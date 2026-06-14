@@ -54,7 +54,7 @@ def generate_morning_brief(weather: str, plans: str):
 Тон: дружелюбный, лаконичный. Без лишних слов."""
 
     message = client.messages.create(
-        model="claude-opus-4-6",
+        model="claude-sonnet-4-6",
         max_tokens=500,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -107,9 +107,18 @@ async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
     await update.message.reply_text("Генерирую сводку...")
 
-    weather = get_weather()
-    plans = plans_storage.get(chat_id, "")
-    text = generate_morning_brief(weather, plans)
+    try:
+        weather = get_weather()
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка погоды: {e}")
+        return
+
+    try:
+        plans = plans_storage.get(chat_id, "")
+        text = generate_morning_brief(weather, plans)
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка Claude: {e}")
+        return
 
     await update.message.reply_text(
         f"☀️ *Тестовая сводка*\n\n{text}",
