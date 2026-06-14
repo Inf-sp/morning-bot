@@ -1,6 +1,5 @@
 import os
 import json
-import anthropic
 import requests
 from datetime import datetime, timezone
 from telegram import Update
@@ -8,13 +7,13 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 
 # --- Keys ---
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
-ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 CHAT_ID = os.environ.get("CHAT_ID", "")
 
 # --- Storage ---
 plans_storage = {}
 
-# --- Wardrobe (saved to file so survives redeploy) ---
+# --- Wardrobe ---
 WARDROBE_FILE = "wardrobe.json"
 
 DEFAULT_WARDROBE = {
@@ -24,7 +23,7 @@ DEFAULT_WARDROBE = {
         "светло-серая мягкая мелкий белый квадрат", "зелёная с цветочным принтом",
         "бежевая с цветочным принтом", "чёрная", "коричневая плотная Uniqlo"
     ],
-    "свитшоты": ["оливковая ZARA с капюшоном", "тёмно-серая застегивающаяся спереди", "серая GU c капюшоном"],
+    "свитшоты": ["тёмно-зелёная", "тёмно-серая", "серая"],
     "верхняя одежда": [
         "бежевая лёгкая ветровка", "синяя ветровка тканевая в лёгкую полоску",
         "чёрная лёгкая ветровка", "фиолетовый флис Uniqlo"
@@ -68,8 +67,6 @@ def wardrobe_to_text(wardrobe):
     for category, items in wardrobe.items():
         lines.append(f"{category.capitalize()}: {', '.join(items)}")
     return "\n".join(lines)
-
-client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 
 def get_weather():
@@ -123,12 +120,15 @@ def generate_morning_brief(weather: str, plans: str, wardrobe: dict):
 
 Формат: без маркдауна, без звёздочек, просто текст."""
 
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=400,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return message.content[0].text
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"maxOutputTokens": 500, "temperature": 0.7}
+    }
+    r = requests.post(url, json=payload, timeout=30)
+    r.raise_for_status()
+    data = r.json()
+    return data["candidates"][0]["content"]["parts"][0]["text"]
 
 
 async def send_morning_brief(context: ContextTypes.DEFAULT_TYPE):
@@ -175,10 +175,6 @@ async def wardrobe_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /add рубашки красная льняная
-    /add обувь белые лоферы
-    """
     if not context.args or len(context.args) < 2:
         await update.message.reply_text(
             "Формат: /add [категория] [вещь]\n\n"
@@ -191,10 +187,8 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     item = " ".join(context.args[1:]).lower()
 
     wardrobe = load_wardrobe()
-
     if category not in wardrobe:
         wardrobe[category] = []
-
     if item in wardrobe[category]:
         await update.message.reply_text(f"'{item}' уже есть в {category}.")
         return
@@ -205,9 +199,6 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /remove рубашки коричневая плотная Uniqlo
-    """
     if not context.args or len(context.args) < 2:
         await update.message.reply_text(
             "Формат: /remove [категория] [вещь]\n\n"
@@ -219,7 +210,6 @@ async def remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     item = " ".join(context.args[1:]).lower()
 
     wardrobe = load_wardrobe()
-
     if category not in wardrobe:
         await update.message.reply_text(f"Категория '{category}' не найдена.")
         return
@@ -249,7 +239,7 @@ async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         wardrobe = load_wardrobe()
         text = generate_morning_brief(weather, plans, wardrobe)
     except Exception as e:
-        await update.message.reply_text(f"Ошибка Claude: {e}")
+        await update.message.reply_text(f"Ошибка Gemini: {e}")
         return
 
     await update.message.reply_text(f"Тест:\n\n{text}")
@@ -262,7 +252,6 @@ async def save_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-    # Init wardrobe file if not exists
     if not os.path.exists(WARDROBE_FILE):
         save_wardrobe(DEFAULT_WARDROBE)
 
