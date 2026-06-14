@@ -10,6 +10,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 # --- Keys ---
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 CHAT_ID = os.environ.get("CHAT_ID", "")
 
 TZ = ZoneInfo("Europe/Amsterdam")
@@ -127,7 +128,7 @@ def chat_reply(history: list) -> str:
     payload = {
         "system_instruction": {"parts": [{"text": CHAT_SYSTEM}]},
         "contents": contents,
-        "generationConfig": {"maxOutputTokens": 1024, "temperature": 0.8}
+        "generationConfig": {"maxOutputTokens": 2048, "temperature": 0.8}
     }
     last_err = None
     for _ in range(3):
@@ -140,6 +141,28 @@ def chat_reply(history: list) -> str:
         data = r.json()
         return data["candidates"][0]["content"]["parts"][0]["text"]
     raise Exception(f"Gemini перегружен ({last_err}). Подожди минуту.")
+
+
+def claude_reply(history: list) -> str:
+    """Claude Sonnet через HTTP. Бросает исключение при ошибке - вызывающий откатится на Gemini."""
+    if not ANTHROPIC_API_KEY:
+        raise Exception("no anthropic key")
+    url = "https://api.anthropic.com/v1/messages"
+    headers = {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    }
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "max_tokens": 2048,
+        "system": CHAT_SYSTEM,
+        "messages": history
+    }
+    r = requests.post(url, headers=headers, json=payload, timeout=60)
+    r.raise_for_status()
+    data = r.json()
+    return data["content"][0]["text"]
 
 # ---------- Wardrobe ----------
 
@@ -216,7 +239,7 @@ def generate_outfit(weather: str, plans: str = ""):
 3. Один совет на день
 
 Без маркдауна и звёздочек, просто текст."""
-    return gemini(prompt, max_tokens=600)
+    return gemini(prompt, max_tokens=900)
 
 
 def generate_lagom(mode: str = "morning"):
@@ -255,7 +278,7 @@ def generate_dutch_lesson():
 [одна тема коротко: правило в 2-3 строки + пример с переводом]
 
 Компактно, без воды."""
-    return gemini(prompt, max_tokens=800, temperature=0.9)
+    return gemini(prompt, max_tokens=1200, temperature=0.9)
 
 
 def generate_translation_challenge():
@@ -321,7 +344,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/dutch - урок нидерландского\n"
         "/vertaal - перевод-челлендж\n\n"
         "Расписание: 07:30 сводка, 12:00 урок NL\n\n"
-        "Без команды - пишешь мне, я отвечаю.\n"
+        "Без команды - пишешь мне, отвечает Claude (при лимите - Gemini).\n"
         "Во время /vertaal твой текст - это перевод."
     )
     await update.message.reply_text(f"Привет! Твой ассистент DM.\n\n{intro}\n\n— — —\n\n{menu}")
@@ -391,16 +414,19 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(fb + "\n\n/vertaal - ещё фраза")
         return
 
-    # Иначе - свободный чат (Gemini, бесплатно)
+    # Иначе - свободный чат: Claude Sonnet, при ошибке откат на Gemini
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
     hist = chat_history.get(chat_id, [])
     hist.append({"role": "user", "content": text})
     hist = hist[-10:]
     try:
-        answer = chat_reply(hist)
-    except Exception as e:
-        await update.message.reply_text(f"Ошибка чата: {e}")
-        return
+        answer = claude_reply(hist)
+    except Exception:
+        try:
+            answer = chat_reply(hist)
+        except Exception as e:
+            await update.message.reply_text(f"Ошибка чата: {e}")
+            return
     hist.append({"role": "assistant", "content": answer})
     chat_history[chat_id] = hist[-10:]
     await send_long(context.bot, chat_id, answer)
