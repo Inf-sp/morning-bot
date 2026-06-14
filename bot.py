@@ -11,17 +11,19 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+CF_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
+CF_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 CHAT_ID = os.environ.get("CHAT_ID", "")
 
 TZ = ZoneInfo("Europe/Amsterdam")
 
 # --- Storage (resets on redeploy) ---
-challenge_state = {}   # {chat_id: {"ru": "..."}}
-chat_history = {}      # {chat_id: [ {role, content}, ... ]}
+challenge_state = {}
+chat_history = {}
 
 WARDROBE_FILE = "wardrobe.json"
 
-# --- Лагом: личные принципы DM ---
 LAGOM = """
 Принципы (лагом) Дмитрия:
 - Сейчас не вся жизнь. Сейчас один шаг.
@@ -78,13 +80,17 @@ TEMP_ZONES = """
 - ветер сильнее 8 м/с: добавь слой
 """
 
-# ---------- Gemini ----------
+# ---------- Gemini (thinking отключён, иначе обрезает) ----------
 
-def gemini(prompt: str, max_tokens: int = 600, temperature: float = 0.7) -> str:
+def gemini(prompt: str, max_tokens: int = 1500, temperature: float = 0.7) -> str:
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature}
+        "generationConfig": {
+            "maxOutputTokens": max_tokens,
+            "temperature": temperature,
+            "thinkingConfig": {"thinkingBudget": 0}
+        }
     }
     last_err = None
     for _ in range(3):
@@ -98,7 +104,7 @@ def gemini(prompt: str, max_tokens: int = 600, temperature: float = 0.7) -> str:
         return data["candidates"][0]["content"]["parts"][0]["text"]
     raise Exception(f"Gemini перегружен ({last_err}). Подожди минуту.")
 
-# ---------- Chat (Gemini, бесплатно) ----------
+# ---------- Чат ----------
 
 CHAT_SYSTEM = f"""Ты личный ассистент Дмитрия (DM). Отвечаешь в Telegram.
 
@@ -118,17 +124,19 @@ CHAT_SYSTEM = f"""Ты личный ассистент Дмитрия (DM). От
 """
 
 def chat_reply(history: list) -> str:
-    # history: [{"role": "user"/"assistant", "content": "..."}]
     contents = []
     for m in history:
         role = "model" if m["role"] == "assistant" else "user"
         contents.append({"role": role, "parts": [{"text": m["content"]}]})
-
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "system_instruction": {"parts": [{"text": CHAT_SYSTEM}]},
         "contents": contents,
-        "generationConfig": {"maxOutputTokens": 2048, "temperature": 0.8}
+        "generationConfig": {
+            "maxOutputTokens": 3000,
+            "temperature": 0.8,
+            "thinkingConfig": {"thinkingBudget": 0}
+        }
     }
     last_err = None
     for _ in range(3):
@@ -144,7 +152,6 @@ def chat_reply(history: list) -> str:
 
 
 def claude_reply(history: list) -> str:
-    """Claude Sonnet через HTTP. Бросает исключение при ошибке - вызывающий откатится на Gemini."""
     if not ANTHROPIC_API_KEY:
         raise Exception("no anthropic key")
     url = "https://api.anthropic.com/v1/messages"
@@ -164,6 +171,37 @@ def claude_reply(history: list) -> str:
     data = r.json()
     return data["content"][0]["text"]
 
+
+def groq_reply(history: list) -> str:
+    if not GROQ_API_KEY:
+        raise Exception("no groq key")
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [{"role": "system", "content": CHAT_SYSTEM}] + history,
+        "max_tokens": 2048,
+        "temperature": 0.8
+    }
+    r = requests.post(url, headers=headers, json=payload, timeout=40)
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"]
+
+
+def cloudflare_reply(history: list) -> str:
+    if not (CF_API_TOKEN and CF_ACCOUNT_ID):
+        raise Exception("no cloudflare creds")
+    model = "@cf/meta/llama-3.1-8b-instruct"
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/{model}"
+    headers = {"Authorization": f"Bearer {CF_API_TOKEN}", "Content-Type": "application/json"}
+    payload = {
+        "messages": [{"role": "system", "content": CHAT_SYSTEM}] + history,
+        "max_tokens": 2048
+    }
+    r = requests.post(url, headers=headers, json=payload, timeout=40)
+    r.raise_for_status()
+    return r.json()["result"]["response"]
+
 # ---------- Wardrobe ----------
 
 def load_wardrobe():
@@ -175,52 +213,52 @@ def load_wardrobe():
 def wardrobe_to_text(wardrobe):
     return "\n".join(f"{cat.capitalize()}: {', '.join(items)}" for cat, items in wardrobe.items())
 
-# ---------- Weather ----------
+# ---------- Weather (day=0 сегодня, day=1 завтра) ----------
 
-def get_weather():
+CODES = {
+    0: "ясно", 1: "преимущественно ясно", 2: "переменная облачность", 3: "пасмурно",
+    45: "туман", 48: "туман с инеем", 51: "лёгкая морось", 53: "морось", 55: "сильная морось",
+    61: "небольшой дождь", 63: "дождь", 65: "сильный дождь", 71: "небольшой снег",
+    73: "снег", 75: "сильный снег", 80: "ливень", 81: "сильный ливень", 95: "гроза"
+}
+
+def get_weather(day: int = 0):
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
         "latitude": 52.63, "longitude": 4.74,
-        "current": "temperature_2m,apparent_temperature,weathercode,windspeed_10m",
+        "current": "temperature_2m,apparent_temperature,weathercode",
         "daily": "temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_probability_max,weathercode,windspeed_10m_max",
         "hourly": "precipitation_probability",
-        "timezone": "Europe/Amsterdam", "wind_speed_unit": "ms", "forecast_days": 1
+        "timezone": "Europe/Amsterdam", "wind_speed_unit": "ms", "forecast_days": 2
     }
     r = requests.get(url, params=params, timeout=20)
     data = r.json()
-    codes = {
-        0: "ясно", 1: "преимущественно ясно", 2: "переменная облачность", 3: "пасмурно",
-        45: "туман", 48: "туман с инеем", 51: "лёгкая морось", 53: "морось", 55: "сильная морось",
-        61: "небольшой дождь", 63: "дождь", 65: "сильный дождь", 71: "небольшой снег",
-        73: "снег", 75: "сильный снег", 80: "ливень", 81: "сильный ливень", 95: "гроза"
-    }
-    c, d = data["current"], data["daily"]
-    rain_when = ""
-    try:
-        hrs, pr = data["hourly"]["time"], data["hourly"]["precipitation_probability"]
-        rainy = [h.split("T")[1][:5] for h, p in zip(hrs, pr) if p and p >= 50]
-        if rainy:
-            rain_when = f", дождь вероятен около {rainy[0]}"
-    except Exception:
-        pass
-    return (
-        f"Сейчас: {codes.get(c['weathercode'],'')}, {c['temperature_2m']:.0f}°C (ощущается {c['apparent_temperature']:.0f}°C)\n"
-        f"День: {codes.get(d['weathercode'][0],'')}, от {d['temperature_2m_min'][0]:.0f} до {d['temperature_2m_max'][0]:.0f}°C "
-        f"(ощущается {d['apparent_temperature_min'][0]:.0f}...{d['apparent_temperature_max'][0]:.0f}°C)\n"
-        f"Дождь: {d['precipitation_probability_max'][0]:.0f}%{rain_when}\n"
-        f"Ветер до {d['windspeed_10m_max'][0]:.0f} м/с"
+    d = data["daily"]
+
+    lines = []
+    if day == 0:
+        c = data["current"]
+        lines.append(f"Сейчас: {CODES.get(c['weathercode'],'')}, {c['temperature_2m']:.0f}°C (ощущается {c['apparent_temperature']:.0f}°C)")
+        label = "День"
+    else:
+        label = "Завтра"
+
+    lines.append(
+        f"{label}: {CODES.get(d['weathercode'][day],'')}, от {d['temperature_2m_min'][day]:.0f} до {d['temperature_2m_max'][day]:.0f}°C "
+        f"(ощущается {d['apparent_temperature_min'][day]:.0f}...{d['apparent_temperature_max'][day]:.0f}°C)"
     )
+    lines.append(f"Дождь: {d['precipitation_probability_max'][day]:.0f}%")
+    lines.append(f"Ветер до {d['windspeed_10m_max'][day]:.0f} м/с")
+    return "\n".join(lines)
 
 # ---------- Generators ----------
 
-def generate_outfit(weather: str, plans: str = ""):
+def generate_outfit(weather: str, when_label: str = "сегодня"):
     wardrobe = load_wardrobe()
     prompt = f"""Ты личный стилист. Коротко и конкретно.
 
-Погода в Алкмаре сегодня:
+Погода в Алкмаре ({when_label}):
 {weather}
-
-Планы: {plans if plans else "обычный день"}
 
 Параметры: рост 179 см, вес ~65 кг, обувь EU 42.5, джинсы W31 L31
 
@@ -234,28 +272,24 @@ def generate_outfit(weather: str, plans: str = ""):
 Учитывай весь день. Если днём теплеет - предложи слои которые можно снять. Если дождь позже - напомни про ветровку.
 
 Напиши:
-1. Погода - кратко, главное на день
-2. Лук - конкретно 3-4 предмета из гардероба выше, по правилам
+1. Погода - очень кратко, одна-две строки, главное
+2. Лук - конкретно 3-4 предмета из гардероба выше, по правилам, с пояснением почему
 3. Один совет на день
 
-Без маркдауна и звёздочек, просто текст."""
-    return gemini(prompt, max_tokens=900)
+Без маркдауна и звёздочек, просто текст. Развёрнуто по делу, не обрывай мысль."""
+    return gemini(prompt, max_tokens=1500)
 
 
 def generate_lagom(mode: str = "morning"):
     if mode == "morning":
         task = ("Напиши короткое утреннее обращение к Дмитрию. Начни со слов \"Доброе утро\". "
-                "2-3 предложения: тёплое пожелание на день, опираясь по духу на 1-2 его принципа. "
-                "Иногда можно лёгкая отсылка к путешествиям. Его голос: спокойный, прямой, без пафоса.")
+                "2-3 законченных предложения: тёплое пожелание на день, опираясь по духу на 1-2 его принципа. "
+                "Иногда лёгкая отсылка к путешествиям. Голос: спокойный, прямой, без пафоса. Не обрывай мысль.")
     else:
-        task = ("Напиши одну короткую мысль-настройку в стиле Дмитрия, опираясь на его принципы. "
-                "Не утреннее приветствие, а отдельная фраза дня - другой ракурс. 1-2 предложения.")
-    prompt = f"""{LAGOM}
-{TRAVEL}
-
-{task}
-Без маркдауна и звёздочек. По-русски."""
-    return gemini(prompt, max_tokens=300, temperature=0.95)
+        task = ("Напиши одну законченную мысль-настройку в стиле Дмитрия, опираясь на его принципы. "
+                "Не утреннее приветствие, а отдельная фраза дня - другой ракурс. 2-3 предложения. Не обрывай мысль.")
+    prompt = f"{LAGOM}\n{TRAVEL}\n\n{task}\nБез маркдауна и звёздочек. По-русски."
+    return gemini(prompt, max_tokens=1024, temperature=0.95)
 
 
 def generate_dutch_lesson():
@@ -277,15 +311,15 @@ def generate_dutch_lesson():
 ГРАММАТИКА ДНЯ
 [одна тема коротко: правило в 2-3 строки + пример с переводом]
 
-Компактно, без воды."""
-    return gemini(prompt, max_tokens=1200, temperature=0.9)
+Компактно, но не обрывай."""
+    return gemini(prompt, max_tokens=2000, temperature=0.9)
 
 
 def generate_translation_challenge():
     prompt = """Дай ОДНУ фразу на русском для перевода на нидерландский.
 Уровень B1: с придаточным, модальным глаголом, прошедшим временем или непростым порядком слов. Бытовая или рабочая ситуация.
 Выведи ТОЛЬКО русскую фразу, без кавычек и пояснений."""
-    return gemini(prompt, max_tokens=100, temperature=1.0).strip()
+    return gemini(prompt, max_tokens=200, temperature=1.0).strip()
 
 
 def check_translation(ru: str, answer: str):
@@ -299,12 +333,15 @@ def check_translation(ru: str, answer: str):
 2. Если ошибки - правильный вариант и в чём именно ошибка (грамматика, порядок слов, слово)
 3. Если есть более естественный вариант - покажи
 
-Конкретно и кратко. Тон коллеги, не учителя."""
-    return gemini(prompt, max_tokens=400, temperature=0.4)
+Конкретно и по делу. Тон коллеги, не учителя. Не обрывай мысль."""
+    return gemini(prompt, max_tokens=800, temperature=0.4)
 
 # ---------- Send helper ----------
 
 async def send_long(bot, chat_id, text):
+    text = text.strip()
+    if not text:
+        text = "Пустой ответ, попробуй ещё раз."
     for i in range(0, len(text), 4000):
         await bot.send_message(chat_id=chat_id, text=text[i:i+4000])
 
@@ -315,8 +352,8 @@ async def send_morning(context: ContextTypes.DEFAULT_TYPE):
         return
     try:
         intro = generate_lagom("morning")
-        weather = get_weather()
-        outfit = generate_outfit(weather)
+        weather = get_weather(0)
+        outfit = generate_outfit(weather, "сегодня")
         await send_long(context.bot, CHAT_ID, f"{intro}\n\n— — —\n\n{outfit}")
     except Exception as e:
         await context.bot.send_message(chat_id=CHAT_ID, text=f"Ошибка утренней сводки: {e}")
@@ -339,40 +376,44 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         intro = "Доброе утро. Один шаг за раз - этого достаточно."
     menu = (
         "/plan - что надеть сегодня (погода + лук)\n"
+        "/tomorrow - план на завтра\n"
         "/weather - погода\n"
         "/lagom - фраза дня\n"
         "/dutch - урок нидерландского\n"
         "/vertaal - перевод-челлендж\n\n"
-        "Расписание: 07:30 сводка, 12:00 урок NL\n\n"
-        "Без команды - пишешь мне, отвечает Claude (при лимите - Gemini).\n"
-        "Во время /vertaal твой текст - это перевод."
+        "Какие вопросы? Спрашивай - всегда помогу."
     )
     await update.message.reply_text(f"Привет! Твой ассистент DM.\n\n{intro}\n\n— — —\n\n{menu}")
 
 
 async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Смотрю погоду...")
+    await update.message.reply_text("Подготавливаю план на сегодня...")
     try:
-        weather = get_weather()
+        weather = get_weather(0)
+        await send_long(context.bot, update.effective_chat.id, generate_outfit(weather, "сегодня"))
     except Exception as e:
-        await update.message.reply_text(f"Ошибка погоды: {e}")
-        return
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+async def tomorrow_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Подготавливаю план на завтра...")
     try:
-        await send_long(context.bot, update.effective_chat.id, generate_outfit(weather))
+        weather = get_weather(1)
+        await send_long(context.bot, update.effective_chat.id, generate_outfit(weather, "завтра"))
     except Exception as e:
-        await update.message.reply_text(f"Ошибка Gemini: {e}")
+        await update.message.reply_text(f"Ошибка: {e}")
 
 
 async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await update.message.reply_text(get_weather())
+        await update.message.reply_text(get_weather(0))
     except Exception as e:
         await update.message.reply_text(f"Ошибка погоды: {e}")
 
 
 async def lagom_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await update.message.reply_text(generate_lagom("phrase"))
+        await send_long(context.bot, update.effective_chat.id, generate_lagom("phrase"))
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
 
@@ -402,7 +443,6 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
     text = update.message.text
 
-    # Идёт челлендж - это перевод
     if chat_id in challenge_state:
         ru = challenge_state.pop(chat_id)["ru"]
         await update.message.reply_text("Проверяю...")
@@ -411,22 +451,30 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             await update.message.reply_text(f"Ошибка проверки: {e}")
             return
-        await update.message.reply_text(fb + "\n\n/vertaal - ещё фраза")
+        await send_long(context.bot, chat_id, fb + "\n\n/vertaal - ещё фраза")
         return
 
-    # Иначе - свободный чат: Claude Sonnet, при ошибке откат на Gemini
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
     hist = chat_history.get(chat_id, [])
     hist.append({"role": "user", "content": text})
     hist = hist[-10:]
-    try:
-        answer = claude_reply(hist)
-    except Exception:
+
+    # Цепочка провайдеров: Claude → Gemini → Groq → Cloudflare
+    answer = None
+    last_err = None
+    for fn in (claude_reply, chat_reply, groq_reply, cloudflare_reply):
         try:
-            answer = chat_reply(hist)
+            answer = fn(hist)
+            if answer and answer.strip():
+                break
         except Exception as e:
-            await update.message.reply_text(f"Ошибка чата: {e}")
-            return
+            last_err = e
+            answer = None
+
+    if not answer:
+        await update.message.reply_text(f"Все API недоступны. Последняя ошибка: {last_err}")
+        return
+
     hist.append({"role": "assistant", "content": answer})
     chat_history[chat_id] = hist[-10:]
     await send_long(context.bot, chat_id, answer)
@@ -437,6 +485,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("plan", plan_command))
+    app.add_handler(CommandHandler("tomorrow", tomorrow_command))
     app.add_handler(CommandHandler("weather", weather_command))
     app.add_handler(CommandHandler("lagom", lagom_command))
     app.add_handler(CommandHandler("dutch", dutch_command))
@@ -444,8 +493,8 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
 
     jq = app.job_queue
-    jq.run_daily(send_morning, time=datetime.strptime("07:30", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
-    jq.run_daily(send_dutch, time=datetime.strptime("12:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
+    jq.run_daily(send_morning, time=datetime.strptime("08:30", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
+    jq.run_daily(send_dutch, time=datetime.strptime("11:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
 
     print("Bot started")
     app.run_polling()
