@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import requests
 from datetime import datetime, timezone
 from telegram import Update
@@ -120,15 +121,24 @@ def generate_morning_brief(weather: str, plans: str, wardrobe: dict):
 
 Формат: без маркдауна, без звёздочек, просто текст."""
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"maxOutputTokens": 500, "temperature": 0.7}
     }
-    r = requests.post(url, json=payload, timeout=30)
-    r.raise_for_status()
-    data = r.json()
-    return data["candidates"][0]["content"]["parts"][0]["text"]
+
+    last_err = None
+    for attempt in range(3):
+        r = requests.post(url, json=payload, timeout=30)
+        if r.status_code == 429:
+            last_err = "429 rate limit"
+            time.sleep(5)
+            continue
+        r.raise_for_status()
+        data = r.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+
+    raise Exception(f"Gemini перегружен ({last_err}). Подожди минуту.")
 
 
 async def send_morning_brief(context: ContextTypes.DEFAULT_TYPE):
