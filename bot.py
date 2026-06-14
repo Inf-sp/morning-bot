@@ -80,29 +80,8 @@ TEMP_ZONES = """
 - ветер сильнее 8 м/с: добавь слой
 """
 
-# ---------- Gemini (thinking отключён, иначе обрезает) ----------
+# ---------- Gemini chat helper used below ----------
 
-def gemini(prompt: str, max_tokens: int = 1500, temperature: float = 0.7) -> str:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "maxOutputTokens": max_tokens,
-            "temperature": temperature,
-            "thinkingConfig": {"thinkingBudget": 0}
-        }
-    }
-    last_err = None
-    for _ in range(3):
-        r = requests.post(url, json=payload, timeout=30)
-        if r.status_code == 429:
-            last_err = "429 rate limit"
-            time.sleep(5)
-            continue
-        r.raise_for_status()
-        data = r.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"]
-    raise Exception(f"Gemini перегружен ({last_err}). Подожди минуту.")
 
 # ---------- Чат ----------
 
@@ -202,6 +181,73 @@ def cloudflare_reply(history: list) -> str:
     r.raise_for_status()
     return r.json()["result"]["response"]
 
+
+# ---------- Единая генерация по одному промпту (цепочка провайдеров) ----------
+
+def _gen_claude(prompt, max_tokens):
+    if not ANTHROPIC_API_KEY:
+        raise Exception("no anthropic key")
+    url = "https://api.anthropic.com/v1/messages"
+    headers = {"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+    payload = {"model": "claude-sonnet-4-6", "max_tokens": max_tokens,
+               "messages": [{"role": "user", "content": prompt}]}
+    r = requests.post(url, headers=headers, json=payload, timeout=60)
+    r.raise_for_status()
+    return r.json()["content"][0]["text"]
+
+
+def _gen_gemini(prompt, max_tokens, temperature):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    payload = {"contents": [{"parts": [{"text": prompt}]}],
+               "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature,
+                                    "thinkingConfig": {"thinkingBudget": 0}}}
+    r = requests.post(url, json=payload, timeout=30)
+    r.raise_for_status()
+    return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+
+
+def _gen_groq(prompt, max_tokens, temperature):
+    if not GROQ_API_KEY:
+        raise Exception("no groq key")
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+    payload = {"model": "llama-3.3-70b-versatile",
+               "messages": [{"role": "user", "content": prompt}],
+               "max_tokens": max_tokens, "temperature": temperature}
+    r = requests.post(url, headers=headers, json=payload, timeout=40)
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"]
+
+
+def _gen_cloudflare(prompt, max_tokens):
+    if not (CF_API_TOKEN and CF_ACCOUNT_ID):
+        raise Exception("no cloudflare creds")
+    model = "@cf/meta/llama-3.1-8b-instruct"
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/{model}"
+    headers = {"Authorization": f"Bearer {CF_API_TOKEN}", "Content-Type": "application/json"}
+    payload = {"messages": [{"role": "user", "content": prompt}], "max_tokens": max_tokens}
+    r = requests.post(url, headers=headers, json=payload, timeout=40)
+    r.raise_for_status()
+    return r.json()["result"]["response"]
+
+
+def llm(prompt: str, max_tokens: int = 1500, temperature: float = 0.7) -> str:
+    """Генерация по одному промпту. Порядок: Claude → Gemini → Groq → Cloudflare."""
+    errs = []
+    for name, call in (
+        ("claude", lambda: _gen_claude(prompt, max_tokens)),
+        ("gemini", lambda: _gen_gemini(prompt, max_tokens, temperature)),
+        ("groq", lambda: _gen_groq(prompt, max_tokens, temperature)),
+        ("cloudflare", lambda: _gen_cloudflare(prompt, max_tokens)),
+    ):
+        try:
+            out = call()
+            if out and out.strip():
+                return out
+        except Exception as e:
+            errs.append(f"{name}:{e}")
+    raise Exception("все API недоступны: " + "; ".join(errs))
+
 # ---------- Wardrobe ----------
 
 def load_wardrobe():
@@ -277,19 +323,19 @@ def generate_outfit(weather: str, when_label: str = "сегодня"):
 3. Один совет на день
 
 Без маркдауна и звёздочек, просто текст. Развёрнуто по делу, не обрывай мысль."""
-    return gemini(prompt, max_tokens=1500)
+    return llm(prompt, max_tokens=1500)
 
 
 def generate_lagom(mode: str = "morning"):
     if mode == "morning":
         task = ("Напиши короткое утреннее обращение к Дмитрию. Начни со слов \"Доброе утро\". "
-                "2-3 законченных предложения: тёплое пожелание на день, опираясь по духу на 1-2 его принципа. "
-                "Иногда лёгкая отсылка к путешествиям. Голос: спокойный, прямой, без пафоса. Не обрывай мысль.")
+                "Максимум 3 коротких законченных предложения: тёплое пожелание на день, опираясь по духу на 1 его принцип. "
+                "Голос: спокойный, прямой, без пафоса. Не обрывай мысль.")
     else:
         task = ("Напиши одну законченную мысль-настройку в стиле Дмитрия, опираясь на его принципы. "
                 "Не утреннее приветствие, а отдельная фраза дня - другой ракурс. 2-3 предложения. Не обрывай мысль.")
     prompt = f"{LAGOM}\n{TRAVEL}\n\n{task}\nБез маркдауна и звёздочек. По-русски."
-    return gemini(prompt, max_tokens=1024, temperature=0.95)
+    return llm(prompt, max_tokens=1024, temperature=0.95)
 
 
 def generate_dutch_lesson():
@@ -312,14 +358,14 @@ def generate_dutch_lesson():
 [одна тема коротко: правило в 2-3 строки + пример с переводом]
 
 Компактно, но не обрывай."""
-    return gemini(prompt, max_tokens=2000, temperature=0.9)
+    return llm(prompt, max_tokens=2000, temperature=0.9)
 
 
 def generate_translation_challenge():
     prompt = """Дай ОДНУ фразу на русском для перевода на нидерландский.
 Уровень B1: с придаточным, модальным глаголом, прошедшим временем или непростым порядком слов. Бытовая или рабочая ситуация.
 Выведи ТОЛЬКО русскую фразу, без кавычек и пояснений."""
-    return gemini(prompt, max_tokens=200, temperature=1.0).strip()
+    return llm(prompt, max_tokens=200, temperature=1.0).strip()
 
 
 def check_translation(ru: str, answer: str):
@@ -334,7 +380,7 @@ def check_translation(ru: str, answer: str):
 3. Если есть более естественный вариант - покажи
 
 Конкретно и по делу. Тон коллеги, не учителя. Не обрывай мысль."""
-    return gemini(prompt, max_tokens=800, temperature=0.4)
+    return llm(prompt, max_tokens=800, temperature=0.4)
 
 # ---------- Send helper ----------
 
