@@ -5,8 +5,9 @@ import time
 import requests
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import (Update, InlineKeyboardButton, InlineKeyboardMarkup,
+                      ReplyKeyboardMarkup, BotCommand)
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
 # --- Keys ---
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
@@ -22,6 +23,7 @@ TZ = ZoneInfo("Europe/Amsterdam")
 # --- Storage ---
 challenge_state = {}
 chat_history = {}
+lesson_answers = {}   # chat_id -> ответ мини-теста
 SETTINGS_FILE = "settings.json"   # {chat_id: {lat, lon, city}}
 NOTES_FILE = "notes.json"         # {chat_id: [note, ...]}
 WARDROBE_FILE = "wardrobe.json"
@@ -313,25 +315,44 @@ JSON:
 }}"""
     return llm_json(prompt, 500)
 
-def generate_lesson(language):
-    prompt = f"""Ты преподаватель. Язык: {language}. Ученик - русскоговорящий, уровень B1.
-Лексика и грамматика B1, не примитивные. Каждый день тема разная.
-Формат строго, без markdown и звёздочек:
+def lesson_data(language):
+    prompt = f"""Урок языка для русскоговорящего ученика B1. Язык: {language}.
+Слово и фраза уровня B1, не примитивные, каждый раз разные.
 
-СЛОВО ДНЯ
-[слово] - [перевод]
-Пример: [предложение на {language}]
-Перевод: [перевод примера]
+JSON:
+{{
+ "word": "слово на {language}",
+ "pron": "[транскрипция IPA в квадратных скобках, или пустая строка]",
+ "meaning": "значение по-русски",
+ "example": "предложение с этим словом на {language}",
+ "example_tr": "перевод примера на русский",
+ "phrase": "полезная разговорная фраза дня на {language}",
+ "phrase_tr": "перевод фразы на русский",
+ "wrong": "частая ошибочная версия этой фразы (как говорят НЕ надо)",
+ "test_ru": "короткая русская фраза для мини-теста",
+ "test_answer": "правильный перевод test_ru на {language}"
+}}"""
+    return llm_json(prompt, 900)
 
-ФРАЗА ДНЯ (реальная ситуация)
-[фраза] - [перевод]
-Когда использовать: [пояснение]
+def format_lesson(language, flag, data):
+    L = [f"{flag} {language.capitalize()} на сегодня", "", f"📝 {data.get('word','')}"]
+    if data.get("pron"):
+        L.append(data["pron"])
+    L += [f"Значение: {data.get('meaning','')}", "",
+          f"🎬 {data.get('example','')}", data.get("example_tr", ""), "",
+          "🧠 Попробуй использовать это слово сегодня хотя бы раз.", "",
+          "— — —", "", "💬 Фраза дня", data.get("phrase", ""), data.get("phrase_tr", "")]
+    if data.get("wrong"):
+        L += ["", "Не говори:", f"❌ {data['wrong']}", "Говори:", f"✅ {data.get('phrase','')}"]
+    L += ["", "— — —", "", "⚡ Мини-тест", "Как сказать:", f"«{data.get('test_ru','')}»"]
+    return "\n".join(L)
 
-ГРАММАТИКА ДНЯ
-[одна тема: правило 2-3 строки + пример с переводом]
-
-Компактно, не обрывай."""
-    return llm(prompt, 2000, 0.9)
+async def send_lesson(bot, chat_id, language, flag):
+    data = lesson_data(language)
+    text = format_lesson(language, flag, data)
+    lesson_answers[str(chat_id)] = data.get("test_answer", "")
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⚡ Показать ответ", callback_data="lesson_answer")]])
+    await bot.send_message(chat_id=chat_id, text=text, reply_markup=kb)
 
 def generate_challenge(language):
     prompt = f"""Дай ОДНУ фразу на русском для перевода на {language}.
@@ -401,7 +422,7 @@ async def job_dutch(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID:
         return
     try:
-        await send_long(context.bot, CHAT_ID, f"🇳🇱 Нидерландский на сегодня\n\n{generate_lesson('нидерландский')}")
+        await send_lesson(context.bot, CHAT_ID, "нидерландский", "🇳🇱")
     except Exception as e:
         await context.bot.send_message(chat_id=CHAT_ID, text=f"Ошибка урока: {e}")
 
@@ -419,8 +440,19 @@ MENU = (
     "Геолокация или /setcity Город - сменить город."
 )
 
+# Кнопки-клавиатура над полем ввода
+KEYBOARD = ReplyKeyboardMarkup(
+    [
+        ["👕 План", "📅 Сегодня"],
+        ["🌤️ Погода", "✈️ Завтра"],
+        ["🇳🇱 Урок NL", "🇬🇧 Урок EN"],
+        ["⚡ Перевод NL", "⚡ Перевод EN"],
+    ],
+    resize_keyboard=True
+)
+
 async def start(update, context):
-    await update.message.reply_text(f"Привет! Твой ассистент DM.\n\n{MENU}")
+    await update.message.reply_text(f"Привет! Твой ассистент DM.\n\n{MENU}", reply_markup=KEYBOARD)
 
 async def plan_command(update, context):
     cid = update.effective_chat.id
@@ -526,16 +558,25 @@ async def clear_command(update, context):
 async def dutch_command(update, context):
     await update.message.reply_text("Готовлю урок...")
     try:
-        await send_long(context.bot, update.effective_chat.id, f"🇳🇱 Урок дня\n\n{generate_lesson('нидерландский')}")
+        await send_lesson(context.bot, update.effective_chat.id, "нидерландский", "🇳🇱")
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
 
 async def english_command(update, context):
     await update.message.reply_text("Готовлю урок...")
     try:
-        await send_long(context.bot, update.effective_chat.id, f"🇬🇧 Урок дня\n\n{generate_lesson('английский')}")
+        await send_lesson(context.bot, update.effective_chat.id, "английский", "🇬🇧")
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
+
+async def answer_callback(update, context):
+    q = update.callback_query
+    await q.answer()
+    ans = lesson_answers.get(str(q.message.chat_id))
+    if ans:
+        await q.message.reply_text(f"✅ {ans}")
+    else:
+        await q.message.reply_text("Ответ не найден - запроси урок заново.")
 
 async def translate_command(update, context):
     cid = str(update.effective_chat.id)
@@ -556,6 +597,27 @@ async def translate_command(update, context):
 async def text_router(update, context):
     cid = str(update.effective_chat.id)
     text = update.message.text
+
+    # Нажатия кнопок-клавиатуры
+    buttons = {
+        "👕 План": plan_command,
+        "📅 Сегодня": today_command,
+        "🌤️ Погода": weather_command,
+        "✈️ Завтра": tomorrow_command,
+        "🇳🇱 Урок NL": dutch_command,
+        "🇬🇧 Урок EN": english_command,
+    }
+    if text in buttons:
+        await buttons[text](update, context)
+        return
+    if text == "⚡ Перевод NL":
+        context.args = []
+        await translate_command(update, context)
+        return
+    if text == "⚡ Перевод EN":
+        context.args = ["en"]
+        await translate_command(update, context)
+        return
 
     if cid in challenge_state:
         st = challenge_state.pop(cid)
@@ -582,8 +644,23 @@ async def text_router(update, context):
     await send_long(context.bot, cid, answer)
 
 
+async def post_init(app):
+    await app.bot.set_my_commands([
+        BotCommand("plan", "одежда и советы"),
+        BotCommand("today", "задачи на сегодня"),
+        BotCommand("tomorrow", "план на завтра"),
+        BotCommand("weather", "погода"),
+        BotCommand("dutch", "урок нидерландского"),
+        BotCommand("english", "урок английского"),
+        BotCommand("translate", "перевод-челлендж"),
+        BotCommand("note", "быстрая заметка"),
+        BotCommand("setcity", "сменить город"),
+        BotCommand("start", "меню и кнопки"),
+    ])
+
+
 def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("plan", plan_command))
     app.add_handler(CommandHandler("today", today_command))
@@ -595,6 +672,7 @@ def main():
     app.add_handler(CommandHandler("translate", translate_command))
     app.add_handler(CommandHandler("note", note_command))
     app.add_handler(CommandHandler("clear", clear_command))
+    app.add_handler(CallbackQueryHandler(answer_callback, pattern="^lesson_answer$"))
     app.add_handler(MessageHandler(filters.LOCATION, location_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
 
