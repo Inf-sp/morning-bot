@@ -46,18 +46,18 @@ BOOKS = "1984, Цветы для Элджернона, Машина времен
 
 # Короткие лагом-строки (реальные принципы, выбираются по дню, без выдумок)
 LAGOM_LINES = [
-    "Сейчас один шаг, не вся жизнь.",
-    "Не нужно идеально. Нужно начать.",
-    "Я не ленивый. Мозг так работает.",
-    "Остановись, выдохни, действуй.",
-    "Пауза сейчас - победа.",
-    "Фокус на хорошем.",
-    "Не все споры стоят нервов.",
-    "Чужие эмоции - не моя ответственность.",
-    "Перемены открывают возможности.",
-    "Скука - криптонит. Создавай интерес.",
-    "Это состояние пройдёт.",
-    "Делаю лучшее из возможного сегодня.",
+    "Сейчас один шаг, не вся жизнь",
+    "Не нужно идеально - нужно начать",
+    "Я не ленивый, мозг так работает",
+    "Остановись, выдохни, действуй",
+    "Пауза сейчас - победа",
+    "Фокус на хорошем",
+    "Не все споры стоят нервов",
+    "Чужие эмоции - не моя ответственность",
+    "Перемены открывают возможности",
+    "Скука - криптонит, создавай интерес",
+    "Это состояние пройдёт",
+    "Делаю лучшее из возможного сегодня",
 ]
 
 def lagom_of_day():
@@ -586,29 +586,22 @@ def fetch_current_temp(lat, lon):
         return None
 
 def plany_extras():
-    r = _random.random()
-    if r < 0.40:
-        bonus_cat = "дополнительное нидерландское ИЛИ английское слово или мини-правило с переводом на русский"
-    elif r < 0.60:
-        bonus_cat = "место дня - куда съездить (страна или город, желательно где обычно не были), одна строка почему"
-    elif r < 0.80:
-        bonus_cat = "короткий научный факт"
-    else:
-        bonus_cat = f"короткая цитата из книги ({BOOKS}) с указанием книги в скобках"
+    country = _random.choice([c.strip() for c in VISITED.split(",")])
     prompt = f"""Сгенерируй блоки для ежедневной сводки русскоязычного пользователя (учит нидерландский и английский).
 JSON:
 {{
- "fact": "интересный факт дня, одна строка",
- "idea": "идея дня - практичный совет (продуктивность/СДВГ/жизнь), одна строка",
- "word_nl": "полезное нидерландское слово",
- "word_en": "его английский эквивалент",
- "word_meaning": "значение по-русски",
+ "place_country": "{country}",
+ "place_text": "3-5 коротких интересных фактов про страну {country}, живо и нескучно",
+ "fact": "новый интересный научный факт, одна строка",
+ "word_ru": "русское слово дня (одно слово)",
+ "word_nl": "перевод на нидерландский",
+ "word_en": "перевод на английский",
  "example_nl": "пример с этим словом на нидерландском",
- "example_ru": "перевод примера",
- "bonus_label": "короткий заголовок бонуса (например: Слово, Место дня, Научный факт, Цитата)",
- "bonus": "содержимое бонуса по теме: {bonus_cat}"
+ "example_ru": "перевод примера на русский",
+ "quote": "короткая цитата (до 14 слов) из книги {BOOKS}",
+ "quote_book": "название книги, откуда цитата"
 }}"""
-    return llm_json(prompt, 900)
+    return llm_json(prompt, 1000)
 
 # ---------- Send ----------
 
@@ -659,7 +652,9 @@ async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID:
         return
     try:
-        await context.bot.send_message(chat_id=CHAT_ID, text="🧠 " + lagom_checkin("day"))
+        await context.bot.send_message(chat_id=CHAT_ID,
+            text="🌤 Дим, что сейчас немного тревожит? Запиши - вечером проверим, что из этого реально случилось")
+        pending_input[str(CHAT_ID)] = "diary"
     except Exception:
         pass
 
@@ -667,9 +662,10 @@ async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID:
         return
     try:
-        msg = lagom_checkin("evening")
+        msg = ("🌙 Дим, как вечер? Смотри: что тревожило и что реально было - часто две разные истории. "
+               "Давай отпустим то, что уже неважно. Как сегодня с этим, заметил разницу?\n\nОтветь - запишу в дневник.")
         pending_input[str(CHAT_ID)] = "diary"
-        await context.bot.send_message(chat_id=CHAT_ID, text="🌙 " + msg + "\n\n(Ответь - запишу в дневник.)")
+        await context.bot.send_message(chat_id=CHAT_ID, text=msg)
     except Exception:
         pass
 
@@ -690,28 +686,51 @@ async def job_weekly(context: ContextTypes.DEFAULT_TYPE):
 
 MENU = (
     "👕 Гардероб - лук, список, анализ, советы, добавить одежду\n"
-    "🌍 Языки и игра - уроки, перевод, угадай персонажа, уровень\n"
-    "🌤 Погода - сегодня и 7 дней\n"
+    "📚 Обучение + игра - грамматика, перевод, игра-детектив, уровень\n"
+    "🌤 Погода - сегодня и 7 дней + рубрика мира\n"
     "✈️ Путешествия - куда поехать, мои страны\n"
-    "🌿 Lagom - фраза дня, чек-ин, вечерний разбор, дневник\n"
-    "📚 Контент - фильмы и книги по вкусу\n"
-    "🎤 Концерты - мониторинг (нужен API событий)\n"
+    "🧠 Мотивация - проверка дня, дневник\n"
+    "🎬 Развлечения - фильмы, книги, концерты\n"
     "🌱 Растения - список и полив\n"
-    "⚙️ Настройки - город и уровень языков\n\n"
-    "Геолокация - сменить город. Без команды - чат с ассистентом."
+    "⚙️ Настройки - город и уровень языков"
+)
+
+ASSIST = "👨🏻‍💻 Вызов ассистента"
+
+WELCOME = (
+    "👨🏻‍💻 Вызов ассистента\n\n"
+    "Что будем делать сегодня?\n"
+    "Помогу с повседневными задачами, языками, гардеробом, путешествиями и поиском информации.\n\n"
+    "💬 Напиши вопрос своими словами или выбери направление в меню ниже.\n\n"
+    "Попробуй спросить:\n"
+    "👕 Что надеть сегодня?\n"
+    "🇳🇱 Объясни разницу между die и dat\n"
+    "✈️ Куда поехать на выходные из Нидерландов?\n"
+    "📚 Посоветуй книгу как «Цветы для Элджернона»\n"
+    "🎬 Найди сериал похожий на The Last of Us\n"
+    "🛒 Что докупить в гардероб?\n"
+    "🌤 Какая погода на выходных?\n\n"
+    "💡 Не знаешь, с чего начать? Расскажи, что сейчас в голове - задача, идея, проблема или вопрос. Помогу разобраться."
+)
+
+FIRST_RUN = (
+    "👋 Привет! Я твой персональный помощник.\n\n"
+    "Чем больше пользуешься, тем точнее становятся рекомендации по одежде, фильмам, путешествиям, языкам и решениям дня.\n\n"
+    "Что хочешь попробовать первым? 🚀"
 )
 
 # --- Меню-дашборд ---
 MAIN_KB = ReplyKeyboardMarkup([
-    ["👨🏻‍💻 Вызов ассистента"],
+    [ASSIST],
     ["🧭 Планы", "👕 Гардероб"],
-    ["🌍 Языки и игра", "🌤 Погода"],
-    ["✈️ Путешествия", "🌿 Lagom"],
-    ["📚 Контент", "🎤 Концерты"],
-    ["🌱 Растения", "⚙️ Настройки"],
+    ["📚 Обучение + игра", "🌤 Погода"],
+    ["✈️ Путешествия", "🧠 Мотивация"],
+    ["🎬 Развлечения", "🌱 Растения"],
+    ["⚙️ Настройки"],
 ], resize_keyboard=True)
 
 WARDROBE_KB = ReplyKeyboardMarkup([
+    [ASSIST],
     ["✨ Сгенерировать лук"],
     ["📊 Скучный список", "🧠 Анализ"],
     ["🛍️ Советы к покупке", "📤 Добавить одежду"],
@@ -719,29 +738,32 @@ WARDROBE_KB = ReplyKeyboardMarkup([
 ], resize_keyboard=True)
 
 LANG_KB = ReplyKeyboardMarkup([
+    [ASSIST],
     ["🇳🇱 Нидерландский", "🇬🇧 Английский"],
-    ["🎮 Угадай персонажа"],
+    ["🕵️ Игра-детектив"],
     ["⚙️ Уровень языка"],
     ["⬅️ Назад"],
 ], resize_keyboard=True)
-NL_KB = ReplyKeyboardMarkup([["📖 Урок NL", "⚡ Перевод NL"], ["⬅️ Назад"]], resize_keyboard=True)
-EN_KB = ReplyKeyboardMarkup([["📖 Урок EN", "⚡ Перевод EN"], ["⬅️ Назад"]], resize_keyboard=True)
+NL_KB = ReplyKeyboardMarkup([[ASSIST], ["📖 Грамматика NL", "⚡ Тренировка NL"], ["⬅️ Назад"]], resize_keyboard=True)
+EN_KB = ReplyKeyboardMarkup([[ASSIST], ["📖 Грамматика EN", "⚡ Тренировка EN"], ["⬅️ Назад"]], resize_keyboard=True)
 
-WEATHER_KB = ReplyKeyboardMarkup([["🌤 Сегодня", "📅 7 дней"], ["⬅️ Назад"]], resize_keyboard=True)
-TRAVEL_KB = ReplyKeyboardMarkup([["🗺 Куда поехать", "🏳 Мои страны"], ["⬅️ Назад"]], resize_keyboard=True)
+WEATHER_KB = ReplyKeyboardMarkup([[ASSIST], ["🌤 Сегодня", "📅 7 дней"], ["⬅️ Назад"]], resize_keyboard=True)
+TRAVEL_KB = ReplyKeyboardMarkup([[ASSIST], ["🗺 Куда поехать", "🏳 Мои страны"], ["⬅️ Назад"]], resize_keyboard=True)
 LAGOM_KB = ReplyKeyboardMarkup([
-    ["🌿 Фраза дня", "🧠 Чек-ин"],
-    ["🌙 Вечерний разбор", "📊 Дневник"],
+    [ASSIST],
+    ["🌙 Проверка дня", "📊 Дневник"],
+    ["🌿 Фраза дня"],
     ["⬅️ Назад"],
 ], resize_keyboard=True)
 CONTENT_KB = ReplyKeyboardMarkup([
+    [ASSIST],
     ["🎬 Что посмотреть", "📖 Что почитать"],
-    ["➕ Добавить любимое"],
+    ["❤️ Любимое", "🎤 Концерты"],
     ["⬅️ Назад"],
 ], resize_keyboard=True)
-PLANTS_KB = ReplyKeyboardMarkup([["💧 Мои растения", "➕ Добавить растение"], ["⬅️ Назад"]], resize_keyboard=True)
-CONCERTS_KB = ReplyKeyboardMarkup([["🎤 Мои артисты", "➕ Добавить артиста"], ["⬅️ Назад"]], resize_keyboard=True)
-SETTINGS_KB = ReplyKeyboardMarkup([["📍 Сменить город", "🌐 Уровень языков"], ["⬅️ Назад"]], resize_keyboard=True)
+PLANTS_KB = ReplyKeyboardMarkup([[ASSIST], ["💧 Мои растения", "🗓 Полив"], ["➕ Добавить растение"], ["⬅️ Назад"]], resize_keyboard=True)
+CONCERTS_KB = ReplyKeyboardMarkup([[ASSIST], ["🎤 Мои артисты", "➕ Добавить артиста"], ["⬅️ Назад"]], resize_keyboard=True)
+SETTINGS_KB = ReplyKeyboardMarkup([[ASSIST], ["📍 Сменить город", "🌐 Уровень языков"], ["⬅️ Назад"]], resize_keyboard=True)
 LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 
 
@@ -756,6 +778,21 @@ _MONTHS = ["января", "февраля", "марта", "апреля", "ма
 def _esc(t):
     return (t or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+def weather_icon(code, temp, rain, wind_kmh):
+    if code in (95, 96, 99):
+        return "🌩️"
+    if code in (71, 73, 75, 77, 85, 86):
+        return "❄️"
+    if temp is not None and temp > 30 and rain >= 30:
+        return "☀️🌧️"
+    if rain >= 30:
+        return "🌧️"
+    if wind_kmh >= 40:
+        return "💨"
+    if code in (0, 1):
+        return "☀️"
+    return "☁️"
+
 async def plany_command(update, context):
     cid = update.effective_chat.id
     await update.message.reply_text("Собираю сводку дня...")
@@ -768,30 +805,7 @@ async def plany_command(update, context):
         code = cur["weathercode"]
         rain = d["precipitation_probability_max"][0] or 0
         wind_kmh = (d["windspeed_10m_max"][0] or 0) * 3.6
-        emoji = EMOJI.get(code, "🌡️")
-
-        # умный вывод
-        notes = []
-        if rain < 30:
-            notes.append("можно без зонта")
-        elif rain >= 60:
-            notes.append("возьми дождевик")
-        if temp > 26:
-            notes.append("жаркий день")
-        elif temp < 5:
-            notes.append("холодно, утепляйся")
-        if wind_kmh >= 30:
-            notes.append("сильный ветер")
-        conclusion = " • ".join(notes) if notes else "комфортно"
-
-        # мировые экстремумы (реальные данные)
-        hot = fetch_current_temp(29.37, 47.98)      # Кувейт
-        cold = fetch_current_temp(-78.46, 106.84)   # Восток, Антарктида
-        extremes = []
-        if hot is not None:
-            extremes.append(f"🔥 Кувейт: {hot:+.0f}°C")
-        if cold is not None:
-            extremes.append(f"❄️ Антарктида: {cold:+.0f}°C")
+        icon = weather_icon(code, temp, rain, wind_kmh)
 
         of = build_outfit_focus(weather_block(data, 0, s["city"]), "сегодня")
         ex = plany_extras()
@@ -800,25 +814,26 @@ async def plany_command(update, context):
         header = f"{_WEEKDAYS[now.weekday()]}, {now.day} {_MONTHS[now.month-1]}"
 
         L = [f"🧭 <b>Планы | {header}</b>", ""]
+        # Погода
         L.append("<b>Погода</b>")
-        L.append(f"{emoji} {_esc(s['city'])}: {temp:+.0f}°C • 🌧 {rain:.0f}% • 💨 {wind_kmh:.0f} км/ч")
-        L.append(f"👉 {conclusion}")
-        L += extremes
-        L += ["", "<b>Лук дня</b>"]
-        L += [f"- {_esc(x)}" for x in of.get("outfit", [])]
-        if of.get("why"):
-            L += ["", f"<i>{_esc(of['why'])}</i>"]
-        L += ["", "<b>Интересный факт</b>", _esc(ex.get("fact", ""))]
-        L += ["", "<b>Идея дня</b>", _esc(ex.get("idea", ""))]
+        L.append(f"{icon} {_esc(s['city'])}: {temp:+.0f}°C • 🌧 {rain:.0f}% • 💨 {wind_kmh:.0f} км/ч")
+        # Место дня
+        L += ["", f"🗺️ <b>Место дня: {_esc(ex.get('place_country',''))}</b>", _esc(ex.get("place_text", ""))]
+        # Лук дня - через запятую, без пояснений
+        L += ["", "<b>Лук дня</b>", _esc(", ".join(of.get("outfit", [])))]
+        # Научный факт
+        L += ["", "<b>Интересный научный факт</b>", _esc(ex.get("fact", ""))]
+        # Слово дня - русское впереди, потом переводы
         L += ["", "<b>Слово дня</b>",
+              _esc(ex.get("word_ru", "")),
               f"🇳🇱 {_esc(ex.get('word_nl',''))}",
               f"🇬🇧 {_esc(ex.get('word_en',''))}",
-              _esc(ex.get("word_meaning", "")),
               f"<i>{_esc(ex.get('example_nl',''))}</i>",
               f"<i>{_esc(ex.get('example_ru',''))}</i>"]
-        L += ["", "<b>💭 Фраза дня</b>", _esc(lagom_of_day())]
-        if ex.get("bonus"):
-            L += ["", f"<b>🎲 {_esc(ex.get('bonus_label','Бонус'))}</b>", _esc(ex.get("bonus", ""))]
+        # Цитата дня с источником
+        if ex.get("quote"):
+            L += ["", "📖 <b>Цитата дня</b>", _esc(ex.get("quote", "")),
+                  f"<i>— {_esc(ex.get('quote_book',''))}</i>"]
 
         await context.bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
     except Exception as e:
@@ -886,21 +901,77 @@ async def weather_command(update, context):
             pass
     try:
         s = get_settings(cid)
-        data = fetch_weather(s["lat"], s["lon"], max(days, 1))
-        if days == 1:
-            await update.message.reply_text(weather_block(data, 0, s["city"]))
-            return
+        data = fetch_weather(s["lat"], s["lon"], max(days, 2))
         d = data["daily"]
-        out = [f"📍 {s['city']} - прогноз на {days} дн.", ""]
         names = ["Сегодня", "Завтра"]
-        for i in range(days):
-            label = names[i] if i < 2 else d["time"][i]
-            code = d["weathercode"][i]
-            out.append(f"{EMOJI.get(code,'🌡️')} {label}: {d['temperature_2m_min'][i]:.0f}-{d['temperature_2m_max'][i]:.0f}°C, "
-                       f"{DESC.get(code,'')}, ветер {d['windspeed_10m_max'][i]:.0f} м/с, дождь {d['precipitation_probability_max'][i] or 0:.0f}%")
+        out = []
+        if days == 1:
+            code = d["weathercode"][0]
+            rain = d["precipitation_probability_max"][0] or 0
+            wind_kmh = (d["windspeed_10m_max"][0] or 0) * 3.6
+            icon = weather_icon(code, d["temperature_2m_max"][0], rain, wind_kmh)
+            out += [f"📍 {s['city']}",
+                    f"{icon} {d['temperature_2m_min'][0]:.0f}-{d['temperature_2m_max'][0]:.0f}°C • 🌧 {rain:.0f}% • 💨 {wind_kmh:.0f} км/ч"]
+        else:
+            out.append(f"📍 {s['city']} - прогноз на {days} дн.")
+            for i in range(days):
+                label = names[i] if i < 2 else d["time"][i]
+                code = d["weathercode"][i]
+                rain = d["precipitation_probability_max"][i] or 0
+                wind_kmh = (d["windspeed_10m_max"][i] or 0) * 3.6
+                icon = weather_icon(code, d["temperature_2m_max"][i], rain, wind_kmh)
+                out.append(f"{icon} {label}: {d['temperature_2m_min'][i]:.0f}-{d['temperature_2m_max'][i]:.0f}°C, дождь {rain:.0f}%, ветер {wind_kmh:.0f} км/ч")
+
+        # Рубрика мира: реальные текущие экстремумы (ротация точек по дню)
+        rubric = world_extreme_line()
+        if rubric:
+            out += ["", rubric]
+        # Дерзкая концовка
+        out += ["", _random.choice(CLOSERS).format(city=s["city"])]
         await update.message.reply_text("\n".join(out))
     except Exception as e:
         await update.message.reply_text(f"Ошибка погоды: {e}")
+
+# Точки для рубрики мира (реальные данные через Open-Meteo)
+EXTREME_POINTS = [
+    ("🇰🇼", "Кувейт", 29.37, 47.98),
+    ("🇦🇶", "Антарктида", -78.46, 106.84),
+    ("🇺🇸", "Долина Смерти", 36.46, -116.87),
+    ("🇷🇺", "Оймякон", 63.46, 142.79),
+    ("🇮🇳", "Дели", 28.61, 77.21),
+    ("🇮🇸", "Рейкьявик", 64.15, -21.94),
+    ("🇦🇪", "Дубай", 25.20, 55.27),
+]
+
+def world_extreme_line():
+    # выбираем 3 точки по дню, тянем реальную температуру, берём самую крайнюю
+    idx = datetime.now(TZ).timetuple().tm_yday
+    pts = [EXTREME_POINTS[(idx + k) % len(EXTREME_POINTS)] for k in range(3)]
+    readings = []
+    for flag, name, lat, lon in pts:
+        t = fetch_current_temp(lat, lon)
+        if t is not None:
+            readings.append((t, flag, name))
+    if not readings:
+        return None
+    hot = max(readings, key=lambda x: x[0])
+    cold = min(readings, key=lambda x: x[0])
+    pick = hot if abs(hot[0]) >= abs(cold[0]) else cold
+    t, flag, name = pick
+    if t >= 40:
+        return f"🔥 Сейчас в {flag} {name} {t:+.0f}°C - асфальт можно намазывать на хлеб."
+    if t <= -20:
+        return f"❄️ В {flag} {name} сейчас {t:+.0f}°C - холоднее, чем в твоей морозилке."
+    return f"🌍 В {flag} {name} сейчас {t:+.0f}°C."
+
+CLOSERS = [
+    "Сегодня {city} явно выиграл погодную лотерею.",
+    "Хорошая новость: зонтик сегодня может отдохнуть.",
+    "Погода для прогулки. Отмазка «плохая погода» не принимается.",
+    "На улице комфортно. Даже велосипед не возражает.",
+    "Сегодня погода дружелюбнее некоторых людей.",
+]
+
 
 async def setcity_command(update, context):
     cid = update.effective_chat.id
@@ -960,6 +1031,9 @@ async def answer_callback(update, context):
         set_level(cid, language, level)
         await q.message.reply_text(f"Уровень {language} установлен: {level}")
         return
+    if data == "game_again":
+        await _send_game(context.bot, cid)
+        return
 
 async def translate_command(update, context):
     cid = str(update.effective_chat.id)
@@ -981,20 +1055,22 @@ async def translate_command(update, context):
 async def generate_look_command(update, context):
     await plan_command(update, context)
 
-async def game_start(update, context):
-    cid = str(update.effective_chat.id)
-    # язык игры: тот, в подменю которого пользователь (по умолчанию нидерландский)
-    state = text_router_state.get(cid)
-    language = "английский" if state == "en" else "нидерландский"
+async def _send_game(bot, cid):
+    language = "английский" if text_router_state.get(str(cid)) == "en" else "нидерландский"
     level = get_level(cid, language)
-    await update.message.reply_text("Загадываю персонажа...")
     try:
         d = game_data(language, level)
     except Exception as e:
-        await update.message.reply_text(f"Ошибка: {e}")
+        await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
         return
-    game_state[cid] = {"answer": d.get("answer", ""), "quote": d.get("quote", "")}
-    await update.message.reply_text(f"🎮 Угадай ({language}, {level}):\n\n{d.get('clues','')}\n\nНапиши имя следующим сообщением.")
+    game_state[str(cid)] = {"answer": d.get("answer", ""), "quote": d.get("quote", "")}
+    await bot.send_message(chat_id=cid,
+        text=f"🕵️ Детектив ({language}, {level}):\n\n{d.get('clues','')}\n\nНапиши имя (можно на любом языке, опечатка ок).")
+
+async def game_start(update, context):
+    cid = str(update.effective_chat.id)
+    await update.message.reply_text("Загадываю персонажа...")
+    await _send_game(context.bot, cid)
 
 async def shopping_command(update, context):
     cid = update.effective_chat.id
@@ -1044,29 +1120,29 @@ async def text_router(update, context):
     text = update.message.text
 
     # ===== Навигация: главные разделы =====
-    if text == "👨🏻‍💻 Вызов ассистента":
+    if text == ASSIST:
         text_router_state[cid] = "main"
-        await update.message.reply_text(MENU, reply_markup=MAIN_KB); return
+        await update.message.reply_text(WELCOME, reply_markup=MAIN_KB); return
     if text == "🧭 Планы":
         await plany_command(update, context); return
     if text == "👕 Гардероб":
         text_router_state[cid] = "wardrobe"
         await update.message.reply_text("Гардероб:", reply_markup=WARDROBE_KB); return
-    if text == "🌍 Языки и игра":
+    if text == "📚 Обучение + игра":
         text_router_state[cid] = "lang"
-        await update.message.reply_text("Языки и игра:", reply_markup=LANG_KB); return
+        await update.message.reply_text("Обучение и игра:", reply_markup=LANG_KB); return
     if text == "🌤 Погода":
         text_router_state[cid] = "weather"
         await update.message.reply_text("Погода:", reply_markup=WEATHER_KB); return
     if text == "✈️ Путешествия":
         text_router_state[cid] = "travel"
         await update.message.reply_text("Путешествия:", reply_markup=TRAVEL_KB); return
-    if text == "🌿 Lagom":
+    if text == "🧠 Мотивация":
         text_router_state[cid] = "lagom"
-        await update.message.reply_text("Lagom:", reply_markup=LAGOM_KB); return
-    if text == "📚 Контент":
+        await update.message.reply_text("Мотивация:", reply_markup=LAGOM_KB); return
+    if text == "🎬 Развлечения":
         text_router_state[cid] = "content"
-        await update.message.reply_text("Контент:", reply_markup=CONTENT_KB); return
+        await update.message.reply_text("Развлечения:", reply_markup=CONTENT_KB); return
     if text == "🎤 Концерты":
         text_router_state[cid] = "concerts"
         await update.message.reply_text("Концерты:", reply_markup=CONCERTS_KB); return
@@ -1114,16 +1190,16 @@ async def text_router(update, context):
     if text == "📤 Добавить одежду":
         await add_clothes_start(update, context); return
 
-    # ===== Языки и игра =====
-    if text == "📖 Урок NL":
+    # ===== Обучение и игра =====
+    if text == "📖 Грамматика NL":
         text_router_state[cid] = "nl"; await dutch_command(update, context); return
-    if text == "📖 Урок EN":
+    if text == "📖 Грамматика EN":
         text_router_state[cid] = "en"; await english_command(update, context); return
-    if text == "⚡ Перевод NL":
+    if text == "⚡ Тренировка NL":
         text_router_state[cid] = "nl"; context.args = []; await translate_command(update, context); return
-    if text == "⚡ Перевод EN":
+    if text == "⚡ Тренировка EN":
         text_router_state[cid] = "en"; context.args = ["en"]; await translate_command(update, context); return
-    if text == "🎮 Угадай персонажа":
+    if text == "🕵️ Игра-детектив":
         await game_start(update, context); return
     if text == "⚙️ Уровень языка" or text == "🌐 Уровень языков":
         nl_lvl, en_lvl = get_level(cid, "нидерландский"), get_level(cid, "английский")
@@ -1150,33 +1226,26 @@ async def text_router(update, context):
     if text == "🏳 Мои страны":
         await send_long(context.bot, cid, "🏳 Посещённые страны:\n\n" + VISITED); return
 
-    # ===== Lagom =====
+    # ===== Мотивация =====
     if text == "🌿 Фраза дня":
         await update.message.reply_text("🌿 " + lagom_of_day()); return
-    if text == "🧠 Чек-ин":
-        try:
-            await update.message.reply_text(lagom_checkin("day"))
-        except Exception as e:
-            await update.message.reply_text(f"Ошибка: {e}")
-        return
-    if text == "🌙 Вечерний разбор":
-        try:
-            msg = lagom_checkin("evening")
-        except Exception as e:
-            await update.message.reply_text(f"Ошибка: {e}"); return
+    if text == "🌙 Проверка дня":
+        msg = ("🌙 Дим, как вечер? Смотри: что тревожило и что реально было - часто две разные истории. "
+               "Давай отпустим то, что уже неважно. Как сегодня с этим, заметил разницу?\n\n"
+               "Ответь - запишу в дневник.")
         pending_input[cid] = "diary"
-        await update.message.reply_text(msg + "\n\n(Ответь сообщением - запишу в дневник.)")
+        await update.message.reply_text(msg)
         return
     if text == "📊 Дневник":
         entries = get_list(DIARY_KEY, cid)
         if not entries:
-            await update.message.reply_text("Дневник пуст. Записи появятся после вечернего разбора.")
+            await update.message.reply_text("Дневник пуст. Записи появятся после вечерней проверки дня.")
         else:
             last = entries[-7:]
             await send_long(context.bot, cid, "📊 Последние записи\n\n" + "\n\n".join(f"{e['date']}: {e['text']}" for e in last))
         return
 
-    # ===== Контент =====
+    # ===== Развлечения =====
     if text == "🎬 Что посмотреть":
         await update.message.reply_text("Подбираю...")
         try:
@@ -1191,9 +1260,14 @@ async def text_router(update, context):
         except Exception as e:
             await update.message.reply_text(f"Ошибка: {e}")
         return
-    if text == "➕ Добавить любимое":
+    if text == "❤️ Любимое":
+        favs = get_list(FAVORITES_KEY, cid)
+        msg = "❤️ Любимое:\n" + ("\n".join(f"• {f}" for f in favs) if favs else "пусто")
         pending_input[cid] = "favorite"
-        await update.message.reply_text("Напиши любимый фильм/сериал/книгу - добавлю. Бот учтёт вкус в рекомендациях."); return
+        await update.message.reply_text(msg + "\n\nНапиши фильм/сериал/книгу - добавлю."); return
+    if text == "🎤 Концерты":
+        text_router_state[cid] = "concerts"
+        await update.message.reply_text("Концерты:", reply_markup=CONCERTS_KB); return
 
     # ===== Концерты =====
     if text == "🎤 Мои артисты":
@@ -1209,9 +1283,17 @@ async def text_router(update, context):
     if text == "💧 Мои растения":
         pl = get_list(PLANTS_KEY, cid)
         await update.message.reply_text("🌱 Растения:\n" + ("\n".join(f"• {p}" for p in pl) if pl else "пусто")); return
+    if text == "🗓 Полив":
+        pl = get_list(PLANTS_KEY, cid)
+        if not pl:
+            await update.message.reply_text("Сначала добавь растения (➕ Добавить растение) с интервалом полива.")
+        else:
+            await update.message.reply_text("🗓 Расписание полива:\n" + "\n".join(f"• {p}" for p in pl) +
+                                             "\n\n(Авто-напоминания добавлю в следующем батче.)")
+        return
     if text == "➕ Добавить растение":
         pending_input[cid] = "plant"
-        await update.message.reply_text("Напиши растение (можно с интервалом полива) - добавлю."); return
+        await update.message.reply_text("Напиши растение и интервал полива, напр.: монстера, раз в 5 дней"); return
 
     # ===== Настройки =====
     if text == "📍 Сменить город":
@@ -1247,9 +1329,20 @@ async def text_router(update, context):
     # ===== Игра: ответ-догадка =====
     if cid in game_state:
         st = game_state.pop(cid)
-        correct = st["answer"].lower() in text.lower() or text.lower() in st["answer"].lower()
-        verdict = "✅ Верно!" if correct else f"❌ Не угадал. Это {st['answer']}."
-        await update.message.reply_text(f"{verdict}\n\n💬 {st.get('quote','')}\n\n🎮 Угадай персонажа - ещё раунд")
+        ans = st["answer"].lower().strip()
+        guess = text.lower().strip()
+        # совпадение: точное, вхождение, или близкое по буквам (одна опечатка)
+        def close(a, b):
+            if a in b or b in a:
+                return True
+            if abs(len(a) - len(b)) <= 1:
+                diff = sum(1 for x, y in zip(a, b) if x != y) + abs(len(a) - len(b))
+                return diff <= 1
+            return False
+        correct = any(close(guess, part) for part in [ans] + ans.split())
+        verdict = "✅ Верно!" if correct else f"❌ Почти. Это {st['answer']}."
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🕵️ Загадать ещё", callback_data="game_again")]])
+        await update.message.reply_text(f"{verdict}\n\n💬 {st.get('quote','')}", reply_markup=kb)
         return
 
     # ===== Перевод-челлендж =====
@@ -1304,7 +1397,7 @@ def main():
     app.add_handler(CommandHandler("dutch", dutch_command))
     app.add_handler(CommandHandler("english", english_command))
     app.add_handler(CommandHandler("translate", translate_command))
-    app.add_handler(CallbackQueryHandler(answer_callback, pattern="^(lesson_answer|lvl_)"))
+    app.add_handler(CallbackQueryHandler(answer_callback, pattern="^(lesson_answer|lvl_|game_again)"))
     app.add_handler(MessageHandler(filters.LOCATION, location_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
