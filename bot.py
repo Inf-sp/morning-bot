@@ -26,7 +26,9 @@ chat_history = {}
 lesson_answers = {}   # chat_id -> ответ мини-теста
 text_router_state = {}  # chat_id -> уровень меню
 add_wardrobe_mode = {}  # chat_id -> True когда ждём список одежды
-game_state = {}         # chat_id -> {answer, quote}
+game_state = {}         # chat_id -> {answer, quote, quote_ru}
+game_config = {}        # chat_id -> {lang, difficulty}
+grammar_state = {}      # chat_id -> {correct, why, a, b}
 pending_input = {}      # chat_id -> "diary" | "plant" | "fav_movie" | "fav_book" | "artist"
 SETTINGS_FILE = "settings.json"
 NOTES_FILE = "notes.json"
@@ -432,44 +434,34 @@ JSON:
 }}"""
     return llm_json(prompt, 500)
 
-def lesson_data(language, level="B1"):
-    prompt = f"""Урок языка для русскоговорящего ученика уровня {level}. Язык: {language}.
-Слово и фраза должны строго соответствовать уровню {level} (для A1-A2 простые, для B2-C2 сложнее), каждый раз разные.
+def grammar_data(language, level="B1"):
+    prompt = f"""Грамматическое задание по языку {language} для русскоговорящего ученика уровня {level}.
+Выбери одну грамматическую тему уровня {level} (каждый раз разную). Сделай предложение с ОДНИМ пропуском.
 
 JSON:
 {{
- "word": "слово на {language}",
- "pron": "[транскрипция IPA в квадратных скобках, или пустая строка]",
- "meaning": "значение по-русски",
- "example": "предложение с этим словом на {language}",
- "example_tr": "перевод примера на русский",
- "phrase": "полезная разговорная фраза дня на {language}",
- "phrase_tr": "перевод фразы на русский",
- "wrong": "частая ошибочная версия этой фразы (как говорят НЕ надо)",
- "test_ru": "короткая русская фраза для мини-теста",
- "test_answer": "правильный перевод test_ru на {language}"
+ "rule_title": "короткое название темы по-русски",
+ "rule": "объяснение правила простым языком, 2-3 строки, по-русски",
+ "sentence": "предложение на {language} с пропуском в виде ____",
+ "a": "вариант ответа A (одно слово)",
+ "b": "вариант ответа B (одно слово)",
+ "correct": "a или b",
+ "why": "одна строка - почему этот вариант верный, по-русски"
 }}"""
-    return llm_json(prompt, 900)
+    return llm_json(prompt, 800)
 
-def format_lesson(language, flag, data, level="B1"):
-    L = [f"{flag} {language.capitalize()} на сегодня ({level})", "", f"📝 {data.get('word','')}"]
-    if data.get("pron"):
-        L.append(data["pron"])
-    L += [f"Значение: {data.get('meaning','')}", "",
-          f"🎬 {data.get('example','')}", data.get("example_tr", ""), "",
-          "🧠 Попробуй использовать это слово сегодня хотя бы раз.", "",
-          "— — —", "", "💬 Фраза дня", data.get("phrase", ""), data.get("phrase_tr", "")]
-    if data.get("wrong"):
-        L += ["", "Не говори:", f"❌ {data['wrong']}", "Говори:", f"✅ {data.get('phrase','')}"]
-    L += ["", "— — —", "", "⚡ Мини-тест", "Как сказать:", f"«{data.get('test_ru','')}»"]
-    return "\n".join(L)
-
-async def send_lesson(bot, chat_id, language, flag):
+async def send_grammar(bot, chat_id, language, flag):
     level = get_level(chat_id, language)
-    data = lesson_data(language, level)
-    text = format_lesson(language, flag, data, level)
-    lesson_answers[str(chat_id)] = data.get("test_answer", "")
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⚡ Показать ответ", callback_data="lesson_answer")]])
+    d = grammar_data(language, level)
+    grammar_state[str(chat_id)] = {"correct": d.get("correct", "a"), "why": d.get("why", ""),
+                                   "a": d.get("a", ""), "b": d.get("b", "")}
+    text = (f"📖 {flag} Грамматика ({level})\n\n"
+            f"{d.get('rule_title','')}\n{d.get('rule','')}\n\n"
+            f"Заполни пропуск:\n{d.get('sentence','')}")
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton(d.get("a", "A"), callback_data="gram_a"),
+        InlineKeyboardButton(d.get("b", "B"), callback_data="gram_b"),
+    ]])
     await bot.send_message(chat_id=chat_id, text=text, reply_markup=kb)
 
 def generate_challenge(language, level="B1"):
@@ -483,12 +475,15 @@ def check_translation(language, ru, answer):
 Русская фраза: {ru}
 Перевод ученика: {answer}
 
-Проверь коротко, без markdown:
-1. Верно или ошибки
-2. Правильный вариант и в чём ошибка
-3. Более естественный вариант, если есть
-Тон коллеги, по делу. Не обрывай."""
-    return llm(prompt, 800, 0.4)
+JSON:
+{{
+ "ok": true/false (перевод по сути верный или нет),
+ "error": "если есть ошибка - в чём именно, коротко по-русски (иначе пустая строка)",
+ "correct": "правильный, естественный вариант на {language}",
+ "simple": ["1-3 очень коротких пункта-объяснения по-русски"],
+ "easier": "более простой/разговорный вариант на {language}, если уместно (иначе пустая строка)"
+}}"""
+    return llm_json(prompt, 800)
 
 def generate_shopping_advice():
     w = load_wardrobe()
@@ -549,16 +544,23 @@ def content_recommend(kind, favorites):
 Без markdown и звёздочек. Заголовок: {'🎬 Что посмотреть' if kind=='movie' else '📖 Что почитать'}."""
     return llm(prompt, 900, 0.8)
 
-def game_data(language, level):
-    prompt = f"""Игра "угадай персонажа/личность" на языке: {language}, уровень {level}.
-Загадай известного персонажа или реального человека (кино, наука, история, музыка).
+def game_data(clue_lang, difficulty):
+    diff_map = {
+        "easy": "очень известный персонаж/личность, подсказки простые и явные",
+        "med": "известный персонаж/личность, подсказки средней сложности",
+        "hard": "менее очевидный, но узнаваемый персонаж/личность, подсказки хитрые и непрямые",
+    }
+    diff = diff_map.get(difficulty, diff_map["med"])
+    prompt = f"""Игра-детектив "угадай персонажа или личность" (кино, наука, история, музыка, литература).
+Сложность: {diff}. Язык подсказок: {clue_lang}.
 JSON:
 {{
- "clues": "3-4 подсказки на {language}, каждая с новой строки, от сложной к лёгкой, без имени",
+ "clues": "3-4 подсказки на языке '{clue_lang}', каждая с новой строки, от непрямой к явной, без имени",
  "answer": "имя",
- "quote": "короткая цитата или интересный факт о нём"
+ "quote": "короткая дерзкая/смешная цитата или фраза в духе этого персонажа на языке '{clue_lang}'",
+ "quote_ru": "перевод цитаты на русский"
 }}"""
-    return llm_json(prompt, 700)
+    return llm_json(prompt, 800)
 
 def lagom_checkin(kind):
     if kind == "day":
@@ -644,7 +646,7 @@ async def job_dutch(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID:
         return
     try:
-        await send_lesson(context.bot, CHAT_ID, "нидерландский", "🇳🇱")
+        await send_grammar(context.bot, CHAT_ID, "нидерландский", "🇳🇱")
     except Exception as e:
         await context.bot.send_message(chat_id=CHAT_ID, text=f"Ошибка урока: {e}")
 
@@ -1003,16 +1005,16 @@ async def location_handler(update, context):
         await update.message.reply_text(f"Локация сохранена. Ошибка погоды: {e}")
 
 async def dutch_command(update, context):
-    await update.message.reply_text("Готовлю урок...")
+    await update.message.reply_text("Готовлю грамматику...")
     try:
-        await send_lesson(context.bot, update.effective_chat.id, "нидерландский", "🇳🇱")
+        await send_grammar(context.bot, update.effective_chat.id, "нидерландский", "🇳🇱")
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
 
 async def english_command(update, context):
-    await update.message.reply_text("Готовлю урок...")
+    await update.message.reply_text("Готовлю грамматику...")
     try:
-        await send_lesson(context.bot, update.effective_chat.id, "английский", "🇬🇧")
+        await send_grammar(context.bot, update.effective_chat.id, "английский", "🇬🇧")
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
 
@@ -1021,15 +1023,39 @@ async def answer_callback(update, context):
     await q.answer()
     cid = str(q.message.chat_id)
     data = q.data
-    if data == "lesson_answer":
-        ans = lesson_answers.get(cid)
-        await q.message.reply_text(f"✅ {ans}" if ans else "Ответ не найден - запроси урок заново.")
-        return
     if data.startswith("lvl_"):
         _, code, level = data.split("_")
         language = "нидерландский" if code == "nl" else "английский"
         set_level(cid, language, level)
         await q.message.reply_text(f"Уровень {language} установлен: {level}")
+        return
+    if data in ("gram_a", "gram_b"):
+        st = grammar_state.get(cid)
+        if not st:
+            await q.message.reply_text("Задание устарело, запроси новое."); return
+        chosen = "a" if data == "gram_a" else "b"
+        if chosen == st["correct"]:
+            await q.message.reply_text(f"✅ Верно! {st['why']}")
+        else:
+            right = st["a"] if st["correct"] == "a" else st["b"]
+            await q.message.reply_text(f"❌ Нет. Правильно: {right}\n{st['why']}")
+        return
+    if data.startswith("gamelang_"):
+        lang = {"ru": "русский", "en": "английский", "nl": "нидерландский"}[data.split("_")[1]]
+        game_config[cid] = {"lang": lang, "difficulty": "med"}
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("Лёгкая", callback_data="gamediff_easy"),
+            InlineKeyboardButton("Средняя", callback_data="gamediff_med"),
+            InlineKeyboardButton("Тяжёлая", callback_data="gamediff_hard"),
+        ]])
+        await q.message.reply_text(f"Язык: {lang}. Выбери сложность:", reply_markup=kb)
+        return
+    if data.startswith("gamediff_"):
+        diff = data.split("_")[1]
+        cfg = game_config.get(cid, {"lang": "нидерландский"})
+        cfg["difficulty"] = diff
+        game_config[cid] = cfg
+        await _send_game(context.bot, cid)
         return
     if data == "game_again":
         await _send_game(context.bot, cid)
@@ -1048,7 +1074,8 @@ async def translate_command(update, context):
         await update.message.reply_text(f"Ошибка: {e}")
         return
     challenge_state[cid] = {"ru": ru, "lang": lang}
-    await update.message.reply_text(f"Переведи на {lang} ({level}):\n\n{ru}\n\nНапиши перевод следующим сообщением.")
+    flag = "🇳🇱" if lang == "нидерландский" else "🇬🇧"
+    await update.message.reply_text(f"{flag} Тренировка ({level})\n\nПереведи на {lang}:\n«{ru}»\n\nНапиши перевод следующим сообщением.")
 
 # --- Шкаф ---
 
@@ -1056,21 +1083,25 @@ async def generate_look_command(update, context):
     await plan_command(update, context)
 
 async def _send_game(bot, cid):
-    language = "английский" if text_router_state.get(str(cid)) == "en" else "нидерландский"
-    level = get_level(cid, language)
+    cfg = game_config.get(str(cid), {"lang": "нидерландский", "difficulty": "med"})
     try:
-        d = game_data(language, level)
+        d = game_data(cfg["lang"], cfg["difficulty"])
     except Exception as e:
         await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
         return
-    game_state[str(cid)] = {"answer": d.get("answer", ""), "quote": d.get("quote", "")}
+    game_state[str(cid)] = {"answer": d.get("answer", ""), "quote": d.get("quote", ""), "quote_ru": d.get("quote_ru", "")}
+    diff_ru = {"easy": "лёгкая", "med": "средняя", "hard": "тяжёлая"}.get(cfg["difficulty"], "средняя")
     await bot.send_message(chat_id=cid,
-        text=f"🕵️ Детектив ({language}, {level}):\n\n{d.get('clues','')}\n\nНапиши имя (можно на любом языке, опечатка ок).")
+        text=f"🕵️ Детектив ({cfg['lang']}, {diff_ru})\n\n{d.get('clues','')}\n\nНапиши имя (можно на любом языке, опечатка ок).")
 
 async def game_start(update, context):
     cid = str(update.effective_chat.id)
-    await update.message.reply_text("Загадываю персонажа...")
-    await _send_game(context.bot, cid)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🇷🇺 Русский", callback_data="gamelang_ru"),
+        InlineKeyboardButton("🇬🇧 English", callback_data="gamelang_en"),
+        InlineKeyboardButton("🇳🇱 Nederlands", callback_data="gamelang_nl"),
+    ]])
+    await update.message.reply_text("🕵️ Игра-детектив. На каком языке подсказки?", reply_markup=kb)
 
 async def shopping_command(update, context):
     cid = update.effective_chat.id
@@ -1342,7 +1373,10 @@ async def text_router(update, context):
         correct = any(close(guess, part) for part in [ans] + ans.split())
         verdict = "✅ Верно!" if correct else f"❌ Почти. Это {st['answer']}."
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("🕵️ Загадать ещё", callback_data="game_again")]])
-        await update.message.reply_text(f"{verdict}\n\n💬 {st.get('quote','')}", reply_markup=kb)
+        L = [verdict, "", f"💬 {st.get('quote','')}"]
+        if st.get("quote_ru"):
+            L.append(f"<i>{_esc(st['quote_ru'])}</i>")
+        await context.bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
         return
 
     # ===== Перевод-челлендж =====
@@ -1350,11 +1384,28 @@ async def text_router(update, context):
         st = challenge_state.pop(cid)
         await update.message.reply_text("Проверяю...")
         try:
-            fb = check_translation(st["lang"], st["ru"], text)
+            r = check_translation(st["lang"], st["ru"], text)
         except Exception as e:
             await update.message.reply_text(f"Ошибка проверки: {e}")
             return
-        await send_long(context.bot, cid, fb)
+        flag = "🇳🇱" if st["lang"] == "нидерландский" else "🇬🇧"
+        L = [f"{flag} Перевод"]
+        if r.get("ok"):
+            L += ["", "✅ Верно!"]
+            if r.get("correct"):
+                L += ["", "💡 Естественнее", r["correct"]]
+        else:
+            if r.get("error"):
+                L += ["", "❌ Ошибка", r["error"]]
+            if r.get("correct"):
+                L += ["", "💡 Правильно", r["correct"]]
+        simple = r.get("simple") or []
+        if simple:
+            L += ["", "🧠 Просто"] + [f"• {x}" for x in simple]
+        if r.get("easier"):
+            L += ["", "✔️ Можно проще", r["easier"]]
+        L += ["", "/translate - ещё фраза"]
+        await send_long(context.bot, cid, "\n".join(L))
         return
 
     # ===== Свободный чат =====
@@ -1397,7 +1448,7 @@ def main():
     app.add_handler(CommandHandler("dutch", dutch_command))
     app.add_handler(CommandHandler("english", english_command))
     app.add_handler(CommandHandler("translate", translate_command))
-    app.add_handler(CallbackQueryHandler(answer_callback, pattern="^(lesson_answer|lvl_|game_again)"))
+    app.add_handler(CallbackQueryHandler(answer_callback, pattern="^(lvl_|game_again|gram_|gamelang_|gamediff_)"))
     app.add_handler(MessageHandler(filters.LOCATION, location_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
