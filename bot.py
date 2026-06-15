@@ -575,6 +575,41 @@ def diary_reflect(entry):
 Без markdown и звёздочек."""
     return llm(prompt, 400, 0.8)
 
+import random as _random
+
+def fetch_current_temp(lat, lon):
+    try:
+        r = requests.get("https://api.open-meteo.com/v1/forecast",
+                         params={"latitude": lat, "longitude": lon, "current": "temperature_2m"}, timeout=15)
+        return r.json()["current"]["temperature_2m"]
+    except Exception:
+        return None
+
+def plany_extras():
+    r = _random.random()
+    if r < 0.40:
+        bonus_cat = "дополнительное нидерландское ИЛИ английское слово или мини-правило с переводом на русский"
+    elif r < 0.60:
+        bonus_cat = "место дня - куда съездить (страна или город, желательно где обычно не были), одна строка почему"
+    elif r < 0.80:
+        bonus_cat = "короткий научный факт"
+    else:
+        bonus_cat = f"короткая цитата из книги ({BOOKS}) с указанием книги в скобках"
+    prompt = f"""Сгенерируй блоки для ежедневной сводки русскоязычного пользователя (учит нидерландский и английский).
+JSON:
+{{
+ "fact": "интересный факт дня, одна строка",
+ "idea": "идея дня - практичный совет (продуктивность/СДВГ/жизнь), одна строка",
+ "word_nl": "полезное нидерландское слово",
+ "word_en": "его английский эквивалент",
+ "word_meaning": "значение по-русски",
+ "example_nl": "пример с этим словом на нидерландском",
+ "example_ru": "перевод примера",
+ "bonus_label": "короткий заголовок бонуса (например: Слово, Место дня, Научный факт, Цитата)",
+ "bonus": "содержимое бонуса по теме: {bonus_cat}"
+}}"""
+    return llm_json(prompt, 900)
+
 # ---------- Send ----------
 
 async def send_long(bot, chat_id, text):
@@ -668,11 +703,12 @@ MENU = (
 
 # --- Меню-дашборд ---
 MAIN_KB = ReplyKeyboardMarkup([
-    ["👕 Гардероб", "🌍 Языки и игра"],
-    ["🌤 Погода", "✈️ Путешествия"],
-    ["🌿 Lagom", "📚 Контент"],
-    ["🎤 Концерты", "🌱 Растения"],
-    ["⚙️ Настройки"],
+    ["👨🏻‍💻 Вызов ассистента"],
+    ["🧭 Планы", "👕 Гардероб"],
+    ["🌍 Языки и игра", "🌤 Погода"],
+    ["✈️ Путешествия", "🌿 Lagom"],
+    ["📚 Контент", "🎤 Концерты"],
+    ["🌱 Растения", "⚙️ Настройки"],
 ], resize_keyboard=True)
 
 WARDROBE_KB = ReplyKeyboardMarkup([
@@ -711,6 +747,82 @@ LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 
 async def start(update, context):
     await update.message.reply_text(f"Привет! Твой ассистент DM.\n\n{MENU}", reply_markup=MAIN_KB)
+
+
+_WEEKDAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
+_MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня",
+           "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+
+def _esc(t):
+    return (t or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+async def plany_command(update, context):
+    cid = update.effective_chat.id
+    await update.message.reply_text("Собираю сводку дня...")
+    try:
+        s = get_settings(cid)
+        data = fetch_weather(s["lat"], s["lon"], 2)
+        cur = data["current"]
+        d = data["daily"]
+        temp = cur["temperature_2m"]
+        code = cur["weathercode"]
+        rain = d["precipitation_probability_max"][0] or 0
+        wind_kmh = (d["windspeed_10m_max"][0] or 0) * 3.6
+        emoji = EMOJI.get(code, "🌡️")
+
+        # умный вывод
+        notes = []
+        if rain < 30:
+            notes.append("можно без зонта")
+        elif rain >= 60:
+            notes.append("возьми дождевик")
+        if temp > 26:
+            notes.append("жаркий день")
+        elif temp < 5:
+            notes.append("холодно, утепляйся")
+        if wind_kmh >= 30:
+            notes.append("сильный ветер")
+        conclusion = " • ".join(notes) if notes else "комфортно"
+
+        # мировые экстремумы (реальные данные)
+        hot = fetch_current_temp(29.37, 47.98)      # Кувейт
+        cold = fetch_current_temp(-78.46, 106.84)   # Восток, Антарктида
+        extremes = []
+        if hot is not None:
+            extremes.append(f"🔥 Кувейт: {hot:+.0f}°C")
+        if cold is not None:
+            extremes.append(f"❄️ Антарктида: {cold:+.0f}°C")
+
+        of = build_outfit_focus(weather_block(data, 0, s["city"]), "сегодня")
+        ex = plany_extras()
+
+        now = datetime.now(TZ)
+        header = f"{_WEEKDAYS[now.weekday()]}, {now.day} {_MONTHS[now.month-1]}"
+
+        L = [f"🧭 <b>Планы | {header}</b>", ""]
+        L.append("<b>Погода</b>")
+        L.append(f"{emoji} {_esc(s['city'])}: {temp:+.0f}°C • 🌧 {rain:.0f}% • 💨 {wind_kmh:.0f} км/ч")
+        L.append(f"👉 {conclusion}")
+        L += extremes
+        L += ["", "<b>Лук дня</b>"]
+        L += [f"- {_esc(x)}" for x in of.get("outfit", [])]
+        if of.get("why"):
+            L += ["", f"<i>{_esc(of['why'])}</i>"]
+        L += ["", "<b>Интересный факт</b>", _esc(ex.get("fact", ""))]
+        L += ["", "<b>Идея дня</b>", _esc(ex.get("idea", ""))]
+        L += ["", "<b>Слово дня</b>",
+              f"🇳🇱 {_esc(ex.get('word_nl',''))}",
+              f"🇬🇧 {_esc(ex.get('word_en',''))}",
+              _esc(ex.get("word_meaning", "")),
+              f"<i>{_esc(ex.get('example_nl',''))}</i>",
+              f"<i>{_esc(ex.get('example_ru',''))}</i>"]
+        L += ["", "<b>💭 Фраза дня</b>", _esc(lagom_of_day())]
+        if ex.get("bonus"):
+            L += ["", f"<b>🎲 {_esc(ex.get('bonus_label','Бонус'))}</b>", _esc(ex.get("bonus", ""))]
+
+        await context.bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка сводки: {e}")
 
 
 async def plan_command(update, context):
@@ -932,6 +1044,11 @@ async def text_router(update, context):
     text = update.message.text
 
     # ===== Навигация: главные разделы =====
+    if text == "👨🏻‍💻 Вызов ассистента":
+        text_router_state[cid] = "main"
+        await update.message.reply_text(MENU, reply_markup=MAIN_KB); return
+    if text == "🧭 Планы":
+        await plany_command(update, context); return
     if text == "👕 Гардероб":
         text_router_state[cid] = "wardrobe"
         await update.message.reply_text("Гардероб:", reply_markup=WARDROBE_KB); return
@@ -1178,6 +1295,7 @@ async def post_init(app):
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("plany", plany_command))
     app.add_handler(CommandHandler("plan", plan_command))
     app.add_handler(CommandHandler("tomorrow", tomorrow_command))
     app.add_handler(CommandHandler("plan3", plan3_command))
