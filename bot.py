@@ -86,20 +86,65 @@ TEMP_ZONES = """
 18-23: футболка, рубашка сверху | выше 23: футболка | дождь >50%: ветровка | ветер >8 м/с: +слой
 """
 
-# ---------- Files ----------
+# ---------- Storage: Postgres (с откатом в память) ----------
 
-def _load(path):
-    if os.path.exists(path):
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+_conn = None
+_mem = {}  # откат, если базы нет
+
+def _db():
+    """Возвращает живое соединение или None если базы нет."""
+    global _conn
+    if not DATABASE_URL:
+        return None
+    try:
+        if _conn is None or _conn.closed:
+            import psycopg2
+            _conn = psycopg2.connect(DATABASE_URL)
+            _conn.autocommit = True
+            with _conn.cursor() as cur:
+                cur.execute("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value JSONB)")
+        # проверка живости
+        with _conn.cursor() as cur:
+            cur.execute("SELECT 1")
+        return _conn
+    except Exception:
         try:
-            with open(path) as f:
-                return json.load(f)
+            import psycopg2
+            _conn = psycopg2.connect(DATABASE_URL)
+            _conn.autocommit = True
+            with _conn.cursor() as cur:
+                cur.execute("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value JSONB)")
+            return _conn
         except Exception:
-            return {}
-    return {}
+            return None
 
-def _save(path, data):
-    with open(path, "w") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def _load(key):
+    conn = _db()
+    if conn is None:
+        return dict(_mem.get(key, {}))
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT value FROM kv WHERE key = %s", (key,))
+            row = cur.fetchone()
+            return row[0] if row else {}
+    except Exception:
+        return dict(_mem.get(key, {}))
+
+def _save(key, data):
+    conn = _db()
+    if conn is None:
+        _mem[key] = data
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO kv (key, value) VALUES (%s, %s) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                (key, json.dumps(data, ensure_ascii=False))
+            )
+    except Exception:
+        _mem[key] = data
 
 def get_settings(chat_id):
     return _load(SETTINGS_FILE).get(str(chat_id), DEFAULT_CITY)
@@ -118,7 +163,19 @@ def set_level(chat_id, language, level):
     _save(LEVELS_FILE, d)
 
 def load_wardrobe():
-    return _load(WARDROBE_FILE)
+    w = _load(WARDROBE_FILE)
+    if not w:
+        # первый запуск: засеять из репозиторного wardrobe.json, если есть
+        try:
+            if os.path.exists(WARDROBE_FILE):
+                with open(WARDROBE_FILE) as f:
+                    seed = json.load(f)
+                if seed:
+                    _save(WARDROBE_FILE, seed)
+                    return seed
+        except Exception:
+            pass
+    return w
 
 def save_wardrobe(w):
     _save(WARDROBE_FILE, w)
