@@ -26,6 +26,8 @@ chat_history = {}
 lesson_answers = {}   # chat_id -> ответ мини-теста
 text_router_state = {}  # chat_id -> уровень меню
 add_wardrobe_mode = {}  # chat_id -> True когда ждём список одежды
+game_state = {}         # chat_id -> {answer, quote}
+pending_input = {}      # chat_id -> "diary" | "plant" | "fav_movie" | "fav_book" | "artist"
 SETTINGS_FILE = "settings.json"
 NOTES_FILE = "notes.json"
 LEVELS_FILE = "levels.json"       # {chat_id: {язык: уровень}}
@@ -197,6 +199,30 @@ def merge_wardrobe(new_items: dict):
 
 def wardrobe_to_text(w):
     return "\n".join(f"{c.capitalize()}: {', '.join(i)}" for c, i in w.items())
+
+# Простые списки в одном kv-ключе: {chat_id: [...]}
+def get_list(key, chat_id):
+    return _load(key).get(str(chat_id), [])
+
+def add_to_list(key, chat_id, item):
+    d = _load(key)
+    d.setdefault(str(chat_id), []).append(item)
+    _save(key, d)
+
+def set_list(key, chat_id, items):
+    d = _load(key)
+    d[str(chat_id)] = items
+    _save(key, d)
+
+FAVORITES_KEY = "favorites.json"   # любимые фильмы/книги
+PLANTS_KEY = "plants.json"
+DIARY_KEY = "diary.json"           # [{date, text}]
+ARTISTS_KEY = "artists.json"
+
+VISITED = ("Австрия, Беларусь, Бельгия, Великобритания, Венгрия, Германия, Греция, Дания, "
+           "Испания, Италия, Латвия, Литва, Мальта, Мексика, Нидерланды, Норвегия, Польша, "
+           "Португалия, Россия, Сербия, Сингапур, Словакия, Таиланд, Турция, Финляндия, Франция, "
+           "Черногория, Чехия, Швеция, Эстония, Япония, Ватикан, Люксембург")
 
 # ---------- LLM chain ----------
 
@@ -490,6 +516,65 @@ def parse_wardrobe_list(text):
 Верни JSON: {{"категория": ["вещь", "вещь"], ...}}. Названия вещей короткие, в нижнем регистре."""
     return llm_json(prompt, 800)
 
+# ---------- Модульные генераторы ----------
+
+def wardrobe_analysis():
+    w = load_wardrobe()
+    prompt = f"""Ты стилист с прямым, иногда дерзким тоном. Профиль:
+{STYLE_PROFILE}
+
+Гардероб:
+{wardrobe_to_text(w)}
+
+Разбери коротко, без markdown и звёздочек:
+🧠 Анализ гардероба
+- Что дублируется
+- Что устарело или выбивается из стиля
+- Чего не хватает для большего числа сочетаний
+Будь конкретным. Без воды."""
+    return llm(prompt, 1000, 0.7)
+
+def travel_suggest():
+    prompt = f"""Дмитрий уже был в этих странах: {VISITED}.
+Любит: путешествия важнее вещей, интеллектуальная атмосфера, города с характером, природа.
+Предложи 4-5 НОВЫХ направлений (где он не был), коротко - почему именно ему зайдёт.
+Без markdown и звёздочек. Заголовок: 🗺 Куда поехать."""
+    return llm(prompt, 900, 0.8)
+
+def content_recommend(kind, favorites):
+    fav = ", ".join(favorites) if favorites else "1984, Цветы для Элджернона, Марсианин, умная фантастика"
+    what = "фильмов или сериалов" if kind == "movie" else "книг"
+    prompt = f"""Порекомендуй 4-5 {what} для человека с таким вкусом: {fav}.
+Любит научную фантастику и интеллектуальное. Для каждого: название, год, одна строка - почему зайдёт.
+Без markdown и звёздочек. Заголовок: {'🎬 Что посмотреть' if kind=='movie' else '📖 Что почитать'}."""
+    return llm(prompt, 900, 0.8)
+
+def game_data(language, level):
+    prompt = f"""Игра "угадай персонажа/личность" на языке: {language}, уровень {level}.
+Загадай известного персонажа или реального человека (кино, наука, история, музыка).
+JSON:
+{{
+ "clues": "3-4 подсказки на {language}, каждая с новой строки, от сложной к лёгкой, без имени",
+ "answer": "имя",
+ "quote": "короткая цитата или интересный факт о нём"
+}}"""
+    return llm_json(prompt, 700)
+
+def lagom_checkin(kind):
+    if kind == "day":
+        task = "Дневной чек-ин (14:00). Один короткий вопрос-настройка: как идёт день, что в фокусе. Тепло, прямо, без пафоса."
+    else:
+        task = "Вечерний разбор (20:00). Мягко предложи отделить 'что тревожило' от 'что реально произошло' и отпустить ненужное. 2-3 строки + один вопрос."
+    prompt = f"{LAGOM}\n\n{task}\nБез markdown и звёздочек. По-русски."
+    return llm(prompt, 400, 0.9)
+
+def diary_reflect(entry):
+    prompt = f"""Запись из эмоционального дневника Дмитрия: "{entry}"
+Ответь как спокойный мини-психолог: 2-3 предложения поддержки и одна практичная мысль. Опирайся на его лагом по духу.
+{LAGOM}
+Без markdown и звёздочек."""
+    return llm(prompt, 400, 0.8)
+
 # ---------- Send ----------
 
 async def send_long(bot, chat_id, text):
@@ -535,22 +620,92 @@ async def job_dutch(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await context.bot.send_message(chat_id=CHAT_ID, text=f"Ошибка урока: {e}")
 
+async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
+    if not CHAT_ID:
+        return
+    try:
+        await context.bot.send_message(chat_id=CHAT_ID, text="🧠 " + lagom_checkin("day"))
+    except Exception:
+        pass
+
+async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
+    if not CHAT_ID:
+        return
+    try:
+        msg = lagom_checkin("evening")
+        pending_input[str(CHAT_ID)] = "diary"
+        await context.bot.send_message(chat_id=CHAT_ID, text="🌙 " + msg + "\n\n(Ответь - запишу в дневник.)")
+    except Exception:
+        pass
+
+async def job_weekly(context: ContextTypes.DEFAULT_TYPE):
+    if not CHAT_ID:
+        return
+    entries = get_list(DIARY_KEY, CHAT_ID)
+    diary = "; ".join(e["text"] for e in entries[-7:]) if entries else "нет записей"
+    try:
+        prompt = (f"Сделай тёплый короткий итог недели для Дмитрия. Записи дневника за неделю: {diary}. "
+                  f"Формат: 📊 Итоги недели. 3-4 строки: инсайт недели, что получилось, мягкая настройка на следующую. "
+                  f"{LAGOM} Без markdown.")
+        await send_long(context.bot, CHAT_ID, llm(prompt, 500, 0.8))
+    except Exception:
+        pass
+
 # ---------- Commands ----------
 
 MENU = (
-    "📋 План - одежда и погода (сегодня / завтра / 3 дня)\n"
-    "👔 Шкаф - сгенерировать лук, советы к покупке, добавить одежду\n"
-    "🌍 Изучение языков - нидерландский и английский (уроки + перевод + уровень)\n\n"
-    "Геолокация или /setcity Город - сменить город."
+    "👕 Гардероб - лук, список, анализ, советы, добавить одежду\n"
+    "🌍 Языки и игра - уроки, перевод, угадай персонажа, уровень\n"
+    "🌤 Погода - сегодня и 7 дней\n"
+    "✈️ Путешествия - куда поехать, мои страны\n"
+    "🌿 Lagom - фраза дня, чек-ин, вечерний разбор, дневник\n"
+    "📚 Контент - фильмы и книги по вкусу\n"
+    "🎤 Концерты - мониторинг (нужен API событий)\n"
+    "🌱 Растения - список и полив\n"
+    "⚙️ Настройки - город и уровень языков\n\n"
+    "Геолокация - сменить город. Без команды - чат с ассистентом."
 )
 
-# --- Многоуровневое меню ---
-MAIN_KB = ReplyKeyboardMarkup([["📋 План"], ["👔 Шкаф"], ["🌍 Изучение языков"]], resize_keyboard=True)
-PLAN_KB = ReplyKeyboardMarkup([["📅 Сегодня", "📅 Завтра"], ["🗓️ На 3 дня"], ["⬅️ Назад"]], resize_keyboard=True)
-WARDROBE_KB = ReplyKeyboardMarkup([["✨ Сгенерировать лук"], ["🛍️ Советы к покупке"], ["📤 Добавить одежду"], ["⬅️ Назад"]], resize_keyboard=True)
-LANG_KB = ReplyKeyboardMarkup([["🇳🇱 Нидерландский"], ["🇬🇧 Английский"], ["⚙️ Уровень языка"], ["⬅️ Назад"]], resize_keyboard=True)
+# --- Меню-дашборд ---
+MAIN_KB = ReplyKeyboardMarkup([
+    ["👕 Гардероб", "🌍 Языки и игра"],
+    ["🌤 Погода", "✈️ Путешествия"],
+    ["🌿 Lagom", "📚 Контент"],
+    ["🎤 Концерты", "🌱 Растения"],
+    ["⚙️ Настройки"],
+], resize_keyboard=True)
+
+WARDROBE_KB = ReplyKeyboardMarkup([
+    ["✨ Сгенерировать лук"],
+    ["📊 Скучный список", "🧠 Анализ"],
+    ["🛍️ Советы к покупке", "📤 Добавить одежду"],
+    ["⬅️ Назад"],
+], resize_keyboard=True)
+
+LANG_KB = ReplyKeyboardMarkup([
+    ["🇳🇱 Нидерландский", "🇬🇧 Английский"],
+    ["🎮 Угадай персонажа"],
+    ["⚙️ Уровень языка"],
+    ["⬅️ Назад"],
+], resize_keyboard=True)
 NL_KB = ReplyKeyboardMarkup([["📖 Урок NL", "⚡ Перевод NL"], ["⬅️ Назад"]], resize_keyboard=True)
 EN_KB = ReplyKeyboardMarkup([["📖 Урок EN", "⚡ Перевод EN"], ["⬅️ Назад"]], resize_keyboard=True)
+
+WEATHER_KB = ReplyKeyboardMarkup([["🌤 Сегодня", "📅 7 дней"], ["⬅️ Назад"]], resize_keyboard=True)
+TRAVEL_KB = ReplyKeyboardMarkup([["🗺 Куда поехать", "🏳 Мои страны"], ["⬅️ Назад"]], resize_keyboard=True)
+LAGOM_KB = ReplyKeyboardMarkup([
+    ["🌿 Фраза дня", "🧠 Чек-ин"],
+    ["🌙 Вечерний разбор", "📊 Дневник"],
+    ["⬅️ Назад"],
+], resize_keyboard=True)
+CONTENT_KB = ReplyKeyboardMarkup([
+    ["🎬 Что посмотреть", "📖 Что почитать"],
+    ["➕ Добавить любимое"],
+    ["⬅️ Назад"],
+], resize_keyboard=True)
+PLANTS_KB = ReplyKeyboardMarkup([["💧 Мои растения", "➕ Добавить растение"], ["⬅️ Назад"]], resize_keyboard=True)
+CONCERTS_KB = ReplyKeyboardMarkup([["🎤 Мои артисты", "➕ Добавить артиста"], ["⬅️ Назад"]], resize_keyboard=True)
+SETTINGS_KB = ReplyKeyboardMarkup([["📍 Сменить город", "🌐 Уровень языков"], ["⬅️ Назад"]], resize_keyboard=True)
 LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 
 
@@ -714,6 +869,21 @@ async def translate_command(update, context):
 async def generate_look_command(update, context):
     await plan_command(update, context)
 
+async def game_start(update, context):
+    cid = str(update.effective_chat.id)
+    # язык игры: тот, в подменю которого пользователь (по умолчанию нидерландский)
+    state = text_router_state.get(cid)
+    language = "английский" if state == "en" else "нидерландский"
+    level = get_level(cid, language)
+    await update.message.reply_text("Загадываю персонажа...")
+    try:
+        d = game_data(language, level)
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+        return
+    game_state[cid] = {"answer": d.get("answer", ""), "quote": d.get("quote", "")}
+    await update.message.reply_text(f"🎮 Угадай ({language}, {level}):\n\n{d.get('clues','')}\n\nНапиши имя следующим сообщением.")
+
 async def shopping_command(update, context):
     cid = update.effective_chat.id
     await update.message.reply_text("Анализирую гардероб...")
@@ -761,60 +931,73 @@ async def text_router(update, context):
     cid = str(update.effective_chat.id)
     text = update.message.text
 
-    # --- Навигация по меню ---
-    if text == "📋 План":
-        await update.message.reply_text("Выбери период:", reply_markup=PLAN_KB)
-        return
-    if text == "👔 Шкаф":
+    # ===== Навигация: главные разделы =====
+    if text == "👕 Гардероб":
         text_router_state[cid] = "wardrobe"
-        await update.message.reply_text("Шкаф:", reply_markup=WARDROBE_KB)
-        return
-    if text == "🌍 Изучение языков":
+        await update.message.reply_text("Гардероб:", reply_markup=WARDROBE_KB); return
+    if text == "🌍 Языки и игра":
         text_router_state[cid] = "lang"
-        await update.message.reply_text("Выбери язык:", reply_markup=LANG_KB)
-        return
+        await update.message.reply_text("Языки и игра:", reply_markup=LANG_KB); return
+    if text == "🌤 Погода":
+        text_router_state[cid] = "weather"
+        await update.message.reply_text("Погода:", reply_markup=WEATHER_KB); return
+    if text == "✈️ Путешествия":
+        text_router_state[cid] = "travel"
+        await update.message.reply_text("Путешествия:", reply_markup=TRAVEL_KB); return
+    if text == "🌿 Lagom":
+        text_router_state[cid] = "lagom"
+        await update.message.reply_text("Lagom:", reply_markup=LAGOM_KB); return
+    if text == "📚 Контент":
+        text_router_state[cid] = "content"
+        await update.message.reply_text("Контент:", reply_markup=CONTENT_KB); return
+    if text == "🎤 Концерты":
+        text_router_state[cid] = "concerts"
+        await update.message.reply_text("Концерты:", reply_markup=CONCERTS_KB); return
+    if text == "🌱 Растения":
+        text_router_state[cid] = "plants"
+        await update.message.reply_text("Растения:", reply_markup=PLANTS_KB); return
+    if text == "⚙️ Настройки":
+        text_router_state[cid] = "settings"
+        await update.message.reply_text("Настройки:", reply_markup=SETTINGS_KB); return
+
+    # языковые подменю
     if text == "🇳🇱 Нидерландский":
         text_router_state[cid] = "nl"
-        await update.message.reply_text("Нидерландский:", reply_markup=NL_KB)
-        return
+        await update.message.reply_text("Нидерландский:", reply_markup=NL_KB); return
     if text == "🇬🇧 Английский":
         text_router_state[cid] = "en"
-        await update.message.reply_text("Английский:", reply_markup=EN_KB)
-        return
-    if text == "⚙️ Уровень языка":
-        nl_lvl, en_lvl = get_level(cid, "нидерландский"), get_level(cid, "английский")
-        kb_nl = InlineKeyboardMarkup([[InlineKeyboardButton(l, callback_data=f"lvl_nl_{l}") for l in LEVELS]])
-        kb_en = InlineKeyboardMarkup([[InlineKeyboardButton(l, callback_data=f"lvl_en_{l}") for l in LEVELS]])
-        await update.message.reply_text(f"🇳🇱 Уровень нидерландского (сейчас {nl_lvl}):", reply_markup=kb_nl)
-        await update.message.reply_text(f"🇬🇧 Уровень английского (сейчас {en_lvl}):", reply_markup=kb_en)
-        return
+        await update.message.reply_text("Английский:", reply_markup=EN_KB); return
+
     if text == "⬅️ Назад":
         add_wardrobe_mode.pop(cid, None)
+        pending_input.pop(cid, None)
         if text_router_state.get(cid) in ("nl", "en"):
             text_router_state[cid] = "lang"
-            await update.message.reply_text("Выбери язык:", reply_markup=LANG_KB)
+            await update.message.reply_text("Языки и игра:", reply_markup=LANG_KB)
         else:
             text_router_state[cid] = "main"
             await update.message.reply_text("Главное меню:", reply_markup=MAIN_KB)
         return
 
-    # --- Действия: План ---
-    if text == "📅 Сегодня":
-        await plan_command(update, context); return
-    if text == "📅 Завтра":
-        await tomorrow_command(update, context); return
-    if text == "🗓️ На 3 дня":
-        await plan3_command(update, context); return
-
-    # --- Действия: Шкаф ---
+    # ===== Гардероб =====
     if text == "✨ Сгенерировать лук":
         await generate_look_command(update, context); return
+    if text == "📊 Скучный список":
+        w = load_wardrobe()
+        await send_long(context.bot, cid, "📊 Гардероб\n\n" + (wardrobe_to_text(w) or "Пусто.")); return
+    if text == "🧠 Анализ":
+        await update.message.reply_text("Анализирую...")
+        try:
+            await send_long(context.bot, cid, wardrobe_analysis())
+        except Exception as e:
+            await update.message.reply_text(f"Ошибка: {e}")
+        return
     if text == "🛍️ Советы к покупке":
         await shopping_command(update, context); return
     if text == "📤 Добавить одежду":
         await add_clothes_start(update, context); return
 
-    # --- Действия: языки ---
+    # ===== Языки и игра =====
     if text == "📖 Урок NL":
         text_router_state[cid] = "nl"; await dutch_command(update, context); return
     if text == "📖 Урок EN":
@@ -823,12 +1006,136 @@ async def text_router(update, context):
         text_router_state[cid] = "nl"; context.args = []; await translate_command(update, context); return
     if text == "⚡ Перевод EN":
         text_router_state[cid] = "en"; context.args = ["en"]; await translate_command(update, context); return
+    if text == "🎮 Угадай персонажа":
+        await game_start(update, context); return
+    if text == "⚙️ Уровень языка" or text == "🌐 Уровень языков":
+        nl_lvl, en_lvl = get_level(cid, "нидерландский"), get_level(cid, "английский")
+        kb_nl = InlineKeyboardMarkup([[InlineKeyboardButton(l, callback_data=f"lvl_nl_{l}") for l in LEVELS]])
+        kb_en = InlineKeyboardMarkup([[InlineKeyboardButton(l, callback_data=f"lvl_en_{l}") for l in LEVELS]])
+        await update.message.reply_text(f"🇳🇱 Уровень нидерландского (сейчас {nl_lvl}):", reply_markup=kb_nl)
+        await update.message.reply_text(f"🇬🇧 Уровень английского (сейчас {en_lvl}):", reply_markup=kb_en)
+        return
 
-    # --- Режим добавления одежды: текст = список вещей ---
+    # ===== Погода =====
+    if text == "🌤 Сегодня":
+        context.args = []; await weather_command(update, context); return
+    if text == "📅 7 дней":
+        context.args = ["7"]; await weather_command(update, context); return
+
+    # ===== Путешествия =====
+    if text == "🗺 Куда поехать":
+        await update.message.reply_text("Подбираю направления...")
+        try:
+            await send_long(context.bot, cid, travel_suggest())
+        except Exception as e:
+            await update.message.reply_text(f"Ошибка: {e}")
+        return
+    if text == "🏳 Мои страны":
+        await send_long(context.bot, cid, "🏳 Посещённые страны:\n\n" + VISITED); return
+
+    # ===== Lagom =====
+    if text == "🌿 Фраза дня":
+        await update.message.reply_text("🌿 " + lagom_of_day()); return
+    if text == "🧠 Чек-ин":
+        try:
+            await update.message.reply_text(lagom_checkin("day"))
+        except Exception as e:
+            await update.message.reply_text(f"Ошибка: {e}")
+        return
+    if text == "🌙 Вечерний разбор":
+        try:
+            msg = lagom_checkin("evening")
+        except Exception as e:
+            await update.message.reply_text(f"Ошибка: {e}"); return
+        pending_input[cid] = "diary"
+        await update.message.reply_text(msg + "\n\n(Ответь сообщением - запишу в дневник.)")
+        return
+    if text == "📊 Дневник":
+        entries = get_list(DIARY_KEY, cid)
+        if not entries:
+            await update.message.reply_text("Дневник пуст. Записи появятся после вечернего разбора.")
+        else:
+            last = entries[-7:]
+            await send_long(context.bot, cid, "📊 Последние записи\n\n" + "\n\n".join(f"{e['date']}: {e['text']}" for e in last))
+        return
+
+    # ===== Контент =====
+    if text == "🎬 Что посмотреть":
+        await update.message.reply_text("Подбираю...")
+        try:
+            await send_long(context.bot, cid, content_recommend("movie", get_list(FAVORITES_KEY, cid)))
+        except Exception as e:
+            await update.message.reply_text(f"Ошибка: {e}")
+        return
+    if text == "📖 Что почитать":
+        await update.message.reply_text("Подбираю...")
+        try:
+            await send_long(context.bot, cid, content_recommend("book", get_list(FAVORITES_KEY, cid)))
+        except Exception as e:
+            await update.message.reply_text(f"Ошибка: {e}")
+        return
+    if text == "➕ Добавить любимое":
+        pending_input[cid] = "favorite"
+        await update.message.reply_text("Напиши любимый фильм/сериал/книгу - добавлю. Бот учтёт вкус в рекомендациях."); return
+
+    # ===== Концерты =====
+    if text == "🎤 Мои артисты":
+        arts = get_list(ARTISTS_KEY, cid)
+        await update.message.reply_text("🎤 Артисты:\n" + ("\n".join(f"• {a}" for a in arts) if arts else "пусто") +
+                                        "\n\nПоиск концертов требует API событий (Ticketmaster/Bandsintown). Дай ключ - подключу мониторинг.")
+        return
+    if text == "➕ Добавить артиста":
+        pending_input[cid] = "artist"
+        await update.message.reply_text("Напиши имя артиста - добавлю в список отслеживания."); return
+
+    # ===== Растения =====
+    if text == "💧 Мои растения":
+        pl = get_list(PLANTS_KEY, cid)
+        await update.message.reply_text("🌱 Растения:\n" + ("\n".join(f"• {p}" for p in pl) if pl else "пусто")); return
+    if text == "➕ Добавить растение":
+        pending_input[cid] = "plant"
+        await update.message.reply_text("Напиши растение (можно с интервалом полива) - добавлю."); return
+
+    # ===== Настройки =====
+    if text == "📍 Сменить город":
+        await update.message.reply_text("Отправь геолокацию или команду: /setcity Амстердам"); return
+
+    # ===== Режим добавления одежды =====
     if add_wardrobe_mode.get(cid):
         await _ingest_wardrobe(update, text)
         return
 
+    # ===== Pending-ввод (дневник, растение, артист, любимое) =====
+    if cid in pending_input:
+        kind = pending_input.pop(cid)
+        if kind == "diary":
+            entries = get_list(DIARY_KEY, cid)
+            entries.append({"date": datetime.now(TZ).strftime("%d.%m"), "text": text})
+            set_list(DIARY_KEY, cid, entries)
+            try:
+                await send_long(context.bot, cid, diary_reflect(text))
+            except Exception:
+                await update.message.reply_text("Записал в дневник.")
+            return
+        if kind == "favorite":
+            add_to_list(FAVORITES_KEY, cid, text)
+            await update.message.reply_text("Добавил в любимое."); return
+        if kind == "artist":
+            add_to_list(ARTISTS_KEY, cid, text)
+            await update.message.reply_text("Добавил артиста."); return
+        if kind == "plant":
+            add_to_list(PLANTS_KEY, cid, text)
+            await update.message.reply_text("Добавил растение."); return
+
+    # ===== Игра: ответ-догадка =====
+    if cid in game_state:
+        st = game_state.pop(cid)
+        correct = st["answer"].lower() in text.lower() or text.lower() in st["answer"].lower()
+        verdict = "✅ Верно!" if correct else f"❌ Не угадал. Это {st['answer']}."
+        await update.message.reply_text(f"{verdict}\n\n💬 {st.get('quote','')}\n\n🎮 Угадай персонажа - ещё раунд")
+        return
+
+    # ===== Перевод-челлендж =====
     if cid in challenge_state:
         st = challenge_state.pop(cid)
         await update.message.reply_text("Проверяю...")
@@ -837,9 +1144,10 @@ async def text_router(update, context):
         except Exception as e:
             await update.message.reply_text(f"Ошибка проверки: {e}")
             return
-        await send_long(context.bot, cid, fb + "\n\n/translate - ещё фраза")
+        await send_long(context.bot, cid, fb)
         return
 
+    # ===== Свободный чат =====
     await context.bot.send_chat_action(chat_id=cid, action="typing")
     hist = chat_history.get(cid, [])
     hist.append({"role": "user", "content": text})
@@ -858,7 +1166,6 @@ async def post_init(app):
     await app.bot.set_my_commands([
         BotCommand("plan", "план на сегодня"),
         BotCommand("tomorrow", "план на завтра"),
-        BotCommand("plan3", "погода на 3 дня"),
         BotCommand("dutch", "урок нидерландского"),
         BotCommand("english", "урок английского"),
         BotCommand("translate", "перевод-челлендж"),
@@ -887,6 +1194,9 @@ def main():
     jq = app.job_queue
     jq.run_daily(job_morning, time=datetime.strptime("08:30", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
     jq.run_daily(job_dutch, time=datetime.strptime("11:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
+    jq.run_daily(job_checkin_day, time=datetime.strptime("14:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
+    jq.run_daily(job_checkin_evening, time=datetime.strptime("20:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
+    jq.run_daily(job_weekly, time=datetime.strptime("19:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=(6,))  # воскресенье
 
     print("Bot started")
     app.run_polling()
