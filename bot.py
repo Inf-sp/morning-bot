@@ -24,8 +24,11 @@ TZ = ZoneInfo("Europe/Amsterdam")
 challenge_state = {}
 chat_history = {}
 lesson_answers = {}   # chat_id -> ответ мини-теста
-SETTINGS_FILE = "settings.json"   # {chat_id: {lat, lon, city}}
-NOTES_FILE = "notes.json"         # {chat_id: [note, ...]}
+text_router_state = {}  # chat_id -> уровень меню
+add_wardrobe_mode = {}  # chat_id -> True когда ждём список одежды
+SETTINGS_FILE = "settings.json"
+NOTES_FILE = "notes.json"
+LEVELS_FILE = "levels.json"       # {chat_id: {язык: уровень}}
 WARDROBE_FILE = "wardrobe.json"
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар"}
@@ -39,6 +42,26 @@ TRIPS = [
 # Любимые книги для цитат
 BOOKS = "1984, Цветы для Элджернона, Машина времени, Остров доктора Моро, Марсианин"
 
+# Короткие лагом-строки (реальные принципы, выбираются по дню, без выдумок)
+LAGOM_LINES = [
+    "Сейчас один шаг, не вся жизнь.",
+    "Не нужно идеально. Нужно начать.",
+    "Я не ленивый. Мозг так работает.",
+    "Остановись, выдохни, действуй.",
+    "Пауза сейчас - победа.",
+    "Фокус на хорошем.",
+    "Не все споры стоят нервов.",
+    "Чужие эмоции - не моя ответственность.",
+    "Перемены открывают возможности.",
+    "Скука - криптонит. Создавай интерес.",
+    "Это состояние пройдёт.",
+    "Делаю лучшее из возможного сегодня.",
+]
+
+def lagom_of_day():
+    idx = datetime.now(TZ).timetuple().tm_yday % len(LAGOM_LINES)
+    return LAGOM_LINES[idx]
+
 LAGOM = """
 Принципы Дмитрия (для тона, не цитировать дословно):
 Сейчас один шаг, не вся жизнь. Не нужно идеально - нужно начать. Я не ленивый, мозг так работает.
@@ -47,12 +70,15 @@ LAGOM = """
 Скука - криптонит, создавай интерес. Это состояние пройдёт.
 """
 
-STYLE_NOTES = """
-- Коричневая рубашка Uniqlo - только с кремовым/белым низом
-- Чёрный с головы до ног - избегать
-- NB - активные выходы, Timberland - городской casual
-- Цепочки не смешивать
-- Минимализм, скандинавская эстетика, базовые цвета, натуральные ткани
+STYLE_PROFILE = """
+Стиль Дмитрия: современный минимализм с элементами скандинавского и японского casual.
+Цель: выглядеть современно, собранно и расслабленно. Образ должен быть уместен в Амстердаме, Утрехте, Копенгагене, Стокгольме.
+Палитра: чёрный, белый, серый, бежевый, оливковый, коричневый, тёмно-синий. Натуральные фактурные ткани. Свободный или прямой силуэт. Комфорт важнее формальности.
+Контекст: одежда под велосипед, прогулки, путешествия и повседневную работу.
+Любит: плотные футболки с высоким воротом, рубашки свободного кроя, ветровки и лёгкую верхнюю одежду, удобную обувь с массивным силуэтом, минималистичные аксессуары.
+Избегать: узких вещей, агрессивных логотипов, кислотных цветов, офисного/делового стиля, чрезмерно спортивных образов, чёрного с головы до ног, смешивания цепочек между собой.
+Опорные вещи (строй образы вокруг них): коричневая плотная рубашка Uniqlo, бежевая ветровка, оливковые брюки, белые кеды, Timberland, чёрные джинсы.
+Правила: коричневая рубашка Uniqlo - только с кремовым/белым низом и нейтральными брюками. NB - активные выходы, Timberland - городской casual.
 """
 
 TEMP_ZONES = """
@@ -83,21 +109,34 @@ def set_settings(chat_id, lat, lon, city):
     d[str(chat_id)] = {"lat": lat, "lon": lon, "city": city}
     _save(SETTINGS_FILE, d)
 
-def get_notes(chat_id):
-    return _load(NOTES_FILE).get(str(chat_id), [])
+def get_level(chat_id, language):
+    return _load(LEVELS_FILE).get(str(chat_id), {}).get(language, "B1")
 
-def add_note(chat_id, text):
-    d = _load(NOTES_FILE)
-    d.setdefault(str(chat_id), []).append(text)
-    _save(NOTES_FILE, d)
-
-def clear_notes(chat_id):
-    d = _load(NOTES_FILE)
-    d[str(chat_id)] = []
-    _save(NOTES_FILE, d)
+def set_level(chat_id, language, level):
+    d = _load(LEVELS_FILE)
+    d.setdefault(str(chat_id), {})[language] = level
+    _save(LEVELS_FILE, d)
 
 def load_wardrobe():
     return _load(WARDROBE_FILE)
+
+def save_wardrobe(w):
+    _save(WARDROBE_FILE, w)
+
+def merge_wardrobe(new_items: dict):
+    """new_items: {категория: [вещи]} -> добавляет к существующему, без дублей."""
+    w = load_wardrobe()
+    added = 0
+    for cat, items in new_items.items():
+        cat = cat.lower().strip()
+        w.setdefault(cat, [])
+        for it in items:
+            it = it.strip().lower()
+            if it and it not in [x.lower() for x in w[cat]]:
+                w[cat].append(it)
+                added += 1
+    save_wardrobe(w)
+    return added
 
 def wardrobe_to_text(w):
     return "\n".join(f"{c.capitalize()}: {', '.join(i)}" for c, i in w.items())
@@ -257,18 +296,6 @@ def weather_block(data, day, city):
         lines.append(f"🌧️ дождь {rain:.0f}%")
     return "\n".join(lines)
 
-def bike_advice(data, day):
-    d = data["daily"]
-    wind = d["windspeed_10m_max"][day]
-    rain = d["precipitation_probability_max"][day] or 0
-    if rain >= 50:
-        return "🚲 Дождь вероятен - дождевик или подумай о транспорте"
-    if wind >= 9:
-        return "🚲 Сильный ветер - встречный утомит, оденься теплее"
-    if wind >= 6:
-        return "🚲 Ветрено - возьми ветровку"
-    return "🚲 Комфортно ехать"
-
 def trip_countdown():
     today = datetime.now(TZ).date()
     upcoming = []
@@ -290,21 +317,28 @@ def trip_countdown():
 
 def build_outfit_focus(weather_text, day_label):
     w = load_wardrobe()
-    prompt = f"""Стилист и коуч с учётом СДВГ. Погода в этом городе ({day_label}):
+    prompt = f"""Ты персональный стилист Дмитрия, не генератор случайных комплектов.
+
+{STYLE_PROFILE}
+
+Погода ({day_label}):
 {weather_text}
 
 Параметры: 179 см, ~65 кг, обувь 42.5, джинсы W31 L31.
-Гардероб:
+Гардероб (используй ТОЛЬКО эти вещи, ничего не выдумывай):
 {wardrobe_to_text(w)}
-Правила стиля:{STYLE_NOTES}
+
 Температурные зоны:{TEMP_ZONES}
+
+Учитывай при подборе: погоду и ветер (для Нидерландов критично), что образ для велосипеда и прогулок, цветовые сочетания, актуальные тренды 2026 (свободный/прямой силуэт), разнообразие. Собери законченный образ из 3-4 вещей, по возможности вокруг опорных предметов.
 
 JSON:
 {{
  "outfit": ["вещь 1","вещь 2","вещь 3","вещь 4"],
- "focus": "один короткий совет на день с учётом СДВГ, конкретный, без банальностей"
+ "why": "1-2 предложения: почему образ работает - палитра, силуэт, комфорт для погоды и ветра",
+ "focus": "один короткий конкретный совет на день с учётом СДВГ, без банальностей"
 }}"""
-    return llm_json(prompt, 700)
+    return llm_json(prompt, 800)
 
 def build_morning_extras(day_label):
     prompt = f"""Сгенерируй для русскоговорящего пользователя (учит нидерландский B1):
@@ -315,9 +349,9 @@ JSON:
 }}"""
     return llm_json(prompt, 500)
 
-def lesson_data(language):
-    prompt = f"""Урок языка для русскоговорящего ученика B1. Язык: {language}.
-Слово и фраза уровня B1, не примитивные, каждый раз разные.
+def lesson_data(language, level="B1"):
+    prompt = f"""Урок языка для русскоговорящего ученика уровня {level}. Язык: {language}.
+Слово и фраза должны строго соответствовать уровню {level} (для A1-A2 простые, для B2-C2 сложнее), каждый раз разные.
 
 JSON:
 {{
@@ -334,8 +368,8 @@ JSON:
 }}"""
     return llm_json(prompt, 900)
 
-def format_lesson(language, flag, data):
-    L = [f"{flag} {language.capitalize()} на сегодня", "", f"📝 {data.get('word','')}"]
+def format_lesson(language, flag, data, level="B1"):
+    L = [f"{flag} {language.capitalize()} на сегодня ({level})", "", f"📝 {data.get('word','')}"]
     if data.get("pron"):
         L.append(data["pron"])
     L += [f"Значение: {data.get('meaning','')}", "",
@@ -348,20 +382,21 @@ def format_lesson(language, flag, data):
     return "\n".join(L)
 
 async def send_lesson(bot, chat_id, language, flag):
-    data = lesson_data(language)
-    text = format_lesson(language, flag, data)
+    level = get_level(chat_id, language)
+    data = lesson_data(language, level)
+    text = format_lesson(language, flag, data, level)
     lesson_answers[str(chat_id)] = data.get("test_answer", "")
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("⚡ Показать ответ", callback_data="lesson_answer")]])
     await bot.send_message(chat_id=chat_id, text=text, reply_markup=kb)
 
-def generate_challenge(language):
+def generate_challenge(language, level="B1"):
     prompt = f"""Дай ОДНУ фразу на русском для перевода на {language}.
-Уровень B1: с придаточным, модальным глаголом или прошедшим временем. Бытовая или рабочая ситуация.
+Уровень {level}: сложность строго под уровень. Бытовая или рабочая ситуация.
 Выведи ТОЛЬКО русскую фразу, без кавычек."""
     return llm(prompt, 200, 1.0).strip()
 
 def check_translation(language, ru, answer):
-    prompt = f"""Ученик (B1) переводит с русского на {language}.
+    prompt = f"""Ученик переводит с русского на {language}.
 Русская фраза: {ru}
 Перевод ученика: {answer}
 
@@ -371,6 +406,32 @@ def check_translation(language, ru, answer):
 3. Более естественный вариант, если есть
 Тон коллеги, по делу. Не обрывай."""
     return llm(prompt, 800, 0.4)
+
+def generate_shopping_advice():
+    w = load_wardrobe()
+    prompt = f"""Ты стилист. Профиль клиента:
+{STYLE_PROFILE}
+
+Текущий гардероб:
+{wardrobe_to_text(w)}
+
+Проанализируй и предложи 4-5 вещей, которые ДОКУПИТЬ, чтобы поднять уровень гардероба и открыть больше сочетаний.
+Учитывай тренды 2026, скандинавский/японский casual, что образы для велосипеда, прогулок и работы.
+Для каждой вещи: что именно, и одна строка - почему она усилит гардероб.
+Без markdown и звёздочек, просто текст. Заголовок: 🛍️ Что докупить."""
+    return llm(prompt, 1000, 0.7)
+
+def parse_wardrobe_list(text):
+    w = load_wardrobe()
+    cats = ", ".join(w.keys()) or "футболки, рубашки, свитшоты, верхняя одежда, брюки, обувь, носки, кепки, аксессуары"
+    prompt = f"""Разбери список одежды и распредели по категориям.
+Существующие категории: {cats}. Используй их, если подходит. Можно создать новую категорию при необходимости.
+
+Список от пользователя:
+{text}
+
+Верни JSON: {{"категория": ["вещь", "вещь"], ...}}. Названия вещей короткие, в нижнем регистре."""
+    return llm_json(prompt, 800)
 
 # ---------- Send ----------
 
@@ -383,26 +444,17 @@ def assemble_morning(chat_id):
     s = get_settings(chat_id)
     data = fetch_weather(s["lat"], s["lon"], days=2)
     wblock = weather_block(data, 0, s["city"])
-    bike = bike_advice(data, 0)
     of = build_outfit_focus(wblock, "сегодня")
     extras = build_morning_extras("сегодня")
-    notes = get_notes(chat_id)
 
     parts = ["☀️ Доброе утро, Дмитрий!", "", wblock, ""]
     parts.append("👕 Лук дня")
-    parts += [f"• {x}" for x in of.get("outfit", [])]
-    parts.append("")
-    parts.append(bike)
-    parts.append("")
-    if notes:
-        parts.append("📅 Сегодня")
-        parts += [f"• {n}" for n in notes]
-        parts.append("")
-    parts.append(f"🧠 {of.get('focus','')}")
-    parts.append("")
-    parts.append(f"🇳🇱 {extras.get('dutch','')}")
-    parts.append("")
-    parts.append(f"📖 {extras.get('quote','')}")
+    parts.append(" + ".join(of.get("outfit", [])) + ".")
+    parts += ["", "Почему работает:", of.get("why", ""), "",
+              f"🧠 {of.get('focus','')}", "",
+              f"🇳🇱 {extras.get('dutch','')}", "",
+              f"📖 {extras.get('quote','')}", "",
+              f"🌿 {lagom_of_day()}"]
     tc = trip_countdown()
     if tc:
         parts += ["", tc]
@@ -429,30 +481,25 @@ async def job_dutch(context: ContextTypes.DEFAULT_TYPE):
 # ---------- Commands ----------
 
 MENU = (
-    "/plan - одежда и советы\n"
-    "/today - задачи на сегодня\n"
-    "/tomorrow - план на завтра\n"
-    "/weather - погода (/weather 5 - на 5 дней)\n"
-    "/dutch - нидерландский\n"
-    "/english - английский\n"
-    "/translate - перевод-челлендж (/translate en - на англ.)\n"
-    "/note - быстрая заметка\n\n"
+    "📋 План - одежда и погода (сегодня / завтра / 3 дня)\n"
+    "👔 Шкаф - сгенерировать лук, советы к покупке, добавить одежду\n"
+    "🌍 Изучение языков - нидерландский и английский (уроки + перевод + уровень)\n\n"
     "Геолокация или /setcity Город - сменить город."
 )
 
-# Кнопки-клавиатура над полем ввода
-KEYBOARD = ReplyKeyboardMarkup(
-    [
-        ["👕 План", "📅 Сегодня"],
-        ["🌤️ Погода", "✈️ Завтра"],
-        ["🇳🇱 Урок NL", "🇬🇧 Урок EN"],
-        ["⚡ Перевод NL", "⚡ Перевод EN"],
-    ],
-    resize_keyboard=True
-)
+# --- Многоуровневое меню ---
+MAIN_KB = ReplyKeyboardMarkup([["📋 План"], ["👔 Шкаф"], ["🌍 Изучение языков"]], resize_keyboard=True)
+PLAN_KB = ReplyKeyboardMarkup([["📅 Сегодня", "📅 Завтра"], ["🗓️ На 3 дня"], ["⬅️ Назад"]], resize_keyboard=True)
+WARDROBE_KB = ReplyKeyboardMarkup([["✨ Сгенерировать лук"], ["🛍️ Советы к покупке"], ["📤 Добавить одежду"], ["⬅️ Назад"]], resize_keyboard=True)
+LANG_KB = ReplyKeyboardMarkup([["🇳🇱 Нидерландский"], ["🇬🇧 Английский"], ["⚙️ Уровень языка"], ["⬅️ Назад"]], resize_keyboard=True)
+NL_KB = ReplyKeyboardMarkup([["📖 Урок NL", "⚡ Перевод NL"], ["⬅️ Назад"]], resize_keyboard=True)
+EN_KB = ReplyKeyboardMarkup([["📖 Урок EN", "⚡ Перевод EN"], ["⬅️ Назад"]], resize_keyboard=True)
+LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
+
 
 async def start(update, context):
-    await update.message.reply_text(f"Привет! Твой ассистент DM.\n\n{MENU}", reply_markup=KEYBOARD)
+    await update.message.reply_text(f"Привет! Твой ассистент DM.\n\n{MENU}", reply_markup=MAIN_KB)
+
 
 async def plan_command(update, context):
     cid = update.effective_chat.id
@@ -462,11 +509,12 @@ async def plan_command(update, context):
         data = fetch_weather(s["lat"], s["lon"], 2)
         wblock = weather_block(data, 0, s["city"])
         of = build_outfit_focus(wblock, "сегодня")
-        out = [wblock, "", "👕 Лук дня"] + [f"• {x}" for x in of.get("outfit", [])]
-        out += ["", bike_advice(data, 0), "", f"🧠 {of.get('focus','')}"]
+        out = [wblock, "", "👕 Лук дня", " + ".join(of.get("outfit", [])) + ".",
+               "", "Почему работает:", of.get("why", ""), "", f"🧠 {of.get('focus','')}"]
         await send_long(context.bot, cid, "\n".join(out))
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
+
 
 async def tomorrow_command(update, context):
     cid = update.effective_chat.id
@@ -476,8 +524,30 @@ async def tomorrow_command(update, context):
         data = fetch_weather(s["lat"], s["lon"], 2)
         wblock = weather_block(data, 1, s["city"])
         of = build_outfit_focus(wblock, "завтра")
-        out = ["Завтра:", "", wblock, "", "👕 Лук"] + [f"• {x}" for x in of.get("outfit", [])]
-        out += ["", bike_advice(data, 1)]
+        out = ["Завтра:", "", wblock, "", "👕 Лук", " + ".join(of.get("outfit", [])) + ".",
+               "", "Почему работает:", of.get("why", ""), "", f"🧠 {of.get('focus','')}"]
+        await send_long(context.bot, cid, "\n".join(out))
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+async def plan3_command(update, context):
+    cid = update.effective_chat.id
+    await update.message.reply_text("Готовлю саммари на 3 дня...")
+    try:
+        s = get_settings(cid)
+        data = fetch_weather(s["lat"], s["lon"], 3)
+        d = data["daily"]
+        names = ["Сегодня", "Завтра", d["time"][2] if len(d["time"]) > 2 else "Послезавтра"]
+        out = [f"🗓️ {s['city']} - 3 дня", ""]
+        for i in range(3):
+            code = d["weathercode"][i]
+            out.append(f"{EMOJI.get(code,'🌡️')} {names[i]}: {d['temperature_2m_min'][i]:.0f}-{d['temperature_2m_max'][i]:.0f}°C, "
+                       f"{DESC.get(code,'')}, ветер {d['windspeed_10m_max'][i]:.0f} м/с, дождь {d['precipitation_probability_max'][i] or 0:.0f}%")
+        # короткий общий совет по гардеробу на 3 дня
+        advice = build_outfit_focus("\n".join(out[2:]), "ближайшие 3 дня")
+        out += ["", "👕 На период", " + ".join(advice.get("outfit", [])) + ".",
+                "", "Почему работает:", advice.get("why", ""), "", f"🧠 {advice.get('focus','')}"]
         await send_long(context.bot, cid, "\n".join(out))
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
@@ -537,24 +607,6 @@ async def location_handler(update, context):
     except Exception as e:
         await update.message.reply_text(f"Локация сохранена. Ошибка погоды: {e}")
 
-async def today_command(update, context):
-    notes = get_notes(update.effective_chat.id)
-    if not notes:
-        await update.message.reply_text("На сегодня задач нет. Добавь: /note текст")
-        return
-    await update.message.reply_text("📅 Задачи на сегодня\n\n" + "\n".join(f"• {n}" for n in notes) + "\n\n/clear - очистить")
-
-async def note_command(update, context):
-    if not context.args:
-        await update.message.reply_text("Формат: /note забрать посылку")
-        return
-    add_note(update.effective_chat.id, " ".join(context.args))
-    await update.message.reply_text("Записал в задачи. /today - посмотреть")
-
-async def clear_command(update, context):
-    clear_notes(update.effective_chat.id)
-    await update.message.reply_text("Задачи очищены.")
-
 async def dutch_command(update, context):
     await update.message.reply_text("Готовлю урок...")
     try:
@@ -572,25 +624,79 @@ async def english_command(update, context):
 async def answer_callback(update, context):
     q = update.callback_query
     await q.answer()
-    ans = lesson_answers.get(str(q.message.chat_id))
-    if ans:
-        await q.message.reply_text(f"✅ {ans}")
-    else:
-        await q.message.reply_text("Ответ не найден - запроси урок заново.")
+    cid = str(q.message.chat_id)
+    data = q.data
+    if data == "lesson_answer":
+        ans = lesson_answers.get(cid)
+        await q.message.reply_text(f"✅ {ans}" if ans else "Ответ не найден - запроси урок заново.")
+        return
+    if data.startswith("lvl_"):
+        _, code, level = data.split("_")
+        language = "нидерландский" if code == "nl" else "английский"
+        set_level(cid, language, level)
+        await q.message.reply_text(f"Уровень {language} установлен: {level}")
+        return
 
 async def translate_command(update, context):
     cid = str(update.effective_chat.id)
     lang = "нидерландский"
     if context.args and context.args[0].lower() in ("en", "eng", "англ"):
         lang = "английский"
+    level = get_level(cid, lang)
     await update.message.reply_text("Придумываю фразу...")
     try:
-        ru = generate_challenge(lang)
+        ru = generate_challenge(lang, level)
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
         return
     challenge_state[cid] = {"ru": ru, "lang": lang}
-    await update.message.reply_text(f"Переведи на {lang}:\n\n{ru}\n\nНапиши перевод следующим сообщением.")
+    await update.message.reply_text(f"Переведи на {lang} ({level}):\n\n{ru}\n\nНапиши перевод следующим сообщением.")
+
+# --- Шкаф ---
+
+async def generate_look_command(update, context):
+    await plan_command(update, context)
+
+async def shopping_command(update, context):
+    cid = update.effective_chat.id
+    await update.message.reply_text("Анализирую гардероб...")
+    try:
+        await send_long(context.bot, cid, generate_shopping_advice())
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+async def add_clothes_start(update, context):
+    cid = str(update.effective_chat.id)
+    add_wardrobe_mode[cid] = True
+    await update.message.reply_text(
+        "📤 Отправь список одежды в гардероб.\n"
+        "Текстом или файлом (.txt). Можно несколько подряд.\n\n"
+        "Когда закончишь - нажми ⬅️ Назад."
+    )
+
+async def document_handler(update, context):
+    cid = str(update.effective_chat.id)
+    if not add_wardrobe_mode.get(cid):
+        return
+    doc = update.message.document
+    try:
+        f = await context.bot.get_file(doc.file_id)
+        content = await f.download_as_bytearray()
+        text = content.decode("utf-8", errors="ignore")
+    except Exception as e:
+        await update.message.reply_text(f"Не смог прочитать файл: {e}")
+        return
+    await _ingest_wardrobe(update, text)
+
+async def _ingest_wardrobe(update, text):
+    await update.message.reply_text("Разбираю список...")
+    try:
+        parsed = parse_wardrobe_list(text)
+        added = merge_wardrobe(parsed)
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка разбора: {e}")
+        return
+    await update.message.reply_text(f"Добавил вещей: {added}. Можешь отправить ещё или нажми ⬅️ Назад.")
 
 # ---------- Text router ----------
 
@@ -598,25 +704,72 @@ async def text_router(update, context):
     cid = str(update.effective_chat.id)
     text = update.message.text
 
-    # Нажатия кнопок-клавиатуры
-    buttons = {
-        "👕 План": plan_command,
-        "📅 Сегодня": today_command,
-        "🌤️ Погода": weather_command,
-        "✈️ Завтра": tomorrow_command,
-        "🇳🇱 Урок NL": dutch_command,
-        "🇬🇧 Урок EN": english_command,
-    }
-    if text in buttons:
-        await buttons[text](update, context)
+    # --- Навигация по меню ---
+    if text == "📋 План":
+        await update.message.reply_text("Выбери период:", reply_markup=PLAN_KB)
         return
+    if text == "👔 Шкаф":
+        text_router_state[cid] = "wardrobe"
+        await update.message.reply_text("Шкаф:", reply_markup=WARDROBE_KB)
+        return
+    if text == "🌍 Изучение языков":
+        text_router_state[cid] = "lang"
+        await update.message.reply_text("Выбери язык:", reply_markup=LANG_KB)
+        return
+    if text == "🇳🇱 Нидерландский":
+        text_router_state[cid] = "nl"
+        await update.message.reply_text("Нидерландский:", reply_markup=NL_KB)
+        return
+    if text == "🇬🇧 Английский":
+        text_router_state[cid] = "en"
+        await update.message.reply_text("Английский:", reply_markup=EN_KB)
+        return
+    if text == "⚙️ Уровень языка":
+        nl_lvl, en_lvl = get_level(cid, "нидерландский"), get_level(cid, "английский")
+        kb_nl = InlineKeyboardMarkup([[InlineKeyboardButton(l, callback_data=f"lvl_nl_{l}") for l in LEVELS]])
+        kb_en = InlineKeyboardMarkup([[InlineKeyboardButton(l, callback_data=f"lvl_en_{l}") for l in LEVELS]])
+        await update.message.reply_text(f"🇳🇱 Уровень нидерландского (сейчас {nl_lvl}):", reply_markup=kb_nl)
+        await update.message.reply_text(f"🇬🇧 Уровень английского (сейчас {en_lvl}):", reply_markup=kb_en)
+        return
+    if text == "⬅️ Назад":
+        add_wardrobe_mode.pop(cid, None)
+        if text_router_state.get(cid) in ("nl", "en"):
+            text_router_state[cid] = "lang"
+            await update.message.reply_text("Выбери язык:", reply_markup=LANG_KB)
+        else:
+            text_router_state[cid] = "main"
+            await update.message.reply_text("Главное меню:", reply_markup=MAIN_KB)
+        return
+
+    # --- Действия: План ---
+    if text == "📅 Сегодня":
+        await plan_command(update, context); return
+    if text == "📅 Завтра":
+        await tomorrow_command(update, context); return
+    if text == "🗓️ На 3 дня":
+        await plan3_command(update, context); return
+
+    # --- Действия: Шкаф ---
+    if text == "✨ Сгенерировать лук":
+        await generate_look_command(update, context); return
+    if text == "🛍️ Советы к покупке":
+        await shopping_command(update, context); return
+    if text == "📤 Добавить одежду":
+        await add_clothes_start(update, context); return
+
+    # --- Действия: языки ---
+    if text == "📖 Урок NL":
+        text_router_state[cid] = "nl"; await dutch_command(update, context); return
+    if text == "📖 Урок EN":
+        text_router_state[cid] = "en"; await english_command(update, context); return
     if text == "⚡ Перевод NL":
-        context.args = []
-        await translate_command(update, context)
-        return
+        text_router_state[cid] = "nl"; context.args = []; await translate_command(update, context); return
     if text == "⚡ Перевод EN":
-        context.args = ["en"]
-        await translate_command(update, context)
+        text_router_state[cid] = "en"; context.args = ["en"]; await translate_command(update, context); return
+
+    # --- Режим добавления одежды: текст = список вещей ---
+    if add_wardrobe_mode.get(cid):
+        await _ingest_wardrobe(update, text)
         return
 
     if cid in challenge_state:
@@ -646,16 +799,15 @@ async def text_router(update, context):
 
 async def post_init(app):
     await app.bot.set_my_commands([
-        BotCommand("plan", "одежда и советы"),
-        BotCommand("today", "задачи на сегодня"),
+        BotCommand("plan", "план на сегодня"),
         BotCommand("tomorrow", "план на завтра"),
-        BotCommand("weather", "погода"),
+        BotCommand("plan3", "погода на 3 дня"),
         BotCommand("dutch", "урок нидерландского"),
         BotCommand("english", "урок английского"),
         BotCommand("translate", "перевод-челлендж"),
-        BotCommand("note", "быстрая заметка"),
+        BotCommand("weather", "погода"),
         BotCommand("setcity", "сменить город"),
-        BotCommand("start", "меню и кнопки"),
+        BotCommand("start", "меню"),
     ])
 
 
@@ -663,17 +815,16 @@ def main():
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("plan", plan_command))
-    app.add_handler(CommandHandler("today", today_command))
     app.add_handler(CommandHandler("tomorrow", tomorrow_command))
+    app.add_handler(CommandHandler("plan3", plan3_command))
     app.add_handler(CommandHandler("weather", weather_command))
     app.add_handler(CommandHandler("setcity", setcity_command))
     app.add_handler(CommandHandler("dutch", dutch_command))
     app.add_handler(CommandHandler("english", english_command))
     app.add_handler(CommandHandler("translate", translate_command))
-    app.add_handler(CommandHandler("note", note_command))
-    app.add_handler(CommandHandler("clear", clear_command))
-    app.add_handler(CallbackQueryHandler(answer_callback, pattern="^lesson_answer$"))
+    app.add_handler(CallbackQueryHandler(answer_callback, pattern="^(lesson_answer|lvl_)"))
     app.add_handler(MessageHandler(filters.LOCATION, location_handler))
+    app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
 
     jq = app.job_queue
