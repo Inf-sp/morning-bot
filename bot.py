@@ -31,6 +31,10 @@ async def answer_callback(update, context):
     data = q.data
     bot = context.bot
 
+    # Ассистент: инлайн-кабинет
+    if data.startswith("as_"):
+        await assistant.handle_callback(bot, cid, q, data)
+        return
     # Навигация по подменю - редактируем сообщение на месте
     if data == "m_close":
         try:
@@ -194,7 +198,7 @@ async def answer_callback(update, context):
         return
     # Ассистент: ещё раз
     if data == "chat_retry":
-        await assistant.chat_retry(bot, cid)
+        await assistant.retry(bot, cid)
         return
 
 
@@ -208,7 +212,7 @@ async def text_router(update, context):
     if text in menu.LABEL_TO_KEY:
         key = menu.LABEL_TO_KEY[text]
         if key == "assist":
-            await assistant.send_welcome(bot, cid)
+            await assistant.send_home(bot, cid)
         else:
             t, kb = menu.menu_screen(key)
             await bot.send_message(chat_id=cid, text=t, reply_markup=kb)
@@ -232,6 +236,8 @@ async def text_router(update, context):
             await content.add_artist(bot, cid, text); return
         if kind == "favcountry":
             await travel.add_country(bot, cid, text); return
+        if kind in ("role_letter", "role_designer", "role_doctor"):
+            await assistant.handle_role(bot, cid, kind.split("_")[1], text); return
 
     # Игра
     if cid in store.game_state:

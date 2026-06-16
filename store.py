@@ -130,3 +130,4 @@ grammar_state = {}
 pending_input = {}
 last_recos = {}
 suggested_countries = {}
+last_action = {}        # chat_id -> ("oneshot", key) | ("role", role, text) | None
