@@ -20,7 +20,7 @@ CHAT_ID = config.CHAT_ID
 
 
 async def start(update, context):
-    await update.message.reply_text("👋 Привет! Я DM - твой ежедневный помощник.\nПогода, обучение, идеи и твой день в одном месте.\n\nВыбери раздел ниже👇", reply_markup=menu.MAIN_KB)
+    await update.message.reply_text("Привет! 👋 Я DM.\n\nВыбери раздел в меню снизу.", reply_markup=menu.MAIN_KB)
 
 
 # ---------- Диспетчер инлайн-кнопок ----------
@@ -191,6 +191,10 @@ async def answer_callback(update, context):
     if data.startswith("worry_"):
         _, action, idx = data.split("_")
         await myday.worry_mark(bot, cid, int(idx), "real" if action == "real" else "let_go")
+        return
+    # Ассистент: ещё раз
+    if data == "chat_retry":
+        await assistant.chat_retry(bot, cid)
         return
 
 
