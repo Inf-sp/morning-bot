@@ -20,7 +20,7 @@ CHAT_ID = config.CHAT_ID
 
 
 async def start(update, context):
-    await update.message.reply_text("👋 Привет! Я DM - твой ежедневный помощник.\nПогода, обучение, идеи и твой день в одном месте.\nВыбери раздел ниже.", reply_markup=menu.MAIN_KB)
+    await update.message.reply_text("👋 Привет! Я DM - твой ежедневный помощник.\nПогода, обучение, идеи и твой день в одном месте.\n\nВыбери раздел ниже👇", reply_markup=menu.MAIN_KB)
 
 
 # ---------- Диспетчер инлайн-кнопок ----------
