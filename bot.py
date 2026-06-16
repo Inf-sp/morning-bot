@@ -713,9 +713,9 @@ async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID:
         return
     try:
+        pending_input[str(CHAT_ID)] = "worry"
         await context.bot.send_message(chat_id=CHAT_ID,
-            text="🌤 Дим, что сейчас немного тревожит? Запиши - вечером проверим, что из этого реально случилось")
-        pending_input[str(CHAT_ID)] = "diary"
+            text="🌤 Дим, что сейчас тревожит? Напиши одним сообщением, каждую тревогу с новой строки - вечером проверим, что реально случилось.")
     except Exception:
         pass
 
@@ -723,10 +723,7 @@ async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID:
         return
     try:
-        msg = ("🌙 Дим, как вечер? Смотри: что тревожило и что реально было - часто две разные истории. "
-               "Давай отпустим то, что уже неважно. Как сегодня с этим, заметил разницу?\n\nОтветь - запишу в дневник.")
-        pending_input[str(CHAT_ID)] = "diary"
-        await context.bot.send_message(chat_id=CHAT_ID, text=msg)
+        await _send_daycheck(context.bot, CHAT_ID)
     except Exception:
         pass
 
@@ -778,11 +775,9 @@ MENU = (
     "⚙️ Настройки - город и уровень языков"
 )
 
-ASSIST = "👨🏻‍💻 Вызов ассистента"
-
 WELCOME = (
     "Что будем делать сегодня?\n\n"
-    "💬 Напиши вопрос своими словами или выбери раздел в меню ниже.\n\n"
+    "💬 Напиши вопрос своими словами или выбери раздел кнопками.\n\n"
     "Попробуй спросить:\n"
     "👕 Что надеть сегодня?\n"
     "🇳🇱 Объясни разницу между die и dat\n"
@@ -790,66 +785,101 @@ WELCOME = (
     "📚 Посоветуй книгу как «Цветы для Элджернона»\n"
     "🎬 Найди сериал похожий на The Last of Us\n"
     "🌤 Какая погода на выходных?\n\n"
-    "💡 Не знаешь, с чего начать? Расскажи, что сейчас в голове - задача, идея, проблема или вопрос. Помогу разобраться."
+    "💡 Не знаешь, с чего начать? Расскажи, что сейчас в голове - задача, идея, проблема или вопрос."
 )
 
-FIRST_RUN = (
-    "👋 Привет! Я твой персональный помощник.\n\n"
-    "Чем больше пользуешься, тем точнее рекомендации по одежде, фильмам, путешествиям, языкам и решениям дня.\n\n"
-    "Что хочешь попробовать первым? 🚀"
-)
-
-# --- Меню-дашборд ---
-MAIN_KB = ReplyKeyboardMarkup([
-    ["🧭 Планы", "👕 Гардероб"],
-    ["📚 Обучение + игра", "🌤 Погода"],
-    ["✈️ Путешествия", "🧠 Мотивация"],
-    ["🎬 Развлечения", "🌱 Растения"],
-    ["⚙️ Настройки"],
-    [ASSIST],
-], resize_keyboard=True)
-
-WARDROBE_KB = ReplyKeyboardMarkup([
-    [ASSIST],
-    ["✨ Сгенерировать лук"],
-    ["📊 Скучный список", "🧠 Анализ"],
-    ["🛍️ Советы к покупке", "📤 Добавить одежду"],
-    ["⬅️ Назад"],
-], resize_keyboard=True)
-
-LANG_KB = ReplyKeyboardMarkup([
-    [ASSIST],
-    ["🇳🇱 Нидерландский", "🇬🇧 Английский"],
-    ["🕵️ Игра-детектив"],
-    ["⚙️ Уровень языка"],
-    ["⬅️ Назад"],
-], resize_keyboard=True)
-NL_KB = ReplyKeyboardMarkup([[ASSIST], ["📖 Грамматика NL", "⚡ Тренировка NL"], ["⬅️ Назад"]], resize_keyboard=True)
-EN_KB = ReplyKeyboardMarkup([[ASSIST], ["📖 Грамматика EN", "⚡ Тренировка EN"], ["⬅️ Назад"]], resize_keyboard=True)
-
-WEATHER_KB = ReplyKeyboardMarkup([[ASSIST], ["🌤 Сегодня", "📅 7 дней"], ["📍 Сменить город"], ["⬅️ Назад"]], resize_keyboard=True)
-TRAVEL_KB = ReplyKeyboardMarkup([[ASSIST], ["🗺 Куда поехать", "🏳 Мои страны"], ["⬅️ Назад"]], resize_keyboard=True)
-LAGOM_KB = ReplyKeyboardMarkup([
-    [ASSIST],
-    ["🌙 Проверка дня", "📊 Дневник"],
-    ["🌿 Фраза дня"],
-    ["⬅️ Назад"],
-], resize_keyboard=True)
-CONTENT_KB = ReplyKeyboardMarkup([
-    [ASSIST],
-    ["🎬 Что посмотреть", "📖 Что почитать"],
-    ["🍿 Список просмотра", "📚 Список чтения"],
-    ["❤️ Любимое", "🎤 Концерты"],
-    ["⬅️ Назад"],
-], resize_keyboard=True)
-PLANTS_KB = ReplyKeyboardMarkup([[ASSIST], ["💧 Мои растения", "🗓 Полив"], ["➕ Добавить растение"], ["⬅️ Назад"]], resize_keyboard=True)
-CONCERTS_KB = ReplyKeyboardMarkup([[ASSIST], ["🎤 Мои артисты", "➕ Добавить артиста"], ["⬅️ Назад"]], resize_keyboard=True)
-SETTINGS_KB = ReplyKeyboardMarkup([[ASSIST], ["📍 Сменить город", "🌐 Уровень языков"], ["⬅️ Назад"]], resize_keyboard=True)
+MAIN_TEXT = "Привет! 👋 Я DM.\n\nВыбери раздел:"
 LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 
 
+def _ikb(rows):
+    return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
+
+def _back(parent):
+    return [("👨🏻‍💻 Вызов ассистента", "a_assist"), ("⬅️ Назад", parent)]
+
+# Текст + клавиатура для каждого экрана меню. m_<key> открывает экран.
+def menu_screen(key):
+    if key == "m_main":
+        return (MAIN_TEXT, _ikb([
+            [("🧭 Планы", "a_plany")],
+            [("👕 Гардероб", "m_wardrobe"), ("📚 Обучение", "m_lang")],
+            [("🌤 Погода", "m_weather"), ("✈️ Путешествия", "m_travel")],
+            [("🧠 Мотивация", "m_lagom"), ("🎬 Развлечения", "m_content")],
+            [("🌱 Растения", "m_plants"), ("⚙️ Настройки", "m_settings")],
+            [("👨🏻‍💻 Вызов ассистента", "a_assist")],
+        ]))
+    if key == "m_wardrobe":
+        return ("👕 Гардероб", _ikb([
+            [("✨ Сгенерировать лук", "a_look")],
+            [("📊 Список", "a_wlist"), ("🧠 Анализ", "a_wanalysis")],
+            [("🛍️ Советы к покупке", "a_shop")],
+            [("📤 Добавить одежду", "a_wadd")],
+            _back("m_main"),
+        ]))
+    if key == "m_lang":
+        return ("📚 Обучение + игра", _ikb([
+            [("🇳🇱 Нидерландский", "m_nl"), ("🇬🇧 Английский", "m_en")],
+            [("🕵️ Игра-детектив", "a_game")],
+            [("⚙️ Уровень языка", "a_levels")],
+            _back("m_main"),
+        ]))
+    if key == "m_nl":
+        return ("🇳🇱 Нидерландский", _ikb([
+            [("📖 Грамматика", "a_gram_nl"), ("⚡ Тренировка", "a_tr_nl")],
+            [("👨🏻‍💻 Вызов ассистента", "a_assist"), ("⬅️ Назад", "m_lang")],
+        ]))
+    if key == "m_en":
+        return ("🇬🇧 Английский", _ikb([
+            [("📖 Грамматика", "a_gram_en"), ("⚡ Тренировка", "a_tr_en")],
+            [("👨🏻‍💻 Вызов ассистента", "a_assist"), ("⬅️ Назад", "m_lang")],
+        ]))
+    if key == "m_weather":
+        return ("🌤 Погода", _ikb([
+            [("🌤 Сегодня", "a_w_today"), ("📅 7 дней", "a_w_week")],
+            [("📍 Сменить город", "a_setcity")],
+            _back("m_main"),
+        ]))
+    if key == "m_travel":
+        return ("✈️ Путешествия", _ikb([
+            [("🗺 Куда поехать", "a_trav_go"), ("🏳 Мои страны", "a_trav_my")],
+            _back("m_main"),
+        ]))
+    if key == "m_lagom":
+        return ("🧠 Мотивация", _ikb([
+            [("🌙 Проверка дня", "a_daycheck"), ("📊 Дневник", "a_diary")],
+            [("🌿 Фраза дня", "a_phrase")],
+            _back("m_main"),
+        ]))
+    if key == "m_content":
+        return ("🎬 Развлечения", _ikb([
+            [("🎬 Что посмотреть", "a_watch"), ("📖 Что почитать", "a_read")],
+            [("🍿 Список просмотра", "a_watchlist"), ("📚 Список чтения", "a_readlist")],
+            [("❤️ Любимое", "a_fav"), ("🎤 Концерты", "m_concerts")],
+            _back("m_main"),
+        ]))
+    if key == "m_concerts":
+        return ("🎤 Концерты", _ikb([
+            [("🎤 Мои артисты", "a_artists"), ("➕ Добавить", "a_artadd")],
+            [("👨🏻‍💻 Вызов ассистента", "a_assist"), ("⬅️ Назад", "m_content")],
+        ]))
+    if key == "m_plants":
+        return ("🌱 Растения", _ikb([
+            [("💧 Мои растения", "a_plants_list"), ("🗓 Полив", "a_water")],
+            [("➕ Добавить растение", "a_plantadd")],
+            _back("m_main"),
+        ]))
+    if key == "m_settings":
+        return ("⚙️ Настройки", _ikb([
+            [("📍 Сменить город", "a_setcity"), ("🌐 Уровень языков", "a_levels")],
+            _back("m_main"),
+        ]))
+    return (MAIN_TEXT, menu_screen("m_main")[1])
+
+
 async def start(update, context):
-    await update.message.reply_text("Привет! 👋 Я DM.\n\nВыбери раздел в меню ниже.", reply_markup=MAIN_KB)
+    text, kb = menu_screen("m_main")
+    await update.message.reply_text(text, reply_markup=kb)
 
 
 _WEEKDAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
@@ -874,49 +904,40 @@ def weather_icon(code, temp, rain, wind_kmh):
         return "☀️"
     return "☁️"
 
+async def _send_plany(bot, cid):
+    s = get_settings(cid)
+    data = fetch_weather(s["lat"], s["lon"], 2)
+    cur = data["current"]
+    d = data["daily"]
+    temp = cur["temperature_2m"]
+    code = cur["weathercode"]
+    rain = d["precipitation_probability_max"][0] or 0
+    wind_kmh = (d["windspeed_10m_max"][0] or 0) * 3.6
+    icon = weather_icon(code, temp, rain, wind_kmh)
+
+    of = build_outfit_focus(weather_block(data, 0, s["city"]), "сегодня")
+    ex = plany_extras()
+
+    now = datetime.now(TZ)
+    header = f"{_WEEKDAYS[now.weekday()]}, {now.day} {_MONTHS[now.month-1]}"
+    wind_ms = d["windspeed_10m_max"][0] or 0
+    L = [f"🧭 <b>Планы | {header}</b>", "", "<b>Погода</b>",
+         f"{icon} {_esc(s['city'])}: {temp:+.0f}°C • Вероятность дождя {rain:.0f}% • 💨 {wind_ms:.0f} м/с",
+         "", "<b>Лук дня</b>", _esc(", ".join(of.get("outfit", []))),
+         "", "<b>Слово дня</b>", _esc(ex.get("word_ru", "")),
+         f"🇳🇱 {_esc(ex.get('word_nl',''))} / 🇬🇧 {_esc(ex.get('word_en',''))}",
+         f"<i>{_esc(ex.get('example_nl',''))} ({_esc(ex.get('example_ru',''))})</i>",
+         "", "🔬 <b>Интересный научный факт</b>", _esc(ex.get("fact", ""))]
+    if ex.get("quote"):
+        L += ["", "📖 <b>Цитата дня</b>", _esc(ex.get("quote", "")), f"<i>— {_esc(ex.get('quote_book',''))}</i>"]
+    if ex.get("place_text"):
+        L += ["", f"🗺️ <b>Место дня: {_esc(ex.get('place_country',''))}</b>", _esc(ex.get("place_text", ""))]
+    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
+
 async def plany_command(update, context):
-    cid = update.effective_chat.id
     await update.message.reply_text("Собираю сводку дня...")
     try:
-        s = get_settings(cid)
-        data = fetch_weather(s["lat"], s["lon"], 2)
-        cur = data["current"]
-        d = data["daily"]
-        temp = cur["temperature_2m"]
-        code = cur["weathercode"]
-        rain = d["precipitation_probability_max"][0] or 0
-        wind_kmh = (d["windspeed_10m_max"][0] or 0) * 3.6
-        icon = weather_icon(code, temp, rain, wind_kmh)
-
-        of = build_outfit_focus(weather_block(data, 0, s["city"]), "сегодня")
-        ex = plany_extras()
-
-        now = datetime.now(TZ)
-        header = f"{_WEEKDAYS[now.weekday()]}, {now.day} {_MONTHS[now.month-1]}"
-
-        wind_ms = d["windspeed_10m_max"][0] or 0
-        L = [f"🧭 <b>Планы | {header}</b>", ""]
-        # Погода (словами про дождь, ветер м/с)
-        L.append("<b>Погода</b>")
-        L.append(f"{icon} {_esc(s['city'])}: {temp:+.0f}°C • Вероятность дождя {rain:.0f}% • 💨 {wind_ms:.0f} м/с")
-        # Лук дня - через запятую, без пояснений
-        L += ["", "<b>Лук дня</b>", _esc(", ".join(of.get("outfit", [])))]
-        # Слово дня - русское впереди, потом перевод
-        L += ["", "<b>Слово дня</b>",
-              _esc(ex.get("word_ru", "")),
-              f"🇳🇱 {_esc(ex.get('word_nl',''))} / 🇬🇧 {_esc(ex.get('word_en',''))}",
-              f"<i>{_esc(ex.get('example_nl',''))} ({_esc(ex.get('example_ru',''))})</i>"]
-        # Научный факт с иконкой и конкретикой
-        L += ["", "🔬 <b>Интересный научный факт</b>", _esc(ex.get("fact", ""))]
-        # Цитата дня - книга и автор, мотивирующая
-        if ex.get("quote"):
-            L += ["", "📖 <b>Цитата дня</b>", _esc(ex.get("quote", "")),
-                  f"<i>— {_esc(ex.get('quote_book',''))}</i>"]
-        # Место дня - коротко, в конце
-        if ex.get("place_text"):
-            L += ["", f"🗺️ <b>Место дня: {_esc(ex.get('place_country',''))}</b>", _esc(ex.get("place_text", ""))]
-
-        await context.bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
+        await _send_plany(context.bot, update.effective_chat.id)
     except Exception as e:
         await update.message.reply_text(f"Ошибка сводки: {e}")
 
@@ -981,8 +1002,39 @@ def wind_note(ms):
         return "заметный"
     return "слабый"
 
+async def _send_weather(bot, cid, days):
+    s = get_settings(cid)
+    data = fetch_weather(s["lat"], s["lon"], max(days, 2))
+    d = data["daily"]
+    names = ["Сегодня", "Завтра"]
+    out = []
+    if days == 1:
+        code = d["weathercode"][0]
+        rain = d["precipitation_probability_max"][0] or 0
+        wind_ms = d["windspeed_10m_max"][0] or 0
+        icon = weather_icon(code, d["temperature_2m_max"][0], rain, wind_ms * 3.6)
+        out += [f"📍 {s['city']}",
+                f"{icon} {d['temperature_2m_min'][0]:.0f}-{d['temperature_2m_max'][0]:.0f}°C",
+                f"Вероятность дождя {rain:.0f}%",
+                f"💨 Ветер {wind_ms:.0f} м/с - {wind_note(wind_ms)}"]
+        rubric = world_extreme_line()
+        if rubric:
+            out += ["", rubric]
+        out += ["", _random.choice(CLOSERS).format(city=s["city"])]
+    else:
+        out.append(f"📍 {s['city']} - прогноз на {days} дн.")
+        out.append("")
+        for i in range(days):
+            label = names[i] if i < 2 else d["time"][i]
+            code = d["weathercode"][i]
+            rain = d["precipitation_probability_max"][i] or 0
+            wind_kmh = (d["windspeed_10m_max"][i] or 0) * 3.6
+            icon = weather_icon(code, d["temperature_2m_max"][i], rain, wind_kmh)
+            out.append(f"{icon} {label}: {d['temperature_2m_min'][i]:.0f}-{d['temperature_2m_max'][i]:.0f}°C, "
+                       f"дождь {rain:.0f}%, ветер {wind_kmh:.0f} км/ч")
+    await bot.send_message(chat_id=cid, text="\n".join(out))
+
 async def weather_command(update, context):
-    cid = update.effective_chat.id
     days = 1
     if context.args:
         try:
@@ -990,36 +1042,7 @@ async def weather_command(update, context):
         except Exception:
             pass
     try:
-        s = get_settings(cid)
-        data = fetch_weather(s["lat"], s["lon"], max(days, 2))
-        d = data["daily"]
-        names = ["Сегодня", "Завтра"]
-        out = []
-        if days == 1:
-            code = d["weathercode"][0]
-            rain = d["precipitation_probability_max"][0] or 0
-            wind_ms = d["windspeed_10m_max"][0] or 0
-            icon = weather_icon(code, d["temperature_2m_max"][0], rain, wind_ms * 3.6)
-            out += [f"📍 {s['city']}",
-                    f"{icon} {d['temperature_2m_min'][0]:.0f}-{d['temperature_2m_max'][0]:.0f}°C",
-                    f"Вероятность дождя {rain:.0f}%",
-                    f"💨 Ветер {wind_ms:.0f} м/с - {wind_note(wind_ms)}"]
-            rubric = world_extreme_line()
-            if rubric:
-                out += ["", rubric]
-            out += ["", _random.choice(CLOSERS).format(city=s["city"])]
-        else:
-            out.append(f"📍 {s['city']} - прогноз на {days} дн.")
-            out.append("")
-            for i in range(days):
-                label = names[i] if i < 2 else d["time"][i]
-                code = d["weathercode"][i]
-                rain = d["precipitation_probability_max"][i] or 0
-                wind_kmh = (d["windspeed_10m_max"][i] or 0) * 3.6
-                icon = weather_icon(code, d["temperature_2m_max"][i], rain, wind_kmh)
-                out.append(f"{icon} {label}: {d['temperature_2m_min'][i]:.0f}-{d['temperature_2m_max'][i]:.0f}°C, "
-                           f"дождь {rain:.0f}%, ветер {wind_kmh:.0f} км/ч")
-        await update.message.reply_text("\n".join(out))
+        await _send_weather(context.bot, update.effective_chat.id, days)
     except Exception as e:
         await update.message.reply_text(f"Ошибка погоды: {e}")
 
@@ -1131,6 +1154,154 @@ async def answer_callback(update, context):
     await q.answer()
     cid = str(q.message.chat_id)
     data = q.data
+
+    # --- Навигация по меню: редактируем сообщение на месте ---
+    if data.startswith("m_"):
+        text, kb = menu_screen(data)
+        try:
+            await q.message.edit_text(text, reply_markup=kb)
+        except Exception:
+            await context.bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+        return
+
+    # --- Действия: открывают результат отдельным сообщением, меню остаётся ---
+    if data.startswith("a_"):
+        act = data[2:]
+        try:
+            if act == "assist":
+                await context.bot.send_message(chat_id=cid, text=WELCOME)
+            elif act == "plany":
+                await context.bot.send_message(chat_id=cid, text="Собираю сводку дня...")
+                await _send_plany(context.bot, cid)
+            # Гардероб
+            elif act == "look":
+                await context.bot.send_message(chat_id=cid, text="Собираю комбинации...")
+                await send_long(context.bot, cid, generate_look())
+            elif act == "wlist":
+                w = load_wardrobe()
+                await send_long(context.bot, cid, "📊 Гардероб\n\n" + (wardrobe_to_text(w) or "Пусто."))
+            elif act == "wanalysis":
+                await context.bot.send_message(chat_id=cid, text="Анализирую...")
+                await send_long(context.bot, cid, wardrobe_analysis())
+            elif act == "shop":
+                await context.bot.send_message(chat_id=cid, text="Подбираю...")
+                await send_long(context.bot, cid, generate_shopping_advice())
+            elif act == "wadd":
+                add_wardrobe_mode[cid] = True
+                await context.bot.send_message(chat_id=cid,
+                    text="📤 Отправь список одежды текстом или файлом (.txt). Можно несколько подряд. Когда закончишь - вернись в меню кнопкой.")
+            # Языки
+            elif act == "gram_nl":
+                await send_grammar(context.bot, cid, "нидерландский", "🇳🇱")
+            elif act == "gram_en":
+                await send_grammar(context.bot, cid, "английский", "🇬🇧")
+            elif act == "tr_nl":
+                await _do_translate(context.bot, cid, "нидерландский")
+            elif act == "tr_en":
+                await _do_translate(context.bot, cid, "английский")
+            elif act == "game":
+                await context.bot.send_message(chat_id=cid, text="🕵️ Игра-детектив. На каком языке подсказки?",
+                                               reply_markup=await _game_lang_kb())
+            elif act == "levels":
+                nl_lvl, en_lvl = get_level(cid, "нидерландский"), get_level(cid, "английский")
+                kb_nl = InlineKeyboardMarkup([[InlineKeyboardButton(l, callback_data=f"lvl_nl_{l}") for l in LEVELS]])
+                kb_en = InlineKeyboardMarkup([[InlineKeyboardButton(l, callback_data=f"lvl_en_{l}") for l in LEVELS]])
+                await context.bot.send_message(chat_id=cid, text=f"🇳🇱 Уровень нидерландского (сейчас {nl_lvl}):", reply_markup=kb_nl)
+                await context.bot.send_message(chat_id=cid, text=f"🇬🇧 Уровень английского (сейчас {en_lvl}):", reply_markup=kb_en)
+            # Погода
+            elif act == "w_today":
+                await _send_weather(context.bot, cid, 1)
+            elif act == "w_week":
+                await _send_weather(context.bot, cid, 7)
+            elif act == "setcity":
+                await context.bot.send_message(chat_id=cid, text="Отправь геолокацию или команду: /setcity Амстердам")
+            # Путешествия
+            elif act == "trav_go":
+                await context.bot.send_message(chat_id=cid, text="Подбираю направления...")
+                await _send_travel_go(context.bot, cid)
+            elif act == "trav_my":
+                await _send_travel_my(context.bot, cid)
+            # Мотивация
+            elif act == "daycheck":
+                await _send_daycheck(context.bot, cid)
+            elif act == "diary":
+                entries = get_list(DIARY_KEY, cid)
+                if not entries:
+                    await context.bot.send_message(chat_id=cid, text="Дневник пуст. Записи появятся после проверки дня.")
+                else:
+                    last = entries[-7:]
+                    await send_long(context.bot, cid, "📊 Последние записи\n\n" + "\n\n".join(f"{e['date']}: {e['text']}" for e in last))
+            elif act == "phrase":
+                await context.bot.send_message(chat_id=cid, text="🌿 " + lagom_of_day())
+            # Развлечения
+            elif act == "watch":
+                await context.bot.send_message(chat_id=cid, text="Подбираю...")
+                await _send_recos(context.bot, cid, "movie")
+            elif act == "read":
+                await context.bot.send_message(chat_id=cid, text="Подбираю...")
+                await _send_recos(context.bot, cid, "book")
+            elif act == "watchlist":
+                lst = get_list(WATCHLIST_KEY, cid)
+                await context.bot.send_message(chat_id=cid, text="🍿 Посмотреть:\n" + ("\n".join(f"• {x}" for x in lst) if lst else "пусто"))
+            elif act == "readlist":
+                lst = get_list(READLIST_KEY, cid)
+                await context.bot.send_message(chat_id=cid, text="📚 Почитать:\n" + ("\n".join(f"• {x}" for x in lst) if lst else "пусто"))
+            elif act == "fav":
+                favs = get_list(FAVORITES_KEY, cid)
+                pending_input[cid] = "favorite"
+                await context.bot.send_message(chat_id=cid,
+                    text="❤️ Любимое:\n" + ("\n".join(f"• {f}" for f in favs) if favs else "пусто") + "\n\nНапиши фильм/сериал/книгу - добавлю.")
+            elif act == "artists":
+                arts = get_list(ARTISTS_KEY, cid)
+                await context.bot.send_message(chat_id=cid,
+                    text="🎤 Артисты:\n" + ("\n".join(f"• {a}" for a in arts) if arts else "пусто") +
+                         "\n\nПоиск концертов требует API событий (Ticketmaster/Bandsintown).")
+            elif act == "artadd":
+                pending_input[cid] = "artist"
+                await context.bot.send_message(chat_id=cid, text="Напиши имя артиста - добавлю в список.")
+            # Растения
+            elif act == "plants_list":
+                pl = get_list(PLANTS_KEY, cid)
+                if not pl:
+                    await context.bot.send_message(chat_id=cid, text="🌱 Растений нет.")
+                else:
+                    lines = ["🌱 Растения"]
+                    rows = []
+                    for i, p in enumerate(pl):
+                        nm = p.get("name", "?") if isinstance(p, dict) else str(p)
+                        iv = p.get("interval", 7) if isinstance(p, dict) else 7
+                        nxt = p.get("next", "") if isinstance(p, dict) else ""
+                        lines.append(f"• {nm} - раз в {iv} дн." + (f", след. {nxt}" if nxt else ""))
+                        rows.append([InlineKeyboardButton(f"💧 Полил: {nm}", callback_data=f"water_{i}")])
+                    await context.bot.send_message(chat_id=cid, text="\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))
+            elif act == "water":
+                pl = get_list(PLANTS_KEY, cid)
+                if not pl:
+                    await context.bot.send_message(chat_id=cid, text="Сначала добавь растения с интервалом полива.")
+                else:
+                    today = datetime.now(TZ).date()
+                    due, ok = [], []
+                    for p in pl:
+                        if not isinstance(p, dict):
+                            continue
+                        try:
+                            nd = date.fromisoformat(p.get("next", ""))
+                        except Exception:
+                            nd = today
+                        (due if nd <= today else ok).append((p["name"], nd))
+                    out = ["🗓 Полив"]
+                    if due:
+                        out += ["", "💧 Пора:"] + [f"• {n}" for n, _ in due]
+                    if ok:
+                        out += ["", "✅ Рано:"] + [f"• {n} (до {dt.isoformat()})" for n, dt in ok]
+                    await context.bot.send_message(chat_id=cid, text="\n".join(out))
+            elif act == "plantadd":
+                pending_input[cid] = "plant"
+                await context.bot.send_message(chat_id=cid, text="Напиши растение и интервал, напр.: монстера, раз в 5 дней")
+        except Exception as e:
+            await context.bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
+        return
+
     if data.startswith("lvl_"):
         _, code, level = data.split("_")
         language = "нидерландский" if code == "nl" else "английский"
@@ -1301,17 +1472,46 @@ async def _send_recos(bot, cid, kind):
             for i, it in enumerate(items)]
     await bot.send_message(chat_id=cid, text="\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))
 
-async def start_day_check(update, context):
-    cid = str(update.effective_chat.id)
+async def _send_daycheck(bot, cid):
+    cid = str(cid)
     worries = get_list(WORRIES_KEY, cid)
     pending = [w for w in worries if w.get("status") == "pending"]
     if not pending:
-        # нечего проверять - собираем тревоги
         pending_input[cid] = "worry"
-        await update.message.reply_text(
-            "🌙 Дим, как вечер?\n\nЧто сегодня шумело в голове? Напиши тревоги одним сообщением, каждую с новой строки - вечером проверим, что реально случилось.")
+        await bot.send_message(chat_id=cid,
+            text="🌙 Дим, как вечер?\n\nЧто сегодня шумело в голове? Напиши тревоги одним сообщением, каждую с новой строки - вечером проверим, что реально случилось.")
         return
-    await _show_worry_check(context.bot, cid)
+    await _show_worry_check(bot, cid)
+
+async def start_day_check(update, context):
+    await _send_daycheck(context.bot, update.effective_chat.id)
+
+async def _send_travel_go(bot, cid):
+    cid = str(cid)
+    data = travel_suggest_data()
+    items = data.get("items", [])
+    suggested_countries[cid] = [it.get("country", "") for it in items]
+    lines = ["🗺 Куда поехать", ""]
+    for it in items:
+        lines.append(f"{it.get('flag','')} {it.get('country','')} - {it.get('why','')}")
+    rows = [[InlineKeyboardButton(f"📍 10 фактов: {it.get('country','')}", callback_data=f"facts_{i}")]
+            for i, it in enumerate(items)]
+    await bot.send_message(chat_id=cid, text="\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))
+
+async def _send_travel_my(bot, cid):
+    cid = str(cid)
+    favs = get_list(FAVCOUNTRIES_KEY, cid)
+    out = ["🏳 Любимые страны:"]
+    if favs:
+        rows = []
+        for i, c in enumerate(favs):
+            out.append(f"{c.get('flag','🏳')} {c.get('name','')}")
+            rows.append([InlineKeyboardButton(f"❌ {c.get('name','')}", callback_data=f"delcountry_{i}")])
+        await bot.send_message(chat_id=cid, text="\n".join(out), reply_markup=InlineKeyboardMarkup(rows))
+    else:
+        await bot.send_message(chat_id=cid, text="🏳 Список пуст.")
+    pending_input[cid] = "favcountry"
+    await bot.send_message(chat_id=cid, text="➕ Добавить любимую страну - напиши её название.")
 
 async def _show_worry_check(bot, cid):
     worries = get_list(WORRIES_KEY, str(cid))
@@ -1409,224 +1609,7 @@ async def text_router(update, context):
     cid = str(update.effective_chat.id)
     text = update.message.text
 
-    # ===== Навигация: главные разделы =====
-    if text == ASSIST:
-        text_router_state[cid] = "main"
-        await update.message.reply_text(WELCOME, reply_markup=MAIN_KB); return
-    if text == "🧭 Планы":
-        await plany_command(update, context); return
-    if text == "👕 Гардероб":
-        text_router_state[cid] = "wardrobe"
-        await update.message.reply_text("Гардероб:", reply_markup=WARDROBE_KB); return
-    if text == "📚 Обучение + игра":
-        text_router_state[cid] = "lang"
-        await update.message.reply_text("Обучение и игра:", reply_markup=LANG_KB); return
-    if text == "🌤 Погода":
-        text_router_state[cid] = "weather"
-        await update.message.reply_text("Погода:", reply_markup=WEATHER_KB); return
-    if text == "✈️ Путешествия":
-        text_router_state[cid] = "travel"
-        await update.message.reply_text("Путешествия:", reply_markup=TRAVEL_KB); return
-    if text == "🧠 Мотивация":
-        text_router_state[cid] = "lagom"
-        await update.message.reply_text("Мотивация:", reply_markup=LAGOM_KB); return
-    if text == "🎬 Развлечения":
-        text_router_state[cid] = "content"
-        await update.message.reply_text("Развлечения:", reply_markup=CONTENT_KB); return
-    if text == "🎤 Концерты":
-        text_router_state[cid] = "concerts"
-        await update.message.reply_text("Концерты:", reply_markup=CONCERTS_KB); return
-    if text == "🌱 Растения":
-        text_router_state[cid] = "plants"
-        await update.message.reply_text("Растения:", reply_markup=PLANTS_KB); return
-    if text == "⚙️ Настройки":
-        text_router_state[cid] = "settings"
-        await update.message.reply_text("Настройки:", reply_markup=SETTINGS_KB); return
-
-    # языковые подменю
-    if text == "🇳🇱 Нидерландский":
-        text_router_state[cid] = "nl"
-        await update.message.reply_text("Нидерландский:", reply_markup=NL_KB); return
-    if text == "🇬🇧 Английский":
-        text_router_state[cid] = "en"
-        await update.message.reply_text("Английский:", reply_markup=EN_KB); return
-
-    if text == "⬅️ Назад":
-        add_wardrobe_mode.pop(cid, None)
-        pending_input.pop(cid, None)
-        if text_router_state.get(cid) in ("nl", "en"):
-            text_router_state[cid] = "lang"
-            await update.message.reply_text("Языки и игра:", reply_markup=LANG_KB)
-        else:
-            text_router_state[cid] = "main"
-            await update.message.reply_text("Главное меню:", reply_markup=MAIN_KB)
-        return
-
-    # ===== Гардероб =====
-    if text == "✨ Сгенерировать лук":
-        await generate_look_command(update, context); return
-    if text == "📊 Скучный список":
-        w = load_wardrobe()
-        await send_long(context.bot, cid, "📊 Гардероб\n\n" + (wardrobe_to_text(w) or "Пусто.")); return
-    if text == "🧠 Анализ":
-        await update.message.reply_text("Анализирую...")
-        try:
-            await send_long(context.bot, cid, wardrobe_analysis())
-        except Exception as e:
-            await update.message.reply_text(f"Ошибка: {e}")
-        return
-    if text == "🛍️ Советы к покупке":
-        await shopping_command(update, context); return
-    if text == "📤 Добавить одежду":
-        await add_clothes_start(update, context); return
-
-    # ===== Обучение и игра =====
-    if text == "📖 Грамматика NL":
-        text_router_state[cid] = "nl"; await dutch_command(update, context); return
-    if text == "📖 Грамматика EN":
-        text_router_state[cid] = "en"; await english_command(update, context); return
-    if text == "⚡ Тренировка NL":
-        text_router_state[cid] = "nl"; context.args = []; await translate_command(update, context); return
-    if text == "⚡ Тренировка EN":
-        text_router_state[cid] = "en"; context.args = ["en"]; await translate_command(update, context); return
-    if text == "🕵️ Игра-детектив":
-        await game_start(update, context); return
-    if text == "⚙️ Уровень языка" or text == "🌐 Уровень языков":
-        nl_lvl, en_lvl = get_level(cid, "нидерландский"), get_level(cid, "английский")
-        kb_nl = InlineKeyboardMarkup([[InlineKeyboardButton(l, callback_data=f"lvl_nl_{l}") for l in LEVELS]])
-        kb_en = InlineKeyboardMarkup([[InlineKeyboardButton(l, callback_data=f"lvl_en_{l}") for l in LEVELS]])
-        await update.message.reply_text(f"🇳🇱 Уровень нидерландского (сейчас {nl_lvl}):", reply_markup=kb_nl)
-        await update.message.reply_text(f"🇬🇧 Уровень английского (сейчас {en_lvl}):", reply_markup=kb_en)
-        return
-
-    # ===== Погода =====
-    if text == "🌤 Сегодня":
-        context.args = []; await weather_command(update, context); return
-    if text == "📅 7 дней":
-        context.args = ["7"]; await weather_command(update, context); return
-
-    # ===== Путешествия =====
-    if text == "🗺 Куда поехать":
-        await update.message.reply_text("Подбираю направления...")
-        try:
-            data = travel_suggest_data()
-            items = data.get("items", [])
-            suggested_countries[cid] = [it.get("country", "") for it in items]
-            lines = ["🗺 Куда поехать", ""]
-            for it in items:
-                lines.append(f"{it.get('flag','')} {it.get('country','')} - {it.get('why','')}")
-            rows = [[InlineKeyboardButton(f"📍 10 фактов: {it.get('country','')}", callback_data=f"facts_{i}")]
-                    for i, it in enumerate(items)]
-            await context.bot.send_message(chat_id=cid, text="\n".join(lines),
-                                           reply_markup=InlineKeyboardMarkup(rows))
-        except Exception as e:
-            await update.message.reply_text(f"Ошибка: {e}")
-        return
-    if text == "🏳 Мои страны":
-        favs = get_list(FAVCOUNTRIES_KEY, cid)
-        out = ["🏳 Любимые страны:"]
-        if favs:
-            rows = []
-            for i, c in enumerate(favs):
-                out.append(f"{c.get('flag','🏳')} {c.get('name','')}")
-                rows.append([InlineKeyboardButton(f"❌ {c.get('name','')}", callback_data=f"delcountry_{i}")])
-            await context.bot.send_message(chat_id=cid, text="\n".join(out), reply_markup=InlineKeyboardMarkup(rows))
-        else:
-            out.append("пусто")
-            await update.message.reply_text("\n".join(out))
-        await update.message.reply_text("➕ Добавить любимую страну - напиши её название.")
-        pending_input[cid] = "favcountry"
-        return
-
-    # ===== Мотивация =====
-    if text == "🌿 Фраза дня":
-        await update.message.reply_text("🌿 " + lagom_of_day()); return
-    if text == "🌙 Проверка дня":
-        await start_day_check(update, context); return
-    if text == "📊 Дневник":
-        entries = get_list(DIARY_KEY, cid)
-        if not entries:
-            await update.message.reply_text("Дневник пуст. Записи появятся после проверки дня.")
-        else:
-            last = entries[-7:]
-            await send_long(context.bot, cid, "📊 Последние записи\n\n" + "\n\n".join(f"{e['date']}: {e['text']}" for e in last))
-        return
-
-    # ===== Развлечения =====
-    if text == "🎬 Что посмотреть":
-        await update.message.reply_text("Подбираю...")
-        await _send_recos(context.bot, cid, "movie"); return
-    if text == "📖 Что почитать":
-        await update.message.reply_text("Подбираю...")
-        await _send_recos(context.bot, cid, "book"); return
-    if text == "🍿 Список просмотра":
-        lst = get_list(WATCHLIST_KEY, cid)
-        await update.message.reply_text("🍿 Посмотреть:\n" + ("\n".join(f"• {x}" for x in lst) if lst else "пусто")); return
-    if text == "📚 Список чтения":
-        lst = get_list(READLIST_KEY, cid)
-        await update.message.reply_text("📚 Почитать:\n" + ("\n".join(f"• {x}" for x in lst) if lst else "пусто")); return
-    if text == "❤️ Любимое":
-        favs = get_list(FAVORITES_KEY, cid)
-        msg = "❤️ Любимое:\n" + ("\n".join(f"• {f}" for f in favs) if favs else "пусто")
-        pending_input[cid] = "favorite"
-        await update.message.reply_text(msg + "\n\nНапиши фильм/сериал/книгу - добавлю."); return
-    if text == "🎤 Концерты":
-        text_router_state[cid] = "concerts"
-        await update.message.reply_text("Концерты:", reply_markup=CONCERTS_KB); return
-
-    # ===== Концерты =====
-    if text == "🎤 Мои артисты":
-        arts = get_list(ARTISTS_KEY, cid)
-        await update.message.reply_text("🎤 Артисты:\n" + ("\n".join(f"• {a}" for a in arts) if arts else "пусто") +
-                                        "\n\nПоиск концертов требует API событий (Ticketmaster/Bandsintown). Дай ключ - подключу мониторинг.")
-        return
-    if text == "➕ Добавить артиста":
-        pending_input[cid] = "artist"
-        await update.message.reply_text("Напиши имя артиста - добавлю в список отслеживания."); return
-
-    # ===== Растения =====
-    if text == "💧 Мои растения":
-        pl = get_list(PLANTS_KEY, cid)
-        if not pl:
-            await update.message.reply_text("🌱 Растений нет. Добавь: ➕ Добавить растение"); return
-        lines = ["🌱 Растения"]
-        rows = []
-        for i, p in enumerate(pl):
-            nm = p.get("name", "?") if isinstance(p, dict) else str(p)
-            iv = p.get("interval", 7) if isinstance(p, dict) else 7
-            nxt = p.get("next", "") if isinstance(p, dict) else ""
-            lines.append(f"• {nm} - раз в {iv} дн." + (f", след. полив {nxt}" if nxt else ""))
-            rows.append([InlineKeyboardButton(f"💧 Полил: {nm}", callback_data=f"water_{i}")])
-        await update.message.reply_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(rows)); return
-    if text == "🗓 Полив":
-        pl = get_list(PLANTS_KEY, cid)
-        if not pl:
-            await update.message.reply_text("Сначала добавь растения (➕ Добавить растение) с интервалом полива.")
-            return
-        today = datetime.now(TZ).date()
-        due, ok = [], []
-        for p in pl:
-            if not isinstance(p, dict):
-                continue
-            try:
-                nd = date.fromisoformat(p.get("next", ""))
-            except Exception:
-                nd = today
-            (due if nd <= today else ok).append((p["name"], nd))
-        out = ["🗓 Полив"]
-        if due:
-            out += ["", "💧 Пора полить:"] + [f"• {n}" for n, _ in due]
-        if ok:
-            out += ["", "✅ Ещё рано:"] + [f"• {n} (до {d.isoformat()})" for n, d in ok]
-        out += ["", "Открой «Мои растения» и жми «Полил» после полива."]
-        await update.message.reply_text("\n".join(out)); return
-    if text == "➕ Добавить растение":
-        pending_input[cid] = "plant"
-        await update.message.reply_text("Напиши растение и интервал полива, напр.: монстера, раз в 5 дней"); return
-
-    # ===== Настройки =====
-    if text == "📍 Сменить город":
-        await update.message.reply_text("Отправь геолокацию или команду: /setcity Амстердам"); return
+    # Меню теперь инлайн (в answer_callback). Здесь - режимы ввода, игра, перевод, чат.
 
     # ===== Режим добавления одежды =====
     if add_wardrobe_mode.get(cid):
@@ -1659,6 +1642,18 @@ async def text_router(update, context):
                        "next": (today + timedelta(days=interval)).isoformat()})
             set_list(PLANTS_KEY, cid, pl)
             await update.message.reply_text(f"Добавил: {name}, полив раз в {interval} дн.")
+            return
+        if kind == "favcountry":
+            flag = country_flag(text.strip())
+            favs = get_list(FAVCOUNTRIES_KEY, cid)
+            favs.append({"name": text.strip(), "flag": flag})
+            set_list(FAVCOUNTRIES_KEY, cid, favs)
+            await update.message.reply_text(f"Добавил: {flag} {text.strip()}")
+            return
+        if kind == "worry":
+            items = [{"text": w.strip(), "status": "pending"} for w in text.split("\n") if w.strip()]
+            set_list(WORRIES_KEY, cid, items)
+            await update.message.reply_text(f"Записал тревог: {len(items)}. Вечером проверим, что реально случилось.")
             return
 
     # ===== Игра: ответ-догадка =====
@@ -1742,16 +1737,7 @@ async def text_router(update, context):
 
 
 async def post_init(app):
-    await app.bot.set_my_commands([
-        BotCommand("plan", "план на сегодня"),
-        BotCommand("tomorrow", "план на завтра"),
-        BotCommand("dutch", "урок нидерландского"),
-        BotCommand("english", "урок английского"),
-        BotCommand("translate", "перевод-челлендж"),
-        BotCommand("weather", "погода"),
-        BotCommand("setcity", "сменить город"),
-        BotCommand("start", "меню"),
-    ])
+    await app.bot.set_my_commands([BotCommand("start", "меню")])
 
 
 def main():
@@ -1766,7 +1752,7 @@ def main():
     app.add_handler(CommandHandler("dutch", dutch_command))
     app.add_handler(CommandHandler("english", english_command))
     app.add_handler(CommandHandler("translate", translate_command))
-    app.add_handler(CallbackQueryHandler(answer_callback, pattern="^(lvl_|game_again|game_hint|game_reveal|game_change|gram_|gamelang_|gamediff_|again_|reco_|facts_|delcountry_|worry_|water_)"))
+    app.add_handler(CallbackQueryHandler(answer_callback))
     app.add_handler(MessageHandler(filters.LOCATION, location_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
