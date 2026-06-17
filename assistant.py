@@ -13,6 +13,27 @@ HOME_TEXT = (
     "Выбери направление или просто напиши вопрос 👇"
 )
 
+STATE_TEXT = (
+    "🎯 Мотивация и состояние\n\n"
+    "Помогу разобраться с внутренним состоянием, фокусом и мотивацией. "
+    "Это не психотерапия и не замена специалиста - если становится тяжело, лучше подключить врача или психолога.\n\n"
+    "Опиши, что сейчас происходит 👇"
+)
+
+DOCTOR_INTRO = (
+    "🩺 Врач\n\n"
+    "Дам общую справочную информацию о здоровье. Это не диагноз и не замена врача - "
+    "при тревожных симптомах обратись к специалисту.\n\n"
+    "Опиши, что беспокоит 👇"
+)
+
+LETTER_REF = (
+    "✍️ Помощь с письмом\n\n"
+    "Помогу написать, исправить или перевести текст.\n\n"
+    "Отправь черновик или расскажи задачу 👇"
+)
+
+
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
 
@@ -20,27 +41,25 @@ def home_kb():
     return _kb([
         [("👨‍🍳 Кулинарный радар", "as_food")],
         [("✍️ Письма и тексты", "as_letter")],
-        [("💡 Генератор бизнес-идей", "as_idea")],
-        [("🩺 Вопрос врачу и состояние", "as_health")],
+        [("💡 Идеи и проекты", "as_idea")],
+        [("🎯 Мотивация и состояние", "as_state")],
+        [("🩺 Вопрос врачу", "as_doctor")],
     ])
 
-def _screen(key):
-    if key == "as_home":
-        return (HOME_TEXT, home_kb())
-    if key == "as_health":
-        return ("🩺 Вопрос врачу и состояние\n\nВыбери:", _kb([
-            [("🩺 Вопрос врачу", "as_doctor")],
-            [("⚡ Мотивация и состояние", "as_motivate")],
-            [("⬅️ В меню", "as_home")],
-        ]))
-    return (HOME_TEXT, home_kb())
-
-
-# ---------- клавиатуры результата (один столбец) ----------
-def _result_kb():
+def state_kb():
     return _kb([
-        [("🔄 Ещё раз", "chat_retry")],
-        [("⭐ В избранное", "as_fav")],
+        [("⚡ Подбодри меня", "as_cheer")],
+        [("🧠 СДВГ-фокус", "as_adhd")],
+        [("😌 Проверить состояние", "as_daycheck")],
+        [("📈 Карта развития", "as_map")],
+        [("⬅️ В меню", "as_home")],
+    ])
+
+# универсальная клавиатура под ответом: [Продолжить][⭐][В меню]
+def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry"):
+    return _kb([
+        [(cont_label, cont_cb)],
+        [("⭐ Добавить в избранное", "as_fav")],
         [("⬅️ В меню", "as_home")],
     ])
 
@@ -48,18 +67,8 @@ def _recipe_kb():
     return _kb([
         [("📖 Полный рецепт", "as_food_full")],
         [("🔄 Ещё рецепт", "as_food")],
-        [("⚡ До 15 минут", "as_food_quick")],
-        [("🧊 Использовать остатки", "as_food_left")],
-        [("⭐ В избранное", "as_fav")],
-        [("⬅️ В меню", "as_home")],
-    ])
-
-def _motivation_kb():
-    return _kb([
-        [("🧠 СДВГ-фокус", "as_adhd")],
-        [("😌 Дневник тревоги", "as_daycheck")],
-        [("🎯 Новый ориентир", "as_motivate")],
-        [("⭐ В избранное", "as_fav")],
+        [("🥕 Не выбрасывать продукты", "as_food_left")],
+        [("⭐ Добавить в избранное", "as_fav")],
         [("⬅️ В меню", "as_home")],
     ])
 
@@ -73,11 +82,11 @@ async def _send(bot, cid, text, kb=None):
     chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
     for c in chunks[:-1]:
         await bot.send_message(chat_id=cid, text=c)
-    await bot.send_message(chat_id=cid, text=chunks[-1], reply_markup=kb if kb is not None else _result_kb())
+    await bot.send_message(chat_id=cid, text=chunks[-1], reply_markup=kb if kb is not None else _ans_kb())
 
 
 async def send_home(bot, cid):
-    text, kb = _screen("as_home")
+    text, kb = HOME_TEXT, home_kb()
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 send_welcome = send_home
@@ -88,14 +97,14 @@ def _gen_recipe(constraint):
     return ai.llm_json(
         f"Предложи 1 рецепт ({constraint}), 1 человек, электрическая плита. Компактно.\n"
         'JSON: {"name":"название","time":"X мин","servings":"N порц.",'
-        '"short":"2-3 коротких предложения как готовить","full":"полный рецепт: ингредиенты списком + шаги"}', 900)
+        '"short":"2-3 коротких предложения как готовить","full":"полный рецепт: ингредиенты списком + шаги по пунктам"}', 900)
 
 def _recipe_card(d):
-    return (f"🥘 {d.get('name','')}\n"
-            f"⏱️ {d.get('time','')} • 🍽️ {d.get('servings','')}\n"
+    return (f"🥘 {d.get('name','')}\n\n"
+            f"⏱️ {d.get('time','')} • 🍽️ {d.get('servings','')}\n\n"
             f"{d.get('short','')}")
 
-async def send_recipe(bot, cid, constraint="обычное блюдо", label="recipe"):
+async def send_recipe(bot, cid, constraint="обычное блюдо"):
     await bot.send_message(chat_id=cid, text="Подбираю...")
     try:
         d = _gen_recipe(constraint)
@@ -120,66 +129,49 @@ async def send_leftovers(bot, cid, ingredients):
     try:
         out = ai.llm(
             f"Есть продукты: {ingredients}. Предложи 3 простых рецепта только из них (+ базовые специи). "
-            "Каждый: 🥘 Название • ⏱️ время, 1-2 строки как готовить. Компактно, эмодзи. Без воды.", 800, 0.9)
+            "Каждый: 🥘 Название • ⏱️ время, затем 1-2 строки как готовить, с переносами. Компактно, эмодзи. Без воды.", 800, 0.9)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     store.last_action[str(cid)] = ("leftovers", ingredients)
-    await _send(bot, cid, out)
+    await _send(bot, cid, out, kb=_recipe_kb())
 
 
-# ---------- одноразовые ----------
+# ---------- Идеи / СДВГ / Подбодрить / Карта ----------
 def _gen_idea(cid):
-    return ai.llm("Сгенерируй 1 свежую бизнес-идею (дизайн, ИИ, путешествия и т.п.). "
+    return ai.llm("Сгенерируй 1 свежую идею или мини-проект (дизайн, ИИ, фото, путешествия). "
                   "1-2 предложения, конкретно, с эмодзи. Без воды.", 300, 1.0)
 
 def _gen_adhd(cid):
     return ai.llm("Дай 1 короткую технику фокуса при СДВГ прямо сейчас (2-3 строки, эмодзи). "
                   "Выполнимо за минуту. Без воды.", 300, 0.9)
 
-_ONESHOT = {"as_idea": _gen_idea, "as_adhd": _gen_adhd}
+def _gen_cheer(cid):
+    return ai.llm(f"Подбодри Дмитрия коротко (2-3 строки), тепло и не банально, с эмодзи. "
+                  f"Опирайся по духу: {config.LAGOM}", 300, 0.95)
 
-# ---------- Мотивация / состояние (карта развития внутри) ----------
-def _gen_orient(cid):
+def _gen_map(cid):
     return ai.llm(
         "Сделай блок-ориентир для Дмитрия (дизайнер UI/UX, фотограф, в Нидерландах, СДВГ). СТРОГО формат:\n\n"
-        "⚡ Сегодняшний ориентир\n\n🎯 Главный фокус\n{1 строка}\n\n"
+        "📈 Карта развития\n\n🎯 Главный фокус\n{1 строка}\n\n"
         "💪 Сильные стороны\n• пункт\n• пункт\n• пункт\n\n"
         "⚠️ Ловушки\n• пункт\n• пункт\n\n"
         "➡️ Следующий шаг\n{1 конкретное действие на 15 минут}\n\n"
-        f"Кратко, под действие. Опирайся по духу: {config.LAGOM}", 600, 0.85)
-
-async def send_orient(bot, cid):
-    await bot.send_message(chat_id=cid, text="Секунду...")
-    try:
-        out = _gen_orient(cid)
-    except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
-    store.last_action[str(cid)] = ("orient",)
-    store.last_answer[str(cid)] = out
-    await _send(bot, cid, out, kb=_motivation_kb())
+        f"Кратко, под действие. Опирайся: {config.LAGOM}", 600, 0.85)
 
 
 # ---------- роли ----------
-LETTER_REF = (
-    "✍️ Помощь с письмом\n\n"
-    "Помогу написать, исправить или перевести текст.\n\n"
-    "Отправь черновик или расскажи задачу 👇"
-)
-DOCTOR_INTRO = (
-    "🩺 Врач\n\n"
-    "Справочная информация о здоровье и симптомах.\n"
-    "Не заменяет консультацию врача.\n\n"
-    "Опиши, что беспокоит 👇"
-)
-
 def _role_system(role):
     if role == "letter":
         return ("Ты помощник по текстам и переписке. Пиши/исправляй/переводи: официальные письма, деловые сообщения, "
                 "сырой текст - вежливо, чётко, структурно. Готовый текст с [плейсхолдерами]. Без воды.")
+    if role == "state":
+        return ("Ты спокойный помощник по состоянию, фокусу и мотивации (не психотерапевт). "
+                "Выслушай, разложи ситуацию на 1-3 конкретных шага, поддержи коротко. Без воды, с эмодзи. "
+                "Если звучит тяжело - мягко предложи специалиста.")
     if role == "doctor":
         return ("Ты помощник по здоровью. Дай разбор СТРОГО в формате, кратко, с эмодзи:\n"
                 "🩺 Разбор симптомов\n\n📍 Основная жалоба:\n{коротко}\n\n🔎 На что похоже:\n{1-2 предложения}\n\n"
-                "✅ Рекомендации:\n• пункт\n• пункт\n\n🚨 Срочно к врачу:\n{когда}\n\nИтог: {1-2 предложения}\n\n"
+                "✅ Рекомендации:\n• пункт\n• пункт\n\n🚨 Срочно к врачу:\n{когда}\n\nИтог: {одно короткое предложение}\n\n"
                 "Не ставь диагноз, это общая информация и не замена врача.")
     return "Ты полезный ассистент."
 
@@ -201,7 +193,7 @@ async def doctor_answer(bot, cid, symptoms):
     base = _role_system("doctor")
     if passages:
         ctx = "\n".join(f"- {p}" for p in passages)
-        prompt = f"{base}\n\nНаиболее релевантные справочные тезисы (по симптомам):\n{ctx}\n\nСимптомы: {symptoms}"
+        prompt = f"{base}\n\nНаиболее релевантные тезисы (по симптомам):\n{ctx}\n\nСимптомы: {symptoms}"
     else:
         prompt = f"{base}\n\nСимптомы: {symptoms}"
     try:
@@ -209,7 +201,7 @@ async def doctor_answer(bot, cid, symptoms):
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     store.last_action[str(cid)] = ("role", "doctor", symptoms)
-    await _send(bot, cid, out)
+    await _send(bot, cid, out, kb=_ans_kb("🔄 Уточнить симптомы", "as_doctor"))
 
 async def handle_role(bot, cid, role, text):
     if role == "doctor":
@@ -220,10 +212,11 @@ async def handle_role(bot, cid, role, text):
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     store.last_action[str(cid)] = ("role", role, text)
-    await _send(bot, cid, out)
+    cont = ("🔄 Ещё совет", "chat_retry") if role == "state" else ("🔄 Продолжить", "chat_retry")
+    await _send(bot, cid, out, kb=_ans_kb(*cont))
 
 
-# ---------- избранное (бывшие заметки) ----------
+# ---------- избранное ----------
 def _shorten(text):
     try:
         return ai.llm("Сожми до 1-3 строк, сохрани суть и важное, без воды:\n\n" + text, 200, 0.3).strip() or text[:300]
@@ -241,9 +234,8 @@ async def save_fav(bot, cid):
 async def send_notes(bot, cid):
     notes = store.get_list(config.NOTES_KEY, cid)
     if not notes:
-        await bot.send_message(chat_id=cid, text="⭐ Избранное пусто. Жми «⭐ В избранное» под ответами."); return
-    rows = []
-    lines = ["⭐ Избранное", ""]
+        await bot.send_message(chat_id=cid, text="⭐ Избранное пусто. Жми «⭐ Добавить в избранное» под ответами."); return
+    rows, lines = [], ["⭐ Избранное"]
     for i, n in enumerate(notes[-20:]):
         t = n.get("text", "") if isinstance(n, dict) else str(n)
         d = n.get("date", "") if isinstance(n, dict) else ""
@@ -252,35 +244,43 @@ async def send_notes(bot, cid):
     await bot.send_message(chat_id=cid, text="\n\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))
 
 
-# ---------- роутер инлайн-кнопок ассистента ----------
+_ONESHOT = {
+    "as_idea": (_gen_idea, "🔄 Ещё идея", "as_idea"),
+    "as_adhd": (_gen_adhd, "🔄 Ещё приём", "as_adhd"),
+    "as_cheer": (_gen_cheer, "🔄 Ещё совет", "as_cheer"),
+    "as_map": (_gen_map, "🔄 Обновить", "as_map"),
+}
+
+
+# ---------- роутер кнопок ассистента ----------
 async def handle_callback(bot, cid, q, data):
-    if data in ("as_home", "as_health"):
-        if data == "as_home":
-            store.pending_input.pop(str(cid), None)
-        text, kb = _screen(data)
+    if data == "as_home":
+        store.pending_input.pop(str(cid), None)
         try:
-            await q.message.edit_text(text, reply_markup=kb)
+            await q.message.edit_text(HOME_TEXT, reply_markup=home_kb())
         except Exception:
-            await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+            await bot.send_message(chat_id=cid, text=HOME_TEXT, reply_markup=home_kb())
+        return
+    if data == "as_state":
+        store.pending_input[str(cid)] = "role_state"
+        try:
+            await q.message.edit_text(STATE_TEXT, reply_markup=state_kb())
+        except Exception:
+            await bot.send_message(chat_id=cid, text=STATE_TEXT, reply_markup=state_kb())
         return
     # Кулинарный радар
     if data == "as_food":
         await send_recipe(bot, cid, "обычное блюдо"); return
-    if data == "as_food_quick":
-        await send_recipe(bot, cid, "очень быстро, до 15 минут"); return
     if data == "as_food_full":
         await send_recipe_full(bot, cid); return
     if data == "as_food_left":
         store.pending_input[str(cid)] = "leftovers"
-        await bot.send_message(chat_id=cid, text="🧊 Напиши продукты, что есть дома (через запятую) - предложу 3 рецепта.",
-                               reply_markup=_back_kb())
-        return
-    # Состояние
-    if data == "as_motivate":
-        await send_orient(bot, cid); return
+        await bot.send_message(chat_id=cid, text="🥕 Напиши продукты, что есть дома (через запятую) - предложу 3 рецепта.",
+                               reply_markup=_back_kb()); return
+    # состояние-кнопки
     if data == "as_daycheck":
         await myday.send_daycheck(bot, cid); return
-    # Избранное
+    # избранное
     if data == "as_fav":
         await save_fav(bot, cid); return
     if data == "as_notes":
@@ -293,13 +293,14 @@ async def handle_callback(bot, cid, q, data):
         await send_notes(bot, cid); return
     # одноразовые
     if data in _ONESHOT:
+        gen, lbl, cb = _ONESHOT[data]
         await bot.send_message(chat_id=cid, text="Секунду...")
         try:
-            out = _ONESHOT[data](cid)
+            out = gen(cid)
         except Exception as e:
             await bot.send_message(chat_id=cid, text=str(e)); return
         store.last_action[str(cid)] = ("oneshot", data)
-        await _send(bot, cid, out)
+        await _send(bot, cid, out, kb=_ans_kb(lbl, cb))
         return
     # роли
     if data == "as_letter":
@@ -326,20 +327,19 @@ async def chat_reply(bot, cid, text):
     await _send(bot, cid, answer)
 
 
-# ---------- «Ещё раз» ----------
+# ---------- «Продолжить» / «Ещё раз» ----------
 async def retry(bot, cid):
     la = store.last_action.get(str(cid))
     if la and la[0] == "oneshot":
+        gen, lbl, cb = _ONESHOT[la[1]]
         await bot.send_message(chat_id=cid, text="Ещё вариант...")
         try:
-            out = _ONESHOT[la[1]](cid)
+            out = gen(cid)
         except Exception as e:
             await bot.send_message(chat_id=cid, text=str(e)); return
-        await _send(bot, cid, out); return
+        await _send(bot, cid, out, kb=_ans_kb(lbl, cb)); return
     if la and la[0] == "recipe":
         await send_recipe(bot, cid, la[1]); return
-    if la and la[0] == "orient":
-        await send_orient(bot, cid); return
     if la and la[0] == "leftovers":
         await send_leftovers(bot, cid, la[1]); return
     if la and la[0] == "role":
@@ -350,7 +350,7 @@ async def retry(bot, cid):
     if hist[-1]["role"] == "assistant":
         hist = hist[:-1]
     await bot.send_chat_action(chat_id=cid, action="typing")
-    nudge = hist + [{"role": "user", "content": "Дай другой, более чёткий вариант ответа."}]
+    nudge = hist + [{"role": "user", "content": "Продолжи мысль или дай более полезный вариант."}]
     try:
         answer = ai.chat_chain(nudge)
     except Exception as e:
