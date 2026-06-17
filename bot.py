@@ -238,6 +238,8 @@ async def text_router(update, context):
             await travel.add_country(bot, cid, text); return
         if kind in ("role_letter", "role_designer", "role_doctor"):
             await assistant.handle_role(bot, cid, kind.split("_")[1], text); return
+        if kind == "search":
+            await assistant.do_search(bot, cid, text); return
 
     # Игра
     if cid in store.game_state:
