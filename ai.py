@@ -108,7 +108,12 @@ def llm_json(prompt, max_tokens=1200):
     m = re.search(r"\{.*\}", raw, re.S)
     if m:
         raw = m.group(0)
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        # чиним неэкранированные обратные слеши (частая причина «Invalid \escape»)
+        fixed = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', raw)
+        return json.loads(fixed)
 
 CHAT_SYSTEM = f"""Ты личный ассистент Дмитрия (DM) в Telegram.
 Он инженер, дизайнер (UI/UX, графика), фотограф. Живёт в Нидерландах. Учит нидерландский (B1) и английский. У него СДВГ.
