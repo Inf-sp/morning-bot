@@ -12,6 +12,8 @@ CF_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 CHAT_ID = os.environ.get("CHAT_ID", "")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 ZEROENTROPY_API_KEY = os.environ.get("ZEROENTROPY_API_KEY", "")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
 
 TZ = ZoneInfo("Europe/Amsterdam")
 
