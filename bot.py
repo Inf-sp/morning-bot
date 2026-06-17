@@ -245,6 +245,8 @@ async def text_router(update, context):
             await travel.add_country(bot, cid, text); return
         if kind in ("role_letter", "role_doctor"):
             await assistant.handle_role(bot, cid, kind.split("_")[1], text); return
+        if kind == "leftovers":
+            await assistant.send_leftovers(bot, cid, text); return
 
     # Игра
     if cid in store.game_state:
@@ -350,7 +352,7 @@ async def job_weekly(context: ContextTypes.DEFAULT_TYPE):
 
 async def post_init(app):
     from telegram import BotCommand
-    await app.bot.set_my_commands([BotCommand("start", "меню"), BotCommand("notes", "мои заметки")])
+    await app.bot.set_my_commands([BotCommand("start", "меню"), BotCommand("notes", "избранное")])
 
 
 def main():

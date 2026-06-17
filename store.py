@@ -132,3 +132,4 @@ last_recos = {}
 suggested_countries = {}
 last_action = {}        # chat_id -> ("oneshot", key) | ("role", role, text) | None
 last_answer = {}        # chat_id -> текст последнего ответа ассистента (для «Сохранить в заметки»)
+last_recipe = {}        # chat_id -> dict рецепта (для «Полный рецепт»)
