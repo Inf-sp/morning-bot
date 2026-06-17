@@ -243,10 +243,8 @@ async def text_router(update, context):
             await content.add_artist(bot, cid, text); return
         if kind == "favcountry":
             await travel.add_country(bot, cid, text); return
-        if kind in ("role_letter", "role_designer", "role_doctor"):
+        if kind in ("role_letter", "role_doctor"):
             await assistant.handle_role(bot, cid, kind.split("_")[1], text); return
-        if kind == "search":
-            await assistant.do_search(bot, cid, text); return
 
     # Игра
     if cid in store.game_state:
@@ -295,6 +293,9 @@ async def weather_command(update, context):
         await weather.send_weather(context.bot, update.effective_chat.id, days)
     except Exception as e:
         await update.message.reply_text(f"Ошибка погоды: {e}")
+
+async def notes_command(update, context):
+    await assistant.send_notes(context.bot, update.effective_chat.id)
 
 
 # ---------- Расписание ----------
@@ -349,12 +350,13 @@ async def job_weekly(context: ContextTypes.DEFAULT_TYPE):
 
 async def post_init(app):
     from telegram import BotCommand
-    await app.bot.set_my_commands([BotCommand("start", "меню")])
+    await app.bot.set_my_commands([BotCommand("start", "меню"), BotCommand("notes", "мои заметки")])
 
 
 def main():
     app = Application.builder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("notes", notes_command))
     app.add_handler(CommandHandler("plany", plany_command))
     app.add_handler(CommandHandler("weather", weather_command))
     app.add_handler(CommandHandler("setcity", weather.setcity_command))
