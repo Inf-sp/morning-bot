@@ -102,12 +102,12 @@ def llm_json(prompt, max_tokens=1200):
 CHAT_SYSTEM = f"""Ты личный ассистент Дмитрия (DM) в Telegram.
 Он инженер, дизайнер (UI/UX, графика), фотограф. Живёт в Нидерландах. Учит нидерландский (B1) и английский. У него СДВГ.
 
-Как отвечать (важно):
-- Форматируй под СДВГ: короткие блоки, пустые строки между мыслями, маркеры • для списков. Без длинных абзацев и воды.
-- Сначала суть/ответ, потом детали. Если шагов несколько - пронумеруй коротко.
-- Тон умного коллеги: прямо, конкретно, короткими предложениями. Проверяй слабые идеи.
-- Короткое тире -, не длинное. По-русски, если он не пишет иначе.
-- ЕСЛИ НЕ ЗНАЕШЬ или не уверен - честно скажи об этом, не выдумывай факты, имена, числа и ссылки. Можешь подсказать, где проверить.
+Формат ответа (строго):
+- Коротко: 2-4 строки. Без воды, без длинных списков и вступлений.
+- Сразу суть. Уместные эмодзи приветствуются.
+- Если тема большая - дай короткий ответ и предложи «развернуть?».
+- Тон умного коллеги: прямо, конкретно. Короткое тире -, не длинное. По-русски, если он не пишет иначе.
+- Если не знаешь - честно скажи, не выдумывай.
 
 {config.LAGOM}"""
 
@@ -117,13 +117,13 @@ def _chat(provider, history):
             raise Exception("no claude")
         r = _post("https://api.anthropic.com/v1/messages",
             {"x-api-key": config.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            {"model": "claude-sonnet-4-6", "max_tokens": 2048, "system": CHAT_SYSTEM, "messages": history}, 60, "claude")
+            {"model": "claude-sonnet-4-6", "max_tokens": 700, "system": CHAT_SYSTEM, "messages": history}, 60, "claude")
         return r.json()["content"][0]["text"]
     if provider == "gemini":
         contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in history]
         r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={config.GEMINI_API_KEY}",
             {}, {"system_instruction": {"parts": [{"text": CHAT_SYSTEM}]}, "contents": contents,
-                 "generationConfig": {"maxOutputTokens": 3000, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, "gemini")
+                 "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, "gemini")
         return r.json()["candidates"][0]["content"]["parts"][0]["text"]
     if provider == "openrouter":
         if not config.OPENROUTER_API_KEY:
@@ -131,7 +131,7 @@ def _chat(provider, history):
         r = _post("https://openrouter.ai/api/v1/chat/completions",
             {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}", "Content-Type": "application/json"},
             {"model": config.OPENROUTER_MODEL, "messages": [{"role": "system", "content": CHAT_SYSTEM}] + history,
-             "max_tokens": 2048, "temperature": 0.8}, 40, "openrouter")
+             "max_tokens": 700, "temperature": 0.8}, 40, "openrouter")
         return r.json()["choices"][0]["message"]["content"]
     if provider == "groq":
         if not config.GROQ_API_KEY:
@@ -139,14 +139,14 @@ def _chat(provider, history):
         r = _post("https://api.groq.com/openai/v1/chat/completions",
             {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"},
             {"model": "llama-3.3-70b-versatile", "messages": [{"role": "system", "content": CHAT_SYSTEM}] + history,
-             "max_tokens": 2048, "temperature": 0.8}, 40, "groq")
+             "max_tokens": 700, "temperature": 0.8}, 40, "groq")
         return r.json()["choices"][0]["message"]["content"]
     if provider == "cf":
         if not (config.CF_API_TOKEN and config.CF_ACCOUNT_ID):
             raise Exception("no cf")
         r = _post(f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.1-8b-instruct",
             {"Authorization": f"Bearer {config.CF_API_TOKEN}", "Content-Type": "application/json"},
-            {"messages": [{"role": "system", "content": CHAT_SYSTEM}] + history, "max_tokens": 2048}, 40, "cf")
+            {"messages": [{"role": "system", "content": CHAT_SYSTEM}] + history, "max_tokens": 700}, 40, "cf")
         return _as_text(r.json().get("result", {}).get("response"))
 
 def chat_chain(history):

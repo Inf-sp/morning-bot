@@ -17,50 +17,35 @@ HOME_TEXT = (
 )
 HOME_HINT = "💡 Не знаешь, с чего начать? Расскажи, что сейчас в голове - задача, идея, проблема или вопрос."
 
-_RETRY_KB = InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Ещё раз (не нравится ответ)", callback_data="chat_retry")]])
-
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
 
+def home_kb():
+    # один столбец, одинаковая ширина
+    return _kb([
+        [("👕 Что надеть сегодня?", "as_wear")],
+        [("📚 Объясни тему дня", "as_topic")],
+        [("✍️ Помощь с письмом", "as_letter")],
+        [("✈️ Куда съездить", "as_trip")],
+        [("🗺️ Карта развития", "as_map")],
+        [("⚡ Мотивируй меня", "as_motivate")],
+        [("🩺 Врач", "as_doctor")],
+        [("🔎 Поиск по записям", "as_search")],
+    ])
+
 def _screen(key):
-    if key == "as_home":
-        return (HOME_TEXT + "\n\n" + HOME_HINT, _kb([
-            [("👕 Стиль и гардероб", "as_style")],
-            [("📚 Учёба и языки", "as_study")],
-            [("✈️ Путешествия", "as_travel")],
-            [("🍳 Еда и покупки", "as_food")],
-            [("🧠 Разобраться в голове", "as_head")],
-            [("🩺 Врач", "as_doctor"), ("🎨 Дизайнер", "as_designer")],
-        ]))
-    if key == "as_style":
-        return ("👕 Стиль и гардероб", _kb([
-            [("Что надеть сегодня?", "as_wear")],
-            [("⬅️ Назад", "as_home")],
-        ]))
-    if key == "as_study":
-        return ("📚 Учёба и языки", _kb([
-            [("Объясни тему дня", "as_topic")],
-            [("✍️ Помощь в написании письма", "as_letter")],
-            [("⬅️ Назад", "as_home")],
-        ]))
-    if key == "as_travel":
-        return ("✈️ Путешествия", _kb([
-            [("Куда съездить", "as_trip")],
-            [("⬅️ Назад", "as_home")],
-        ]))
-    if key == "as_food":
-        return ("🍳 Еда и покупки", _kb([
-            [("Составь меню на неделю", "as_menu")],
-            [("⬅️ Назад", "as_home")],
-        ]))
-    if key == "as_head":
-        return ("🧠 Разобраться в голове", _kb([
-            [("🗺️ Карта развития", "as_map")],
-            [("Мотивируй меня", "as_motivate")],
-            [("🔎 Поиск по записям", "as_search")],
-            [("⬅️ Назад", "as_home")],
-        ]))
-    return (HOME_TEXT, _screen("as_home")[1])
+    return (HOME_TEXT + "\n\n" + HOME_HINT, home_kb())
+
+# Клавиатура под результатом: «Ещё раз» + «В меню» (один столбец)
+def _result_kb():
+    return _kb([
+        [("🔄 Ещё раз (не нравится ответ)", "chat_retry")],
+        [("⬅️ В меню", "as_home")],
+    ])
+
+# Клавиатура под подсказкой роли: только «Назад»
+def _back_kb():
+    return _kb([[("⬅️ В меню", "as_home")]])
 
 
 async def _send(bot, cid, text, retry=True):
@@ -68,7 +53,7 @@ async def _send(bot, cid, text, retry=True):
     chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
     for c in chunks[:-1]:
         await bot.send_message(chat_id=cid, text=c)
-    await bot.send_message(chat_id=cid, text=chunks[-1], reply_markup=_RETRY_KB if retry else None)
+    await bot.send_message(chat_id=cid, text=chunks[-1], reply_markup=_result_kb() if retry else None)
 
 
 async def send_home(bot, cid):
@@ -86,37 +71,30 @@ def _gen_wear(cid):
     return "👕 Что надеть сегодня\n\n" + ", ".join(of.get("outfit", [])) + "\n\n" + of.get("why", "")
 
 def _gen_topic(cid):
+    nl = store.get_level(cid, "нидерландский")
     return ai.llm(
-        "Объясни одну полезную тему дня (грамматика нидерландского/английского ИЛИ полезный навык). "
-        "Просто, для СДВГ: суть, короткий пример, как применить. Короткие блоки, маркеры. Без воды.", 900, 0.8)
+        f"Объясни одну тему дня по нидерландскому языку (уровень {nl}), каждый раз новую. "
+        f"Коротко для СДВГ: правило в 1-2 строки, 1 пример с переводом, как применить. Эмодзи уместны. Без воды.", 600, 0.8)
 
 def _gen_trip(cid):
     s = store.get_settings(cid)
     return ai.llm(
-        f"Куда съездить на выходные из города {s['city']} (Нидерланды/Европа)? "
-        f"4-5 вариантов: место - чем добраться - почему стоит. Коротко, маркеры. Без воды.", 900, 0.8)
-
-def _gen_menu(cid):
-    return ai.llm(
-        "Составь простое меню на неделю (завтрак/обед/ужин) для одного человека. "
-        "Готовка на электрической плите. Коротко, по дням, маркеры. В конце - короткий список покупок.", 1200, 0.7)
+        f"Куда съездить на выходные из города {s['city']}? 4 варианта: место - чем добраться - почему. "
+        f"Очень коротко, маркеры, эмодзи. Без воды.", 700, 0.8)
 
 def _gen_map(cid):
     return ai.llm(
-        f"Сделай «Карту развития» для Дмитрия: дизайнер UI/UX и график, фотограф, в Нидерландах, "
-        f"учит нидерландский и английский, у него СДВГ. Формат, без воды:\n\n"
-        f"🗺️ Карта развития\n\n🎯 Цель (1 строка)\n\n📍 Сейчас (2-3 пункта)\n\n"
-        f"🪜 Шаги на 3 месяца (3-4 пункта)\n\n💪 Сильные стороны\n\n⚠️ Ловушки (СДВГ)\n\n"
-        f"Опирайся по духу на установки: {config.LAGOM}", 1200, 0.8)
+        f"«Карта развития» для Дмитрия: дизайнер UI/UX, фотограф, в Нидерландах, учит нидерландский и английский, СДВГ. "
+        f"Кратко, формат:\n🗺️ Карта развития\n🎯 Цель\n📍 Сейчас\n🪜 3 шага на месяц\n💪 Сильные стороны\n⚠️ Ловушка СДВГ\n"
+        f"По 1 строке на пункт. Опирайся по духу: {config.LAGOM}", 700, 0.8)
 
 def _gen_motivate(cid):
     return ai.llm(
-        f"Мотивируй Дмитрия коротко и по-настоящему (не банально), 3-4 строки, опираясь на его установки: "
-        f"{config.LAGOM}\nБез воды и пафоса.", 400, 0.95)
+        f"Мотивируй Дмитрия коротко (2-3 строки), не банально, с эмодзи, опираясь на установки: {config.LAGOM}\nБез пафоса.", 300, 0.95)
 
 _ONESHOT = {
     "as_wear": _gen_wear, "as_topic": _gen_topic, "as_trip": _gen_trip,
-    "as_menu": _gen_menu, "as_map": _gen_map, "as_motivate": _gen_motivate,
+    "as_map": _gen_map, "as_motivate": _gen_motivate,
 }
 
 LETTER_REF = (
@@ -155,8 +133,9 @@ ROLE_INTRO = {
 
 
 async def handle_callback(bot, cid, q, data):
-    if data in ("as_home", "as_style", "as_study", "as_travel", "as_food", "as_head"):
-        text, kb = _screen(data)
+    if data == "as_home":
+        store.pending_input.pop(str(cid), None)
+        text, kb = _screen("as_home")
         try:
             await q.message.edit_text(text, reply_markup=kb)
         except Exception:
@@ -174,20 +153,17 @@ async def handle_callback(bot, cid, q, data):
         return
     if data == "as_letter":
         store.pending_input[str(cid)] = "role_letter"
-        await bot.send_message(chat_id=cid, text=LETTER_REF)
-        return
-    if data == "as_designer":
-        store.pending_input[str(cid)] = "role_designer"
-        await bot.send_message(chat_id=cid, text=ROLE_INTRO["designer"])
+        await bot.send_message(chat_id=cid, text=LETTER_REF, reply_markup=_back_kb())
         return
     if data == "as_doctor":
         store.pending_input[str(cid)] = "role_doctor"
-        await bot.send_message(chat_id=cid, text=ROLE_INTRO["doctor"])
+        await bot.send_message(chat_id=cid, text=ROLE_INTRO["doctor"], reply_markup=_back_kb())
         return
     if data == "as_search":
         store.pending_input[str(cid)] = "search"
         await bot.send_message(chat_id=cid,
-            text="🔎 Поиск по твоим записям (дневник, списки, гардероб, недавний чат).\n\nЧто найти? Напиши запрос.")
+            text="🔎 Поиск по твоим записям (дневник, списки, гардероб, недавний чат).\n\nЧто найти? Напиши запрос.",
+            reply_markup=_back_kb())
         return
 
 
