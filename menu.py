@@ -14,7 +14,6 @@ MAIN_KB = ReplyKeyboardMarkup([
 # Reply-ярлык -> ключ инлайн-подменю (или действие)
 LABEL_TO_KEY = {
     "💬 Ассистент": "assist",
-    "👕 Гардероб": "m_wardrobe",
     "📚 Обучение": "m_lang",
     "🌤 Погода": "m_weather",
     "✈️ Путешествия": "m_travel",
@@ -29,14 +28,6 @@ def _back(parent="m_close"):
     return [("⬅️ Назад", parent)]
 
 def menu_screen(key):
-    if key == "m_wardrobe":
-        return ("👕 Гардероб", _ikb([
-            [("✨ Сгенерировать лук", "a_look")],
-            [("📊 Список", "a_wlist"), ("🧠 Анализ", "a_wanalysis")],
-            [("🛍️ Советы к покупке", "a_shop")],
-            [("📤 Добавить одежду", "a_wadd")],
-            _back(),
-        ]))
     if key == "m_lang":
         return ("📚 Обучение + игра", _ikb([
             [("🇳🇱 Нидерландский", "m_nl"), ("🇬🇧 Английский", "m_en")],
