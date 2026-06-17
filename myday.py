@@ -69,34 +69,36 @@ async def send_plany(bot, cid):
     now = datetime.now(TZ)
     header = f"{_WEEKDAYS[now.weekday()]}, {now.day} {_MONTHS[now.month-1]}"
 
-    L = [f"🧭 Мой день • {header}", ""]
+    L = [f"🧭 <b>Мой день • {header}</b>", ""]
     # Погода
-    L += ["🌤 Погода",
-          f"{s['city']} • {temp:+.0f}°C",
+    L += ["🌤 <b>Погода</b>",
+          f"{esc(s['city'])} • {temp:+.0f}°C",
           f"{icon} {rain:.0f}% дождя • 💨 {wind_ms:.0f} м/с ({_wind_word(wind_ms)} ветер)", ""]
     # Лук
     outfit = " + ".join(of.get("outfit", []))
     if outfit and not outfit.endswith("."):
         outfit += "."
-    L += ["👕 Лук", outfit, ""]
+    L += ["👕 <b>Лук</b>", esc(outfit), ""]
     # Мини-урок
-    L += ["📚 Мини-урок",
-          f"{ex.get('word_ru','')} → 🇳🇱 {ex.get('word_nl','')} → 🇬🇧 {ex.get('word_en','')}", ""]
+    L += ["📚 <b>Мини-урок</b>",
+          f"{esc(ex.get('word_ru',''))} → 🇳🇱 {esc(ex.get('word_nl',''))} → 🇬🇧 {esc(ex.get('word_en',''))}", ""]
     # Бизнес-идея
-    L += ["🚀 Бизнес-идея", ex.get("idea", ""), ""]
-    # Факт + ротирующиеся блоки
-    L += ["🔬 Факт", ex.get("fact", "")]
+    L += ["🚀 <b>Бизнес-идея</b>", esc(ex.get("idea", "")), ""]
+    # Интересные факты (научный + ротирующиеся, буллетами)
+    L += ["🔬 <b>Интересные факты</b>"]
+    if ex.get("fact"):
+        L.append(f"• {esc(ex.get('fact',''))}")
     rot = ex.get("rotating", {}) or {}
     for emoji, lbl in rotating:
         txt = rot.get(lbl, "")
         if txt:
-            L.append(f"{emoji} {txt}")
+            L.append(f"• {esc(txt)}")
     L.append("")
     # Цитата
     if ex.get("quote"):
-        L += ["📖 Цитата", f"«{ex.get('quote','')}» - ({ex.get('quote_src','')})"]
+        L += ["📖 <b>Цитата</b>", f"«{esc(ex.get('quote',''))}» - ({esc(ex.get('quote_src',''))})"]
 
-    await bot.send_message(chat_id=cid, text="\n".join(L).strip())
+    await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML")
 
 # --- Утро ---
 def morning_greeting(weather_short):
@@ -154,7 +156,7 @@ async def show_worry_check(bot, cid):
         if w.get("status") == "pending":
             rows.append([InlineKeyboardButton(f"📌 Случилось", callback_data=f"worry_real_{i}"),
                          InlineKeyboardButton(f"🧹 Отпустить", callback_data=f"worry_let_{i}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_myday")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_home")])
     if resolved == total and total:
         lines += ["", "Готово. Чем больше отпускаешь шума - тем чище голова."]
     await bot.send_message(chat_id=cid, text="\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))

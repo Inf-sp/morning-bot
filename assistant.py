@@ -4,6 +4,7 @@ import store
 import ai
 import weather
 import wardrobe
+import myday
 import ze
 
 FONTS = ("Cuprum, Fira Sans, Lora, Montserrat, Neucha, Open Sans, Orbitron, "
@@ -29,6 +30,9 @@ def home_kb():
         [("✈️ Куда съездить", "as_trip")],
         [("🗺️ Карта развития", "as_map")],
         [("⚡ Мотивируй меня", "as_motivate")],
+        [("🌙 Проверка дня", "as_daycheck")],
+        [("📊 Дневник", "as_diary")],
+        [("🌿 Фраза дня", "as_phrase")],
         [("🩺 Врач", "as_doctor")],
         [("🔎 Поиск по записям", "as_search")],
     ])
@@ -150,6 +154,15 @@ async def handle_callback(bot, cid, q, data):
             return
         store.last_action[str(cid)] = ("oneshot", data)
         await _send(bot, cid, out)
+        return
+    if data == "as_daycheck":
+        await myday.send_daycheck(bot, cid)
+        return
+    if data == "as_diary":
+        await myday.send_diary(bot, cid)
+        return
+    if data == "as_phrase":
+        await myday.send_phrase(bot, cid)
         return
     if data == "as_letter":
         store.pending_input[str(cid)] = "role_letter"
