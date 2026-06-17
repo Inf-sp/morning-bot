@@ -38,6 +38,16 @@ def _gen_gemini(prompt, max_tokens, temperature):
         30, "gemini")
     return r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
+def _gen_openai(prompt, max_tokens, temperature):
+    if not config.OPENAI_API_KEY:
+        raise Exception("no openai")
+    r = _post("https://api.openai.com/v1/chat/completions",
+        {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"},
+        {"model": config.OPENAI_MODEL, "messages": [{"role": "user", "content": prompt}],
+         "max_tokens": max_tokens, "temperature": temperature},
+        40, "openai")
+    return r.json()["choices"][0]["message"]["content"]
+
 def _gen_openrouter(prompt, max_tokens, temperature):
     if not config.OPENROUTER_API_KEY:
         raise Exception("no openrouter")
@@ -78,6 +88,7 @@ def llm(prompt, max_tokens=1200, temperature=0.7):
     errs = []
     for name, call in (
         ("claude", lambda: _gen_claude(prompt, max_tokens)),
+        ("openai", lambda: _gen_openai(prompt, max_tokens, temperature)),
         ("gemini", lambda: _gen_gemini(prompt, max_tokens, temperature)),
         ("openrouter", lambda: _gen_openrouter(prompt, max_tokens, temperature)),
         ("groq", lambda: _gen_groq(prompt, max_tokens, temperature)),
@@ -125,6 +136,14 @@ def _chat(provider, history):
             {}, {"system_instruction": {"parts": [{"text": CHAT_SYSTEM}]}, "contents": contents,
                  "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, "gemini")
         return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+    if provider == "openai":
+        if not config.OPENAI_API_KEY:
+            raise Exception("no openai")
+        r = _post("https://api.openai.com/v1/chat/completions",
+            {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"},
+            {"model": config.OPENAI_MODEL, "messages": [{"role": "system", "content": CHAT_SYSTEM}] + history,
+             "max_tokens": 700, "temperature": 0.8}, 40, "openai")
+        return r.json()["choices"][0]["message"]["content"]
     if provider == "openrouter":
         if not config.OPENROUTER_API_KEY:
             raise Exception("no openrouter")
@@ -151,7 +170,7 @@ def _chat(provider, history):
 
 def chat_chain(history):
     errs = []
-    for p in ("claude", "gemini", "openrouter", "groq", "cf"):
+    for p in ("claude", "openai", "gemini", "openrouter", "groq", "cf"):
         try:
             out = _as_text(_chat(p, history))
             if out and out.strip():

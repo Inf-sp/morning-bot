@@ -35,6 +35,10 @@ async def answer_callback(update, context):
     if data.startswith("as_"):
         await assistant.handle_callback(bot, cid, q, data)
         return
+    # Гардероб: инлайн-кабинет
+    if data.startswith("w_"):
+        await wardrobe.handle_callback(bot, cid, q, data)
+        return
     # Навигация по подменю - редактируем сообщение на месте
     if data == "m_close":
         try:
@@ -65,16 +69,6 @@ async def answer_callback(update, context):
                 await myday.send_diary(bot, cid)
             elif act == "phrase":
                 await myday.send_phrase(bot, cid)
-            elif act == "look":
-                await wardrobe.send_look(bot, cid)
-            elif act == "wlist":
-                await wardrobe.send_list(bot, cid)
-            elif act == "wanalysis":
-                await wardrobe.send_analysis(bot, cid)
-            elif act == "shop":
-                await wardrobe.send_shop(bot, cid)
-            elif act == "wadd":
-                await wardrobe.start_add(bot, cid)
             elif act == "gram_nl":
                 await learning.send_grammar(bot, cid, "нидерландский", "🇳🇱")
             elif act == "gram_en":
@@ -215,6 +209,9 @@ async def text_router(update, context):
         except Exception as e:
             await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
         return
+    if text == "👕 Гардероб":
+        await wardrobe.send_home(bot, cid)
+        return
     # Нажатие нижнего reply-меню -> открыть инлайн-подменю / ассистента
     if text in menu.LABEL_TO_KEY:
         key = menu.LABEL_TO_KEY[text]
@@ -225,7 +222,7 @@ async def text_router(update, context):
             await bot.send_message(chat_id=cid, text=t, reply_markup=kb)
         return
 
-    # Режим добавления одежды
+    # Режим добавления одежды (файлом)
     if store.add_wardrobe_mode.get(cid):
         await wardrobe.ingest(bot, cid, text)
         return
@@ -247,6 +244,10 @@ async def text_router(update, context):
             await assistant.handle_role(bot, cid, kind.split("_")[1], text); return
         if kind == "leftovers":
             await assistant.send_leftovers(bot, cid, text); return
+        if kind == "wardrobe_add":
+            await wardrobe.add_item(bot, cid, text); return
+        if kind == "wardrobe_check":
+            await wardrobe.check_purchase(bot, cid, text); return
 
     # Игра
     if cid in store.game_state:
