@@ -208,6 +208,13 @@ async def text_router(update, context):
     text = update.message.text
     bot = context.bot
 
+    if text == "📋 Мой день":
+        await bot.send_message(chat_id=cid, text="Собираю сводку дня...")
+        try:
+            await myday.send_plany(bot, cid)
+        except Exception as e:
+            await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
+        return
     # Нажатие нижнего reply-меню -> открыть инлайн-подменю / ассистента
     if text in menu.LABEL_TO_KEY:
         key = menu.LABEL_TO_KEY[text]
