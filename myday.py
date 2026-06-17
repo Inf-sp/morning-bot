@@ -11,23 +11,46 @@ from util import esc, send_long, _WEEKDAYS, _MONTHS
 TZ = config.TZ
 
 # --- Сводка дня (Мой день) ---
-def plany_extras():
-    country = random.choice([c.strip() for c in config.VISITED.split(",")])
-    prompt = f"""Сгенерируй блоки для ежедневной сводки (учит нидерландский и английский).
-ВАЖНО: строго валидный JSON, экранируй кавычки, без переносов внутри значений.
+ROTATING = [
+    ("🐱", "Факт о кошках"),
+    ("🌈", "Факт о ЛГБТК+ истории"),
+    ("🚲", "Велосипедный совет"),
+    ("📷", "Совет по фотографии"),
+    ("📚", "Книжная рекомендация"),
+    ("🧠", "Факт о СДВГ"),
+    ("✈️", "Страна для путешествия"),
+    ("🎨", "Дизайн-фишка"),
+    ("💡", "Бытовой лайфхак"),
+]
+
+def _wind_word(ms):
+    if ms >= 14:
+        return "штормовой"
+    if ms >= 8:
+        return "сильный"
+    if ms >= 5:
+        return "умеренный"
+    return "слабый"
+
+def plany_extras(rotating):
+    labels = ", ".join(f'"{lbl}"' for _, lbl in rotating)
+    rot_fields = "\n".join(f'  "{lbl}": "короткий текст по теме, 1 предложение",' for _, lbl in rotating)
+    prompt = f"""Сгенерируй блоки для ежедневной сводки (Дмитрий учит нидерландский B1 и английский).
+Строго валидный JSON, экранируй кавычки, без переносов внутри значений.
 {{
- "place_country": "{country}",
- "place_text": "2-3 коротких факта про {country}",
- "fact": "новый научный факт с конкретикой (где/что именно), 1-2 предложения",
- "word_ru": "русское слово дня (одно слово)",
- "word_nl": "перевод на нидерландский",
+ "word_ru": "слово дня на русском (одно слово)",
+ "word_nl": "перевод на нидерландский С АРТИКЛЕМ (de/het)",
  "word_en": "перевод на английский",
- "example_nl": "пример на нидерландском",
- "example_ru": "перевод примера",
- "quote": "мотивирующая позитивная цитата (1-2 предложения) из книги: {config.FAV_BOOKS}",
- "quote_book": "название книги и автор"
-}}"""
-    return ai.llm_json(prompt, 1000)
+ "idea": "1 бизнес-идея, 1-2 предложения",
+ "fact": "1 научный или технологический факт, 1-2 предложения",
+ "quote": "позитивная/вдохновляющая цитата",
+ "quote_src": "книга, автор, год издания",
+ "rotating": {{
+{rot_fields}
+ }}
+}}
+Правила: НЕ повторяй одно и то же слово/тему в word, idea и fact. Кратко, без воды."""
+    return ai.llm_json(prompt, 1100)
 
 async def send_plany(bot, cid):
     s = store.get_settings(cid)
@@ -35,27 +58,45 @@ async def send_plany(bot, cid):
     cur = data["current"]
     d = data["daily"]
     temp = cur["temperature_2m"]
-    code = cur["weathercode"]
     rain = d["precipitation_probability_max"][0] or 0
-    wind_kmh = (d["windspeed_10m_max"][0] or 0) * 3.6
     wind_ms = d["windspeed_10m_max"][0] or 0
-    icon = weather.weather_icon(code, temp, rain, wind_kmh)
+    icon = weather.weather_icon(cur["weathercode"], temp, rain, wind_ms * 3.6)
     of = wardrobe.build_outfit_focus(weather.weather_block(data, 0, s["city"]), "сегодня")
-    ex = plany_extras()
+
+    rotating = random.sample(ROTATING, k=random.choice([2, 3]))
+    ex = plany_extras(rotating)
+
     now = datetime.now(TZ)
     header = f"{_WEEKDAYS[now.weekday()]}, {now.day} {_MONTHS[now.month-1]}"
-    L = [f"🧭 <b>Мой день | {header}</b>", "", "<b>Погода</b>",
-         f"{icon} {esc(s['city'])}: {temp:+.0f}°C • Вероятность дождя {rain:.0f}% • 💨 {wind_ms:.0f} м/с",
-         "", "<b>Лук дня</b>", esc(", ".join(of.get("outfit", []))),
-         "", "<b>Слово дня</b>", esc(ex.get("word_ru", "")),
-         f"🇳🇱 {esc(ex.get('word_nl',''))} / 🇬🇧 {esc(ex.get('word_en',''))}",
-         f"<i>{esc(ex.get('example_nl',''))} ({esc(ex.get('example_ru',''))})</i>",
-         "", "🔬 <b>Интересный научный факт</b>", esc(ex.get("fact", ""))]
+
+    L = [f"🧭 Мой день • {header}", ""]
+    # Погода
+    L += ["🌤 Погода",
+          f"{s['city']} • {temp:+.0f}°C",
+          f"{icon} {rain:.0f}% дождя • 💨 {wind_ms:.0f} м/с ({_wind_word(wind_ms)} ветер)", ""]
+    # Лук
+    outfit = " + ".join(of.get("outfit", []))
+    if outfit and not outfit.endswith("."):
+        outfit += "."
+    L += ["👕 Лук", outfit, ""]
+    # Мини-урок
+    L += ["📚 Мини-урок",
+          f"{ex.get('word_ru','')} → 🇳🇱 {ex.get('word_nl','')} → 🇬🇧 {ex.get('word_en','')}", ""]
+    # Бизнес-идея
+    L += ["🚀 Бизнес-идея", ex.get("idea", ""), ""]
+    # Факт + ротирующиеся блоки
+    L += ["🔬 Факт", ex.get("fact", "")]
+    rot = ex.get("rotating", {}) or {}
+    for emoji, lbl in rotating:
+        txt = rot.get(lbl, "")
+        if txt:
+            L.append(f"{emoji} {txt}")
+    L.append("")
+    # Цитата
     if ex.get("quote"):
-        L += ["", "📖 <b>Цитата дня</b>", esc(ex.get("quote", "")), f"<i>— {esc(ex.get('quote_book',''))}</i>"]
-    if ex.get("place_text"):
-        L += ["", f"🗺️ <b>Место дня: {esc(ex.get('place_country',''))}</b>", esc(ex.get("place_text", ""))]
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
+        L += ["📖 Цитата", f"«{ex.get('quote','')}» - ({ex.get('quote_src','')})"]
+
+    await bot.send_message(chat_id=cid, text="\n".join(L).strip())
 
 # --- Утро ---
 def morning_greeting(weather_short):
