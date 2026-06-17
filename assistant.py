@@ -4,6 +4,7 @@ import config
 import store
 import ai
 import myday
+import ze
 
 HOME_TEXT = (
     "💬 Ассистент DM | Daily Manager\n\n"
@@ -225,7 +226,41 @@ async def send_notes(bot, cid):
     await bot.send_message(chat_id=cid, text="\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))
 
 
+def _doctor_candidates(symptoms):
+    data = ai.llm_json(
+        f"Пользователь описал: {symptoms}\n"
+        "Дай 6 коротких справочных тезисов (общая информация о возможных причинах/состояниях при таких "
+        "симптомах; НЕ диагноз). JSON: {\"items\": [\"тезис\", ...]}", 900)
+    return [x for x in data.get("items", []) if isinstance(x, str) and x.strip()]
+
+async def doctor_answer(bot, cid, symptoms):
+    await bot.send_chat_action(chat_id=cid, action="typing")
+    passages = []
+    # ZeroEntropy: ранжируем сгенерированные тезисы по релевантности симптомам
+    try:
+        cands = _doctor_candidates(symptoms)
+        ranked = ze.rerank(symptoms, cands, top_n=3)
+        passages = [t for t, _ in ranked]
+    except Exception:
+        passages = []
+    base = _role_system("doctor")
+    if passages:
+        ctx = "\n".join(f"- {p}" for p in passages)
+        prompt = f"{base}\n\nНаиболее релевантные справочные тезисы (отобраны по симптомам):\n{ctx}\n\nСимптомы: {symptoms}"
+    else:
+        prompt = f"{base}\n\nСимптомы: {symptoms}"
+    try:
+        out = ai.llm(prompt, 900, 0.5)
+    except Exception as e:
+        await bot.send_message(chat_id=cid, text=str(e)); return
+    store.last_action[str(cid)] = ("role", "doctor", symptoms)
+    await _send(bot, cid, out)
+
+
 async def handle_role(bot, cid, role, text):
+    if role == "doctor":
+        await doctor_answer(bot, cid, text)
+        return
     await bot.send_chat_action(chat_id=cid, action="typing")
     try:
         out = ai.llm(_role_system(role) + "\n\nЗапрос пользователя:\n" + text, 1500, 0.7)
