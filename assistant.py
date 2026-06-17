@@ -167,7 +167,7 @@ async def handle_callback(bot, cid, q, data):
         try:
             out = _ONESHOT[data](cid)
         except Exception as e:
-            await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
+            await bot.send_message(chat_id=cid, text=str(e))
             return
         store.last_action[str(cid)] = ("oneshot", data)
         await _send(bot, cid, out)
@@ -253,7 +253,7 @@ async def handle_role(bot, cid, role, text):
     try:
         out = ai.llm(_role_system(role) + "\n\nЗапрос пользователя:\n" + text, 1500, 0.7)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
+        await bot.send_message(chat_id=cid, text=str(e))
         return
     store.last_action[str(cid)] = ("role", role, text)
     await _send(bot, cid, out)
@@ -268,7 +268,7 @@ async def chat_reply(bot, cid, text):
     try:
         answer = ai.chat_chain(hist)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=f"Ошибка чата: {e}")
+        await bot.send_message(chat_id=cid, text=str(e))
         return
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
@@ -282,7 +282,7 @@ async def retry(bot, cid):
         try:
             out = _ONESHOT[la[1]](cid)
         except Exception as e:
-            await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
+            await bot.send_message(chat_id=cid, text=str(e))
             return
         await _send(bot, cid, out)
         return
@@ -303,7 +303,7 @@ async def retry(bot, cid):
     try:
         answer = ai.chat_chain(nudge)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
+        await bot.send_message(chat_id=cid, text=str(e))
         return
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
