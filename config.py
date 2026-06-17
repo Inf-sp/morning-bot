@@ -11,6 +11,7 @@ CF_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
 CF_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 CHAT_ID = os.environ.get("CHAT_ID", "")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
+ZEROENTROPY_API_KEY = os.environ.get("ZEROENTROPY_API_KEY", "")
 
 TZ = ZoneInfo("Europe/Amsterdam")
 

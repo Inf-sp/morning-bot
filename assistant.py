@@ -4,6 +4,7 @@ import store
 import ai
 import weather
 import wardrobe
+import ze
 
 FONTS = ("Cuprum, Fira Sans, Lora, Montserrat, Neucha, Open Sans, Orbitron, "
          "Pacifico, Philosopher, PT Sans, PT Serif, Roboto, Rubik, Ubuntu, Loew")
@@ -56,6 +57,7 @@ def _screen(key):
         return ("🧠 Разобраться в голове", _kb([
             [("🗺️ Карта развития", "as_map")],
             [("Мотивируй меня", "as_motivate")],
+            [("🔎 Поиск по записям", "as_search")],
             [("⬅️ Назад", "as_home")],
         ]))
     return (HOME_TEXT, _screen("as_home")[1])
@@ -182,6 +184,68 @@ async def handle_callback(bot, cid, q, data):
         store.pending_input[str(cid)] = "role_doctor"
         await bot.send_message(chat_id=cid, text=ROLE_INTRO["doctor"])
         return
+    if data == "as_search":
+        store.pending_input[str(cid)] = "search"
+        await bot.send_message(chat_id=cid,
+            text="🔎 Поиск по твоим записям (дневник, списки, гардероб, недавний чат).\n\nЧто найти? Напиши запрос.")
+        return
+
+
+def _personal_docs(cid):
+    cid = str(cid)
+    docs = []
+    for e in store.get_list(config.DIARY_KEY, cid):
+        if isinstance(e, dict):
+            docs.append(f"Дневник {e.get('date','')}: {e.get('text','')}")
+    for key, label in ((config.FAVORITES_KEY, "Любимое"), (config.WATCHLIST_KEY, "Посмотреть"),
+                       (config.READLIST_KEY, "Почитать"), (config.ARTISTS_KEY, "Артист")):
+        for it in store.get_list(key, cid):
+            docs.append(f"{label}: {it}")
+    for c in store.get_list(config.FAVCOUNTRIES_KEY, cid):
+        if isinstance(c, dict):
+            docs.append(f"Любимая страна: {c.get('name','')}")
+    try:
+        w = store.load_wardrobe()
+        for cat, items in w.items():
+            for it in items:
+                docs.append(f"Гардероб ({cat}): {it}")
+    except Exception:
+        pass
+    for m in store.chat_history.get(cid, []):
+        who = "Я" if m.get("role") == "user" else "Ассистент"
+        docs.append(f"{who}: {m.get('content','')[:300]}")
+    return docs
+
+
+async def do_search(bot, cid, query):
+    docs = _personal_docs(cid)
+    if not docs:
+        await bot.send_message(chat_id=cid, text="Пока нечего искать - записей нет.")
+        return
+    await bot.send_message(chat_id=cid, text="Ищу...")
+    try:
+        ranked = ze.rerank(query, docs, top_n=5)
+    except Exception as e:
+        await bot.send_message(chat_id=cid, text=f"Ошибка поиска: {e}")
+        return
+    if not ranked:
+        await bot.send_message(chat_id=cid, text="Ничего похожего не нашёл.")
+        return
+    lines = ["🔎 Нашёл по теме:", ""]
+    for txt, _ in ranked:
+        lines.append(f"• {txt}")
+    # короткий ответ строго по найденному (без выдумок)
+    context_text = "\n".join(f"- {t}" for t, _ in ranked)
+    try:
+        ans = ai.llm(
+            f"Вопрос: {query}\n\nМои записи (отвечай ТОЛЬКО по ним, ничего не выдумывай):\n{context_text}\n\n"
+            f"Коротко ответь по записям. Если в них нет ответа - честно скажи.", 500, 0.3)
+        if ans and ans.strip():
+            lines += ["", "🧠 Кратко:", ans.strip()]
+    except Exception:
+        pass
+    store.last_action[str(cid)] = ("search", query)
+    await _send(bot, cid, "\n".join(lines))
 
 
 async def handle_role(bot, cid, role, text):
@@ -224,6 +288,9 @@ async def retry(bot, cid):
         return
     if la and la[0] == "role":
         await handle_role(bot, cid, la[1], la[2])
+        return
+    if la and la[0] == "search":
+        await do_search(bot, cid, la[1])
         return
     hist = list(store.chat_history.get(str(cid), []))
     if not hist:
