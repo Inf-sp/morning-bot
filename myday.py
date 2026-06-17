@@ -42,7 +42,7 @@ def plany_extras(rotating):
  "word_nl": "перевод на нидерландский С АРТИКЛЕМ (de/het)",
  "word_en": "перевод на английский",
  "idea": "1 бизнес-идея, 1-2 предложения",
- "fact": "1 научный или технологический факт, 1-2 предложения",
+ "fact": "1 новый интересный научный или технический факт, 1-2 предложения",
  "quote": "позитивная/вдохновляющая цитата",
  "quote_src": "книга, автор, год издания",
  "rotating": {{
@@ -63,7 +63,7 @@ async def send_plany(bot, cid):
     icon = weather.weather_icon(cur["weathercode"], temp, rain, wind_ms * 3.6)
     of = wardrobe.build_outfit_focus(weather.weather_block(data, 0, s["city"]), "сегодня")
 
-    rotating = random.sample(ROTATING, k=random.choice([2, 3]))
+    rotating = random.sample(ROTATING, k=1)
     ex = plany_extras(rotating)
 
     now = datetime.now(TZ)
