@@ -73,6 +73,14 @@ async def send_plany(bot, cid):
     of = wardrobe.build_outfit_focus(weather.weather_block(data, 0, s["city"]), "сегодня")
     rotating = random.sample(ROTATING, k=1)
     ex = plany_extras(rotating, s.get("country", ""), day_str)
+    # если в личном словаре есть слова - подмешиваем одно в мини-урок
+    dict_words = store.get_list(config.DICT_KEY, cid)
+    if dict_words:
+        w = random.choice(dict_words[-20:])
+        if isinstance(w, dict) and w.get("nl"):
+            ex["word_ru"] = w.get("ru", ex.get("word_ru", ""))
+            ex["word_nl"] = w.get("nl", ex.get("word_nl", ""))
+            ex["word_en"] = w.get("en", ex.get("word_en", ""))
 
     now = datetime.now(TZ)
     header = f"{_WEEKDAYS[now.weekday()]}, {now.day} {_MONTHS[now.month-1]}"

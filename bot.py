@@ -77,6 +77,22 @@ async def answer_callback(update, context):
                 await learning.do_translate(bot, cid, "нидерландский")
             elif act == "tr_en":
                 await learning.do_translate(bot, cid, "английский")
+            elif act == "verb_nl":
+                await learning.send_verb(bot, cid, "нидерландский")
+            elif act == "verb_en":
+                await learning.send_verb(bot, cid, "английский")
+            elif act == "proverb_nl":
+                await learning.send_proverb(bot, cid, "нидерландский")
+            elif act == "proverb_en":
+                await learning.send_proverb(bot, cid, "английский")
+            elif act == "expr_nl":
+                await learning.send_expression(bot, cid, "нидерландский")
+            elif act == "dict":
+                await learning.send_dict(bot, cid)
+            elif act == "addword":
+                await learning.add_word(bot, cid)
+            elif act == "exam":
+                await learning.send_exam(bot, cid)
             elif act == "game":
                 await learning.game_start(bot, cid)
             elif act == "levels":
@@ -143,20 +159,21 @@ async def answer_callback(update, context):
     if data.startswith("gamelang_"):
         lang = {"ru": "русский", "en": "английский", "nl": "нидерландский"}[data.split("_")[1]]
         store.game_config[cid] = {"lang": lang, "difficulty": "med"}
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Лёгкая", callback_data="gamediff_easy"),
-            InlineKeyboardButton("Средняя", callback_data="gamediff_med"),
-            InlineKeyboardButton("Тяжёлая", callback_data="gamediff_hard"),
-        ]])
-        await q.message.reply_text(f"Язык: {lang}. Выбери сложность:", reply_markup=kb)
+        await learning.ask_difficulty(bot, cid, lang)
         return
     if data.startswith("gamediff_"):
         diff = data.split("_")[1]
-        cfg = store.game_config.get(cid, {"lang": "нидерландский"})
+        cfg = store.game_config.get(cid, {"lang": "русский"})
         cfg["difficulty"] = diff
         store.game_config[cid] = cfg
         await learning.send_game(bot, cid)
+        return
+    if data == "game_change_diff":
+        cfg = store.game_config.get(cid, {"lang": "русский"})
+        await learning.ask_difficulty(bot, cid, cfg["lang"])
+        return
+    if data.startswith("worddel_"):
+        await learning.del_word(bot, cid, int(data.split("_")[1]))
         return
     if data == "game_again":
         await learning.send_game(bot, cid)
@@ -235,6 +252,14 @@ async def text_router(update, context):
         await wardrobe.ingest(bot, cid, text)
         return
 
+    # Игра и перевод проверяем ПЕРЕД pending - иначе ответ уходит не туда (в дневник)
+    if cid in store.game_state:
+        if await learning.game_answer(bot, cid, text):
+            return
+    if cid in store.challenge_state:
+        if await learning.translate_answer(bot, cid, text):
+            return
+
     # Pending-ввод
     if cid in store.pending_input:
         kind = store.pending_input.pop(cid)
@@ -258,15 +283,6 @@ async def text_router(update, context):
             await wardrobe.check_purchase(bot, cid, text); return
         if kind == "setcity":
             await weather.set_city_text(bot, cid, text); return
-
-    # Игра
-    if cid in store.game_state:
-        if await learning.game_answer(bot, cid, text):
-            return
-    # Перевод
-    if cid in store.challenge_state:
-        if await learning.translate_answer(bot, cid, text):
-            return
 
     # Свободный чат
     await assistant.chat_reply(bot, cid, text)
@@ -309,6 +325,9 @@ async def weather_command(update, context):
 
 async def notes_command(update, context):
     await assistant.send_notes(context.bot, update.effective_chat.id)
+
+async def setup_command(update, context):
+    await learning.send_levels(context.bot, update.effective_chat.id)
 
 async def reload_wardrobe_command(update, context):
     import json
@@ -406,6 +425,7 @@ def main():
     app = Application.builder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("notes", notes_command))
+    app.add_handler(CommandHandler("setup", setup_command))
     app.add_handler(CommandHandler("reload_wardrobe", reload_wardrobe_command))
     app.add_handler(CommandHandler("reload_content", reload_content_command))
     app.add_handler(CommandHandler("reload_artists", reload_artists_command))

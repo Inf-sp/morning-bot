@@ -32,6 +32,7 @@ READLIST_KEY = "readlist.json"
 FAVCOUNTRIES_KEY = "favcountries.json"
 WORRIES_KEY = "worries.json"
 NOTES_KEY = "notes.json"
+DICT_KEY = "dict.json"
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}
 
