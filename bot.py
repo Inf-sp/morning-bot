@@ -82,9 +82,11 @@ async def answer_callback(update, context):
             elif act == "levels":
                 await learning.send_levels(bot, cid)
             elif act == "w_today":
-                await weather.send_weather(bot, cid, 1)
-            elif act == "w_3":
-                await weather.send_weather(bot, cid, 3)
+                await weather.send_weather(bot, cid, "today")
+            elif act == "w_tomorrow":
+                await weather.send_weather(bot, cid, "tomorrow")
+            elif act == "w_week":
+                await weather.send_weather(bot, cid, "week")
             elif act == "setcity":
                 store.pending_input[cid] = "setcity"
                 await bot.send_message(chat_id=cid, text="📍 Напиши название города - переключу прогноз на него.")
