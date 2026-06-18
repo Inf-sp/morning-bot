@@ -32,7 +32,7 @@ FAVCOUNTRIES_KEY = "favcountries.json"
 WORRIES_KEY = "worries.json"
 NOTES_KEY = "notes.json"
 
-DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар"}
+DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды"}
 
 # --- Мой лагом (единый источник для фраз и тона) ---
 LAGOM_LINES = [

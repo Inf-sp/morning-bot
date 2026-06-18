@@ -47,7 +47,8 @@ def menu_screen(key):
         ]))
     if key == "m_weather":
         return ("🌤 Погода", _ikb([
-            [("🌤 Сегодня", "a_w_today"), ("📅 7 дней", "a_w_week")],
+            [("🌤 Сегодня", "a_w_today")],
+            [("📅 На 3 дня", "a_w_3")],
             [("📍 Сменить город", "a_setcity")],
             _back(),
         ]))

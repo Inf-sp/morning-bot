@@ -83,10 +83,11 @@ async def answer_callback(update, context):
                 await learning.send_levels(bot, cid)
             elif act == "w_today":
                 await weather.send_weather(bot, cid, 1)
-            elif act == "w_week":
-                await weather.send_weather(bot, cid, 7)
+            elif act == "w_3":
+                await weather.send_weather(bot, cid, 3)
             elif act == "setcity":
-                await bot.send_message(chat_id=cid, text="Отправь геолокацию или команду: /setcity Амстердам")
+                store.pending_input[cid] = "setcity"
+                await bot.send_message(chat_id=cid, text="📍 Напиши название города - переключу прогноз на него.")
             elif act == "trav_go":
                 await travel.send_go(bot, cid)
             elif act == "trav_my":
@@ -248,6 +249,8 @@ async def text_router(update, context):
             await wardrobe.add_item(bot, cid, text); return
         if kind == "wardrobe_check":
             await wardrobe.check_purchase(bot, cid, text); return
+        if kind == "setcity":
+            await weather.set_city_text(bot, cid, text); return
 
     # Игра
     if cid in store.game_state:
