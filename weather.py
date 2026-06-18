@@ -1,13 +1,14 @@
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 import config
 import store
 import ai
+from util import esc, _WEEKDAYS, _MONTHS
 
 TZ = config.TZ
 
-DESC = {0: "ясно", 1: "малооблачно", 2: "переменно", 3: "пасмурно", 45: "туман", 48: "туман",
+DESC = {0: "ясно", 1: "малооблачно", 2: "переменно облачно", 3: "пасмурно", 45: "туман", 48: "туман",
         51: "морось", 53: "морось", 55: "морось", 61: "дождь", 63: "дождь", 65: "сильный дождь",
         71: "снег", 73: "снег", 75: "сильный снег", 80: "ливень", 81: "ливень", 95: "гроза"}
 
@@ -16,7 +17,7 @@ def fetch_weather(lat, lon, days=2):
     r = requests.get("https://api.open-meteo.com/v1/forecast", params={
         "latitude": lat, "longitude": lon,
         "current": "temperature_2m,apparent_temperature,weathercode",
-        "hourly": "precipitation_probability",
+        "hourly": "precipitation_probability,windspeed_10m",
         "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode,windspeed_10m_max",
         "timezone": "Europe/Amsterdam", "wind_speed_unit": "ms", "forecast_days": max(days, 2)
     }, timeout=20)
@@ -32,21 +33,20 @@ def fetch_current_temp(lat, lon):
         return None
 
 
-# ---------- ветер (шкала) ----------
+# ---------- ветер ----------
 def wind_scale(ms):
     if ms < 3:
-        return "🌬️", "почти без ветра"
+        return "🌬️", "Почти без ветра"
     if ms < 5:
-        return "💨", "слабый ветер"
+        return "💨", "Лёгкий ветер"
     if ms < 8:
-        return "🌪️", "умеренно сильный ветер"
+        return "🌪️", "Умеренный ветер"
     if ms < 11:
-        return "⚠️", "сильный ветер"
-    return "🚨", "очень сильный ветер"
+        return "⚠️", "Сильный ветер"
+    return "🚨", "Очень сильный ветер"
 
-# для совместимости (myday)
 def wind_note(ms):
-    return wind_scale(ms)[1]
+    return wind_scale(ms)[1].lower()
 
 
 # ---------- иконка ----------
@@ -66,28 +66,25 @@ def weather_icon(code, temp, rain, wind_ms=0):
     return "☁️"
 
 
-# ---------- период дождя по часам ----------
-def rain_periods(data, day_index=0):
+# ---------- периоды по часам ----------
+def _periods(data, day_str, key, threshold):
     try:
         hours = data["hourly"]["time"]
-        probs = data["hourly"]["precipitation_probability"]
+        vals = data["hourly"][key]
     except Exception:
         return []
-    target = data["daily"]["time"][day_index]
     buckets = {"утром": (6, 12), "днём": (12, 18), "вечером": (18, 24), "ночью": (0, 6)}
     hit = []
     for name, (h1, h2) in buckets.items():
-        for t, p in zip(hours, probs):
-            if not t.startswith(target):
-                continue
-            hh = int(t[11:13])
-            if h1 <= hh < h2 and (p or 0) >= 40:
+        for t, v in zip(hours, vals):
+            if t.startswith(day_str) and h1 <= int(t[11:13]) < h2 and (v or 0) >= threshold:
                 hit.append(name)
                 break
-    return hit
+    # порядок: утром, днём, вечером, ночью
+    return [p for p in ["утром", "днём", "вечером", "ночью"] if p in hit]
 
 
-# ---------- блок погоды (используется в myday) ----------
+# ---------- блок для myday ----------
 def weather_block(data, day, city):
     d = data["daily"]
     code = d["weathercode"][day]
@@ -101,97 +98,110 @@ def weather_block(data, day, city):
     return "\n".join(lines)
 
 
-# ---------- мировой факт + концовка (свежие, из реальных температур) ----------
+# ---------- мировой факт ----------
 WORLD_POINTS = [
-    ("🇰🇼", "Кувейт", 29.37, 47.98), ("🇦🇪", "Дубай", 25.20, 55.27), ("🇮🇳", "Дели", 28.61, 77.21),
-    ("🇦🇶", "Антарктида", -75.25, 0.07), ("🇷🇺", "Оймякон", 63.46, 142.79), ("🇺🇸", "Долина Смерти", 36.46, -116.87),
-    ("🇮🇸", "Рейкьявик", 64.15, -21.94), ("🇸🇬", "Сингапур", 1.35, 103.82), ("🇪🇬", "Каир", 30.04, 31.24),
-    ("🇧🇷", "Манаус", -3.12, -60.02), ("🇨🇦", "Йеллоунайф", 62.45, -114.37), ("🇦🇺", "Алис-Спрингс", -23.70, 133.88),
-    ("🇲🇳", "Улан-Батор", 47.89, 106.91), ("🇨🇱", "Атакама", -24.5, -69.25), ("🇳🇴", "Шпицберген", 78.22, 15.63),
+    ("🇰🇼", "Кувейте", 29.37, 47.98), ("🇦🇪", "Дубае", 25.20, 55.27), ("🇮🇳", "Дели", 28.61, 77.21),
+    ("🇦🇶", "Антарктиде", -75.25, 0.07), ("🇷🇺", "Оймяконе", 63.46, 142.79), ("🇺🇸", "Долине Смерти", 36.46, -116.87),
+    ("🇮🇸", "Рейкьявике", 64.15, -21.94), ("🇸🇬", "Сингапуре", 1.35, 103.82), ("🇪🇬", "Каире", 30.04, 31.24),
+    ("🇧🇷", "Манаусе", -3.12, -60.02), ("🇨🇦", "Йеллоунайфе", 62.45, -114.37), ("🇦🇺", "Алис-Спрингсе", -23.70, 133.88),
+    ("🇲🇳", "Улан-Баторе", 47.89, 106.91), ("🇨🇱", "Атакаме", -24.5, -69.25), ("🇳🇴", "Шпицбергене", 78.22, 15.63),
 ]
 
-def _world_fact_and_closer(city):
-    # берём 4 случайные точки, тянем реальную температуру сейчас
+def _world_fact():
     pts = random.sample(WORLD_POINTS, 4)
     readings = []
     for flag, name, lat, lon in pts:
         t = fetch_current_temp(lat, lon)
         if t is not None:
             readings.append((flag, name, t))
-    fact = ""
-    if readings:
-        flag, name, t = max(readings, key=lambda x: abs(x[2]))
-        try:
-            fact = ai.llm(
-                f"Сейчас в {name} {t:+.0f}°C (реальные данные). Напиши ОДНУ короткую необычную фразу-факт про эту погоду "
-                f"на русском, начни строку с эмодзи {flag} НЕ ставь флаг перед страной. 1 предложение, с лёгким юмором, без markdown.",
-                120, 1.0).strip().splitlines()[0]
-        except Exception:
-            fact = f"{flag} Сейчас в {name} около {t:+.0f}°C."
+    if not readings:
+        return ""
+    flag, name, t = max(readings, key=lambda x: abs(x[2]))
     try:
-        closer = ai.llm(
-            f"Придумай ОДНУ дерзкую и тёплую фразу-концовку прогноза погоды для города {city}, на русском, "
-            f"каждый раз новую, 1 предложение, без markdown.", 100, 1.1).strip().splitlines()[0]
+        line = ai.llm(
+            f"Сейчас в {name} {t:+.0f}°C (реальные данные). Напиши ОДНУ фразу, начни СТРОГО со слов "
+            f"«Кстати, сегодня в {name} ...», с лёгким юмором, на русском, 1 предложение, без markdown.",
+            120, 1.05).strip().splitlines()[0]
     except Exception:
-        closer = f"Сегодня {city} явно выиграл погодную лотерею."
-    return fact, closer
+        line = f"Кстати, сегодня в {name} около {t:+.0f}°C."
+    return f"{flag} {line}"
+
+def _joke_outfit(city, tmax, rain, wind_ms, desc, when="сегодня"):
+    try:
+        return ai.llm(
+            f"Город {city}, {when}: {desc}, до {tmax:+.0f}°C, дождь {rain:.0f}%, ветер {wind_ms:.0f} м/с. "
+            f"Напиши ОДНУ дерзкую дружелюбную фразу + короткий совет по одежде (нужна ли куртка/зонт). "
+            f"1 предложение, на русском, без markdown.", 120, 1.05).strip().splitlines()[0]
+    except Exception:
+        return f"Сегодня {city} явно выиграл погодную лотерею."
 
 
-# ---------- отправка прогноза ----------
-async def send_weather(bot, cid, days):
+# ---------- отправка ----------
+async def send_weather(bot, cid, mode="today"):
     s = store.get_settings(cid)
     country = s.get("country", "")
-    place = f"{country}, {s['city']}" if country else s["city"]
-    data = fetch_weather(s["lat"], s["lon"], max(days, 2))
+    place = f"{s['city']}, {country}" if country else s["city"]
+    data = fetch_weather(s["lat"], s["lon"], 7)
     d = data["daily"]
-    names = ["Сегодня", "Завтра"]
-    out = []
+    now = datetime.now(TZ)
 
-    if days == 1:
-        out.append(f"📍 {place} • прогноз на сегодня")
-        out.append("")
-        code = d["weathercode"][0]
-        tmin, tmax = d["temperature_2m_min"][0], d["temperature_2m_max"][0]
-        rain = d["precipitation_probability_max"][0] or 0
-        wind_ms = d["windspeed_10m_max"][0] or 0
+    if mode in ("today", "tomorrow"):
+        day = 0 if mode == "today" else 1
+        dt = now + timedelta(days=day)
+        title = "сегодня" if mode == "today" else "завтра"
+        header = f"Погода на {title} • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]}"
+        code = d["weathercode"][day]
+        tmax = d["temperature_2m_max"][day]
+        rain = d["precipitation_probability_max"][day] or 0
+        wind_ms = d["windspeed_10m_max"][day] or 0
         icon = weather_icon(code, tmax, rain, wind_ms)
         wemoji, wword = wind_scale(wind_ms)
-        out.append(f"{icon} Сегодня")
-        if rain >= 30:
-            periods = rain_periods(data, 0)
-            when = (" (" + ", ".join(periods) + ")") if periods else ""
-            out.append(f"{tmin:.0f}…{tmax:.0f}°C • 🌧️ Вероятность дождя{when} {rain:.0f}%")
-        else:
-            out.append(f"{tmin:.0f}…{tmax:.0f}°C • ☁️ Вероятность дождя {rain:.0f}%")
-        out.append(f"{wemoji} {wind_ms:.1f} м/с ({wword})")
-        # факт + концовка из реальных данных
-        fact, closer = _world_fact_and_closer(s["city"])
-        if fact:
-            out += ["", fact]
-        if closer:
-            out += ["", closer]
-    else:
-        out.append(f"📍 {place} • прогноз на 3 дня")
-        out.append("")
-        for i in range(min(days, 3)):
-            if i < 2:
-                label = names[i]
-            else:
-                dt = datetime.fromisoformat(d["time"][i])
-                from util import _WEEKDAYS
-                label = f"{_WEEKDAYS[dt.weekday()][:2]}, {dt.day} {['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'][dt.month-1]}"
-            code = d["weathercode"][i]
-            tmin, tmax = d["temperature_2m_min"][i], d["temperature_2m_max"][i]
-            rain = d["precipitation_probability_max"][i] or 0
-            wind_ms = d["windspeed_10m_max"][i] or 0
-            icon = weather_icon(code, tmax, rain, wind_ms)
-            wemoji, wword = wind_scale(wind_ms)
-            out.append(f"{icon} {label}")
-            out.append(f"{tmin:.0f}…{tmax:.0f}°C • 🌧️ {rain:.0f}%")
-            out.append(f"{wemoji} {wind_ms:.1f} м/с ({wword})")
-            out.append("")
+        day_str = d["time"][day]
+        rain_p = _periods(data, day_str, "precipitation_probability", 40)
+        wind_p = _periods(data, day_str, "windspeed_10m", 6)
+        rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
+        wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
 
-    await bot.send_message(chat_id=cid, text="\n".join(out).strip())
+        L = [f"<b>{esc(header)}</b>", "",
+             f"<b>🌡️ {esc(place)}</b>",
+             f"{icon} {tmax:+.0f}°C • 🌧️ Дождь{rain_when} {rain:.0f}% • {wemoji} {wword}{wind_when} {wind_ms:.0f} м/с"]
+        joke = _joke_outfit(s["city"], tmax, rain, wind_ms, DESC.get(code, ""), title)
+        if joke:
+            L += ["", esc(joke)]
+        fact = _world_fact()
+        if fact:
+            L += ["", esc(fact)]
+        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
+        return
+
+    # week
+    d1 = now
+    d2 = now + timedelta(days=6)
+    if d1.month == d2.month:
+        rng = f"{d1.day} - {d2.day} {_MONTHS[d1.month-1]}"
+    else:
+        rng = f"{d1.day} {_MONTHS[d1.month-1]} - {d2.day} {_MONTHS[d2.month-1]}"
+    tmins = d["temperature_2m_min"][:7]
+    tmaxs = d["temperature_2m_max"][:7]
+    rains = d["precipitation_probability_max"][:7]
+    winds = d["windspeed_10m_max"][:7]
+    summary_data = (f"мин {min(tmins):.0f}°C, макс {max(tmaxs):.0f}°C; "
+                    f"дожди по дням %: {[int(x or 0) for x in rains]}; "
+                    f"ветер {min(winds):.0f}-{max(winds):.0f} м/с")
+    try:
+        body = ai.llm(
+            f"Сделай краткую сводку погоды на неделю для города {s['city']}. Данные: {summary_data}.\n"
+            f"СТРОГО формат, без markdown, каждая строка с эмодзи:\n"
+            f"🌤️ {{характер недели и диапазон температур}}\n"
+            f"🌧️ {{про дожди, в какие части дня чаще}}\n"
+            f"💨 {{ветер диапазон м/с}}\n"
+            f"☁️ {{общая облачность}}\n\n"
+            f"Лучшие дни: {{когда}}\n"
+            f"{{одна строка про сложные дни}}", 500, 0.8)
+    except Exception as e:
+        await bot.send_message(chat_id=cid, text=str(e)); return
+    L = [f"<b>Ближайшая неделя • {esc(rng)}</b>", "", f"<b>🌡️ {esc(place)}</b>", esc(body)]
+    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
 
 
 # ---------- смена города ----------
@@ -220,7 +230,7 @@ async def setcity_command(update, context):
 async def location_handler(update, context):
     cid = update.effective_chat.id
     loc = update.message.location
-    city, country = "", ""
+    city, country = "твой город", ""
     try:
         r = requests.get("https://api.bigdatacloud.net/data/reverse-geocode-client",
                          params={"latitude": loc.latitude, "longitude": loc.longitude, "localityLanguage": "ru"},
@@ -229,10 +239,10 @@ async def location_handler(update, context):
         city = j.get("city") or j.get("locality") or j.get("principalSubdivision") or "твой город"
         country = j.get("countryName", "")
     except Exception:
-        city = "твой город"
+        pass
     store.set_settings(cid, loc.latitude, loc.longitude, city, country)
     await update.message.reply_text(f"Готово. Ты находишься в городе {city}" + (f", {country}." if country else "."))
     try:
-        await send_weather(context.bot, cid, 1)
+        await send_weather(context.bot, cid, "today")
     except Exception:
         pass
