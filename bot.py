@@ -209,7 +209,7 @@ async def text_router(update, context):
     text = update.message.text
     bot = context.bot
 
-    if text == "🧠 Ассистент":
+    if text == "🧠 Ассистент DM | Daily Manager":
         await assistant.send_home(bot, cid)
         return
     if text == "☀️ Мой день":
@@ -425,7 +425,7 @@ def main():
     jq.run_daily(job_weekly, time=datetime.strptime("19:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=(6,))
 
     print("Bot started")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
