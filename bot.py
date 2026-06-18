@@ -305,6 +305,17 @@ async def weather_command(update, context):
 async def notes_command(update, context):
     await assistant.send_notes(context.bot, update.effective_chat.id)
 
+async def reload_wardrobe_command(update, context):
+    import json
+    try:
+        with open(config.WARDROBE_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        store.save_wardrobe(data)
+        n = sum(len(v) for v in data.values())
+        await update.message.reply_text(f"Шкаф обновлён: {n} вещей в {len(data)} категориях.")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
 
 # ---------- Расписание ----------
 async def job_morning(context: ContextTypes.DEFAULT_TYPE):
@@ -365,6 +376,7 @@ def main():
     app = Application.builder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("notes", notes_command))
+    app.add_handler(CommandHandler("reload_wardrobe", reload_wardrobe_command))
     app.add_handler(CommandHandler("plany", plany_command))
     app.add_handler(CommandHandler("weather", weather_command))
     app.add_handler(CommandHandler("setcity", weather.setcity_command))
