@@ -108,6 +108,8 @@ async def answer_callback(update, context):
                 await content.send_artists(bot, cid)
             elif act == "artadd":
                 await content.start_add_artist(bot, cid)
+            elif act == "concerts_find":
+                await content.find_concerts(bot, cid)
         except Exception as e:
             await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
         return
@@ -330,6 +332,17 @@ async def reload_content_command(update, context):
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
 
+async def reload_artists_command(update, context):
+    import json
+    cid = update.effective_chat.id
+    try:
+        with open("artists.json", encoding="utf-8") as f:
+            data = json.load(f)
+        store.set_list(config.ARTISTS_KEY, cid, data)
+        await update.message.reply_text(f"Артисты обновлены: {len(data)}.")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
 
 # ---------- Расписание ----------
 async def job_morning(context: ContextTypes.DEFAULT_TYPE):
@@ -392,6 +405,7 @@ def main():
     app.add_handler(CommandHandler("notes", notes_command))
     app.add_handler(CommandHandler("reload_wardrobe", reload_wardrobe_command))
     app.add_handler(CommandHandler("reload_content", reload_content_command))
+    app.add_handler(CommandHandler("reload_artists", reload_artists_command))
     app.add_handler(CommandHandler("plany", plany_command))
     app.add_handler(CommandHandler("weather", weather_command))
     app.add_handler(CommandHandler("setcity", weather.setcity_command))
