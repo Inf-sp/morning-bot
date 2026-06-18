@@ -84,23 +84,31 @@ async def find_concerts(bot, cid):
     if not artists:
         await bot.send_message(chat_id=cid, text="Список артистов пуст. Нажми «Мои артисты» или выполни /reload_artists.")
         return
-    await bot.send_message(chat_id=cid, text="Ищу концерты в Нидерландах, ~10-20 сек...")
+    await bot.send_message(chat_id=cid, text="Ищу концерты в NL, Бельгии и Германии, ~20-40 сек...")
     import requests
+    countries = [("NL", "🇳🇱"), ("BE", "🇧🇪"), ("DE", "🇩🇪")]
     found = {}
     for a in artists[:40]:
-        try:
-            r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json",
-                params={"apikey": config.TICKETMASTER_API_KEY, "keyword": a, "countryCode": "NL",
-                        "classificationName": "music", "size": 2, "sort": "date,asc"}, timeout=15)
-            for e in r.json().get("_embedded", {}).get("events", []):
-                found[e.get("id")] = e
-        except Exception:
-            continue
+        for cc, flag in countries:
+            try:
+                r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json",
+                    params={"apikey": config.TICKETMASTER_API_KEY, "keyword": a, "countryCode": cc,
+                            "classificationName": "music", "size": 2, "sort": "date,asc"}, timeout=15)
+                for e in r.json().get("_embedded", {}).get("events", []):
+                    e["_flag"] = flag
+                    found[e.get("id")] = e
+            except Exception:
+                continue
     if not found:
-        await bot.send_message(chat_id=cid, text="Сейчас концертов твоих артистов в Нидерландах не нашёл. Загляни позже.")
+        await bot.send_message(chat_id=cid, text="Сейчас концертов твоих артистов в NL, Бельгии и Германии не нашёл. Загляни позже.")
         return
-    lines = ["🎤 Концерты в Нидерландах", ""]
-    for e in list(found.values())[:15]:
+    # сортируем по дате
+    def _date(e):
+        return e.get("dates", {}).get("start", {}).get("localDate", "9999")
+    events = sorted(found.values(), key=_date)
+    lines = ["🎤 Концерты в NL, Бельгии и Германии", ""]
+    for e in events[:20]:
+        flag = e.get("_flag", "")
         name = e.get("name", "")
         date = e.get("dates", {}).get("start", {}).get("localDate", "")
         ven = (e.get("_embedded", {}).get("venues") or [{}])[0]
@@ -109,7 +117,7 @@ async def find_concerts(bot, cid):
         url = e.get("url", "")
         lines.append(f"🎤 {name}")
         if vn or city:
-            lines.append(f"📍 {vn}{', ' + city if city else ''}")
+            lines.append(f"📍 {flag} {vn}{', ' + city if city else ''}")
         if date:
             lines.append(f"📅 {date}")
         pr = e.get("priceRanges")
