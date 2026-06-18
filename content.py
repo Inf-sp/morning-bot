@@ -69,6 +69,25 @@ async def add_fav(bot, cid, text):
     store.add_to_list(config.FAVORITES_KEY, cid, text)
     await bot.send_message(chat_id=cid, text="Добавил в любимое.")
 
+async def send_listen(bot, cid):
+    arts = store.get_list(config.ARTISTS_KEY, cid)
+    anchors = ", ".join(arts[:25]) if arts else "Charli xcx, The xx, Fever Ray, RÜFÜS DU SOL, PLACEBO"
+    await bot.send_message(chat_id=cid, text="Подбираю под твой вкус...")
+    try:
+        data = ai.llm_json(
+            f"Любимые исполнители: {anchors}. Порекомендуй 5 новых артистов/треков в этом вкусе "
+            "(электроника, синтипоп, альт, дрим-поп, дарквейв и близкое). НЕ повторяй уже любимых.\n"
+            'JSON: {"items": [{"title": "Артист - Трек/Альбом", "hook": "1 строка чем похоже"}]}', 900)
+        items = data.get("items", [])
+    except Exception as e:
+        await bot.send_message(chat_id=cid, text=f"Ошибка: {e}"); return
+    lines = ["🎵 Что послушать", ""]
+    for it in items:
+        lines.append(f"• {it.get('title','')}")
+        lines.append(f"  {it.get('hook','')}")
+    from util import send_long
+    await send_long(bot, cid, "\n".join(lines))
+
 async def send_artists(bot, cid):
     arts = store.get_list(config.ARTISTS_KEY, cid)
     txt = "🎤 Мои артисты:\n" + ("\n".join(f"• {a}" for a in arts) if arts else "пусто")
