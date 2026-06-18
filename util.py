@@ -18,3 +18,9 @@ def country_flag(name):
         return out if out else "🏳"
     except Exception:
         return "🏳"
+
+def flag_from_cc(cc):
+    cc = (cc or "").upper()
+    if len(cc) != 2 or not cc.isalpha():
+        return ""
+    return chr(0x1F1E6 + ord(cc[0]) - 65) + chr(0x1F1E6 + ord(cc[1]) - 65)
