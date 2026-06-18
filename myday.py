@@ -60,7 +60,7 @@ async def send_plany(bot, cid):
     temp = cur["temperature_2m"]
     rain = d["precipitation_probability_max"][0] or 0
     wind_ms = d["windspeed_10m_max"][0] or 0
-    icon = weather.weather_icon(cur["weathercode"], temp, rain, wind_ms * 3.6)
+    icon = weather.weather_icon(cur["weathercode"], temp, rain, wind_ms)
     of = wardrobe.build_outfit_focus(weather.weather_block(data, 0, s["city"]), "сегодня")
 
     rotating = random.sample(ROTATING, k=1)
