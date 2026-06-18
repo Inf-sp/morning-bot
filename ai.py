@@ -84,26 +84,31 @@ def _friendly(errs):
         return "⏳ Сейчас слишком много запросов к ИИ - бесплатные лимиты исчерпаны. Подожди минуту и попробуй снова."
     return "⚠️ ИИ временно недоступен. Попробуй ещё раз через пару минут."
 
-def llm(prompt, max_tokens=1200, temperature=0.7):
+DEFAULT_ORDER = ("claude", "openai", "gemini", "openrouter", "groq", "cf")
+LEARN_ORDER = ("openai", "claude", "gemini", "openrouter", "groq", "cf")
+
+def llm(prompt, max_tokens=1200, temperature=0.7, order=None):
+    order = order or DEFAULT_ORDER
+    calls = {
+        "claude": lambda: _gen_claude(prompt, max_tokens),
+        "openai": lambda: _gen_openai(prompt, max_tokens, temperature),
+        "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature),
+        "openrouter": lambda: _gen_openrouter(prompt, max_tokens, temperature),
+        "groq": lambda: _gen_groq(prompt, max_tokens, temperature),
+        "cf": lambda: _gen_cf(prompt, max_tokens),
+    }
     errs = []
-    for name, call in (
-        ("claude", lambda: _gen_claude(prompt, max_tokens)),
-        ("openai", lambda: _gen_openai(prompt, max_tokens, temperature)),
-        ("gemini", lambda: _gen_gemini(prompt, max_tokens, temperature)),
-        ("openrouter", lambda: _gen_openrouter(prompt, max_tokens, temperature)),
-        ("groq", lambda: _gen_groq(prompt, max_tokens, temperature)),
-        ("cf", lambda: _gen_cf(prompt, max_tokens)),
-    ):
+    for name in order:
         try:
-            out = _as_text(call())
+            out = _as_text(calls[name]())
             if out and out.strip():
                 return out
         except Exception as e:
             errs.append(f"{name}:{e}")
     raise Exception(_friendly(errs))
 
-def llm_json(prompt, max_tokens=1200):
-    raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown.", max_tokens, 0.7)
+def llm_json(prompt, max_tokens=1200, order=None):
+    raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown.", max_tokens, 0.7, order)
     raw = re.sub(r"```(json)?", "", raw).strip()
     m = re.search(r"\{.*\}", raw, re.S)
     if m:
