@@ -60,9 +60,9 @@ def _save(key, data):
 def get_settings(chat_id):
     return _load(config.SETTINGS_FILE).get(str(chat_id), config.DEFAULT_CITY)
 
-def set_settings(chat_id, lat, lon, city, country=""):
+def set_settings(chat_id, lat, lon, city, country="", cc=""):
     d = _load(config.SETTINGS_FILE)
-    d[str(chat_id)] = {"lat": lat, "lon": lon, "city": city, "country": country}
+    d[str(chat_id)] = {"lat": lat, "lon": lon, "city": city, "country": country, "cc": cc}
     _save(config.SETTINGS_FILE, d)
 
 def get_level(chat_id, language):
