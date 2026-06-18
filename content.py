@@ -3,18 +3,29 @@ import config
 import store
 import ai
 
-def content_recommend(kind, favorites):
-    fav = ", ".join(favorites) if favorites else "1984, Цветы для Элджернона, Марсианин, умная фантастика"
-    what = "фильмов/сериалов" if kind == "movie" else "книг"
-    prompt = f"""Порекомендуй 5 {what} для вкуса: {fav}. Любит научную фантастику и интеллектуальное.
-JSON: {{"items": [{{"title": "название (год)", "hook": "1 строка интриги, на что похоже", "rating": "X.X"}}]}}
-rating - предполагаемая оценка из 10 на основе вкуса."""
-    return ai.llm_json(prompt, 900)
+def content_recommend(kind, cid):
+    if kind == "movie":
+        seen = store.get_list(config.WATCHLIST_KEY, cid)
+        what = "фильмов или сериалов"
+    else:
+        seen = store.get_list(config.READLIST_KEY, cid)
+        what = "книг"
+    seen_titles = [s if isinstance(s, str) else str(s) for s in seen]
+    avoid = ("\nНЕ рекомендуй то, что уже есть в его списке: " + ", ".join(seen_titles[:60])) if seen_titles else ""
+    anchors = ", ".join(seen_titles[:25]) if seen_titles else "Breaking Bad, Euphoria, Parasite, Call Me by Your Name"
+    prompt = f"""{config.CONTENT_TASTE}
+
+Его уже отмеченные работы (референсы вкуса): {anchors}
+
+Порекомендуй 5 {what}, максимально точно под этот профиль вкуса.{avoid}
+JSON: {{"items": [{{"title": "название (год)", "hook": "1 строка: на что похоже из его референсов и чем зацепит", "rating": "X.X"}}]}}
+rating - предполагаемая оценка из 10 именно под его вкус."""
+    return ai.llm_json(prompt, 1000)
 
 async def send_recos(bot, cid, kind):
-    await bot.send_message(chat_id=cid, text="Подбираю...")
+    await bot.send_message(chat_id=cid, text="Подбираю под твой вкус...")
     try:
-        data = content_recommend(kind, store.get_list(config.FAVORITES_KEY, str(cid)))
+        data = content_recommend(kind, str(cid))
         items = data.get("items", [])
     except Exception as e:
         await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")

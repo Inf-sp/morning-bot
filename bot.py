@@ -316,6 +316,20 @@ async def reload_wardrobe_command(update, context):
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
 
+async def reload_content_command(update, context):
+    import json
+    cid = update.effective_chat.id
+    try:
+        with open("content.json", encoding="utf-8") as f:
+            data = json.load(f)
+        watch = list(data.get("films", [])) + list(data.get("series", [])) + list(data.get("docs", []))
+        read = list(data.get("books", []))
+        store.set_list(config.WATCHLIST_KEY, cid, watch)
+        store.set_list(config.READLIST_KEY, cid, read)
+        await update.message.reply_text(f"Досуг обновлён: {len(watch)} в списке просмотра, {len(read)} в списке чтения.")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
 
 # ---------- Расписание ----------
 async def job_morning(context: ContextTypes.DEFAULT_TYPE):
@@ -377,6 +391,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("notes", notes_command))
     app.add_handler(CommandHandler("reload_wardrobe", reload_wardrobe_command))
+    app.add_handler(CommandHandler("reload_content", reload_content_command))
     app.add_handler(CommandHandler("plany", plany_command))
     app.add_handler(CommandHandler("weather", weather_command))
     app.add_handler(CommandHandler("setcity", weather.setcity_command))

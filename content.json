@@ -1,0 +1,28 @@
+{
+  "books": [
+    "Остров доктора Моро",
+    "Машина времени",
+    "1984",
+    "Цветы для Элджернона",
+    "Марсианин"
+  ],
+  "series": [
+    "Shameless", "The Last of Us", "Game of Thrones", "Breaking Bad", "Stranger Things",
+    "Euphoria", "Sex Education", "The Bear", "Black Mirror", "House of the Dragon",
+    "The White Lotus", "Friends", "Modern Family", "Lost", "The Queen's Gambit",
+    "The Handmaid's Tale", "Westworld", "Sherlock", "Squid Game", "Skam",
+    "Unorthodox", "American Horror Story", "Money Heist", "Anne with an E",
+    "Kaulitz & Kaulitz", "The Crown", "Our Flag Means Death", "Young Royals"
+  ],
+  "films": [
+    "Call Me by Your Name", "Red, White & Royal Blue", "Spoiler Alert", "Heartbeats",
+    "The Substance", "Dune: Part One", "Dune: Part Two", "Bohemian Rhapsody",
+    "Everything Everywhere All at Once", "Saltburn", "Monsters, Inc.", "The Neon Demon",
+    "Mommy", "Parasite", "The Devil Wears Prada", "Poor Things", "Requiem for a Dream",
+    "The Intouchables", "Brokeback Mountain", "Dallas Buyers Club", "I Killed My Mother"
+  ],
+  "docs": [
+    "Planet Earth",
+    "Blue Planet II"
+  ]
+}
