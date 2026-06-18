@@ -16,6 +16,7 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
 
 TZ = ZoneInfo("Europe/Amsterdam")
 

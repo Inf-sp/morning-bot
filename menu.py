@@ -69,6 +69,7 @@ def menu_screen(key):
         ]))
     if key == "m_concerts":
         return ("🎤 Концерты", _ikb([
+            [("🔎 Найти концерты (NL)", "a_concerts_find")],
             [("🎤 Мои артисты", "a_artists"), ("➕ Добавить", "a_artadd")],
             [("⬅️ Назад", "m_content")],
         ]))
