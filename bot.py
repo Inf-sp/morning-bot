@@ -110,6 +110,8 @@ async def answer_callback(update, context):
                 await content.start_add_artist(bot, cid)
             elif act == "concerts_find":
                 await content.find_concerts(bot, cid)
+            elif act == "listen":
+                await content.send_listen(bot, cid)
         except Exception as e:
             await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
         return
@@ -207,24 +209,25 @@ async def text_router(update, context):
     text = update.message.text
     bot = context.bot
 
-    if text == "📋 Мой день":
+    if text == "🧠 Ассистент":
+        await assistant.send_home(bot, cid)
+        return
+    if text == "☀️ Мой день":
         await bot.send_message(chat_id=cid, text="Собираю сводку дня...")
         try:
             await myday.send_plany(bot, cid)
         except Exception as e:
             await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
+        await bot.send_message(chat_id=cid, text="Ещё по погоде 👇", reply_markup=menu.day_weather_kb())
         return
     if text == "👕 Гардероб":
         await wardrobe.send_home(bot, cid)
         return
-    # Нажатие нижнего reply-меню -> открыть инлайн-подменю / ассистента
+    # Нажатие нижнего reply-меню -> открыть инлайн-подменю
     if text in menu.LABEL_TO_KEY:
         key = menu.LABEL_TO_KEY[text]
-        if key == "assist":
-            await assistant.send_home(bot, cid)
-        else:
-            t, kb = menu.menu_screen(key)
-            await bot.send_message(chat_id=cid, text=t, reply_markup=kb)
+        t, kb = menu.menu_screen(key)
+        await bot.send_message(chat_id=cid, text=t, reply_markup=kb)
         return
 
     # Режим добавления одежды (файлом)

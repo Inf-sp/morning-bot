@@ -52,7 +52,7 @@ def state_kb():
         [("🧠 СДВГ-фокус", "as_adhd")],
         [("😌 Проверить состояние", "as_daycheck")],
         [("📈 Карта развития", "as_map")],
-        [("⬅️ В меню", "as_home")],
+        [("⬅️ Назад", "m_close")],
     ])
 
 # универсальная клавиатура под ответом: [Продолжить][⭐][В меню]
@@ -60,7 +60,7 @@ def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry"):
     return _kb([
         [(cont_label, cont_cb)],
         [("⭐ Добавить в избранное", "as_fav")],
-        [("⬅️ В меню", "as_home")],
+        [("⬅️ Назад", "m_close")],
     ])
 
 def _recipe_kb():
@@ -69,11 +69,11 @@ def _recipe_kb():
         [("🔄 Ещё рецепт", "as_food")],
         [("🥕 Не выбрасывать продукты", "as_food_left")],
         [("⭐ Добавить в избранное", "as_fav")],
-        [("⬅️ В меню", "as_home")],
+        [("⬅️ Назад", "m_close")],
     ])
 
 def _back_kb():
-    return _kb([[("⬅️ В меню", "as_home")]])
+    return _kb([[("⬅️ Назад", "m_close")]])
 
 
 async def _send(bot, cid, text, kb=None):
@@ -86,8 +86,7 @@ async def _send(bot, cid, text, kb=None):
 
 
 async def send_home(bot, cid):
-    text, kb = HOME_TEXT, home_kb()
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=HOME_TEXT)
 
 send_welcome = send_home
 
