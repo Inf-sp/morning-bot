@@ -133,6 +133,8 @@ async def handle_callback(bot, cid, q, data):
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     cache = _day_cache.get(str(cid), {})
     ex = cache.get("ex", {})
+    if data == "md_worrycheck":
+        await show_worry_check(bot, cid); return
     if data == "md_idea":
         import assistant
         await bot.send_message(chat_id=cid, text="Думаю...")
@@ -207,14 +209,26 @@ def diary_reflect(entry):
 
 async def send_daycheck(bot, cid):
     cid = str(cid)
+    store.challenge_state.pop(cid, None)   # фикс: ответ не уйдёт в Обратный перевод
+    store.game_state.pop(cid, None)
     worries = store.get_list(config.WORRIES_KEY, cid)
-    pending = [w for w in worries if w.get("status") == "pending"]
-    if not pending:
-        store.pending_input[cid] = "worry"
-        await bot.send_message(chat_id=cid,
-            text="🌙 Дим, как вечер?\n\nЧто сегодня шумело в голове? Напиши тревоги одним сообщением, каждую с новой строки - проверим, что реально случилось.")
-        return
-    await show_worry_check(bot, cid)
+    lines = ["😌 <b>Дневник тревоги</b>", "",
+             "Сюда выгружай всё, что крутится в голове. Не анализируй - просто запиши.",
+             "Каждую тревогу с новой строки. Вечером проверим, что было фактами, а что шумом.", ""]
+    if worries:
+        lines.append("<b>Тревоги за сегодня:</b>")
+        for w in worries:
+            mark = {"real": "📌", "let_go": "🧹"}.get(w.get("status"), "•")
+            lines.append(f"{mark} {esc(w['text'])}")
+        lines.append("")
+        lines.append("Напиши новые мысли сообщением или разбери текущие 👇")
+    else:
+        lines.append("Пока пусто. Напиши тревоги одним сообщением.")
+    store.pending_input[cid] = "worry"
+    rows = [[InlineKeyboardButton("🧠 Разобрать тревоги", callback_data="md_worrycheck")]] if worries else []
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_close")])
+    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
+                           reply_markup=InlineKeyboardMarkup(rows))
 
 async def show_worry_check(bot, cid):
     cid = str(cid)
@@ -232,7 +246,7 @@ async def show_worry_check(bot, cid):
         if w.get("status") == "pending":
             rows.append([InlineKeyboardButton(f"📌 Случилось", callback_data=f"worry_real_{i}"),
                          InlineKeyboardButton(f"🧹 Отпустить", callback_data=f"worry_let_{i}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_home")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_close")])
     if resolved == total and total:
         lines += ["", "Готово. Чем больше отпускаешь шума - тем чище голова."]
     await bot.send_message(chat_id=cid, text="\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))
@@ -250,9 +264,11 @@ async def worry_mark(bot, cid, i, status):
         await show_worry_check(bot, cid)
 
 async def save_worries(bot, cid, text):
-    items = [{"text": w.strip(), "status": "pending"} for w in text.split("\n") if w.strip()]
-    store.set_list(config.WORRIES_KEY, cid, items)
-    await bot.send_message(chat_id=cid, text=f"Записал тревог: {len(items)}. Вечером проверим, что реально случилось.")
+    cid = str(cid)
+    new = [{"text": w.strip(), "status": "pending"} for w in text.split("\n") if w.strip()]
+    existing = store.get_list(config.WORRIES_KEY, cid)
+    store.set_list(config.WORRIES_KEY, cid, existing + new)
+    await bot.send_message(chat_id=cid, text=f"📝 Записал в дневник тревоги: +{len(new)}. Вечером проверим, что реально случилось.")
 
 async def save_diary(bot, cid, text):
     store.add_to_list(config.DIARY_KEY, cid, {"date": datetime.now(TZ).strftime("%d.%m"), "text": text})

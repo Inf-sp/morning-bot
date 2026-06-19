@@ -33,6 +33,8 @@ async def send_recos(bot, cid, kind):
         await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
         return
     store.last_recos[str(cid)] = {"kind": kind, "items": [it.get("title", "") for it in items]}
+    store.last_source[str(cid)] = "Досуг · " + ("Что посмотреть" if kind=="movie" else "Что почитать")
+    store.last_answer[str(cid)] = "\n".join(f"{it.get('title','')} - {it.get('hook','')}" for it in items)
     head = "🎬 Что посмотреть" if kind == "movie" else "📖 Что почитать"
     lines = [head, ""]
     for it in items:
@@ -46,12 +48,16 @@ async def send_recos(bot, cid, kind):
     await bot.send_message(chat_id=cid, text="\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))
 
 async def add_reco(bot, cid, i):
+    from datetime import datetime
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         key = config.WATCHLIST_KEY if rec["kind"] == "movie" else config.READLIST_KEY
+        folder = "Что посмотреть" if rec["kind"] == "movie" else "Что почитать"
         store.add_to_list(key, cid, title)
-        await bot.send_message(chat_id=cid, text=f"Добавил в список: {title}")
+        store.add_to_list(config.NOTES_KEY, cid,
+                          {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": folder})
+        await bot.send_message(chat_id=cid, text=f"⭐ В закладках «{folder}»: {title}")
 
 async def send_watchlist(bot, cid):
     lst = store.get_list(config.WATCHLIST_KEY, cid)
@@ -83,12 +89,24 @@ async def send_listen(bot, cid):
         items = data.get("items", [])
     except Exception as e:
         await bot.send_message(chat_id=cid, text=f"Ошибка: {e}"); return
-    lines = ["🎵 Что послушать", ""]
+    store.last_recos[str(cid)] = {"kind": "listen", "items": [it.get("title", "") for it in items]}
+    lines = ["🎵 <b>Что послушать</b>", ""]
     for it in items:
-        lines.append(f"• {it.get('title','')}")
-        lines.append(f"  {it.get('hook','')}")
-    from util import send_long
-    await send_long(bot, cid, "\n".join(lines))
+        lines.append(f"• {esc(it.get('title',''))}")
+        lines.append(f"  {esc(it.get('hook',''))}")
+    rows = [[InlineKeyboardButton(f"⭐ В закладки: {it.get('title','')[:26]}", callback_data=f"listen_{i}")]
+            for i, it in enumerate(items)]
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
+    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+async def add_listen(bot, cid, i):
+    from datetime import datetime
+    rec = store.last_recos.get(str(cid))
+    if rec and rec.get("kind") == "listen" and i < len(rec["items"]):
+        title = rec["items"][i]
+        store.add_to_list(config.NOTES_KEY, cid,
+                          {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": "Что послушать"})
+        await bot.send_message(chat_id=cid, text=f"⭐ В закладках «Что послушать»: {title}")
 
 async def send_artists(bot, cid):
     arts = store.get_list(config.ARTISTS_KEY, cid)
@@ -119,13 +137,28 @@ async def find_concerts(bot, cid, mode="home"):
 
     await bot.send_message(chat_id=cid, text=f"Ищу концерты в {cname}, ~15-30 сек...")
     import requests
+    from util import _MONTHS
     found = {}
+    seen_pairs = set()
     for a in artists[:40]:
         try:
             r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json",
                 params={"apikey": config.TICKETMASTER_API_KEY, "keyword": a, "countryCode": cc,
-                        "classificationName": "music", "size": 2, "sort": "date,asc"}, timeout=15)
+                        "classificationName": "music", "size": 3, "sort": "date,asc"}, timeout=15)
             for e in r.json().get("_embedded", {}).get("events", []):
+                # артист действительно в составе (а не трибьют/«песни ...»)
+                attractions = [att.get("name", "").lower()
+                               for att in (e.get("_embedded", {}).get("attractions") or [])]
+                al = a.lower()
+                if attractions and not any(al in nm or nm in al for nm in attractions):
+                    continue
+                if not attractions and al not in e.get("name", "").lower():
+                    continue
+                date = e.get("dates", {}).get("start", {}).get("localDate", "")
+                pair = (al, date)
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
                 e["_artist"] = a
                 found[e.get("id")] = e
         except Exception:
@@ -133,9 +166,10 @@ async def find_concerts(bot, cid, mode="home"):
 
     rows = []
     if mode == "home":
-        rows.append([InlineKeyboardButton("🇧🇪 Бельгия", callback_data="a_concerts_be"),
-                     InlineKeyboardButton("🇩🇪 Германия", callback_data="a_concerts_de")])
-    rows.append([InlineKeyboardButton("⭐ Добавить в избранное", callback_data="as_fav")])
+        rows.append([InlineKeyboardButton("🇧🇪 Бельгия", callback_data="a_concerts_be")])
+        rows.append([InlineKeyboardButton("🇩🇪 Германия", callback_data="a_concerts_de")])
+    else:
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="a_concerts_find")])
     rows.append([InlineKeyboardButton("⬅️ Меню", callback_data="m_leisure")])
     kb = InlineKeyboardMarkup(rows)
 
@@ -147,6 +181,13 @@ async def find_concerts(bot, cid, mode="home"):
             parse_mode="HTML", reply_markup=kb)
         return
 
+    def _fmt_date(ds):
+        try:
+            y, m, dd = ds.split("-")
+            return f"{int(dd)} {_MONTHS[int(m)-1]} {y}"
+        except Exception:
+            return ds
+
     events = sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate", "9999"))
     lines = [f"🎤 <b>Концерты в {esc(cname)}</b>", ""]
     for e in events[:20]:
@@ -157,17 +198,18 @@ async def find_concerts(bot, cid, mode="home"):
         vn = ven.get("name", "")
         city = (ven.get("city") or {}).get("name", "")
         url = e.get("url", "")
-        lines.append(f"🎤 <b>{esc(artist)}</b>")
+        lines.append(f"<b>{esc(artist)}</b>")
         if name and name.lower() != artist.lower():
             lines.append(esc(name))
         if vn or city:
             lines.append(f"📍 {flag} {esc(vn)}{', ' + esc(city) if city else ''}")
         if date:
-            lines.append(f"📅 {date}")
+            lines.append(f"📅 {_fmt_date(date)}")
         if url:
             lines.append(f"🎟 {url}")
         lines.append("")
     txt = "\n".join(lines)
+    store.last_source[str(cid)] = "Досуг · Концерты"
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", txt)
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 

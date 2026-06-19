@@ -161,6 +161,12 @@ async def answer_callback(update, context):
                 await content.find_concerts(bot, cid, "de")
             elif act == "listen":
                 await content.send_listen(bot, cid)
+            elif act == "food_breakfast":
+                await assistant.send_recipe(bot, cid, "завтрак")
+            elif act == "food_lunch":
+                await assistant.send_recipe(bot, cid, "обед")
+            elif act == "food_dinner":
+                await assistant.send_recipe(bot, cid, "ужин")
         except Exception as e:
             await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
         return
@@ -235,6 +241,9 @@ async def answer_callback(update, context):
     # Развлечения / путешествия
     if data.startswith("reco_"):
         await content.add_reco(bot, cid, int(data.split("_")[1]))
+        return
+    if data.startswith("listen_"):
+        await content.add_listen(bot, cid, int(data.split("_")[1]))
         return
     if data.startswith("facts_"):
         await travel.send_facts(bot, cid, int(data.split("_")[1]))
