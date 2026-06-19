@@ -17,7 +17,7 @@ def fetch_weather(lat, lon, days=2):
     r = requests.get("https://api.open-meteo.com/v1/forecast", params={
         "latitude": lat, "longitude": lon,
         "current": "temperature_2m,apparent_temperature,weathercode",
-        "hourly": "precipitation_probability,windspeed_10m",
+        "hourly": "precipitation_probability,windspeed_10m,temperature_2m",
         "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode,windspeed_10m_max",
         "timezone": "Europe/Amsterdam", "wind_speed_unit": "ms", "forecast_days": max(days, 2)
     }, timeout=20)
@@ -144,6 +144,39 @@ async def send_weather(bot, cid, mode="today"):
     data = fetch_weather(s["lat"], s["lon"], 7)
     d = data["daily"]
     now = datetime.now(TZ)
+
+    if mode == "full":
+        dt = now
+        header = f"Полный прогноз на сегодня • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} • {s['city']}"
+        try:
+            hours = data["hourly"]["time"]
+            temps = data["hourly"].get("temperature_2m") or []
+            probs = data["hourly"]["precipitation_probability"]
+            winds = data["hourly"]["windspeed_10m"]
+        except Exception:
+            temps = probs = winds = []
+        day_str = d["time"][0]
+        L = [f"<b>{esc(header)}</b>", ""]
+        parts = [("Утром", 6, 12), ("Днём", 12, 18), ("Вечером", 18, 24)]
+        for label, h1, h2 in parts:
+            t_vals, p_vals, w_vals, code_v = [], [], [], 1
+            for i, ts in enumerate(hours):
+                if ts.startswith(day_str) and h1 <= int(ts[11:13]) < h2:
+                    if i < len(temps): t_vals.append(temps[i] or 0)
+                    if i < len(probs): p_vals.append(probs[i] or 0)
+                    if i < len(winds): w_vals.append(winds[i] or 0)
+            if not t_vals:
+                continue
+            tmx = max(t_vals); rn = max(p_vals) if p_vals else 0; wd = max(w_vals) if w_vals else 0
+            icon = weather_icon(d["weathercode"][0], tmx, rn, wd)
+            wemoji, wword = wind_scale(wd)
+            wind_str = f"{wemoji} {wword} {wd:.0f} м/с" if wd >= 8 else f"💨 Ветер {wd:.0f} м/с"
+            L += [f"<b>{label}:</b>", f"{icon} До {tmx:+.0f}°C • Дождь {rn:.0f}% • {wind_str}", ""]
+        fact = _world_fact()
+        if fact:
+            L.append(esc(fact))
+        await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML")
+        return
 
     if mode in ("today", "tomorrow"):
         day = 0 if mode == "today" else 1

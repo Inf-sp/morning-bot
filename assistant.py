@@ -79,6 +79,7 @@ def _back_kb():
 async def _send(bot, cid, text, kb=None):
     text = (text or "").strip() or "Пусто, попробуй ещё раз."
     store.last_answer[str(cid)] = text
+    store.last_source.setdefault(str(cid), "Ассистент")
     chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
     for c in chunks[:-1]:
         await bot.send_message(chat_id=cid, text=c)
@@ -112,6 +113,7 @@ async def send_recipe(bot, cid, constraint="обычное блюдо"):
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe", constraint)
     card = _recipe_card(d)
+    store.last_source[str(cid)] = "Питание · Рецепт"
     store.last_answer[str(cid)] = card
     await bot.send_message(chat_id=cid, text=card, reply_markup=_recipe_kb())
 
@@ -230,20 +232,73 @@ async def save_fav(bot, cid):
     if not txt:
         await bot.send_message(chat_id=cid, text="Нечего сохранять."); return
     short = _shorten(txt)
-    store.add_to_list(config.NOTES_KEY, cid, {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": short})
+    source = store.last_source.get(str(cid), "Прочее")
+    store.add_to_list(config.NOTES_KEY, cid, {"date": datetime.now(config.TZ).strftime("%d.%m"),
+                                              "text": short, "source": source})
     await bot.send_message(chat_id=cid, text="⭐ Сохранено в избранное.")
+
+def _top_cat(source):
+    return (source or "Прочее").split(" · ")[0]
+
+async def export_notes(bot, cid):
+    import io
+    notes = store.get_list(config.NOTES_KEY, cid)
+    if not notes:
+        await bot.send_message(chat_id=cid, text="Избранное пусто."); return
+    by_cat = {}
+    for n in notes:
+        src = n.get("source", "Прочее") if isinstance(n, dict) else "Прочее"
+        by_cat.setdefault(_top_cat(src), []).append(n)
+    lines = ["Моё избранное (DM)", ""]
+    for cat, items in by_cat.items():
+        lines.append(f"== {cat} ==")
+        for n in items:
+            t = n.get("text", "") if isinstance(n, dict) else str(n)
+            d = n.get("date", "") if isinstance(n, dict) else ""
+            lines.append(f"- [{d}] {t.strip()}")
+        lines.append("")
+    buf = io.BytesIO("\n".join(lines).encode("utf-8"))
+    buf.name = "izbrannoe.txt"
+    await bot.send_document(chat_id=cid, document=buf, filename="izbrannoe.txt",
+                            caption="📤 Готово. Текст можно вставить в Заметки/Напоминания Apple.")
 
 async def send_notes(bot, cid):
     notes = store.get_list(config.NOTES_KEY, cid)
     if not notes:
         await bot.send_message(chat_id=cid, text="⭐ Избранное пусто. Жми «⭐ Добавить в избранное» под ответами."); return
-    rows, lines = [], ["⭐ Избранное"]
-    for i, n in enumerate(notes[-20:]):
+    cats = []
+    for n in notes:
+        c = _top_cat(n.get("source", "Прочее") if isinstance(n, dict) else "Прочее")
+        if c not in cats:
+            cats.append(c)
+    rows = [[InlineKeyboardButton(f"📂 {c} ({sum(1 for n in notes if _top_cat(n.get('source','Прочее') if isinstance(n,dict) else 'Прочее')==c)})",
+                                  callback_data=f"as_notecat_{i}")] for i, c in enumerate(cats)]
+    rows.append([InlineKeyboardButton("📤 Экспорт в файл", callback_data="as_export")])
+    await bot.send_message(chat_id=cid, text="⭐ Избранное - выбери категорию:", reply_markup=InlineKeyboardMarkup(rows))
+
+async def send_notes_cat(bot, cid, cat_index):
+    notes = store.get_list(config.NOTES_KEY, cid)
+    cats = []
+    for n in notes:
+        c = _top_cat(n.get("source", "Прочее") if isinstance(n, dict) else "Прочее")
+        if c not in cats:
+            cats.append(c)
+    if cat_index >= len(cats):
+        await send_notes(bot, cid); return
+    cat = cats[cat_index]
+    lines = [f"⭐ <b>{cat}</b>", ""]
+    rows = []
+    for i, n in enumerate(notes):
+        src = n.get("source", "Прочее") if isinstance(n, dict) else "Прочее"
+        if _top_cat(src) != cat:
+            continue
         t = n.get("text", "") if isinstance(n, dict) else str(n)
         d = n.get("date", "") if isinstance(n, dict) else ""
-        lines.append(f"{i+1}. {d} {t.strip()}")
-        rows.append([InlineKeyboardButton(f"❌ {i+1}", callback_data=f"as_notedel_{i}")])
-    await bot.send_message(chat_id=cid, text="\n\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))
+        sub = (" · " + src.split(" · ", 1)[1]) if " · " in src else ""
+        lines.append(f"• {d}{sub}: {t.strip()}")
+        rows.append([InlineKeyboardButton(f"❌ {d} {t.strip()[:24]}", callback_data=f"as_notedel_{i}")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
+    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
 
 _ONESHOT = {
@@ -287,6 +342,10 @@ async def handle_callback(bot, cid, q, data):
         await save_fav(bot, cid); return
     if data == "as_notes":
         await send_notes(bot, cid); return
+    if data == "as_notecat_export" or data == "as_export":
+        await export_notes(bot, cid); return
+    if data.startswith("as_notecat_"):
+        await send_notes_cat(bot, cid, int(data.split("_")[-1])); return
     if data.startswith("as_notedel_"):
         i = int(data.split("_")[-1])
         notes = store.get_list(config.NOTES_KEY, cid)
@@ -329,8 +388,12 @@ async def handle_callback(bot, cid, q, data):
 
 
 # ---------- свободный чат ----------
+_MED_WORDS = ("боль", "болит", "температур", "симптом", "врач", "таблет", "лекарств", "горло",
+              "кашель", "тошнот", "давлен", "head", "сыпь", "простуд", "грипп", "живот")
+
 async def chat_reply(bot, cid, text):
     store.last_action[str(cid)] = None
+    store.last_source[str(cid)] = "Ассистент"
     await bot.send_chat_action(chat_id=cid, action="typing")
     hist = store.chat_history.get(str(cid), [])
     hist.append({"role": "user", "content": text})
@@ -341,7 +404,13 @@ async def chat_reply(bot, cid, text):
         await bot.send_message(chat_id=cid, text=str(e)); return
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
-    await _send(bot, cid, answer)
+    await bot.send_message(chat_id=cid, text=(answer or "").strip() or "Пусто, попробуй ещё раз.")
+    store.last_answer[str(cid)] = answer
+    if any(w in text.lower() for w in _MED_WORDS):
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🩺 Вопрос врачу", callback_data="as_doctor")]])
+        await bot.send_message(chat_id=cid,
+            text="🩺 Похоже на вопрос о здоровье. В разделе 🧠 Баланс → «Вопрос врачу» дам подробный структурированный разбор.",
+            reply_markup=kb)
 
 
 # ---------- «Продолжить» / «Ещё раз» ----------
