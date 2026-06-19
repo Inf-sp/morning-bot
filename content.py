@@ -19,41 +19,48 @@ def content_recommend(kind, cid):
 
 Его уже отмеченные работы (референсы вкуса): {anchors}
 
-Порекомендуй 5 {what}, максимально точно под этот профиль вкуса.{avoid}
-JSON: {{"items": [{{"title": "название (год)", "hook": "1 строка: на что похоже из его референсов и чем зацепит", "rating": "X.X"}}]}}
-rating - предполагаемая оценка из 10 именно под его вкус."""
+Порекомендуй РОВНО 5 {what}, максимально точно под этот профиль вкуса.{avoid}
+JSON: {{"items": [{{"title": "название (год)", "title_en": "оригинальное/английское название", "hook": "1 строка: на что похоже из его референсов и чем зацепит"}}]}}"""
     return ai.llm_json(prompt, 1000)
 
-def _tmdb_lookup(title):
+_TMDB_GENRES = {28:"боевик",12:"приключения",16:"анимация",35:"комедия",80:"криминал",99:"документальный",
+    18:"драма",10751:"семейный",14:"фэнтези",36:"история",27:"ужасы",10402:"музыка",9648:"детектив",
+    10749:"мелодрама",878:"фантастика",10770:"телефильм",53:"триллер",10752:"военный",37:"вестерн",
+    10759:"боевик",10762:"детское",10763:"новости",10764:"реалити",10765:"фантастика",10766:"мыло",
+    10767:"ток-шоу",10768:"военное"}
+
+def _tmdb_lookup(title, title_en=""):
     if not config.TMDB_API_KEY:
         return None
     import requests
-    try:
-        r = requests.get("https://api.themoviedb.org/3/search/multi",
-            params={"api_key": config.TMDB_API_KEY, "query": title, "language": "ru-RU",
-                    "include_adult": "false"}, timeout=12)
-        results = [x for x in r.json().get("results", []) if x.get("media_type") in ("movie", "tv")]
-        if not results:
-            return None
-        x = results[0]
-        name = x.get("title") or x.get("name") or title
-        date = x.get("release_date") or x.get("first_air_date") or ""
-        year = date[:4] if date else ""
-        rating = x.get("vote_average") or 0
-        poster = x.get("poster_path")
-        kind = "movie" if x.get("media_type") == "movie" else "tv"
-        return {"name": name, "year": year, "rating": rating,
-                "poster": (f"https://image.tmdb.org/t/p/w500{poster}" if poster else None),
-                "url": f"https://www.themoviedb.org/{kind}/{x.get('id')}",
-                "overview": x.get("overview", "")}
-    except Exception:
-        return None
+    for q in [t for t in (title_en, title) if t]:
+        try:
+            r = requests.get("https://api.themoviedb.org/3/search/multi",
+                params={"api_key": config.TMDB_API_KEY, "query": q, "include_adult": "false"}, timeout=12)
+            results = [x for x in r.json().get("results", []) if x.get("media_type") in ("movie", "tv")]
+            if not results:
+                continue
+            x = results[0]
+            date = x.get("release_date") or x.get("first_air_date") or ""
+            kind = "movie" if x.get("media_type") == "movie" else "tv"
+            poster = x.get("poster_path")
+            genres = ", ".join(_TMDB_GENRES.get(g, "") for g in (x.get("genre_ids") or [])[:3] if _TMDB_GENRES.get(g))
+            return {"name": x.get("title") or x.get("name") or q,
+                    "name_en": x.get("original_title") or x.get("original_name") or "",
+                    "year": date[:4] if date else "", "rating": x.get("vote_average") or 0,
+                    "genres": genres,
+                    "poster": (f"https://image.tmdb.org/t/p/w500{poster}" if poster else None),
+                    "url": f"https://www.themoviedb.org/{kind}/{x.get('id')}",
+                    "overview": x.get("overview", "")}
+        except Exception:
+            continue
+    return None
 
 async def send_recos(bot, cid, kind):
     await bot.send_message(chat_id=cid, text="Подбираю под твой вкус...")
     try:
         data = content_recommend(kind, str(cid))
-        items = data.get("items", [])
+        items = data.get("items", [])[:5]
     except Exception as e:
         await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
         return
@@ -65,10 +72,16 @@ async def send_recos(bot, cid, kind):
     if kind == "movie" and config.TMDB_API_KEY:
         await bot.send_message(chat_id=cid, text="🎬 <b>Что посмотреть</b>", parse_mode="HTML")
         for i, it in enumerate(items):
-            tm = _tmdb_lookup(it.get("title", ""))
+            tm = _tmdb_lookup(it.get("title", ""), it.get("title_en", ""))
             title = (tm["name"] if tm else it.get("title", ""))
             year = f" ({tm['year']})" if tm and tm["year"] else ""
             cap = [f"🎬 <b>{esc(title)}{year}</b>"]
+            if tm and tm.get("name_en") and tm["name_en"].lower() != title.lower():
+                cap.append(f"🇬🇧 {esc(tm['name_en'])}")
+            elif it.get("title_en"):
+                cap.append(f"🇬🇧 {esc(it['title_en'])}")
+            if tm and tm.get("genres"):
+                cap.append(f"🎭 {esc(tm['genres'])}")
             if tm and tm["rating"]:
                 cap.append(f"⭐ {tm['rating']:.1f}/10 TMDb")
             cap.append(esc(it.get("hook", "")))
@@ -76,23 +89,25 @@ async def send_recos(bot, cid, kind):
                 cap.append(tm["url"])
             kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"{label}: {title[:26]}", callback_data=f"reco_{i}")]])
             text = "\n".join(cap)
+            sent = False
             if tm and tm.get("poster"):
                 try:
                     await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=text, parse_mode="HTML", reply_markup=kb)
-                    continue
+                    sent = True
                 except Exception:
-                    pass
-            await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
-        await bot.send_message(chat_id=cid, text="Ещё 👇",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")]]))
+                    sent = False
+            if not sent:
+                await bot.send_message(chat_id=cid, text=text, parse_mode="HTML",
+                                       reply_markup=kb, disable_web_page_preview=False)
         return
 
     head = "🎬 Что посмотреть" if kind == "movie" else "📖 Что почитать"
     lines = [head, ""]
     for it in items:
         lines.append(f"• {it.get('title','')}")
+        if it.get("title_en"):
+            lines.append(f"  🇬🇧 {it['title_en']}")
         lines.append(f"  {it.get('hook','')}")
-        lines.append(f"  ⭐ ~{it.get('rating','')}/10")
     rows = [[InlineKeyboardButton(f"{label}: {it.get('title','')[:28]}", callback_data=f"reco_{i}")]
             for i, it in enumerate(items)]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])

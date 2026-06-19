@@ -27,14 +27,13 @@ async def start(update, context):
         "<b>Что я умею:</b>\n"
         "☀️ <b>Мой день</b> - погода, образ, слово дня, идея, факты, цитата\n"
         "👕 <b>Гардероб</b> - луки по погоде, разбор шкафа, проверка покупок\n"
-        "🧠 <b>Баланс</b> - врач, мотивация, СДВГ-фокус, дневник тревог, рецепты\n"
+        "🧠 <b>Баланс</b> - врач, мотивация, рецепты\n"
         "📚 <b>Обучение</b> - нидерландский/английский, игра, словарь, экзамен\n"
         "🍿 <b>Досуг</b> - фильмы, книги, музыка, концерты, путешествия\n\n"
         "💬 Любой вопрос можно просто написать в чат - отвечу.\n\n"
         "<b>Команды:</b>\n"
         "/start - меню и описание\n"
-        "/setup - настройки (язык, город, уведомления, параметры шкафа)\n"
-        "/notes - твоё избранное\n\n"
+        "/setup - настройки (язык, город, уведомления, параметры шкафа)\n\n"
         "⭐ Сохранять можно кнопкой «Добавить в избранное» под ответами. "
         "Потом всё найдёшь в /notes по категориям (Идеи, Цитаты, События...)."
     )
@@ -113,13 +112,14 @@ async def answer_callback(update, context):
                 await learning.send_proverb(bot, cid, "английский")
             elif act == "dict":
                 await learning.send_dict(bot, cid)
-            elif act == "dictadd":
-                store.pending_input[cid] = "dictadd"
-                await bot.send_message(chat_id=cid, text="📖 Напиши слово или фразу - добавлю в словарь с переводом.")
+            elif act == "dictadd_nl":
+                store.pending_input[cid] = "dictadd_nl"
+                await bot.send_message(chat_id=cid, text="🇳🇱 Напиши нидерландское слово или фразу - добавлю с переводом.")
+            elif act == "dictadd_en":
+                store.pending_input[cid] = "dictadd_en"
+                await bot.send_message(chat_id=cid, text="🇬🇧 Напиши английское слово или фразу - добавлю с переводом.")
             elif act == "addword":
                 await learning.add_word(bot, cid)
-            elif act == "exam":
-                await learning.send_exam(bot, cid)
             elif act == "game":
                 await learning.game_start(bot, cid)
             elif act == "levels":
@@ -190,9 +190,9 @@ async def answer_callback(update, context):
         elif what == "tr_en":
             await learning.do_translate(bot, cid, "английский")
         elif what == "gram_nl":
-            await learning.send_grammar(bot, cid, "нидерландский", "🇳🇱")
+            await learning.again_grammar(bot, cid, "нидерландский")
         elif what == "gram_en":
-            await learning.send_grammar(bot, cid, "английский", "🇬🇧")
+            await learning.again_grammar(bot, cid, "английский")
         return
     # Игра
     if data.startswith("gamelang_"):
@@ -219,21 +219,25 @@ async def answer_callback(update, context):
         return
     if data == "game_hint":
         st = store.game_state.get(cid)
+        ui = learning.GAME_UI.get(store.game_config.get(cid, {}).get("lang", "русский"), learning.GAME_UI["русский"])
         if st and st.get("hint"):
-            await q.message.reply_text(f"💡 {st['hint']}\n\nНапиши ответ или нажми «Ответ».")
+            from util import esc
+            await q.message.reply_text(f"💡 <b>{esc(st['hint'])}</b>\n\n{ui['give']}", parse_mode="HTML")
         else:
             await q.message.reply_text("Подсказок больше нет.")
         return
     if data == "game_reveal":
         st = store.game_state.pop(cid, None)
+        ui = learning.GAME_UI.get(store.game_config.get(cid, {}).get("lang", "русский"), learning.GAME_UI["русский"])
         if st:
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             from util import esc
-            L = [f"👁 Это {st.get('answer','')}", "", f"💬 {st.get('quote','')}"]
-            if st.get("quote_ru"):
-                L.append(f"<i>{esc(st['quote_ru'])}</i>")
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🕵️ Загадать ещё", callback_data="game_again")]])
-            await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
+            body = st.get("explain") or st.get("quote", "")
+            txt = f"{ui['found']}\n\n{ui['answer']}: <b>{esc(st.get('answer',''))}</b>"
+            if body:
+                txt += f"\n\n{esc(body)}"
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton(ui["again"], callback_data="game_again")]])
+            await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
         return
     if data == "game_change":
         await learning.game_start(bot, cid)
@@ -252,6 +256,12 @@ async def answer_callback(update, context):
         await travel.del_country(bot, cid, int(data.split("_")[1]))
         return
     # Проверка дня
+    if data == "worry_clearall":
+        await myday.worry_clear_all(bot, cid)
+        return
+    if data.startswith("worry_del_"):
+        await myday.worry_delete(bot, cid, int(data.split("_")[-1]))
+        return
     if data.startswith("worry_"):
         _, action, idx = data.split("_")
         await myday.worry_mark(bot, cid, int(idx), "real" if action == "real" else "let_go")
@@ -324,8 +334,10 @@ async def text_router(update, context):
             await wardrobe.check_purchase(bot, cid, text); return
         if kind == "setcity":
             await weather.set_city_text(bot, cid, text); return
-        if kind == "dictadd":
-            await learning.add_word_manual(bot, cid, text); return
+        if kind == "dictadd_nl":
+            await learning.add_word_manual(bot, cid, text, "nl"); return
+        if kind == "dictadd_en":
+            await learning.add_word_manual(bot, cid, text, "en"); return
         if kind == "bodyinput":
             settings.set_(cid, "body", text)
             await bot.send_message(chat_id=cid, text="Готово, параметры сохранены.")
@@ -449,7 +461,15 @@ async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID or not settings.notif_on(CHAT_ID, "checkin_eve"):
         return
     try:
-        await myday.send_daycheck(context.bot, CHAT_ID)
+        await myday.send_evening_review(context.bot, CHAT_ID)
+    except Exception:
+        pass
+
+async def job_vocab(context: ContextTypes.DEFAULT_TYPE):
+    if not CHAT_ID or not settings.notif_on(CHAT_ID, "vocab"):
+        return
+    try:
+        await learning.send_vocab_cards(context.bot, CHAT_ID)
     except Exception:
         pass
 
@@ -526,6 +546,7 @@ def main():
     jq.run_daily(job_checkin_day, time=datetime.strptime("14:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
     jq.run_daily(job_checkin_evening, time=datetime.strptime("20:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
     jq.run_daily(job_weekly, time=datetime.strptime("19:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=(6,))
+    jq.run_daily(job_vocab, time=datetime.strptime("12:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=(6,))
 
     print("Bot started")
     app.run_polling(drop_pending_updates=True)

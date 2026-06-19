@@ -230,6 +230,50 @@ async def send_daycheck(bot, cid):
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 
+async def send_evening_review(bot, cid):
+    cid = str(cid)
+    store.challenge_state.pop(cid, None)
+    store.game_state.pop(cid, None)
+    worries = store.get_list(config.WORRIES_KEY, cid)
+    if not worries:
+        await bot.send_message(chat_id=cid, parse_mode="HTML",
+            text="🥸 <b>Вечерний разбор</b>\n\nСегодня тревог не записано. Если что-то крутится - выгрузи сейчас, каждую с новой строки.")
+        store.pending_input[cid] = "worry"
+        return
+    wlist = "\n".join(f"- {w['text']}" for w in worries)
+    try:
+        analysis = ai.llm(
+            "Ты спокойный психолог. Разбери список тревог человека с СДВГ кратко и по-доброму. "
+            "Для каждой - одна строка: что из этого факт, а что тревожный шум, и мягкий вывод. Без воды, тепло.\n\n"
+            f"Тревоги:\n{wlist}", 700, 0.6)
+    except Exception:
+        analysis = ""
+    L = ["🥸 <b>Вечерний разбор</b>", "",
+         "Сейчас не анализируй - просто посмотри, что крутилось за день.", "",
+         "<b>Что меня сегодня напрягло:</b>"]
+    rows = []
+    for i, w in enumerate(worries):
+        L.append(f"• {esc(w['text'])}")
+        rows.append([InlineKeyboardButton(f"🗑 {w['text'][:24]}", callback_data=f"worry_del_{i}")])
+    if analysis:
+        L += ["", "👓 <b>Разбор:</b>", esc(analysis)]
+    rows.append([InlineKeyboardButton("🧹 Очистить все тревоги", callback_data="worry_clearall")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_close")])
+    from telegram import InlineKeyboardMarkup
+    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+async def worry_delete(bot, cid, i):
+    cid = str(cid)
+    worries = store.get_list(config.WORRIES_KEY, cid)
+    if i < len(worries):
+        worries.pop(i)
+        store.set_list(config.WORRIES_KEY, cid, worries)
+    await send_evening_review(bot, cid)
+
+async def worry_clear_all(bot, cid):
+    store.set_list(config.WORRIES_KEY, str(cid), [])
+    await bot.send_message(chat_id=cid, text="🧹 Дневник тревог очищен. Лёгкой ночи.")
+
 async def show_worry_check(bot, cid):
     cid = str(cid)
     worries = store.get_list(config.WORRIES_KEY, cid)
