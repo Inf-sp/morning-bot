@@ -24,6 +24,31 @@ JSON: {{"items": [{{"title": "название (год)", "hook": "1 строк�
 rating - предполагаемая оценка из 10 именно под его вкус."""
     return ai.llm_json(prompt, 1000)
 
+def _tmdb_lookup(title):
+    if not config.TMDB_API_KEY:
+        return None
+    import requests
+    try:
+        r = requests.get("https://api.themoviedb.org/3/search/multi",
+            params={"api_key": config.TMDB_API_KEY, "query": title, "language": "ru-RU",
+                    "include_adult": "false"}, timeout=12)
+        results = [x for x in r.json().get("results", []) if x.get("media_type") in ("movie", "tv")]
+        if not results:
+            return None
+        x = results[0]
+        name = x.get("title") or x.get("name") or title
+        date = x.get("release_date") or x.get("first_air_date") or ""
+        year = date[:4] if date else ""
+        rating = x.get("vote_average") or 0
+        poster = x.get("poster_path")
+        kind = "movie" if x.get("media_type") == "movie" else "tv"
+        return {"name": name, "year": year, "rating": rating,
+                "poster": (f"https://image.tmdb.org/t/p/w500{poster}" if poster else None),
+                "url": f"https://www.themoviedb.org/{kind}/{x.get('id')}",
+                "overview": x.get("overview", "")}
+    except Exception:
+        return None
+
 async def send_recos(bot, cid, kind):
     await bot.send_message(chat_id=cid, text="Подбираю под твой вкус...")
     try:
@@ -33,15 +58,41 @@ async def send_recos(bot, cid, kind):
         await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
         return
     store.last_recos[str(cid)] = {"kind": kind, "items": [it.get("title", "") for it in items]}
-    store.last_source[str(cid)] = "Досуг · " + ("Что посмотреть" if kind=="movie" else "Что почитать")
+    store.last_source[str(cid)] = "Досуг · " + ("Что посмотреть" if kind == "movie" else "Что почитать")
     store.last_answer[str(cid)] = "\n".join(f"{it.get('title','')} - {it.get('hook','')}" for it in items)
+    label = "🍿 В закладки" if kind == "movie" else "📚 В закладки"
+
+    if kind == "movie" and config.TMDB_API_KEY:
+        await bot.send_message(chat_id=cid, text="🎬 <b>Что посмотреть</b>", parse_mode="HTML")
+        for i, it in enumerate(items):
+            tm = _tmdb_lookup(it.get("title", ""))
+            title = (tm["name"] if tm else it.get("title", ""))
+            year = f" ({tm['year']})" if tm and tm["year"] else ""
+            cap = [f"🎬 <b>{esc(title)}{year}</b>"]
+            if tm and tm["rating"]:
+                cap.append(f"⭐ {tm['rating']:.1f}/10 TMDb")
+            cap.append(esc(it.get("hook", "")))
+            if tm and tm.get("url"):
+                cap.append(tm["url"])
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"{label}: {title[:26]}", callback_data=f"reco_{i}")]])
+            text = "\n".join(cap)
+            if tm and tm.get("poster"):
+                try:
+                    await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=text, parse_mode="HTML", reply_markup=kb)
+                    continue
+                except Exception:
+                    pass
+            await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+        await bot.send_message(chat_id=cid, text="Ещё 👇",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")]]))
+        return
+
     head = "🎬 Что посмотреть" if kind == "movie" else "📖 Что почитать"
     lines = [head, ""]
     for it in items:
         lines.append(f"• {it.get('title','')}")
         lines.append(f"  {it.get('hook','')}")
         lines.append(f"  ⭐ ~{it.get('rating','')}/10")
-    label = "🍿 В список" if kind == "movie" else "📚 В список"
     rows = [[InlineKeyboardButton(f"{label}: {it.get('title','')[:28]}", callback_data=f"reco_{i}")]
             for i, it in enumerate(items)]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
