@@ -49,9 +49,9 @@ async def answer_callback(update, context):
     if data.startswith("m_"):
         text, kb = menu.menu_screen(data)
         try:
-            await q.message.edit_text(text, reply_markup=kb)
+            await q.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
         except Exception:
-            await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+            await bot.send_message(chat_id=cid, text=text, reply_markup=kb, parse_mode="HTML")
         return
 
     # Действия
@@ -85,10 +85,11 @@ async def answer_callback(update, context):
                 await learning.send_proverb(bot, cid, "нидерландский")
             elif act == "proverb_en":
                 await learning.send_proverb(bot, cid, "английский")
-            elif act == "expr_nl":
-                await learning.send_expression(bot, cid, "нидерландский")
             elif act == "dict":
                 await learning.send_dict(bot, cid)
+            elif act == "dictadd":
+                store.pending_input[cid] = "dictadd"
+                await bot.send_message(chat_id=cid, text="📖 Напиши слово или фразу - добавлю в словарь с переводом.")
             elif act == "addword":
                 await learning.add_word(bot, cid)
             elif act == "exam":
@@ -125,7 +126,11 @@ async def answer_callback(update, context):
             elif act == "artadd":
                 await content.start_add_artist(bot, cid)
             elif act == "concerts_find":
-                await content.find_concerts(bot, cid)
+                await content.find_concerts(bot, cid, "home")
+            elif act == "concerts_be":
+                await content.find_concerts(bot, cid, "be")
+            elif act == "concerts_de":
+                await content.find_concerts(bot, cid, "de")
             elif act == "listen":
                 await content.send_listen(bot, cid)
         except Exception as e:
@@ -226,7 +231,7 @@ async def text_router(update, context):
     text = update.message.text
     bot = context.bot
 
-    if text == "🧠 Ассистент DM | Daily Manager":
+    if text == "💬 Ассистент DM | Daily Manager":
         await assistant.send_home(bot, cid)
         return
     if text == "☀️ Мой день":
@@ -244,7 +249,7 @@ async def text_router(update, context):
     if text in menu.LABEL_TO_KEY:
         key = menu.LABEL_TO_KEY[text]
         t, kb = menu.menu_screen(key)
-        await bot.send_message(chat_id=cid, text=t, reply_markup=kb)
+        await bot.send_message(chat_id=cid, text=t, reply_markup=kb, parse_mode="HTML")
         return
 
     # Режим добавления одежды (файлом)
@@ -283,6 +288,8 @@ async def text_router(update, context):
             await wardrobe.check_purchase(bot, cid, text); return
         if kind == "setcity":
             await weather.set_city_text(bot, cid, text); return
+        if kind == "dictadd":
+            await learning.add_word_manual(bot, cid, text); return
 
     # Свободный чат
     await assistant.chat_reply(bot, cid, text)

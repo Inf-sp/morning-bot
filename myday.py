@@ -32,30 +32,25 @@ def _wind_word(ms):
         return "умеренный"
     return "слабый"
 
-def plany_extras(rotating, country, date_str):
-    rot_fields = "\n".join(f'  "{lbl}": "новый короткий факт по теме, 1 предложение",' for _, lbl in rotating)
-    prompt = f"""Сгенерируй блоки для ежедневной сводки. Дата: {{date_str}}. Страна пользователя: {{country}}.
+def plany_extras(country, date_str, city=""):
+    prompt = f"""Сгенерируй блоки для ежедневной сводки. Дата: {date_str}. Город: {city}. Страна: {country}.
 Строго валидный JSON, экранируй кавычки, без переносов внутри значений.
-{{{{
- "event": "Событие в стране {{country}} на эту дату. Логика: сначала государственный праздник (День короля, День освобождения, Синтерклаас, Рождество, Пасха и т.п.); если праздника нет - крупное сезонное событие (сезон молодой сельди, цветение тюльпанов, Прайд, Неделя музеев, карнавалы). 1-2 предложения, по-русски.",
+{{
+ "event": "Реальное событие, привязанное к дате {date_str}. Приоритет: сначала событие/праздник в городе {city}, затем в стране {country}, затем в мире. Если на саму дату события нет - возьми то, что идёт именно на ЭТОЙ неделе (не раньше и не позже даты). Гос-праздники и крупные сезонные/культурные события (сельдь, тюльпаны, фестивали, Прайд, Неделя музеев). НЕ политика. 1-2 предложения по-русски.",
  "word_ru": "слово дня на русском (одно слово)",
  "word_nl": "перевод на нидерландский С АРТИКЛЕМ (de/het)",
- "word_en": "перевод на английский",
- "idea": "1 бизнес-идея, 1-2 предложения, ВСЕГДА новая, придумай ей название в стиле научной фантастики",
- "fact": "1 новый интересный научный или технический факт, 1-2 предложения",
- "quote": "позитивная/вдохновляющая цитата",
- "quote_src": "автор, год",
- "rotating": {{{{
-{{rot_fields}}
- }}}}
-}}}}
-Правила: НЕ повторяй одно и то же слово/тему в word, idea и fact. Кратко, без воды."""
-    return ai.llm_json(prompt, 1100)
+ "word_en": "перевод на английский С АРТИКЛЕМ (a/the)",
+ "idea": "1 бизнес-идея, 1-2 предложения, ВСЕГДА новая, придумай название в стиле научной фантастики",
+ "facts": ["3 разных интересных факта (наука/технологии/природа), каждый НЕ больше 1 предложения, всегда новые"],
+ "quote": "вдохновляющая цитата",
+ "quote_src": "автор, год"
+}}
+Правила: НЕ повторяй одно и то же в word, idea и facts. Кратко."""
+    return ai.llm_json(prompt, 1200)
 
 async def send_plany(bot, cid):
     import util as _util
     s = store.get_settings(cid)
-    flag = _util.flag_from_cc(s.get("cc", ""))
     data = weather.fetch_weather(s["lat"], s["lon"], 2)
     d = data["daily"]
     day_str = d["time"][0]
@@ -71,9 +66,7 @@ async def send_plany(bot, cid):
     wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
 
     of = wardrobe.build_outfit_focus(weather.weather_block(data, 0, s["city"]), "сегодня")
-    rotating = random.sample(ROTATING, k=1)
-    ex = plany_extras(rotating, s.get("country", ""), day_str)
-    # если в личном словаре есть слова - подмешиваем одно в мини-урок
+    ex = plany_extras(s.get("country", ""), day_str, s.get("city", ""))
     dict_words = store.get_list(config.DICT_KEY, cid)
     if dict_words:
         w = random.choice(dict_words[-20:])
@@ -85,24 +78,23 @@ async def send_plany(bot, cid):
     now = datetime.now(TZ)
     header = f"{_WEEKDAYS[now.weekday()]}, {now.day} {_MONTHS[now.month-1]}"
 
-    L = [f"<b>Мой день • {esc(header)}</b>", ""]
-    L += [f"<b>🌡️{flag} Погода в {esc(s['city'])}</b>",
-          f"{icon} {tmax:+.0f}°C • 🌧️ Дождь{rain_when} {rain:.0f}% • {wemoji} {wword}{wind_when} {wind_ms:.0f} м/с", ""]
+    L = [f"<b>Мой день • {esc(header)} • {esc(s.get('city',''))}</b>", ""]
+    L += ["<b>🌡️ Погода</b>",
+          f"{icon} {tmax:+.0f}°C • Дождь{rain_when} {rain:.0f}% • {wemoji} {wword}{wind_when} {wind_ms:.0f} м/с", ""]
     if ex.get("event"):
-        L += ["<b>🗓️ Событие в стране</b>", esc(ex.get("event", "")), ""]
+        L += ["<b>🗓️ Событие в стране или мире</b>", esc(ex.get("event", "")), ""]
     outfit = " + ".join(of.get("outfit", [])).rstrip(".")
     L += ["<b>👕 Лук</b>", esc(outfit), ""]
     L += ["<b>📚 Мини-урок</b>",
           f"{esc(ex.get('word_ru',''))} → 🇳🇱 {esc(ex.get('word_nl',''))} → 🇬🇧 {esc(ex.get('word_en',''))}", ""]
     L += ["<b>🚀 Бизнес-идея</b>", esc(ex.get("idea", "")), ""]
     L += ["<b>🔬 Интересные факты</b>"]
-    if ex.get("fact"):
-        L.append(f"• {esc(ex.get('fact',''))}")
-    rot = ex.get("rotating", {}) or {}
-    for emoji, lbl in rotating:
-        txt = rot.get(lbl, "")
-        if txt:
-            L.append(f"• {esc(txt)}")
+    facts = ex.get("facts", [])
+    if isinstance(facts, str):
+        facts = [facts]
+    for f in facts[:3]:
+        if f:
+            L.append(f"• {esc(f)}")
     L.append("")
     if ex.get("quote"):
         L += ["<b>📖 Цитата</b>", f"«{esc(ex.get('quote',''))}» - ({esc(ex.get('quote_src',''))})"]
