@@ -140,19 +140,23 @@ async def find_concerts(bot, cid, mode="home"):
     from util import _MONTHS
     found = {}
     seen_pairs = set()
+    TRIBUTE = ("tribute", "cover", "covers", "candlelight", "songs of", "the music of",
+               "performed by", "celebrating", "by candle", "symphonic", "reimagined",
+               "someone like", "a tribute", "in the style of", "plays the music", "experience:")
     for a in artists[:40]:
         try:
             r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json",
                 params={"apikey": config.TICKETMASTER_API_KEY, "keyword": a, "countryCode": cc,
                         "classificationName": "music", "size": 3, "sort": "date,asc"}, timeout=15)
             for e in r.json().get("_embedded", {}).get("events", []):
-                # артист действительно в составе (а не трибьют/«песни ...»)
+                al = a.lower()
+                name_l = e.get("name", "").lower()
                 attractions = [att.get("name", "").lower()
                                for att in (e.get("_embedded", {}).get("attractions") or [])]
-                al = a.lower()
-                if attractions and not any(al in nm or nm in al for nm in attractions):
+                attr_match = any(al in nm or nm in al for nm in attractions)
+                if any(k in name_l for k in TRIBUTE):
                     continue
-                if not attractions and al not in e.get("name", "").lower():
+                if not (al in name_l or attr_match):
                     continue
                 date = e.get("dates", {}).get("start", {}).get("localDate", "")
                 pair = (al, date)
