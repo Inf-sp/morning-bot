@@ -1,7 +1,9 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+import re
 import config
 import store
 import ai
+from util import esc
 
 def content_recommend(kind, cid):
     if kind == "movie":
@@ -40,7 +42,7 @@ async def send_recos(bot, cid, kind):
     label = "🍿 В список" if kind == "movie" else "📚 В список"
     rows = [[InlineKeyboardButton(f"{label}: {it.get('title','')[:28]}", callback_data=f"reco_{i}")]
             for i, it in enumerate(items)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_content")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))
 
 async def add_reco(bot, cid, i):
@@ -93,7 +95,7 @@ async def send_artists(bot, cid):
     txt = "🎤 Мои артисты:\n" + ("\n".join(f"• {a}" for a in arts) if arts else "пусто")
     await bot.send_message(chat_id=cid, text=txt)
 
-async def find_concerts(bot, cid):
+async def find_concerts(bot, cid, mode="home"):
     if not config.TICKETMASTER_API_KEY:
         await bot.send_message(chat_id=cid,
             text="🔎 Поиск концертов требует бесплатный ключ Ticketmaster.\n"
@@ -103,50 +105,71 @@ async def find_concerts(bot, cid):
     if not artists:
         await bot.send_message(chat_id=cid, text="Список артистов пуст. Нажми «Мои артисты» или выполни /reload_artists.")
         return
-    await bot.send_message(chat_id=cid, text="Ищу концерты в NL, Бельгии и Германии, ~20-40 сек...")
+    import util
+    s = store.get_settings(cid)
+    home_cc = (s.get("cc") or "NL").upper()
+    home_flag = util.flag_from_cc(home_cc) or "🏳"
+    home_name = s.get("country") or "твоя страна"
+    if mode == "be":
+        cc, flag, cname = "BE", "🇧🇪", "Бельгия"
+    elif mode == "de":
+        cc, flag, cname = "DE", "🇩🇪", "Германия"
+    else:
+        cc, flag, cname = home_cc, home_flag, home_name
+
+    await bot.send_message(chat_id=cid, text=f"Ищу концерты в {cname}, ~15-30 сек...")
     import requests
-    countries = [("NL", "🇳🇱"), ("BE", "🇧🇪"), ("DE", "🇩🇪")]
     found = {}
     for a in artists[:40]:
-        for cc, flag in countries:
-            try:
-                r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json",
-                    params={"apikey": config.TICKETMASTER_API_KEY, "keyword": a, "countryCode": cc,
-                            "classificationName": "music", "size": 2, "sort": "date,asc"}, timeout=15)
-                for e in r.json().get("_embedded", {}).get("events", []):
-                    e["_flag"] = flag
-                    found[e.get("id")] = e
-            except Exception:
-                continue
+        try:
+            r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json",
+                params={"apikey": config.TICKETMASTER_API_KEY, "keyword": a, "countryCode": cc,
+                        "classificationName": "music", "size": 2, "sort": "date,asc"}, timeout=15)
+            for e in r.json().get("_embedded", {}).get("events", []):
+                e["_artist"] = a
+                found[e.get("id")] = e
+        except Exception:
+            continue
+
+    rows = []
+    if mode == "home":
+        rows.append([InlineKeyboardButton("🇧🇪 Бельгия", callback_data="a_concerts_be"),
+                     InlineKeyboardButton("🇩🇪 Германия", callback_data="a_concerts_de")])
+    rows.append([InlineKeyboardButton("⭐ Добавить в избранное", callback_data="as_fav")])
+    rows.append([InlineKeyboardButton("⬅️ Меню", callback_data="m_leisure")])
+    kb = InlineKeyboardMarkup(rows)
+
     if not found:
-        await bot.send_message(chat_id=cid, text="Сейчас концертов твоих артистов в NL, Бельгии и Германии не нашёл. Загляни позже.")
+        store.last_answer[str(cid)] = f"Концерты в {cname}: ничего не нашёл."
+        await bot.send_message(chat_id=cid,
+            text=f"🎤 <b>Концерты в {esc(cname)}</b>\n\nСейчас ничего не нашёл. Загляни позже"
+                 + (" или проверь Бельгию/Германию ниже." if mode == "home" else "."),
+            parse_mode="HTML", reply_markup=kb)
         return
-    # сортируем по дате
-    def _date(e):
-        return e.get("dates", {}).get("start", {}).get("localDate", "9999")
-    events = sorted(found.values(), key=_date)
-    lines = ["🎤 Концерты в NL, Бельгии и Германии", ""]
+
+    events = sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate", "9999"))
+    lines = [f"🎤 <b>Концерты в {esc(cname)}</b>", ""]
     for e in events[:20]:
-        flag = e.get("_flag", "")
+        artist = e.get("_artist", "")
         name = e.get("name", "")
         date = e.get("dates", {}).get("start", {}).get("localDate", "")
         ven = (e.get("_embedded", {}).get("venues") or [{}])[0]
         vn = ven.get("name", "")
         city = (ven.get("city") or {}).get("name", "")
         url = e.get("url", "")
-        lines.append(f"🎤 {name}")
+        lines.append(f"🎤 <b>{esc(artist)}</b>")
+        if name and name.lower() != artist.lower():
+            lines.append(esc(name))
         if vn or city:
-            lines.append(f"📍 {flag} {vn}{', ' + city if city else ''}")
+            lines.append(f"📍 {flag} {esc(vn)}{', ' + esc(city) if city else ''}")
         if date:
             lines.append(f"📅 {date}")
-        pr = e.get("priceRanges")
-        if pr:
-            lines.append(f"💰 {pr[0].get('min')}-{pr[0].get('max')} {pr[0].get('currency','')}")
         if url:
             lines.append(f"🎟 {url}")
         lines.append("")
-    from util import send_long
-    await send_long(bot, cid, "\n".join(lines))
+    txt = "\n".join(lines)
+    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", txt)
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 
 async def start_add_artist(bot, cid):
     store.pending_input[str(cid)] = "artist"

@@ -3,12 +3,12 @@ import config
 import store
 import ai
 import weather
-from util import send_long
+from util import send_long, esc
 
 HOME_TEXT = (
-    "👕 Гардероб DM | Daily Manager\n\n"
+    "👕 <b>Гардероб</b>\n\n"
     "Одежда без хаоса.\n"
-    "Соберу тебе лук, разберу шкаф и скажу честно - что с ним не так.\n\n"
+    "Соберу лук, разберу шкаф и скажу честно - что с ним не так.\n\n"
     "Выбирай 👇"
 )
 
@@ -31,14 +31,6 @@ def home_kb():
         [("⬅️ Назад", "m_close")],
     ])
 
-def look_kb():
-    return _kb([
-        [("🚶 Прогулка", "w_look_walk")],
-        [("💼 Работа / учёба", "w_look_work")],
-        [("🎉 Вечеринка", "w_look_party")],
-        [("⬅️ В меню", "w_home")],
-    ])
-
 def closet_kb():
     return _kb([
         [("👁 Показать всё", "w_show")],
@@ -47,41 +39,42 @@ def closet_kb():
         [("⬅️ В меню", "w_home")],
     ])
 
-def _look_result_kb(scenario):
+def _look_result_kb():
     return _kb([
-        [("🔄 Ещё вариант", f"w_look_{scenario}")],
+        [("🔄 Ещё 3 варианта", "w_look")],
         [("⭐ Добавить в избранное", "as_fav")],
-        [("⬅️ В меню", "w_home")],
+        [("⬅️ Назад", "w_home")],
     ])
 
 def _back_kb():
-    return _kb([[("⬅️ В меню", "w_home")]])
+    return _kb([[("⬅️ Назад", "w_home")]])
 
 
 async def send_home(bot, cid):
-    await bot.send_message(chat_id=cid, text=HOME_TEXT, reply_markup=home_kb())
+    await bot.send_message(chat_id=cid, text=HOME_TEXT, parse_mode="HTML", reply_markup=home_kb())
 
 
 # ---------- используется в «Мой день» (НЕ удалять) ----------
 def build_outfit_focus(weather_text, day_label):
     w = store.load_wardrobe()
-    prompt = f"""Ты персональный стилист Дмитрия.
+    prompt = f"""Ты персональный стилист Дмитрия. Собери ОДИН целостный лук на сегодня.
 {config.STYLE_PROFILE}
 Погода ({day_label}):
 {weather_text}
 Параметры: 179 см, ~65 кг, обувь 42.5, джинсы W31 L31.
-Гардероб (используй ТОЛЬКО эти вещи):
+Гардероб (используй ТОЛЬКО эти вещи, точные названия):
 {store.wardrobe_to_text(w)}
 Температурные зоны:{config.TEMP_ZONES}
-Учитывай погоду, ветер, велосипед/прогулки, сочетания цветов, минимализм.
+Правила: обязательно 1 верх + 1 низ + обувь (+ опц. аксессуар/слой).
+Если тепло (выше ~22°C и без дождя) - бери шорты и лёгкий верх. Если холодно/дождь/ветер - слои, ветровка/флис, закрытая обувь.
+Вещи должны сочетаться по цвету, стиль минимализм. Не мешай несочетаемое.
 JSON:
-{{"outfit": ["вещь 1","вещь 2","вещь 3","вещь 4"], "why": "1-2 предложения", "focus": "один короткий совет на день"}}"""
+{{"outfit": ["верх","низ","обувь","аксессуар"], "why": "1-2 предложения почему так", "focus": "один короткий совет на день"}}"""
     return ai.llm_json(prompt, 800)
 
 
-# ---------- генерация лука по сценарию ----------
-async def send_look_scenario(bot, cid, scenario):
-    label, ctx = SCENARIOS.get(scenario, SCENARIOS["walk"])
+# ---------- генерация лука (3 варианта, по погоде) ----------
+async def send_looks(bot, cid):
     w = store.load_wardrobe()
     s = store.get_settings(cid)
     try:
@@ -89,33 +82,29 @@ async def send_look_scenario(bot, cid, scenario):
     except Exception:
         wblock = "нет данных"
     recent = store.recent_looks.get(str(cid), [])
-    avoid = ("\nНе повторяй недавние луки:\n" + "\n".join(recent)) if recent else ""
-    await bot.send_message(chat_id=cid, text="Собираю лук...")
-    prompt = f"""Ты стилист Дмитрия. Собери ОДИН лук из его гардероба.
+    avoid = ("\nНе повторяй недавние луки: " + "; ".join(recent)) if recent else ""
+    await bot.send_message(chat_id=cid, text="Собираю 3 лука под погоду...")
+    prompt = f"""Ты стилист Дмитрия. Собери 3 РАЗНЫХ лука из его гардероба на сегодня.
 {config.STYLE_PROFILE}
-Сценарий: {ctx}.
 Погода сегодня: {wblock}
-Гардероб (только эти вещи):
+Гардероб (только эти вещи, точные названия):
 {store.wardrobe_to_text(w)}
-Условия: минимум 1 верх + 1 низ + обувь; стиль минимализм; учитывай погоду; избегай немодных сочетаний.{avoid}
-Ответь СТРОГО в формате (без markdown):
-👕 {{короткое название лука}}
-
-Верх: {{вещь}}
-Низ: {{вещь}}
-Обувь: {{вещь}}
-Аксессуары: {{вещь или «-»}}
-
-🎯 Сценарий: {ctx}"""
+Правила: каждый лук - 1 верх + 1 низ + обувь (+ опц. аксессуар). Стиль минимализм, сочетание по цвету.
+Если тепло (выше ~22°C, без дождя) - шорты и лёгкий верх. Если холодно/дождь/ветер - слои, ветровка/флис, закрытая обувь.{avoid}
+Ответь СТРОГО, без markdown:
+1) {{название}} — Верх: .. • Низ: .. • Обувь: .. • Акс: ..
+2) {{название}} — Верх: .. • Низ: .. • Обувь: .. • Акс: ..
+3) {{название}} — Верх: .. • Низ: .. • Обувь: .. • Акс: .."""
     try:
-        out = ai.llm(prompt, 600, 0.9)
+        out = ai.llm(prompt, 700, 0.9)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     rl = store.recent_looks.get(str(cid), [])
     rl.append(out.split("\n")[0])
     store.recent_looks[str(cid)] = rl[-3:]
     store.last_answer[str(cid)] = out
-    await bot.send_message(chat_id=cid, text=out, reply_markup=_look_result_kb(scenario))
+    await bot.send_message(chat_id=cid, text=f"👕 <b>3 варианта лука</b>\n\n{esc(out)}",
+                           parse_mode="HTML", reply_markup=_look_result_kb())
 
 
 # ---------- шкаф ----------
@@ -142,14 +131,15 @@ async def send_show(bot, cid):
     for cat, items in w.items():
         z = _zone_of(cat)
         grouped.setdefault(z, []).extend(items)
+    zone_emoji = {"Верх": "👕", "Низ": "👖", "Обувь": "👟", "Аксессуары": "⌚", "Другое": "🎒"}
     order = ["Верх", "Низ", "Обувь", "Аксессуары", "Другое"]
-    lines = ["🗄 Мой шкаф", ""]
+    lines = ["🗄 <b>Мой шкаф</b>", ""]
     for z in order:
         if grouped.get(z):
-            lines.append(z)
-            lines += [f"• {it}" for it in grouped[z]]
+            lines.append(f"{zone_emoji.get(z,'•')} <b>{z}</b>")
+            lines += [f"   - {esc(it)}" for it in grouped[z]]
             lines.append("")
-    await bot.send_message(chat_id=cid, text="\n".join(lines).strip(), reply_markup=closet_kb())
+    await bot.send_message(chat_id=cid, text="\n".join(lines).strip(), parse_mode="HTML", reply_markup=closet_kb())
 
 async def add_item(bot, cid, text):
     w = store.load_wardrobe()
@@ -206,8 +196,8 @@ async def send_improve(bot, cid):
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     store.last_answer[str(cid)] = out
-    await bot.send_message(chat_id=cid, text=out, reply_markup=_kb([
-        [("⭐ Добавить в избранное", "as_fav")], [("⬅️ В меню", "w_home")]]))
+    await bot.send_message(chat_id=cid, text=f"💡 <b>Улучшить гардероб</b>\n\n{esc(out)}", parse_mode="HTML",
+        reply_markup=_kb([[("⭐ Добавить в избранное", "as_fav")], [("⬅️ Назад", "w_home")]]))
 
 
 # ---------- проверка перед покупкой ----------
@@ -228,8 +218,8 @@ async def check_purchase(bot, cid, text):
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     store.last_answer[str(cid)] = out
-    await bot.send_message(chat_id=cid, text=out, reply_markup=_kb([
-        [("⭐ Добавить в избранное", "as_fav")], [("⬅️ В меню", "w_home")]]))
+    await bot.send_message(chat_id=cid, text=f"🛒 <b>Проверка покупки</b>\n\n{esc(out)}", parse_mode="HTML",
+        reply_markup=_kb([[("⭐ Добавить в избранное", "as_fav")], [("⬅️ Назад", "w_home")]]))
 
 
 # ---------- добавление файлом (старый режим, оставлен) ----------
@@ -242,23 +232,17 @@ async def ingest(bot, cid, text):
 async def handle_callback(bot, cid, q, data):
     if data == "w_home":
         try:
-            await q.message.edit_text(HOME_TEXT, reply_markup=home_kb())
+            await q.message.edit_text(HOME_TEXT, parse_mode="HTML", reply_markup=home_kb())
         except Exception:
-            await bot.send_message(chat_id=cid, text=HOME_TEXT, reply_markup=home_kb())
+            await bot.send_message(chat_id=cid, text=HOME_TEXT, parse_mode="HTML", reply_markup=home_kb())
         return
     if data == "w_look":
-        try:
-            await q.message.edit_text("✨ Собрать лук - под какой сценарий?", reply_markup=look_kb())
-        except Exception:
-            await bot.send_message(chat_id=cid, text="✨ Собрать лук - под какой сценарий?", reply_markup=look_kb())
-        return
-    if data.startswith("w_look_"):
-        await send_look_scenario(bot, cid, data[len("w_look_"):]); return
+        await send_looks(bot, cid); return
     if data == "w_closet":
         try:
-            await q.message.edit_text("🗄 Мой шкаф - база вещей.", reply_markup=closet_kb())
+            await q.message.edit_text("🗄 <b>Мой шкаф</b> - база вещей.", parse_mode="HTML", reply_markup=closet_kb())
         except Exception:
-            await bot.send_message(chat_id=cid, text="🗄 Мой шкаф - база вещей.", reply_markup=closet_kb())
+            await bot.send_message(chat_id=cid, text="🗄 <b>Мой шкаф</b> - база вещей.", parse_mode="HTML", reply_markup=closet_kb())
         return
     if data == "w_show":
         await send_show(bot, cid); return
