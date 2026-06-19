@@ -68,7 +68,6 @@ def _recipe_kb():
     return _kb([
         [("📖 Полный рецепт", "as_food_full")],
         [("🔄 Ещё рецепт", "as_food")],
-        [("🥕 Не выбрасывать продукты", "as_food_left")],
         [("⭐ Добавить в избранное", "as_fav")],
         [("⬅️ Назад", "m_close")],
     ])
@@ -153,6 +152,21 @@ def _gen_adhd(cid):
 def _gen_cheer(cid):
     return ai.llm(f"Подбодри коротко (2-3 строки), тепло и не банально, с эмодзи. "
                   f"Опирайся по духу: {config.LAGOM}", 300, 0.95)
+
+def _gen_motiv(cid):
+    return ai.llm(
+        "Сгенерируй блок «Личная мотивация» для человека с СДВГ. Тепло, по-доброму, без воды и клише. "
+        "СТРОГО формат, без markdown, эмодзи как навигация (не для украшения):\n\n"
+        "🎯 Личная мотивация\n\n"
+        "💬 {1 короткая поддерживающая фраза под настроение}\n\n"
+        "🧠 Фокус сейчас:\n"
+        "• {микро-техника на 1 минуту против прокрастинации}\n"
+        "• {как удержать внимание}\n\n"
+        "⚡ Один шаг:\n"
+        "• {одно конкретное мелкое действие прямо сейчас}\n\n"
+        "🌱 Напоминание:\n"
+        "• {короткая мысль про прогресс, а не идеал}",
+        500, 0.95, ai.LEARN_ORDER)
 
 def _gen_map(cid):
     return ai.llm(
@@ -336,6 +350,7 @@ _ONESHOT = {
     "as_idea": (_gen_idea, "🔁 Новая идея", "as_idea"),
     "as_adhd": (_gen_adhd, "🔄 Ещё приём", "as_adhd"),
     "as_cheer": (_gen_cheer, "🔄 Ещё совет", "as_cheer"),
+    "as_motiv": (_gen_motiv, "🔄 Ещё", "as_motiv"),
     "as_map": (_gen_map, "🔄 Обновить", "as_map"),
 }
 
@@ -392,6 +407,7 @@ async def handle_callback(bot, cid, q, data):
         except Exception as e:
             await bot.send_message(chat_id=cid, text=str(e)); return
         store.last_action[str(cid)] = ("oneshot", data)
+        store.last_source[str(cid)] = {"as_motiv": "Здоровье · Мотивация", "as_idea": "Идеи"}.get(data, "Ассистент")
         await _send(bot, cid, out, kb=_ans_kb(lbl, cb))
         return
     # роли
