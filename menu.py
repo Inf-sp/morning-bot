@@ -5,10 +5,10 @@ MAIN_LABELS = ["💬 Ассистент DM | Daily Manager", "☀️ Мой де
                "📚 Обучение", "🍽️ Питание", "🍿 Досуг"]
 
 MAIN_KB = ReplyKeyboardMarkup([
-    ["💬 Ассистент DM | Daily Manager"],
     ["☀️ Мой день", "👕 Гардероб"],
     ["📋 Здоровье", "📚 Обучение"],
     ["🍽️ Питание", "🍿 Досуг"],
+    ["💬 Ассистент DM | Daily Manager"],
 ], resize_keyboard=True)
 
 # Reply-ярлык -> ключ инлайн-подменю
