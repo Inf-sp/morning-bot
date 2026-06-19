@@ -21,10 +21,10 @@ STATE_TEXT = (
 )
 
 DOCTOR_INTRO = (
-    "🩺 Врач\n\n"
-    "Дам общую справочную информацию о здоровье. Это не диагноз и не замена врача - "
+    "👩🏻‍⚕️ Врач\n\n"
+    "Дам общую справочную информацию о здоровье и лекарствах. Это не диагноз и не назначение - "
     "при тревожных симптомах обратись к специалисту.\n\n"
-    "Опиши, что беспокоит 👇"
+    "Опиши, что беспокоит, или спроси про лекарство 👇"
 )
 
 LETTER_REF = (
@@ -57,11 +57,12 @@ def state_kb():
 
 # универсальная клавиатура под ответом: [Продолжить][⭐][В меню]
 def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry"):
-    return _kb([
-        [(cont_label, cont_cb)],
-        [("⭐ Добавить в избранное", "as_fav")],
-        [("⬅️ Назад", "m_close")],
-    ])
+    rows = []
+    if cont_label and cont_cb:
+        rows.append([(cont_label, cont_cb)])
+    rows.append([("⭐ Добавить в избранное", "as_fav")])
+    rows.append([("⬅️ Назад", "m_close")])
+    return _kb(rows)
 
 def _recipe_kb():
     return _kb([
@@ -174,10 +175,29 @@ def _role_system(role):
                 "Если звучит тяжело - мягко предложи специалиста.")
     if role == "doctor":
         return ("Ты помощник по здоровью. Дай разбор СТРОГО в формате, кратко, с эмодзи:\n"
-                "🩺 Разбор симптомов\n\n📍 Основная жалоба:\n{коротко}\n\n🔎 На что похоже:\n{1-2 предложения}\n\n"
+                "👩🏻‍⚕️ Разбор симптомов\n\n📍 Основная жалоба:\n{коротко}\n\n🔎 На что похоже:\n{1-2 предложения}\n\n"
                 "✅ Рекомендации:\n• пункт\n• пункт\n\n🚨 Срочно к врачу:\n{когда}\n\nИтог: {одно короткое предложение}\n\n"
                 "Не ставь диагноз, это общая информация и не замена врача.")
     return "Ты полезный ассистент."
+
+_MED_RE = ("лекарств", "таблет", "препарат", "доз", "мг ", " мг", "метилфенидат", "ибупрофен",
+           "парацетамол", "антибиотик", "капл", "сироп", "мазь", "витамин", "пилюл", "concerta",
+           "ritalin", "риталин", "медикамент", "побочк", "побочн", "как принимать")
+
+def _is_med_question(text):
+    t = (text or "").lower()
+    return any(k in t for k in _MED_RE)
+
+def _med_system():
+    return ("Ты помощник по лекарствам. Дай СПРАВОЧНУЮ информацию о препарате СТРОГО в формате, кратко, с эмодзи:\n"
+            "💊 {название и доза если есть}\n\n"
+            "📍 Зачем:\n{коротко}\n\n"
+            "⏱️ Когда работает:\n{через сколько и сколько держится}\n\n"
+            "⚠️ Часто бывает:\n• побочка\n• побочка\n\n"
+            "💡 Важно:\n• пункт\n• пункт\n\n"
+            "🚨 К врачу если:\n• симптом\n• симптом\n\n"
+            "Итог: {одно короткое предложение}\n\n"
+            "Это общая справочная информация, не назначение. Дозы и схему определяет врач.")
 
 def _doctor_candidates(symptoms):
     data = ai.llm_json(
@@ -187,6 +207,16 @@ def _doctor_candidates(symptoms):
 
 async def doctor_answer(bot, cid, symptoms):
     await bot.send_chat_action(chat_id=cid, action="typing")
+    if _is_med_question(symptoms):
+        prompt = f"{_med_system()}\n\nВопрос про лекарство: {symptoms}"
+        try:
+            out = ai.llm(prompt, 900, 0.4)
+        except Exception as e:
+            await bot.send_message(chat_id=cid, text=str(e)); return
+        store.last_source[str(cid)] = "Здоровье · Лекарство"
+        store.last_action[str(cid)] = ("role", "doctor", symptoms)
+        await _send(bot, cid, out, kb=_ans_kb(None, None))
+        return
     passages = []
     try:
         cands = _doctor_candidates(symptoms)
@@ -204,8 +234,9 @@ async def doctor_answer(bot, cid, symptoms):
         out = ai.llm(prompt, 900, 0.5)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
+    store.last_source[str(cid)] = "Здоровье · Врач"
     store.last_action[str(cid)] = ("role", "doctor", symptoms)
-    await _send(bot, cid, out, kb=_ans_kb("🔄 Уточнить симптомы", "as_doctor"))
+    await _send(bot, cid, out, kb=_ans_kb(None, None))
 
 async def handle_role(bot, cid, role, text):
     if role == "doctor":
@@ -409,7 +440,7 @@ async def chat_reply(bot, cid, text):
     if any(w in text.lower() for w in _MED_WORDS):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("👩🏻‍⚕️ Вопрос врачу", callback_data="as_doctor")]])
         await bot.send_message(chat_id=cid,
-            text="🩺 Похоже на вопрос о здоровье. В разделе 🧠 Баланс → «Вопрос врачу» дам подробный структурированный разбор.",
+            text="👩🏻‍⚕️ Похоже на вопрос о здоровье. В разделе 🧠 Баланс → «Вопрос врачу» дам подробный структурированный разбор.",
             reply_markup=kb)
 
 
