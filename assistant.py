@@ -43,7 +43,7 @@ def home_kb():
         [("✍️ Письма и тексты", "as_letter")],
         [("💡 Идеи и проекты", "as_idea")],
         [("🎯 Мотивация и состояние", "as_state")],
-        [("🩺 Вопрос врачу", "as_doctor")],
+        [("👩🏻‍⚕️ Вопрос врачу", "as_doctor")],
     ])
 
 def state_kb():
@@ -150,12 +150,12 @@ def _gen_adhd(cid):
                   "Выполнимо за минуту. Без воды.", 300, 0.9)
 
 def _gen_cheer(cid):
-    return ai.llm(f"Подбодри Дмитрия коротко (2-3 строки), тепло и не банально, с эмодзи. "
+    return ai.llm(f"Подбодри коротко (2-3 строки), тепло и не банально, с эмодзи. "
                   f"Опирайся по духу: {config.LAGOM}", 300, 0.95)
 
 def _gen_map(cid):
     return ai.llm(
-        "Сделай блок-ориентир для Дмитрия (дизайнер UI/UX, фотограф, в Нидерландах, СДВГ). СТРОГО формат:\n\n"
+        "Сделай блок-ориентир (для дизайнера UI/UX и фотографа в Нидерландах, с СДВГ). СТРОГО формат:\n\n"
         "📈 Карта развития\n\n🎯 Главный фокус\n{1 строка}\n\n"
         "💪 Сильные стороны\n• пункт\n• пункт\n• пункт\n\n"
         "⚠️ Ловушки\n• пункт\n• пункт\n\n"
@@ -407,7 +407,7 @@ async def chat_reply(bot, cid, text):
     await bot.send_message(chat_id=cid, text=(answer or "").strip() or "Пусто, попробуй ещё раз.")
     store.last_answer[str(cid)] = answer
     if any(w in text.lower() for w in _MED_WORDS):
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🩺 Вопрос врачу", callback_data="as_doctor")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("👩🏻‍⚕️ Вопрос врачу", callback_data="as_doctor")]])
         await bot.send_message(chat_id=cid,
             text="🩺 Похоже на вопрос о здоровье. В разделе 🧠 Баланс → «Вопрос врачу» дам подробный структурированный разбор.",
             reply_markup=kb)

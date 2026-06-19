@@ -56,7 +56,6 @@ def _day_menu_kb():
         [InlineKeyboardButton("🗓️ Полный прогноз на сегодня", callback_data="a_w_full")],
         [InlineKeyboardButton("🗓️ Погода на завтра", callback_data="a_w_tomorrow")],
         [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
-        [InlineKeyboardButton("🚀 Новая идея", callback_data="md_idea")],
         [InlineKeyboardButton("🌍 Сменить город", callback_data="a_setcity")],
         [InlineKeyboardButton("⭐ Добавить в избранное", callback_data="md_fav")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_close")],
@@ -200,7 +199,7 @@ def assemble_morning(chat_id):
 
 # --- Мотивация / проверка дня ---
 def diary_reflect(entry):
-    prompt = f"""Запись дневника Дмитрия: "{entry}"
+    prompt = f"""Запись дневника пользователя: "{entry}"
 Ответь как спокойный мини-психолог: 2-3 предложения поддержки и одна практичная мысль.
 {config.LAGOM}
 Без markdown."""

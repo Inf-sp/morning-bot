@@ -1,6 +1,7 @@
 import random
 from datetime import datetime, timedelta
 import requests
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 import ai
@@ -172,10 +173,12 @@ async def send_weather(bot, cid, mode="today"):
             wemoji, wword = wind_scale(wd)
             wind_str = f"{wemoji} {wword} {wd:.0f} м/с" if wd >= 8 else f"💨 Ветер {wd:.0f} м/с"
             L += [f"<b>{label}:</b>", f"{icon} До {tmx:+.0f}°C • Дождь {rn:.0f}% • {wind_str}", ""]
-        fact = _world_fact()
-        if fact:
-            L.append(esc(fact))
-        await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML")
+        joke = _joke_outfit(s["city"], d["temperature_2m_max"][0], d["precipitation_probability_max"][0] or 0,
+                            d["windspeed_10m_max"][0] or 0, DESC.get(d["weathercode"][0], ""), "сегодня")
+        if joke:
+            L.append(esc(joke))
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_close")]])
+        await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
         return
 
     if mode in ("today", "tomorrow"):
@@ -204,7 +207,8 @@ async def send_weather(bot, cid, mode="today"):
         fact = _world_fact()
         if fact:
             L += ["", esc(fact)]
-        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_close")]])
+        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
         return
 
     # week
@@ -224,17 +228,36 @@ async def send_weather(bot, cid, mode="today"):
     try:
         body = ai.llm(
             f"Сделай краткую сводку погоды на неделю для города {s['city']}. Данные: {summary_data}.\n"
-            f"СТРОГО формат, без markdown, каждая строка с эмодзи:\n"
+            f"СТРОГО формат, без markdown:\n"
             f"🌤️ {{характер недели и диапазон температур}}\n"
             f"🌧️ {{про дожди, в какие части дня чаще}}\n"
             f"💨 {{ветер диапазон м/с}}\n"
-            f"☁️ {{общая облачность}}\n\n"
-            f"Лучшие дни: {{когда}}\n"
-            f"{{одна строка про сложные дни}}", 500, 0.8)
+            f"ЛУЧШИЕ: {{короткий список дней через запятую, напр. Пн, вт, ср}}\n"
+            f"СЛОЖНО: {{одна короткая строка, напр. А вот вс будет дождливым}}", 400, 0.8)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
-    L = [f"<b>Ближайшая неделя • {esc(rng)}</b>", "", f"<b>🌡️ {esc(place)}</b>", esc(body)]
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
+    best, hard, main = "", "", []
+    for ln in body.splitlines():
+        s_ln = ln.strip()
+        if s_ln.upper().startswith("ЛУЧШИЕ"):
+            best = s_ln.split(":", 1)[-1].strip()
+        elif s_ln.upper().startswith("СЛОЖНО"):
+            hard = s_ln.split(":", 1)[-1].strip()
+        elif s_ln:
+            main.append(esc(s_ln))
+    flag = __import__("util").flag_from_cc(s.get("cc", ""))
+    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])}</b>", ""]
+    L += main
+    if best or hard:
+        L += ["", "<b>Лучшие дни:</b>", esc((best + (". " + hard if hard else "")).strip())]
+    try:
+        cfact = ai.llm(f"Одна короткая фраза про погоду в стране {s.get('country','')} летом, начни с «Кстати,». 1 предложение.", 100, 0.9).strip().splitlines()[0]
+        if cfact:
+            L += ["", f"{flag} {esc(cfact)}"]
+    except Exception:
+        pass
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_close")]])
+    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
 
 
 # ---------- смена города ----------

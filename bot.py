@@ -259,6 +259,10 @@ async def text_router(update, context):
     text = update.message.text
     bot = context.bot
 
+    # Нажата любая кнопка нижнего меню -> сбрасываем незавершённый ввод (чтобы чат не «съел» сообщение настроек)
+    if text in ("☀️ Мой день", "👕 Гардероб") or text in menu.LABEL_TO_KEY:
+        store.pending_input.pop(cid, None)
+
     if text == "☀️ Мой день":
         try:
             await myday.send_plany(bot, cid)
@@ -358,9 +362,11 @@ async def weather_command(update, context):
         await update.message.reply_text(f"Ошибка погоды: {e}")
 
 async def notes_command(update, context):
+    store.pending_input.pop(str(update.effective_chat.id), None)
     await assistant.send_notes(context.bot, update.effective_chat.id)
 
 async def setup_command(update, context):
+    store.pending_input.pop(str(update.effective_chat.id), None)
     await settings.send_home(context.bot, update.effective_chat.id)
 
 async def reload_wardrobe_command(update, context):
