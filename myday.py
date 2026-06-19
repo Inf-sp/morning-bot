@@ -48,8 +48,21 @@ def plany_extras(country, date_str, city=""):
 Правила: НЕ повторяй одно и то же в word, idea и facts. Кратко."""
     return ai.llm_json(prompt, 1200)
 
-async def send_plany(bot, cid):
-    import util as _util
+_day_cache = {}  # cid -> {"date":..., "text":..., "ex":..., "outfit":...}
+
+def _day_menu_kb():
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🗓️ Полный прогноз на сегодня", callback_data="a_w_full")],
+        [InlineKeyboardButton("🗓️ Погода на завтра", callback_data="a_w_tomorrow")],
+        [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
+        [InlineKeyboardButton("🚀 Новая идея", callback_data="md_idea")],
+        [InlineKeyboardButton("🌍 Сменить город", callback_data="a_setcity")],
+        [InlineKeyboardButton("⭐ Добавить в избранное", callback_data="md_fav")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_close")],
+    ])
+
+def _build_day_text(cid):
     s = store.get_settings(cid)
     data = weather.fetch_weather(s["lat"], s["lon"], 2)
     d = data["daily"]
@@ -61,9 +74,14 @@ async def send_plany(bot, cid):
     icon = weather.weather_icon(code, tmax, rain, wind_ms)
     wemoji, wword = weather.wind_scale(wind_ms)
     rain_p = weather._periods(data, day_str, "precipitation_probability", 40)
-    wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
     rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-    wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
+    # ветер: подробно только если сильный
+    if wind_ms >= 8:
+        wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
+        wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
+        wind_str = f"{wemoji} {wword}{wind_when} {wind_ms:.0f} м/с"
+    else:
+        wind_str = f"💨 Ветер {wind_ms:.0f} м/с"
 
     of = wardrobe.build_outfit_focus(weather.weather_block(data, 0, s["city"]), "сегодня")
     ex = plany_extras(s.get("country", ""), day_str, s.get("city", ""))
@@ -77,29 +95,87 @@ async def send_plany(bot, cid):
 
     now = datetime.now(TZ)
     header = f"{_WEEKDAYS[now.weekday()]}, {now.day} {_MONTHS[now.month-1]}"
-
+    def cap(x): return x[:1].upper() + x[1:] if x else x
     L = [f"<b>Мой день • {esc(header)} • {esc(s.get('city',''))}</b>", ""]
-    L += ["<b>🌡️ Погода</b>",
-          f"{icon} {tmax:+.0f}°C • Дождь{rain_when} {rain:.0f}% • {wemoji} {wword}{wind_when} {wind_ms:.0f} м/с", ""]
+    L += [f"<b>{icon} Погода сегодня</b>",
+          f"До {tmax:+.0f}°C • Дождь{rain_when} {rain:.0f}% • {wind_str}", ""]
     if ex.get("event"):
-        L += ["<b>🗓️ Событие в стране или мире</b>", esc(ex.get("event", "")), ""]
+        L += ["<b>🗓️ Важное событие</b>", esc(ex.get("event", "")), ""]
     outfit = " + ".join(of.get("outfit", [])).rstrip(".")
-    L += ["<b>👕 Лук</b>", esc(outfit), ""]
-    L += ["<b>📚 Мини-урок</b>",
-          f"{esc(ex.get('word_ru',''))} → 🇳🇱 {esc(ex.get('word_nl',''))} → 🇬🇧 {esc(ex.get('word_en',''))}", ""]
-    L += ["<b>🚀 Бизнес-идея</b>", esc(ex.get("idea", "")), ""]
+    L += ["<b>👕 Что надеть сегодня</b>", esc(outfit), ""]
+    L += ["<b>📚 Слово дня</b>",
+          f"{cap(esc(ex.get('word_ru','')))} → 🇳🇱 {cap(esc(ex.get('word_nl','')))} → 🇬🇧 {cap(esc(ex.get('word_en','')))}", ""]
+    L += ["<b>🚀 Бизнес-идея</b>", esc(ex.get("idea", "").split(". ")[0].rstrip(".")), ""]
     L += ["<b>🔬 Интересные факты</b>"]
     facts = ex.get("facts", [])
-    if isinstance(facts, str):
-        facts = [facts]
+    if isinstance(facts, str): facts = [facts]
     for f in facts[:3]:
-        if f:
-            L.append(f"• {esc(f)}")
+        if f: L.append(f"• {esc(f.rstrip('.'))}")
     L.append("")
     if ex.get("quote"):
-        L += ["<b>📖 Цитата</b>", f"«{esc(ex.get('quote',''))}» - ({esc(ex.get('quote_src',''))})"]
+        L += ["<b>💭 Цитата</b>", f"«{esc(ex.get('quote',''))}» - ({esc(ex.get('quote_src',''))})"]
+    text = "\n".join(L).strip()
+    return text, ex, outfit, day_str
 
-    await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML")
+async def send_plany(bot, cid):
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    cache = _day_cache.get(str(cid))
+    if not cache or cache.get("date") != today:
+        await bot.send_message(chat_id=cid, text="Собираю сводку дня...")
+        try:
+            text, ex, outfit, _ = _build_day_text(cid)
+        except Exception as e:
+            await bot.send_message(chat_id=cid, text=f"Ошибка: {e}"); return
+        _day_cache[str(cid)] = {"date": today, "text": text, "ex": ex, "outfit": outfit}
+    text = _day_cache[str(cid)]["text"]
+    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=_day_menu_kb())
+
+async def handle_callback(bot, cid, q, data):
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    cache = _day_cache.get(str(cid), {})
+    ex = cache.get("ex", {})
+    if data == "md_idea":
+        import assistant
+        await bot.send_message(chat_id=cid, text="Думаю...")
+        try:
+            out = assistant._gen_idea(cid)
+        except Exception as e:
+            await bot.send_message(chat_id=cid, text=str(e)); return
+        store.last_source[str(cid)] = "Идеи"
+        store.last_answer[str(cid)] = out
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Новая идея", callback_data="md_idea")],
+                                   [InlineKeyboardButton("⭐ Добавить в избранное", callback_data="as_fav")],
+                                   [InlineKeyboardButton("⬅️ Назад", callback_data="m_close")]])
+        await bot.send_message(chat_id=cid, text=out, reply_markup=kb)
+        return
+    if data == "md_fav":
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⭐ Сохранить бизнес-идею", callback_data="md_save_idea")],
+            [InlineKeyboardButton("⭐ Сохранить цитату", callback_data="md_save_quote")],
+            [InlineKeyboardButton("⭐ Сохранить событие", callback_data="md_save_event")],
+            [InlineKeyboardButton("⭐ Сохранить образ дня", callback_data="md_save_look")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="m_close")],
+        ])
+        try:
+            await q.message.edit_reply_markup(reply_markup=kb)
+        except Exception:
+            await bot.send_message(chat_id=cid, text="Что сохранить?", reply_markup=kb)
+        return
+    if data.startswith("md_save_"):
+        what = data[len("md_save_"):]
+        mapping = {
+            "idea": ("Идеи", ex.get("idea", "")),
+            "quote": ("Цитаты", (f"«{ex.get('quote','')}» - ({ex.get('quote_src','')})") if ex.get("quote") else ""),
+            "event": ("События", ex.get("event", "")),
+            "look": ("Образы", cache.get("outfit", "")),
+        }
+        cat, txt = mapping.get(what, ("Прочее", ""))
+        if not txt:
+            await bot.send_message(chat_id=cid, text="Нечего сохранять - открой «Мой день» заново."); return
+        store.add_to_list(config.NOTES_KEY, cid, {"date": datetime.now(TZ).strftime("%d.%m"),
+                                                  "text": txt.strip(), "source": cat})
+        await bot.send_message(chat_id=cid, text=f"⭐ Сохранено в «{cat}».")
+        return
 
 # --- Утро ---
 def morning_greeting(weather_short):

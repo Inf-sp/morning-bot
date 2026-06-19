@@ -10,6 +10,7 @@ import assistant
 import myday
 import wardrobe
 import learning
+import settings
 import travel
 import content
 import weather
@@ -20,7 +21,24 @@ CHAT_ID = config.CHAT_ID
 
 
 async def start(update, context):
-    await update.message.reply_text("Привет! 👋 Я DM.\n\nВыбери раздел в меню снизу.", reply_markup=menu.MAIN_KB)
+    txt = (
+        "👋 <b>Привет! Я DM</b> - твой ежедневный помощник.\n"
+        "Погода, обучение, идеи и весь твой день в одном месте.\n\n"
+        "<b>Что я умею:</b>\n"
+        "☀️ <b>Мой день</b> - погода, образ, слово дня, идея, факты, цитата\n"
+        "👕 <b>Гардероб</b> - луки по погоде, разбор шкафа, проверка покупок\n"
+        "🧠 <b>Баланс</b> - врач, мотивация, СДВГ-фокус, дневник тревог, рецепты\n"
+        "📚 <b>Обучение</b> - нидерландский/английский, игра, словарь, экзамен\n"
+        "🍿 <b>Досуг</b> - фильмы, книги, музыка, концерты, путешествия\n\n"
+        "💬 Любой вопрос можно просто написать в чат - отвечу.\n\n"
+        "<b>Команды:</b>\n"
+        "/start - меню и описание\n"
+        "/setup - настройки (язык, город, уведомления, параметры шкафа)\n"
+        "/notes - твоё избранное\n\n"
+        "⭐ Сохранять можно кнопкой «Добавить в избранное» под ответами. "
+        "Потом всё найдёшь в /notes по категориям (Идеи, Цитаты, События...)."
+    )
+    await update.message.reply_text(txt, parse_mode="HTML", reply_markup=menu.MAIN_KB)
 
 
 # ---------- Диспетчер инлайн-кнопок ----------
@@ -38,6 +56,14 @@ async def answer_callback(update, context):
     # Гардероб: инлайн-кабинет
     if data.startswith("w_"):
         await wardrobe.handle_callback(bot, cid, q, data)
+        return
+    # Мой день: инлайн-кабинет
+    if data.startswith("md_"):
+        await myday.handle_callback(bot, cid, q, data)
+        return
+    # Настройки
+    if data.startswith("set_"):
+        await handle_settings(bot, cid, data)
         return
     # Навигация по подменю - редактируем сообщение на месте
     if data == "m_close":
@@ -98,6 +124,8 @@ async def answer_callback(update, context):
                 await learning.game_start(bot, cid)
             elif act == "levels":
                 await learning.send_levels(bot, cid)
+            elif act == "w_full":
+                await weather.send_weather(bot, cid, "full")
             elif act == "w_today":
                 await weather.send_weather(bot, cid, "today")
             elif act == "w_tomorrow":
@@ -231,16 +259,11 @@ async def text_router(update, context):
     text = update.message.text
     bot = context.bot
 
-    if text == "💬 Ассистент DM | Daily Manager":
-        await assistant.send_home(bot, cid)
-        return
     if text == "☀️ Мой день":
-        await bot.send_message(chat_id=cid, text="Собираю сводку дня...")
         try:
             await myday.send_plany(bot, cid)
         except Exception as e:
             await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
-        await bot.send_message(chat_id=cid, text="Ещё по погоде 👇", reply_markup=menu.day_weather_kb())
         return
     if text == "👕 Гардероб":
         await wardrobe.send_home(bot, cid)
@@ -290,6 +313,10 @@ async def text_router(update, context):
             await weather.set_city_text(bot, cid, text); return
         if kind == "dictadd":
             await learning.add_word_manual(bot, cid, text); return
+        if kind == "bodyinput":
+            settings.set_(cid, "body", text)
+            await bot.send_message(chat_id=cid, text="Готово, параметры сохранены.")
+            await settings.send_body(bot, cid); return
 
     # Свободный чат
     await assistant.chat_reply(bot, cid, text)
@@ -334,7 +361,7 @@ async def notes_command(update, context):
     await assistant.send_notes(context.bot, update.effective_chat.id)
 
 async def setup_command(update, context):
-    await learning.send_levels(context.bot, update.effective_chat.id)
+    await settings.send_home(context.bot, update.effective_chat.id)
 
 async def reload_wardrobe_command(update, context):
     import json
@@ -375,7 +402,7 @@ async def reload_artists_command(update, context):
 
 # ---------- Расписание ----------
 async def job_morning(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID:
+    if not CHAT_ID or not settings.notif_on(CHAT_ID, "morning"):
         return
     try:
         await send_long(context.bot, CHAT_ID, myday.assemble_morning(CHAT_ID))
@@ -383,25 +410,28 @@ async def job_morning(context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=CHAT_ID, text=f"Ошибка сводки: {e}")
 
 async def job_grammar(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID:
+    if not CHAT_ID or not settings.notif_on(CHAT_ID, "grammar"):
         return
     try:
-        await learning.send_grammar(context.bot, CHAT_ID, "нидерландский", "🇳🇱")
+        lang = settings.study_lang(CHAT_ID)
+        flag = "🇳🇱" if lang == "нидерландский" else "🇬🇧"
+        await learning.send_grammar(context.bot, CHAT_ID, lang, flag)
     except Exception:
         pass
 
 async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID:
+    if not CHAT_ID or not settings.notif_on(CHAT_ID, "checkin_day"):
         return
     try:
         store.pending_input[str(CHAT_ID)] = "worry"
-        await context.bot.send_message(chat_id=CHAT_ID,
-            text="🌤 Дим, что сейчас тревожит? Напиши одним сообщением, каждую тревогу с новой строки - вечером проверим.")
+        await context.bot.send_message(chat_id=CHAT_ID, parse_mode="HTML",
+            text="🫣 <b>Дневная разгрузка</b>\n\nСейчас не анализируй, просто выгрузи мысли.\n"
+                 "Каждая тревога - с новой строки.\nВечером проверим, что было фактами, а что шумом.")
     except Exception:
         pass
 
 async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID:
+    if not CHAT_ID or not settings.notif_on(CHAT_ID, "checkin_eve"):
         return
     try:
         await myday.send_daycheck(context.bot, CHAT_ID)
@@ -423,9 +453,40 @@ async def job_weekly(context: ContextTypes.DEFAULT_TYPE):
         pass
 
 
+async def handle_settings(bot, cid, data):
+    if data == "set_home":
+        await settings.send_home(bot, cid)
+    elif data == "set_notif":
+        await settings.send_notif(bot, cid)
+    elif data.startswith("set_notiftgl_"):
+        await settings.toggle_notif(bot, cid, data[len("set_notiftgl_"):])
+    elif data == "set_lang":
+        await settings.send_lang(bot, cid)
+    elif data == "set_lang_nl":
+        await settings.set_lang(bot, cid, "нидерландский")
+    elif data == "set_lang_en":
+        await settings.set_lang(bot, cid, "английский")
+    elif data == "set_levels":
+        await learning.send_levels(bot, cid)
+    elif data == "set_city":
+        store.pending_input[cid] = "setcity"
+        await bot.send_message(chat_id=cid, text="🌍 Напиши город - переключу.")
+    elif data == "set_body":
+        await settings.send_body(bot, cid)
+    elif data.startswith("set_style_"):
+        await settings.set_style(bot, cid, int(data.split("_")[-1]))
+    elif data == "set_bodyinput":
+        store.pending_input[cid] = "bodyinput"
+        await bot.send_message(chat_id=cid, text="✏️ Напиши параметры: рост, вес, обувь, размер брюк и одежды.")
+
+
 async def post_init(app):
     from telegram import BotCommand
-    await app.bot.set_my_commands([BotCommand("start", "меню"), BotCommand("notes", "избранное")])
+    await app.bot.set_my_commands([
+        BotCommand("start", "меню и описание"),
+        BotCommand("setup", "настройки"),
+        BotCommand("notes", "избранное"),
+    ])
 
 
 def main():
