@@ -259,12 +259,31 @@ async def send_weather(bot, cid, mode="today"):
 
 # ---------- смена города ----------
 async def set_city_text(bot, cid, name):
+    import re as _re
+    # нормализация: убрать пробелы вокруг тире, лишние пробелы
+    q = _re.sub(r"\s*-\s*", "-", (name or "").strip())
+    q = _re.sub(r"\s+", " ", q)
     try:
-        r = requests.get("https://geocoding-api.open-meteo.com/v1/search",
-                         params={"name": name, "count": 1, "language": "ru"}, timeout=20)
-        res = r.json().get("results")
+        res = None
+        for lang in ("ru", "en"):
+            r = requests.get("https://geocoding-api.open-meteo.com/v1/search",
+                             params={"name": q, "count": 1, "language": lang}, timeout=20)
+            res = r.json().get("results")
+            if res:
+                break
+        # запасной геокодер
         if not res:
-            await bot.send_message(chat_id=cid, text=f"Не нашёл город: {name}. Попробуй иначе.")
+            r2 = requests.get("https://nominatim.openstreetmap.org/search",
+                              params={"q": q, "format": "json", "limit": 1, "accept-language": "ru"},
+                              headers={"User-Agent": "DM-bot"}, timeout=20)
+            arr = r2.json()
+            if arr:
+                a = arr[0]
+                disp = a.get("display_name", q).split(",")
+                res = [{"latitude": float(a["lat"]), "longitude": float(a["lon"]),
+                        "name": disp[0].strip(), "country": disp[-1].strip(), "country_code": ""}]
+        if not res:
+            await bot.send_message(chat_id=cid, text=f"Не нашёл город: {name}. Попробуй написать иначе (например, по-английски).")
             return
         c = res[0]
         country = c.get("country", "")
@@ -275,7 +294,7 @@ async def set_city_text(bot, cid, name):
             myday.reset_day_cache(cid)
         except Exception:
             pass
-        await bot.send_message(chat_id=cid, text=f"Готово. Ты находишься в городе {c['name']}"
+        await bot.send_message(chat_id=cid, text=f"Готово. Город переключён на {c['name']}"
                                                  + (f", {country}." if country else "."))
     except Exception as e:
         await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
