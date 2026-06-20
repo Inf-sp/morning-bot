@@ -215,40 +215,38 @@ async def send_weather(bot, cid, mode="today"):
     tmaxs = d["temperature_2m_max"][:7]
     rains = d["precipitation_probability_max"][:7]
     winds = d["windspeed_10m_max"][:7]
-    summary_data = (f"мин {min(tmins):.0f}°C, макс {max(tmaxs):.0f}°C; "
-                    f"дожди по дням %: {[int(x or 0) for x in rains]}; "
-                    f"ветер {min(winds):.0f}-{max(winds):.0f} м/с")
+    days_ru = [_WEEKDAYS[(now + timedelta(days=i)).weekday()] for i in range(7)]
+    short = {"Понедельник": "Пн", "Вторник": "Вт", "Среда": "Ср", "Четверг": "Чт",
+             "Пятница": "Пт", "Суббота": "Сб", "Воскресенье": "Вс"}
+    per_day = "; ".join(f"{short[days_ru[i]]}: {tmaxs[i]:.0f}°C, дождь {int(rains[i] or 0)}%, ветер {winds[i]:.0f}"
+                        for i in range(7))
+    tmin, tmax = min(tmins), max(tmaxs)
+    flag = __import__("util").flag_from_cc(s.get("cc", ""))
     try:
         body = ai.llm(
-            f"Сделай краткую сводку погоды на неделю для города {s['city']}. Данные: {summary_data}.\n"
-            f"Дни недели пиши ПОЛНОСТЬЮ (Понедельник, Вторник...), НЕ сокращай.\n"
-            f"СТРОГО формат, без markdown:\n"
-            f"🌤️ {{характер недели и диапазон температур}}\n"
-            f"🌧️ {{про дожди, в какие дни вероятнее, с процентами}}\n"
-            f"💨 {{ветер диапазон м/с}}\n"
-            f"КОМФОРТ: {{одна строка: в какие дни комфортно, в какие дождь, дни недели полностью}}", 450, 0.8)
+            f"Сводка погоды на неделю, город {s['city']}. По дням: {per_day}.\n"
+            f"Дни недели сокращай как Пн, Вт, Ср, Чт, Пт, Сб, Вс. Группируй диапазонами (например 'Ср - Сб').\n"
+            f"СТРОГО такой формат, без markdown, каждая строка отдельно:\n"
+            f"☀️ {{диапазон дней}}: лучшая погода\n"
+            f"🌧️ {{диапазон дней}}: возможны дожди\n"
+            f"🔥 {{диапазон дней}}: пик жары (ТОЛЬКО если есть жаркие дни, иначе пропусти строку)\n"
+            f"💨 {{ветер: слабый/умеренный/сильный}}\n"
+            f"Итог: {{1 предложение, тёплый вывод}}", 350, 0.8)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
-    comfort, main = "", []
+    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", "",
+         f"<b>Температура {tmin:+.0f}°C → {tmax:+.0f}°C</b>", ""]
     for ln in body.splitlines():
-        s_ln = ln.strip()
-        if s_ln.upper().startswith("КОМФОРТ"):
-            comfort = s_ln.split(":", 1)[-1].strip()
-        elif s_ln:
-            main.append(esc(s_ln))
-    flag = __import__("util").flag_from_cc(s.get("cc", ""))
-    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", ""]
-    L += main
-    if comfort:
-        L += ["", f"<b>Комфортные дни:</b> {esc(comfort)}"]
-    try:
-        cfact = ai.llm(f"Одна короткая фраза про погоду в стране {s.get('country','')} летом, начни с «Кстати,». 1 предложение.", 100, 0.9).strip().splitlines()[0]
-        if cfact:
-            L += ["", f"{flag} {esc(cfact)}"]
-    except Exception:
-        pass
+        t = ln.strip()
+        if not t:
+            continue
+        if t.lower().startswith("итог"):
+            L.append(f"<b>{esc(t)}</b>")
+        else:
+            L.append(esc(t))
+            L.append("")
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_close")]])
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
 
 
 # ---------- смена города ----------
@@ -277,7 +275,8 @@ async def set_city_text(bot, cid, name):
                 res = [{"latitude": float(a["lat"]), "longitude": float(a["lon"]),
                         "name": disp[0].strip(), "country": disp[-1].strip(), "country_code": ""}]
         if not res:
-            await bot.send_message(chat_id=cid, text=f"Не нашёл город: {name}. Попробуй написать иначе (например, по-английски).")
+            store.pending_input[str(cid)] = "setcity"
+            await bot.send_message(chat_id=cid, text=f"😕 Не нашёл город: {name}.\n\n🌍 Напиши название города ещё раз - исправив ошибки!")
             return
         c = res[0]
         country = c.get("country", "")
