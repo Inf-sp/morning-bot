@@ -34,6 +34,9 @@ def plany_extras(country, date_str, city="", weather_text="", wardrobe_text=""):
 
 _day_cache = {}  # cid -> {"date":..., "text":..., "ex":..., "outfit":...}
 
+def reset_day_cache(cid):
+    _day_cache.pop(str(cid), None)
+
 def _day_menu_kb():
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     return InlineKeyboardMarkup([
@@ -82,8 +85,9 @@ def _build_day_text(cid):
     L = [f"<b>Мой день • {esc(header)} • {esc(s.get('city',''))}</b>", ""]
     L += [f"<b>{icon} Погода сегодня</b>",
           f"До {tmax:+.0f}°C • Дождь{rain_when} {rain:.0f}% • {wind_str}", ""]
-    if ex.get("event"):
-        L += ["<b>🗓️ Важное событие</b>", esc(ex.get("event", "")), ""]
+    ev = (ex.get("event") or "").strip()
+    if ev and "нет крупных событи" not in ev.lower() and "нет событи" not in ev.lower():
+        L += ["<b>🗓️ Важное событие</b>", esc(ev), ""]
     outfit = " + ".join(ex.get("outfit", [])).rstrip(".")
     L += ["<b>👕 Что надеть сегодня</b>", esc(outfit), ""]
     L += ["<b>📚 Слово дня</b>",
@@ -140,7 +144,6 @@ async def handle_callback(bot, cid, q, data):
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("⭐ Сохранить бизнес-идею", callback_data="md_save_idea")],
             [InlineKeyboardButton("⭐ Сохранить цитату", callback_data="md_save_quote")],
-            [InlineKeyboardButton("⭐ Сохранить событие", callback_data="md_save_event")],
             [InlineKeyboardButton("⭐ Сохранить образ дня", callback_data="md_save_look")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="m_close")],
         ])
