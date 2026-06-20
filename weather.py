@@ -241,7 +241,10 @@ async def send_weather(bot, cid, mode="today"):
         if not t:
             continue
         if t.lower().startswith("итог"):
-            L.append(f"<b>{esc(t)}</b>")
+            rest = t.split(":", 1)[1].strip() if ":" in t else ""
+            L.append("<b>Итог:</b>")
+            if rest:
+                L.append(esc(rest))
         else:
             L.append(esc(t))
             L.append("")
