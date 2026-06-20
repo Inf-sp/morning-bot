@@ -270,6 +270,11 @@ async def set_city_text(bot, cid, name):
         country = c.get("country", "")
         cc = c.get("country_code", "")
         store.set_settings(cid, c["latitude"], c["longitude"], c["name"], country, cc)
+        try:
+            import myday
+            myday.reset_day_cache(cid)
+        except Exception:
+            pass
         await bot.send_message(chat_id=cid, text=f"Готово. Ты находишься в городе {c['name']}"
                                                  + (f", {country}." if country else "."))
     except Exception as e:
@@ -296,6 +301,11 @@ async def location_handler(update, context):
     except Exception:
         cc = ""
     store.set_settings(cid, loc.latitude, loc.longitude, city, country, cc)
+    try:
+        import myday
+        myday.reset_day_cache(cid)
+    except Exception:
+        pass
     await update.message.reply_text(f"Готово. Ты находишься в городе {city}" + (f", {country}." if country else "."))
     try:
         await send_weather(context.bot, cid, "today")
