@@ -6,20 +6,6 @@ import ai
 import myday
 import ze
 
-HOME_TEXT = (
-    "💬 Ассистент DM | Daily Manager\n\n"
-    "Что делаем сегодня?\n\n"
-    "Я помогаю с делами, языками, стилем, путешествиями и решениями на каждый день.\n\n"
-    "Выбери направление или просто напиши вопрос 👇"
-)
-
-STATE_TEXT = (
-    "🎯 Мотивация и состояние\n\n"
-    "Помогу разобраться с внутренним состоянием, фокусом и мотивацией. "
-    "Это не психотерапия и не замена специалиста - если становится тяжело, лучше подключить врача или психолога.\n\n"
-    "Опиши, что сейчас происходит 👇"
-)
-
 DOCTOR_INTRO = (
     "👩🏻‍⚕️ Врач\n\n"
     "Дам общую справочную информацию о здоровье и лекарствах. Это не диагноз и не назначение - "
@@ -36,24 +22,6 @@ LETTER_REF = (
 
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
-
-def home_kb():
-    return _kb([
-        [("👨‍🍳 Кулинарный радар", "as_food")],
-        [("✍️ Письма и тексты", "as_letter")],
-        [("💡 Идеи и проекты", "as_idea")],
-        [("🎯 Мотивация и состояние", "as_state")],
-        [("👩🏻‍⚕️ Вопрос врачу", "as_doctor")],
-    ])
-
-def state_kb():
-    return _kb([
-        [("⚡ Подбодри меня", "as_cheer")],
-        [("🧠 СДВГ-фокус", "as_adhd")],
-        [("😌 Проверить состояние", "as_daycheck")],
-        [("📈 Карта развития", "as_map")],
-        [("⬅️ Назад", "m_close")],
-    ])
 
 # универсальная клавиатура под ответом: [Продолжить][⭐][В меню]
 def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry"):
@@ -86,10 +54,6 @@ async def _send(bot, cid, text, kb=None):
     await bot.send_message(chat_id=cid, text=chunks[-1], reply_markup=kb if kb is not None else _ans_kb())
 
 
-async def send_home(bot, cid):
-    await bot.send_message(chat_id=cid, text=HOME_TEXT)
-
-send_welcome = send_home
 
 
 # ---------- Кулинарный радар ----------
@@ -145,14 +109,6 @@ def _gen_idea(cid):
                   "Польза: {через запятую}\nНачать: {через запятую}\n\nПервый результат: {что получится}",
                   400, 1.0, ai.LEARN_ORDER)
 
-def _gen_adhd(cid):
-    return ai.llm("Дай 1 короткую технику фокуса при СДВГ прямо сейчас (2-3 строки, эмодзи). "
-                  "Выполнимо за минуту. Без воды.", 300, 0.9)
-
-def _gen_cheer(cid):
-    return ai.llm(f"Подбодри коротко (2-3 строки), тепло и не банально, с эмодзи. "
-                  f"Опирайся по духу: {config.LAGOM}", 300, 0.95)
-
 def _gen_motiv(cid):
     return ai.llm(
         "Сгенерируй блок «Личная мотивация» для человека с СДВГ. Тепло, по-доброму, без воды и клише. "
@@ -167,15 +123,6 @@ def _gen_motiv(cid):
         "🌱 Напоминание:\n"
         "• {короткая мысль про прогресс, а не идеал}",
         500, 0.95, ai.LEARN_ORDER)
-
-def _gen_map(cid):
-    return ai.llm(
-        "Сделай блок-ориентир (для дизайнера UI/UX и фотографа в Нидерландах, с СДВГ). СТРОГО формат:\n\n"
-        "📈 Карта развития\n\n🎯 Главный фокус\n{1 строка}\n\n"
-        "💪 Сильные стороны\n• пункт\n• пункт\n• пункт\n\n"
-        "⚠️ Ловушки\n• пункт\n• пункт\n\n"
-        "➡️ Следующий шаг\n{1 конкретное действие на 15 минут}\n\n"
-        f"Кратко, под действие. Опирайся: {config.LAGOM}", 600, 0.85)
 
 
 # ---------- роли ----------
@@ -348,29 +295,12 @@ async def send_notes_cat(bot, cid, cat_index):
 
 _ONESHOT = {
     "as_idea": (_gen_idea, "🔁 Новая идея", "as_idea"),
-    "as_adhd": (_gen_adhd, "🔄 Ещё приём", "as_adhd"),
-    "as_cheer": (_gen_cheer, "🔄 Ещё совет", "as_cheer"),
     "as_motiv": (_gen_motiv, "🔄 Ещё", "as_motiv"),
-    "as_map": (_gen_map, "🔄 Обновить", "as_map"),
 }
 
 
 # ---------- роутер кнопок ассистента ----------
 async def handle_callback(bot, cid, q, data):
-    if data == "as_home":
-        store.pending_input.pop(str(cid), None)
-        try:
-            await q.message.edit_text(HOME_TEXT, reply_markup=home_kb())
-        except Exception:
-            await bot.send_message(chat_id=cid, text=HOME_TEXT, reply_markup=home_kb())
-        return
-    if data == "as_state":
-        store.pending_input[str(cid)] = "role_state"
-        try:
-            await q.message.edit_text(STATE_TEXT, reply_markup=state_kb())
-        except Exception:
-            await bot.send_message(chat_id=cid, text=STATE_TEXT, reply_markup=state_kb())
-        return
     # Кулинарный радар
     if data == "as_food":
         await send_recipe(bot, cid, "обычное блюдо"); return

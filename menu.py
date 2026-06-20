@@ -22,17 +22,6 @@ def _ikb(rows):
 def _back(parent="m_close"):
     return [("⬅️ Назад", parent)]
 
-def day_weather_kb():
-    return _ikb([
-        [("🗓️ Полный прогноз на сегодня", "a_w_full")],
-        [("🗓️ Погода на завтра", "a_w_tomorrow")],
-        [("🗓️ Погода на неделю", "a_w_week")],
-        [("🚀 Новая идея", "md_idea")],
-        [("🌍 Сменить город", "a_setcity")],
-        [("⭐ Добавить в избранное", "md_fav")],
-        [("⬅️ Назад", "m_close")],
-    ])
-
 def menu_screen(key):
     if key == "m_balance":
         return ("🧠 <b>Баланс</b>\n\nЗдоровье, эмоции и питание в одном месте.\n"

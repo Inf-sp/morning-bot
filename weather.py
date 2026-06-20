@@ -46,9 +46,6 @@ def wind_scale(ms):
         return "⚠️", "Сильный ветер"
     return "🚨", "Очень сильный ветер"
 
-def wind_note(ms):
-    return wind_scale(ms)[1].lower()
-
 
 # ---------- иконка ----------
 def weather_icon(code, temp, rain, wind_ms=0):
