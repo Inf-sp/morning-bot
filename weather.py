@@ -182,7 +182,8 @@ async def send_weather(bot, cid, mode="today"):
         day = 0 if mode == "today" else 1
         dt = now + timedelta(days=day)
         title = "сегодня" if mode == "today" else "завтра"
-        header = f"Погода на {title} • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]}"
+        flag = __import__("util").flag_from_cc(s.get("cc", "")) or ""
+        header = f"Погода на {title} • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} • {s['city']} {flag}"
         code = d["weathercode"][day]
         tmax = d["temperature_2m_max"][day]
         rain = d["precipitation_probability_max"][day] or 0
@@ -191,16 +192,11 @@ async def send_weather(bot, cid, mode="today"):
         wemoji, wword = wind_scale(wind_ms)
         day_str = d["time"][day]
         rain_p = _periods(data, day_str, "precipitation_probability", 40)
-        wind_p = _periods(data, day_str, "windspeed_10m", 6)
         rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-        wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
+        wind_str = f"{wemoji} {wword} {wind_ms:.0f} м/с" if wind_ms >= 8 else f"💨 Ветер {wind_ms:.0f} м/с"
 
         L = [f"<b>{esc(header)}</b>", "",
-             f"<b>🌡️ {esc(place)}</b>",
-             f"{icon} {tmax:+.0f}°C • 🌧️ Дождь{rain_when} {rain:.0f}% • {wemoji} {wword}{wind_when} {wind_ms:.0f} м/с"]
-        joke = _joke_outfit(s["city"], tmax, rain, wind_ms, DESC.get(code, ""), title)
-        if joke:
-            L += ["", esc(joke)]
+             f"{icon} До {tmax:+.0f}°C • Дождь{rain_when} {rain:.0f}% • {wind_str}"]
         fact = _world_fact()
         if fact:
             L += ["", esc(fact)]
@@ -225,28 +221,26 @@ async def send_weather(bot, cid, mode="today"):
     try:
         body = ai.llm(
             f"Сделай краткую сводку погоды на неделю для города {s['city']}. Данные: {summary_data}.\n"
+            f"Дни недели пиши ПОЛНОСТЬЮ (Понедельник, Вторник...), НЕ сокращай.\n"
             f"СТРОГО формат, без markdown:\n"
             f"🌤️ {{характер недели и диапазон температур}}\n"
-            f"🌧️ {{про дожди, в какие части дня чаще}}\n"
+            f"🌧️ {{про дожди, в какие дни вероятнее, с процентами}}\n"
             f"💨 {{ветер диапазон м/с}}\n"
-            f"ЛУЧШИЕ: {{короткий список дней через запятую, напр. Пн, вт, ср}}\n"
-            f"СЛОЖНО: {{одна короткая строка, напр. А вот вс будет дождливым}}", 400, 0.8)
+            f"КОМФОРТ: {{одна строка: в какие дни комфортно, в какие дождь, дни недели полностью}}", 450, 0.8)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
-    best, hard, main = "", "", []
+    comfort, main = "", []
     for ln in body.splitlines():
         s_ln = ln.strip()
-        if s_ln.upper().startswith("ЛУЧШИЕ"):
-            best = s_ln.split(":", 1)[-1].strip()
-        elif s_ln.upper().startswith("СЛОЖНО"):
-            hard = s_ln.split(":", 1)[-1].strip()
+        if s_ln.upper().startswith("КОМФОРТ"):
+            comfort = s_ln.split(":", 1)[-1].strip()
         elif s_ln:
             main.append(esc(s_ln))
     flag = __import__("util").flag_from_cc(s.get("cc", ""))
-    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])}</b>", ""]
+    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", ""]
     L += main
-    if best or hard:
-        L += ["", "<b>Лучшие дни:</b>", esc((best + (". " + hard if hard else "")).strip())]
+    if comfort:
+        L += ["", f"<b>Комфортные дни:</b> {esc(comfort)}"]
     try:
         cfact = ai.llm(f"Одна короткая фраза про погоду в стране {s.get('country','')} летом, начни с «Кстати,». 1 предложение.", 100, 0.9).strip().splitlines()[0]
         if cfact:
