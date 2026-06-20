@@ -8,13 +8,27 @@ from util import esc
 def content_recommend(kind, cid):
     if kind == "movie":
         seen = store.get_list(config.WATCHLIST_KEY, cid)
+        black = store.get_list(config.MOVIE_BLACKLIST_KEY, cid)
         what = "фильмов или сериалов"
     else:
         seen = store.get_list(config.READLIST_KEY, cid)
+        black = store.get_list(config.BOOK_BLACKLIST_KEY, cid)
         what = "книг"
     seen_titles = [s if isinstance(s, str) else str(s) for s in seen]
-    avoid = ("\nНЕ рекомендуй то, что уже есть в его списке: " + ", ".join(seen_titles[:60])) if seen_titles else ""
+    black_titles = [s if isinstance(s, str) else str(s) for s in black]
+    skip = seen_titles + black_titles
+    avoid = ("\nНЕ рекомендуй то, что уже отмечено или не понравилось: " + ", ".join(skip[:80])) if skip else ""
     anchors = ", ".join(seen_titles[:25]) if seen_titles else "Breaking Bad, Euphoria, Parasite, Call Me by Your Name"
+    if kind == "book":
+        prompt = f"""{config.CONTENT_TASTE}
+
+Любимые/прочитанные книги (референсы вкуса): {anchors}
+
+Ты опытный книжный критик. Порекомендуй РОВНО 5 действительно сильных книг под этот вкус (без проходных).{avoid}
+JSON: {{"items": [{{"title": "название (год издания)", "title_en": "оригинальное название",
+ "author": "автор", "hook": "почему именно ему зайдёт, 1-2 строки, со ссылкой на его референсы",
+ "quote": "короткая цитата из книги или известная цитата, связанная с ней"}}]}}"""
+        return ai.llm_json(prompt, 1100)
     prompt = f"""{config.CONTENT_TASTE}
 
 Его уже отмеченные работы (референсы вкуса): {anchors}
@@ -56,7 +70,32 @@ def _tmdb_lookup(title, title_en=""):
             continue
     return None
 
+def _movie_card(it, tm):
+    title = (tm["name"] if tm else it.get("title", ""))
+    year = f" ({tm['year']})" if tm and tm["year"] else ""
+    cap = [f"🎬 <b>{esc(title)}{year}</b>"]
+    en = (tm.get("name_en") if tm else "") or it.get("title_en", "")
+    if en and en.lower() != title.lower():
+        cap.append(f"<i>{esc(en)}</i>")
+    if tm and tm.get("genres"):
+        cap.append("")
+        cap.append(f"🎭 {esc(tm['genres'])}")
+    if tm and tm["rating"]:
+        cap.append(f"⭐ {tm['rating']:.1f}/10 TMDb")
+    if tm and tm.get("overview"):
+        cap.append("")
+        cap.append(esc(tm["overview"][:300]))
+    cap.append("")
+    cap.append(f"💡 {esc(it.get('hook', ''))}")
+    if tm and tm.get("url"):
+        cap.append("")
+        cap.append(f"🔗 {tm['url']}")
+    return title, "\n".join(cap)
+
 async def send_recos(bot, cid, kind):
+    if kind == "book":
+        await send_books_reco(bot, cid)
+        return
     await bot.send_message(chat_id=cid, text="Подбираю под твой вкус...")
     try:
         data = content_recommend(kind, str(cid))
@@ -65,53 +104,140 @@ async def send_recos(bot, cid, kind):
         await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
         return
     store.last_recos[str(cid)] = {"kind": kind, "items": [it.get("title", "") for it in items]}
-    store.last_source[str(cid)] = "Досуг · " + ("Что посмотреть" if kind == "movie" else "Что почитать")
+    store.last_source[str(cid)] = "Досуг · Фильмы и сериалы"
     store.last_answer[str(cid)] = "\n".join(f"{it.get('title','')} - {it.get('hook','')}" for it in items)
-    label = "🍿 В закладки" if kind == "movie" else "📚 В закладки"
 
-    if kind == "movie" and config.TMDB_API_KEY:
-        await bot.send_message(chat_id=cid, text="🎬 <b>Что посмотреть</b>", parse_mode="HTML")
-        for i, it in enumerate(items):
-            tm = _tmdb_lookup(it.get("title", ""), it.get("title_en", ""))
-            title = (tm["name"] if tm else it.get("title", ""))
-            year = f" ({tm['year']})" if tm and tm["year"] else ""
-            cap = [f"🎬 <b>{esc(title)}{year}</b>"]
-            if tm and tm.get("name_en") and tm["name_en"].lower() != title.lower():
-                cap.append(f"🇬🇧 {esc(tm['name_en'])}")
-            elif it.get("title_en"):
-                cap.append(f"🇬🇧 {esc(it['title_en'])}")
-            if tm and tm.get("genres"):
-                cap.append(f"🎭 {esc(tm['genres'])}")
-            if tm and tm["rating"]:
-                cap.append(f"⭐ {tm['rating']:.1f}/10 TMDb")
-            cap.append(esc(it.get("hook", "")))
-            if tm and tm.get("url"):
-                cap.append(tm["url"])
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"{label}: {title[:26]}", callback_data=f"reco_{i}")]])
-            text = "\n".join(cap)
-            sent = False
-            if tm and tm.get("poster"):
-                try:
-                    await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=text, parse_mode="HTML", reply_markup=kb)
-                    sent = True
-                except Exception:
-                    sent = False
-            if not sent:
-                await bot.send_message(chat_id=cid, text=text, parse_mode="HTML",
-                                       reply_markup=kb, disable_web_page_preview=False)
+    await bot.send_message(chat_id=cid, text="🎬 <b>Фильмы и сериалы</b>", parse_mode="HTML")
+    for i, it in enumerate(items):
+        tm = _tmdb_lookup(it.get("title", ""), it.get("title_en", "")) if config.TMDB_API_KEY else None
+        title, text = _movie_card(it, tm)
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("😕 Не зашло", callback_data=f"movie_no_{i}"),
+             InlineKeyboardButton("⭐ В закладки", callback_data=f"reco_{i}")]])
+        sent = False
+        if tm and tm.get("poster"):
+            try:
+                await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=text, parse_mode="HTML", reply_markup=kb)
+                sent = True
+            except Exception:
+                sent = False
+        if not sent:
+            await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text="⬇️",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")]]))
+
+async def movie_dislike(bot, cid, i):
+    rec = store.last_recos.get(str(cid))
+    if rec and i < len(rec["items"]):
+        title = rec["items"][i]
+        store.add_to_list(config.MOVIE_BLACKLIST_KEY, cid, title)
+        await bot.send_message(chat_id=cid, text=f"Понял, больше не буду рекомендовать «{title}». Вот другой вариант 👇")
+    try:
+        data = content_recommend("movie", str(cid))
+        items = data.get("items", [])
+    except Exception:
+        items = []
+    if not items:
         return
+    it = items[0]
+    rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
+    rec["items"].append(it.get("title", ""))
+    store.last_recos[str(cid)] = rec
+    ni = len(rec["items"]) - 1
+    tm = _tmdb_lookup(it.get("title", ""), it.get("title_en", "")) if config.TMDB_API_KEY else None
+    title, text = _movie_card(it, tm)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("😕 Не зашло", callback_data=f"movie_no_{ni}"),
+         InlineKeyboardButton("⭐ В закладки", callback_data=f"reco_{ni}")]])
+    if tm and tm.get("poster"):
+        try:
+            await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=text, parse_mode="HTML", reply_markup=kb); return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
 
-    head = "🎬 Что посмотреть" if kind == "movie" else "📖 Что почитать"
-    lines = [head, ""]
-    for it in items:
-        lines.append(f"• {it.get('title','')}")
+def _book_cover(title, title_en=""):
+    import requests
+    for q in [t for t in (title_en, title) if t]:
+        try:
+            r = requests.get("https://openlibrary.org/search.json",
+                             params={"title": q, "limit": 1}, timeout=10)
+            docs = r.json().get("docs", [])
+            if docs and docs[0].get("cover_i"):
+                return f"https://covers.openlibrary.org/b/id/{docs[0]['cover_i']}-L.jpg"
+        except Exception:
+            continue
+    return None
+
+async def send_books_reco(bot, cid):
+    await bot.send_message(chat_id=cid, text="Подбираю книги под твой вкус...")
+    try:
+        data = content_recommend("book", str(cid))
+        items = data.get("items", [])[:5]
+    except Exception as e:
+        await bot.send_message(chat_id=cid, text=f"Ошибка: {e}"); return
+    store.last_recos[str(cid)] = {"kind": "book", "items": [it.get("title", "") for it in items]}
+    store.last_source[str(cid)] = "Досуг · Книги"
+    store.last_answer[str(cid)] = "\n".join(it.get("title", "") for it in items)
+    await bot.send_message(chat_id=cid, text="📖 <b>Книги</b>", parse_mode="HTML")
+    for i, it in enumerate(items):
+        cap = [f"📖 <b>{esc(it.get('title',''))}</b>"]
         if it.get("title_en"):
-            lines.append(f"  🇬🇧 {it['title_en']}")
-        lines.append(f"  {it.get('hook','')}")
-    rows = [[InlineKeyboardButton(f"{label}: {it.get('title','')[:28]}", callback_data=f"reco_{i}")]
-            for i, it in enumerate(items)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
-    await bot.send_message(chat_id=cid, text="\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))
+            cap.append(f"<i>{esc(it['title_en'])}</i>")
+        if it.get("author"):
+            cap.append("")
+            cap.append(f"✍️ <b>{esc(it['author'])}</b>")
+        cap.append("")
+        cap.append(esc(it.get("hook", "")))
+        if it.get("quote"):
+            cap.append("")
+            cap.append(f"💬 «{esc(it['quote'])}»")
+        text = "\n".join(cap)
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("😕 Не зашло", callback_data=f"book_no_{i}"),
+             InlineKeyboardButton("⭐ В закладки", callback_data=f"reco_{i}")]])
+        cover = _book_cover(it.get("title", ""), it.get("title_en", ""))
+        sent = False
+        if cover:
+            try:
+                await bot.send_photo(chat_id=cid, photo=cover, caption=text, parse_mode="HTML", reply_markup=kb); sent = True
+            except Exception:
+                sent = False
+        if not sent:
+            await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text="⬇️",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")]]))
+
+async def book_dislike(bot, cid, i):
+    rec = store.last_recos.get(str(cid))
+    if rec and i < len(rec["items"]):
+        title = rec["items"][i]
+        store.add_to_list(config.BOOK_BLACKLIST_KEY, cid, title)
+        await bot.send_message(chat_id=cid, text=f"Понял, «{title}» исключил. Вот другая книга 👇")
+    try:
+        data = content_recommend("book", str(cid))
+        items = data.get("items", [])
+    except Exception:
+        items = []
+    if not items:
+        return
+    it = items[0]
+    rec = store.last_recos.get(str(cid), {"kind": "book", "items": []})
+    rec["items"].append(it.get("title", ""))
+    store.last_recos[str(cid)] = rec
+    ni = len(rec["items"]) - 1
+    cap = [f"📖 <b>{esc(it.get('title',''))}</b>"]
+    if it.get("title_en"):
+        cap.append(f"<i>{esc(it['title_en'])}</i>")
+    if it.get("author"):
+        cap += ["", f"✍️ <b>{esc(it['author'])}</b>"]
+    cap += ["", esc(it.get("hook", ""))]
+    if it.get("quote"):
+        cap += ["", f"💬 «{esc(it['quote'])}»"]
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("😕 Не зашло", callback_data=f"book_no_{ni}"),
+         InlineKeyboardButton("⭐ В закладки", callback_data=f"reco_{ni}")]])
+    await bot.send_message(chat_id=cid, text="\n".join(cap), parse_mode="HTML", reply_markup=kb)
 
 async def add_reco(bot, cid, i):
     from datetime import datetime
@@ -119,7 +245,7 @@ async def add_reco(bot, cid, i):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         key = config.WATCHLIST_KEY if rec["kind"] == "movie" else config.READLIST_KEY
-        folder = "Что посмотреть" if rec["kind"] == "movie" else "Что почитать"
+        folder = "Фильмы и сериалы" if rec["kind"] == "movie" else "Книги"
         store.add_to_list(key, cid, title)
         store.add_to_list(config.NOTES_KEY, cid,
                           {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": folder})
@@ -194,10 +320,14 @@ async def find_concerts(bot, cid, mode="home"):
     home_cc = (s.get("cc") or "NL").upper()
     home_flag = util.flag_from_cc(home_cc) or "🏳"
     home_name = s.get("country") or "твоя страна"
-    if mode == "be":
-        cc, flag, cname = "BE", "🇧🇪", "Бельгия"
-    elif mode == "de":
-        cc, flag, cname = "DE", "🇩🇪", "Германия"
+    CC_MAP = {"be": ("BE", "🇧🇪", "Бельгия"), "de": ("DE", "🇩🇪", "Германия"),
+              "fr": ("FR", "🇫🇷", "Франция"), "gb": ("GB", "🇬🇧", "Великобритания"),
+              "es": ("ES", "🇪🇸", "Испания"), "it": ("IT", "🇮🇹", "Италия"),
+              "at": ("AT", "🇦🇹", "Австрия"), "ch": ("CH", "🇨🇭", "Швейцария"),
+              "pl": ("PL", "🇵🇱", "Польша"), "se": ("SE", "🇸🇪", "Швеция"),
+              "dk": ("DK", "🇩🇰", "Дания"), "pt": ("PT", "🇵🇹", "Португалия")}
+    if mode in CC_MAP:
+        cc, flag, cname = CC_MAP[mode]
     else:
         cc, flag, cname = home_cc, home_flag, home_name
 
@@ -234,20 +364,16 @@ async def find_concerts(bot, cid, mode="home"):
         except Exception:
             continue
 
-    rows = []
-    if mode == "home":
-        rows.append([InlineKeyboardButton("🇧🇪 Бельгия", callback_data="a_concerts_be")])
-        rows.append([InlineKeyboardButton("🇩🇪 Германия", callback_data="a_concerts_de")])
-    else:
-        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="a_concerts_find")])
-    rows.append([InlineKeyboardButton("⬅️ Меню", callback_data="m_leisure")])
+    rows = [[InlineKeyboardButton("🌍 Сменить страну", callback_data="a_concerts_pick")]]
+    if mode != "home":
+        rows.append([InlineKeyboardButton("🏠 Моя страна", callback_data="a_concerts_find")])
+    rows.append([InlineKeyboardButton("⬅️ Меню", callback_data="m_music")])
     kb = InlineKeyboardMarkup(rows)
 
     if not found:
         store.last_answer[str(cid)] = f"Концерты в {cname}: ничего не нашёл."
         await bot.send_message(chat_id=cid,
-            text=f"🎤 <b>Концерты в {esc(cname)}</b>\n\nСейчас ничего не нашёл. Загляни позже"
-                 + (" или проверь Бельгию/Германию ниже." if mode == "home" else "."),
+            text=f"🎤 <b>Концерты в {esc(cname)}</b>\n\nСейчас ничего не нашёл. Попробуй другую страну 🌍",
             parse_mode="HTML", reply_markup=kb)
         return
 
@@ -282,6 +408,17 @@ async def find_concerts(bot, cid, mode="home"):
     store.last_source[str(cid)] = "Досуг · Концерты"
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", txt)
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+
+async def concert_pick_country(bot, cid):
+    codes = [("be", "🇧🇪 Бельгия"), ("de", "🇩🇪 Германия"), ("fr", "🇫🇷 Франция"),
+             ("gb", "🇬🇧 Великобр."), ("es", "🇪🇸 Испания"), ("it", "🇮🇹 Италия"),
+             ("at", "🇦🇹 Австрия"), ("ch", "🇨🇭 Швейцария"), ("pl", "🇵🇱 Польша"),
+             ("se", "🇸🇪 Швеция"), ("dk", "🇩🇰 Дания"), ("pt", "🇵🇹 Португалия")]
+    rows = [[InlineKeyboardButton(lbl, callback_data=f"a_concerts_{cc}")] for cc, lbl in codes]
+    rows.append([InlineKeyboardButton("🏠 Моя страна", callback_data="a_concerts_find")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_music")])
+    await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
+                           reply_markup=InlineKeyboardMarkup(rows))
 
 async def start_add_artist(bot, cid):
     store.pending_input[str(cid)] = "artist"

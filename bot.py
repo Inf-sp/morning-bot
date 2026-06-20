@@ -135,8 +135,8 @@ async def answer_callback(update, context):
                 await bot.send_message(chat_id=cid, text="📍 Напиши название города - переключу прогноз на него.")
             elif act == "trav_go":
                 await travel.send_go(bot, cid)
-            elif act == "trav_my":
-                await travel.send_my(bot, cid)
+            elif act == "trav_no":
+                await travel.travel_dislike(bot, cid)
             elif act == "watch":
                 await content.send_recos(bot, cid, "movie")
             elif act == "read":
@@ -153,10 +153,12 @@ async def answer_callback(update, context):
                 await content.start_add_artist(bot, cid)
             elif act == "concerts_find":
                 await content.find_concerts(bot, cid, "home")
-            elif act == "concerts_be":
-                await content.find_concerts(bot, cid, "be")
-            elif act == "concerts_de":
-                await content.find_concerts(bot, cid, "de")
+            elif act == "concerts_pick":
+                await content.concert_pick_country(bot, cid)
+            elif act in ("concerts_be", "concerts_de", "concerts_fr", "concerts_gb",
+                         "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
+                         "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
+                await content.find_concerts(bot, cid, act.split("_")[1])
             elif act == "listen":
                 await content.send_listen(bot, cid)
             elif act == "food_breakfast":
@@ -244,14 +246,14 @@ async def answer_callback(update, context):
     if data.startswith("reco_"):
         await content.add_reco(bot, cid, int(data.split("_")[1]))
         return
+    if data.startswith("movie_no_"):
+        await content.movie_dislike(bot, cid, int(data.split("_")[-1]))
+        return
+    if data.startswith("book_no_"):
+        await content.book_dislike(bot, cid, int(data.split("_")[-1]))
+        return
     if data.startswith("listen_"):
         await content.add_listen(bot, cid, int(data.split("_")[1]))
-        return
-    if data.startswith("facts_"):
-        await travel.send_facts(bot, cid, int(data.split("_")[1]))
-        return
-    if data.startswith("delcountry_"):
-        await travel.del_country(bot, cid, int(data.split("_")[1]))
         return
     # Проверка дня
     if data == "worry_clearall":
@@ -340,6 +342,12 @@ async def text_router(update, context):
             settings.set_(cid, "body", text)
             await bot.send_message(chat_id=cid, text="Готово, параметры сохранены.")
             await settings.send_body(bot, cid); return
+        if kind == "setadd_country":
+            await settings.list_add_done(bot, cid, "country", text); return
+        if kind == "setadd_artist":
+            await settings.list_add_done(bot, cid, "artist", text); return
+        if kind == "setadd_book":
+            await settings.list_add_done(bot, cid, "book", text); return
 
     # Свободный чат
     await assistant.chat_reply(bot, cid, text)
@@ -484,6 +492,10 @@ async def job_weekly(context: ContextTypes.DEFAULT_TYPE):
         await send_long(context.bot, CHAT_ID, ai.llm(prompt, 500, 0.8))
     except Exception:
         pass
+    try:
+        await content.find_concerts(context.bot, CHAT_ID, "home")
+    except Exception:
+        pass
 
 
 async def handle_settings(bot, cid, data):
@@ -506,6 +518,29 @@ async def handle_settings(bot, cid, data):
         await bot.send_message(chat_id=cid, text="🌍 Напиши город - переключу.")
     elif data == "set_body":
         await settings.send_body(bot, cid)
+    elif data == "set_wardrobe":
+        await settings.send_wardrobe(bot, cid)
+    elif data == "set_countries":
+        await settings.send_countries(bot, cid)
+    elif data == "set_artists":
+        await settings.send_artists(bot, cid)
+    elif data == "set_books":
+        await settings.send_books(bot, cid)
+    elif data == "setadd_country":
+        store.pending_input[cid] = "setadd_country"
+        await bot.send_message(chat_id=cid, text="🧳 Напиши страну - добавлю в список.")
+    elif data == "setadd_artist":
+        store.pending_input[cid] = "setadd_artist"
+        await bot.send_message(chat_id=cid, text="🎤 Напиши имя артиста - добавлю в список.")
+    elif data == "setadd_book":
+        store.pending_input[cid] = "setadd_book"
+        await bot.send_message(chat_id=cid, text="📚 Напиши название книги - добавлю в список.")
+    elif data.startswith("setdel_country_"):
+        await settings.list_delete(bot, cid, "country", int(data.split("_")[-1]))
+    elif data.startswith("setdel_artist_"):
+        await settings.list_delete(bot, cid, "artist", int(data.split("_")[-1]))
+    elif data.startswith("setdel_book_"):
+        await settings.list_delete(bot, cid, "book", int(data.split("_")[-1]))
     elif data.startswith("set_style_"):
         await settings.set_style(bot, cid, int(data.split("_")[-1]))
     elif data == "set_bodyinput":
