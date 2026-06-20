@@ -27,7 +27,6 @@ def home_kb():
         [("✨ Сгенерировать лук", "w_look")],
         [("💡 Улучшить гардероб", "w_improve")],
         [("🛒 Проверка перед покупкой", "w_check")],
-        [("🗄 Мой шкаф", "w_closet")],
         [("⬅️ Назад", "m_close")],
     ])
 
@@ -57,19 +56,20 @@ async def send_home(bot, cid):
 # ---------- используется в «Мой день» (НЕ удалять) ----------
 def build_outfit_focus(weather_text, day_label):
     w = store.load_wardrobe()
-    prompt = f"""Ты персональный стилист Дмитрия. Собери ОДИН целостный лук на сегодня.
+    prompt = f"""Ты опытный стилист. Собери ОДИН целостный лук на сегодня.
 {config.STYLE_PROFILE}
 Погода ({day_label}):
 {weather_text}
-Параметры: 179 см, ~65 кг, обувь 42.5, джинсы W31 L31.
 Гардероб (используй ТОЛЬКО эти вещи, точные названия):
 {store.wardrobe_to_text(w)}
 Температурные зоны:{config.TEMP_ZONES}
-Правила: обязательно 1 верх + 1 низ + обувь (+ опц. аксессуар/слой).
-Если тепло (выше ~22°C и без дождя) - бери шорты и лёгкий верх. Если холодно/дождь/ветер - слои, ветровка/флис, закрытая обувь.
-Вещи должны сочетаться по цвету, стиль минимализм. Не мешай несочетаемое.
+Жёсткие правила по температуре:
+- от +24°C и без дождя: ШОРТЫ + футболка, лёгкая обувь. Никаких брюк, ветровок, флиса.
+- +17…+23°C: лёгкие брюки/джинсы + футболка/рубашка, опц. лёгкий слой.
+- ниже +16°C или дождь/сильный ветер: слои, ветровка/флис, закрытая обувь.
+Обязательно 1 верх + 1 низ + обувь. Сочетание по цвету, минимализм. Без обращения по имени.
 JSON:
-{{"outfit": ["верх","низ","обувь","аксессуар"], "why": "1-2 предложения почему так", "focus": "один короткий совет на день"}}"""
+{{"outfit": ["верх","низ","обувь","аксессуар"], "why": "1-2 предложения", "focus": "один короткий совет"}}"""
     return ai.llm_json(prompt, 800)
 
 
@@ -84,13 +84,13 @@ async def send_looks(bot, cid):
     recent = store.recent_looks.get(str(cid), [])
     avoid = ("\nНе повторяй недавние луки: " + "; ".join(recent)) if recent else ""
     await bot.send_message(chat_id=cid, text="Собираю 3 лука под погоду...")
-    prompt = f"""Ты стилист Дмитрия. Собери 3 РАЗНЫХ лука из его гардероба на сегодня.
+    prompt = f"""Ты опытный стилист. Собери 3 РАЗНЫХ лука из гардероба на сегодня.
 {config.STYLE_PROFILE}
 Погода сегодня: {wblock}
 Гардероб (только эти вещи, точные названия):
 {store.wardrobe_to_text(w)}
 Правила: каждый лук - 1 верх + 1 низ + обувь (+ опц. аксессуар). Стиль минимализм, сочетание по цвету.
-Если тепло (выше ~22°C, без дождя) - шорты и лёгкий верх. Если холодно/дождь/ветер - слои, ветровка/флис, закрытая обувь.{avoid}
+Жёстко по температуре: от +24°C без дождя - ШОРТЫ + футболка; +17..+23 - лёгкие брюки/джинсы + футболка/рубашка; ниже +16 или дождь/ветер - слои, ветровка/флис, закрытая обувь. Без обращения по имени.{avoid}
 Ответь СТРОГО, без markdown:
 1) {{название}} — Верх: .. • Низ: .. • Обувь: .. • Акс: ..
 2) {{название}} — Верх: .. • Низ: .. • Обувь: .. • Акс: ..
@@ -102,6 +102,7 @@ async def send_looks(bot, cid):
     rl = store.recent_looks.get(str(cid), [])
     rl.append(out.split("\n")[0])
     store.recent_looks[str(cid)] = rl[-3:]
+    store.last_source[str(cid)] = "Гардероб · Лук"
     store.last_answer[str(cid)] = out
     await bot.send_message(chat_id=cid, text=f"👕 <b>3 варианта лука</b>\n\n{esc(out)}",
                            parse_mode="HTML", reply_markup=_look_result_kb())
@@ -195,6 +196,7 @@ async def send_improve(bot, cid):
         out = ai.llm(prompt, 700, 0.9)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
+    store.last_source[str(cid)] = "Гардероб · Улучшение"
     store.last_answer[str(cid)] = out
     await bot.send_message(chat_id=cid, text=f"💡 <b>Улучшить гардероб</b>\n\n{esc(out)}", parse_mode="HTML",
         reply_markup=_kb([[("⭐ Добавить в избранное", "as_fav")], [("⬅️ Назад", "w_home")]]))
@@ -217,6 +219,7 @@ async def check_purchase(bot, cid, text):
         out = ai.llm(prompt, 500, 0.7)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
+    store.last_source[str(cid)] = "Гардероб · Покупка"
     store.last_answer[str(cid)] = out
     await bot.send_message(chat_id=cid, text=f"🛒 <b>Проверка покупки</b>\n\n{esc(out)}", parse_mode="HTML",
         reply_markup=_kb([[("⭐ Добавить в избранное", "as_fav")], [("⬅️ Назад", "w_home")]]))

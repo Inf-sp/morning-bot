@@ -37,7 +37,10 @@ def home_kb(cid):
         [InlineKeyboardButton("🗣 Язык для грамматики", callback_data="set_lang")],
         [InlineKeyboardButton("🎚 Уровень языков", callback_data="set_levels")],
         [InlineKeyboardButton("🌍 Сменить город", callback_data="set_city")],
-        [InlineKeyboardButton("👕 Параметры шкафа", callback_data="set_body")],
+        [InlineKeyboardButton("👕 Мой шкаф", callback_data="set_wardrobe")],
+        [InlineKeyboardButton("🧳 Мои страны", callback_data="set_countries")],
+        [InlineKeyboardButton("🎤 Мои артисты", callback_data="set_artists")],
+        [InlineKeyboardButton("📚 Мои книги", callback_data="set_books")],
     ])
 
 async def send_home(bot, cid):
@@ -91,3 +94,82 @@ async def set_style(bot, cid, i):
     if 0 <= i < len(STYLES):
         set_(cid, "style", STYLES[i])
     await send_body(bot, cid)
+
+
+# ===== Списки в настройках: страны, артисты, книги, шкаф =====
+import content as _content
+
+def _list_kb(items, del_prefix, add_cb, back="set_home"):
+    rows = []
+    for i, it in enumerate(items[-40:]):
+        label = it if isinstance(it, str) else (it.get("name") or it.get("word") or str(it))
+        rows.append([InlineKeyboardButton(f"❌ {str(label)[:28]}", callback_data=f"{del_prefix}{i}")])
+    rows.append([InlineKeyboardButton("➕ Добавить", callback_data=add_cb)])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back)])
+    return InlineKeyboardMarkup(rows)
+
+# --- Шкаф ---
+async def send_wardrobe(bot, cid):
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("👁 Показать всё", callback_data="w_show")],
+        [InlineKeyboardButton("🏷 Добавить вещь", callback_data="w_add")],
+        [InlineKeyboardButton("🧹 Удалить вещь", callback_data="w_del")],
+        [InlineKeyboardButton("📐 Параметры шкафа", callback_data="set_body")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
+    ])
+    await bot.send_message(chat_id=cid, text="👕 <b>Мой шкаф</b>\n\nБаза вещей и параметры для подбора лука.",
+                           parse_mode="HTML", reply_markup=kb)
+
+# --- Страны ---
+def _preload_countries(cid):
+    cur = store.get_list(config.COUNTRIES_KEY, cid)
+    if not cur:
+        seed = [c.strip() for c in config.VISITED.replace("Страны:", "").split(",") if c.strip()]
+        store.set_list(config.COUNTRIES_KEY, cid, seed)
+        return seed
+    return cur
+
+async def send_countries(bot, cid):
+    items = _preload_countries(cid)
+    txt = "🧳 <b>Мои страны</b>\n\n" + (", ".join(items) if items else "пусто")
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
+                           reply_markup=_list_kb(items, "setdel_country_", "setadd_country"))
+
+# --- Артисты ---
+async def send_artists(bot, cid):
+    items = store.get_list(config.ARTISTS_KEY, cid)
+    txt = "🎤 <b>Мои артисты</b>\n\n" + (", ".join(items) if items else "пусто. Добавь или выполни /reload_artists")
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
+                           reply_markup=_list_kb(items, "setdel_artist_", "setadd_artist"))
+
+# --- Книги ---
+async def send_books(bot, cid):
+    items = store.get_list(config.BOOKS_KEY, cid)
+    txt = "📚 <b>Мои книги</b>\n\n" + ("\n".join(f"• {b}" for b in items) if items else "пусто")
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
+                           reply_markup=_list_kb(items, "setdel_book_", "setadd_book"))
+
+async def list_delete(bot, cid, kind, i):
+    keymap = {"country": config.COUNTRIES_KEY, "artist": config.ARTISTS_KEY, "book": config.BOOKS_KEY}
+    key = keymap.get(kind)
+    items = store.get_list(key, cid)
+    if i < len(items):
+        items.pop(i)
+        store.set_list(key, cid, items)
+    if kind == "country":
+        await send_countries(bot, cid)
+    elif kind == "artist":
+        await send_artists(bot, cid)
+    else:
+        await send_books(bot, cid)
+
+async def list_add_done(bot, cid, kind, text):
+    keymap = {"country": config.COUNTRIES_KEY, "artist": config.ARTISTS_KEY, "book": config.BOOKS_KEY}
+    store.add_to_list(keymap[kind], cid, text.strip())
+    await bot.send_message(chat_id=cid, text="Добавлено.")
+    if kind == "country":
+        await send_countries(bot, cid)
+    elif kind == "artist":
+        await send_artists(bot, cid)
+    else:
+        await send_books(bot, cid)
