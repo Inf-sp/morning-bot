@@ -7,13 +7,16 @@ from util import send_long, country_flag, esc
 
 def travel_suggest_one(cid):
     visited = store.get_list(config.COUNTRIES_KEY, cid)            # Мои страны (был/посещённые)
+    if not visited:
+        # фолбэк: если список в настройках ещё не заполнен - берём дефолтный VISITED
+        visited = [c.strip() for c in config.VISITED.split(",") if c.strip()]
     favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)           # закладки
     fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
     disliked = store.get_list("travel_dislike.json", cid)
     skip = ", ".join([str(x) for x in visited] + fav_names + [str(x) for x in disliked])
-    prompt = f"""Уже был / в закладках / не интересно (НЕ предлагай это): {skip}.
+    prompt = f"""Уже был / в закладках / не интересно (СТРОГО НЕ предлагай ничего из этого списка): {skip}.
 Профиль: любит интеллектуальную атмосферу, города с характером, природу; путешествия важнее вещей.
-Предложи РОВНО 1 НОВУЮ страну (не из списка выше). Компактно. Верни JSON:
+Предложи РОВНО 1 НОВУЮ страну, которой ТОЧНО НЕТ в списке выше. Перепроверь, что её нет в списке. Компактно. Верни JSON:
 {{"flag":"эмодзи флага","country":"страна",
  "about":"1-2 строки образно о стране",
  "for_what":"ради чего ехать, 1 строка",
@@ -35,22 +38,38 @@ def _country_card(d):
 
 def _travel_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🧳 Собрать план поездки", callback_data="trav_plan")],
-        [InlineKeyboardButton("😕 Не нравится", callback_data="trav_no")],
-        [InlineKeyboardButton("⭐ Добавить в закладки", callback_data="trav_fav")],
+        [InlineKeyboardButton("🧳 Собрать план поездки", callback_data="a_trav_plan")],
+        [InlineKeyboardButton("😕 Не нравится", callback_data="a_trav_no")],
+        [InlineKeyboardButton("⭐ Добавить в закладки", callback_data="a_trav_fav")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
 async def send_go(bot, cid):
     await bot.send_message(chat_id=cid, text="Подбираю страну...")
+    # собираем множество исключений для пост-проверки
+    visited = store.get_list(config.COUNTRIES_KEY, cid)
+    if not visited:
+        visited = [c.strip() for c in config.VISITED.split(",") if c.strip()]
+    favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
+    fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
+    disliked = store.get_list("travel_dislike.json", cid)
+    skip_set = {str(x).strip().lower() for x in (list(visited) + fav_names + list(disliked)) if str(x).strip()}
+    d = None
     try:
-        d = travel_suggest_one(cid)
+        for _ in range(3):  # до 3 попыток получить НОВУЮ страну
+            cand = travel_suggest_one(cid)
+            cname = (cand.get("country") or "").strip().lower()
+            if cname and cname not in skip_set:
+                d = cand
+                break
+        if d is None:
+            d = cand  # если все попытки дали известные - покажем последнюю
     except Exception as e:
         await bot.send_message(chat_id=cid, text=f"Ошибка: {e}"); return
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", _country_card(d))
     store.last_source[str(cid)] = "Путешествия"
     store.suggested_countries[str(cid)] = d.get("country", "")
-    store.last_recipe[str(cid)] = d  # переиспользуем слот для данных страны (для плана поездки)
+    store.last_recipe[str(cid)] = d
     await bot.send_message(chat_id=cid, text=_country_card(d), parse_mode="HTML", reply_markup=_travel_kb())
 
 async def travel_dislike(bot, cid):
@@ -121,7 +140,7 @@ async def send_plan(bot, cid):
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
     store.last_source[str(cid)] = "Путешествия · План"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⭐ Добавить в закладки", callback_data="trav_fav")],
+        [InlineKeyboardButton("⭐ Добавить в закладки", callback_data="a_trav_fav")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
