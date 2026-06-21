@@ -199,7 +199,7 @@ async def handle_callback(bot, cid, q, data):
         if not txt:
             await bot.send_message(chat_id=cid, text="Нечего сохранять - открой «Мой день» заново."); return
         store.add_to_list(config.NOTES_KEY, cid, {"date": datetime.now(TZ).strftime("%d.%m"),
-                                                  "text": txt.strip(), "source": cat})
+                                                  "text": txt.strip(), "source": cat, "bucket": "fav"})
         await bot.send_message(chat_id=cid, text=f"⭐ Сохранено в «{cat}».")
         return
 
