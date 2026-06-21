@@ -22,7 +22,7 @@ def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry"):
     rows = []
     if cont_label and cont_cb:
         rows.append([(cont_label, cont_cb)])
-    rows.append([("⭐ Добавить в избранное", "as_fav")])
+    rows.append([("⭐ Добавить в закладки", "as_fav")])
     rows.append([("⬅️ Назад", "m_close")])
     return _kb(rows)
 
@@ -30,7 +30,7 @@ def _recipe_kb():
     return _kb([
         [("📖 Полный рецепт", "as_food_full")],
         [("🔄 Ещё рецепт", "as_food")],
-        [("⭐ Добавить в избранное", "as_fav")],
+        [("⭐ Добавить в закладки", "as_fav")],
         [("⬅️ Назад", "m_close")],
     ])
 
@@ -234,7 +234,7 @@ async def save_fav(bot, cid):
     source = store.last_source.get(str(cid), "Прочее")
     store.add_to_list(config.NOTES_KEY, cid, {"date": datetime.now(config.TZ).strftime("%d.%m"),
                                               "text": short, "source": source})
-    await bot.send_message(chat_id=cid, text="⭐ Сохранено в избранное.")
+    await bot.send_message(chat_id=cid, text="⭐ Сохранено в закладки.")
 
 def _top_cat(source):
     return (source or "Прочее").split(" · ")[0]
@@ -248,7 +248,7 @@ async def export_notes(bot, cid):
     for n in notes:
         src = n.get("source", "Прочее") if isinstance(n, dict) else "Прочее"
         by_cat.setdefault(_top_cat(src), []).append(n)
-    lines = ["Моё избранное (DM)", ""]
+    lines = ["Мои закладки (DM)", ""]
     for cat, items in by_cat.items():
         lines.append(f"== {cat} ==")
         for n in items:
@@ -264,7 +264,7 @@ async def export_notes(bot, cid):
 async def send_notes(bot, cid):
     notes = store.get_list(config.NOTES_KEY, cid)
     if not notes:
-        await bot.send_message(chat_id=cid, text="⭐ Избранное пусто. Жми «⭐ Добавить в избранное» под ответами."); return
+        await bot.send_message(chat_id=cid, text="⭐ Закладки пусты. Жми «⭐ Добавить в закладки» под ответами."); return
     cats = []
     for n in notes:
         c = _top_cat(n.get("source", "Прочее") if isinstance(n, dict) else "Прочее")
