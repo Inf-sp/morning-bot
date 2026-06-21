@@ -6,7 +6,7 @@ import store
 import ai
 import weather
 import wardrobe
-from util import esc, send_long, _WEEKDAYS, _MONTHS
+from util import esc, send_long, _WEEKDAYS, _MONTHS, flag_from_cc, country_flag
 
 TZ = config.TZ
 
@@ -91,7 +91,9 @@ def _build_day_text(cid):
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     def cap(x): return x[:1].upper() + x[1:] if x else x
-    L = [f"<b>Мой день • {esc(header)} • {esc(s.get('city',''))}</b>", ""]
+    flag = flag_from_cc(s.get("cc", "")) or (country_flag(s.get("country", "")) if s.get("country") else "")
+    title_flag = f" {flag}" if flag else ""
+    L = [f"<b>Мой день • {esc(header)} • {esc(s.get('city',''))}{title_flag}</b>", ""]
     L += [f"<b>{icon} Погода сегодня</b>",
           f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}", ""]
     outfit = " + ".join(ex.get("outfit", [])).rstrip(".")  # для «Сохранить образ дня», в сводке не показываем
