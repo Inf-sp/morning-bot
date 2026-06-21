@@ -10,32 +10,43 @@ def content_recommend(kind, cid):
         seen = store.get_list(config.WATCHLIST_KEY, cid)
         black = store.get_list(config.MOVIE_BLACKLIST_KEY, cid)
         what = "фильмов или сериалов"
-    else:
-        seen = store.get_list(config.READLIST_KEY, cid)
-        black = store.get_list(config.BOOK_BLACKLIST_KEY, cid)
-        what = "книг"
-    seen_titles = [s if isinstance(s, str) else str(s) for s in seen]
-    black_titles = [s if isinstance(s, str) else str(s) for s in black]
-    skip = seen_titles + black_titles
-    avoid = ("\nНЕ рекомендуй то, что уже отмечено или не понравилось: " + ", ".join(skip[:80])) if skip else ""
-    anchors = ", ".join(seen_titles[:25]) if seen_titles else "Breaking Bad, Euphoria, Parasite, Call Me by Your Name"
-    if kind == "book":
+        seen_titles = [s if isinstance(s, str) else str(s) for s in seen]
+        black_titles = [s if isinstance(s, str) else str(s) for s in black]
+        skip = seen_titles + black_titles
+        avoid = ("\nНЕ рекомендуй то, что уже отмечено или не понравилось: " + ", ".join(skip[:80])) if skip else ""
+        anchors = ", ".join(seen_titles[:25]) if seen_titles else "Breaking Bad, Euphoria, Parasite, Call Me by Your Name"
         prompt = f"""{config.CONTENT_TASTE}
-
-Любимые/прочитанные книги (референсы вкуса): {anchors}
-
-Ты опытный книжный критик. Порекомендуй РОВНО 5 действительно сильных книг под этот вкус (без проходных).{avoid}
-JSON: {{"items": [{{"title": "название (год издания)", "title_en": "оригинальное название",
- "author": "автор", "hook": "почему именно ему зайдёт, 1-2 строки, со ссылкой на его референсы",
- "quote": "короткая цитата из книги или известная цитата, связанная с ней"}}]}}"""
-        return ai.llm_json(prompt, 1100)
-    prompt = f"""{config.CONTENT_TASTE}
 
 Его уже отмеченные работы (референсы вкуса): {anchors}
 
 Порекомендуй РОВНО 5 {what}, максимально точно под этот профиль вкуса.{avoid}
 JSON: {{"items": [{{"title": "название (год)", "title_en": "оригинальное/английское название", "hook": "1 строка: на что похоже из его референсов и чем зацепит"}}]}}"""
-    return ai.llm_json(prompt, 1000)
+        return ai.llm_json(prompt, 1000)
+
+    # книги: референсы вкуса берём из "Мои книги" (настройки) + любимые из конфига
+    my_books = store.get_list(config.BOOKS_KEY, cid)
+    my_books_titles = [b if isinstance(b, str) else str(b) for b in my_books]
+    read_seen = store.get_list(config.READLIST_KEY, cid)         # уже в закладках "почитать"
+    black = store.get_list(config.BOOK_BLACKLIST_KEY, cid)       # отклонённые
+    read_titles = [s if isinstance(s, str) else str(s) for s in read_seen]
+    black_titles = [s if isinstance(s, str) else str(s) for s in black]
+    refs = my_books_titles or [config.FAV_BOOKS]
+    anchors = ", ".join(refs[:25])
+    skip = my_books_titles + read_titles + black_titles
+    avoid = ("\nНЕ рекомендуй уже прочитанное/в закладках/отклонённое: " + ", ".join(skip[:80])) if skip else ""
+    prompt = f"""{config.CONTENT_TASTE}
+
+Любимые книги пользователя (референсы книжного вкуса, из его настроек): {anchors}
+
+Ты опытный книжный критик. Порекомендуй РОВНО 5 действительно сильных КНИГ под этот вкус (без проходных).
+Сравнивай ТОЛЬКО с книгами из его списка выше, не с фильмами/сериалами.{avoid}
+JSON: {{"items": [{{"title": "название", "title_en": "оригинальное название", "year": "год",
+ "author": "автор", "desc": "1-2 строки общего описания/жанра",
+ "why": ["2 пункта почему зайдёт, со ссылкой на конкретные книги из его списка"],
+ "plot": "коротко о сюжете, 2-3 предложения без жёстких спойлеров финала",
+ "quote": "короткая цитата из книги",
+ "hook": "1 строка: если понравились такие-то его книги - эта зацепит тем-то"}}]}}"""
+    return ai.llm_json(prompt, 1300)
 
 _TMDB_GENRES = {28:"боевик",12:"приключения",16:"анимация",35:"комедия",80:"криминал",99:"документальный",
     18:"драма",10751:"семейный",14:"фэнтези",36:"история",27:"ужасы",10402:"музыка",9648:"детектив",
@@ -109,8 +120,26 @@ def _movie_kb(i):
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
-async def _send_movie_card(bot, cid, it, i):
-    tm = _tmdb_lookup(it.get("title", ""), it.get("title_en", "")) if config.TMDB_API_KEY else None
+MIN_TMDB_RATING = 7.0  # рекомендуем только фильмы/сериалы с оценкой выше этой
+
+def _pick_good_movie(items, used_titles):
+    """Возвращает (item, tm) для первого фильма с рейтингом >= порога и не из used_titles.
+    Если таких нет - первый доступный (с tm если получилось)."""
+    fallback = None
+    for it in items:
+        if it.get("title", "") in used_titles:
+            continue
+        tm = _tmdb_lookup(it.get("title", ""), it.get("title_en", "")) if config.TMDB_API_KEY else None
+        if fallback is None:
+            fallback = (it, tm)
+        rating = (tm or {}).get("rating") or 0
+        if not config.TMDB_API_KEY or rating >= MIN_TMDB_RATING:
+            return it, tm
+    return fallback if fallback else (items[0] if items else None, None)
+
+async def _send_movie_card(bot, cid, it, i, tm="__lookup__"):
+    if tm == "__lookup__":
+        tm = _tmdb_lookup(it.get("title", ""), it.get("title_en", "")) if config.TMDB_API_KEY else None
     title, text = _movie_card(it, tm)
     kb = _movie_kb(i)
     if tm and tm.get("poster"):
@@ -134,11 +163,13 @@ async def send_recos(bot, cid, kind):
         return
     if not items:
         await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
-    it = items[0]
+    it, tm = _pick_good_movie(items, set())
+    if not it:
+        await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
     store.last_recos[str(cid)] = {"kind": kind, "items": [it.get("title", "")]}
     store.last_source[str(cid)] = "Досуг · Фильмы и сериалы"
     store.last_answer[str(cid)] = f"{it.get('title','')} - {it.get('hook','')}"
-    await _send_movie_card(bot, cid, it, 0)
+    await _send_movie_card(bot, cid, it, 0, tm=tm)
 
 async def movie_dislike(bot, cid, i):
     rec = store.last_recos.get(str(cid))
@@ -153,12 +184,14 @@ async def movie_dislike(bot, cid, i):
         items = []
     if not items:
         return
-    it = items[0]
     rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
+    it, tm = _pick_good_movie(items, set(rec["items"]))
+    if not it:
+        return
     rec["items"].append(it.get("title", ""))
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1
-    await _send_movie_card(bot, cid, it, ni)
+    await _send_movie_card(bot, cid, it, ni, tm=tm)
 
 def _book_cover(title, title_en=""):
     import requests
@@ -174,15 +207,27 @@ def _book_cover(title, title_en=""):
     return None
 
 def _book_text(it):
-    cap = [f"📖 <b>{esc(it.get('title',''))}</b>"]
-    if it.get("title_en"):
-        cap.append(f"<i>{esc(it['title_en'])}</i>")
-    if it.get("author"):
-        cap += ["", f"✍️ <b>{esc(it['author'])}</b>"]
-    cap += ["", esc(it.get("hook", ""))]
+    author = esc(it.get("author", ""))
+    title = esc(it.get("title", ""))
+    en = esc(it.get("title_en", ""))
+    year = esc(str(it.get("year", "")))
+    head_meta = ", ".join(x for x in [en, year] if x)
+    head = f"{author} • «{title}»" if author else f"«{title}»"
+    if head_meta:
+        head += f" <i>({head_meta})</i>"
+    L = [head]
+    if it.get("desc"):
+        L += ["", esc(it["desc"])]
+    why = it.get("why") or []
+    if isinstance(why, list) and why:
+        L += ["", "🎯 <b>Почему она тебе точно зайдёт:</b>"] + [f"• {esc(str(w))}" for w in why]
+    if it.get("plot"):
+        L += ["", f"✍🏻 <b>Коротко о сюжете:</b> {esc(it['plot'])}"]
     if it.get("quote"):
-        cap += ["", f"💬 «{esc(it['quote'])}»"]
-    return "\n".join(cap)
+        L += ["", f"💬 <b>Цитата:</b> «{esc(it['quote'])}»"]
+    if it.get("hook"):
+        L += ["", f"💡 {esc(it['hook'])}"]
+    return "\n".join(L)
 
 def _book_kb(i):
     return InlineKeyboardMarkup([
@@ -241,14 +286,38 @@ async def book_dislike(bot, cid, i):
 async def add_reco(bot, cid, i):
     from datetime import datetime
     rec = store.last_recos.get(str(cid))
-    if rec and i < len(rec["items"]):
-        title = rec["items"][i]
-        key = config.WATCHLIST_KEY if rec["kind"] == "movie" else config.READLIST_KEY
-        folder = "Фильмы и сериалы" if rec["kind"] == "movie" else "Книги"
-        store.add_to_list(key, cid, title)
-        store.add_to_list(config.NOTES_KEY, cid,
-                          {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": folder})
-        await bot.send_message(chat_id=cid, text=f"⭐ В закладках «{folder}»: {title}")
+    if not (rec and i < len(rec["items"])):
+        return
+    title = rec["items"][i]
+    kind = rec["kind"]
+    key = config.WATCHLIST_KEY if kind == "movie" else config.READLIST_KEY
+    folder = "Фильмы и сериалы" if kind == "movie" else "Книги"
+    store.add_to_list(key, cid, title)
+    store.add_to_list(config.NOTES_KEY, cid,
+                      {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": folder})
+    await bot.send_message(chat_id=cid, text=f"⭐ В закладках «{folder}»: {title}. Вот ещё вариант 👇")
+    # сразу показываем следующую рекомендацию
+    try:
+        data = content_recommend(kind, str(cid))
+        items = data.get("items", [])
+    except Exception:
+        items = []
+    if not items:
+        return
+    if kind == "movie":
+        it, tm = _pick_good_movie(items, set(rec["items"]))
+        if not it:
+            return
+        rec["items"].append(it.get("title", ""))
+        store.last_recos[str(cid)] = rec
+        ni = len(rec["items"]) - 1
+        await _send_movie_card(bot, cid, it, ni, tm=tm)
+    else:
+        it = items[0]
+        rec["items"].append(it.get("title", ""))
+        store.last_recos[str(cid)] = rec
+        ni = len(rec["items"]) - 1
+        await _send_book_card(bot, cid, it, ni)
 
 async def send_watchlist(bot, cid):
     lst = store.get_list(config.WATCHLIST_KEY, cid)
