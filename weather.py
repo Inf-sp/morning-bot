@@ -157,6 +157,50 @@ def _joke_outfit(city, tmax, rain, wind_ms, desc, when="сегодня"):
         return f"Сегодня {city} явно выиграл погодную лотерею."
 
 
+# ---------- экстремальная погода (Code Geel и сильнее) ----------
+STORM_WIND_MS = 15      # порог шквалов
+SNOW_CODES = (71, 73, 75, 77, 85, 86)
+HEAVY_RAIN_CODES = (65, 81, 82, 95, 96, 99)
+
+def storm_alert(wind_ms, code, rain, rain_mm=None):
+    """Возвращает текст штормового блока или '' если угрозы нет.
+    Триггер: ветер > 15 м/с, снегопад, ливень/гроза."""
+    reasons = []
+    if wind_ms and wind_ms > STORM_WIND_MS:
+        reasons.append("wind")
+    if code in SNOW_CODES:
+        reasons.append("snow")
+    if code in HEAVY_RAIN_CODES or (rain_mm is not None and rain_mm >= 15):
+        reasons.append("rain")
+    if not reasons:
+        return ""
+    L = ["⚠️ <b>Штормовое предупреждение (Code Geel)</b>", ""]
+    if "wind" in reasons:
+        L.append(f"Ожидаются шквалы до {wind_ms:.0f} м/с. Закрепи велосипед цепью за опору, "
+                 "убери лёгкие предметы с балкона.")
+        L.append("Высокий риск задержек и отмен поездов NS - ветки на путях парализуют движение. Проверь приложение NS.")
+    if "rain" in reasons:
+        L.append("Сильный дождь и риск подтоплений. Сверься с Buienradar перед выходом.")
+    if "snow" in reasons:
+        L.append("Снег и гололёд. Осторожно на велодорожках, заложи время на дорогу.")
+    return "\n".join(L)
+
+def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label=""):
+    """Метео-факт, привязанный к завтрашней погоде: контраст или историческая локальность KNMI."""
+    try:
+        return ai.llm(
+            f"Погода завтра в городе {city} (Нидерланды){(' ' + date_label) if date_label else ''}: "
+            f"{desc}, до {tmax:+.0f}°C, дождь {rain:.0f}%, ветер {wind_ms:.0f} м/с.\n"
+            "Дай ОДИН метео-факт, строго по логике (без шуток про отношения/настроение, сухой тон, тонкая ирония):\n"
+            "- Если аномальная для Нидерландов жара (выше +25°C) - сравни с рекордным пеклом в Европе на эту дату.\n"
+            "- Если сильный дождь - найди место с рекордной засухой сейчас.\n"
+            "- Иначе - историческая локальность KNMI: что было в Нидерландах в этот день 50-100 лет назад.\n"
+            "Только факты и цифры. Максимум 2 коротких предложения, на русском, без markdown.",
+            200, 0.85).strip()
+    except Exception:
+        return ""
+
+
 # ---------- отправка ----------
 async def send_weather(bot, cid, mode="today"):
     s = store.get_settings(cid)
@@ -224,9 +268,21 @@ async def send_weather(bot, cid, mode="today"):
 
         L = [f"<b>{esc(header)}</b>", "",
              f"{icon} До {tmax:+.0f}°C • {rain_text(rain, rain_mm, rain_when)}{wind_str}"]
-        fact = _world_fact()
-        if fact:
-            L += ["", esc(fact)]
+
+        if mode == "tomorrow":
+            desc = DESC.get(code, "")
+            alert = storm_alert(wind_ms, code, rain, rain_mm)
+            if alert:
+                # экстремальная погода: показываем угрозу, метео-факт блокируется
+                L += ["", alert]
+            else:
+                mf = _meteo_fact(s["city"], tmax, rain, wind_ms, desc, header.split("•")[1].strip() if "•" in header else "")
+                if mf:
+                    L += ["", "🔬 <b>Метео-факт</b>", esc(mf)]
+        else:
+            fact = _world_fact()
+            if fact:
+                L += ["", esc(fact)]
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_close")]])
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
         return
@@ -243,22 +299,26 @@ async def send_weather(bot, cid, mode="today"):
     rains = d["precipitation_probability_max"][:7]
     winds = d["windspeed_10m_max"][:7]
     days_ru = [_WEEKDAYS[(now + timedelta(days=i)).weekday()] for i in range(7)]
-    short = {"Понедельник": "Пн", "Вторник": "Вт", "Среда": "Ср", "Четверг": "Чт",
-             "Пятница": "Пт", "Суббота": "Сб", "Воскресенье": "Вс"}
-    per_day = "; ".join(f"{short[days_ru[i]]}: {tmaxs[i]:.0f}°C, дождь {int(rains[i] or 0)}%, ветер {winds[i]:.0f}"
+    per_day = "; ".join(f"{days_ru[i]}: {tmaxs[i]:.0f}°C, дождь {int(rains[i] or 0)}%, ветер {winds[i]:.0f}"
                         for i in range(7))
     tmin, tmax = min(tmins), max(tmaxs)
     flag = __import__("util").flag_from_cc(s.get("cc", ""))
     try:
         body = ai.llm(
-            f"Сводка погоды на неделю, город {s['city']}. По дням: {per_day}.\n"
-            f"Дни недели сокращай как Пн, Вт, Ср, Чт, Пт, Сб, Вс. Группируй диапазонами (например 'Ср - Сб').\n"
-            f"СТРОГО такой формат, без markdown, каждая строка отдельно:\n"
-            f"☀️ {{диапазон дней}}: лучшая погода\n"
-            f"🌧️ {{диапазон дней}}: возможны дожди\n"
-            f"🔥 {{диапазон дней}}: пик жары (ТОЛЬКО если есть жаркие дни, иначе пропусти строку)\n"
-            f"💨 {{ветер: слабый/умеренный/сильный}}\n"
-            f"Итог: {{1 предложение, тёплый вывод}}", 350, 0.8)
+            f"Сводка погоды на неделю, город {s['city']} (Нидерланды). По дням: {per_day}.\n\n"
+            "ПРАВИЛА (соблюдать строго):\n"
+            "1. Дни недели писать ПОЛНОСТЬЮ и перечислять через запятую (например: понедельник, вторник). "
+            "НЕ сокращай (не Пн/Вт), НЕ используй диапазоны через тире.\n"
+            "2. Голландский климат: выше +25°C - жарко и требует осторожности; выше +30°C - ЭКСТРЕМАЛЬНАЯ жара, "
+            "а НЕ 'отличная погода для прогулок'. Не называй жару выше +25°C хорошей погодой.\n"
+            "3. Один и тот же день НЕ может быть одновременно в 'лучшая погода' и в 'пик жары/дожди'. Каждый день - в одной рубрике.\n"
+            "4. Итог - конкретное руководство к действию (когда ехать на велосипеде, когда остаться дома). Без воды.\n\n"
+            "Формат, без markdown, каждая строка отдельно (рубрику пропусти, если дней под неё нет):\n"
+            "☀️ {дни через запятую}: комфортная погода\n"
+            "🌧️ {дни через запятую}: возможны дожди\n"
+            "🔥 {дни через запятую}: жара, осторожно\n"
+            "💨 Ветер: {слабый/умеренный/сильный, диапазон м/с}\n"
+            "Итог: {1-2 предложения, конкретный совет}", 400, 0.7)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", "",
@@ -282,31 +342,52 @@ async def send_weather(bot, cid, mode="today"):
 # ---------- смена города ----------
 async def set_city_text(bot, cid, name):
     import re as _re
-    # нормализация: убрать пробелы вокруг тире, лишние пробелы
-    q = _re.sub(r"\s*-\s*", "-", (name or "").strip())
+    raw = (name or "").strip()
+    # нормализация: убрать пробелы вокруг тире, схлопнуть пробелы
+    q = _re.sub(r"\s*-\s*", "-", raw)
     q = _re.sub(r"\s+", " ", q)
+    # варианты запроса: нормализованный, без тире (через пробел), оригинал
+    variants = []
+    for v in (q, q.replace("-", " "), raw):
+        v = v.strip()
+        if v and v not in variants:
+            variants.append(v)
     try:
         res = None
-        for lang in ("ru", "en"):
-            r = requests.get("https://geocoding-api.open-meteo.com/v1/search",
-                             params={"name": q, "count": 1, "language": lang}, timeout=20)
-            res = r.json().get("results")
+        # 1) Open-Meteo geocoder: по вариантам и языкам
+        for v in variants:
+            for lang in ("ru", "en", "nl"):
+                try:
+                    r = requests.get("https://geocoding-api.open-meteo.com/v1/search",
+                                     params={"name": v, "count": 5, "language": lang}, timeout=20)
+                    results = r.json().get("results")
+                except Exception:
+                    results = None
+                if results:
+                    res = results[:1]
+                    break
             if res:
                 break
-        # запасной геокодер
+        # 2) запасной геокодер Nominatim
         if not res:
-            r2 = requests.get("https://nominatim.openstreetmap.org/search",
-                              params={"q": q, "format": "json", "limit": 1, "accept-language": "ru"},
-                              headers={"User-Agent": "DM-bot"}, timeout=20)
-            arr = r2.json()
-            if arr:
-                a = arr[0]
-                disp = a.get("display_name", q).split(",")
-                res = [{"latitude": float(a["lat"]), "longitude": float(a["lon"]),
-                        "name": disp[0].strip(), "country": disp[-1].strip(), "country_code": ""}]
+            for v in variants:
+                try:
+                    r2 = requests.get("https://nominatim.openstreetmap.org/search",
+                                      params={"q": v, "format": "json", "limit": 1, "accept-language": "ru"},
+                                      headers={"User-Agent": "DM-bot"}, timeout=20)
+                    arr = r2.json()
+                except Exception:
+                    arr = []
+                if arr:
+                    a = arr[0]
+                    disp = a.get("display_name", v).split(",")
+                    res = [{"latitude": float(a["lat"]), "longitude": float(a["lon"]),
+                            "name": disp[0].strip(), "country": disp[-1].strip(), "country_code": ""}]
+                    break
         if not res:
             store.pending_input[str(cid)] = "setcity"
-            await bot.send_message(chat_id=cid, text=f"😕 Не нашёл город: {name}.\n\n🌍 Напиши название города ещё раз - исправив ошибки!")
+            await bot.send_message(chat_id=cid,
+                text=f"😕 Не нашёл город: {raw}.\n\n🌍 Проверь написание и пришли название ещё раз.")
             return
         c = res[0]
         country = c.get("country", "")
