@@ -322,7 +322,7 @@ async def text_router(update, context):
             await content.add_artist(bot, cid, text); return
         if kind == "favcountry":
             await travel.add_country(bot, cid, text); return
-        if kind in ("role_letter", "role_doctor", "role_state"):
+        if kind in ("role_doctor", "role_state"):
             await assistant.handle_role(bot, cid, kind.split("_")[1], text); return
         if kind == "leftovers":
             await assistant.send_leftovers(bot, cid, text); return
