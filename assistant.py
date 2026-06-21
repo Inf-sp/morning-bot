@@ -5,6 +5,7 @@ import store
 import ai
 import myday
 import ze
+import util
 
 DOCTOR_INTRO = (
     "👩🏻‍⚕️ Врач\n\n"
@@ -41,10 +42,15 @@ async def _send(bot, cid, text, kb=None):
     text = (text or "").strip() or "Пусто, попробуй ещё раз."
     store.last_answer[str(cid)] = text
     store.last_source.setdefault(str(cid), "Ассистент")
-    chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
-    for c in chunks[:-1]:
-        await bot.send_message(chat_id=cid, text=c)
-    await bot.send_message(chat_id=cid, text=chunks[-1], reply_markup=kb if kb is not None else _ans_kb())
+    html = util.tg_html(text)
+    chunks = [html[i:i+4000] for i in range(0, len(html), 4000)]
+    for i, c in enumerate(chunks):
+        markup = (kb if kb is not None else _ans_kb()) if i == len(chunks) - 1 else None
+        try:
+            await bot.send_message(chat_id=cid, text=c, parse_mode="HTML", reply_markup=markup)
+        except Exception:
+            # если HTML невалиден - отправляем как обычный текст, без падения
+            await bot.send_message(chat_id=cid, text=c, reply_markup=markup)
 
 
 
