@@ -99,14 +99,20 @@ async def answer_callback(update, context):
                 await learning.do_translate(bot, cid, "нидерландский")
             elif act == "tr_en":
                 await learning.do_translate(bot, cid, "английский")
-            elif act == "verb_nl":
-                await learning.send_verb(bot, cid, "нидерландский")
-            elif act == "verb_en":
-                await learning.send_verb(bot, cid, "английский")
             elif act == "proverb_nl":
                 await learning.send_proverb(bot, cid, "нидерландский")
             elif act == "proverb_en":
                 await learning.send_proverb(bot, cid, "английский")
+            elif act == "topics_nl":
+                await learning.send_topics(bot, cid, "нидерландский")
+            elif act == "topics_en":
+                await learning.send_topics(bot, cid, "английский")
+            elif act == "topicadd_nl":
+                store.pending_input[cid] = "topicadd_nl"
+                await bot.send_message(chat_id=cid, text="🇳🇱 Напиши тему для изучения (можно с переводом) - добавлю и разберу.")
+            elif act == "topicadd_en":
+                store.pending_input[cid] = "topicadd_en"
+                await bot.send_message(chat_id=cid, text="🇬🇧 Напиши тему для изучения (можно с переводом) - добавлю и разберу.")
             elif act == "dict":
                 await learning.send_dict(bot, cid)
             elif act == "dictadd_nl":
@@ -115,8 +121,6 @@ async def answer_callback(update, context):
             elif act == "dictadd_en":
                 store.pending_input[cid] = "dictadd_en"
                 await bot.send_message(chat_id=cid, text="🇬🇧 Напиши английское слово или фразу - добавлю с переводом.")
-            elif act == "addword":
-                await learning.add_word(bot, cid)
             elif act == "game":
                 await learning.game_start(bot, cid)
             elif act == "levels":
@@ -217,6 +221,10 @@ async def answer_callback(update, context):
     if data.startswith("worddel_"):
         await learning.del_word(bot, cid, int(data.split("_")[1]))
         return
+    if data.startswith("topicdel_"):
+        parts = data.split("_")  # topicdel_nl_3
+        await learning.del_topic(bot, cid, parts[1], int(parts[2]))
+        return
     if data == "game_again":
         await learning.send_game(bot, cid)
         return
@@ -225,7 +233,9 @@ async def answer_callback(update, context):
         ui = learning.GAME_UI.get(store.game_config.get(cid, {}).get("lang", "русский"), learning.GAME_UI["русский"])
         if st and st.get("hint"):
             from util import esc
-            await q.message.reply_text(f"💡 <b>{esc(st['hint'])}</b>\n\n{ui['give']}", parse_mode="HTML")
+            await q.message.reply_text(
+                f"💡 <b>Подсказка</b>\n\n<b>{esc(st['hint'])}</b>\n\nЗнаешь ответ?\nНапиши его или нажми «😞 Сдаюсь»",
+                parse_mode="HTML")
         else:
             await q.message.reply_text("Подсказок больше нет.")
         return
@@ -236,10 +246,13 @@ async def answer_callback(update, context):
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             from util import esc
             body = st.get("explain") or st.get("quote", "")
-            txt = f"{ui['found']}\n\n{ui['answer']}: <b>{esc(st.get('answer',''))}</b>"
+            txt = f"✅ <b>Дело раскрыто!</b>\n\n{ui['answer']}: <b>{esc(st.get('answer',''))}</b>"
             if body:
                 txt += f"\n\n{esc(body)}"
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton(ui["again"], callback_data="game_again")]])
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton(ui["again"], callback_data="game_again")],
+                [InlineKeyboardButton("⬅️ Обучение", callback_data="m_learn")],
+            ])
             await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
         return
     if data == "game_change":
@@ -350,6 +363,10 @@ async def text_router(update, context):
             await learning.add_word_manual(bot, cid, text, "nl"); return
         if kind == "dictadd_en":
             await learning.add_word_manual(bot, cid, text, "en"); return
+        if kind == "topicadd_nl":
+            await learning.add_topic(bot, cid, text, "нидерландский"); return
+        if kind == "topicadd_en":
+            await learning.add_topic(bot, cid, text, "английский"); return
         if kind == "bodyinput":
             settings.set_(cid, "body", text)
             await bot.send_message(chat_id=cid, text="Готово, параметры сохранены.")
@@ -460,9 +477,7 @@ async def job_grammar(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID or not settings.notif_on(CHAT_ID, "grammar"):
         return
     try:
-        lang = settings.study_lang(CHAT_ID)
-        flag = "🇳🇱" if lang == "нидерландский" else "🇬🇧"
-        await learning.send_grammar(context.bot, CHAT_ID, lang, flag)
+        await learning.send_morning_word(context.bot, CHAT_ID)
     except Exception:
         pass
 
