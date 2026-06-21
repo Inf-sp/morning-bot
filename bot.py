@@ -34,7 +34,7 @@ async def start(update, context):
         "<b>Команды:</b>\n"
         "/start - меню и описание\n"
         "/setup - настройки (язык, город, уведомления, параметры шкафа)\n\n"
-        "⭐ Сохранять можно кнопкой «Добавить в избранное» под ответами. "
+        "⭐ Сохранять можно кнопкой «⭐ Добавить в закладки» под ответами. "
         "Потом всё найдёшь в /notes по категориям (Идеи, Цитаты, События...)."
     )
     await update.message.reply_text(txt, parse_mode="HTML", reply_markup=menu.MAIN_KB)
@@ -134,6 +134,10 @@ async def answer_callback(update, context):
                 await travel.send_go(bot, cid)
             elif act == "trav_no":
                 await travel.travel_dislike(bot, cid)
+            elif act == "trav_plan":
+                await travel.send_plan(bot, cid)
+            elif act == "trav_fav":
+                await travel.travel_fav(bot, cid)
             elif act == "watch":
                 await content.send_recos(bot, cid, "movie")
             elif act == "read":
@@ -158,6 +162,8 @@ async def answer_callback(update, context):
                 await content.find_concerts(bot, cid, act.split("_")[1])
             elif act == "listen":
                 await content.send_listen(bot, cid)
+            elif act == "listen_no":
+                await content.listen_dislike(bot, cid)
             elif act == "food_breakfast":
                 await assistant.send_recipe(bot, cid, "завтрак")
             elif act == "food_lunch":
@@ -550,7 +556,7 @@ async def post_init(app):
     await app.bot.set_my_commands([
         BotCommand("start", "меню и описание"),
         BotCommand("setup", "настройки"),
-        BotCommand("notes", "избранное"),
+        BotCommand("notes", "закладки"),
     ])
 
 

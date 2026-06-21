@@ -286,7 +286,9 @@ GAME_UI = {
 }
 
 def game_data(clue_lang, difficulty, recent):
-    diff_map = {"easy": "очень известный персонаж (можно из мультфильмов/фильмов), простые подсказки",
+    diff_map = {"easy": "ОЧЕНЬ известный и популярный персонаж, которого знают почти все "
+                        "(герои Disney/Pixar/Marvel-уровня узнаваемости, мировые звёзды, классика кино и мультфильмов). "
+                        "Подсказки простые и явные, угадывается легко",
                 "med": "сложнее: исторические личности, актёры, более тонкие подсказки",
                 "hard": "редкие персонажи или абстрактные понятия, специфичная лексика, хитрые подсказки"}
     avoid = ("Не загадывай: " + ", ".join(recent[-30:])) if recent else ""
@@ -358,9 +360,9 @@ def _fuzzy(a, b):
         return False
     if a in b or b in a:
         return True
-    if abs(len(a) - len(b)) <= 2:
+    if abs(len(a) - len(b)) <= 3:
         diff = sum(1 for x, y in zip(a, b) if x != y) + abs(len(a) - len(b))
-        return diff <= 2
+        return diff <= 3
     return False
 
 async def game_answer(bot, cid, text):

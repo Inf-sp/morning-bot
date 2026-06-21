@@ -69,7 +69,7 @@ def _day_menu_kb():
         [InlineKeyboardButton("🗓️ Погода на завтра", callback_data="a_w_tomorrow")],
         [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
         [InlineKeyboardButton("🌍 Сменить город", callback_data="a_setcity")],
-        [InlineKeyboardButton("⭐ Добавить в избранное", callback_data="md_fav")],
+        [InlineKeyboardButton("⭐ Добавить в закладки", callback_data="md_fav")],
     ])
 
 def _build_day_text(cid):
@@ -168,7 +168,7 @@ async def handle_callback(bot, cid, q, data):
         store.last_source[str(cid)] = "Идеи"
         store.last_answer[str(cid)] = out
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Новая идея", callback_data="md_idea")],
-                                   [InlineKeyboardButton("⭐ Добавить в избранное", callback_data="as_fav")],
+                                   [InlineKeyboardButton("⭐ Добавить в закладки", callback_data="as_fav")],
                                    [InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")]])
         await bot.send_message(chat_id=cid, text=out, reply_markup=kb)
         return
