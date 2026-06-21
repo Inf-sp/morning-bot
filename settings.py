@@ -143,8 +143,23 @@ async def send_artists(bot, cid):
                            reply_markup=_list_kb(items, "setdel_artist_", "setadd_artist"))
 
 # --- Книги ---
+def _preload_books(cid):
+    cur = store.get_list(config.BOOKS_KEY, cid)
+    if cur:
+        return cur
+    try:
+        import json
+        with open("content.json", encoding="utf-8") as f:
+            seed = list(json.load(f).get("books", []))
+        if seed:
+            store.set_list(config.BOOKS_KEY, cid, seed)
+            return seed
+    except Exception:
+        pass
+    return cur
+
 async def send_books(bot, cid):
-    items = store.get_list(config.BOOKS_KEY, cid)
+    items = _preload_books(cid)
     txt = "📚 <b>Мои книги</b>\n\n" + ("\n".join(f"• {b}" for b in items) if items else "пусто")
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=_list_kb(items, "setdel_book_", "setadd_book"))

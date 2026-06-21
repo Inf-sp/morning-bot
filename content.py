@@ -5,6 +5,23 @@ import store
 import ai
 from util import esc
 
+def _ensure_books(cid):
+    """Возвращает 'Мои книги'; если пусто - подгружает из content.json (секция books)."""
+    books = store.get_list(config.BOOKS_KEY, cid)
+    if books:
+        return books
+    try:
+        import json
+        with open("content.json", encoding="utf-8") as f:
+            data = json.load(f)
+        seed = list(data.get("books", []))
+        if seed:
+            store.set_list(config.BOOKS_KEY, cid, seed)
+            return seed
+    except Exception:
+        pass
+    return books
+
 def content_recommend(kind, cid):
     if kind == "movie":
         seen = store.get_list(config.WATCHLIST_KEY, cid)
@@ -23,8 +40,8 @@ def content_recommend(kind, cid):
 JSON: {{"items": [{{"title": "название (год)", "title_en": "оригинальное/английское название", "hook": "1 строка: на что похоже из его референсов и чем зацепит"}}]}}"""
         return ai.llm_json(prompt, 1000)
 
-    # книги: референсы вкуса берём из "Мои книги" (настройки) + любимые из конфига
-    my_books = store.get_list(config.BOOKS_KEY, cid)
+    # книги: референсы вкуса берём из "Мои книги" (настройки/БД, авто-загрузка из content.json)
+    my_books = _ensure_books(cid)
     my_books_titles = [b if isinstance(b, str) else str(b) for b in my_books]
     read_seen = store.get_list(config.READLIST_KEY, cid)         # уже в закладках "почитать"
     black = store.get_list(config.BOOK_BLACKLIST_KEY, cid)       # отклонённые
