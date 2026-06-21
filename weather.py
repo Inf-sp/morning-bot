@@ -162,9 +162,9 @@ STORM_WIND_MS = 15      # порог шквалов
 SNOW_CODES = (71, 73, 75, 77, 85, 86)
 HEAVY_RAIN_CODES = (65, 81, 82, 95, 96, 99)
 
-def storm_alert(wind_ms, code, rain, rain_mm=None):
+def storm_alert(wind_ms, code, rain, rain_mm=None, cc=""):
     """Возвращает текст штормового блока или '' если угрозы нет.
-    Триггер: ветер > 15 м/с, снегопад, ливень/гроза."""
+    Триггер: ветер > 15 м/с, снегопад, ливень/гроза. NS/Buienradar - только для NL."""
     reasons = []
     if wind_ms and wind_ms > STORM_WIND_MS:
         reasons.append("wind")
@@ -174,31 +174,40 @@ def storm_alert(wind_ms, code, rain, rain_mm=None):
         reasons.append("rain")
     if not reasons:
         return ""
-    L = ["⚠️ <b>Штормовое предупреждение (Code Geel)</b>", ""]
+    is_nl = (cc or "").upper() == "NL"
+    L = ["⚠️ <b>Штормовое предупреждение</b>" + (" (Code Geel)" if is_nl else ""), ""]
     if "wind" in reasons:
-        L.append(f"Ожидаются шквалы до {wind_ms:.0f} м/с. Закрепи велосипед цепью за опору, "
-                 "убери лёгкие предметы с балкона.")
-        L.append("Высокий риск задержек и отмен поездов NS - ветки на путях парализуют движение. Проверь приложение NS.")
+        L.append(f"Ожидаются шквалы до {wind_ms:.0f} м/с. Закрепи велосипед, убери лёгкие предметы с балкона.")
+        if is_nl:
+            L.append("Высокий риск задержек и отмен поездов NS - ветки на путях парализуют движение. Проверь приложение NS.")
+        else:
+            L.append("Возможны задержки транспорта из-за ветра. Заложи время на дорогу.")
     if "rain" in reasons:
-        L.append("Сильный дождь и риск подтоплений. Сверься с Buienradar перед выходом.")
+        if is_nl:
+            L.append("Сильный дождь и риск подтоплений. Сверься с Buienradar перед выходом.")
+        else:
+            L.append("Сильный дождь и риск подтоплений. Проверь прогноз осадков перед выходом.")
     if "snow" in reasons:
-        L.append("Снег и гололёд. Осторожно на велодорожках, заложи время на дорогу.")
+        L.append("Снег и гололёд. Осторожно на дорогах, заложи время на дорогу.")
     return "\n".join(L)
 
-def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label=""):
-    """Метео-факт, привязанный к завтрашней погоде: контраст или историческая локальность KNMI."""
+def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="", country="", cc=""):
+    """Метео-факт, привязанный к завтрашней погоде, для текущей страны."""
+    place = f"{city}, {country}" if country else city
+    is_nl = (cc or "").upper() == "NL"
+    hist_src = "архивов KNMI" if is_nl else "исторических метеоданных страны"
     try:
         out = ai.llm(
-            f"Контекст (НЕ повторять в ответе): завтра в городе {city} (Нидерланды){(' ' + date_label) if date_label else ''} "
+            f"Контекст (НЕ повторять в ответе): завтра в {place}{(' ' + date_label) if date_label else ''} "
             f"{desc}, до {tmax:+.0f}°C, дождь {rain:.0f}%, ветер {wind_ms:.0f} м/с.\n"
             "Дай ОДИН метео-факт, строго по логике (без шуток про отношения/настроение, сухой тон, тонкая ирония):\n"
-            "- Если аномальная для Нидерландов жара (выше +25°C) - сравни с рекордным пеклом в Европе на эту дату.\n"
+            f"- Если для {place} это аномальная жара - сравни с рекордным пеклом в этом регионе/на континенте на эту дату.\n"
             "- Если сильный дождь - найди место с рекордной засухой сейчас.\n"
-            "- Иначе - историческая локальность KNMI: что было в Нидерландах в этот день 50-100 лет назад.\n"
-            "ВАЖНО: начни сразу с самого факта. НЕ пересказывай погоду, город, дату и температуру из контекста - "
-            "это уже показано выше. Только новый факт, максимум 2 коротких предложения, на русском, без markdown.",
+            f"- Иначе - историческая локальность (по данным {hist_src}): что было в этой стране в этот день 50-100 лет назад.\n"
+            f"Факт строго про {place} или прямой контраст с ним. "
+            "ВАЖНО: начни сразу с самого факта. НЕ пересказывай погоду, город, дату и температуру из контекста. "
+            "Только новый факт, максимум 2 коротких предложения, на русском, без markdown.",
             200, 0.85).strip()
-        # подстраховка: если модель всё же начала с пересказа погоды - убираем первое предложение-вводную
         low = out.lower()
         if low.startswith(("погода", "завтра", f"в {city.lower()}", city.lower())):
             parts = out.split(". ", 1)
@@ -279,12 +288,15 @@ async def send_weather(bot, cid, mode="today"):
 
         if mode == "tomorrow":
             desc = DESC.get(code, "")
-            alert = storm_alert(wind_ms, code, rain, rain_mm)
+            cc = s.get("cc", "")
+            country = s.get("country", "")
+            alert = storm_alert(wind_ms, code, rain, rain_mm, cc=cc)
             if alert:
                 # экстремальная погода: показываем угрозу, метео-факт блокируется
                 L += ["", alert]
             else:
-                mf = _meteo_fact(s["city"], tmax, rain, wind_ms, desc, header.split("•")[1].strip() if "•" in header else "")
+                date_lbl = header.split("•")[1].strip() if "•" in header else ""
+                mf = _meteo_fact(s["city"], tmax, rain, wind_ms, desc, date_lbl, country=country, cc=cc)
                 if mf:
                     L += ["", "🔬 <b>Метео-факт</b>", esc(mf)]
         else:
@@ -323,13 +335,16 @@ async def send_weather(bot, cid, mode="today"):
         t = tmaxs[i] or 0
         rp = rains[i] or 0
         mm = rmms[i]
-        day_name = days_ru[i] if i == 0 else days_ru[i].lower()
+        day_name = days_ru[i].lower()  # храним в нижнем регистре, первое слово строки капитализируем при выводе
         if t > 25:
             hot.append(day_name)
         elif _rain_real(rp, mm):
             wet.append(day_name)
         else:
             comfort.append(day_name)
+
+    def _cap_first(s):
+        return s[:1].upper() + s[1:] if s else s
 
     # ветер за неделю
     wmax = max(winds) if winds else 0
@@ -342,26 +357,31 @@ async def send_weather(bot, cid, mode="today"):
     wmin = min(winds) if winds else 0
     wind_line = f"💨 Ветер: {wlabel}, {wmin:.0f}-{wmax:.0f} м/с"
 
-    # итог - короткий совет от LLM по уже разложенным данным
-    summary_ctx = (f"Комфортные дни: {', '.join(comfort) or 'нет'}. "
+    # итог - короткий совет от LLM по уже разложенным данным, для реально выбранного места
+    place = s.get("city", "")
+    country = s.get("country", "")
+    place_full = f"{place} ({country})" if country and country != place else place
+    summary_ctx = (f"Место: {place_full}. "
+                   f"Комфортные дни: {', '.join(comfort) or 'нет'}. "
                    f"Дожди: {', '.join(wet) or 'нет'}. "
-                   f"Жара (>25°C, в Нидерландах требует осторожности, >30°C - экстрим): {', '.join(hot) or 'нет'}.")
+                   f"Жара (>25°C жарко, >30°C - экстрим): {', '.join(hot) or 'нет'}.")
     try:
         tip = ai.llm(
-            "Дай короткий практичный итог по погоде на неделю в Нидерландах (1-2 предложения, без воды, без markdown): "
-            "когда лучше планировать прогулку/велосипед, а когда переждать жару дома. "
-            "Жару выше +25°C НЕ называй хорошей погодой.\n" + summary_ctx, 200, 0.6).strip()
+            f"Дай короткий практичный итог по погоде на неделю для места: {place_full} "
+            "(1-2 предложения, без воды, без markdown): когда лучше планировать прогулку/велосипед, "
+            "а когда переждать жару дома. Жару выше +25°C НЕ называй хорошей погодой. "
+            f"Пиши именно про {place_full}, не упоминай другие страны.\n" + summary_ctx, 200, 0.6).strip()
     except Exception:
         tip = ""
 
     L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", "",
          f"От {tmin:+.0f}°C → {tmax:+.0f}°C", ""]
     if comfort:
-        L.append(f"☀️ {esc(', '.join(comfort))}: комфортная погода")
+        L.append(f"☀️ {esc(_cap_first(', '.join(comfort)))}: комфортная погода")
     if wet:
-        L.append(f"🌧️ {esc(', '.join(wet))}: возможны дожди")
+        L.append(f"🌧️ {esc(_cap_first(', '.join(wet)))}: возможны дожди")
     if hot:
-        L.append(f"🔥 {esc(', '.join(hot))}: жара, осторожно")
+        L.append(f"🔥 {esc(_cap_first(', '.join(hot)))}: жара, осторожно")
     L += ["", wind_line]
     if tip:
         L += ["", "<b>Итог:</b>", esc(tip)]
