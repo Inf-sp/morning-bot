@@ -37,10 +37,6 @@ def home_kb(cid):
         [InlineKeyboardButton("🗣 Язык для грамматики", callback_data="set_lang")],
         [InlineKeyboardButton("🎚 Уровень языков", callback_data="set_levels")],
         [InlineKeyboardButton("🌍 Сменить город", callback_data="set_city")],
-        [InlineKeyboardButton("👕 Мой шкаф", callback_data="set_wardrobe")],
-        [InlineKeyboardButton("🧳 Мои страны", callback_data="set_countries")],
-        [InlineKeyboardButton("🎸 Мои артисты", callback_data="set_artists")],
-        [InlineKeyboardButton("📖 Книги", callback_data="set_books")],
     ])
 
 async def send_home(bot, cid):
