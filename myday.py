@@ -149,7 +149,7 @@ async def handle_callback(bot, cid, q, data):
         store.last_answer[str(cid)] = out
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Новая идея", callback_data="md_idea")],
                                    [InlineKeyboardButton("⭐ Добавить в избранное", callback_data="as_fav")],
-                                   [InlineKeyboardButton("⬅️ Назад", callback_data="m_close")]])
+                                   [InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")]])
         await bot.send_message(chat_id=cid, text=out, reply_markup=kb)
         return
     if data == "md_fav":
@@ -157,7 +157,7 @@ async def handle_callback(bot, cid, q, data):
             [InlineKeyboardButton("⭐ Сохранить бизнес-идею", callback_data="md_save_idea")],
             [InlineKeyboardButton("⭐ Сохранить цитату", callback_data="md_save_quote")],
             [InlineKeyboardButton("⭐ Сохранить образ дня", callback_data="md_save_look")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="m_close")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")],
         ])
         try:
             await q.message.edit_reply_markup(reply_markup=kb)

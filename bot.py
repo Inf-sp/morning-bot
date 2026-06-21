@@ -84,7 +84,6 @@ async def answer_callback(update, context):
         act = data[2:]
         try:
             if act == "plany":
-                await bot.send_message(chat_id=cid, text="Собираю сводку дня...")
                 await myday.send_plany(bot, cid)
             elif act == "daycheck":
                 await myday.send_daycheck(bot, cid)
