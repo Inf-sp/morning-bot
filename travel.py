@@ -12,7 +12,7 @@ def travel_suggest_one(cid):
         visited = [c.strip() for c in config.VISITED.split(",") if c.strip()]
     favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)           # закладки
     fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
-    disliked = store.get_list("travel_dislike.json", cid)
+    disliked = store.get_list(config.TRAVEL_DISLIKE_KEY, cid)
     skip = ", ".join([str(x) for x in visited] + fav_names + [str(x) for x in disliked])
     prompt = f"""Уже был / в закладках / не интересно (СТРОГО НЕ предлагай ничего из этого списка): {skip}.
 Профиль: любит интеллектуальную атмосферу, города с характером, природу; путешествия важнее вещей.
@@ -52,7 +52,7 @@ async def send_go(bot, cid):
         visited = [c.strip() for c in config.VISITED.split(",") if c.strip()]
     favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
     fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
-    disliked = store.get_list("travel_dislike.json", cid)
+    disliked = store.get_list(config.TRAVEL_DISLIKE_KEY, cid)
     skip_set = {str(x).strip().lower() for x in (list(visited) + fav_names + list(disliked)) if str(x).strip()}
     d = None
     try:
@@ -75,7 +75,7 @@ async def send_go(bot, cid):
 async def travel_dislike(bot, cid):
     c = store.suggested_countries.get(str(cid))
     if c:
-        store.add_to_list("travel_dislike.json", cid, c)
+        store.add_to_list(config.TRAVEL_DISLIKE_KEY, cid, c)
     await send_go(bot, cid)
 
 async def travel_fav(bot, cid):
@@ -101,7 +101,7 @@ async def send_plan(bot, cid):
     visited = store.get_list(config.COUNTRIES_KEY, cid)
     favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
     fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
-    disliked = store.get_list("travel_dislike.json", cid)
+    disliked = store.get_list(config.TRAVEL_DISLIKE_KEY, cid)
     skip = ", ".join([str(x) for x in visited] + fav_names + [str(x) for x in disliked] + [country])
     await bot.send_message(chat_id=cid, text="Собираю план поездки...")
     prompt = f"""Подробный план поездки в страну/направление: {country}. Вылет из: {home}.
@@ -140,6 +140,7 @@ async def send_plan(bot, cid):
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
     store.last_source[str(cid)] = "Путешествия · План"
     kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("😕 Не нравится", callback_data="a_trav_no")],
         [InlineKeyboardButton("⭐ Добавить в закладки", callback_data="a_trav_fav")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])

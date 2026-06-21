@@ -348,13 +348,13 @@ def _listen_kb():
 async def listen_dislike(bot, cid):
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
-        store.add_to_list("music_dislike.json", cid, rec["items"][0])
+        store.add_to_list(config.MUSIC_DISLIKE_KEY, cid, rec["items"][0])
     await send_listen(bot, cid)
 
 async def send_listen(bot, cid):
     arts = _ensure_artists(cid)
     anchors = ", ".join(arts[:25]) if arts else "Charli xcx, The xx, Fever Ray, RÜFÜS DU SOL, PLACEBO"
-    disliked = store.get_list("music_dislike.json", cid)
+    disliked = store.get_list(config.MUSIC_DISLIKE_KEY, cid)
     avoid_artists = ", ".join(arts[:40])
     avoid_dis = ", ".join([str(x) for x in disliked][:40])
     await bot.send_message(chat_id=cid, text="Подбираю исполнителя под твой вкус...")
@@ -396,7 +396,8 @@ async def add_listen(bot, cid, i):
         title = rec["items"][0]
         store.add_to_list(config.NOTES_KEY, cid,
                           {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": "Музыка"})
-        await bot.send_message(chat_id=cid, text=f"⭐ В закладках «Музыка»: {title}")
+        await bot.send_message(chat_id=cid, text=f"⭐ В закладках «Музыка»: {title}. Вот ещё вариант 👇")
+    await send_listen(bot, cid)
 
 async def send_artists(bot, cid):
     arts = store.get_list(config.ARTISTS_KEY, cid)

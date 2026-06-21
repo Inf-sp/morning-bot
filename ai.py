@@ -107,20 +107,72 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None):
             errs.append(f"{name}:{e}")
     raise Exception(_friendly(errs))
 
+def _repair_inner_quotes(raw):
+    """Чинит неэкранированные двойные кавычки внутри строковых значений JSON.
+    Идём по символам, отслеживаем, находимся ли внутри строки-значения."""
+    out = []
+    in_str = False
+    i = 0
+    n = len(raw)
+    while i < n:
+        ch = raw[i]
+        if not in_str:
+            out.append(ch)
+            if ch == '"':
+                in_str = True
+            i += 1
+            continue
+        # внутри строки
+        if ch == '\\':
+            out.append(ch)
+            if i + 1 < n:
+                out.append(raw[i + 1])
+                i += 2
+                continue
+            i += 1
+            continue
+        if ch == '"':
+            # смотрим вперёд: если дальше структурный символ - это конец строки
+            j = i + 1
+            while j < n and raw[j] in ' \t\r\n':
+                j += 1
+            if j < n and raw[j] in ',:}]':
+                out.append('"')
+                in_str = False
+            elif j >= n:
+                out.append('"')
+                in_str = False
+            else:
+                # кавычка внутри текста - экранируем
+                out.append('\\"')
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
 def llm_json(prompt, max_tokens=1200, order=None):
-    raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown.", max_tokens, 0.7, order)
+    raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
+                       "Внутри строковых значений НЕ используй двойные кавычки - "
+                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order)
     raw = re.sub(r"```(json)?", "", raw).strip()
     m = re.search(r"\{.*\}", raw, re.S)
     if m:
         raw = m.group(0)
-    try:
-        return json.loads(raw, strict=False)
-    except json.JSONDecodeError:
+    # пытаемся распарсить в несколько шагов, от мягкого к агрессивному
+    for attempt in (
+        lambda s: json.loads(s, strict=False),
+        lambda s: json.loads(re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', s), strict=False),
+        lambda s: json.loads(_repair_inner_quotes(s), strict=False),
+        lambda s: json.JSONDecoder(strict=False).raw_decode(s)[0],
+        lambda s: json.JSONDecoder(strict=False).raw_decode(_repair_inner_quotes(s))[0],
+    ):
         try:
-            fixed = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', raw)
-            return json.loads(fixed, strict=False)
-        except json.JSONDecodeError:
-            return json.JSONDecoder(strict=False).raw_decode(raw)[0]
+            return attempt(raw)
+        except Exception:
+            continue
+    # последний шанс - пустой dict, чтобы вызывающий показал понятную ошибку
+    raise Exception("Не удалось разобрать ответ ИИ (JSON). Попробуй ещё раз.")
 
 CHAT_SYSTEM = f"""Ты личный ассистент в Telegram.
 Собеседник - инженер, дизайнер (UI/UX, графика), фотограф. Живёт в Нидерландах. Учит нидерландский (B1) и английский. У него СДВГ.
