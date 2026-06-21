@@ -13,13 +13,6 @@ DOCTOR_INTRO = (
     "Опиши, что беспокоит, или спроси про лекарство 👇"
 )
 
-LETTER_REF = (
-    "✍️ Помощь с письмом\n\n"
-    "Помогу написать, исправить или перевести текст.\n\n"
-    "Отправь черновик или расскажи задачу 👇"
-)
-
-
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
 
@@ -127,9 +120,6 @@ def _gen_motiv(cid):
 
 # ---------- роли ----------
 def _role_system(role):
-    if role == "letter":
-        return ("Ты помощник по текстам и переписке. Пиши/исправляй/переводи: официальные письма, деловые сообщения, "
-                "сырой текст - вежливо, чётко, структурно. Готовый текст с [плейсхолдерами]. Без воды.")
     if role == "state":
         return ("Ты спокойный помощник по состоянию, фокусу и мотивации (не психотерапевт). "
                 "Выслушай, разложи ситуацию на 1-3 конкретных шага, поддержи коротко. Без воды, с эмодзи. "
@@ -341,24 +331,6 @@ async def handle_callback(bot, cid, q, data):
         await _send(bot, cid, out, kb=_ans_kb(lbl, cb))
         return
     # роли
-    if data == "as_letter":
-        store.pending_input[str(cid)] = "role_letter"
-        kb = _kb([
-            [("📄 Официальный ответ", "as_draft_official")],
-            [("🎂 Поздравление с ДР", "as_draft_bday")],
-            [("💬 Ответ на личное сообщение", "as_draft_dm")],
-            [("⬅️ Назад", "m_close")],
-        ])
-        await bot.send_message(chat_id=cid, text=LETTER_REF, reply_markup=kb); return
-    if data.startswith("as_draft_"):
-        kind = data[len("as_draft_"):]
-        presets = {
-            "official": "Напиши официальный ответ. Уточни у меня детали, если нужно. Тон вежливый, формальный.",
-            "bday": "Напиши тёплое поздравление с днём рождения. Спроси, кому, если нужно.",
-            "dm": "Помоги ответить на личное сообщение - вежливо и по-человечески.",
-        }
-        await handle_role(bot, cid, "letter", presets.get(kind, "Помоги с текстом."))
-        return
     if data == "as_doctor":
         store.pending_input[str(cid)] = "role_doctor"
         await bot.send_message(chat_id=cid, text=DOCTOR_INTRO, reply_markup=_back_kb()); return
