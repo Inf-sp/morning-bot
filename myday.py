@@ -12,23 +12,30 @@ TZ = config.TZ
 
 # --- Сводка дня (Мой день) ---
 
-def plany_extras(country, date_str, city="", weather_text="", wardrobe_text=""):
-    prompt = f"""Сгенерируй блоки для ежедневной сводки. Дата: {date_str}. Город: {city}. Страна: {country}.
+def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", weekday="", is_weekend=False):
+    day_kind = "выходной" if is_weekend else "будний день"
+    prompt = f"""Сгенерируй блоки для ежедневной сводки. Дата: {date_str} ({weekday}, {day_kind}). Город: {city}. Страна: {country}.
 Погода сегодня: {weather_text}
 Гардероб (используй ТОЛЬКО эти вещи, точные названия): {wardrobe_text}
+
+{config.USER_FOCUS_CONTEXT}
+
+{config.MYDAY_RULES}
+
 Строго валидный JSON, экранируй кавычки, без переносов внутри значений.
 {{
+ "focus": "Фокус дня - ОДНА доминанта через глагол действия, одна короткая строка (см. правила [Фокус дня])",
  "outfit": ["верх","низ","обувь","аксессуар"],
  "word_ru": "слово дня на русском (одно слово)",
  "word_nl": "перевод на нидерландский С АРТИКЛЕМ (de/het)",
  "word_en": "перевод на английский С АРТИКЛЕМ (a/the)",
- "idea": "1 бизнес-идея, 1-2 предложения, ВСЕГДА новая, с названием в стиле научной фантастики",
- "fact": "ОДИН точно проверенный, достоверный и интересный факт (наука/история/природа/технологии). Только бесспорные факты, без сомнительных утверждений. 1 предложение, всегда новый.",
- "quote": "вдохновляющая цитата",
- "quote_src": "автор, год"
+ "idea": "бизнес-идея по правилам [Бизнес-идея]: Суть одним предложением + Монетизация/MVP одним предложением",
+ "fact": "интересный факт по правилам [Интересный факт]: локальный, удивляющий, максимум 2 коротких предложения",
+ "quote": "цитата по правилам [Цитата], строго привязанная к Фокусу дня выше",
+ "quote_src": "автор"
 }}
 Правила для outfit: 1 верх + 1 низ + обувь (+ опц. аксессуар), сочетание по цвету, минимализм. От +24°C без дождя - ШОРТЫ + футболка; +17..+23 - лёгкие брюки + футболка/рубашка; ниже +16 или дождь/ветер - слои/ветровка, закрытая обувь. Без обращения по имени.
-НЕ повторяй одно и то же в word, idea и fact. Кратко."""
+Цитата должна логически соответствовать Фокусу дня. НЕ повторяй одно и то же в word, idea и fact. Кратко."""
     return ai.llm_json(prompt, 1300)
 
 _day_cache = {}  # cid -> {"date":..., "text":..., "ex":..., "outfit":...}
@@ -43,7 +50,6 @@ def _day_menu_kb():
         [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
         [InlineKeyboardButton("🌍 Сменить город", callback_data="a_setcity")],
         [InlineKeyboardButton("⭐ Добавить в избранное", callback_data="md_fav")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_close")],
     ])
 
 def _build_day_text(cid):
@@ -68,9 +74,13 @@ def _build_day_text(cid):
     else:
         wind_str = f"💨 Ветер {wind_ms:.0f} м/с"
 
+    now = datetime.now(TZ)
     wblock = weather.weather_block(data, 0, s["city"])
+    weekday_name = _WEEKDAYS[now.weekday()]
+    is_weekend = now.weekday() >= 5
     ex = plany_extras(s.get("country", ""), day_str, s.get("city", ""),
-                      weather_text=wblock, wardrobe_text=store.wardrobe_to_text(store.load_wardrobe()))
+                      weather_text=wblock, wardrobe_text=store.wardrobe_to_text(store.load_wardrobe()),
+                      weekday=weekday_name, is_weekend=is_weekend)
     dict_words = store.get_list(config.DICT_KEY, cid)
     if dict_words:
         w = random.choice(dict_words[-20:])
@@ -79,17 +89,18 @@ def _build_day_text(cid):
             ex["word_nl"] = w.get("nl", ex.get("word_nl", ""))
             ex["word_en"] = w.get("en", ex.get("word_en", ""))
 
-    now = datetime.now(TZ)
-    header = f"{_WEEKDAYS[now.weekday()]}, {now.day} {_MONTHS[now.month-1]}"
+    header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     def cap(x): return x[:1].upper() + x[1:] if x else x
     L = [f"<b>Мой день • {esc(header)} • {esc(s.get('city',''))}</b>", ""]
     L += [f"<b>{icon} Погода сегодня</b>",
           f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}", ""]
-    outfit = " + ".join(ex.get("outfit", [])).rstrip(".")
-    L += ["<b>👕 Что надеть сегодня</b>", esc(outfit), ""]
+    outfit = " + ".join(ex.get("outfit", [])).rstrip(".")  # для «Сохранить образ дня», в сводке не показываем
+    focus = (ex.get("focus") or "").strip().rstrip(".")
+    if focus:
+        L += ["<b>🎯 Фокус дня</b>", esc(focus), ""]
     L += ["<b>📚 Слово дня</b>",
           f"{cap(esc(ex.get('word_ru','')))} → 🇳🇱 {cap(esc(ex.get('word_nl','')))} → 🇬🇧 {cap(esc(ex.get('word_en','')))}", ""]
-    L += ["<b>🚀 Бизнес-идея</b>", esc(ex.get("idea", "").split(". ")[0].rstrip(".")), ""]
+    L += ["<b>🚀 Бизнес-идея</b>", esc(ex.get("idea", "").strip().rstrip(".")), ""]
     fact = ex.get("fact") or ""
     if not fact:
         facts = ex.get("facts", [])
@@ -100,7 +111,9 @@ def _build_day_text(cid):
     if fact:
         L += ["<b>🔬 Интересный факт</b>", esc(fact.strip().rstrip(".")), ""]
     if ex.get("quote"):
-        L += ["<b>💭 Цитата</b>", f"«{esc(ex.get('quote',''))}» - ({esc(ex.get('quote_src',''))})"]
+        src = esc(ex.get("quote_src", "")).strip()
+        line = f"«{esc(ex.get('quote',''))}»" + (f" — {src}" if src else "")
+        L += ["<b>💭 Цитата</b>", line]
     text = "\n".join(L).strip()
     return text, ex, outfit, day_str
 
