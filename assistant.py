@@ -322,25 +322,48 @@ async def note_drop(bot, cid, i):
 
 async def export_notes(bot, cid):
     import io
+    lines = ["Мои сохранения (DM)", ""]
+
+    # 1) Временные закладки (лента notes с bucket=fav)
     notes = store.get_list(config.NOTES_KEY, cid)
-    if not notes:
-        await bot.send_message(chat_id=cid, text="Пока пусто."); return
-    by_cat = {}
-    for n in notes:
-        src = n.get("source", "Прочее") if isinstance(n, dict) else "Прочее"
-        by_cat.setdefault(_top_cat(src), []).append(n)
-    lines = ["Мои закладки (DM)", ""]
-    for cat, items in by_cat.items():
-        lines.append(f"== {cat} ==")
-        for n in items:
+    fav = [n for n in notes if _note_bucket(n) == "fav"]
+    lines.append("⭐ ВРЕМЕННЫЕ ЗАКЛАДКИ")
+    if fav:
+        for n in fav:
             t = n.get("text", "") if isinstance(n, dict) else str(n)
             d = n.get("date", "") if isinstance(n, dict) else ""
-            lines.append(f"- [{d}] {t.strip()}")
-        lines.append("")
+            src_full = n.get("source", "") if isinstance(n, dict) else ""
+            src = src_full.split(" · ", 1)[1] if " · " in src_full else src_full
+            tag = f" [{src}]" if src and src != "Прочее" else ""
+            lines.append(f"- [{d}]{tag} {t.strip()}")
+    else:
+        lines.append("- пусто")
+    lines.append("")
+
+    # 2) Любимые (категорийные списки)
+    lines.append("❤️ ЛЮБИМЫЕ")
+    sections = [
+        ("Мои страны", store.get_list(config.COUNTRIES_KEY, cid)),
+        ("Мои артисты", store.get_list(config.ARTISTS_KEY, cid)),
+        ("Мои книги", store.get_list(config.BOOKS_KEY, cid)),
+    ]
+    any_love = False
+    for name, items in sections:
+        names = [i if isinstance(i, str) else i.get("name", "") for i in items]
+        names = [x for x in names if x]
+        if names:
+            any_love = True
+            lines.append(f"  {name}:")
+            for x in names:
+                lines.append(f"  - {x}")
+    if not any_love:
+        lines.append("- пусто")
+    lines.append("")
+
     buf = io.BytesIO("\n".join(lines).encode("utf-8"))
-    buf.name = "izbrannoe.txt"
-    await bot.send_document(chat_id=cid, document=buf, filename="izbrannoe.txt",
-                            caption="📤 Готово. Текст можно вставить в Заметки/Напоминания Apple.")
+    buf.name = "moi_sohraneniya.txt"
+    await bot.send_document(chat_id=cid, document=buf, filename="moi_sohraneniya.txt",
+                            caption="📤 Готово. Текст можно сохранить на ваше устройство.")
 
 async def send_notes(bot, cid):
     notes = store.get_list(config.NOTES_KEY, cid)
@@ -349,12 +372,14 @@ async def send_notes(bot, cid):
               + len(store.get_list(config.ARTISTS_KEY, cid))
               + len(store.get_list(config.BOOKS_KEY, cid)))
     rows = [
-        [InlineKeyboardButton(f"⭐ Закладки ({n_fav})", callback_data="as_bucket_fav")],
+        [InlineKeyboardButton(f"⭐ Временные закладки ({n_fav})", callback_data="as_bucket_fav")],
         [InlineKeyboardButton("❤️ Любимые", callback_data="as_bucket_love")],
         [InlineKeyboardButton("📤 Экспорт в файл", callback_data="as_export")],
     ]
-    await bot.send_message(chat_id=cid, text="📂 Мои сохранения - выбери раздел:",
-                           reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, parse_mode="HTML",
+        text="В этом разделе хранятся временные закладки и любимые (артисты, фильмы, книги и т).\n\n"
+             "<b>Мои сохранения</b> - выбери раздел:",
+        reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_bucket(bot, cid, bucket):
     """fav - лента закладок; love - меню под-разделов (страны/артисты/книги/одежда)."""
@@ -364,10 +389,10 @@ async def send_bucket(bot, cid, bucket):
     notes = store.get_list(config.NOTES_KEY, cid)
     items = [(i, n) for i, n in enumerate(notes) if _note_bucket(n) == "fav"]
     if not items:
-        await bot.send_message(chat_id=cid, text="⭐ <b>Закладки</b>\n\nпусто", parse_mode="HTML",
+        await bot.send_message(chat_id=cid, text="⭐ <b>Временные закладки</b>\n\nпусто", parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")]]))
         return
-    lines = ["⭐ <b>Закладки</b>", ""]
+    lines = ["⭐ <b>Временные закладки</b>", ""]
     rows = []
     for i, n in items:
         t = n.get("text", "") if isinstance(n, dict) else str(n)
