@@ -303,18 +303,15 @@ async def note_to_love(bot, cid, i):
         await send_notes(bot, cid); return
     typ, _, fav_key, cat = _note_type(n.get("source", "") if isinstance(n, dict) else "")
     t = _note_text(n)
-    # 1) в раздел настроек по типу
     if fav_key:
         if typ == "travel":
             from util import country_flag
             store.add_to_list(fav_key, cid, {"name": t, "flag": country_flag(t)})
         else:
             store.add_to_list(fav_key, cid, t)
-    # 2) копию в "Любимые" ленту /notes
-    n2 = dict(n) if isinstance(n, dict) else {"text": t}
-    n2["bucket"] = "love"
-    store.add_to_list(config.NOTES_KEY, cid, n2)
-    await bot.send_message(chat_id=cid, text=f"❤️ «{t[:50]}» - в любимые и в раздел «{cat}» настроек.")
+        await bot.send_message(chat_id=cid, text=f"❤️ «{t[:50]}» - в любимые, раздел «{cat}».")
+    else:
+        await bot.send_message(chat_id=cid, text="Удалил из закладок.")
     await send_bucket(bot, cid, "fav")
 
 async def note_drop(bot, cid, i):
@@ -347,28 +344,30 @@ async def export_notes(bot, cid):
 
 async def send_notes(bot, cid):
     notes = store.get_list(config.NOTES_KEY, cid)
-    if not notes:
-        await bot.send_message(chat_id=cid, text="⭐ Пусто. Жми «⭐ Добавить в закладки» под ответами."); return
     n_fav = sum(1 for n in notes if _note_bucket(n) == "fav")
-    n_love = sum(1 for n in notes if _note_bucket(n) == "love")
+    n_love = (len(store.get_list(config.COUNTRIES_KEY, cid))
+              + len(store.get_list(config.ARTISTS_KEY, cid))
+              + len(store.get_list(config.BOOKS_KEY, cid)))
     rows = [
         [InlineKeyboardButton(f"⭐ Закладки ({n_fav})", callback_data="as_bucket_fav")],
-        [InlineKeyboardButton(f"❤️ Любимые ({n_love})", callback_data="as_bucket_love")],
+        [InlineKeyboardButton("❤️ Любимые", callback_data="as_bucket_love")],
         [InlineKeyboardButton("📤 Экспорт в файл", callback_data="as_export")],
     ]
     await bot.send_message(chat_id=cid, text="📂 Мои сохранения - выбери раздел:",
                            reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_bucket(bot, cid, bucket):
-    """Показывает заметки одного bucket (fav/love), сгруппированные по категории."""
+    """fav - лента закладок; love - меню под-разделов (страны/артисты/книги/одежда)."""
+    if bucket == "love":
+        await send_love_home(bot, cid)
+        return
     notes = store.get_list(config.NOTES_KEY, cid)
-    items = [(i, n) for i, n in enumerate(notes) if _note_bucket(n) == bucket]
-    title = "⭐ <b>Закладки</b>" if bucket == "fav" else "❤️ <b>Любимые</b>"
+    items = [(i, n) for i, n in enumerate(notes) if _note_bucket(n) == "fav"]
     if not items:
-        await bot.send_message(chat_id=cid, text=f"{title}\n\nпусто", parse_mode="HTML",
+        await bot.send_message(chat_id=cid, text="⭐ <b>Закладки</b>\n\nпусто", parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")]]))
         return
-    lines = [title, ""]
+    lines = ["⭐ <b>Закладки</b>", ""]
     rows = []
     for i, n in items:
         t = n.get("text", "") if isinstance(n, dict) else str(n)
@@ -379,6 +378,100 @@ async def send_bucket(bot, cid, bucket):
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
+
+
+# ===== Любимые: под-разделы (страны/артисты/книги/одежда) =====
+# каждый: (заголовок, тип для роутинга)
+LOVE_SECTIONS = [
+    ("🧳 Мои страны", "countries"),
+    ("🎸 Мои артисты", "artists"),
+    ("📖 Мои книги", "books"),
+    ("👕 Моя одежда", "wardrobe"),
+]
+
+async def send_love_home(bot, cid):
+    rows = [[InlineKeyboardButton(title, callback_data=f"love_{key}")] for title, key in LOVE_SECTIONS]
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
+    await bot.send_message(chat_id=cid, text="❤️ <b>Любимые</b>\n\nВыбери раздел:",
+                           parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+def _love_items(cid, key):
+    """Возвращает список строк-названий для раздела (с авто-загрузкой дефолтов)."""
+    if key == "countries":
+        cur = store.get_list(config.COUNTRIES_KEY, cid)
+        if not cur:
+            cur = [c.strip() for c in config.VISITED.split(",") if c.strip()]
+            store.set_list(config.COUNTRIES_KEY, cid, cur)
+        return [c if isinstance(c, str) else c.get("name", "") for c in cur]
+    if key == "artists":
+        cur = store.get_list(config.ARTISTS_KEY, cid)
+        if not cur:
+            try:
+                import json
+                with open("artists.json", encoding="utf-8") as f:
+                    cur = json.load(f)
+                store.set_list(config.ARTISTS_KEY, cid, cur)
+            except Exception:
+                cur = []
+        return list(cur)
+    if key == "books":
+        cur = store.get_list(config.BOOKS_KEY, cid)
+        if not cur:
+            try:
+                import json
+                with open("content.json", encoding="utf-8") as f:
+                    cur = list(json.load(f).get("books", []))
+                store.set_list(config.BOOKS_KEY, cid, cur)
+            except Exception:
+                cur = []
+        return list(cur)
+    return []
+
+def _love_title(key):
+    return {"countries": "🧳 Мои страны", "artists": "🎸 Мои артисты",
+            "books": "📖 Мои книги", "wardrobe": "👕 Моя одежда"}.get(key, "Любимые")
+
+async def send_love_section(bot, cid, key):
+    if key == "wardrobe":
+        import wardrobe
+        await wardrobe.send_show(bot, cid)   # показ шкафа с его управлением
+        return
+    items = _love_items(cid, key)
+    title = _love_title(key)
+    lines = [f"<b>{title}</b>", ""]
+    lines.append(", ".join(items) if items else "пусто")
+    rows = [[InlineKeyboardButton(f"❌ {str(it)[:28]}", callback_data=f"lovedel_{key}_{i}")]
+            for i, it in enumerate(items[:40])]
+    rows.append([InlineKeyboardButton("➕ Добавить", callback_data=f"loveadd_{key}")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_love")])
+    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
+                           reply_markup=InlineKeyboardMarkup(rows))
+
+def _love_key_of(key):
+    return {"countries": config.COUNTRIES_KEY, "artists": config.ARTISTS_KEY,
+            "books": config.BOOKS_KEY}.get(key)
+
+async def love_delete(bot, cid, key, i):
+    store_key = _love_key_of(key)
+    if not store_key:
+        await send_love_section(bot, cid, key); return
+    items = store.get_list(store_key, cid)
+    if i < len(items):
+        items.pop(i)
+        store.set_list(store_key, cid, items)
+    await send_love_section(bot, cid, key)
+
+async def love_add_start(bot, cid, key):
+    store.pending_input[str(cid)] = f"loveadd_{key}"
+    name = {"countries": "страну", "artists": "артиста", "books": "книгу"}.get(key, "элемент")
+    await bot.send_message(chat_id=cid, text=f"Напиши {name} - добавлю в любимые.")
+
+async def love_add_done(bot, cid, key, text):
+    store_key = _love_key_of(key)
+    if store_key:
+        store.add_to_list(store_key, cid, text.strip())
+    await bot.send_message(chat_id=cid, text="Добавлено.")
+    await send_love_section(bot, cid, key)
 
 
 _ONESHOT = {
@@ -420,6 +513,13 @@ async def handle_callback(bot, cid, q, data):
         await note_to_love(bot, cid, int(data.split("_")[-1])); return
     if data.startswith("as_notedrop_"):
         await note_drop(bot, cid, int(data.split("_")[-1])); return
+    if data.startswith("love_"):
+        await send_love_section(bot, cid, data[len("love_"):]); return
+    if data.startswith("lovedel_"):
+        parts = data[len("lovedel_"):].rsplit("_", 1)
+        await love_delete(bot, cid, parts[0], int(parts[1])); return
+    if data.startswith("loveadd_"):
+        await love_add_start(bot, cid, data[len("loveadd_"):]); return
     # одноразовые
     if data in _ONESHOT:
         gen, lbl, cb = _ONESHOT[data]

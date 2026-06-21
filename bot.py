@@ -351,6 +351,8 @@ async def text_router(update, context):
             await settings.list_add_done(bot, cid, "artist", text); return
         if kind == "setadd_book":
             await settings.list_add_done(bot, cid, "book", text); return
+        if kind.startswith("loveadd_"):
+            await assistant.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
 
     # Свободный чат
     await assistant.chat_reply(bot, cid, text)
