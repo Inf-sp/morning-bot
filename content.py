@@ -66,7 +66,14 @@ def _tmdb_lookup(title, title_en=""):
             results = [x for x in r.json().get("results", []) if x.get("media_type") in ("movie", "tv")]
             if not results:
                 continue
-            x = results[0]
+            # отсекаем мусор: "Making of", тизеры, бонусы и т.п.
+            def _ok(x):
+                nm = (x.get("title") or x.get("name") or "").lower()
+                return nm and not any(b in nm for b in _BAD_TMDB)
+            good = [x for x in results if _ok(x)]
+            if not good:
+                continue
+            x = good[0]
             date = x.get("release_date") or x.get("first_air_date") or ""
             kind = "movie" if x.get("media_type") == "movie" else "tv"
             poster = x.get("poster_path")
@@ -90,6 +97,16 @@ def _tmdb_lookup(title, title_en=""):
         except Exception:
             continue
     return None
+
+def _display_title(it, tm):
+    """Название, которое реально показано пользователю (TMDb если есть, иначе от LLM)."""
+    name = (tm.get("name") if tm else "") or it.get("title", "")
+    year = (tm.get("year") if tm else "") or ""
+    return f"{name} ({year})" if year else name
+
+# мусорные совпадения TMDb (документалки о съёмках, тизеры и т.п.)
+_BAD_TMDB = ("making of", "behind the scenes", "bonus", "featurette",
+             "the making", "deleted scenes", "trailer", "teaser")
 
 def _movie_card(it, tm):
     title = (tm["name"] if tm else it.get("title", ""))
@@ -124,12 +141,17 @@ MIN_TMDB_RATING = 7.0  # рекомендуем только фильмы/сер
 
 def _pick_good_movie(items, used_titles):
     """Возвращает (item, tm) для первого фильма с рейтингом >= порога и не из used_titles.
-    Если таких нет - первый доступный (с tm если получилось)."""
+    used_titles сравнивается и с LLM-названием, и с отображаемым (TMDb) названием.
+    Если подходящих нет - первый доступный."""
+    used = {str(u).lower() for u in used_titles}
     fallback = None
     for it in items:
-        if it.get("title", "") in used_titles:
+        if it.get("title", "").lower() in used:
             continue
         tm = _tmdb_lookup(it.get("title", ""), it.get("title_en", "")) if config.TMDB_API_KEY else None
+        disp = _display_title(it, tm).lower()
+        if disp in used:
+            continue
         if fallback is None:
             fallback = (it, tm)
         rating = (tm or {}).get("rating") or 0
@@ -166,9 +188,10 @@ async def send_recos(bot, cid, kind):
     it, tm = _pick_good_movie(items, set())
     if not it:
         await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
-    store.last_recos[str(cid)] = {"kind": kind, "items": [it.get("title", "")]}
+    disp = _display_title(it, tm)
+    store.last_recos[str(cid)] = {"kind": kind, "items": [disp]}
     store.last_source[str(cid)] = "Досуг · Фильмы и сериалы"
-    store.last_answer[str(cid)] = f"{it.get('title','')} - {it.get('hook','')}"
+    store.last_answer[str(cid)] = f"{disp} - {it.get('hook','')}"
     await _send_movie_card(bot, cid, it, 0, tm=tm)
 
 async def movie_dislike(bot, cid, i):
@@ -188,7 +211,7 @@ async def movie_dislike(bot, cid, i):
     it, tm = _pick_good_movie(items, set(rec["items"]))
     if not it:
         return
-    rec["items"].append(it.get("title", ""))
+    rec["items"].append(_display_title(it, tm))
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1
     await _send_movie_card(bot, cid, it, ni, tm=tm)
@@ -308,7 +331,7 @@ async def add_reco(bot, cid, i):
         it, tm = _pick_good_movie(items, set(rec["items"]))
         if not it:
             return
-        rec["items"].append(it.get("title", ""))
+        rec["items"].append(_display_title(it, tm))
         store.last_recos[str(cid)] = rec
         ni = len(rec["items"]) - 1
         await _send_movie_card(bot, cid, it, ni, tm=tm)
