@@ -40,6 +40,8 @@ TRAVEL_DISLIKE_KEY = "travel_dislike.json"
 WORRIES_KEY = "worries.json"
 NOTES_KEY = "notes.json"
 DICT_KEY = "dict.json"
+TOPICS_NL_KEY = "topics_nl.json"
+TOPICS_EN_KEY = "topics_en.json"
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}
 
