@@ -100,7 +100,7 @@ def _build_day_text(cid):
         L += ["<b>🎯 Фокус дня</b>", esc(focus), ""]
     L += ["<b>📚 Слово дня</b>",
           f"{cap(esc(ex.get('word_ru','')))} → 🇳🇱 {cap(esc(ex.get('word_nl','')))} → 🇬🇧 {cap(esc(ex.get('word_en','')))}", ""]
-    L += ["<b>🚀 Бизнес-идея</b>", esc(ex.get("idea", "").strip().rstrip(".")), ""]
+    L += ["<b>🚀 Бизнес-идея</b>", esc(ex.get("idea", "").strip()), ""]
     fact = ex.get("fact") or ""
     if not fact:
         facts = ex.get("facts", [])
@@ -109,7 +109,7 @@ def _build_day_text(cid):
         elif isinstance(facts, str):
             fact = facts
     if fact:
-        L += ["<b>🔬 Интересный факт</b>", esc(fact.strip().rstrip(".")), ""]
+        L += ["<b>🔬 Интересный факт</b>", esc(fact.strip()), ""]
     if ex.get("quote"):
         src = esc(ex.get("quote_src", "")).strip()
         line = f"«{esc(ex.get('quote',''))}»" + (f" — {src}" if src else "")
