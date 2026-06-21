@@ -9,6 +9,11 @@ from util import esc, _WEEKDAYS, _MONTHS
 
 TZ = config.TZ
 
+# Порог вероятности дождя: ниже - дождя нет (эмодзи и проценты не показываем)
+RAIN_PROB_MIN = 50
+# Минимум реальных осадков (мм) для подтверждения дождя при высокой вероятности
+RAIN_MM_MIN = 0.1
+
 DESC = {0: "ясно", 1: "малооблачно", 2: "переменно облачно", 3: "пасмурно", 45: "туман", 48: "туман",
         51: "морось", 53: "морось", 55: "морось", 61: "дождь", 63: "дождь", 65: "сильный дождь",
         71: "снег", 73: "снег", 75: "сильный снег", 80: "ливень", 81: "ливень", 95: "гроза"}
@@ -18,8 +23,8 @@ def fetch_weather(lat, lon, days=2):
     r = requests.get("https://api.open-meteo.com/v1/forecast", params={
         "latitude": lat, "longitude": lon,
         "current": "temperature_2m,apparent_temperature,weathercode",
-        "hourly": "precipitation_probability,windspeed_10m,temperature_2m",
-        "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode,windspeed_10m_max",
+        "hourly": "precipitation_probability,precipitation,windspeed_10m,temperature_2m",
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,weathercode,windspeed_10m_max",
         "timezone": "Europe/Amsterdam", "wind_speed_unit": "ms", "forecast_days": max(days, 2)
     }, timeout=20)
     r.raise_for_status()
@@ -47,15 +52,32 @@ def wind_scale(ms):
     return "🚨", "Очень сильный ветер"
 
 
+def _rain_real(rain, rain_mm=None):
+    """True, если дождь стоит показывать: вероятность >= порога и (мм неизвестны или >= минимума)."""
+    if rain < RAIN_PROB_MIN:
+        return False
+    if rain_mm is not None and rain_mm < RAIN_MM_MIN:
+        return False
+    return True
+
+
+def rain_text(rain, rain_mm=None, when=""):
+    """Кусок строки про дождь. Пусто, если дождя по сути нет."""
+    if rain and _rain_real(rain, rain_mm):
+        return f"Дождь{when} {rain:.0f}% • "
+    return ""
+
+
 # ---------- иконка ----------
-def weather_icon(code, temp, rain, wind_ms=0):
+def weather_icon(code, temp, rain, wind_ms=0, rain_mm=None):
     if code in (95, 96, 99):
         return "🌩️"
     if code in (71, 73, 75, 77, 85, 86):
         return "❄️"
-    if temp is not None and temp > 30 and rain >= 30:
+    wet = _rain_real(rain, rain_mm)
+    if temp is not None and temp > 30 and wet:
         return "☀️🌧️"
-    if rain >= 30:
+    if wet:
         return "🌧️"
     if wind_ms >= 8:
         return "💨"
@@ -90,8 +112,9 @@ def weather_block(data, day, city):
     tmin, tmax = d["temperature_2m_min"][day], d["temperature_2m_max"][day]
     wind = d["windspeed_10m_max"][day]
     rain = d["precipitation_probability_max"][day]
+    rain_mm = (d.get("precipitation_sum") or [None])[day] if d.get("precipitation_sum") else None
     lines = [f"📍 {city}", f"{desc}, {tmin:.0f}-{tmax:.0f}°C", f"💨 ветер до {wind:.0f} м/с"]
-    if rain and rain >= 30:
+    if rain and _rain_real(rain, rain_mm):
         lines.append(f"вероятность дождя {rain:.0f}%")
     return "\n".join(lines)
 
@@ -150,26 +173,29 @@ async def send_weather(bot, cid, mode="today"):
             hours = data["hourly"]["time"]
             temps = data["hourly"].get("temperature_2m") or []
             probs = data["hourly"]["precipitation_probability"]
+            precs = data["hourly"].get("precipitation") or []
             winds = data["hourly"]["windspeed_10m"]
         except Exception:
-            temps = probs = winds = []
+            temps = probs = precs = winds = []
         day_str = d["time"][0]
         L = [f"<b>{esc(header)}</b>", ""]
         parts = [("Утром", 6, 12), ("Днём", 12, 18), ("Вечером", 18, 24)]
         for label, h1, h2 in parts:
-            t_vals, p_vals, w_vals, code_v = [], [], [], 1
+            t_vals, p_vals, w_vals, mm_vals, code_v = [], [], [], [], 1
             for i, ts in enumerate(hours):
                 if ts.startswith(day_str) and h1 <= int(ts[11:13]) < h2:
                     if i < len(temps): t_vals.append(temps[i] or 0)
                     if i < len(probs): p_vals.append(probs[i] or 0)
                     if i < len(winds): w_vals.append(winds[i] or 0)
+                    if i < len(precs): mm_vals.append(precs[i] or 0)
             if not t_vals:
                 continue
             tmx = max(t_vals); rn = max(p_vals) if p_vals else 0; wd = max(w_vals) if w_vals else 0
-            icon = weather_icon(d["weathercode"][0], tmx, rn, wd)
+            mm = max(mm_vals) if mm_vals else None
+            icon = weather_icon(d["weathercode"][0], tmx, rn, wd, mm)
             wemoji, wword = wind_scale(wd)
             wind_str = f"{wemoji} {wword} {wd:.0f} м/с" if wd >= 8 else f"💨 Ветер {wd:.0f} м/с"
-            L += [f"<b>{label}:</b>", f"{icon} До {tmx:+.0f}°C • Дождь {rn:.0f}% • {wind_str}", ""]
+            L += [f"<b>{label}:</b>", f"{icon} До {tmx:+.0f}°C • {rain_text(rn, mm)}{wind_str}", ""]
         joke = _joke_outfit(s["city"], d["temperature_2m_max"][0], d["precipitation_probability_max"][0] or 0,
                             d["windspeed_10m_max"][0] or 0, DESC.get(d["weathercode"][0], ""), "сегодня")
         if joke:
@@ -187,16 +213,17 @@ async def send_weather(bot, cid, mode="today"):
         code = d["weathercode"][day]
         tmax = d["temperature_2m_max"][day]
         rain = d["precipitation_probability_max"][day] or 0
+        rain_mm = (d.get("precipitation_sum") or [None] * (day + 1))[day] if d.get("precipitation_sum") else None
         wind_ms = d["windspeed_10m_max"][day] or 0
-        icon = weather_icon(code, tmax, rain, wind_ms)
+        icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
         wemoji, wword = wind_scale(wind_ms)
         day_str = d["time"][day]
-        rain_p = _periods(data, day_str, "precipitation_probability", 40)
+        rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
         wind_str = f"{wemoji} {wword} {wind_ms:.0f} м/с" if wind_ms >= 8 else f"💨 Ветер {wind_ms:.0f} м/с"
 
         L = [f"<b>{esc(header)}</b>", "",
-             f"{icon} До {tmax:+.0f}°C • Дождь{rain_when} {rain:.0f}% • {wind_str}"]
+             f"{icon} До {tmax:+.0f}°C • {rain_text(rain, rain_mm, rain_when)}{wind_str}"]
         fact = _world_fact()
         if fact:
             L += ["", esc(fact)]
