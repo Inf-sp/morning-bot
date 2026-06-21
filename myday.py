@@ -10,17 +10,37 @@ from util import esc, send_long, _WEEKDAYS, _MONTHS, flag_from_cc, country_flag
 
 TZ = config.TZ
 
+def _strip_quotes(s):
+    """Убирает внешние кавычки (« » \" \" \" ') с краёв, чтобы не задваивать обёртку."""
+    s = (s or "").strip()
+    pairs = ('«»', '""', '""', "''", '„“', '‚‘')
+    changed = True
+    while changed and len(s) >= 2:
+        changed = False
+        for p in pairs:
+            if s[0] == p[0] and s[-1] == p[1]:
+                s = s[1:-1].strip()
+                changed = True
+        # одинаковые прямые кавычки с обеих сторон
+        if len(s) >= 2 and s[0] in '"\'' and s[-1] == s[0]:
+            s = s[1:-1].strip()
+            changed = True
+    return s
+
 # --- Сводка дня (Мой день) ---
 
-def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", weekday="", is_weekend=False):
+def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", weekday="", is_weekend=False, cc=""):
     day_kind = "выходной" if is_weekend else "будний день"
-    prompt = f"""Сгенерируй блоки для ежедневной сводки. Дата: {date_str} ({weekday}, {day_kind}). Город: {city}. Страна: {country}.
+    place = f"{city}, {country}" if country else city
+    prompt = f"""Сгенерируй блоки для ежедневной сводки. Дата: {date_str} ({weekday}, {day_kind}). Локация: {place}.
 Погода сегодня: {weather_text}
 Гардероб (используй ТОЛЬКО эти вещи, точные названия): {wardrobe_text}
 
 {config.USER_FOCUS_CONTEXT}
 
-{config.MYDAY_RULES}
+{config.myday_rules(city, country, cc)}
+
+Интересный факт должен быть про текущую локацию ({place}), не про другие страны.
 
 Строго валидный JSON, экранируй кавычки, без переносов внутри значений.
 {{
@@ -30,7 +50,7 @@ def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", 
  "word_nl": "перевод на нидерландский С АРТИКЛЕМ (de/het)",
  "word_en": "перевод на английский С АРТИКЛЕМ (a/the)",
  "idea": "бизнес-идея по правилам [Бизнес-идея]: Суть одним предложением + Монетизация/MVP одним предложением",
- "fact": "интересный факт по правилам [Интересный факт]: локальный, удивляющий, максимум 2 коротких предложения",
+ "fact": "интересный факт по правилам [Интересный факт] про {place}: локальный, удивляющий, максимум 2 коротких предложения",
  "quote": "цитата по правилам [Цитата], строго привязанная к Фокусу дня выше",
  "quote_src": "автор"
 }}
@@ -80,7 +100,7 @@ def _build_day_text(cid):
     is_weekend = now.weekday() >= 5
     ex = plany_extras(s.get("country", ""), day_str, s.get("city", ""),
                       weather_text=wblock, wardrobe_text=store.wardrobe_to_text(store.load_wardrobe()),
-                      weekday=weekday_name, is_weekend=is_weekend)
+                      weekday=weekday_name, is_weekend=is_weekend, cc=s.get("cc", ""))
     dict_words = store.get_list(config.DICT_KEY, cid)
     if dict_words:
         w = random.choice(dict_words[-20:])
@@ -114,7 +134,7 @@ def _build_day_text(cid):
         L += ["<b>🔬 Интересный факт</b>", esc(fact.strip()), ""]
     if ex.get("quote"):
         src = esc(ex.get("quote_src", "")).strip()
-        line = f"«{esc(ex.get('quote',''))}»" + (f" — {src}" if src else "")
+        line = f"«{esc(_strip_quotes(ex.get('quote','')))}»" + (f" — {src}" if src else "")
         L += ["<b>💭 Цитата</b>", line]
     text = "\n".join(L).strip()
     return text, ex, outfit, day_str
@@ -154,9 +174,9 @@ async def handle_callback(bot, cid, q, data):
         return
     if data == "md_fav":
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("⭐ Сохранить бизнес-идею", callback_data="md_save_idea")],
-            [InlineKeyboardButton("⭐ Сохранить цитату", callback_data="md_save_quote")],
-            [InlineKeyboardButton("⭐ Сохранить образ дня", callback_data="md_save_look")],
+            [InlineKeyboardButton("🚀 Сохранить бизнес-идею", callback_data="md_save_idea")],
+            [InlineKeyboardButton("🔬 Сохранить интересный факт", callback_data="md_save_fact")],
+            [InlineKeyboardButton("💭 Сохранить цитату", callback_data="md_save_quote")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")],
         ])
         try:
@@ -166,10 +186,14 @@ async def handle_callback(bot, cid, q, data):
         return
     if data.startswith("md_save_"):
         what = data[len("md_save_"):]
+        fact_txt = ex.get("fact") or ""
+        if not fact_txt:
+            facts = ex.get("facts", [])
+            fact_txt = facts[0] if isinstance(facts, list) and facts else (facts if isinstance(facts, str) else "")
         mapping = {
             "idea": ("Идеи", ex.get("idea", "")),
-            "quote": ("Цитаты", (f"«{ex.get('quote','')}» - ({ex.get('quote_src','')})") if ex.get("quote") else ""),
-            "look": ("Образы", cache.get("outfit", "")),
+            "fact": ("Факты", fact_txt),
+            "quote": ("Цитаты", (f"«{_strip_quotes(ex.get('quote',''))}» — {ex.get('quote_src','')}") if ex.get("quote") else ""),
         }
         cat, txt = mapping.get(what, ("Прочее", ""))
         if not txt:
