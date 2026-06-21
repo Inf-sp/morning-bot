@@ -459,8 +459,14 @@ async def set_city_text(bot, cid, name):
             myday.reset_day_cache(cid)
         except Exception:
             pass
-        await bot.send_message(chat_id=cid, text=f"Готово. Город переключён на {c['name']}"
+        await bot.send_message(chat_id=cid, text=f"✅ Готово. Город переключён на {c['name']}"
                                                  + (f", {country}." if country else "."))
+        # сразу показываем обновлённую сводку "Мой день" под новую локацию
+        try:
+            import myday
+            await myday.send_plany(bot, cid)
+        except Exception:
+            pass
     except Exception as e:
         await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
 
