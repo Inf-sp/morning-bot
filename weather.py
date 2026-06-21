@@ -311,51 +311,60 @@ async def send_weather(bot, cid, mode="today"):
     tmins = d["temperature_2m_min"][:7]
     tmaxs = d["temperature_2m_max"][:7]
     rains = d["precipitation_probability_max"][:7]
+    rmms = (d.get("precipitation_sum") or [None] * 7)[:7]
     winds = d["windspeed_10m_max"][:7]
     days_ru = [_WEEKDAYS[(now + timedelta(days=i)).weekday()] for i in range(7)]
-    per_day = "; ".join(f"{days_ru[i]}: {tmaxs[i]:.0f}°C, дождь {int(rains[i] or 0)}%, ветер {winds[i]:.0f}"
-                        for i in range(7))
     tmin, tmax = min(tmins), max(tmaxs)
     flag = __import__("util").flag_from_cc(s.get("cc", ""))
-    try:
-        body = ai.llm(
-            f"Сводка погоды на неделю, город {s['city']} (Нидерланды). По дням: {per_day}.\n\n"
-            "ПРАВИЛА (соблюдать строго):\n"
-            "1. Дни недели писать ПОЛНОСТЬЮ как в данных, через запятую. НЕ сокращай (не Пн/Вт), "
-            "НЕ диапазоны через тире. Каждый день упомяни МАКСИМУМ ОДИН раз во всей сводке. "
-            "Не добавляй слова 'ближайший/следующий' - в данных ровно 7 разных дней.\n"
-            "2. Голландский климат: выше +25°C - жарко и требует осторожности; выше +30°C - ЭКСТРЕМАЛЬНАЯ жара, "
-            "а НЕ 'отличная погода для прогулок'. Не называй жару выше +25°C хорошей погодой.\n"
-            "3. Один и тот же день НЕ может быть в двух рубриках. Каждый день - ровно в одной строке.\n"
-            "4. Итог - конкретное руководство к действию (когда ехать на велосипеде, когда остаться дома). Без воды.\n\n"
-            "Формат строго, без markdown. Эмодзи в начале каждой строки бери РОВНО как ниже, не меняй:\n"
-            "☀️ {дни через запятую}: комфортная погода\n"
-            "🌧️ {дни через запятую}: возможны дожди\n"
-            "🔥 {дни через запятую}: жара, осторожно\n"
-            "💨 Ветер: {слабый/умеренный/сильный, диапазон м/с}\n"
-            "Итог: {1-2 предложения, конкретный совет}\n"
-            "Рубрику пропусти целиком, если под неё нет дней. Не используй другие эмодзи (никаких 🌡️).", 400, 0.6)
-    except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
-    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", "",
-         f"Температура {tmin:+.0f}°C → {tmax:+.0f}°C", ""]
-    for ln in body.splitlines():
-        t = ln.strip()
-        if not t:
-            continue
-        if t.lower().startswith("итог"):
-            rest = t.split(":", 1)[1].strip() if ":" in t else ""
-            L.append("<b>Итог:</b>")
-            if rest:
-                L.append(esc(rest))
+
+    # раскладка дней по рубрикам В КОДЕ - каждый день ровно в одну (приоритет: жара > дождь > комфорт)
+    hot, wet, comfort = [], [], []
+    for i in range(7):
+        t = tmaxs[i] or 0
+        rp = rains[i] or 0
+        mm = rmms[i]
+        day_name = days_ru[i] if i == 0 else days_ru[i].lower()
+        if t > 25:
+            hot.append(day_name)
+        elif _rain_real(rp, mm):
+            wet.append(day_name)
         else:
-            # страховка: если модель поставила неверный эмодзи (🌡️ и пр.) - чиним по смыслу
-            if t.startswith("🌡️") or t.startswith("🌡"):
-                low = t.lower()
-                emoji = "🌧️" if "дожд" in low else ("🔥" if "жар" in low else "☀️")
-                t = emoji + " " + t.lstrip("🌡️🌡 ").lstrip()
-            L.append(esc(t))
-            L.append("")
+            comfort.append(day_name)
+
+    # ветер за неделю
+    wmax = max(winds) if winds else 0
+    if wmax < 5:
+        wlabel = "слабый"
+    elif wmax < 10:
+        wlabel = "умеренный"
+    else:
+        wlabel = "сильный"
+    wmin = min(winds) if winds else 0
+    wind_line = f"💨 Ветер: {wlabel}, {wmin:.0f}-{wmax:.0f} м/с"
+
+    # итог - короткий совет от LLM по уже разложенным данным
+    summary_ctx = (f"Комфортные дни: {', '.join(comfort) or 'нет'}. "
+                   f"Дожди: {', '.join(wet) or 'нет'}. "
+                   f"Жара (>25°C, в Нидерландах требует осторожности, >30°C - экстрим): {', '.join(hot) or 'нет'}.")
+    try:
+        tip = ai.llm(
+            "Дай короткий практичный итог по погоде на неделю в Нидерландах (1-2 предложения, без воды, без markdown): "
+            "когда лучше планировать прогулку/велосипед, а когда переждать жару дома. "
+            "Жару выше +25°C НЕ называй хорошей погодой.\n" + summary_ctx, 200, 0.6).strip()
+    except Exception:
+        tip = ""
+
+    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", "",
+         f"От {tmin:+.0f}°C → {tmax:+.0f}°C", ""]
+    if comfort:
+        L.append(f"☀️ {esc(', '.join(comfort))}: комфортная погода")
+    if wet:
+        L.append(f"🌧️ {esc(', '.join(wet))}: возможны дожди")
+    if hot:
+        L.append(f"🔥 {esc(', '.join(hot))}: жара, осторожно")
+    L += ["", wind_line]
+    if tip:
+        L += ["", "<b>Итог:</b>", esc(tip)]
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_close")]])
     await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
 
