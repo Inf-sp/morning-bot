@@ -325,18 +325,26 @@ async def send_weather(bot, cid, mode="today"):
     rains = d["precipitation_probability_max"][:7]
     rmms = (d.get("precipitation_sum") or [None] * 7)[:7]
     winds = d["windspeed_10m_max"][:7]
+    codes = d["weathercode"][:7]
     days_ru = [_WEEKDAYS[(now + timedelta(days=i)).weekday()] for i in range(7)]
     tmin, tmax = min(tmins), max(tmaxs)
     flag = __import__("util").flag_from_cc(s.get("cc", ""))
 
-    # раскладка дней по рубрикам В КОДЕ - каждый день ровно в одну (приоритет: жара > дождь > комфорт)
-    hot, wet, comfort = [], [], []
+    # раскладка дней по рубрикам В КОДЕ - каждый день ровно в одну
+    # приоритет: шторм > жара > дождь > комфорт
+    storm, hot, wet, comfort = [], [], [], []
     for i in range(7):
         t = tmaxs[i] or 0
         rp = rains[i] or 0
         mm = rmms[i]
-        day_name = days_ru[i].lower()  # храним в нижнем регистре, первое слово строки капитализируем при выводе
-        if t > 25:
+        wd = winds[i] or 0
+        code = codes[i]
+        day_name = days_ru[i].lower()  # нижний регистр, первое слово строки капитализируем при выводе
+        is_storm = (wd > STORM_WIND_MS) or (code in SNOW_CODES) or (code in HEAVY_RAIN_CODES) \
+                   or (mm is not None and mm >= 15)
+        if is_storm:
+            storm.append(day_name)
+        elif t > 25:
             hot.append(day_name)
         elif _rain_real(rp, mm):
             wet.append(day_name)
@@ -357,25 +365,28 @@ async def send_weather(bot, cid, mode="today"):
     wmin = min(winds) if winds else 0
     wind_line = f"💨 Ветер: {wlabel}, {wmin:.0f}-{wmax:.0f} м/с"
 
-    # итог - короткий совет от LLM по уже разложенным данным, для реально выбранного места
+    # итог - короткий и важный: одно главное указание, без перечисления дней
     place = s.get("city", "")
     country = s.get("country", "")
     place_full = f"{place} ({country})" if country and country != place else place
-    summary_ctx = (f"Место: {place_full}. "
-                   f"Комфортные дни: {', '.join(comfort) or 'нет'}. "
+    summary_ctx = (f"Штормовые дни: {', '.join(storm) or 'нет'}. "
+                   f"Жара: {', '.join(hot) or 'нет'}. "
                    f"Дожди: {', '.join(wet) or 'нет'}. "
-                   f"Жара (>25°C жарко, >30°C - экстрим): {', '.join(hot) or 'нет'}.")
+                   f"Комфортные: {', '.join(comfort) or 'нет'}.")
     try:
         tip = ai.llm(
-            f"Дай короткий практичный итог по погоде на неделю для места: {place_full} "
-            "(1-2 предложения, без воды, без markdown): когда лучше планировать прогулку/велосипед, "
-            "а когда переждать жару дома. Жару выше +25°C НЕ называй хорошей погодой. "
-            f"Пиши именно про {place_full}, не упоминай другие страны.\n" + summary_ctx, 200, 0.6).strip()
+            f"Погода на неделю, {place_full}. {summary_ctx}\n"
+            "Дай ОДНО короткое важное указание к действию (максимум 1 предложение, до 15 слов). "
+            "Без перечисления дней недели, без воды, без markdown. "
+            "Приоритет в совете: если есть шторм - предупреди про него; иначе жара; иначе лучший день для прогулки/велосипеда.",
+            120, 0.5).strip().splitlines()[0]
     except Exception:
         tip = ""
 
     L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", "",
          f"От {tmin:+.0f}°C → {tmax:+.0f}°C", ""]
+    if storm:
+        L.append(f"⚠️ {esc(_cap_first(', '.join(storm)))}: шторм, осторожно")
     if comfort:
         L.append(f"☀️ {esc(_cap_first(', '.join(comfort)))}: комфортная погода")
     if wet:
