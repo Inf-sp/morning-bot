@@ -54,10 +54,11 @@ def _build_day_text(cid):
     code = d["weathercode"][0]
     tmax = d["temperature_2m_max"][0]
     rain = d["precipitation_probability_max"][0] or 0
+    rain_mm = (d.get("precipitation_sum") or [None])[0] if d.get("precipitation_sum") else None
     wind_ms = d["windspeed_10m_max"][0] or 0
-    icon = weather.weather_icon(code, tmax, rain, wind_ms)
+    icon = weather.weather_icon(code, tmax, rain, wind_ms, rain_mm)
     wemoji, wword = weather.wind_scale(wind_ms)
-    rain_p = weather._periods(data, day_str, "precipitation_probability", 40)
+    rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
     rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
     # ветер: подробно только если сильный
     if wind_ms >= 8:
@@ -83,7 +84,7 @@ def _build_day_text(cid):
     def cap(x): return x[:1].upper() + x[1:] if x else x
     L = [f"<b>Мой день • {esc(header)} • {esc(s.get('city',''))}</b>", ""]
     L += [f"<b>{icon} Погода сегодня</b>",
-          f"До {tmax:+.0f}°C • Дождь{rain_when} {rain:.0f}% • {wind_str}", ""]
+          f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}", ""]
     outfit = " + ".join(ex.get("outfit", [])).rstrip(".")
     L += ["<b>👕 Что надеть сегодня</b>", esc(outfit), ""]
     L += ["<b>📚 Слово дня</b>",
