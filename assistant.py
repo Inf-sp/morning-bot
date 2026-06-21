@@ -38,6 +38,15 @@ def _back_kb():
     return _kb([[("⬅️ Назад", "m_close")]])
 
 
+async def _send_html(bot, cid, text, reply_markup=None):
+    """Одиночное сообщение в Telegram HTML с чисткой markdown и откатом на plain."""
+    html = util.tg_html(text or "")
+    try:
+        await bot.send_message(chat_id=cid, text=html, parse_mode="HTML", reply_markup=reply_markup)
+    except Exception:
+        await bot.send_message(chat_id=cid, text=html, reply_markup=reply_markup)
+
+
 async def _send(bot, cid, text, kb=None):
     text = (text or "").strip() or "Пусто, попробуй ещё раз."
     store.last_answer[str(cid)] = text
@@ -59,12 +68,14 @@ async def _send(bot, cid, text, kb=None):
 def _gen_recipe(constraint):
     return ai.llm_json(
         f"Предложи 1 рецепт ({constraint}), 1 человек, электрическая плита. Компактно.\n"
+        "Оформление полей в Telegram HTML: подзаголовки тегом <b>...</b>, пункты с маркера «• ». "
+        "НИКАКОГО markdown - запрещены *, **, #, `. Заголовки <b>Ингредиенты</b> и <b>Приготовление</b>, пункты с новой строки «• ».\n"
         'JSON: {"name":"название","time":"X мин","servings":"N порц.",'
-        '"short":"2-3 коротких предложения как готовить","full":"полный рецепт: ингредиенты списком + шаги по пунктам"}', 900)
+        '"short":"2-3 коротких предложения как готовить","full":"полный рецепт в Telegram HTML, БЕЗ повтора названия в начале: блок <b>Ингредиенты</b> со списком пунктов «• », затем <b>Приготовление</b> с пунктами «• »"}', 900)
 
 def _recipe_card(d):
-    return (f"🥘 {d.get('name','')}\n\n"
-            f"⏱️ {d.get('time','')} • 🍽️ {d.get('servings','')}\n\n"
+    return (f"🥘 <b>{util.esc(d.get('name',''))}</b>\n\n"
+            f"⏱️ {util.esc(d.get('time',''))} • 🍽️ {util.esc(d.get('servings',''))}\n\n"
             f"{d.get('short','')}")
 
 async def send_recipe(bot, cid, constraint="обычное блюдо"):
@@ -78,15 +89,15 @@ async def send_recipe(bot, cid, constraint="обычное блюдо"):
     card = _recipe_card(d)
     store.last_source[str(cid)] = "Питание · Рецепт"
     store.last_answer[str(cid)] = card
-    await bot.send_message(chat_id=cid, text=card, reply_markup=_recipe_kb())
+    await _send_html(bot, cid, card, reply_markup=_recipe_kb())
 
 async def send_recipe_full(bot, cid):
     d = store.last_recipe.get(str(cid))
     if not d:
         await bot.send_message(chat_id=cid, text="Сначала выбери рецепт."); return
-    txt = f"📖 {d.get('name','')}\n\n{d.get('full','')}"
+    txt = f"📖 <b>{util.esc(d.get('name',''))}</b>\n\n{d.get('full','')}"
     store.last_answer[str(cid)] = txt
-    await bot.send_message(chat_id=cid, text=txt, reply_markup=_recipe_kb())
+    await _send_html(bot, cid, txt, reply_markup=_recipe_kb())
 
 async def send_leftovers(bot, cid, ingredients):
     await bot.send_message(chat_id=cid, text="Смотрю, что можно приготовить...")
@@ -359,7 +370,7 @@ async def chat_reply(bot, cid, text):
         await bot.send_message(chat_id=cid, text=str(e)); return
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
-    await bot.send_message(chat_id=cid, text=(answer or "").strip() or "Пусто, попробуй ещё раз.")
+    await _send_html(bot, cid, (answer or "").strip() or "Пусто, попробуй ещё раз.")
     store.last_answer[str(cid)] = answer
     if any(w in text.lower() for w in _MED_WORDS):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("👩🏻‍⚕️ Вопрос врачу", callback_data="as_doctor")]])
