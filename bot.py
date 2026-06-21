@@ -246,6 +246,15 @@ async def answer_callback(update, context):
         await learning.game_start(bot, cid)
         return
     # Развлечения / путешествия
+    if data.startswith("movie_love_"):
+        await content.movie_love(bot, cid, int(data.split("_")[-1]))
+        return
+    if data.startswith("book_love_"):
+        await content.book_love(bot, cid, int(data.split("_")[-1]))
+        return
+    if data == "listen_love":
+        await content.listen_love(bot, cid)
+        return
     if data.startswith("reco_"):
         await content.add_reco(bot, cid, int(data.split("_")[1]))
         return

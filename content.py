@@ -151,6 +151,7 @@ def _movie_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("😕 Не нравится", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("⭐ Добавить в закладки", callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("❤️ Добавить в любимые", callback_data=f"movie_love_{i}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
@@ -273,6 +274,7 @@ def _book_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("😕 Не нравится", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("⭐ Добавить в закладки", callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("❤️ Добавить в любимые", callback_data=f"book_love_{i}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
@@ -322,6 +324,30 @@ async def book_dislike(bot, cid, i):
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1
     await _send_book_card(bot, cid, it, ni)
+
+async def movie_love(bot, cid, i):
+    """Фильм/сериал - в любимые (watchlist)."""
+    rec = store.last_recos.get(str(cid))
+    if rec and i < len(rec["items"]):
+        title = rec["items"][i]
+        store.add_to_list(config.WATCHLIST_KEY, cid, title)
+        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» - в любимые (Фильмы и сериалы).")
+
+async def book_love(bot, cid, i):
+    """Книга - в любимые (Мои книги)."""
+    rec = store.last_recos.get(str(cid))
+    if rec and i < len(rec["items"]):
+        title = rec["items"][i]
+        store.add_to_list(config.BOOKS_KEY, cid, title)
+        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» - в любимые (Мои книги).")
+
+async def listen_love(bot, cid):
+    """Артист - в любимые (Мои артисты)."""
+    rec = store.last_recos.get(str(cid))
+    if rec and rec.get("kind") == "listen" and rec["items"]:
+        artist = rec["items"][0]
+        store.add_to_list(config.ARTISTS_KEY, cid, artist)
+        await bot.send_message(chat_id=cid, text=f"❤️ «{artist}» - в любимые (Мои артисты).")
 
 async def add_reco(bot, cid, i):
     from datetime import datetime
@@ -382,6 +408,7 @@ def _listen_kb():
         [InlineKeyboardButton("😕 Не нравится", callback_data="a_listen_no")],
         [InlineKeyboardButton("🔍 Поиск по концертам", callback_data="a_concerts_find")],
         [InlineKeyboardButton("⭐ Добавить в закладки", callback_data="listen_0")],
+        [InlineKeyboardButton("❤️ Добавить в любимые", callback_data="listen_love")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 

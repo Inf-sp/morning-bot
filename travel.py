@@ -40,7 +40,7 @@ def _travel_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🧳 Собрать план поездки", callback_data="a_trav_plan")],
         [InlineKeyboardButton("😕 Не нравится", callback_data="a_trav_no")],
-        [InlineKeyboardButton("⭐ Добавить в закладки", callback_data="a_trav_fav")],
+        [InlineKeyboardButton("❤️ Добавить в любимые", callback_data="a_trav_fav")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
@@ -87,7 +87,7 @@ async def travel_fav(bot, cid):
         favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
         favs.append({"name": c, "flag": flag})
         store.set_list(config.FAVCOUNTRIES_KEY, cid, favs)
-        await bot.send_message(chat_id=cid, text=f"⭐ В закладках: {flag} {c}")
+        await bot.send_message(chat_id=cid, text=f"❤️ В любимых (Мои страны): {flag} {c}")
     await send_go(bot, cid)
 
 async def send_plan(bot, cid):
@@ -141,7 +141,7 @@ async def send_plan(bot, cid):
     store.last_source[str(cid)] = "Путешествия · План"
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("😕 Не нравится", callback_data="a_trav_no")],
-        [InlineKeyboardButton("⭐ Добавить в закладки", callback_data="a_trav_fav")],
+        [InlineKeyboardButton("❤️ Добавить в любимые", callback_data="a_trav_fav")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)

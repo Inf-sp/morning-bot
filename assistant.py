@@ -390,7 +390,7 @@ LOVE_SECTIONS = [
 ]
 
 async def send_love_home(bot, cid):
-    rows = [[InlineKeyboardButton(title, callback_data=f"love_{key}")] for title, key in LOVE_SECTIONS]
+    rows = [[InlineKeyboardButton(title, callback_data=f"as_love_{key}")] for title, key in LOVE_SECTIONS]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, text="❤️ <b>Любимые</b>\n\nВыбери раздел:",
                            parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
@@ -440,9 +440,9 @@ async def send_love_section(bot, cid, key):
     title = _love_title(key)
     lines = [f"<b>{title}</b>", ""]
     lines.append(", ".join(items) if items else "пусто")
-    rows = [[InlineKeyboardButton(f"❌ {str(it)[:28]}", callback_data=f"lovedel_{key}_{i}")]
+    rows = [[InlineKeyboardButton(f"❌ {str(it)[:28]}", callback_data=f"as_lovedel_{key}_{i}")]
             for i, it in enumerate(items[:40])]
-    rows.append([InlineKeyboardButton("➕ Добавить", callback_data=f"loveadd_{key}")])
+    rows.append([InlineKeyboardButton("➕ Добавить", callback_data=f"as_loveadd_{key}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_love")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -513,13 +513,13 @@ async def handle_callback(bot, cid, q, data):
         await note_to_love(bot, cid, int(data.split("_")[-1])); return
     if data.startswith("as_notedrop_"):
         await note_drop(bot, cid, int(data.split("_")[-1])); return
-    if data.startswith("love_"):
-        await send_love_section(bot, cid, data[len("love_"):]); return
-    if data.startswith("lovedel_"):
-        parts = data[len("lovedel_"):].rsplit("_", 1)
+    if data.startswith("as_lovedel_"):
+        parts = data[len("as_lovedel_"):].rsplit("_", 1)
         await love_delete(bot, cid, parts[0], int(parts[1])); return
-    if data.startswith("loveadd_"):
-        await love_add_start(bot, cid, data[len("loveadd_"):]); return
+    if data.startswith("as_loveadd_"):
+        await love_add_start(bot, cid, data[len("as_loveadd_"):]); return
+    if data.startswith("as_love_"):
+        await send_love_section(bot, cid, data[len("as_love_"):]); return
     # одноразовые
     if data in _ONESHOT:
         gen, lbl, cb = _ONESHOT[data]
