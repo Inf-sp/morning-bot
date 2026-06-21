@@ -233,17 +233,101 @@ async def save_fav(bot, cid):
     short = _shorten(txt)
     source = store.last_source.get(str(cid), "Прочее")
     store.add_to_list(config.NOTES_KEY, cid, {"date": datetime.now(config.TZ).strftime("%d.%m"),
-                                              "text": short, "source": source})
+                                              "text": short, "source": source, "bucket": "fav"})
     await bot.send_message(chat_id=cid, text="⭐ Сохранено в закладки.")
 
 def _top_cat(source):
     return (source or "Прочее").split(" · ")[0]
 
+# тип закладки из source -> (blacklist_key, fav_setting_key, имя раздела настроек)
+def _note_type(source):
+    s = (source or "").lower()
+    if "фильм" in s or "сериал" in s or "кино" in s:
+        return ("movie", config.MOVIE_BLACKLIST_KEY, config.WATCHLIST_KEY, "Фильмы и сериалы")
+    if "книг" in s:
+        return ("book", config.BOOK_BLACKLIST_KEY, config.BOOKS_KEY, "Книги")
+    if "музык" in s or "концерт" in s:
+        return ("music", config.MUSIC_DISLIKE_KEY, config.ARTISTS_KEY, "Артисты")
+    if "путешеств" in s or "стран" in s:
+        return ("travel", config.TRAVEL_DISLIKE_KEY, config.FAVCOUNTRIES_KEY, "Страны")
+    return (None, None, None, None)
+
+def _note_bucket(n):
+    """⭐ закладка ('fav') или ❤️ любимое ('love'). Старые заметки без поля - закладки."""
+    return n.get("bucket", "fav") if isinstance(n, dict) else "fav"
+
+async def note_delete_menu(bot, cid, i):
+    """При удалении из закладок - спрашиваем, что сделать с элементом."""
+    notes = store.get_list(config.NOTES_KEY, cid)
+    if i >= len(notes):
+        await send_notes(bot, cid); return
+    n = notes[i]
+    t = (n.get("text", "") if isinstance(n, dict) else str(n)).strip()
+    typ, _, _, _ = _note_type(n.get("source", "") if isinstance(n, dict) else "")
+    rows = []
+    if typ:  # только для типизированных (фильм/книга/музыка/страна)
+        rows.append([InlineKeyboardButton("🚫 В чёрный список", callback_data=f"as_noteblack_{i}")])
+        rows.append([InlineKeyboardButton("❤️ В любимые", callback_data=f"as_notelove_{i}")])
+    rows.append([InlineKeyboardButton("🗑 Просто удалить", callback_data=f"as_notedrop_{i}")])
+    rows.append([InlineKeyboardButton("⬅️ Отмена", callback_data="as_notes")])
+    await bot.send_message(chat_id=cid, text=f"Что сделать с «{t[:60]}»?",
+                           reply_markup=InlineKeyboardMarkup(rows))
+
+def _pop_note(cid, i):
+    notes = store.get_list(config.NOTES_KEY, cid)
+    if i >= len(notes):
+        return None
+    n = notes.pop(i)
+    store.set_list(config.NOTES_KEY, cid, notes)
+    return n
+
+def _note_text(n):
+    return (n.get("text", "") if isinstance(n, dict) else str(n)).strip()
+
+async def note_to_blacklist(bot, cid, i):
+    n = _pop_note(cid, i)
+    if not n:
+        await send_notes(bot, cid); return
+    typ, black_key, _, cat = _note_type(n.get("source", "") if isinstance(n, dict) else "")
+    t = _note_text(n)
+    if black_key:
+        store.add_to_list(black_key, cid, t)
+        await bot.send_message(chat_id=cid, text=f"🚫 «{t[:50]}» - в чёрный список «{cat}». Больше не порекомендую.")
+    else:
+        await bot.send_message(chat_id=cid, text="Удалил из закладок.")
+    await send_bucket(bot, cid, "fav")
+
+async def note_to_love(bot, cid, i):
+    n = _pop_note(cid, i)
+    if not n:
+        await send_notes(bot, cid); return
+    typ, _, fav_key, cat = _note_type(n.get("source", "") if isinstance(n, dict) else "")
+    t = _note_text(n)
+    # 1) в раздел настроек по типу
+    if fav_key:
+        if typ == "travel":
+            from util import country_flag
+            store.add_to_list(fav_key, cid, {"name": t, "flag": country_flag(t)})
+        else:
+            store.add_to_list(fav_key, cid, t)
+    # 2) копию в "Любимые" ленту /notes
+    n2 = dict(n) if isinstance(n, dict) else {"text": t}
+    n2["bucket"] = "love"
+    store.add_to_list(config.NOTES_KEY, cid, n2)
+    await bot.send_message(chat_id=cid, text=f"❤️ «{t[:50]}» - в любимые и в раздел «{cat}» настроек.")
+    await send_bucket(bot, cid, "fav")
+
+async def note_drop(bot, cid, i):
+    n = _pop_note(cid, i)
+    bucket = _note_bucket(n) if n else "fav"
+    await bot.send_message(chat_id=cid, text="🗑 Удалил.")
+    await send_bucket(bot, cid, bucket)
+
 async def export_notes(bot, cid):
     import io
     notes = store.get_list(config.NOTES_KEY, cid)
     if not notes:
-        await bot.send_message(chat_id=cid, text="Избранное пусто."); return
+        await bot.send_message(chat_id=cid, text="Пока пусто."); return
     by_cat = {}
     for n in notes:
         src = n.get("source", "Прочее") if isinstance(n, dict) else "Прочее"
@@ -264,40 +348,37 @@ async def export_notes(bot, cid):
 async def send_notes(bot, cid):
     notes = store.get_list(config.NOTES_KEY, cid)
     if not notes:
-        await bot.send_message(chat_id=cid, text="⭐ Закладки пусты. Жми «⭐ Добавить в закладки» под ответами."); return
-    cats = []
-    for n in notes:
-        c = _top_cat(n.get("source", "Прочее") if isinstance(n, dict) else "Прочее")
-        if c not in cats:
-            cats.append(c)
-    rows = [[InlineKeyboardButton(f"📂 {c} ({sum(1 for n in notes if _top_cat(n.get('source','Прочее') if isinstance(n,dict) else 'Прочее')==c)})",
-                                  callback_data=f"as_notecat_{i}")] for i, c in enumerate(cats)]
-    rows.append([InlineKeyboardButton("📤 Экспорт в файл", callback_data="as_export")])
-    await bot.send_message(chat_id=cid, text="⭐ Избранное - выбери категорию:", reply_markup=InlineKeyboardMarkup(rows))
+        await bot.send_message(chat_id=cid, text="⭐ Пусто. Жми «⭐ Добавить в закладки» под ответами."); return
+    n_fav = sum(1 for n in notes if _note_bucket(n) == "fav")
+    n_love = sum(1 for n in notes if _note_bucket(n) == "love")
+    rows = [
+        [InlineKeyboardButton(f"⭐ Закладки ({n_fav})", callback_data="as_bucket_fav")],
+        [InlineKeyboardButton(f"❤️ Любимые ({n_love})", callback_data="as_bucket_love")],
+        [InlineKeyboardButton("📤 Экспорт в файл", callback_data="as_export")],
+    ]
+    await bot.send_message(chat_id=cid, text="📂 Мои сохранения - выбери раздел:",
+                           reply_markup=InlineKeyboardMarkup(rows))
 
-async def send_notes_cat(bot, cid, cat_index):
+async def send_bucket(bot, cid, bucket):
+    """Показывает заметки одного bucket (fav/love), сгруппированные по категории."""
     notes = store.get_list(config.NOTES_KEY, cid)
-    cats = []
-    for n in notes:
-        c = _top_cat(n.get("source", "Прочее") if isinstance(n, dict) else "Прочее")
-        if c not in cats:
-            cats.append(c)
-    if cat_index >= len(cats):
-        await send_notes(bot, cid); return
-    cat = cats[cat_index]
-    lines = [f"⭐ <b>{cat}</b>", ""]
+    items = [(i, n) for i, n in enumerate(notes) if _note_bucket(n) == bucket]
+    title = "⭐ <b>Закладки</b>" if bucket == "fav" else "❤️ <b>Любимые</b>"
+    if not items:
+        await bot.send_message(chat_id=cid, text=f"{title}\n\nпусто", parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")]]))
+        return
+    lines = [title, ""]
     rows = []
-    for i, n in enumerate(notes):
-        src = n.get("source", "Прочее") if isinstance(n, dict) else "Прочее"
-        if _top_cat(src) != cat:
-            continue
+    for i, n in items:
         t = n.get("text", "") if isinstance(n, dict) else str(n)
         d = n.get("date", "") if isinstance(n, dict) else ""
-        sub = (" · " + src.split(" · ", 1)[1]) if " · " in src else ""
-        lines.append(f"• {d}{sub}: {t.strip()}")
-        rows.append([InlineKeyboardButton(f"❌ {d} {t.strip()[:24]}", callback_data=f"as_notedel_{i}")])
+        src = n.get("source", "Прочее") if isinstance(n, dict) else "Прочее"
+        lines.append(f"• {d} · {_top_cat(src)}: {t.strip()}")
+        rows.append([InlineKeyboardButton(f"❌ {d} {t.strip()[:22]}", callback_data=f"as_notedel_{i}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
+                           reply_markup=InlineKeyboardMarkup(rows))
 
 
 _ONESHOT = {
@@ -325,16 +406,20 @@ async def handle_callback(bot, cid, q, data):
         await save_fav(bot, cid); return
     if data == "as_notes":
         await send_notes(bot, cid); return
-    if data == "as_notecat_export" or data == "as_export":
+    if data == "as_bucket_fav":
+        await send_bucket(bot, cid, "fav"); return
+    if data == "as_bucket_love":
+        await send_bucket(bot, cid, "love"); return
+    if data == "as_export":
         await export_notes(bot, cid); return
-    if data.startswith("as_notecat_"):
-        await send_notes_cat(bot, cid, int(data.split("_")[-1])); return
     if data.startswith("as_notedel_"):
-        i = int(data.split("_")[-1])
-        notes = store.get_list(config.NOTES_KEY, cid)
-        if i < len(notes):
-            notes.pop(i); store.set_list(config.NOTES_KEY, cid, notes)
-        await send_notes(bot, cid); return
+        await note_delete_menu(bot, cid, int(data.split("_")[-1])); return
+    if data.startswith("as_noteblack_"):
+        await note_to_blacklist(bot, cid, int(data.split("_")[-1])); return
+    if data.startswith("as_notelove_"):
+        await note_to_love(bot, cid, int(data.split("_")[-1])); return
+    if data.startswith("as_notedrop_"):
+        await note_drop(bot, cid, int(data.split("_")[-1])); return
     # одноразовые
     if data in _ONESHOT:
         gen, lbl, cb = _ONESHOT[data]

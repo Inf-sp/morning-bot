@@ -334,7 +334,7 @@ async def add_reco(bot, cid, i):
     folder = "Фильмы и сериалы" if kind == "movie" else "Книги"
     store.add_to_list(key, cid, title)
     store.add_to_list(config.NOTES_KEY, cid,
-                      {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": folder})
+                      {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": folder, "bucket": "fav"})
     await bot.send_message(chat_id=cid, text=f"⭐ В закладках «{folder}»: {title}. Вот ещё вариант 👇")
     # сразу показываем следующую рекомендацию
     try:
@@ -435,7 +435,7 @@ async def add_listen(bot, cid, i):
     if rec and rec.get("kind") == "listen" and rec["items"]:
         title = rec["items"][0]
         store.add_to_list(config.NOTES_KEY, cid,
-                          {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": "Музыка"})
+                          {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": "Музыка", "bucket": "fav"})
         await bot.send_message(chat_id=cid, text=f"⭐ В закладках «Музыка»: {title}. Вот ещё вариант 👇")
     await send_listen(bot, cid)
 
