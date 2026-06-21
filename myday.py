@@ -117,7 +117,7 @@ def _build_day_text(cid):
     L += [f"<b>{icon} Погода сегодня</b>",
           f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}", ""]
     outfit = " + ".join(ex.get("outfit", [])).rstrip(".")  # для «Сохранить образ дня», в сводке не показываем
-    focus = (ex.get("focus") or "").strip().rstrip(".")
+    focus = (ex.get("focus") or "").strip()
     if focus:
         L += ["<b>🎯 Фокус дня</b>", esc(focus), ""]
     L += ["<b>📚 Слово дня</b>",
