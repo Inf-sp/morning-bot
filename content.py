@@ -195,12 +195,15 @@ async def send_recos(bot, cid, kind):
         await send_books_reco(bot, cid)
         return
     await bot.send_message(chat_id=cid, text="Подбираю под твой вкус...")
-    try:
-        data = content_recommend(kind, str(cid))
-        items = data.get("items", [])
-    except Exception as e:
-        await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
-        return
+    items = []
+    for _ in range(2):
+        try:
+            data = content_recommend(kind, str(cid))
+            items = data.get("items", []) if isinstance(data, dict) else []
+        except Exception:
+            items = []
+        if items:
+            break
     if not items:
         await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
     it, tm = _pick_good_movie(items, set())
@@ -292,11 +295,15 @@ async def _send_book_card(bot, cid, it, i):
 
 async def send_books_reco(bot, cid):
     await bot.send_message(chat_id=cid, text="Подбираю книги под твой вкус...")
-    try:
-        data = content_recommend("book", str(cid))
-        items = data.get("items", [])
-    except Exception as e:
-        await bot.send_message(chat_id=cid, text=f"Ошибка: {e}"); return
+    items = []
+    for _ in range(2):
+        try:
+            data = content_recommend("book", str(cid))
+            items = data.get("items", []) if isinstance(data, dict) else []
+        except Exception:
+            items = []
+        if items:
+            break
     if not items:
         await bot.send_message(chat_id=cid, text="Не удалось подобрать книгу. Попробуй ещё раз."); return
     it = items[0]
@@ -342,12 +349,13 @@ async def book_love(bot, cid, i):
         await bot.send_message(chat_id=cid, text=f"❤️ «{title}» - в любимые (Мои книги).")
 
 async def listen_love(bot, cid):
-    """Артист - в любимые (Мои артисты)."""
+    """Артист - в любимые (Мои артисты), затем следующая рекомендация."""
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
         artist = rec["items"][0]
         store.add_to_list(config.ARTISTS_KEY, cid, artist)
-        await bot.send_message(chat_id=cid, text=f"❤️ «{artist}» - в любимые (Мои артисты).")
+        await bot.send_message(chat_id=cid, text=f"❤️ «{artist}» - в любимые (Мои артисты). Вот ещё вариант 👇")
+    await send_listen(bot, cid)
 
 async def add_reco(bot, cid, i):
     from datetime import datetime
@@ -406,7 +414,6 @@ async def add_fav(bot, cid, text):
 def _listen_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("😕 Не нравится", callback_data="a_listen_no")],
-        [InlineKeyboardButton("🔍 Поиск по концертам", callback_data="a_concerts_find")],
         [InlineKeyboardButton("⭐ Добавить в закладки", callback_data="listen_0")],
         [InlineKeyboardButton("❤️ Добавить в любимые", callback_data="listen_love")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
@@ -432,11 +439,13 @@ async def send_listen(bot, cid):
             + (f"НЕ предлагай уже отклонённых: {avoid_dis}.\n" if avoid_dis else "")
             + "Предложи РОВНО ОДНОГО нового исполнителя, максимально близкого по вкусу "
             "(электроника, синтипоп, альт, дрим-поп, дарквейв, арт-поп и близкое).\n"
-            'JSON: {"artist":"имя","desc":"1-2 строки образно о звучании",'
-            '"why":["2 пункта: на кого из ЕГО любимых похоже и чем",'
-            '"можно ссылаться на конкретных артистов из его списка"],'
-            '"tracks":["3-4 лучших трека с короткой пометкой через тире"],'
-            '"fact":"1 интересный факт об исполнителе"}', 1000)
+            "Верни строго такой JSON:\n"
+            '{"artist": "имя исполнителя", '
+            '"desc": "1-2 строки образно о звучании", '
+            '"why": ["пункт 1 - на кого из его любимых похоже и чем", "пункт 2"], '
+            '"tracks": ["трек 1 - короткая пометка", "трек 2", "трек 3"], '
+            '"fact": "1 интересный факт об исполнителе"}',
+            1000)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=f"Ошибка: {e}"); return
     artist = data.get("artist", "")
@@ -490,7 +499,7 @@ def _ensure_artists(cid):
 async def find_concerts(bot, cid, mode="home"):
     if not config.TICKETMASTER_API_KEY:
         await bot.send_message(chat_id=cid,
-            text="🔎 Поиск концертов требует бесплатный ключ Ticketmaster.\n"
+            text="🎫 Поиск мероприятий требует бесплатный ключ Ticketmaster.\n"
                  "Заведи его на developer.ticketmaster.com и добавь на Railway переменную TICKETMASTER_API_KEY.")
         return
     artists = _ensure_artists(cid)
@@ -513,7 +522,7 @@ async def find_concerts(bot, cid, mode="home"):
     else:
         cc, flag, cname = home_cc, home_flag, home_name
 
-    await bot.send_message(chat_id=cid, text=f"Ищу концерты в {cname}, ~15-30 сек...")
+    await bot.send_message(chat_id=cid, text=f"Ищу мероприятия в {cname}, ~15-30 сек...")
     import requests
     from util import _MONTHS
     found = {}
@@ -547,11 +556,10 @@ async def find_concerts(bot, cid, mode="home"):
             continue
 
     rows = [[InlineKeyboardButton("🌍 Сменить страну", callback_data="a_concerts_pick")]]
-    rows.append([InlineKeyboardButton("⬅️ Меню", callback_data="m_music")])
     kb = InlineKeyboardMarkup(rows)
 
     if not found:
-        store.last_answer[str(cid)] = f"Концерты в {cname}: ничего не нашёл."
+        store.last_answer[str(cid)] = f"Мероприятия в {cname}: ничего не нашёл."
         await bot.send_message(chat_id=cid,
             text=f"🎤 <b>Концерты в {esc(cname)}</b>\n\nСейчас ничего не нашёл. Попробуй другую страну 🌍",
             parse_mode="HTML", reply_markup=kb)
@@ -595,7 +603,7 @@ async def concert_pick_country(bot, cid):
              ("at", "🇦🇹 Австрия"), ("ch", "🇨🇭 Швейцария"), ("pl", "🇵🇱 Польша"),
              ("se", "🇸🇪 Швеция"), ("dk", "🇩🇰 Дания"), ("pt", "🇵🇹 Португалия")]
     rows = [[InlineKeyboardButton(lbl, callback_data=f"a_concerts_{cc}")] for cc, lbl in codes]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_music")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
                            reply_markup=InlineKeyboardMarkup(rows))
 
