@@ -81,7 +81,7 @@ async def send_looks(bot, cid, scenario=None):
     w = store.load_wardrobe()
     s = store.get_settings(cid)
     try:
-        wblock = weather.weather_block(weather.fetch_weather(s["lat"], s["lon"], 1), 0, s["city"])
+        wblock = weather.weather_block(weather.fetch_weather(s["lat"], s["lon"], 2), 0, s["city"])
     except Exception:
         wblock = "нет данных"
     recent = store.recent_looks.get(str(cid), [])
@@ -101,7 +101,7 @@ async def send_looks(bot, cid, scenario=None):
 JSON (без markdown):
 {{"intro":"1 строка про погоду и логику образа","items":["вещь 1 полным названием","вещь 2","вещь 3"],"add":"1 совет что добавить (аксессуар) и почему"}}"""
     try:
-        d = ai.llm_json(prompt, 700, 0.9)
+        d = ai.llm_json(prompt, 700)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     items = d.get("items", [])
@@ -205,7 +205,7 @@ async def send_improve(bot, cid):
 Разбери шкаф. Верни JSON (без markdown):
 {{"intro":"1-2 строки общий вердикт","weak":["что проседает, 3-4 пункта"],"fix":["что улучшить, 2-3 пункта"],"outro":"1 строка итог"}}"""
     try:
-        d = ai.llm_json(prompt, 800, 0.9)
+        d = ai.llm_json(prompt, 800)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     L = ["💡 <b>Разбор гардероба</b>", ""]
@@ -233,7 +233,7 @@ async def check_purchase(bot, cid, text):
 Верни JSON (без markdown):
 {{"verdict":"БРАТЬ или НЕ БРАТЬ","why":["2-3 причины"],"outro":"1 строка итог"}}"""
     try:
-        d = ai.llm_json(prompt, 500, 0.7)
+        d = ai.llm_json(prompt, 500)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     verdict = d.get("verdict", "")
