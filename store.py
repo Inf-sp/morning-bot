@@ -75,17 +75,19 @@ def set_level(chat_id, language, level):
 
 def load_wardrobe():
     w = _load(config.WARDROBE_FILE)
-    if not w:
-        try:
-            if os.path.exists(config.WARDROBE_FILE):
-                with open(config.WARDROBE_FILE) as f:
-                    seed = json.load(f)
-                if seed:
-                    _save(config.WARDROBE_FILE, seed)
-                    return seed
-        except Exception:
-            pass
-    return w
+    seed = None
+    try:
+        if os.path.exists(config.WARDROBE_FILE):
+            with open(config.WARDROBE_FILE, encoding="utf-8") as f:
+                seed = json.load(f)
+    except Exception:
+        seed = None
+    seed_v = (seed or {}).get("_v")
+    # затираем старое, если в БД нет версии сида (новая база одежды)
+    if seed and (not w or w.get("_v") != seed_v):
+        _save(config.WARDROBE_FILE, seed)
+        return seed
+    return w or {}
 
 def save_wardrobe(w):
     _save(config.WARDROBE_FILE, w)
@@ -105,7 +107,8 @@ def merge_wardrobe(new_items: dict):
     return added
 
 def wardrobe_to_text(w):
-    return "\n".join(f"{c.capitalize()}: {', '.join(i)}" for c, i in w.items())
+    return "\n".join(f"{c.capitalize()}: {', '.join(i)}" for c, i in w.items()
+                     if c != "_v" and isinstance(i, list))
 
 def get_list(key, chat_id):
     return _load(key).get(str(chat_id), [])
