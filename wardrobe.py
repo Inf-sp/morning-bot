@@ -141,6 +141,8 @@ async def send_show(bot, cid):
         return
     grouped = {}
     for cat, items in w.items():
+        if cat == "_v" or not isinstance(items, list):
+            continue
         z = _zone_of(cat)
         grouped.setdefault(z, []).extend(items)
     zone_emoji = {"Верх": "👕", "Низ": "👖", "Обувь": "👟", "Аксессуары": "⌚", "Другое": "🎒"}
@@ -171,6 +173,8 @@ async def send_del(bot, cid):
     w = store.load_wardrobe()
     flat = []
     for cat, items in w.items():
+        if cat == "_v" or not isinstance(items, list):
+            continue
         for it in items:
             flat.append((cat, it))
     if not flat:
