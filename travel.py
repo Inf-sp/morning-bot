@@ -40,7 +40,6 @@ def _travel_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🧳 Собрать план поездки", callback_data="a_trav_plan")],
         [InlineKeyboardButton("😕 Не нравится", callback_data="a_trav_no")],
-        [InlineKeyboardButton("❤️ В любимые", callback_data="a_trav_fav")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
@@ -133,14 +132,29 @@ async def send_plan(bot, cid):
         L += ["", "🏳️‍🌈 <b>LGBTQ+</b>", esc(p["lgbt"])]
     if p.get("fact"):
         L += ["", "🍲 <b>Интересный факт</b>", esc(p["fact"])]
-    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
+    plan_text = "\n".join(L)
+    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", plan_text)
     store.last_source[str(cid)] = "Путешествия · План"
+    store.last_recipe[str(cid)] = {**(store.last_recipe.get(str(cid)) or {}), "plan_text": plan_text}
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("😕 Не нравится", callback_data="a_trav_no")],
-        [InlineKeyboardButton("❤️ В любимые", callback_data="a_trav_fav")],
+        [InlineKeyboardButton("💾 Сохранить план поездки", callback_data="a_trav_save")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=plan_text, parse_mode="HTML", reply_markup=kb)
+
+async def save_plan(bot, cid):
+    from datetime import datetime
+    d = store.last_recipe.get(str(cid)) or {}
+    plan = d.get("plan_text", "")
+    country = d.get("country") or store.suggested_countries.get(str(cid), "план")
+    if not plan:
+        await bot.send_message(chat_id=cid, text="Сначала собери план поездки."); return
+    store.add_to_list(config.NOTES_KEY, cid, {
+        "date": datetime.now(config.TZ).strftime("%d.%m"),
+        "text": plan, "source": "План поездки", "bucket": "fav", "full": True,
+    })
+    await bot.send_message(chat_id=cid, text=f"💾 План поездки ({country}) сохранён в «Мои сохранения».")
 
 async def send_my(bot, cid):
     favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)

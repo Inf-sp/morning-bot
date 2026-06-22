@@ -144,6 +144,8 @@ async def answer_callback(update, context):
                 await travel.send_plan(bot, cid)
             elif act == "trav_fav":
                 await travel.travel_fav(bot, cid)
+            elif act == "trav_save":
+                await travel.save_plan(bot, cid)
             elif act == "watch":
                 await content.send_recos(bot, cid, "movie")
             elif act == "read":
