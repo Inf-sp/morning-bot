@@ -150,12 +150,21 @@ def _movie_card(it, tm):
 def _movie_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("😕 Не нравится", callback_data=f"movie_no_{i}")],
-        [InlineKeyboardButton("⭐ Добавить в закладки", callback_data=f"reco_{i}")],
-        [InlineKeyboardButton("❤️ Добавить в любимые", callback_data=f"movie_love_{i}")],
+        [InlineKeyboardButton("⭐ В закладки", callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("❤️ В любимые", callback_data=f"movie_love_{i}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
 MIN_TMDB_RATING = 7.0  # рекомендуем только фильмы/сериалы с оценкой выше этой
+
+def _movie_used(cid):
+    """Множество названий, которые нельзя повторять: закладки+любимые (watchlist) и чёрный список."""
+    wl = store.get_list(config.WATCHLIST_KEY, cid)
+    bl = store.get_list(config.MOVIE_BLACKLIST_KEY, cid)
+    used = set()
+    for x in list(wl) + list(bl):
+        used.add((x if isinstance(x, str) else str(x)).lower())
+    return used
 
 def _pick_good_movie(items, used_titles):
     """Возвращает (item, tm) для первого фильма с рейтингом >= порога и не из used_titles.
@@ -206,7 +215,7 @@ async def send_recos(bot, cid, kind):
             break
     if not items:
         await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
-    it, tm = _pick_good_movie(items, set())
+    it, tm = _pick_good_movie(items, _movie_used(cid))
     if not it:
         await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
     disp = _display_title(it, tm)
@@ -229,7 +238,8 @@ async def movie_dislike(bot, cid, i):
     if not items:
         return
     rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
-    it, tm = _pick_good_movie(items, set(rec["items"]))
+    used = _movie_used(cid) | {str(x).lower() for x in rec["items"]}
+    it, tm = _pick_good_movie(items, used)
     if not it:
         return
     rec["items"].append(_display_title(it, tm))
@@ -276,8 +286,8 @@ def _book_text(it):
 def _book_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("😕 Не нравится", callback_data=f"book_no_{i}")],
-        [InlineKeyboardButton("⭐ Добавить в закладки", callback_data=f"reco_{i}")],
-        [InlineKeyboardButton("❤️ Добавить в любимые", callback_data=f"book_love_{i}")],
+        [InlineKeyboardButton("⭐ В закладки", callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
@@ -333,12 +343,29 @@ async def book_dislike(bot, cid, i):
     await _send_book_card(bot, cid, it, ni)
 
 async def movie_love(bot, cid, i):
-    """Фильм/сериал - в любимые (watchlist)."""
+    """Фильм/сериал - в любимые (watchlist), затем следующая рекомендация."""
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         store.add_to_list(config.WATCHLIST_KEY, cid, title)
-        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» - в любимые (Фильмы и сериалы).")
+        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» - в любимые (Фильмы и сериалы). Вот ещё вариант 👇")
+    # следующая рекомендация
+    try:
+        data = content_recommend("movie", str(cid))
+        items = data.get("items", [])
+    except Exception:
+        items = []
+    if not items:
+        return
+    rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
+    used = _movie_used(cid) | {str(x).lower() for x in rec["items"]}
+    it, tm = _pick_good_movie(items, used)
+    if not it:
+        return
+    rec["items"].append(_display_title(it, tm))
+    store.last_recos[str(cid)] = rec
+    ni = len(rec["items"]) - 1
+    await _send_movie_card(bot, cid, it, ni, tm=tm)
 
 async def book_love(bot, cid, i):
     """Книга - в любимые (Мои книги)."""
@@ -414,8 +441,8 @@ async def add_fav(bot, cid, text):
 def _listen_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("😕 Не нравится", callback_data="a_listen_no")],
-        [InlineKeyboardButton("⭐ Добавить в закладки", callback_data="listen_0")],
-        [InlineKeyboardButton("❤️ Добавить в любимые", callback_data="listen_love")],
+        [InlineKeyboardButton("⭐ В закладки", callback_data="listen_0")],
+        [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
@@ -429,25 +456,37 @@ async def send_listen(bot, cid):
     arts = _ensure_artists(cid)
     anchors = ", ".join(arts[:25]) if arts else "Charli xcx, The xx, Fever Ray, RÜFÜS DU SOL, PLACEBO"
     disliked = store.get_list(config.MUSIC_DISLIKE_KEY, cid)
-    avoid_artists = ", ".join(arts[:40])
-    avoid_dis = ", ".join([str(x) for x in disliked][:40])
+    # закладки музыки лежат в NOTES с source "Музыка"
+    notes = store.get_list(config.NOTES_KEY, cid)
+    booked = [n.get("text", "") for n in notes
+              if isinstance(n, dict) and "музык" in str(n.get("source", "")).lower()]
+    # всё, что нельзя предлагать снова: любимые + закладки + дизлайки
+    known = set(a.lower() for a in arts) | set(b.lower() for b in booked) | set(str(d).lower() for d in disliked)
+    avoid_all = ", ".join(list(arts) + booked + [str(d) for d in disliked])[:600]
     await bot.send_message(chat_id=cid, text="Подбираю исполнителя под твой вкус...")
-    try:
-        data = ai.llm_json(
-            f"Любимые исполнители пользователя (его вкус): {anchors}.\n"
-            f"НЕ предлагай тех, кто уже в любимых: {avoid_artists}.\n"
-            + (f"НЕ предлагай уже отклонённых: {avoid_dis}.\n" if avoid_dis else "")
-            + "Предложи РОВНО ОДНОГО нового исполнителя, максимально близкого по вкусу "
-            "(электроника, синтипоп, альт, дрим-поп, дарквейв, арт-поп и близкое).\n"
-            "Верни строго такой JSON:\n"
-            '{"artist": "имя исполнителя", '
-            '"desc": "1-2 строки образно о звучании", '
-            '"why": ["пункт 1 - на кого из его любимых похоже и чем", "пункт 2"], '
-            '"tracks": ["трек 1 - короткая пометка", "трек 2", "трек 3"], '
-            '"fact": "1 интересный факт об исполнителе"}',
-            1000)
-    except Exception as e:
-        await bot.send_message(chat_id=cid, text=f"Ошибка: {e}"); return
+    data = None
+    for _ in range(3):
+        try:
+            cand = ai.llm_json(
+                f"Любимые исполнители пользователя (его вкус): {anchors}.\n"
+                f"НЕ предлагай никого из этого списка (уже в закладках/любимых/отклонены): {avoid_all}.\n"
+                "Предложи РОВНО ОДНОГО НОВОГО исполнителя, максимально близкого по вкусу "
+                "(электроника, синтипоп, альт, дрим-поп, дарквейв, арт-поп и близкое).\n"
+                "Верни строго такой JSON:\n"
+                '{"artist": "имя исполнителя", '
+                '"desc": "1-2 строки образно о звучании", '
+                '"why": ["пункт 1 - на кого из его любимых похоже и чем", "пункт 2"], '
+                '"tracks": ["трек 1 - короткая пометка", "трек 2", "трек 3"], '
+                '"fact": "1 интересный факт об исполнителе"}',
+                1000)
+        except Exception:
+            cand = None
+        if cand and cand.get("artist") and cand["artist"].strip().lower() not in known:
+            data = cand
+            break
+        data = cand  # запомним последнего на случай если все попытки дали известных
+    if not data or not data.get("artist"):
+        await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
     artist = data.get("artist", "")
     store.last_recos[str(cid)] = {"kind": "listen", "items": [artist]}
     store.last_source[str(cid)] = "Досуг · Музыка"

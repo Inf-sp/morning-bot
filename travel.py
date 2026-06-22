@@ -40,7 +40,7 @@ def _travel_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🧳 Собрать план поездки", callback_data="a_trav_plan")],
         [InlineKeyboardButton("😕 Не нравится", callback_data="a_trav_no")],
-        [InlineKeyboardButton("❤️ Добавить в любимые", callback_data="a_trav_fav")],
+        [InlineKeyboardButton("❤️ В любимые", callback_data="a_trav_fav")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
@@ -113,8 +113,7 @@ async def send_plan(bot, cid):
  "budget":["перелёт туда-обратно ориентир из {home}","эконом в день","комфорт в день"],
  "spots":["3 места не пропустить с короткой пометкой"],
  "lgbt":"1 строка про дружелюбность/безопасность",
- "fact":"1 интересный местный факт",
- "next":["2 следующих направления (НЕ из: {skip}) с эмодзи флага"]}}"""
+ "fact":"1 интересный местный факт"}}"""
     try:
         p = ai.llm_json(prompt, 1100)
     except Exception as e:
@@ -134,14 +133,11 @@ async def send_plan(bot, cid):
         L += ["", "🏳️‍🌈 <b>LGBTQ+</b>", esc(p["lgbt"])]
     if p.get("fact"):
         L += ["", "🍲 <b>Интересный факт</b>", esc(p["fact"])]
-    if p.get("next"):
-        nxt = " → ".join(esc(str(n)) for n in p["next"])
-        L += ["", "🎯 <b>Что дальше?</b>", f"Твой следующий маршрут: {nxt}"]
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
     store.last_source[str(cid)] = "Путешествия · План"
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("😕 Не нравится", callback_data="a_trav_no")],
-        [InlineKeyboardButton("❤️ Добавить в любимые", callback_data="a_trav_fav")],
+        [InlineKeyboardButton("❤️ В любимые", callback_data="a_trav_fav")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)

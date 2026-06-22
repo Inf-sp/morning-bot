@@ -22,7 +22,7 @@ def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry"):
     rows = []
     if cont_label and cont_cb:
         rows.append([(cont_label, cont_cb)])
-    rows.append([("⭐ Добавить в закладки", "as_fav")])
+    rows.append([("⭐ В закладки", "as_fav")])
     rows.append([("⬅️ Назад", "m_close")])
     return _kb(rows)
 
@@ -30,7 +30,7 @@ def _recipe_kb():
     return _kb([
         [("📖 Полный рецепт", "as_food_full")],
         [("🔄 Ещё рецепт", "as_food")],
-        [("⭐ Добавить в закладки", "as_fav")],
+        [("⭐ В закладки", "as_fav")],
         [("⬅️ Назад", "m_close")],
     ])
 
