@@ -117,12 +117,23 @@ async def answer_callback(update, context):
                 await bot.send_message(chat_id=cid, text="🇬🇧 Напиши тему для изучения (можно с переводом) - добавлю и разберу.")
             elif act == "dict":
                 await learning.send_dict(bot, cid)
-            elif act == "dictadd_nl":
-                store.pending_input[cid] = "dictadd_nl"
-                await bot.send_message(chat_id=cid, text="🇳🇱 Напиши нидерландское слово или фразу - добавлю с переводом.")
-            elif act == "dictadd_en":
-                store.pending_input[cid] = "dictadd_en"
-                await bot.send_message(chat_id=cid, text="🇬🇧 Напиши английское слово или фразу - добавлю с переводом.")
+            elif act == "dictlang_nl":
+                await learning.send_dict_lang(bot, cid, "nl")
+            elif act == "dictlang_en":
+                await learning.send_dict_lang(bot, cid, "en")
+            elif act.startswith("dictaddw_"):
+                lang = act.split("_")[1]
+                store.pending_input[cid] = f"dictaddw_{lang}"
+                flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+                await bot.send_message(chat_id=cid, text=f"{flag} Напиши слово - добавлю с переводом.")
+            elif act.startswith("dictaddp_"):
+                lang = act.split("_")[1]
+                store.pending_input[cid] = f"dictaddp_{lang}"
+                flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+                await bot.send_message(chat_id=cid, text=f"{flag} Напиши фразу - добавлю с переводом.")
+            elif act.startswith("dictedit_"):
+                _, lang, dkind = act.split("_")
+                await learning.send_dict_edit(bot, cid, lang, dkind)
             elif act == "game":
                 await learning.game_start(bot, cid)
             elif act == "levels":
@@ -205,6 +216,10 @@ async def answer_callback(update, context):
         elif what == "gram_en":
             await learning.again_grammar(bot, cid, "английский")
         return
+    if data.startswith("next_gram_"):
+        lang = "нидерландский" if data.endswith("_nl") else "английский"
+        await learning.next_grammar(bot, cid, lang)
+        return
     # Игра
     if data.startswith("gamelang_"):
         lang = {"ru": "русский", "en": "английский", "nl": "нидерландский"}[data.split("_")[1]]
@@ -238,7 +253,7 @@ async def answer_callback(update, context):
         if st and st.get("hint"):
             from util import esc
             await q.message.reply_text(
-                f"💡 <b>Подсказка</b>\n\n<b>{esc(st['hint'])}</b>\n\nЗнаешь ответ?\nНапиши его или нажми «😞 Сдаюсь»",
+                f"💡 <b>Подсказка</b>\n\n<b>{esc(st['hint'])}</b>\n\nЗнаешь ответ?",
                 parse_mode="HTML")
         else:
             await q.message.reply_text("Подсказок больше нет.")
@@ -250,7 +265,7 @@ async def answer_callback(update, context):
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             from util import esc
             body = st.get("explain") or st.get("quote", "")
-            txt = f"✅ <b>Дело раскрыто!</b>\n\n{ui['answer']}: <b>{esc(st.get('answer',''))}</b>"
+            txt = f"✅ <b>Дело раскрыто!</b>\n\nОтвет:\n<b>{esc(st.get('answer',''))}</b>"
             if body:
                 txt += f"\n\n{esc(body)}"
             kb = InlineKeyboardMarkup([
@@ -363,6 +378,10 @@ async def text_router(update, context):
             await wardrobe.check_purchase(bot, cid, text); return
         if kind == "setcity":
             await weather.set_city_text(bot, cid, text); return
+        if kind.startswith("dictaddw_"):
+            await learning.add_word_manual(bot, cid, text, kind.split("_")[1], "word"); return
+        if kind.startswith("dictaddp_"):
+            await learning.add_word_manual(bot, cid, text, kind.split("_")[1], "phrase"); return
         if kind == "dictadd_nl":
             await learning.add_word_manual(bot, cid, text, "nl"); return
         if kind == "dictadd_en":

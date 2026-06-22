@@ -89,10 +89,15 @@ async def _send_grammar_task(bot, cid, d, code):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(d.get("a", "A"), callback_data="gram_a"),
          InlineKeyboardButton(d.get("b", "B"), callback_data="gram_b")],
-        [InlineKeyboardButton("🔄 Ещё пример", callback_data=f"again_gram_{code}")],
+        [InlineKeyboardButton("🔄 Ещё пример из этой темы", callback_data=f"again_gram_{code}")],
+        [InlineKeyboardButton("➡️ Следующая тема", callback_data=f"next_gram_{code}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"m_{code}")],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(L2), parse_mode="HTML", reply_markup=kb)
+
+async def next_grammar(bot, cid, language):
+    """Следующая тема: полностью новая грамматика с объяснением."""
+    await send_grammar(bot, cid, language)
 
 async def again_grammar(bot, cid, language):
     """Ещё пример: новое задание на ТУ ЖЕ тему, без повтора объяснения грамматики."""
@@ -127,7 +132,10 @@ async def grammar_answer(bot, cid, chosen):
             L += ["", f"<b>Перевод:</b> {esc(st['task_ru'])}"]
         if st.get("rule"):
             L += ["", f"💡 <b>Правило:</b> {esc(st['rule'])}"]
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Ещё пример", callback_data=f"again_gram_{code}")]])
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Ещё пример из этой темы", callback_data=f"again_gram_{code}")],
+        [InlineKeyboardButton("➡️ Следующая тема", callback_data=f"next_gram_{code}")],
+    ])
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
 
 
@@ -195,21 +203,26 @@ def _proverb_kb(code):
 
 async def send_proverb(bot, cid, language):
     adj = "нидерландском" if language == "нидерландский" else "английском"
+    flag = _flag(language)
     try:
         d = ai.llm_json(
             f"Дай пословицу/поговорку или живое разговорное выражение строго на {language} языке.\n"
             'JSON: {"original":"оригинал на ' + language + '","literal":"дословный перевод на русский",'
-            '"analog":"русский аналог по смыслу (1-2 варианта)","meaning":"значение, когда так говорят, 1-2 строки"}',
+            '"analog":["русский аналог 1","аналог 2","аналог 3"],"meaning":"значение, когда так говорят, 1-2 строки"}',
             500, LO)
-        L = [f"💬 <b>Пословица на {adj} языке</b>", ""]
-        L.append(f"\"{esc(d.get('original',''))}\" → \"{esc(d.get('literal',''))}\"")
-        if d.get("analog"):
-            L += ["", f"<b>Русский аналог:</b> {esc(d['analog'])}"]
+        L = [f"💬{flag} <b>Пословица на {adj}</b>", ""]
+        L.append(f"<b>{esc(d.get('original',''))}</b> → {esc(d.get('literal',''))}")
+        analog = d.get("analog", "")
+        if analog:
+            if isinstance(analog, list):
+                L += ["", "<b>Русский аналог:</b>"] + [esc(str(a)) for a in analog]
+            else:
+                L += ["", "<b>Русский аналог:</b>", esc(analog)]
         if d.get("meaning"):
-            L += ["", f"<b>Значение:</b> {esc(d['meaning'])}"]
+            L += ["", "<b>Значение:</b>", esc(d["meaning"])]
         txt = "\n".join(L)
     except Exception:
-        txt = f"💬 <b>Пословица на {adj} языке</b>\n\nНе удалось получить, попробуй ещё раз."
+        txt = f"💬{flag} <b>Пословица на {adj}</b>\n\nНе удалось получить, попробуй ещё раз."
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=_proverb_kb(_code(language)))
 
 
@@ -228,12 +241,14 @@ def _normalize_word(raw, lang="nl"):
     except Exception:
         return {"lang": lang, "word": str(raw)[:60], "ru": ""}
 
-async def add_word_manual(bot, cid, text, lang="nl"):
+async def add_word_manual(bot, cid, text, lang="nl", kind="word"):
     d = _normalize_word(text, lang)
+    d["kind"] = kind
     store.add_to_list(config.DICT_KEY, cid, d)
     flag = "🇬🇧" if lang == "en" else "🇳🇱"
-    await bot.send_message(chat_id=cid, text=f"📖 Добавлено: {flag} {d.get('word','')} - {d.get('ru','')}")
-    await send_dict(bot, cid)
+    label = "Слово" if kind == "word" else "Фраза"
+    await bot.send_message(chat_id=cid, text=f"📖 {label} добавлено: {flag} {d.get('word','')} - {d.get('ru','')}")
+    await send_dict_lang(bot, cid, lang)
 
 def _w_field(w, *keys):
     for k in keys:
@@ -257,27 +272,64 @@ def _ensure_dict(cid):
         pass
     return words
 
-async def send_dict(bot, cid):
+def _dict_kind(w):
+    if isinstance(w, dict) and w.get("kind"):
+        return w["kind"]
+    word = w.get("word", "") if isinstance(w, dict) else str(w)
+    return "phrase" if " " in word.strip() else "word"
+
+def _dict_lang(w):
+    return w.get("lang", "nl") if isinstance(w, dict) else "nl"
+
+def _dict_counts(cid):
     words = _ensure_dict(cid)
-    lines = ["🗂️ <b>Мой словарь</b>", ""]
-    rows = [[InlineKeyboardButton("🇳🇱 Добавить нидерландское", callback_data="a_dictadd_nl")],
-            [InlineKeyboardButton("🇬🇧 Добавить английское", callback_data="a_dictadd_en")]]
-    if not words:
-        lines.append("Пока пусто. Добавляй слова кнопками ниже.")
-    nl_words = [(i, w) for i, w in enumerate(words) if (w.get("lang") if isinstance(w, dict) else "nl") != "en"]
-    en_words = [(i, w) for i, w in enumerate(words) if isinstance(w, dict) and w.get("lang") == "en"]
-    if nl_words:
-        lines.append("🇳🇱 <b>Нидерландские</b>")
-        for i, w in nl_words[-25:]:
-            lines.append(f"• {esc(_w_field(w,'word','nl'))} - {esc(_w_field(w,'ru'))}")
-            rows.append([InlineKeyboardButton(f"❌ 🇳🇱 {_w_field(w,'word','nl')[:18]}", callback_data=f"worddel_{i}")])
-    if en_words:
-        lines.append("")
-        lines.append("🇬🇧 <b>Английские</b>")
-        for i, w in en_words[-25:]:
-            lines.append(f"• {esc(_w_field(w,'word','en'))} - {esc(_w_field(w,'ru'))}")
-            rows.append([InlineKeyboardButton(f"❌ 🇬🇧 {_w_field(w,'word','en')[:18]}", callback_data=f"worddel_{i}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")])
+    out = {"nl": {"word": 0, "phrase": 0}, "en": {"word": 0, "phrase": 0}}
+    for w in words:
+        lang = "en" if _dict_lang(w) == "en" else "nl"
+        out[lang][_dict_kind(w)] += 1
+    return out
+
+async def send_dict(bot, cid):
+    c = _dict_counts(cid)
+    nl_total = c["nl"]["word"] + c["nl"]["phrase"]
+    en_total = c["en"]["word"] + c["en"]["phrase"]
+    txt = (f"🗂️ <b>Мой словарь</b>\n\nВсего: {nl_total + en_total} "
+           f"(🇳🇱 {nl_total} · 🇬🇧 {en_total})\n\nВыбери язык 👇")
+    rows = [
+        [InlineKeyboardButton(f"🇳🇱 Нидерландский ({nl_total})", callback_data="a_dictlang_nl")],
+        [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data="a_dictlang_en")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
+    ]
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+async def send_dict_lang(bot, cid, lang):
+    c = _dict_counts(cid)[lang]
+    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+    name = "Нидерландский" if lang == "nl" else "Английский"
+    txt = (f"{flag} <b>Словарь · {name}</b>\n\n"
+           f"Слов: {c['word']} · Фраз: {c['phrase']}\n\nВыбери действие 👇")
+    rows = [
+        [InlineKeyboardButton(f"{flag} Добавить слово", callback_data=f"a_dictaddw_{lang}")],
+        [InlineKeyboardButton(f"{flag} Добавить фразу", callback_data=f"a_dictaddp_{lang}")],
+        [InlineKeyboardButton("✏️ Редактировать список слов", callback_data=f"a_dictedit_{lang}_word")],
+        [InlineKeyboardButton("✏️ Редактировать список фраз", callback_data=f"a_dictedit_{lang}_phrase")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="a_dict")],
+    ]
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+async def send_dict_edit(bot, cid, lang, kind):
+    words = _ensure_dict(cid)
+    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+    label = "слов" if kind == "word" else "фраз"
+    items = [(i, w) for i, w in enumerate(words) if _dict_lang(w) == lang and _dict_kind(w) == kind]
+    lines = [f"{flag} <b>Список {label}</b>", ""]
+    rows = []
+    if not items:
+        lines.append("Пусто.")
+    for i, w in items[-40:]:
+        lines.append(f"• {esc(_w_field(w,'word','nl','en'))} - {esc(_w_field(w,'ru'))}")
+        rows.append([InlineKeyboardButton(f"❌ {_w_field(w,'word','nl','en')[:22]}", callback_data=f"worddel_{i}")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
 async def del_word(bot, cid, i):
@@ -528,7 +580,7 @@ async def game_answer(bot, cid, text):
             [InlineKeyboardButton("⬅️ Обучение", callback_data="m_learn")],
         ])
         body = st.get("explain") or st.get("quote", "")
-        txt = f"✅ <b>Дело раскрыто!</b>\n\n{ui['answer']}: <b>{esc(st['answer'])}</b>"
+        txt = f"✅ <b>Дело раскрыто!</b>\n\nОтвет:\n<b>{esc(st['answer'])}</b>"
         if body:
             txt += f"\n\n{esc(body)}"
         await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
