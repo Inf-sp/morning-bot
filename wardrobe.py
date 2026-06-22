@@ -109,8 +109,6 @@ JSON (без markdown):
     rl.append(", ".join(items)[:80])
     store.recent_looks[str(cid)] = rl[-3:]
     L = ["✨ <b>Новый образ</b>", ""]
-    if d.get("intro"):
-        L += [esc(d["intro"]), ""]
     L += [f"• {esc(str(it))}" for it in items]
     if d.get("add"):
         L += ["", "⚡ <b>Можно добавить:</b>", esc(d["add"])]
@@ -204,23 +202,31 @@ async def send_improve(bot, cid):
     w = store.load_wardrobe()
     await bot.send_message(chat_id=cid, text="Разбираю шкаф...")
     prompt = f"""Ты стилист с прямым тоном. {config.STYLE_PROFILE}
-Гардероб:
+Разбери ТВОЙ гардероб пользователя (обращайся на "ты", НЕ используй имя):
 {store.wardrobe_to_text(w)}
-Разбери шкаф. Верни JSON (без markdown):
-{{"intro":"1-2 строки общий вердикт","weak":["что проседает, 3-4 пункта"],"fix":["что улучшить, 2-3 пункта"],"outro":"1 строка итог"}}"""
+Сжато, для СДВГ, без воды. Верни JSON (без markdown):
+{{"style":"1 строка: какой стиль","verdict":"1 строка вердикт по базе и силуэтам",
+"remove":["что убрать, ломает стиль, 1-3 пункта"],
+"replace":["на что заменить, 1-3 пункта"],
+"texture":"1-2 строки: как через фактуру/ткани сделать интереснее без ярких принтов",
+"accessory":"1-2 строки: какие строгие аксессуары и многослойность добавить"}}"""
     try:
         d = ai.llm_json(prompt, 800)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     L = ["💡 <b>Разбор гардероба</b>", ""]
-    if d.get("intro"):
-        L += [esc(d["intro"])]
-    if d.get("weak"):
-        L += ["", "🤔 <b>Что проседает:</b>"] + [esc(str(x)) for x in d["weak"]]
-    if d.get("fix"):
-        L += ["", "⚠️ <b>Что улучшить:</b>"] + [esc(str(x)) for x in d["fix"]]
-    if d.get("outro"):
-        L += ["", esc(d["outro"])]
+    if d.get("style"):
+        L.append(f"<b>Стиль:</b> {esc(d['style'])}")
+    if d.get("verdict"):
+        L.append(f"<b>Вердикт:</b> {esc(d['verdict'])}")
+    if d.get("remove"):
+        L += ["", "❌ <b>Что убрать:</b>"] + [esc(str(x)) for x in d["remove"]]
+    if d.get("replace"):
+        L += ["", "✅ <b>На что заменить:</b>"] + [esc(str(x)) for x in d["replace"]]
+    if d.get("texture"):
+        L += ["", "<b>Фактура вместо принтов:</b>", esc(d["texture"])]
+    if d.get("accessory"):
+        L += ["", "<b>Аксессуары:</b>", esc(d["accessory"])]
     store.last_source[str(cid)] = "Гардероб · Улучшение"
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
@@ -232,10 +238,10 @@ async def check_purchase(bot, cid, text):
     await bot.send_message(chat_id=cid, text="Оцениваю...")
     prompt = f"""Ты стилист. Пользователь думает купить: {text}
 {config.STYLE_PROFILE}
-Его гардероб:
+Оцени по ЕГО гардеробу (обращайся на "ты", НЕ используй имя):
 {store.wardrobe_to_text(w)}
 Верни JSON (без markdown):
-{{"verdict":"БРАТЬ или НЕ БРАТЬ","why":["2-3 причины"],"outro":"1 строка итог"}}"""
+{{"verdict":"БРАТЬ или НЕ БРАТЬ","why":["2-3 причины, на ты, без имени"],"outro":"1 строка итог, на ты, без имени"}}"""
     try:
         d = ai.llm_json(prompt, 500)
     except Exception as e:
