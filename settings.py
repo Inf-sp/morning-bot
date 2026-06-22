@@ -6,10 +6,9 @@ import learning
 SETTINGS_KEY = "user_settings.json"
 NOTIF_TYPES = [
     ("morning", "🌅 Утренняя сводка (08:30)"),
-    ("grammar", "📚 Грамматика/слово дня (11:00)"),
+    ("grammar", "📚 Слова дня (11:00)"),
     ("checkin_day", "🫣 Дневная разгрузка (14:00)"),
     ("checkin_eve", "🥸 Вечерний разбор (20:00)"),
-    ("vocab", "📚 Повторение словаря (вс 12:00)"),
 ]
 STYLES = ["минимализм", "скандинавская эстетика", "натуральные ткани"]
 
@@ -41,8 +40,7 @@ def home_kb(cid):
 
 async def send_home(bot, cid):
     await bot.send_message(chat_id=cid,
-        text="⚙️ <b>Настройки</b>\n\nЗдесь можно настроить уведомления, язык обучения, "
-             "уровень, город и параметры для подбора лука.\n\nВыбери 👇",
+        text="⚙️ <b>Настройки</b>\n\nЯзык, уведомления, город и параметры стиля.\n\nВыбери раздел 👇",
         parse_mode="HTML", reply_markup=home_kb(cid))
 
 async def send_notif(bot, cid):

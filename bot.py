@@ -22,20 +22,22 @@ CHAT_ID = config.CHAT_ID
 
 async def start(update, context):
     txt = (
-        "👋 <b>Привет! Я DM</b> - твой ежедневный помощник.\n"
-        "Погода, обучение, идеи и весь твой день в одном месте.\n\n"
+        "👋 <b>Привет! Я DM</b> - твой помощник на каждый день. "
+        "Погода, учеба, идеи и планы в одном месте.\n\n"
         "<b>Что я умею:</b>\n"
-        "☀️ <b>Мой день</b> - погода, образ, слово дня, идея, факты, цитата\n"
-        "👕 <b>Гардероб</b> - луки по погоде, разбор шкафа, проверка покупок\n"
-        "🧠 <b>Баланс</b> - врач, мотивация, рецепты\n"
-        "📚 <b>Обучение</b> - нидерландский/английский, игра, словарь, экзамен\n"
-        "🍿 <b>Досуг</b> - фильмы, книги, музыка, концерты, путешествия\n\n"
-        "💬 Любой вопрос можно просто написать в чат - отвечу.\n\n"
+        "☀️ <b>Мой день</b> - погода, образ, слово дня, идея и факты.\n"
+        "👕 <b>Гардероб</b> - луки по погоде, разбор шкафа и оценка покупок.\n"
+        "🧠 <b>Баланс</b> - советы врача, мотивация и рецепты.\n"
+        "📚 <b>Обучение</b> - языки (NL/EN), игры, словарь и тесты.\n"
+        "🍿 <b>Досуг</b> - фильмы, книги, музыка, концерты и поездки.\n\n"
+        "Просто напиши свой вопрос в чат - я на него отвечу 💬\n\n"
         "<b>Команды:</b>\n"
-        "/start - меню и описание\n"
-        "/setup - настройки (язык, город, уведомления, параметры шкафа)\n\n"
-        "⭐ Сохранять можно кнопкой «⭐ В закладки» под ответами. "
-        "Потом всё найдёшь в /notes по категориям (Идеи, Цитаты, События...)."
+        "/start - главное меню\n"
+        "/setup - настройки (язык, город, уведомления)\n\n"
+        "<b>Как сохранять:</b>\n"
+        "Жми «⭐ В закладки» под ответами, чтобы не потерять их. "
+        "Топовые треки и фильмы кидай в «❤️ В любимые». "
+        "Всё сохраненное лежит тут: /notes."
     )
     await update.message.reply_text(txt, parse_mode="HTML", reply_markup=menu.MAIN_KB)
 
@@ -487,8 +489,8 @@ async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
     try:
         store.pending_input[str(CHAT_ID)] = "worry"
         await context.bot.send_message(chat_id=CHAT_ID, parse_mode="HTML",
-            text="🫣 <b>Дневная разгрузка</b>\n\nСейчас не анализируй, просто выгрузи мысли.\n"
-                 "Каждая тревога - с новой строки.\nВечером проверим, что было фактами, а что шумом.")
+            text="🫣 <b>Дневная разгрузка</b>\n\nСейчас не анализируй, просто выгрузи мысли.\n\n"
+                 "Каждая тревога - с новой строки.\n\nВечером проверим, что было фактами, а что шумом…")
     except Exception:
         pass
 
@@ -497,32 +499,6 @@ async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
         return
     try:
         await myday.send_evening_review(context.bot, CHAT_ID)
-    except Exception:
-        pass
-
-async def job_vocab(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID or not settings.notif_on(CHAT_ID, "vocab"):
-        return
-    try:
-        await learning.send_vocab_cards(context.bot, CHAT_ID)
-    except Exception:
-        pass
-
-async def job_weekly(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID:
-        return
-    import ai
-    entries = store.get_list(config.DIARY_KEY, CHAT_ID)
-    diary = "; ".join(e["text"] for e in entries[-7:]) if entries else "нет записей"
-    try:
-        prompt = (f"Тёплый короткий итог недели для Дмитрия. Записи: {diary}. "
-                  f"Формат: 📊 Итоги недели. 3-4 строки: инсайт, что получилось, настрой на следующую. "
-                  f"{config.LAGOM} Без markdown.")
-        await send_long(context.bot, CHAT_ID, ai.llm(prompt, 500, 0.8))
-    except Exception:
-        pass
-    try:
-        await content.find_concerts(context.bot, CHAT_ID, "home")
     except Exception:
         pass
 
@@ -607,8 +583,6 @@ def main():
     jq.run_daily(job_grammar, time=datetime.strptime("11:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
     jq.run_daily(job_checkin_day, time=datetime.strptime("14:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
     jq.run_daily(job_checkin_evening, time=datetime.strptime("20:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
-    jq.run_daily(job_weekly, time=datetime.strptime("19:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=(6,))
-    jq.run_daily(job_vocab, time=datetime.strptime("12:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=(6,))
 
     print("Bot started")
     app.run_polling(drop_pending_updates=True)

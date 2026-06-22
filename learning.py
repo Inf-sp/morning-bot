@@ -287,18 +287,52 @@ async def del_word(bot, cid, i):
         store.set_list(config.DICT_KEY, cid, words)
     await send_dict(bot, cid)
 
+WEEK_TRACK = {
+    0: ("Свежая кровь", "Загрузка",
+        "Берём 5 новых слов и 2 фразы. Прочитай вслух, покрути в голове. Больше ничего."),
+    1: ("Первый повтор", "Эффект генерации",
+        "Повтори вчерашнее. Посмотри на русский - вспомни перевод. Придумай ОДНО смешное предложение."),
+    2: ("День разгрузки", "Микро-доза",
+        "Повтори только фразы за понедельник. Слова не трогай. Есть силы - добавь 2 новых слова."),
+    3: ("Проверка боем", "Активное вспоминание",
+        "Повторяем всё за Пн и Ср. Закрой перевод рукой, вспоминай. Ошибся - отметь крестиком."),
+    4: ("Финал недели", "Зачистка хвостов",
+        "Повтори только слова, где вчера были крестики. Короткий спринт."),
+    5: ("Легальный отдых", "Полный оффлайн",
+        "Никакой учёбы. Мозгу нужен чистый отдых для переноса в долговременную память."),
+    6: ("Легальный отдых", "Полный оффлайн",
+        "Никакой учёбы. Дай мозгу отдохнуть - это часть процесса."),
+}
+
 async def send_morning_word(bot, cid):
-    """Утреннее слово (11:00) - случайное из словаря пользователя."""
-    words = _ensure_dict(cid)
-    if not words:
-        return
+    """11:00 - Daily Words: метод дня недели + порция слов из словаря."""
     import random as _r
-    w = _r.choice(words)
-    flag = "🇬🇧" if (isinstance(w, dict) and w.get("lang") == "en") else "🇳🇱"
-    word = _w_field(w, "word", "nl", "en")
-    ru = _w_field(w, "ru")
-    txt = f"📖 <b>Слово дня</b> {flag}\n\n<b>{esc(word)}</b> - {esc(ru)}"
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML")
+    from datetime import datetime
+    wd = datetime.now(config.TZ).weekday()
+    title, phase, method = WEEK_TRACK[wd]
+    words = _ensure_dict(cid)
+    L = ["📚 <b>Daily Words | Повторение</b>", "", f"<b>{title}</b> - {phase}", esc(method)]
+    # выходные - отдых, слова не шлём
+    if wd >= 5 or not words:
+        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
+        return
+    portion = _r.sample(words, min(5, len(words)))
+    L += ["", "🗂 <b>Порция на сегодня:</b>"]
+    rows = []
+    for w in portion:
+        word = _w_field(w, "word", "nl", "en")
+        ru = _w_field(w, "ru")
+        L.append(f"• {esc(word)} → {esc(ru)}")
+        # индекс для удаления
+        try:
+            idx = words.index(w)
+            rows.append([InlineKeyboardButton(f"❌ {word[:24]}", callback_data=f"worddel_{idx}")])
+        except ValueError:
+            pass
+    L += ["", "💡 <b>Контекст:</b> применяй эти слова сразу, когда думаешь о рутине."]
+    rows.append([InlineKeyboardButton("🗂️ Мой словарь", callback_data="a_dict")])
+    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
+                           reply_markup=InlineKeyboardMarkup(rows))
 
 
 # ================= ИЗУЧАЕМЫЕ ТЕМЫ (раздельно NL / EN) =================
