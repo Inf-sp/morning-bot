@@ -155,6 +155,7 @@ async def save_plan(bot, cid):
         "text": plan, "source": "План поездки", "bucket": "fav", "full": True,
     })
     await bot.send_message(chat_id=cid, text=f"💾 План поездки ({country}) сохранён в «Мои сохранения».")
+    await send_go(bot, cid)
 
 async def send_my(bot, cid):
     favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
