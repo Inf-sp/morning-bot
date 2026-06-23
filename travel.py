@@ -5,6 +5,12 @@ import store
 import ai
 from util import country_flag, esc
 
+def _plan_countries(cid):
+    """Страны из уже сохранённых планов поездок (вкладка «Планы»)."""
+    notes = store.get_list(config.NOTES_KEY, cid)
+    return [n.get("country", "") for n in notes
+            if isinstance(n, dict) and n.get("bucket") == "plan" and n.get("country")]
+
 def travel_suggest_one(cid):
     visited = store.get_list(config.COUNTRIES_KEY, cid)            # Мои страны (был/посещённые)
     if not visited:
@@ -13,7 +19,8 @@ def travel_suggest_one(cid):
     favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)           # закладки
     fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
     disliked = store.get_list(config.TRAVEL_DISLIKE_KEY, cid)
-    skip = ", ".join([str(x) for x in visited] + fav_names + [str(x) for x in disliked])
+    plans = _plan_countries(cid)
+    skip = ", ".join([str(x) for x in visited] + fav_names + [str(x) for x in disliked] + plans)
     prompt = f"""Уже был / в закладках / не интересно (СТРОГО НЕ предлагай ничего из этого списка): {skip}.
 Профиль: любит интеллектуальную атмосферу, города с характером, природу; путешествия важнее вещей.
 Предложи РОВНО 1 НОВУЮ страну, которой ТОЧНО НЕТ в списке выше. Перепроверь, что её нет в списке. Компактно. Верни JSON:
@@ -52,7 +59,8 @@ async def send_go(bot, cid):
     favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
     fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
     disliked = store.get_list(config.TRAVEL_DISLIKE_KEY, cid)
-    skip_set = {str(x).strip().lower() for x in (list(visited) + fav_names + list(disliked)) if str(x).strip()}
+    plans = _plan_countries(cid)
+    skip_set = {str(x).strip().lower() for x in (list(visited) + fav_names + list(disliked) + plans) if str(x).strip()}
     d = None
     try:
         for _ in range(3):  # до 3 попыток получить НОВУЮ страну
@@ -152,7 +160,8 @@ async def save_plan(bot, cid):
         await bot.send_message(chat_id=cid, text="Сначала собери план поездки."); return
     store.add_to_list(config.NOTES_KEY, cid, {
         "date": datetime.now(config.TZ).strftime("%d.%m"),
-        "text": plan, "source": "План поездки", "bucket": "fav", "full": True,
+        "text": plan, "source": "План поездки", "bucket": "plan", "full": True,
+        "country": country,
     })
-    await bot.send_message(chat_id=cid, text=f"💾 План поездки ({country}) сохранён в «Мои сохранения».")
+    await bot.send_message(chat_id=cid, text=f"💾 План поездки ({country}) сохранён в «Мои сохранения» → «Планы».")
     await send_go(bot, cid)

@@ -8,6 +8,7 @@ import store
 import ai
 import weather
 import balance
+import learning
 from util import esc, _WEEKDAYS, _MONTHS, flag_from_cc, country_flag
 
 TZ = config.TZ
@@ -126,6 +127,69 @@ def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", 
 Правила для outfit: 1 верх + 1 низ + обувь (+ опц. аксессуар), сочетание по цвету, минимализм. От +24°C без дождя - ШОРТЫ + футболка; +17..+23 - лёгкие брюки + футболка/рубашка; ниже +16 или дождь/ветер - слои/ветровка, закрытая обувь. Без обращения по имени."""
     return ai.llm_json(prompt, 600)
 
+def _cap(s):
+    s = (s or "").strip()
+    return s[:1].upper() + s[1:] if s else s
+
+def _is_word_entry(w):
+    """Запись словаря - именно СЛОВО, а не фраза."""
+    if not isinstance(w, dict):
+        return False
+    if w.get("kind"):
+        return w["kind"] == "word"
+    return " " not in (w.get("word") or "").strip()
+
+def _fill_translations(ru, word, lang):
+    """Возвращает (nl, en): известный язык как есть, недостающий - переводим (и кэшируем у вызывающего)."""
+    nl = word if lang == "nl" else ""
+    en = word if lang == "en" else ""
+    if nl and en:
+        return nl, en
+    known = "нидерландском" if lang == "nl" else "английском"
+    try:
+        d = ai.llm_json(
+            f"Слово на русском: «{ru}». Уже известно на {known}: «{word}». "
+            "Дай недостающие переводы. СТРОГО: nl - только на нидерландском (с артиклем de/het), "
+            "en - только на английском. Одним словом/словосочетанием, без пояснений, без других языков.\n"
+            'JSON: {"nl":"нидерландский перевод","en":"английский перевод"}',
+            200, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
+        nl = nl or (d.get("nl") or "").strip()
+        en = en or (d.get("en") or "").strip()
+    except Exception:
+        pass
+    return nl, en
+
+def _word_of_day(cid):
+    """Слово дня: ОБЯЗАТЕЛЬНО и только из словаря СЛОВ (не фраз). Формат: Русский → 🇳🇱 → 🇬🇧."""
+    words = learning._ensure_dict(cid)
+    pool = [w for w in words if _is_word_entry(w)
+            and (w.get("ru") or "").strip() and (w.get("word") or "").strip()]
+    if not pool:
+        return ""
+    w = random.choice(pool)
+    ru = (w.get("ru") or "").strip()
+    lang = "en" if w.get("lang") == "en" else "nl"
+    nl = (w.get("nl") or (w.get("word") if lang == "nl" else "") or "").strip()
+    en = (w.get("en") or (w.get("word") if lang == "en" else "") or "").strip()
+    if not nl or not en:
+        nl2, en2 = _fill_translations(ru, w.get("word", ""), lang)
+        nl, en = nl or nl2, en or en2
+        # кэшируем перевод в записи, чтобы не переводить повторно
+        if nl:
+            w["nl"] = nl
+        if en:
+            w["en"] = en
+        try:
+            store.set_list(config.DICT_KEY, cid, words)
+        except Exception:
+            pass
+    parts = [_cap(ru)]
+    if nl:
+        parts.append(f"🇳🇱 {_cap(nl)}")
+    if en:
+        parts.append(f"🇬🇧 {_cap(en)}")
+    return " → ".join(parts)
+
 _day_cache = {}  # cid -> {"date":..., "text":..., "ex":..., "outfit":...}
 
 def reset_day_cache(cid):
@@ -168,13 +232,7 @@ def _build_day_text(cid):
     ex = plany_extras(s.get("country", ""), day_str, s.get("city", ""),
                       weather_text=wblock, wardrobe_text=store.wardrobe_to_text(store.load_wardrobe()),
                       weekday=weekday_name, is_weekend=is_weekend, cc=s.get("cc", ""))
-    dict_words = store.get_list(config.DICT_KEY, cid)
-    word_line = ""
-    if dict_words:
-        w = random.choice(dict_words)
-        word = w.get("word", "") if isinstance(w, dict) else str(w)
-        ru = w.get("ru", "") if isinstance(w, dict) else ""
-        word_line = f"{word} → {ru}"
+    word_line = _word_of_day(cid)
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     def cap(x): return x[:1].upper() + x[1:] if x else x

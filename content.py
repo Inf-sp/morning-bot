@@ -1,5 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import re
+import random
 import config
 import store
 import ai
@@ -36,7 +37,8 @@ def content_recommend(kind, cid):
 
 Его уже отмеченные работы (референсы вкуса): {anchors}
 
-Порекомендуй РОВНО 5 {what}, максимально точно под этот профиль вкуса.{avoid}
+Порекомендуй РОВНО 5 {what}, максимально точно под этот профиль вкуса.
+Обязательно дай СМЕСЬ: и фильмы, и сериалы - минимум 2 сериала из 5.{avoid}
 JSON: {{"items": [{{"title": "название (год)", "title_en": "оригинальное/английское название", "hook": "1 строка: на что похоже из его референсов и чем зацепит"}}]}}"""
         return ai.llm_json(prompt, 1000)
 
@@ -107,7 +109,7 @@ def _tmdb_lookup(title, title_en=""):
             return {"name": x.get("title") or x.get("name") or q,
                     "name_en": x.get("original_title") or x.get("original_name") or "",
                     "year": date[:4] if date else "", "rating": x.get("vote_average") or 0,
-                    "genres": genres,
+                    "genres": genres, "kind": kind,
                     "poster": (f"https://image.tmdb.org/t/p/w500{poster}" if poster else None),
                     "url": f"https://www.themoviedb.org/{kind}/{x.get('id')}",
                     "overview": overview}
@@ -125,21 +127,37 @@ def _display_title(it, tm):
 _BAD_TMDB = ("making of", "behind the scenes", "bonus", "featurette",
              "the making", "deleted scenes", "trailer", "teaser")
 
+def _clip(text, limit=450):
+    """Аккуратно обрезает описание по концу предложения/слова, без обрыва на полуслове."""
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+    if end >= int(limit * 0.5):
+        return cut[:end + 1].strip()
+    sp = cut.rfind(" ")
+    return (cut[:sp] if sp > 0 else cut).rstrip(" ,.;:—-") + "…"
+
 def _movie_card(it, tm):
     title = (tm["name"] if tm else it.get("title", ""))
     year = f" ({tm['year']})" if tm and tm["year"] else ""
-    cap = [f"🎬 <b>{esc(title)}{year}</b>"]
+    kind = (tm.get("kind") if tm else "") or ""
+    icon = "📺" if kind == "tv" else "🎬"
+    type_label = "Сериал" if kind == "tv" else ("Фильм" if kind == "movie" else "")
+    cap = [f"{icon} <b>{esc(title)}{year}</b>"]
     en = (tm.get("name_en") if tm else "") or it.get("title_en", "")
     if en and en.lower() != title.lower():
         cap.append(f"<i>{esc(en)}</i>")
-    if tm and tm.get("genres"):
+    genre_bits = " · ".join(x for x in [type_label, (tm.get("genres") if tm else "")] if x)
+    if genre_bits:
         cap.append("")
-        cap.append(f"🎭 {esc(tm['genres'])}")
+        cap.append(f"🎭 {esc(genre_bits)}")
     if tm and tm["rating"]:
         cap.append(f"⭐ {tm['rating']:.1f}/10 TMDb")
     if tm and tm.get("overview"):
         cap.append("")
-        cap.append(esc(tm["overview"][:300]))
+        cap.append(esc(_clip(tm["overview"])))
     cap.append("")
     cap.append(f"💡 {esc(it.get('hook', ''))}")
     if tm and tm.get("url"):
@@ -303,6 +321,62 @@ async def _send_book_card(bot, cid, it, i):
             pass
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
 
+# Топ must-read книги - гарантированный фолбэк, если ИИ не ответил
+_FALLBACK_BOOKS = [
+    {"title": "Мастер и Маргарита", "title_en": "The Master and Margarita", "year": "1967",
+     "author": "Михаил Булгаков", "desc": "Сатира, мистика и история любви в одном романе.",
+     "why": ["Многослойность: дьявол в Москве, Понтий Пилат и вечная любовь сразу",
+             "Из тех книг, что перечитывают всю жизнь и каждый раз видят новое"],
+     "plot": "Воланд со свитой устраивает хаос в советской Москве, а параллельно разворачивается роман Мастера о Пилате и история его любви к Маргарите.",
+     "quote": "Рукописи не горят.",
+     "hook": "Абсолютная классика, которую стоит прочесть хотя бы раз."},
+    {"title": "1984", "title_en": "1984", "year": "1949",
+     "author": "Джордж Оруэлл", "desc": "Главная антиутопия XX века о тотальной слежке.",
+     "why": ["Предсказала мир, в котором мы во многом живём",
+             "Меняет взгляд на свободу, правду и язык"],
+     "plot": "Уинстон Смит живёт в государстве, где Большой Брат следит за каждым, и пытается сохранить способность думать самостоятельно.",
+     "quote": "Война - это мир. Свобода - это рабство. Незнание - сила.",
+     "hook": "Если не читал - это пробел, который точно стоит закрыть."},
+    {"title": "Маленький принц", "title_en": "Le Petit Prince", "year": "1943",
+     "author": "Антуан де Сент-Экзюпери", "desc": "Мудрая сказка для взрослых о главном.",
+     "why": ["Читается за вечер, остаётся с тобой на годы",
+             "Простыми словами о любви, дружбе и смысле"],
+     "plot": "Лётчик в пустыне встречает мальчика с другой планеты, и через его рассказы открываются простые истины о том, что по-настоящему важно.",
+     "quote": "Мы в ответе за тех, кого приручили.",
+     "hook": "Тёплая книга, которую стоит прочитать всем."},
+    {"title": "Убить пересмешника", "title_en": "To Kill a Mockingbird", "year": "1960",
+     "author": "Харпер Ли", "desc": "Роман о справедливости и взрослении на юге США.",
+     "why": ["Учит эмпатии без морализаторства",
+             "Один из главных романов о совести и предрассудках"],
+     "plot": "Девочка Скаут растёт в маленьком городке, где её отец-адвокат защищает несправедливо обвинённого, и взрослеет, сталкиваясь с миром взрослых.",
+     "hook": "Книга из всех списков «обязательного к прочтению»."},
+    {"title": "Сто лет одиночества", "title_en": "Cien años de soledad", "year": "1967",
+     "author": "Габриэль Гарсиа Маркес", "desc": "Эталон магического реализма.",
+     "why": ["Завораживающий язык и целый придуманный мир",
+             "Семейная сага, которую считают одной из лучших книг века"],
+     "plot": "История нескольких поколений семьи Буэндиа в вымышленном городке Макондо, где обыденное и волшебное переплетены.",
+     "hook": "Если хочешь большую сильную книгу - начни с неё."},
+    {"title": "Преступление и наказание", "title_en": "Crime and Punishment", "year": "1866",
+     "author": "Фёдор Достоевский", "desc": "Психологический роман о вине и искуплении.",
+     "why": ["Заглядывает в самые тёмные уголки разума",
+             "Классика, которая держит как триллер"],
+     "plot": "Студент Раскольников убивает старуху-процентщицу, проверяя свою теорию, и оказывается раздавлен муками совести.",
+     "hook": "Достоевский, с которого стоит начать знакомство."},
+]
+
+def _book_used(cid):
+    used = set()
+    for key in (config.READLIST_KEY, config.BOOK_BLACKLIST_KEY):
+        for x in store.get_list(key, cid):
+            used.add((x if isinstance(x, str) else str(x)).strip().lower())
+    return used
+
+def _fallback_book(cid, extra_skip=()):
+    """Гарантированная рекомендация: популярная must-read книга, ещё не виденная пользователем."""
+    used = _book_used(cid) | {str(x).strip().lower() for x in extra_skip}
+    pool = [b for b in _FALLBACK_BOOKS if b["title"].lower() not in used] or _FALLBACK_BOOKS
+    return random.choice(pool)
+
 async def send_books_reco(bot, cid):
     await bot.send_message(chat_id=cid, text="Подбираю книги под твой вкус...")
     items = []
@@ -314,9 +388,7 @@ async def send_books_reco(bot, cid):
             items = []
         if items:
             break
-    if not items:
-        await bot.send_message(chat_id=cid, text="Не удалось подобрать книгу. Попробуй ещё раз."); return
-    it = items[0]
+    it = items[0] if items else _fallback_book(cid)
     store.last_recos[str(cid)] = {"kind": "book", "items": [it.get("title", "")]}
     store.last_source[str(cid)] = "Досуг · Книги"
     store.last_answer[str(cid)] = it.get("title", "")
@@ -333,10 +405,8 @@ async def book_dislike(bot, cid, i):
         items = data.get("items", [])
     except Exception:
         items = []
-    if not items:
-        return
-    it = items[0]
     rec = store.last_recos.get(str(cid), {"kind": "book", "items": []})
+    it = items[0] if items else _fallback_book(cid, extra_skip=rec.get("items", []))
     rec["items"].append(it.get("title", ""))
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1

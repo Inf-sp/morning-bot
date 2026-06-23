@@ -237,27 +237,51 @@ async def send_proverb(bot, cid, language):
 
 
 # ================= СЛОВАРЬ (раздельно NL / EN) =================
-def _normalize_word(raw, lang="nl"):
-    if lang == "en":
-        spec = '{"word":"английское слово/фраза","ru":"русский перевод"}'
-        lng = "английского"
-    else:
-        spec = '{"word":"нидерландское слово/фраза с артиклем (de/het)","ru":"русский перевод"}'
-        lng = "нидерландского"
-    try:
-        d = ai.llm_json(f"Выдели главное слово/фразу {lng} языка из текста и переведи на русский.\n"
-                        f"Текст: {raw}\nJSON: {spec}", 300, LO)
-        return {"lang": lang, "word": d.get("word", "")[:80], "ru": d.get("ru", "")}
-    except Exception:
-        return {"lang": lang, "word": str(raw)[:60], "ru": ""}
+def _parse_batch(text, lang_hint):
+    """Разбирает присланный текст на отдельные слова/фразы с авто-определением языка и типа."""
+    spec = ("Раздели текст на отдельные слова и фразы (разделители: новые строки, запятые, точки с запятой, цифры-нумерация). "
+            "Для КАЖДОГО элемента определи: lang (nl - нидерландский или en - английский), "
+            "kind (word - одно слово, phrase - выражение из нескольких слов), и перевод ru на русский. "
+            "Нидерландские существительные - с артиклем de/het. "
+            f"Если язык элемента неочевиден, ставь \"{lang_hint}\". "
+            'Верни ТОЛЬКО JSON: {"items":[{"word":"оригинал","ru":"перевод","lang":"nl|en","kind":"word|phrase"}]}')
+    d = ai.llm_json(f"{spec}\n\nТекст:\n{text}", 1500, LO)
+    return d.get("items", []) if isinstance(d, dict) else []
 
-async def add_word_manual(bot, cid, text, lang="nl", kind="word"):
-    d = _normalize_word(text, lang)
-    d["kind"] = kind
-    store.add_to_list(config.DICT_KEY, cid, d)
-    flag = "🇬🇧" if lang == "en" else "🇳🇱"
-    label = "Слово" if kind == "word" else "Фраза"
-    await bot.send_message(chat_id=cid, text=f"📖 {label} добавлено: {flag} {d.get('word','')} - {d.get('ru','')}")
+async def add_words_batch(bot, cid, text, lang="nl"):
+    """Добавляет много слов/фраз разом: каждое отдельной записью, авто-тип (слово/фраза) и язык."""
+    try:
+        items = _parse_batch(text, lang)
+    except Exception:
+        items = []
+    if not items:
+        # фолбэк: бьём по строкам/запятым, язык = текущий, тип по пробелу, без перевода
+        raw = re.split(r"[\n;,]+", text)
+        items = [{"word": x.strip(), "ru": "", "lang": lang,
+                  "kind": "phrase" if " " in x.strip() else "word"}
+                 for x in raw if x.strip()]
+    added = {"nl": {"word": 0, "phrase": 0}, "en": {"word": 0, "phrase": 0}}
+    for it in items:
+        w = (it.get("word") or "").strip()
+        if not w:
+            continue
+        lng = "en" if it.get("lang") == "en" else "nl"
+        knd = "phrase" if (it.get("kind") == "phrase" or " " in w) else "word"
+        store.add_to_list(config.DICT_KEY, cid, {"lang": lng, "word": w[:80],
+                                                 "ru": (it.get("ru") or "").strip(), "kind": knd})
+        added[lng][knd] += 1
+    if not any(added[l][k] for l in added for k in added[l]):
+        await bot.send_message(chat_id=cid, text="Не удалось распознать слова. Попробуй ещё раз."); return
+    parts = []
+    for lng, flag in (("nl", "🇳🇱"), ("en", "🇬🇧")):
+        seg = []
+        if added[lng]["word"]:
+            seg.append(f"слов: {added[lng]['word']}")
+        if added[lng]["phrase"]:
+            seg.append(f"фраз: {added[lng]['phrase']}")
+        if seg:
+            parts.append(f"{flag} " + ", ".join(seg))
+    await bot.send_message(chat_id=cid, text="📖 Добавлено - " + "; ".join(parts))
     await send_dict_lang(bot, cid, lang)
 
 def _w_field(w, *keys):
@@ -319,8 +343,7 @@ async def send_dict_lang(bot, cid, lang):
     txt = (f"{flag} <b>Словарь · {name}</b>\n\n"
            f"Слов: {c['word']} · Фраз: {c['phrase']}\n\nВыбери действие 👇")
     rows = [
-        [InlineKeyboardButton(f"{flag} Добавить слово", callback_data=f"a_dictaddw_{lang}")],
-        [InlineKeyboardButton(f"{flag} Добавить фразу", callback_data=f"a_dictaddp_{lang}")],
+        [InlineKeyboardButton("➕ Добавить новое слово или фразу", callback_data=f"a_dictadd_{lang}")],
         [InlineKeyboardButton("✏️ Редактировать список слов", callback_data=f"a_dictedit_{lang}_word")],
         [InlineKeyboardButton("✏️ Редактировать список фраз", callback_data=f"a_dictedit_{lang}_phrase")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="a_dict")],
@@ -485,6 +508,13 @@ GAME_UI = {
                 "correct": "✅ Goed!", "wrong": "❌ Niet juist", "retry": "Nog een poging - typ een naam of neem een hint."},
 }
 
+def _dot(s):
+    """Гарантирует точку в конце предложения/подсказки."""
+    s = (s or "").strip()
+    if s and s[-1] not in ".!?…:":
+        s += "."
+    return s
+
 def game_data(clue_lang, difficulty, recent):
     diff_map = {"easy": "ОЧЕНЬ известный и популярный персонаж, которого знают почти все "
                         "(герои Disney/Pixar/Marvel-уровня узнаваемости, мировые звёзды, классика кино и мультфильмов). "
@@ -494,18 +524,20 @@ def game_data(clue_lang, difficulty, recent):
     avoid = ("Не загадывай: " + ", ".join(recent[-30:])) if recent else ""
     prompt = f"""Игра-детектив. Загадай персонажа/личность (кино, мультфильмы, наука, история, музыка, литература).
 Сложность: {diff_map.get(difficulty, diff_map['med'])}. ВЕСЬ текст на языке: {clue_lang}. {avoid}
+Каждая подсказка и каждое предложение заканчивается точкой.
 Ответь строго, каждое поле с новой строки, без markdown:
 CLUES: 4 подсказки на языке {clue_lang}, через | , от непрямой к явной, без имени
 ANSWER: имя на языке {clue_lang}
 ALIASES: то же имя на русском, английском и нидерландском через |
 HINT: ещё одна явная подсказка на языке {clue_lang}
+HINT2: совсем простая, почти очевидная подсказка про того же персонажа (но без имени), на языке {clue_lang}
 QUOTE: короткая фраза в духе персонажа на языке {clue_lang}
 EXPLAIN: 1-2 предложения почему это он (на языке {clue_lang})"""
-    raw = ai.llm(prompt, 800, 1.0, LO)
+    raw = ai.llm(prompt, 900, 1.0, LO)
     out = {}
     for key, field in (("CLUES", "clues"), ("ANSWER", "answer"), ("ALIASES", "aliases"),
-                       ("HINT", "hint"), ("QUOTE", "quote"), ("EXPLAIN", "explain")):
-        m = re.search(rf"{key}:\s*(.+?)(?=\n[A-Z]+:|\Z)", raw, re.S)
+                       ("HINT", "hint"), ("HINT2", "hint2"), ("QUOTE", "quote"), ("EXPLAIN", "explain")):
+        m = re.search(rf"{key}:\s*(.+?)(?=\n[A-Z]+\d*:|\Z)", raw, re.S)
         out[field] = m.group(1).strip() if m else ""
     out["clues"] = out.get("clues", "").replace(" | ", "\n").replace("|", "\n")
     out["aliases"] = [x.strip() for x in out.get("aliases", "").split("|") if x.strip()]
@@ -542,9 +574,10 @@ async def send_game(bot, cid):
         d = game_data(lang, cfg["difficulty"], recent)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
+    hints = [_dot(h) for h in [d.get("hint"), d.get("hint2")] if (h or "").strip()]
     store.game_state[str(cid)] = {"answer": d.get("answer", ""), "aliases": d.get("aliases", []),
-                                  "quote": d.get("quote", ""), "hint": d.get("hint", ""),
-                                  "explain": d.get("explain", ""), "tries": 0}
+                                  "quote": d.get("quote", ""), "hints": hints, "hint_i": 0,
+                                  "explain": _dot(d.get("explain", "")), "tries": 0}
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["hint"], callback_data="game_hint"),
          InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")],
@@ -552,7 +585,7 @@ async def send_game(bot, cid):
          InlineKeyboardButton(ui["chlang"], callback_data="game_change")],
         [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
     ])
-    clues = "\n".join(f"• {c.strip()}" for c in d.get("clues", "").split("\n") if c.strip())
+    clues = "\n".join(f"• {_dot(c)}" for c in d.get("clues", "").split("\n") if c.strip())
     txt = f"<b>{ui['title']}</b>\n\n<b>{ui['suspect']}</b>\n{clues}\n\n{ui['who']} 🤔"
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 
