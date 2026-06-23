@@ -63,27 +63,20 @@ def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", 
 Погода сегодня: {weather_text}
 Гардероб (используй ТОЛЬКО эти вещи, точные названия): {wardrobe_text}
 
-{config.USER_FOCUS_CONTEXT}
-
 {config.myday_rules(city, country, cc)}
 
-Интересный факт и бизнес-идея должны быть про текущую локацию ({place}), не про другие страны.
+Интересный факт должен быть про текущую локацию ({place}), РЕАЛЬНЫЙ и проверяемый, без выдумок и без выводов-домыслов.
 
 Строго валидный JSON, экранируй кавычки, без переносов внутри значений.
 {{
- "focus": "Фокус дня - ОДНА доминанта через глагол действия, одна короткая строка (см. правила [Фокус дня])",
  "outfit": ["верх","низ","обувь","аксессуар"],
- "word_ru": "слово дня на русском (одно слово)",
- "word_nl": "перевод на нидерландский С АРТИКЛЕМ (de/het)",
- "word_en": "перевод на английский С АРТИКЛЕМ (a/the)",
- "idea": "бизнес-идея по правилам [Бизнес-идея] под реалии {place}: Суть одним предложением + Монетизация/MVP одним предложением",
- "fact": "интересный факт по правилам [Интересный факт] про {place}: локальный, удивляющий, максимум 2 коротких предложения",
- "quote": "цитата по правилам [Цитата], строго привязанная к Фокусу дня выше",
+ "fact": "интересный факт по правилам [Интересный факт] про {place}: локальный, РЕАЛЬНЫЙ, удивляющий, максимум 2 коротких предложения, без домыслов",
+ "quote": "короткая цитата от мыслителя/учёного/предпринимателя (Сенека, Марк Аврелий, Навал, Джобс), без банальностей",
  "quote_src": "автор"
 }}
 Правила для outfit: 1 верх + 1 низ + обувь (+ опц. аксессуар), сочетание по цвету, минимализм. От +24°C без дождя - ШОРТЫ + футболка; +17..+23 - лёгкие брюки + футболка/рубашка; ниже +16 или дождь/ветер - слои/ветровка, закрытая обувь. Без обращения по имени.
-Цитата должна логически соответствовать Фокусу дня. НЕ повторяй одно и то же в word, idea и fact. Кратко."""
-    return ai.llm_json(prompt, 1300)
+Факт - только реальные проверяемые сведения. Кратко."""
+    return ai.llm_json(prompt, 1100)
 
 _day_cache = {}  # cid -> {"date":..., "text":..., "ex":..., "outfit":...}
 
@@ -129,12 +122,13 @@ def _build_day_text(cid):
                       weather_text=wblock, wardrobe_text=store.wardrobe_to_text(store.load_wardrobe()),
                       weekday=weekday_name, is_weekend=is_weekend, cc=s.get("cc", ""))
     dict_words = store.get_list(config.DICT_KEY, cid)
+    word_line = ""
     if dict_words:
-        w = random.choice(dict_words[-20:])
-        if isinstance(w, dict) and w.get("nl"):
-            ex["word_ru"] = w.get("ru", ex.get("word_ru", ""))
-            ex["word_nl"] = w.get("nl", ex.get("word_nl", ""))
-            ex["word_en"] = w.get("en", ex.get("word_en", ""))
+        w = random.choice(dict_words)
+        word = w.get("word", "") if isinstance(w, dict) else str(w)
+        ru = w.get("ru", "") if isinstance(w, dict) else ""
+        flagw = "🇬🇧" if (isinstance(w, dict) and w.get("lang") == "en") else "🇳🇱"
+        word_line = f"{flagw} {word} → {ru}"
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     def cap(x): return x[:1].upper() + x[1:] if x else x
@@ -144,12 +138,8 @@ def _build_day_text(cid):
     L += [f"<b>{icon} Погода сегодня</b>",
           f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}", ""]
     outfit = " + ".join(ex.get("outfit", [])).rstrip(".")  # для «Сохранить образ дня», в сводке не показываем
-    focus = (ex.get("focus") or "").strip()
-    if focus:
-        L += ["<b>🎯 Фокус дня</b>", esc(focus), ""]
-    L += ["<b>📚 Слово дня</b>",
-          f"{cap(esc(ex.get('word_ru','')))} → 🇳🇱 {cap(esc(ex.get('word_nl','')))} → 🇬🇧 {cap(esc(ex.get('word_en','')))}", ""]
-    L += ["<b>🚀 Бизнес-идея</b>", esc(ex.get("idea", "").strip()), ""]
+    if word_line:
+        L += ["<b>📚 Слово дня</b>", esc(word_line), ""]
     fact = ex.get("fact") or ""
     if not fact:
         facts = ex.get("facts", [])
@@ -185,23 +175,8 @@ async def handle_callback(bot, cid, q, data):
     ex = cache.get("ex", {})
     if data == "md_worrycheck":
         await show_worry_check(bot, cid); return
-    if data == "md_idea":
-        import assistant
-        await bot.send_message(chat_id=cid, text="Думаю...")
-        try:
-            out = assistant._gen_idea(cid)
-        except Exception as e:
-            await bot.send_message(chat_id=cid, text=str(e)); return
-        store.last_source[str(cid)] = "Идеи"
-        store.last_answer[str(cid)] = out
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Новая идея", callback_data="md_idea")],
-                                   [InlineKeyboardButton("⭐ В закладки", callback_data="as_fav")],
-                                   [InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")]])
-        await bot.send_message(chat_id=cid, text=out, reply_markup=kb)
-        return
     if data == "md_fav":
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🚀 Сохранить бизнес-идею", callback_data="md_save_idea")],
             [InlineKeyboardButton("🔬 Сохранить интересный факт", callback_data="md_save_fact")],
             [InlineKeyboardButton("💭 Сохранить цитату", callback_data="md_save_quote")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")],
@@ -218,7 +193,6 @@ async def handle_callback(bot, cid, q, data):
             facts = ex.get("facts", [])
             fact_txt = facts[0] if isinstance(facts, list) and facts else (facts if isinstance(facts, str) else "")
         mapping = {
-            "idea": ("Идеи", ex.get("idea", "")),
             "fact": ("Факты", fact_txt),
             "quote": ("Цитаты", (f"«{_strip_quotes(ex.get('quote',''))}» — {ex.get('quote_src','')}") if ex.get("quote") else ""),
         }
@@ -263,9 +237,6 @@ def assemble_morning(chat_id):
         greet = "Привет. На связи. Мысли в сторону - включаем действие."
 
     L = [f"<b>{esc(date_line)}</b>", "", esc(greet)]
-    focus = (ex.get("focus") or "").strip()
-    if focus:
-        L += ["", "👨🏻‍💻 <b>Главное на сегодня</b>", esc(focus)]
     # короткая строка погоды
     wline = wblock.split("\n")[0] if wblock else ""
     if wline:
