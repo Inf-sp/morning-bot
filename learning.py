@@ -367,19 +367,8 @@ async def send_dict_lang(bot, cid, lang):
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_dict_edit(bot, cid, lang, kind):
-    words = _ensure_dict(cid)
-    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-    label = "слов" if kind == "word" else "фраз"
-    items = [(i, w) for i, w in enumerate(words) if _dict_lang(w) == lang and _dict_kind(w) == kind]
-    lines = [f"{flag} <b>Список {label}</b>", ""]
-    rows = []
-    if not items:
-        lines.append("Пусто.")
-    for i, w in items[-40:]:
-        lines.append(f"• {esc(_w_field(w,'word','nl','en'))} - {esc(_w_field(w,'ru'))}")
-        rows.append([InlineKeyboardButton(f"❌ {_w_field(w,'word','nl','en')[:22]}", callback_data=f"worddel_{i}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")])
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    """Редактирование списка = режим чистки (пагинация + мультивыбор)."""
+    await open_cleanup(bot, cid, f"d_{lang}_{kind}")
 
 async def del_word(bot, cid, i):
     words = store.get_list(config.DICT_KEY, cid)
@@ -460,18 +449,16 @@ async def send_topics(bot, cid, language):
     code = _code(language)
     topics = get_topics(cid, language)
     flag = _flag(language)
-    lines = [f"🤓 <b>{flag} Изучаемые темы</b>", ""]
+    lines = [f"🤓 <b>{flag} Изучаемые темы</b>", f"Всего: {len(topics)}", ""]
     if topics:
-        for t in topics:
+        for i, t in enumerate(topics, 1):
             txt = t.get("text", "") if isinstance(t, dict) else str(t)
-            lines.append(f"• {esc(txt)}")
+            lines.append(f"{i}. {esc(txt)}")
     else:
         lines.append("Пока пусто. Добавь тему, которую хочешь разобрать.")
-    rows = []
-    for i, t in enumerate(topics[:30]):
-        txt = (t.get("text", "") if isinstance(t, dict) else str(t))
-        rows.append([InlineKeyboardButton(f"❌ {txt[:26]}", callback_data=f"topicdel_{code}_{i}")])
-    rows.append([InlineKeyboardButton("✍🏻 Добавить тему", callback_data=f"a_topicadd_{code}")])
+    rows = [[InlineKeyboardButton("✍🏻 Добавить тему", callback_data=f"a_topicadd_{code}")]]
+    if topics:
+        rows.append([InlineKeyboardButton("🧹 Убрать выученные", callback_data=f"a_topicclean_{code}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"m_{code}")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -547,6 +534,108 @@ async def del_topic(bot, cid, code, i):
         topics.pop(i)
         store.set_list(_topics_key(language), cid, topics)
     await send_topics(bot, cid, language)
+
+
+# ================= ЧИСТКА СПИСКОВ (пагинация + мультивыбор) =================
+CLEAN_PAGE = 8
+
+def _sel(cid, ctx):
+    return store.list_sel.setdefault(f"{cid}:{ctx}", set())
+
+def _ctx_items(cid, ctx):
+    """(заголовок, items=[(global_id, label)], back_callback) для контекста чистки."""
+    if ctx.startswith("d_"):
+        _, lang, kind = ctx.split("_")
+        flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+        label = "слов" if kind == "word" else "фраз"
+        words = _ensure_dict(cid)
+        items = []
+        for i, w in enumerate(words):
+            if _dict_lang(w) == lang and _dict_kind(w) == kind:
+                term = _w_field(w, "word", "nl", "en")
+                ru = _w_field(w, "ru")
+                items.append((i, f"{term} — {ru}".strip(" —")))
+        return f"{flag} Чистка: {label}", items, f"a_dictlang_{lang}"
+    _, lang = ctx.split("_")
+    language = "нидерландский" if lang == "nl" else "английский"
+    topics = get_topics(cid, language)
+    items = [(i, (t.get("text", "") if isinstance(t, dict) else str(t))) for i, t in enumerate(topics)]
+    return f"{_flag(language)} Чистка: темы", items, f"a_topics_{lang}"
+
+async def send_cleanup(bot, cid, ctx, page=0, q=None):
+    title, items, back = _ctx_items(cid, ctx)
+    sel = _sel(cid, ctx)
+    sel &= {i for i, _ in items}          # отбрасываем устаревшие индексы
+    total = len(items)
+    pages = max(1, (total + CLEAN_PAGE - 1) // CLEAN_PAGE)
+    page = max(0, min(page, pages - 1))
+    chunk = items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]
+    lines = [f"🧹 <b>{esc(title)}</b>", f"Всего: {total} · отмечено: {len(sel)}", "",
+             "Отметь выученное ✅ и нажми «Удалить отмеченные»."]
+    rows = []
+    for idx, lbl in chunk:
+        mark = "✅" if idx in sel else "▫️"
+        rows.append([InlineKeyboardButton(f"{mark} {lbl[:36]}", callback_data=f"clt_{ctx}_{idx}_{page}")])
+    if pages > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"clp_{ctx}_{(page - 1) % pages}"),
+            InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"clp_{ctx}_{(page + 1) % pages}"),
+        ])
+    rows.append([InlineKeyboardButton("☑️ Отметить всё на странице", callback_data=f"cla_{ctx}_{page}")])
+    if sel:
+        rows.append([InlineKeyboardButton(f"🗑 Удалить отмеченные ({len(sel)})", callback_data=f"cld_{ctx}_{page}")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back)])
+    kb = InlineKeyboardMarkup(rows)
+    text = "\n".join(lines)
+    if q is not None:
+        try:
+            await q.message.edit_text(text, parse_mode="HTML", reply_markup=kb); return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+
+def _cleanup_delete(cid, ctx):
+    sel = _sel(cid, ctx)
+    if not sel:
+        return
+    if ctx.startswith("d_"):
+        words = [w for i, w in enumerate(_ensure_dict(cid)) if i not in sel]
+        store.set_list(config.DICT_KEY, cid, words)
+    else:
+        _, lang = ctx.split("_")
+        language = "нидерландский" if lang == "nl" else "английский"
+        topics = [t for i, t in enumerate(get_topics(cid, language)) if i not in sel]
+        store.set_list(_topics_key(language), cid, topics)
+    store.list_sel[f"{cid}:{ctx}"] = set()
+
+async def open_cleanup(bot, cid, ctx):
+    """Свежий вход в режим чистки - сбрасываем выбор."""
+    store.list_sel[f"{cid}:{ctx}"] = set()
+    await send_cleanup(bot, cid, ctx, 0)
+
+async def handle_cleanup(bot, cid, data, q=None):
+    parts = data.split("_")
+    op = parts[0]
+    if op == "clt":                       # переключить галочку
+        page, idx, ctx = int(parts[-1]), int(parts[-2]), "_".join(parts[1:-2])
+        _sel(cid, ctx).symmetric_difference_update({idx})
+        await send_cleanup(bot, cid, ctx, page, q=q); return
+    page, ctx = int(parts[-1]), "_".join(parts[1:-1])
+    if op == "clp":                       # листать страницы
+        await send_cleanup(bot, cid, ctx, page, q=q); return
+    if op == "cla":                       # отметить/снять всю страницу
+        _, items, _ = _ctx_items(cid, ctx)
+        page_ids = {i for i, _ in items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]}
+        sel = _sel(cid, ctx)
+        if page_ids <= sel:               # уже все отмечены - снимаем
+            sel -= page_ids
+        else:                             # иначе отмечаем всю страницу
+            sel |= page_ids
+        await send_cleanup(bot, cid, ctx, page, q=q); return
+    if op == "cld":                       # удалить отмеченные
+        _cleanup_delete(cid, ctx)
+        await send_cleanup(bot, cid, ctx, 0, q=q); return
 
 
 # ================= ИГРА-ДЕТЕКТИВ =================

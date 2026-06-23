@@ -113,6 +113,8 @@ async def answer_callback(update, context):
             elif act == "topicadd_en":
                 store.pending_input[cid] = "topicadd_en"
                 await bot.send_message(chat_id=cid, text="🇬🇧 Напиши тему для изучения - можно сразу несколько, каждую с новой строки. Добавлю и разберу.")
+            elif act.startswith("topicclean_"):
+                await learning.open_cleanup(bot, cid, f"t_{act.split('_')[1]}")
             elif act == "dict":
                 await learning.send_dict(bot, cid)
             elif act == "dictlang_nl":
@@ -230,6 +232,11 @@ async def answer_callback(update, context):
     if data == "game_change_diff":
         cfg = store.game_config.get(cid, {"lang": "русский"})
         await learning.ask_difficulty(bot, cid, cfg["lang"])
+        return
+    if data == "noop":
+        return
+    if data.startswith(("clt_", "clp_", "cla_", "cld_")):
+        await learning.handle_cleanup(bot, cid, data, q)
         return
     if data.startswith("worddel_"):
         await learning.del_word(bot, cid, int(data.split("_")[1]))
