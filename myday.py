@@ -26,17 +26,6 @@ def ensure_lagom(cid):
         pass
     return items
 
-def lagom_line(cid):
-    """Одна фраза Лагом: из списка пользователя, иначе LLM."""
-    items = ensure_lagom(cid)
-    if items:
-        return random.choice(items)
-    try:
-        return ai.llm("Дай одну короткую практику в духе лагом/осознанности для фокуса при СДВГ. "
-                      "1-2 предложения, без markdown, спокойный тон.", 150, 0.8).strip()
-    except Exception:
-        return ""
-
 def _strip_quotes(s):
     """Убирает внешние кавычки (« » \" \" \" ') с краёв, чтобы не задваивать обёртку."""
     s = (s or "").strip()
@@ -202,52 +191,6 @@ async def handle_callback(bot, cid, q, data):
                                                   "text": txt.strip(), "source": cat, "bucket": "fav"})
         await bot.send_message(chat_id=cid, text=f"⭐ Сохранено в «{cat}».")
         return
-
-# --- Утро ---
-def morning_greeting(weather_short):
-    prompt = f"""Короткое утреннее приветствие пользователю на "ты" (по-русски, можно с лёгкой дерзостью), без имени.
-Погода сегодня: {weather_short}
-2-4 строки: приветствие с характером + мини-настрой. В конце ОДИН совет по духу его установок (НЕ про одежду):
-{config.LAGOM}
-Без markdown и звёздочек."""
-    return ai.llm(prompt, 400, 0.95)
-
-def assemble_morning(chat_id):
-    s = store.get_settings(chat_id)
-    cc = s.get("cc", "")
-    city = s.get("city", "")
-    flag = flag_from_cc(cc) or country_flag(s.get("country", ""))
-    now = datetime.now(TZ)
-    weekday = _WEEKDAYS[now.weekday()]
-    date_line = f"{weekday}, {now.day} {_MONTHS[now.month-1]} • {city} {flag}".strip()
-
-    data = weather.fetch_weather(s["lat"], s["lon"], days=2)
-    wblock = weather.weather_block(data, 0, s["city"])
-    is_weekend = now.weekday() >= 5
-    try:
-        ex = plany_extras(s.get("country", ""), now.strftime("%d.%m.%Y"), city,
-                          weather_text=wblock, wardrobe_text=store.wardrobe_to_text(store.load_wardrobe()),
-                          weekday=weekday, is_weekend=is_weekend, cc=cc)
-    except Exception:
-        ex = {}
-    try:
-        greet = morning_greeting(wblock)
-    except Exception:
-        greet = "Привет. На связи. Мысли в сторону - включаем действие."
-
-    L = [f"<b>{esc(date_line)}</b>", "", esc(greet)]
-    # короткая строка погоды
-    wline = wblock.split("\n")[0] if wblock else ""
-    if wline:
-        L += ["", "☁️ <b>Погода сегодня</b>", esc(wline)]
-    lag = lagom_line(chat_id)
-    if lag:
-        L += ["", "🍃 <b>Лагом</b>", esc(lag)]
-    if ex.get("quote"):
-        q = _strip_quotes(ex.get("quote", ""))
-        src = ex.get("quote_src", "")
-        L += ["", "💭 <b>Цитата</b>", f"«{esc(q)}»" + (f" - {esc(src)}" if src else "")]
-    return "\n".join(L)
 
 # --- Мотивация / проверка дня ---
 def diary_reflect(entry):

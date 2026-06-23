@@ -14,7 +14,6 @@ import settings
 import travel
 import content
 import weather
-from util import send_long
 
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID
@@ -167,10 +166,6 @@ async def answer_callback(update, context):
                 await content.send_readlist(bot, cid)
             elif act == "fav":
                 await content.send_fav(bot, cid)
-            elif act == "artists":
-                await content.send_artists(bot, cid)
-            elif act == "artadd":
-                await content.start_add_artist(bot, cid)
             elif act == "concerts_find":
                 await content.find_concerts(bot, cid, "home")
             elif act == "concerts_pick":
@@ -364,10 +359,6 @@ async def text_router(update, context):
             await myday.save_worries(bot, cid, text); return
         if kind == "favorite":
             await content.add_fav(bot, cid, text); return
-        if kind == "artist":
-            await content.add_artist(bot, cid, text); return
-        if kind == "favcountry":
-            await travel.add_country(bot, cid, text); return
         if kind in ("role_doctor", "role_state"):
             await assistant.handle_role(bot, cid, kind.split("_")[1], text); return
         if kind == "leftovers":
@@ -423,25 +414,6 @@ async def document_handler(update, context):
 
 
 # ---------- Команды-обёртки ----------
-async def plany_command(update, context):
-    await update.message.reply_text("Собираю сводку дня...")
-    try:
-        await myday.send_plany(context.bot, update.effective_chat.id)
-    except Exception as e:
-        await update.message.reply_text(f"Ошибка: {e}")
-
-async def weather_command(update, context):
-    days = 1
-    if context.args:
-        try:
-            days = max(1, min(7, int(context.args[0])))
-        except Exception:
-            pass
-    try:
-        await weather.send_weather(context.bot, update.effective_chat.id, days)
-    except Exception as e:
-        await update.message.reply_text(f"Ошибка погоды: {e}")
-
 async def notes_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
     await assistant.send_notes(context.bot, update.effective_chat.id)
@@ -450,52 +422,8 @@ async def setup_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
     await settings.send_home(context.bot, update.effective_chat.id)
 
-async def reload_wardrobe_command(update, context):
-    import json
-    try:
-        with open(config.WARDROBE_FILE, encoding="utf-8") as f:
-            data = json.load(f)
-        store.save_wardrobe(data)
-        n = sum(len(v) for v in data.values())
-        await update.message.reply_text(f"Шкаф обновлён: {n} вещей в {len(data)} категориях.")
-    except Exception as e:
-        await update.message.reply_text(f"Ошибка: {e}")
-
-async def reload_content_command(update, context):
-    import json
-    cid = update.effective_chat.id
-    try:
-        with open("content.json", encoding="utf-8") as f:
-            data = json.load(f)
-        watch = list(data.get("films", [])) + list(data.get("series", [])) + list(data.get("docs", []))
-        read = list(data.get("books", []))
-        store.set_list(config.WATCHLIST_KEY, cid, watch)
-        store.set_list(config.READLIST_KEY, cid, read)
-        await update.message.reply_text(f"Досуг обновлён: {len(watch)} в списке просмотра, {len(read)} в списке чтения.")
-    except Exception as e:
-        await update.message.reply_text(f"Ошибка: {e}")
-
-async def reload_artists_command(update, context):
-    import json
-    cid = update.effective_chat.id
-    try:
-        with open("artists.json", encoding="utf-8") as f:
-            data = json.load(f)
-        store.set_list(config.ARTISTS_KEY, cid, data)
-        await update.message.reply_text(f"Артисты обновлены: {len(data)}.")
-    except Exception as e:
-        await update.message.reply_text(f"Ошибка: {e}")
-
 
 # ---------- Расписание ----------
-async def job_morning(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID or not settings.notif_on(CHAT_ID, "morning"):
-        return
-    try:
-        await send_long(context.bot, CHAT_ID, myday.assemble_morning(CHAT_ID))
-    except Exception as e:
-        await context.bot.send_message(chat_id=CHAT_ID, text=f"Ошибка сводки: {e}")
-
 async def job_grammar(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID or not settings.notif_on(CHAT_ID, "grammar"):
         return
@@ -588,19 +516,12 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("notes", notes_command))
     app.add_handler(CommandHandler("setup", setup_command))
-    app.add_handler(CommandHandler("reload_wardrobe", reload_wardrobe_command))
-    app.add_handler(CommandHandler("reload_content", reload_content_command))
-    app.add_handler(CommandHandler("reload_artists", reload_artists_command))
-    app.add_handler(CommandHandler("plany", plany_command))
-    app.add_handler(CommandHandler("weather", weather_command))
-    app.add_handler(CommandHandler("setcity", weather.setcity_command))
     app.add_handler(CallbackQueryHandler(answer_callback))
     app.add_handler(MessageHandler(filters.LOCATION, weather.location_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
 
     jq = app.job_queue
-    jq.run_daily(job_morning, time=datetime.strptime("08:30", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
     jq.run_daily(job_grammar, time=datetime.strptime("11:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
     jq.run_daily(job_checkin_day, time=datetime.strptime("14:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
     jq.run_daily(job_checkin_evening, time=datetime.strptime("20:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
