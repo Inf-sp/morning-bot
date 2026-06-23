@@ -237,14 +237,31 @@ async def send_proverb(bot, cid, language):
 
 
 # ================= СЛОВАРЬ (раздельно NL / EN) =================
+_BULLET_RE = re.compile(r"^[\s\-\*•·–—>»\d\.\)\(]+")
+_TERM_SEP_RE = re.compile(r"\s+[-–—=:]\s+|\t+")
+
+def _split_term(s):
+    """Убирает маркеры списка и отделяет перевод, если он на той же строке (через - – — : =)."""
+    s = _BULLET_RE.sub("", (s or "").strip()).strip()
+    parts = _TERM_SEP_RE.split(s, maxsplit=1)
+    if len(parts) == 2:
+        return parts[0].strip(), parts[1].strip()
+    return s, ""
+
+def _kind_of(term):
+    """Слово или фраза: считаем по термину без ведущего артикля (de/het/een/the/a/an)."""
+    t = re.sub(r"^(de|het|een|the|a|an)\s+", "", (term or "").strip().lower())
+    return "word" if len(t.split()) <= 1 else "phrase"
+
 def _parse_batch(text, lang_hint):
     """Разбирает присланный текст на отдельные слова/фразы с авто-определением языка и типа."""
-    spec = ("Раздели текст на отдельные слова и фразы (разделители: новые строки, запятые, точки с запятой, цифры-нумерация). "
-            "Для КАЖДОГО элемента определи: lang (nl - нидерландский или en - английский), "
-            "kind (word - одно слово, phrase - выражение из нескольких слов), и перевод ru на русский. "
-            "Нидерландские существительные - с артиклем de/het. "
+    spec = ("Раздели текст на отдельные единицы (разделители: новые строки, запятые, точки с запятой, маркеры списка, нумерация). "
+            "Строки часто в формате «термин - перевод» или «термин — перевод»: в word клади ТОЛЬКО иностранный термин, "
+            "перевод - в ru. Для КАЖДОГО элемента определи: lang (nl - нидерландский или en - английский), "
+            "kind (word - одно слово, в т.ч. существительное с артиклем de/het/the; phrase - выражение из нескольких слов), "
+            "и перевод ru на русский. Нидерландские существительные - с артиклем de/het. "
             f"Если язык элемента неочевиден, ставь \"{lang_hint}\". "
-            'Верни ТОЛЬКО JSON: {"items":[{"word":"оригинал","ru":"перевод","lang":"nl|en","kind":"word|phrase"}]}')
+            'Верни ТОЛЬКО JSON: {"items":[{"word":"иностранный термин без перевода","ru":"перевод","lang":"nl|en","kind":"word|phrase"}]}')
     d = ai.llm_json(f"{spec}\n\nТекст:\n{text}", 1500, LO)
     return d.get("items", []) if isinstance(d, dict) else []
 
@@ -255,20 +272,19 @@ async def add_words_batch(bot, cid, text, lang="nl"):
     except Exception:
         items = []
     if not items:
-        # фолбэк: бьём по строкам/запятым, язык = текущий, тип по пробелу, без перевода
+        # фолбэк: бьём по строкам/запятым, язык = текущий, без перевода
         raw = re.split(r"[\n;,]+", text)
-        items = [{"word": x.strip(), "ru": "", "lang": lang,
-                  "kind": "phrase" if " " in x.strip() else "word"}
-                 for x in raw if x.strip()]
+        items = [{"word": x.strip(), "ru": "", "lang": lang} for x in raw if x.strip()]
     added = {"nl": {"word": 0, "phrase": 0}, "en": {"word": 0, "phrase": 0}}
     for it in items:
-        w = (it.get("word") or "").strip()
-        if not w:
+        # чистим маркеры списка и отделяем перевод, прилипший к слову
+        term, extra_ru = _split_term(it.get("word") or "")
+        if not term:
             continue
+        ru = (it.get("ru") or "").strip() or extra_ru
         lng = "en" if it.get("lang") == "en" else "nl"
-        knd = "phrase" if (it.get("kind") == "phrase" or " " in w) else "word"
-        store.add_to_list(config.DICT_KEY, cid, {"lang": lng, "word": w[:80],
-                                                 "ru": (it.get("ru") or "").strip(), "kind": knd})
+        knd = _kind_of(term)   # тип по самому термину (одно слово = слово)
+        store.add_to_list(config.DICT_KEY, cid, {"lang": lng, "word": term[:80], "ru": ru, "kind": knd})
         added[lng][knd] += 1
     if not any(added[l][k] for l in added for k in added[l]):
         await bot.send_message(chat_id=cid, text="Не удалось распознать слова. Попробуй ещё раз."); return
@@ -460,12 +476,20 @@ async def send_topics(bot, cid, language):
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 
-async def add_topic(bot, cid, text, language):
-    """Сохраняет тему и показывает грамматический разбор."""
-    text = text.strip()
+def _split_topics(text):
+    """Дробит сообщение на отдельные темы по строкам/«;», убирая маркеры списка.
+    Тема может быть из нескольких слов, поэтому по пробелам/запятым НЕ режем."""
+    items = []
+    for line in re.split(r"[\n;]+", text or ""):
+        t = _BULLET_RE.sub("", line.strip()).strip()
+        if t:
+            items.append(t)
+    return items
+
+async def _add_one_topic(bot, cid, text, language):
+    """Сохраняет одну тему и показывает грамматический разбор."""
     store.add_to_list(_topics_key(language), cid, {"text": text})
     flag = _flag(language)
-    # разбор темы
     try:
         breakdown = ai.llm(
             f"Пользователь учит {language}. Он добавил тему/фразу для изучения: \"{text}\".\n"
@@ -480,6 +504,39 @@ async def add_topic(bot, cid, text, language):
     if breakdown:
         L += ["", breakdown]
     code = _code(language)
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ К темам", callback_data=f"a_topics_{code}")]])
+    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
+
+def _topics_overview(topics, language):
+    """Одним запросом - краткая суть по каждой теме (тема -> суть)."""
+    joined = "\n".join(f"- {t}" for t in topics)
+    try:
+        d = ai.llm_json(
+            f"Пользователь учит {language}. Он добавил темы для изучения:\n{joined}\n"
+            "Для КАЖДОЙ темы дай очень короткую суть на русском (1 строка - главное правило/смысл).\n"
+            'Верни ТОЛЬКО JSON: {"items":[{"topic":"тема как есть","tip":"короткая суть"}]}',
+            1000, LO)
+        return {(i.get("topic") or "").strip(): (i.get("tip") or "").strip()
+                for i in d.get("items", [])} if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+async def add_topic(bot, cid, text, language):
+    """Добавляет тему(ы). Если в сообщении несколько - дробит и добавляет каждую отдельно."""
+    topics = _split_topics(text)
+    if not topics:
+        return
+    if len(topics) == 1:
+        await _add_one_topic(bot, cid, topics[0], language)
+        return
+    for t in topics:
+        store.add_to_list(_topics_key(language), cid, {"text": t})
+    tips = _topics_overview(topics, language)
+    flag, code = _flag(language), _code(language)
+    L = [f"Добавил в 🤓 Изучаемые темы {flag}: {len(topics)}", ""]
+    for t in topics:
+        tip = tips.get(t, "")
+        L.append(f"• <b>{esc(t)}</b>" + (f" — {esc(tip)}" if tip else ""))
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ К темам", callback_data=f"a_topics_{code}")]])
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
 

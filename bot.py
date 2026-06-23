@@ -109,10 +109,10 @@ async def answer_callback(update, context):
                 await learning.send_topics(bot, cid, "английский")
             elif act == "topicadd_nl":
                 store.pending_input[cid] = "topicadd_nl"
-                await bot.send_message(chat_id=cid, text="🇳🇱 Напиши тему для изучения (можно с переводом) - добавлю и разберу.")
+                await bot.send_message(chat_id=cid, text="🇳🇱 Напиши тему для изучения - можно сразу несколько, каждую с новой строки. Добавлю и разберу.")
             elif act == "topicadd_en":
                 store.pending_input[cid] = "topicadd_en"
-                await bot.send_message(chat_id=cid, text="🇬🇧 Напиши тему для изучения (можно с переводом) - добавлю и разберу.")
+                await bot.send_message(chat_id=cid, text="🇬🇧 Напиши тему для изучения - можно сразу несколько, каждую с новой строки. Добавлю и разберу.")
             elif act == "dict":
                 await learning.send_dict(bot, cid)
             elif act == "dictlang_nl":
