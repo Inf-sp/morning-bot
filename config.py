@@ -1,7 +1,5 @@
 import os
 import json
-import random
-from datetime import datetime
 from zoneinfo import ZoneInfo
 
 # --- Keys ---
@@ -74,11 +72,6 @@ _LAGOM_ITEMS = _load_lagom_items()
 
 LAGOM = ("Лагом-установки пользователя (используй как ориентир тона и ценностей):\n"
          + "\n".join(f"• {it}" for it in _LAGOM_ITEMS)) if _LAGOM_ITEMS else ""
-
-
-def lagom_of_day():
-    items = _LAGOM_ITEMS or _load_lagom_items()
-    return random.choice(items) if items else "Маленькие шаги тоже ведут вперёд."
 
 
 def place_hint(city="", country="", cc=""):

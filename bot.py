@@ -7,6 +7,8 @@ import config
 import store
 import menu
 import assistant
+import balance
+import notes
 import myday
 import wardrobe
 import learning
@@ -49,9 +51,12 @@ async def answer_callback(update, context):
     data = q.data
     bot = context.bot
 
-    # Ассистент: инлайн-кабинет
+    # Баланс (врач/мотивация/рецепты/тревоги) vs Закладки/Любимое
     if data.startswith("as_"):
-        await assistant.handle_callback(bot, cid, q, data)
+        if data.startswith(("as_food", "as_daycheck", "as_motiv", "as_doctor")):
+            await balance.handle_callback(bot, cid, q, data)
+        else:
+            await notes.handle_callback(bot, cid, q, data)
         return
     # Гардероб: инлайн-кабинет
     if data.startswith("w_"):
@@ -86,12 +91,6 @@ async def answer_callback(update, context):
         try:
             if act == "plany":
                 await myday.send_plany(bot, cid)
-            elif act == "daycheck":
-                await myday.send_daycheck(bot, cid)
-            elif act == "diary":
-                await myday.send_diary(bot, cid)
-            elif act == "phrase":
-                await myday.send_phrase(bot, cid)
             elif act == "gram_nl":
                 await learning.send_grammar(bot, cid, "нидерландский", "🇳🇱")
             elif act == "gram_en":
@@ -179,11 +178,11 @@ async def answer_callback(update, context):
             elif act == "listen_no":
                 await content.listen_dislike(bot, cid)
             elif act == "food_breakfast":
-                await assistant.send_recipe(bot, cid, "завтрак")
+                await balance.send_recipe(bot, cid, "завтрак")
             elif act == "food_lunch":
-                await assistant.send_recipe(bot, cid, "обед")
+                await balance.send_recipe(bot, cid, "обед")
             elif act == "food_dinner":
-                await assistant.send_recipe(bot, cid, "ужин")
+                await balance.send_recipe(bot, cid, "ужин")
         except Exception as e:
             await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
         return
@@ -294,20 +293,20 @@ async def answer_callback(update, context):
     if data.startswith("listen_"):
         await content.add_listen(bot, cid, int(data.split("_")[1]))
         return
-    # Проверка дня
+    # Проверка дня (тревоги)
     if data == "worry_clearall":
-        await myday.worry_clear_all(bot, cid)
+        await balance.worry_clear_all(bot, cid)
         return
     if data.startswith("worry_del_"):
-        await myday.worry_delete(bot, cid, int(data.split("_")[-1]))
+        await balance.worry_delete(bot, cid, int(data.split("_")[-1]))
         return
     if data.startswith("worry_"):
         _, action, idx = data.split("_")
-        await myday.worry_mark(bot, cid, int(idx), "real" if action == "real" else "let_go")
+        await balance.worry_mark(bot, cid, int(idx), "real" if action == "real" else "let_go")
         return
-    # Ассистент: ещё раз
+    # «Продолжить / ещё раз»
     if data == "chat_retry":
-        await assistant.retry(bot, cid)
+        await balance.retry(bot, cid)
         return
 
 
@@ -353,16 +352,14 @@ async def text_router(update, context):
     # Pending-ввод
     if cid in store.pending_input:
         kind = store.pending_input.pop(cid)
-        if kind == "diary":
-            await myday.save_diary(bot, cid, text); return
         if kind == "worry":
-            await myday.save_worries(bot, cid, text); return
+            await balance.save_worries(bot, cid, text); return
         if kind == "favorite":
             await content.add_fav(bot, cid, text); return
         if kind in ("role_doctor", "role_state"):
-            await assistant.handle_role(bot, cid, kind.split("_")[1], text); return
+            await balance.handle_role(bot, cid, kind.split("_")[1], text); return
         if kind == "leftovers":
-            await assistant.send_leftovers(bot, cid, text); return
+            await balance.send_leftovers(bot, cid, text); return
         if kind == "wardrobe_add":
             await wardrobe.add_item(bot, cid, text); return
         if kind == "wardrobe_check":
@@ -392,7 +389,7 @@ async def text_router(update, context):
         if kind == "setadd_book":
             await settings.list_add_done(bot, cid, "book", text); return
         if kind.startswith("loveadd_"):
-            await assistant.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
+            await notes.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
 
     # Свободный чат
     await assistant.chat_reply(bot, cid, text)
@@ -416,7 +413,7 @@ async def document_handler(update, context):
 # ---------- Команды-обёртки ----------
 async def notes_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
-    await assistant.send_notes(context.bot, update.effective_chat.id)
+    await notes.send_notes(context.bot, update.effective_chat.id)
 
 async def setup_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
@@ -447,7 +444,7 @@ async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID or not settings.notif_on(CHAT_ID, "checkin_eve"):
         return
     try:
-        await myday.send_evening_review(context.bot, CHAT_ID)
+        await balance.send_evening_review(context.bot, CHAT_ID)
     except Exception:
         pass
 
