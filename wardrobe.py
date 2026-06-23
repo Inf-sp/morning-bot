@@ -178,32 +178,41 @@ async def del_item(bot, cid, i):
 async def send_improve(bot, cid):
     w = store.load_wardrobe()
     await bot.send_message(chat_id=cid, text="Разбираю шкаф...")
-    prompt = f"""Ты стилист с прямым тоном. {config.STYLE_PROFILE}
+    prompt = f"""Ты стилист с прямым, живым тоном - как умный друг, который шарит в одежде. {config.STYLE_PROFILE}
 Разбери ТВОЙ гардероб пользователя (обращайся на "ты", НЕ используй имя):
 {store.wardrobe_to_text(w)}
-Сжато, для СДВГ, без воды. Верни JSON (без markdown):
-{{"style":"1 строка: какой стиль","verdict":"1 строка вердикт по базе и силуэтам",
-"remove":["что убрать, ломает стиль, 1-3 пункта"],
-"replace":["на что заменить, 1-3 пункта"],
-"texture":"1-2 строки: как через фактуру/ткани сделать интереснее без ярких принтов",
-"accessory":"1-2 строки: какие строгие аксессуары и многослойность добавить"}}"""
+Пиши конкретно и с огоньком, для СДВГ - без воды, но интересно: каждый пункт «убрать/заменить» объясняй ОДНОЙ короткой причиной (почему/какой эффект), не просто перечисляй. Верни JSON (без markdown):
+{{"style":"1 строка: какой стиль и его настроение/вайб",
+"verdict":"1 строка: честный живой вердикт по базе и силуэтам",
+"keep":["что в гардеробе уже отлично работает и почему, 1-2 пункта"],
+"remove":["вещь - короткая причина, почему ломает стиль, 1-3 пункта"],
+"replace":["на что заменить - какой эффект это даст, 1-3 пункта"],
+"texture":"1 строка: какие фактуры/ткани добавят интереса без ярких принтов",
+"accessory":"1 строка: какие строгие аксессуары и многослойность добавить",
+"combo":"1 строка: готовый образ из ЭТИХ вещей - верх + низ + обувь + акцент"}}"""
     try:
-        d = ai.llm_json(prompt, 800)
+        d = ai.llm_json(prompt, 900)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
+    def _bullets(items):
+        return [f"• {esc(str(x))}" for x in items if str(x).strip()]
     L = ["💡 <b>Разбор гардероба</b>", ""]
     if d.get("style"):
-        L.append(f"<b>Стиль:</b> {esc(d['style'])}")
+        L.append(f"🎯 <b>Стиль:</b> {esc(d['style'])}")
     if d.get("verdict"):
-        L.append(f"<b>Вердикт:</b> {esc(d['verdict'])}")
+        L.append(f"📋 <b>Вердикт:</b> {esc(d['verdict'])}")
+    if d.get("keep"):
+        L += ["", "🟢 <b>Уже работает:</b>"] + _bullets(d["keep"])
     if d.get("remove"):
-        L += ["", "❌ <b>Что убрать:</b>"] + [esc(str(x)) for x in d["remove"]]
+        L += ["", "❌ <b>Убрать:</b>"] + _bullets(d["remove"])
     if d.get("replace"):
-        L += ["", "✅ <b>На что заменить:</b>"] + [esc(str(x)) for x in d["replace"]]
+        L += ["", "✅ <b>Заменить на:</b>"] + _bullets(d["replace"])
     if d.get("texture"):
-        L += ["", "<b>Фактура вместо принтов:</b>", esc(d["texture"])]
+        L += ["", f"🧵 <b>Фактура без принтов:</b> {esc(d['texture'])}"]
     if d.get("accessory"):
-        L += ["", "<b>Аксессуары:</b>", esc(d["accessory"])]
+        L += ["", f"⌚ <b>Аксессуары:</b> {esc(d['accessory'])}"]
+    if d.get("combo"):
+        L += ["", f"✨ <b>Собери прямо сейчас:</b> {esc(d['combo'])}"]
     store.last_source[str(cid)] = "Гардероб · Улучшение"
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",

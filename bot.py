@@ -508,7 +508,7 @@ async def post_init(app):
     await app.bot.set_my_commands([
         BotCommand("start", "меню и описание"),
         BotCommand("setup", "настройки"),
-        BotCommand("notes", "закладки"),
+        BotCommand("notes", "мои сохранения"),
     ])
 
 
