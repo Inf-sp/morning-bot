@@ -37,32 +37,34 @@ def grammar_data(language, level, topic=None, study_topics=None):
                       + "; ".join(study_topics[:10]) + ". Бери одну из них.")
     else:
         topic_rule = f"Выбери одну тему уровня {level}, каждый раз НОВУЮ."
-    prompt = f"""Грамматическое задание по языку {language}, уровень {level}. {book}
+    prompt = f"""Ты опытный преподаватель языка {language}, объясняешь грамматику взрослому ученику уровня {level}. {book}
 {topic_rule} {lang_rule}
-Покажи тему в настоящем и прошедшем времени рядом.
+Цель: чтобы после прочтения ученик понял ОДНО правило и смог применить его сам.
+Объясняй живо и по сути: дай чёткое правило, покажи тему в настоящем и прошедшем времени рядом, предупреди о типичной ошибке.
 JSON (без переносов строк внутри значений):
 {{
  "title": "название темы",
- "explain": "краткое объяснение простыми словами, 2-3 строки",
+ "explain": "объяснение правила простыми словами, 2-4 коротких предложения - суть, когда применяется, как образуется",
  "present": "пример в настоящем времени на {language}",
  "present_ru": "перевод",
  "past": "пример в прошедшем времени на {language} (или 'N.v.t.' если неприменимо)",
  "past_ru": "перевод или пусто",
+ "mistake": "типичная ошибка изучающих по этой теме и как правильно, 1 предложение",
  "task": "предложение по теме с одним пропуском ____ на {language}",
  "task_ru": "перевод задания на русский",
  "a": "вариант A",
  "b": "вариант B",
  "correct": "a или b",
- "rule": "правило-объяснение почему так, 1-2 строки"
+ "rule": "почему именно этот вариант верный, 1-2 строки"
 }}"""
-    return ai.llm_json(prompt, 1000, LO)
+    return ai.llm_json(prompt, 1400, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
 
-async def send_grammar(bot, cid, language, flag=None, topic=None):
+async def send_grammar(bot, cid, language, flag=None, topic=None, random=False):
     level = store.get_level(cid, language)
     study_topics = [t.get("text", "") if isinstance(t, dict) else str(t)
                     for t in get_topics(cid, language)]
     try:
-        d = grammar_data(language, level, topic, study_topics if not topic else None)
+        d = grammar_data(language, level, topic, None if random or topic else study_topics)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     store.grammar_state[str(cid)] = {"correct": d.get("correct", "a"), "rule": d.get("rule", ""),
@@ -80,6 +82,8 @@ async def send_grammar(bot, cid, language, flag=None, topic=None):
         L.append(f"Настоящее время - {esc(d.get('present',''))} → {esc(d.get('present_ru',''))}")
     if d.get("past") and d.get("past") != "N.v.t.":
         L.append(f"Прошедшее время - {esc(d.get('past',''))} → {esc(d.get('past_ru',''))}")
+    if d.get("mistake"):
+        L += ["", f"⚠️ <b>Частая ошибка:</b> {esc(d['mistake'])}"]
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
     # Сообщение 2: задание
     await _send_grammar_task(bot, cid, d, code)
@@ -91,6 +95,7 @@ async def _send_grammar_task(bot, cid, d, code):
          InlineKeyboardButton(d.get("b", "B"), callback_data="gram_b")],
         [InlineKeyboardButton("🔄 Ещё пример из этой темы", callback_data=f"again_gram_{code}")],
         [InlineKeyboardButton("➡️ Следующая тема", callback_data=f"next_gram_{code}")],
+        [InlineKeyboardButton("🎲 Случайная тема", callback_data=f"rand_gram_{code}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"m_{code}")],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(L2), parse_mode="HTML", reply_markup=kb)
@@ -98,6 +103,10 @@ async def _send_grammar_task(bot, cid, d, code):
 async def next_grammar(bot, cid, language):
     """Следующая тема: полностью новая грамматика с объяснением."""
     await send_grammar(bot, cid, language)
+
+async def random_grammar(bot, cid, language):
+    """Случайная тема: новая грамматика уровня, игнорируя список изучаемых тем."""
+    await send_grammar(bot, cid, language, random=True)
 
 async def again_grammar(bot, cid, language):
     """Ещё пример: новое задание на ТУ ЖЕ тему, без повтора объяснения грамматики."""
@@ -135,6 +144,7 @@ async def grammar_answer(bot, cid, chosen):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Ещё пример из этой темы", callback_data=f"again_gram_{code}")],
         [InlineKeyboardButton("➡️ Следующая тема", callback_data=f"next_gram_{code}")],
+        [InlineKeyboardButton("🎲 Случайная тема", callback_data=f"rand_gram_{code}")],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
 
@@ -463,15 +473,15 @@ async def del_topic(bot, cid, code, i):
 GAME_UI = {
     "русский": {"diff_q": "Выбери сложность:", "easy": "Лёгкая", "med": "Средняя", "hard": "Тяжёлая",
                 "title": "🕵️ Игра-детектив", "who": "Кто это?", "hint": "💡 Подсказка", "reveal": "😞 Сдаюсь", "suspect": "Подозреваемый:", "found": "✅ Дело раскрыто!", "answer": "Ответ", "give": "Знаешь ответ? Напиши его или нажми «😞 Сдаюсь»",
-                "again": "🕵️ Загадать ещё", "chdiff": "🎚 Сложность", "chlang": "🌐 Язык",
+                "again": "🕵️ Загадать ещё", "chdiff": "🎚 Сложность", "chlang": "🌐 Язык", "back": "⬅️ Обучение", "nohint": "Подсказок больше нет.",
                 "correct": "✅ Верно!", "wrong": "❌ Не то", "retry": "Ещё попытка - напиши ответ или возьми подсказку."},
     "английский": {"diff_q": "Choose difficulty:", "easy": "Easy", "med": "Medium", "hard": "Hard",
                 "title": "🕵️ Detective Game", "who": "Who am I?", "hint": "💡 Hint", "reveal": "😞 Give up", "suspect": "Suspect:", "found": "✅ Case solved!", "answer": "Answer", "give": "Know it? Type the name or tap «😞 Give up»",
-                "again": "🕵️ New character", "chdiff": "🎚 Difficulty", "chlang": "🌐 Language",
+                "again": "🕵️ New character", "chdiff": "🎚 Difficulty", "chlang": "🌐 Language", "back": "⬅️ Learning", "nohint": "No more hints.",
                 "correct": "✅ Correct!", "wrong": "❌ Not quite", "retry": "Try again - type a name or take a hint."},
     "нидерландский": {"diff_q": "Kies niveau:", "easy": "Makkelijk", "med": "Gemiddeld", "hard": "Moeilijk",
                 "title": "🕵️ Detectivespel", "who": "Wie ben ik?", "hint": "💡 Hint", "reveal": "😞 Opgeven", "suspect": "Verdachte:", "found": "✅ Opgelost!", "answer": "Antwoord", "give": "Weet je het? Typ de naam of tik «😞 Opgeven»",
-                "again": "🕵️ Nog een", "chdiff": "🎚 Niveau", "chlang": "🌐 Taal",
+                "again": "🕵️ Nog een", "chdiff": "🎚 Niveau", "chlang": "🌐 Taal", "back": "⬅️ Leren", "nohint": "Geen hints meer.",
                 "correct": "✅ Goed!", "wrong": "❌ Niet juist", "retry": "Nog een poging - typ een naam of neem een hint."},
 }
 
@@ -540,7 +550,7 @@ async def send_game(bot, cid):
          InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")],
         [InlineKeyboardButton(ui["chdiff"], callback_data="game_change_diff"),
          InlineKeyboardButton(ui["chlang"], callback_data="game_change")],
-        [InlineKeyboardButton("⬅️ Обучение", callback_data="m_learn")],
+        [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
     ])
     clues = "\n".join(f"• {c.strip()}" for c in d.get("clues", "").split("\n") if c.strip())
     txt = f"<b>{ui['title']}</b>\n\n<b>{ui['suspect']}</b>\n{clues}\n\n{ui['who']} 🤔"
@@ -574,10 +584,10 @@ async def game_answer(bot, cid, text):
         rec = store.game_recent.get(str(cid), []); rec.append(st["answer"]); store.game_recent[str(cid)] = rec[-30:]
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton(ui["again"], callback_data="game_again")],
-            [InlineKeyboardButton("⬅️ Обучение", callback_data="m_learn")],
+            [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
         ])
         body = st.get("explain") or st.get("quote", "")
-        txt = f"✅ <b>Дело раскрыто!</b>\n\nОтвет:\n<b>{esc(st['answer'])}</b>"
+        txt = f"<b>{ui['found']}</b>\n\n{ui['answer']}:\n<b>{esc(st['answer'])}</b>"
         if body:
             txt += f"\n\n{esc(body)}"
         await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
