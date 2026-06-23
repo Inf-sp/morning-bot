@@ -445,12 +445,6 @@ async def set_city_text(bot, cid, name):
     except Exception as e:
         await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
 
-async def setcity_command(update, context):
-    if not context.args:
-        await update.message.reply_text("Формат: /setcity Амстердам")
-        return
-    await set_city_text(context.bot, update.effective_chat.id, " ".join(context.args))
-
 async def location_handler(update, context):
     cid = update.effective_chat.id
     loc = update.message.location

@@ -47,7 +47,7 @@ JSON: {{"items": [{{"title": "название (год)", "title_en": "ориг�
     black = store.get_list(config.BOOK_BLACKLIST_KEY, cid)       # отклонённые
     read_titles = [s if isinstance(s, str) else str(s) for s in read_seen]
     black_titles = [s if isinstance(s, str) else str(s) for s in black]
-    refs = my_books_titles or [config.FAV_BOOKS]
+    refs = my_books_titles
     anchors = ", ".join(refs[:25])
     skip = my_books_titles + read_titles + black_titles
     avoid = ("\nНЕ рекомендуй уже прочитанное/в закладках/отклонённое: " + ", ".join(skip[:80])) if skip else ""
@@ -514,11 +514,6 @@ async def add_listen(bot, cid, i):
         await bot.send_message(chat_id=cid, text=f"⭐ В закладках «Музыка»: {title}. Вот ещё вариант 👇")
     await send_listen(bot, cid)
 
-async def send_artists(bot, cid):
-    arts = store.get_list(config.ARTISTS_KEY, cid)
-    txt = "🎤 Мои артисты:\n" + ("\n".join(f"• {a}" for a in arts) if arts else "пусто")
-    await bot.send_message(chat_id=cid, text=txt)
-
 def _ensure_artists(cid):
     """Возвращает список артистов; если пуст - подгружает дефолтный из artists.json."""
     arts = store.get_list(config.ARTISTS_KEY, cid)
@@ -645,11 +640,3 @@ async def concert_pick_country(bot, cid):
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
                            reply_markup=InlineKeyboardMarkup(rows))
-
-async def start_add_artist(bot, cid):
-    store.pending_input[str(cid)] = "artist"
-    await bot.send_message(chat_id=cid, text="Напиши имя артиста - добавлю в список.")
-
-async def add_artist(bot, cid, text):
-    store.add_to_list(config.ARTISTS_KEY, cid, text)
-    await bot.send_message(chat_id=cid, text="Добавил артиста.")

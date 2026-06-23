@@ -3,7 +3,7 @@ import re
 import config
 import store
 import ai
-from util import send_long, country_flag, esc
+from util import country_flag, esc
 
 def travel_suggest_one(cid):
     visited = store.get_list(config.COUNTRIES_KEY, cid)            # Мои страны (был/посещённые)
@@ -156,32 +156,3 @@ async def save_plan(bot, cid):
     })
     await bot.send_message(chat_id=cid, text=f"💾 План поездки ({country}) сохранён в «Мои сохранения».")
     await send_go(bot, cid)
-
-async def send_my(bot, cid):
-    favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
-    out = ["🏳 Любимые страны:"]
-    rows = []
-    if favs:
-        for i, c in enumerate(favs):
-            out.append(f"{c.get('flag','🏳')} {c.get('name','')}")
-            rows.append([InlineKeyboardButton(f"❌ {c.get('name','')}", callback_data=f"delcountry_{i}")])
-    else:
-        out.append("пусто")
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel")])
-    store.pending_input[str(cid)] = "favcountry"
-    await bot.send_message(chat_id=cid, text="\n".join(out) + "\n\n➕ Напиши страну - добавлю.",
-                           reply_markup=InlineKeyboardMarkup(rows))
-
-async def del_country(bot, cid, i):
-    favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
-    if i < len(favs):
-        removed = favs.pop(i)
-        store.set_list(config.FAVCOUNTRIES_KEY, cid, favs)
-        await bot.send_message(chat_id=cid, text=f"Удалил: {removed.get('name','')}")
-
-async def add_country(bot, cid, text):
-    flag = country_flag(text.strip())
-    favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
-    favs.append({"name": text.strip(), "flag": flag})
-    store.set_list(config.FAVCOUNTRIES_KEY, cid, favs)
-    await bot.send_message(chat_id=cid, text=f"Добавил: {flag} {text.strip()}")

@@ -4,7 +4,7 @@ import config
 import store
 import ai
 import weather
-from util import send_long, esc
+from util import esc
 
 HOME_TEXT = (
     "👕 <b>Гардероб</b>\n\n"
@@ -56,27 +56,7 @@ async def send_home(bot, cid):
     await bot.send_message(chat_id=cid, text=HOME_TEXT, parse_mode="HTML", reply_markup=home_kb())
 
 
-# ---------- используется в «Мой день» (НЕ удалять) ----------
-def build_outfit_focus(weather_text, day_label):
-    w = store.load_wardrobe()
-    prompt = f"""Ты опытный стилист. Собери ОДИН целостный лук на сегодня.
-{config.STYLE_PROFILE}
-Погода ({day_label}):
-{weather_text}
-Гардероб (используй ТОЛЬКО эти вещи, точные названия):
-{store.wardrobe_to_text(w)}
-Температурные зоны:{config.TEMP_ZONES}
-Жёсткие правила по температуре:
-- от +24°C и без дождя: ШОРТЫ + футболка, лёгкая обувь. Никаких брюк, ветровок, флиса.
-- +17…+23°C: лёгкие брюки/джинсы + футболка/рубашка, опц. лёгкий слой.
-- ниже +16°C или дождь/сильный ветер: слои, ветровка/флис, закрытая обувь.
-Обязательно 1 верх + 1 низ + обувь. Сочетание по цвету, минимализм. Без обращения по имени.
-JSON:
-{{"outfit": ["верх","низ","обувь","аксессуар"], "why": "1-2 предложения", "focus": "один короткий совет"}}"""
-    return ai.llm_json(prompt, 800)
-
-
-# ---------- генерация лука (3 варианта, по погоде) ----------
+# ---------- генерация лука по погоде ----------
 async def send_looks(bot, cid, scenario=None):
     w = store.load_wardrobe()
     s = store.get_settings(cid)

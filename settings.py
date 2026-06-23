@@ -5,7 +5,6 @@ import learning
 
 SETTINGS_KEY = "user_settings.json"
 NOTIF_TYPES = [
-    ("morning", "🌅 Утренняя сводка (08:30)"),
     ("grammar", "📚 Слова дня (11:00)"),
     ("checkin_day", "🫣 Дневная разгрузка (14:00)"),
     ("checkin_eve", "🥸 Вечерний разбор (20:00)"),

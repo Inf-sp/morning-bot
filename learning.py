@@ -3,7 +3,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 import ai
-from util import esc, send_long
+from util import esc
 
 LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 LO = ai.LEARN_ORDER
@@ -444,22 +444,6 @@ async def del_topic(bot, cid, code, i):
         topics.pop(i)
         store.set_list(_topics_key(language), cid, topics)
     await send_topics(bot, cid, language)
-
-
-# ===== Воскресная рассылка: интервальные повторения словаря =====
-async def send_vocab_cards(bot, cid):
-    words = store.get_list(config.DICT_KEY, cid)
-    if not words:
-        return
-    import random as _r
-    pick = _r.sample(words, k=min(5, len(words)))
-    lines = ["📚 <b>Повторение словаря</b>", "", "Вспомни перевод, потом проверь 👇", ""]
-    for w in pick:
-        flag = "🇬🇧" if (isinstance(w, dict) and w.get("lang") == "en") else "🇳🇱"
-        word = _w_field(w, "word", "nl", "en")
-        ru = _w_field(w, "ru")
-        lines.append(f"{flag} <b>{esc(word)}</b> — <tg-spoiler>{esc(ru)}</tg-spoiler>")
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML")
 
 
 # ================= ИГРА-ДЕТЕКТИВ =================

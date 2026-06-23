@@ -4,7 +4,7 @@ import config
 import store
 import ai
 import myday
-import ze
+import rerank
 import util
 
 DOCTOR_INTRO = (
@@ -111,14 +111,7 @@ async def send_leftovers(bot, cid, ingredients):
     await _send(bot, cid, out, kb=_recipe_kb())
 
 
-# ---------- Идеи / СДВГ / Подбодрить / Карта ----------
-def _gen_idea(cid):
-    return ai.llm("Сгенерируй 1 свежую идею/мини-проект (дизайн, ИИ, фото, AR, путешествия). "
-                  "Придумай ей короткое название. СТРОГО формат, без markdown:\n"
-                  "💡 Идея дня\n\n{название проекта}\n\n{1-2 предложения описания}\n\n"
-                  "Польза: {через запятую}\nНачать: {через запятую}\n\nПервый результат: {что получится}",
-                  400, 1.0, ai.LEARN_ORDER)
-
+# ---------- СДВГ / Подбодрить ----------
 def _gen_motiv(cid):
     return ai.llm(
         "Сгенерируй блок «Личная мотивация» для человека с СДВГ. Тепло, по-доброму, без воды и клише. "
@@ -188,7 +181,7 @@ async def doctor_answer(bot, cid, symptoms):
     passages = []
     try:
         cands = _doctor_candidates(symptoms)
-        ranked = ze.rerank(symptoms, cands, top_n=3)
+        ranked = rerank.rerank(symptoms, cands, top_n=3)
         passages = [t for t, _ in ranked]
     except Exception:
         passages = []
@@ -508,7 +501,6 @@ async def love_add_done(bot, cid, key, text):
 
 
 _ONESHOT = {
-    "as_idea": (_gen_idea, "🔁 Новая идея", "as_idea"),
     "as_motiv": (_gen_motiv, "🔄 Ещё", "as_motiv"),
 }
 
@@ -562,7 +554,7 @@ async def handle_callback(bot, cid, q, data):
         except Exception as e:
             await bot.send_message(chat_id=cid, text=str(e)); return
         store.last_action[str(cid)] = ("oneshot", data)
-        store.last_source[str(cid)] = {"as_motiv": "Здоровье · Мотивация", "as_idea": "Идеи"}.get(data, "Ассистент")
+        store.last_source[str(cid)] = {"as_motiv": "Здоровье · Мотивация"}.get(data, "Ассистент")
         await _send(bot, cid, out, kb=_ans_kb(lbl, cb))
         return
     # роли

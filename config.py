@@ -48,15 +48,27 @@ LAGOM_KEY = "lagom.json"
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}
 
-VISITED = "Нидерланды, Германия, Франция, Бельгия, Испания, Великобритания, Италия, Польша"
+
+def _load_json(path, default):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
+
+
+# --- Посещённые страны (сид-файл countries.json) ---
+VISITED = ", ".join(_load_json("countries.json", []))
+
+# --- Шаблоны промптов (prompts.json) ---
+_PROMPTS = _load_json("prompts.json", {})
+STYLE_PROFILE = _PROMPTS.get("style_profile", "")
+TEMP_ZONES = _PROMPTS.get("temp_zones", "")
+CONTENT_TASTE = _PROMPTS.get("content_taste", "")
 
 
 def _load_lagom_items():
-    try:
-        with open("lagom.json", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+    return _load_json("lagom.json", [])
 
 _LAGOM_ITEMS = _load_lagom_items()
 
