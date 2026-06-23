@@ -341,7 +341,7 @@ async def del_word(bot, cid, i):
 
 WEEK_TRACK = {
     0: ("Свежая кровь", "Загрузка",
-        "Берём 5 новых слов и 2 фразы. Прочитай вслух, покрути в голове. Больше ничего."),
+        "Прочитай вслух, покрути в голове. Больше ничего."),
     1: ("Первый повтор", "Эффект генерации",
         "Повтори вчерашнее. Посмотри на русский - вспомни перевод. Придумай ОДНО смешное предложение."),
     2: ("День разгрузки", "Микро-доза",
@@ -357,18 +357,31 @@ WEEK_TRACK = {
 }
 
 async def send_morning_word(bot, cid):
-    """11:00 - Daily Words: метод дня недели + порция слов из словаря."""
+    """11:00 - Daily Words: метод дня недели + порция (3 слова + 2 фразы) из словаря."""
     import random as _r
     from datetime import datetime
+    import settings
+    language = settings.study_lang(cid)          # язык утреннего слова из /setup
+    lang_code = _code(language)                  # "nl" / "en"
+    flag = _flag(language)
+    lang_gen = "нидерландского" if language == "нидерландский" else "английского"
     wd = datetime.now(config.TZ).weekday()
     title, phase, method = WEEK_TRACK[wd]
-    words = _ensure_dict(cid)
-    L = ["📚 <b>Daily Words | Повторение</b>", "", f"<b>{title}</b> - {phase}", esc(method)]
+    words = _ensure_dict(cid)                    # полный список - для индексов удаления
+    pool = [w for w in words if _dict_lang(w) == lang_code]
+    L = [f"📚{flag} <b>Daily Words | Повторение {lang_gen} языка</b>", "", esc(method)]
     # выходные - отдых, слова не шлём
-    if wd >= 5 or not words:
+    if wd >= 5 or not pool:
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
         return
-    portion = _r.sample(words, min(5, len(words)))
+    # 3 слова + 2 фразы (раздельно по типу из словаря)
+    word_items = [w for w in pool if _dict_kind(w) == "word"]
+    phrase_items = [w for w in pool if _dict_kind(w) == "phrase"]
+    portion = (_r.sample(word_items, min(3, len(word_items)))
+               + _r.sample(phrase_items, min(2, len(phrase_items))))
+    if not portion:
+        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
+        return
     L += ["", "🗂 <b>Порция на сегодня:</b>"]
     rows = []
     for w in portion:
@@ -381,7 +394,7 @@ async def send_morning_word(bot, cid):
             rows.append([InlineKeyboardButton(f"❌ {word[:24]}", callback_data=f"worddel_{idx}")])
         except ValueError:
             pass
-    L += ["", "💡 <b>Контекст:</b> применяй эти слова сразу, когда думаешь о рутине."]
+    L += ["", "💡 Применяй эти слова сразу, когда думаешь о рутине."]
     rows.append([InlineKeyboardButton("🗂️ Мой словарь", callback_data="a_dict")])
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
