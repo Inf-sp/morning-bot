@@ -8,10 +8,13 @@ _MONTHS = ["января", "февраля", "марта", "апреля", "ма
 def esc(t):
     return (t or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-async def send_long(bot, chat_id, text):
-    text = (text or "").strip() or "Пусто, попробуй ещё раз."
-    for i in range(0, len(text), 4000):
-        await bot.send_message(chat_id=chat_id, text=text[i:i+4000])
+async def send_html(bot, cid, text, reply_markup=None):
+    """Одиночное сообщение в Telegram HTML с чисткой markdown и откатом на plain."""
+    html = tg_html(text or "")
+    try:
+        await bot.send_message(chat_id=cid, text=html, parse_mode="HTML", reply_markup=reply_markup)
+    except Exception:
+        await bot.send_message(chat_id=cid, text=html, reply_markup=reply_markup)
 
 def country_flag(name):
     try:
