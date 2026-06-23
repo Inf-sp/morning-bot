@@ -126,7 +126,19 @@ async def export_notes(bot, cid):
         lines.append("- пусто")
     lines.append("")
 
-    # 2) Любимые (категорийные списки)
+    # 2) Планы поездок
+    plans = [n for n in notes if _note_bucket(n) == "plan"]
+    lines.append("🧳 ПЛАНЫ ПОЕЗДОК")
+    if plans:
+        for n in plans:
+            d = n.get("date", "") if isinstance(n, dict) else ""
+            country = (n.get("country") or "") if isinstance(n, dict) else ""
+            lines.append(f"- [{d}] {country}")
+    else:
+        lines.append("- пусто")
+    lines.append("")
+
+    # 3) Любимые (категорийные списки)
     lines.append("❤️ ЛЮБИМЫЕ")
     sections = [
         ("Мои страны", store.get_list(config.COUNTRIES_KEY, cid)),
@@ -154,19 +166,54 @@ async def export_notes(bot, cid):
 async def send_notes(bot, cid):
     notes = store.get_list(config.NOTES_KEY, cid)
     n_fav = sum(1 for n in notes if _note_bucket(n) == "fav")
+    n_plan = sum(1 for n in notes if _note_bucket(n) == "plan")
     rows = [
         [InlineKeyboardButton(f"⭐ Временные закладки ({n_fav})", callback_data="as_bucket_fav")],
+        [InlineKeyboardButton(f"🧳 Планы ({n_plan})", callback_data="as_bucket_plan")],
         [InlineKeyboardButton("❤️ Любимые", callback_data="as_bucket_love")],
         [InlineKeyboardButton("📤 Экспорт в файл", callback_data="as_export")],
     ]
     await bot.send_message(chat_id=cid, parse_mode="HTML",
-        text="💾 <b>Мои сохранения</b>\n\nЗакладки, фильмы, книги и артисты.\n\nВыбери раздел 👇",
+        text="💾 <b>Мои сохранения</b>\n\nЗакладки, планы поездок, фильмы, книги и артисты.\n\nВыбери раздел 👇",
         reply_markup=InlineKeyboardMarkup(rows))
 
+async def send_plans(bot, cid):
+    """Вкладка «Планы» - сохранённые планы поездок (bucket=plan)."""
+    notes = store.get_list(config.NOTES_KEY, cid)
+    items = [(i, n) for i, n in enumerate(notes) if _note_bucket(n) == "plan"]
+    if not items:
+        await bot.send_message(chat_id=cid, text="🧳 <b>Планы</b>\n\nпусто", parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")]]))
+        return
+    rows = []
+    for i, n in items:
+        country = (n.get("country") or "План") if isinstance(n, dict) else "План"
+        d = n.get("date", "") if isinstance(n, dict) else ""
+        rows.append([InlineKeyboardButton(f"🧳 {d} · {country}"[:40], callback_data=f"as_planview_{i}")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
+    await bot.send_message(chat_id=cid, parse_mode="HTML",
+        text="🧳 <b>Планы</b>\n\nСохранённые планы поездок.\n\nВыбери план 👇",
+        reply_markup=InlineKeyboardMarkup(rows))
+
+async def plan_view(bot, cid, i):
+    notes = store.get_list(config.NOTES_KEY, cid)
+    if i >= len(notes) or _note_bucket(notes[i]) != "plan":
+        await send_plans(bot, cid); return
+    n = notes[i]
+    text = n.get("text", "") if isinstance(n, dict) else str(n)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🗑 Удалить план", callback_data=f"as_plandel_{i}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_plan")],
+    ])
+    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+
 async def send_bucket(bot, cid, bucket):
-    """fav - лента закладок; love - меню под-разделов (страны/артисты/книги/одежда)."""
+    """fav - лента закладок; plan - планы поездок; love - меню под-разделов."""
     if bucket == "love":
         await send_love_home(bot, cid)
+        return
+    if bucket == "plan":
+        await send_plans(bot, cid)
         return
     notes = store.get_list(config.NOTES_KEY, cid)
     items = [(i, n) for i, n in enumerate(notes) if _note_bucket(n) == "fav"]
@@ -298,8 +345,14 @@ async def handle_callback(bot, cid, q, data):
         await send_notes(bot, cid); return
     if data == "as_bucket_fav":
         await send_bucket(bot, cid, "fav"); return
+    if data == "as_bucket_plan":
+        await send_bucket(bot, cid, "plan"); return
     if data == "as_bucket_love":
         await send_bucket(bot, cid, "love"); return
+    if data.startswith("as_planview_"):
+        await plan_view(bot, cid, int(data.split("_")[-1])); return
+    if data.startswith("as_plandel_"):
+        await note_drop(bot, cid, int(data.split("_")[-1])); return
     if data == "as_export":
         await export_notes(bot, cid); return
     if data.startswith("as_notedel_"):

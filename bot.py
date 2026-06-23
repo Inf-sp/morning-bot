@@ -119,16 +119,12 @@ async def answer_callback(update, context):
                 await learning.send_dict_lang(bot, cid, "nl")
             elif act == "dictlang_en":
                 await learning.send_dict_lang(bot, cid, "en")
-            elif act.startswith("dictaddw_"):
+            elif act.startswith("dictadd_"):
                 lang = act.split("_")[1]
-                store.pending_input[cid] = f"dictaddw_{lang}"
-                flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-                await bot.send_message(chat_id=cid, text=f"{flag} Напиши слово - добавлю с переводом.")
-            elif act.startswith("dictaddp_"):
-                lang = act.split("_")[1]
-                store.pending_input[cid] = f"dictaddp_{lang}"
-                flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-                await bot.send_message(chat_id=cid, text=f"{flag} Напиши фразу - добавлю с переводом.")
+                store.pending_input[cid] = f"dictadd_{lang}"
+                await bot.send_message(chat_id=cid, text=(
+                    "✍🏻 Пришли слова или фразы - можно сразу много, в столбик или через запятую.\n"
+                    "Я разберу каждое отдельно, сам пойму слово это или фраза, язык и перевод."))
             elif act.startswith("dictedit_"):
                 _, lang, dkind = act.split("_")
                 await learning.send_dict_edit(bot, cid, lang, dkind)
@@ -248,10 +244,13 @@ async def answer_callback(update, context):
     if data == "game_hint":
         st = store.game_state.get(cid)
         ui = learning.GAME_UI.get(store.game_config.get(cid, {}).get("lang", "русский"), learning.GAME_UI["русский"])
-        if st and st.get("hint"):
+        hints = (st or {}).get("hints") or []
+        i = (st or {}).get("hint_i", 0)
+        if st and i < len(hints):
+            st["hint_i"] = i + 1
             from util import esc
             await q.message.reply_text(
-                f"<b>{ui['hint']}</b>\n\n<b>{esc(st['hint'])}</b>\n\n{ui['who']}",
+                f"<b>{ui['hint']}</b>\n\n<b>{esc(hints[i])}</b>\n\n{ui['who']}",
                 parse_mode="HTML")
         else:
             await q.message.reply_text(ui["nohint"])
@@ -370,14 +369,8 @@ async def text_router(update, context):
             await wardrobe.check_purchase(bot, cid, text); return
         if kind == "setcity":
             await weather.set_city_text(bot, cid, text); return
-        if kind.startswith("dictaddw_"):
-            await learning.add_word_manual(bot, cid, text, kind.split("_")[1], "word"); return
-        if kind.startswith("dictaddp_"):
-            await learning.add_word_manual(bot, cid, text, kind.split("_")[1], "phrase"); return
-        if kind == "dictadd_nl":
-            await learning.add_word_manual(bot, cid, text, "nl"); return
-        if kind == "dictadd_en":
-            await learning.add_word_manual(bot, cid, text, "en"); return
+        if kind.startswith("dictadd_"):
+            await learning.add_words_batch(bot, cid, text, kind.split("_")[1]); return
         if kind == "topicadd_nl":
             await learning.add_topic(bot, cid, text, "нидерландский"); return
         if kind == "topicadd_en":
