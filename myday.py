@@ -127,8 +127,7 @@ def _build_day_text(cid):
         w = random.choice(dict_words)
         word = w.get("word", "") if isinstance(w, dict) else str(w)
         ru = w.get("ru", "") if isinstance(w, dict) else ""
-        flagw = "🇬🇧" if (isinstance(w, dict) and w.get("lang") == "en") else "🇳🇱"
-        word_line = f"{flagw} {word} → {ru}"
+        word_line = f"{word} → {ru}"
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     def cap(x): return x[:1].upper() + x[1:] if x else x
