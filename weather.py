@@ -198,21 +198,14 @@ def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="", country="", cc="
     hist_src = "архивов KNMI" if is_nl else "исторических метеоданных страны"
     try:
         out = ai.llm(
-            f"Контекст (НЕ повторять в ответе): завтра в {place}{(' ' + date_label) if date_label else ''} "
-            f"{desc}, до {tmax:+.0f}°C, дождь {rain:.0f}%, ветер {wind_ms:.0f} м/с.\n"
-            "Дай ОДИН метео-факт, строго по логике (без шуток про отношения/настроение, сухой тон, тонкая ирония):\n"
-            f"- Если для {place} это аномальная жара - сравни с рекордным пеклом в этом регионе/на континенте на эту дату.\n"
-            "- Если сильный дождь - найди место с рекордной засухой сейчас.\n"
-            f"- Иначе - историческая локальность (по данным {hist_src}): что было в этой стране в этот день 50-100 лет назад.\n"
-            f"Факт строго про {place} или прямой контраст с ним. "
-            "ВАЖНО: начни сразу с самого факта. НЕ пересказывай погоду, город, дату и температуру из контекста. "
-            "Только новый факт, максимум 2 коротких предложения, на русском, без markdown.",
-            200, 0.85).strip()
-        low = out.lower()
-        if low.startswith(("погода", "завтра", f"в {city.lower()}", city.lower())):
-            parts = out.split(". ", 1)
-            if len(parts) == 2 and len(parts[1]) > 30:
-                out = parts[1].strip()
+            f"Дай ОДИН РЕАЛЬНЫЙ исторический метео-факт про место: {place}. "
+            "Сухой тон, тонкая ирония допустима.\n"
+            f"Источник - {hist_src}: реальный погодный рекорд или событие в этом регионе "
+            "(рекордная жара/холод/осадки и в каком году), либо проверяемый климатический факт.\n"
+            "ЗАПРЕЩЕНО: делать выводы или прогнозы про завтрашнюю погоду, сравнивать с завтра, "
+            "фантазировать, додумывать. Только проверяемый факт из прошлого.\n"
+            "Максимум 2 коротких предложения, на русском, без markdown, начни сразу с факта.",
+            200, 0.7).strip()
         return out
     except Exception:
         return ""
@@ -367,22 +360,6 @@ async def send_weather(bot, cid, mode="today"):
 
     # итог - короткий и важный: одно главное указание, без перечисления дней
     place = s.get("city", "")
-    country = s.get("country", "")
-    place_full = f"{place} ({country})" if country and country != place else place
-    summary_ctx = (f"Штормовые дни: {', '.join(storm) or 'нет'}. "
-                   f"Жара: {', '.join(hot) or 'нет'}. "
-                   f"Дожди: {', '.join(wet) or 'нет'}. "
-                   f"Комфортные: {', '.join(comfort) or 'нет'}.")
-    try:
-        tip = ai.llm(
-            f"Погода на неделю, {place_full}. {summary_ctx}\n"
-            "Дай ОДНО короткое важное указание к действию (максимум 1 предложение, до 15 слов). "
-            "Без перечисления дней недели, без воды, без markdown. "
-            "Приоритет в совете: если есть шторм - предупреди про него; иначе жара; иначе лучший день для прогулки/велосипеда.",
-            120, 0.5).strip().splitlines()[0]
-    except Exception:
-        tip = ""
-
     L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", "",
          f"От {tmin:+.0f}°C → {tmax:+.0f}°C", ""]
     if storm:
@@ -394,8 +371,6 @@ async def send_weather(bot, cid, mode="today"):
     if hot:
         L.append(f"🔥 {esc(_cap_first(', '.join(hot)))}: жара, осторожно")
     L += ["", wind_line]
-    if tip:
-        L += ["", "<b>Итог:</b>", esc(tip)]
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")]])
     await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
 
