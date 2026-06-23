@@ -1,4 +1,6 @@
 import os
+import json
+import random
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -46,6 +48,25 @@ LAGOM_KEY = "lagom.json"
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}
 
+VISITED = "Нидерланды, Германия, Франция, Бельгия, Испания, Великобритания, Италия, Польша"
+
+
+def _load_lagom_items():
+    try:
+        with open("lagom.json", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+_LAGOM_ITEMS = _load_lagom_items()
+
+LAGOM = ("Лагом-установки пользователя (используй как ориентир тона и ценностей):\n"
+         + "\n".join(f"• {it}" for it in _LAGOM_ITEMS)) if _LAGOM_ITEMS else ""
+
+
+def lagom_of_day():
+    items = _LAGOM_ITEMS or _load_lagom_items()
+    return random.choice(items) if items else "Маленькие шаги тоже ведут вперёд."
 
 
 def place_hint(city="", country="", cc=""):
