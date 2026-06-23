@@ -22,12 +22,13 @@ def _as_text(x):
     return None
 
 # ---------- одиночная генерация ----------
-def _gen_claude(prompt, max_tokens):
+def _gen_claude(prompt, max_tokens, model=None):
     if not config.ANTHROPIC_API_KEY:
         raise Exception("no claude")
     r = _post("https://api.anthropic.com/v1/messages",
         {"x-api-key": config.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-        {"model": "claude-sonnet-4-6", "max_tokens": max_tokens, "messages": [{"role": "user", "content": prompt}]},
+        {"model": model or config.ANTHROPIC_MODEL, "max_tokens": max_tokens,
+         "messages": [{"role": "user", "content": prompt}]},
         60, "claude")
     return r.json()["content"][0]["text"]
 
@@ -85,12 +86,15 @@ def _friendly(errs):
     return "⚠️ ИИ временно недоступен. Попробуй ещё раз через пару минут."
 
 DEFAULT_ORDER = ("claude", "openai", "gemini", "openrouter", "groq", "cf")
-LEARN_ORDER = ("openai", "claude", "gemini", "openrouter", "groq", "cf")
+# Для обучения языку Claude идёт первым - качество объяснений важнее цены
+LEARN_ORDER = ("claude", "openai", "gemini", "openrouter", "groq", "cf")
+# Грамматика - Claude (дешёвый Haiku) первым; дальше бесплатные fallback'и
+GRAMMAR_ORDER = ("claude", "groq", "gemini", "openrouter", "openai", "cf")
 
-def llm(prompt, max_tokens=1200, temperature=0.7, order=None):
+def llm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None):
     order = order or DEFAULT_ORDER
     calls = {
-        "claude": lambda: _gen_claude(prompt, max_tokens),
+        "claude": lambda: _gen_claude(prompt, max_tokens, claude_model),
         "openai": lambda: _gen_openai(prompt, max_tokens, temperature),
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature),
         "openrouter": lambda: _gen_openrouter(prompt, max_tokens, temperature),
@@ -151,10 +155,10 @@ def _repair_inner_quotes(raw):
         i += 1
     return "".join(out)
 
-def llm_json(prompt, max_tokens=1200, order=None):
+def llm_json(prompt, max_tokens=1200, order=None, claude_model=None):
     raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
                        "Внутри строковых значений НЕ используй двойные кавычки - "
-                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order)
+                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order, claude_model)
     raw = re.sub(r"```(json)?", "", raw).strip()
     m = re.search(r"\{.*\}", raw, re.S)
     if m:

@@ -1,5 +1,7 @@
+import re
 from datetime import datetime
 import random
+import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
@@ -45,6 +47,67 @@ def _strip_quotes(s):
 
 # --- Сводка дня (Мой день) ---
 
+_WIKI_UA = {"User-Agent": "morning-bot/1.0"}
+
+def _wiki_ru_title(city):
+    """Русский заголовок статьи о городе через langlink из английской Википедии
+    (надёжно находит именно город по латинскому названию, а не клуб/тёзку)."""
+    try:
+        r = requests.get("https://en.wikipedia.org/w/api.php", params={
+            "action": "query", "format": "json", "prop": "langlinks",
+            "lllang": "ru", "lllimit": 1, "redirects": 1, "titles": city,
+        }, headers=_WIKI_UA, timeout=10)
+        for p in (r.json().get("query", {}).get("pages", {}) or {}).values():
+            if "missing" in p:
+                continue
+            for ll in (p.get("langlinks") or []):
+                return ll.get("*") or ll.get("title") or ""
+    except Exception:
+        pass
+    return ""
+
+def _wiki_extract(title, lang):
+    """Интро статьи по точному заголовку - только реальный текст Википедии."""
+    try:
+        r = requests.get(f"https://{lang}.wikipedia.org/w/api.php", params={
+            "action": "query", "format": "json", "prop": "extracts",
+            "exintro": 1, "explaintext": 1, "redirects": 1, "titles": title,
+        }, headers=_WIKI_UA, timeout=10)
+        for p in (r.json().get("query", {}).get("pages", {}) or {}).values():
+            if "missing" in p:
+                continue
+            extract = (p.get("extract") or "").strip()
+            if extract:
+                return extract
+    except Exception:
+        pass
+    return ""
+
+def _clean_wiki(s):
+    """Чистит артефакты после explaintext: языковые пометки, пустые скобки, сноски."""
+    s = re.sub(r"\(\s*(?:нид|англ|МФА|лат|нем|фр)\.?[^)]*\)", "", s)
+    s = re.sub(r"\[[^\]]*\]", "", s)
+    s = re.sub(r"\(\s*\)", "", s)
+    s = re.sub(r"\s+", " ", s)
+    s = re.sub(r"\s+([.,;:!?])", r"\1", s)
+    return s.strip()
+
+def city_fact(city, country=""):
+    """Реальный факт о городе из Википедии. Источник правды - Wikipedia, без LLM-домыслов."""
+    if not city:
+        return ""
+    # русский текст предпочтительнее; кириллический город ищем сразу в ru-wiki
+    ru_title = city if re.search(r"[А-Яа-яЁё]", city) else _wiki_ru_title(city)
+    extract = (_wiki_extract(ru_title, "ru") if ru_title else "") or _wiki_extract(city, "en")
+    if not extract:
+        return ""
+    extract = _clean_wiki(extract)
+    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", extract) if len(s.strip()) > 40]
+    if not sents:
+        return extract[:300].strip()
+    # содержательное предложение из интро (разнообразие день ото дня)
+    return random.choice(sents[:6])
+
 def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", weekday="", is_weekend=False, cc=""):
     day_kind = "выходной" if is_weekend else "будний день"
     place = f"{city}, {country}" if country else city
@@ -54,18 +117,14 @@ def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", 
 
 {config.myday_rules(city, country, cc)}
 
-Интересный факт должен быть про текущую локацию ({place}), РЕАЛЬНЫЙ и проверяемый, без выдумок и без выводов-домыслов.
-
 Строго валидный JSON, экранируй кавычки, без переносов внутри значений.
 {{
  "outfit": ["верх","низ","обувь","аксессуар"],
- "fact": "интересный факт по правилам [Интересный факт] про {place}: локальный, РЕАЛЬНЫЙ, удивляющий, максимум 2 коротких предложения, без домыслов",
  "quote": "короткая цитата от мыслителя/учёного/предпринимателя (Сенека, Марк Аврелий, Навал, Джобс), без банальностей",
  "quote_src": "автор"
 }}
-Правила для outfit: 1 верх + 1 низ + обувь (+ опц. аксессуар), сочетание по цвету, минимализм. От +24°C без дождя - ШОРТЫ + футболка; +17..+23 - лёгкие брюки + футболка/рубашка; ниже +16 или дождь/ветер - слои/ветровка, закрытая обувь. Без обращения по имени.
-Факт - только реальные проверяемые сведения. Кратко."""
-    return ai.llm_json(prompt, 1100)
+Правила для outfit: 1 верх + 1 низ + обувь (+ опц. аксессуар), сочетание по цвету, минимализм. От +24°C без дождя - ШОРТЫ + футболка; +17..+23 - лёгкие брюки + футболка/рубашка; ниже +16 или дождь/ветер - слои/ветровка, закрытая обувь. Без обращения по имени."""
+    return ai.llm_json(prompt, 600)
 
 _day_cache = {}  # cid -> {"date":..., "text":..., "ex":..., "outfit":...}
 
@@ -78,7 +137,6 @@ def _day_menu_kb():
         [InlineKeyboardButton("🗓️ Погода на завтра", callback_data="a_w_tomorrow")],
         [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
         [InlineKeyboardButton("🌍 Сменить город", callback_data="a_setcity")],
-        [InlineKeyboardButton("⭐ В закладки", callback_data="md_fav")],
     ])
 
 def _build_day_text(cid):
@@ -128,13 +186,7 @@ def _build_day_text(cid):
     outfit = " + ".join(ex.get("outfit", [])).rstrip(".")  # для «Сохранить образ дня», в сводке не показываем
     if word_line:
         L += ["<b>📚 Слово дня</b>", esc(word_line), ""]
-    fact = ex.get("fact") or ""
-    if not fact:
-        facts = ex.get("facts", [])
-        if isinstance(facts, list) and facts:
-            fact = facts[0]
-        elif isinstance(facts, str):
-            fact = facts
+    fact = city_fact(s.get("city", ""), s.get("country", ""))
     if fact:
         L += ["<b>🔬 Интересный факт</b>", esc(fact.strip()), ""]
     if ex.get("quote"):
@@ -158,36 +210,5 @@ async def send_plany(bot, cid):
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=_day_menu_kb())
 
 async def handle_callback(bot, cid, q, data):
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-    cache = _day_cache.get(str(cid), {})
-    ex = cache.get("ex", {})
     if data == "md_worrycheck":
         await balance.show_worry_check(bot, cid); return
-    if data == "md_fav":
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔬 Сохранить интересный факт", callback_data="md_save_fact")],
-            [InlineKeyboardButton("💭 Сохранить цитату", callback_data="md_save_quote")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")],
-        ])
-        try:
-            await q.message.edit_reply_markup(reply_markup=kb)
-        except Exception:
-            await bot.send_message(chat_id=cid, text="Что сохранить?", reply_markup=kb)
-        return
-    if data.startswith("md_save_"):
-        what = data[len("md_save_"):]
-        fact_txt = ex.get("fact") or ""
-        if not fact_txt:
-            facts = ex.get("facts", [])
-            fact_txt = facts[0] if isinstance(facts, list) and facts else (facts if isinstance(facts, str) else "")
-        mapping = {
-            "fact": ("Факты", fact_txt),
-            "quote": ("Цитаты", (f"«{_strip_quotes(ex.get('quote',''))}» — {ex.get('quote_src','')}") if ex.get("quote") else ""),
-        }
-        cat, txt = mapping.get(what, ("Прочее", ""))
-        if not txt:
-            await bot.send_message(chat_id=cid, text="Нечего сохранять - открой «Мой день» заново."); return
-        store.add_to_list(config.NOTES_KEY, cid, {"date": datetime.now(TZ).strftime("%d.%m"),
-                                                  "text": txt.strip(), "source": cat, "bucket": "fav"})
-        await bot.send_message(chat_id=cid, text=f"⭐ Сохранено в «{cat}».")
-        return

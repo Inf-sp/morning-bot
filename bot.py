@@ -214,6 +214,10 @@ async def answer_callback(update, context):
         lang = "нидерландский" if data.endswith("_nl") else "английский"
         await learning.next_grammar(bot, cid, lang)
         return
+    if data.startswith("rand_gram_"):
+        lang = "нидерландский" if data.endswith("_nl") else "английский"
+        await learning.random_grammar(bot, cid, lang)
+        return
     # Игра
     if data.startswith("gamelang_"):
         lang = {"ru": "русский", "en": "английский", "nl": "нидерландский"}[data.split("_")[1]]
@@ -247,10 +251,10 @@ async def answer_callback(update, context):
         if st and st.get("hint"):
             from util import esc
             await q.message.reply_text(
-                f"💡 <b>Подсказка</b>\n\n<b>{esc(st['hint'])}</b>\n\nЗнаешь ответ?",
+                f"<b>{ui['hint']}</b>\n\n<b>{esc(st['hint'])}</b>\n\n{ui['who']}",
                 parse_mode="HTML")
         else:
-            await q.message.reply_text("Подсказок больше нет.")
+            await q.message.reply_text(ui["nohint"])
         return
     if data == "game_reveal":
         st = store.game_state.pop(cid, None)
@@ -259,12 +263,12 @@ async def answer_callback(update, context):
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             from util import esc
             body = st.get("explain") or st.get("quote", "")
-            txt = f"✅ <b>Дело раскрыто!</b>\n\nОтвет:\n<b>{esc(st.get('answer',''))}</b>"
+            txt = f"<b>{ui['found']}</b>\n\n{ui['answer']}:\n<b>{esc(st.get('answer',''))}</b>"
             if body:
                 txt += f"\n\n{esc(body)}"
             kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton(ui["again"], callback_data="game_again")],
-                [InlineKeyboardButton("⬅️ Обучение", callback_data="m_learn")],
+                [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
             ])
             await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
         return
