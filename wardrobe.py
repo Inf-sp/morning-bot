@@ -40,10 +40,10 @@ def closet_kb():
 
 def _look_result_kb():
     return _kb([
+        [("✨ Другой образ", "w_look")],
         [("👟 Прогулка", "w_scen_walk")],
         [("💻 Работа / учёба", "w_scen_work")],
         [("🥂 Вечеринка", "w_scen_party")],
-        [("🔄 Другой образ", "w_look")],
         [("⭐ В закладки", "as_fav")],
         [("⬅️ Назад", "w_home")],
     ])
