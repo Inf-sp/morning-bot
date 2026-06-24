@@ -95,6 +95,10 @@ async def answer_callback(update, context):
                 await learning.send_grammar(bot, cid, "нидерландский", "🇳🇱")
             elif act == "gram_en":
                 await learning.send_grammar(bot, cid, "английский", "🇬🇧")
+            elif act == "train_nl":
+                await learning.train_start(bot, cid, "нидерландский")
+            elif act == "train_en":
+                await learning.train_start(bot, cid, "английский")
             elif act == "tr_nl":
                 await learning.do_translate(bot, cid, "нидерландский")
             elif act == "tr_en":
@@ -161,6 +165,10 @@ async def answer_callback(update, context):
                 await content.send_watchlist(bot, cid)
             elif act == "readlist":
                 await content.send_readlist(bot, cid)
+            elif act == "watchclean":
+                await learning.open_cleanup(bot, cid, "wl")
+            elif act == "readclean":
+                await learning.open_cleanup(bot, cid, "rl")
             elif act == "fav":
                 await content.send_fav(bot, cid)
             elif act == "concerts_find":
@@ -195,6 +203,18 @@ async def answer_callback(update, context):
     # Грамматика
     if data in ("gram_a", "gram_b"):
         await learning.grammar_answer(bot, cid, "a" if data == "gram_a" else "b")
+        return
+    # Тренажёр слов
+    if data.startswith("train_"):
+        sub = data[len("train_"):]
+        if sub in ("a", "b"):
+            await learning.train_answer(bot, cid, sub)
+        elif sub in ("true", "false"):
+            await learning.train_answer(bot, cid, sub == "true")
+        elif sub == "reveal":
+            await learning.train_reveal(bot, cid)
+        elif sub == "next":
+            await learning.train_next(bot, cid)
         return
     # «Ещё»
     if data.startswith("again_"):
