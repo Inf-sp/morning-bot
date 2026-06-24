@@ -25,7 +25,7 @@ def _adj(language):
 
 
 # ================= ГРАММАТИКА =================
-def grammar_data(language, level, topic=None, study_topics=None):
+def grammar_data(language, level, topic=None, study_topics=None, study_words=None):
     in_lang = _is_b1plus(level) and language == "нидерландский"
     lang_rule = ("Объяснение - на русском простыми словами; пример и задание на нидерландском с переводом." if in_lang
                  else "Объяснение простым русским, пример на изучаемом языке с переводом.")
@@ -37,8 +37,10 @@ def grammar_data(language, level, topic=None, study_topics=None):
                       + "; ".join(study_topics[:10]) + ". Бери одну из них.")
     else:
         topic_rule = f"Выбери одну тему уровня {level}, каждый раз НОВУЮ."
+    words_rule = ("Если уместно, построй пример и задание вокруг одного из слов пользователя: "
+                  + ", ".join(study_words[:8]) + " - используй слово естественно. " if study_words else "")
     prompt = f"""Ты опытный преподаватель языка {language}, объясняешь грамматику взрослому ученику уровня {level}. {book}
-{topic_rule} {lang_rule}
+{topic_rule} {words_rule}{lang_rule}
 Цель: чтобы после прочтения ученик понял ОДНО правило и смог применить его сам.
 Объясняй живо и по сути: дай чёткое правило, покажи тему в настоящем и прошедшем времени рядом, предупреди о типичной ошибке.
 JSON (без переносов строк внутри значений):
@@ -59,12 +61,21 @@ JSON (без переносов строк внутри значений):
 }}"""
     return ai.llm_json(prompt, 1400, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
 
+def _study_words(cid, language):
+    """До 8 слов нужного языка из словаря - для примеров грамматики/тренажёра."""
+    code = _code(language)
+    words = [_cap(_w_field(w, "word", "nl", "en"))
+             for w in _ensure_dict(cid)
+             if _dict_lang(w) == code and _dict_kind(w) == "word"]
+    return [w for w in words if w][:8]
+
 async def send_grammar(bot, cid, language, flag=None, topic=None, random=False):
     level = store.get_level(cid, language)
     study_topics = [t.get("text", "") if isinstance(t, dict) else str(t)
                     for t in get_topics(cid, language)]
+    study_words = _study_words(cid, language)
     try:
-        d = grammar_data(language, level, topic, None if random or topic else study_topics)
+        d = grammar_data(language, level, topic, None if random or topic else study_topics, study_words)
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     store.grammar_state[str(cid)] = {"correct": d.get("correct", "a"), "rule": d.get("rule", ""),
@@ -114,7 +125,7 @@ async def again_grammar(bot, cid, language):
     topic = st.get("topic")
     level = store.get_level(cid, language)
     try:
-        d = grammar_data(language, level, topic)
+        d = grammar_data(language, level, topic, study_words=_study_words(cid, language))
     except Exception as e:
         await bot.send_message(chat_id=cid, text=str(e)); return
     store.grammar_state[str(cid)] = {"correct": d.get("correct", "a"), "rule": d.get("rule", ""),
@@ -147,6 +158,132 @@ async def grammar_answer(bot, cid, chosen):
         [InlineKeyboardButton("🎲 Случайная тема", callback_data=f"rand_gram_{code}")],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
+
+
+# ================= ТРЕНАЖЁР СЛОВ =================
+TRAIN_FORMATS = ["gap", "tf", "card"]
+
+def _train_words(cid, language):
+    """Слова (kind=word) нужного языка из словаря: [(word, ru), ...]."""
+    code = _code(language)
+    out = []
+    for w in _ensure_dict(cid):
+        if _dict_lang(w) == code and _dict_kind(w) == "word":
+            term = _cap(_w_field(w, "word", "nl", "en"))
+            if term:
+                out.append((term, _w_field(w, "ru")))
+    return out
+
+def train_data(language, level, word, ru, fmt):
+    """Задание тренажёра вокруг слова `word` (перевод `ru`) в формате fmt (gap/tf)."""
+    base = (f"Ты преподаватель языка {language}, уровень ученика {level}. "
+            f'Целевое слово: "{word}"' + (f" (перевод: {ru})" if ru else "") + ". ")
+    if fmt == "gap":
+        prompt = base + f"""Составь ОДНО естественное предложение на {language} уровня {level} с этим словом, заменив само слово на ____.
+Дай два варианта: правильный (исходное слово в нужной форме) и один правдоподобный неверный.
+JSON (без переносов строк внутри значений):
+{{"sentence":"предложение с ____","a":"вариант A","b":"вариант B","correct":"a или b","ru":"перевод предложения на русский","rule":"почему верный вариант, 1 строка"}}"""
+    else:  # tf
+        prompt = base + f"""Составь ОДНО естественное предложение на {language} уровня {level}, где это слово - существительное, выделенное тегами <b></b>.
+Затем дай утверждение на русском о значении/роли выделенного существительного - иногда ВЕРНОЕ, иногда ЛОЖНОЕ (выбирай случайно).
+JSON (без переносов строк внутри значений):
+{{"sentence":"предложение со словом в <b></b>","claim":"утверждение о выделенном слове на русском","correct":true или false,"explain":"короткое пояснение на русском, 1 строка","ru":"перевод предложения"}}"""
+    return ai.llm_json(prompt, 700, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
+
+def _train_again_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("➡️ Ещё задание", callback_data="train_next")],
+        [InlineKeyboardButton("🗂️ Мой словарь", callback_data="a_dict")],
+    ])
+
+async def train_start(bot, cid, language):
+    store.challenge_state.pop(str(cid), None)
+    store.game_state.pop(str(cid), None)
+    if not _train_words(cid, language):
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🗂️ Мой словарь", callback_data="a_dict")]])
+        await bot.send_message(chat_id=cid,
+            text=f"{_flag(language)} В словаре пока нет слов для тренировки. Добавь слова в 🗂️ Словарь.",
+            reply_markup=kb)
+        return
+    store.train_state[str(cid)] = {"lang": language, "fmt_i": 0}
+    await _render_train(bot, cid)
+
+async def _render_train(bot, cid):
+    import random as _r
+    st = store.train_state.get(str(cid))
+    if not st:
+        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    language = st["lang"]
+    words = _train_words(cid, language)
+    if not words:
+        await bot.send_message(chat_id=cid, text="В словаре нет слов для тренировки."); return
+    word, ru = _r.choice(words)
+    fmt = TRAIN_FORMATS[st.get("fmt_i", 0) % len(TRAIN_FORMATS)]
+    head = f"🧠 {_flag(language)} <b>Тренажёр слов</b>"
+    if fmt == "card":
+        st.update({"fmt": "card", "word": word, "ru": ru})
+        L = [head, "", "Вспомни перевод:", "", f"<b>{esc(word)}</b>"]
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("👁 Показать перевод", callback_data="train_reveal")]])
+        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
+        return
+    try:
+        d = train_data(language, store.get_level(cid, language), word, ru, fmt)
+    except Exception as e:
+        await bot.send_message(chat_id=cid, text=str(e)); return
+    if fmt == "gap":
+        st.update({"fmt": "gap", "word": word, "ru": ru, "correct": d.get("correct", "a"),
+                   "a": d.get("a", ""), "b": d.get("b", ""),
+                   "task_ru": d.get("ru", ""), "rule": d.get("rule", "")})
+        L = [head, "", "Вставь пропущенное слово:", "", esc(d.get("sentence", "")), "", "Выбери вариант 👇"]
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton(d.get("a", "A"), callback_data="train_a"),
+                                    InlineKeyboardButton(d.get("b", "B"), callback_data="train_b")]])
+        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
+        return
+    # tf - в предложении нужно сохранить <b></b> от модели, но обезопасить остальной HTML
+    st.update({"fmt": "tf", "word": word, "ru": ru, "correct": bool(d.get("correct")),
+               "explain": d.get("explain", ""), "task_ru": d.get("ru", "")})
+    sentence = esc(d.get("sentence", "")).replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
+    L = [head, "", sentence, "", f"❓ {esc(d.get('claim', ''))}", "", "Верно или неверно? 👇"]
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("✅ Верно", callback_data="train_true"),
+                                InlineKeyboardButton("❌ Неверно", callback_data="train_false")]])
+    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
+
+async def train_reveal(bot, cid):
+    st = store.train_state.get(str(cid))
+    if not st:
+        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    L = [f"🧠 {_flag(st['lang'])} <b>{esc(st.get('word', ''))}</b>", "",
+         f"Перевод: {esc(st.get('ru', '') or '—')}"]
+    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=_train_again_kb())
+
+async def train_answer(bot, cid, chosen):
+    st = store.train_state.get(str(cid))
+    if not st:
+        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    fmt = st.get("fmt")
+    if fmt == "gap":
+        right = st.get("a") if st.get("correct") == "a" else st.get("b")
+        L = ["✅ <b>Верно!</b>"] if chosen == st.get("correct") else [f"❌ <b>Неверно.</b> Правильно: {esc(right)}"]
+        if st.get("task_ru"):
+            L += ["", f"<b>Перевод:</b> {esc(st['task_ru'])}"]
+        if st.get("rule"):
+            L += ["", f"💡 {esc(st['rule'])}"]
+    elif fmt == "tf":
+        L = ["✅ <b>Верно!</b>"] if chosen == st.get("correct") else ["❌ <b>Неверно.</b>"]
+        if st.get("explain"):
+            L += ["", f"💡 {esc(st['explain'])}"]
+        if st.get("task_ru"):
+            L += ["", f"<b>Перевод:</b> {esc(st['task_ru'])}"]
+    else:
+        await bot.send_message(chat_id=cid, text="Это задание без выбора ответа."); return
+    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=_train_again_kb())
+
+async def train_next(bot, cid):
+    st = store.train_state.get(str(cid))
+    if not st:
+        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    st["fmt_i"] = (st.get("fmt_i", 0) + 1) % len(TRAIN_FORMATS)
+    await _render_train(bot, cid)
 
 
 # ================= ОБРАТНЫЙ ПЕРЕВОД =================
@@ -564,6 +701,10 @@ CLEAN_PAGE = 8
 def _sel(cid, ctx):
     return store.list_sel.setdefault(f"{cid}:{ctx}", set())
 
+def _list_label(it):
+    """Подпись для элемента простого списка (строка или {name})."""
+    return it.get("name", "") if isinstance(it, dict) else str(it)
+
 def _ctx_items(cid, ctx):
     """(заголовок, items=[(global_id, label)], back_callback) для контекста чистки."""
     if ctx.startswith("d_"):
@@ -578,11 +719,47 @@ def _ctx_items(cid, ctx):
                 ru = _w_field(w, "ru")
                 items.append((i, f"{term} — {ru}".strip(" —")))
         return f"{flag} Чистка: {label}", items, f"a_dictlang_{lang}"
-    _, lang = ctx.split("_")
-    language = "нидерландский" if lang == "nl" else "английский"
-    topics = get_topics(cid, language)
-    items = [(i, (t.get("text", "") if isinstance(t, dict) else str(t))) for i, t in enumerate(topics)]
-    return f"{_flag(language)} Чистка: темы", items, f"a_topics_{lang}"
+    if ctx.startswith("t_"):
+        _, lang = ctx.split("_")
+        language = "нидерландский" if lang == "nl" else "английский"
+        topics = get_topics(cid, language)
+        items = [(i, (t.get("text", "") if isinstance(t, dict) else str(t))) for i, t in enumerate(topics)]
+        return f"{_flag(language)} Чистка: темы", items, f"a_topics_{lang}"
+    if ctx == "nb":                       # временные закладки (NOTES, bucket=fav)
+        notes = store.get_list(config.NOTES_KEY, cid)
+        items = [(i, (n.get("text", "") if isinstance(n, dict) else str(n)).strip())
+                 for i, n in enumerate(notes)
+                 if (n.get("bucket", "fav") if isinstance(n, dict) else "fav") == "fav"]
+        return "⭐ Чистка: закладки", items, "as_bucket_fav"
+    if ctx in ("wl", "rl"):               # watchlist / readlist
+        key = config.WATCHLIST_KEY if ctx == "wl" else config.READLIST_KEY
+        title = "🍿 Чистка: посмотреть" if ctx == "wl" else "📚 Чистка: почитать"
+        back = "a_watchlist" if ctx == "wl" else "a_readlist"
+        items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(key, cid))]
+        return title, items, back
+    if ctx == "kast":                     # шкаф (плоский список (cat,item))
+        flat = _wardrobe_flat(cid)
+        items = [(i, it) for i, (cat, it) in enumerate(flat)]
+        return "🗄 Чистка: шкаф", items, "w_closet"
+    if ctx.startswith("lv_"):             # любимые: страны/артисты/книги
+        key = ctx[len("lv_"):]
+        store_key = {"countries": config.COUNTRIES_KEY, "artists": config.ARTISTS_KEY,
+                     "books": config.BOOKS_KEY}.get(key)
+        title = {"countries": "🧳 Чистка: страны", "artists": "🎸 Чистка: артисты",
+                 "books": "📖 Чистка: книги"}.get(key, "Чистка")
+        items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
+        return title, items, f"as_love_{key}"
+    return "Чистка", [], "m_learn"
+
+def _wardrobe_flat(cid):
+    """Плоский стабильный список (категория, вещь) шкафа - для чистки/удаления."""
+    flat = []
+    for cat, items in store.load_wardrobe().items():
+        if cat == "_v" or not isinstance(items, list):
+            continue
+        for it in items:
+            flat.append((cat, it))
+    return flat
 
 async def send_cleanup(bot, cid, ctx, page=0, q=None):
     title, items, back = _ctx_items(cid, ctx)
@@ -624,11 +801,33 @@ def _cleanup_delete(cid, ctx):
     if ctx.startswith("d_"):
         words = [w for i, w in enumerate(_ensure_dict(cid)) if i not in sel]
         store.set_list(config.DICT_KEY, cid, words)
-    else:
+    elif ctx.startswith("t_"):
         _, lang = ctx.split("_")
         language = "нидерландский" if lang == "nl" else "английский"
         topics = [t for i, t in enumerate(get_topics(cid, language)) if i not in sel]
         store.set_list(_topics_key(language), cid, topics)
+    elif ctx == "nb":
+        notes = [n for i, n in enumerate(store.get_list(config.NOTES_KEY, cid)) if i not in sel]
+        store.set_list(config.NOTES_KEY, cid, notes)
+    elif ctx in ("wl", "rl"):
+        key = config.WATCHLIST_KEY if ctx == "wl" else config.READLIST_KEY
+        store.set_list(key, cid, [it for i, it in enumerate(store.get_list(key, cid)) if i not in sel])
+    elif ctx == "kast":
+        flat = _wardrobe_flat(cid)
+        drop = {flat[i] for i in sel if i < len(flat)}   # (cat, item) пары на удаление
+        w = store.load_wardrobe()
+        for cat, it in drop:
+            if cat in w and it in w[cat]:
+                w[cat].remove(it)
+                if not w[cat]:
+                    del w[cat]
+        store.save_wardrobe(w)
+    elif ctx.startswith("lv_"):
+        key = ctx[len("lv_"):]
+        store_key = {"countries": config.COUNTRIES_KEY, "artists": config.ARTISTS_KEY,
+                     "books": config.BOOKS_KEY}.get(key)
+        if store_key:
+            store.set_list(store_key, cid, [it for i, it in enumerate(store.get_list(store_key, cid)) if i not in sel])
     store.list_sel[f"{cid}:{ctx}"] = set()
 
 async def open_cleanup(bot, cid, ctx):
@@ -751,7 +950,6 @@ async def send_game(bot, cid):
          InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")],
         [InlineKeyboardButton(ui["chdiff"], callback_data="game_change_diff"),
          InlineKeyboardButton(ui["chlang"], callback_data="game_change")],
-        [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
     ])
     clues = "\n".join(f"• {_dot(c)}" for c in d.get("clues", "").split("\n") if c.strip())
     txt = f"<b>{ui['title']}</b>\n\n<b>{ui['suspect']}</b>\n{clues}\n\n{ui['who']} 🤔"

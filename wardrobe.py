@@ -277,7 +277,8 @@ async def handle_callback(bot, cid, q, data):
                                "Напр.: «Футболка белая Uniqlo плотная» или «Шорты серые тонкие». Можно списком.",
                                reply_markup=_back_kb()); return
     if data == "w_del":
-        await send_del(bot, cid); return
+        import learning
+        await learning.open_cleanup(bot, cid, "kast"); return
     if data.startswith("w_delitem_"):
         await del_item(bot, cid, int(data.split("_")[-1])); return
     if data == "w_improve":

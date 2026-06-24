@@ -229,6 +229,7 @@ async def send_bucket(bot, cid, bucket):
         src = n.get("source", "Прочее") if isinstance(n, dict) else "Прочее"
         lines.append(f"• {d} · {_top_cat(src)}: {t.strip()}")
         rows.append([InlineKeyboardButton(f"❌ {d} {t.strip()[:22]}", callback_data=f"as_notedel_{i}")])
+    rows.append([InlineKeyboardButton("🧹 Убрать несколько", callback_data="as_clean_fav")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -305,6 +306,8 @@ async def send_love_section(bot, cid, key):
     rows = [[InlineKeyboardButton(f"❌ {str(it)[:28]}", callback_data=f"as_lovedel_{key}_{i}")]
             for i, it in enumerate(items[:40])]
     rows.append([InlineKeyboardButton("➕ Добавить", callback_data=f"as_loveadd_{key}")])
+    if key in ("countries", "artists", "books") and items:
+        rows.append([InlineKeyboardButton("🧹 Убрать несколько", callback_data=f"as_loveclean_{key}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_love")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -363,6 +366,12 @@ async def handle_callback(bot, cid, q, data):
         await note_to_love(bot, cid, int(data.split("_")[-1])); return
     if data.startswith("as_notedrop_"):
         await note_drop(bot, cid, int(data.split("_")[-1])); return
+    if data == "as_clean_fav":
+        import learning
+        await learning.open_cleanup(bot, cid, "nb"); return
+    if data.startswith("as_loveclean_"):
+        import learning
+        await learning.open_cleanup(bot, cid, f"lv_{data[len('as_loveclean_'):]}"); return
     if data.startswith("as_lovedel_"):
         parts = data[len("as_lovedel_"):].rsplit("_", 1)
         await love_delete(bot, cid, parts[0], int(parts[1])); return

@@ -490,13 +490,28 @@ async def add_reco(bot, cid, i):
         ni = len(rec["items"]) - 1
         await _send_book_card(bot, cid, it, ni)
 
+def _list_text(it):
+    return it.get("name", "") if isinstance(it, dict) else str(it)
+
 async def send_watchlist(bot, cid):
     lst = store.get_list(config.WATCHLIST_KEY, cid)
-    await bot.send_message(chat_id=cid, text="🍿 Посмотреть:\n" + ("\n".join(f"• {x}" for x in lst) if lst else "пусто"))
+    rows = []
+    if lst:
+        rows.append([InlineKeyboardButton("🧹 Чистка списка", callback_data="a_watchclean")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
+    await bot.send_message(chat_id=cid,
+        text="🍿 Посмотреть:\n" + ("\n".join(f"• {_list_text(x)}" for x in lst) if lst else "пусто"),
+        reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_readlist(bot, cid):
     lst = store.get_list(config.READLIST_KEY, cid)
-    await bot.send_message(chat_id=cid, text="📚 Почитать:\n" + ("\n".join(f"• {x}" for x in lst) if lst else "пусто"))
+    rows = []
+    if lst:
+        rows.append([InlineKeyboardButton("🧹 Чистка списка", callback_data="a_readclean")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
+    await bot.send_message(chat_id=cid,
+        text="📚 Почитать:\n" + ("\n".join(f"• {_list_text(x)}" for x in lst) if lst else "пусто"),
+        reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_fav(bot, cid):
     favs = store.get_list(config.FAVORITES_KEY, cid)

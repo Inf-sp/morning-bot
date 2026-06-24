@@ -130,6 +130,7 @@ add_wardrobe_mode = {}
 game_state = {}
 game_config = {}
 grammar_state = {}
+train_state = {}        # chat_id -> состояние тренажёра слов (формат/ответ/слово)
 pending_input = {}
 last_recos = {}
 suggested_countries = {}
