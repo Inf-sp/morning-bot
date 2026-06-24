@@ -219,14 +219,13 @@ async def send_daycheck(bot, cid):
     if worries:
         lines.append("<b>Тревоги за сегодня:</b>")
         for w in worries:
-            mark = {"real": "📌", "let_go": "🧹"}.get(w.get("status"), "•")
-            lines.append(f"{mark} {esc(w['text'])}")
+            lines.append(f"• {esc(w['text'])}")
         lines.append("")
         lines.append("Напиши новые мысли сообщением или разбери текущие 👇")
     else:
         lines.append("Пока пусто. Напиши тревоги одним сообщением.")
     store.pending_input[cid] = "worry"
-    rows = [[InlineKeyboardButton("🧠 Разобрать тревоги", callback_data="md_worrycheck")]] if worries else []
+    rows = [[InlineKeyboardButton("🧠 Разобрать тревоги", callback_data="as_worryreview")]] if worries else []
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_close")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -250,70 +249,31 @@ async def send_evening_review(bot, cid):
             "Факт: {что реально известно}\n"
             "Предположение: {что пока лишь догадка}\n\n"
             "В конце добавь блок:\n"
-            "🧠 <b>Итог дня</b>\n{1-2 строки: сколько тревог подтвердилось фактами, про неопределённость}\n\n"
+            "🧠 <b>Итог дня</b>\n{1-2 строки: где факты, а где шум и неопределённость}\n\n"
             "🌿 {тёплая короткая мысль на ночь}\n\n"
             f"Тревоги:\n{wlist}", 800, 0.6)
         analysis = analysis.replace("**", "").replace("* ", "").strip()
     except Exception:
         analysis = ""
     L = ["🥸 <b>Вечерний разбор</b>", "", "<b>Сегодня тебя беспокоили:</b>"]
-    rows = []
-    for i, w in enumerate(worries):
+    for w in worries:
         L.append(f"• {esc(w['text'])}")
-        rows.append([
-            InlineKeyboardButton("🧹 Не сбылось", callback_data=f"worry_letgo_{i}"),
-            InlineKeyboardButton("👌🏻 Подтвердилось", callback_data=f"worry_real_{i}"),
-        ])
     if analysis:
         L += ["", analysis]
-    rows.append([InlineKeyboardButton("🧹 Очистить все тревоги", callback_data="worry_clearall")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_close")])
+    rows = [
+        [InlineKeyboardButton("🧹 Очистить все тревоги", callback_data="worry_clearall")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_close")],
+    ]
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
-async def worry_delete(bot, cid, i):
-    cid = str(cid)
-    worries = store.get_list(config.WORRIES_KEY, cid)
-    if i < len(worries):
-        worries.pop(i)
-        store.set_list(config.WORRIES_KEY, cid, worries)
-    await send_evening_review(bot, cid)
-
 async def worry_clear_all(bot, cid):
-    store.set_list(config.WORRIES_KEY, str(cid), [])
+    cid = str(cid)
+    worries = store.get_list(config.WORRIES_KEY, cid)
+    if worries:
+        summary = f"Разобрано тревог: {len(worries)}"
+        store.add_to_list(config.DIARY_KEY, cid, {"date": datetime.now(TZ).strftime("%d.%m"), "text": summary})
+    store.set_list(config.WORRIES_KEY, cid, [])
     await bot.send_message(chat_id=cid, text="🧹 Дневник тревог очищен. Лёгкой ночи.")
-
-async def show_worry_check(bot, cid):
-    cid = str(cid)
-    worries = store.get_list(config.WORRIES_KEY, cid)
-    total = len(worries)
-    resolved = sum(1 for w in worries if w.get("status") in ("real", "let_go"))
-    let_go = sum(1 for w in worries if w.get("status") == "let_go")
-    pct = int(100 * let_go / total) if total else 0
-    bar = "▓" * (pct // 10) + "░" * (10 - pct // 10)
-    lines = [f"🧠 <b>Проверка дня</b>", f"🧹 Ментальная разгрузка: {pct}%", bar, ""]
-    rows = []
-    for i, w in enumerate(worries):
-        mark = {"real": "👌🏻", "let_go": "🧹"}.get(w.get("status"), "•")
-        lines.append(f"{mark} {esc(w['text'])}")
-        if w.get("status") == "pending":
-            rows.append([InlineKeyboardButton("🧹 Не сбылось", callback_data=f"worry_letgo_{i}"),
-                         InlineKeyboardButton("👌🏻 Подтвердилось", callback_data=f"worry_real_{i}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_close")])
-    if resolved == total and total:
-        lines += ["", "Готово. Чем больше отпускаешь шума - тем чище голова."]
-    await bot.send_message(chat_id=cid, text="\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))
-
-async def worry_mark(bot, cid, i, status):
-    cid = str(cid)
-    worries = store.get_list(config.WORRIES_KEY, cid)
-    if i < len(worries):
-        worries[i]["status"] = status
-        store.set_list(config.WORRIES_KEY, cid, worries)
-        if all(w.get("status") != "pending" for w in worries):
-            real = [w["text"] for w in worries if w["status"] == "real"]
-            summary = f"Тревог: {len(worries)}, реально: {len(real)}, отпущено: {len(worries)-len(real)}"
-            store.add_to_list(config.DIARY_KEY, cid, {"date": datetime.now(TZ).strftime("%d.%m"), "text": summary})
-        await show_worry_check(bot, cid)
 
 async def save_worries(bot, cid, text):
     cid = str(cid)
@@ -342,6 +302,8 @@ async def handle_callback(bot, cid, q, data):
     # дневник тревоги
     if data == "as_daycheck":
         await send_daycheck(bot, cid); return
+    if data == "as_worryreview":
+        await send_evening_review(bot, cid); return
     # мотивация (одноразовая генерация)
     if data in _ONESHOT:
         gen, lbl, cb = _ONESHOT[data]

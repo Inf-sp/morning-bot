@@ -269,4 +269,4 @@ async def send_plany(bot, cid):
 
 async def handle_callback(bot, cid, q, data):
     if data == "md_worrycheck":
-        await balance.show_worry_check(bot, cid); return
+        await balance.send_evening_review(bot, cid); return

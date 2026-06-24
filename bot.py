@@ -307,13 +307,6 @@ async def answer_callback(update, context):
     if data == "worry_clearall":
         await balance.worry_clear_all(bot, cid)
         return
-    if data.startswith("worry_del_"):
-        await balance.worry_delete(bot, cid, int(data.split("_")[-1]))
-        return
-    if data.startswith("worry_"):
-        _, action, idx = data.split("_")
-        await balance.worry_mark(bot, cid, int(idx), "real" if action == "real" else "let_go")
-        return
     # «Продолжить / ещё раз»
     if data == "chat_retry":
         await balance.retry(bot, cid)
@@ -525,7 +518,7 @@ def main():
     jq = app.job_queue
     jq.run_daily(job_grammar, time=datetime.strptime("11:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
     jq.run_daily(job_checkin_day, time=datetime.strptime("14:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
-    jq.run_daily(job_checkin_evening, time=datetime.strptime("20:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
+    jq.run_daily(job_checkin_evening, time=datetime.strptime("22:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
 
     print("Bot started")
     app.run_polling(drop_pending_updates=True)
