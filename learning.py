@@ -248,6 +248,28 @@ def _split_term(s):
         return parts[0].strip(), parts[1].strip()
     return s, ""
 
+def _cap(s):
+    """Первая буква термина - заглавная (с учётом орфографии), остальное не трогаем."""
+    s = (s or "").strip()
+    return s[:1].upper() + s[1:] if s else s
+
+def migrate_dict_caps():
+    """Разовая миграция: приводит уже сохранённые слова словаря к виду с заглавной буквы."""
+    data = store._load(config.DICT_KEY)
+    changed = False
+    for cid, words in (data or {}).items():
+        if not isinstance(words, list):
+            continue
+        for w in words:
+            if isinstance(w, dict) and w.get("word"):
+                capped = _cap(w["word"])
+                if capped != w["word"]:
+                    w["word"] = capped
+                    changed = True
+    if changed:
+        store._save(config.DICT_KEY, data)
+    return changed
+
 def _kind_of(term):
     """Слово или фраза: считаем по термину без ведущего артикля (de/het/een/the/a/an)."""
     t = re.sub(r"^(de|het|een|the|a|an)\s+", "", (term or "").strip().lower())
@@ -284,7 +306,7 @@ async def add_words_batch(bot, cid, text, lang="nl"):
         ru = (it.get("ru") or "").strip() or extra_ru
         lng = "en" if it.get("lang") == "en" else "nl"
         knd = _kind_of(term)   # тип по самому термину (одно слово = слово)
-        store.add_to_list(config.DICT_KEY, cid, {"lang": lng, "word": term[:80], "ru": ru, "kind": knd})
+        store.add_to_list(config.DICT_KEY, cid, {"lang": lng, "word": _cap(term)[:80], "ru": ru, "kind": knd})
         added[lng][knd] += 1
     if not any(added[l][k] for l in added for k in added[l]):
         await bot.send_message(chat_id=cid, text="Не удалось распознать слова. Попробуй ещё раз."); return
@@ -423,7 +445,7 @@ async def send_morning_word(bot, cid):
     L += ["", "🗂 <b>Порция на сегодня:</b>"]
     rows = []
     for w in portion:
-        word = _w_field(w, "word", "nl", "en")
+        word = _cap(_w_field(w, "word", "nl", "en"))
         ru = _w_field(w, "ru")
         L.append(f"• {esc(word)} → {esc(ru)}")
         # индекс для удаления

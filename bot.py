@@ -497,6 +497,11 @@ async def handle_settings(bot, cid, data):
 
 
 async def post_init(app):
+    try:
+        if learning.migrate_dict_caps():
+            print("Dict caps migration: applied")
+    except Exception as e:
+        print(f"Dict caps migration failed: {e}")
     from telegram import BotCommand
     await app.bot.set_my_commands([
         BotCommand("start", "меню и описание"),
