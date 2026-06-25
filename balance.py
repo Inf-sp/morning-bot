@@ -37,6 +37,7 @@ def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry", depth=
 def _recipe_kb():
     return _kb([
         [("🗒️ Полный рецепт", "as_food_full")],
+        [("❤️ Сохранить рецепт", "as_recipe_save")],
         [("✨ Ещё рецепт", "as_food")],
         [("⭐ В закладки", "as_fav")],
         [("⬅️ Назад", "m_close")],
@@ -66,9 +67,19 @@ async def _send(bot, cid, text, kb=None, surface="card"):
 
 
 # ---------- Кулинарный радар ----------
-def _gen_recipe(constraint):
+def _my_recipe_pref(cid):
+    """Контекст из базы рецептов для промпта (первые 5 названий)."""
+    if not cid:
+        return ""
+    saved = store.get_list(config.MY_RECIPES_KEY, str(cid))[:5]
+    names = ", ".join(r.get("name", "") for r in saved if r.get("name"))
+    return f"Пользователь любит готовить: {names}. Похожий стиль приветствуется.\n" if names else ""
+
+
+def _gen_recipe(constraint, cid=None):
+    pref = _my_recipe_pref(cid)
     return ai.llm_json(
-        f"Предложи 1 рецепт ({constraint}), 1 человек, электрическая плита, духавка SAGE. Компактно.\n"
+        f"{pref}Предложи 1 рецепт ({constraint}), 1 человек, электрическая плита, духовка SAGE. Компактно.\n"
         "Оформление полей в Telegram HTML: подзаголовки тегом <b>...</b>, пункты с маркера «• ». "
         "НИКАКОГО markdown - запрещены *, **, #, `. Заголовки <b>Ингредиенты</b> и <b>Приготовление</b>, пункты с новой строки «• ».\n"
         'JSON: {"name":"название","time":"X мин","servings":"N порц.",'
@@ -82,7 +93,7 @@ def _recipe_card(d):
 async def send_recipe(bot, cid, constraint="обычное блюдо"):
     await bot.send_message(chat_id=cid, text="Подбираю...")
     try:
-        d = _gen_recipe(constraint)
+        d = _gen_recipe(constraint, cid=cid)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     store.last_recipe[str(cid)] = d
@@ -100,17 +111,147 @@ async def send_recipe_full(bot, cid):
     store.last_answer[str(cid)] = txt
     await util.send_html(bot, cid, txt, reply_markup=_recipe_kb())
 
+def _gen_leftovers_recipe(ingredients):
+    return ai.llm_json(
+        f"Есть продукты: {secure.wrap_untrusted(ingredients, 'продукты')}. "
+        "Предложи 1 простой рецепт только из них (+ базовые специи, максимум 1 доп продукт). 1 человек.\n"
+        "Telegram HTML в полях: <b>теги</b> для заголовков, пункты с «• ». Без markdown.\n"
+        'JSON: {"name":"название","time":"X мин","servings":"1 порц.",'
+        '"short":"3-4 коротких предложения как готовить","full":"полный рецепт: <b>Ингредиенты</b> со списком «• », '
+        'затем <b>Приготовление</b> с пунктами «• »"}', 900, tier="cheap")
+
 async def send_leftovers(bot, cid, ingredients):
     await bot.send_message(chat_id=cid, text="Смотрю, что можно приготовить...")
     try:
-        out = ai.llm(
-            f"Есть продукты: {secure.wrap_untrusted(ingredients, 'продукты')}. "
-            "Предложи 1 простой рецепт только из них (+ базовые специи и максимум 1 доп продукт что получилось вкусное блюдо). "
-            "Каждый: 🥘 Название • ⏱️ время, затем 1-2 строки как готовить, с переносами. Компактно, эмодзи. Без воды.", 800, 0.9, tier="cheap")
+        d = _gen_leftovers_recipe(ingredients)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
+    store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("leftovers", ingredients)
-    await _send(bot, cid, out, kb=_recipe_kb())
+    card = _recipe_card(d)
+    store.last_source[str(cid)] = "Питание · Остатки"
+    store.last_answer[str(cid)] = card
+    await util.send_html(bot, cid, card, reply_markup=_recipe_kb())
+
+
+# ---------- Мой холодильник ----------
+async def send_fridge(bot, cid):
+    cid_s = str(cid)
+    items = store.get_list(config.FRIDGE_KEY, cid_s)
+    if items:
+        lines = "\n".join(f"• {util.esc(it)}" for it in items)
+        txt = f"🧊 <b>Мой холодильник</b>\n\n{lines}"
+    else:
+        txt = "🧊 <b>Мой холодильник</b>\n\nСписок пуст. Добавь продукты, которые обычно есть дома."
+    rows = []
+    for i, it in enumerate(items):
+        rows.append([InlineKeyboardButton(f"❌ {it[:32]}", callback_data=f"as_fridge_del_{i}")])
+    rows.append([InlineKeyboardButton("➕ Добавить продукты", callback_data="as_fridge_add")])
+    if items:
+        rows.append([InlineKeyboardButton("🍳 Что приготовить", callback_data="as_fridge_cook")])
+        rows.append([InlineKeyboardButton("🗑 Очистить список", callback_data="as_fridge_clear")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_food")])
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
+                           reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def fridge_add_done(bot, cid, text):
+    cid_s = str(cid)
+    parts = re.split(r"[,\n;]+", text)
+    items_new = [p.strip().lower() for p in parts if p.strip()]
+    existing = {x.lower() for x in store.get_list(config.FRIDGE_KEY, cid_s)}
+    added = []
+    for it in items_new:
+        if it and it not in existing:
+            store.add_to_list(config.FRIDGE_KEY, cid_s, it)
+            existing.add(it)
+            added.append(it)
+    if added:
+        await bot.send_message(chat_id=cid, text=f"➕ Добавлено: {', '.join(added)}")
+    else:
+        await bot.send_message(chat_id=cid, text="Все эти продукты уже есть в списке.")
+    await send_fridge(bot, cid)
+
+
+async def fridge_del(bot, cid, idx):
+    cid_s = str(cid)
+    items = store.get_list(config.FRIDGE_KEY, cid_s)
+    if idx < len(items):
+        items.pop(idx)
+        store.set_list(config.FRIDGE_KEY, cid_s, items)
+    await send_fridge(bot, cid)
+
+
+async def fridge_clear(bot, cid):
+    store.set_list(config.FRIDGE_KEY, str(cid), [])
+    await bot.send_message(chat_id=cid, text="🗑 Список продуктов очищен.")
+    await send_fridge(bot, cid)
+
+
+async def send_fridge_recipe(bot, cid):
+    items = store.get_list(config.FRIDGE_KEY, str(cid))
+    if not items:
+        await bot.send_message(chat_id=cid, text="Холодильник пуст. Сначала добавь продукты."); return
+    await send_leftovers(bot, cid, ", ".join(items))
+
+
+# ---------- База рецептов ----------
+async def save_my_recipe(bot, cid):
+    cid_s = str(cid)
+    d = store.last_recipe.get(cid_s)
+    if not d or not d.get("name"):
+        await bot.send_message(chat_id=cid, text="Нет рецепта для сохранения."); return
+    saved = store.get_list(config.MY_RECIPES_KEY, cid_s)
+    names_lower = [r.get("name", "").lower() for r in saved]
+    if d["name"].lower() in names_lower:
+        await bot.send_message(chat_id=cid, text=f"«{util.esc(d['name'])}» уже есть в твоих рецептах."); return
+    store.add_to_list(config.MY_RECIPES_KEY, cid_s, d)
+    await bot.send_message(chat_id=cid, text=f"❤️ «{util.esc(d['name'])}» сохранён в базе рецептов.")
+
+
+async def send_my_recipes(bot, cid):
+    cid_s = str(cid)
+    recipes = store.get_list(config.MY_RECIPES_KEY, cid_s)
+    if not recipes:
+        txt = ("📚 <b>Мои рецепты</b>\n\nПусто. Сохраняй рецепты кнопкой "
+               "«❤️ Сохранить рецепт» под любым рецептом.")
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_food")]])
+    else:
+        txt = "📚 <b>Мои рецепты</b> — {}\n\n".format(len(recipes))
+        txt += "\n".join(f"• {util.esc(r.get('name', '?'))}" for r in recipes)
+        rows = []
+        for i, r in enumerate(recipes):
+            name = r.get("name", f"Рецепт {i+1}")[:30]
+            rows.append([InlineKeyboardButton(f"📖 {name}", callback_data=f"as_my_recipe_{i}")])
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_food")])
+        kb = InlineKeyboardMarkup(rows)
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+
+
+async def send_my_recipe_full(bot, cid, idx):
+    cid_s = str(cid)
+    recipes = store.get_list(config.MY_RECIPES_KEY, cid_s)
+    if idx >= len(recipes):
+        await bot.send_message(chat_id=cid, text="Рецепт не найден."); return
+    d = recipes[idx]
+    store.last_recipe[cid_s] = d
+    txt = f"📖 <b>{util.esc(d.get('name',''))}</b>\n\n{d.get('full','')}"
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Удалить из базы", callback_data=f"as_my_recipe_del_{idx}")],
+        [InlineKeyboardButton("⬅️ Назад к списку", callback_data="as_my_recipes")],
+    ])
+    await util.send_html(bot, cid, txt, reply_markup=kb)
+
+
+async def my_recipe_del(bot, cid, idx):
+    cid_s = str(cid)
+    recipes = store.get_list(config.MY_RECIPES_KEY, cid_s)
+    if idx < len(recipes):
+        name = recipes[idx].get("name", "рецепт")
+        recipes.pop(idx)
+        store.set_list(config.MY_RECIPES_KEY, cid_s, recipes)
+        await bot.send_message(chat_id=cid, text=f"🗑 «{util.esc(name)}» удалён из базы рецептов.")
+    await send_my_recipes(bot, cid)
 
 
 # ---------- СДВГ / Следующий шаг ----------
@@ -325,7 +466,7 @@ async def handle_callback(bot, cid, q, data):
         await send_recipe_full(bot, cid); return
     if data == "as_food_left":
         store.pending_input[str(cid)] = "leftovers"
-        await bot.send_message(chat_id=cid, text="🥕 Напиши продукты, что есть дома (через запятую) - предложу 3 рецепта.",
+        await bot.send_message(chat_id=cid, text="🥕 Напиши продукты, что есть дома (через запятую) — предложу рецепт.",
                                reply_markup=_back_kb()); return
     # дневник тревоги
     if data == "as_daycheck":
@@ -348,6 +489,41 @@ async def handle_callback(bot, cid, q, data):
     if data == "as_doctor":
         store.pending_input[str(cid)] = "role_doctor"
         await bot.send_message(chat_id=cid, text=DOCTOR_INTRO, reply_markup=_back_kb()); return
+    # холодильник
+    if data == "as_fridge":
+        await send_fridge(bot, cid); return
+    if data == "as_fridge_add":
+        store.pending_input[str(cid)] = "fridge_add"
+        await bot.send_message(chat_id=cid,
+            text="➕ Напиши продукты через запятую или с новой строки — добавлю в список.",
+            reply_markup=_back_kb()); return
+    if data == "as_fridge_cook":
+        await send_fridge_recipe(bot, cid); return
+    if data == "as_fridge_clear":
+        await fridge_clear(bot, cid); return
+    if data.startswith("as_fridge_del_"):
+        try:
+            await fridge_del(bot, cid, int(data.split("_")[-1]))
+        except (ValueError, IndexError):
+            pass
+        return
+    # база рецептов
+    if data == "as_recipe_save":
+        await save_my_recipe(bot, cid); return
+    if data == "as_my_recipes":
+        await send_my_recipes(bot, cid); return
+    if data.startswith("as_my_recipe_del_"):
+        try:
+            await my_recipe_del(bot, cid, int(data.split("_")[-1]))
+        except (ValueError, IndexError):
+            pass
+        return
+    if data.startswith("as_my_recipe_"):
+        try:
+            await send_my_recipe_full(bot, cid, int(data.split("_")[-1]))
+        except (ValueError, IndexError):
+            pass
+        return
 
 
 # ---------- «Продолжить» / «Ещё раз» ----------
