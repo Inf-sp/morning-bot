@@ -226,6 +226,70 @@ def wikidata_city_sentence(name: str) -> str:
     return random.choice(list(facts.values())) if facts else ""
 
 
+# ================= WEATHER ARCHIVE =================
+_WR_CACHE: dict = {}   # (lat, lon) -> (ts, dict)
+_WR_TTL = 86400
+
+
+def weather_records(lat: float, lon: float, tz: str = "UTC", years: int = 10) -> dict:
+    """Реальные погодные рекорды за N лет из Open-Meteo Archive API.
+
+    Возвращает {тип: строка} — heat/cold/rain. Без LLM, реальные данные.
+    """
+    from datetime import date
+    key = (round(lat, 2), round(lon, 2))
+    hit = _WR_CACHE.get(key)
+    if hit and time.time() - hit[0] < _WR_TTL:
+        return hit[1]
+
+    end = date.today()
+    start = date(end.year - years, 1, 1)
+    months = util._MONTHS
+    facts: dict = {}
+    try:
+        r = requests.get("https://archive-api.open-meteo.com/v1/archive", params={
+            "latitude": lat, "longitude": lon,
+            "start_date": str(start), "end_date": str(end),
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
+            "timezone": tz,
+        }, timeout=30)
+        if r.status_code != 200:
+            _log.warning("research: weather_records → HTTP %s", r.status_code)
+            return {}
+        d = r.json().get("daily", {})
+        times = d.get("time", [])
+        tmaxs = d.get("temperature_2m_max", [])
+        tmins = d.get("temperature_2m_min", [])
+        rains = d.get("precipitation_sum", [])
+
+        def _fmt(date_str: str) -> str:
+            from datetime import datetime as _dt
+            dt = _dt.strptime(date_str, "%Y-%m-%d")
+            return f"{dt.day} {months[dt.month - 1]} {dt.year}"
+
+        heat = [(t, v) for t, v in zip(times, tmaxs) if v is not None]
+        if heat:
+            ds, val = max(heat, key=lambda x: x[1])
+            facts["heat"] = f"Рекорд жары за {years} лет: {val:+.0f}°C · {_fmt(ds)}"
+
+        cold = [(t, v) for t, v in zip(times, tmins) if v is not None]
+        if cold:
+            ds, val = min(cold, key=lambda x: x[1])
+            facts["cold"] = f"Рекорд холода за {years} лет: {val:+.0f}°C · {_fmt(ds)}"
+
+        rain = [(t, v) for t, v in zip(times, rains) if v is not None and v > 5]
+        if rain:
+            ds, val = max(rain, key=lambda x: x[1])
+            facts["rain"] = f"Рекордный ливень за {years} лет: {val:.0f} мм · {_fmt(ds)}"
+
+    except Exception as e:
+        _log.warning("research: weather_records(%.2f, %.2f) failed: %s", lat, lon, e)
+        return {}
+
+    _WR_CACHE[key] = (time.time(), facts)
+    return facts
+
+
 # ================= REST COUNTRIES =================
 def country_facts(name):
     """Проверенные факты о стране -> {cc, capital, languages, region, currency} или {}."""

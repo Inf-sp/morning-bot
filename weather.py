@@ -208,24 +208,23 @@ def storm_alert(wind_ms, code, rain, rain_mm=None, cc=""):
         L.append("Снег и гололёд. Осторожно на дорогах, заложи время на дорогу.")
     return "\n".join(L)
 
-def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="", country="", cc=""):
-    """Метео-факт, привязанный к завтрашней погоде, для текущей страны."""
-    place = f"{city}, {country}" if country else city
-    is_nl = (cc or "").upper() == "NL"
-    hist_src = "архивов KNMI" if is_nl else "исторических метеоданных страны"
-    try:
-        out = ai.llm(
-            f"Дай ОДИН РЕАЛЬНЫЙ исторический метео-факт про место: {place}. "
-            "Сухой тон, тонкая ирония допустима.\n"
-            f"Источник - {hist_src}: реальный погодный рекорд или событие в этом регионе "
-            "(рекордная жара/холод/осадки и в каком году), либо проверяемый климатический факт.\n"
-            "ЗАПРЕЩЕНО: делать выводы или прогнозы про завтрашнюю погоду, сравнивать с завтра, "
-            "фантазировать, додумывать. Только проверяемый факт из прошлого.\n"
-            "Максимум 2 коротких предложения, на русском, без markdown, начни сразу с факта.",
-            200, 0.7, tier="cheap").strip()
-        return out
-    except Exception:
+def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="",
+                country="", cc="", lat=None, lon=None, tz="UTC"):
+    """Реальный метео-рекорд из Open-Meteo Archive — без LLM, без галлюцинаций."""
+    import research as _r
+    if lat is None or lon is None:
         return ""
+    records = _r.weather_records(lat, lon, tz=tz, years=10)
+    if not records:
+        return ""
+    # выбираем факт релевантный текущей погоде
+    if tmax >= 28 and "heat" in records:
+        return records["heat"]
+    if rain >= 50 and "rain" in records:
+        return records["rain"]
+    if tmax < 5 and "cold" in records:
+        return records["cold"]
+    return random.choice(list(records.values()))
 
 
 # ---------- отправка ----------
@@ -306,7 +305,9 @@ async def send_weather(bot, cid, mode="today"):
                 L += ["", alert]
             else:
                 date_lbl = header.split("•")[1].strip() if "•" in header else ""
-                mf = _meteo_fact(s["city"], tmax, rain, wind_ms, desc, date_lbl, country=country, cc=cc)
+                mf = _meteo_fact(s["city"], tmax, rain, wind_ms, desc, date_lbl,
+                                country=country, cc=cc,
+                                lat=s["lat"], lon=s["lon"], tz=str(TZ))
                 if mf:
                     L += ["", "🔬 <b>Метео-факт</b>", esc(mf)]
         else:
