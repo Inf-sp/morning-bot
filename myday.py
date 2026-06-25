@@ -56,15 +56,15 @@ def _strip_quotes(s):
 
 # --- Сводка дня (Мой день) ---
 
-def city_fact(city, country, cid):
-    """Факт о городе: Perplexity (если ключ) → Wikipedia+LLM. Anti-repeat по cid."""
+def city_fact(city, country, cid, cc=""):
+    """Факт о городе: Gemini+Google Search → Wikipedia+LLM. Anti-repeat по cid."""
     cid = str(cid)
     city_key = (city or "").lower().replace(" ", "_")
     seen_all = store._load(config.CITY_FACTS_KEY)
     seen = set(seen_all.get(cid, {}).get(city_key, []))
 
     # --- Gemini Search: реальный веб-поиск через Google grounding ---
-    gsf = research.gemini_search_fact(city, country, avoid=list(seen))
+    gsf = research.gemini_search_fact(city, country, cc=cc, avoid=list(seen))
     if gsf:
         seen.add(gsf)
         seen_all.setdefault(cid, {})[city_key] = list(seen)
@@ -273,7 +273,7 @@ def _build_day_text(cid):
     outfit = " + ".join(ex.get("outfit", [])).rstrip(".")  # для «Сохранить образ дня», в сводке не показываем
     if word_line:
         L += ["<b>📚 Слово дня</b>", esc(word_line), ""]
-    fact = city_fact(s.get("city", ""), s.get("country", ""), cid)
+    fact = city_fact(s.get("city", ""), s.get("country", ""), cid, cc=s.get("cc", ""))
     if fact:
         L += ["<b>🔬 Интересный факт</b>", esc(fact.strip()), ""]
     hack_cat, hack_text = daily_lifehack(
