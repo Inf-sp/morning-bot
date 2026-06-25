@@ -1,5 +1,4 @@
 import re
-import ai
 
 _WEEKDAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 _MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня",
@@ -16,12 +15,45 @@ async def send_html(bot, cid, text, reply_markup=None):
     except Exception:
         await bot.send_message(chat_id=cid, text=html, reply_markup=reply_markup)
 
+# Имя страны (ru/en, нижний регистр) -> ISO-2 код. Офлайн, без LLM.
+_COUNTRY_CC = {
+    "нидерланды": "NL", "голландия": "NL", "netherlands": "NL", "holland": "NL",
+    "бельгия": "BE", "belgium": "BE", "германия": "DE", "germany": "DE",
+    "франция": "FR", "france": "FR", "испания": "ES", "spain": "ES",
+    "италия": "IT", "italy": "IT", "португалия": "PT", "portugal": "PT",
+    "великобритания": "GB", "англия": "GB", "соединённое королевство": "GB",
+    "uk": "GB", "united kingdom": "GB", "england": "GB", "britain": "GB",
+    "ирландия": "IE", "ireland": "IE", "австрия": "AT", "austria": "AT",
+    "швейцария": "CH", "switzerland": "CH", "польша": "PL", "poland": "PL",
+    "чехия": "CZ", "czechia": "CZ", "czech republic": "CZ", "словакия": "SK", "slovakia": "SK",
+    "венгрия": "HU", "hungary": "HU", "швеция": "SE", "sweden": "SE",
+    "норвегия": "NO", "norway": "NO", "дания": "DK", "denmark": "DK",
+    "финляндия": "FI", "finland": "FI", "исландия": "IS", "iceland": "IS",
+    "греция": "GR", "greece": "GR", "хорватия": "HR", "croatia": "HR",
+    "словения": "SI", "slovenia": "SI", "румыния": "RO", "romania": "RO",
+    "болгария": "BG", "bulgaria": "BG", "сербия": "RS", "serbia": "RS",
+    "люксембург": "LU", "luxembourg": "LU", "эстония": "EE", "estonia": "EE",
+    "латвия": "LV", "latvia": "LV", "литва": "LT", "lithuania": "LT",
+    "россия": "RU", "russia": "RU", "украина": "UA", "ukraine": "UA",
+    "сша": "US", "америка": "US", "usa": "US", "united states": "US", "us": "US",
+    "канада": "CA", "canada": "CA", "мексика": "MX", "mexico": "MX",
+    "бразилия": "BR", "brazil": "BR", "аргентина": "AR", "argentina": "AR",
+    "япония": "JP", "japan": "JP", "китай": "CN", "china": "CN",
+    "южная корея": "KR", "корея": "KR", "south korea": "KR", "korea": "KR",
+    "таиланд": "TH", "thailand": "TH", "вьетнам": "VN", "vietnam": "VN",
+    "индия": "IN", "india": "IN", "индонезия": "ID", "indonesia": "ID",
+    "турция": "TR", "turkey": "TR", "türkiye": "TR", "оаэ": "AE",
+    "uae": "AE", "эмираты": "AE", "united arab emirates": "AE",
+    "египет": "EG", "egypt": "EG", "марокко": "MA", "morocco": "MA",
+    "израиль": "IL", "israel": "IL", "грузия": "GE", "georgia": "GE",
+    "австралия": "AU", "australia": "AU", "новая зеландия": "NZ", "new zealand": "NZ",
+    "кипр": "CY", "cyprus": "CY", "мальта": "MT", "malta": "MT",
+}
+
 def country_flag(name):
-    try:
-        out = ai.llm(f"Верни ТОЛЬКО эмодзи флага страны: {name}. Без текста.", 20, 0).strip()
-        return out if out else "🏳"
-    except Exception:
-        return "🏳"
+    """Эмодзи флага по названию страны - офлайн, без LLM. Неизвестное -> 🏳."""
+    cc = _COUNTRY_CC.get((name or "").strip().lower())
+    return flag_from_cc(cc) if cc else "🏳"
 
 def flag_from_cc(cc):
     cc = (cc or "").upper()

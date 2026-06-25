@@ -17,6 +17,7 @@ import travel
 import content
 import weather
 import verify
+import secure
 
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID
@@ -337,8 +338,11 @@ async def answer_callback(update, context):
 # ---------- Текстовый роутер ----------
 async def text_router(update, context):
     cid = str(update.effective_chat.id)
-    text = update.message.text
+    text = secure.clamp(update.message.text)        # лимит длины + чистка невидимых/управляющих
     bot = context.bot
+    flags = secure.injection_flags(text)
+    if flags:
+        print("[secure] injection flags:", flags)   # advisory, не блокируем
 
     # Нажата любая кнопка нижнего меню -> сбрасываем незавершённый ввод (чтобы чат не «съел» сообщение настроек)
     if text in ("☀️ Мой день", "👕 Гардероб") or text in menu.LABEL_TO_KEY:
@@ -418,12 +422,15 @@ async def document_handler(update, context):
     if not store.add_wardrobe_mode.get(cid):
         return
     doc = update.message.document
+    if (doc.file_size or 0) > secure.MAX_DOC_BYTES:
+        await update.message.reply_text("Файл слишком большой. Пришли список вещей текстом или файлом до 100 КБ.")
+        return
     try:
         f = await context.bot.get_file(doc.file_id)
         body = await f.download_as_bytearray()
-        txt = body.decode("utf-8", errors="ignore")
+        txt = secure.clamp(body.decode("utf-8", errors="ignore"))
     except Exception as e:
-        await update.message.reply_text(f"Не смог прочитать файл: {e}")
+        await verify.safe_error(context.bot, cid, e)
         return
     await wardrobe.ingest(context.bot, cid, txt)
 
@@ -536,6 +543,11 @@ async def post_init(app):
             print("Callback audit: OK")
     except Exception as e:
         print(f"Callback audit failed: {e}")
+    try:
+        leaks = secure.scan_secrets()
+        print("Secrets scan:", ("findings -> " + "; ".join(leaks)) if leaks else "OK")
+    except Exception as e:
+        print(f"Secrets scan failed: {e}")
     from telegram import BotCommand
     await app.bot.set_my_commands([
         BotCommand("start", "меню и описание"),
