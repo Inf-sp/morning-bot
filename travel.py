@@ -4,6 +4,7 @@ import config
 import store
 import ai
 from util import country_flag, esc
+import verify
 
 def _plan_countries(cid):
     """Страны из уже сохранённых планов поездок (вкладка «Планы»)."""
@@ -72,7 +73,7 @@ async def send_go(bot, cid):
         if d is None:
             d = cand  # если все попытки дали известные - покажем последнюю
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=f"Ошибка: {e}"); return
+        await verify.safe_error(bot, cid, e); return
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", _country_card(d))
     store.last_source[str(cid)] = "Путешествия"
     store.suggested_countries[str(cid)] = d.get("country", "")
@@ -124,7 +125,7 @@ async def send_plan(bot, cid):
     try:
         p = ai.llm_json(prompt, 1100)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=f"Ошибка: {e}"); return
+        await verify.safe_error(bot, cid, e); return
     L = [f"{p.get('flag','')} <b>{esc(p.get('title', country))}</b>"]
     if p.get("about"):
         L += ["", esc(p["about"])]

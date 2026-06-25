@@ -6,6 +6,7 @@ import ai
 import rerank
 import util
 from util import esc
+import verify
 
 TZ = config.TZ
 
@@ -40,8 +41,11 @@ def _back_kb():
     return _kb([[("⬅️ Назад", "m_close")]])
 
 
-async def _send(bot, cid, text, kb=None):
+async def _send(bot, cid, text, kb=None, surface="card"):
     text = (text or "").strip() or "Пусто, попробуй ещё раз."
+    text, _w = verify.grade_text(text, surface)   # health->дисклеймер, chat->≤1 эмодзи
+    for w in _w:
+        print(f"[verify] {surface}: {w}")
     store.last_answer[str(cid)] = text
     store.last_source.setdefault(str(cid), "Ассистент")
     html = util.tg_html(text)
@@ -74,7 +78,7 @@ async def send_recipe(bot, cid, constraint="обычное блюдо"):
     try:
         d = _gen_recipe(constraint)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe", constraint)
     card = _recipe_card(d)
@@ -97,7 +101,7 @@ async def send_leftovers(bot, cid, ingredients):
             f"Есть продукты: {ingredients}. Предложи 1 простой рецепт только из них (+ базовые специи и максимум 1 доп продукт что получилось вкусное блюдо). "
             "Каждый: 🥘 Название • ⏱️ время, затем 1-2 строки как готовить, с переносами. Компактно, эмодзи. Без воды.", 800, 0.9)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     store.last_action[str(cid)] = ("leftovers", ingredients)
     await _send(bot, cid, out, kb=_recipe_kb())
 
@@ -168,10 +172,10 @@ async def doctor_answer(bot, cid, symptoms):
         try:
             out = ai.llm(prompt, 900, 0.4)
         except Exception as e:
-            await bot.send_message(chat_id=cid, text=str(e)); return
+            await verify.safe_error(bot, cid, e); return
         store.last_source[str(cid)] = "Здоровье · Лекарство"
         store.last_action[str(cid)] = ("role", "doctor", symptoms)
-        await _send(bot, cid, out, kb=_ans_kb(None, None))
+        await _send(bot, cid, out, kb=_ans_kb(None, None), surface="health")
         return
     passages = []
     try:
@@ -189,10 +193,10 @@ async def doctor_answer(bot, cid, symptoms):
     try:
         out = ai.llm(prompt, 900, 0.5)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     store.last_source[str(cid)] = "Здоровье · Врач"
     store.last_action[str(cid)] = ("role", "doctor", symptoms)
-    await _send(bot, cid, out, kb=_ans_kb(None, None))
+    await _send(bot, cid, out, kb=_ans_kb(None, None), surface="health")
 
 async def handle_role(bot, cid, role, text):
     if role == "doctor":
@@ -201,10 +205,10 @@ async def handle_role(bot, cid, role, text):
     try:
         out = ai.llm(_role_system(role) + "\n\nЗапрос пользователя:\n" + text, 1500, 0.7)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     store.last_action[str(cid)] = ("role", role, text)
     cont = ("🔄 Ещё совет", "chat_retry") if role == "state" else ("🔄 Продолжить", "chat_retry")
-    await _send(bot, cid, out, kb=_ans_kb(*cont))
+    await _send(bot, cid, out, kb=_ans_kb(*cont), surface="chat" if role == "state" else "card")
 
 
 # ---------- Дневник тревоги ----------
@@ -311,7 +315,7 @@ async def handle_callback(bot, cid, q, data):
         try:
             out = gen(cid)
         except Exception as e:
-            await bot.send_message(chat_id=cid, text=str(e)); return
+            await verify.safe_error(bot, cid, e); return
         store.last_action[str(cid)] = ("oneshot", data)
         store.last_source[str(cid)] = {"as_motiv": "Здоровье · Мотивация"}.get(data, "Ассистент")
         await _send(bot, cid, out, kb=_ans_kb(lbl, cb))
@@ -331,7 +335,7 @@ async def retry(bot, cid):
         try:
             out = gen(cid)
         except Exception as e:
-            await bot.send_message(chat_id=cid, text=str(e)); return
+            await verify.safe_error(bot, cid, e); return
         await _send(bot, cid, out, kb=_ans_kb(lbl, cb)); return
     if la and la[0] == "recipe":
         await send_recipe(bot, cid, la[1]); return
@@ -349,7 +353,7 @@ async def retry(bot, cid):
     try:
         answer = ai.chat_chain(nudge)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
-    await _send(bot, cid, answer)
+    await _send(bot, cid, answer, surface="chat")

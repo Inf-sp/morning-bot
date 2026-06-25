@@ -5,6 +5,7 @@ import store
 import ai
 import weather
 from util import esc
+import verify
 
 HOME_TEXT = (
     "👕 <b>Гардероб</b>\n\n"
@@ -80,7 +81,7 @@ JSON (без markdown):
     try:
         d = ai.llm_json(prompt, 700)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     items = d.get("items", [])
     rl = store.recent_looks.get(str(cid), [])
     rl.append(", ".join(items)[:80])
@@ -141,7 +142,7 @@ async def add_item(bot, cid, text):
             'JSON: {"категория": ["полное название вещи"]}.', 700)
         added = store.merge_wardrobe(parsed)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     await bot.send_message(chat_id=cid, text=f"Добавлено в шкаф ({added}).", reply_markup=closet_kb())
 
 async def send_del(bot, cid):
@@ -193,7 +194,7 @@ async def send_improve(bot, cid):
     try:
         d = ai.llm_json(prompt, 900)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     def _bullets(items):
         return [f"• {esc(str(x))}" for x in items if str(x).strip()]
     L = ["💡 <b>Разбор гардероба</b>", ""]
@@ -231,7 +232,7 @@ async def check_purchase(bot, cid, text):
     try:
         d = ai.llm_json(prompt, 500)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     verdict = d.get("verdict", "")
     emoji = "✅" if "НЕ" not in verdict.upper() else "⚠️"
     L = ["🛒 <b>Модный приговор</b>", "", f"{emoji} <b>Вердикт: {esc(verdict)}</b>"]

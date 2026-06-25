@@ -1,7 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import store
 import ai
-import util
+import verify
 
 # ---------- свободный чат ----------
 _MED_WORDS = ("боль", "болит", "температур", "симптом", "врач", "таблет", "лекарств", "горло",
@@ -17,10 +17,10 @@ async def chat_reply(bot, cid, text):
     try:
         answer = ai.chat_chain(hist)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
-    await util.send_html(bot, cid, (answer or "").strip() or "Пусто, попробуй ещё раз.")
+    await verify.safe_send(bot, cid, (answer or "").strip() or "Пусто, попробуй ещё раз.", surface="chat")
     store.last_answer[str(cid)] = answer
     if any(w in text.lower() for w in _MED_WORDS):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("👩🏻‍⚕️ Вопрос врачу", callback_data="as_doctor")]])
