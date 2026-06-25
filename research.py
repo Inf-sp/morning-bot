@@ -1,4 +1,4 @@
-"""Research-first: слой доверенных данных (Wikipedia, REST Countries) для фактических ответов.
+"""Research-first: слой доверенных данных (Wikipedia, Wikidata, REST Countries).
 
 Принцип: сначала получить факты из источника, затем дать их LLM как источник истины -
 вместо «уверенной фантазии». Источники бесплатные, без ключей. TTL-кеш по образцу
@@ -18,6 +18,9 @@ _WIKI_UA = {"User-Agent": "morning-bot/1.0"}
 _CF_CACHE = {}          # name.lower() -> (ts, dict)
 _CF_TTL = 86400         # факты о стране стабильны - сутки
 
+_WD_CACHE = {}          # name.lower() -> (ts, str)
+_WD_TTL = 86400
+
 
 # ================= WIKIPEDIA =================
 def _wiki_ru_title(name):
@@ -35,6 +38,20 @@ def _wiki_ru_title(name):
     except Exception:
         pass
     return ""
+
+
+def _wiki_search_en(name):
+    """English Wikipedia title через opensearch — работает с русскими именами городов."""
+    try:
+        r = requests.get("https://en.wikipedia.org/w/api.php", params={
+            "action": "opensearch", "search": name, "limit": 1,
+            "format": "json", "namespace": 0
+        }, headers=_WIKI_UA, timeout=8)
+        arr = r.json()
+        return arr[1][0] if len(arr) > 1 and arr[1] else ""
+    except Exception:
+        return ""
+
 
 def wiki_summary(title, lang):
     """Интро статьи по точному заголовку - только реальный текст Википедии."""
@@ -55,7 +72,7 @@ def wiki_summary(title, lang):
 
 def _clean_wiki(s):
     """Чистит артефакты explaintext: языковые пометки, пустые скобки, сноски."""
-    s = re.sub(r"\(\s*(?:нид|англ|МФА|лат|нем|фр)\.?[^)]*\)", "", s)
+    s = re.sub(r"\(\s*(?:нид|англ|МФА|лат|нем|фр|Dutch|IPA)\.?[^)]*\)", "", s)
     s = re.sub(r"\[[^\]]*\]", "", s)
     s = re.sub(r"\(\s*\)", "", s)
     s = re.sub(r"\s+", " ", s)
@@ -70,20 +87,39 @@ def _is_dubious_record(s):
     has_record = bool(re.search(r'\bрекорд', sl))
     return (has_superlative and has_temp_number) or has_record
 
-def wiki_sentences(name):
-    """Список кандидатов-предложений для факта о месте (без дефинитивного первого)."""
-    if not name:
-        return []
-    ru_title = name if re.search(r"[А-Яа-яЁё]", name) else _wiki_ru_title(name)
-    extract = (wiki_summary(ru_title, "ru") if ru_title else "") or wiki_summary(name, "en")
+def _extract_sents(extract):
+    """Предложения из вики-интро: чистим, фильтруем дефинитивные и дубиозные."""
     if not extract:
         return []
-    extract = _clean_wiki(extract)
-    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", extract) if len(s.strip()) > 40]
-    # Убираем дефинитивные предложения ("X — это город...") вне зависимости от их количества
-    sents = [s for s in sents if not re.match(r"^.{0,60}[—–-]", s)]
+    clean = _clean_wiki(extract)
+    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean) if len(s.strip()) > 40]
+    # Дефинитивные: "X — город..." (рус) и "X is a city..." (англ)
+    sents = [s for s in sents if not re.match(r"^.{0,60}[—–\-]", s)]
+    sents = [s for s in sents if not re.match(r"^.{0,80}\bis\s+a(?:n)?\s+\w+", s, re.I)]
     sents = [s for s in sents if not _is_dubious_record(s)]
-    return sents[:6]
+    return sents
+
+def wiki_sentences(name):
+    """Список кандидатов-предложений из RU + EN Википедии (до 8 штук)."""
+    if not name:
+        return []
+    all_sents, seen = [], set()
+
+    # 1) RU Wikipedia
+    ru_title = name if re.search(r"[А-Яа-яЁё]", name) else _wiki_ru_title(name)
+    if ru_title:
+        for s in _extract_sents(wiki_summary(ru_title, "ru")):
+            if s not in seen:
+                all_sents.append(s); seen.add(s)
+
+    # 2) EN Wikipedia — обычно богаче для европейских городов
+    en_title = _wiki_search_en(name)
+    if en_title:
+        for s in _extract_sents(wiki_summary(en_title, "en")):
+            if s not in seen:
+                all_sents.append(s); seen.add(s)
+
+    return all_sents[:8]
 
 def wiki_fact(name):
     """Реальный факт о месте/стране из Википедии. Источник правды - Wikipedia, без LLM."""
@@ -91,6 +127,48 @@ def wiki_fact(name):
     if not sents:
         return ""
     return random.choice(sents)
+
+
+# ================= WIKIDATA =================
+def wikidata_city_sentence(name):
+    """Один структурированный факт о городе из Wikidata (год основания). Без LLM, без ключей.
+    Возвращает готовую строку или '' если данных нет / ошибка."""
+    name_clean = (name or "").strip()
+    if not name_clean:
+        return ""
+    key = name_clean.lower()
+    hit = _WD_CACHE.get(key)
+    if hit and time.time() - hit[0] < _WD_TTL:
+        return hit[1]
+    result = ""
+    try:
+        r = requests.get("https://www.wikidata.org/w/api.php", params={
+            "action": "wbsearchentities", "search": name_clean,
+            "language": "ru", "type": "item", "limit": 1, "format": "json"
+        }, headers=_WIKI_UA, timeout=8)
+        items = r.json().get("search", [])
+        if not items:
+            _WD_CACHE[key] = (time.time(), "")
+            return ""
+        qid = items[0]["id"]
+        r2 = requests.get(f"https://www.wikidata.org/wiki/Special:EntityData/{qid}.json",
+                          headers=_WIKI_UA, timeout=12)
+        entity = r2.json().get("entities", {}).get(qid, {})
+        claims = entity.get("claims", {})
+        # P571 — inception (год основания)
+        p571 = claims.get("P571", [])
+        if p571:
+            time_str = (p571[0].get("mainsnak", {}).get("datavalue", {})
+                        .get("value", {}).get("time", ""))
+            year = time_str.lstrip("+").split("-")[0]
+            if year.isdigit():
+                y = int(year)
+                if y > 0:
+                    result = f"Город основан в {year} году."
+    except Exception as e:
+        _log.warning("research: wikidata_city_sentence(%s) failed: %s", name_clean, e)
+    _WD_CACHE[key] = (time.time(), result)
+    return result
 
 
 # ================= REST COUNTRIES =================

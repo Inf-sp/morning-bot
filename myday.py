@@ -57,28 +57,33 @@ def _strip_quotes(s):
 # --- Сводка дня (Мой день) ---
 
 def city_fact(city, country, cid):
-    """Реальный факт о городе из Википедии без повторений (anti-repeat по cid)."""
-    sents = research.wiki_sentences(city)
-    if not sents:
+    """Факт о городе: Wikipedia (RU+EN) + Wikidata как fallback. Anti-repeat по cid."""
+    pool = list(research.wiki_sentences(city))
+    if len(pool) < 3:
+        wd = research.wikidata_city_sentence(city)
+        if wd and wd not in pool:
+            pool.append(wd)
+    if not pool:
         return ""
     cid = str(cid)
     city_key = (city or "").lower().replace(" ", "_")
     seen_all = store._load(config.CITY_FACTS_KEY)
     seen = set(seen_all.get(cid, {}).get(city_key, []))
-    unseen = [s for s in sents if s not in seen]
+    unseen = [s for s in pool if s not in seen]
     if not unseen:
         seen = set()
-        unseen = sents
+        unseen = pool
     fact_raw = random.choice(unseen)
     seen.add(fact_raw)
     seen_all.setdefault(cid, {})[city_key] = list(seen)
     store._save(config.CITY_FACTS_KEY, seen_all)
+    lang_hint = "на русском" if re.search(r"[А-Яа-яЁё]", fact_raw) else "переведи на русский и"
     prompt = (
-        f"Источник (Википедия, {city}): «{fact_raw}»\n\n"
-        "Перепиши это как неожиданный и живой факт для утреннего бота — так, чтобы читатель удивился или улыбнулся. "
+        f"Источник ({city}): «{fact_raw}»\n\n"
+        f"Перепиши это {lang_hint} как неожиданный живой факт для утреннего бота — "
+        "чтобы читатель удивился или улыбнулся. "
         "Используй ТОЛЬКО информацию из источника, не придумывай деталей. "
-        "Не начинай с названия города и не пиши в стиле энциклопедии. "
-        "Одно предложение, без заголовка и без кавычек."
+        "Не начинай с названия города. Одно предложение, без заголовка и без кавычек."
     )
     return ai.llm(prompt, 150, tier="cheap") or fact_raw
 
