@@ -170,7 +170,6 @@ async def send_notes(bot, cid):
     rows = [
         [InlineKeyboardButton(f"⭐ Временные закладки ({n_fav})", callback_data="as_bucket_fav")],
         [InlineKeyboardButton(f"🧳 Планы ({n_plan})", callback_data="as_bucket_plan")],
-        [InlineKeyboardButton("❤️ Любимые", callback_data="as_bucket_love")],
         [InlineKeyboardButton("📤 Экспорт в файл", callback_data="as_export")],
     ]
     await bot.send_message(chat_id=cid, parse_mode="HTML",
@@ -248,7 +247,7 @@ LOVE_SECTIONS = [
 
 async def send_love_home(bot, cid):
     rows = [[InlineKeyboardButton(title, callback_data=f"as_love_{key}")] for title, key in LOVE_SECTIONS]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid, text="❤️ <b>Любимые</b>\n\nТвои топ-категории.\n\nВыбери раздел 👇",
                            parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 

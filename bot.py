@@ -102,6 +102,8 @@ async def answer_callback(update, context):
                 await learning.send_grammar(bot, cid, "нидерландский", "🇳🇱")
             elif act == "gram_en":
                 await learning.send_grammar(bot, cid, "английский", "🇬🇧")
+            elif act == "train":
+                await learning.send_train_lang_select(bot, cid)
             elif act == "train_nl":
                 await learning.train_start(bot, cid, "нидерландский")
             elif act == "train_en":
@@ -110,6 +112,8 @@ async def answer_callback(update, context):
                 await learning.do_translate(bot, cid, "нидерландский")
             elif act == "tr_en":
                 await learning.do_translate(bot, cid, "английский")
+            elif act == "proverb":
+                await learning.send_proverb_both(bot, cid)
             elif act == "proverb_nl":
                 await learning.send_proverb(bot, cid, "нидерландский")
             elif act == "proverb_en":
@@ -395,6 +399,8 @@ async def text_router(update, context):
             await settings.list_add_done(bot, cid, "artist", text); return
         if kind == "setadd_book":
             await settings.list_add_done(bot, cid, "book", text); return
+        if kind == "train_translate":
+            await learning.train_translate_answer(bot, cid, text); return
         if kind.startswith("loveadd_"):
             await notes.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
 

@@ -138,6 +138,12 @@ async def send_leftovers(bot, cid, ingredients):
     await util.send_html(bot, cid, card, reply_markup=_recipe_kb())
 
 
+FRIDGE_DESC = (
+    "🧊 <b>Мой холодильник</b>\n\n"
+    "Список продуктов, которые обычно есть дома — использую для рецептов из остатков.\n\n"
+    "Управляй через /setup — там можно добавить или убрать продукты."
+)
+
 # ---------- Мой холодильник ----------
 async def send_fridge(bot, cid):
     cid_s = str(cid)
@@ -148,12 +154,10 @@ async def send_fridge(bot, cid):
     else:
         txt = "🧊 <b>Мой холодильник</b>\n\nСписок пуст. Добавь продукты, которые обычно есть дома."
     rows = []
-    if items:
-        rows.append([InlineKeyboardButton("🍳 Из холодильника", callback_data="as_fridge_cook")])
     rows.append([InlineKeyboardButton("📝 Добавить продукты", callback_data="as_fridge_add")])
     if items:
         rows.append([InlineKeyboardButton("🧹 Убрать несколько", callback_data="as_fridge_clean")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_food")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -488,7 +492,9 @@ async def handle_callback(bot, cid, q, data):
         await bot.send_message(chat_id=cid, text=DOCTOR_INTRO, reply_markup=_back_kb()); return
     # холодильник
     if data == "as_fridge":
-        await send_fridge(bot, cid); return
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_food")]])
+        await bot.send_message(chat_id=cid, text=FRIDGE_DESC, parse_mode="HTML", reply_markup=kb)
+        return
     if data == "as_fridge_add":
         store.pending_input[str(cid)] = "fridge_add"
         await bot.send_message(chat_id=cid,
