@@ -1,4 +1,4 @@
-"""Research-first: слой доверенных данных (Wikipedia, Wikidata, REST Countries).
+"""Research-first: слой доверенных данных (Wikipedia, Wikidata, REST Countries, Perplexity).
 
 Принцип: сначала получить факты из источника, затем дать их LLM как источник истины -
 вместо «уверенной фантазии». Источники бесплатные, без ключей. TTL-кеш по образцу
@@ -12,6 +12,7 @@ import requests
 
 _log = logging.getLogger(__name__)
 import util
+import config
 
 _WIKI_UA = {"User-Agent": "morning-bot/1.0"}
 
@@ -221,3 +222,60 @@ def facts_block(d):
 def grounded(d):
     """Есть ли реальные данные (для advisory-лога «ответ без источника»)."""
     return bool(d and (d.get("capital") or d.get("languages")))
+
+
+# ================= PERPLEXITY =================
+_PPX_CACHE = {}   # (city_key) -> (ts, str)
+_PPX_TTL = 3600   # 1 час — достаточно, факт в сутки один
+
+
+def perplexity_city_fact(city: str, country: str, avoid: list[str] | None = None) -> str:
+    """Ищет реальный факт о городе через Perplexity sonar (web-search).
+
+    avoid — список уже виденных фактов, передаётся в промпт чтобы не повторяться.
+    Возвращает готовый текст на русском или '' при ошибке/отсутствии ключа.
+    """
+    key = config.PERPLEXITY_API_KEY
+    if not key:
+        return ""
+    place = f"{city}, {country}" if country else city
+    cache_key = place.lower()
+    hit = _PPX_CACHE.get(cache_key)
+    if hit and time.time() - hit[0] < _PPX_TTL:
+        return hit[1]
+
+    avoid_block = ""
+    if avoid:
+        previews = "; ".join(a[:80] for a in avoid[:5])
+        avoid_block = f"\n\nИзбегай фактов похожих на уже известные: {previews}"
+
+    prompt = (
+        f"Найди один реальный малоизвестный факт о городе {place}. "
+        "Требования: "
+        "(1) локальная специфика — история, законы, архитектура, инфраструктура или менталитет; "
+        "(2) эффект «вау» — даже местный житель узнаёт что-то новое; "
+        "(3) максимум 2 коротких предложения без вводных слов и воды; "
+        "(4) только факт, без «Вот интересный факт:» и подобных вступлений; "
+        "(5) ответ на русском языке."
+        + avoid_block
+    )
+    try:
+        r = requests.post(
+            "https://api.perplexity.ai/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": "sonar",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 200,
+            },
+            timeout=20,
+        )
+        if r.status_code == 200:
+            text = (r.json().get("choices", [{}])[0]
+                    .get("message", {}).get("content", "").strip())
+            _PPX_CACHE[cache_key] = (time.time(), text)
+            return text
+        _log.warning("research: perplexity %s → HTTP %s", place, r.status_code)
+    except Exception as e:
+        _log.warning("research: perplexity_city_fact(%s) failed: %s", place, e)
+    return ""
