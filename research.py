@@ -229,11 +229,19 @@ _GSR_CACHE = {}   # place_key -> (ts, str)
 _GSR_TTL = 3600   # 1 час
 
 
-def gemini_search_fact(city: str, country: str, avoid: list[str] | None = None) -> str:
+_GSR_BAD = re.compile(
+    r"не подходит|не является|не относится|ошибка|вместо этого|"
+    r"does not|instead|however|this text|incorrect",
+    re.I,
+)
+
+
+def gemini_search_fact(city: str, country: str, cc: str = "",
+                       avoid: list[str] | None = None) -> str:
     """Реальный факт о городе через Gemini + Google Search grounding.
 
-    Модель ищет в Google перед ответом — не фантазирует.
-    avoid — виденные факты, передаётся в промпт для anti-repeat.
+    Промпт на английском для точного поиска, cc исключает путаницу городов.
+    Ответ запрашиваем на русском. Валидирует что ответ — факт, а не мета-объяснение.
     """
     if not config.GEMINI_API_KEY:
         return ""
@@ -246,16 +254,18 @@ def gemini_search_fact(city: str, country: str, avoid: list[str] | None = None) 
     avoid_block = ""
     if avoid:
         previews = "; ".join(a[:80] for a in avoid[:5])
-        avoid_block = f" Не повторяй факты похожие на: {previews}."
+        avoid_block = f" Do not repeat facts similar to: {previews}."
 
+    cc_hint = f" Country ISO code: {cc}." if cc else ""
     prompt = (
-        f"Найди один реальный малоизвестный факт о городе {place}. "
-        "Требования: "
-        "(1) локальная специфика — история, законы, архитектура, инфраструктура или менталитет; "
-        "(2) эффект «вау» — даже местный житель узнаёт что-то новое; "
-        "(3) максимум 2 коротких предложения без вводных слов; "
-        "(4) только сам факт, без «Вот интересный факт:» и подобных вступлений; "
-        "(5) строго на русском языке."
+        f"Find one real, little-known, surprising fact specifically about the city {city}, {country}.{cc_hint} "
+        "This must be about THIS city only — not any other city with a similar name. "
+        "Requirements: "
+        "(1) local specifics — history, laws, architecture, infrastructure, or local mentality; "
+        "(2) wow effect — even a long-term local resident learns something new; "
+        "(3) max 2 short sentences, no filler; "
+        "(4) output only the fact itself — no preamble like 'Here is a fact:'; "
+        "(5) answer in Russian language."
         + avoid_block
     )
     try:
@@ -273,10 +283,13 @@ def gemini_search_fact(city: str, country: str, avoid: list[str] | None = None) 
             parts = (r.json().get("candidates", [{}])[0]
                      .get("content", {}).get("parts", []))
             text = " ".join(p.get("text", "") for p in parts if p.get("text")).strip()
-            if text:
+            if text and not _GSR_BAD.search(text):
                 _GSR_CACHE[cache_key] = (time.time(), text)
                 return text
-        _log.warning("research: gemini_search_fact %s → HTTP %s", place, r.status_code)
+            if text:
+                _log.warning("research: gemini_search_fact discarded bad response for %s", place)
+        else:
+            _log.warning("research: gemini_search_fact %s → HTTP %s", place, r.status_code)
     except Exception as e:
         _log.warning("research: gemini_search_fact(%s) failed: %s", place, e)
     return ""
