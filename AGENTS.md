@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-Гайд для Claude Code по работе в этом репозитории. Отвечай и комментируй на русском.
+Гайд для Codex по работе в этом репозитории. Отвечай и комментируй на русском.
 
 ## Обзор проекта
 
@@ -17,7 +17,7 @@
 - [menu.py](menu.py) — нижнее reply-меню и инлайн-подменю (`menu_screen`).
 - [store.py](store.py) — персистентность: KV-таблица в Postgres с **откатом в память** (`_load`/`_save`, `get_list`/`set_list`); плюс in-memory dict'ы эфемерного состояния (`pending_input`, `*_state`, `list_sel` и т.д.).
 - [config.py](config.py) — env-ключи, имена ключей хранилища (`*_KEY`/`*_FILE`), модели, `TZ`, промпты из JSON.
-- [ai.py](ai.py) — слой LLM: `llm()` и `llm_json()` с **каскадом провайдеров** (`DEFAULT_ORDER`, `LEARN_ORDER`, `GRAMMAR_ORDER`) — claude/openai/gemini/openrouter/groq/cloudflare; параметр `claude_model` выбирает модель Claude (по умолчанию `GRAMMAR_MODEL`=Haiku для дешёвых задач).
+- [ai.py](ai.py) — слой LLM: `llm()` и `llm_json()` с **каскадом провайдеров** (`DEFAULT_ORDER`, `LEARN_ORDER`, `GRAMMAR_ORDER`) — Codex/openai/gemini/openrouter/groq/cloudflare; параметр `claude_model` выбирает модель Codex (по умолчанию `GRAMMAR_MODEL`=Haiku для дешёвых задач).
 - [memory.py](memory.py) — **память пользователя** («бот учится на тебе»): фокус дня (`set_focus`/`get_focus`/`fresh_focus`), фидбек гардероба (`add_wardrobe_feedback`/`wardrobe_hints`), наблюдения (`add_observation`). Поверх профиля в store (`config.PROFILE_KEY`, `store.get_profile`/`set_profile`). Без LLM/сети. Источник персонализации: вечерний фокус → утренний бриф; фидбек по образам → подмешивается в промпт следующего лука.
 - Фичевые модули: [learning.py](learning.py) (грамматика, тренажёр слов, словарь, темы, игра-детектив, обратный перевод), [content.py](content.py) (фильмы/книги/музыка/концерты), [notes.py](notes.py) (сохранения: закладки/планы/любимые), [wardrobe.py](wardrobe.py) (гардероб/шкаф), [myday.py](myday.py), [balance.py](balance.py), [travel.py](travel.py), [weather.py](weather.py), [settings.py](settings.py) (/setup), [assistant.py](assistant.py) (свободный чат).
 
@@ -65,10 +65,10 @@
 
 ## ECC-правила
 
-Подключена конфигурация ECC в [.claude/rules/](.claude/rules/) — слои **common** + **python** (правила авто-применяются к `**/*.py` по `paths` во фронтматтере). Перед нетривиальной работой свериться:
+Подключена конфигурация ECC в [.Codex/rules/](.Codex/rules/) — слои **common** + **python** (правила авто-применяются к `**/*.py` по `paths` во фронтматтере). Перед нетривиальной работой свериться:
 
-- [.claude/rules/python/coding-style.md](.claude/rules/python/coding-style.md), [patterns.md](.claude/rules/python/patterns.md), [security.md](.claude/rules/python/security.md), [testing.md](.claude/rules/python/testing.md), [hooks.md](.claude/rules/python/hooks.md)
-- [.claude/rules/common/](.claude/rules/common/) — общие принципы (git-workflow, code-review, performance, agents…). При конфликте **python-правила приоритетнее** common.
+- [.Codex/rules/python/coding-style.md](.Codex/rules/python/coding-style.md), [patterns.md](.Codex/rules/python/patterns.md), [security.md](.Codex/rules/python/security.md), [testing.md](.Codex/rules/python/testing.md), [hooks.md](.Codex/rules/python/hooks.md)
+- [.Codex/rules/common/](.Codex/rules/common/) — общие принципы (git-workflow, code-review, performance, agents…). При конфликте **python-правила приоритетнее** common.
 
 Ключевые требования ECC: PEP 8, type-аннотации на сигнатурах, `black`/`isort`/`ruff`, `pytest` (+`--cov`), `bandit`, секреты через `os.environ`, `logging` вместо `print()`.
 

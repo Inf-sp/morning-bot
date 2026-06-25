@@ -144,11 +144,12 @@ async def send_fridge(bot, cid):
     else:
         txt = "🧊 <b>Мой холодильник</b>\n\nСписок пуст. Добавь продукты, которые обычно есть дома."
     rows = []
-    for i, it in enumerate(items):
-        rows.append([InlineKeyboardButton(f"❌ {it[:32]}", callback_data=f"as_fridge_del_{i}")])
-    rows.append([InlineKeyboardButton("➕ Добавить продукты", callback_data="as_fridge_add")])
     if items:
-        rows.append([InlineKeyboardButton("🍳 Что приготовить", callback_data="as_fridge_cook")])
+        rows.append([InlineKeyboardButton("🍳 Из холодильника", callback_data="as_fridge_cook")])
+    rows.append([InlineKeyboardButton("🥕 Ввести вручную", callback_data="as_food_left")])
+    rows.append([InlineKeyboardButton("📝 Добавить продукты", callback_data="as_fridge_add")])
+    if items:
+        rows.append([InlineKeyboardButton("🧹 Убрать несколько", callback_data="as_fridge_clean")])
         rows.append([InlineKeyboardButton("🗑 Очистить список", callback_data="as_fridge_clear")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_food")])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
@@ -213,17 +214,18 @@ async def send_my_recipes(bot, cid):
     cid_s = str(cid)
     recipes = store.get_list(config.MY_RECIPES_KEY, cid_s)
     if not recipes:
-        txt = ("📚 <b>Мои рецепты</b>\n\nПусто. Сохраняй рецепты кнопкой "
+        txt = ("🍳 <b>Мои рецепты</b>\n\nПусто. Сохраняй рецепты кнопкой "
                "«❤️ Сохранить рецепт» под любым рецептом.")
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_food")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_love")]])
     else:
-        txt = "📚 <b>Мои рецепты</b> — {}\n\n".format(len(recipes))
+        txt = "🍳 <b>Мои рецепты</b> — {}\n\n".format(len(recipes))
         txt += "\n".join(f"• {util.esc(r.get('name', '?'))}" for r in recipes)
         rows = []
         for i, r in enumerate(recipes):
             name = r.get("name", f"Рецепт {i+1}")[:30]
             rows.append([InlineKeyboardButton(f"📖 {name}", callback_data=f"as_my_recipe_{i}")])
-        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_food")])
+        rows.append([InlineKeyboardButton("🧹 Удалить несколько", callback_data="as_recipe_clean")])
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_love")])
         kb = InlineKeyboardMarkup(rows)
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 
@@ -501,6 +503,9 @@ async def handle_callback(bot, cid, q, data):
         await send_fridge_recipe(bot, cid); return
     if data == "as_fridge_clear":
         await fridge_clear(bot, cid); return
+    if data == "as_fridge_clean":
+        import learning
+        await learning.open_cleanup(bot, cid, "fridge"); return
     if data.startswith("as_fridge_del_"):
         try:
             await fridge_del(bot, cid, int(data.split("_")[-1]))
@@ -510,6 +515,9 @@ async def handle_callback(bot, cid, q, data):
     # база рецептов
     if data == "as_recipe_save":
         await save_my_recipe(bot, cid); return
+    if data == "as_recipe_clean":
+        import learning
+        await learning.open_cleanup(bot, cid, "recipes"); return
     if data == "as_my_recipes":
         await send_my_recipes(bot, cid); return
     if data.startswith("as_my_recipe_del_"):

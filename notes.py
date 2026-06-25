@@ -243,6 +243,7 @@ LOVE_SECTIONS = [
     ("📖 Мои книги", "books"),
     ("👕 Моя одежда", "wardrobe"),
     ("🍃 Лагом", "lagom"),
+    ("🍳 Мои рецепты", "recipes"),
 ]
 
 async def send_love_home(bot, cid):
@@ -294,7 +295,11 @@ def _love_title(key):
 async def send_love_section(bot, cid, key):
     if key == "wardrobe":
         import wardrobe
-        await wardrobe.send_show(bot, cid)   # показ шкафа с его управлением
+        await wardrobe.send_show(bot, cid)
+        return
+    if key == "recipes":
+        import balance
+        await balance.send_my_recipes(bot, cid)
         return
     items = _love_items(cid, key)
     title = _love_title(key)
@@ -305,7 +310,7 @@ async def send_love_section(bot, cid, key):
         lines.append(", ".join(items) if items else "пусто")
     rows = [[InlineKeyboardButton(f"❌ {str(it)[:28]}", callback_data=f"as_lovedel_{key}_{i}")]
             for i, it in enumerate(items[:40])]
-    rows.append([InlineKeyboardButton("➕ Добавить", callback_data=f"as_loveadd_{key}")])
+    rows.append([InlineKeyboardButton("📝 Добавить", callback_data=f"as_loveadd_{key}")])
     if key in ("countries", "artists", "books") and items:
         rows.append([InlineKeyboardButton("🧹 Убрать несколько", callback_data=f"as_loveclean_{key}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_love")])
