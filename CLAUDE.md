@@ -53,7 +53,13 @@
 - Опасные мед-запросы (`secure.is_dangerous_med`) → `secure.CRISIS_MSG` без генерации.
 - `secure.scan_secrets()` зовётся в `bot.post_init` (continuous eval, должен быть `OK`).
 
-Следующие этапы (ещё НЕ сделаны): Research-first (данные → проверка → ответ).
+Этап 4 (Research-first, сделан): модуль [research.py](research.py) — слой доверенных данных без ключей (Wikipedia + REST Countries, TTL-кеш). Правила:
+- Фактические вещи бери из `research.*`, не из «фантазии» LLM: `wiki_fact(name)` (реальный факт), `country_facts(name)` (столица/язык/регион/валюта).
+- Если кормишь факты в LLM — давай их как ИСТОЧНИК ИСТИНЫ в промпте (`facts_block`), а оценки (бюджет/сроки) помечай как ориентир. Пример: `travel.send_plan`/`send_go`.
+- При отсутствии данных (`research.grounded` == False) — advisory-лог `[research] …`.
+- `myday.city_fact` — тонкая обёртка над `research.wiki_fact`. Health осознанно НЕ граундится внешними мед-данными (нет надёжного бесплатного источника) — там дисклеймер + кризис-рамки.
+
+Все 4 этапа ECC (Skills/Verification, Cost-aware, AgentShield, Research-first) реализованы.
 
 ## ECC-правила
 
