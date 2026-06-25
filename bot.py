@@ -1,3 +1,4 @@
+import logging
 from telegram import Update
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
                           ContextTypes, CallbackQueryHandler)
@@ -70,7 +71,7 @@ async def answer_callback(update, context):
         return
     # Настройки
     if data.startswith("set_"):
-        await handle_settings(bot, cid, data)
+        await settings.handle_callback(bot, cid, data)
         return
     # Навигация по подменю - редактируем сообщение на месте
     if data == "m_close":
@@ -271,34 +272,10 @@ async def answer_callback(update, context):
         await learning.send_game(bot, cid)
         return
     if data == "game_hint":
-        st = store.game_state.get(cid)
-        ui = learning.GAME_UI.get(store.game_config.get(cid, {}).get("lang", "русский"), learning.GAME_UI["русский"])
-        hints = (st or {}).get("hints") or []
-        i = (st or {}).get("hint_i", 0)
-        if st and i < len(hints):
-            st["hint_i"] = i + 1
-            from util import esc
-            await q.message.reply_text(
-                f"<b>{ui['hint']}</b>\n\n<b>{esc(hints[i])}</b>\n\n{ui['who']}",
-                parse_mode="HTML")
-        else:
-            await q.message.reply_text(ui["nohint"])
+        await learning.game_hint(bot, cid, q)
         return
     if data == "game_reveal":
-        st = store.game_state.pop(cid, None)
-        ui = learning.GAME_UI.get(store.game_config.get(cid, {}).get("lang", "русский"), learning.GAME_UI["русский"])
-        if st:
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-            from util import esc
-            body = st.get("explain") or st.get("quote", "")
-            txt = f"<b>{ui['found']}</b>\n\n{ui['answer']}:\n<b>{esc(st.get('answer',''))}</b>"
-            if body:
-                txt += f"\n\n{esc(body)}"
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton(ui["again"], callback_data="game_again")],
-                [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
-            ])
-            await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+        await learning.game_reveal(bot, cid, q)
         return
     if data == "game_change":
         await learning.game_start(bot, cid)
@@ -456,7 +433,7 @@ async def job_grammar(context: ContextTypes.DEFAULT_TYPE):
     try:
         await learning.send_morning_word(context.bot, CHAT_ID)
     except Exception:
-        pass
+        logging.exception("job_grammar failed")
 
 async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID or not settings.notif_on(CHAT_ID, "checkin_day"):
@@ -467,7 +444,7 @@ async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
             text="🫣 <b>Дневная разгрузка</b>\n\nСейчас не анализируй, просто выгрузи мысли.\n\n"
                  "Каждая тревога - с новой строки.\n\nВечером проверим, что было фактами, а что шумом…")
     except Exception:
-        pass
+        logging.exception("job_checkin_day failed")
 
 async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID or not settings.notif_on(CHAT_ID, "checkin_eve"):
@@ -475,83 +452,36 @@ async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
     try:
         await balance.send_evening_review(context.bot, CHAT_ID)
     except Exception:
-        pass
-
-
-async def handle_settings(bot, cid, data):
-    if data == "set_home":
-        await settings.send_home(bot, cid)
-    elif data == "set_notif":
-        await settings.send_notif(bot, cid)
-    elif data.startswith("set_notiftgl_"):
-        await settings.toggle_notif(bot, cid, data[len("set_notiftgl_"):])
-    elif data == "set_lang":
-        await settings.send_lang(bot, cid)
-    elif data == "set_lang_nl":
-        await settings.set_lang(bot, cid, "нидерландский")
-    elif data == "set_lang_en":
-        await settings.set_lang(bot, cid, "английский")
-    elif data == "set_levels":
-        await learning.send_levels(bot, cid)
-    elif data == "set_city":
-        store.pending_input[cid] = "setcity"
-        await bot.send_message(chat_id=cid, text="🌍 Напиши город - переключу.")
-    elif data == "set_body":
-        await settings.send_body(bot, cid)
-    elif data == "set_wardrobe":
-        await settings.send_wardrobe(bot, cid)
-    elif data == "set_countries":
-        await settings.send_countries(bot, cid)
-    elif data == "set_artists":
-        await settings.send_artists(bot, cid)
-    elif data == "set_books":
-        await settings.send_books(bot, cid)
-    elif data == "setadd_country":
-        store.pending_input[cid] = "setadd_country"
-        await bot.send_message(chat_id=cid, text="🧳 Напиши страну - добавлю в список.")
-    elif data == "setadd_artist":
-        store.pending_input[cid] = "setadd_artist"
-        await bot.send_message(chat_id=cid, text="🎤 Напиши имя артиста - добавлю в список.")
-    elif data == "setadd_book":
-        store.pending_input[cid] = "setadd_book"
-        await bot.send_message(chat_id=cid, text="📚 Напиши название книги - добавлю в список.")
-    elif data.startswith("setdel_country_"):
-        await settings.list_delete(bot, cid, "country", int(data.split("_")[-1]))
-    elif data.startswith("setdel_artist_"):
-        await settings.list_delete(bot, cid, "artist", int(data.split("_")[-1]))
-    elif data.startswith("setdel_book_"):
-        await settings.list_delete(bot, cid, "book", int(data.split("_")[-1]))
-    elif data.startswith("set_style_"):
-        await settings.set_style(bot, cid, int(data.split("_")[-1]))
-    elif data == "set_bodyinput":
-        store.pending_input[cid] = "bodyinput"
-        await bot.send_message(chat_id=cid, text="✏️ Напиши параметры: рост, вес, обувь, размер брюк и одежды.")
+        logging.exception("job_checkin_evening failed")
 
 
 async def post_init(app):
     try:
         if learning.migrate_dict_caps():
-            print("Dict caps migration: applied")
-    except Exception as e:
-        print(f"Dict caps migration failed: {e}")
+            logging.info("Dict caps migration: applied")
+    except Exception:
+        logging.exception("Dict caps migration failed")
     try:
         if content.dedupe_lists():
-            print("Dedupe lists: applied")
-    except Exception as e:
-        print(f"Dedupe lists failed: {e}")
+            logging.info("Dedupe lists: applied")
+    except Exception:
+        logging.exception("Dedupe lists failed")
     try:
         unhandled = verify.audit_callbacks()
         if unhandled:
-            print("Callback audit: unhandled ->", ", ".join(unhandled))
+            logging.warning("Callback audit: unhandled -> %s", ", ".join(unhandled))
         else:
-            print("Callback audit: OK")
-    except Exception as e:
-        print(f"Callback audit failed: {e}")
+            logging.info("Callback audit: OK")
+    except Exception:
+        logging.exception("Callback audit failed")
     try:
         leaks = secure.scan_secrets()
-        print("Secrets scan:", ("findings -> " + "; ".join(leaks)) if leaks else "OK")
-    except Exception as e:
-        print(f"Secrets scan failed: {e}")
+        if leaks:
+            logging.warning("Secrets scan: findings -> %s", "; ".join(leaks))
+        else:
+            logging.info("Secrets scan: OK")
+    except Exception:
+        logging.exception("Secrets scan failed")
     from telegram import BotCommand
     await app.bot.set_my_commands([
         BotCommand("start", "меню и описание"),
@@ -561,6 +491,7 @@ async def post_init(app):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     app = Application.builder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("notes", notes_command))
@@ -575,7 +506,7 @@ def main():
     jq.run_daily(job_checkin_day, time=datetime.strptime("14:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
     jq.run_daily(job_checkin_evening, time=datetime.strptime("22:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
 
-    print("Bot started")
+    logging.info("Bot started")
     app.run_polling(drop_pending_updates=True)
 
 
