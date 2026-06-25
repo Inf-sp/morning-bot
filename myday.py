@@ -57,49 +57,59 @@ def _strip_quotes(s):
 # --- Сводка дня (Мой день) ---
 
 def city_fact(city, country, cid, cc=""):
-    """Факт о городе: Gemini+Google Search → Wikipedia+LLM. Anti-repeat по cid."""
+    """Факт о городе: Wikidata (структура) → Wikipedia+LLM → Gemini Search. Anti-repeat по cid."""
     cid = str(cid)
     city_key = (city or "").lower().replace(" ", "_")
     seen_all = store._load(config.CITY_FACTS_KEY)
-    seen = set(seen_all.get(cid, {}).get(city_key, []))
+    seen_types = set(seen_all.get(cid, {}).get(city_key + "_types", []))
+    seen_texts = set(seen_all.get(cid, {}).get(city_key, []))
 
-    # --- Gemini Search: реальный веб-поиск через Google grounding ---
-    gsf = research.gemini_search_fact(city, country, cc=cc, avoid=list(seen))
-    if gsf:
-        seen.add(gsf)
-        seen_all.setdefault(cid, {})[city_key] = list(seen)
+    def _save(text, fact_type=None):
+        if fact_type:
+            seen_types.add(fact_type)
+            seen_all.setdefault(cid, {})[city_key + "_types"] = list(seen_types)
+        seen_texts.add(text)
+        seen_all.setdefault(cid, {})[city_key] = list(seen_texts)
         store._save(config.CITY_FACTS_KEY, seen_all)
+
+    # --- Уровень 1: Wikidata — структурированные факты, без LLM, без галлюцинаций ---
+    wd_facts = research.wikidata_city_facts(city)
+    unseen_wd = {t: s for t, s in wd_facts.items() if t not in seen_types}
+    if not unseen_wd:
+        unseen_wd = wd_facts  # всё видели — начинаем сначала
+    if unseen_wd:
+        fact_type, fact_text = random.choice(list(unseen_wd.items()))
+        _save(fact_text, fact_type)
+        return fact_text
+
+    # --- Уровень 2: Wikipedia + LLM-перефраз (строго по источнику) ---
+    pool = list(research.wiki_sentences(city))
+    unseen_wiki = [s for s in pool if s not in seen_texts]
+    if not unseen_wiki:
+        unseen_wiki = pool
+    if unseen_wiki:
+        fact_raw = random.choice(unseen_wiki)
+        lang_hint = "на русском" if re.search(r"[А-Яа-яЁё]", fact_raw) else "переведи на русский и"
+        place = f"{city}, {country}" if country else city
+        prompt = (
+            f"Источник ({place}): «{fact_raw}»\n\n"
+            f"Перепиши это {lang_hint}. "
+            "Правила: используй ТОЛЬКО слова и числа из источника — "
+            "никаких новых дат, имён, цифр которых нет в тексте выше. "
+            "Если источник беден — сократи, но не дополняй. "
+            "Максимум 2 предложения. Без заголовка, без кавычек."
+        )
+        result = ai.llm(prompt, 180, tier="cheap") or fact_raw
+        _save(result)
+        return result
+
+    # --- Уровень 3: Gemini + Google Search (последний резерв) ---
+    gsf = research.gemini_search_fact(city, country, cc=cc, avoid=list(seen_texts))
+    if gsf:
+        _save(gsf)
         return gsf
 
-    # --- Fallback: Wikipedia + LLM-перефраз ---
-    pool = list(research.wiki_sentences(city))
-    if len(pool) < 3:
-        wd = research.wikidata_city_sentence(city)
-        if wd and wd not in pool:
-            pool.append(wd)
-    if not pool:
-        return ""
-    unseen = [s for s in pool if s not in seen]
-    if not unseen:
-        seen = set()
-        unseen = pool
-    fact_raw = random.choice(unseen)
-    seen.add(fact_raw)
-    seen_all.setdefault(cid, {})[city_key] = list(seen)
-    store._save(config.CITY_FACTS_KEY, seen_all)
-    lang_hint = "на русском" if re.search(r"[А-Яа-яЁё]", fact_raw) else "переведи на русский и"
-    place = f"{city}, {country}" if country else city
-    prompt = (
-        f"Источник ({place}): «{fact_raw}»\n\n"
-        f"Перепиши это {lang_hint} как факт для утреннего бота о {place}. "
-        "Критерии:\n"
-        "1. Локальность — связан с историей, законами, менталитетом, архитектурой или инфраструктурой региона.\n"
-        "2. Эффект «Вау» — даже местный житель должен узнать что-то новое.\n"
-        "3. Краткость — максимум 2 коротких предложения, без воды.\n"
-        "Используй ТОЛЬКО информацию из источника, не придумывай деталей. "
-        "Не начинай с названия города. Без заголовка и без кавычек."
-    )
-    return ai.llm(prompt, 200, tier="cheap") or fact_raw
+    return ""
 
 
 def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
@@ -134,20 +144,28 @@ def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
 def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", weekday="", is_weekend=False, cc=""):
     day_kind = "выходной" if is_weekend else "будний день"
     place = f"{city}, {country}" if country else city
-    prompt = f"""Сгенерируй блоки для ежедневной сводки. Дата: {date_str} ({weekday}, {day_kind}). Локация: {place}.
-Погода сегодня: {weather_text}
+    prompt = f"""Сгенерируй образ дня. Дата: {date_str} ({weekday}, {day_kind}). Локация: {place}.
+Погода: {weather_text}
 Гардероб (используй ТОЛЬКО эти вещи, точные названия): {wardrobe_text}
 
 {config.myday_rules(city, country, cc)}
 
-Строго валидный JSON, экранируй кавычки, без переносов внутри значений.
-{{
- "outfit": ["верх","низ","обувь","аксессуар"],
- "quote": "короткая цитата от мыслителя/учёного/предпринимателя (Сенека, Марк Аврелий, Навал, Джобс), без банальностей. ТОЛЬКО на русском языке, без иностранных слов.",
- "quote_src": "автор"
-}}
-Правила для outfit: 1 верх + 1 низ + обувь (+ опц. аксессуар), сочетание по цвету, минимализм. От +24°C без дождя - ШОРТЫ + футболка; +17..+23 - лёгкие брюки + футболка/рубашка; ниже +16 или дождь/ветер - слои/ветровка, закрытая обувь. Без обращения по имени."""
-    return ai.llm_json(prompt, 600, tier="cheap")
+Строго валидный JSON, без переносов внутри значений.
+{{"outfit": ["верх","низ","обувь","аксессуар"]}}
+Правила: 1 верх + 1 низ + обувь (+ опц. аксессуар), сочетание по цвету, минимализм. От +24°C без дождя — шорты + футболка; +17..+23 — лёгкие брюки + футболка/рубашка; ниже +16 или дождь/ветер — слои/ветровка, закрытая обувь."""
+    return ai.llm_json(prompt, 300, tier="cheap")
+
+
+def _fetch_quote():
+    """Цитата дня: отдельный лёгкий вызов, не зависит от outfit-промпта."""
+    d = ai.llm_json(
+        "Дай одну нестандартную цитату (1-2 предложения) от мыслителя или предпринимателя "
+        "(Сенека, Марк Аврелий, Навал Равикант, Монтень, Шопенгауэр, Эпиктет — без банальностей). "
+        'Строго JSON: {"quote": "текст на русском", "src": "Автор"}. '
+        "Только кириллица, никаких латинских букв в тексте цитаты.",
+        150, tier="cheap",
+    )
+    return (d or {}) if isinstance(d, dict) else {}
 
 def _cap(s):
     s = (s or "").strip()
@@ -280,9 +298,10 @@ def _build_day_text(cid):
         cid, rain=rain >= 40, hot=tmax >= 24, is_weekend=is_weekend)
     if hack_text:
         L += [f"<b>💡 База знаний</b>", esc(hack_text)]
-    raw_quote = _strip_quotes(ex.get("quote", ""))
+    q_data = _fetch_quote()
+    raw_quote = _strip_quotes(q_data.get("quote", ""))
     if raw_quote and _quote_valid(raw_quote):
-        src = esc(ex.get("quote_src", "")).strip()
+        src = esc(q_data.get("src", "")).strip()
         line = f"«{esc(raw_quote)}»" + (f" — {src}" if src else "")
         L += ["", "<b>💭 Цитата</b>", line]
     text = "\n".join(L).strip()
