@@ -54,9 +54,10 @@ async def answer_callback(update, context):
     data = q.data
     bot = context.bot
 
-    # Баланс (врач/мотивация/рецепты/тревоги) vs Закладки/Любимое
+    # Баланс (врач/мотивация/рецепты/тревоги/холодильник) vs Закладки/Любимое
     if data.startswith("as_"):
-        if data.startswith(("as_food", "as_daycheck", "as_motiv", "as_doctor")):
+        if data.startswith(("as_food", "as_fridge", "as_recipe", "as_my_recipe",
+                             "as_daycheck", "as_motiv", "as_doctor")):
             await balance.handle_callback(bot, cid, q, data)
         else:
             await notes.handle_callback(bot, cid, q, data)
@@ -385,6 +386,8 @@ async def text_router(update, context):
             settings.set_(cid, "body", text)
             await bot.send_message(chat_id=cid, text="Готово, параметры сохранены.")
             await settings.send_body(bot, cid); return
+        if kind == "fridge_add":
+            await balance.fridge_add_done(bot, cid, text); return
         if kind == "setadd_country":
             await settings.list_add_done(bot, cid, "country", text); return
         if kind == "setadd_artist":
