@@ -327,66 +327,68 @@ async def send_weather(bot, cid, mode="today"):
     d1 = now
     d2 = now + timedelta(days=6)
     if d1.month == d2.month:
-        rng = f"{d1.day} - {d2.day} {_MONTHS[d1.month-1]}"
+        rng = f"{d1.day}–{d2.day} {_MONTHS[d1.month-1]}"
     else:
-        rng = f"{d1.day} {_MONTHS[d1.month-1]} - {d2.day} {_MONTHS[d2.month-1]}"
+        rng = f"{d1.day} {_MONTHS[d1.month-1]} – {d2.day} {_MONTHS[d2.month-1]}"
     tmins = d["temperature_2m_min"][:7]
     tmaxs = d["temperature_2m_max"][:7]
     rains = d["precipitation_probability_max"][:7]
     rmms = (d.get("precipitation_sum") or [None] * 7)[:7]
     winds = d["windspeed_10m_max"][:7]
     codes = d["weathercode"][:7]
-    days_ru = [_WEEKDAYS[(now + timedelta(days=i)).weekday()] for i in range(7)]
-    tmin, tmax = min(tmins), max(tmaxs)
     flag = __import__("util").flag_from_cc(s.get("cc", ""))
+    _SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
-    # раскладка дней по рубрикам В КОДЕ - каждый день ровно в одну
-    # приоритет: шторм > жара > дождь > комфорт
-    storm, hot, wet, comfort = [], [], [], []
+    def _day_range_str(indices):
+        if not indices:
+            return ""
+        shorts = [_SHORT[(now + timedelta(days=i)).weekday()] for i in indices]
+        if len(shorts) == 1:
+            return shorts[0]
+        is_consec = all(indices[j+1] == indices[j]+1 for j in range(len(indices)-1))
+        return f"{shorts[0]}–{shorts[-1]}" if is_consec else ", ".join(shorts)
+
+    # раскладка дней по рубрикам; приоритет: шторм > жара > дождь > комфорт
+    storm_i, hot_i, wet_i, comfort_i = [], [], [], []
     for i in range(7):
         t = tmaxs[i] or 0
         rp = rains[i] or 0
         mm = rmms[i]
         wd = winds[i] or 0
         code = codes[i]
-        day_name = days_ru[i].lower()  # нижний регистр, первое слово строки капитализируем при выводе
         is_storm = (wd > STORM_WIND_MS) or (code in SNOW_CODES) or (code in HEAVY_RAIN_CODES) \
                    or (mm is not None and mm >= 15)
         if is_storm:
-            storm.append(day_name)
+            storm_i.append(i)
         elif t > 25:
-            hot.append(day_name)
+            hot_i.append(i)
         elif _rain_real(rp, mm):
-            wet.append(day_name)
+            wet_i.append(i)
         else:
-            comfort.append(day_name)
+            comfort_i.append(i)
 
-    def _cap_first(s):
-        return s[:1].upper() + s[1:] if s else s
+    def _gtmax(indices):
+        return max(tmaxs[i] for i in indices) if indices else 0
 
-    # ветер за неделю
     wmax = max(winds) if winds else 0
+    wmin = min(winds) if winds else 0
     if wmax < 5:
         wlabel = "слабый"
     elif wmax < 10:
         wlabel = "умеренный"
     else:
         wlabel = "сильный"
-    wmin = min(winds) if winds else 0
-    wind_line = f"💨 Ветер: {wlabel}, {wmin:.0f}-{wmax:.0f} м/с"
+    wind_line = f"💨 Ветер: {wlabel}, {wmin:.0f}–{wmax:.0f} м/с"
 
-    # итог - короткий и важный: одно главное указание, без перечисления дней
-    place = s.get("city", "")
-    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", "",
-         f"От {tmin:+.0f}°C → {tmax:+.0f}°C", ""]
-    if storm:
-        L.append(f"⚠️ {esc(_cap_first(', '.join(storm)))}: шторм, осторожно")
-    if comfort:
-        L.append(f"☀️ {esc(_cap_first(', '.join(comfort)))}: комфортная погода")
-    if wet:
-        L.append(f"🌧️ {esc(_cap_first(', '.join(wet)))}: возможны дожди")
-    if hot:
-        L.append(f"🔥 {esc(_cap_first(', '.join(hot)))}: жара, осторожно")
+    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", ""]
+    if storm_i:
+        L.append(f"⚠️ {esc(_day_range_str(storm_i))}: до {_gtmax(storm_i):+.0f}°C — шторм, осторожно")
+    if comfort_i:
+        L.append(f"☀️ {esc(_day_range_str(comfort_i))}: до {_gtmax(comfort_i):+.0f}°C — комфортно")
+    if wet_i:
+        L.append(f"🌧️ {esc(_day_range_str(wet_i))}: до {_gtmax(wet_i):+.0f}°C — возможны дожди")
+    if hot_i:
+        L.append(f"🔥 {esc(_day_range_str(hot_i))}: до {_gtmax(hot_i):+.0f}°C — жара, осторожно")
     L += ["", wind_line]
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")]])
     await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
