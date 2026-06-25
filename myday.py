@@ -57,7 +57,21 @@ def _strip_quotes(s):
 # --- Сводка дня (Мой день) ---
 
 def city_fact(city, country, cid):
-    """Факт о городе: Wikipedia (RU+EN) + Wikidata как fallback. Anti-repeat по cid."""
+    """Факт о городе: Perplexity (если ключ) → Wikipedia+LLM. Anti-repeat по cid."""
+    cid = str(cid)
+    city_key = (city or "").lower().replace(" ", "_")
+    seen_all = store._load(config.CITY_FACTS_KEY)
+    seen = set(seen_all.get(cid, {}).get(city_key, []))
+
+    # --- Perplexity: реальный веб-поиск ---
+    ppx = research.perplexity_city_fact(city, country, avoid=list(seen))
+    if ppx:
+        seen.add(ppx)
+        seen_all.setdefault(cid, {})[city_key] = list(seen)
+        store._save(config.CITY_FACTS_KEY, seen_all)
+        return ppx
+
+    # --- Fallback: Wikipedia + LLM-перефраз ---
     pool = list(research.wiki_sentences(city))
     if len(pool) < 3:
         wd = research.wikidata_city_sentence(city)
@@ -65,10 +79,6 @@ def city_fact(city, country, cid):
             pool.append(wd)
     if not pool:
         return ""
-    cid = str(cid)
-    city_key = (city or "").lower().replace(" ", "_")
-    seen_all = store._load(config.CITY_FACTS_KEY)
-    seen = set(seen_all.get(cid, {}).get(city_key, []))
     unseen = [s for s in pool if s not in seen]
     if not unseen:
         seen = set()
