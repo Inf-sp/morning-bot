@@ -78,14 +78,18 @@ def city_fact(city, country, cid):
     seen_all.setdefault(cid, {})[city_key] = list(seen)
     store._save(config.CITY_FACTS_KEY, seen_all)
     lang_hint = "на русском" if re.search(r"[А-Яа-яЁё]", fact_raw) else "переведи на русский и"
+    place = f"{city}, {country}" if country else city
     prompt = (
-        f"Источник ({city}): «{fact_raw}»\n\n"
-        f"Перепиши это {lang_hint} как неожиданный живой факт для утреннего бота — "
-        "чтобы читатель удивился или улыбнулся. "
+        f"Источник ({place}): «{fact_raw}»\n\n"
+        f"Перепиши это {lang_hint} как факт для утреннего бота о {place}. "
+        "Критерии:\n"
+        "1. Локальность — связан с историей, законами, менталитетом, архитектурой или инфраструктурой региона.\n"
+        "2. Эффект «Вау» — даже местный житель должен узнать что-то новое.\n"
+        "3. Краткость — максимум 2 коротких предложения, без воды.\n"
         "Используй ТОЛЬКО информацию из источника, не придумывай деталей. "
-        "Не начинай с названия города. Одно предложение, без заголовка и без кавычек."
+        "Не начинай с названия города. Без заголовка и без кавычек."
     )
-    return ai.llm(prompt, 150, tier="cheap") or fact_raw
+    return ai.llm(prompt, 200, tier="cheap") or fact_raw
 
 
 def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
