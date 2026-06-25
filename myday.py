@@ -63,11 +63,17 @@ def city_fact(city, country, cid):
     if not unseen:
         seen = set()
         unseen = sents
-    fact = random.choice(unseen)
-    seen.add(fact)
+    fact_raw = random.choice(unseen)
+    seen.add(fact_raw)
     seen_all.setdefault(cid, {})[city_key] = list(seen)
     store._save(config.CITY_FACTS_KEY, seen_all)
-    return fact
+    prompt = (
+        f"Источник (Википедия, {city}): «{fact_raw}»\n\n"
+        "Перефразируй это как живой интересный факт для утренней сводки. "
+        "Используй ТОЛЬКО информацию из источника — не придумывай деталей. "
+        "Одно предложение, без заголовка «Интересный факт:» и без кавычек."
+    )
+    return ai.llm(prompt, 150, tier="cheap") or fact_raw
 
 
 def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):

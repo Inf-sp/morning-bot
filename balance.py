@@ -146,11 +146,9 @@ async def send_fridge(bot, cid):
     rows = []
     if items:
         rows.append([InlineKeyboardButton("🍳 Из холодильника", callback_data="as_fridge_cook")])
-    rows.append([InlineKeyboardButton("🥕 Ввести вручную", callback_data="as_food_left")])
     rows.append([InlineKeyboardButton("📝 Добавить продукты", callback_data="as_fridge_add")])
     if items:
         rows.append([InlineKeyboardButton("🧹 Убрать несколько", callback_data="as_fridge_clean")])
-        rows.append([InlineKeyboardButton("🗑 Очистить список", callback_data="as_fridge_clear")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_food")])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -182,11 +180,6 @@ async def fridge_del(bot, cid, idx):
         store.set_list(config.FRIDGE_KEY, cid_s, items)
     await send_fridge(bot, cid)
 
-
-async def fridge_clear(bot, cid):
-    store.set_list(config.FRIDGE_KEY, str(cid), [])
-    await bot.send_message(chat_id=cid, text="🗑 Список продуктов очищен.")
-    await send_fridge(bot, cid)
 
 
 async def send_fridge_recipe(bot, cid):
@@ -466,11 +459,7 @@ async def handle_callback(bot, cid, q, data):
         await send_recipe(bot, cid, "обычное блюдо"); return
     if data == "as_food_full":
         await send_recipe_full(bot, cid); return
-    if data == "as_food_left":
-        store.pending_input[str(cid)] = "leftovers"
-        await bot.send_message(chat_id=cid, text="🥕 Напиши продукты, что есть дома (через запятую) — предложу рецепт.",
-                               reply_markup=_back_kb()); return
-    # дневник тревоги
+# дневник тревоги
     if data == "as_daycheck":
         await send_daycheck(bot, cid); return
     if data == "as_worryreview":
@@ -501,9 +490,7 @@ async def handle_callback(bot, cid, q, data):
             reply_markup=_back_kb()); return
     if data == "as_fridge_cook":
         await send_fridge_recipe(bot, cid); return
-    if data == "as_fridge_clear":
-        await fridge_clear(bot, cid); return
-    if data == "as_fridge_clean":
+if data == "as_fridge_clean":
         import learning
         await learning.open_cleanup(bot, cid, "fridge"); return
     if data.startswith("as_fridge_del_"):

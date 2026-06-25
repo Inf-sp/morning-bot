@@ -70,7 +70,6 @@ VISITED = ", ".join(_load_json("countries.json", []))
 # --- Шаблоны промптов (prompts.json) ---
 _PROMPTS = _load_json("prompts.json", {})
 STYLE_PROFILE = _PROMPTS.get("style_profile", "")
-TEMP_ZONES = _PROMPTS.get("temp_zones", "")
 CONTENT_TASTE = _PROMPTS.get("content_taste", "")
 
 
