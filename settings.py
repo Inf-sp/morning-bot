@@ -31,6 +31,9 @@ def study_lang(cid):
 
 def home_kb(cid):
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("❤️ Любимые", callback_data="set_love")],
+        [InlineKeyboardButton("🗂️ Словарь", callback_data="set_dict")],
+        [InlineKeyboardButton("🧊 Мой холодильник", callback_data="set_fridge")],
         [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
         [InlineKeyboardButton("🗣 Язык для грамматики", callback_data="set_lang")],
         [InlineKeyboardButton("🎚 Уровень языков", callback_data="set_levels")],
@@ -184,6 +187,15 @@ async def list_add_done(bot, cid, kind, text):
 async def handle_callback(bot, cid, data):
     if data == "set_home":
         await send_home(bot, cid)
+    elif data == "set_love":
+        import notes
+        await notes.send_love_home(bot, cid)
+    elif data == "set_dict":
+        import learning
+        await learning.send_dict(bot, cid)
+    elif data == "set_fridge":
+        import balance
+        await balance.send_fridge(bot, cid)
     elif data == "set_notif":
         await send_notif(bot, cid)
     elif data.startswith("set_notiftgl_"):

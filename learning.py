@@ -13,6 +13,11 @@ import secure
 
 LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 
+_URL_RE = re.compile(r'\(?https?://\S+\)?')
+
+def _strip_urls(s):
+    return re.sub(r'\s{2,}', ' ', _URL_RE.sub('', s or '')).strip()
+
 def _is_b1plus(level):
     try:
         return LEVELS.index(level) >= LEVELS.index("B1")
@@ -166,7 +171,7 @@ async def grammar_answer(bot, cid, chosen):
 
 
 # ================= ТРЕНАЖЁР СЛОВ =================
-TRAIN_FORMATS = ["gap", "tf", "card"]
+TRAIN_FORMATS = ["gap", "tf", "card", "translate"]
 
 def _train_words(cid, language):
     """Слова (kind=word) нужного языка из словаря: [(word, ru), ...]."""
@@ -198,16 +203,16 @@ JSON (без переносов строк внутри значений):
 def _train_again_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("➡️ Ещё задание", callback_data="train_next")],
-        [InlineKeyboardButton("🗂️ Мой словарь", callback_data="a_dict")],
     ])
 
 async def train_start(bot, cid, language):
     store.challenge_state.pop(str(cid), None)
     store.game_state.pop(str(cid), None)
+    store.pending_input.pop(str(cid), None)
     if not _train_words(cid, language):
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🗂️ Мой словарь", callback_data="a_dict")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⚙️ Настройки (словарь)", callback_data="set_dict")]])
         await bot.send_message(chat_id=cid,
-            text=f"{_flag(language)} В словаре пока нет слов для тренировки. Добавь слова в 🗂️ Словарь.",
+            text=f"{_flag(language)} В словаре пока нет слов для тренировки. Добавь слова через /setup → Словарь.",
             reply_markup=kb)
         return
     store.train_state[str(cid)] = {"lang": language, "fmt_i": 0}
@@ -215,6 +220,7 @@ async def train_start(bot, cid, language):
 
 async def _render_train(bot, cid):
     import random as _r
+    store.pending_input.pop(str(cid), None)
     st = store.train_state.get(str(cid))
     if not st:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
@@ -231,6 +237,19 @@ async def _render_train(bot, cid):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("👁 Показать перевод", callback_data="train_reveal")]])
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
         return
+    if fmt == "translate":
+        level = store.get_level(cid, language)
+        try:
+            challenge_ru = generate_challenge(language, level)
+        except Exception as e:
+            await verify.safe_error(bot, cid, e); return
+        st.update({"fmt": "translate", "word": word, "challenge_ru": challenge_ru})
+        store.pending_input[str(cid)] = "train_translate"
+        L = [head, "", f"Переведи фразу на {language}:", "", f"«{esc(challenge_ru)}»", "",
+             "Напиши перевод следующим сообщением — проверю."]
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("➡️ Пропустить", callback_data="train_next")]])
+        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
+        return
     try:
         d = train_data(language, store.get_level(cid, language), word, ru, fmt)
     except Exception as e:
@@ -238,6 +257,7 @@ async def _render_train(bot, cid):
     if fmt == "gap":
         st.update({"fmt": "gap", "word": word, "ru": ru, "correct": d.get("correct", "a"),
                    "a": d.get("a", ""), "b": d.get("b", ""),
+                   "sentence": d.get("sentence", ""),
                    "task_ru": d.get("ru", ""), "rule": d.get("rule", "")})
         L = [head, "", "Вставь пропущенное слово:", "", esc(d.get("sentence", "")), "", "Выбери вариант 👇"]
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(d.get("a", "A"), callback_data="train_a"),
@@ -268,17 +288,22 @@ async def train_answer(bot, cid, chosen):
     fmt = st.get("fmt")
     if fmt == "gap":
         right = st.get("a") if st.get("correct") == "a" else st.get("b")
-        L = ["✅ <b>Верно!</b>"] if chosen == st.get("correct") else [f"❌ <b>Неверно.</b> Правильно: {esc(right)}"]
+        correct = chosen == st.get("correct")
+        L = ["✅ Верно!" if correct else f"❌ Неверно. Правильно: {esc(right)}"]
+        if st.get("sentence") and right:
+            full = esc(st["sentence"].replace("____", right))
+            L += ["", full]
         if st.get("task_ru"):
-            L += ["", f"<b>Перевод:</b> {esc(st['task_ru'])}"]
+            L += ["", esc(st["task_ru"])]
         if st.get("rule"):
-            L += ["", f"💡 {esc(st['rule'])}"]
+            L += ["", _strip_urls(esc(st["rule"]))]
     elif fmt == "tf":
-        L = ["✅ <b>Верно!</b>"] if chosen == st.get("correct") else ["❌ <b>Неверно.</b>"]
+        correct = chosen == st.get("correct")
+        L = ["✅ Верно!" if correct else "❌ Неверно."]
         if st.get("explain"):
-            L += ["", f"💡 {esc(st['explain'])}"]
+            L += ["", _strip_urls(esc(st["explain"]))]
         if st.get("task_ru"):
-            L += ["", f"<b>Перевод:</b> {esc(st['task_ru'])}"]
+            L += ["", esc(st["task_ru"])]
     else:
         await bot.send_message(chat_id=cid, text="Это задание без выбора ответа."); return
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=_train_again_kb())
@@ -287,8 +312,46 @@ async def train_next(bot, cid):
     st = store.train_state.get(str(cid))
     if not st:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    store.pending_input.pop(str(cid), None)
     st["fmt_i"] = (st.get("fmt_i", 0) + 1) % len(TRAIN_FORMATS)
     await _render_train(bot, cid)
+
+
+async def train_translate_answer(bot, cid, text):
+    """Проверяет ответ на задание «обратный перевод» внутри тренажёра."""
+    st = store.train_state.get(str(cid))
+    if not st or st.get("fmt") != "translate":
+        return
+    lang = st["lang"]
+    ru = st.get("challenge_ru", "")
+    try:
+        r = check_translation(lang, ru, text)
+    except Exception as e:
+        await verify.safe_error(bot, cid, e); return
+    L = [f"🧠 {_flag(lang)} <b>Тренажёр — обратный перевод</b>", "", f"Твой ответ: {esc(text)}", ""]
+    if r.get("ok"):
+        L.append("Верно!")
+        if r.get("correct") and r["correct"].strip().lower() != text.strip().lower():
+            L += ["", f"Естественнее: {esc(r['correct'])}"]
+    else:
+        if r.get("error"):
+            L.append(f"Ошибка: {esc(r['error'])}")
+        if r.get("correct"):
+            L += ["", f"Лучше: {esc(r['correct'])}"]
+    if r.get("note"):
+        L += ["", _strip_urls(esc(r["note"]))]
+    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=_train_again_kb())
+
+
+async def send_train_lang_select(bot, cid):
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🇳🇱 Нидерландский", callback_data="a_train_nl")],
+        [InlineKeyboardButton("🇬🇧 Английский", callback_data="a_train_en")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
+    ])
+    await bot.send_message(chat_id=cid,
+        text="🧠 <b>Тренажёр слов</b>\n\nВыбери язык для тренировки 👇",
+        parse_mode="HTML", reply_markup=kb)
 
 
 # ================= ОБРАТНЫЙ ПЕРЕВОД =================
@@ -360,22 +423,45 @@ async def send_proverb(bot, cid, language):
         d = ai.llm_json(
             f"Дай пословицу/поговорку или живое разговорное выражение строго на {language} языке.\n"
             'JSON: {"original":"оригинал на ' + language + '","literal":"дословный перевод на русский",'
-            '"analog":["русский аналог 1","аналог 2","аналог 3"],"meaning":"значение, когда так говорят, 1-2 строки"}',
-            500, tier="cheap")
+            '"meaning":"значение, когда так говорят, 1-2 строки"}',
+            400, tier="cheap")
         L = [f"💬{flag} <b>Пословица на {adj}</b>", ""]
-        L.append(f"<b>{esc(d.get('original',''))}</b> → {esc(d.get('literal',''))}")
-        analog = d.get("analog", "")
-        if analog:
-            if isinstance(analog, list):
-                L += ["", "<b>Русский аналог:</b>"] + [esc(str(a)) for a in analog]
-            else:
-                L += ["", "<b>Русский аналог:</b>", esc(analog)]
+        L.append(f"<b>{esc(d.get('original',''))}</b>")
+        if d.get("literal"):
+            L.append(esc(d["literal"]))
         if d.get("meaning"):
-            L += ["", "<b>Значение:</b>", esc(d["meaning"])]
+            L += ["", esc(d["meaning"])]
         txt = "\n".join(L)
     except Exception:
         txt = f"💬{flag} <b>Пословица на {adj}</b>\n\nНе удалось получить, попробуй ещё раз."
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=_proverb_kb(_code(language)))
+
+
+async def send_proverb_both(bot, cid):
+    """Одна пословица сразу на трёх языках: NL оригинал, EN эквивалент, RU дословно."""
+    try:
+        d = ai.llm_json(
+            "Дай одну интересную пословицу или разговорное выражение.\n"
+            'JSON: {"nl":"пословица на нидерландском","en":"английский эквивалент (не перевод, а аналог)",'
+            '"ru":"дословный перевод на русский","meaning":"значение и когда так говорят, 1-2 строки на русском"}',
+            500, tier="cheap")
+        L = ["💬 <b>Пословица</b>", ""]
+        if d.get("nl"):
+            L.append(f"🇳🇱 {esc(d['nl'])}")
+        if d.get("en"):
+            L.append(f"🇬🇧 {esc(d['en'])}")
+        if d.get("ru"):
+            L.append(f"🇷🇺 {esc(d['ru'])}")
+        if d.get("meaning"):
+            L += ["", esc(d["meaning"])]
+        txt = "\n".join(L)
+    except Exception:
+        txt = "💬 <b>Пословица</b>\n\nНе удалось получить, попробуй ещё раз."
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Ещё", callback_data="a_proverb")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
+    ])
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 
 
 # ================= СЛОВАРЬ (раздельно NL / EN) =================
@@ -512,7 +598,7 @@ async def send_dict(bot, cid):
     rows = [
         [InlineKeyboardButton(f"🇳🇱 Нидерландский ({nl_total})", callback_data="a_dictlang_nl")],
         [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data="a_dictlang_en")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
     ]
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
@@ -524,8 +610,8 @@ async def send_dict_lang(bot, cid, lang):
            f"Слов: {c['word']} · Фраз: {c['phrase']}\n\nВыбери действие 👇")
     rows = [
         [InlineKeyboardButton("📝 Добавить новое слово или фразу", callback_data=f"a_dictadd_{lang}")],
-        [InlineKeyboardButton("✏️ Редактировать список слов", callback_data=f"a_dictedit_{lang}_word")],
-        [InlineKeyboardButton("✏️ Редактировать список фраз", callback_data=f"a_dictedit_{lang}_phrase")],
+        [InlineKeyboardButton("❌ Удалить слово", callback_data=f"a_dictedit_{lang}_word")],
+        [InlineKeyboardButton("❌ Удалить фразу", callback_data=f"a_dictedit_{lang}_phrase")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="a_dict")],
     ]
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
