@@ -19,8 +19,6 @@ _WIKI_UA = {"User-Agent": "morning-bot/1.0"}
 _CF_CACHE = {}          # name.lower() -> (ts, dict)
 _CF_TTL = 86400         # факты о стране стабильны - сутки
 
-_WD_CACHE = {}          # name.lower() -> (ts, str)
-_WD_TTL = 86400
 
 
 # ================= WIKIPEDIA =================
@@ -131,45 +129,101 @@ def wiki_fact(name):
 
 
 # ================= WIKIDATA =================
-def wikidata_city_sentence(name):
-    """Один структурированный факт о городе из Wikidata (год основания). Без LLM, без ключей.
-    Возвращает готовую строку или '' если данных нет / ошибка."""
+_WDF_CACHE = {}   # name -> (ts, dict[str,str])
+_WDF_TTL = 86400
+
+
+def _wd_qid(name_clean: str) -> str:
+    """QID города из Wikidata по имени (поиск по ru+en)."""
+    for lang in ("ru", "en"):
+        try:
+            r = requests.get("https://www.wikidata.org/w/api.php", params={
+                "action": "wbsearchentities", "search": name_clean,
+                "language": lang, "type": "item", "limit": 3, "format": "json"
+            }, headers=_WIKI_UA, timeout=8)
+            items = r.json().get("search", [])
+            # берём первый результат у которого description содержит city/municipality/город
+            for it in items:
+                desc = (it.get("description") or "").lower()
+                if any(w in desc for w in ("city", "town", "municipality", "город", "gemeente", "stad")):
+                    return it["id"]
+            if items:
+                return items[0]["id"]
+        except Exception:
+            pass
+    return ""
+
+
+def wikidata_city_facts(name: str) -> dict:
+    """Структурированные факты о городе из Wikidata: {тип: предложение}.
+
+    Без LLM, без ключей. Типы: founded, population, area.
+    """
     name_clean = (name or "").strip()
     if not name_clean:
-        return ""
+        return {}
     key = name_clean.lower()
-    hit = _WD_CACHE.get(key)
-    if hit and time.time() - hit[0] < _WD_TTL:
+    hit = _WDF_CACHE.get(key)
+    if hit and time.time() - hit[0] < _WDF_TTL:
         return hit[1]
-    result = ""
+    qid = _wd_qid(name_clean)
+    facts: dict = {}
+    if not qid:
+        _WDF_CACHE[key] = (time.time(), facts)
+        return facts
     try:
-        r = requests.get("https://www.wikidata.org/w/api.php", params={
-            "action": "wbsearchentities", "search": name_clean,
-            "language": "ru", "type": "item", "limit": 1, "format": "json"
-        }, headers=_WIKI_UA, timeout=8)
-        items = r.json().get("search", [])
-        if not items:
-            _WD_CACHE[key] = (time.time(), "")
-            return ""
-        qid = items[0]["id"]
-        r2 = requests.get(f"https://www.wikidata.org/wiki/Special:EntityData/{qid}.json",
-                          headers=_WIKI_UA, timeout=12)
-        entity = r2.json().get("entities", {}).get(qid, {})
-        claims = entity.get("claims", {})
-        # P571 — inception (год основания)
+        r = requests.get(f"https://www.wikidata.org/wiki/Special:EntityData/{qid}.json",
+                         headers=_WIKI_UA, timeout=12)
+        claims = r.json().get("entities", {}).get(qid, {}).get("claims", {})
+
+        # P571 — год основания
         p571 = claims.get("P571", [])
         if p571:
-            time_str = (p571[0].get("mainsnak", {}).get("datavalue", {})
-                        .get("value", {}).get("time", ""))
-            year = time_str.lstrip("+").split("-")[0]
-            if year.isdigit():
-                y = int(year)
-                if y > 0:
-                    result = f"Город основан в {year} году."
+            tstr = (p571[0].get("mainsnak", {}).get("datavalue", {})
+                    .get("value", {}).get("time", ""))
+            year = tstr.lstrip("+").split("-")[0]
+            if year.isdigit() and int(year) > 0:
+                facts["founded"] = f"Город основан в {year} году."
+
+        # P1082 — население (берём последнее/наибольшее значение)
+        p1082 = claims.get("P1082", [])
+        if p1082:
+            amounts = []
+            for c in p1082:
+                amt = (c.get("mainsnak", {}).get("datavalue", {})
+                       .get("value", {}).get("amount", ""))
+                try:
+                    amounts.append(int(float(amt)))
+                except (ValueError, TypeError):
+                    pass
+            if amounts:
+                pop = max(amounts)
+                if pop > 500:
+                    facts["population"] = f"Население — {pop:,} человек.".replace(",", " ")
+
+        # P2046 — площадь (км²)
+        p2046 = claims.get("P2046", [])
+        if p2046:
+            amt = (p2046[0].get("mainsnak", {}).get("datavalue", {})
+                   .get("value", {}).get("amount", ""))
+            try:
+                area = float(amt)
+                if area > 0:
+                    facts["area"] = f"Площадь города — {area:.0f} км²."
+            except (ValueError, TypeError):
+                pass
+
     except Exception as e:
-        _log.warning("research: wikidata_city_sentence(%s) failed: %s", name_clean, e)
-    _WD_CACHE[key] = (time.time(), result)
-    return result
+        _log.warning("research: wikidata_city_facts(%s/%s) failed: %s", name_clean, qid, e)
+
+    _WDF_CACHE[key] = (time.time(), facts)
+    return facts
+
+
+def wikidata_city_sentence(name: str) -> str:
+    """Один факт из Wikidata (обратная совместимость)."""
+    facts = wikidata_city_facts(name)
+    return random.choice(list(facts.values())) if facts else ""
 
 
 # ================= REST COUNTRIES =================
