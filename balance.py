@@ -490,7 +490,7 @@ async def handle_callback(bot, cid, q, data):
             reply_markup=_back_kb()); return
     if data == "as_fridge_cook":
         await send_fridge_recipe(bot, cid); return
-if data == "as_fridge_clean":
+    if data == "as_fridge_clean":
         import learning
         await learning.open_cleanup(bot, cid, "fridge"); return
     if data.startswith("as_fridge_del_"):
