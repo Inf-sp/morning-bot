@@ -30,7 +30,7 @@ def travel_suggest_one(cid):
  "for_what":"ради чего ехать, 1 строка",
  "langs":"язык(и) + говорят ли на английском",
  "note":"главный нюанс/предупреждение, 1 строка"}}"""
-    return ai.llm_json(prompt, 700)
+    return ai.llm_json(prompt, 700, tier="cheap")
 
 def _country_card(d):
     L = [f"{d.get('flag','')} <b>{esc(d.get('country',''))}</b>", ""]

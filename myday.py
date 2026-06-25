@@ -126,7 +126,7 @@ def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", 
  "quote_src": "автор"
 }}
 Правила для outfit: 1 верх + 1 низ + обувь (+ опц. аксессуар), сочетание по цвету, минимализм. От +24°C без дождя - ШОРТЫ + футболка; +17..+23 - лёгкие брюки + футболка/рубашка; ниже +16 или дождь/ветер - слои/ветровка, закрытая обувь. Без обращения по имени."""
-    return ai.llm_json(prompt, 600)
+    return ai.llm_json(prompt, 600, tier="cheap")
 
 def _cap(s):
     s = (s or "").strip()

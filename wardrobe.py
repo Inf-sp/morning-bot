@@ -6,6 +6,7 @@ import ai
 import weather
 from util import esc
 import verify
+import secure
 
 HOME_TEXT = (
     "👕 <b>Гардероб</b>\n\n"
@@ -136,10 +137,11 @@ async def add_item(bot, cid, text):
     cats = ", ".join(w.keys()) or "футболки, рубашки, свитшоты, верхняя одежда, брюки, джинсы, обувь, аксессуары"
     try:
         parsed = ai.llm_json(
-            f"Разбери вещи по категориям. Категории: {cats} (можно создать новую).\nВещи:\n{text}\n"
+            f"Разбери вещи по категориям. Категории: {cats} (можно создать новую).\n"
+            f"Вещи:\n{secure.wrap_untrusted(text, 'список вещей')}\n"
             "Каждую вещь пиши ПОЛНЫМ названием в порядке: тип + цвет + детали/бренд "
             "(напр. «Футболка белая Uniqlo плотная», «Шорты серые тонкие»). Сохраняй бренд если указан.\n"
-            'JSON: {"категория": ["полное название вещи"]}.', 700)
+            'JSON: {"категория": ["полное название вещи"]}.', 700, tier="cheap")
         added = store.merge_wardrobe(parsed)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
@@ -230,7 +232,7 @@ async def check_purchase(bot, cid, text):
 Верни JSON (без markdown):
 {{"verdict":"БРАТЬ или НЕ БРАТЬ","why":["2-3 причины, на ты, без имени"],"outro":"1 строка итог, на ты, без имени"}}"""
     try:
-        d = ai.llm_json(prompt, 500)
+        d = ai.llm_json(prompt, 500, tier="cheap")
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     verdict = d.get("verdict", "")

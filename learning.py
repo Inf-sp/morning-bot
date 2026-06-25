@@ -5,9 +5,9 @@ import store
 import ai
 from util import esc
 import verify
+import secure
 
 LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
-LO = ai.LEARN_ORDER
 
 def _is_b1plus(level):
     try:
@@ -290,14 +290,14 @@ async def train_next(bot, cid):
 # ================= ОБРАТНЫЙ ПЕРЕВОД =================
 def generate_challenge(language, level):
     return ai.llm(f"Дай ОДНУ фразу на русском для перевода на {language}. Уровень {level}, бытовая/рабочая ситуация. "
-                  f"Только русская фраза, без кавычек.", 200, 1.0, LO).strip()
+                  f"Только русская фраза, без кавычек.", 200, 1.0, tier="cheap").strip()
 
 def check_translation(language, ru, answer):
     return ai.llm_json(f"""Ученик переводит с русского на {language}.
 Русская фраза: {ru}
 Перевод ученика: {answer}
 JSON: {{"ok": true/false, "error": "ошибка коротко по-русски или пусто",
- "correct": "правильный естественный вариант на {language}", "note": "короткое правило/слово по-русски или пусто"}}""", 800, LO)
+ "correct": "правильный естественный вариант на {language}", "note": "короткое правило/слово по-русски или пусто"}}""", 800, tier="cheap")
 
 async def do_translate(bot, cid, lang):
     store.pending_input.pop(str(cid), None)
@@ -357,7 +357,7 @@ async def send_proverb(bot, cid, language):
             f"Дай пословицу/поговорку или живое разговорное выражение строго на {language} языке.\n"
             'JSON: {"original":"оригинал на ' + language + '","literal":"дословный перевод на русский",'
             '"analog":["русский аналог 1","аналог 2","аналог 3"],"meaning":"значение, когда так говорят, 1-2 строки"}',
-            500, LO)
+            500, tier="cheap")
         L = [f"💬{flag} <b>Пословица на {adj}</b>", ""]
         L.append(f"<b>{esc(d.get('original',''))}</b> → {esc(d.get('literal',''))}")
         analog = d.get("analog", "")
@@ -422,7 +422,7 @@ def _parse_batch(text, lang_hint):
             "и перевод ru на русский. Нидерландские существительные - с артиклем de/het. "
             f"Если язык элемента неочевиден, ставь \"{lang_hint}\". "
             'Верни ТОЛЬКО JSON: {"items":[{"word":"иностранный термин без перевода","ru":"перевод","lang":"nl|en","kind":"word|phrase"}]}')
-    d = ai.llm_json(f"{spec}\n\nТекст:\n{text}", 1500, LO)
+    d = ai.llm_json(f"{spec}\n\n{secure.wrap_untrusted(text, 'текст для разбора')}", 1500, tier="cheap")
     return d.get("items", []) if isinstance(d, dict) else []
 
 async def add_words_batch(bot, cid, text, lang="nl"):
@@ -639,12 +639,13 @@ async def _add_one_topic(bot, cid, text, language):
     flag = _flag(language)
     try:
         breakdown = ai.llm(
-            f"Пользователь учит {language}. Он добавил тему/фразу для изучения: \"{text}\".\n"
+            f"Пользователь учит {language}. Он добавил тему/фразу для изучения: "
+            f"{secure.wrap_untrusted(text, 'тема')}\n"
             "Дай короткий разбор простыми словами на русском (Telegram HTML, теги <b>):\n"
             "- если это фраза/конструкция: разбери по частям (что значит каждое слово), "
             "выдели грамматическое правило одним предложением.\n"
             "- если это грамматическая тема: объясни суть в 2-3 строки с мини-примером.\n"
-            "Без markdown, компактно, по делу.", 500, 0.6, LO).strip()
+            "Без markdown, компактно, по делу.", 500, 0.6, tier="cheap").strip()
     except Exception:
         breakdown = ""
     L = [f"Добавил в 🤓 Изучаемая тема {flag}", "", f"<b>Будем изучать:</b> {esc(text)}"]
@@ -662,7 +663,7 @@ def _topics_overview(topics, language):
             f"Пользователь учит {language}. Он добавил темы для изучения:\n{joined}\n"
             "Для КАЖДОЙ темы дай очень короткую суть на русском (1 строка - главное правило/смысл).\n"
             'Верни ТОЛЬКО JSON: {"items":[{"topic":"тема как есть","tip":"короткая суть"}]}',
-            1000, LO)
+            1000, tier="cheap")
         return {(i.get("topic") or "").strip(): (i.get("tip") or "").strip()
                 for i in d.get("items", [])} if isinstance(d, dict) else {}
     except Exception:
@@ -901,7 +902,7 @@ HINT: ещё одна явная подсказка на языке {clue_lang}
 HINT2: совсем простая, почти очевидная подсказка про того же персонажа (но без имени), на языке {clue_lang}
 QUOTE: короткая фраза в духе персонажа на языке {clue_lang}
 EXPLAIN: 1-2 предложения почему это он (на языке {clue_lang})"""
-    raw = ai.llm(prompt, 900, 1.0, LO)
+    raw = ai.llm(prompt, 900, 1.0, tier="cheap")
     out = {}
     for key, field in (("CLUES", "clues"), ("ANSWER", "answer"), ("ALIASES", "aliases"),
                        ("HINT", "hint"), ("HINT2", "hint2"), ("QUOTE", "quote"), ("EXPLAIN", "explain")):

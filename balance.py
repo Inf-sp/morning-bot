@@ -7,6 +7,7 @@ import rerank
 import util
 from util import esc
 import verify
+import secure
 
 TZ = config.TZ
 
@@ -66,7 +67,7 @@ def _gen_recipe(constraint):
         "Оформление полей в Telegram HTML: подзаголовки тегом <b>...</b>, пункты с маркера «• ». "
         "НИКАКОГО markdown - запрещены *, **, #, `. Заголовки <b>Ингредиенты</b> и <b>Приготовление</b>, пункты с новой строки «• ».\n"
         'JSON: {"name":"название","time":"X мин","servings":"N порц.",'
-        '"short":"3-4 коротких предложения как готовить","full":"полный рецепт в Telegram HTML: блок <b>Ингредиенты</b> со списком пунктов «• », затем <b>Приготовление</b> с пунктами «• »"}', 900)
+        '"short":"3-4 коротких предложения как готовить","full":"полный рецепт в Telegram HTML: блок <b>Ингредиенты</b> со списком пунктов «• », затем <b>Приготовление</b> с пунктами «• »"}', 900, tier="cheap")
 
 def _recipe_card(d):
     return (f"🥘 <b>{util.esc(d.get('name',''))}</b>\n\n"
@@ -98,8 +99,9 @@ async def send_leftovers(bot, cid, ingredients):
     await bot.send_message(chat_id=cid, text="Смотрю, что можно приготовить...")
     try:
         out = ai.llm(
-            f"Есть продукты: {ingredients}. Предложи 1 простой рецепт только из них (+ базовые специи и максимум 1 доп продукт что получилось вкусное блюдо). "
-            "Каждый: 🥘 Название • ⏱️ время, затем 1-2 строки как готовить, с переносами. Компактно, эмодзи. Без воды.", 800, 0.9)
+            f"Есть продукты: {secure.wrap_untrusted(ingredients, 'продукты')}. "
+            "Предложи 1 простой рецепт только из них (+ базовые специи и максимум 1 доп продукт что получилось вкусное блюдо). "
+            "Каждый: 🥘 Название • ⏱️ время, затем 1-2 строки как готовить, с переносами. Компактно, эмодзи. Без воды.", 800, 0.9, tier="cheap")
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     store.last_action[str(cid)] = ("leftovers", ingredients)
@@ -162,10 +164,13 @@ def _med_system():
 def _doctor_candidates(symptoms):
     data = ai.llm_json(
         f"Пользователь описал: {symptoms}\nДай 6 коротких справочных тезисов (общая информация о возможных "
-        "причинах/состояниях при таких симптомах; НЕ диагноз). JSON: {\"items\": [\"тезис\", ...]}", 900)
+        "причинах/состояниях при таких симптомах; НЕ диагноз). JSON: {\"items\": [\"тезис\", ...]}", 900, tier="cheap")
     return [x for x in data.get("items", []) if isinstance(x, str) and x.strip()]
 
 async def doctor_answer(bot, cid, symptoms):
+    if secure.is_dangerous_med(symptoms):
+        await verify.safe_send(bot, cid, secure.CRISIS_MSG, surface="health")
+        return
     await bot.send_chat_action(chat_id=cid, action="typing")
     if _is_med_question(symptoms):
         prompt = f"{_med_system()}\n\nВопрос про лекарство: {symptoms}"
@@ -201,6 +206,8 @@ async def doctor_answer(bot, cid, symptoms):
 async def handle_role(bot, cid, role, text):
     if role == "doctor":
         await doctor_answer(bot, cid, text); return
+    if secure.is_dangerous_med(text):
+        await verify.safe_send(bot, cid, secure.CRISIS_MSG, surface="health"); return
     await bot.send_chat_action(chat_id=cid, action="typing")
     try:
         out = ai.llm(_role_system(role) + "\n\nЗапрос пользователя:\n" + text, 1500, 0.7)

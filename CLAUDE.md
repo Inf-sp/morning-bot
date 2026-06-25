@@ -44,7 +44,16 @@
   - Любую ошибку показывай через `verify.safe_error(bot, cid, e, skill=...)` — **никогда** `text=str(e)`/`f"Ошибка: {e}"` (утечка тел ошибок API).
 - **Continuous eval:** `verify.audit_callbacks()` зовётся в `bot.post_init` и печатает необработанные callback'и. Тесты — `pytest` в [tests/](tests/) (грейдеры идут без Telegram/env; `conftest.py` ставит dummy-env). Запуск: `pip install -r requirements-dev.txt && pytest -q`.
 
-Следующие этапы (ещё НЕ сделаны): Cost-aware LLM pipeline (кеш, выбор модели), AgentShield-скан (секреты/инъекции), Research-first (данные → проверка → ответ).
+Этап 2 (Cost-aware, сделан): в [ai.py](ai.py) тиры моделей — `ai.llm/llm_json(..., tier="cheap"|"smart")`. `cheap` (= `GRAMMAR_ORDER`+`GRAMMAR_MODEL`, Haiku) для механики/парсинга/флавора и всего раздела Обучения; `smart` (Sonnet) — для врача, рекомендаций, разбора гардероба, плана поездки, мотивации, вечернего разбора. `util.country_flag` офлайновый (без LLM), `weather.fetch_weather` с TTL-кешем (общий для myday/wardrobe/weather). При новых вызовах LLM выбирай `tier` под задачу.
+
+Этап 3 (AgentShield/Security, сделан): модуль [secure.py](secure.py). Правила для нового кода:
+- Любой пользовательский/файловый текст пропускай через `secure.clamp` (лимит длины + чистка невидимых символов) — единый чок-поинт уже стоит в `bot.text_router`.
+- Недоверенный текст, идущий в LLM-промпт, оборачивай `secure.wrap_untrusted(text, label)` (трактовать как данные, не инструкции).
+- Логи с телами ошибок/ответами провайдеров — через `secure.redact` (маскирует токены/ключи). Никогда не печатай сырые тела.
+- Опасные мед-запросы (`secure.is_dangerous_med`) → `secure.CRISIS_MSG` без генерации.
+- `secure.scan_secrets()` зовётся в `bot.post_init` (continuous eval, должен быть `OK`).
+
+Следующие этапы (ещё НЕ сделаны): Research-first (данные → проверка → ответ).
 
 ## ECC-правила
 

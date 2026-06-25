@@ -8,7 +8,7 @@ import ai
 # ---------- сохранение в закладки ----------
 def _shorten(text):
     try:
-        return ai.llm("Сожми до 1-3 строк, сохрани суть и важное, без воды:\n\n" + text, 200, 0.3).strip() or text[:300]
+        return ai.llm("Сожми до 1-3 строк, сохрани суть и важное, без воды:\n\n" + text, 200, 0.3, tier="cheap").strip() or text[:300]
     except Exception:
         return text[:300]
 
