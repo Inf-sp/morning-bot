@@ -97,7 +97,7 @@ def _list_kb(items, del_prefix, add_cb, back="set_home"):
     for i, it in enumerate(items[-40:]):
         label = it if isinstance(it, str) else (it.get("name") or it.get("word") or str(it))
         rows.append([InlineKeyboardButton(f"❌ {str(label)[:28]}", callback_data=f"{del_prefix}{i}")])
-    rows.append([InlineKeyboardButton("➕ Добавить", callback_data=add_cb)])
+    rows.append([InlineKeyboardButton("📝 Добавить", callback_data=add_cb)])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back)])
     return InlineKeyboardMarkup(rows)
 

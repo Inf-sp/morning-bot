@@ -111,7 +111,7 @@ def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", 
 Строго валидный JSON, экранируй кавычки, без переносов внутри значений.
 {{
  "outfit": ["верх","низ","обувь","аксессуар"],
- "quote": "короткая цитата от мыслителя/учёного/предпринимателя (Сенека, Марк Аврелий, Навал, Джобс), без банальностей",
+ "quote": "короткая цитата от мыслителя/учёного/предпринимателя (Сенека, Марк Аврелий, Навал, Джобс), без банальностей. ТОЛЬКО на русском языке, без иностранных слов.",
  "quote_src": "автор"
 }}
 Правила для outfit: 1 верх + 1 низ + обувь (+ опц. аксессуар), сочетание по цвету, минимализм. От +24°C без дождя - ШОРТЫ + футболка; +17..+23 - лёгкие брюки + футболка/рубашка; ниже +16 или дождь/ветер - слои/ветровка, закрытая обувь. Без обращения по имени."""
@@ -120,6 +120,10 @@ def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", 
 def _cap(s):
     s = (s or "").strip()
     return s[:1].upper() + s[1:] if s else s
+
+def _quote_valid(q):
+    """Пропускает цитату если LLM вставил латинское слово в кириллический текст."""
+    return not re.search(r'[а-яА-ЯЁё][a-zA-Z]|[a-zA-Z][а-яА-ЯЁё]', q or "")
 
 def _is_word_entry(w):
     """Запись словаря - именно СЛОВО, а не фраза."""
@@ -243,10 +247,11 @@ def _build_day_text(cid):
     hack_cat, hack_text = daily_lifehack(
         cid, rain=rain >= 40, hot=tmax >= 24, is_weekend=is_weekend)
     if hack_text:
-        L += ["", f"<b>💡 База знаний · {esc(hack_cat)}</b>", esc(hack_text)]
-    if ex.get("quote"):
+        L += [f"<b>💡 База знаний</b>", esc(hack_text)]
+    raw_quote = _strip_quotes(ex.get("quote", ""))
+    if raw_quote and _quote_valid(raw_quote):
         src = esc(ex.get("quote_src", "")).strip()
-        line = f"«{esc(_strip_quotes(ex.get('quote','')))}»" + (f" — {src}" if src else "")
+        line = f"«{esc(raw_quote)}»" + (f" — {src}" if src else "")
         L += ["", "<b>💭 Цитата</b>", line]
     text = "\n".join(L).strip()
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя

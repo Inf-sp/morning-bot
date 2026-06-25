@@ -59,6 +59,14 @@ def _clean_wiki(s):
     s = re.sub(r"\s+([.,;:!?])", r"\1", s)
     return s.strip()
 
+def _is_dubious_record(s):
+    """Предложения с конкретными историческими рекордами (температуры, даты) неверифицируемы для конкретного города."""
+    sl = s.lower()
+    has_superlative = bool(re.search(r'\bсам(?:ый|ая|ое|ые)\b|\bнаибол', sl))
+    has_temp_number = bool(re.search(r'[-−]\s*\d+[,.]?\d*\s*(?:°|градус)', sl))
+    has_record = bool(re.search(r'\bрекорд', sl))
+    return (has_superlative and has_temp_number) or has_record
+
 def wiki_sentences(name):
     """Список кандидатов-предложений для факта о месте (без дефинитивного первого)."""
     if not name:
@@ -72,6 +80,7 @@ def wiki_sentences(name):
     # Первое предложение обычно дефинитивное ("Алкмар — город...") — пропускаем
     if len(sents) > 1 and re.match(r"^.{0,60}[—–-]", sents[0]):
         sents = sents[1:]
+    sents = [s for s in sents if not _is_dubious_record(s)]
     return sents[:6]
 
 def wiki_fact(name):

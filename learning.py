@@ -180,10 +180,10 @@ def train_data(language, level, word, ru, fmt):
     base = (f"Ты преподаватель языка {language}, уровень ученика {level}. "
             f'Целевое слово: "{word}"' + (f" (перевод: {ru})" if ru else "") + ". ")
     if fmt == "gap":
-        prompt = base + f"""Составь ОДНО естественное предложение на {language} уровня {level} с этим словом, заменив само слово на ____.
-Дай два варианта: правильный (исходное слово в нужной форме) и один правдоподобный неверный.
+        prompt = base + f"""Составь ОДНО предложение на {language} уровня {level} с этим словом, заменив его на ____.
+Задание должно иметь РОВНО ОДИН верный ответ. Неверный вариант — это слово в неправильной форме (другое время/число/падеж), или слово другой части речи, или синоним с другим управлением, который грамматически НЕЛЬЗЯ вставить в данное предложение. Не выбирай синонимы, которые оба подходят в этом контексте.
 JSON (без переносов строк внутри значений):
-{{"sentence":"предложение с ____","a":"вариант A","b":"вариант B","correct":"a или b","ru":"перевод предложения на русский","rule":"почему верный вариант, 1 строка"}}"""
+{{"sentence":"предложение с ____","a":"вариант A","b":"вариант B","correct":"a или b","ru":"перевод предложения на русский","rule":"почему правильный верен, а неверный — нет (1 строка)"}}"""
     else:  # tf
         prompt = base + f"""Составь ОДНО естественное предложение на {language} уровня {level}, где это слово - существительное, выделенное тегами <b></b>.
 Затем дай утверждение на русском о значении/роли выделенного существительного - иногда ВЕРНОЕ, иногда ЛОЖНОЕ (выбирай случайно).
@@ -519,7 +519,7 @@ async def send_dict_lang(bot, cid, lang):
     txt = (f"{flag} <b>Словарь · {name}</b>\n\n"
            f"Слов: {c['word']} · Фраз: {c['phrase']}\n\nВыбери действие 👇")
     rows = [
-        [InlineKeyboardButton("➕ Добавить новое слово или фразу", callback_data=f"a_dictadd_{lang}")],
+        [InlineKeyboardButton("📝 Добавить новое слово или фразу", callback_data=f"a_dictadd_{lang}")],
         [InlineKeyboardButton("✏️ Редактировать список слов", callback_data=f"a_dictedit_{lang}_word")],
         [InlineKeyboardButton("✏️ Редактировать список фраз", callback_data=f"a_dictedit_{lang}_phrase")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="a_dict")],
@@ -751,6 +751,13 @@ def _ctx_items(cid, ctx):
                  "books": "📖 Чистка: книги"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
         return title, items, f"as_love_{key}"
+    if ctx == "fridge":
+        items = [(i, it) for i, it in enumerate(store.get_list(config.FRIDGE_KEY, cid))]
+        return "🧊 Чистка: холодильник", items, "as_fridge"
+    if ctx == "recipes":
+        recipes = store.get_list(config.MY_RECIPES_KEY, cid)
+        items = [(i, r.get("name", f"Рецепт {i+1}")) for i, r in enumerate(recipes)]
+        return "🍳 Чистка: рецепты", items, "as_my_recipes"
     return "Чистка", [], "m_learn"
 
 def _wardrobe_flat(cid):
@@ -830,6 +837,10 @@ def _cleanup_delete(cid, ctx):
                      "books": config.BOOKS_KEY}.get(key)
         if store_key:
             store.set_list(store_key, cid, [it for i, it in enumerate(store.get_list(store_key, cid)) if i not in sel])
+    elif ctx == "fridge":
+        store.set_list(config.FRIDGE_KEY, cid, [it for i, it in enumerate(store.get_list(config.FRIDGE_KEY, cid)) if i not in sel])
+    elif ctx == "recipes":
+        store.set_list(config.MY_RECIPES_KEY, cid, [r for i, r in enumerate(store.get_list(config.MY_RECIPES_KEY, cid)) if i not in sel])
     store.list_sel[f"{cid}:{ctx}"] = set()
 
 async def open_cleanup(bot, cid, ctx):
