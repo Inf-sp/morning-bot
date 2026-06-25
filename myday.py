@@ -63,13 +63,13 @@ def city_fact(city, country, cid):
     seen_all = store._load(config.CITY_FACTS_KEY)
     seen = set(seen_all.get(cid, {}).get(city_key, []))
 
-    # --- Perplexity: реальный веб-поиск ---
-    ppx = research.perplexity_city_fact(city, country, avoid=list(seen))
-    if ppx:
-        seen.add(ppx)
+    # --- Gemini Search: реальный веб-поиск через Google grounding ---
+    gsf = research.gemini_search_fact(city, country, avoid=list(seen))
+    if gsf:
+        seen.add(gsf)
         seen_all.setdefault(cid, {})[city_key] = list(seen)
         store._save(config.CITY_FACTS_KEY, seen_all)
-        return ppx
+        return gsf
 
     # --- Fallback: Wikipedia + LLM-перефраз ---
     pool = list(research.wiki_sentences(city))
