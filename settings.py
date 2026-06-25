@@ -181,3 +181,53 @@ async def list_add_done(bot, cid, kind, text):
         await send_artists(bot, cid)
     else:
         await send_books(bot, cid)
+
+
+async def handle_callback(bot, cid, data):
+    if data == "set_home":
+        await send_home(bot, cid)
+    elif data == "set_notif":
+        await send_notif(bot, cid)
+    elif data.startswith("set_notiftgl_"):
+        await toggle_notif(bot, cid, data[len("set_notiftgl_"):])
+    elif data == "set_lang":
+        await send_lang(bot, cid)
+    elif data == "set_lang_nl":
+        await set_lang(bot, cid, "нидерландский")
+    elif data == "set_lang_en":
+        await set_lang(bot, cid, "английский")
+    elif data == "set_levels":
+        await learning.send_levels(bot, cid)
+    elif data == "set_city":
+        store.pending_input[cid] = "setcity"
+        await bot.send_message(chat_id=cid, text="🌍 Напиши город - переключу.")
+    elif data == "set_body":
+        await send_body(bot, cid)
+    elif data == "set_wardrobe":
+        await send_wardrobe(bot, cid)
+    elif data == "set_countries":
+        await send_countries(bot, cid)
+    elif data == "set_artists":
+        await send_artists(bot, cid)
+    elif data == "set_books":
+        await send_books(bot, cid)
+    elif data == "setadd_country":
+        store.pending_input[cid] = "setadd_country"
+        await bot.send_message(chat_id=cid, text="🧳 Напиши страну - добавлю в список.")
+    elif data == "setadd_artist":
+        store.pending_input[cid] = "setadd_artist"
+        await bot.send_message(chat_id=cid, text="🎤 Напиши имя артиста - добавлю в список.")
+    elif data == "setadd_book":
+        store.pending_input[cid] = "setadd_book"
+        await bot.send_message(chat_id=cid, text="📚 Напиши название книги - добавлю в список.")
+    elif data.startswith("setdel_country_"):
+        await list_delete(bot, cid, "country", int(data.split("_")[-1]))
+    elif data.startswith("setdel_artist_"):
+        await list_delete(bot, cid, "artist", int(data.split("_")[-1]))
+    elif data.startswith("setdel_book_"):
+        await list_delete(bot, cid, "book", int(data.split("_")[-1]))
+    elif data.startswith("set_style_"):
+        await set_style(bot, cid, int(data.split("_")[-1]))
+    elif data == "set_bodyinput":
+        store.pending_input[cid] = "bodyinput"
+        await bot.send_message(chat_id=cid, text="✏️ Напиши параметры: рост, вес, обувь, размер брюк и одежды.")

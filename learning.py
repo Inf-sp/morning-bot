@@ -1006,6 +1006,36 @@ async def game_answer(bot, cid, text):
     return True
 
 
+async def game_hint(bot, cid, q):
+    st = store.game_state.get(str(cid))
+    ui = GAME_UI.get(store.game_config.get(str(cid), {}).get("lang", "русский"), GAME_UI["русский"])
+    hints = (st or {}).get("hints") or []
+    i = (st or {}).get("hint_i", 0)
+    if st and i < len(hints):
+        st["hint_i"] = i + 1
+        await q.message.reply_text(
+            f"<b>{ui['hint']}</b>\n\n<b>{esc(hints[i])}</b>\n\n{ui['who']}",
+            parse_mode="HTML")
+    else:
+        await q.message.reply_text(ui["nohint"])
+
+
+async def game_reveal(bot, cid, q):
+    st = store.game_state.pop(str(cid), None)
+    ui = GAME_UI.get(store.game_config.get(str(cid), {}).get("lang", "русский"), GAME_UI["русский"])
+    if not st:
+        return
+    body = st.get("explain") or st.get("quote", "")
+    txt = f"<b>{ui['found']}</b>\n\n{ui['answer']}:\n<b>{esc(st.get('answer', ''))}</b>"
+    if body:
+        txt += f"\n\n{esc(body)}"
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(ui["again"], callback_data="game_again")],
+        [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
+    ])
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+
+
 # ================= УРОВЕНЬ (/setup) =================
 async def send_levels(bot, cid):
     nl_lvl, en_lvl = store.get_level(cid, "нидерландский"), store.get_level(cid, "английский")
