@@ -1,6 +1,12 @@
 import os
 import json
+import logging
+from pathlib import Path
 import config
+
+_HERE = Path(__file__).parent
+
+_log = logging.getLogger(__name__)
 
 # --- Postgres (с откатом в память) ---
 _conn = None
@@ -28,20 +34,22 @@ def _db():
             with _conn.cursor() as cur:
                 cur.execute("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value JSONB)")
             return _conn
-        except Exception:
+        except Exception as e:
+            _log.warning("store: DB reconnect failed, using memory: %s", e)
             return None
 
 def _load(key):
     conn = _db()
     if conn is None:
-        return dict(_mem.get(key, {}))
+        return {k: list(v) if isinstance(v, list) else v for k, v in _mem.get(key, {}).items()}
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT value FROM kv WHERE key = %s", (key,))
             row = cur.fetchone()
             return row[0] if row else {}
-    except Exception:
-        return dict(_mem.get(key, {}))
+    except Exception as e:
+        _log.warning("store: _load(%s) DB error, using memory: %s", key, e)
+        return {k: list(v) if isinstance(v, list) else v for k, v in _mem.get(key, {}).items()}
 
 def _save(key, data):
     conn = _db()
@@ -53,7 +61,8 @@ def _save(key, data):
             cur.execute("INSERT INTO kv (key, value) VALUES (%s, %s) "
                         "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
                         (key, json.dumps(data, ensure_ascii=False)))
-    except Exception:
+    except Exception as e:
+        _log.warning("store: _save(%s) DB error, falling back to memory: %s", key, e)
         _mem[key] = data
 
 # --- helpers ---
@@ -86,8 +95,9 @@ def load_wardrobe():
     w = _load(config.WARDROBE_FILE)
     seed = None
     try:
-        if os.path.exists(config.WARDROBE_FILE):
-            with open(config.WARDROBE_FILE, encoding="utf-8") as f:
+        _seed_path = _HERE / config.WARDROBE_FILE
+        if _seed_path.exists():
+            with open(_seed_path, encoding="utf-8") as f:
                 seed = json.load(f)
     except Exception:
         seed = None
@@ -109,7 +119,7 @@ def merge_wardrobe(new_items: dict):
         w.setdefault(cat, [])
         for it in items:
             it = it.strip().lower()
-            if it and it not in [x.lower() for x in w[cat]]:
+            if it and it not in {x.lower() for x in w[cat]}:
                 w[cat].append(it)
                 added += 1
     save_wardrobe(w)

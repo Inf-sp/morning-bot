@@ -9,8 +9,11 @@
 Верхний уровень импортирует только stdlib, чтобы чистые грейдеры тестировались
 без telegram/env. util/config/traceback импортируются лениво внутри функций.
 """
+import logging
 import re
 import json
+
+_log = logging.getLogger(__name__)
 
 SURFACES = ("chat", "health", "card", "weather")
 
@@ -103,7 +106,7 @@ async def safe_send(bot, cid, text, *, surface="card", rain_real=None, reply_mar
     html = util.tg_html(text)
     warnings += grade_html(html)
     for w in warnings:
-        print(f"[verify] {surface}: {w}")
+        _log.warning("[verify] %s: %s", surface, w)
     chunks = [html[i:i + 4000] for i in range(0, len(html), 4000)] or [html]
     for i, c in enumerate(chunks):
         markup = reply_markup if i == len(chunks) - 1 else None
@@ -116,7 +119,7 @@ async def safe_send(bot, cid, text, *, surface="card", rain_real=None, reply_mar
 async def safe_error(bot, cid, exc, *, skill=None):
     """Полную ошибку - в логи, пользователю - нейтральный текст. Никогда не показываем str(exc)."""
     import traceback
-    print("[error]", repr(exc))
+    _log.error("[error] %r", exc, exc_info=True)
     traceback.print_exc()
     msg = str(exc)
     if msg.startswith(("⏳", "⚠️")):          # уже безопасный текст из ai._friendly

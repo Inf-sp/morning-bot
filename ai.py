@@ -1,8 +1,12 @@
+import asyncio
+import logging
 import re
 import json
 import requests
 import config
 import secure
+
+_log = logging.getLogger(__name__)
 
 def _post(url, headers, payload, timeout, name):
     r = requests.post(url, headers=headers, json=payload, timeout=timeout)
@@ -81,7 +85,7 @@ def _gen_cf(prompt, max_tokens):
 
 def _friendly(errs):
     joined = "; ".join(errs)
-    print("LLM chain failed:", secure.redact(joined))  # в логи Railway, без секретов
+    _log.warning("LLM chain failed: %s", secure.redact(joined))
     if "429" in joined or "Too Many Requests" in joined or "rate" in joined.lower():
         return "⏳ Сейчас слишком много запросов к ИИ - бесплатные лимиты исчерпаны. Подожди минуту и попробуй снова."
     return "⚠️ ИИ временно недоступен. Попробуй ещё раз через пару минут."
@@ -267,3 +271,14 @@ def chat_chain(history):
         except Exception as e:
             errs.append(f"{p}:{e}")
     raise Exception(_friendly(errs))
+
+
+# --- async-обёртки для вызова из async-обработчиков без блокировки event loop ---
+async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None, tier=None):
+    return await asyncio.to_thread(llm, prompt, max_tokens, temperature, order, claude_model, tier)
+
+async def allm_json(prompt, max_tokens=1200, order=None, claude_model=None, tier=None):
+    return await asyncio.to_thread(llm_json, prompt, max_tokens, order, claude_model, tier)
+
+async def achat_chain(history):
+    return await asyncio.to_thread(chat_chain, history)

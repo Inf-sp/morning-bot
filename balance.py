@@ -1,8 +1,12 @@
+import asyncio
 from datetime import datetime
+import logging
 import re
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
+
+_log = logging.getLogger(__name__)
 import ai
 import rerank
 import util
@@ -93,7 +97,7 @@ def _recipe_card(d):
 async def send_recipe(bot, cid, constraint="обычное блюдо"):
     await bot.send_message(chat_id=cid, text="Подбираю...")
     try:
-        d = _gen_recipe(constraint, cid=cid)
+        d = await asyncio.to_thread(_gen_recipe, constraint, cid=cid)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     store.last_recipe[str(cid)] = d
@@ -123,7 +127,7 @@ def _gen_leftovers_recipe(ingredients):
 async def send_leftovers(bot, cid, ingredients):
     await bot.send_message(chat_id=cid, text="Смотрю, что можно приготовить...")
     try:
-        d = _gen_leftovers_recipe(ingredients)
+        d = await asyncio.to_thread(_gen_leftovers_recipe, ingredients)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     store.last_recipe[str(cid)] = d
@@ -314,10 +318,11 @@ async def doctor_answer(bot, cid, symptoms):
         await verify.safe_send(bot, cid, secure.CRISIS_MSG, surface="health")
         return
     await bot.send_chat_action(chat_id=cid, action="typing")
+    safe_symptoms = secure.wrap_untrusted(symptoms, "симптомы пользователя")
     if _is_med_question(symptoms):
-        prompt = f"{_med_system()}\n\nВопрос про лекарство: {symptoms}"
+        prompt = f"{_med_system()}\n\nВопрос про лекарство: {safe_symptoms}"
         try:
-            out = ai.llm(prompt, 900, 0.4)
+            out = await ai.allm(prompt, 900, 0.4)
         except Exception as e:
             await verify.safe_error(bot, cid, e); return
         store.last_source[str(cid)] = "Здоровье · Лекарство"
@@ -326,7 +331,7 @@ async def doctor_answer(bot, cid, symptoms):
         return
     passages = []
     try:
-        cands = _doctor_candidates(symptoms)
+        cands = await asyncio.to_thread(_doctor_candidates, symptoms)
         ranked = rerank.rerank(symptoms, cands, top_n=3)
         passages = [t for t, _ in ranked]
     except Exception:
@@ -334,11 +339,11 @@ async def doctor_answer(bot, cid, symptoms):
     base = _role_system("doctor")
     if passages:
         ctx = "\n".join(f"- {p}" for p in passages)
-        prompt = f"{base}\n\nНаиболее релевантные тезисы (по симптомам):\n{ctx}\n\nСимптомы: {symptoms}"
+        prompt = f"{base}\n\nНаиболее релевантные тезисы (по симптомам):\n{ctx}\n\nСимптомы: {safe_symptoms}"
     else:
-        prompt = f"{base}\n\nСимптомы: {symptoms}"
+        prompt = f"{base}\n\nСимптомы: {safe_symptoms}"
     try:
-        out = ai.llm(prompt, 900, 0.5)
+        out = await ai.allm(prompt, 900, 0.5)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     store.last_source[str(cid)] = "Здоровье · Врач"
@@ -352,7 +357,7 @@ async def handle_role(bot, cid, role, text):
         await verify.safe_send(bot, cid, secure.CRISIS_MSG, surface="health"); return
     await bot.send_chat_action(chat_id=cid, action="typing")
     try:
-        out = ai.llm(_role_system(role) + "\n\nЗапрос пользователя:\n" + text, 1500, 0.7)
+        out = await ai.allm(_role_system(role) + "\n\nЗапрос пользователя:\n" + text, 1500, 0.7)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     store.last_action[str(cid)] = ("role", role, text)
@@ -396,7 +401,7 @@ async def send_evening_review(bot, cid):
     wlist = "\n".join(f"- {w['text']}" for w in worries)
     focus = ""
     try:
-        analysis = ai.llm(
+        analysis = await ai.allm(
             "Ты спокойный психолог. Разбери тревоги человека с СДВГ по-доброму, на русском.\n"
             "Для КАЖДОЙ тревоги дай блок строго в формате (Telegram HTML, без markdown, без звёздочек *):\n"
             "📌 <b>{текст тревоги}</b>\n"
@@ -413,7 +418,8 @@ async def send_evening_review(bot, cid):
         if m:
             focus = m.group(1).strip().strip('"«»')
             analysis = analysis[:m.start()].strip()
-    except Exception:
+    except Exception as e:
+        _log.warning("send_evening_review: LLM failed, analysis empty: %s", e)
         analysis = ""
     if focus:
         memory.set_focus(cid, focus)
@@ -491,8 +497,8 @@ async def handle_callback(bot, cid, q, data):
     if data == "as_fridge_cook":
         await send_fridge_recipe(bot, cid); return
     if data == "as_fridge_clean":
-        import learning
-        await learning.open_cleanup(bot, cid, "fridge"); return
+        import cleanup
+        await cleanup.open_cleanup(bot, cid, "fridge"); return
     if data.startswith("as_fridge_del_"):
         try:
             await fridge_del(bot, cid, int(data.split("_")[-1]))
@@ -503,8 +509,8 @@ async def handle_callback(bot, cid, q, data):
     if data == "as_recipe_save":
         await save_my_recipe(bot, cid); return
     if data == "as_recipe_clean":
-        import learning
-        await learning.open_cleanup(bot, cid, "recipes"); return
+        import cleanup
+        await cleanup.open_cleanup(bot, cid, "recipes"); return
     if data == "as_my_recipes":
         await send_my_recipes(bot, cid); return
     if data.startswith("as_my_recipe_del_"):
@@ -546,7 +552,7 @@ async def retry(bot, cid):
     await bot.send_chat_action(chat_id=cid, action="typing")
     nudge = hist + [{"role": "user", "content": "Продолжи мысль или дай более полезный вариант."}]
     try:
-        answer = ai.chat_chain(nudge)
+        answer = await ai.achat_chain(nudge)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     hist.append({"role": "assistant", "content": answer})
@@ -569,7 +575,7 @@ async def reword(bot, cid, mode):
               "Формат - Telegram HTML: подзаголовки <b>...</b>, пункты с «• », без markdown (без *, #, `).\n\n"
               f"Текст:\n{secure.wrap_untrusted(prev, 'предыдущий ответ')}")
     try:
-        out = ai.llm(prompt, 1200, 0.6, tier=tier)
+        out = await ai.allm(prompt, 1200, 0.6, tier=tier)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     await _send(bot, cid, out, surface=surface)
