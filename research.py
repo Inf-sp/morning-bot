@@ -183,7 +183,7 @@ def wikidata_city_facts(name: str) -> dict:
                     .get("value", {}).get("time", ""))
             year = tstr.lstrip("+").split("-")[0]
             if year.isdigit() and int(year) > 0:
-                facts["founded"] = f"Город основан в {year} году."
+                facts["founded"] = f"{name_clean} основан в {year} году."
 
         # P1082 — население (берём последнее/наибольшее значение)
         p1082 = claims.get("P1082", [])
@@ -199,7 +199,7 @@ def wikidata_city_facts(name: str) -> dict:
             if amounts:
                 pop = max(amounts)
                 if pop > 500:
-                    facts["population"] = f"Население — {pop:,} человек.".replace(",", " ")
+                    facts["population"] = f"Население {name_clean} — {pop:,} человек.".replace(",", " ")
 
         # P2046 — площадь (км²)
         p2046 = claims.get("P2046", [])
@@ -209,7 +209,7 @@ def wikidata_city_facts(name: str) -> dict:
             try:
                 area = float(amt)
                 if area > 0:
-                    facts["area"] = f"Площадь города — {area:.0f} км²."
+                    facts["area"] = f"Площадь {name_clean} — {area:.0f} км²."
             except (ValueError, TypeError):
                 pass
 
