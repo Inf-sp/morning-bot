@@ -3,6 +3,8 @@ import re
 import config
 import store
 import ai
+import util
+import research
 from util import country_flag, esc
 import verify
 
@@ -42,6 +44,8 @@ def _country_card(d):
         L += [f"🗣️ <b>Язык:</b> {esc(d['langs'])}", ""]
     if d.get("note"):
         L += [f"⚠️ <b>Главный нюанс:</b> {esc(d['note'])}"]
+    if d.get("fact"):
+        L += ["", f"🔎 <b>Факт:</b> {esc(d['fact'])}"]
     return "\n".join(L).strip()
 
 def _travel_kb():
@@ -74,6 +78,17 @@ async def send_go(bot, cid):
             d = cand  # если все попытки дали известные - покажем последнюю
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
+    # research-first: перекрываем фактические поля реальными данными
+    facts = research.country_facts(d.get("country", ""))
+    if facts.get("cc"):
+        d["flag"] = util.flag_from_cc(facts["cc"]) or d.get("flag", "")
+    if facts.get("languages"):
+        d["langs"] = ", ".join(facts["languages"][:3])
+    rfact = research.wiki_fact(d.get("country", ""))
+    if rfact:
+        d["fact"] = rfact
+    if not research.grounded(facts):
+        print("[research] travel: no grounding for", d.get("country", ""))
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", _country_card(d))
     store.last_source[str(cid)] = "Путешествия"
     store.suggested_countries[str(cid)] = d.get("country", "")
@@ -112,12 +127,21 @@ async def send_plan(bot, cid):
     disliked = store.get_list(config.TRAVEL_DISLIKE_KEY, cid)
     skip = ", ".join([str(x) for x in visited] + fav_names + [str(x) for x in disliked] + [country])
     await bot.send_message(chat_id=cid, text="Собираю план поездки...")
+    # research-first: сначала проверенные факты, затем синтез поверх них
+    facts = research.country_facts(country)
+    fblock = research.facts_block(facts)
+    rfact = research.wiki_fact(country)
+    if not research.grounded(facts):
+        print("[research] travel-plan: no grounding for", country)
+    ground_line = (f"Проверенные факты (ИСТОЧНИК ИСТИНЫ для столицы/языка/региона/валюты, "
+                   f"не противоречь им): {fblock}.\n" if fblock else "")
     prompt = f"""Подробный план поездки в страну/направление: {country}. Вылет из: {home}.
-Профиль: ценит атмосферу, природу, города с характером; путешествия важнее вещей.
+{ground_line}Профиль: ценит атмосферу, природу, города с характером; путешествия важнее вещей.
+Бюджет и сроки — это ОРИЕНТИР/оценка (так и помечай), фактические данные бери из проверенных фактов, не выдумывай.
 Дай JSON (компактно, по делу, на русском):
 {{"flag":"эмодзи","title":"страна/регион","about":"1-2 строки",
  "why":["3 пункта почему подойдёт"],
- "best_time":"лучшее время + темп. диапазон, 1-2 строки",
+ "best_time":"лучшее время + темп. диапазон (ориентир), 1-2 строки",
  "budget":["перелёт туда-обратно ориентир из {home}","эконом в день","комфорт в день"],
  "spots":["3 места не пропустить с короткой пометкой"],
  "lgbt":"1 строка про дружелюбность/безопасность",
@@ -126,6 +150,10 @@ async def send_plan(bot, cid):
         p = ai.llm_json(prompt, 1100)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
+    if facts.get("cc"):
+        p["flag"] = util.flag_from_cc(facts["cc"]) or p.get("flag", "")
+    if rfact:
+        p["fact"] = rfact   # реальный факт из Википедии вместо выдуманного
     L = [f"{p.get('flag','')} <b>{esc(p.get('title', country))}</b>"]
     if p.get("about"):
         L += ["", esc(p["about"])]

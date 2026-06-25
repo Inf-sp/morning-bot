@@ -50,9 +50,13 @@ _COUNTRY_CC = {
     "кипр": "CY", "cyprus": "CY", "мальта": "MT", "malta": "MT",
 }
 
+def cc_of(name):
+    """ISO-2 код по названию страны (ru/en) или '' если неизвестно."""
+    return _COUNTRY_CC.get((name or "").strip().lower(), "")
+
 def country_flag(name):
     """Эмодзи флага по названию страны - офлайн, без LLM. Неизвестное -> 🏳."""
-    cc = _COUNTRY_CC.get((name or "").strip().lower())
+    cc = cc_of(name)
     return flag_from_cc(cc) if cc else "🏳"
 
 def flag_from_cc(cc):

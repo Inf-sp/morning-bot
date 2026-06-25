@@ -1,7 +1,6 @@
 import re
 from datetime import datetime
 import random
-import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
@@ -9,6 +8,7 @@ import ai
 import weather
 import balance
 import learning
+import research
 from util import esc, _WEEKDAYS, _MONTHS, flag_from_cc, country_flag
 import verify
 
@@ -49,66 +49,9 @@ def _strip_quotes(s):
 
 # --- Сводка дня (Мой день) ---
 
-_WIKI_UA = {"User-Agent": "morning-bot/1.0"}
-
-def _wiki_ru_title(city):
-    """Русский заголовок статьи о городе через langlink из английской Википедии
-    (надёжно находит именно город по латинскому названию, а не клуб/тёзку)."""
-    try:
-        r = requests.get("https://en.wikipedia.org/w/api.php", params={
-            "action": "query", "format": "json", "prop": "langlinks",
-            "lllang": "ru", "lllimit": 1, "redirects": 1, "titles": city,
-        }, headers=_WIKI_UA, timeout=10)
-        for p in (r.json().get("query", {}).get("pages", {}) or {}).values():
-            if "missing" in p:
-                continue
-            for ll in (p.get("langlinks") or []):
-                return ll.get("*") or ll.get("title") or ""
-    except Exception:
-        pass
-    return ""
-
-def _wiki_extract(title, lang):
-    """Интро статьи по точному заголовку - только реальный текст Википедии."""
-    try:
-        r = requests.get(f"https://{lang}.wikipedia.org/w/api.php", params={
-            "action": "query", "format": "json", "prop": "extracts",
-            "exintro": 1, "explaintext": 1, "redirects": 1, "titles": title,
-        }, headers=_WIKI_UA, timeout=10)
-        for p in (r.json().get("query", {}).get("pages", {}) or {}).values():
-            if "missing" in p:
-                continue
-            extract = (p.get("extract") or "").strip()
-            if extract:
-                return extract
-    except Exception:
-        pass
-    return ""
-
-def _clean_wiki(s):
-    """Чистит артефакты после explaintext: языковые пометки, пустые скобки, сноски."""
-    s = re.sub(r"\(\s*(?:нид|англ|МФА|лат|нем|фр)\.?[^)]*\)", "", s)
-    s = re.sub(r"\[[^\]]*\]", "", s)
-    s = re.sub(r"\(\s*\)", "", s)
-    s = re.sub(r"\s+", " ", s)
-    s = re.sub(r"\s+([.,;:!?])", r"\1", s)
-    return s.strip()
-
 def city_fact(city, country=""):
-    """Реальный факт о городе из Википедии. Источник правды - Wikipedia, без LLM-домыслов."""
-    if not city:
-        return ""
-    # русский текст предпочтительнее; кириллический город ищем сразу в ru-wiki
-    ru_title = city if re.search(r"[А-Яа-яЁё]", city) else _wiki_ru_title(city)
-    extract = (_wiki_extract(ru_title, "ru") if ru_title else "") or _wiki_extract(city, "en")
-    if not extract:
-        return ""
-    extract = _clean_wiki(extract)
-    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", extract) if len(s.strip()) > 40]
-    if not sents:
-        return extract[:300].strip()
-    # содержательное предложение из интро (разнообразие день ото дня)
-    return random.choice(sents[:6])
+    """Реальный факт о городе из Википедии (research-first). Делегирует в research.wiki_fact."""
+    return research.wiki_fact(city)
 
 def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", weekday="", is_weekend=False, cc=""):
     day_kind = "выходной" if is_weekend else "будний день"
