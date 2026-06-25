@@ -232,7 +232,7 @@ async def send_weather(bot, cid, mode="today"):
     s = store.get_settings(cid)
     country = s.get("country", "")
     place = f"{s['city']}, {country}" if country else s["city"]
-    data = fetch_weather(s["lat"], s["lon"], 7)
+    data = fetch_weather(s["lat"], s["lon"], 9)
     d = data["daily"]
     now = datetime.now(TZ)
 
@@ -324,26 +324,27 @@ async def send_weather(bot, cid, mode="today"):
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
         return
 
-    # week
-    d1 = now
-    d2 = now + timedelta(days=6)
+    # week: сегодня — в «Мой день», завтра — в «Погода на завтра»; неделя с послезавтра
+    _SKIP = 2
+    d1 = now + timedelta(days=_SKIP)
+    d2 = now + timedelta(days=_SKIP + 6)
     if d1.month == d2.month:
         rng = f"{d1.day}–{d2.day} {_MONTHS[d1.month-1]}"
     else:
         rng = f"{d1.day} {_MONTHS[d1.month-1]} – {d2.day} {_MONTHS[d2.month-1]}"
-    tmins = d["temperature_2m_min"][:7]
-    tmaxs = d["temperature_2m_max"][:7]
-    rains = d["precipitation_probability_max"][:7]
-    rmms = (d.get("precipitation_sum") or [None] * 7)[:7]
-    winds = d["windspeed_10m_max"][:7]
-    codes = d["weathercode"][:7]
+    tmins = d["temperature_2m_min"][_SKIP:_SKIP+7]
+    tmaxs = d["temperature_2m_max"][_SKIP:_SKIP+7]
+    rains = d["precipitation_probability_max"][_SKIP:_SKIP+7]
+    rmms = (d.get("precipitation_sum") or [None] * 9)[_SKIP:_SKIP+7]
+    winds = d["windspeed_10m_max"][_SKIP:_SKIP+7]
+    codes = d["weathercode"][_SKIP:_SKIP+7]
     flag = __import__("util").flag_from_cc(s.get("cc", ""))
     _SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
     def _day_range_str(indices):
         if not indices:
             return ""
-        shorts = [_SHORT[(now + timedelta(days=i)).weekday()] for i in indices]
+        shorts = [_SHORT[(now + timedelta(days=i + _SKIP)).weekday()] for i in indices]
         if len(shorts) == 1:
             return shorts[0]
         is_consec = all(indices[j+1] == indices[j]+1 for j in range(len(indices)-1))
