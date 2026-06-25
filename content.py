@@ -23,6 +23,53 @@ def _ensure_books(cid):
         pass
     return books
 
+def _norm(x):
+    """Нормализованное имя элемента (строка или {name}) для сравнения без учёта регистра."""
+    s = x.get("name", "") if isinstance(x, dict) else str(x)
+    return s.strip().lower()
+
+def _add_unique(key, cid, value):
+    """Добавляет в список, только если такого ещё нет (без учёта регистра). True - если добавлено."""
+    existing = {_norm(x) for x in store.get_list(key, cid)}
+    if _norm(value) in existing:
+        return False
+    store.add_to_list(key, cid, value)
+    return True
+
+def _note_fav_exists(cid, text):
+    """Есть ли уже такая закладка (bucket=fav) с тем же текстом."""
+    t = (text or "").strip().lower()
+    for n in store.get_list(config.NOTES_KEY, cid):
+        if isinstance(n, dict) and n.get("bucket", "fav") == "fav" and n.get("text", "").strip().lower() == t:
+            return True
+    return False
+
+def dedupe_lists():
+    """Разовая чистка: убирает повторы (без учёта регистра) в списках любимого/закладок."""
+    keys = [config.BOOKS_KEY, config.ARTISTS_KEY, config.WATCHLIST_KEY,
+            config.READLIST_KEY, config.FAVORITES_KEY, config.COUNTRIES_KEY]
+    changed_any = False
+    for key in keys:
+        data = store._load(key)
+        changed = False
+        for cid, items in (data or {}).items():
+            if not isinstance(items, list):
+                continue
+            seen, out = set(), []
+            for it in items:
+                n = _norm(it)
+                if n and n in seen:
+                    continue
+                seen.add(n)
+                out.append(it)
+            if len(out) != len(items):
+                data[cid] = out
+                changed = True
+        if changed:
+            store._save(key, data)
+            changed_any = True
+    return changed_any
+
 def content_recommend(kind, cid):
     if kind == "movie":
         seen = store.get_list(config.WATCHLIST_KEY, cid)
@@ -365,8 +412,9 @@ _FALLBACK_BOOKS = [
 ]
 
 def _book_used(cid):
+    """Названия книг, которые нельзя повторять: любимые (Мои книги) + закладки + отклонённые."""
     used = set()
-    for key in (config.READLIST_KEY, config.BOOK_BLACKLIST_KEY):
+    for key in (config.BOOKS_KEY, config.READLIST_KEY, config.BOOK_BLACKLIST_KEY):
         for x in store.get_list(key, cid):
             used.add((x if isinstance(x, str) else str(x)).strip().lower())
     return used
@@ -376,6 +424,15 @@ def _fallback_book(cid, extra_skip=()):
     used = _book_used(cid) | {str(x).strip().lower() for x in extra_skip}
     pool = [b for b in _FALLBACK_BOOKS if b["title"].lower() not in used] or _FALLBACK_BOOKS
     return random.choice(pool)
+
+def _pick_good_book(items, cid, extra_skip=()):
+    """Первая книга из items, которой ещё нет в списках/показанных; иначе - гарантированный фолбэк."""
+    used = _book_used(cid) | {str(x).strip().lower() for x in extra_skip}
+    for it in items or []:
+        t = (it.get("title", "") or "").strip().lower()
+        if t and t not in used:
+            return it
+    return _fallback_book(cid, extra_skip=extra_skip)
 
 async def send_books_reco(bot, cid):
     await bot.send_message(chat_id=cid, text="Подбираю книги под твой вкус...")
@@ -388,7 +445,7 @@ async def send_books_reco(bot, cid):
             items = []
         if items:
             break
-    it = items[0] if items else _fallback_book(cid)
+    it = _pick_good_book(items, cid)
     store.last_recos[str(cid)] = {"kind": "book", "items": [it.get("title", "")]}
     store.last_source[str(cid)] = "Досуг · Книги"
     store.last_answer[str(cid)] = it.get("title", "")
@@ -406,7 +463,7 @@ async def book_dislike(bot, cid, i):
     except Exception:
         items = []
     rec = store.last_recos.get(str(cid), {"kind": "book", "items": []})
-    it = items[0] if items else _fallback_book(cid, extra_skip=rec.get("items", []))
+    it = _pick_good_book(items, cid, extra_skip=rec.get("items", []))
     rec["items"].append(it.get("title", ""))
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1
@@ -417,7 +474,7 @@ async def movie_love(bot, cid, i):
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
-        store.add_to_list(config.WATCHLIST_KEY, cid, title)
+        _add_unique(config.WATCHLIST_KEY, cid, title)
         await bot.send_message(chat_id=cid, text=f"❤️ «{title}» - в любимые (Фильмы и сериалы). Вот ещё вариант 👇")
     # следующая рекомендация
     try:
@@ -438,19 +495,31 @@ async def movie_love(bot, cid, i):
     await _send_movie_card(bot, cid, it, ni, tm=tm)
 
 async def book_love(bot, cid, i):
-    """Книга - в любимые (Мои книги)."""
+    """Книга - в любимые (Мои книги), затем следующая рекомендация."""
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
-        store.add_to_list(config.BOOKS_KEY, cid, title)
-        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» - в любимые (Мои книги).")
+        _add_unique(config.BOOKS_KEY, cid, title)
+        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» - в любимые (Мои книги). Вот ещё вариант 👇")
+    # следующая рекомендация
+    try:
+        data = content_recommend("book", str(cid))
+        items = data.get("items", [])
+    except Exception:
+        items = []
+    rec = store.last_recos.get(str(cid), {"kind": "book", "items": []})
+    it = _pick_good_book(items, cid, extra_skip=rec.get("items", []))
+    rec["items"].append(it.get("title", ""))
+    store.last_recos[str(cid)] = rec
+    ni = len(rec["items"]) - 1
+    await _send_book_card(bot, cid, it, ni)
 
 async def listen_love(bot, cid):
     """Артист - в любимые (Мои артисты), затем следующая рекомендация."""
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
         artist = rec["items"][0]
-        store.add_to_list(config.ARTISTS_KEY, cid, artist)
+        _add_unique(config.ARTISTS_KEY, cid, artist)
         await bot.send_message(chat_id=cid, text=f"❤️ «{artist}» - в любимые (Мои артисты). Вот ещё вариант 👇")
     await send_listen(bot, cid)
 
@@ -463,9 +532,10 @@ async def add_reco(bot, cid, i):
     kind = rec["kind"]
     key = config.WATCHLIST_KEY if kind == "movie" else config.READLIST_KEY
     folder = "Фильмы и сериалы" if kind == "movie" else "Книги"
-    store.add_to_list(key, cid, title)
-    store.add_to_list(config.NOTES_KEY, cid,
-                      {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": folder, "bucket": "fav"})
+    _add_unique(key, cid, title)
+    if not _note_fav_exists(cid, title):
+        store.add_to_list(config.NOTES_KEY, cid,
+                          {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": folder, "bucket": "fav"})
     await bot.send_message(chat_id=cid, text=f"⭐ В закладках «{folder}»: {title}. Вот ещё вариант 👇")
     # сразу показываем следующую рекомендацию
     try:
@@ -484,7 +554,7 @@ async def add_reco(bot, cid, i):
         ni = len(rec["items"]) - 1
         await _send_movie_card(bot, cid, it, ni, tm=tm)
     else:
-        it = items[0]
+        it = _pick_good_book(items, cid, extra_skip=rec["items"])
         rec["items"].append(it.get("title", ""))
         store.last_recos[str(cid)] = rec
         ni = len(rec["items"]) - 1
@@ -520,8 +590,8 @@ async def send_fav(bot, cid):
         text="❤️ Любимое:\n" + ("\n".join(f"• {f}" for f in favs) if favs else "пусто") + "\n\nНапиши фильм/сериал/книгу - добавлю.")
 
 async def add_fav(bot, cid, text):
-    store.add_to_list(config.FAVORITES_KEY, cid, text)
-    await bot.send_message(chat_id=cid, text="Добавил в любимое.")
+    added = _add_unique(config.FAVORITES_KEY, cid, text)
+    await bot.send_message(chat_id=cid, text="Добавил в любимое." if added else "Уже в любимом.")
 
 def _listen_kb():
     return InlineKeyboardMarkup([
@@ -594,8 +664,9 @@ async def add_listen(bot, cid, i):
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
         title = rec["items"][0]
-        store.add_to_list(config.NOTES_KEY, cid,
-                          {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": "Музыка", "bucket": "fav"})
+        if not _note_fav_exists(cid, title):
+            store.add_to_list(config.NOTES_KEY, cid,
+                              {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": "Музыка", "bucket": "fav"})
         await bot.send_message(chat_id=cid, text=f"⭐ В закладках «Музыка»: {title}. Вот ещё вариант 👇")
     await send_listen(bot, cid)
 

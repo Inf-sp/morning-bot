@@ -522,6 +522,11 @@ async def post_init(app):
             print("Dict caps migration: applied")
     except Exception as e:
         print(f"Dict caps migration failed: {e}")
+    try:
+        if content.dedupe_lists():
+            print("Dedupe lists: applied")
+    except Exception as e:
+        print(f"Dedupe lists failed: {e}")
     from telegram import BotCommand
     await app.bot.set_my_commands([
         BotCommand("start", "меню и описание"),
