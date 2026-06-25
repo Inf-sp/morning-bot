@@ -4,6 +4,7 @@ import config
 import store
 import ai
 from util import esc
+import verify
 
 LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 LO = ai.LEARN_ORDER
@@ -77,7 +78,7 @@ async def send_grammar(bot, cid, language, flag=None, topic=None, random=False):
     try:
         d = grammar_data(language, level, topic, None if random or topic else study_topics, study_words)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     store.grammar_state[str(cid)] = {"correct": d.get("correct", "a"), "rule": d.get("rule", ""),
                                      "a": d.get("a", ""), "b": d.get("b", ""),
                                      "task_ru": d.get("task_ru", ""),
@@ -127,7 +128,7 @@ async def again_grammar(bot, cid, language):
     try:
         d = grammar_data(language, level, topic, study_words=_study_words(cid, language))
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     store.grammar_state[str(cid)] = {"correct": d.get("correct", "a"), "rule": d.get("rule", ""),
                                      "a": d.get("a", ""), "b": d.get("b", ""),
                                      "task_ru": d.get("task_ru", ""),
@@ -229,7 +230,7 @@ async def _render_train(bot, cid):
     try:
         d = train_data(language, store.get_level(cid, language), word, ru, fmt)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     if fmt == "gap":
         st.update({"fmt": "gap", "word": word, "ru": ru, "correct": d.get("correct", "a"),
                    "a": d.get("a", ""), "b": d.get("b", ""),
@@ -305,7 +306,7 @@ async def do_translate(bot, cid, lang):
     try:
         ru = generate_challenge(lang, level)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     store.challenge_state[str(cid)] = {"ru": ru, "lang": lang}
     await bot.send_message(chat_id=cid,
         text=f"📝 <b>{_flag(lang)} Обратный перевод</b>\n\nФраза: «{esc(ru)}»\n\nНапиши перевод на {lang} следующим сообщением.",
@@ -319,7 +320,7 @@ async def translate_answer(bot, cid, text):
     try:
         r = check_translation(st["lang"], st["ru"], text)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return True
+        await verify.safe_error(bot, cid, e); return True
     L = [f"📝 <b>{_flag(st['lang'])} Обратный перевод</b>", "", f"Твой ответ: {esc(text)}", ""]
     if r.get("ok"):
         L.append("✅ Верно")
@@ -940,7 +941,7 @@ async def send_game(bot, cid):
     try:
         d = game_data(lang, cfg["difficulty"], recent)
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=str(e)); return
+        await verify.safe_error(bot, cid, e); return
     hints = [_dot(h) for h in [d.get("hint"), d.get("hint2")] if (h or "").strip()]
     store.game_state[str(cid)] = {"answer": d.get("answer", ""), "aliases": d.get("aliases", []),
                                   "quote": d.get("quote", ""), "hints": hints, "hint_i": 0,

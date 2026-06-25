@@ -6,6 +6,7 @@ import config
 import store
 import ai
 from util import esc, _WEEKDAYS, _MONTHS
+import verify
 
 TZ = config.TZ
 
@@ -443,7 +444,7 @@ async def set_city_text(bot, cid, name):
         except Exception:
             pass
     except Exception as e:
-        await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
+        await verify.safe_error(bot, cid, e)
 
 async def location_handler(update, context):
     cid = update.effective_chat.id

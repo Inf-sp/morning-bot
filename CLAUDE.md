@@ -29,6 +29,23 @@
 - Переиспользуемый движок **чистки списков** (пагинация + мультивыбор) живёт в [learning.py](learning.py) (`open_cleanup`/`send_cleanup`/`_ctx_items`/`_cleanup_delete`); другие модули зовут его ленивым `import learning`.
 - Стиль терсный: короткие хелперы с `_`-префиксом, минимум комментариев (только неочевидное), русские строки.
 
+## Skills-контракты и Verification
+
+Бот движется к ECC-архитектуре «skills как primary workflow surface». Этап 1 (сделан):
+
+- **[skills.py](skills.py)** — декларативный реестр контрактов (`Skill`: `name`, `title`, `surface`, `entrypoints`, `memory`, `fallback`). Не диспетчер, а документация контракта + источник для аудита callback'ов. При добавлении фичи — заводи запись в `SKILLS`.
+- **[verify.py](verify.py)** — слой проверок. Грейдеры привязаны к **surface** скилла:
+  - `chat` — свободный диалог: ≤1 эмодзи (лишние триммятся) + валидный HTML.
+  - `health` — медразбор: обязательный дисклеймер (дописывается) + HTML. Лимита эмодзи НЕТ.
+  - `card` — карточки/советы: только HTML.
+  - `weather` — сводка/лук: предупреждение «зонт без дождя» (`rain_real`).
+- **Правила интеграции (обязательны для нового кода):**
+  - Любой **генеративный** текст шли через `verify.safe_send(bot, cid, text, surface=...)` (или прогоняй `verify.grade_text` перед своей отправкой, как в `balance._send`).
+  - Любую ошибку показывай через `verify.safe_error(bot, cid, e, skill=...)` — **никогда** `text=str(e)`/`f"Ошибка: {e}"` (утечка тел ошибок API).
+- **Continuous eval:** `verify.audit_callbacks()` зовётся в `bot.post_init` и печатает необработанные callback'и. Тесты — `pytest` в [tests/](tests/) (грейдеры идут без Telegram/env; `conftest.py` ставит dummy-env). Запуск: `pip install -r requirements-dev.txt && pytest -q`.
+
+Следующие этапы (ещё НЕ сделаны): Cost-aware LLM pipeline (кеш, выбор модели), AgentShield-скан (секреты/инъекции), Research-first (данные → проверка → ответ).
+
 ## ECC-правила
 
 Подключена конфигурация ECC в [.claude/](.claude/) — слои **common** + **python** (правила авто-применяются к `**/*.py` по `paths` во фронтматтере). Перед нетривиальной работой свериться:

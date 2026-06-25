@@ -10,6 +10,7 @@ import weather
 import balance
 import learning
 from util import esc, _WEEKDAYS, _MONTHS, flag_from_cc, country_flag
+import verify
 
 TZ = config.TZ
 
@@ -252,6 +253,10 @@ def _build_day_text(cid):
         line = f"«{esc(_strip_quotes(ex.get('quote','')))}»" + (f" — {src}" if src else "")
         L += ["<b>💭 Цитата</b>", line]
     text = "\n".join(L).strip()
+    # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя
+    _, _uw = verify.grade_umbrella(text, weather._rain_real(rain, rain_mm))
+    for w in _uw:
+        print(f"[verify] weather: {w}")
     return text, ex, outfit, day_str
 
 async def send_plany(bot, cid):
@@ -262,7 +267,7 @@ async def send_plany(bot, cid):
         try:
             text, ex, outfit, _ = _build_day_text(cid)
         except Exception as e:
-            await bot.send_message(chat_id=cid, text=f"Ошибка: {e}"); return
+            await verify.safe_error(bot, cid, e); return
         _day_cache[str(cid)] = {"date": today, "text": text, "ex": ex, "outfit": outfit}
     text = _day_cache[str(cid)]["text"]
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=_day_menu_kb())

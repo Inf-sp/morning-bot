@@ -16,6 +16,7 @@ import settings
 import travel
 import content
 import weather
+import verify
 
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID
@@ -190,7 +191,7 @@ async def answer_callback(update, context):
             elif act == "food_dinner":
                 await balance.send_recipe(bot, cid, "ужин")
         except Exception as e:
-            await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
+            await verify.safe_error(bot, cid, e)
         return
 
     # Уровни языка
@@ -347,7 +348,7 @@ async def text_router(update, context):
         try:
             await myday.send_plany(bot, cid)
         except Exception as e:
-            await bot.send_message(chat_id=cid, text=f"Ошибка: {e}")
+            await verify.safe_error(bot, cid, e)
         return
     if text == "👕 Гардероб":
         await wardrobe.send_home(bot, cid)
@@ -527,6 +528,14 @@ async def post_init(app):
             print("Dedupe lists: applied")
     except Exception as e:
         print(f"Dedupe lists failed: {e}")
+    try:
+        unhandled = verify.audit_callbacks()
+        if unhandled:
+            print("Callback audit: unhandled ->", ", ".join(unhandled))
+        else:
+            print("Callback audit: OK")
+    except Exception as e:
+        print(f"Callback audit failed: {e}")
     from telegram import BotCommand
     await app.bot.set_my_commands([
         BotCommand("start", "меню и описание"),
