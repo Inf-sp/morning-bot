@@ -48,6 +48,8 @@ TOPICS_NL_KEY = "topics_nl.json"
 TOPICS_EN_KEY = "topics_en.json"
 LAGOM_KEY = "lagom.json"
 PROFILE_KEY = "profile.json"   # память пользователя: фокус, фидбек гардероба, наблюдения
+CITY_FACTS_KEY = "city_facts_seen.json"
+LIFEHACK_KEY = "lifehacks_seen.json"
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}
 

@@ -50,9 +50,54 @@ def _strip_quotes(s):
 
 # --- Сводка дня (Мой день) ---
 
-def city_fact(city, country=""):
-    """Реальный факт о городе из Википедии (research-first). Делегирует в research.wiki_fact."""
-    return research.wiki_fact(city)
+def city_fact(city, country, cid):
+    """Реальный факт о городе из Википедии без повторений (anti-repeat по cid)."""
+    sents = research.wiki_sentences(city)
+    if not sents:
+        return ""
+    cid = str(cid)
+    city_key = (city or "").lower().replace(" ", "_")
+    seen_all = store._load(config.CITY_FACTS_KEY)
+    seen = set(seen_all.get(cid, {}).get(city_key, []))
+    unseen = [s for s in sents if s not in seen]
+    if not unseen:
+        seen = set()
+        unseen = sents
+    fact = random.choice(unseen)
+    seen.add(fact)
+    seen_all.setdefault(cid, {})[city_key] = list(seen)
+    store._save(config.CITY_FACTS_KEY, seen_all)
+    return fact
+
+
+def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
+    """Случайный совет из lifehacks.json с anti-repeat и контекстной фильтрацией."""
+    try:
+        import json
+        with open("lifehacks.json", encoding="utf-8") as f:
+            cats = json.load(f)
+    except Exception:
+        return "", ""
+    all_tips = [
+        (cat["emoji"], cat["cat"], f"{ci}:{ti}", tip["text"], tip.get("tags", []))
+        for ci, cat in enumerate(cats)
+        for ti, tip in enumerate(cat["tips"])
+    ]
+    if not all_tips:
+        return "", ""
+    cid = str(cid)
+    seen = set(store.get_list(config.LIFEHACK_KEY, cid))
+    ctx_tags = (["rain"] if rain else []) + (["hot"] if hot else []) + ([] if is_weekend else ["work"])
+    contextual = [t for t in all_tips if t[4] and any(g in t[4] for g in ctx_tags) and t[2] not in seen]
+    unseen = [t for t in all_tips if t[2] not in seen]
+    pool = contextual or unseen
+    if not pool:
+        store.set_list(config.LIFEHACK_KEY, cid, [])
+        pool = all_tips
+    tip = random.choice(pool)
+    new_seen = list(seen | {tip[2]})
+    store.set_list(config.LIFEHACK_KEY, cid, new_seen)
+    return f"{tip[0]} {tip[1]}", tip[3]
 
 def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", weekday="", is_weekend=False, cc=""):
     day_kind = "выходной" if is_weekend else "будний день"
@@ -192,13 +237,17 @@ def _build_day_text(cid):
     outfit = " + ".join(ex.get("outfit", [])).rstrip(".")  # для «Сохранить образ дня», в сводке не показываем
     if word_line:
         L += ["<b>📚 Слово дня</b>", esc(word_line), ""]
-    fact = city_fact(s.get("city", ""), s.get("country", ""))
+    fact = city_fact(s.get("city", ""), s.get("country", ""), cid)
     if fact:
         L += ["<b>🔬 Интересный факт</b>", esc(fact.strip()), ""]
+    hack_cat, hack_text = daily_lifehack(
+        cid, rain=rain >= 40, hot=tmax >= 24, is_weekend=is_weekend)
+    if hack_text:
+        L += ["", f"<b>💡 База знаний · {esc(hack_cat)}</b>", esc(hack_text)]
     if ex.get("quote"):
         src = esc(ex.get("quote_src", "")).strip()
         line = f"«{esc(_strip_quotes(ex.get('quote','')))}»" + (f" — {src}" if src else "")
-        L += ["<b>💭 Цитата</b>", line]
+        L += ["", "<b>💭 Цитата</b>", line]
     text = "\n".join(L).strip()
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя
     _, _uw = verify.grade_umbrella(text, weather._rain_real(rain, rain_mm))

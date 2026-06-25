@@ -59,19 +59,27 @@ def _clean_wiki(s):
     s = re.sub(r"\s+([.,;:!?])", r"\1", s)
     return s.strip()
 
-def wiki_fact(name):
-    """Реальный факт о месте/стране из Википедии. Источник правды - Wikipedia, без LLM."""
+def wiki_sentences(name):
+    """Список кандидатов-предложений для факта о месте (без дефинитивного первого)."""
     if not name:
-        return ""
+        return []
     ru_title = name if re.search(r"[А-Яа-яЁё]", name) else _wiki_ru_title(name)
     extract = (wiki_summary(ru_title, "ru") if ru_title else "") or wiki_summary(name, "en")
     if not extract:
-        return ""
+        return []
     extract = _clean_wiki(extract)
     sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", extract) if len(s.strip()) > 40]
+    # Первое предложение обычно дефинитивное ("Алкмар — город...") — пропускаем
+    if len(sents) > 1 and re.match(r"^.{0,60}[—–-]", sents[0]):
+        sents = sents[1:]
+    return sents[:6]
+
+def wiki_fact(name):
+    """Реальный факт о месте/стране из Википедии. Источник правды - Wikipedia, без LLM."""
+    sents = wiki_sentences(name)
     if not sents:
-        return extract[:300].strip()
-    return random.choice(sents[:6])
+        return ""
+    return random.choice(sents)
 
 
 # ================= REST COUNTRIES =================
