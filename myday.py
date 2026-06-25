@@ -1,8 +1,14 @@
+import asyncio
+import logging
 import re
 from datetime import datetime
+from pathlib import Path
 import random
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
+
+_HERE = Path(__file__).parent
+_log = logging.getLogger(__name__)
 import store
 import ai
 import weather
@@ -22,7 +28,7 @@ def ensure_lagom(cid):
         return items
     try:
         import json
-        with open("lagom.json", encoding="utf-8") as f:
+        with open(_HERE / "lagom.json", encoding="utf-8") as f:
             seed = json.load(f)
         if seed:
             store.set_list(config.LAGOM_KEY, cid, seed)
@@ -81,7 +87,7 @@ def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
     """Случайный совет из lifehacks.json с anti-repeat и контекстной фильтрацией."""
     try:
         import json
-        with open("lifehacks.json", encoding="utf-8") as f:
+        with open(_HERE / "lifehacks.json", encoding="utf-8") as f:
             cats = json.load(f)
     except Exception:
         return "", ""
@@ -264,7 +270,7 @@ def _build_day_text(cid):
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя
     _, _uw = verify.grade_umbrella(text, weather._rain_real(rain, rain_mm))
     for w in _uw:
-        print(f"[verify] weather: {w}")
+        _log.warning("[verify] weather: %s", w)
     return text, ex, outfit, day_str
 
 async def send_plany(bot, cid):
@@ -273,7 +279,7 @@ async def send_plany(bot, cid):
     if not cache or cache.get("date") != today:
         await bot.send_message(chat_id=cid, text="Собираю сводку дня...")
         try:
-            text, ex, outfit, _ = _build_day_text(cid)
+            text, ex, outfit, _ = await asyncio.to_thread(_build_day_text, cid)
         except Exception as e:
             await verify.safe_error(bot, cid, e); return
         _day_cache[str(cid)] = {"date": today, "text": text, "ex": ex, "outfit": outfit}

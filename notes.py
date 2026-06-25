@@ -372,11 +372,11 @@ async def handle_callback(bot, cid, q, data):
     if data.startswith("as_notedrop_"):
         await note_drop(bot, cid, int(data.split("_")[-1])); return
     if data == "as_clean_fav":
-        import learning
-        await learning.open_cleanup(bot, cid, "nb"); return
+        import cleanup
+        await cleanup.open_cleanup(bot, cid, "nb"); return
     if data.startswith("as_loveclean_"):
-        import learning
-        await learning.open_cleanup(bot, cid, f"lv_{data[len('as_loveclean_'):]}"); return
+        import cleanup
+        await cleanup.open_cleanup(bot, cid, f"lv_{data[len('as_loveclean_'):]}"); return
     if data.startswith("as_lovedel_"):
         parts = data[len("as_lovedel_"):].rsplit("_", 1)
         await love_delete(bot, cid, parts[0], int(parts[1])); return

@@ -4,10 +4,13 @@
 вместо «уверенной фантазии». Источники бесплатные, без ключей. TTL-кеш по образцу
 weather._WX_CACHE.
 """
+import logging
 import re
 import time
 import random
 import requests
+
+_log = logging.getLogger(__name__)
 import util
 
 _WIKI_UA = {"User-Agent": "morning-bot/1.0"}
@@ -116,8 +119,9 @@ def country_facts(name):
                 out = {"cc": c.get("cca2", "") or cc, "capital": cap[0] if cap else "",
                        "languages": langs, "region": c.get("region", ""),
                        "currency": cur[0] if cur else ""}
-    except Exception:
-        out = {}
+    except Exception as e:
+        _log.warning("research: country_facts(%s) failed, not caching: %s", name, e)
+        return {}
     _CF_CACHE[key] = (time.time(), out)
     return out
 

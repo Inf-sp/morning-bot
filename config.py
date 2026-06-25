@@ -1,6 +1,9 @@
 import os
 import json
+from pathlib import Path
 from zoneinfo import ZoneInfo
+
+_HERE = Path(__file__).parent
 
 # --- Keys ---
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
@@ -58,7 +61,7 @@ DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "�
 
 def _load_json(path, default):
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(_HERE / path, encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return default

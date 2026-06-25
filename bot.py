@@ -1,5 +1,7 @@
 import logging
 from telegram import Update
+
+_log = logging.getLogger(__name__)
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
                           ContextTypes, CallbackQueryHandler)
 from datetime import datetime
@@ -13,6 +15,7 @@ import notes
 import myday
 import wardrobe
 import learning
+import cleanup
 import settings
 import travel
 import content
@@ -122,7 +125,7 @@ async def answer_callback(update, context):
                 store.pending_input[cid] = "topicadd_en"
                 await bot.send_message(chat_id=cid, text="🇬🇧 Напиши тему для изучения - можно сразу несколько, каждую с новой строки. Добавлю и разберу.")
             elif act.startswith("topicclean_"):
-                await learning.open_cleanup(bot, cid, f"t_{act.split('_')[1]}")
+                await cleanup.open_cleanup(bot, cid, f"t_{act.split('_')[1]}")
             elif act == "dict":
                 await learning.send_dict(bot, cid)
             elif act == "dictlang_nl":
@@ -170,9 +173,9 @@ async def answer_callback(update, context):
             elif act == "readlist":
                 await content.send_readlist(bot, cid)
             elif act == "watchclean":
-                await learning.open_cleanup(bot, cid, "wl")
+                await cleanup.open_cleanup(bot, cid, "wl")
             elif act == "readclean":
-                await learning.open_cleanup(bot, cid, "rl")
+                await cleanup.open_cleanup(bot, cid, "rl")
             elif act == "fav":
                 await content.send_fav(bot, cid)
             elif act == "concerts_find":
@@ -260,7 +263,7 @@ async def answer_callback(update, context):
     if data == "noop":
         return
     if data.startswith(("clt_", "clp_", "cla_", "cld_")):
-        await learning.handle_cleanup(bot, cid, data, q)
+        await cleanup.handle_cleanup(bot, cid, data, q)
         return
     if data.startswith("worddel_"):
         await learning.del_word(bot, cid, int(data.split("_")[1]))
@@ -324,7 +327,7 @@ async def text_router(update, context):
     bot = context.bot
     flags = secure.injection_flags(text)
     if flags:
-        print("[secure] injection flags:", flags)   # advisory, не блокируем
+        _log.warning("[secure] injection flags: %s", flags)
 
     # Нажата любая кнопка нижнего меню -> сбрасываем незавершённый ввод (чтобы чат не «съел» сообщение настроек)
     if text in ("☀️ Мой день", "👕 Гардероб") or text in menu.LABEL_TO_KEY:

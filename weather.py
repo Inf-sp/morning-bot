@@ -1,6 +1,10 @@
+import asyncio
+import logging
 import random
 from datetime import datetime, timedelta
 import requests
+
+_log = logging.getLogger(__name__)
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
@@ -407,7 +411,8 @@ async def set_city_text(bot, cid, name):
         for v in variants:
             for lang in ("ru", "en", "nl"):
                 try:
-                    r = requests.get("https://geocoding-api.open-meteo.com/v1/search",
+                    r = await asyncio.to_thread(requests.get,
+                                     "https://geocoding-api.open-meteo.com/v1/search",
                                      params={"name": v, "count": 5, "language": lang}, timeout=20)
                     results = r.json().get("results")
                 except Exception:
@@ -421,7 +426,8 @@ async def set_city_text(bot, cid, name):
         if not res:
             for v in variants:
                 try:
-                    r2 = requests.get("https://nominatim.openstreetmap.org/search",
+                    r2 = await asyncio.to_thread(requests.get,
+                                      "https://nominatim.openstreetmap.org/search",
                                       params={"q": v, "format": "json", "limit": 1, "accept-language": "ru"},
                                       headers={"User-Agent": "DM-bot"}, timeout=20)
                     arr = r2.json()
@@ -463,14 +469,16 @@ async def location_handler(update, context):
     loc = update.message.location
     city, country = "твой город", ""
     try:
-        r = requests.get("https://api.bigdatacloud.net/data/reverse-geocode-client",
+        r = await asyncio.to_thread(requests.get,
+                         "https://api.bigdatacloud.net/data/reverse-geocode-client",
                          params={"latitude": loc.latitude, "longitude": loc.longitude, "localityLanguage": "ru"},
                          timeout=15)
         j = r.json()
         city = j.get("city") or j.get("locality") or j.get("principalSubdivision") or "твой город"
         country = j.get("countryName", "")
         cc = j.get("countryCode", "")
-    except Exception:
+    except Exception as e:
+        _log.warning("location_handler: reverse geocode failed: %s", e)
         cc = ""
     store.set_settings(cid, loc.latitude, loc.longitude, city, country, cc)
     try:
