@@ -90,8 +90,6 @@ async def set_style(bot, cid, i):
 
 
 # ===== Списки в настройках: страны, артисты, книги, шкаф =====
-import content as _content
-
 def _list_kb(items, del_prefix, add_cb, back="set_home"):
     rows = []
     for i, it in enumerate(items[-40:]):
