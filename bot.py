@@ -368,7 +368,7 @@ async def text_router(update, context):
             await content.add_fav(bot, cid, text); return
         if kind in ("role_doctor", "role_state"):
             await balance.handle_role(bot, cid, kind.split("_")[1], text); return
-if kind == "wardrobe_add":
+        if kind == "wardrobe_add":
             await wardrobe.add_item(bot, cid, text); return
         if kind == "wardrobe_check":
             await wardrobe.check_purchase(bot, cid, text); return
