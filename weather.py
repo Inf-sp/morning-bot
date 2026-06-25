@@ -383,14 +383,17 @@ async def send_weather(bot, cid, mode="today"):
     wind_line = f"💨 Ветер: {wlabel}, {wmin:.0f}–{wmax:.0f} м/с"
 
     L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", ""]
+    groups = []
     if storm_i:
-        L.append(f"⚠️ {esc(_day_range_str(storm_i))}: до {_gtmax(storm_i):+.0f}°C — шторм, осторожно")
+        groups.append((min(storm_i), f"⚠️ {esc(_day_range_str(storm_i))}: до {_gtmax(storm_i):+.0f}°C — шторм, осторожно"))
     if comfort_i:
-        L.append(f"☀️ {esc(_day_range_str(comfort_i))}: до {_gtmax(comfort_i):+.0f}°C — комфортно")
+        groups.append((min(comfort_i), f"☀️ {esc(_day_range_str(comfort_i))}: до {_gtmax(comfort_i):+.0f}°C — комфортно"))
     if wet_i:
-        L.append(f"🌧️ {esc(_day_range_str(wet_i))}: до {_gtmax(wet_i):+.0f}°C — возможны дожди")
+        groups.append((min(wet_i), f"🌧️ {esc(_day_range_str(wet_i))}: до {_gtmax(wet_i):+.0f}°C — возможны дожди"))
     if hot_i:
-        L.append(f"🔥 {esc(_day_range_str(hot_i))}: до {_gtmax(hot_i):+.0f}°C — жара, осторожно")
+        groups.append((min(hot_i), f"🔥 {esc(_day_range_str(hot_i))}: до {_gtmax(hot_i):+.0f}°C — жара, осторожно"))
+    groups.sort(key=lambda x: x[0])
+    L.extend(line for _, line in groups)
     L += ["", wind_line]
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")]])
     await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
