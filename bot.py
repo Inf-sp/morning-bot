@@ -333,6 +333,10 @@ async def answer_callback(update, context):
     if data == "chat_retry":
         await balance.retry(bot, cid)
         return
+    # «Короче / Глубже» - переписать последний ответ
+    if data in ("ans_short", "ans_deep"):
+        await balance.reword(bot, cid, "short" if data == "ans_short" else "deep")
+        return
 
 
 # ---------- Текстовый роутер ----------

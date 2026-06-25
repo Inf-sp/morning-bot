@@ -22,6 +22,7 @@ async def chat_reply(bot, cid, text):
     store.chat_history[str(cid)] = hist[-10:]
     await verify.safe_send(bot, cid, (answer or "").strip() or "Пусто, попробуй ещё раз.", surface="chat")
     store.last_answer[str(cid)] = answer
+    store.last_surface[str(cid)] = "chat"
     if any(w in text.lower() for w in _MED_WORDS):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("👩🏻‍⚕️ Вопрос врачу", callback_data="as_doctor")]])
         await bot.send_message(chat_id=cid,

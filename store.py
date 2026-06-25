@@ -65,6 +65,15 @@ def set_settings(chat_id, lat, lon, city, country="", cc=""):
     d[str(chat_id)] = {"lat": lat, "lon": lon, "city": city, "country": country, "cc": cc}
     _save(config.SETTINGS_FILE, d)
 
+def get_profile(chat_id):
+    """Память пользователя (dict). Пусто -> {}."""
+    return _load(config.PROFILE_KEY).get(str(chat_id), {})
+
+def set_profile(chat_id, prof):
+    d = _load(config.PROFILE_KEY)
+    d[str(chat_id)] = prof
+    _save(config.PROFILE_KEY, d)
+
 def get_level(chat_id, language):
     return _load(config.LEVELS_FILE).get(str(chat_id), {}).get(language, "B1")
 
@@ -143,3 +152,5 @@ last_word = {}          # chat_id -> последнее показанное с�
 game_recent = {}        # chat_id -> [последние загаданные персонажи]
 list_sel = {}           # "chat_id:ctx" -> set(индексов) для чистки списков (словарь/темы)
 last_source = {}        # chat_id -> откуда последний ответ (для категорий избранного)
+last_surface = {}       # chat_id -> surface последнего ответа (для «Короче/Глубже»)
+last_look = {}          # chat_id -> последний показанный образ (для фидбека гардероба)
