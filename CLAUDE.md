@@ -18,11 +18,12 @@
 - [store.py](store.py) — персистентность: KV-таблица в Postgres с **откатом в память** (`_load`/`_save`, `get_list`/`set_list`); плюс in-memory dict'ы эфемерного состояния (`pending_input`, `*_state`, `list_sel` и т.д.).
 - [config.py](config.py) — env-ключи, имена ключей хранилища (`*_KEY`/`*_FILE`), модели, `TZ`, промпты из JSON.
 - [ai.py](ai.py) — слой LLM: `llm()` и `llm_json()` с **каскадом провайдеров** (`DEFAULT_ORDER`, `LEARN_ORDER`, `GRAMMAR_ORDER`) — claude/openai/gemini/openrouter/groq/cloudflare; параметр `claude_model` выбирает модель Claude (по умолчанию `GRAMMAR_MODEL`=Haiku для дешёвых задач).
+- [memory.py](memory.py) — **память пользователя** («бот учится на тебе»): фокус дня (`set_focus`/`get_focus`/`fresh_focus`), фидбек гардероба (`add_wardrobe_feedback`/`wardrobe_hints`), наблюдения (`add_observation`). Поверх профиля в store (`config.PROFILE_KEY`, `store.get_profile`/`set_profile`). Без LLM/сети. Источник персонализации: вечерний фокус → утренний бриф; фидбек по образам → подмешивается в промпт следующего лука.
 - Фичевые модули: [learning.py](learning.py) (грамматика, тренажёр слов, словарь, темы, игра-детектив, обратный перевод), [content.py](content.py) (фильмы/книги/музыка/концерты), [notes.py](notes.py) (сохранения: закладки/планы/любимые), [wardrobe.py](wardrobe.py) (гардероб/шкаф), [myday.py](myday.py), [balance.py](balance.py), [travel.py](travel.py), [weather.py](weather.py), [settings.py](settings.py) (/setup), [assistant.py](assistant.py) (свободный чат).
 
 ## Конвенции этого кода (следуй им при правках)
 
-- **Маршрутизация по префиксу callback_data**: `a_`/`as_` (действия/сохранения), `w_` (гардероб), `md_`, `set_`, `m_` (навигация меню), `gram_`, `train_`, `game*`, чистка `clt_/clp_/cla_/cld_`, `lvl_`. Новую кнопку добавляй И в рендер клавиатуры, И в соответствующий блок диспетчера.
+- **Маршрутизация по префиксу callback_data**: `a_`/`as_` (действия/сохранения), `w_` (гардероб, в т.ч. `w_fb_*` — фидбек по образу), `md_`, `set_`, `m_` (навигация меню), `gram_`, `train_`, `game*`, чистка `clt_/clp_/cla_/cld_`, `lvl_`, `ans_short`/`ans_deep` (переписать ответ короче/глубже). Новую кнопку добавляй И в рендер клавиатуры, И в соответствующий блок диспетчера (иначе `verify.audit_callbacks()` отметит её unhandled).
 - **Telegram HTML**: `parse_mode="HTML"`, любой пользовательский/LLM-текст оборачивай в `esc()` из [util.py](util.py). Сообщения собираются списком строк `L` и `"\n".join(L)`.
 - **Данные** кладём через `store.get_list/set_list/add_to_list` по ключу из `config`; **состояние шага** — через `store.pending_input`/`store.*_state` (сбрасывается при рестарте).
 - **LLM** только через `ai.llm`/`ai.llm_json` (не дёргай провайдеров напрямую); подбирай `order`/`claude_model` под задачу (грамматика/тренажёр → `GRAMMAR_ORDER` + `GRAMMAR_MODEL`).
@@ -63,10 +64,10 @@
 
 ## ECC-правила
 
-Подключена конфигурация ECC в [.claude/](.claude/) — слои **common** + **python** (правила авто-применяются к `**/*.py` по `paths` во фронтматтере). Перед нетривиальной работой свериться:
+Подключена конфигурация ECC в [.claude/rules/](.claude/rules/) — слои **common** + **python** (правила авто-применяются к `**/*.py` по `paths` во фронтматтере). Перед нетривиальной работой свериться:
 
-- [.claude/python/coding-style.md](.claude/python/coding-style.md), [patterns.md](.claude/python/patterns.md), [security.md](.claude/python/security.md), [testing.md](.claude/python/testing.md), [hooks.md](.claude/python/hooks.md)
-- [.claude/common/](.claude/common/) — общие принципы (git-workflow, code-review, performance, agents…). При конфликте **python-правила приоритетнее** common.
+- [.claude/rules/python/coding-style.md](.claude/rules/python/coding-style.md), [patterns.md](.claude/rules/python/patterns.md), [security.md](.claude/rules/python/security.md), [testing.md](.claude/rules/python/testing.md), [hooks.md](.claude/rules/python/hooks.md)
+- [.claude/rules/common/](.claude/rules/common/) — общие принципы (git-workflow, code-review, performance, agents…). При конфликте **python-правила приоритетнее** common.
 
 Ключевые требования ECC: PEP 8, type-аннотации на сигнатурах, `black`/`isort`/`ruff`, `pytest` (+`--cov`), `bandit`, секреты через `os.environ`, `logging` вместо `print()`.
 

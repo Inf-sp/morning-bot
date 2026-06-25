@@ -9,6 +9,7 @@ import weather
 import balance
 import learning
 import research
+import memory
 from util import esc, _WEEKDAYS, _MONTHS, flag_from_cc, country_flag
 import verify
 
@@ -185,6 +186,9 @@ def _build_day_text(cid):
     L = [f"<b>Мой день • {esc(header)} • {esc(s.get('city',''))}{title_flag}</b>", ""]
     L += [f"<b>{icon} Погода сегодня</b>",
           f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}", ""]
+    focus = memory.fresh_focus(cid)        # перенесён с вечернего разбора
+    if focus:
+        L += ["<b>🎯 Фокус на сегодня</b>", esc(focus), ""]
     outfit = " + ".join(ex.get("outfit", [])).rstrip(".")  # для «Сохранить образ дня», в сводке не показываем
     if word_line:
         L += ["<b>📚 Слово дня</b>", esc(word_line), ""]

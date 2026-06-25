@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
@@ -8,6 +9,7 @@ import util
 from util import esc
 import verify
 import secure
+import memory
 
 TZ = config.TZ
 
@@ -21,11 +23,13 @@ DOCTOR_INTRO = (
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
 
-# универсальная клавиатура под ответом: [Продолжить][⭐][В меню]
-def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry"):
+# универсальная клавиатура под ответом: [Продолжить][Короче|Глубже][⭐][В меню]
+def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry", depth=True):
     rows = []
     if cont_label and cont_cb:
         rows.append([(cont_label, cont_cb)])
+    if depth:
+        rows.append([("✂️ Короче", "ans_short"), ("🔬 Глубже", "ans_deep")])
     rows.append([("⭐ В закладки", "as_fav")])
     rows.append([("⬅️ Назад", "m_close")])
     return _kb(rows)
@@ -49,6 +53,7 @@ async def _send(bot, cid, text, kb=None, surface="card"):
         print(f"[verify] {surface}: {w}")
     store.last_answer[str(cid)] = text
     store.last_source.setdefault(str(cid), "Ассистент")
+    store.last_surface[str(cid)] = surface       # для «Короче/Глубже»
     html = util.tg_html(text)
     chunks = [html[i:i+4000] for i in range(0, len(html), 4000)]
     for i, c in enumerate(chunks):
@@ -108,24 +113,25 @@ async def send_leftovers(bot, cid, ingredients):
     await _send(bot, cid, out, kb=_recipe_kb())
 
 
-# ---------- СДВГ / Подбодрить ----------
+# ---------- СДВГ / Следующий шаг ----------
 def _gen_motiv(cid):
     return ai.llm(
-        "Сгенерируй блок «Личная мотивация» для человека с СДВГ. Тёплый живой тон, как поддерживающий друг, "
-        "без воды, канцелярита и заезженных клише («верь в себя», «всё получится»). "
-        "ВАЖНО: пиши СТРОГО на русском языке - ни одного иностранного слова и ни одной фразы на другом языке. "
-        "Будь конкретным: реальные приёмы, а не общие слова. Каждый раз бери РАЗНЫЕ техники фокуса "
-        "(не повторяй одно и то же), коротко поясняй суть техники простыми словами. "
+        "Человеку с СДВГ трудно начать. НЕ давай мотивацию и НЕ хвали - дай конкретный "
+        "ФИЗИЧЕСКИЙ следующий шаг, который запускает тело, а не настроение "
+        "(открой нужный файл, налей воды, поставь таймер на 7 минут, надень кроссовки, "
+        "напиши первое плохое предложение, вынеси одну вещь со стола). "
+        "Тёплый живой тон, как друг рядом. Без воды, канцелярита и клише («верь в себя», «ты сможешь»). "
+        "ВАЖНО: пиши СТРОГО на русском - ни одного иностранного слова. "
+        "Каждый раз бери РАЗНЫЕ шаги (не повторяйся). "
         "СТРОГО формат, без markdown, жирные заголовки:\n\n"
-        "🎯 Личная мотивация\n\n"
-        "{1 короткая тёплая фраза под настроение, не банальная}\n\n"
-        "Фокус сейчас:\n"
-        "• {конкретная микро-техника на 1-2 минуты против прокрастинации, понятно объясни как делать}\n"
-        "• {приём удержать внимание - своими словами, без иностранных названий}\n\n"
-        "⚡ Один шаг:\n"
-        "• {одно предельно мелкое конкретное действие, которое можно сделать прямо сейчас за минуту}\n\n"
-        "Напоминание:\n"
-        "• {короткая честная мысль про прогресс вместо идеала}",
+        "🎯 Следующий шаг\n\n"
+        "{1 короткая фраза-разрешение начать с малого, не банальная}\n\n"
+        "Прямо сейчас:\n"
+        "• {ОДНО предельно мелкое физическое действие на 1 минуту, максимально конкретно}\n\n"
+        "Потом:\n"
+        "• {следующее такое же мелкое физическое действие, как продолжение}\n\n"
+        "Если застрял:\n"
+        "• {как снизить порог ещё сильнее - сделать шаг вдвое меньше}",
         500, 0.9, ai.LEARN_ORDER)
 
 
@@ -180,7 +186,7 @@ async def doctor_answer(bot, cid, symptoms):
             await verify.safe_error(bot, cid, e); return
         store.last_source[str(cid)] = "Здоровье · Лекарство"
         store.last_action[str(cid)] = ("role", "doctor", symptoms)
-        await _send(bot, cid, out, kb=_ans_kb(None, None), surface="health")
+        await _send(bot, cid, out, kb=_ans_kb(None, None, depth=False), surface="health")
         return
     passages = []
     try:
@@ -201,7 +207,7 @@ async def doctor_answer(bot, cid, symptoms):
         await verify.safe_error(bot, cid, e); return
     store.last_source[str(cid)] = "Здоровье · Врач"
     store.last_action[str(cid)] = ("role", "doctor", symptoms)
-    await _send(bot, cid, out, kb=_ans_kb(None, None), surface="health")
+    await _send(bot, cid, out, kb=_ans_kb(None, None, depth=False), surface="health")
 
 async def handle_role(bot, cid, role, text):
     if role == "doctor":
@@ -252,6 +258,7 @@ async def send_evening_review(bot, cid):
         store.pending_input[cid] = "worry"
         return
     wlist = "\n".join(f"- {w['text']}" for w in worries)
+    focus = ""
     try:
         analysis = ai.llm(
             "Ты спокойный психолог. Разбери тревоги человека с СДВГ по-доброму, на русском.\n"
@@ -262,15 +269,25 @@ async def send_evening_review(bot, cid):
             "В конце добавь блок:\n"
             "🧠 <b>Итог дня</b>\n{1-2 строки: где факты, а где шум и неопределённость}\n\n"
             "🌿 {тёплая короткая мысль на ночь}\n\n"
+            "В самом конце с новой строки добавь ровно одну строку вида:\n"
+            "FOCUS: <одно конкретное дело или намерение на завтра, коротко, без кавычек>\n\n"
             f"Тревоги:\n{wlist}", 800, 0.6)
         analysis = analysis.replace("**", "").replace("* ", "").strip()
+        m = re.search(r"FOCUS:\s*(.+)", analysis)
+        if m:
+            focus = m.group(1).strip().strip('"«»')
+            analysis = analysis[:m.start()].strip()
     except Exception:
         analysis = ""
+    if focus:
+        memory.set_focus(cid, focus)
     L = ["🥸 <b>Вечерний разбор</b>", "", "<b>Сегодня тебя беспокоили:</b>"]
     for w in worries:
         L.append(f"• {esc(w['text'])}")
     if analysis:
         L += ["", analysis]
+    if focus:
+        L += ["", f"🎯 <b>Фокус на завтра:</b> {esc(focus)}"]
     rows = [
         [InlineKeyboardButton("🧹 Очистить все тревоги", callback_data="worry_clearall")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_close")],
@@ -364,3 +381,24 @@ async def retry(bot, cid):
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
     await _send(bot, cid, answer, surface="chat")
+
+
+# ---------- «Короче / Глубже» (переписать последний ответ) ----------
+async def reword(bot, cid, mode):
+    prev = (store.last_answer.get(str(cid)) or "").strip()
+    if not prev:
+        await bot.send_message(chat_id=cid, text="Нет ответа, который можно переписать."); return
+    surface = store.last_surface.get(str(cid), "card")
+    if mode == "short":
+        how, tier = "короче и без воды, оставь только суть", "cheap"
+    else:
+        how, tier = "подробнее и глубже, добавь полезные детали и нюансы", "smart"
+    await bot.send_chat_action(chat_id=cid, action="typing")
+    prompt = (f"Перепиши этот ответ {how}. Сохрани смысл и тот же язык. "
+              "Формат - Telegram HTML: подзаголовки <b>...</b>, пункты с «• », без markdown (без *, #, `).\n\n"
+              f"Текст:\n{secure.wrap_untrusted(prev, 'предыдущий ответ')}")
+    try:
+        out = ai.llm(prompt, 1200, 0.6, tier=tier)
+    except Exception as e:
+        await verify.safe_error(bot, cid, e); return
+    await _send(bot, cid, out, surface=surface)

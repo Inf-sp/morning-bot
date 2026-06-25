@@ -1,0 +1,72 @@
+"""Память пользователя: фокус (датировка/свежесть), кап лент, wardrobe_hints."""
+from datetime import datetime, timedelta
+import pytest
+
+import config
+import store
+import memory
+
+CID = "test-cid"
+
+
+@pytest.fixture(autouse=True)
+def _clean_profile():
+    """Чистый профиль на каждый тест (in-memory fallback в store, DATABASE_URL не задан)."""
+    store._mem.pop(config.PROFILE_KEY, None)
+    yield
+    store._mem.pop(config.PROFILE_KEY, None)
+
+
+@pytest.mark.unit
+def test_focus_set_get_roundtrip():
+    memory.set_focus(CID, "  закрыть отчёт  ")
+    f = memory.get_focus(CID)
+    assert f["text"] == "закрыть отчёт"
+    assert f["date"] == datetime.now(config.TZ).date().isoformat()
+    assert memory.fresh_focus(CID) == "закрыть отчёт"
+
+
+@pytest.mark.unit
+def test_focus_empty_clears():
+    memory.set_focus(CID, "что-то")
+    memory.set_focus(CID, "")
+    assert memory.get_focus(CID) == {}
+    assert memory.fresh_focus(CID) == ""
+
+
+@pytest.mark.unit
+def test_focus_stale_not_fresh():
+    old = (datetime.now(config.TZ).date() - timedelta(days=3)).isoformat()
+    store.set_profile(CID, {"focus": {"date": old, "text": "старый фокус"}})
+    assert memory.fresh_focus(CID) == ""           # старше 1 дня - не показываем
+    assert memory.get_focus(CID)["text"] == "старый фокус"  # но в памяти лежит
+
+
+@pytest.mark.unit
+def test_observations_cap():
+    for i in range(40):
+        memory.add_observation(CID, "test", f"obs {i}")
+    obs = memory.observations(CID)
+    assert len(obs) == 30                          # _OBS_CAP
+    assert obs[-1]["text"] == "obs 39"             # хвост сохранён
+
+
+@pytest.mark.unit
+def test_wardrobe_feedback_cap_and_unknown_verdict():
+    memory.add_wardrobe_feedback(CID, "look", "не-такой-код")   # игнор
+    for i in range(30):
+        memory.add_wardrobe_feedback(CID, f"образ {i}", "cold")
+    fb = store.get_profile(CID).get("wardrobe_fb", [])
+    assert len(fb) == 20                           # _FB_CAP
+    assert all(x["verdict"] == "cold" for x in fb)
+
+
+@pytest.mark.unit
+def test_wardrobe_hints_empty_and_format():
+    assert memory.wardrobe_hints(CID) == ""
+    memory.add_wardrobe_feedback(CID, "белая футболка, шорты", "cold")
+    memory.add_wardrobe_feedback(CID, "белая футболка, шорты", "cold")
+    memory.add_wardrobe_feedback(CID, "пиджак, брюки", "nostyle")
+    h = memory.wardrobe_hints(CID)
+    assert "мёрзнет" in h and "×2" in h
+    assert "не его стиль" in h and "пиджак" in h

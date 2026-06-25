@@ -7,6 +7,7 @@ import weather
 from util import esc
 import verify
 import secure
+import memory
 
 HOME_TEXT = (
     "👕 <b>Гардероб</b>\n\n"
@@ -41,6 +42,8 @@ def closet_kb():
 
 def _look_result_kb():
     return _kb([
+        [("👍 Надел", "w_fb_worn"), ("🙅 Не мой стиль", "w_fb_nostyle")],
+        [("🥶 Было холодно", "w_fb_cold"), ("🥵 Жарко", "w_fb_hot")],
         [("✨ Другой образ", "w_look")],
         [("👔 Официальная", "w_scen_work")],
         [("🪩 Вечеринка", "w_scen_party")],
@@ -68,10 +71,13 @@ async def send_looks(bot, cid, scenario=None):
     scen_line = ""
     if scenario and scenario in SCENARIOS:
         scen_line = f"\nСценарий: {SCENARIOS[scenario][1]}. Подбери образ под этот случай."
+    hints = memory.wardrobe_hints(cid)
+    fb_line = ("\nУчитывай прошлый фидбек (НЕ показывай его дословно, просто учти): "
+               + secure.wrap_untrusted(hints, "фидбек гардероба")) if hints else ""
     await bot.send_message(chat_id=cid, text="Собираю образ под погоду...")
     prompt = f"""Ты опытный стилист. Собери ОДИН образ из гардероба на сегодня.
 {config.STYLE_PROFILE}
-Погода сегодня: {wblock}{scen_line}
+Погода сегодня: {wblock}{scen_line}{fb_line}
 Гардероб (только эти вещи, ПОЛНЫЕ точные названия с брендом и цветом):
 {store.wardrobe_to_text(w)}
 Правила: 1 верх + 1 низ + обувь (+ опц. аксессуар-совет). Минимализм, сочетание по цвету.
@@ -87,6 +93,7 @@ JSON (без markdown):
     rl = store.recent_looks.get(str(cid), [])
     rl.append(", ".join(items)[:80])
     store.recent_looks[str(cid)] = rl[-3:]
+    store.last_look[str(cid)] = ", ".join(str(it) for it in items)[:120]   # для фидбека
     L = ["✨ <b>Новый образ</b>", ""]
     L += [f"• {esc(str(it))}" for it in items]
     if d.get("add"):
@@ -94,6 +101,20 @@ JSON (без markdown):
     store.last_source[str(cid)] = "Гардероб · Образ"
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=_look_result_kb())
+
+
+# ---------- фидбек по образу ----------
+_FB_ACK = {
+    "worn": "👍 Отметил: надел. Буду чаще предлагать похожее.",
+    "cold": "🥶 Запомнил: было холодно. В следующих образах одену теплее.",
+    "hot": "🥵 Запомнил: было жарко. В следующих образах будет легче.",
+    "nostyle": "🙅 Понял: не твой стиль. Учту и не буду повторять похожее.",
+}
+
+async def look_feedback(bot, cid, verdict):
+    look = store.last_look.get(str(cid), "")
+    memory.add_wardrobe_feedback(cid, look, verdict)
+    await bot.send_message(chat_id=cid, text=_FB_ACK.get(verdict, "Запомнил — учту в следующих образах."))
 
 
 # ---------- шкаф ----------
@@ -264,6 +285,8 @@ async def handle_callback(bot, cid, q, data):
         return
     if data == "w_look":
         await send_looks(bot, cid); return
+    if data.startswith("w_fb_"):
+        await look_feedback(bot, cid, data[len("w_fb_"):]); return
     if data.startswith("w_scen_"):
         await send_looks(bot, cid, data[len("w_scen_"):]); return
     if data == "w_closet":
