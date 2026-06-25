@@ -77,9 +77,8 @@ def wiki_sentences(name):
         return []
     extract = _clean_wiki(extract)
     sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", extract) if len(s.strip()) > 40]
-    # Первое предложение обычно дефинитивное ("Алкмар — город...") — пропускаем
-    if len(sents) > 1 and re.match(r"^.{0,60}[—–-]", sents[0]):
-        sents = sents[1:]
+    # Убираем дефинитивные предложения ("X — это город...") вне зависимости от их количества
+    sents = [s for s in sents if not re.match(r"^.{0,60}[—–-]", s)]
     sents = [s for s in sents if not _is_dubious_record(s)]
     return sents[:6]
 
