@@ -99,17 +99,10 @@ async def send_food_menu(bot, cid):
     tip = await asyncio.to_thread(balance.fetch_food_tip, cid)
     header = "👨‍🍳 <b>Кулинарный радар</b>"
     body = f"\n\n{tip}" if tip else ""
-    footer = (
-        "\n\n\n<b>Команды:</b>\n"
-        "/setup — настройки\n"
-        "/notes — сохранённые закладки\n\n"
-        "Сохраняй полезное через ⭐ <b>В закладки</b> или ❤️ <b>В любимые</b>.\n\n"
-        "<b>Выбери 👇</b>"
-    )
     kb = _ikb([
         [("✨ Новый рецепт", "m_food_gen")],
         [("🧊 Из холодильника", "as_fridge_cook")],
         [("⬅️ Назад", "m_balance")],
     ])
-    await bot.send_message(chat_id=cid, text=header + body + footer,
+    await bot.send_message(chat_id=cid, text=header + body,
                            parse_mode="HTML", reply_markup=kb)

@@ -876,17 +876,16 @@ def game_data(clue_lang, difficulty, recent):
 Сложность: {diff_desc}. ВЕСЬ текст на языке: {clue_lang}. {avoid}
 Каждая подсказка и каждое предложение заканчивается точкой.
 Ответь строго, каждое поле с новой строки, без markdown:
-CLUES: 4 подсказки на языке {clue_lang}, через | , от непрямой к явной, без имени/названия
+CLUES: 4 улики на языке {clue_lang}, через | , от косвенной к более явной — конкретные детали (форма, цвет, происхождение, функция, ощущения), без имени/названия
 ANSWER: название на языке {clue_lang}
 ALIASES: то же название на русском, английском и нидерландском через |
 HINT: ещё одна явная подсказка на языке {clue_lang}
 HINT2: совсем простая, почти очевидная подсказка (но без названия), на языке {clue_lang}
-ANALYSE: детективный анализ улик 1-2 предложения в стиле сыщика на языке {clue_lang}, намекает на ответ без называния
 EXPLAIN: 1-2 предложения — что это такое (на языке {clue_lang})"""
     raw = ai.llm(prompt, 900, 1.0, tier="cheap")
     out = {}
     for key, field in (("CLUES", "clues"), ("ANSWER", "answer"), ("ALIASES", "aliases"),
-                       ("HINT", "hint"), ("HINT2", "hint2"), ("ANALYSE", "quote"), ("EXPLAIN", "explain")):
+                       ("HINT", "hint"), ("HINT2", "hint2"), ("EXPLAIN", "explain")):
         m = re.search(rf"{key}:\s*(.+?)(?=\n[A-Z]+\d*:|\Z)", raw, re.S)
         out[field] = m.group(1).strip() if m else ""
     out["clues"] = out.get("clues", "").replace(" | ", "\n").replace("|", "\n")
@@ -929,15 +928,10 @@ async def send_game(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["hint"], callback_data="game_hint"),
          InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")],
-        [InlineKeyboardButton(ui["chdiff"], callback_data="game_change_diff"),
-         InlineKeyboardButton(ui["chlang"], callback_data="game_change")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="game_change")],
     ])
     clues = "\n".join(f"•{c.strip()}" for c in d.get("clues", "").split("\n") if c.strip())
-    L = [f"<b>{ui['title']}</b>", "", f"<b>{ui['suspect']}</b>", clues]
-    analyse = (d.get("quote") or "").strip()
-    if analyse:
-        L += ["", f"{ui['analyse']}: {esc(analyse)}"]
-    L += ["", f"<b>{ui['who']} 🤔</b>"]
+    L = [f"<b>{ui['title']}</b>", "", f"<b>{ui['suspect']}</b>", clues, "", f"<b>{ui['who']} 🤔</b>"]
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
 
 def _fuzzy(a, b):
