@@ -70,6 +70,10 @@ def _ctx_items(cid, ctx):
         flat = _wardrobe_flat(cid)
         items = [(i, it) for i, (cat, it) in enumerate(flat)]
         return "🗄 Чистка: шкаф", items, "w_closet"
+    if ctx == "kast_s":
+        flat = _wardrobe_flat(cid)
+        items = [(i, it) for i, (cat, it) in enumerate(flat)]
+        return "🗄 Чистка: шкаф", items, "set_wardrobe"
     if ctx.startswith("lv_"):
         key = ctx[len("lv_"):]
         store_key = {"countries": config.COUNTRIES_KEY, "artists": config.ARTISTS_KEY,
@@ -147,7 +151,7 @@ def _cleanup_delete(cid, ctx):
     elif ctx in ("wl", "rl"):
         key = config.WATCHLIST_KEY if ctx == "wl" else config.READLIST_KEY
         store.set_list(key, cid, [it for i, it in enumerate(store.get_list(key, cid)) if i not in sel])
-    elif ctx == "kast":
+    elif ctx in ("kast", "kast_s"):
         flat = _wardrobe_flat(cid)
         drop = {flat[i] for i in sel if i < len(flat)}
         w = store.load_wardrobe()

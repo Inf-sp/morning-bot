@@ -146,20 +146,30 @@ async def send_show(bot, cid):
             lines.append("")
     await bot.send_message(chat_id=cid, text="\n".join(lines).strip(), parse_mode="HTML", reply_markup=closet_kb())
 
-async def add_item(bot, cid, text):
+async def _parse_and_add(bot, cid, text):
     w = store.load_wardrobe()
     cats = ", ".join(w.keys()) or "футболки, рубашки, свитшоты, верхняя одежда, брюки, джинсы, обувь, аксессуары"
+    parsed = ai.llm_json(
+        f"Разбери вещи по категориям. Категории: {cats} (можно создать новую).\n"
+        f"Вещи:\n{secure.wrap_untrusted(text, 'список вещей')}\n"
+        "Каждую вещь пиши ПОЛНЫМ названием в порядке: тип + цвет + детали/бренд "
+        "(напр. «Футболка белая Uniqlo плотная», «Шорты серые тонкие»). Сохраняй бренд если указан.\n"
+        'JSON: {"категория": ["полное название вещи"]}.', 700, tier="cheap")
+    return store.merge_wardrobe(parsed)
+
+async def add_item(bot, cid, text):
     try:
-        parsed = ai.llm_json(
-            f"Разбери вещи по категориям. Категории: {cats} (можно создать новую).\n"
-            f"Вещи:\n{secure.wrap_untrusted(text, 'список вещей')}\n"
-            "Каждую вещь пиши ПОЛНЫМ названием в порядке: тип + цвет + детали/бренд "
-            "(напр. «Футболка белая Uniqlo плотная», «Шорты серые тонкие»). Сохраняй бренд если указан.\n"
-            'JSON: {"категория": ["полное название вещи"]}.', 700, tier="cheap")
-        added = store.merge_wardrobe(parsed)
+        added = await _parse_and_add(bot, cid, text)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     await bot.send_message(chat_id=cid, text=f"Добавлено в шкаф ({added}).", reply_markup=closet_kb())
+
+async def add_item_settings(bot, cid, text):
+    try:
+        added = await _parse_and_add(bot, cid, text)
+    except Exception as e:
+        await verify.safe_error(bot, cid, e); return
+    await bot.send_message(chat_id=cid, text=f"Добавлено в шкаф ({added}).")
 
 async def send_del(bot, cid):
     w = store.load_wardrobe()

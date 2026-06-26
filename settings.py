@@ -9,7 +9,16 @@ NOTIF_TYPES = [
     ("checkin_day", "🫣 Дневная разгрузка (14:00)"),
     ("checkin_eve", "🥸 Вечерний разбор (22:00)"),
 ]
-STYLES = ["минимализм", "скандинавская эстетика", "натуральные ткани"]
+STYLES = [
+    "минимализм",
+    "скандинавский стиль",
+    "smart casual",
+    "casual / повседневный",
+    "классика",
+    "streetwear / городской",
+    "натуральный / бохо",
+    "спортивный",
+]
 
 def _all():
     return store._load(SETTINGS_KEY)
@@ -77,14 +86,24 @@ async def set_lang(bot, cid, lang):
     await send_home(bot, cid)
 
 async def send_body(bot, cid):
+    body = get(cid, "body", "рост 179 см, вес ~65 кг, обувь EU 42.5, брюки W31 L31, размер M")
+    style = get(cid, "style", "минимализм")
+    txt = f"📐 <b>Параметры шкафа</b>\n\n<b>Параметры:</b> {body}\n<b>Стиль:</b> {style}"
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✏️ Параметры тела", callback_data="set_bodyinput")],
+        [InlineKeyboardButton("🎨 Стиль", callback_data="set_stylepick")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe")],
+    ])
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+
+async def send_style_pick(bot, cid):
     cur = get(cid, "style", "минимализм")
     rows = [[InlineKeyboardButton(("✅ " if cur == s else "") + s, callback_data=f"set_style_{i}")]
             for i, s in enumerate(STYLES)]
-    rows.append([InlineKeyboardButton("✏️ Ввести параметры тела", callback_data="set_bodyinput")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
-    body = get(cid, "body", "рост 179 см, вес ~65 кг, обувь EU 42.5, брюки W31 L31, размер M")
+    rows.append([InlineKeyboardButton("✏️ Описать своими словами", callback_data="set_stylecustom")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_body")])
     await bot.send_message(chat_id=cid,
-        text=f"👕 <b>Параметры шкафа</b>\n\nСейчас: {body}\nСтиль: {cur}\n\nВыбери стиль или введи параметры:",
+        text="🎨 <b>Стиль одежды</b>\n\nВыбери из предложенных или опиши своими словами — бот учтёт при подборе образа:",
         parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
 async def set_style(bot, cid, i):
@@ -113,8 +132,8 @@ async def _send_list(bot, cid, title, items, del_prefix, add_cb, back="set_home"
 # --- Шкаф ---
 async def send_wardrobe(bot, cid):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📝 Добавить", callback_data="w_add")],
-        [InlineKeyboardButton("🧹 Убрать", callback_data="w_del")],
+        [InlineKeyboardButton("📝 Добавить", callback_data="set_ward_add")],
+        [InlineKeyboardButton("❌ Убрать", callback_data="set_ward_del")],
         [InlineKeyboardButton("📐 Параметры шкафа", callback_data="set_body")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
     ])
@@ -180,7 +199,7 @@ async def send_lagom(bot, cid):
     rows = []
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data="setadd_lagom")])
     if items:
-        rows.append([InlineKeyboardButton("🧹 Убрать", callback_data="set_lagom_clean")])
+        rows.append([InlineKeyboardButton("❌ Убрать", callback_data="set_lagom_clean")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -247,6 +266,16 @@ async def handle_callback(bot, cid, data):
         await send_body(bot, cid)
     elif data == "set_wardrobe":
         await send_wardrobe(bot, cid)
+    elif data == "set_ward_add":
+        store.pending_input[cid] = "wardrobe_add_set"
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe")]])
+        await bot.send_message(chat_id=cid,
+            text="🏷 Напиши вещь: тип + цвет + детали/бренд.\n"
+                 "<i>Напр.: «Футболка белая Uniqlo» или «Шорты серые тонкие». Можно списком.</i>",
+            parse_mode="HTML", reply_markup=kb)
+    elif data == "set_ward_del":
+        from cleanup import open_cleanup
+        await open_cleanup(bot, cid, "kast_s")
     elif data == "set_lagom":
         await send_lagom(bot, cid)
     elif data == "setadd_lagom":
@@ -283,6 +312,15 @@ async def handle_callback(bot, cid, data):
         await list_delete(bot, cid, "artist", int(data.split("_")[-1]))
     elif data.startswith("setdel_book_"):
         await list_delete(bot, cid, "book", int(data.split("_")[-1]))
+    elif data == "set_stylepick":
+        await send_style_pick(bot, cid)
+    elif data == "set_stylecustom":
+        store.pending_input[cid] = "styleinput"
+        await bot.send_message(chat_id=cid,
+            text="🎨 Опиши свой стиль — как хочешь выглядеть, что нравится, что нет.\n\n"
+                 "<i>Например: «Люблю тёмные оттенки, оверсайз-силуэты, минимум принтов. "
+                 "Стараюсь избегать костюмов.»</i>",
+            parse_mode="HTML")
     elif data.startswith("set_style_"):
         await set_style(bot, cid, int(data.split("_")[-1]))
     elif data == "set_bodyinput":

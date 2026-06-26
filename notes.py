@@ -231,7 +231,7 @@ async def send_bucket(bot, cid, bucket):
         label = f"{_top_cat(src)} · {t.strip()[:30]}"
         rows.append([InlineKeyboardButton(f"❌ {label}", callback_data=f"as_notedel_{i}")])
     if count > 2:
-        rows.append([InlineKeyboardButton("🧹 Убрать несколько", callback_data="as_clean_fav")])
+        rows.append([InlineKeyboardButton("❌ Убрать", callback_data="as_clean_fav")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -300,7 +300,7 @@ async def send_love_section(bot, cid, key):
             for i, it in enumerate(items[:40])]
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data=f"as_loveadd_{key}")])
     if items:
-        rows.append([InlineKeyboardButton("🧹 Убрать несколько", callback_data=f"as_loveclean_{key}")])
+        rows.append([InlineKeyboardButton("❌ Убрать", callback_data=f"as_loveclean_{key}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_love")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
