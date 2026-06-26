@@ -43,11 +43,11 @@ def home_kb(cid):
         [InlineKeyboardButton("🌍 Сменить город", callback_data="set_city")],
         [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
         [InlineKeyboardButton("🎚 Уровень языков", callback_data="set_levels")],
-        [InlineKeyboardButton("🗄 Шкаф", callback_data="set_wardrobe")],
-        [InlineKeyboardButton("☕️ Лагом", callback_data="set_lagom")],
-        [InlineKeyboardButton("❤️ Любимые", callback_data="set_love")],
-        [InlineKeyboardButton("🗂️ Словарь", callback_data="set_dict")],
+        [InlineKeyboardButton("👕 Шкаф", callback_data="set_wardrobe")],
         [InlineKeyboardButton("🧊 Холодильник", callback_data="set_fridge")],
+        [InlineKeyboardButton("🎯 Лагом", callback_data="set_lagom")],
+        [InlineKeyboardButton("🗂️ Словарь", callback_data="set_dict")],
+        [InlineKeyboardButton("❤️ Любимые", callback_data="set_love")],
     ])
 
 async def send_home(bot, cid):

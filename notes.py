@@ -240,6 +240,7 @@ async def send_bucket(bot, cid, bucket):
 # ===== Любимые: под-разделы (страны/артисты/книги/одежда) =====
 # каждый: (заголовок, тип для роутинга)
 LOVE_SECTIONS = [
+    ("🎬 Фильмы и сериалы", "movies"),
     ("🧳 Мои страны", "countries"),
     ("🎸 Мои артисты", "artists"),
     ("📖 Мои книги", "books"),
@@ -254,6 +255,8 @@ async def send_love_home(bot, cid):
 
 def _love_items(cid, key):
     """Возвращает список строк-названий для раздела (с авто-загрузкой дефолтов)."""
+    if key == "movies":
+        return list(store.get_list(config.WATCHLIST_KEY, cid))
     if key == "countries":
         cur = store.get_list(config.COUNTRIES_KEY, cid)
         if not cur:
@@ -285,8 +288,8 @@ def _love_items(cid, key):
     return []
 
 def _love_title(key):
-    return {"countries": "🧳 Мои страны", "artists": "🎸 Мои артисты",
-            "books": "📖 Мои книги"}.get(key, "Любимые")
+    return {"movies": "🎬 Фильмы и сериалы", "countries": "🧳 Мои страны",
+            "artists": "🎸 Мои артисты", "books": "📖 Мои книги"}.get(key, "Любимые")
 
 async def send_love_section(bot, cid, key):
     if key == "recipes":
@@ -306,8 +309,8 @@ async def send_love_section(bot, cid, key):
                            reply_markup=InlineKeyboardMarkup(rows))
 
 def _love_key_of(key):
-    return {"countries": config.COUNTRIES_KEY, "artists": config.ARTISTS_KEY,
-            "books": config.BOOKS_KEY}.get(key)
+    return {"movies": config.WATCHLIST_KEY, "countries": config.COUNTRIES_KEY,
+            "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
 
 async def love_delete(bot, cid, key, i):
     store_key = _love_key_of(key)
