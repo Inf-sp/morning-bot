@@ -113,8 +113,8 @@ async def _send_list(bot, cid, title, items, del_prefix, add_cb, back="set_home"
 # --- Шкаф ---
 async def send_wardrobe(bot, cid):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🏷 Добавить вещь", callback_data="w_add")],
-        [InlineKeyboardButton("🧹 Удалить вещь", callback_data="w_del")],
+        [InlineKeyboardButton("📝 Добавить", callback_data="w_add")],
+        [InlineKeyboardButton("🧹 Убрать", callback_data="w_del")],
         [InlineKeyboardButton("📐 Параметры шкафа", callback_data="set_body")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
     ])
@@ -131,9 +131,14 @@ def _preload_countries(cid):
     return cur
 
 async def send_countries(bot, cid):
+    from util import country_flag
     items = _preload_countries(cid)
+    rows = [[InlineKeyboardButton(f"❌ {country_flag(it)} {_item_label(it)[:33]}", callback_data=f"setdel_country_{i}")]
+            for i, it in enumerate(items[-40:])]
+    rows.append([InlineKeyboardButton("📝 Добавить", callback_data="setadd_country")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid, text="🧳 <b>Мои страны</b>", parse_mode="HTML",
-                           reply_markup=_list_kb(items, "setdel_country_", "setadd_country"))
+                           reply_markup=InlineKeyboardMarkup(rows))
 
 # --- Артисты ---
 async def send_artists(bot, cid):
@@ -171,8 +176,14 @@ _LAGOM_INTRO = (
 async def send_lagom(bot, cid):
     import memory
     items = memory.get_lagom(cid)
-    await _send_list(bot, cid, _LAGOM_INTRO.rstrip(), items,
-                     "setdel_lagom_", "setadd_lagom")
+    txt = _LAGOM_INTRO.rstrip() if items else f"{_LAGOM_INTRO.rstrip()}\n\nПока пусто — добавь первый принцип 👇"
+    rows = []
+    rows.append([InlineKeyboardButton("📝 Добавить", callback_data="setadd_lagom")])
+    if items:
+        rows.append([InlineKeyboardButton("🧹 Убрать", callback_data="set_lagom_clean")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
+                           reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_books(bot, cid):
     items = _preload_books(cid)
@@ -248,6 +259,9 @@ async def handle_callback(bot, cid, data):
         import memory
         memory.del_lagom(cid, int(data.split("_")[-1]))
         await send_lagom(bot, cid)
+    elif data == "set_lagom_clean":
+        from cleanup import open_cleanup
+        await open_cleanup(bot, cid, "lagom")
     elif data == "set_countries":
         await send_countries(bot, cid)
     elif data == "set_artists":

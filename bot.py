@@ -74,7 +74,7 @@ async def answer_callback(update, context):
         await myday.handle_callback(bot, cid, q, data)
         return
     # Настройки
-    if data.startswith("set_"):
+    if data.startswith(("set_", "setadd_", "setdel_")):
         await settings.handle_callback(bot, cid, data)
         return
     # Навигация по подменю - редактируем сообщение на месте
