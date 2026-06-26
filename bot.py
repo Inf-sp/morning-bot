@@ -409,7 +409,18 @@ async def text_router(update, context):
             await settings.list_add_done(bot, cid, "book", text); return
         if kind == "setadd_lagom":
             import memory
-            memory.add_lagom(cid, text)
+            from util import esc
+            added = memory.add_lagom_batch(cid, text)
+            n = len(added)
+            if n == 0:
+                await bot.send_message(chat_id=cid, text="Эти принципы уже есть в Лагом.")
+            else:
+                label = "принцип" if n == 1 else ("принципа" if 2 <= n <= 4 else "принципов")
+                preview = "\n".join(f"• {esc(it)}" for it in added[:10])
+                suffix = f"\n<i>...и ещё {n - 10}</i>" if n > 10 else ""
+                await bot.send_message(chat_id=cid,
+                    text=f"✅ Добавлено {n} {label}:\n\n{preview}{suffix}",
+                    parse_mode="HTML")
             await settings.send_lagom(bot, cid); return
         if kind == "train_translate":
             await learning.train_translate_answer(bot, cid, text); return
