@@ -230,7 +230,7 @@ async def send_fridge(bot, cid):
     rows = []
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data="as_fridge_add")])
     if items:
-        rows.append([InlineKeyboardButton("🧹 Убрать", callback_data="as_fridge_clean")])
+        rows.append([InlineKeyboardButton("❌ Убрать", callback_data="as_fridge_clean")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -299,7 +299,7 @@ async def send_my_recipes(bot, cid):
         for i, r in enumerate(recipes):
             name = r.get("name", f"Рецепт {i+1}")[:30]
             rows.append([InlineKeyboardButton(f"📖 {name}", callback_data=f"as_my_recipe_{i}")])
-        rows.append([InlineKeyboardButton("🧹 Удалить несколько", callback_data="as_recipe_clean")])
+        rows.append([InlineKeyboardButton("❌ Убрать", callback_data="as_recipe_clean")])
         rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_love")])
         kb = InlineKeyboardMarkup(rows)
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)

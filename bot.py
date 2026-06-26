@@ -378,6 +378,9 @@ async def text_router(update, context):
             await balance.handle_role(bot, cid, kind.split("_")[1], text); return
         if kind == "wardrobe_add":
             await wardrobe.add_item(bot, cid, text); return
+        if kind == "wardrobe_add_set":
+            await wardrobe.add_item_settings(bot, cid, text)
+            await settings.send_wardrobe(bot, cid); return
         if kind == "wardrobe_check":
             await wardrobe.check_purchase(bot, cid, text); return
         if kind == "setcity":
@@ -391,6 +394,10 @@ async def text_router(update, context):
         if kind == "bodyinput":
             settings.set_(cid, "body", text)
             await bot.send_message(chat_id=cid, text="Готово, параметры сохранены.")
+            await settings.send_body(bot, cid); return
+        if kind == "styleinput":
+            settings.set_(cid, "style", text.strip())
+            await bot.send_message(chat_id=cid, text="Стиль сохранён.")
             await settings.send_body(bot, cid); return
         if kind == "fridge_add":
             await balance.fridge_add_done(bot, cid, text); return
