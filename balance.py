@@ -222,14 +222,15 @@ async def send_fridge(bot, cid):
     cid_s = str(cid)
     items = store.get_list(config.FRIDGE_KEY, cid_s)
     if items:
-        lines = "\n".join(f"• {util.esc(it)}" for it in items)
-        txt = f"🧊 <b>Мой холодильник</b>\n\n{lines}"
+        compact = ", ".join(util.esc(it) for it in items[:20])
+        suffix = f" <i>и ещё {len(items) - 20}</i>" if len(items) > 20 else ""
+        txt = f"🧊 <b>Мой холодильник</b> · {len(items)} продуктов\n\n{compact}{suffix}"
     else:
-        txt = "🧊 <b>Мой холодильник</b>\n\nСписок пуст. Добавь продукты, которые обычно есть дома."
+        txt = "🧊 <b>Мой холодильник</b>\n\nПусто — добавь продукты, которые обычно есть дома."
     rows = []
-    rows.append([InlineKeyboardButton("📝 Добавить продукты", callback_data="as_fridge_add")])
+    rows.append([InlineKeyboardButton("📝 Добавить", callback_data="as_fridge_add")])
     if items:
-        rows.append([InlineKeyboardButton("🧹 Убрать несколько", callback_data="as_fridge_clean")])
+        rows.append([InlineKeyboardButton("🧹 Убрать", callback_data="as_fridge_clean")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))

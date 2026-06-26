@@ -85,6 +85,10 @@ def _ctx_items(cid, ctx):
         recipes = store.get_list(config.MY_RECIPES_KEY, cid)
         items = [(i, r.get("name", f"Рецепт {i+1}")) for i, r in enumerate(recipes)]
         return "🍳 Чистка: рецепты", items, "as_my_recipes"
+    if ctx == "lagom":
+        import memory
+        items = [(i, it) for i, it in enumerate(memory.get_lagom(cid))]
+        return "🍃 Чистка: Лагом", items, "set_lagom"
     return "Чистка", [], "m_learn"
 
 
@@ -163,6 +167,9 @@ def _cleanup_delete(cid, ctx):
         store.set_list(config.FRIDGE_KEY, cid, [it for i, it in enumerate(store.get_list(config.FRIDGE_KEY, cid)) if i not in sel])
     elif ctx == "recipes":
         store.set_list(config.MY_RECIPES_KEY, cid, [r for i, r in enumerate(store.get_list(config.MY_RECIPES_KEY, cid)) if i not in sel])
+    elif ctx == "lagom":
+        import memory
+        memory.set_lagom(cid, [it for i, it in enumerate(memory.get_lagom(cid)) if i not in sel])
     store.list_sel[f"{cid}:{ctx}"] = set()
 
 
