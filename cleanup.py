@@ -76,10 +76,10 @@ def _ctx_items(cid, ctx):
         return "🗄 Чистка: шкаф", items, "set_wardrobe"
     if ctx.startswith("lv_"):
         key = ctx[len("lv_"):]
-        store_key = {"countries": config.COUNTRIES_KEY, "artists": config.ARTISTS_KEY,
-                     "books": config.BOOKS_KEY}.get(key)
-        title = {"countries": "🧳 Чистка: страны", "artists": "🎸 Чистка: артисты",
-                 "books": "📖 Чистка: книги"}.get(key, "Чистка")
+        store_key = {"movies": config.WATCHLIST_KEY, "countries": config.COUNTRIES_KEY,
+                     "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
+        title = {"movies": "🎬 Чистка: фильмы", "countries": "🧳 Чистка: страны",
+                 "artists": "🎸 Чистка: артисты", "books": "📖 Чистка: книги"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
         return title, items, f"as_love_{key}"
     if ctx == "fridge":
@@ -163,8 +163,8 @@ def _cleanup_delete(cid, ctx):
         store.save_wardrobe(w)
     elif ctx.startswith("lv_"):
         key = ctx[len("lv_"):]
-        store_key = {"countries": config.COUNTRIES_KEY, "artists": config.ARTISTS_KEY,
-                     "books": config.BOOKS_KEY}.get(key)
+        store_key = {"movies": config.WATCHLIST_KEY, "countries": config.COUNTRIES_KEY,
+                     "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
         if store_key:
             store.set_list(store_key, cid, [it for i, it in enumerate(store.get_list(store_key, cid)) if i not in sel])
     elif ctx == "fridge":
