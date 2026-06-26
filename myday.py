@@ -141,31 +141,84 @@ def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
     store.set_list(config.LIFEHACK_KEY, cid, new_seen)
     return f"{tip[0]} {tip[1]}", tip[3]
 
-def plany_extras(country, date_str, city="", weather_text="", wardrobe_text="", weekday="", is_weekend=False, cc=""):
-    day_kind = "выходной" if is_weekend else "будний день"
-    place = f"{city}, {country}" if country else city
-    prompt = f"""Сгенерируй образ дня. Дата: {date_str} ({weekday}, {day_kind}). Локация: {place}.
-Погода: {weather_text}
-Гардероб (используй ТОЛЬКО эти вещи, точные названия): {wardrobe_text}
-
-{config.myday_rules(city, country, cc)}
-
-Строго валидный JSON, без переносов внутри значений.
-{{"outfit": ["верх","низ","обувь","аксессуар"]}}
-Правила: 1 верх + 1 низ + обувь (+ опц. аксессуар), сочетание по цвету, минимализм. От +24°C без дождя — шорты + футболка; +17..+23 — лёгкие брюки + футболка/рубашка; ниже +16 или дождь/ветер — слои/ветровка, закрытая обувь."""
-    return ai.llm_json(prompt, 300, tier="cheap")
 
 
-def _fetch_quote():
-    """Цитата дня: отдельный лёгкий вызов, не зависит от outfit-промпта."""
-    d = ai.llm_json(
-        "Дай одну нестандартную цитату (1-2 предложения) от мыслителя или предпринимателя "
-        "(Сенека, Марк Аврелий, Навал Равикант, Монтень, Шопенгауэр, Эпиктет — без банальностей). "
+_QUOTE_RESET_AFTER = 15  # сбрасываем anti-repeat после N авторов
+
+
+def _build_quote_context(cid):
+    """Собирает контекст пользователя для персонализации цитаты."""
+    movies = store.get_list(config.WATCHLIST_KEY, cid)[:6]
+    books = store.get_list(config.BOOKS_KEY, cid)[:6]
+    artists = store.get_list(config.ARTISTS_KEY, cid)[:6]
+    focus = memory.fresh_focus(cid)
+    seen_authors = store.get_list(config.QUOTE_AUTHORS_KEY, cid)
+    if len(seen_authors) >= _QUOTE_RESET_AFTER:
+        store.set_list(config.QUOTE_AUTHORS_KEY, cid, [])
+        seen_authors = []
+    return {
+        "movies": [str(m) for m in movies if m],
+        "books": [str(b) for b in books if b],
+        "artists": [str(a) for a in artists if a],
+        "focus": focus,
+        "seen_authors": seen_authors,
+    }
+
+
+def _fetch_quote(cid=None):
+    """Персонализированная цитата дня с anti-repeat по авторам."""
+    ctx = _build_quote_context(cid) if cid else {
+        "movies": [], "books": [], "artists": [], "focus": "", "seen_authors": []
+    }
+
+    parts = []
+    if ctx["focus"]:
+        parts.append(f"Фокус дня человека: «{ctx['focus']}»")
+    if ctx["movies"]:
+        parts.append(f"Любимые фильмы/сериалы: {', '.join(ctx['movies'])}")
+    if ctx["books"]:
+        parts.append(f"Любимые книги: {', '.join(ctx['books'])}")
+    if ctx["artists"]:
+        parts.append(f"Любимые исполнители: {', '.join(ctx['artists'])}")
+
+    context_block = ("\n".join(parts) + "\n\n") if parts else ""
+
+    avoid_block = ""
+    if ctx["seen_authors"]:
+        avoid_block = f"Этих авторов уже показывали — не повторяй: {', '.join(ctx['seen_authors'])}.\n\n"
+
+    if parts:
+        author_hint = (
+            "Выбери автора, чьё мировоззрение или творчество перекликается с интересами человека выше. "
+            "Это может быть режиссёр, писатель, музыкант, философ, предприниматель или учёный — "
+            "главное, чтобы цитата резонировала с его вкусами или фокусом дня."
+        )
+    else:
+        author_hint = (
+            "Выбери мыслителя или предпринимателя (Сенека, Марк Аврелий, Навал Равикант, "
+            "Монтень, Шопенгауэр, Эпиктет, Чарли Мунгер — без банальностей)."
+        )
+
+    prompt = (
+        f"{context_block}"
+        f"{avoid_block}"
+        f"Дай одну нестандартную цитату (1-2 предложения). {author_hint} "
+        "Цитата должна быть реальной — не выдумывай. "
         'Строго JSON: {"quote": "текст на русском", "src": "Автор"}. '
-        "Только кириллица, никаких латинских букв в тексте цитаты.",
-        150, tier="cheap",
+        "Только кириллица, никаких латинских букв в тексте цитаты."
     )
-    return (d or {}) if isinstance(d, dict) else {}
+
+    d = ai.llm_json(prompt, 200, tier="cheap")
+    if not isinstance(d, dict):
+        return {}
+
+    src = (d.get("src") or "").strip()
+    if src and cid:
+        seen = store.get_list(config.QUOTE_AUTHORS_KEY, cid)
+        if src not in seen:
+            store.set_list(config.QUOTE_AUTHORS_KEY, cid, seen + [src])
+
+    return d
 
 def _cap(s):
     s = (s or "").strip()
@@ -234,7 +287,7 @@ def _word_of_day(cid):
         parts.append(f"🇬🇧 {_cap(en)}")
     return " → ".join(parts)
 
-_day_cache = {}  # cid -> {"date":..., "text":..., "ex":..., "outfit":...}
+_day_cache = {}  # cid -> {"date":..., "text":...}
 
 def reset_day_cache(cid):
     _day_cache.pop(str(cid), None)
@@ -270,25 +323,19 @@ def _build_day_text(cid):
         wind_str = f"💨 Ветер {wind_ms:.0f} м/с"
 
     now = datetime.now(TZ)
-    wblock = weather.weather_block(data, 0, s["city"])
     weekday_name = _WEEKDAYS[now.weekday()]
     is_weekend = now.weekday() >= 5
-    ex = plany_extras(s.get("country", ""), day_str, s.get("city", ""),
-                      weather_text=wblock, wardrobe_text=store.wardrobe_to_text(store.load_wardrobe()),
-                      weekday=weekday_name, is_weekend=is_weekend, cc=s.get("cc", ""))
     word_line = _word_of_day(cid)
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
-    def cap(x): return x[:1].upper() + x[1:] if x else x
     flag = flag_from_cc(s.get("cc", "")) or (country_flag(s.get("country", "")) if s.get("country") else "")
     title_flag = f" {flag}" if flag else ""
     L = [f"<b>Мой день • {esc(header)} • {esc(s.get('city',''))}{title_flag}</b>", ""]
     L += [f"<b>{icon} Погода сегодня</b>",
           f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}", ""]
-    focus = memory.fresh_focus(cid)        # перенесён с вечернего разбора
+    focus = memory.fresh_focus(cid)
     if focus:
         L += ["<b>🎯 Фокус на сегодня</b>", esc(focus), ""]
-    outfit = " + ".join(ex.get("outfit", [])).rstrip(".")  # для «Сохранить образ дня», в сводке не показываем
     if word_line:
         L += ["<b>📚 Слово дня</b>", esc(word_line), ""]
     fact = city_fact(s.get("city", ""), s.get("country", ""), cid, cc=s.get("cc", ""))
@@ -298,7 +345,7 @@ def _build_day_text(cid):
         cid, rain=rain >= 40, hot=tmax >= 24, is_weekend=is_weekend)
     if hack_text:
         L += [f"<b>💡 База знаний</b>", esc(hack_text)]
-    q_data = _fetch_quote()
+    q_data = _fetch_quote(cid)
     raw_quote = _strip_quotes(q_data.get("quote", ""))
     if raw_quote and _quote_valid(raw_quote):
         src = esc(q_data.get("src", "")).strip()
@@ -309,7 +356,7 @@ def _build_day_text(cid):
     _, _uw = verify.grade_umbrella(text, weather._rain_real(rain, rain_mm))
     for w in _uw:
         _log.warning("[verify] weather: %s", w)
-    return text, ex, outfit, day_str
+    return text
 
 async def send_plany(bot, cid):
     today = datetime.now(TZ).strftime("%Y-%m-%d")
@@ -317,10 +364,10 @@ async def send_plany(bot, cid):
     if not cache or cache.get("date") != today:
         await bot.send_message(chat_id=cid, text="Собираю сводку дня...")
         try:
-            text, ex, outfit, _ = await asyncio.to_thread(_build_day_text, cid)
+            text = await asyncio.to_thread(_build_day_text, cid)
         except Exception as e:
             await verify.safe_error(bot, cid, e); return
-        _day_cache[str(cid)] = {"date": today, "text": text, "ex": ex, "outfit": outfit}
+        _day_cache[str(cid)] = {"date": today, "text": text}
     text = _day_cache[str(cid)]["text"]
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=_day_menu_kb())
 
