@@ -3,6 +3,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 import ai
+from util import esc
 
 
 # ---------- сохранение в закладки ----------
@@ -298,7 +299,8 @@ async def send_love_section(bot, cid, key):
         return
     items = _love_items(cid, key)
     title = _love_title(key)
-    lines = [f"<b>{title}</b>", "", (", ".join(items) if items else "пусто")]
+    body = ", ".join(esc(str(it)) for it in items) if items else "пусто"
+    lines = [f"<b>{title}</b>", "", body]
     rows = [[InlineKeyboardButton(f"❌ {str(it)[:28]}", callback_data=f"as_lovedel_{key}_{i}")]
             for i, it in enumerate(items[:40])]
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data=f"as_loveadd_{key}")])
@@ -324,8 +326,9 @@ async def love_delete(bot, cid, key, i):
 
 async def love_add_start(bot, cid, key):
     store.pending_input[str(cid)] = f"loveadd_{key}"
-    name = {"countries": "страну", "artists": "артиста", "books": "книгу"}.get(key, "элемент")
-    await bot.send_message(chat_id=cid, text=f"Напиши {name} - добавлю в любимые.")
+    name = {"movies": "фильм или сериал", "countries": "страну",
+            "artists": "артиста", "books": "книгу"}.get(key, "элемент")
+    await bot.send_message(chat_id=cid, text=f"Напиши {name} — добавлю в любимые.")
 
 async def love_add_done(bot, cid, key, text):
     store_key = _love_key_of(key)
