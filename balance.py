@@ -29,6 +29,23 @@ def _food_tip_context(cid) -> str:
         parts.append("Любимые рецепты уже есть: " + ", ".join(str(r) for r in recipes[:6]))
     return "\n".join(parts)
 
+def _food_card(d, label="Рецепт дня") -> str:
+    """Единый формат карточки рецепта для радара и нового рецепта."""
+    name = esc(str(d.get("name", "")).strip())
+    time_ = esc(str(d.get("time", "")).strip())
+    servings = esc(str(d.get("servings", "")).strip())
+    ingredients = esc(str(d.get("ingredients", "")).strip())
+    short = str(d.get("short", d.get("why", ""))).strip()
+    lines = [f"<b>{label}: {name}</b>"]
+    if time_ or servings:
+        meta = " • ".join(p for p in [f"⏱️ {time_}", f"🍽️ {servings}"] if p.split()[-1:])
+        lines += ["", meta]
+    if ingredients:
+        lines += ["", f"Ингредиенты: {ingredients}"]
+    if short:
+        lines += ["", esc(short)]
+    return "\n".join(lines)
+
 def fetch_food_tip(cid) -> str:
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     cache = _food_tip_cache.get(str(cid))
@@ -40,13 +57,13 @@ def fetch_food_tip(cid) -> str:
         + (ctx + "\n" if ctx else "")
         + "Учти стиль жизни — не повторяй уже знакомые блюда из списка любимых.\n"
         "Верни JSON (без markdown): "
-        '{\"name\":\"Название блюда\",\"why\":\"2-3 строки: что это и почему понравится\"}'
+        '{"name":"Название блюда","time":"X мин","servings":"1 порц.",'
+        '"ingredients":"короткий список через запятую",'
+        '"why":"1-2 предложения: что это и почему понравится"}'
     )
     try:
-        d = ai.llm_json(prompt, 300, tier="cheap")
-        name = str(d.get("name", "")).strip()
-        why = str(d.get("why", "")).strip()
-        text = f"✨ <b>Рецепт дня</b>\n{esc(name)}\n\n{esc(why)}" if name else ""
+        d = ai.llm_json(prompt, 400, tier="cheap")
+        text = _food_card(d) if d.get("name") else ""
     except Exception:
         text = ""
     _food_tip_cache[str(cid)] = {"date": today, "text": text}
@@ -75,11 +92,25 @@ def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry", depth=
 
 def _recipe_kb():
     return _kb([
-        [("🗒️ Полный рецепт", "as_food_full")],
-        [("❤️ Сохранить рецепт", "as_recipe_save")],
+        [("❤️ В любимые", "as_recipe_save"), ("⭐ В закладки", "as_fav")],
         [("✨ Ещё рецепт", "as_food")],
-        [("⭐ В закладки", "as_fav")],
         [("⬅️ Назад", "m_close")],
+    ])
+
+def _recipe_typed_kb():
+    """Клавиатура после генерации из «Новый рецепт» — с выбором типа приёма пищи."""
+    return _kb([
+        [("❤️ В любимые", "as_recipe_save"), ("⭐ В закладки", "as_fav")],
+        [("🍳 Завтрак", "a_food_breakfast"), ("🥗 Обед", "a_food_lunch"), ("🍽️ Ужин", "a_food_dinner")],
+        [("⬅️ Назад", "m_food")],
+    ])
+
+def _fridge_recipe_kb():
+    """Клавиатура после рецепта из холодильника."""
+    return _kb([
+        [("❤️ В любимые", "as_recipe_save"), ("⭐ В закладки", "as_fav")],
+        [("🔄 Другой рецепт", "as_fridge_cook")],
+        [("⬅️ Назад", "m_food")],
     ])
 
 def _back_kb():
@@ -119,15 +150,15 @@ def _gen_recipe(constraint, cid=None):
     pref = _my_recipe_pref(cid)
     return ai.llm_json(
         f"{pref}Предложи 1 рецепт ({constraint}), 1 человек, электрическая плита, духовка SAGE. Компактно.\n"
-        "Оформление полей в Telegram HTML: подзаголовки тегом <b>...</b>, пункты с маркера «• ». "
-        "НИКАКОГО markdown - запрещены *, **, #, `. Заголовки <b>Ингредиенты</b> и <b>Приготовление</b>, пункты с новой строки «• ».\n"
-        'JSON: {"name":"название","time":"X мин","servings":"N порц.",'
-        '"short":"3-4 коротких предложения как готовить","full":"полный рецепт в Telegram HTML: блок <b>Ингредиенты</b> со списком пунктов «• », затем <b>Приготовление</b> с пунктами «• »"}', 900, tier="cheap")
+        "Поля full — Telegram HTML: <b>теги</b> для заголовков, пункты «• ». Без markdown.\n"
+        'JSON: {"name":"название","time":"X мин","servings":"1 порц.",'
+        '"ingredients":"короткий список ингредиентов через запятую",'
+        '"short":"2-3 предложения как готовить",'
+        '"full":"полный рецепт: <b>Ингредиенты</b> со списком «• », затем <b>Приготовление</b> с пунктами «• »"}',
+        900, tier="cheap")
 
 def _recipe_card(d):
-    return (f"🥘 <b>{util.esc(d.get('name',''))}</b>\n\n"
-            f"⏱️ {util.esc(d.get('time',''))} • 🍽️ {util.esc(d.get('servings',''))}\n\n"
-            f"{d.get('short','')}")
+    return _food_card(d, label="Рецепт дня")
 
 async def send_recipe(bot, cid, constraint="обычное блюдо"):
     await bot.send_message(chat_id=cid, text="Подбираю...")
@@ -142,22 +173,28 @@ async def send_recipe(bot, cid, constraint="обычное блюдо"):
     store.last_answer[str(cid)] = card
     await util.send_html(bot, cid, card, reply_markup=_recipe_kb())
 
-async def send_recipe_full(bot, cid):
-    d = store.last_recipe.get(str(cid))
-    if not d:
-        await bot.send_message(chat_id=cid, text="Сначала выбери рецепт."); return
-    txt = f"📖 <b>{util.esc(d.get('name',''))}</b>\n\n{d.get('full','')}"
-    store.last_answer[str(cid)] = txt
-    await util.send_html(bot, cid, txt, reply_markup=_recipe_kb())
+async def send_recipe_featured(bot, cid):
+    """Новый рецепт из меню — под результатом кнопки завтрак/обед/ужин."""
+    await bot.send_message(chat_id=cid, text="Подбираю рецепт...")
+    try:
+        d = await asyncio.to_thread(_gen_recipe, "любое блюдо под вкус пользователя", cid=cid)
+    except Exception as e:
+        await verify.safe_error(bot, cid, e); return
+    store.last_recipe[str(cid)] = d
+    store.last_action[str(cid)] = ("recipe", "featured")
+    card = _recipe_card(d)
+    store.last_source[str(cid)] = "Питание · Рецепт"
+    store.last_answer[str(cid)] = card
+    await util.send_html(bot, cid, card, reply_markup=_recipe_typed_kb())
 
 def _gen_leftovers_recipe(ingredients):
     return ai.llm_json(
         f"Есть продукты: {secure.wrap_untrusted(ingredients, 'продукты')}. "
         "Предложи 1 простой рецепт только из них (+ базовые специи, максимум 1 доп продукт). 1 человек.\n"
-        "Telegram HTML в полях: <b>теги</b> для заголовков, пункты с «• ». Без markdown.\n"
         'JSON: {"name":"название","time":"X мин","servings":"1 порц.",'
-        '"short":"3-4 коротких предложения как готовить","full":"полный рецепт: <b>Ингредиенты</b> со списком «• », '
-        'затем <b>Приготовление</b> с пунктами «• »"}', 900, tier="cheap")
+        '"ingredients":"список использованных продуктов через запятую",'
+        '"short":"2-3 предложения как готовить"}',
+        500, tier="cheap")
 
 async def send_leftovers(bot, cid, ingredients):
     await bot.send_message(chat_id=cid, text="Смотрю, что можно приготовить...")
@@ -167,10 +204,10 @@ async def send_leftovers(bot, cid, ingredients):
         await verify.safe_error(bot, cid, e); return
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("leftovers", ingredients)
-    card = _recipe_card(d)
+    card = _food_card(d, label="Рецепт из холодильника")
     store.last_source[str(cid)] = "Питание · Остатки"
     store.last_answer[str(cid)] = card
-    await util.send_html(bot, cid, card, reply_markup=_recipe_kb())
+    await util.send_html(bot, cid, card, reply_markup=_fridge_recipe_kb())
 
 
 FRIDGE_DESC = (
@@ -527,8 +564,7 @@ async def handle_callback(bot, cid, q, data):
     # Кулинарный радар
     if data == "as_food":
         await send_recipe(bot, cid, "обычное блюдо"); return
-    if data == "as_food_full":
-        await send_recipe_full(bot, cid); return
+
 # дневник тревоги
     if data == "as_daycheck":
         await send_daycheck(bot, cid); return

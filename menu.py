@@ -106,7 +106,7 @@ async def send_food_menu(bot, cid):
         "Выбери 👇"
     )
     kb = _ikb([
-        [("🍽️ Сгенерировать рецепт", "m_food_gen")],
+        [("✨ Новый рецепт", "m_food_gen")],
         [("🧊 Из холодильника", "as_fridge_cook")],
         [("⬅️ Назад", "m_balance")],
     ])
