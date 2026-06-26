@@ -19,10 +19,6 @@ HOME_TEXT = (
     "<b>Выбери</b> 👇"
 )
 
-SCENARIOS = {
-    "work": ("👔 Официальная", "официальный выход, деловая встреча"),
-    "party": ("🪩 Вечеринка", "вечеринка, выход вечером"),
-}
 
 
 def _kb(rows):
@@ -46,8 +42,6 @@ def closet_kb():
 def _look_result_kb():
     return _kb([
         [("😍 Надел", "w_fb_worn"), ("🫪 Не мой стиль", "w_fb_nostyle")],
-        [("👔 Официальная", "w_scen_work")],
-        [("🪩 Вечеринка", "w_scen_party")],
         [("⬅️ Назад", "w_home")],
     ])
 
@@ -60,7 +54,7 @@ async def send_home(bot, cid):
 
 
 # ---------- генерация лука по погоде ----------
-async def send_looks(bot, cid, scenario=None):
+async def send_looks(bot, cid):
     w = store.load_wardrobe()
     s = store.get_settings(cid)
     try:
@@ -69,16 +63,13 @@ async def send_looks(bot, cid, scenario=None):
         wblock = "нет данных"
     recent = store.recent_looks.get(str(cid), [])
     avoid = ("\nНе повторяй образы за последние 3 дня: " + "; ".join(recent)) if recent else ""
-    scen_line = ""
-    if scenario and scenario in SCENARIOS:
-        scen_line = f"\nСценарий: {SCENARIOS[scenario][1]}. Подбери образ под этот случай."
     hints = memory.wardrobe_hints(cid)
     fb_line = ("\nУчитывай прошлый фидбек (НЕ показывай его дословно, просто учти): "
                + secure.wrap_untrusted(hints, "фидбек гардероба")) if hints else ""
     await bot.send_message(chat_id=cid, text="Собираю образ под погоду...")
     prompt = f"""Ты опытный стилист. Собери ОДИН образ из гардероба на сегодня.
 {config.STYLE_PROFILE}
-Погода сегодня: {wblock}{scen_line}{fb_line}
+Погода сегодня: {wblock}{fb_line}
 Гардероб (только эти вещи, ПОЛНЫЕ точные названия с брендом и цветом):
 {store.wardrobe_to_text(w)}
 Правила: 1 верх + 1 низ + обувь (+ опц. аксессуар-совет). Минимализм, сочетание по цвету.
@@ -204,41 +195,39 @@ async def del_item(bot, cid, i):
 async def send_improve(bot, cid):
     w = store.load_wardrobe()
     await bot.send_message(chat_id=cid, text="Разбираю шкаф...")
-    prompt = f"""Ты стилист с прямым, живым тоном - как умный друг, который шарит в одежде. {config.STYLE_PROFILE}
-Разбери ТВОЙ гардероб пользователя (обращайся на "ты", НЕ используй имя):
+    prompt = f"""Ты стилист с прямым, живым тоном — как умный друг, который шарит в одежде. {config.STYLE_PROFILE}
+Разбери гардероб (обращайся на "ты", НЕ используй имя):
 {store.wardrobe_to_text(w)}
-Пиши конкретно и с огоньком, для СДВГ - без воды, но интересно: каждый пункт «убрать/заменить» объясняй ОДНОЙ короткой причиной (почему/какой эффект), не просто перечисляй. Верни JSON (без markdown):
-{{"style":"1 строка: какой стиль и его настроение/вайб",
-"verdict":"1 строка: честный живой вердикт по базе и силуэтам",
-"keep":["что в гардеробе уже отлично работает и почему, 1-2 пункта"],
-"remove":["вещь - короткая причина, почему ломает стиль, 1-3 пункта"],
-"replace":["на что заменить - какой эффект это даст, 1-3 пункта"],
-"texture":"1 строка: какие фактуры/ткани добавят интереса без ярких принтов",
-"accessory":"1 строка: какие строгие аксессуары и многослойность добавить",
-"combo":"1 строка: готовый образ из ЭТИХ вещей - верх + низ + обувь + акцент"}}"""
+Стиль: современный минимализм, сканди-японо casual. Без воды — каждый пункт с одной короткой причиной.
+Верни строго валидный JSON (без markdown):
+{{"style":"1 строка: стиль и его вайб",
+"verdict":"1-2 предложения: честный разбор базы и силуэтов",
+"works":["вещь — почему работает"],
+"weak":["вещь — почему ломает стиль"],
+"replace":["что заменить → на что и какой эффект"],
+"accessories":"Casio, кольца, цепь... — аксессуары одной строкой с характером",
+"outfit":"Готовый образ из рекомендаций: верх + низ + обувь + акцент"}}"""
     try:
-        d = ai.llm_json(prompt, 900)
+        d = ai.llm_json(prompt, 1000)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     def _bullets(items):
-        return [f"• {esc(str(x))}" for x in items if str(x).strip()]
-    L = ["💡 <b>Разбор гардероба</b>", ""]
+        return [f"• {esc(str(x))}" for x in (items or []) if str(x).strip()]
+    L = ["🧥 <b>Улучшить гардероб</b>"]
     if d.get("style"):
-        L.append(f"🎯 <b>Стиль:</b> {esc(d['style'])}")
+        L += ["", f"<b>Стиль:</b> {esc(d['style'])}"]
     if d.get("verdict"):
-        L.append(f"📋 <b>Вердикт:</b> {esc(d['verdict'])}")
-    if d.get("keep"):
-        L += ["", "🟢 <b>Уже работает:</b>"] + _bullets(d["keep"])
-    if d.get("remove"):
-        L += ["", "❌ <b>Убрать:</b>"] + _bullets(d["remove"])
+        L += [f"<b>Вердикт:</b> {esc(d['verdict'])}"]
+    if d.get("works"):
+        L += ["", "🟢 <b>Работает</b>"] + _bullets(d["works"])
+    if d.get("weak"):
+        L += ["", "❌ <b>Слабые элементы</b>"] + _bullets(d["weak"])
     if d.get("replace"):
-        L += ["", "✅ <b>Заменить на:</b>"] + _bullets(d["replace"])
-    if d.get("texture"):
-        L += ["", f"🧵 <b>Фактура без принтов:</b> {esc(d['texture'])}"]
-    if d.get("accessory"):
-        L += ["", f"⌚ <b>Аксессуары:</b> {esc(d['accessory'])}"]
-    if d.get("combo"):
-        L += ["", f"✨ <b>Собери прямо сейчас:</b> {esc(d['combo'])}"]
+        L += ["", "🛒 <b>Замены</b>"] + _bullets(d["replace"])
+    if d.get("accessories"):
+        L += ["", f"⌚ <b>Аксессуары</b>\n{esc(d['accessories'])}"]
+    if d.get("outfit"):
+        L += ["", f"✨ <b>Готовый образ</b>\n{esc(d['outfit'])}"]
     store.last_source[str(cid)] = "Гардероб · Улучшение"
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
@@ -253,14 +242,19 @@ async def check_purchase(bot, cid, text):
 Оцени по ЕГО гардеробу (обращайся на "ты", НЕ используй имя):
 {store.wardrobe_to_text(w)}
 Верни JSON (без markdown):
-{{"verdict":"БРАТЬ или НЕ БРАТЬ","why":["2-3 причины, на ты, без имени"],"outro":"1 строка итог, на ты, без имени"}}"""
+{{"verdict":"БРАТЬ или НЕ БРАТЬ","why":["2-3 причины, на ты, без имени"],"outro":"1 строка — дерзкий или остроумный итог, с характером, на ты, без имени"}}"""
     try:
         d = ai.llm_json(prompt, 500, tier="cheap")
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     verdict = d.get("verdict", "")
     emoji = "✅" if "НЕ" not in verdict.upper() else "⚠️"
-    L = ["🛒 <b>Модный приговор</b>", "", f"{emoji} <b>Вердикт: {esc(verdict)}</b>"]
+    L = [
+        f"🔎 <b>Проверка покупки</b>",
+        f"<i>{esc(text)}</i>",
+        "",
+        f"{emoji} <b>Вердикт: {esc(verdict)}</b>",
+    ]
     if d.get("why"):
         L += ["", "<b>Почему:</b>"] + [f"• {esc(str(x))}" for x in d["why"]]
     if d.get("outro"):
@@ -289,8 +283,6 @@ async def handle_callback(bot, cid, q, data):
         await send_looks(bot, cid); return
     if data.startswith("w_fb_"):
         await look_feedback(bot, cid, data[len("w_fb_"):]); return
-    if data.startswith("w_scen_"):
-        await send_looks(bot, cid, data[len("w_scen_"):]); return
     if data == "w_closet":
         try:
             await q.message.edit_text("🗄 <b>Мой шкаф</b> - база вещей.", parse_mode="HTML", reply_markup=closet_kb())
