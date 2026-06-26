@@ -17,6 +17,41 @@ import memory
 
 TZ = config.TZ
 
+_food_tip_cache: dict = {}  # cid -> {"date": ..., "text": ...}
+
+def _food_tip_context(cid) -> str:
+    lagom = store.get_list(config.LAGOM_KEY, cid)
+    recipes = store.get_list(config.MY_RECIPES_KEY, cid)
+    parts = []
+    if lagom:
+        parts.append("Ценности и стиль жизни: " + "; ".join(str(x) for x in lagom[:8]))
+    if recipes:
+        parts.append("Любимые рецепты уже есть: " + ", ".join(str(r) for r in recipes[:6]))
+    return "\n".join(parts)
+
+def fetch_food_tip(cid) -> str:
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    cache = _food_tip_cache.get(str(cid))
+    if cache and cache.get("date") == today:
+        return cache["text"]
+    ctx = _food_tip_context(cid)
+    prompt = (
+        "Ты кулинарный советник. Предложи один интересный рецепт, который понравится этому человеку.\n"
+        + (ctx + "\n" if ctx else "")
+        + "Учти стиль жизни — не повторяй уже знакомые блюда из списка любимых.\n"
+        "Верни JSON (без markdown): "
+        '{\"name\":\"Название блюда\",\"why\":\"2-3 строки: что это и почему понравится\"}'
+    )
+    try:
+        d = ai.llm_json(prompt, 300, tier="cheap")
+        name = str(d.get("name", "")).strip()
+        why = str(d.get("why", "")).strip()
+        text = f"✨ <b>Рецепт дня</b>\n{esc(name)}\n\n{esc(why)}" if name else ""
+    except Exception:
+        text = ""
+    _food_tip_cache[str(cid)] = {"date": today, "text": text}
+    return text
+
 DOCTOR_INTRO = (
     "👩🏻‍⚕️ Врач\n\n"
     "Дам общую справочную информацию о здоровье и лекарствах. Это не диагноз и не назначение - "
@@ -258,25 +293,50 @@ async def my_recipe_del(bot, cid, idx):
 
 
 # ---------- СДВГ / Следующий шаг ----------
+def _pick_lagom(cid) -> str:
+    """Берёт один неиспользованный Лагом-принцип, при исчерпании — сбрасывает счётчик."""
+    import myday
+    items = list(myday.ensure_lagom(cid))
+    if not items:
+        return ""
+    seen = store.get_list(config.MOTIV_LAGOM_SEEN_KEY, cid)
+    unused = [i for i in range(len(items)) if i not in seen]
+    if not unused:
+        seen = []
+        unused = list(range(len(items)))
+        store.set_list(config.MOTIV_LAGOM_SEEN_KEY, cid, [])
+    import random
+    idx = random.choice(unused)
+    seen.append(idx)
+    store.set_list(config.MOTIV_LAGOM_SEEN_KEY, cid, seen)
+    return items[idx]
+
 def _gen_motiv(cid):
-    return ai.llm(
-        "Человеку с СДВГ трудно начать. НЕ давай мотивацию и НЕ хвали - дай конкретный "
-        "ФИЗИЧЕСКИЙ следующий шаг, который запускает тело, а не настроение "
-        "(открой нужный файл, налей воды, поставь таймер на 7 минут, надень кроссовки, "
-        "напиши первое плохое предложение, вынеси одну вещь со стола). "
-        "Тёплый живой тон, как друг рядом. Без воды, канцелярита и клише («верь в себя», «ты сможешь»). "
-        "ВАЖНО: пиши СТРОГО на русском - ни одного иностранного слова. "
-        "Каждый раз бери РАЗНЫЕ шаги (не повторяйся). "
-        "СТРОГО формат, без markdown, жирные заголовки:\n\n"
-        "🎯 Следующий шаг\n\n"
-        "{1 короткая фраза-разрешение начать с малого, не банальная}\n\n"
-        "Прямо сейчас:\n"
-        "• {ОДНО предельно мелкое физическое действие на 1 минуту, максимально конкретно}\n\n"
-        "Потом:\n"
-        "• {следующее такое же мелкое физическое действие, как продолжение}\n\n"
-        "Если застрял:\n"
-        "• {как снизить порог ещё сильнее - сделать шаг вдвое меньше}",
-        500, 0.9, ai.LEARN_ORDER)
+    lagom = _pick_lagom(cid)
+    lagom_line = f"Принцип пользователя: «{lagom}»\n" if lagom else ""
+    prompt = (
+        f"{lagom_line}"
+        "Сгенерируй короткую мотивацию для человека с СДВГ. "
+        "Цель — снять сопротивление старта, не мотивировать философски. "
+        "Без клише, строго на русском. "
+        "Верни JSON (без markdown):\n"
+        '{"anchor":"1 строка-якорь из духа принципа, конкретно и живо",'
+        '"action":"1 физическое действие на 2-5 мин, максимально конкретное",'
+        '"why":"1 строка: почему именно этот шаг снимает сопротивление"}'
+    )
+    try:
+        d = ai.llm_json(prompt, 300, tier="cheap")
+        anchor = esc(str(d.get("anchor", "")).strip())
+        action = esc(str(d.get("action", "")).strip())
+        why = esc(str(d.get("why", "")).strip())
+    except Exception:
+        return "🎯 Одно действие прямо сейчас — открой то, с чего хотел начать."
+    lines = ["🎯 <b>Личная мотивация</b>", "",
+             "Сейчас не вся жизнь. Сейчас один шаг.", f"<i>{anchor}</i>", "",
+             "⚡ <b>Одно действие (2–5 минут)</b>", f"👉 {action}", "",
+             "🚀 <b>Старт</b>", "→ не думать, просто начать", "",
+             "🧠 <b>Почему</b>", why]
+    return "\n".join(lines)
 
 
 # ---------- роли ----------
@@ -375,7 +435,7 @@ async def send_daycheck(bot, cid):
     store.challenge_state.pop(cid, None)   # фикс: ответ не уйдёт в Обратный перевод
     store.game_state.pop(cid, None)
     worries = store.get_list(config.WORRIES_KEY, cid)
-    lines = ["😌 <b>Дневник тревоги</b>", "",
+    lines = ["📓 <b>Дневник тревоги</b>", "",
              "Сюда выгружай всё, что крутится в голове. Не анализируй - просто запиши.",
              "Каждую тревогу с новой строки. Вечером проверим, что было фактами, а что шумом.", ""]
     if worries:
@@ -457,9 +517,9 @@ async def save_worries(bot, cid, text):
     await bot.send_message(chat_id=cid, text=f"📝 Записал в дневник тревоги: +{len(new)}. Вечером проверим, что реально случилось.")
 
 
-_ONESHOT = {
-    "as_motiv": (_gen_motiv, "🔄 Ещё", "as_motiv"),
-}
+_MOTIV_KB = _kb([[("🔄 Ещё", "as_motiv")], [("⬅️ Назад", "m_balance")]])
+
+_ONESHOT = {}
 
 
 # ---------- роутер кнопок Баланса ----------
@@ -474,7 +534,18 @@ async def handle_callback(bot, cid, q, data):
         await send_daycheck(bot, cid); return
     if data == "as_worryreview":
         await send_evening_review(bot, cid); return
-    # мотивация (одноразовая генерация)
+    # мотивация
+    if data == "as_motiv":
+        await bot.send_message(chat_id=cid, text="Секунду...")
+        try:
+            out = _gen_motiv(cid)
+        except Exception as e:
+            await verify.safe_error(bot, cid, e); return
+        store.last_source[str(cid)] = "Баланс · Мотивация"
+        store.last_answer[str(cid)] = out
+        await _send(bot, cid, out, kb=_MOTIV_KB, surface="card")
+        return
+    # одноразовая генерация (прочее)
     if data in _ONESHOT:
         gen, lbl, cb = _ONESHOT[data]
         await bot.send_message(chat_id=cid, text="Секунду...")

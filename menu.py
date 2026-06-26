@@ -52,20 +52,17 @@ def menu_screen(key):
                 [("👨‍🍳 Кулинарный радар", "m_food")],
                 [("👩🏻‍⚕️ Вопрос врачу", "as_doctor")],
                 [("🎯 Личная мотивация", "as_motiv")],
-                [("😌 Дневник тревоги", "as_daycheck")],
+                [("📓 Дневник тревоги", "as_daycheck")],
             ])
         )
-    if key == "m_food":
+    if key == "m_food_gen":
         return (
-            "👨‍🍳 <b>Кулинарный радар</b>\n\n"
-            "Подберу рецепт под приём пищи или помогу с остатками."
-            + _MENU_FOOTER,
+            "👨‍🍳 <b>Сгенерировать рецепт</b>\n\nВыбери приём пищи 👇",
             _ikb([
                 [("🍳 Завтрак", "a_food_breakfast")],
                 [("🥗 Обед", "a_food_lunch")],
                 [("🍽️ Ужин", "a_food_dinner")],
-                [("🧊 Из холодильника", "as_fridge_cook")],
-                [("⬅️ Назад", "m_balance")],
+                [("⬅️ Назад", "m_food")],
             ])
         )
     if key in ("m_learn", "m_nl", "m_en"):
@@ -93,3 +90,25 @@ def menu_screen(key):
             ])
         )
     return ("Меню снизу 👇", None)
+
+
+async def send_food_menu(bot, cid):
+    import asyncio
+    import balance
+    tip = await asyncio.to_thread(balance.fetch_food_tip, cid)
+    header = "👨‍🍳 <b>Кулинарный радар</b>"
+    body = f"\n\n{tip}" if tip else ""
+    footer = (
+        "\n\n\n<b>Команды:</b>\n"
+        "/setup — настройки\n"
+        "/notes — сохранённые закладки\n\n"
+        "Сохраняй полезное через ⭐ В закладки или ❤️ В любимые.\n\n"
+        "Выбери 👇"
+    )
+    kb = _ikb([
+        [("🍽️ Сгенерировать рецепт", "m_food_gen")],
+        [("🧊 Из холодильника", "as_fridge_cook")],
+        [("⬅️ Назад", "m_balance")],
+    ])
+    await bot.send_message(chat_id=cid, text=header + body + footer,
+                           parse_mode="HTML", reply_markup=kb)

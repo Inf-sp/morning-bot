@@ -56,6 +56,8 @@ LIFEHACK_KEY = "lifehacks_seen.json"
 FRIDGE_KEY = "fridge.json"
 MY_RECIPES_KEY = "my_recipes.json"
 QUOTE_AUTHORS_KEY = "quote_authors_seen.json"
+FOOD_TIP_KEY = "food_tip_cache.json"
+MOTIV_LAGOM_SEEN_KEY = "motiv_lagom_seen.json"
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}
 
