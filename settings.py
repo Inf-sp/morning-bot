@@ -31,14 +31,14 @@ def study_lang(cid):
 
 def home_kb(cid):
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🌍 Сменить город", callback_data="set_city")],
+        [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
+        [InlineKeyboardButton("🎚 Уровень языков", callback_data="set_levels")],
         [InlineKeyboardButton("🗄 Шкаф", callback_data="set_wardrobe")],
-        [InlineKeyboardButton("🍃 Лагом", callback_data="set_lagom")],
+        [InlineKeyboardButton("☕️ Лагом", callback_data="set_lagom")],
         [InlineKeyboardButton("❤️ Любимые", callback_data="set_love")],
         [InlineKeyboardButton("🗂️ Словарь", callback_data="set_dict")],
         [InlineKeyboardButton("🧊 Холодильник", callback_data="set_fridge")],
-        [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
-        [InlineKeyboardButton("🎚 Уровень языков", callback_data="set_levels")],
-        [InlineKeyboardButton("🌍 Сменить город", callback_data="set_city")],
     ])
 
 async def send_home(bot, cid):
@@ -159,7 +159,7 @@ def _preload_books(cid):
 
 # --- Лагом ---
 _LAGOM_INTRO = (
-    "🍃 <b>Лагом — твои установки и ценности</b>\n\n"
+    "☕️ <b>Лагом — твои установки и ценности</b>\n\n"
     "Лагом (швед. <i>lagom</i> — «в самый раз») — твой личный свод принципов: "
     "что важно, как хочешь жить, что даёт энергию, а что забирает.\n\n"
     "Бот использует их в 🎯 Личная мотивация — "
@@ -169,8 +169,8 @@ _LAGOM_INTRO = (
 )
 
 async def send_lagom(bot, cid):
-    import myday
-    items = list(myday.ensure_lagom(cid))
+    import memory
+    items = memory.get_lagom(cid)
     await _send_list(bot, cid, _LAGOM_INTRO.rstrip(), items,
                      "setdel_lagom_", "setadd_lagom")
 
@@ -241,16 +241,12 @@ async def handle_callback(bot, cid, data):
     elif data == "setadd_lagom":
         store.pending_input[cid] = "setadd_lagom"
         await bot.send_message(chat_id=cid,
-            text="🍃 Напиши установку или принцип — добавлю в Лагом.\n\n"
+            text="☕️ Напиши установку или принцип — добавлю в Лагом.\n\n"
                  "<i>Например: «Меньше экрана, больше природы»</i>",
             parse_mode="HTML")
     elif data.startswith("setdel_lagom_"):
-        import myday
-        i = int(data.split("_")[-1])
-        items = list(myday.ensure_lagom(cid))
-        if i < len(items):
-            items.pop(i)
-            store.set_list(config.LAGOM_KEY, cid, items)
+        import memory
+        memory.del_lagom(cid, int(data.split("_")[-1]))
         await send_lagom(bot, cid)
     elif data == "set_countries":
         await send_countries(bot, cid)

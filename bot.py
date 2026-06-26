@@ -42,8 +42,8 @@ async def start(update, context):
         "/start - главное меню\n"
         "/setup - настройки (язык, город, уведомления)\n\n"
         "<b>Как сохранять:</b>\n"
-        "Жми «⭐ В закладки» под ответами, чтобы не потерять их. "
-        "Топовые треки и фильмы кидай в «❤️ В любимые». "
+        "Жми «⭐ <b>В закладки</b>» под ответами, чтобы не потерять их. "
+        "Топовые треки и фильмы кидай в «❤️ <b>В любимые</b>». "
         "Всё сохраненное лежит тут: /notes."
     )
     await update.message.reply_text(txt, parse_mode="HTML", reply_markup=menu.MAIN_KB)
@@ -401,10 +401,8 @@ async def text_router(update, context):
         if kind == "setadd_book":
             await settings.list_add_done(bot, cid, "book", text); return
         if kind == "setadd_lagom":
-            import myday
-            items = list(myday.ensure_lagom(cid))
-            items.append(text.strip())
-            store.set_list(config.LAGOM_KEY, cid, items)
+            import memory
+            memory.add_lagom(cid, text)
             await settings.send_lagom(bot, cid); return
         if kind == "train_translate":
             await learning.train_translate_answer(bot, cid, text); return

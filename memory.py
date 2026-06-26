@@ -1,11 +1,15 @@
-"""Память пользователя («бот учится на тебе»): фокус дня, фидбек гардероба, наблюдения.
+"""Память пользователя («бот учится на тебе»): фокус дня, фидбек гардероба, наблюдения, Лагом.
 
 Тонкий доменный слой поверх профиля в store (config.PROFILE_KEY). Без LLM и сети.
-Профиль - dict на пользователя: {"focus": {...}, "wardrobe_fb": [...], "observations": [...]}.
+Профиль - dict на пользователя: {"focus": {...}, "wardrobe_fb": [...], "observations": [...], "lagom": [...]}.
 """
 from datetime import date, datetime
+import json
+from pathlib import Path
 import config
 import store
+
+_HERE = Path(__file__).parent
 
 _OBS_CAP = 30
 _FB_CAP = 20
@@ -105,3 +109,43 @@ def wardrobe_hints(cid, recent=10):
     if counts.get("worn"):
         parts.append(f"носит охотно похожие образы (×{counts['worn']})")
     return "; ".join(parts)
+
+
+# ---------- Лагом (ценности/установки пользователя) ----------
+def get_lagom(cid) -> list:
+    """Список Лагом-принципов пользователя; при первом обращении мигрирует из LAGOM_KEY."""
+    prof = store.get_profile(cid)
+    if "lagom" not in prof:
+        # миграция из старого отдельного ключа
+        old = store.get_list(config.LAGOM_KEY, cid)
+        if not old:
+            try:
+                with open(_HERE / "lagom.json", encoding="utf-8") as f:
+                    old = json.load(f)
+            except Exception:
+                old = []
+        prof["lagom"] = list(old)
+        store.set_profile(cid, prof)
+    return prof.get("lagom", [])
+
+
+def set_lagom(cid, items: list):
+    prof = store.get_profile(cid)
+    prof["lagom"] = list(items)
+    store.set_profile(cid, prof)
+
+
+def add_lagom(cid, item: str):
+    item = (item or "").strip()
+    if not item:
+        return
+    items = get_lagom(cid)
+    items.append(item)
+    set_lagom(cid, items)
+
+
+def del_lagom(cid, i: int):
+    items = get_lagom(cid)
+    if 0 <= i < len(items):
+        items.pop(i)
+        set_lagom(cid, items)

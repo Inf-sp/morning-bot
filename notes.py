@@ -282,36 +282,24 @@ def _love_items(cid, key):
             except Exception:
                 cur = []
         return list(cur)
-    if key == "lagom":
-        import myday
-        return list(myday.ensure_lagom(cid))
     return []
 
 def _love_title(key):
     return {"countries": "🧳 Мои страны", "artists": "🎸 Мои артисты",
-            "books": "📖 Мои книги", "wardrobe": "👕 Моя одежда",
-            "lagom": "🍃 Лагом"}.get(key, "Любимые")
+            "books": "📖 Мои книги"}.get(key, "Любимые")
 
 async def send_love_section(bot, cid, key):
-    if key == "wardrobe":
-        import wardrobe
-        await wardrobe.send_show(bot, cid)
-        return
     if key == "recipes":
         import balance
         await balance.send_my_recipes(bot, cid)
         return
     items = _love_items(cid, key)
     title = _love_title(key)
-    lines = [f"<b>{title}</b>", ""]
-    if key == "lagom":
-        lines.append("\n".join(f"• {it}" for it in items) if items else "пусто")
-    else:
-        lines.append(", ".join(items) if items else "пусто")
+    lines = [f"<b>{title}</b>", "", (", ".join(items) if items else "пусто")]
     rows = [[InlineKeyboardButton(f"❌ {str(it)[:28]}", callback_data=f"as_lovedel_{key}_{i}")]
             for i, it in enumerate(items[:40])]
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data=f"as_loveadd_{key}")])
-    if key in ("countries", "artists", "books") and items:
+    if items:
         rows.append([InlineKeyboardButton("🧹 Убрать несколько", callback_data=f"as_loveclean_{key}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_love")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
@@ -319,7 +307,7 @@ async def send_love_section(bot, cid, key):
 
 def _love_key_of(key):
     return {"countries": config.COUNTRIES_KEY, "artists": config.ARTISTS_KEY,
-            "books": config.BOOKS_KEY, "lagom": config.LAGOM_KEY}.get(key)
+            "books": config.BOOKS_KEY}.get(key)
 
 async def love_delete(bot, cid, key, i):
     store_key = _love_key_of(key)
@@ -333,8 +321,7 @@ async def love_delete(bot, cid, key, i):
 
 async def love_add_start(bot, cid, key):
     store.pending_input[str(cid)] = f"loveadd_{key}"
-    name = {"countries": "страну", "artists": "артиста", "books": "книгу",
-            "lagom": "фразу-практику Лагом"}.get(key, "элемент")
+    name = {"countries": "страну", "artists": "артиста", "books": "книгу"}.get(key, "элемент")
     await bot.send_message(chat_id=cid, text=f"Напиши {name} - добавлю в любимые.")
 
 async def love_add_done(bot, cid, key, text):

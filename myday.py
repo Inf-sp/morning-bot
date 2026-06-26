@@ -22,20 +22,8 @@ import verify
 TZ = config.TZ
 
 def ensure_lagom(cid):
-    """Список Лагом-фраз пользователя; авто-загрузка из lagom.json если пусто."""
-    items = store.get_list(config.LAGOM_KEY, cid)
-    if items:
-        return items
-    try:
-        import json
-        with open(_HERE / "lagom.json", encoding="utf-8") as f:
-            seed = json.load(f)
-        if seed:
-            store.set_list(config.LAGOM_KEY, cid, seed)
-            return seed
-    except Exception:
-        pass
-    return items
+    """Список Лагом-принципов пользователя — делегирует в memory.get_lagom."""
+    return memory.get_lagom(cid)
 
 def _strip_quotes(s):
     """Убирает внешние кавычки (« » \" \" \" ') с краёв, чтобы не задваивать обёртку."""

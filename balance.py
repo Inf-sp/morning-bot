@@ -20,7 +20,8 @@ TZ = config.TZ
 _food_tip_cache: dict = {}  # cid -> {"date": ..., "text": ...}
 
 def _food_tip_context(cid) -> str:
-    lagom = store.get_list(config.LAGOM_KEY, cid)
+    import memory
+    lagom = memory.get_lagom(cid)
     recipes = store.get_list(config.MY_RECIPES_KEY, cid)
     parts = []
     if lagom:
@@ -332,8 +333,8 @@ async def my_recipe_del(bot, cid, idx):
 # ---------- СДВГ / Следующий шаг ----------
 def _pick_lagom(cid) -> str:
     """Берёт один неиспользованный Лагом-принцип, при исчерпании — сбрасывает счётчик."""
-    import myday
-    items = list(myday.ensure_lagom(cid))
+    import memory
+    items = memory.get_lagom(cid)
     if not items:
         return ""
     seen = store.get_list(config.MOTIV_LAGOM_SEEN_KEY, cid)

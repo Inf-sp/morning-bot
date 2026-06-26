@@ -87,8 +87,8 @@ def _friendly(errs):
     joined = "; ".join(errs)
     _log.warning("LLM chain failed: %s", secure.redact(joined))
     if "429" in joined or "Too Many Requests" in joined or "rate" in joined.lower():
-        return "⏳ Сейчас слишком много запросов к ИИ - бесплатные лимиты исчерпаны. Подожди минуту и попробуй снова."
-    return "⚠️ ИИ временно недоступен. Попробуй ещё раз через пару минут."
+        return "⏳ ИИ временно перегружен — подожди минуту и попробуй снова."
+    return "⚠️ ИИ временно недоступен — попробуй снова через пару минут."
 
 DEFAULT_ORDER = ("claude", "openai", "gemini", "openrouter", "groq", "cf")
 # Для обучения языку Claude идёт первым - качество объяснений важнее цены
