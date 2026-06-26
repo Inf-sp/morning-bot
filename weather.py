@@ -98,7 +98,7 @@ def weather_icon(code, temp, rain, wind_ms=0, rain_mm=None):
         return "🌧️"
     if wind_ms >= 8:
         return "💨"
-    if temp is not None and temp >= 35:
+    if temp is not None and temp >= 30:
         return "🥵"
     if code in (0, 1) or (temp is not None and temp >= 28):
         return "☀️"

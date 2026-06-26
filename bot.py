@@ -334,7 +334,7 @@ async def text_router(update, context):
         _log.warning("[secure] injection flags: %s", flags)
 
     # Нажата любая кнопка нижнего меню -> сбрасываем незавершённый ввод (чтобы чат не «съел» сообщение настроек)
-    if text in ("☀️ Мой день", "👕 Гардероб") or text in menu.LABEL_TO_KEY:
+    if text == "☀️ Мой день" or text in menu.LABEL_TO_KEY:
         store.pending_input.pop(cid, None)
 
     if text == "☀️ Мой день":
@@ -342,9 +342,6 @@ async def text_router(update, context):
             await myday.send_plany(bot, cid)
         except Exception as e:
             await verify.safe_error(bot, cid, e)
-        return
-    if text == "👕 Гардероб":
-        await wardrobe.send_home(bot, cid)
         return
     # Нажатие нижнего reply-меню -> открыть инлайн-подменю
     if text in menu.LABEL_TO_KEY:
