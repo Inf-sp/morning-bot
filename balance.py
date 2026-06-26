@@ -350,29 +350,34 @@ def _pick_lagom(cid) -> str:
 
 def _gen_motiv(cid):
     lagom = _pick_lagom(cid)
-    lagom_line = f"Принцип пользователя: «{lagom}»\n" if lagom else ""
+    lagom_ctx = f"Принцип: «{lagom}»\n" if lagom else ""
     prompt = (
-        f"{lagom_line}"
-        "Сгенерируй короткую мотивацию для человека с СДВГ. "
-        "Цель — снять сопротивление старта, не мотивировать философски. "
-        "Без клише, строго на русском. "
+        f"{lagom_ctx}"
+        "Сгенерируй мотивацию для человека с СДВГ. Снимай сопротивление старта, не философствуй. "
+        "Строго на русском, без клише. "
         "Верни JSON (без markdown):\n"
-        '{"anchor":"1 строка-якорь из духа принципа, конкретно и живо",'
-        '"action":"1 физическое действие на 2-5 мин, максимально конкретное",'
-        '"why":"1 строка: почему именно этот шаг снимает сопротивление"}'
+        '{"base":"одно слово — суть принципа (существительное)",'
+        '"steps":["конкретное физическое действие","второе действие","третье если нужно"],'
+        '"why":"1-2 предложения: зачем это работает, в чём энергия"}'
     )
     try:
-        d = ai.llm_json(prompt, 300, tier="cheap")
-        anchor = esc(str(d.get("anchor", "")).strip())
-        action = esc(str(d.get("action", "")).strip())
+        d = ai.llm_json(prompt, 350, tier="cheap")
+        base = esc(str(d.get("base", "")).strip())
+        steps = [esc(str(s).strip()) for s in (d.get("steps") or []) if str(s).strip()]
         why = esc(str(d.get("why", "")).strip())
     except Exception:
-        return "🎯 Одно действие прямо сейчас — открой то, с чего хотел начать."
-    lines = ["🎯 <b>Личная мотивация</b>", "",
-             "Сейчас не вся жизнь. Сейчас один шаг.", f"<i>{anchor}</i>", "",
-             "⚡ <b>Одно действие (2–5 минут)</b>", f"👉 {action}", "",
-             "🚀 <b>Старт</b>", "→ не думать, просто начать", "",
-             "🧠 <b>Почему</b>", why]
+        return "🎯 Одно действие прямо сейчас — встань и пройди круг по комнате."
+    lagom_full = esc(lagom) if lagom else "Один шаг."
+    lines = [
+        "🎯 <b>Личная мотивация</b>", "",
+        f"<b>База:</b> {base}",
+        f"Сейчас — не вся жизнь. Только один шаг.  <i>({lagom_full})</i>", "",
+        "<b>Действие:</b>",
+    ]
+    lines += [f"• {s}" for s in steps]
+    lines += ["• Не думай — просто начни"]
+    if why:
+        lines += ["", f"🔋 <b>Зачем:</b> {why}"]
     return "\n".join(lines)
 
 
@@ -554,7 +559,7 @@ async def save_worries(bot, cid, text):
     await bot.send_message(chat_id=cid, text=f"📝 Записал в дневник тревоги: +{len(new)}. Вечером проверим, что реально случилось.")
 
 
-_MOTIV_KB = _kb([[("🔄 Ещё", "as_motiv")], [("⬅️ Назад", "m_balance")]])
+_MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("⬅️ Назад", "m_balance")]])
 
 _ONESHOT = {}
 
