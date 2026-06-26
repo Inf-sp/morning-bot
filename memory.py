@@ -5,6 +5,7 @@
 """
 from datetime import date, datetime
 import json
+import re
 from pathlib import Path
 import config
 import store
@@ -149,3 +150,29 @@ def del_lagom(cid, i: int):
     if 0 <= i < len(items):
         items.pop(i)
         set_lagom(cid, items)
+
+
+def _split_items(text: str) -> list:
+    """Разбивает ввод на отдельные принципы: сначала по строкам, затем по предложениям."""
+    lines = [re.sub(r'^[\s*\-•·→\d]+[\.\)\:]?\s*', '', l).strip() for l in text.splitlines()]
+    lines = [l for l in lines if l]
+    if not lines:
+        return []
+    # Одна строка без переносов → разбить по предложениям
+    if len(lines) == 1:
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', lines[0]) if s.strip()]
+        return sentences if len(sentences) > 1 else lines
+    return lines
+
+
+def add_lagom_batch(cid, text: str) -> list:
+    """Парсит текст, добавляет каждый принцип отдельно. Возвращает список добавленных."""
+    parts = _split_items(text)
+    existing = set(get_lagom(cid))
+    added = []
+    for it in parts:
+        if it and it not in existing:
+            add_lagom(cid, it)
+            existing.add(it)
+            added.append(it)
+    return added

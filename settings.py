@@ -224,9 +224,13 @@ async def list_delete(bot, cid, kind, i):
         await send_books(bot, cid)
 
 async def list_add_done(bot, cid, kind, text):
+    from util import esc
     keymap = {"country": config.COUNTRIES_KEY, "artist": config.ARTISTS_KEY, "book": config.BOOKS_KEY}
-    store.add_to_list(keymap[kind], cid, text.strip())
-    await bot.send_message(chat_id=cid, text="Добавлено.")
+    icons = {"country": "🧳", "artist": "🎤", "book": "📚"}
+    item = text.strip()
+    store.add_to_list(keymap[kind], cid, item)
+    await bot.send_message(chat_id=cid,
+        text=f"✅ {icons.get(kind, '')} «{esc(item)}» добавлено.", parse_mode="HTML")
     if kind == "country":
         await send_countries(bot, cid)
     elif kind == "artist":
