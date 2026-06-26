@@ -31,9 +31,11 @@ def study_lang(cid):
 
 def home_kb(cid):
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🗄 Шкаф", callback_data="set_wardrobe")],
+        [InlineKeyboardButton("🍃 Лагом", callback_data="set_lagom")],
         [InlineKeyboardButton("❤️ Любимые", callback_data="set_love")],
         [InlineKeyboardButton("🗂️ Словарь", callback_data="set_dict")],
-        [InlineKeyboardButton("🧊 Мой холодильник", callback_data="set_fridge")],
+        [InlineKeyboardButton("🧊 Холодильник", callback_data="set_fridge")],
         [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
         [InlineKeyboardButton("🗣 Язык для грамматики", callback_data="set_lang")],
         [InlineKeyboardButton("🎚 Уровень языков", callback_data="set_levels")],
@@ -152,6 +154,29 @@ def _preload_books(cid):
         pass
     return cur
 
+# --- Лагом ---
+_LAGOM_INTRO = (
+    "🍃 <b>Лагом — твои установки и ценности</b>\n\n"
+    "Лагом (швед. <i>lagom</i> — «в самый раз») — это твой личный свод принципов: "
+    "что важно, как ты хочешь жить, что даёт энергию, а что забирает.\n\n"
+    "Бот использует эти установки в разделе 🎯 Личная мотивация — "
+    "чтобы советы и поддержка звучали именно про тебя, а не общими словами.\n\n"
+    "<b>Примеры:</b> «Меньше, но лучше», «Физическая активность каждый день», "
+    "«Не сравниваю себя с другими», «Ем осознанно».\n\n"
+)
+
+async def send_lagom(bot, cid):
+    import myday
+    items = list(myday.ensure_lagom(cid))
+    body = ("\n".join(f"• {it}" for it in items)) if items else "Пока пусто — добавь первую установку 👇"
+    txt = _LAGOM_INTRO + body
+    rows = [[InlineKeyboardButton(f"❌ {str(it)[:30]}", callback_data=f"setdel_lagom_{i}")]
+            for i, it in enumerate(items)]
+    rows.append([InlineKeyboardButton("📝 Добавить", callback_data="setadd_lagom")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
+                           reply_markup=InlineKeyboardMarkup(rows))
+
 async def send_books(bot, cid):
     items = _preload_books(cid)
     txt = "📚 <b>Мои книги</b>\n\n" + ("\n".join(f"• {b}" for b in items) if items else "пусто")
@@ -215,6 +240,22 @@ async def handle_callback(bot, cid, data):
         await send_body(bot, cid)
     elif data == "set_wardrobe":
         await send_wardrobe(bot, cid)
+    elif data == "set_lagom":
+        await send_lagom(bot, cid)
+    elif data == "setadd_lagom":
+        store.pending_input[cid] = "setadd_lagom"
+        await bot.send_message(chat_id=cid,
+            text="🍃 Напиши установку или принцип — добавлю в Лагом.\n\n"
+                 "<i>Например: «Меньше экрана, больше природы»</i>",
+            parse_mode="HTML")
+    elif data.startswith("setdel_lagom_"):
+        import myday
+        i = int(data.split("_")[-1])
+        items = list(myday.ensure_lagom(cid))
+        if i < len(items):
+            items.pop(i)
+            store.set_list(config.LAGOM_KEY, cid, items)
+        await send_lagom(bot, cid)
     elif data == "set_countries":
         await send_countries(bot, cid)
     elif data == "set_artists":

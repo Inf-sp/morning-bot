@@ -396,6 +396,12 @@ async def text_router(update, context):
             await settings.list_add_done(bot, cid, "artist", text); return
         if kind == "setadd_book":
             await settings.list_add_done(bot, cid, "book", text); return
+        if kind == "setadd_lagom":
+            import myday
+            items = list(myday.ensure_lagom(cid))
+            items.append(text.strip())
+            store.set_list(config.LAGOM_KEY, cid, items)
+            await settings.send_lagom(bot, cid); return
         if kind == "train_translate":
             await learning.train_translate_answer(bot, cid, text); return
         if kind.startswith("loveadd_"):
