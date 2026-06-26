@@ -97,24 +97,22 @@ async def set_style(bot, cid, i):
 def _item_label(it):
     return it if isinstance(it, str) else (it.get("name") or it.get("word") or str(it))
 
-async def _send_list(bot, cid, title, items, del_prefix, add_cb, back="set_home", hint=""):
-    """Единый рендер списка: буллеты в тексте + ❌-кнопки под сообщением."""
-    if items:
-        body = "\n".join(f"• {_item_label(it)}" for it in items[-40:])
-    else:
-        body = "Пока пусто — добавь первый элемент 👇"
-    txt = f"{title}\n\n{hint}{body}" if hint else f"{title}\n\n{body}"
+def _list_kb(items, del_prefix, add_cb, back="set_home"):
     rows = [[InlineKeyboardButton(f"❌ {_item_label(it)[:35]}", callback_data=f"{del_prefix}{i}")]
             for i, it in enumerate(items[-40:])]
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data=add_cb)])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back)])
+    return InlineKeyboardMarkup(rows)
+
+async def _send_list(bot, cid, title, items, del_prefix, add_cb, back="set_home"):
+    """Лагом и аналогичные экраны с intro-текстом: элементы только в кнопках."""
+    txt = title if items else f"{title}\n\nПока пусто — добавь первый элемент 👇"
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
-                           reply_markup=InlineKeyboardMarkup(rows))
+                           reply_markup=_list_kb(items, del_prefix, add_cb, back))
 
 # --- Шкаф ---
 async def send_wardrobe(bot, cid):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("👁 Показать всё", callback_data="w_show")],
         [InlineKeyboardButton("🏷 Добавить вещь", callback_data="w_add")],
         [InlineKeyboardButton("🧹 Удалить вещь", callback_data="w_del")],
         [InlineKeyboardButton("📐 Параметры шкафа", callback_data="set_body")],
@@ -134,12 +132,14 @@ def _preload_countries(cid):
 
 async def send_countries(bot, cid):
     items = _preload_countries(cid)
-    await _send_list(bot, cid, "🧳 <b>Мои страны</b>", items, "setdel_country_", "setadd_country")
+    await bot.send_message(chat_id=cid, text="🧳 <b>Мои страны</b>", parse_mode="HTML",
+                           reply_markup=_list_kb(items, "setdel_country_", "setadd_country"))
 
 # --- Артисты ---
 async def send_artists(bot, cid):
     items = store.get_list(config.ARTISTS_KEY, cid)
-    await _send_list(bot, cid, "🎤 <b>Мои артисты</b>", items, "setdel_artist_", "setadd_artist")
+    await bot.send_message(chat_id=cid, text="🎤 <b>Мои артисты</b>", parse_mode="HTML",
+                           reply_markup=_list_kb(items, "setdel_artist_", "setadd_artist"))
 
 # --- Книги ---
 def _preload_books(cid):
@@ -176,7 +176,8 @@ async def send_lagom(bot, cid):
 
 async def send_books(bot, cid):
     items = _preload_books(cid)
-    await _send_list(bot, cid, "📚 <b>Мои книги</b>", items, "setdel_book_", "setadd_book")
+    await bot.send_message(chat_id=cid, text="📚 <b>Мои книги</b>", parse_mode="HTML",
+                           reply_markup=_list_kb(items, "setdel_book_", "setadd_book"))
 
 async def list_delete(bot, cid, kind, i):
     keymap = {"country": config.COUNTRIES_KEY, "artist": config.ARTISTS_KEY, "book": config.BOOKS_KEY}

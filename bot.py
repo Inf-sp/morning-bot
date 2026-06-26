@@ -84,6 +84,8 @@ async def answer_callback(update, context):
         except Exception:
             pass
         return
+    if data == "m_food":
+        await menu.send_food_menu(bot, cid); return
     if data.startswith("m_"):
         text, kb = menu.menu_screen(data)
         try:
