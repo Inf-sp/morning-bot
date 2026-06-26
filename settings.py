@@ -37,7 +37,6 @@ def home_kb(cid):
         [InlineKeyboardButton("🗂️ Словарь", callback_data="set_dict")],
         [InlineKeyboardButton("🧊 Холодильник", callback_data="set_fridge")],
         [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
-        [InlineKeyboardButton("🗣 Язык для грамматики", callback_data="set_lang")],
         [InlineKeyboardButton("🎚 Уровень языков", callback_data="set_levels")],
         [InlineKeyboardButton("🌍 Сменить город", callback_data="set_city")],
     ])
@@ -95,14 +94,22 @@ async def set_style(bot, cid, i):
 
 
 # ===== Списки в настройках: страны, артисты, книги, шкаф =====
-def _list_kb(items, del_prefix, add_cb, back="set_home"):
-    rows = []
-    for i, it in enumerate(items[-40:]):
-        label = it if isinstance(it, str) else (it.get("name") or it.get("word") or str(it))
-        rows.append([InlineKeyboardButton(f"❌ {str(label)[:28]}", callback_data=f"{del_prefix}{i}")])
+def _item_label(it):
+    return it if isinstance(it, str) else (it.get("name") or it.get("word") or str(it))
+
+async def _send_list(bot, cid, title, items, del_prefix, add_cb, back="set_home", hint=""):
+    """Единый рендер списка: буллеты в тексте + ❌-кнопки под сообщением."""
+    if items:
+        body = "\n".join(f"• {_item_label(it)}" for it in items[-40:])
+    else:
+        body = "Пока пусто — добавь первый элемент 👇"
+    txt = f"{title}\n\n{hint}{body}" if hint else f"{title}\n\n{body}"
+    rows = [[InlineKeyboardButton(f"❌ {_item_label(it)[:35]}", callback_data=f"{del_prefix}{i}")]
+            for i, it in enumerate(items[-40:])]
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data=add_cb)])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back)])
-    return InlineKeyboardMarkup(rows)
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
+                           reply_markup=InlineKeyboardMarkup(rows))
 
 # --- Шкаф ---
 async def send_wardrobe(bot, cid):
@@ -127,16 +134,12 @@ def _preload_countries(cid):
 
 async def send_countries(bot, cid):
     items = _preload_countries(cid)
-    txt = "🧳 <b>Мои страны</b>\n\n" + (", ".join(items) if items else "пусто")
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
-                           reply_markup=_list_kb(items, "setdel_country_", "setadd_country"))
+    await _send_list(bot, cid, "🧳 <b>Мои страны</b>", items, "setdel_country_", "setadd_country")
 
 # --- Артисты ---
 async def send_artists(bot, cid):
     items = store.get_list(config.ARTISTS_KEY, cid)
-    txt = "🎤 <b>Мои артисты</b>\n\n" + (", ".join(items) if items else "пусто. Добавь или выполни /reload_artists")
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
-                           reply_markup=_list_kb(items, "setdel_artist_", "setadd_artist"))
+    await _send_list(bot, cid, "🎤 <b>Мои артисты</b>", items, "setdel_artist_", "setadd_artist")
 
 # --- Книги ---
 def _preload_books(cid):
@@ -157,31 +160,23 @@ def _preload_books(cid):
 # --- Лагом ---
 _LAGOM_INTRO = (
     "🍃 <b>Лагом — твои установки и ценности</b>\n\n"
-    "Лагом (швед. <i>lagom</i> — «в самый раз») — это твой личный свод принципов: "
-    "что важно, как ты хочешь жить, что даёт энергию, а что забирает.\n\n"
-    "Бот использует эти установки в разделе 🎯 Личная мотивация — "
-    "чтобы советы и поддержка звучали именно про тебя, а не общими словами.\n\n"
-    "<b>Примеры:</b> «Меньше, но лучше», «Физическая активность каждый день», "
-    "«Не сравниваю себя с другими», «Ем осознанно».\n\n"
+    "Лагом (швед. <i>lagom</i> — «в самый раз») — твой личный свод принципов: "
+    "что важно, как хочешь жить, что даёт энергию, а что забирает.\n\n"
+    "Бот использует их в 🎯 Личная мотивация — "
+    "чтобы советы звучали именно про тебя, а не общими словами.\n\n"
+    "<b>Примеры:</b> «Меньше, но лучше» · «Физическая активность каждый день» · "
+    "«Не сравниваю себя с другими»\n\n"
 )
 
 async def send_lagom(bot, cid):
     import myday
     items = list(myday.ensure_lagom(cid))
-    body = ("\n".join(f"• {it}" for it in items)) if items else "Пока пусто — добавь первую установку 👇"
-    txt = _LAGOM_INTRO + body
-    rows = [[InlineKeyboardButton(f"❌ {str(it)[:30]}", callback_data=f"setdel_lagom_{i}")]
-            for i, it in enumerate(items)]
-    rows.append([InlineKeyboardButton("📝 Добавить", callback_data="setadd_lagom")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
-                           reply_markup=InlineKeyboardMarkup(rows))
+    await _send_list(bot, cid, _LAGOM_INTRO.rstrip(), items,
+                     "setdel_lagom_", "setadd_lagom")
 
 async def send_books(bot, cid):
     items = _preload_books(cid)
-    txt = "📚 <b>Мои книги</b>\n\n" + ("\n".join(f"• {b}" for b in items) if items else "пусто")
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
-                           reply_markup=_list_kb(items, "setdel_book_", "setadd_book"))
+    await _send_list(bot, cid, "📚 <b>Мои книги</b>", items, "setdel_book_", "setadd_book")
 
 async def list_delete(bot, cid, kind, i):
     keymap = {"country": config.COUNTRIES_KEY, "artist": config.ARTISTS_KEY, "book": config.BOOKS_KEY}
