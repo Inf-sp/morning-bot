@@ -625,7 +625,14 @@ async def del_word(bot, cid, i):
     if i < len(words):
         words.pop(i)
         store.set_list(config.DICT_KEY, cid, words)
-    await send_dict(bot, cid)
+    await bot.send_message(
+        chat_id=cid,
+        text=(
+            "✅ Слово удалено из текущего списка.\n"
+            "При желании его можно снова добавить через настройки: /setup → Мой словарь."
+        ),
+        parse_mode="HTML",
+    )
 
 WEEK_TRACK = {
     0: ("Свежая кровь", "Загрузка",
@@ -649,43 +656,66 @@ async def send_morning_word(bot, cid):
     import random as _r
     from datetime import datetime
     import settings
-    language = settings.study_lang(cid)          # язык утреннего слова из /setup
-    lang_code = _code(language)                  # "nl" / "en"
+    language = settings.study_lang(cid)
+    lang_code = _code(language)
     flag = _flag(language)
     lang_gen = "нидерландского" if language == "нидерландский" else "английского"
     wd = datetime.now(config.TZ).weekday()
     title, phase, method = WEEK_TRACK[wd]
-    words = _ensure_dict(cid)                    # полный список - для индексов удаления
+    words = _ensure_dict(cid)
     pool = [w for w in words if _dict_lang(w) == lang_code]
-    L = [f"📚{flag} <b>Daily Words | Повторение {lang_gen} языка</b>", "", esc(method)]
-    # выходные - отдых, слова не шлём
+    L = [f"📚{flag} <b>Daily Words • Повторение {lang_gen}</b>", "", esc(method)]
     if wd >= 5 or not pool:
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
         return
-    # 3 слова + 2 фразы (раздельно по типу из словаря)
     word_items = [w for w in pool if _dict_kind(w) == "word"]
     phrase_items = [w for w in pool if _dict_kind(w) == "phrase"]
-    portion = (_r.sample(word_items, min(3, len(word_items)))
-               + _r.sample(phrase_items, min(2, len(phrase_items))))
-    if not portion:
+    chosen_phrases = _r.sample(phrase_items, min(2, len(phrase_items)))
+    chosen_words = _r.sample(word_items, min(3, len(word_items)))
+    if not chosen_phrases and not chosen_words:
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
         return
-    L += ["", "🗂 <b>Порция на сегодня:</b>"]
+
+    phrase_del_row = []
+    if chosen_phrases:
+        L += ["", "💬 <b>Фразы</b>"]
+        for w in chosen_phrases:
+            word = _cap(_w_field(w, "word", "nl", "en"))
+            ru = _w_field(w, "ru")
+            L.append(f"• {esc(word)} → {esc(ru)}")
+            try:
+                idx = words.index(w)
+                phrase_del_row.append(InlineKeyboardButton(f"❌ {word[:18]}", callback_data=f"worddel_{idx}"))
+            except ValueError:
+                pass
+
+    word_del_row = []
+    if chosen_words:
+        L += ["", "📖 <b>Слова</b>"]
+        for w in chosen_words:
+            word = _cap(_w_field(w, "word", "nl", "en"))
+            ru = _w_field(w, "ru")
+            L.append(f"• {esc(word)} → {esc(ru)}")
+            try:
+                idx = words.index(w)
+                word_del_row.append(InlineKeyboardButton(f"❌ {word[:14]}", callback_data=f"worddel_{idx}"))
+            except ValueError:
+                pass
+
+    L += ["", "💡 Попробуй использовать эти слова сегодня в мыслях, сообщениях или разговорах."]
+
     rows = []
-    for w in portion:
-        word = _cap(_w_field(w, "word", "nl", "en"))
-        ru = _w_field(w, "ru")
-        L.append(f"• {esc(word)} → {esc(ru)}")
-        # индекс для удаления
-        try:
-            idx = words.index(w)
-            rows.append([InlineKeyboardButton(f"❌ {word[:24]}", callback_data=f"worddel_{idx}")])
-        except ValueError:
-            pass
-    L += ["", "💡 Применяй эти слова сразу, когда думаешь о рутине."]
-    rows.append([InlineKeyboardButton("🗂️ Мой словарь", callback_data="a_dict")])
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
-                           reply_markup=InlineKeyboardMarkup(rows))
+    if phrase_del_row:
+        rows.append(phrase_del_row)
+    if word_del_row:
+        rows.append(word_del_row)
+
+    await bot.send_message(
+        chat_id=cid,
+        text="\n".join(L),
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows) if rows else None,
+    )
 
 
 # ================= ИЗУЧАЕМЫЕ ТЕМЫ (раздельно NL / EN) =================
