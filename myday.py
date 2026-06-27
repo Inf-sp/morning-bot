@@ -138,6 +138,28 @@ def _score_facts(candidates: list, city: str, country: str) -> list:
         return [{"text": t, "score": 3} for t in candidates]
 
 
+def _llm_facts_fallback(city: str, country: str) -> list:
+    """LLM-fallback когда research вернул пустой результат."""
+    if not city:
+        return []
+    place = f"{city}, {country}" if country else city
+    prompt = (
+        f"Напиши 5 интересных малоизвестных фактов о городе {place}. "
+        "Конкретика: числа, даты, имена. Каждый факт 1–2 предложения на русском. "
+        "Только сам факт, без вводных слов. "
+        'JSON-массив строк: ["факт1","факт2",...]'
+    )
+    try:
+        raw = ai.llm(prompt, 600, tier="cheap")
+        m = re.search(r'\[.*\]', raw, re.S)
+        if m:
+            arr = json.loads(m.group(0))
+            return [f for f in arr if isinstance(f, str) and len(f.strip()) > 20]
+    except Exception as e:
+        _log.warning("myday: _llm_facts_fallback(%s) failed: %s", city, e)
+    return []
+
+
 def _build_city_facts(city: str, country: str, cc: str) -> list:
     """One-time build: собирает, оценивает, сохраняет в facts/<city>.json."""
     existing = _load_city_facts_file(city)
@@ -166,6 +188,9 @@ def _build_city_facts(city: str, country: str, cc: str) -> list:
         avoid = list(seen)
 
     if not raw:
+        _log.warning("myday: research returned nothing for %s — trying LLM fallback", city)
+        raw = _llm_facts_fallback(city, country)
+    if not raw:
         return existing
 
     _BATCH = 15
@@ -186,6 +211,9 @@ def _build_city_facts(city: str, country: str, cc: str) -> list:
 def city_fact(city, country, cid, cc=""):
     """Факт о городе: lazy-build из facts/<city>.json, anti-repeat по cid."""
     cid = str(cid)
+    if not city:
+        _log.warning("myday: city_fact called with empty city for cid=%s", cid)
+        return ""
     slug = _city_slug(city)
 
     facts = _load_city_facts_file(city)
@@ -469,14 +497,22 @@ def _build_day_text(cid):
         L += ["<b>🎯 Фокус на сегодня</b>", esc(focus), ""]
     if word_line:
         L += ["<b>📚 Слово дня</b>", esc(word_line), ""]
-    fact = city_fact(s.get("city", ""), s.get("country", ""), cid, cc=s.get("cc", ""))
+    try:
+        fact = city_fact(s.get("city", ""), s.get("country", ""), cid, cc=s.get("cc", ""))
+    except Exception as e:
+        _log.warning("myday: city_fact failed: %s", e)
+        fact = ""
     if fact:
         L += ["<b>🔬 Интересный факт</b>", esc(fact.strip()), ""]
     hack_cat, hack_text = daily_lifehack(
         cid, rain=rain >= 40, hot=tmax >= 24, is_weekend=is_weekend)
     if hack_text:
         L += [f"<b>💡 База знаний</b>", esc(hack_text)]
-    q_data = _fetch_quote(cid)
+    try:
+        q_data = _fetch_quote(cid)
+    except Exception as e:
+        _log.warning("myday: _fetch_quote failed: %s", e)
+        q_data = {}
     raw_quote = _strip_quotes(q_data.get("quote", ""))
     if raw_quote and _quote_valid(raw_quote):
         src = esc(q_data.get("src", "")).strip()
