@@ -407,8 +407,13 @@ async def handle_callback(bot, cid, data, q=None):
 
 # ===== СОХРАНЕНИЯ / ЛЮБИМЫЕ (notes.py) =====
 
-async def save_fav(bot, cid):
-    txt = store.last_answer.get(str(cid))
+async def save_fav(bot, cid, q=None):
+    # Берём оригинальный текст сообщения (с HTML-форматированием) прямо из callback
+    txt = ""
+    if q is not None and q.message:
+        txt = q.message.text_html or q.message.caption_html or ""
+    if not txt:
+        txt = store.last_answer.get(str(cid), "")
     if not txt:
         await bot.send_message(chat_id=cid, text="Нечего сохранять."); return
     source = store.last_source.get(str(cid), "Прочее")
@@ -498,7 +503,8 @@ async def note_drop(bot, cid, i):
     await send_bucket(bot, cid, bucket)
 
 async def export_notes(bot, cid):
-    import io
+    import io, re as _re2
+    _plain = lambda s: _re2.sub(r"<[^>]+>", "", s).strip()
     lines = ["Мои сохранения (DM)", ""]
 
     notes_list = store.get_list(config.NOTES_KEY, cid)
@@ -506,12 +512,12 @@ async def export_notes(bot, cid):
     lines.append("⭐ ВРЕМЕННЫЕ ЗАКЛАДКИ")
     if fav:
         for n in fav:
-            t = n.get("text", "") if isinstance(n, dict) else str(n)
+            t = _plain(n.get("text", "") if isinstance(n, dict) else str(n))
             d = n.get("date", "") if isinstance(n, dict) else ""
             src_full = n.get("source", "") if isinstance(n, dict) else ""
             src = src_full.split(" · ", 1)[1] if " · " in src_full else src_full
             tag = f" [{src}]" if src and src != "Прочее" else ""
-            lines.append(f"- [{d}]{tag} {t.strip()}")
+            lines.append(f"- [{d}]{tag} {t}")
     else:
         lines.append("- пусто")
     lines.append("")
@@ -635,11 +641,14 @@ async def send_bucket(bot, cid, bucket):
         rows = [[InlineKeyboardButton("◀️ Назад", callback_data="as_notes")]]
         await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                                reply_markup=InlineKeyboardMarkup(rows)); return
+    import re as _re
+    _strip_html = lambda s: _re.sub(r"<[^>]+>", "", s)
     txt = f"⭐ <b>Временные закладки</b> · {count}"
     rows = []
     for i, n in items:
         src = (n.get("source", "Прочее") if isinstance(n, dict) else "Прочее") or "Прочее"
-        preview = (n.get("text", "") if isinstance(n, dict) else str(n)).strip()
+        raw = (n.get("text", "") if isinstance(n, dict) else str(n)).strip()
+        preview = _strip_html(raw)
         short = preview[:28] + ("…" if len(preview) > 28 else "")
         label = f"{src} · {short}"
         rows.append([InlineKeyboardButton(label, callback_data=f"fav_view_{i}")])
@@ -730,7 +739,7 @@ async def love_add_done(bot, cid, key, text):
 async def handle_notes_callback(bot, cid, q, data):
     """Роутер для callback'ов закладок/любимого (as_* и fav_*)."""
     if data == "as_fav":
-        await save_fav(bot, cid); return
+        await save_fav(bot, cid, q); return
     if data == "as_notes":
         await send_notes(bot, cid); return
     if data == "as_bucket_fav":
