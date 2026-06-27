@@ -672,7 +672,7 @@ async def save_worries(bot, cid, text):
     await bot.send_message(chat_id=cid, text=f"📝 Записал в дневник тревоги: +{len(new)}. Вечером проверим, что реально случилось.")
 
 
-_MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [(" ", "m_balance")]])
+_MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("◀️ Назад", "m_balance")]])
 
 _ONESHOT = {}
 
