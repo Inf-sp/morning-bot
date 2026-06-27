@@ -472,6 +472,13 @@ async def text_router(update, context):
             code = kind[len("gm_addtopic_"):]
             await learning.add_topic_done(bot, cid, code, text); return
 
+    # Fallback: pending_input мог быть сброшен при рестарте — проверяем профиль
+    ob_step = onboard.get_text_step(cid)
+    if ob_step == "name":
+        await onboard.handle_name(bot, cid, text); return
+    if ob_step == "city":
+        await onboard.handle_city(bot, cid, text); return
+
     # Свободный чат
     await assistant.chat_reply(bot, cid, text)
 
