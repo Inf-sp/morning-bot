@@ -464,6 +464,50 @@ async def setup_command(update, context):
 
 
 # ---------- Расписание ----------
+async def job_morning_brief(context: ContextTypes.DEFAULT_TYPE):
+    if not CHAT_ID or not settings.notif_on(CHAT_ID, "morning_brief"):
+        return
+    try:
+        await weather.send_weather(context.bot, CHAT_ID, "today")
+        await learning.send_morning_word(context.bot, CHAT_ID)
+    except Exception:
+        logging.exception("job_morning_brief failed")
+
+async def job_weather_warn(context: ContextTypes.DEFAULT_TYPE):
+    if not CHAT_ID or not settings.notif_on(CHAT_ID, "weather_warn"):
+        return
+    try:
+        s = store.get_settings(CHAT_ID)
+        data = weather.fetch_weather(s["lat"], s["lon"], 2)
+        d = data["daily"]
+        wind = d["windspeed_10m_max"][0] or 0
+        code = d["weathercode"][0]
+        rain = d["precipitation_probability_max"][0] or 0
+        rain_mm = (d.get("precipitation_sum") or [None])[0]
+        _WARN_CODES = {95, 96, 99}
+        if wind > 10 or code in _WARN_CODES or rain > 70:
+            text = weather.storm_alert(wind, code, rain, rain_mm, cc=s.get("cc", ""))
+            if not text:
+                parts = []
+                if wind > 10:
+                    parts.append(f"💨 ветер до {wind:.0f} м/с")
+                if rain > 70:
+                    parts.append(f"🌧 дождь {rain:.0f}%")
+                if code in _WARN_CODES:
+                    parts.append("⛈ возможна гроза")
+                text = "⚠️ <b>Погодное предупреждение</b>\n\n" + " • ".join(parts)
+            await context.bot.send_message(chat_id=CHAT_ID, text=text, parse_mode="HTML")
+    except Exception:
+        logging.exception("job_weather_warn failed")
+
+async def job_lagom(context: ContextTypes.DEFAULT_TYPE):
+    if not CHAT_ID or not settings.notif_on(CHAT_ID, "lagom_daily"):
+        return
+    try:
+        await balance.send_motiv_push(context.bot, CHAT_ID)
+    except Exception:
+        logging.exception("job_lagom failed")
+
 async def job_grammar(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID or not settings.notif_on(CHAT_ID, "grammar"):
         return
@@ -483,6 +527,22 @@ async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         logging.exception("job_checkin_day failed")
 
+async def job_recipe(context: ContextTypes.DEFAULT_TYPE):
+    if not CHAT_ID or not settings.notif_on(CHAT_ID, "recipe_daily"):
+        return
+    try:
+        await balance.send_recipe_featured(context.bot, CHAT_ID)
+    except Exception:
+        logging.exception("job_recipe failed")
+
+async def job_vocab_review(context: ContextTypes.DEFAULT_TYPE):
+    if not CHAT_ID or not settings.notif_on(CHAT_ID, "vocab_review"):
+        return
+    try:
+        await learning.send_vocab_review(context.bot, CHAT_ID)
+    except Exception:
+        logging.exception("job_vocab_review failed")
+
 async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID or not settings.notif_on(CHAT_ID, "checkin_eve"):
         return
@@ -490,6 +550,22 @@ async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
         await balance.send_evening_review(context.bot, CHAT_ID)
     except Exception:
         logging.exception("job_checkin_evening failed")
+
+async def job_weekly_events(context: ContextTypes.DEFAULT_TYPE):
+    if not CHAT_ID or not settings.notif_on(CHAT_ID, "weekly_events"):
+        return
+    try:
+        await content.send_weekly_events(context.bot, CHAT_ID)
+    except Exception:
+        logging.exception("job_weekly_events failed")
+
+async def job_weekly_forecast(context: ContextTypes.DEFAULT_TYPE):
+    if not CHAT_ID or not settings.notif_on(CHAT_ID, "weekly_forecast"):
+        return
+    try:
+        await weather.send_weather(context.bot, CHAT_ID, "week")
+    except Exception:
+        logging.exception("job_weekly_forecast failed")
 
 
 async def post_init(app):
@@ -539,9 +615,18 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
 
     jq = app.job_queue
-    jq.run_daily(job_grammar, time=datetime.strptime("11:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
-    jq.run_daily(job_checkin_day, time=datetime.strptime("14:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
-    jq.run_daily(job_checkin_evening, time=datetime.strptime("22:00", "%H:%M").replace(tzinfo=TZ).timetz(), days=tuple(range(7)))
+    def _t(hm):
+        return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
+    jq.run_daily(job_morning_brief,   time=_t("07:30"), days=tuple(range(7)))
+    jq.run_daily(job_weather_warn,    time=_t("08:15"), days=tuple(range(7)))
+    jq.run_daily(job_lagom,           time=_t("09:00"), days=tuple(range(7)))
+    jq.run_daily(job_weekly_events,   time=_t("09:00"), days=(0,))            # пн
+    jq.run_daily(job_grammar,         time=_t("11:00"), days=tuple(range(7)))
+    jq.run_daily(job_recipe,          time=_t("12:30"), days=tuple(range(7)))
+    jq.run_daily(job_checkin_day,     time=_t("14:00"), days=tuple(range(7)))
+    jq.run_daily(job_vocab_review,    time=_t("21:00"), days=tuple(range(7)))
+    jq.run_daily(job_checkin_evening, time=_t("22:00"), days=tuple(range(7)))
+    jq.run_daily(job_weekly_forecast, time=_t("19:00"), days=(6,))            # вс
 
     logging.info("Bot started")
     app.run_polling(drop_pending_updates=True)
