@@ -57,10 +57,30 @@ async def send_home(bot, cid):
 async def send_looks(bot, cid):
     w = store.load_wardrobe()
     s = store.get_settings(cid)
+    tmax = None
     try:
-        wblock = weather.weather_block(weather.fetch_weather(s["lat"], s["lon"], 2), 0, s["city"])
+        wdata = weather.fetch_weather(s["lat"], s["lon"], 2)
+        wd = wdata["daily"]
+        tmax = round(wd["temperature_2m_max"][0])
+        tmin = round(wd["temperature_2m_min"][0])
+        wind_ms = round(wd["windspeed_10m_max"][0])
+        rain_prob = wd["precipitation_probability_max"][0] or 0
+        rain_mm = (wd.get("precipitation_sum") or [None])[0]
+        has_rain = weather._rain_real(rain_prob, rain_mm)
+        wctx = (f"Сегодня: +{tmax}°C (ночью +{tmin}°C), ветер {wind_ms} м/с"
+                + (", ожидается дождь" if has_rain else ""))
     except Exception:
-        wblock = "нет данных"
+        wctx = "нет данных"
+        has_rain = False
+    if tmax is not None and tmax >= 24 and not has_rain:
+        temp_rule = (f"tmax={tmax}°C, ЖАРКО — ЗАПРЕЩЕНО: ветровки, флис, куртки, толстовки, слои. "
+                     "Только лёгкий верх (футболка/рубашка) + шорты или лёгкие брюки.")
+    elif tmax is not None and tmax >= 17:
+        temp_rule = (f"tmax={tmax}°C, ТЕПЛО — лёгкие брюки/джинсы + футболка или рубашка. "
+                     "Без тяжёлых слоёв и ветровок.")
+    else:
+        temp_rule = (f"tmax={tmax}°C, ПРОХЛАДНО{'/ дождь' if has_rain else ''} — "
+                     "слои уместны, можно ветровку или флис, закрытая обувь.")
     recent = store.recent_looks.get(str(cid), [])
     avoid = ("\nНе повторяй образы за последние 3 дня: " + "; ".join(recent)) if recent else ""
     hints = memory.wardrobe_hints(cid)
@@ -69,11 +89,11 @@ async def send_looks(bot, cid):
     await bot.send_message(chat_id=cid, text="Собираю образ под погоду...")
     prompt = f"""Ты опытный стилист. Собери ОДИН образ из гардероба на сегодня.
 {config.STYLE_PROFILE}
-Погода сегодня: {wblock}{fb_line}
+Погода: {wctx}
+ТЕМПЕРАТУРНОЕ ПРАВИЛО (строго, не нарушать): {temp_rule}{fb_line}
 Гардероб (только эти вещи, ПОЛНЫЕ точные названия с брендом и цветом):
 {store.wardrobe_to_text(w)}
 Правила: 1 верх + 1 низ + обувь (+ опц. аксессуар-совет). Минимализм, сочетание по цвету.
-Жёстко по температуре: от +24°C без дождя - ШОРТЫ + футболка; +17..+23 - лёгкие брюки/джинсы + футболка/рубашка; ниже +16 или дождь/ветер - слои, ветровка/флис, закрытая обувь.
 Каждую вещь пиши ПОЛНЫМ названием (напр. «Белая футболка Uniqlo», не «Верх: белая»).{avoid}
 JSON (без markdown):
 {{"intro":"1 строка про погоду и логику образа","items":["вещь 1 полным названием","вещь 2","вещь 3"],"add":"1 совет что добавить (аксессуар) и почему"}}"""

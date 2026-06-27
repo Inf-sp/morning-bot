@@ -79,6 +79,14 @@ def _clean_wiki(s):
     s = re.sub(r"\s+([.,;:!?])", r"\1", s)
     return s.strip()
 
+_BUREAUCRATIC = re.compile(
+    r'\b(classif(?:ied|ication)|global\s+city|gawc|gamma\s*\+?|tier|'
+    r'member(?:ship)?\s+of|ranked\s+(?:as|in)|ranking|network\s+of|'
+    r'designation|listed\s+as|status\s+of|organisation|organization|'
+    r'association\s+of|index(?:ed)?|municipal(?:ity|ities))\b',
+    re.I
+)
+
 def _is_dubious_record(s):
     """Предложения с конкретными историческими рекордами (температуры, даты) неверифицируемы для конкретного города."""
     sl = s.lower()
@@ -97,6 +105,7 @@ def _extract_sents(extract):
     sents = [s for s in sents if not re.match(r"^.{0,60}[—–\-]", s)]
     sents = [s for s in sents if not re.match(r"^.{0,80}\bis\s+a(?:n)?\s+\w+", s, re.I)]
     sents = [s for s in sents if not _is_dubious_record(s)]
+    sents = [s for s in sents if not _BUREAUCRATIC.search(s)]
     return sents
 
 def wiki_sentences(name):
