@@ -129,23 +129,31 @@ def wardrobe_to_text(w):
     return "\n".join(f"{c.capitalize()}: {', '.join(i)}" for c, i in w.items()
                      if c != "_v" and isinstance(i, list))
 
+def _migrate_flat(key, chat_id, d) -> dict:
+    """Если данные — плоский список (legacy), мигрируем в per-user dict для CHAT_ID."""
+    if isinstance(d, list) and config.CHAT_ID and str(chat_id) == str(config.CHAT_ID):
+        new_d = {str(chat_id): d}
+        _save(key, new_d)
+        return new_d
+    return {}
+
 def get_list(key, chat_id):
     d = _load(key)
     if not isinstance(d, dict):
-        return []  # глобальный список (legacy) — не отдаём его как данные пользователя
+        d = _migrate_flat(key, chat_id, d)
     return d.get(str(chat_id), [])
 
 def add_to_list(key, chat_id, item):
     d = _load(key)
     if not isinstance(d, dict):
-        d = {}
+        d = _migrate_flat(key, chat_id, d)
     d.setdefault(str(chat_id), []).append(item)
     _save(key, d)
 
 def set_list(key, chat_id, items):
     d = _load(key)
     if not isinstance(d, dict):
-        d = {}
+        d = _migrate_flat(key, chat_id, d)
     d[str(chat_id)] = items
     _save(key, d)
 
