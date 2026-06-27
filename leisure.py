@@ -277,7 +277,7 @@ def _movie_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("😕 Не нравится", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"movie_love_{i}"),
-         InlineKeyboardButton("⭐ В закладки", callback_data=f"reco_{i}"),
+         InlineKeyboardButton("⏳ Позже", callback_data=f"reco_{i}"),
          InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
@@ -417,7 +417,7 @@ def _book_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("😕 Не нравится", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
-         InlineKeyboardButton("⭐ В закладки", callback_data=f"reco_{i}"),
+         InlineKeyboardButton("⏳ Позже", callback_data=f"reco_{i}"),
          InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
@@ -661,7 +661,7 @@ def _listen_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("😕 Не нравится", callback_data="a_listen_no")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love"),
-         InlineKeyboardButton("⭐ В закладки", callback_data="listen_0"),
+         InlineKeyboardButton("⏳ Позже", callback_data="listen_0"),
          InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 

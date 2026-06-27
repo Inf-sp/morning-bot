@@ -153,7 +153,7 @@ def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry", depth=
         rows.append([(cont_label, cont_cb)])
     if depth:
         rows.append([("✂️ Короче", "ans_short"), ("🔬 Глубже", "ans_deep")])
-    rows.append([("⭐ В закладки", "as_fav"), ("◀️ Назад", "m_close")])
+    rows.append([("⏳ Позже", "as_fav"), ("◀️ Назад", "m_close")])
     return _kb(rows)
 
 def _recipe_kb():
