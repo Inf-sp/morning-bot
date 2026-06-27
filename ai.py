@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import logging
 import re
 import json
@@ -140,7 +141,21 @@ def _resolve(tier, order, claude_model):
     o, m = TIERS.get(tier or "smart", (DEFAULT_ORDER, None))
     return o, m
 
+_SKIP_MODULES = frozenset({"ai", "bot", "asyncio", "threading", "concurrent", "<string>", "run_code"})
+
+def _caller_module() -> str:
+    """Автоопределение модуля-источника вызова из стека (пропускаем ai.py и служебные)."""
+    for frame in inspect.stack()[2:6]:
+        fname = (frame.filename or "").rsplit("/", 1)[-1]
+        if fname.endswith(".py"):
+            m = fname[:-3]
+            if m not in _SKIP_MODULES:
+                return m
+    return ""
+
 def llm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None, tier=None, module=""):
+    if not module:
+        module = _caller_module()
     order, claude_model = _resolve(tier, order, claude_model)
     calls = {
         "claude": lambda: _gen_claude(prompt, max_tokens, claude_model),
@@ -206,6 +221,8 @@ def _repair_inner_quotes(raw):
     return "".join(out)
 
 def llm_json(prompt, max_tokens=1200, order=None, claude_model=None, tier=None, module=""):
+    if not module:
+        module = _caller_module()
     raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
                        "Внутри строковых значений НЕ используй двойные кавычки - "
                        "вместо них используй « » или одинарные.", max_tokens, 0.7, order, claude_model, tier, module)

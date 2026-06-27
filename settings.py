@@ -851,23 +851,48 @@ async def send_admin_cost(bot, cid):
             by_prov[prov] = by_prov.get(prov, 0) + tok
             total_tokens += tok
 
-        top_mods = sorted(by_mod.items(), key=lambda x: -x[1])[:5]
-        top_provs = sorted(by_prov.items(), key=lambda x: -x[1])[:3]
+        # грубая оценка в USD
+        haiku_tok = sum(e.get("tokens", 0) for e in recent if "haiku" in e.get("model", "").lower())
+        other_tok = total_tokens - haiku_tok
+        usd_est = haiku_tok / 1_000_000 * 0.75 + other_tok / 1_000_000 * 3.0
 
-        # грубая оценка в USD: Haiku ~0.25$/1M in + 1.25$/1M out ≈ 0.75$/1M avg, Sonnet ~3$/1M
-        haiku_tokens = sum(e.get("tokens", 0) for e in recent if "haiku" in e.get("model", "").lower())
-        other_tokens = total_tokens - haiku_tokens
-        usd_est = haiku_tokens / 1_000_000 * 0.75 + other_tokens / 1_000_000 * 3.0
+        def _pct(t):
+            return f"{round(t / total_tokens * 100)}%" if total_tokens else "0%"
 
-        lines = [f"💸 <b>Расходы за 7 дней</b>", "",
-                 f"Вызовов: {len(recent)}", f"Токенов: ~{total_tokens:,}", f"Оценка: ~${usd_est:.3f}", ""]
-        lines.append("<b>Топ модулей:</b>")
-        for m, t in top_mods:
-            lines.append(f"  {esc(m)}: {t:,} tok")
-        lines.append("")
+        # человекочитаемые имена провайдеров
+        _prov_names = {"groq": "Groq (бесплатно)", "gemini": "Gemini (бесплатно)",
+                       "claude": "Claude (Anthropic)", "openai": "OpenAI",
+                       "openrouter": "OpenRouter", "cloudflare": "Cloudflare"}
+
+        # человекочитаемые имена функций
+        _mod_names = {"wardrobe": "👗 Гардероб", "balance": "🥗 Баланс/еда",
+                      "weather": "🌤 Погода", "learning": "📚 Обучение",
+                      "leisure": "🎬 Досуг", "myday": "☀️ Мой день",
+                      "travel": "✈️ Путешествия", "assistant": "💬 Ассистент",
+                      "content": "🎵 Контент", "notes": "📝 Заметки"}
+
+        lines = ["💸 <b>Расходы за 7 дней</b>", "",
+                 f"Вызовов: {len(recent)}",
+                 f"Токенов: ~{total_tokens:,}",
+                 f"Оценка: ~${usd_est:.3f}", ""]
+
+        # по провайдерам (с % и меткой)
+        top_provs = sorted(by_prov.items(), key=lambda x: -x[1])[:5]
         lines.append("<b>По провайдерам:</b>")
         for p, t in top_provs:
-            lines.append(f"  {esc(p)}: {t:,} tok")
+            label = _prov_names.get(p, p)
+            lines.append(f"  {esc(label)}: {t:,} tok ({_pct(t)})")
+
+        # по функциям — только заполненные модули
+        known_mods = [(m, t) for m, t in by_mod.items() if m and m != "?"]
+        if known_mods:
+            top_mods = sorted(known_mods, key=lambda x: -x[1])[:5]
+            lines.append("")
+            lines.append("<b>Где тратится:</b>")
+            for m, t in top_mods:
+                label = _mod_names.get(m, m)
+                lines.append(f"  {esc(label)}: {t:,} tok ({_pct(t)})")
+
         text = "\n".join(lines)
 
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
