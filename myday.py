@@ -103,7 +103,6 @@ def _score_facts(candidates: list, city: str, country: str) -> list:
     items = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(candidates))
     prompt = (
         f"Оцени интересность каждого факта о {place} по шкале 1-5.\n"
-        f"ОБЯЗАТЕЛЬНО: факт должен упоминать название '{city}'. Если не упоминает — score 1.\n"
         "АВТОМАТИЧЕСКИ score 1: классификации, рейтинги, членства в организациях, сетях, "
         "UNESCO tier/category, global city, GAWC, Gamma, муниципальный статус — неинтересно.\n"
         "5 = рекорд / «первый в мире» / Гиннес-уровень\n"
@@ -126,6 +125,11 @@ def _score_facts(candidates: list, city: str, country: str) -> list:
                 continue
             if 1 <= idx <= len(candidates) and score >= 3:
                 result.append({"text": candidates[idx - 1], "score": score})
+        # Если всё отфильтровано (LLM дал всем <3) — берём с базовым score=3,
+        # иначе попадаем в бесконечный rebuild-цикл
+        if not result:
+            _log.info("myday: _score_facts: все score<3 для %s — берём raw с score=3", place)
+            return [{"text": t, "score": 3} for t in candidates]
         return result
     except Exception as e:
         _log.warning("myday: _score_facts failed: %s", e)
@@ -448,7 +452,6 @@ def _day_menu_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Погода на завтра", callback_data="a_w_tomorrow")],
         [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
-        [InlineKeyboardButton("🔄 Обновить сводку", callback_data="md_refresh")],
         [InlineKeyboardButton("🌍 Сменить город", callback_data="a_setcity")],
     ])
 
