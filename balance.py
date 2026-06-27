@@ -36,15 +36,19 @@ def _food_card(d, label="Рецепт дня") -> str:
     time_ = esc(str(d.get("time", "")).strip())
     servings = esc(str(d.get("servings", "")).strip())
     ingredients = esc(str(d.get("ingredients", "")).strip())
-    short = str(d.get("short", d.get("why", ""))).strip()
+    steps = d.get("steps") or []
+    if isinstance(steps, str):
+        steps = [steps]
     lines = [f"<b>{label}: {name}</b>"]
     if time_ or servings:
         meta = " • ".join(p for p in [f"⏱️ {time_}", f"🍽️ {servings}"] if p.split()[-1:])
         lines += ["", meta]
     if ingredients:
         lines += ["", f"Ингредиенты: {ingredients}"]
-    if short:
-        lines += ["", esc(short)]
+    if steps:
+        lines += ["", "Приготовление:"]
+        for step in steps:
+            lines.append(f"• {esc(str(step).strip())}")
     return "\n".join(lines)
 
 def fetch_food_tip(cid) -> str:
@@ -60,7 +64,7 @@ def fetch_food_tip(cid) -> str:
         "Верни JSON (без markdown): "
         '{"name":"Название блюда","time":"X мин","servings":"1 порц.",'
         '"ingredients":"короткий список через запятую",'
-        '"why":"1-2 предложения: что это и почему понравится"}'
+        '"steps":["шаг 1 (до 15 слов)","шаг 2","шаг 3"]}'
     )
     try:
         d = ai.llm_json(prompt, 400, tier="cheap")
@@ -93,15 +97,13 @@ def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry", depth=
 
 def _recipe_kb():
     return _kb([
-        [("❤️ В любимые", "as_recipe_save"), ("⭐ В закладки", "as_fav")],
         [("✨ Ещё рецепт", "as_food")],
         [("⬅️ Назад", "m_close")],
     ])
 
 def _recipe_typed_kb():
-    """Клавиатура после генерации из «Новый рецепт» — с выбором типа приёма пищи."""
+    """Клавиатура после «Новый рецепт» — только выбор типа приёма пищи."""
     return _kb([
-        [("❤️ В любимые", "as_recipe_save"), ("⭐ В закладки", "as_fav")],
         [("🍳 Завтрак", "a_food_breakfast"), ("🥗 Обед", "a_food_lunch"), ("🍽️ Ужин", "a_food_dinner")],
         [("⬅️ Назад", "m_food")],
     ])
@@ -109,8 +111,7 @@ def _recipe_typed_kb():
 def _fridge_recipe_kb():
     """Клавиатура после рецепта из холодильника."""
     return _kb([
-        [("❤️ В любимые", "as_recipe_save"), ("⭐ В закладки", "as_fav")],
-        [("🔄 Другой рецепт", "as_fridge_cook")],
+        [("🍳 Завтрак", "a_food_breakfast"), ("🥗 Обед", "a_food_lunch"), ("🍽️ Ужин", "a_food_dinner")],
         [("⬅️ Назад", "m_food")],
     ])
 
@@ -154,7 +155,7 @@ def _gen_recipe(constraint, cid=None):
         "Поля full — Telegram HTML: <b>теги</b> для заголовков, пункты «• ». Без markdown.\n"
         'JSON: {"name":"название","time":"X мин","servings":"1 порц.",'
         '"ingredients":"короткий список ингредиентов через запятую",'
-        '"short":"2-3 предложения как готовить",'
+        '"steps":["шаг 1 (до 15 слов)","шаг 2","шаг 3"],'
         '"full":"полный рецепт: <b>Ингредиенты</b> со списком «• », затем <b>Приготовление</b> с пунктами «• »"}',
         900, tier="cheap")
 
@@ -194,7 +195,7 @@ def _gen_leftovers_recipe(ingredients):
         "Предложи 1 простой рецепт только из них (+ базовые специи, максимум 1 доп продукт). 1 человек.\n"
         'JSON: {"name":"название","time":"X мин","servings":"1 порц.",'
         '"ingredients":"список использованных продуктов через запятую",'
-        '"short":"2-3 предложения как готовить"}',
+        '"steps":["шаг 1 (до 15 слов)","шаг 2","шаг 3"]}',
         500, tier="cheap")
 
 async def send_leftovers(bot, cid, ingredients):
