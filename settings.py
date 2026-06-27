@@ -556,14 +556,14 @@ async def send_plans(bot, cid):
     items = [(i, n) for i, n in enumerate(notes_list) if _note_bucket(n) == "plan"]
     if not items:
         await bot.send_message(chat_id=cid, text="🧳 <b>Планы</b>\n\nпусто", parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")]]))
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="as_notes")]]))
         return
     rows = []
     for i, n in items:
         country = (n.get("country") or "План") if isinstance(n, dict) else "План"
         d = n.get("date", "") if isinstance(n, dict) else ""
         rows.append([InlineKeyboardButton(f"🧳 {d} · {country}"[:40], callback_data=f"as_planview_{i}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, parse_mode="HTML",
         text="🧳 <b>Планы</b>\n\nСохранённые планы поездок.\n\nВыбери план 👇",
         reply_markup=InlineKeyboardMarkup(rows))
@@ -576,7 +576,7 @@ async def plan_view(bot, cid, i):
     text = n.get("text", "") if isinstance(n, dict) else str(n)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🗑 Удалить план", callback_data=f"as_plandel_{i}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_plan")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_plan")],
     ])
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
 
@@ -619,7 +619,7 @@ async def send_bucket(bot, cid, bucket):
     if not count:
         txt = ("⭐ <b>Временные закладки</b>\n\n"
                "Пусто — сохраняй интересное кнопкой «⭐ В закладки» под ответами.")
-        rows = [[InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")]]
+        rows = [[InlineKeyboardButton("◀️ Назад", callback_data="as_notes")]]
         await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                                reply_markup=InlineKeyboardMarkup(rows)); return
     txt = f"⭐ <b>Временные закладки</b> · {count}"
@@ -631,7 +631,7 @@ async def send_bucket(bot, cid, bucket):
         label = f"{src} · {short}"
         rows.append([InlineKeyboardButton(label, callback_data=f"fav_view_{i}")])
     rows.append([InlineKeyboardButton("❌ Удалить", callback_data="as_clean_fav")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -645,7 +645,7 @@ LOVE_SECTIONS = [
 
 async def send_love_home(bot, cid):
     rows = [[InlineKeyboardButton(title, callback_data=f"as_love_{key}")] for title, key in LOVE_SECTIONS]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid, text="❤️ <b>Любимые</b>\n\nТвои топ-категории.\n\nВыбери раздел 👇",
                            parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
@@ -700,7 +700,7 @@ async def send_love_section(bot, cid, key):
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data=f"as_loveadd_{key}")])
     if items:
         rows.append([InlineKeyboardButton("❌ Убрать", callback_data=f"as_loveclean_{key}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_love")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_love")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 

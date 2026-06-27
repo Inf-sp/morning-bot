@@ -236,7 +236,7 @@ def _movie_kb(i):
         [InlineKeyboardButton("😕 Не нравится", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"movie_love_{i}"),
          InlineKeyboardButton("⭐ В закладки", callback_data=f"reco_{i}"),
-         InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
+         InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
 MIN_TMDB_RATING = 7.0
@@ -371,7 +371,7 @@ def _book_kb(i):
         [InlineKeyboardButton("😕 Не нравится", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
          InlineKeyboardButton("⭐ В закладки", callback_data=f"reco_{i}"),
-         InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
+         InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
 async def _send_book_card(bot, cid, it, i):
@@ -582,7 +582,7 @@ async def send_watchlist(bot, cid):
     rows = []
     if lst:
         rows.append([InlineKeyboardButton("🧹 Чистка списка", callback_data="a_watchclean")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid,
         text="🍿 Посмотреть:\n" + ("\n".join(f"• {_list_text(x)}" for x in lst) if lst else "пусто"),
         reply_markup=InlineKeyboardMarkup(rows))
@@ -592,7 +592,7 @@ async def send_readlist(bot, cid):
     rows = []
     if lst:
         rows.append([InlineKeyboardButton("🧹 Чистка списка", callback_data="a_readclean")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid,
         text="📚 Почитать:\n" + ("\n".join(f"• {_list_text(x)}" for x in lst) if lst else "пусто"),
         reply_markup=InlineKeyboardMarkup(rows))
@@ -612,7 +612,7 @@ def _listen_kb():
         [InlineKeyboardButton("😕 Не нравится", callback_data="a_listen_no")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love"),
          InlineKeyboardButton("⭐ В закладки", callback_data="listen_0"),
-         InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
+         InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
 async def listen_dislike(bot, cid):
@@ -811,7 +811,7 @@ async def concert_pick_country(bot, cid):
              ("at", "🇦🇹 Австрия"), ("ch", "🇨🇭 Швейцария"), ("pl", "🇵🇱 Польша"),
              ("se", "🇸🇪 Швеция"), ("dk", "🇩🇰 Дания"), ("pt", "🇵🇹 Португалия")]
     rows = [[InlineKeyboardButton(lbl, callback_data=f"a_concerts_{cc}")] for cc, lbl in codes]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -861,7 +861,7 @@ def _travel_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🧳 Собрать план поездки", callback_data="a_trav_plan")],
         [InlineKeyboardButton("😕 Не нравится", callback_data="a_trav_no")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
 async def send_go(bot, cid):
@@ -985,7 +985,7 @@ async def send_plan(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("😕 Не нравится", callback_data="a_trav_no")],
         [InlineKeyboardButton("💾 Сохранить план поездки", callback_data="a_trav_save")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
     await bot.send_message(chat_id=cid, text=plan_text, parse_mode="HTML", reply_markup=kb)
 
