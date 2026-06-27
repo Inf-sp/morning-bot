@@ -38,8 +38,8 @@ def fetch_weather(lat, lon, days=2):
     r = requests.get("https://api.open-meteo.com/v1/forecast", params={
         "latitude": lat, "longitude": lon,
         "current": "temperature_2m,apparent_temperature,weathercode",
-        "hourly": "precipitation_probability,precipitation,windspeed_10m,temperature_2m",
-        "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,weathercode,windspeed_10m_max",
+        "hourly": "precipitation_probability,precipitation,windspeed_10m,temperature_2m,relativehumidity_2m",
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,weathercode,windspeed_10m_max,winddirection_10m_dominant",
         "timezone": "Europe/Amsterdam", "wind_speed_unit": "ms", "forecast_days": days
     }, timeout=20)
     r.raise_for_status()
@@ -57,6 +57,17 @@ def fetch_current_temp(lat, lon):
 
 
 # ---------- ветер ----------
+def wind_direction_text(deg):
+    """Градусы метео-направления → русское название (откуда дует)."""
+    if deg is None:
+        return ""
+    sectors = [
+        "северный", "северо-восточный", "восточный", "юго-восточный",
+        "южный", "юго-западный", "западный", "северо-западный",
+    ]
+    return sectors[round(float(deg) / 45) % 8]
+
+
 def wind_scale(ms):
     if ms < 3:
         return "🌬️", "Почти без ветра"
@@ -82,6 +93,48 @@ def rain_text(rain, rain_mm=None, when=""):
     """Кусок строки про дождь. Пусто, если дождя по сути нет."""
     if rain and _rain_real(rain, rain_mm):
         return f"Дождь{when} {rain:.0f}% • "
+    return ""
+
+
+def rain_character(code, rain_mm, rain_prob, data, day_str):
+    """Доп. фраза о характере осадков — только для нетривиальных типов."""
+    if not _rain_real(rain_prob, rain_mm):
+        return ""
+    if code in (95, 96, 99):
+        return "Возможны кратковременные грозы"
+    if code in (65, 82):
+        return "Сильный дождь" + (f" ({rain_mm:.0f} мм)" if rain_mm else "")
+    if code in (80, 81):
+        return "Ливень"
+    if code in (51, 53, 55):
+        return "Морось"
+    return ""
+
+
+def humidity_phrase(data, day_str, tmax, cc):
+    """Короткая фраза о комфорте с учётом влажности; '' если нечего добавить."""
+    try:
+        hours = data["hourly"]["time"]
+        hum_vals = data["hourly"].get("relativehumidity_2m") or []
+    except Exception:
+        return ""
+    if not hum_vals:
+        return ""
+    day_hum = [
+        v for t, v in zip(hours, hum_vals)
+        if t.startswith(day_str) and 6 <= int(t[11:13]) < 21 and v is not None
+    ]
+    if not day_hum:
+        return ""
+    rh = sum(day_hum) / len(day_hum)
+    if rh >= 80 and tmax >= 22:
+        return "Высокая влажность — будет казаться жарче"
+    if rh >= 70 and tmax >= 20:
+        return "Из-за влажности может казаться жарче"
+    if rh >= 75 and (cc or "").upper() == "NL":
+        return "Вечерами у каналов будет свежо"
+    if rh < 35:
+        return "Воздух сухой"
     return ""
 
 

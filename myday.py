@@ -128,8 +128,10 @@ def _build_city_facts(city: str, country: str, cc: str) -> list:
             raw.append(t)
             seen.add(t)
 
-    for v in research.wikidata_city_facts(city).values():
-        _add(v)
+    # Wikidata: только год основания (population/area — сухие цифры, Gemini найдёт интереснее)
+    wd = research.wikidata_city_facts(city)
+    if wd.get("founded"):
+        _add(wd["founded"])
     for s in research.wiki_sentences(city):
         _add(s)
 
@@ -389,17 +391,20 @@ def _build_day_text(cid):
     rain = d["precipitation_probability_max"][0] or 0
     rain_mm = (d.get("precipitation_sum") or [None])[0] if d.get("precipitation_sum") else None
     wind_ms = d["windspeed_10m_max"][0] or 0
+    wind_dir_deg = (d.get("winddirection_10m_dominant") or [None])[0]
     icon = weather.weather_icon(code, tmax, rain, wind_ms, rain_mm)
     wemoji, wword = weather.wind_scale(wind_ms)
     rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
     rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
+    dir_text = weather.wind_direction_text(wind_dir_deg)
+    dir_part = f", {dir_text}" if dir_text else ""
     # ветер: подробно только если сильный
     if wind_ms >= 8:
         wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
         wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
-        wind_str = f"{wemoji} {wword}{wind_when} {wind_ms:.0f} м/с"
+        wind_str = f"{wemoji} {wword}{wind_when} {wind_ms:.0f} м/с{dir_part}"
     else:
-        wind_str = f"💨 Ветер {wind_ms:.0f} м/с"
+        wind_str = f"💨 Ветер {wind_ms:.0f} м/с{dir_part}"
 
     now = datetime.now(TZ)
     weekday_name = _WEEKDAYS[now.weekday()]
@@ -410,8 +415,15 @@ def _build_day_text(cid):
     flag = flag_from_cc(s.get("cc", "")) or (country_flag(s.get("country", "")) if s.get("country") else "")
     title_flag = f" {flag}" if flag else ""
     L = [f"<b>Мой день • {esc(header)} • {esc(s.get('city',''))}{title_flag}</b>", ""]
-    L += [f"<b>{icon} Погода сегодня</b>",
-          f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}", ""]
+    L.append(f"<b>{icon} Погода сегодня</b>")
+    L.append(f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}")
+    rain_char = weather.rain_character(code, rain_mm, rain, data, day_str)
+    if rain_char:
+        L.append(f"🌩 {rain_char}")
+    hum = weather.humidity_phrase(data, day_str, tmax, s.get("cc", ""))
+    if hum:
+        L.append(f"💧 {hum}")
+    L.append("")
     focus = memory.fresh_focus(cid)
     if focus:
         L += ["<b>🎯 Фокус на сегодня</b>", esc(focus), ""]
