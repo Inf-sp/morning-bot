@@ -769,7 +769,11 @@ async def handle_notes_callback(bot, cid, q, data):
     if data.startswith("as_loveadd_"):
         await love_add_start(bot, cid, data[len("as_loveadd_"):]); return
     if data.startswith("as_love_"):
-        await send_love_section(bot, cid, data[len("as_love_"):]); return
+        key = data[len("as_love_"):]
+        if key == "countries":
+            import cleanup as _cl
+            await _cl.open_cleanup(bot, cid, "lv_countries"); return
+        await send_love_section(bot, cid, key); return
 
 
 # ===== АДМИНИСТРАТОР =====

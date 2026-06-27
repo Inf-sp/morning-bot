@@ -81,7 +81,9 @@ def _ctx_items(cid, ctx):
         title = {"movies": "🎬 Чистка: фильмы", "countries": "🧳 Чистка: страны",
                  "artists": "🎸 Чистка: артисты", "books": "📖 Чистка: книги"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
-        return title, items, f"as_love_{key}"
+        # countries открывается напрямую из Любимых → Назад должен возвращать туда, а не в саму чистку
+        back = "as_bucket_love" if key == "countries" else f"as_love_{key}"
+        return title, items, back
     if ctx == "fridge":
         raw = store.get_list(config.FRIDGE_KEY, cid)
         items = [(i, it["name"] if isinstance(it, dict) else it) for i, it in enumerate(raw)]
@@ -120,6 +122,8 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     rows.append([InlineKeyboardButton("☑️ Отметить всё на странице", callback_data=f"cla_{ctx}_{page}")])
     if sel:
         rows.append([InlineKeyboardButton(f"🗑 Удалить отмеченные ({len(sel)})", callback_data=f"cld_{ctx}_{page}")])
+    if ctx == "lv_countries":
+        rows.append([InlineKeyboardButton("📝 Добавить страну", callback_data="as_loveadd_countries")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
