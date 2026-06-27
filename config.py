@@ -58,6 +58,9 @@ MY_RECIPES_KEY = "my_recipes.json"
 QUOTE_AUTHORS_KEY = "quote_authors_seen.json"
 FOOD_TIP_KEY = "food_tip_cache.json"
 MOTIV_LAGOM_SEEN_KEY = "motiv_lagom_seen.json"
+MICRO_TOPICS_KEY = "micro_topics.json"
+MICRO_LESSONS_KEY = "micro_lessons.json"
+MICRO_PROGRESS_KEY = "micro_progress.json"
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}
 
