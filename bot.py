@@ -22,6 +22,7 @@ import weather
 import verify
 import secure
 import onboard
+import firstvisit
 from util import ack_loading as _ack
 
 TZ = config.TZ
@@ -111,6 +112,17 @@ async def answer_callback(update, context):
         await menu.send_food_menu(bot, cid); return
     if data == "m_food_gen":
         await _ack(q); await balance.send_recipe_featured(bot, cid); return
+    # Пропустить первичный опрос раздела
+    if data.startswith("fv_skip_"):
+        section = data[len("fv_skip_"):]
+        await _ack(q)
+        await firstvisit.skip(bot, cid, section); return
+    # Первичный опрос при входе в раздел (wardrobe / learn / leisure / balance)
+    _FV_SECTION = {"m_wardrobe": "wardrobe", "m_learn": "learn",
+                   "m_leisure": "leisure", "m_balance": "balance"}
+    if data in _FV_SECTION and firstvisit.needs_setup(cid, _FV_SECTION[data]):
+        await _ack(q)
+        await firstvisit.show_prompt(bot, cid, _FV_SECTION[data]); return
     if data.startswith("m_"):
         text, kb = menu.menu_screen(data)
         try:
@@ -379,6 +391,12 @@ async def text_router(update, context):
     # Нажатие нижнего reply-меню -> открыть инлайн-подменю
     if text in menu.LABEL_TO_KEY:
         key = menu.LABEL_TO_KEY[text]
+        # Первый вход в раздел с пустым профилем — опрос
+        _FV = {"m_wardrobe": "wardrobe", "m_learn": "learn",
+               "m_leisure": "leisure", "m_balance": "balance"}
+        if key in _FV and firstvisit.needs_setup(cid, _FV[key]):
+            await firstvisit.show_prompt(bot, cid, _FV[key])
+            return
         t, kb = menu.menu_screen(key)
         await bot.send_message(chat_id=cid, text=t, reply_markup=kb, parse_mode="HTML")
         return
@@ -468,6 +486,8 @@ async def text_router(update, context):
             await learning.train_card_answer(bot, cid, text); return
         if kind.startswith("collect_"):
             await leisure.collect_done(bot, cid, kind[len("collect_"):], text); return
+        if kind.startswith("firstvisit_"):
+            await firstvisit.handle_response(bot, cid, kind[len("firstvisit_"):], text); return
         if kind.startswith("loveadd_"):
             await settings.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
         if kind.startswith("gm_addtopic_"):
