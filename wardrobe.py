@@ -41,7 +41,8 @@ def closet_kb():
 
 def _look_result_kb():
     return _kb([
-        [("😍 Надел", "w_fb_worn"), ("🫪 Не нравится", "w_fb_nostyle")],
+        [("😍 Надел", "w_fb_worn")],
+        [("🫪 Не нравится", "w_fb_nostyle")],
         [("⬅️ Назад", "w_home")],
     ])
 
