@@ -59,7 +59,6 @@ def home_kb(cid):
         [InlineKeyboardButton("🎯 Лагом", callback_data="set_lagom")],
         [InlineKeyboardButton("🗂️ Словарь", callback_data="set_dict")],
         [InlineKeyboardButton("❤️ Любимые", callback_data="set_love")],
-        [InlineKeyboardButton("🧠 Память", callback_data="set_memory")],
     ]
     if config.CHAT_ID and str(cid) == str(config.CHAT_ID):
         rows.append([InlineKeyboardButton("🔐 Администратор", callback_data="set_admin")])
@@ -197,7 +196,7 @@ _LAGOM_INTRO = (
     "☕️ <b>Лагом — твои установки и ценности</b>\n\n"
     "Лагом (швед. <i>lagom</i> — «в самый раз») — твой личный свод принципов: "
     "что важно, как хочешь жить, что даёт энергию, а что забирает.\n\n"
-    "Бот использует их в 🎯 Личная мотивация — "
+    "Бот использует их в ☕️ Личная мотивация — "
     "чтобы советы звучали именно про тебя, а не общими словами.\n\n"
     "<b>Примеры:</b> «Меньше, но лучше» · «Физическая активность каждый день» · "
     "«Не сравниваю себя с другими»\n\n"
@@ -250,7 +249,7 @@ async def list_add_done(bot, cid, kind, text):
         await send_books(bot, cid)
 
 
-async def handle_callback(bot, cid, data):
+async def handle_callback(bot, cid, data, q=None):
     if data == "set_home":
         await send_home(bot, cid)
     elif data == "set_memory":
@@ -295,7 +294,7 @@ async def handle_callback(bot, cid, data):
     elif data == "set_lang_en":
         await set_lang(bot, cid, "английский")
     elif data == "set_levels":
-        await learning.send_levels(bot, cid)
+        await learning.send_levels(bot, cid, q)
     elif data == "set_city":
         store.pending_input[cid] = "setcity"
         await bot.send_message(chat_id=cid, text="🌍 Напиши город - переключу.")
