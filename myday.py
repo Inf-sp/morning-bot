@@ -221,6 +221,9 @@ def city_fact(city, country, cid, cc=""):
     if len(facts) < _FACTS_MIN and slug not in _build_attempted:
         _build_attempted.add(slug)
         facts = _build_city_facts(city, country, cc)
+        if not facts:
+            # build провалился — разрешаем повтор в следующей сессии
+            _build_attempted.discard(slug)
 
     if not facts:
         return ""
@@ -435,7 +438,7 @@ def _word_of_day(cid):
         parts.append(f"🇬🇧 {_cap(en)}")
     return " → ".join(parts)
 
-_day_cache = {}  # cid -> {"date":..., "text":...}
+_day_cache = {}  # cid -> {"date":..., "text":..., "has_fact": bool, "ts": float}
 
 def reset_day_cache(cid):
     _day_cache.pop(str(cid), None)
@@ -445,6 +448,7 @@ def _day_menu_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Погода на завтра", callback_data="a_w_tomorrow")],
         [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
+        [InlineKeyboardButton("🔄 Обновить сводку", callback_data="md_refresh")],
         [InlineKeyboardButton("🌍 Сменить город", callback_data="a_setcity")],
     ])
 
@@ -524,21 +528,41 @@ def _build_day_text(cid):
     _, _uw = verify.grade_umbrella(text, weather._rain_real(rain, rain_mm))
     for w in _uw:
         _log.warning("[verify] weather: %s", w)
+    # помечаем, есть ли факт — чтобы кешировать короче если нет
+    _build_day_text._has_fact = bool(fact)
     return text
 
-async def send_plany(bot, cid):
+async def send_plany(bot, cid, force=False):
+    import time as _time
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     cache = _day_cache.get(str(cid))
-    if not cache or cache.get("date") != today:
+    # Кеш устарел если: другой день, принудительное обновление,
+    # или факт не был получен и прошло >30 минут (чтобы дать build ещё шанс)
+    stale = (
+        not cache
+        or cache.get("date") != today
+        or force
+        or (not cache.get("has_fact") and _time.time() - cache.get("ts", 0) > 1800)
+    )
+    if stale:
         await bot.send_message(chat_id=cid, text="Собираю сводку дня...")
+        _build_day_text._has_fact = False
         try:
             text = await asyncio.to_thread(_build_day_text, cid)
         except Exception as e:
             await verify.safe_error(bot, cid, e); return
-        _day_cache[str(cid)] = {"date": today, "text": text}
+        _day_cache[str(cid)] = {
+            "date": today, "text": text,
+            "has_fact": getattr(_build_day_text, "_has_fact", False),
+            "ts": _time.time(),
+        }
     text = _day_cache[str(cid)]["text"]
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=_day_menu_kb())
 
 async def handle_callback(bot, cid, q, data):
+    if data == "md_refresh":
+        reset_day_cache(cid)
+        _build_attempted.discard(_city_slug(store.get_settings(cid).get("city", "")))
+        await send_plany(bot, cid, force=True); return
     if data == "md_worrycheck":
         await balance.send_evening_review(bot, cid); return
