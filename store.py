@@ -92,10 +92,17 @@ def set_level(chat_id, language, level):
     _save(config.LEVELS_FILE, d)
 
 def load_wardrobe(cid=None):
-    """Per-user wardrobe. cid=None falls back to legacy global (migration path)."""
+    """Per-user wardrobe. Для CHAT_ID одноразово мигрирует глобальный wardrobe.json."""
     if cid is not None:
         key = f"wardrobe_user_{cid}"
-        return _load(key) or {}
+        w = _load(key)
+        if not w and config.CHAT_ID and str(cid) == str(config.CHAT_ID):
+            # Одноразовая миграция: глобальный шкаф владельца → per-user ключ
+            global_w = _load(config.WARDROBE_FILE)
+            if isinstance(global_w, dict) and any(k != "_v" for k in global_w):
+                _save(key, global_w)
+                return global_w
+        return w or {}
     return _load(config.WARDROBE_FILE) or {}
 
 def save_wardrobe(w, cid=None):

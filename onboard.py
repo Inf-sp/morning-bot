@@ -73,7 +73,7 @@ async def handle_name(bot, cid, text: str):
 
 async def handle_city(bot, cid, text: str):
     import weather as _wx
-    await _wx.set_city_text(bot, cid, text)
+    await _wx.set_city_text(bot, cid, text, show_brief=False)
     _ob.setdefault(str(cid), {})["step"] = "lang"
     _save_step(cid, None)          # текстовый ввод больше не нужен
     store.pending_input.pop(str(cid), None)

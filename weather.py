@@ -508,7 +508,7 @@ async def send_weather(bot, cid, mode="today"):
 
 
 # ---------- смена города ----------
-async def set_city_text(bot, cid, name):
+async def set_city_text(bot, cid, name, show_brief=True):
     import re as _re
     raw = (name or "").strip()
     # нормализация: убрать пробелы вокруг тире, схлопнуть пробелы
@@ -570,12 +570,13 @@ async def set_city_text(bot, cid, name):
             pass
         await bot.send_message(chat_id=cid, text=f"✅ Готово. Город переключён на {c['name']}"
                                                  + (f", {country}." if country else "."))
-        # сразу показываем обновлённую сводку "Мой день" под новую локацию
-        try:
-            import myday
-            await myday.send_plany(bot, cid)
-        except Exception:
-            pass
+        # сразу показываем обновлённую сводку "Мой день" (не во время онбординга)
+        if show_brief:
+            try:
+                import myday
+                await myday.send_plany(bot, cid)
+            except Exception:
+                pass
     except Exception as e:
         await verify.safe_error(bot, cid, e)
 
