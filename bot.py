@@ -57,6 +57,10 @@ async def answer_callback(update, context):
     data = q.data
     bot = context.bot
 
+    # Закладки: fav_view_* и fav_del_*
+    if data.startswith("fav_"):
+        await notes.handle_callback(bot, cid, q, data)
+        return
     # Баланс (врач/мотивация/рецепты/тревоги/холодильник) vs Закладки/Любимое
     if data.startswith("as_"):
         if data.startswith(("as_food", "as_fridge", "as_recipe", "as_my_recipe",

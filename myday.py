@@ -429,7 +429,8 @@ def _build_day_text(cid):
     rain_mm = (d.get("precipitation_sum") or [None])[0] if d.get("precipitation_sum") else None
     wind_ms = d["windspeed_10m_max"][0] or 0
     wind_dir_deg = (d.get("winddirection_10m_dominant") or [None])[0]
-    wind_avg = weather._daytime_avg_wind(data, day_str) or wind_ms
+    _avg = weather._daytime_avg_wind(data, day_str)
+    wind_avg = _avg if _avg is not None else wind_ms
     icon = weather.weather_icon(code, tmax, rain, wind_ms, rain_mm)
     wemoji, wword = weather.wind_scale(wind_avg)
     rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
