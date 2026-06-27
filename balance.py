@@ -153,27 +153,27 @@ def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry", depth=
         rows.append([(cont_label, cont_cb)])
     if depth:
         rows.append([("✂️ Короче", "ans_short"), ("🔬 Глубже", "ans_deep")])
-    rows.append([("⭐ В закладки", "as_fav"), ("◀️ ", "m_close")])
+    rows.append([("⭐ В закладки", "as_fav"), ("◀️ Назад", "m_close")])
     return _kb(rows)
 
 def _recipe_kb():
     return _kb([
         [("✨ Ещё рецепт", "as_food")],
-        [("◀️ ", "m_close")],
+        [("◀️ Назад", "m_close")],
     ])
 
 def _recipe_typed_kb():
     """Клавиатура после «Новый рецепт» — только выбор типа приёма пищи."""
     return _kb([
         [("🍳 Завтрак", "a_food_breakfast"), ("🥗 Обед", "a_food_lunch"), ("🍽️ Ужин", "a_food_dinner")],
-        [("◀️ ", "m_food")],
+        [("◀️ Назад", "m_food")],
     ])
 
 def _fridge_recipe_kb():
     return _recipe_typed_kb()
 
 def _back_kb():
-    return _kb([[("◀️ ", "m_close")]])
+    return _kb([[("◀️ Назад", "m_close")]])
 
 
 async def _send(bot, cid, text, kb=None, surface="card"):
@@ -321,7 +321,7 @@ async def send_fridge(bot, cid):
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data="as_fridge_add")])
     if items:
         rows.append([InlineKeyboardButton("❌ Убрать", callback_data="as_fridge_clean")])
-    rows.append([InlineKeyboardButton("◀️ ", callback_data="set_home")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -395,7 +395,7 @@ async def send_my_recipes(bot, cid):
     if not recipes:
         txt = ("🍳 <b>Мои рецепты</b>\n\nПусто. Сохраняй рецепты кнопкой "
                "«❤️ Сохранить рецепт» под любым рецептом.")
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ ", callback_data="as_bucket_love")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_love")]])
     else:
         txt = "🍳 <b>Мои рецепты</b> — {}\n\n".format(len(recipes))
         txt += "\n".join(f"• {util.esc(r.get('name', '?'))}" for r in recipes)
@@ -404,7 +404,7 @@ async def send_my_recipes(bot, cid):
             name = r.get("name", f"Рецепт {i+1}")[:30]
             rows.append([InlineKeyboardButton(f"📖 {name}", callback_data=f"as_my_recipe_{i}")])
         rows.append([InlineKeyboardButton("❌ Убрать", callback_data="as_recipe_clean")])
-        rows.append([InlineKeyboardButton("◀️ ", callback_data="as_bucket_love")])
+        rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_love")])
         kb = InlineKeyboardMarkup(rows)
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 
@@ -651,7 +651,7 @@ async def send_evening_review(bot, cid):
         L += ["", f"🎯 <b>Фокус на завтра:</b> {esc(focus)}"]
     rows = [
         [InlineKeyboardButton("🧹 Очистить все тревоги", callback_data="worry_clearall")],
-        [InlineKeyboardButton("◀️ ", callback_data="m_close")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="m_close")],
     ]
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
@@ -717,7 +717,7 @@ async def handle_callback(bot, cid, q, data):
         await bot.send_message(chat_id=cid, text=DOCTOR_INTRO, reply_markup=_back_kb()); return
     # холодильник
     if data == "as_fridge":
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ ", callback_data="m_food")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="m_food")]])
         await bot.send_message(chat_id=cid, text=FRIDGE_DESC, parse_mode="HTML", reply_markup=kb)
         return
     if data == "as_fridge_add":

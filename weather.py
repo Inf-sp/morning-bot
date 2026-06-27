@@ -483,7 +483,7 @@ async def send_weather(bot, cid, mode="today"):
         groups.append((min(hot_i), f"🔥 {esc(_day_range_str(hot_i))}: до {_gtmax(hot_i):+.0f}°C — жара, осторожно"))
     groups.sort(key=lambda x: x[0])
     L.extend(line for _, line in groups)
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ ", callback_data="a_plany")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
     await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
 
 
