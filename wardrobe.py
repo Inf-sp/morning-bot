@@ -10,6 +10,7 @@ import verify
 import secure
 import memory
 import research
+import settings as _settings
 
 HOME_TEXT = (
     "👕 <b>Гардероб</b>\n\n"
@@ -35,7 +36,7 @@ def home_kb():
 
 def closet_kb():
     return _kb([
-        [("👁 Показать всё", "w_show")],
+        [("🗄️ Показать всё", "w_show")],
         [("🏷 Добавить вещь", "w_add")],
         [("🧹 Удалить вещь", "w_del")],
         [(" В меню", "w_home")],
@@ -59,7 +60,30 @@ async def send_home(bot, cid):
 # ---------- генерация лука по погоде ----------
 async def send_looks(bot, cid):
     w = store.load_wardrobe(cid)
+    wardrobe_text = store.wardrobe_to_text(w)
+    if not wardrobe_text.strip():
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("👔 Добавить вещи в шкаф", callback_data="set_closet"),
+            InlineKeyboardButton("◀️ Назад", callback_data="m_wardrobe"),
+        ]])
+        await bot.send_message(
+            chat_id=cid,
+            text=(
+                "👔 <b>Шкаф пуст</b>\n\n"
+                "Чтобы собрать образ из твоих вещей, сначала добавь их в шкаф.\n\n"
+                "<i>Можно написать список вещей прямо в чат или добавить через /setup → Гардероб → Мой шкаф.</i>"
+            ),
+            parse_mode="HTML",
+            reply_markup=kb,
+        )
+        return
     s = store.get_settings(cid)
+    # Персональный профиль из настроек пользователя
+    user_style = _settings.get(cid, "style", "")
+    user_body = _settings.get(cid, "body", "")
+    style_line = f"Стиль пользователя: {user_style}." if user_style else ""
+    body_line = f"Параметры тела: {user_body}." if user_body else ""
+    style_block = "\n".join(x for x in [style_line, body_line] if x)
     tmax = None
     try:
         wdata = weather.fetch_weather(s["lat"], s["lon"], 2)
@@ -92,14 +116,14 @@ async def send_looks(bot, cid):
     pref_hints = memory.profile_hints(cid)
     pref_line = ("\n" + secure.wrap_untrusted(pref_hints, "предпочтения")) if pref_hints else ""
     await bot.send_message(chat_id=cid, text="Собираю образ под погоду...")
-    prompt = f"""Ты опытный стилист. Собери ОДИН образ из гардероба на сегодня.
-{config.STYLE_PROFILE}
+    profile_block = (f"\n{style_block}" if style_block else "")
+    prompt = f"""Ты опытный стилист. Собери ОДИН образ из гардероба на сегодня.{profile_block}
 Погода: {wctx}
 ТЕМПЕРАТУРНОЕ ПРАВИЛО (строго, не нарушать): {temp_rule}{fb_line}{pref_line}
-Гардероб (только эти вещи, ПОЛНЫЕ точные названия с брендом и цветом):
-{store.wardrobe_to_text(w)}
-Правила: 1 верх + 1 низ + обувь (+ опц. аксессуар-совет). Минимализм, сочетание по цвету.
-Каждую вещь пиши ПОЛНЫМ названием (напр. «Белая футболка Uniqlo», не «Верх: белая»).{avoid}
+Гардероб пользователя (ТОЛЬКО эти вещи, другие не добавлять):
+{wardrobe_text}
+Правила: 1 верх + 1 низ + обувь (+ опц. аксессуар-совет). Сочетание по цвету и стилю.
+Каждую вещь пиши ПОЛНЫМ названием из списка выше (напр. «Белая футболка Uniqlo», не «Верх: белая»).{avoid}
 JSON (без markdown):
 {{"intro":"1 строка про погоду и логику образа","items":["вещь 1 полным названием","вещь 2","вещь 3"],"add":"1 совет что добавить (аксессуар) и почему"}}"""
     try:
@@ -229,11 +253,26 @@ async def del_item(bot, cid, i):
 # ---------- улучшить гардероб ----------
 async def send_improve(bot, cid):
     w = store.load_wardrobe(cid)
+    wardrobe_text = store.wardrobe_to_text(w)
+    if not wardrobe_text.strip():
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("👔 Добавить вещи в шкаф", callback_data="set_closet"),
+            InlineKeyboardButton("◀️ Назад", callback_data="m_wardrobe"),
+        ]])
+        await bot.send_message(
+            chat_id=cid,
+            text="🧥 <b>Шкаф пуст</b>\n\nДобавь вещи в шкаф — тогда разберу гардероб и дам советы.",
+            parse_mode="HTML",
+            reply_markup=kb,
+        )
+        return
+    user_style = _settings.get(cid, "style", "")
+    style_ctx = f"Стиль пользователя: {user_style}." if user_style else "Стиль не указан — выведи его из гардероба."
     await bot.send_message(chat_id=cid, text="Разбираю шкаф...")
-    prompt = f"""Ты стилист с прямым, живым тоном — как умный друг, который шарит в одежде. {config.STYLE_PROFILE}
+    prompt = f"""Ты стилист с прямым, живым тоном — как умный друг, который шарит в одежде. {style_ctx}
 Разбери гардероб (обращайся на "ты", НЕ используй имя):
-{store.wardrobe_to_text(w)}
-Стиль: современный минимализм, сканди-японо casual. Без воды — каждый пункт с одной короткой причиной.
+{wardrobe_text}
+Без воды — каждый пункт с одной короткой причиной.
 Верни строго валидный JSON (без markdown):
 {{"style":"1 строка: стиль и его вайб",
 "verdict":"1-2 предложения: честный разбор базы и силуэтов",
@@ -279,8 +318,12 @@ async def check_purchase(bot, cid, text):
             "\nАктуальная информация о товаре из сети (используй как дополнительный контекст):\n"
             + secure.wrap_untrusted(web_data, "web") + "\n"
         )
+    user_style = _settings.get(cid, "style", "")
+    user_body = _settings.get(cid, "body", "")
+    style_ctx = f"Стиль: {user_style}. " if user_style else ""
+    body_ctx = f"Параметры тела: {user_body}. " if user_body else ""
     prompt = f"""Ты стилист. Пользователь думает купить: {text}
-{config.STYLE_PROFILE}{web_block}
+{style_ctx}{body_ctx}{web_block}
 Оцени по ЕГО гардеробу (обращайся на "ты", НЕ используй имя):
 {store.wardrobe_to_text(w)}
 Верни JSON (без markdown):
