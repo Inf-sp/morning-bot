@@ -164,3 +164,4 @@ list_sel = {}           # "chat_id:ctx" -> set(индексов) для чист
 last_source = {}        # chat_id -> откуда последний ответ (для категорий избранного)
 last_surface = {}       # chat_id -> surface последнего ответа (для «Короче/Глубже»)
 last_look = {}          # chat_id -> последний показанный образ (для фидбека гардероба)
+micro_state = {}        # chat_id -> {"topic_id", "lang", "title", "pattern", "level", "code", "awaiting_sentence"}

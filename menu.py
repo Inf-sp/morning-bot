@@ -73,6 +73,7 @@ def menu_screen(key):
             + _MENU_FOOTER,
             _ikb([
                 [("🧠 Тренажёр", "a_train")],
+                [("📘 Грамматика", "gm_home")],
                 [("💭 Живой язык", "a_proverb")],
                 [("🕵️ Игра-детектив", "a_game")],
             ])

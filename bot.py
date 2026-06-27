@@ -22,6 +22,7 @@ import content
 import weather
 import verify
 import secure
+import grammar_micro
 
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID
@@ -60,6 +61,10 @@ async def answer_callback(update, context):
     # Закладки: fav_view_* и fav_del_*
     if data.startswith("fav_"):
         await notes.handle_callback(bot, cid, q, data)
+        return
+    # Микро-грамматика
+    if data.startswith("gm_"):
+        await grammar_micro.handle_callback(bot, cid, q, data)
         return
     # Баланс (врач/мотивация/рецепты/тревоги/холодильник) vs Закладки/Любимое
     if data.startswith("as_"):
@@ -344,6 +349,7 @@ async def text_router(update, context):
     # Нажата любая кнопка нижнего меню -> сбрасываем незавершённый ввод (чтобы чат не «съел» сообщение настроек)
     if text == "☀️ Мой день" or text in menu.LABEL_TO_KEY:
         store.pending_input.pop(cid, None)
+        store.micro_state.pop(cid, None)
 
     if text == "☀️ Мой день":
         try:
@@ -369,6 +375,11 @@ async def text_router(update, context):
             return
     if cid in store.challenge_state:
         if await learning.translate_answer(bot, cid, text):
+            return
+
+    # Микро-грамматика: практическое предложение
+    if store.micro_state.get(cid, {}).get("awaiting_sentence"):
+        if await grammar_micro.check_sentence(bot, cid, text):
             return
 
     # Pending-ввод
@@ -430,6 +441,9 @@ async def text_router(update, context):
             await learning.train_translate_answer(bot, cid, text); return
         if kind.startswith("loveadd_"):
             await notes.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
+        if kind.startswith("gm_addtopic_"):
+            code = kind[len("gm_addtopic_"):]
+            await grammar_micro.add_topic_done(bot, cid, code, text); return
 
     # Свободный чат
     await assistant.chat_reply(bot, cid, text)
