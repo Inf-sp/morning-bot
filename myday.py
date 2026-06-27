@@ -108,12 +108,15 @@ def _score_facts(candidates: list, city: str, country: str) -> list:
     place = f"{city}, {country}" if country else city
     items = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(candidates))
     prompt = (
-        f"Оцени интересность каждого факта о {place} по шкале 1-5:\n"
+        f"Оцени интересность каждого факта о {place} по шкале 1-5.\n"
+        f"ОБЯЗАТЕЛЬНО: факт должен упоминать название '{city}'. Если не упоминает — score 1.\n"
+        "АВТОМАТИЧЕСКИ score 1: классификации, рейтинги, членства в организациях, сетях, "
+        "UNESCO tier/category, global city, GAWC, Gamma, муниципальный статус — неинтересно.\n"
         "5 = рекорд / «первый в мире» / Гиннес-уровень\n"
         "4 = неожиданность, контринтуитивно, удивит местного жителя\n"
         "3 = конкретика с цифрой/датой/именем\n"
         "2 = курьёз, но слабый\n"
-        "1 = общая фраза / всё и так знают / без конкретики\n\n"
+        "1 = общая фраза / классификация / членство / без конкретики\n\n"
         f"{items}\n\n"
         'JSON: {"scores":[{"idx":1,"score":4},...]}'
     )
@@ -155,10 +158,6 @@ def _build_city_facts(city: str, country: str, cc: str) -> list:
         _add(wd["founded"])
     for s in research.wiki_sentences(city):
         _add(s)
-
-    if (cc or "").upper() == "NL":
-        for s in research.nl_world_records():
-            _add(s)
 
     avoid = list(seen)
     for aspect in _FACT_ASPECTS:
@@ -211,7 +210,9 @@ def city_fact(city, country, cid, cc=""):
         high = [f for f in facts if f.get("score", 3) >= 4]
         pool = high or facts
 
-    chosen = random.choice(pool)
+    city_lower = city.lower()
+    city_pool = [f for f in pool if city_lower in f["text"].lower()]
+    chosen = random.choice(city_pool) if city_pool else random.choice(pool)
 
     # lazy-перевод для фактов, сохранённых до введения перевода
     if not _is_russian(chosen["text"]):

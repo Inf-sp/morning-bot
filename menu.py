@@ -100,7 +100,7 @@ async def send_food_menu(bot, cid):
     header = "👨‍🍳 <b>Кулинарный радар</b>"
     body = f"\n\n{tip}" if tip else ""
     kb = _ikb([
-        [("✨ Новый рецепт", "m_food_gen")],
+        [("🍳 Завтрак", "a_food_breakfast"), ("🥗 Обед", "a_food_lunch"), ("🍽️ Ужин", "a_food_dinner")],
         [("🧊 Из холодильника", "as_fridge_cook")],
         [("⬅️ Назад", "m_balance")],
     ])
