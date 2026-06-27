@@ -690,7 +690,7 @@ async def handle_callback(bot, cid, q, data):
         await send_evening_review(bot, cid); return
     # мотивация
     if data == "as_motiv":
-        await bot.send_message(chat_id=cid, text="Секунду...")
+        await util.ack_loading(q)
         try:
             out = _gen_motiv(cid)
         except Exception as e:
@@ -702,7 +702,7 @@ async def handle_callback(bot, cid, q, data):
     # одноразовая генерация (прочее)
     if data in _ONESHOT:
         gen, lbl, cb = _ONESHOT[data]
-        await bot.send_message(chat_id=cid, text="Секунду...")
+        await util.ack_loading(q)
         try:
             out = gen(cid)
         except Exception as e:
@@ -726,7 +726,7 @@ async def handle_callback(bot, cid, q, data):
             text="➕ Напиши продукты через запятую или с новой строки — добавлю в список.",
             reply_markup=_back_kb()); return
     if data == "as_fridge_cook":
-        await send_fridge_recipe(bot, cid); return
+        await util.ack_loading(q); await send_fridge_recipe(bot, cid); return
     if data == "as_fridge_clean":
         import cleanup
         await cleanup.open_cleanup(bot, cid, "fridge"); return

@@ -4,10 +4,12 @@ import config
 import store
 import ai
 import weather
+import util
 from util import esc
 import verify
 import secure
 import memory
+import research
 
 HOME_TEXT = (
     "👕 <b>Гардероб</b>\n\n"
@@ -270,8 +272,15 @@ async def send_improve(bot, cid):
 async def check_purchase(bot, cid, text):
     w = store.load_wardrobe()
     await bot.send_message(chat_id=cid, text="Оцениваю...")
+    web_block = ""
+    web_data = research.tavily_snippet(f"{text} отзывы обзор стоит ли покупать", max_chars=900)
+    if web_data:
+        web_block = (
+            "\nАктуальная информация о товаре из сети (используй как дополнительный контекст):\n"
+            + secure.wrap_untrusted(web_data, "web") + "\n"
+        )
     prompt = f"""Ты стилист. Пользователь думает купить: {text}
-{config.STYLE_PROFILE}
+{config.STYLE_PROFILE}{web_block}
 Оцени по ЕГО гардеробу (обращайся на "ты", НЕ используй имя):
 {store.wardrobe_to_text(w)}
 Верни JSON (без markdown):
@@ -313,7 +322,7 @@ async def handle_callback(bot, cid, q, data):
             await bot.send_message(chat_id=cid, text=HOME_TEXT, parse_mode="HTML", reply_markup=home_kb())
         return
     if data == "w_look":
-        await send_looks(bot, cid); return
+        await util.ack_loading(q); await send_looks(bot, cid); return
     if data.startswith("w_fb_"):
         await look_feedback(bot, cid, data[len("w_fb_"):]); return
     if data == "w_closet":
@@ -335,7 +344,7 @@ async def handle_callback(bot, cid, q, data):
     if data.startswith("w_delitem_"):
         await del_item(bot, cid, int(data.split("_")[-1])); return
     if data == "w_improve":
-        await send_improve(bot, cid); return
+        await util.ack_loading(q); await send_improve(bot, cid); return
     if data == "w_check":
         store.pending_input[str(cid)] = "wardrobe_check"
         await bot.send_message(chat_id=cid, text="Пришли ссылку или название вещи - оценю, брать или нет.",

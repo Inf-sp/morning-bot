@@ -45,8 +45,7 @@ def _strip_quotes(s):
 
 # --- Факты о городе (lazy build) ---
 
-_FACTS_DIR = _HERE / "facts"
-_FACTS_MIN = 30  # порог «город закрыт» — дальше только чтение
+_FACTS_MIN = 5   # минимум фактов для показа; 30 было слишком — Railway стирал файлы
 
 _FACT_ASPECTS = [
     "history, founding date, and historical records",
@@ -62,22 +61,17 @@ def _city_slug(city: str) -> str:
     return re.sub(r"[^\w]", "_", (city or "").strip().lower())
 
 
-def _load_city_facts_file(city: str) -> list:
-    p = _FACTS_DIR / f"{_city_slug(city)}.json"
-    if not p.exists():
-        return []
-    try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except Exception:
-        return []
+def _load_city_facts(city: str) -> list:
+    """Загружает факты из store (Postgres/in-memory) — переживает рестарты."""
+    db = store._load(config.CITY_FACTS_DB_KEY)
+    return list(db.get(_city_slug(city), []))
 
 
-def _save_city_facts_file(city: str, facts: list) -> None:
-    _FACTS_DIR.mkdir(exist_ok=True)
-    (_FACTS_DIR / f"{_city_slug(city)}.json").write_text(
-        json.dumps(facts, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+def _save_city_facts(city: str, facts: list) -> None:
+    """Сохраняет факты в store (Postgres/in-memory) — переживает рестарты."""
+    db = store._load(config.CITY_FACTS_DB_KEY)
+    db[_city_slug(city)] = facts
+    store._save(config.CITY_FACTS_DB_KEY, db)
 
 
 def _is_russian(text: str) -> bool:
@@ -161,8 +155,8 @@ def _llm_facts_fallback(city: str, country: str) -> list:
 
 
 def _build_city_facts(city: str, country: str, cc: str) -> list:
-    """One-time build: собирает, оценивает, сохраняет в facts/<city>.json."""
-    existing = _load_city_facts_file(city)
+    """One-time build: собирает факты из Wikipedia/Gemini/Tavily/LLM, сохраняет в store."""
+    existing = _load_city_facts(city)
     existing_texts: set = {f["text"] for f in existing}
 
     raw: list = []
@@ -174,12 +168,19 @@ def _build_city_facts(city: str, country: str, cc: str) -> list:
             raw.append(t)
             seen.add(t)
 
-    # Wikidata: только год основания (population/area — сухие цифры, Gemini найдёт интереснее)
+    # Wikidata: год основания
     wd = research.wikidata_city_facts(city)
     if wd.get("founded"):
         _add(wd["founded"])
     for s in research.wiki_sentences(city):
         _add(s)
+
+    # Tavily: актуальные факты из сети
+    place = f"{city}, {country}" if country else city
+    for r in research.tavily_search(f"interesting facts about {place} history culture", max_results=5):
+        for sent in (r.get("content") or "").split(". "):
+            if len(sent.strip()) > 30:
+                _add(sent.strip())
 
     avoid = list(seen)
     for aspect in _FACT_ASPECTS:
@@ -203,20 +204,20 @@ def _build_city_facts(city: str, country: str, cc: str) -> list:
             f["text"] = _translate_to_ru(f["text"])
 
     all_facts = existing + scored
-    _save_city_facts_file(city, all_facts)
+    _save_city_facts(city, all_facts)
     _log.info("myday: built %d facts for %s (was %d)", len(all_facts), city, len(existing))
     return all_facts
 
 
 def city_fact(city, country, cid, cc=""):
-    """Факт о городе: lazy-build из facts/<city>.json, anti-repeat по cid."""
+    """Факт о городе: lazy-build из store, anti-repeat по cid."""
     cid = str(cid)
     if not city:
         _log.warning("myday: city_fact called with empty city for cid=%s", cid)
         return ""
     slug = _city_slug(city)
 
-    facts = _load_city_facts_file(city)
+    facts = _load_city_facts(city)
     if len(facts) < _FACTS_MIN and slug not in _build_attempted:
         _build_attempted.add(slug)
         facts = _build_city_facts(city, country, cc)
@@ -247,7 +248,7 @@ def city_fact(city, country, cid, cc=""):
         translated = _translate_to_ru(chosen["text"])
         if translated != chosen["text"]:
             chosen["text"] = translated
-            _save_city_facts_file(city, facts)
+            _save_city_facts(city, facts)
 
     seen_texts.add(chosen["text"])
     seen_all.setdefault(cid, {})[slug] = list(seen_texts)
