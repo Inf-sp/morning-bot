@@ -91,28 +91,21 @@ def set_level(chat_id, language, level):
     d.setdefault(str(chat_id), {})[language] = level
     _save(config.LEVELS_FILE, d)
 
-def load_wardrobe():
-    w = _load(config.WARDROBE_FILE)
-    seed = None
-    try:
-        _seed_path = _HERE / config.WARDROBE_FILE
-        if _seed_path.exists():
-            with open(_seed_path, encoding="utf-8") as f:
-                seed = json.load(f)
-    except Exception:
-        seed = None
-    seed_v = (seed or {}).get("_v")
-    # затираем старое, если в БД нет версии сида (новая база одежды)
-    if seed and (not w or w.get("_v") != seed_v):
-        _save(config.WARDROBE_FILE, seed)
-        return seed
-    return w or {}
+def load_wardrobe(cid=None):
+    """Per-user wardrobe. cid=None falls back to legacy global (migration path)."""
+    if cid is not None:
+        key = f"wardrobe_user_{cid}"
+        return _load(key) or {}
+    return _load(config.WARDROBE_FILE) or {}
 
-def save_wardrobe(w):
-    _save(config.WARDROBE_FILE, w)
+def save_wardrobe(w, cid=None):
+    if cid is not None:
+        _save(f"wardrobe_user_{cid}", w)
+    else:
+        _save(config.WARDROBE_FILE, w)
 
-def merge_wardrobe(new_items: dict):
-    w = load_wardrobe()
+def merge_wardrobe(new_items: dict, cid=None):
+    w = load_wardrobe(cid)
     added = 0
     for cat, items in new_items.items():
         cat = cat.lower().strip()
@@ -122,7 +115,7 @@ def merge_wardrobe(new_items: dict):
             if it and it not in {x.lower() for x in w[cat]}:
                 w[cat].append(it)
                 added += 1
-    save_wardrobe(w)
+    save_wardrobe(w, cid)
     return added
 
 def wardrobe_to_text(w):

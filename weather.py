@@ -338,7 +338,7 @@ async def send_weather(bot, cid, mode="today"):
                             d["windspeed_10m_max"][0] or 0, DESC.get(d["weathercode"][0], ""), "сегодня")
         if joke:
             L.append(esc(joke))
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(" ", callback_data="a_plany")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
         await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
         return
 
@@ -387,11 +387,40 @@ async def send_weather(bot, cid, mode="today"):
         if mode == "tomorrow":
             kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
-                [InlineKeyboardButton(" ", callback_data="a_plany")],
+                [InlineKeyboardButton("◀️ Назад", callback_data="a_plany")],
             ])
         else:
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton(" ", callback_data="a_plany")]])
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
+        return
+
+    if mode == "tomorrow_plain":
+        # Рассылка 19:00 — погода на завтра без лишних кнопок
+        day = 1
+        dt = now + timedelta(days=1)
+        flag = __import__("util").flag_from_cc(s.get("cc", "")) or ""
+        header = f"🌙 Погода на завтра • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} • {s['city']} {flag}"
+        code = d["weathercode"][day]
+        tmax = d["temperature_2m_max"][day]
+        rain = d["precipitation_probability_max"][day] or 0
+        rain_mm = (d.get("precipitation_sum") or [None] * (day + 1))[day] if d.get("precipitation_sum") else None
+        wind_ms = d["windspeed_10m_max"][day] or 0
+        day_str = d["time"][day]
+        _avg = _daytime_avg_wind(data, day_str)
+        wind_avg = _avg if _avg is not None else wind_ms
+        icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
+        wemoji, wword = wind_scale(wind_avg)
+        rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
+        rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
+        wind_str = f"{wemoji} {wword} {wind_avg:.0f} м/с" if wind_avg >= 8 else f"💨 Ветер {wind_avg:.0f} м/с"
+        desc = DESC.get(code, "")
+        cc = s.get("cc", "")
+        alert = storm_alert(wind_ms, code, rain, rain_mm, cc=cc)
+        L = [f"<b>{esc(header)}</b>", "",
+             f"{icon} До {tmax:+.0f}°C • {rain_text(rain, rain_mm, rain_when)}{wind_str}"]
+        if alert:
+            L += ["", alert]
+        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
         return
 
     # week: сегодня — в «Мой день», завтра — в «Погода на завтра»; неделя с послезавтра

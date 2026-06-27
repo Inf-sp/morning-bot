@@ -262,8 +262,9 @@ async def _render_train(bot, cid):
     head = f"🧠 {_flag(language)} <b>Тренажёр слов</b>"
     if fmt == "card":
         st.update({"fmt": "card", "word": word, "ru": ru})
-        L = [head, "", "Вспомни перевод:", "", f"<b>{esc(word)}</b>"]
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("👁 Показать перевод", callback_data="train_reveal")]])
+        store.pending_input[str(cid)] = "train_card"
+        L = [head, "", "✍️ Напиши перевод:", "", f"<b>{esc(word)}</b>"]
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить", callback_data="train_next")]])
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
         return
     if fmt == "translate":
@@ -318,6 +319,33 @@ async def train_reveal(bot, cid):
     except Exception:
         pass
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=_train_again_kb())
+
+async def train_card_answer(bot, cid, text):
+    """Проверяет ввод пользователя для режима 'Вспомни перевод' (card)."""
+    st = store.train_state.get(str(cid))
+    if not st or st.get("fmt") != "card":
+        return
+    store.pending_input.pop(str(cid), None)
+    word = st.get("word", "")
+    ru = st.get("ru", "") or ""
+    lang = st.get("lang", "nl")
+    prompt = (f"Слово на {lang}: «{word}». Правильный перевод на русский: «{ru}».\n"
+              f"Ответ пользователя: «{text}».\n"
+              "Ответь JSON: {\"ok\": true/false, \"note\": \"короткий комментарий на русском (1 строка) или пусто\"}. "
+              "ok=true если ответ верен или близок по смыслу; ok=false если заметно неверен.")
+    try:
+        r = await asyncio.to_thread(ai.llm_json, prompt, tier="cheap")
+    except Exception:
+        r = {"ok": text.strip().lower() == ru.strip().lower()}
+    L = [f"🧠 {_flag(lang)} <b>{esc(word)}</b>", ""]
+    if r.get("ok"):
+        L.append(f"✅ Верно! Перевод: {esc(ru)}")
+    else:
+        L += [f"❌ Нет. Перевод: <b>{esc(ru)}</b>"]
+    if r.get("note"):
+        L += ["", esc(r["note"])]
+    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=_train_again_kb())
+
 
 async def train_answer(bot, cid, chosen):
     st = store.train_state.get(str(cid))
@@ -441,7 +469,7 @@ async def translate_answer(bot, cid, text):
     code = _code(st["lang"])
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Ещё пример", callback_data=f"again_tr_{code}")],
-        [InlineKeyboardButton(" ", callback_data=f"m_{code}")],
+        [InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
     return True
@@ -451,7 +479,7 @@ async def translate_answer(bot, cid, text):
 def _proverb_kb(code):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё вариант", callback_data=f"a_proverb_{code}")],
-        [InlineKeyboardButton(" ", callback_data=f"m_{code}")],
+        [InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")],
     ])
 
 async def send_proverb(bot, cid, language):
@@ -660,7 +688,7 @@ async def send_dict_lang(bot, cid, lang):
         [InlineKeyboardButton("📝 Добавить новое слово или фразу", callback_data=f"a_dictadd_{lang}")],
         [InlineKeyboardButton("❌ Удалить слово", callback_data=f"a_dictedit_{lang}_word")],
         [InlineKeyboardButton("❌ Удалить фразу", callback_data=f"a_dictedit_{lang}_phrase")],
-        [InlineKeyboardButton(" ", callback_data="a_dict")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="a_dict")],
     ]
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
@@ -808,7 +836,7 @@ async def send_topics(bot, cid, language):
     rows = [[InlineKeyboardButton("✍🏻 Добавить тему", callback_data=f"a_topicadd_{code}")]]
     if topics:
         rows.append([InlineKeyboardButton("🧹 Убрать выученные", callback_data=f"a_topicclean_{code}")])
-    rows.append([InlineKeyboardButton(" ", callback_data=f"m_{code}")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -979,7 +1007,7 @@ async def send_game(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["hint"], callback_data="game_hint"),
          InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")],
-        [InlineKeyboardButton(" ", callback_data="game_change")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="game_change")],
     ])
     clues = "\n".join(f"•{c.strip()}" for c in d.get("clues", "").split("\n") if c.strip())
     L = [f"<b>{ui['title']}</b>", "", f"<b>{ui['suspect']}</b>", clues, "", f"<b>{ui['who']} 🤔</b>"]
