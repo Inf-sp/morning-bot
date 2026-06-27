@@ -294,7 +294,7 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_lang_en":
         await set_lang(bot, cid, "английский")
     elif data == "set_levels":
-        await learning.send_levels(bot, cid, q)
+        await learning.send_levels(bot, cid)
     elif data == "set_city":
         store.pending_input[cid] = "setcity"
         await bot.send_message(chat_id=cid, text="🌍 Напиши город - переключу.")

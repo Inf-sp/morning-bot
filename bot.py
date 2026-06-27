@@ -99,7 +99,10 @@ async def answer_callback(update, context):
         return
     # Настройки
     if data.startswith(("set_", "setadd_", "setdel_")):
-        await settings.handle_callback(bot, cid, data, q)
+        try:
+            await settings.handle_callback(bot, cid, data, q)
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
         return
     # Навигация по подменю - редактируем сообщение на месте
     if data == "m_close":
