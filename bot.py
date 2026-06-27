@@ -62,8 +62,8 @@ async def answer_callback(update, context):
     if data.startswith("fav_"):
         await notes.handle_callback(bot, cid, q, data)
         return
-    # Микро-грамматика
-    if data.startswith("gm_"):
+    # Микро-грамматика и тренажёр de/het
+    if data.startswith("gm_") or data.startswith("dh_"):
         await grammar_micro.handle_callback(bot, cid, q, data)
         return
     # Баланс (врач/мотивация/рецепты/тревоги/холодильник) vs Закладки/Любимое

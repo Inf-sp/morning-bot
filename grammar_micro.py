@@ -159,6 +159,28 @@ def _check_data(lang, title, pattern, sentence):
     return ai.llm_json(prompt, 200, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
 
 
+def _gen_dehet_words():
+    prompt = (
+        "Дай 7 нидерландских существительных уровня A1-A2 с правильным артиклем de или het.\n"
+        "Разные темы: дом, природа, еда, тело, транспорт, вещи. Примерно 4 de и 3 het (или наоборот).\n"
+        'JSON (только массив): [{"word": "huis", "article": "het"}, ...]'
+    )
+    return ai.llm_json(prompt, 300, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
+
+
+def _dehet_card(st):
+    idx = st["idx"]
+    total = len(st["words"])
+    word = st["words"][idx]["word"]
+    return f"🧩 <b>de / het</b>  ·  {idx + 1} из {total}\n\n<b>      {esc(word)}</b>"
+
+
+_DEHET_KB = _ikb([
+    [("de", "dh_de"), ("het", "dh_het")],
+    [("⬅️ Стоп", "gm_lang_nl")],
+])
+
+
 # --- UI ---
 
 async def send_home(bot, cid):
@@ -177,18 +199,20 @@ async def send_home(bot, cid):
 async def send_lang(bot, cid, code):
     lang = _lang(code)
     flag = _LANG_FLAG[lang]
-    kb = _ikb([
+    rows = [
         [("📘 A1 · Основы", f"gm_level_{code}_A1")],
         [("📙 A2 · Продолжение", f"gm_level_{code}_A2")],
         [("📗 B1 · Уверенный", f"gm_level_{code}_B1")],
         [("📝 Мои темы", f"gm_custom_{code}")],
         [("⬅️ Назад", "gm_home")],
-    ])
+    ]
+    if code == "nl":
+        rows.insert(0, [("🧩 Тренажёр de/het", "dh_start")])
     await bot.send_message(
         chat_id=cid,
         text=f"📘 <b>Грамматика · {flag} {lang.capitalize()}</b>\n\nВыбери курс:",
         parse_mode="HTML",
-        reply_markup=kb,
+        reply_markup=_ikb(rows),
     )
 
 
@@ -408,6 +432,62 @@ async def add_topic_done(bot, cid, code, name):
     await send_custom(bot, cid, code)
 
 
+async def send_dehet_trainer(bot, cid):
+    try:
+        words = _gen_dehet_words()
+    except Exception as e:
+        await verify.safe_error(bot, cid, e)
+        return
+    if not isinstance(words, list) or not words:
+        await bot.send_message(chat_id=cid, text="Не удалось сгенерировать слова, попробуй ещё.")
+        return
+    store.dehet_state[cid] = {"words": words, "idx": 0, "score": 0, "results": []}
+    await bot.send_message(
+        chat_id=cid,
+        text=_dehet_card(store.dehet_state[cid]),
+        parse_mode="HTML",
+        reply_markup=_DEHET_KB,
+    )
+
+
+async def dehet_answer(bot, cid, q, chosen):
+    st = store.dehet_state.get(cid)
+    if not st:
+        await bot.send_message(chat_id=cid, text="Сессия устарела. Начни заново через меню Грамматика.")
+        return
+    words = st["words"]
+    idx = st["idx"]
+    word_data = words[idx]
+    correct = word_data["article"]
+    ok = chosen == correct
+    if ok:
+        st["score"] += 1
+    st["results"].append({"word": word_data["word"], "article": correct, "ok": ok})
+    st["idx"] += 1
+
+    feedback = f"{'✅' if ok else f'❌ (верно: {correct})'} <b>{esc(word_data['word'])}</b>\n\n"
+
+    if st["idx"] >= len(words):
+        score = st["score"]
+        total = len(words)
+        lines = [f"🎯 <b>Результат: {score}/{total}</b>", ""]
+        for r in st["results"]:
+            mark = "✅" if r["ok"] else f"❌ ({r['article']})"
+            lines.append(f"{mark} <b>{esc(r['word'])}</b> — {r['article']}")
+        store.dehet_state.pop(cid, None)
+        kb = _ikb([[("🔄 Ещё раз", "dh_start"), ("⬅️ Назад", "gm_lang_nl")]])
+        try:
+            await q.edit_message_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    else:
+        text = feedback + _dehet_card(st)
+        try:
+            await q.edit_message_text(text, parse_mode="HTML", reply_markup=_DEHET_KB)
+        except Exception:
+            await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=_DEHET_KB)
+
+
 async def handle_callback(bot, cid, q, data):
     if data == "gm_home":
         await send_home(bot, cid)
@@ -433,3 +513,7 @@ async def handle_callback(bot, cid, q, data):
         )
     elif data.startswith("gm_deltopic_"):
         await delete_topic(bot, cid, data[len("gm_deltopic_"):])
+    elif data == "dh_start":
+        await send_dehet_trainer(bot, cid)
+    elif data in ("dh_de", "dh_het"):
+        await dehet_answer(bot, cid, q, data[3:])

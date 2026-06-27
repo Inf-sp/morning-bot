@@ -165,3 +165,4 @@ last_source = {}        # chat_id -> откуда последний ответ 
 last_surface = {}       # chat_id -> surface последнего ответа (для «Короче/Глубже»)
 last_look = {}          # chat_id -> последний показанный образ (для фидбека гардероба)
 micro_state = {}        # chat_id -> {"topic_id", "lang", "title", "pattern", "level", "code", "awaiting_sentence"}
+dehet_state = {}        # chat_id -> {"words", "idx", "score", "results"}
