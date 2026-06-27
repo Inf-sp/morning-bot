@@ -160,7 +160,7 @@ async def send_wardrobe(bot, cid):
         [InlineKeyboardButton("📐 Параметры шкафа", callback_data="set_body")],
         [InlineKeyboardButton("◀️ Назад", callback_data="set_home")],
     ])
-    await bot.send_message(chat_id=cid, text="👕 <b>Мой шкаф</b>\n\nБаза вещей и параметры для подбора лука.",
+    await bot.send_message(chat_id=cid, text="👕 <b>Мой шкаф</b>\n\nБаза вещей и параметры для подбора одежды.",
                            parse_mode="HTML", reply_markup=kb)
 
 # --- Страны ---
