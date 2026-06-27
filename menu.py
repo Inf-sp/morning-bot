@@ -48,7 +48,7 @@ def _ikb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
 
 def _back(parent="m_close"):
-    return [(" ", parent)]
+    return [("◀️ Назад", parent)]
 
 def menu_screen(key):
     if key == "m_wardrobe":
@@ -81,7 +81,7 @@ def menu_screen(key):
                 [("🍳 Завтрак", "a_food_breakfast")],
                 [("🥗 Обед", "a_food_lunch")],
                 [("🍽️ Ужин", "a_food_dinner")],
-                [(" ", "m_food")],
+                [("◀️ Назад", "m_food")],
             ])
         )
     if key in ("m_learn", "m_nl", "m_en"):
@@ -122,7 +122,7 @@ async def send_food_menu(bot, cid):
     kb = _ikb([
         [("🍳 Завтрак", "a_food_breakfast"), ("🥗 Обед", "a_food_lunch"), ("🍽️ Ужин", "a_food_dinner")],
         [("🧊 Из холодильника", "as_fridge_cook")],
-        [(" ", "m_balance")],
+        [("◀️ Назад", "m_balance")],
     ])
     await bot.send_message(chat_id=cid, text=header + body,
                            parse_mode="HTML", reply_markup=kb)
