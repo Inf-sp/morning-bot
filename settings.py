@@ -108,10 +108,20 @@ async def set_lang(bot, cid, lang):
     await bot.send_message(chat_id=cid, text=f"Готово. Язык уведомлений по обучению: {lang}.")
     await send_home(bot, cid)
 
+_BODY_PLACEHOLDER = "не указано"
+
 async def send_body(bot, cid):
-    body = get(cid, "body", "рост 179 см, вес ~65 кг, обувь EU 42.5, брюки W31 L31, размер M")
+    body = get(cid, "body", "")
     style = get(cid, "style", "минимализм")
-    txt = f"📐 <b>Параметры шкафа</b>\n\n<b>Параметры:</b> {body}\n<b>Стиль:</b> {style}"
+    body_line = esc(body) if body else "<i>не задано</i>"
+    txt = (
+        "📐 <b>Параметры шкафа</b>\n\n"
+        "Бот использует эти данные при подборе образа и оценке покупок — "
+        "чтобы советы по размеру и силуэту подходили именно тебе.\n\n"
+        f"<b>Параметры тела:</b> {body_line}\n"
+        f"<b>Стиль:</b> {esc(style)}\n\n"
+        "<i>Пример параметров: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32</i>"
+    )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✏️ Параметры тела", callback_data="set_bodyinput")],
         [InlineKeyboardButton("🎨 Стиль", callback_data="set_stylepick")],
@@ -352,7 +362,10 @@ async def handle_callback(bot, cid, data):
         await set_style(bot, cid, int(data.split("_")[-1]))
     elif data == "set_bodyinput":
         store.pending_input[cid] = "bodyinput"
-        await bot.send_message(chat_id=cid, text="✏️ Напиши параметры: рост, вес, обувь, размер брюк и одежды.")
+        await bot.send_message(chat_id=cid,
+            text="✏️ <b>Параметры тела</b>\n\nНапиши свободным текстом — рост, размер одежды, размер обуви и брюк.\n\n"
+                 "<i>Пример: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32</i>",
+            parse_mode="HTML")
     elif data == "set_admin":
         await _admin_guard(bot, cid, send_admin)
     elif data == "set_admin_users":
