@@ -83,7 +83,8 @@ def _ctx_items(cid, ctx):
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
         return title, items, f"as_love_{key}"
     if ctx == "fridge":
-        items = [(i, it) for i, it in enumerate(store.get_list(config.FRIDGE_KEY, cid))]
+        raw = store.get_list(config.FRIDGE_KEY, cid)
+        items = [(i, it["name"] if isinstance(it, dict) else it) for i, it in enumerate(raw)]
         return "🧊 Чистка: холодильник", items, "as_fridge"
     if ctx == "recipes":
         recipes = store.get_list(config.MY_RECIPES_KEY, cid)
@@ -119,7 +120,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     rows.append([InlineKeyboardButton("☑️ Отметить всё на странице", callback_data=f"cla_{ctx}_{page}")])
     if sel:
         rows.append([InlineKeyboardButton(f"🗑 Удалить отмеченные ({len(sel)})", callback_data=f"cld_{ctx}_{page}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back)])
+    rows.append([InlineKeyboardButton("◀️ ", callback_data=back)])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
     if q is not None:

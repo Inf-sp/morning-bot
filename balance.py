@@ -19,6 +19,64 @@ TZ = config.TZ
 
 _food_tip_cache: dict = {}  # cid -> {"date": ..., "text": ...}
 
+# ===== Холодильник: категории =====
+_FRIDGE_KEYWORDS: dict = {
+    "мясо":     ["курич", "курен", "говядин", "свинин", "фарш", "индейк", "баранин",
+                 "сосис", "колбас", "ветчин", "бекон", "утк", "кролик", "стейк"],
+    "рыба":     ["рыб", "лосос", "сёмг", "семг", "тунец", "треска", "сельдь",
+                 "скумбри", "форел", "икр", "креветк", "мидии", "кальмар", "осьминог", "краб"],
+    "овощи":    ["помидор", "томат", "огурец", "морков", "репчат", "лук", "чеснок",
+                 "перец", "картофел", "картошк", "брокколи", "цукини", "кабачок",
+                 "баклажан", "шпинат", "салат", "капуст", "свёкл", "свекл",
+                 "сельдерей", "петрушк", "укроп", "зелен", "горошек", "кукуруз",
+                 "редис", "тыкв", "артишок", "спаржа", "порей"],
+    "фрукты":   ["яблок", "банан", "апельсин", "лимон", "лайм", "мандарин", "груш",
+                 "слив", "персик", "ягод", "малин", "клубник", "черник", "виноград",
+                 "авокадо", "киви", "манго", "ананас", "смородин", "вишн", "черешн"],
+    "молочное": ["молок", "кефир", "йогурт", "творог", "сметан", "сливк", "масл",
+                 "сыр", "ряженк", "варенец", "айран", "кумыс"],
+    "яйца":     ["яйц"],
+    "крупы":    ["рис", "гречк", "овсянк", "овёс", "макарон", "паст", "хлопь",
+                 "киноа", "булгур", "кускус", "перловк", "пшен", "чечевиц",
+                 "нут", "фасол", "горох", "боб", "ячмен", "полба"],
+    "специи":   ["соль", "специ", "приправ", "соус", "уксус", "горчиц", "кетчуп",
+                 "майонез", "соев", "песто", "тахин", "хумус"],
+    "хлеб":     ["хлеб", "батон", "булочк", "тост", "лаваш", "питa", "пита",
+                 "лепёшк", "лепешк", "багет", "чиабатт"],
+}
+_CAT_EMOJI: dict = {
+    "мясо": "🥩", "рыба": "🐟", "овощи": "🥦", "фрукты": "🍎",
+    "молочное": "🥛", "яйца": "🥚", "крупы": "🌾", "специи": "🧂",
+    "хлеб": "🍞", "прочее": "📦",
+}
+_CAT_ORDER = ["мясо", "рыба", "овощи", "фрукты", "молочное", "яйца", "крупы", "хлеб", "специи", "прочее"]
+
+
+def _fridge_cat(name: str) -> str:
+    """Определить категорию продукта по ключевым словам."""
+    n = name.lower()
+    for cat, keywords in _FRIDGE_KEYWORDS.items():
+        if any(k in n for k in keywords):
+            return cat
+    return "прочее"
+
+
+def _fridge_migrate(items: list) -> list:
+    """Конвертировать старые строки в {name, cat, on}. Уже мигрированные пропускаем."""
+    result = []
+    for it in items:
+        if isinstance(it, dict):
+            result.append(it)
+        else:
+            s = str(it)
+            result.append({"name": s, "cat": _fridge_cat(s), "on": True})
+    return result
+
+
+def _fridge_available(items: list) -> list:
+    """Имена продуктов с on=True (для рецепта)."""
+    return [it["name"] for it in _fridge_migrate(items) if it.get("on", True)]
+
 def _food_tip_context(cid) -> str:
     import memory
     lagom = memory.get_lagom(cid)
@@ -28,6 +86,9 @@ def _food_tip_context(cid) -> str:
         parts.append("Ценности и стиль жизни: " + "; ".join(str(x) for x in lagom[:8]))
     if recipes:
         parts.append("Любимые рецепты уже есть: " + ", ".join(str(r) for r in recipes[:6]))
+    hints = memory.profile_hints(cid)
+    if hints:
+        parts.append(hints)
     return "\n".join(parts)
 
 def _food_card(d, label="Рецепт дня") -> str:
@@ -92,27 +153,27 @@ def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry", depth=
         rows.append([(cont_label, cont_cb)])
     if depth:
         rows.append([("✂️ Короче", "ans_short"), ("🔬 Глубже", "ans_deep")])
-    rows.append([("⭐ В закладки", "as_fav"), ("⬅️ Назад", "m_close")])
+    rows.append([("⭐ В закладки", "as_fav"), ("◀️ ", "m_close")])
     return _kb(rows)
 
 def _recipe_kb():
     return _kb([
         [("✨ Ещё рецепт", "as_food")],
-        [("⬅️ Назад", "m_close")],
+        [("◀️ ", "m_close")],
     ])
 
 def _recipe_typed_kb():
     """Клавиатура после «Новый рецепт» — только выбор типа приёма пищи."""
     return _kb([
         [("🍳 Завтрак", "a_food_breakfast"), ("🥗 Обед", "a_food_lunch"), ("🍽️ Ужин", "a_food_dinner")],
-        [("⬅️ Назад", "m_food")],
+        [("◀️ ", "m_food")],
     ])
 
 def _fridge_recipe_kb():
     return _recipe_typed_kb()
 
 def _back_kb():
-    return _kb([[("⬅️ Назад", "m_close")]])
+    return _kb([[("◀️ ", "m_close")]])
 
 
 async def _send(bot, cid, text, kb=None, surface="card"):
@@ -229,18 +290,38 @@ FRIDGE_DESC = (
 # ---------- Мой холодильник ----------
 async def send_fridge(bot, cid):
     cid_s = str(cid)
-    items = store.get_list(config.FRIDGE_KEY, cid_s)
-    if items:
-        compact = ", ".join(util.esc(it) for it in items[:20])
-        suffix = f" <i>и ещё {len(items) - 20}</i>" if len(items) > 20 else ""
-        txt = f"🧊 <b>Мой холодильник</b> · {len(items)} продуктов\n\n{compact}{suffix}"
-    else:
+    raw = store.get_list(config.FRIDGE_KEY, cid_s)
+    items = _fridge_migrate(raw)
+    if items != raw:                                  # сохраняем мигрированные данные
+        store.set_list(config.FRIDGE_KEY, cid_s, items)
+
+    if not items:
         txt = "🧊 <b>Мой холодильник</b>\n\nПусто — добавь продукты, которые обычно есть дома."
+    else:
+        available = sum(1 for it in items if it.get("on", True))
+        by_cat: dict = {}
+        for it in items:
+            by_cat.setdefault(it.get("cat", "прочее"), []).append(it)
+        lines = [f"🧊 <b>Мой холодильник</b> · {len(items)} продуктов · {available} в наличии", ""]
+        for cat in _CAT_ORDER:
+            if cat not in by_cat:
+                continue
+            emoji = _CAT_EMOJI.get(cat, "📦")
+            names = []
+            for it in by_cat[cat]:
+                mark = "🟢" if it.get("on", True) else "⚪"
+                names.append(f"{mark} {esc(it['name'])}")
+            lines.append(f"{emoji} <b>{cat.capitalize()}</b>: {', '.join(names)}")
+        txt = "\n".join(lines)
+
     rows = []
+    for i, it in enumerate(items):
+        mark = "🟢" if it.get("on", True) else "⚪"
+        rows.append([InlineKeyboardButton(f"{mark} {it['name']}", callback_data=f"as_fridge_tgl_{i}")])
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data="as_fridge_add")])
     if items:
         rows.append([InlineKeyboardButton("❌ Убрать", callback_data="as_fridge_clean")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
+    rows.append([InlineKeyboardButton("◀️ ", callback_data="set_home")])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -249,13 +330,15 @@ async def fridge_add_done(bot, cid, text):
     cid_s = str(cid)
     parts = re.split(r"[,\n;]+", text)
     items_new = [p.strip().lower() for p in parts if p.strip()]
-    existing = {x.lower() for x in store.get_list(config.FRIDGE_KEY, cid_s)}
+    items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
+    existing = {it["name"].lower() for it in items}
     added = []
-    for it in items_new:
-        if it and it not in existing:
-            store.add_to_list(config.FRIDGE_KEY, cid_s, it)
-            existing.add(it)
-            added.append(it)
+    for name in items_new:
+        if name and name not in existing:
+            items.append({"name": name, "cat": _fridge_cat(name), "on": True})
+            existing.add(name)
+            added.append(name)
+    store.set_list(config.FRIDGE_KEY, cid_s, items)
     if added:
         await bot.send_message(chat_id=cid, text=f"➕ Добавлено: {', '.join(added)}")
     else:
@@ -263,21 +346,33 @@ async def fridge_add_done(bot, cid, text):
     await send_fridge(bot, cid)
 
 
-async def fridge_del(bot, cid, idx):
+async def fridge_toggle(bot, cid, idx: int):
     cid_s = str(cid)
-    items = store.get_list(config.FRIDGE_KEY, cid_s)
+    items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
+    if 0 <= idx < len(items):
+        items[idx]["on"] = not items[idx].get("on", True)
+        store.set_list(config.FRIDGE_KEY, cid_s, items)
+    await send_fridge(bot, cid)
+
+
+async def fridge_del(bot, cid, idx: int):
+    cid_s = str(cid)
+    items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
     if idx < len(items):
         items.pop(idx)
         store.set_list(config.FRIDGE_KEY, cid_s, items)
     await send_fridge(bot, cid)
 
 
-
 async def send_fridge_recipe(bot, cid):
-    items = store.get_list(config.FRIDGE_KEY, str(cid))
-    if not items:
-        await bot.send_message(chat_id=cid, text="Холодильник пуст. Сначала добавь продукты."); return
-    await send_leftovers(bot, cid, ", ".join(items))
+    raw = store.get_list(config.FRIDGE_KEY, str(cid))
+    available = _fridge_available(raw)
+    if not available:
+        await bot.send_message(chat_id=cid,
+            text="🧊 Холодильник пуст или все продукты отмечены как отсутствующие.\n\n"
+                 "Отметь 🟢, что есть сейчас, и попробуй снова.")
+        return
+    await send_leftovers(bot, cid, ", ".join(available))
 
 
 # ---------- База рецептов ----------
@@ -300,7 +395,7 @@ async def send_my_recipes(bot, cid):
     if not recipes:
         txt = ("🍳 <b>Мои рецепты</b>\n\nПусто. Сохраняй рецепты кнопкой "
                "«❤️ Сохранить рецепт» под любым рецептом.")
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_love")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ ", callback_data="as_bucket_love")]])
     else:
         txt = "🍳 <b>Мои рецепты</b> — {}\n\n".format(len(recipes))
         txt += "\n".join(f"• {util.esc(r.get('name', '?'))}" for r in recipes)
@@ -309,7 +404,7 @@ async def send_my_recipes(bot, cid):
             name = r.get("name", f"Рецепт {i+1}")[:30]
             rows.append([InlineKeyboardButton(f"📖 {name}", callback_data=f"as_my_recipe_{i}")])
         rows.append([InlineKeyboardButton("❌ Убрать", callback_data="as_recipe_clean")])
-        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_love")])
+        rows.append([InlineKeyboardButton("◀️ ", callback_data="as_bucket_love")])
         kb = InlineKeyboardMarkup(rows)
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 
@@ -324,7 +419,7 @@ async def send_my_recipe_full(bot, cid, idx):
     txt = f"📖 <b>{util.esc(d.get('name',''))}</b>\n\n{d.get('full','')}"
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить из базы", callback_data=f"as_my_recipe_del_{idx}")],
-        [InlineKeyboardButton("⬅️ Назад к списку", callback_data="as_my_recipes")],
+        [InlineKeyboardButton("◀️  к списку", callback_data="as_my_recipes")],
     ])
     await util.send_html(bot, cid, txt, reply_markup=kb)
 
@@ -508,7 +603,7 @@ async def send_daycheck(bot, cid):
         lines.append("Пока пусто. Напиши тревоги одним сообщением.")
     store.pending_input[cid] = "worry"
     rows = [[InlineKeyboardButton("🧠 Разобрать тревоги", callback_data="as_worryreview")]] if worries else []
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_close")])
+    rows.append([InlineKeyboardButton(" ", callback_data="m_close")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -556,7 +651,7 @@ async def send_evening_review(bot, cid):
         L += ["", f"🎯 <b>Фокус на завтра:</b> {esc(focus)}"]
     rows = [
         [InlineKeyboardButton("🧹 Очистить все тревоги", callback_data="worry_clearall")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_close")],
+        [InlineKeyboardButton("◀️ ", callback_data="m_close")],
     ]
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
@@ -577,7 +672,7 @@ async def save_worries(bot, cid, text):
     await bot.send_message(chat_id=cid, text=f"📝 Записал в дневник тревоги: +{len(new)}. Вечером проверим, что реально случилось.")
 
 
-_MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("⬅️ Назад", "m_balance")]])
+_MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [(" ", "m_balance")]])
 
 _ONESHOT = {}
 
@@ -622,7 +717,7 @@ async def handle_callback(bot, cid, q, data):
         await bot.send_message(chat_id=cid, text=DOCTOR_INTRO, reply_markup=_back_kb()); return
     # холодильник
     if data == "as_fridge":
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_food")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ ", callback_data="m_food")]])
         await bot.send_message(chat_id=cid, text=FRIDGE_DESC, parse_mode="HTML", reply_markup=kb)
         return
     if data == "as_fridge_add":
@@ -635,6 +730,12 @@ async def handle_callback(bot, cid, q, data):
     if data == "as_fridge_clean":
         import cleanup
         await cleanup.open_cleanup(bot, cid, "fridge"); return
+    if data.startswith("as_fridge_tgl_"):
+        try:
+            await fridge_toggle(bot, cid, int(data.split("_")[-1]))
+        except (ValueError, IndexError):
+            pass
+        return
     if data.startswith("as_fridge_del_"):
         try:
             await fridge_del(bot, cid, int(data.split("_")[-1]))

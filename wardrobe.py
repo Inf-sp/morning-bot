@@ -36,18 +36,18 @@ def closet_kb():
         [("👁 Показать всё", "w_show")],
         [("🏷 Добавить вещь", "w_add")],
         [("🧹 Удалить вещь", "w_del")],
-        [("⬅️ В меню", "w_home")],
+        [(" В меню", "w_home")],
     ])
 
 def _look_result_kb():
     return _kb([
         [("😍 Надел", "w_fb_worn")],
         [("🫪 Не нравится", "w_fb_nostyle")],
-        [("⬅️ Назад", "w_home")],
+        [(" ", "w_home")],
     ])
 
 def _back_kb():
-    return _kb([[("⬅️ Назад", "w_home")]])
+    return _kb([[(" ", "w_home")]])
 
 
 async def send_home(bot, cid):
@@ -87,11 +87,13 @@ async def send_looks(bot, cid):
     hints = memory.wardrobe_hints(cid)
     fb_line = ("\nУчитывай прошлый фидбек (НЕ показывай его дословно, просто учти): "
                + secure.wrap_untrusted(hints, "фидбек гардероба")) if hints else ""
+    pref_hints = memory.profile_hints(cid)
+    pref_line = ("\n" + secure.wrap_untrusted(pref_hints, "предпочтения")) if pref_hints else ""
     await bot.send_message(chat_id=cid, text="Собираю образ под погоду...")
     prompt = f"""Ты опытный стилист. Собери ОДИН образ из гардероба на сегодня.
 {config.STYLE_PROFILE}
 Погода: {wctx}
-ТЕМПЕРАТУРНОЕ ПРАВИЛО (строго, не нарушать): {temp_rule}{fb_line}
+ТЕМПЕРАТУРНОЕ ПРАВИЛО (строго, не нарушать): {temp_rule}{fb_line}{pref_line}
 Гардероб (только эти вещи, ПОЛНЫЕ точные названия с брендом и цветом):
 {store.wardrobe_to_text(w)}
 Правила: 1 верх + 1 низ + обувь (+ опц. аксессуар-совет). Минимализм, сочетание по цвету.
@@ -262,7 +264,7 @@ async def send_improve(bot, cid):
     store.last_source[str(cid)] = "Гардероб · Улучшение"
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
-        reply_markup=_kb([[("⭐ В закладки", "as_fav")], [("⬅️ Назад", "w_home")]]))
+        reply_markup=_kb([[("⭐ В закладки", "as_fav")], [(" ", "w_home")]]))
 
 
 async def check_purchase(bot, cid, text):
@@ -293,7 +295,7 @@ async def check_purchase(bot, cid, text):
     store.last_source[str(cid)] = "Гардероб · Покупка"
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
-        reply_markup=_kb([[("⭐ В закладки", "as_fav")], [("⬅️ Назад", "w_home")]]))
+        reply_markup=_kb([[("⭐ В закладки", "as_fav")], [(" ", "w_home")]]))
 
 
 # ---------- добавление файлом (старый режим, оставлен) ----------
