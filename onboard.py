@@ -3,7 +3,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import store
 from util import esc
 
-# in-memory состояние онбординга (сбрасывается при рестарте, это нормально)
+# in-memory кеш шага (быстрый доступ; _onboard_step в профиле — персистентный бэкап)
 _ob: dict = {}
 
 _LANG_KB = InlineKeyboardMarkup([
@@ -19,12 +19,28 @@ def _lvl_kb(code: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(l, callback_data=f"ob_lvl_{code}_{l}") for l in levels]
     ])
 
-def is_onboarding(cid) -> bool:
-    return str(cid) in _ob
+
+def _save_step(cid, step: str | None):
+    """Персистируем шаг в профиле — выживает при рестарте бота."""
+    prof = store.get_profile(cid)
+    if step:
+        prof["_onboard_step"] = step
+    else:
+        prof.pop("_onboard_step", None)
+    store.set_profile(cid, prof)
+
+
+def get_text_step(cid) -> str | None:
+    """Возвращает шаг онбординга, требующий текстового ввода ('name' или 'city').
+    Проверяет сначала in-memory, потом профиль (на случай рестарта)."""
+    st = _ob.get(str(cid), {})
+    step = st.get("step") or store.get_profile(cid).get("_onboard_step")
+    return step if step in ("name", "city") else None
 
 
 async def start(bot, cid):
     _ob[str(cid)] = {"step": "name", "langs": []}
+    _save_step(cid, "name")
     store.pending_input[str(cid)] = "onboard_name"
     await bot.send_message(
         chat_id=cid,
@@ -42,13 +58,14 @@ async def handle_name(bot, cid, text: str):
     prof = store.get_profile(cid)
     prof["name"] = name
     store.set_profile(cid, prof)
-    _ob[str(cid)]["step"] = "city"
+    _ob.setdefault(str(cid), {})["step"] = "city"
+    _save_step(cid, "city")
     store.pending_input[str(cid)] = "onboard_city"
     await bot.send_message(
         chat_id=cid,
         text=(
             f"Приятно познакомиться, <b>{esc(name)}</b>! 🙌\n\n"
-            "🌍 Из какого ты города? Напишу текстом — настрою погоду и контекст для советов."
+            "🌍 Из какого ты города? Напиши текстом — настрою погоду и контекст для советов."
         ),
         parse_mode="HTML",
     )
@@ -56,9 +73,9 @@ async def handle_name(bot, cid, text: str):
 
 async def handle_city(bot, cid, text: str):
     import weather as _wx
-    # set_city_text сама отправляет подтверждение/ошибку
     await _wx.set_city_text(bot, cid, text)
-    _ob[str(cid)]["step"] = "lang"
+    _ob.setdefault(str(cid), {})["step"] = "lang"
+    _save_step(cid, None)          # текстовый ввод больше не нужен
     store.pending_input.pop(str(cid), None)
     await bot.send_message(
         chat_id=cid,
@@ -81,6 +98,7 @@ async def handle_callback(bot, cid, q, data: str):
             st["langs"] = [choice]
         st["step"] = "lvl"
         st["lvl_queue"] = list(st["langs"])
+        _ob[str(cid)] = st
         await _ask_next_level(bot, cid, q)
         return
 
@@ -92,6 +110,7 @@ async def handle_callback(bot, cid, q, data: str):
         if queue and queue[0] == code:
             queue.pop(0)
         st["lvl_queue"] = queue
+        _ob[str(cid)] = st
         if queue:
             await _ask_next_level(bot, cid, q)
         else:
@@ -126,6 +145,7 @@ async def _ask_next_level(bot, cid, q):
 async def _finish(bot, cid):
     import menu
     _ob.pop(str(cid), None)
+    _save_step(cid, None)
     store.pending_input.pop(str(cid), None)
     await bot.send_message(
         chat_id=cid,
