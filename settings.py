@@ -419,7 +419,7 @@ async def save_fav(bot, cid, q=None):
     source = store.last_source.get(str(cid), "Прочее")
     store.add_to_list(config.NOTES_KEY, cid, {"date": datetime.now(config.TZ).strftime("%d.%m"),
                                               "text": txt, "source": source, "bucket": "fav"})
-    await bot.send_message(chat_id=cid, text="⭐ Сохранено в закладки.")
+    await bot.send_message(chat_id=cid, text="⏳ Сохранено во временные закладки.")
 
 def _top_cat(source):
     return (source or "Прочее").split(" · ")[0]
@@ -509,7 +509,7 @@ async def export_notes(bot, cid):
 
     notes_list = store.get_list(config.NOTES_KEY, cid)
     fav = [n for n in notes_list if _note_bucket(n) == "fav"]
-    lines.append("⭐ ВРЕМЕННЫЕ ЗАКЛАДКИ")
+    lines.append("⏳ ВРЕМЕННЫЕ ЗАКЛАДКИ")
     if fav:
         for n in fav:
             t = _plain(n.get("text", "") if isinstance(n, dict) else str(n))
@@ -562,7 +562,7 @@ async def send_notes(bot, cid):
     n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     n_plan = sum(1 for n in notes_list if _note_bucket(n) == "plan")
     rows = [
-        [InlineKeyboardButton(f"⭐ Временные закладки ({n_fav})", callback_data="as_bucket_fav")],
+        [InlineKeyboardButton(f"⏳ Временные закладки ({n_fav})", callback_data="as_bucket_fav")],
         [InlineKeyboardButton(f"🧳 Планы ({n_plan})", callback_data="as_bucket_plan")],
         [InlineKeyboardButton("📤 Экспорт в файл", callback_data="as_export")],
     ]
@@ -636,14 +636,14 @@ async def send_bucket(bot, cid, bucket):
     items = [(i, n) for i, n in enumerate(notes_list) if _note_bucket(n) == "fav"]
     count = len(items)
     if not count:
-        txt = ("⭐ <b>Временные закладки</b>\n\n"
-               "Пусто — сохраняй интересное кнопкой «⭐ В закладки» под ответами.")
+        txt = ("⏳ <b>Временные закладки</b>\n\n"
+               "Пусто — сохраняй интересное кнопкой «⏳ Позже» под ответами.")
         rows = [[InlineKeyboardButton("◀️ Назад", callback_data="as_notes")]]
         await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                                reply_markup=InlineKeyboardMarkup(rows)); return
     import re as _re
     _strip_html = lambda s: _re.sub(r"<[^>]+>", "", s)
-    txt = f"⭐ <b>Временные закладки</b> · {count}"
+    txt = f"⏳ <b>Временные закладки</b> · {count}"
     rows = []
     for i, n in items:
         src = (n.get("source", "Прочее") if isinstance(n, dict) else "Прочее") or "Прочее"

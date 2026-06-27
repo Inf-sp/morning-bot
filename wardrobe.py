@@ -17,8 +17,8 @@ HOME_TEXT = (
     "Одежда без хаоса. Соберу тебе актуальный образ, разберу шкаф и честно скажу, что с ним не так.\n\n"
     "<b>Команды:</b>\n\n"
     "/setup — настройки\n"
-    "/notes — сохранённые закладки\n\n"
-    "Сохраняй полезное через ⭐ <b>В закладк</b> или ❤️ <b>В любимые</b>.\n\n"
+    "/notes — временные закладки\n\n"
+    "Сохраняй полезное через ⏳ <b>Позже</b> или ❤️ <b>В любимые</b>.\n\n"
     "<b>Выбери</b> 👇"
 )
 
@@ -305,7 +305,7 @@ async def send_improve(bot, cid):
     store.last_source[str(cid)] = "Гардероб · Улучшение"
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
-        reply_markup=_kb([[("⭐ В закладки", "as_fav")], [("◀️ Назад", "w_home")]]))
+        reply_markup=_kb([[("⏳ Позже", "as_fav")], [("◀️ Назад", "w_home")]]))
 
 
 async def check_purchase(bot, cid, text):
@@ -347,7 +347,7 @@ async def check_purchase(bot, cid, text):
     store.last_source[str(cid)] = "Гардероб · Покупка"
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
-        reply_markup=_kb([[("⭐ В закладки", "as_fav")], [("◀️ Назад", "w_home")]]))
+        reply_markup=_kb([[("⏳ Позже", "as_fav")], [("◀️ Назад", "w_home")]]))
 
 
 # ---------- добавление файлом (старый режим, оставлен) ----------
