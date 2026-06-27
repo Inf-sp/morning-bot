@@ -4,6 +4,7 @@
 вместо «уверенной фантазии». Источники бесплатные, без ключей. TTL-кеш по образцу
 weather._WX_CACHE.
 """
+import json
 import logging
 import re
 import time
@@ -411,3 +412,82 @@ def gemini_search_fact(city: str, country: str, cc: str = "",
     except Exception as e:
         _log.warning("research: gemini_search_fact(%s) failed: %s", place, e)
     return ""
+
+
+# ================= GEMINI MULTI-FACT =================
+
+_GMULTI_BAD = re.compile(
+    r"не подходит|не является|не относится|ошибка|вместо этого|"
+    r"does not|instead|however|this text|incorrect",
+    re.I,
+)
+
+
+def _parse_json_list(text: str) -> list:
+    """Извлекает JSON-массив из текста (Gemini может добавить ```json ... ``` вокруг)."""
+    text = re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.M)
+    text = re.sub(r"\s*```\s*$", "", text, flags=re.M).strip()
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, list) else []
+    except Exception:
+        pass
+    m = re.search(r"\[.*?\]", text, re.DOTALL)
+    if m:
+        try:
+            parsed = json.loads(m.group())
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            pass
+    return []
+
+
+def gemini_search_facts_multi(city: str, country: str, cc: str = "",
+                               aspect: str = "history",
+                               avoid: list | None = None) -> list[str]:
+    """3-5 фактов о городе через Gemini + Google Search по одному аспекту.
+
+    Возвращает список строк (факты на русском).
+    """
+    if not config.GEMINI_API_KEY:
+        return []
+    avoid = avoid or []
+    place = f"{city}, {country}" if country else city
+    cc_hint = f" Country ISO code: {cc}." if cc else ""
+    avoid_block = ""
+    if avoid:
+        previews = "; ".join(a[:60] for a in avoid[:8])
+        avoid_block = f" Do not repeat facts similar to: {previews}."
+    prompt = (
+        f"Give 3-5 real, little-known, surprising facts about the {aspect} of {city}, {country}.{cc_hint} "
+        "Must be specifically about THIS city only — not any other city with a similar name. "
+        "Requirements: each fact max 2 sentences, prefer specific numbers/dates/names, wow effect. "
+        "Skip generic phrases like 'rich history' or 'cultural center'. "
+        "Output ONLY a JSON array of strings in Russian: [\"fact1\",\"fact2\",...]"
+        + avoid_block
+    )
+    try:
+        r = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+            f"?key={config.GEMINI_API_KEY}",
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "tools": [{"google_search": {}}],
+                "generationConfig": {"maxOutputTokens": 700, "temperature": 0.5},
+            },
+            timeout=25,
+        )
+        if r.status_code != 200:
+            _log.warning("research: gemini_search_facts_multi %s → HTTP %s", place, r.status_code)
+            return []
+        parts_list = (r.json().get("candidates", [{}])[0]
+                      .get("content", {}).get("parts", []))
+        text = " ".join(p.get("text", "") for p in parts_list if p.get("text")).strip()
+        arr = _parse_json_list(text)
+        return [
+            f for f in arr
+            if isinstance(f, str) and len(f.strip()) > 20 and not _GMULTI_BAD.search(f)
+        ]
+    except Exception as e:
+        _log.warning("research: gemini_search_facts_multi(%s, %s) failed: %s", city, aspect, e)
+        return []

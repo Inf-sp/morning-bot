@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import re
 from datetime import datetime
@@ -42,62 +43,152 @@ def _strip_quotes(s):
             changed = True
     return s
 
-# --- Сводка дня (Мой день) ---
+# --- Факты о городе (lazy build) ---
+
+_FACTS_DIR = _HERE / "facts"
+_FACTS_MIN = 30  # порог «город закрыт» — дальше только чтение
+
+_FACT_ASPECTS = [
+    "history, founding date, and historical records",
+    "architecture, infrastructure, and city planning",
+    "unusual laws, regulations, and local quirks",
+    "culture, traditions, and notable people born here",
+]
+
+_build_attempted: set = set()  # city slugs, уже пробованные в этой сессии
+
+
+def _city_slug(city: str) -> str:
+    return re.sub(r"[^\w]", "_", (city or "").strip().lower())
+
+
+def _load_city_facts_file(city: str) -> list:
+    p = _FACTS_DIR / f"{_city_slug(city)}.json"
+    if not p.exists():
+        return []
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _save_city_facts_file(city: str, facts: list) -> None:
+    _FACTS_DIR.mkdir(exist_ok=True)
+    (_FACTS_DIR / f"{_city_slug(city)}.json").write_text(
+        json.dumps(facts, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def _score_facts(candidates: list, city: str, country: str) -> list:
+    """Оценивает кандидатов LLM → [{text, score}]. Пропускает score < 3."""
+    if not candidates:
+        return []
+    place = f"{city}, {country}" if country else city
+    items = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(candidates))
+    prompt = (
+        f"Оцени интересность каждого факта о {place} по шкале 1-5:\n"
+        "5 = рекорд / «первый в мире» / Гиннес-уровень\n"
+        "4 = неожиданность, контринтуитивно, удивит местного жителя\n"
+        "3 = конкретика с цифрой/датой/именем\n"
+        "2 = курьёз, но слабый\n"
+        "1 = общая фраза / всё и так знают / без конкретики\n\n"
+        f"{items}\n\n"
+        'JSON: {"scores":[{"idx":1,"score":4},...]}'
+    )
+    try:
+        d = ai.llm_json(prompt, 600, tier="cheap")
+        raw_scores = d.get("scores", []) if isinstance(d, dict) else []
+        result = []
+        for item in raw_scores:
+            try:
+                idx = int(item.get("idx", 0))
+                score = int(item.get("score", 1))
+            except (TypeError, ValueError):
+                continue
+            if 1 <= idx <= len(candidates) and score >= 3:
+                result.append({"text": candidates[idx - 1], "score": score})
+        return result
+    except Exception as e:
+        _log.warning("myday: _score_facts failed: %s", e)
+        return [{"text": t, "score": 3} for t in candidates]
+
+
+def _build_city_facts(city: str, country: str, cc: str) -> list:
+    """One-time build: собирает, оценивает, сохраняет в facts/<city>.json."""
+    existing = _load_city_facts_file(city)
+    existing_texts: set = {f["text"] for f in existing}
+
+    raw: list = []
+    seen: set = set(existing_texts)
+
+    def _add(text: str) -> None:
+        t = (text or "").strip()
+        if t and t not in seen:
+            raw.append(t)
+            seen.add(t)
+
+    for v in research.wikidata_city_facts(city).values():
+        _add(v)
+    for s in research.wiki_sentences(city):
+        _add(s)
+
+    avoid = list(seen)
+    for aspect in _FACT_ASPECTS:
+        for fact in research.gemini_search_facts_multi(city, country, cc, aspect, avoid):
+            _add(fact)
+        avoid = list(seen)
+
+    if not raw:
+        return existing
+
+    _BATCH = 15
+    scored: list = []
+    for i in range(0, len(raw), _BATCH):
+        scored.extend(_score_facts(raw[i:i + _BATCH], city, country))
+
+    all_facts = existing + scored
+    _save_city_facts_file(city, all_facts)
+    _log.info("myday: built %d facts for %s (was %d)", len(all_facts), city, len(existing))
+    return all_facts
+
 
 def city_fact(city, country, cid, cc=""):
-    """Факт о городе: Wikidata (структура) → Wikipedia+LLM → Gemini Search. Anti-repeat по cid."""
+    """Факт о городе: lazy-build из facts/<city>.json, anti-repeat по cid."""
     cid = str(cid)
-    city_key = (city or "").lower().replace(" ", "_")
+    slug = _city_slug(city)
+
+    facts = _load_city_facts_file(city)
+    if len(facts) < _FACTS_MIN and slug not in _build_attempted:
+        _build_attempted.add(slug)
+        facts = _build_city_facts(city, country, cc)
+
+    if not facts:
+        return ""
+
     seen_all = store._load(config.CITY_FACTS_KEY)
-    seen_types = set(seen_all.get(cid, {}).get(city_key + "_types", []))
-    seen_texts = set(seen_all.get(cid, {}).get(city_key, []))
+    seen_texts = set(seen_all.get(cid, {}).get(slug, []))
 
-    def _save(text, fact_type=None):
-        if fact_type:
-            seen_types.add(fact_type)
-            seen_all.setdefault(cid, {})[city_key + "_types"] = list(seen_types)
-        seen_texts.add(text)
-        seen_all.setdefault(cid, {})[city_key] = list(seen_texts)
-        store._save(config.CITY_FACTS_KEY, seen_all)
+    # Сначала score 4-5, потом 3+
+    high = [f for f in facts if f.get("score", 3) >= 4 and f["text"] not in seen_texts]
+    mid = [f for f in facts if f.get("score", 3) >= 3 and f["text"] not in seen_texts]
+    pool = high or mid
 
-    # --- Уровень 1: Wikidata — структурированные факты, без LLM, без галлюцинаций ---
-    wd_facts = research.wikidata_city_facts(city)
-    unseen_wd = {t: s for t, s in wd_facts.items() if t not in seen_types}
-    if not unseen_wd:
-        unseen_wd = wd_facts  # всё видели — начинаем сначала
-    if unseen_wd:
-        fact_type, fact_text = random.choice(list(unseen_wd.items()))
-        _save(fact_text, fact_type)
-        return fact_text
+    if not pool:
+        # Все показали — сброс, начинаем с высокоскоринговых
+        seen_texts = set()
+        high = [f for f in facts if f.get("score", 3) >= 4]
+        pool = high or facts
 
-    # --- Уровень 2: Wikipedia + LLM-перефраз (строго по источнику) ---
-    pool = list(research.wiki_sentences(city))
-    unseen_wiki = [s for s in pool if s not in seen_texts]
-    if not unseen_wiki:
-        unseen_wiki = pool
-    if unseen_wiki:
-        fact_raw = random.choice(unseen_wiki)
-        lang_hint = "на русском" if re.search(r"[А-Яа-яЁё]", fact_raw) else "переведи на русский и"
-        place = f"{city}, {country}" if country else city
-        prompt = (
-            f"Источник ({place}): «{fact_raw}»\n\n"
-            f"Перепиши это {lang_hint}. "
-            "Правила: используй ТОЛЬКО слова и числа из источника — "
-            "никаких новых дат, имён, цифр которых нет в тексте выше. "
-            "Если источник беден — сократи, но не дополняй. "
-            "Максимум 2 предложения. Без заголовка, без кавычек."
-        )
-        result = ai.llm(prompt, 180, tier="cheap") or fact_raw
-        _save(result)
-        return result
+    chosen = random.choice(pool)
+    seen_texts.add(chosen["text"])
+    seen_all.setdefault(cid, {})[slug] = list(seen_texts)
+    store._save(config.CITY_FACTS_KEY, seen_all)
 
-    # --- Уровень 3: Gemini + Google Search (последний резерв) ---
-    gsf = research.gemini_search_fact(city, country, cc=cc, avoid=list(seen_texts))
-    if gsf:
-        _save(gsf)
-        return gsf
+    return chosen["text"]
 
-    return ""
+
+# --- Сводка дня (Мой день) ---
 
 
 def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
