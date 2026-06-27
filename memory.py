@@ -112,17 +112,11 @@ def wardrobe_hints(cid, recent=10):
 
 # ---------- Лагом (ценности/установки пользователя) ----------
 def get_lagom(cid) -> list:
-    """Список Лагом-принципов пользователя; при первом обращении мигрирует из LAGOM_KEY."""
+    """Список Лагом-принципов пользователя."""
     prof = store.get_profile(cid)
     if "lagom" not in prof:
-        # миграция из старого отдельного ключа
+        # миграция из старого отдельного ключа (без подгрузки файла-сида)
         old = store.get_list(config.LAGOM_KEY, cid)
-        if not old:
-            try:
-                with open(_HERE / "lagom.json", encoding="utf-8") as f:
-                    old = json.load(f)
-            except Exception:
-                old = []
         prof["lagom"] = list(old)
         store.set_profile(cid, prof)
     return prof.get("lagom", [])

@@ -466,6 +466,8 @@ async def text_router(update, context):
             await learning.train_translate_answer(bot, cid, text); return
         if kind == "train_card":
             await learning.train_card_answer(bot, cid, text); return
+        if kind.startswith("collect_"):
+            await leisure.collect_done(bot, cid, kind[len("collect_"):], text); return
         if kind.startswith("loveadd_"):
             await settings.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
         if kind.startswith("gm_addtopic_"):

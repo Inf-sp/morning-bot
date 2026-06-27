@@ -14,22 +14,66 @@ import verify
 
 # ===== КОНТЕНТ (content.py) =====
 
+# --- Инлайн-сбор предпочтений при пустом профиле ---
+_COLLECT_HINTS = {
+    "artists": (
+        "🎵 <b>Ещё нет любимых исполнителей</b>\n\n"
+        "Чтобы подбирать музыку под твой вкус, мне нужно знать, кого ты слушаешь.\n\n"
+        "Пришли список прямо сюда — по одному или через запятую:\n"
+        "<i>Например: The xx, Massive Attack, Portishead</i>"
+    ),
+    "movies": (
+        "🎬 <b>Ещё нет любимых фильмов</b>\n\n"
+        "Пришли список фильмов или сериалов, которые тебе понравились, — "
+        "подберу похожее.\n\n"
+        "<i>Например: Паразиты, Эйфория, Настоящий детектив</i>"
+    ),
+    "books": (
+        "📚 <b>Ещё нет любимых книг</b>\n\n"
+        "Пришли список книг, которые ты читал и которые тебе понравились, — "
+        "подберу похожее.\n\n"
+        "<i>Например: Дюна, Атлант расправил плечи, Идиот</i>"
+    ),
+}
+
+async def _ask_collect(bot, cid, kind: str):
+    """Показывает экран сбора предпочтений и ставит pending_input."""
+    import secure as _sec
+    store.pending_input[str(cid)] = f"collect_{kind}"
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить", callback_data="m_leisure")]])
+    await bot.send_message(chat_id=cid, text=_COLLECT_HINTS[kind], parse_mode="HTML", reply_markup=kb)
+
+async def collect_done(bot, cid, kind: str, text: str):
+    """Парсит и сохраняет введённый список; повторно открывает раздел."""
+    import secure as _sec
+    raw = _sec.clamp(text)
+    # Разбиваем по запятым, переносам, точкам с запятой
+    items = [x.strip() for x in re.split(r"[,;\n]+", raw) if x.strip()]
+    if not items:
+        await bot.send_message(chat_id=cid, text="Не смог разобрать список — попробуй ещё раз.")
+        return
+    key_map = {"artists": config.ARTISTS_KEY, "movies": config.WATCHLIST_KEY, "books": config.BOOKS_KEY}
+    key = key_map.get(kind)
+    if key:
+        existing = {_norm(x) for x in store.get_list(key, cid)}
+        added = [it for it in items if _norm(it) not in existing]
+        for it in added:
+            store.add_to_list(key, cid, it)
+        n = len(added)
+        label = {"artists": "артист(ов)", "movies": "фильм(ов)", "books": "книг(и)"}[kind]
+        await bot.send_message(chat_id=cid,
+            text=f"✅ Сохранено {n} {label}. Генерирую рекомендации...", parse_mode="HTML")
+    # Повторно открываем нужный раздел
+    if kind == "artists":
+        await send_listen(bot, cid)
+    elif kind == "movies":
+        await send_recos(bot, cid, "movie")
+    elif kind == "books":
+        await send_books_reco(bot, cid)
+
 def _ensure_books(cid):
-    """Возвращает 'Мои книги'; если пусто - подгружает из content.json (секция books)."""
-    books = store.get_list(config.BOOKS_KEY, cid)
-    if books:
-        return books
-    try:
-        import json
-        with open("content.json", encoding="utf-8") as f:
-            data = json.load(f)
-        seed = list(data.get("books", []))
-        if seed:
-            store.set_list(config.BOOKS_KEY, cid, seed)
-            return seed
-    except Exception:
-        pass
-    return books
+    """Возвращает список книг пользователя (без авто-сида)."""
+    return store.get_list(config.BOOKS_KEY, cid)
 
 def _norm(x):
     """Нормализованное имя элемента (строка или {name}) для сравнения без учёта регистра."""
@@ -87,7 +131,7 @@ def content_recommend(kind, cid):
         black_titles = [s if isinstance(s, str) else str(s) for s in black]
         skip = seen_titles + black_titles
         avoid = ("\nНЕ рекомендуй то, что уже отмечено или не понравилось: " + ", ".join(skip[:80])) if skip else ""
-        anchors = ", ".join(seen_titles[:25]) if seen_titles else "Breaking Bad, Euphoria, Parasite, Call Me by Your Name"
+        anchors = ", ".join(seen_titles[:25])
         web_block = ""
         web = research.tavily_snippet(
             f"лучшие фильмы сериалы 2024 2025 драма артхаус триллер похожие {anchors[:80]}",
@@ -286,6 +330,11 @@ async def send_recos(bot, cid, kind):
     if kind == "book":
         await send_books_reco(bot, cid)
         return
+    # Пустой список фильмов — предлагаем собрать
+    seen = store.get_list(config.WATCHLIST_KEY, cid)
+    if not seen:
+        await _ask_collect(bot, cid, "movies")
+        return
     await bot.send_message(chat_id=cid, text="Подбираю под твой вкус...")
     items = []
     for _ in range(2):
@@ -452,6 +501,9 @@ def _pick_good_book(items, cid, extra_skip=()):
     return _fallback_book(cid, extra_skip=extra_skip)
 
 async def send_books_reco(bot, cid):
+    if not _ensure_books(cid):
+        await _ask_collect(bot, cid, "books")
+        return
     await bot.send_message(chat_id=cid, text="Подбираю книги под твой вкус...")
     items = []
     for _ in range(2):
@@ -623,7 +675,10 @@ async def listen_dislike(bot, cid):
 
 async def send_listen(bot, cid):
     arts = _ensure_artists(cid)
-    anchors = ", ".join(arts[:25]) if arts else "Charli xcx, The xx, Fever Ray, RÜFÜS DU SOL, PLACEBO"
+    if not arts:
+        await _ask_collect(bot, cid, "artists")
+        return
+    anchors = ", ".join(arts[:25])
     disliked = store.get_list(config.MUSIC_DISLIKE_KEY, cid)
     notes = store.get_list(config.NOTES_KEY, cid)
     booked = [n.get("text", "") for n in notes
@@ -683,20 +738,8 @@ async def add_listen(bot, cid, i):
     await send_listen(bot, cid)
 
 def _ensure_artists(cid):
-    """Возвращает список артистов; если пуст - подгружает дефолтный из artists.json."""
-    arts = store.get_list(config.ARTISTS_KEY, cid)
-    if arts:
-        return arts
-    try:
-        import json
-        with open("artists.json", encoding="utf-8") as f:
-            seed = json.load(f)
-        if seed:
-            store.set_list(config.ARTISTS_KEY, cid, seed)
-            return seed
-    except Exception:
-        pass
-    return arts
+    """Возвращает список артистов пользователя (без авто-сида)."""
+    return store.get_list(config.ARTISTS_KEY, cid)
 
 async def find_concerts(bot, cid, mode="home"):
     if not config.TICKETMASTER_API_KEY:

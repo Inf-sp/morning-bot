@@ -264,7 +264,7 @@ async def _render_train(bot, cid):
         st.update({"fmt": "card", "word": word, "ru": ru})
         store.pending_input[str(cid)] = "train_card"
         L = [head, "", "✍️ Напиши перевод:", "", f"<b>{esc(word)}</b>"]
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("👁 Показать перевод", callback_data="train_reveal")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("😞 Показать перевод", callback_data="train_reveal")]])
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
         return
     if fmt == "translate":
@@ -634,20 +634,8 @@ def _w_field(w, *keys):
     return ""
 
 def _ensure_dict(cid):
-    """Возвращает словарь; если пусто - подгружает дефолтные NL-слова из dict_nl.json."""
-    words = store.get_list(config.DICT_KEY, cid)
-    if words:
-        return words
-    try:
-        import json
-        with open(_HERE / "dict_nl.json", encoding="utf-8") as f:
-            seed = json.load(f)
-        if seed:
-            store.set_list(config.DICT_KEY, cid, seed)
-            return seed
-    except Exception:
-        pass
-    return words
+    """Возвращает словарь пользователя (без авто-сида)."""
+    return store.get_list(config.DICT_KEY, cid)
 
 def _dict_kind(w):
     if isinstance(w, dict) and w.get("kind"):
