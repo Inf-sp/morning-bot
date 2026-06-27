@@ -181,7 +181,7 @@ async def grammar_answer(bot, cid, chosen):
 
 
 # ================= ТРЕНАЖЁР СЛОВ =================
-TRAIN_FORMATS = ["gap", "tf", "card", "translate"]
+TRAIN_FORMATS = ["gap", "tf", "card"]
 
 def _train_words(cid, language):
     """Слова (kind=word) нужного языка из словаря: [(word, ru), ...]."""
@@ -264,7 +264,7 @@ async def _render_train(bot, cid):
         st.update({"fmt": "card", "word": word, "ru": ru})
         store.pending_input[str(cid)] = "train_card"
         L = [head, "", "✍️ Напиши перевод:", "", f"<b>{esc(word)}</b>"]
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить", callback_data="train_next")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("👁 Показать перевод", callback_data="train_reveal")]])
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
         return
     if fmt == "translate":
@@ -304,6 +304,7 @@ async def _render_train(bot, cid):
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
 
 async def train_reveal(bot, cid):
+    store.pending_input.pop(str(cid), None)
     st = store.train_state.get(str(cid))
     if not st:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
