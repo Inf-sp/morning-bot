@@ -387,6 +387,7 @@ async def handle_callback(bot, cid, data):
         async def _do_revoke(b, c):
             import access as _acc
             _acc.revoke_user(target)
+            store.purge_user(target)
             await send_admin_users(b, c)
         await _admin_guard(bot, cid, _do_revoke)
     elif data == "set_admin_cost":
@@ -817,7 +818,7 @@ async def send_admin_users(bot, cid):
             lines.append(f"👑 Owner{name_part}")
         else:
             lines.append(f"👤 {uid}{name_part}")
-            rows.append([InlineKeyboardButton(f"❌ Отозвать {uid}", callback_data=f"set_admin_revoke_{uid}")])
+            rows.append([InlineKeyboardButton(f"🗑 Удалить {uid}{name_part}", callback_data=f"set_admin_revoke_{uid}")])
 
     if pending:
         lines.append("")
