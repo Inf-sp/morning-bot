@@ -2,17 +2,10 @@ from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
-import ai
 from util import esc
 
 
 # ---------- сохранение в закладки ----------
-def _shorten(text):
-    try:
-        return ai.llm("Сожми до 1-3 строк, сохрани суть и важное, без воды:\n\n" + text, 200, 0.3, tier="cheap").strip() or text[:300]
-    except Exception:
-        return text[:300]
-
 async def save_fav(bot, cid):
     txt = store.last_answer.get(str(cid))
     if not txt:

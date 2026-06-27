@@ -109,11 +109,7 @@ def _recipe_typed_kb():
     ])
 
 def _fridge_recipe_kb():
-    """Клавиатура после рецепта из холодильника."""
-    return _kb([
-        [("🍳 Завтрак", "a_food_breakfast"), ("🥗 Обед", "a_food_lunch"), ("🍽️ Ужин", "a_food_dinner")],
-        [("⬅️ Назад", "m_food")],
-    ])
+    return _recipe_typed_kb()
 
 def _back_kb():
     return _kb([[("⬅️ Назад", "m_close")]])
