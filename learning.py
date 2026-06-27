@@ -1096,12 +1096,33 @@ async def game_reveal(bot, cid, q):
 
 
 # ================= УРОВЕНЬ (/setup) =================
-async def send_levels(bot, cid):
-    nl_lvl, en_lvl = store.get_level(cid, "нидерландский"), store.get_level(cid, "английский")
-    kb_nl = InlineKeyboardMarkup([[InlineKeyboardButton(l, callback_data=f"lvl_nl_{l}") for l in LEVELS]])
-    kb_en = InlineKeyboardMarkup([[InlineKeyboardButton(l, callback_data=f"lvl_en_{l}") for l in LEVELS]])
-    await bot.send_message(chat_id=cid, text=f"🇳🇱 Уровень нидерландского (сейчас {nl_lvl}):", reply_markup=kb_nl)
-    await bot.send_message(chat_id=cid, text=f"🇬🇧 Уровень английского (сейчас {en_lvl}):", reply_markup=kb_en)
+def _levels_kb(nl_lvl, en_lvl):
+    def _row(code, cur):
+        return [InlineKeyboardButton(("✅ " if l == cur else "") + l, callback_data=f"lvl_{code}_{l}")
+                for l in LEVELS]
+    return InlineKeyboardMarkup([
+        _row("nl", nl_lvl),
+        _row("en", en_lvl),
+        [InlineKeyboardButton("◀️ Назад", callback_data="set_home")],
+    ])
+
+async def send_levels(bot, cid, q=None):
+    nl_lvl = store.get_level(cid, "нидерландский")
+    en_lvl = store.get_level(cid, "английский")
+    text = (
+        "🎚 <b>Уровень языков</b>\n\n"
+        f"🇳🇱 Нидерландский: <b>{nl_lvl}</b>\n"
+        f"🇬🇧 Английский: <b>{en_lvl}</b>\n\n"
+        "Нажми уровень чтобы изменить:"
+    )
+    kb = _levels_kb(nl_lvl, en_lvl)
+    if q is not None:
+        try:
+            await q.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
 
 
 # ===== МИКРО-ГРАММАТИКА (grammar_micro) =====

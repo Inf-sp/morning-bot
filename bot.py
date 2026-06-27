@@ -99,7 +99,7 @@ async def answer_callback(update, context):
         return
     # Настройки
     if data.startswith(("set_", "setadd_", "setdel_")):
-        await settings.handle_callback(bot, cid, data)
+        await settings.handle_callback(bot, cid, data, q)
         return
     # Навигация по подменю - редактируем сообщение на месте
     if data == "m_close":
@@ -245,10 +245,11 @@ async def answer_callback(update, context):
 
     # Уровни языка
     if data.startswith("lvl_"):
-        _, code, level = data.split("_")
+        parts = data.split("_")
+        code, level = parts[1], parts[2]
         language = "нидерландский" if code == "nl" else "английский"
         store.set_level(cid, language, level)
-        await q.message.reply_text(f"Уровень {language} установлен: {level}")
+        await learning.send_levels(bot, cid, q)
         return
     # Грамматика
     if data in ("gram_a", "gram_b"):
