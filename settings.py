@@ -5,9 +5,16 @@ import learning
 
 SETTINGS_KEY = "user_settings.json"
 NOTIF_TYPES = [
-    ("grammar", "📚 Слова дня (11:00)"),
-    ("checkin_day", "🫣 Дневная разгрузка (14:00)"),
-    ("checkin_eve", "🥸 Вечерний разбор (22:00)"),
+    ("morning_brief", "☀️ Утренний бриф (07:30)"),
+    ("weather_warn",  "⚠️ Погодное предупреждение (08:15)"),
+    ("lagom_daily",   "🍃 Лагом дня (09:00)"),
+    ("grammar",       "📚 Слова дня (11:00)"),
+    ("recipe_daily",  "🍽️ Рецепт дня (12:30)"),
+    ("checkin_day",   "🫣 Дневная разгрузка (14:00)"),
+    ("vocab_review",  "📖 Повтор словаря (21:00)"),
+    ("checkin_eve",   "🥸 Вечерний разбор (22:00)"),
+    ("weekly_events", "🎬 Досуг на неделю (пн 09:00)"),
+    ("weekly_forecast","🌍 Недельный прогноз (вс 19:00)"),
 ]
 STYLES = [
     "минимализм",

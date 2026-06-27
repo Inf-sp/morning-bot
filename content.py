@@ -787,6 +787,13 @@ async def find_concerts(bot, cid, mode="home"):
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", txt)
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 
+async def send_weekly_events(bot, cid):
+    """Пн 09:00 — Досуг на неделю: фильм + музыка."""
+    await bot.send_message(chat_id=cid, text="🎬 <b>Досуг на эту неделю</b>", parse_mode="HTML")
+    await send_recos(bot, cid, "movie")
+    await send_listen(bot, cid)
+
+
 async def concert_pick_country(bot, cid):
     codes = [("be", "🇧🇪 Бельгия"), ("de", "🇩🇪 Германия"), ("fr", "🇫🇷 Франция"),
              ("gb", "🇬🇧 Великобр."), ("es", "🇪🇸 Испания"), ("it", "🇮🇹 Италия"),

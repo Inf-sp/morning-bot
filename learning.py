@@ -762,6 +762,27 @@ async def send_morning_word(bot, cid):
     )
 
 
+async def send_vocab_review(bot, cid):
+    """21:00 — 5 случайных слов из словаря для вечернего повторения."""
+    import random as _r
+    import settings as _s
+    language = _s.study_lang(cid)
+    lang_code = _code(language)
+    flag = _flag(language)
+    words = _ensure_dict(cid)
+    pool = [w for w in words if _dict_lang(w) == lang_code]
+    if not pool:
+        return
+    sample = _r.sample(pool, min(5, len(pool)))
+    lines = [f"📖{flag} <b>Повтор словаря</b>", ""]
+    for w in sample:
+        term = _cap(_w_field(w, "word", "nl", "en"))
+        ru = _w_field(w, "ru")
+        icon = "💬" if _dict_kind(w) == "phrase" else "📝"
+        lines.append(f"{icon} <b>{esc(term)}</b> — {esc(ru)}")
+    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML")
+
+
 # ================= ИЗУЧАЕМЫЕ ТЕМЫ (раздельно NL / EN) =================
 def _topics_key(language):
     return config.TOPICS_NL_KEY if language == "нидерландский" else config.TOPICS_EN_KEY

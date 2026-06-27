@@ -379,6 +379,14 @@ def _gen_motiv(cid):
     return "\n".join(lines)
 
 
+async def send_motiv_push(bot, cid):
+    """09:00 — плановая мотивация (без 'Секунду...')."""
+    out = _gen_motiv(cid)
+    store.last_source[str(cid)] = "Баланс · Мотивация"
+    store.last_answer[str(cid)] = out
+    await bot.send_message(chat_id=cid, text=out, parse_mode="HTML", reply_markup=_MOTIV_KB)
+
+
 # ---------- роли ----------
 def _role_system(role):
     if role == "state":
