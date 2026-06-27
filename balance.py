@@ -281,52 +281,114 @@ async def send_leftovers(bot, cid, ingredients):
     await util.send_html(bot, cid, card, reply_markup=_fridge_recipe_kb())
 
 
-FRIDGE_DESC = (
-    "🧊 <b>Мой холодильник</b>\n\n"
-    "Список продуктов, которые обычно есть дома — использую для рецептов из остатков.\n\n"
-    "Управляй через /setup — там можно добавить или убрать продукты."
-)
+_FRIDGE_PAGE = 8  # продуктов на страницу в категории
 
-# ---------- Мой холодильник ----------
-async def send_fridge(bot, cid):
+
+def _fridge_by_cat(items: list) -> dict:
+    """Словарь cat → [(global_idx, item)] для отображения."""
+    by_cat: dict = {}
+    for i, it in enumerate(items):
+        cat = it.get("cat", "прочее")
+        by_cat.setdefault(cat, []).append((i, it))
+    return by_cat
+
+
+# ---------- Мой холодильник: главный экран (категории) ----------
+async def send_fridge(bot, cid, q=None):
     cid_s = str(cid)
     raw = store.get_list(config.FRIDGE_KEY, cid_s)
     items = _fridge_migrate(raw)
-    if items != raw:                                  # сохраняем мигрированные данные
+    if items != raw:
         store.set_list(config.FRIDGE_KEY, cid_s, items)
 
     if not items:
         txt = "🧊 <b>Мой холодильник</b>\n\nПусто — добавь продукты, которые обычно есть дома."
+        rows = [
+            [InlineKeyboardButton("📝 Добавить продукты", callback_data="as_fridge_add")],
+            [InlineKeyboardButton("◀️ Назад", callback_data="m_food")],
+        ]
     else:
         available = sum(1 for it in items if it.get("on", True))
-        by_cat: dict = {}
-        for it in items:
-            by_cat.setdefault(it.get("cat", "прочее"), []).append(it)
-        lines = [f"🧊 <b>Мой холодильник</b> · {len(items)} продуктов · {available} в наличии", ""]
-        for cat in _CAT_ORDER:
+        by_cat = _fridge_by_cat(items)
+        txt = f"🧊 <b>Мой холодильник</b> · {len(items)} продуктов · {available} в наличии\n\nВыбери категорию:"
+        rows = []
+        for ci, cat in enumerate(_CAT_ORDER):
             if cat not in by_cat:
                 continue
+            cat_items = by_cat[cat]
+            on_cnt = sum(1 for _, it in cat_items if it.get("on", True))
             emoji = _CAT_EMOJI.get(cat, "📦")
-            names = []
-            for it in by_cat[cat]:
-                mark = "🟢" if it.get("on", True) else "⚪"
-                names.append(f"{mark} {esc(it['name'])}")
-            lines.append(f"{emoji} <b>{cat.capitalize()}</b>: {', '.join(names)}")
-        txt = "\n".join(lines)
+            rows.append([InlineKeyboardButton(
+                f"{emoji} {cat.capitalize()} · {on_cnt}/{len(cat_items)}",
+                callback_data=f"as_fridge_cat_{ci}_0"
+            )])
+        rows.append([InlineKeyboardButton("📝 Добавить продукты", callback_data="as_fridge_add")])
+        rows.append([InlineKeyboardButton("🧊 Рецепт из остатков", callback_data="as_fridge_cook")])
+        rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_food")])
+
+    kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(txt, parse_mode="HTML", reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+
+
+# ---------- Экран категории (пагинация + toggle + delete) ----------
+async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
+    cid_s = str(cid)
+    items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
+    by_cat = _fridge_by_cat(items)
+
+    # Определяем имя категории по индексу в _CAT_ORDER
+    present_cats = [c for c in _CAT_ORDER if c in by_cat]
+    if cat_idx >= len(present_cats):
+        await send_fridge(bot, cid, q); return
+    cat = present_cats[cat_idx]
+    cat_items = by_cat[cat]  # [(global_idx, item)]
+
+    total = len(cat_items)
+    pages = max(1, (total + _FRIDGE_PAGE - 1) // _FRIDGE_PAGE)
+    page = max(0, min(page, pages - 1))
+    chunk = cat_items[page * _FRIDGE_PAGE:(page + 1) * _FRIDGE_PAGE]
+
+    emoji = _CAT_EMOJI.get(cat, "📦")
+    on_cnt = sum(1 for _, it in cat_items if it.get("on", True))
+    txt = (f"{emoji} <b>{cat.capitalize()}</b> · {total} продуктов · {on_cnt} в наличии\n\n"
+           "🟢 — есть в наличии  ⚪ — закончилось\n"
+           "Нажми продукт чтобы изменить статус, ❌ чтобы удалить.")
 
     rows = []
-    for i, it in enumerate(items):
+    for gi, it in chunk:
         mark = "🟢" if it.get("on", True) else "⚪"
-        rows.append([InlineKeyboardButton(f"{mark} {it['name']}", callback_data=f"as_fridge_tgl_{i}")])
-    rows.append([InlineKeyboardButton("📝 Добавить", callback_data="as_fridge_add")])
-    if items:
-        rows.append([InlineKeyboardButton("❌ Убрать", callback_data="as_fridge_clean")])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
-                           reply_markup=InlineKeyboardMarkup(rows))
+        name_short = it["name"][:22]
+        rows.append([
+            InlineKeyboardButton(f"{mark} {name_short}", callback_data=f"as_fridge_tgl_{gi}_{cat_idx}_{page}"),
+            InlineKeyboardButton("❌", callback_data=f"as_fridge_del_{gi}_{cat_idx}_{page}"),
+        ])
+
+    if pages > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"as_fridge_cat_{cat_idx}_{(page-1) % pages}"),
+            InlineKeyboardButton(f"{page+1}/{pages}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"as_fridge_cat_{cat_idx}_{(page+1) % pages}"),
+        ])
+    rows.append([InlineKeyboardButton("📝 Добавить", callback_data=f"as_fridge_add_{cat_idx}")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_fridge_home")])
+
+    kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(txt, parse_mode="HTML", reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 
 
-async def fridge_add_done(bot, cid, text):
+async def fridge_add_done(bot, cid, text, cat_idx: int = -1):
     cid_s = str(cid)
     parts = re.split(r"[,\n;]+", text)
     items_new = [p.strip().lower() for p in parts if p.strip()]
@@ -343,25 +405,28 @@ async def fridge_add_done(bot, cid, text):
         await bot.send_message(chat_id=cid, text=f"➕ Добавлено: {', '.join(added)}")
     else:
         await bot.send_message(chat_id=cid, text="Все эти продукты уже есть в списке.")
-    await send_fridge(bot, cid)
+    if cat_idx >= 0:
+        await send_fridge_cat(bot, cid, cat_idx, 0)
+    else:
+        await send_fridge(bot, cid)
 
 
-async def fridge_toggle(bot, cid, idx: int):
+async def fridge_toggle(bot, cid, idx: int, cat_idx: int, page: int, q=None):
     cid_s = str(cid)
     items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
     if 0 <= idx < len(items):
         items[idx]["on"] = not items[idx].get("on", True)
         store.set_list(config.FRIDGE_KEY, cid_s, items)
-    await send_fridge(bot, cid)
+    await send_fridge_cat(bot, cid, cat_idx, page, q)
 
 
-async def fridge_del(bot, cid, idx: int):
+async def fridge_del(bot, cid, idx: int, cat_idx: int, page: int, q=None):
     cid_s = str(cid)
     items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
-    if idx < len(items):
+    if 0 <= idx < len(items):
         items.pop(idx)
         store.set_list(config.FRIDGE_KEY, cid_s, items)
-    await send_fridge(bot, cid)
+    await send_fridge_cat(bot, cid, cat_idx, page, q)
 
 
 async def send_fridge_recipe(bot, cid):
@@ -716,12 +781,27 @@ async def handle_callback(bot, cid, q, data):
         store.pending_input[str(cid)] = "role_doctor"
         await bot.send_message(chat_id=cid, text=DOCTOR_INTRO, reply_markup=_back_kb()); return
     # холодильник
-    if data == "as_fridge":
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="m_food")]])
-        await bot.send_message(chat_id=cid, text=FRIDGE_DESC, parse_mode="HTML", reply_markup=kb)
+    if data in ("as_fridge", "as_fridge_home"):
+        await send_fridge(bot, cid, q); return
+    if data.startswith("as_fridge_cat_"):
+        parts = data.split("_")  # as_fridge_cat_{ci}_{page}
+        try:
+            await send_fridge_cat(bot, cid, int(parts[3]), int(parts[4]), q)
+        except (ValueError, IndexError):
+            await send_fridge(bot, cid, q)
         return
+    if data.startswith("as_fridge_add_"):
+        # добавление из категории: as_fridge_add_{ci}
+        try:
+            ci = int(data.split("_")[-1])
+        except (ValueError, IndexError):
+            ci = -1
+        store.pending_input[str(cid)] = f"fridge_add_{ci}"
+        await bot.send_message(chat_id=cid,
+            text="➕ Напиши продукты через запятую или с новой строки — добавлю в список.",
+            reply_markup=_back_kb()); return
     if data == "as_fridge_add":
-        store.pending_input[str(cid)] = "fridge_add"
+        store.pending_input[str(cid)] = "fridge_add_-1"
         await bot.send_message(chat_id=cid,
             text="➕ Напиши продукты через запятую или с новой строки — добавлю в список.",
             reply_markup=_back_kb()); return
@@ -731,16 +811,20 @@ async def handle_callback(bot, cid, q, data):
         import cleanup
         await cleanup.open_cleanup(bot, cid, "fridge"); return
     if data.startswith("as_fridge_tgl_"):
+        # as_fridge_tgl_{idx}_{ci}_{page}
+        parts = data.split("_")
         try:
-            await fridge_toggle(bot, cid, int(data.split("_")[-1]))
+            await fridge_toggle(bot, cid, int(parts[3]), int(parts[4]), int(parts[5]), q)
         except (ValueError, IndexError):
-            pass
+            await send_fridge(bot, cid, q)
         return
     if data.startswith("as_fridge_del_"):
+        # as_fridge_del_{idx}_{ci}_{page}
+        parts = data.split("_")
         try:
-            await fridge_del(bot, cid, int(data.split("_")[-1]))
+            await fridge_del(bot, cid, int(parts[3]), int(parts[4]), int(parts[5]), q)
         except (ValueError, IndexError):
-            pass
+            await send_fridge(bot, cid, q)
         return
     # база рецептов
     if data == "as_recipe_save":

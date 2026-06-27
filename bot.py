@@ -457,8 +457,12 @@ async def text_router(update, context):
             settings.set_(cid, "style", text.strip())
             await bot.send_message(chat_id=cid, text="Стиль сохранён.")
             await settings.send_body(bot, cid); return
-        if kind == "fridge_add":
-            await balance.fridge_add_done(bot, cid, text); return
+        if kind.startswith("fridge_add"):
+            try:
+                ci = int(kind.split("_")[-1])
+            except (ValueError, IndexError):
+                ci = -1
+            await balance.fridge_add_done(bot, cid, text, ci); return
         if kind == "setadd_country":
             await settings.list_add_done(bot, cid, "country", text); return
         if kind == "setadd_artist":
