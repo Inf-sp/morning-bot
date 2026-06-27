@@ -603,7 +603,7 @@ async def send_daycheck(bot, cid):
         lines.append("Пока пусто. Напиши тревоги одним сообщением.")
     store.pending_input[cid] = "worry"
     rows = [[InlineKeyboardButton("🧠 Разобрать тревоги", callback_data="as_worryreview")]] if worries else []
-    rows.append([InlineKeyboardButton(" ", callback_data="m_close")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_close")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 

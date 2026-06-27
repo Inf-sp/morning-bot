@@ -29,24 +29,7 @@ CHAT_ID = config.CHAT_ID
 
 
 
-_WELCOME = (
-    "👋 <b>Привет! Я DM</b> - твой помощник на каждый день. "
-    "Погода, учеба, идеи и планы в одном месте.\n\n"
-    "<b>Что я умею:</b>\n"
-    "☀️ <b>Мой день</b> - погода, образ, слово дня, идея и факты.\n"
-    "👕 <b>Гардероб</b> - луки по погоде, разбор шкафа и оценка покупок.\n"
-    "🧠 <b>Баланс</b> - советы врача, мотивация и рецепты.\n"
-    "📚 <b>Обучение</b> - языки (NL/EN), игры, словарь и тесты.\n"
-    "🍿 <b>Досуг</b> - фильмы, книги, музыка, концерты и поездки.\n\n"
-    "Просто напиши свой вопрос в чат - я на него отвечу 💬\n\n"
-    "<b>Команды:</b>\n"
-    "/start - главное меню\n"
-    "/setup - настройки (язык, город, уведомления)\n\n"
-    "<b>Как сохранять:</b>\n"
-    "Жми «⭐ <b>В закладки</b>» под ответами, чтобы не потерять их. "
-    "Топовые треки и фильмы кидай в «❤️ <b>В любимые</b>». "
-    "Всё сохраненное лежит тут: /notes."
-)
+_WELCOME = menu.WELCOME
 
 
 async def start(update, context):
@@ -481,6 +464,8 @@ async def text_router(update, context):
             await settings.send_lagom(bot, cid); return
         if kind == "train_translate":
             await learning.train_translate_answer(bot, cid, text); return
+        if kind == "train_card":
+            await learning.train_card_answer(bot, cid, text); return
         if kind.startswith("loveadd_"):
             await settings.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
         if kind.startswith("gm_addtopic_"):
@@ -601,9 +586,8 @@ async def invite_command(update, context):
     bot_me = await context.bot.get_me()
     link = f"https://t.me/{bot_me.username}?start={code}"
     await update.message.reply_text(
-        f"🔗 <b>Инвайт-ссылка</b> (действует 48 ч):\n\n<code>{link}</code>\n\n"
-        "Отправь другу. После перехода доступ откроется.",
-        parse_mode="HTML"
+        f"🔗 <b>Инвайт (48 ч):</b>\n<a href=\"{link}\">{link}</a>\n\nОтправь другу — он нажмёт и получит доступ.",
+        parse_mode="HTML", disable_web_page_preview=True
     )
 
 
@@ -731,6 +715,16 @@ async def job_weekly_forecast(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_weekly_forecast failed for cid=%s", cid)
 
 
+async def job_evening_weather(context: ContextTypes.DEFAULT_TYPE):
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "evening_weather"):
+            continue
+        try:
+            await weather.send_weather(context.bot, cid, "tomorrow_plain")
+        except Exception:
+            logging.exception("job_evening_weather failed for cid=%s", cid)
+
+
 async def post_init(app):
     try:
         if learning.migrate_dict_caps():
@@ -793,6 +787,7 @@ def main():
     jq.run_daily(job_vocab_review,    time=_t("21:00"), days=tuple(range(7)))
     jq.run_daily(job_checkin_evening, time=_t("22:00"), days=tuple(range(7)))
     jq.run_daily(job_live_lang,        time=_t("18:00"), days=tuple(range(7)))
+    jq.run_daily(job_evening_weather,  time=_t("19:00"), days=tuple(range(7)))
     jq.run_daily(job_weekly_forecast,  time=_t("19:00"), days=(6,))            # вс
 
     logging.info("Bot started")

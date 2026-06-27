@@ -58,7 +58,7 @@ async def send_home(bot, cid):
 
 # ---------- генерация лука по погоде ----------
 async def send_looks(bot, cid):
-    w = store.load_wardrobe()
+    w = store.load_wardrobe(cid)
     s = store.get_settings(cid)
     tmax = None
     try:
@@ -151,7 +151,7 @@ def _zone_of(category):
     return "Другое"
 
 async def send_show(bot, cid):
-    w = store.load_wardrobe()
+    w = store.load_wardrobe(cid)
     if not w:
         await bot.send_message(chat_id=cid, text="Шкаф пуст. Добавь вещи через «🏷 Добавить вещь».", reply_markup=closet_kb())
         return
@@ -172,7 +172,7 @@ async def send_show(bot, cid):
     await bot.send_message(chat_id=cid, text="\n".join(lines).strip(), parse_mode="HTML", reply_markup=closet_kb())
 
 async def _parse_and_add(bot, cid, text):
-    w = store.load_wardrobe()
+    w = store.load_wardrobe(cid)
     cats = ", ".join(w.keys()) or "футболки, рубашки, свитшоты, верхняя одежда, брюки, джинсы, обувь, аксессуары"
     parsed = ai.llm_json(
         f"Разбери вещи по категориям. Категории: {cats} (можно создать новую).\n"
@@ -180,7 +180,7 @@ async def _parse_and_add(bot, cid, text):
         "Каждую вещь пиши ПОЛНЫМ названием в порядке: тип + цвет + детали/бренд "
         "(напр. «Футболка белая Uniqlo плотная», «Шорты серые тонкие»). Сохраняй бренд если указан.\n"
         'JSON: {"категория": ["полное название вещи"]}.', 700, tier="cheap")
-    return store.merge_wardrobe(parsed)
+    return store.merge_wardrobe(parsed, cid)
 
 async def add_item(bot, cid, text):
     try:
@@ -197,7 +197,7 @@ async def add_item_settings(bot, cid, text):
     await bot.send_message(chat_id=cid, text=f"Добавлено в шкаф ({added}).")
 
 async def send_del(bot, cid):
-    w = store.load_wardrobe()
+    w = store.load_wardrobe(cid)
     flat = []
     for cat, items in w.items():
         if cat == "_v" or not isinstance(items, list):
@@ -216,19 +216,19 @@ async def del_item(bot, cid, i):
     if i >= len(flat):
         await bot.send_message(chat_id=cid, text="Уже удалено."); return
     cat, it = flat[i]
-    w = store.load_wardrobe()
+    w = store.load_wardrobe(cid)
     if cat in w and it in w[cat]:
         w[cat].remove(it)
         if not w[cat]:
             del w[cat]
-        store.save_wardrobe(w)
+        store.save_wardrobe(w, cid)
     await bot.send_message(chat_id=cid, text="Удалено. Шкаф стал легче.")
     await send_del(bot, cid)
 
 
 # ---------- улучшить гардероб ----------
 async def send_improve(bot, cid):
-    w = store.load_wardrobe()
+    w = store.load_wardrobe(cid)
     await bot.send_message(chat_id=cid, text="Разбираю шкаф...")
     prompt = f"""Ты стилист с прямым, живым тоном — как умный друг, который шарит в одежде. {config.STYLE_PROFILE}
 Разбери гардероб (обращайся на "ты", НЕ используй имя):
@@ -270,7 +270,7 @@ async def send_improve(bot, cid):
 
 
 async def check_purchase(bot, cid, text):
-    w = store.load_wardrobe()
+    w = store.load_wardrobe(cid)
     await bot.send_message(chat_id=cid, text="Оцениваю...")
     web_block = ""
     web_data = research.tavily_snippet(f"{text} отзывы обзор стоит ли покупать", max_chars=900)

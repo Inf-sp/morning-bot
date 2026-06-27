@@ -24,7 +24,7 @@ def _list_label(it):
 def _wardrobe_flat(cid):
     """Плоский стабильный список (категория, вещь) шкафа."""
     flat = []
-    for cat, items in store.load_wardrobe().items():
+    for cat, items in store.load_wardrobe(cid).items():
         if cat == "_v" or not isinstance(items, list):
             continue
         for it in items:
@@ -155,13 +155,13 @@ def _cleanup_delete(cid, ctx):
     elif ctx in ("kast", "kast_s"):
         flat = _wardrobe_flat(cid)
         drop = {flat[i] for i in sel if i < len(flat)}
-        w = store.load_wardrobe()
+        w = store.load_wardrobe(cid)
         for cat, it in drop:
             if cat in w and it in w[cat]:
                 w[cat].remove(it)
                 if not w[cat]:
                     del w[cat]
-        store.save_wardrobe(w)
+        store.save_wardrobe(w, cid)
     elif ctx.startswith("lv_"):
         key = ctx[len("lv_"):]
         store_key = {"movies": config.WATCHLIST_KEY, "countries": config.COUNTRIES_KEY,

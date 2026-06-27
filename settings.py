@@ -18,6 +18,7 @@ NOTIF_TYPES = [
     ("checkin_eve",   "🥸 Вечерний разбор (22:00)"),
     ("weekly_events", "🎬 Досуг на неделю (пн 09:00)"),
     ("weekly_forecast","🌍 Недельный прогноз (вс 19:00)"),
+    ("evening_weather","🌙 Погода на завтра (19:00)"),
 ]
 STYLES = [
     "минимализм",
@@ -75,13 +76,21 @@ async def send_notif(bot, cid):
         on = notif_on(cid, kind)
         mark = "🟢" if on else "⚪"
         rows.append([InlineKeyboardButton(f"{mark} {label}", callback_data=f"set_notiftgl_{kind}")])
-    rows.append([InlineKeyboardButton(" ", callback_data="set_home")])
+    any_on = any(notif_on(cid, k) for k, _ in NOTIF_TYPES)
+    if any_on:
+        rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid,
-        text="🔔 <b>Уведомления</b>\n\nНажми, чтобы включить/выключить. 🟢 - включено.",
+        text="🔔 <b>Уведомления</b>\n\nНажми, чтобы включить/выключить. 🟢 — включено.",
         parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
 async def toggle_notif(bot, cid, kind):
     set_(cid, f"notif_{kind}", not notif_on(cid, kind))
+    await send_notif(bot, cid)
+
+async def notif_off_all(bot, cid):
+    for kind, _ in NOTIF_TYPES:
+        set_(cid, f"notif_{kind}", False)
     await send_notif(bot, cid)
 
 async def send_lang(bot, cid):
@@ -89,7 +98,7 @@ async def send_lang(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(("✅ " if cur == "нидерландский" else "") + "🇳🇱 Нидерландский", callback_data="set_lang_nl")],
         [InlineKeyboardButton(("✅ " if cur == "английский" else "") + "🇬🇧 Английский", callback_data="set_lang_en")],
-        [InlineKeyboardButton(" ", callback_data="set_home")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="set_home")],
     ])
     await bot.send_message(chat_id=cid, text="🗣 <b>Язык для утренней грамматики/слова дня</b>",
                            parse_mode="HTML", reply_markup=kb)
@@ -106,7 +115,7 @@ async def send_body(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✏️ Параметры тела", callback_data="set_bodyinput")],
         [InlineKeyboardButton("🎨 Стиль", callback_data="set_stylepick")],
-        [InlineKeyboardButton(" ", callback_data="set_wardrobe")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="set_wardrobe")],
     ])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 
@@ -115,7 +124,7 @@ async def send_style_pick(bot, cid):
     rows = [[InlineKeyboardButton(("✅ " if cur == s else "") + s, callback_data=f"set_style_{i}")]
             for i, s in enumerate(STYLES)]
     rows.append([InlineKeyboardButton("✏️ Описать своими словами", callback_data="set_stylecustom")])
-    rows.append([InlineKeyboardButton(" ", callback_data="set_body")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_body")])
     await bot.send_message(chat_id=cid,
         text="🎨 <b>Стиль одежды</b>\n\nВыбери из предложенных или опиши своими словами — бот учтёт при подборе образа:",
         parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
@@ -134,7 +143,7 @@ def _list_kb(items, del_prefix, add_cb, back="set_home"):
     rows = [[InlineKeyboardButton(f"❌ {_item_label(it)[:35]}", callback_data=f"{del_prefix}{i}")]
             for i, it in enumerate(items[-40:])]
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data=add_cb)])
-    rows.append([InlineKeyboardButton(" ", callback_data=back)])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
     return InlineKeyboardMarkup(rows)
 
 async def _send_list(bot, cid, title, items, del_prefix, add_cb, back="set_home"):
@@ -149,27 +158,19 @@ async def send_wardrobe(bot, cid):
         [InlineKeyboardButton("📝 Добавить", callback_data="set_ward_add")],
         [InlineKeyboardButton("❌ Убрать", callback_data="set_ward_del")],
         [InlineKeyboardButton("📐 Параметры шкафа", callback_data="set_body")],
-        [InlineKeyboardButton(" ", callback_data="set_home")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="set_home")],
     ])
     await bot.send_message(chat_id=cid, text="👕 <b>Мой шкаф</b>\n\nБаза вещей и параметры для подбора лука.",
                            parse_mode="HTML", reply_markup=kb)
 
 # --- Страны ---
-def _preload_countries(cid):
-    cur = store.get_list(config.COUNTRIES_KEY, cid)
-    if not cur:
-        seed = [c.strip() for c in config.VISITED.replace("Страны:", "").split(",") if c.strip()]
-        store.set_list(config.COUNTRIES_KEY, cid, seed)
-        return seed
-    return cur
-
 async def send_countries(bot, cid):
     from util import country_flag
-    items = _preload_countries(cid)
+    items = store.get_list(config.COUNTRIES_KEY, cid)
     rows = [[InlineKeyboardButton(f"❌ {country_flag(it)} {_item_label(it)[:33]}", callback_data=f"setdel_country_{i}")]
             for i, it in enumerate(items[-40:])]
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data="setadd_country")])
-    rows.append([InlineKeyboardButton(" ", callback_data="set_home")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid, text="🧳 <b>Мои страны</b>", parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -180,20 +181,6 @@ async def send_artists(bot, cid):
                            reply_markup=_list_kb(items, "setdel_artist_", "setadd_artist"))
 
 # --- Книги ---
-def _preload_books(cid):
-    cur = store.get_list(config.BOOKS_KEY, cid)
-    if cur:
-        return cur
-    try:
-        import json
-        with open("content.json", encoding="utf-8") as f:
-            seed = list(json.load(f).get("books", []))
-        if seed:
-            store.set_list(config.BOOKS_KEY, cid, seed)
-            return seed
-    except Exception:
-        pass
-    return cur
 
 # --- Лагом ---
 _LAGOM_INTRO = (
@@ -214,12 +201,12 @@ async def send_lagom(bot, cid):
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data="setadd_lagom")])
     if items:
         rows.append([InlineKeyboardButton("❌ Убрать", callback_data="set_lagom_clean")])
-    rows.append([InlineKeyboardButton(" ", callback_data="set_home")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_books(bot, cid):
-    items = _preload_books(cid)
+    items = store.get_list(config.BOOKS_KEY, cid)
     await bot.send_message(chat_id=cid, text="📚 <b>Мои книги</b>", parse_mode="HTML",
                            reply_markup=_list_kb(items, "setdel_book_", "setadd_book"))
 
@@ -260,7 +247,7 @@ async def handle_callback(bot, cid, data):
         await send_memory(bot, cid)
     elif data == "set_mem_add":
         store.pending_input[cid] = "set_mem_add"
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(" ", callback_data="set_memory")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_memory")]])
         await bot.send_message(chat_id=cid,
             text="🧠 Напиши факт о себе — одну строку.\n\nПримеры: «не люблю острое», «мёрзну утром».",
             reply_markup=kb)
@@ -289,6 +276,8 @@ async def handle_callback(bot, cid, data):
         await send_notif(bot, cid)
     elif data.startswith("set_notiftgl_"):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):])
+    elif data == "set_notif_off_all":
+        await notif_off_all(bot, cid)
     elif data == "set_lang":
         await send_lang(bot, cid)
     elif data == "set_lang_nl":
@@ -306,7 +295,7 @@ async def handle_callback(bot, cid, data):
         await send_wardrobe(bot, cid)
     elif data == "set_ward_add":
         store.pending_input[cid] = "wardrobe_add_set"
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(" ", callback_data="set_wardrobe")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_wardrobe")]])
         await bot.send_message(chat_id=cid,
             text="🏷 Напиши вещь: тип + цвет + детали/бренд.\n"
                  "<i>Напр.: «Футболка белая Uniqlo» или «Шорты серые тонкие». Можно списком.</i>",
@@ -376,9 +365,9 @@ async def handle_callback(bot, cid, data):
             me = await b.get_me()
             link = f"https://t.me/{me.username}?start={code}"
             await b.send_message(chat_id=c,
-                text=f"🔗 <b>Инвайт</b> (48 ч):\n\n<code>{link}</code>",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(" ", callback_data="set_admin_users")]]))
+                text=f"🔗 <b>Инвайт (48 ч):</b>\n<a href=\"{link}\">{link}</a>",
+                parse_mode="HTML", disable_web_page_preview=True,
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Пользователи", callback_data="set_admin_users")]]))
         await _admin_guard(bot, cid, _do_invite)
     elif data.startswith("set_admin_revoke_"):
         target = data[len("set_admin_revoke_"):]
@@ -808,7 +797,7 @@ async def send_admin(bot, cid):
         [InlineKeyboardButton("👥 Пользователи", callback_data="set_admin_users")],
         [InlineKeyboardButton("💸 Расходы на LLM", callback_data="set_admin_cost")],
         [InlineKeyboardButton("🧠 Профиль памяти", callback_data="set_admin_prefs")],
-        [InlineKeyboardButton(" ", callback_data="set_home")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="set_home")],
     ])
     await bot.send_message(
         chat_id=cid,
@@ -827,9 +816,13 @@ async def send_admin_users(bot, cid):
     lines = ["👥 <b>Пользователи</b>", ""]
     rows = []
     for uid in allowed:
-        label = "👑 Owner" if _acc.is_owner(uid) else f"👤 {uid}"
-        lines.append(label)
-        if not _acc.is_owner(uid):
+        prof = store.get_profile(uid)
+        name = prof.get("name", "")
+        name_part = f" · {esc(name)}" if name else ""
+        if _acc.is_owner(uid):
+            lines.append(f"👑 Owner{name_part}")
+        else:
+            lines.append(f"👤 {uid}{name_part}")
             rows.append([InlineKeyboardButton(f"❌ Отозвать {uid}", callback_data=f"set_admin_revoke_{uid}")])
 
     if pending:
@@ -837,7 +830,7 @@ async def send_admin_users(bot, cid):
         lines.append(f"⏳ Активных инвайтов: {len(pending)}")
 
     rows.append([InlineKeyboardButton("🔗 Создать инвайт", callback_data="set_admin_invite")])
-    rows.append([InlineKeyboardButton(" ", callback_data="set_admin")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_admin")])
 
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -883,7 +876,7 @@ async def send_admin_cost(bot, cid):
             lines.append(f"  {esc(p)}: {t:,} tok")
         text = "\n".join(lines)
 
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton(" ", callback_data="set_admin")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -900,7 +893,7 @@ async def send_memory(bot, cid):
         )
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("📝 Добавить", callback_data="set_mem_add")],
-            [InlineKeyboardButton(" ", callback_data="set_home")],
+            [InlineKeyboardButton("◀️ Назад", callback_data="set_home")],
         ])
     else:
         txt = f"🧠 <b>Память</b> · {len(prefs)} факт{'а' if 2 <= len(prefs) <= 4 else 'ов' if len(prefs) >= 5 else ''}\n\nНажми ❌, чтобы удалить:"
@@ -911,7 +904,7 @@ async def send_memory(bot, cid):
         rows.append([InlineKeyboardButton("📝 Добавить", callback_data="set_mem_add")])
         if len(prefs) > 1:
             rows.append([InlineKeyboardButton("🗑 Очистить всё", callback_data="set_mem_clr")])
-        rows.append([InlineKeyboardButton(" ", callback_data="set_home")])
+        rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
         kb = InlineKeyboardMarkup(rows)
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 
@@ -932,7 +925,7 @@ async def send_admin_prefs(bot, cid):
     prefs = memory.get_preferences(cid)
     if not prefs:
         txt = "🧠 <b>Профиль памяти</b>\n\nПока пусто."
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(" ", callback_data="set_admin")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
     else:
         txt = "🧠 <b>Профиль памяти</b>\n\nНажми ❌, чтобы удалить факт:"
         rows = [
@@ -940,7 +933,7 @@ async def send_admin_prefs(bot, cid):
             for i, p in enumerate(prefs)
         ]
         rows.append([InlineKeyboardButton("🗑 Очистить всё", callback_data="set_admin_prefclr")])
-        rows.append([InlineKeyboardButton(" ", callback_data="set_admin")])
+        rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_admin")])
         kb = InlineKeyboardMarkup(rows)
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 

@@ -127,16 +127,9 @@ async def _finish(bot, cid):
     import menu
     _ob.pop(str(cid), None)
     store.pending_input.pop(str(cid), None)
-    prof = store.get_profile(cid)
-    name = prof.get("name", "")
-    greeting = f"<b>{esc(name)}, всё готово!</b>" if name else "<b>Всё готово!</b>"
     await bot.send_message(
         chat_id=cid,
-        text=(
-            f"✅ {greeting}\n\n"
-            "Бот настроен и готов к работе. Меню внизу 👇\n\n"
-            "В любой момент можно изменить настройки через /setup."
-        ),
+        text=menu.WELCOME,
         parse_mode="HTML",
         reply_markup=menu.MAIN_KB,
     )
