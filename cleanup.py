@@ -55,8 +55,10 @@ def _ctx_items(cid, ctx):
         items = [(i, (t.get("text", "") if isinstance(t, dict) else str(t))) for i, t in enumerate(topics)]
         return f"{_l._flag(language)} Чистка: темы", items, f"a_topics_{lang}"
     if ctx == "nb":
+        import re as _re
+        _strip = lambda s: _re.sub(r"<[^>]+>", "", s).strip()
         notes = store.get_list(config.NOTES_KEY, cid)
-        items = [(i, (n.get("text", "") if isinstance(n, dict) else str(n)).strip())
+        items = [(i, _strip(n.get("text", "") if isinstance(n, dict) else str(n)))
                  for i, n in enumerate(notes)
                  if (n.get("bucket", "fav") if isinstance(n, dict) else "fav") == "fav"]
         return "⭐ Чистка: закладки", items, "as_bucket_fav"
