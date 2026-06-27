@@ -70,7 +70,7 @@ async def chat_reply(bot, cid, text):
     if any(w in text.lower() for w in _MED_WORDS):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("👩🏻‍⚕️ Вопрос врачу", callback_data="as_doctor")]])
         await bot.send_message(chat_id=cid,
-            text="👩🏻‍⚕️ Похоже на вопрос о здоровье. В разделе 🍃 Баланс → «Вопрос врачу» дам подробный структурированный разбор.",
+            text="👩🏻‍⚕️ Похоже на вопрос о здоровье. В разделе 🍃 Самозабота → «Вопрос врачу» дам подробный структурированный разбор.",
             reply_markup=kb)
     cats = _detect_categories(text)
     if cats:
