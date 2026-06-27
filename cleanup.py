@@ -81,9 +81,7 @@ def _ctx_items(cid, ctx):
         title = {"movies": "🎬 Чистка: фильмы", "countries": "🧳 Чистка: страны",
                  "artists": "🎸 Чистка: артисты", "books": "📖 Чистка: книги"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
-        # countries открывается напрямую из Любимых → Назад должен возвращать туда, а не в саму чистку
-        back = "as_bucket_love" if key == "countries" else f"as_love_{key}"
-        return title, items, back
+        return title, items, "as_bucket_love"
     if ctx == "fridge":
         raw = store.get_list(config.FRIDGE_KEY, cid)
         items = [(i, it["name"] if isinstance(it, dict) else it) for i, it in enumerate(raw)]
@@ -109,7 +107,15 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     chunk = items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]
     lines = [f"🧹 <b>{esc(title)}</b>", f"Всего: {total} · отмечено: {len(sel)}", "",
              "Отметь выученное ✅ и нажми «Удалить отмеченные»."]
+    _lv_add_label = {
+        "lv_movies": "📝 Добавить фильм",
+        "lv_countries": "📝 Добавить страну",
+        "lv_artists": "📝 Добавить артиста",
+        "lv_books": "📝 Добавить книгу",
+    }
     rows = []
+    if ctx in _lv_add_label:
+        rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"as_loveadd_{ctx[3:]}")])
     for idx, lbl in chunk:
         mark = "✅" if idx in sel else "▫️"
         rows.append([InlineKeyboardButton(f"{mark} {lbl[:36]}", callback_data=f"clt_{ctx}_{idx}_{page}")])
@@ -122,8 +128,6 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     rows.append([InlineKeyboardButton("☑️ Отметить всё на странице", callback_data=f"cla_{ctx}_{page}")])
     if sel:
         rows.append([InlineKeyboardButton(f"🗑 Удалить отмеченные ({len(sel)})", callback_data=f"cld_{ctx}_{page}")])
-    if ctx == "lv_countries":
-        rows.append([InlineKeyboardButton("📝 Добавить страну", callback_data="as_loveadd_countries")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)

@@ -722,8 +722,9 @@ async def love_add_done(bot, cid, key, text):
     store_key = _love_key_of(key)
     if store_key:
         store.add_to_list(store_key, cid, text.strip())
+    import cleanup as _cl
     await bot.send_message(chat_id=cid, text="Добавлено.")
-    await send_love_section(bot, cid, key)
+    await _cl.open_cleanup(bot, cid, f"lv_{key}")
 
 
 async def handle_notes_callback(bot, cid, q, data):
@@ -769,10 +770,8 @@ async def handle_notes_callback(bot, cid, q, data):
         await love_add_start(bot, cid, data[len("as_loveadd_"):]); return
     if data.startswith("as_love_"):
         key = data[len("as_love_"):]
-        if key == "countries":
-            import cleanup as _cl
-            await _cl.open_cleanup(bot, cid, "lv_countries"); return
-        await send_love_section(bot, cid, key); return
+        import cleanup as _cl
+        await _cl.open_cleanup(bot, cid, f"lv_{key}"); return
 
 
 # ===== АДМИНИСТРАТОР =====
