@@ -294,11 +294,17 @@ async def _render_train(bot, cid):
                                     InlineKeyboardButton(d.get("b", "B"), callback_data="train_b")]])
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
         return
-    # tf - в предложении нужно сохранить <b></b> от модели, но обезопасить остальной HTML
+    # tf - слово в предложении выделяем курсивом
     st.update({"fmt": "tf", "word": word, "ru": ru, "correct": bool(d.get("correct")),
                "explain": d.get("explain", ""), "task_ru": d.get("ru", "")})
-    sentence = esc(d.get("sentence", "")).replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
-    L = [head, "", sentence, "", f"❓ {esc(d.get('claim', ''))}", "", "Верно или неверно? 👇"]
+    sentence_raw = d.get("sentence", "")
+    sentence = esc(sentence_raw).replace("&lt;b&gt;", "<i>").replace("&lt;/b&gt;", "</i>")
+    # Если модель не вставила теги — выделяем слово вручную
+    if "<i>" not in sentence:
+        import re as _re
+        sentence = _re.sub(r"(?i)" + _re.escape(esc(word)), f"<i>{esc(word)}</i>", sentence, count=1)
+    head_tf = head + f" · <i>{esc(word)}</i>"
+    L = [head_tf, "", sentence, "", f"❓ {esc(d.get('claim', ''))}", "", "Верно или неверно? 👇"]
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("✅ Верно", callback_data="train_true"),
                                 InlineKeyboardButton("❌ Неверно", callback_data="train_false")]])
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
@@ -495,13 +501,17 @@ async def send_proverb(bot, cid, language):
             '"literal":"дословный перевод на русский",'
             '"meaning":"значение + когда так говорят, 1-2 строки на русском"}',
             400, tier="cheap")
-        kind = esc((d.get("type") or "").strip())
+        def _cap(s):
+            s = (s or "").strip()
+            return s[0].upper() + s[1:] if s else s
+
+        kind = esc(_cap(d.get("type") or ""))
         header = f"💭{flag} <b>Живой язык</b>" + (f" · {kind}" if kind else "")
         L = [header, "", f"<b>{esc(d.get('original', ''))}</b>"]
         if d.get("literal"):
-            L.append(esc(d["literal"]))
+            L.append(esc(_cap(d["literal"])))
         if d.get("meaning"):
-            L += ["", esc(d["meaning"])]
+            L += ["", esc(_cap(d["meaning"]))]
         txt = "\n".join(L)
     except Exception:
         txt = f"💭{flag} <b>Живой язык</b>\n\nНе удалось получить, попробуй ещё раз."
@@ -520,7 +530,11 @@ async def send_proverb_both(bot, cid):
             '"type":"фразовый глагол / идиома / разговорная фраза",'
             '"meaning":"значение + когда так говорят, 1-2 строки на русском"}',
             500, tier="cheap")
-        kind = esc((d.get("type") or "").strip())
+        def _cap(s):
+            s = (s or "").strip()
+            return s[0].upper() + s[1:] if s else s
+
+        kind = esc(_cap(d.get("type") or ""))
         header = "💭 <b>Живой язык</b>" + (f" · {kind}" if kind else "")
         L = [header, ""]
         if d.get("nl"):
@@ -528,9 +542,9 @@ async def send_proverb_both(bot, cid):
         if d.get("en"):
             L.append(f"🇬🇧 {esc(d['en'])}")
         if d.get("ru"):
-            L.append(f"🇷🇺 {esc(d['ru'])}")
+            L.append(f"🇷🇺 {esc(_cap(d['ru']))}")
         if d.get("meaning"):
-            L += ["", esc(d["meaning"])]
+            L += ["", esc(_cap(d["meaning"]))]
         txt = "\n".join(L)
     except Exception:
         txt = "💭 <b>Живой язык</b>\n\nНе удалось получить, попробуй ещё раз."
@@ -1284,8 +1298,7 @@ async def gm_send_lang(bot, cid, code):
         [("📝 Мои темы", f"gm_custom_{code}")],
         [("⬅️ Назад", "gm_home")],
     ]
-    if code == "nl":
-        rows.insert(0, [("🧩 Тренажёр de/het", "dh_start")])
+    # De/Het теперь в основном меню Обучение, не здесь
     await bot.send_message(
         chat_id=cid,
         text=f"📘 <b>Грамматика · {flag} {lang.capitalize()}</b>\n\nВыбери курс:",
