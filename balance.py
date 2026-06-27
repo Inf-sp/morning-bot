@@ -537,10 +537,10 @@ def _gen_motiv(cid):
         steps = [esc(str(s).strip()) for s in (d.get("steps") or []) if str(s).strip()]
         why = esc(str(d.get("why", "")).strip())
     except Exception:
-        return "🎯 Одно действие прямо сейчас — встань и пройди круг по комнате."
+        return "☕️ Одно действие прямо сейчас — встань и пройди круг по комнате."
     lagom_full = esc(lagom) if lagom else "Один шаг."
     lines = [
-        "🎯 <b>Личная мотивация</b>", "",
+        "☕️ <b>Личная мотивация</b>", "",
         f"<b>База:</b> {base}",
         f"Сейчас — не вся жизнь. Только один шаг.  <i>({lagom_full})</i>", "",
         "<b>Действие:</b>",
