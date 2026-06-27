@@ -180,7 +180,7 @@ async def send_countries(bot, cid):
             for i, it in enumerate(items[-40:])]
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data="setadd_country")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
-    await bot.send_message(chat_id=cid, text="🧳 <b>Мои страны</b>", parse_mode="HTML",
+    await bot.send_message(chat_id=cid, text="🗺️ <b>Мои страны</b>", parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 
 # --- Артисты ---
@@ -660,7 +660,7 @@ async def send_bucket(bot, cid, bucket):
 
 LOVE_SECTIONS = [
     ("🎬 Фильмы и сериалы", "movies"),
-    ("🧳 Мои страны", "countries"),
+    ("🗺️ Мои страны", "countries"),
     ("🎸 Мои артисты", "artists"),
     ("📖 Мои книги", "books"),
 ]
@@ -684,7 +684,7 @@ def _love_items(cid, key):
     return []
 
 def _love_title(key):
-    return {"movies": "🎬 Фильмы и сериалы", "countries": "🧳 Мои страны",
+    return {"movies": "🎬 Фильмы и сериалы", "countries": "🗺️ Мои страны",
             "artists": "🎸 Мои артисты", "books": "📖 Мои книги"}.get(key, "Любимые")
 
 async def send_love_section(bot, cid, key):
