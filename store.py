@@ -123,15 +123,22 @@ def wardrobe_to_text(w):
                      if c != "_v" and isinstance(i, list))
 
 def get_list(key, chat_id):
-    return _load(key).get(str(chat_id), [])
+    d = _load(key)
+    if not isinstance(d, dict):
+        return []  # глобальный список (legacy) — не отдаём его как данные пользователя
+    return d.get(str(chat_id), [])
 
 def add_to_list(key, chat_id, item):
     d = _load(key)
+    if not isinstance(d, dict):
+        d = {}
     d.setdefault(str(chat_id), []).append(item)
     _save(key, d)
 
 def set_list(key, chat_id, items):
     d = _load(key)
+    if not isinstance(d, dict):
+        d = {}
     d[str(chat_id)] = items
     _save(key, d)
 
