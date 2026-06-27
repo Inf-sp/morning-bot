@@ -685,13 +685,15 @@ async def send_love_section(bot, cid, key):
         return
     items = _love_items(cid, key)
     title = _love_title(key)
-    body = ", ".join(esc(str(it)) for it in items) if items else "пусто"
-    lines = [f"<b>{title}</b>", "", body]
-    rows = [[InlineKeyboardButton(f"❌ {str(it)[:28]}", callback_data=f"as_lovedel_{key}_{i}")]
-            for i, it in enumerate(items[:40])]
-    rows.append([InlineKeyboardButton("📝 Добавить", callback_data=f"as_loveadd_{key}")])
     if items:
-        rows.append([InlineKeyboardButton("❌ Убрать", callback_data=f"as_loveclean_{key}")])
+        preview = "\n".join(f"• {esc(str(it))}" for it in items[:50])
+        body = preview
+    else:
+        body = "<i>пусто</i>"
+    lines = [f"<b>{title}</b>", "", body]
+    rows = [[InlineKeyboardButton("📝 Добавить", callback_data=f"as_loveadd_{key}")]]
+    if items:
+        rows.append([InlineKeyboardButton("🗑 Выбрать для удаления", callback_data=f"as_loveclean_{key}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_love")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
