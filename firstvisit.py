@@ -71,18 +71,34 @@ def needs_setup(cid, section: str) -> bool:
     if section == "wardrobe":
         import settings as _s
         w = store.load_wardrobe(cid)
-        return not store.wardrobe_to_text(w).strip() and not _s.get(cid, "style")
+        has_wardrobe = bool(store.wardrobe_to_text(w).strip())
+        has_style = bool(_s.get(cid, "style") or _s.get(cid, "body"))
+        if has_wardrobe or has_style:
+            _mark(cid, section)  # уже заполнен — помечаем, чтобы не проверять снова
+            return False
+        return True
     if section == "learn":
         import settings as _s
-        return not _s.get(cid, "study_lang")
+        has_lang = bool(_s.get(cid, "study_lang"))
+        if has_lang:
+            _mark(cid, section)
+            return False
+        return True
     if section == "leisure":
-        return (
-            not store.get_list(config.ARTISTS_KEY, cid)
-            and not store.get_list(config.WATCHLIST_KEY, cid)
-            and not store.get_list(config.BOOKS_KEY, cid)
+        has_any = (
+            store.get_list(config.ARTISTS_KEY, cid)
+            or store.get_list(config.WATCHLIST_KEY, cid)
+            or store.get_list(config.BOOKS_KEY, cid)
         )
+        if has_any:
+            _mark(cid, section)
+            return False
+        return True
     if section == "balance":
-        return not prof.get("diet_prefs")
+        if prof.get("diet_prefs"):
+            _mark(cid, section)
+            return False
+        return True
     return False
 
 
