@@ -49,6 +49,7 @@ def _food_card(d, label="Рецепт дня") -> str:
         lines += ["", "Приготовление:"]
         for step in steps:
             lines.append(f"• {esc(str(step).strip())}")
+    lines += ["", "😋 Приятного аппетита!"]
     return "\n".join(lines)
 
 def fetch_food_tip(cid) -> str:
@@ -184,6 +185,18 @@ async def send_recipe_featured(bot, cid):
     store.last_source[str(cid)] = "Питание · Рецепт"
     store.last_answer[str(cid)] = card
     await util.send_html(bot, cid, card, reply_markup=_recipe_typed_kb())
+
+async def send_recipe_push(bot, cid):
+    """Уведомление 12:30 — без кнопок."""
+    try:
+        d = await asyncio.to_thread(_gen_recipe, "любое блюдо под вкус пользователя", cid=cid)
+    except Exception as e:
+        await verify.safe_error(bot, cid, e); return
+    card = _recipe_card(d)
+    store.last_source[str(cid)] = "Питание · Рецепт"
+    store.last_answer[str(cid)] = card
+    await util.send_html(bot, cid, card)
+
 
 def _gen_leftovers_recipe(ingredients):
     return ai.llm_json(

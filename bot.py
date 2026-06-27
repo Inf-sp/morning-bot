@@ -545,7 +545,7 @@ async def job_recipe(context: ContextTypes.DEFAULT_TYPE):
     if not CHAT_ID or not settings.notif_on(CHAT_ID, "recipe_daily"):
         return
     try:
-        await balance.send_recipe_featured(context.bot, CHAT_ID)
+        await balance.send_recipe_push(context.bot, CHAT_ID)
     except Exception:
         logging.exception("job_recipe failed")
 
