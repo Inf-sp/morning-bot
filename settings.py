@@ -377,7 +377,7 @@ async def handle_callback(bot, cid, data, q=None):
             me = await b.get_me()
             link = f"https://t.me/{me.username}?start={code}"
             await b.send_message(chat_id=c,
-                text=f"🔗 <b>Инвайт (48 ч):</b>\n<a href=\"{link}\">{link}</a>",
+                text=f"🔗 <b>Подарочный инвайт :</b>\n<a href=\"{link}\">{link}</a>",
                 parse_mode="HTML", disable_web_page_preview=True,
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Пользователи", callback_data="set_admin_users")]]))
         await _admin_guard(bot, cid, _do_invite)

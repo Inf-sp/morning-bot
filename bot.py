@@ -623,7 +623,7 @@ async def invite_command(update, context):
     bot_me = await context.bot.get_me()
     link = f"https://t.me/{bot_me.username}?start={code}"
     await update.message.reply_text(
-        f"🔗 <b>Инвайт (48 ч):</b>\n<a href=\"{link}\">{link}</a>\n\nОтправь другу — он нажмёт и получит доступ.",
+        f"🔗 <b>Подарочный инвайт:</b>\n<a href=\"{link}\">{link}</a>\n\nОтправь другу — он нажмёт и получит доступ.",
         parse_mode="HTML", disable_web_page_preview=True
     )
 
