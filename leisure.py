@@ -869,8 +869,6 @@ def _plan_countries(cid):
 
 def travel_suggest_one(cid):
     visited = store.get_list(config.COUNTRIES_KEY, cid)
-    if not visited:
-        visited = [c.strip() for c in config.VISITED.split(",") if c.strip()]
     favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
     fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
     disliked = store.get_list(config.TRAVEL_DISLIKE_KEY, cid)
@@ -910,8 +908,6 @@ def _travel_kb():
 async def send_go(bot, cid):
     await bot.send_message(chat_id=cid, text="Подбираю страну...")
     visited = store.get_list(config.COUNTRIES_KEY, cid)
-    if not visited:
-        visited = [c.strip() for c in config.VISITED.split(",") if c.strip()]
     favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
     fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
     disliked = store.get_list(config.TRAVEL_DISLIKE_KEY, cid)

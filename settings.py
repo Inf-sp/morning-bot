@@ -667,32 +667,11 @@ def _love_items(cid, key):
         return list(store.get_list(config.WATCHLIST_KEY, cid))
     if key == "countries":
         cur = store.get_list(config.COUNTRIES_KEY, cid)
-        if not cur:
-            cur = [c.strip() for c in config.VISITED.split(",") if c.strip()]
-            store.set_list(config.COUNTRIES_KEY, cid, cur)
         return [c if isinstance(c, str) else c.get("name", "") for c in cur]
     if key == "artists":
-        cur = store.get_list(config.ARTISTS_KEY, cid)
-        if not cur:
-            try:
-                import json
-                with open("artists.json", encoding="utf-8") as f:
-                    cur = json.load(f)
-                store.set_list(config.ARTISTS_KEY, cid, cur)
-            except Exception:
-                cur = []
-        return list(cur)
+        return list(store.get_list(config.ARTISTS_KEY, cid))
     if key == "books":
-        cur = store.get_list(config.BOOKS_KEY, cid)
-        if not cur:
-            try:
-                import json
-                with open("content.json", encoding="utf-8") as f:
-                    cur = list(json.load(f).get("books", []))
-                store.set_list(config.BOOKS_KEY, cid, cur)
-            except Exception:
-                cur = []
-        return list(cur)
+        return list(store.get_list(config.BOOKS_KEY, cid))
     return []
 
 def _love_title(key):
