@@ -70,3 +70,60 @@ def test_wardrobe_hints_empty_and_format():
     h = memory.wardrobe_hints(CID)
     assert "мёрзнет" in h and "×2" in h
     assert "не его стиль" in h and "пиджак" in h
+
+
+# ---------- предпочтения (Memory Agent) ----------
+
+@pytest.mark.unit
+def test_preferences_add_get_roundtrip():
+    memory.add_preference(CID, "не люблю острое")
+    prefs = memory.get_preferences(CID)
+    assert "не люблю острое" in prefs
+
+
+@pytest.mark.unit
+def test_preferences_duplicate_ignored():
+    memory.add_preference(CID, "мёрзну утром")
+    memory.add_preference(CID, "мёрзну утром")
+    assert memory.get_preferences(CID).count("мёрзну утром") == 1
+
+
+@pytest.mark.unit
+def test_preferences_cap():
+    for i in range(60):
+        memory.add_preference(CID, f"факт {i}")
+    prefs = memory.get_preferences(CID)
+    assert len(prefs) == memory._PREFS_CAP
+
+
+@pytest.mark.unit
+def test_preferences_del():
+    memory.add_preference(CID, "A")
+    memory.add_preference(CID, "B")
+    memory.add_preference(CID, "C")
+    memory.del_preference(CID, 1)          # удаляем "B"
+    prefs = memory.get_preferences(CID)
+    assert "B" not in prefs
+    assert "A" in prefs and "C" in prefs
+
+
+@pytest.mark.unit
+def test_preferences_del_out_of_range():
+    memory.add_preference(CID, "A")
+    memory.del_preference(CID, 99)         # не падает
+    assert "A" in memory.get_preferences(CID)
+
+
+@pytest.mark.unit
+def test_profile_hints_empty():
+    assert memory.profile_hints(CID) == ""
+
+
+@pytest.mark.unit
+def test_profile_hints_format():
+    memory.add_preference(CID, "не люблю острое")
+    memory.add_preference(CID, "мёрзну утром")
+    h = memory.profile_hints(CID)
+    assert h.startswith("Знаешь о пользователе:")
+    assert "не люблю острое" in h
+    assert "мёрзну утром" in h

@@ -8,46 +8,67 @@ from datetime import datetime
 
 import config
 import store
+import access
 import menu
 import assistant
 import balance
-import notes
 import myday
 import wardrobe
 import learning
 import cleanup
 import settings
-import travel
-import content
+import leisure
 import weather
 import verify
 import secure
-import grammar_micro
 
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID
 
 
+_WELCOME = (
+    "👋 <b>Привет! Я DM</b> - твой помощник на каждый день. "
+    "Погода, учеба, идеи и планы в одном месте.\n\n"
+    "<b>Что я умею:</b>\n"
+    "☀️ <b>Мой день</b> - погода, образ, слово дня, идея и факты.\n"
+    "👕 <b>Гардероб</b> - луки по погоде, разбор шкафа и оценка покупок.\n"
+    "🧠 <b>Баланс</b> - советы врача, мотивация и рецепты.\n"
+    "📚 <b>Обучение</b> - языки (NL/EN), игры, словарь и тесты.\n"
+    "🍿 <b>Досуг</b> - фильмы, книги, музыка, концерты и поездки.\n\n"
+    "Просто напиши свой вопрос в чат - я на него отвечу 💬\n\n"
+    "<b>Команды:</b>\n"
+    "/start - главное меню\n"
+    "/setup - настройки (язык, город, уведомления)\n\n"
+    "<b>Как сохранять:</b>\n"
+    "Жми «⭐ <b>В закладки</b>» под ответами, чтобы не потерять их. "
+    "Топовые треки и фильмы кидай в «❤️ <b>В любимые</b>». "
+    "Всё сохраненное лежит тут: /notes."
+)
+
+
 async def start(update, context):
-    txt = (
-        "👋 <b>Привет! Я DM</b> - твой помощник на каждый день. "
-        "Погода, учеба, идеи и планы в одном месте.\n\n"
-        "<b>Что я умею:</b>\n"
-        "☀️ <b>Мой день</b> - погода, образ, слово дня, идея и факты.\n"
-        "👕 <b>Гардероб</b> - луки по погоде, разбор шкафа и оценка покупок.\n"
-        "🧠 <b>Баланс</b> - советы врача, мотивация и рецепты.\n"
-        "📚 <b>Обучение</b> - языки (NL/EN), игры, словарь и тесты.\n"
-        "🍿 <b>Досуг</b> - фильмы, книги, музыка, концерты и поездки.\n\n"
-        "Просто напиши свой вопрос в чат - я на него отвечу 💬\n\n"
-        "<b>Команды:</b>\n"
-        "/start - главное меню\n"
-        "/setup - настройки (язык, город, уведомления)\n\n"
-        "<b>Как сохранять:</b>\n"
-        "Жми «⭐ <b>В закладки</b>» под ответами, чтобы не потерять их. "
-        "Топовые треки и фильмы кидай в «❤️ <b>В любимые</b>». "
-        "Всё сохраненное лежит тут: /notes."
-    )
-    await update.message.reply_text(txt, parse_mode="HTML", reply_markup=menu.MAIN_KB)
+    cid = str(update.effective_chat.id)
+    args = context.args or []
+
+    # Инвайт-код передан через /start <code>
+    if args:
+        code = args[0].strip()
+        if access.is_allowed(cid):
+            await update.message.reply_text(_WELCOME, parse_mode="HTML", reply_markup=menu.MAIN_KB)
+            return
+        if access.use_invite(code, cid):
+            await update.message.reply_text(
+                "✅ Доступ открыт!\n\n" + _WELCOME, parse_mode="HTML", reply_markup=menu.MAIN_KB
+            )
+            return
+        await update.message.reply_text("❌ Инвайт-код недействителен или устарел.")
+        return
+
+    if not access.is_allowed(cid):
+        await update.message.reply_text("⛔ Бот приватный. Попроси владельца прислать инвайт.")
+        return
+
+    await update.message.reply_text(_WELCOME, parse_mode="HTML", reply_markup=menu.MAIN_KB)
 
 
 # ---------- Диспетчер инлайн-кнопок ----------
@@ -58,13 +79,17 @@ async def answer_callback(update, context):
     data = q.data
     bot = context.bot
 
+    if not access.is_allowed(cid):
+        await bot.send_message(chat_id=cid, text="⛔ Бот приватный. Попроси владельца прислать инвайт.")
+        return
+
     # Закладки: fav_view_* и fav_del_*
     if data.startswith("fav_"):
-        await notes.handle_callback(bot, cid, q, data)
+        await settings.handle_notes_callback(bot, cid, q, data)
         return
     # Микро-грамматика и тренажёр de/het
     if data.startswith("gm_") or data.startswith("dh_"):
-        await grammar_micro.handle_callback(bot, cid, q, data)
+        await learning.handle_callback(bot, cid, q, data)
         return
     # Баланс (врач/мотивация/рецепты/тревоги/холодильник) vs Закладки/Любимое
     if data.startswith("as_"):
@@ -72,7 +97,7 @@ async def answer_callback(update, context):
                              "as_daycheck", "as_motiv", "as_doctor")):
             await balance.handle_callback(bot, cid, q, data)
         else:
-            await notes.handle_callback(bot, cid, q, data)
+            await settings.handle_notes_callback(bot, cid, q, data)
         return
     # Гардероб: инлайн-кабинет
     if data.startswith("w_"):
@@ -172,41 +197,41 @@ async def answer_callback(update, context):
                 store.pending_input[cid] = "setcity"
                 await bot.send_message(chat_id=cid, text="🌍 Напиши название города - переключу на него!")
             elif act == "trav_go":
-                await travel.send_go(bot, cid)
+                await leisure.send_go(bot, cid)
             elif act == "trav_no":
-                await travel.travel_dislike(bot, cid)
+                await leisure.travel_dislike(bot, cid)
             elif act == "trav_plan":
-                await travel.send_plan(bot, cid)
+                await leisure.send_plan(bot, cid)
             elif act == "trav_fav":
-                await travel.travel_fav(bot, cid)
+                await leisure.travel_fav(bot, cid)
             elif act == "trav_save":
-                await travel.save_plan(bot, cid)
+                await leisure.save_plan(bot, cid)
             elif act == "watch":
-                await content.send_recos(bot, cid, "movie")
+                await leisure.send_recos(bot, cid, "movie")
             elif act == "read":
-                await content.send_recos(bot, cid, "book")
+                await leisure.send_recos(bot, cid, "book")
             elif act == "watchlist":
-                await content.send_watchlist(bot, cid)
+                await leisure.send_watchlist(bot, cid)
             elif act == "readlist":
-                await content.send_readlist(bot, cid)
+                await leisure.send_readlist(bot, cid)
             elif act == "watchclean":
                 await cleanup.open_cleanup(bot, cid, "wl")
             elif act == "readclean":
                 await cleanup.open_cleanup(bot, cid, "rl")
             elif act == "fav":
-                await content.send_fav(bot, cid)
+                await leisure.send_fav(bot, cid)
             elif act == "concerts_find":
-                await content.find_concerts(bot, cid, "home")
+                await leisure.find_concerts(bot, cid, "home")
             elif act == "concerts_pick":
-                await content.concert_pick_country(bot, cid)
+                await leisure.concert_pick_country(bot, cid)
             elif act in ("concerts_be", "concerts_de", "concerts_fr", "concerts_gb",
                          "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
                          "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
-                await content.find_concerts(bot, cid, act.split("_")[1])
+                await leisure.find_concerts(bot, cid, act.split("_")[1])
             elif act == "listen":
-                await content.send_listen(bot, cid)
+                await leisure.send_listen(bot, cid)
             elif act == "listen_no":
-                await content.listen_dislike(bot, cid)
+                await leisure.listen_dislike(bot, cid)
             elif act == "food_breakfast":
                 await balance.send_recipe(bot, cid, "завтрак")
             elif act == "food_lunch":
@@ -303,25 +328,25 @@ async def answer_callback(update, context):
         return
     # Развлечения / путешествия
     if data.startswith("movie_love_"):
-        await content.movie_love(bot, cid, int(data.split("_")[-1]))
+        await leisure.movie_love(bot, cid, int(data.split("_")[-1]))
         return
     if data.startswith("book_love_"):
-        await content.book_love(bot, cid, int(data.split("_")[-1]))
+        await leisure.book_love(bot, cid, int(data.split("_")[-1]))
         return
     if data == "listen_love":
-        await content.listen_love(bot, cid)
+        await leisure.listen_love(bot, cid)
         return
     if data.startswith("reco_"):
-        await content.add_reco(bot, cid, int(data.split("_")[1]))
+        await leisure.add_reco(bot, cid, int(data.split("_")[1]))
         return
     if data.startswith("movie_no_"):
-        await content.movie_dislike(bot, cid, int(data.split("_")[-1]))
+        await leisure.movie_dislike(bot, cid, int(data.split("_")[-1]))
         return
     if data.startswith("book_no_"):
-        await content.book_dislike(bot, cid, int(data.split("_")[-1]))
+        await leisure.book_dislike(bot, cid, int(data.split("_")[-1]))
         return
     if data.startswith("listen_"):
-        await content.add_listen(bot, cid, int(data.split("_")[1]))
+        await leisure.add_listen(bot, cid, int(data.split("_")[1]))
         return
     # Проверка дня (тревоги)
     if data == "worry_clearall":
@@ -342,6 +367,11 @@ async def text_router(update, context):
     cid = str(update.effective_chat.id)
     text = secure.clamp(update.message.text)        # лимит длины + чистка невидимых/управляющих
     bot = context.bot
+
+    if not access.is_allowed(cid):
+        await bot.send_message(chat_id=cid, text="⛔ Бот приватный. Попроси владельца прислать инвайт.")
+        return
+
     flags = secure.injection_flags(text)
     if flags:
         _log.warning("[secure] injection flags: %s", flags)
@@ -379,7 +409,7 @@ async def text_router(update, context):
 
     # Микро-грамматика: практическое предложение
     if store.micro_state.get(cid, {}).get("awaiting_sentence"):
-        if await grammar_micro.check_sentence(bot, cid, text):
+        if await learning.check_sentence(bot, cid, text):
             return
 
     # Pending-ввод
@@ -388,7 +418,7 @@ async def text_router(update, context):
         if kind == "worry":
             await balance.save_worries(bot, cid, text); return
         if kind == "favorite":
-            await content.add_fav(bot, cid, text); return
+            await leisure.add_fav(bot, cid, text); return
         if kind in ("role_doctor", "role_state"):
             await balance.handle_role(bot, cid, kind.split("_")[1], text); return
         if kind == "wardrobe_add":
@@ -440,10 +470,10 @@ async def text_router(update, context):
         if kind == "train_translate":
             await learning.train_translate_answer(bot, cid, text); return
         if kind.startswith("loveadd_"):
-            await notes.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
+            await settings.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
         if kind.startswith("gm_addtopic_"):
             code = kind[len("gm_addtopic_"):]
-            await grammar_micro.add_topic_done(bot, cid, code, text); return
+            await learning.add_topic_done(bot, cid, code, text); return
 
     # Свободный чат
     await assistant.chat_reply(bot, cid, text)
@@ -470,124 +500,223 @@ async def document_handler(update, context):
 # ---------- Команды-обёртки ----------
 async def notes_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
-    await notes.send_notes(context.bot, update.effective_chat.id)
+    await settings.send_notes(context.bot, update.effective_chat.id)
 
 async def setup_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
     await settings.send_home(context.bot, update.effective_chat.id)
 
+async def health_command(update, context):
+    import ai as _ai
+    lines = ["<b>🩺 Health check</b>", ""]
+
+    # Env keys
+    keys = {
+        "TELEGRAM_TOKEN": bool(config.TELEGRAM_TOKEN),
+        "GEMINI_API_KEY": bool(config.GEMINI_API_KEY),
+        "ANTHROPIC_API_KEY": bool(config.ANTHROPIC_API_KEY),
+        "GROQ_API_KEY": bool(config.GROQ_API_KEY),
+        "DATABASE_URL": bool(config.DATABASE_URL),
+    }
+    lines.append("<b>Env:</b>")
+    for k, ok in keys.items():
+        lines.append(f"  {'✅' if ok else '❌'} {k}")
+
+    # DB
+    try:
+        store._load("__health__")
+        lines.append("✅ DB: OK")
+    except Exception as e:
+        _log.warning("health: DB failed: %s", e)
+        lines.append("❌ DB: недоступна")
+
+    # Weather
+    try:
+        s = store.get_settings(update.effective_chat.id)
+        weather.fetch_weather(s["lat"], s["lon"], 1)
+        lines.append("✅ Weather API: OK")
+    except Exception as e:
+        _log.warning("health: weather failed: %s", e)
+        lines.append("❌ Weather API: недоступна")
+
+    # LLM cost summary (последние 7 дней)
+    import ai as _ai2
+    import time as _t
+    log = _ai2.get_cost_log()
+    week_ago = _t.time() - 7 * 86400
+    recent = [e for e in log if e.get("ts", 0) >= week_ago]
+    if recent:
+        total_tok = sum(e.get("tokens", 0) for e in recent)
+        lines.append(f"💸 LLM 7д: {len(recent)} вызовов, ~{total_tok:,} tok")
+    else:
+        lines.append("💸 LLM 7д: нет данных")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+async def remember_command(update, context):
+    """Сохранить факт о пользователе в профиль памяти."""
+    cid = update.effective_chat.id
+    text = " ".join(context.args or []).strip()
+    if not text:
+        await update.message.reply_text(
+            "💡 Использование: /remember <факт>\n\n"
+            "Например: /remember не люблю острое\n/remember мёрзну утром"
+        )
+        return
+    text = secure.clamp(text, 200)
+    import memory
+    memory.add_preference(cid, text)
+    await update.message.reply_text(f"🧠 Запомнил: «{text}»")
+
+
+async def cost_command(update, context):
+    """Сводка расходов на LLM — только для администратора."""
+    cid = update.effective_chat.id
+    if config.CHAT_ID and str(cid) != str(config.CHAT_ID):
+        await update.message.reply_text("⛔ Только для администратора.")
+        return
+    await settings.send_admin_cost(context.bot, cid)
+
+
+async def invite_command(update, context):
+    """Создать одноразовый инвайт-код — только для owner."""
+    cid = update.effective_chat.id
+    if not access.is_owner(cid):
+        await update.message.reply_text("⛔ Только для владельца бота.")
+        return
+    code = access.create_invite()
+    bot_me = await context.bot.get_me()
+    link = f"https://t.me/{bot_me.username}?start={code}"
+    await update.message.reply_text(
+        f"🔗 <b>Инвайт-ссылка</b> (действует 48 ч):\n\n<code>{link}</code>\n\n"
+        "Отправь другу. После перехода доступ откроется.",
+        parse_mode="HTML"
+    )
+
 
 # ---------- Расписание ----------
 async def job_morning_brief(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID or not settings.notif_on(CHAT_ID, "morning_brief"):
-        return
-    try:
-        await weather.send_weather(context.bot, CHAT_ID, "today")
-        await learning.send_morning_word(context.bot, CHAT_ID)
-    except Exception:
-        logging.exception("job_morning_brief failed")
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "morning_brief"):
+            continue
+        try:
+            await weather.send_weather(context.bot, cid, "today")
+            await learning.send_morning_word(context.bot, cid)
+        except Exception:
+            logging.exception("job_morning_brief failed for cid=%s", cid)
 
 async def job_weather_warn(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID or not settings.notif_on(CHAT_ID, "weather_warn"):
-        return
-    try:
-        s = store.get_settings(CHAT_ID)
-        data = weather.fetch_weather(s["lat"], s["lon"], 2)
-        d = data["daily"]
-        wind = d["windspeed_10m_max"][0] or 0
-        code = d["weathercode"][0]
-        rain = d["precipitation_probability_max"][0] or 0
-        rain_mm = (d.get("precipitation_sum") or [None])[0]
-        _WARN_CODES = {95, 96, 99}
-        if wind > 10 or code in _WARN_CODES or rain > 70:
-            text = weather.storm_alert(wind, code, rain, rain_mm, cc=s.get("cc", ""))
-            if not text:
-                parts = []
-                if wind > 10:
-                    parts.append(f"💨 ветер до {wind:.0f} м/с")
-                if rain > 70:
-                    parts.append(f"🌧 дождь {rain:.0f}%")
-                if code in _WARN_CODES:
-                    parts.append("⛈ возможна гроза")
-                text = "⚠️ <b>Погодное предупреждение</b>\n\n" + " • ".join(parts)
-            await context.bot.send_message(chat_id=CHAT_ID, text=text, parse_mode="HTML")
-    except Exception:
-        logging.exception("job_weather_warn failed")
+    _WARN_CODES = {95, 96, 99}
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "weather_warn"):
+            continue
+        try:
+            s = store.get_settings(cid)
+            data = weather.fetch_weather(s["lat"], s["lon"], 2)
+            d = data["daily"]
+            wind = d["windspeed_10m_max"][0] or 0
+            code = d["weathercode"][0]
+            rain = d["precipitation_probability_max"][0] or 0
+            rain_mm = (d.get("precipitation_sum") or [None])[0]
+            if wind > 10 or code in _WARN_CODES or rain > 70:
+                text = weather.storm_alert(wind, code, rain, rain_mm, cc=s.get("cc", ""))
+                if not text:
+                    parts = []
+                    if wind > 10:
+                        parts.append(f"💨 ветер до {wind:.0f} м/с")
+                    if rain > 70:
+                        parts.append(f"🌧 дождь {rain:.0f}%")
+                    if code in _WARN_CODES:
+                        parts.append("⛈ возможна гроза")
+                    text = "⚠️ <b>Погодное предупреждение</b>\n\n" + " • ".join(parts)
+                await context.bot.send_message(chat_id=cid, text=text, parse_mode="HTML")
+        except Exception:
+            logging.exception("job_weather_warn failed for cid=%s", cid)
 
 async def job_lagom(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID or not settings.notif_on(CHAT_ID, "lagom_daily"):
-        return
-    try:
-        await balance.send_motiv_push(context.bot, CHAT_ID)
-    except Exception:
-        logging.exception("job_lagom failed")
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "lagom_daily"):
+            continue
+        try:
+            await balance.send_motiv_push(context.bot, cid)
+        except Exception:
+            logging.exception("job_lagom failed for cid=%s", cid)
 
 async def job_grammar(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID or not settings.notif_on(CHAT_ID, "grammar"):
-        return
-    try:
-        await learning.send_morning_word(context.bot, CHAT_ID)
-    except Exception:
-        logging.exception("job_grammar failed")
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "grammar"):
+            continue
+        try:
+            await learning.send_morning_word(context.bot, cid)
+        except Exception:
+            logging.exception("job_grammar failed for cid=%s", cid)
 
 async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID or not settings.notif_on(CHAT_ID, "checkin_day"):
-        return
-    try:
-        store.pending_input[str(CHAT_ID)] = "worry"
-        await context.bot.send_message(chat_id=CHAT_ID, parse_mode="HTML",
-            text="🫣 <b>Дневная разгрузка</b>\n\nСейчас не анализируй, просто выгрузи мысли.\n\n"
-                 "Каждая тревога - с новой строки.\n\nВечером проверим, что было фактами, а что шумом…")
-    except Exception:
-        logging.exception("job_checkin_day failed")
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "checkin_day"):
+            continue
+        try:
+            store.pending_input[str(cid)] = "worry"
+            await context.bot.send_message(chat_id=cid, parse_mode="HTML",
+                text="🫣 <b>Дневная разгрузка</b>\n\nСейчас не анализируй, просто выгрузи мысли.\n\n"
+                     "Каждая тревога - с новой строки.\n\nВечером проверим, что было фактами, а что шумом…")
+        except Exception:
+            logging.exception("job_checkin_day failed for cid=%s", cid)
 
 async def job_recipe(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID or not settings.notif_on(CHAT_ID, "recipe_daily"):
-        return
-    try:
-        await balance.send_recipe_push(context.bot, CHAT_ID)
-    except Exception:
-        logging.exception("job_recipe failed")
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "recipe_daily"):
+            continue
+        try:
+            await balance.send_recipe_push(context.bot, cid)
+        except Exception:
+            logging.exception("job_recipe failed for cid=%s", cid)
 
 async def job_vocab_review(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID or not settings.notif_on(CHAT_ID, "vocab_review"):
-        return
-    try:
-        await learning.send_vocab_review(context.bot, CHAT_ID)
-    except Exception:
-        logging.exception("job_vocab_review failed")
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "vocab_review"):
+            continue
+        try:
+            await learning.send_vocab_review(context.bot, cid)
+        except Exception:
+            logging.exception("job_vocab_review failed for cid=%s", cid)
 
 async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID or not settings.notif_on(CHAT_ID, "checkin_eve"):
-        return
-    try:
-        await balance.send_evening_review(context.bot, CHAT_ID)
-    except Exception:
-        logging.exception("job_checkin_evening failed")
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "checkin_eve"):
+            continue
+        try:
+            await balance.send_evening_review(context.bot, cid)
+        except Exception:
+            logging.exception("job_checkin_evening failed for cid=%s", cid)
 
 async def job_weekly_events(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID or not settings.notif_on(CHAT_ID, "weekly_events"):
-        return
-    try:
-        await content.send_weekly_events(context.bot, CHAT_ID)
-    except Exception:
-        logging.exception("job_weekly_events failed")
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "weekly_events"):
+            continue
+        try:
+            await leisure.send_weekly_events(context.bot, cid)
+        except Exception:
+            logging.exception("job_weekly_events failed for cid=%s", cid)
 
 async def job_live_lang(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID or not settings.notif_on(CHAT_ID, "live_lang"):
-        return
-    try:
-        await learning.send_proverb_both(context.bot, CHAT_ID)
-    except Exception:
-        logging.exception("job_live_lang failed")
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "live_lang"):
+            continue
+        try:
+            await learning.send_proverb_both(context.bot, cid)
+        except Exception:
+            logging.exception("job_live_lang failed for cid=%s", cid)
 
 async def job_weekly_forecast(context: ContextTypes.DEFAULT_TYPE):
-    if not CHAT_ID or not settings.notif_on(CHAT_ID, "weekly_forecast"):
-        return
-    try:
-        await weather.send_weather(context.bot, CHAT_ID, "week")
-    except Exception:
-        logging.exception("job_weekly_forecast failed")
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "weekly_forecast"):
+            continue
+        try:
+            await weather.send_weather(context.bot, cid, "week")
+        except Exception:
+            logging.exception("job_weekly_forecast failed for cid=%s", cid)
 
 
 async def post_init(app):
@@ -597,7 +726,7 @@ async def post_init(app):
     except Exception:
         logging.exception("Dict caps migration failed")
     try:
-        if content.dedupe_lists():
+        if leisure.dedupe_lists():
             logging.info("Dedupe lists: applied")
     except Exception:
         logging.exception("Dedupe lists failed")
@@ -622,6 +751,7 @@ async def post_init(app):
         BotCommand("start", "меню и описание"),
         BotCommand("setup", "настройки"),
         BotCommand("notes", "мои сохранения"),
+        BotCommand("remember", "запомнить факт о себе"),
     ])
 
 
@@ -631,6 +761,10 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("notes", notes_command))
     app.add_handler(CommandHandler("setup", setup_command))
+    app.add_handler(CommandHandler("health", health_command))
+    app.add_handler(CommandHandler("remember", remember_command))
+    app.add_handler(CommandHandler("cost", cost_command))
+    app.add_handler(CommandHandler("invite", invite_command))
     app.add_handler(CallbackQueryHandler(answer_callback))
     app.add_handler(MessageHandler(filters.LOCATION, weather.location_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, document_handler))

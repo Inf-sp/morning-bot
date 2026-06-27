@@ -1,18 +1,20 @@
 import re
+from html import escape as _html_escape
 
 _WEEKDAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 _MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня",
            "июля", "августа", "сентября", "октября", "ноября", "декабря"]
 
-def esc(t):
-    return (t or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+def esc(t: str | None) -> str:
+    return _html_escape(t or "", quote=False)
 
-async def send_html(bot, cid, text, reply_markup=None):
+async def send_html(bot, cid, text: str | None, reply_markup=None) -> None:
     """Одиночное сообщение в Telegram HTML с чисткой markdown и откатом на plain."""
+    from telegram.error import BadRequest
     html = tg_html(text or "")
     try:
         await bot.send_message(chat_id=cid, text=html, parse_mode="HTML", reply_markup=reply_markup)
-    except Exception:
+    except BadRequest:
         await bot.send_message(chat_id=cid, text=html, reply_markup=reply_markup)
 
 # Имя страны (ru/en, нижний регистр) -> ISO-2 код. Офлайн, без LLM.
@@ -59,16 +61,17 @@ def country_flag(name):
     cc = cc_of(name)
     return flag_from_cc(cc) if cc else "🏳"
 
-def flag_from_cc(cc):
+def flag_from_cc(cc: str) -> str:
     cc = (cc or "").upper()
     if len(cc) != 2 or not cc.isalpha():
         return ""
-    return chr(0x1F1E6 + ord(cc[0]) - 65) + chr(0x1F1E6 + ord(cc[1]) - 65)
+    return "".join(chr(0x1F1E6 + ord(c) - ord("A")) for c in cc)
 
 # --- markdown -> Telegram HTML (страховка поверх системного промпта) ---
 _ALLOWED_TAGS = ("b", "i", "u", "s", "code", "pre", "a")
+_TAG_RE = re.compile(r"</?(?:" + "|".join(_ALLOWED_TAGS) + r")(?:\s[^>]*)?>", re.I)
 
-def tg_html(text):
+def tg_html(text: str | None) -> str:
     """Чистит ответ модели под Telegram HTML: убирает markdown, оставляет
     только разрешённые теги, приводит списки к «• ». Безопасно при любом вводе."""
     if not text:
@@ -80,8 +83,7 @@ def tg_html(text):
     def _stash(m):
         saved.append(m.group(0))
         return f"\x00{len(saved)-1}\x00"
-    tag_re = re.compile(r"</?(?:" + "|".join(_ALLOWED_TAGS) + r")(?:\s[^>]*)?>", re.I)
-    t = tag_re.sub(_stash, t)
+    t = _TAG_RE.sub(_stash, t)
 
     # 2) Экранировать всё остальное
     t = t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")

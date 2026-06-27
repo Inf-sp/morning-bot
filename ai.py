@@ -2,11 +2,42 @@ import asyncio
 import logging
 import re
 import json
+import time
 import requests
 import config
+import store
 import secure
 
 _log = logging.getLogger(__name__)
+
+# ---------- Cost logger ----------
+_COST_MAX = 500  # максимум записей в rolling-буфере
+
+
+def _log_cost(provider: str, model: str, prompt: str, result: str, module: str = ""):
+    """Добавить запись о LLM-вызове в rolling-буфер (хранится в store)."""
+    try:
+        tokens = (len(prompt) + len(result or "")) // 4
+        entry = {
+            "ts": int(time.time()),
+            "provider": provider,
+            "model": model or "",
+            "tokens": tokens,
+            "module": module or "",
+        }
+        buf = store._load(config.COST_LOG_KEY).get("log", [])
+        buf.append(entry)
+        store._save(config.COST_LOG_KEY, {"log": buf[-_COST_MAX:]})
+    except Exception:
+        pass  # логирование не должно ломать основной поток
+
+
+def get_cost_log() -> list:
+    """Вернуть список всех сохранённых записей расходов."""
+    try:
+        return store._load(config.COST_LOG_KEY).get("log", [])
+    except Exception:
+        return []
 
 def _post(url, headers, payload, timeout, name):
     r = requests.post(url, headers=headers, json=payload, timeout=timeout)
@@ -109,7 +140,7 @@ def _resolve(tier, order, claude_model):
     o, m = TIERS.get(tier or "smart", (DEFAULT_ORDER, None))
     return o, m
 
-def llm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None, tier=None):
+def llm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None, tier=None, module=""):
     order, claude_model = _resolve(tier, order, claude_model)
     calls = {
         "claude": lambda: _gen_claude(prompt, max_tokens, claude_model),
@@ -124,6 +155,7 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None,
         try:
             out = _as_text(calls[name]())
             if out and out.strip():
+                _log_cost(name, claude_model if name == "claude" else name, prompt, out, module)
                 return out
         except Exception as e:
             errs.append(f"{name}:{e}")
@@ -173,10 +205,10 @@ def _repair_inner_quotes(raw):
         i += 1
     return "".join(out)
 
-def llm_json(prompt, max_tokens=1200, order=None, claude_model=None, tier=None):
+def llm_json(prompt, max_tokens=1200, order=None, claude_model=None, tier=None, module=""):
     raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
                        "Внутри строковых значений НЕ используй двойные кавычки - "
-                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order, claude_model, tier)
+                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order, claude_model, tier, module)
     raw = re.sub(r"```(json)?", "", raw).strip()
     m = re.search(r"\{.*\}", raw, re.S)
     if m:

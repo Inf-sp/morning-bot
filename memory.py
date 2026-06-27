@@ -1,7 +1,7 @@
-"""Память пользователя («бот учится на тебе»): фокус дня, фидбек гардероба, наблюдения, Лагом.
+"""Память пользователя («бот учится на тебе»): фокус дня, фидбек гардероба, наблюдения, Лагом, предпочтения.
 
 Тонкий доменный слой поверх профиля в store (config.PROFILE_KEY). Без LLM и сети.
-Профиль - dict на пользователя: {"focus": {...}, "wardrobe_fb": [...], "observations": [...], "lagom": [...]}.
+Профиль - dict на пользователя: {"focus": {...}, "wardrobe_fb": [...], "observations": [...], "lagom": [...], "prefs": [...]}.
 """
 from datetime import date, datetime
 import json
@@ -174,3 +174,43 @@ def add_lagom_batch(cid, text: str) -> list:
             existing.add(it)
             added.append(it)
     return added
+
+
+# ---------- Предпочтения пользователя (Memory Agent) ----------
+_PREFS_CAP = 50
+
+
+def add_preference(cid, text: str):
+    """Сохранить факт/предпочтение о пользователе (строка). Дубликаты отсекаются."""
+    text = (text or "").strip()
+    if not text:
+        return
+    prof = store.get_profile(cid)
+    prefs = prof.get("prefs", [])
+    if text not in prefs:
+        prefs.append(text)
+    prof["prefs"] = prefs[-_PREFS_CAP:]
+    store.set_profile(cid, prof)
+
+
+def get_preferences(cid) -> list:
+    """Список сохранённых фактов о пользователе."""
+    return store.get_profile(cid).get("prefs", [])
+
+
+def del_preference(cid, i: int):
+    """Удалить предпочтение по индексу."""
+    prefs = get_preferences(cid)
+    if 0 <= i < len(prefs):
+        prefs.pop(i)
+        prof = store.get_profile(cid)
+        prof["prefs"] = prefs
+        store.set_profile(cid, prof)
+
+
+def profile_hints(cid) -> str:
+    """Компактная строка предпочтений для подмешивания в LLM-промпты. '' если пусто."""
+    prefs = get_preferences(cid)
+    if not prefs:
+        return ""
+    return "Знаешь о пользователе: " + "; ".join(prefs[:20]) + "."

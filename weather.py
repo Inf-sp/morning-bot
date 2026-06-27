@@ -338,7 +338,7 @@ async def send_weather(bot, cid, mode="today"):
                             d["windspeed_10m_max"][0] or 0, DESC.get(d["weathercode"][0], ""), "сегодня")
         if joke:
             L.append(esc(joke))
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton(" ", callback_data="a_plany")]])
         await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
         return
 
@@ -387,10 +387,10 @@ async def send_weather(bot, cid, mode="today"):
         if mode == "tomorrow":
             kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
-                [InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")],
+                [InlineKeyboardButton(" ", callback_data="a_plany")],
             ])
         else:
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")]])
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton(" ", callback_data="a_plany")]])
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
         return
 
@@ -454,7 +454,7 @@ async def send_weather(bot, cid, mode="today"):
         groups.append((min(hot_i), f"🔥 {esc(_day_range_str(hot_i))}: до {_gtmax(hot_i):+.0f}°C — жара, осторожно"))
     groups.sort(key=lambda x: x[0])
     L.extend(line for _, line in groups)
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ ", callback_data="a_plany")]])
     await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
 
 
