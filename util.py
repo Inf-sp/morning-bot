@@ -8,6 +8,15 @@ _MONTHS = ["января", "февраля", "марта", "апреля", "ма
 def esc(t: str | None) -> str:
     return _html_escape(t or "", quote=False)
 
+async def ack_loading(q) -> None:
+    """Меняет клавиатуру на ⏳ пока идёт медленная LLM-операция. Ошибки игнорирует."""
+    try:
+        from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⏳ Генерация…", callback_data="noop")]])
+        await q.edit_message_reply_markup(reply_markup=kb)
+    except Exception:
+        pass
+
 async def send_html(bot, cid, text: str | None, reply_markup=None) -> None:
     """Одиночное сообщение в Telegram HTML с чисткой markdown и откатом на plain."""
     from telegram.error import BadRequest

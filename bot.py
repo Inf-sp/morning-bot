@@ -21,9 +21,12 @@ import leisure
 import weather
 import verify
 import secure
+import onboard
+from util import ack_loading as _ack
 
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID
+
 
 
 _WELCOME = (
@@ -57,9 +60,7 @@ async def start(update, context):
             await update.message.reply_text(_WELCOME, parse_mode="HTML", reply_markup=menu.MAIN_KB)
             return
         if access.use_invite(code, cid):
-            await update.message.reply_text(
-                "✅ Доступ открыт!\n\n" + _WELCOME, parse_mode="HTML", reply_markup=menu.MAIN_KB
-            )
+            await onboard.start(context.bot, cid)
             return
         await update.message.reply_text("❌ Инвайт-код недействителен или устарел.")
         return
@@ -81,6 +82,11 @@ async def answer_callback(update, context):
 
     if not access.is_allowed(cid):
         await bot.send_message(chat_id=cid, text="⛔ Бот приватный. Попроси владельца прислать инвайт.")
+        return
+
+    # Онбординг новых пользователей
+    if data.startswith("ob_"):
+        await onboard.handle_callback(bot, cid, q, data)
         return
 
     # Закладки: fav_view_* и fav_del_*
@@ -121,7 +127,7 @@ async def answer_callback(update, context):
     if data == "m_food":
         await menu.send_food_menu(bot, cid); return
     if data == "m_food_gen":
-        await balance.send_recipe_featured(bot, cid); return
+        await _ack(q); await balance.send_recipe_featured(bot, cid); return
     if data.startswith("m_"):
         text, kb = menu.menu_screen(data)
         try:
@@ -137,19 +143,19 @@ async def answer_callback(update, context):
             if act == "plany":
                 await myday.send_plany(bot, cid)
             elif act == "gram_nl":
-                await learning.send_grammar(bot, cid, "нидерландский", "🇳🇱")
+                await _ack(q); await learning.send_grammar(bot, cid, "нидерландский", "🇳🇱")
             elif act == "gram_en":
-                await learning.send_grammar(bot, cid, "английский", "🇬🇧")
+                await _ack(q); await learning.send_grammar(bot, cid, "английский", "🇬🇧")
             elif act == "train":
                 await learning.send_train_lang_select(bot, cid)
             elif act == "train_nl":
-                await learning.train_start(bot, cid, "нидерландский")
+                await _ack(q); await learning.train_start(bot, cid, "нидерландский")
             elif act == "train_en":
-                await learning.train_start(bot, cid, "английский")
+                await _ack(q); await learning.train_start(bot, cid, "английский")
             elif act == "tr_nl":
-                await learning.do_translate(bot, cid, "нидерландский")
+                await _ack(q); await learning.do_translate(bot, cid, "нидерландский")
             elif act == "tr_en":
-                await learning.do_translate(bot, cid, "английский")
+                await _ack(q); await learning.do_translate(bot, cid, "английский")
             elif act == "proverb":
                 await learning.send_proverb_both(bot, cid)
             elif act == "proverb_nl":
@@ -197,19 +203,19 @@ async def answer_callback(update, context):
                 store.pending_input[cid] = "setcity"
                 await bot.send_message(chat_id=cid, text="🌍 Напиши название города - переключу на него!")
             elif act == "trav_go":
-                await leisure.send_go(bot, cid)
+                await _ack(q); await leisure.send_go(bot, cid)
             elif act == "trav_no":
                 await leisure.travel_dislike(bot, cid)
             elif act == "trav_plan":
-                await leisure.send_plan(bot, cid)
+                await _ack(q); await leisure.send_plan(bot, cid)
             elif act == "trav_fav":
                 await leisure.travel_fav(bot, cid)
             elif act == "trav_save":
                 await leisure.save_plan(bot, cid)
             elif act == "watch":
-                await leisure.send_recos(bot, cid, "movie")
+                await _ack(q); await leisure.send_recos(bot, cid, "movie")
             elif act == "read":
-                await leisure.send_recos(bot, cid, "book")
+                await _ack(q); await leisure.send_recos(bot, cid, "book")
             elif act == "watchlist":
                 await leisure.send_watchlist(bot, cid)
             elif act == "readlist":
@@ -229,15 +235,15 @@ async def answer_callback(update, context):
                          "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
                 await leisure.find_concerts(bot, cid, act.split("_")[1])
             elif act == "listen":
-                await leisure.send_listen(bot, cid)
+                await _ack(q); await leisure.send_listen(bot, cid)
             elif act == "listen_no":
                 await leisure.listen_dislike(bot, cid)
             elif act == "food_breakfast":
-                await balance.send_recipe(bot, cid, "завтрак")
+                await _ack(q); await balance.send_recipe(bot, cid, "завтрак")
             elif act == "food_lunch":
-                await balance.send_recipe(bot, cid, "обед")
+                await _ack(q); await balance.send_recipe(bot, cid, "обед")
             elif act == "food_dinner":
-                await balance.send_recipe(bot, cid, "ужин")
+                await _ack(q); await balance.send_recipe(bot, cid, "ужин")
         except Exception as e:
             await verify.safe_error(bot, cid, e)
         return
@@ -263,27 +269,27 @@ async def answer_callback(update, context):
         elif sub == "reveal":
             await learning.train_reveal(bot, cid)
         elif sub == "next":
-            await learning.train_next(bot, cid)
+            await _ack(q); await learning.train_next(bot, cid)
         return
     # «Ещё»
     if data.startswith("again_"):
         what = data[len("again_"):]
         if what == "tr_nl":
-            await learning.do_translate(bot, cid, "нидерландский")
+            await _ack(q); await learning.do_translate(bot, cid, "нидерландский")
         elif what == "tr_en":
-            await learning.do_translate(bot, cid, "английский")
+            await _ack(q); await learning.do_translate(bot, cid, "английский")
         elif what == "gram_nl":
-            await learning.again_grammar(bot, cid, "нидерландский")
+            await _ack(q); await learning.again_grammar(bot, cid, "нидерландский")
         elif what == "gram_en":
-            await learning.again_grammar(bot, cid, "английский")
+            await _ack(q); await learning.again_grammar(bot, cid, "английский")
         return
     if data.startswith("next_gram_"):
         lang = "нидерландский" if data.endswith("_nl") else "английский"
-        await learning.next_grammar(bot, cid, lang)
+        await _ack(q); await learning.next_grammar(bot, cid, lang)
         return
     if data.startswith("rand_gram_"):
         lang = "нидерландский" if data.endswith("_nl") else "английский"
-        await learning.random_grammar(bot, cid, lang)
+        await _ack(q); await learning.random_grammar(bot, cid, lang)
         return
     # Игра
     if data.startswith("gamelang_"):
@@ -428,6 +434,12 @@ async def text_router(update, context):
             await settings.send_wardrobe(bot, cid); return
         if kind == "wardrobe_check":
             await wardrobe.check_purchase(bot, cid, text); return
+        if kind == "onboard_name":
+            await onboard.handle_name(bot, cid, text); return
+        if kind == "onboard_city":
+            await onboard.handle_city(bot, cid, text); return
+        if kind == "set_mem_add":
+            await settings.memory_add_done(bot, cid, text); return
         if kind == "setcity":
             await weather.set_city_text(bot, cid, text); return
         if kind.startswith("dictadd_"):
@@ -751,7 +763,6 @@ async def post_init(app):
         BotCommand("start", "меню и описание"),
         BotCommand("setup", "настройки"),
         BotCommand("notes", "мои сохранения"),
-        BotCommand("remember", "запомнить факт о себе"),
     ])
 
 
@@ -762,7 +773,6 @@ def main():
     app.add_handler(CommandHandler("notes", notes_command))
     app.add_handler(CommandHandler("setup", setup_command))
     app.add_handler(CommandHandler("health", health_command))
-    app.add_handler(CommandHandler("remember", remember_command))
     app.add_handler(CommandHandler("cost", cost_command))
     app.add_handler(CommandHandler("invite", invite_command))
     app.add_handler(CallbackQueryHandler(answer_callback))

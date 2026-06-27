@@ -539,3 +539,52 @@ def gemini_search_facts_multi(city: str, country: str, cc: str = "",
     except Exception as e:
         _log.warning("research: gemini_search_facts_multi(%s, %s) failed: %s", city, aspect, e)
         return []
+
+
+# ================= TAVILY =================
+
+_TV_CACHE: dict = {}    # query -> (ts, results)
+_TV_TTL = 86400         # 24h — запросы дорогие, кешируем на сутки
+
+
+def tavily_search(query: str, max_results: int = 5) -> list:
+    """Поиск через Tavily. Возвращает list[{title, url, content}] или [] при ошибке/нет ключа."""
+    if not config.TAVILY_API_KEY:
+        return []
+    key = f"{query}:{max_results}"
+    cached = _TV_CACHE.get(key)
+    if cached and time.time() - cached[0] < _TV_TTL:
+        return cached[1]
+    try:
+        import secure
+        r = requests.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": config.TAVILY_API_KEY,
+                "query": query,
+                "max_results": max_results,
+                "search_depth": "basic",
+                "include_answer": False,
+                "include_raw_content": False,
+                "include_images": False,
+            },
+            timeout=15,
+        )
+        results = r.json().get("results", [])
+        _TV_CACHE[key] = (time.time(), results)
+        return results
+    except Exception as e:
+        _log.warning("tavily_search failed: %s", str(e)[:120])
+        return []
+
+
+def tavily_snippet(query: str, max_chars: int = 1200) -> str:
+    """Top-3 Tavily сниппета, склеенные для LLM-промпта. Пустая строка если ключа нет."""
+    results = tavily_search(query, max_results=3)
+    parts, total = [], 0
+    for r in results:
+        chunk = (r.get("content") or "").strip()
+        if chunk and total + len(chunk) < max_chars:
+            parts.append(chunk)
+            total += len(chunk)
+    return "\n---\n".join(parts)

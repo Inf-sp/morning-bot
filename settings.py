@@ -58,6 +58,7 @@ def home_kb(cid):
         [InlineKeyboardButton("🎯 Лагом", callback_data="set_lagom")],
         [InlineKeyboardButton("🗂️ Словарь", callback_data="set_dict")],
         [InlineKeyboardButton("❤️ Любимые", callback_data="set_love")],
+        [InlineKeyboardButton("🧠 Память", callback_data="set_memory")],
     ]
     if config.CHAT_ID and str(cid) == str(config.CHAT_ID):
         rows.append([InlineKeyboardButton("🔐 Администратор", callback_data="set_admin")])
@@ -255,6 +256,27 @@ async def list_add_done(bot, cid, kind, text):
 async def handle_callback(bot, cid, data):
     if data == "set_home":
         await send_home(bot, cid)
+    elif data == "set_memory":
+        await send_memory(bot, cid)
+    elif data == "set_mem_add":
+        store.pending_input[cid] = "set_mem_add"
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton(" ", callback_data="set_memory")]])
+        await bot.send_message(chat_id=cid,
+            text="🧠 Напиши факт о себе — одну строку.\n\nПримеры: «не люблю острое», «мёрзну утром».",
+            reply_markup=kb)
+    elif data.startswith("set_mem_del_"):
+        import memory as _mem
+        try:
+            _mem.del_preference(cid, int(data.split("_")[-1]))
+        except (ValueError, IndexError):
+            pass
+        await send_memory(bot, cid)
+    elif data == "set_mem_clr":
+        import memory as _mem
+        prof = store.get_profile(cid)
+        prof["prefs"] = []
+        store.set_profile(cid, prof)
+        await send_memory(bot, cid)
     elif data == "set_love":
         await send_love_home(bot, cid)
     elif data == "set_dict":
@@ -865,12 +887,51 @@ async def send_admin_cost(bot, cid):
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
 
 
+async def send_memory(bot, cid):
+    """Раздел Память в настройках: факты о себе для персонализации."""
+    import memory as _mem
+    prefs = _mem.get_preferences(cid)
+    if not prefs:
+        txt = (
+            "🧠 <b>Память</b>\n\n"
+            "Здесь хранятся факты о тебе — они влияют на советы по гардеробу, еде и мотивации.\n\n"
+            "Примеры: «не люблю острое», «мёрзну утром», «веган», «высокий рост».\n\n"
+            "Нажми «📝 Добавить», чтобы записать первый факт."
+        )
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📝 Добавить", callback_data="set_mem_add")],
+            [InlineKeyboardButton(" ", callback_data="set_home")],
+        ])
+    else:
+        txt = f"🧠 <b>Память</b> · {len(prefs)} факт{'а' if 2 <= len(prefs) <= 4 else 'ов' if len(prefs) >= 5 else ''}\n\nНажми ❌, чтобы удалить:"
+        rows = [
+            [InlineKeyboardButton(f"❌ {esc(p[:55])}", callback_data=f"set_mem_del_{i}")]
+            for i, p in enumerate(prefs)
+        ]
+        rows.append([InlineKeyboardButton("📝 Добавить", callback_data="set_mem_add")])
+        if len(prefs) > 1:
+            rows.append([InlineKeyboardButton("🗑 Очистить всё", callback_data="set_mem_clr")])
+        rows.append([InlineKeyboardButton(" ", callback_data="set_home")])
+        kb = InlineKeyboardMarkup(rows)
+    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+
+
+async def memory_add_done(bot, cid, text: str):
+    import memory as _mem
+    import secure
+    fact = secure.clamp(text.strip(), 200)
+    if fact:
+        _mem.add_preference(cid, fact)
+        await bot.send_message(chat_id=cid, text=f"🧠 Запомнил: «{esc(fact)}»", parse_mode="HTML")
+    await send_memory(bot, cid)
+
+
 async def send_admin_prefs(bot, cid):
-    """Профиль памяти: список предпочтений пользователя."""
+    """Профиль памяти в Администраторе (только для owner)."""
     import memory
     prefs = memory.get_preferences(cid)
     if not prefs:
-        txt = "🧠 <b>Профиль памяти</b>\n\nПока пусто. Используй /remember для добавления."
+        txt = "🧠 <b>Профиль памяти</b>\n\nПока пусто."
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(" ", callback_data="set_admin")]])
     else:
         txt = "🧠 <b>Профиль памяти</b>\n\nНажми ❌, чтобы удалить факт:"

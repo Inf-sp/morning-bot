@@ -25,6 +25,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 
 TZ = ZoneInfo("Europe/Amsterdam")
 
@@ -52,6 +53,7 @@ TOPICS_EN_KEY = "topics_en.json"
 LAGOM_KEY = "lagom.json"
 PROFILE_KEY = "profile.json"   # память пользователя: фокус, фидбек гардероба, наблюдения
 CITY_FACTS_KEY = "city_facts_seen.json"
+CITY_FACTS_DB_KEY = "city_facts_db"        # факты о городах (Postgres/in-memory, persistent)
 LIFEHACK_KEY = "lifehacks_seen.json"
 FRIDGE_KEY = "fridge.json"
 MY_RECIPES_KEY = "my_recipes.json"
