@@ -634,7 +634,7 @@ def main():
     jq.run_daily(job_checkin_day,     time=_t("14:00"), days=tuple(range(7)))
     jq.run_daily(job_vocab_review,    time=_t("21:00"), days=tuple(range(7)))
     jq.run_daily(job_checkin_evening, time=_t("22:00"), days=tuple(range(7)))
-    jq.run_daily(job_live_lang,        time=_t("19:00"), days=tuple(range(7)))
+    jq.run_daily(job_live_lang,        time=_t("18:00"), days=tuple(range(7)))
     jq.run_daily(job_weekly_forecast,  time=_t("19:00"), days=(6,))            # вс
 
     logging.info("Bot started")
