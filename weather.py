@@ -176,6 +176,19 @@ def _periods(data, day_str, key, threshold):
     return [p for p in ["утром", "днём", "вечером", "ночью"] if p in hit]
 
 
+# ---------- дневное среднее ветра ----------
+def _daytime_avg_wind(data, day_str):
+    """Среднее ветра 6–21ч из hourly — то, что показывают Buienradar/KNMI вместо суточного пика."""
+    try:
+        hours = data["hourly"]["time"]
+        vals = data["hourly"]["windspeed_10m"]
+    except Exception:
+        return None
+    day_vals = [v for t, v in zip(hours, vals)
+                if t.startswith(day_str) and 6 <= int(t[11:13]) < 21 and v is not None]
+    return sum(day_vals) / len(day_vals) if day_vals else None
+
+
 # ---------- блок для myday ----------
 def weather_block(data, day, city):
     d = data["daily"]
@@ -340,12 +353,13 @@ async def send_weather(bot, cid, mode="today"):
         rain = d["precipitation_probability_max"][day] or 0
         rain_mm = (d.get("precipitation_sum") or [None] * (day + 1))[day] if d.get("precipitation_sum") else None
         wind_ms = d["windspeed_10m_max"][day] or 0
-        icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
-        wemoji, wword = wind_scale(wind_ms)
         day_str = d["time"][day]
+        wind_avg = _daytime_avg_wind(data, day_str) or wind_ms
+        icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
+        wemoji, wword = wind_scale(wind_avg)
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-        wind_str = f"{wemoji} {wword} {wind_ms:.0f} м/с" if wind_ms >= 8 else f"💨 Ветер {wind_ms:.0f} м/с"
+        wind_str = f"{wemoji} {wword} {wind_avg:.0f} м/с" if wind_avg >= 8 else f"💨 Ветер {wind_avg:.0f} м/с"
 
         L = [f"<b>{esc(header)}</b>", "",
              f"{icon} До {tmax:+.0f}°C • {rain_text(rain, rain_mm, rain_when)}{wind_str}"]
@@ -427,16 +441,6 @@ async def send_weather(bot, cid, mode="today"):
     def _gtmax(indices):
         return max(tmaxs[i] for i in indices) if indices else 0
 
-    wmax = max(winds) if winds else 0
-    wmin = min(winds) if winds else 0
-    if wmax < 5:
-        wlabel = "слабый"
-    elif wmax < 10:
-        wlabel = "умеренный"
-    else:
-        wlabel = "сильный"
-    wind_line = f"💨 Ветер: {wlabel}, {wmin:.0f}–{wmax:.0f} м/с"
-
     L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", ""]
     groups = []
     if storm_i:
@@ -449,7 +453,6 @@ async def send_weather(bot, cid, mode="today"):
         groups.append((min(hot_i), f"🔥 {esc(_day_range_str(hot_i))}: до {_gtmax(hot_i):+.0f}°C — жара, осторожно"))
     groups.sort(key=lambda x: x[0])
     L.extend(line for _, line in groups)
-    L += ["", wind_line]
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany")]])
     await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
 

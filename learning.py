@@ -1,3 +1,4 @@
+import asyncio
 import re
 from pathlib import Path
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -208,6 +209,22 @@ JSON (без переносов строк внутри значений):
 {{"sentence":"предложение со словом в <b></b>","claim":"утверждение о выделенном слове на русском","correct":true или false,"explain":"короткое пояснение на русском, 1 строка","ru":"перевод предложения"}}"""
     return ai.llm_json(prompt, 700, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
 
+def _word_meanings(word: str, language: str) -> list:
+    """Все значения слова (tier=cheap). Пустой список если значение одно."""
+    try:
+        d = ai.llm_json(
+            f"Слово на языке {language}: «{word}». "
+            "Перечисли ВСЕ его значения на русском. "
+            "Если значение одно — верни пустой массив. "
+            'JSON: {"meanings": ["значение 1", "значение 2"]}',
+            200, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL
+        )
+        meanings = d.get("meanings", []) if isinstance(d, dict) else []
+        return [str(m).strip() for m in meanings if str(m).strip()]
+    except Exception:
+        return []
+
+
 def _train_again_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("➡️ Ещё задание", callback_data="train_next")],
@@ -285,8 +302,17 @@ async def train_reveal(bot, cid):
     st = store.train_state.get(str(cid))
     if not st:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
-    L = [f"🧠 {_flag(st['lang'])} <b>{esc(st.get('word', ''))}</b>", "",
-         f"Перевод: {esc(st.get('ru', '') or '—')}"]
+    word = st.get('word', '')
+    ru = st.get('ru', '') or '—'
+    L = [f"🧠 {_flag(st['lang'])} <b>{esc(word)}</b>", "", f"Перевод: {esc(ru)}"]
+    try:
+        meanings = await asyncio.to_thread(_word_meanings, word, st['lang'])
+        if len(meanings) > 1:
+            L += ["", "📖 Все значения:"]
+            for i, m in enumerate(meanings, 1):
+                L.append(f"{i}. {esc(m)}")
+    except Exception:
+        pass
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=_train_again_kb())
 
 async def train_answer(bot, cid, chosen):

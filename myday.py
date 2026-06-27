@@ -80,6 +80,27 @@ def _save_city_facts_file(city: str, facts: list) -> None:
     )
 
 
+def _is_russian(text: str) -> bool:
+    """True если ≥30% символов кириллица — перевод не нужен."""
+    if not text:
+        return True
+    cyr = sum(1 for c in text if 'а' <= c.lower() <= 'я' or c in 'ёЁ')
+    return cyr / len(text) >= 0.3
+
+
+def _translate_to_ru(text: str) -> str:
+    """Переводит факт на русский (tier=cheap). При ошибке — оригинал."""
+    try:
+        return ai.llm(
+            f"Переведи точно на русский. Сохрани все факты, числа и имена собственные. "
+            f"Только перевод, без пояснений:\n{text}",
+            300, tier="cheap"
+        ).strip()
+    except Exception as e:
+        _log.warning("myday: _translate_to_ru failed: %s", e)
+        return text
+
+
 def _score_facts(candidates: list, city: str, country: str) -> list:
     """Оценивает кандидатов LLM → [{text, score}]. Пропускает score < 3."""
     if not candidates:
@@ -135,6 +156,10 @@ def _build_city_facts(city: str, country: str, cc: str) -> list:
     for s in research.wiki_sentences(city):
         _add(s)
 
+    if (cc or "").upper() == "NL":
+        for s in research.nl_world_records():
+            _add(s)
+
     avoid = list(seen)
     for aspect in _FACT_ASPECTS:
         for fact in research.gemini_search_facts_multi(city, country, cc, aspect, avoid):
@@ -148,6 +173,10 @@ def _build_city_facts(city: str, country: str, cc: str) -> list:
     scored: list = []
     for i in range(0, len(raw), _BATCH):
         scored.extend(_score_facts(raw[i:i + _BATCH], city, country))
+
+    for f in scored:
+        if not _is_russian(f["text"]):
+            f["text"] = _translate_to_ru(f["text"])
 
     all_facts = existing + scored
     _save_city_facts_file(city, all_facts)
@@ -183,6 +212,14 @@ def city_fact(city, country, cid, cc=""):
         pool = high or facts
 
     chosen = random.choice(pool)
+
+    # lazy-перевод для фактов, сохранённых до введения перевода
+    if not _is_russian(chosen["text"]):
+        translated = _translate_to_ru(chosen["text"])
+        if translated != chosen["text"]:
+            chosen["text"] = translated
+            _save_city_facts_file(city, facts)
+
     seen_texts.add(chosen["text"])
     seen_all.setdefault(cid, {})[slug] = list(seen_texts)
     store._save(config.CITY_FACTS_KEY, seen_all)
@@ -392,19 +429,20 @@ def _build_day_text(cid):
     rain_mm = (d.get("precipitation_sum") or [None])[0] if d.get("precipitation_sum") else None
     wind_ms = d["windspeed_10m_max"][0] or 0
     wind_dir_deg = (d.get("winddirection_10m_dominant") or [None])[0]
+    wind_avg = weather._daytime_avg_wind(data, day_str) or wind_ms
     icon = weather.weather_icon(code, tmax, rain, wind_ms, rain_mm)
-    wemoji, wword = weather.wind_scale(wind_ms)
+    wemoji, wword = weather.wind_scale(wind_avg)
     rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
     rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
     dir_text = weather.wind_direction_text(wind_dir_deg)
     dir_part = f", {dir_text}" if dir_text else ""
     # ветер: подробно только если сильный
-    if wind_ms >= 8:
+    if wind_avg >= 8:
         wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
         wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
-        wind_str = f"{wemoji} {wword}{wind_when} {wind_ms:.0f} м/с{dir_part}"
+        wind_str = f"{wemoji} {wword}{wind_when} {wind_avg:.0f} м/с{dir_part}"
     else:
-        wind_str = f"💨 Ветер {wind_ms:.0f} м/с{dir_part}"
+        wind_str = f"💨 Ветер {wind_avg:.0f} м/с{dir_part}"
 
     now = datetime.now(TZ)
     weekday_name = _WEEKDAYS[now.weekday()]

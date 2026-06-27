@@ -343,6 +343,45 @@ def grounded(d):
     return bool(d and (d.get("capital") or d.get("languages")))
 
 
+# ================= NL WORLD RECORDS =================
+_NL_RECORDS_CACHE: dict = {}
+_NL_RECORDS_TTL = 86400 * 7  # неделя
+
+
+def _extract_record_sents(extract: str) -> list:
+    """Предложения с конкретными данными из вики-статьи (числа / рекорды / мировые показатели)."""
+    if not extract:
+        return []
+    clean = _clean_wiki(extract)
+    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean) if len(s.strip()) > 40]
+    sents = [s for s in sents if not re.match(r"^.{0,60}[—–\-]", s)]
+    sents = [s for s in sents if not re.match(r"^.{0,80}\bis\s+a(?:n)?\s+\w+", s, re.I)]
+    return [s for s in sents
+            if re.search(r'\d|\bfirst\b|\blargest\b|\bmost\b|\brecord\b|\bworld\b', s, re.I)]
+
+
+def nl_world_records() -> list:
+    """Факты-рекорды о Нидерландах из Википедии — для пула city_fact при cc=NL."""
+    key = "nl_records"
+    hit = _NL_RECORDS_CACHE.get(key)
+    if hit and time.time() - hit[0] < _NL_RECORDS_TTL:
+        return hit[1]
+
+    seen: set = set()
+    result: list = []
+    for page in ("Records of the Netherlands", "Netherlands"):
+        en_title = _wiki_search_en(page) or page
+        extract = wiki_summary(en_title, "en")
+        for s in _extract_record_sents(extract):
+            if s not in seen:
+                result.append(s)
+                seen.add(s)
+
+    _NL_RECORDS_CACHE[key] = (time.time(), result)
+    _log.info("research: nl_world_records → %d sentences", len(result))
+    return result
+
+
 # ================= GEMINI SEARCH =================
 _GSR_CACHE = {}   # place_key -> (ts, str)
 _GSR_TTL = 3600   # 1 час
