@@ -278,7 +278,7 @@ def storm_alert(wind_ms, code, rain, rain_mm=None, cc=""):
 
 def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="",
                 country="", cc="", lat=None, lon=None, tz="UTC"):
-    """Реальный метео-рекорд из Open-Meteo Archive — без LLM, без галлюцинаций."""
+    """Реальный метео-рекорд из Open-Meteo Archive + LLM-нарративизация."""
     import research as _r
     if lat is None or lon is None:
         return ""
@@ -287,12 +287,26 @@ def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="",
         return ""
     # выбираем факт релевантный текущей погоде
     if tmax >= 28 and "heat" in records:
-        return records["heat"]
-    if rain >= 50 and "rain" in records:
-        return records["rain"]
-    if tmax < 5 and "cold" in records:
-        return records["cold"]
-    return random.choice(list(records.values()))
+        raw = records["heat"]
+    elif rain >= 50 and "rain" in records:
+        raw = records["rain"]
+    elif tmax < 5 and "cold" in records:
+        raw = records["cold"]
+    else:
+        raw = random.choice(list(records.values()))
+    # Добавляем живой нарратив через LLM
+    try:
+        narrative = ai.llm(
+            f"Реальный метеорекорд для города {city}: «{raw}»\n"
+            f"Завтра: {desc}, до {tmax:+.0f}°C, дождь {rain:.0f}%.\n"
+            "Перепиши факт в одно живое, ироничное предложение — как будто рассказываешь другу. "
+            "Сохрани цифры и дату. Без markdown, на русском. "
+            "Пример хорошего: «В июне 2024-го здесь лило как из ведра — 39 мм за день, рекорд за 10 лет.»",
+            150, 1.05, tier="cheap"
+        ).strip().splitlines()[0]
+        return narrative
+    except Exception:
+        return raw
 
 
 # ---------- отправка ----------
@@ -420,6 +434,12 @@ async def send_weather(bot, cid, mode="today"):
              f"{icon} До {tmax:+.0f}°C • {rain_text(rain, rain_mm, rain_when)}{wind_str}"]
         if alert:
             L += ["", alert]
+        else:
+            mf = _meteo_fact(s["city"], tmax, rain, wind_ms, desc,
+                             country=s.get("country", ""), cc=cc,
+                             lat=s["lat"], lon=s["lon"], tz=str(TZ))
+            if mf:
+                L += ["", "🔬 <b>Метео-факт</b>", esc(mf)]
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
         return
 
