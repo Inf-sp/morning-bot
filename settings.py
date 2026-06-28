@@ -177,7 +177,7 @@ async def send_body(bot, cid):
     style = get(cid, "style", "минимализм")
     body_line = esc(body) if body else "<i>не задано</i>"
     txt = (
-        "📐 <b>Параметры шкафа</b>\n\n"
+        "📐 <b>Мои параметры </b>\n\n"
         "Бот использует эти данные при подборе образа и оценке покупок — "
         "чтобы советы по размеру и силуэту подходили именно тебе.\n\n"
         f"<b>Параметры тела:</b> {body_line}\n"
@@ -635,15 +635,15 @@ async def send_notes(bot, cid):
     n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     rows = [
         [InlineKeyboardButton(f"⏳ Позже ({n_fav})", callback_data="as_bucket_fav")],
-        [InlineKeyboardButton("🧳 Мои поездки", callback_data="as_bucket_plan"),
-         InlineKeyboardButton("👕 Мой шкаф", callback_data="set_wardrobe")],
-        [InlineKeyboardButton("🧊 Мой холодильник", callback_data="set_fridge"),
-         InlineKeyboardButton("🗂️ Мой словарь", callback_data="set_dict")],
-        [InlineKeyboardButton("🎯 Мой лагом", callback_data="set_lagom"),
-         InlineKeyboardButton("🎬 Мое кино", callback_data="as_love_movies")],
-        [InlineKeyboardButton("🗺️ Мои страны", callback_data="as_love_countries"),
-         InlineKeyboardButton("🎸 Мои артисты", callback_data="as_love_artists")],
-        [InlineKeyboardButton("📖 Мои книги", callback_data="as_love_books")],
+        [InlineKeyboardButton("🎚️ Мои поездки", callback_data="as_bucket_plan"),
+         InlineKeyboardButton("🎚️ Мой шкаф", callback_data="set_wardrobe")],
+        [InlineKeyboardButton("🎚️ Мой холодильник", callback_data="set_fridge"),
+         InlineKeyboardButton("🎚️ Мой словарь", callback_data="set_dict")],
+        [InlineKeyboardButton("🎚️ Мой лагом", callback_data="set_lagom"),
+         InlineKeyboardButton("🎚️ Мое кино", callback_data="as_love_movies")],
+        [InlineKeyboardButton("🎚️ Мои страны", callback_data="as_love_countries"),
+         InlineKeyboardButton("🎚️ Мои артисты", callback_data="as_love_artists")],
+        [InlineKeyboardButton("🎚️ Мои книги", callback_data="as_love_books")],
         [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
     ]
     await bot.send_message(chat_id=cid, parse_mode="HTML",
