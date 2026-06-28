@@ -305,7 +305,7 @@ def _movie_card(it, tm):
 def _movie_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("❤️ Любимое", callback_data=f"movie_love_{i}"),
-         InlineKeyboardButton("✅ Знакомо", callback_data=f"movie_seen_{i}")],
+         InlineKeyboardButton("✅ Смотрел", callback_data=f"movie_seen_{i}")],
         [InlineKeyboardButton("⏳ Позже", callback_data=f"reco_{i}"),
          InlineKeyboardButton("❌ Не интересно", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
@@ -450,7 +450,7 @@ def _book_text(it):
 def _book_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("❤️ Любимое", callback_data=f"book_love_{i}"),
-         InlineKeyboardButton("✅ Знакомо", callback_data=f"book_seen_{i}")],
+         InlineKeyboardButton("✅ Читал", callback_data=f"book_seen_{i}")],
         [InlineKeyboardButton("⏳ Позже", callback_data=f"reco_{i}"),
          InlineKeyboardButton("❌ Не интересно", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
