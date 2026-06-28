@@ -53,11 +53,6 @@ def home_kb(cid):
         [InlineKeyboardButton("🌍 Сменить город", callback_data="set_city")],
         [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
         [InlineKeyboardButton("🎚 Уровень языков", callback_data="set_levels")],
-        [InlineKeyboardButton("👕 Шкаф", callback_data="set_wardrobe")],
-        [InlineKeyboardButton("🧊 Холодильник", callback_data="set_fridge")],
-        [InlineKeyboardButton("🎯 Лагом", callback_data="set_lagom")],
-        [InlineKeyboardButton("🗂️ Словарь", callback_data="set_dict")],
-        [InlineKeyboardButton("❤️ Любимые", callback_data="set_love")],
     ]
     if config.CHAT_ID and str(cid) == str(config.CHAT_ID):
         rows.append([InlineKeyboardButton("🔐 Администратор", callback_data="set_admin")])
@@ -224,12 +219,12 @@ async def _send_list(bot, cid, title, items, del_prefix, add_cb, back="set_home"
                            reply_markup=_list_kb(items, del_prefix, add_cb, back))
 
 # --- Шкаф ---
-async def send_wardrobe(bot, cid):
+async def send_wardrobe(bot, cid, back="m_notes"):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("📝 Добавить", callback_data="set_ward_add")],
         [InlineKeyboardButton("❌ Убрать", callback_data="set_ward_del")],
         [InlineKeyboardButton("📐 Параметры шкафа", callback_data="set_body")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="set_home")],
+        [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ])
     await bot.send_message(chat_id=cid, text="👕 <b>Мой шкаф</b>\n\nБаза вещей и параметры для подбора одежды.",
                            parse_mode="HTML", reply_markup=kb)
@@ -264,7 +259,7 @@ _LAGOM_INTRO = (
     "«Не сравниваю себя с другими»\n\n"
 )
 
-async def send_lagom(bot, cid):
+async def send_lagom(bot, cid, back="m_notes"):
     import memory
     items = memory.get_lagom(cid)
     txt = _LAGOM_INTRO.rstrip() if items else f"{_LAGOM_INTRO.rstrip()}\n\nПока пусто — добавь первый принцип 👇"
@@ -272,7 +267,7 @@ async def send_lagom(bot, cid):
     rows.append([InlineKeyboardButton("📝 Добавить", callback_data="setadd_lagom")])
     if items:
         rows.append([InlineKeyboardButton("❌ Убрать", callback_data="set_lagom_clean")])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -336,13 +331,19 @@ async def handle_callback(bot, cid, data, q=None):
         store.set_profile(cid, prof)
         await send_memory(bot, cid)
     elif data == "set_love":
-        await send_love_home(bot, cid)
+        await send_love_home(bot, cid, back="m_notes")
     elif data == "set_dict":
         import learning
-        await learning.send_dict(bot, cid)
+        await learning.send_dict(bot, cid, back="m_notes")
+    elif data == "set_dict_g":
+        import learning
+        await learning.send_dict(bot, cid, back="m_learn")
     elif data == "set_fridge":
         import balance
-        await balance.send_fridge(bot, cid)
+        await balance.send_fridge(bot, cid, back="m_notes")
+    elif data == "set_fridge_g":
+        import balance
+        await balance.send_fridge(bot, cid, back="m_food")
     elif data == "set_notif":
         await send_notif(bot, cid)
     elif data.startswith("set_notiftgl_"):
@@ -365,7 +366,9 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_body":
         await send_body(bot, cid)
     elif data == "set_wardrobe":
-        await send_wardrobe(bot, cid)
+        await send_wardrobe(bot, cid, back="m_notes")
+    elif data == "set_wardrobe_g":
+        await send_wardrobe(bot, cid, back="m_wardrobe")
     elif data == "set_ward_add":
         store.pending_input[cid] = "wardrobe_add_set"
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_wardrobe")]])
@@ -377,7 +380,7 @@ async def handle_callback(bot, cid, data, q=None):
         from cleanup import open_cleanup
         await open_cleanup(bot, cid, "kast_s")
     elif data == "set_lagom":
-        await send_lagom(bot, cid)
+        await send_lagom(bot, cid, back="m_notes")
     elif data == "setadd_lagom":
         store.pending_input[cid] = "setadd_lagom"
         await bot.send_message(chat_id=cid,
@@ -626,9 +629,14 @@ async def send_notes(bot, cid):
     n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     n_plan = sum(1 for n in notes_list if _note_bucket(n) == "plan")
     rows = [
-        [InlineKeyboardButton(f"⏳ Позже  ({n_fav})", callback_data="as_bucket_fav")],
-        [InlineKeyboardButton(f"🧳 Планы ({n_plan})", callback_data="as_bucket_plan")],
-        [InlineKeyboardButton("📤 Экспорт в файл", callback_data="as_export")],
+        [InlineKeyboardButton(f"⏳ Позже ({n_fav})", callback_data="as_bucket_fav"),
+         InlineKeyboardButton(f"🧳 Планы ({n_plan})", callback_data="as_bucket_plan")],
+        [InlineKeyboardButton("👕 Шкаф", callback_data="set_wardrobe"),
+         InlineKeyboardButton("🧊 Холодильник", callback_data="set_fridge")],
+        [InlineKeyboardButton("🗂️ Словарь", callback_data="set_dict"),
+         InlineKeyboardButton("🎯 Лагом", callback_data="set_lagom")],
+        [InlineKeyboardButton("❤️ Любимые", callback_data="set_love"),
+         InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
     ]
     await bot.send_message(chat_id=cid, parse_mode="HTML",
         text="💾 <b>Моя база</b>\n\nЗакладки, планы поездок, фильмы, книги и артисты.\n\nВыбери раздел 👇",
@@ -729,9 +737,9 @@ LOVE_SECTIONS = [
     ("📖 Мои книги", "books"),
 ]
 
-async def send_love_home(bot, cid):
+async def send_love_home(bot, cid, back="m_notes"):
     rows = [[InlineKeyboardButton(title, callback_data=f"as_love_{key}")] for title, key in LOVE_SECTIONS]
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
     await bot.send_message(chat_id=cid, text="❤️ <b>Любимые</b>\n\nТвои топ-категории.\n\nВыбери раздел 👇",
                            parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 

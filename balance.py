@@ -294,7 +294,7 @@ def _fridge_by_cat(items: list) -> dict:
 
 
 # ---------- Мой холодильник: главный экран (категории) ----------
-async def send_fridge(bot, cid, q=None):
+async def send_fridge(bot, cid, q=None, back="m_food"):
     cid_s = str(cid)
     raw = store.get_list(config.FRIDGE_KEY, cid_s)
     items = _fridge_migrate(raw)
@@ -305,7 +305,7 @@ async def send_fridge(bot, cid, q=None):
         txt = "🧊 <b>Мой холодильник</b>\n\nПусто — добавь продукты, которые обычно есть дома."
         rows = [
             [InlineKeyboardButton("📝 Добавить продукты", callback_data="as_fridge_add")],
-            [InlineKeyboardButton("◀️ Назад", callback_data="m_food")],
+            [InlineKeyboardButton("◀️ Назад", callback_data=back)],
         ]
     else:
         available = sum(1 for it in items if it.get("on", True))
@@ -324,7 +324,7 @@ async def send_fridge(bot, cid, q=None):
             ))
         rows = [cat_btns[i:i + 3] for i in range(0, len(cat_btns), 3)]
         rows.append([InlineKeyboardButton("📝 Добавить продукты", callback_data="as_fridge_add")])
-        rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_food")])
+        rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
 
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
