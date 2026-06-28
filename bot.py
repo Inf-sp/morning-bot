@@ -123,6 +123,8 @@ async def answer_callback(update, context):
         return
     if data == "m_food":
         await menu.send_food_menu(bot, cid); return
+    if data == "m_notes":
+        await settings.send_notes(bot, cid); return
     if data == "m_food_gen":
         await _ack(q); await balance.send_recipe_featured(bot, cid); return
     # Пропустить первичный опрос раздела
@@ -399,6 +401,18 @@ async def text_router(update, context):
     if text == "☀️ Мой день":
         try:
             await myday.send_plany(bot, cid)
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+        return
+    if text == "🗂️ Моя база":
+        try:
+            await settings.send_notes(bot, cid)
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+        return
+    if text == "🍳 Готовка":
+        try:
+            await menu.send_food_menu(bot, cid)
         except Exception as e:
             await verify.safe_error(bot, cid, e)
         return
@@ -814,7 +828,6 @@ async def post_init(app):
     await app.bot.set_my_commands([
         BotCommand("start", "меню и описание"),
         BotCommand("setup", "настройки"),
-        BotCommand("notes", "мои сохранения"),
     ])
 
 

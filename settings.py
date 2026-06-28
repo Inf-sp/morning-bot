@@ -626,12 +626,12 @@ async def send_notes(bot, cid):
     n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     n_plan = sum(1 for n in notes_list if _note_bucket(n) == "plan")
     rows = [
-        [InlineKeyboardButton(f"⏳ Временные закладки ({n_fav})", callback_data="as_bucket_fav")],
+        [InlineKeyboardButton(f"⏳ Позже  ({n_fav})", callback_data="as_bucket_fav")],
         [InlineKeyboardButton(f"🧳 Планы ({n_plan})", callback_data="as_bucket_plan")],
         [InlineKeyboardButton("📤 Экспорт в файл", callback_data="as_export")],
     ]
     await bot.send_message(chat_id=cid, parse_mode="HTML",
-        text="💾 <b>Мои сохранения</b>\n\nЗакладки, планы поездок, фильмы, книги и артисты.\n\nВыбери раздел 👇",
+        text="💾 <b>Моя база</b>\n\nЗакладки, планы поездок, фильмы, книги и артисты.\n\nВыбери раздел 👇",
         reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_plans(bot, cid):
@@ -700,14 +700,14 @@ async def send_bucket(bot, cid, bucket):
     items = [(i, n) for i, n in enumerate(notes_list) if _note_bucket(n) == "fav"]
     count = len(items)
     if not count:
-        txt = ("⏳ <b>Временные закладки</b>\n\n"
+        txt = ("⏳ <b>Позже </b>\n\n"
                "Пусто — сохраняй интересное кнопкой «⏳ Позже» под ответами.")
         rows = [[InlineKeyboardButton("◀️ Назад", callback_data="as_notes")]]
         await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                                reply_markup=InlineKeyboardMarkup(rows)); return
     import re as _re
     _strip_html = lambda s: _re.sub(r"<[^>]+>", "", s)
-    txt = f"⏳ <b>Временные закладки</b> · {count}"
+    txt = f"⏳ <b>Позже </b> · {count}"
     rows = []
     for i, n in items:
         src = (n.get("source", "Прочее") if isinstance(n, dict) else "Прочее") or "Прочее"
@@ -748,7 +748,7 @@ def _love_items(cid, key):
     return []
 
 def _love_title(key):
-    return {"movies": "🎬 Кино", "countries": "🗺️ Мои страны",
+    return {"movies": "🎬 Мое кино", "countries": "🗺️ Мои страны",
             "artists": "🎸 Мои артисты", "books": "📖 Мои книги"}.get(key, "Любимые")
 
 async def send_love_section(bot, cid, key):
