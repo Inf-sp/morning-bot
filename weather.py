@@ -483,6 +483,9 @@ async def send_weather(bot, cid, mode="today"):
         })
 
     # LLM: компактные описания дней (с группировкой) + итог — один вызов
+    ordered_abbrevs = [dd["abbrev"] for dd in day_data]
+    abbrev_to_idx = {a: i for i, a in enumerate(ordered_abbrevs)}
+
     prompt_lines = [
         f"{dd['abbrev']}: {DESC.get(dd['code'], 'ясно')}, до {dd['tmax']:+.0f}°C"
         + (f", дождь {dd['rain']:.0f}%{dd['rain_when']}" if dd["rain_real"] else "")
@@ -497,7 +500,9 @@ async def send_weather(bot, cid, mode="today"):
             "Верни JSON:\n"
             '{"groups":[{"abbrevs":["Пн"],"desc":"дождь утром и ночью"},'
             '{"abbrevs":["Вт","Ср"],"desc":"облачно"}],"summary":"1-2 предложения"}\n\n'
-            "Правила: desc — 3-7 слов, суть без цифр; схожие соседние дни объединяй; "
+            "Правила: desc — 3-7 слов, суть без цифр; "
+            "объединять ТОЛЬКО идущие подряд дни (Ср-Чт-Пт — можно, Пн-Сб через пропуск — нельзя); "
+            "все 7 дней должны войти в группы; "
             "summary — 1-2 предложения без слова «зонт», без markdown.",
             300, tier="cheap"
         )
@@ -505,6 +510,21 @@ async def send_weather(bot, cid, mode="today"):
         summary = (llm_result.get("summary") or "").strip()
     except Exception:
         groups = [{"abbrevs": [dd["abbrev"]], "desc": DESC.get(dd["code"], "")} for dd in day_data]
+
+    # Валидация: разбиваем группу на одиночные дни если дни не идут подряд
+    def _split_if_gaps(grp):
+        abbrevs = [a for a in (grp.get("abbrevs") or []) if a in abbrev_to_idx]
+        if len(abbrevs) <= 1:
+            return [grp] if abbrevs else []
+        idxs = [abbrev_to_idx[a] for a in abbrevs]
+        if all(idxs[i + 1] == idxs[i] + 1 for i in range(len(idxs) - 1)):
+            return [grp]
+        return [{"abbrevs": [a], "desc": grp.get("desc", "")} for a in abbrevs]
+
+    validated = []
+    for grp in groups:
+        validated.extend(_split_if_gaps(grp))
+    groups = validated
 
     abbrev_map = {dd["abbrev"]: dd for dd in day_data}
 

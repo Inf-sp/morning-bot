@@ -92,10 +92,13 @@ async def handle_callback(bot, cid, q, data: str):
         if choice == "skip":
             await _finish(bot, cid)
             return
+        import settings as _s
         if choice == "both":
             st["langs"] = ["nl", "en"]
+            _s.set_(cid, "study_lang", "нидерландский")
         else:
             st["langs"] = [choice]
+            _s.set_(cid, "study_lang", "нидерландский" if choice == "nl" else "английский")
         st["step"] = "lvl"
         st["lvl_queue"] = list(st["langs"])
         _ob[str(cid)] = st

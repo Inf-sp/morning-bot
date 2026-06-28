@@ -80,7 +80,8 @@ def needs_setup(cid, section: str) -> bool:
     if section == "learn":
         import settings as _s
         has_lang = bool(_s.get(cid, "study_lang"))
-        if has_lang:
+        has_level = bool(store.get_level(cid, "нидерландский") or store.get_level(cid, "английский"))
+        if has_lang or has_level:
             _mark(cid, section)
             return False
         return True
