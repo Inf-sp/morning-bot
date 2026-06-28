@@ -43,225 +43,64 @@ def _strip_quotes(s):
             changed = True
     return s
 
-# --- Факты о городе (lazy build) ---
+# --- Факты о городе (curated JSON + research fallback) ---
 
-_FACTS_MIN = 5   # минимум фактов для показа; 30 было слишком — Railway стирал файлы
-
-_FACT_ASPECTS = [
-    "history, founding date, and historical records",
-    "architecture, infrastructure, and city planning",
-    "unusual laws, regulations, and local quirks",
-    "culture, traditions, and notable people born here",
-]
-
-_build_attempted: set = set()  # city slugs, уже пробованные в этой сессии
+_CURATED_FACTS: dict = {}   # кеш city_facts.json на время сессии
 
 
-def _city_slug(city: str) -> str:
-    return re.sub(r"[^\w]", "_", (city or "").strip().lower())
-
-
-def _load_city_facts(city: str) -> list:
-    """Загружает факты из store (Postgres/in-memory) — переживает рестарты."""
-    db = store._load(config.CITY_FACTS_DB_KEY)
-    return list(db.get(_city_slug(city), []))
-
-
-def _save_city_facts(city: str, facts: list) -> None:
-    """Сохраняет факты в store (Postgres/in-memory) — переживает рестарты."""
-    db = store._load(config.CITY_FACTS_DB_KEY)
-    db[_city_slug(city)] = facts
-    store._save(config.CITY_FACTS_DB_KEY, db)
-
-
-def _is_russian(text: str) -> bool:
-    """True если ≥30% символов кириллица — перевод не нужен."""
-    if not text:
-        return True
-    cyr = sum(1 for c in text if 'а' <= c.lower() <= 'я' or c in 'ёЁ')
-    return cyr / len(text) >= 0.3
-
-
-def _translate_to_ru(text: str) -> str:
-    """Переводит факт на русский (tier=cheap). При ошибке — оригинал."""
-    try:
-        return ai.llm(
-            f"Переведи точно на русский. Сохрани все факты, числа и имена собственные. "
-            f"Только перевод, без пояснений:\n{text}",
-            300, tier="cheap"
-        ).strip()
-    except Exception as e:
-        _log.warning("myday: _translate_to_ru failed: %s", e)
-        return text
-
-
-def _score_facts(candidates: list, city: str, country: str) -> list:
-    """Оценивает кандидатов LLM → [{text, score}]. Пропускает score < 3."""
-    if not candidates:
-        return []
-    place = f"{city}, {country}" if country else city
-    items = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(candidates))
-    prompt = (
-        f"Оцени интересность каждого факта о {place} по шкале 1-5.\n"
-        "АВТОМАТИЧЕСКИ score 1: классификации, рейтинги, членства в организациях, сетях, "
-        "UNESCO tier/category, global city, GAWC, Gamma, муниципальный статус — неинтересно.\n"
-        "5 = рекорд / «первый в мире» / Гиннес-уровень\n"
-        "4 = неожиданность, контринтуитивно, удивит местного жителя\n"
-        "3 = конкретика с цифрой/датой/именем\n"
-        "2 = курьёз, но слабый\n"
-        "1 = общая фраза / классификация / членство / без конкретики\n\n"
-        f"{items}\n\n"
-        'JSON: {"scores":[{"idx":1,"score":4},...]}'
-    )
-    try:
-        d = ai.llm_json(prompt, 600, tier="cheap")
-        raw_scores = d.get("scores", []) if isinstance(d, dict) else []
-        result = []
-        for item in raw_scores:
-            try:
-                idx = int(item.get("idx", 0))
-                score = int(item.get("score", 1))
-            except (TypeError, ValueError):
-                continue
-            if 1 <= idx <= len(candidates) and score >= 3:
-                result.append({"text": candidates[idx - 1], "score": score})
-        # Если всё отфильтровано (LLM дал всем <3) — берём с базовым score=3,
-        # иначе попадаем в бесконечный rebuild-цикл
-        if not result:
-            _log.info("myday: _score_facts: все score<3 для %s — берём raw с score=3", place)
-            return [{"text": t, "score": 3} for t in candidates]
-        return result
-    except Exception as e:
-        _log.warning("myday: _score_facts failed: %s", e)
-        return [{"text": t, "score": 3} for t in candidates]
-
-
-def _llm_facts_fallback(city: str, country: str) -> list:
-    """LLM-fallback когда research вернул пустой результат."""
-    if not city:
-        return []
-    place = f"{city}, {country}" if country else city
-    prompt = (
-        f"Напиши 5 интересных малоизвестных фактов о городе {place}. "
-        "Конкретика: числа, даты, имена. Каждый факт 1–2 предложения на русском. "
-        "Только сам факт, без вводных слов. "
-        'JSON-массив строк: ["факт1","факт2",...]'
-    )
-    try:
-        raw = ai.llm(prompt, 600, tier="cheap")
-        m = re.search(r'\[.*\]', raw, re.S)
-        if m:
-            arr = json.loads(m.group(0))
-            return [f for f in arr if isinstance(f, str) and len(f.strip()) > 20]
-    except Exception as e:
-        _log.warning("myday: _llm_facts_fallback(%s) failed: %s", city, e)
+def _load_curated_facts(city: str) -> list:
+    """Загружает факты из city_facts.json (кеш в памяти). Поиск по имени города."""
+    global _CURATED_FACTS
+    if not _CURATED_FACTS:
+        try:
+            _CURATED_FACTS = json.loads((_HERE / config.CITY_FACTS_FILE).read_text(encoding="utf-8"))
+        except Exception as e:
+            _log.warning("myday: city_facts.json not loaded: %s", e)
+            return []
+    city_lower = city.strip().lower()
+    for key, facts in _CURATED_FACTS.items():
+        if key.strip().lower() == city_lower:
+            return list(facts)
     return []
 
 
-def _build_city_facts(city: str, country: str, cc: str) -> list:
-    """One-time build: собирает факты из Wikipedia/Gemini/Tavily/LLM, сохраняет в store."""
-    existing = _load_city_facts(city)
-    existing_texts: set = {f["text"] for f in existing}
-
-    raw: list = []
-    seen: set = set(existing_texts)
-
-    def _add(text: str) -> None:
-        t = (text or "").strip()
-        if t and t not in seen:
-            raw.append(t)
-            seen.add(t)
-
-    # Wikidata: год основания
-    wd = research.wikidata_city_facts(city)
-    if wd.get("founded"):
-        _add(wd["founded"])
-    for s in research.wiki_sentences(city):
-        _add(s)
-
-    # Tavily: актуальные факты из сети
-    place = f"{city}, {country}" if country else city
-    for r in research.tavily_search(f"interesting facts about {place} history culture", max_results=5):
-        for sent in (r.get("content") or "").split(". "):
-            if len(sent.strip()) > 30:
-                _add(sent.strip())
-
-    avoid = list(seen)
-    for aspect in _FACT_ASPECTS:
-        for fact in research.gemini_search_facts_multi(city, country, cc, aspect, avoid):
-            _add(fact)
-        avoid = list(seen)
-
-    if not raw:
-        _log.warning("myday: research returned nothing for %s — trying LLM fallback", city)
-        raw = _llm_facts_fallback(city, country)
-    if not raw:
-        return existing
-
-    _BATCH = 15
-    scored: list = []
-    for i in range(0, len(raw), _BATCH):
-        scored.extend(_score_facts(raw[i:i + _BATCH], city, country))
-
-    for f in scored:
-        if not _is_russian(f["text"]):
-            f["text"] = _translate_to_ru(f["text"])
-
-    all_facts = existing + scored
-    _save_city_facts(city, all_facts)
-    _log.info("myday: built %d facts for %s (was %d)", len(all_facts), city, len(existing))
-    return all_facts
-
-
 def city_fact(city, country, cid, cc=""):
-    """Факт о городе: lazy-build из store, anti-repeat по cid."""
-    cid = str(cid)
+    """Grounded факт о городе: curated JSON с anti-repeat → research.wiki_fact → ''."""
     if not city:
-        _log.warning("myday: city_fact called with empty city for cid=%s", cid)
         return ""
-    slug = _city_slug(city)
+    cid = str(cid)
+    today_mmdd = datetime.now(config.TZ).strftime("%m-%d")
+    facts = _load_curated_facts(city)
 
-    facts = _load_city_facts(city)
-    if len(facts) < _FACTS_MIN and slug not in _build_attempted:
-        _build_attempted.add(slug)
-        facts = _build_city_facts(city, country, cc)
-        if not facts:
-            # build провалился — разрешаем повтор в следующей сессии
-            _build_attempted.discard(slug)
+    if facts:
+        # Приоритет: факт с датой = сегодня
+        dated = [f for f in facts if f.get("date") == today_mmdd]
+        if dated:
+            return dated[0]["text"]
 
-    if not facts:
-        return ""
+        # Anti-repeat по индексам (как Лагом)
+        all_idx = list(range(len(facts)))
+        seen_data = store._load(config.CITY_FACT_IDX_KEY) or {}
+        city_key = city.strip().lower()
+        seen_set = set(seen_data.get(cid, {}).get(city_key, []))
+        unseen = [i for i in all_idx if i not in seen_set]
+        if not unseen:
+            seen_set = set()
+            unseen = all_idx
+        chosen_idx = random.choice(unseen)
+        seen_set.add(chosen_idx)
+        seen_data.setdefault(cid, {})[city_key] = list(seen_set)
+        store._save(config.CITY_FACT_IDX_KEY, seen_data)
+        return facts[chosen_idx]["text"]
 
-    seen_all = store._load(config.CITY_FACTS_KEY)
-    seen_texts = set(seen_all.get(cid, {}).get(slug, []))
-
-    # Сначала score 4-5, потом 3+
-    high = [f for f in facts if f.get("score", 3) >= 4 and f["text"] not in seen_texts]
-    mid = [f for f in facts if f.get("score", 3) >= 3 and f["text"] not in seen_texts]
-    pool = high or mid
-
-    if not pool:
-        # Все показали — сброс, начинаем с высокоскоринговых
-        seen_texts = set()
-        high = [f for f in facts if f.get("score", 3) >= 4]
-        pool = high or facts
-
-    city_lower = city.lower()
-    city_pool = [f for f in pool if city_lower in f["text"].lower()]
-    chosen = random.choice(city_pool) if city_pool else random.choice(pool)
-
-    # lazy-перевод для фактов, сохранённых до введения перевода
-    if not _is_russian(chosen["text"]):
-        translated = _translate_to_ru(chosen["text"])
-        if translated != chosen["text"]:
-            chosen["text"] = translated
-            _save_city_facts(city, facts)
-
-    seen_texts.add(chosen["text"])
-    seen_all.setdefault(cid, {})[slug] = list(seen_texts)
-    store._save(config.CITY_FACTS_KEY, seen_all)
-
-    return chosen["text"]
+    # Fallback: Wikipedia — только если текст конкретный (>60 символов)
+    try:
+        wiki = research.wiki_fact(city)
+        if wiki and len(wiki.strip()) > 60:
+            return wiki.strip()
+    except Exception as e:
+        _log.warning("myday: wiki_fact(%s) failed: %s", city, e)
+    return ""
 
 
 # --- Сводка дня (Мой день) ---
@@ -306,7 +145,6 @@ def _build_quote_context(cid):
     movies = store.get_list(config.WATCHLIST_KEY, cid)[:6]
     books = store.get_list(config.BOOKS_KEY, cid)[:6]
     artists = store.get_list(config.ARTISTS_KEY, cid)[:6]
-    focus = memory.fresh_focus(cid)
     seen_authors = store.get_list(config.QUOTE_AUTHORS_KEY, cid)
     if len(seen_authors) >= _QUOTE_RESET_AFTER:
         store.set_list(config.QUOTE_AUTHORS_KEY, cid, [])
@@ -315,7 +153,6 @@ def _build_quote_context(cid):
         "movies": [str(m) for m in movies if m],
         "books": [str(b) for b in books if b],
         "artists": [str(a) for a in artists if a],
-        "focus": focus,
         "seen_authors": seen_authors,
     }
 
@@ -327,8 +164,6 @@ def _fetch_quote(cid=None):
     }
 
     parts = []
-    if ctx["focus"]:
-        parts.append(f"Фокус дня человека: «{ctx['focus']}»")
     if ctx["movies"]:
         parts.append(f"Любимые фильмы/сериалы: {', '.join(ctx['movies'])}")
     if ctx["books"]:
@@ -465,22 +300,19 @@ def _build_day_text(cid):
     rain = d["precipitation_probability_max"][0] or 0
     rain_mm = (d.get("precipitation_sum") or [None])[0] if d.get("precipitation_sum") else None
     wind_ms = d["windspeed_10m_max"][0] or 0
-    wind_dir_deg = (d.get("winddirection_10m_dominant") or [None])[0]
     _avg = weather._daytime_avg_wind(data, day_str)
     wind_avg = _avg if _avg is not None else wind_ms
     icon = weather.weather_icon(code, tmax, rain, wind_ms, rain_mm)
     wemoji, wword = weather.wind_scale(wind_avg)
     rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
     rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-    dir_text = weather.wind_direction_text(wind_dir_deg)
-    dir_part = f", {dir_text}" if dir_text else ""
-    # ветер: подробно только если сильный
+    # ветер: подробно только если сильный, без направления
     if wind_avg >= 8:
         wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
         wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
-        wind_str = f"{wemoji} {wword}{wind_when} {wind_avg:.0f} м/с{dir_part}"
+        wind_str = f" • {wemoji} {wword}{wind_when} {wind_avg:.0f} м/с"
     else:
-        wind_str = f"💨 Ветер {wind_avg:.0f} м/с{dir_part}"
+        wind_str = f" • 💨 Ветер {wind_avg:.0f} м/с"
 
     now = datetime.now(TZ)
     weekday_name = _WEEKDAYS[now.weekday()]
@@ -493,16 +325,10 @@ def _build_day_text(cid):
     L = [f"<b>Мой день • {esc(header)} • {esc(s.get('city',''))}{title_flag}</b>", ""]
     L.append(f"<b>{icon} Погода сегодня</b>")
     L.append(f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}")
-    rain_char = weather.rain_character(code, rain_mm, rain, data, day_str)
-    if rain_char:
-        L.append(f"🌩 {rain_char}")
     hum = weather.humidity_phrase(data, day_str, tmax, s.get("cc", ""))
     if hum:
         L.append(f"💧 {hum}")
     L.append("")
-    focus = memory.fresh_focus(cid)
-    if focus:
-        L += ["<b>🎯 Фокус на сегодня</b>", esc(focus), ""]
     if word_line:
         L += ["<b>📚 Слово дня</b>", esc(word_line), ""]
     try:

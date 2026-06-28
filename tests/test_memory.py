@@ -1,4 +1,4 @@
-"""Память пользователя: фокус (датировка/свежесть), кап лент, wardrobe_hints."""
+"""Память пользователя: кап лент, wardrobe_hints, предпочтения."""
 from datetime import datetime, timedelta
 import pytest
 
@@ -15,31 +15,6 @@ def _clean_profile():
     store._mem.pop(config.PROFILE_KEY, None)
     yield
     store._mem.pop(config.PROFILE_KEY, None)
-
-
-@pytest.mark.unit
-def test_focus_set_get_roundtrip():
-    memory.set_focus(CID, "  закрыть отчёт  ")
-    f = memory.get_focus(CID)
-    assert f["text"] == "закрыть отчёт"
-    assert f["date"] == datetime.now(config.TZ).date().isoformat()
-    assert memory.fresh_focus(CID) == "закрыть отчёт"
-
-
-@pytest.mark.unit
-def test_focus_empty_clears():
-    memory.set_focus(CID, "что-то")
-    memory.set_focus(CID, "")
-    assert memory.get_focus(CID) == {}
-    assert memory.fresh_focus(CID) == ""
-
-
-@pytest.mark.unit
-def test_focus_stale_not_fresh():
-    old = (datetime.now(config.TZ).date() - timedelta(days=3)).isoformat()
-    store.set_profile(CID, {"focus": {"date": old, "text": "старый фокус"}})
-    assert memory.fresh_focus(CID) == ""           # старше 1 дня - не показываем
-    assert memory.get_focus(CID)["text"] == "старый фокус"  # но в памяти лежит
 
 
 @pytest.mark.unit
