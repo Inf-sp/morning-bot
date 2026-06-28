@@ -59,7 +59,7 @@ async def chat_reply(bot, cid, text):
     hist.append({"role": "user", "content": text})
     hist = hist[-10:]
     try:
-        answer = await ai.achat_chain(hist)
+        answer = await ai.achat_chain(hist, cid)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     hist.append({"role": "assistant", "content": answer})
