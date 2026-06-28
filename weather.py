@@ -9,7 +9,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 import ai
-from util import esc, _WEEKDAYS, _MONTHS
+from util import esc, _WEEKDAYS, _WEEKDAY_SHORT, _MONTHS
 import verify
 
 TZ = config.TZ
@@ -444,7 +444,7 @@ async def send_weather(bot, cid, mode="today"):
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
         return
 
-    # week: 7 дней начиная с завтра, каждый день — отдельный блок
+    # week: компактный формат — одна строка на день/группу
     _SKIP = 1
     d1 = now + timedelta(days=_SKIP)
     d2 = now + timedelta(days=_SKIP + 6)
@@ -453,11 +453,9 @@ async def send_weather(bot, cid, mode="today"):
     else:
         rng = f"{d1.day} {_MONTHS[d1.month-1]} – {d2.day} {_MONTHS[d2.month-1]}"
     flag = __import__("util").flag_from_cc(s.get("cc", ""))
-    _DAY_LABELS = ["Завтра", "Послезавтра"]
 
-    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>"]
-
-    week_summary_lines = []   # для LLM-итога
+    # Сбор данных для 7 дней
+    day_data = []
     for i in range(7):
         idx = _SKIP + i
         if idx >= len(d["weathercode"]):
@@ -468,38 +466,65 @@ async def send_weather(bot, cid, mode="today"):
         rain = d["precipitation_probability_max"][idx] or 0
         rain_mm = (d.get("precipitation_sum") or [None] * 10)[idx]
         day_str = d["time"][idx]
-        wind_avg = _daytime_avg_wind(data, day_str) or (d["windspeed_10m_max"][idx] or 0)
-        icon = weather_icon(code, tmax, rain, d["windspeed_10m_max"][idx] or 0, rain_mm)
+        wind_max = d["windspeed_10m_max"][idx] or 0
+        wind_avg = _daytime_avg_wind(data, day_str) or wind_max
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-        rain_block = f"Дождь{rain_when} {rain:.0f}% • " if _rain_real(rain, rain_mm) else ""
-        wind_str = f"💨 Ветер {wind_avg:.0f} м/с"
-        if i < len(_DAY_LABELS):
-            label = _DAY_LABELS[i]
-        else:
-            label = _WEEKDAYS[dt_i.weekday()]
-        date_str = f"{dt_i.day} {_MONTHS[dt_i.month - 1]}"
-        L += ["", f"{icon} <b>{esc(label)}, {date_str}</b>",
-              f"До {tmax:+.0f}°C • {rain_block}{wind_str}"]
-        week_summary_lines.append(
-            f"{label}: {DESC.get(code, '')}, до {tmax:+.0f}°C, "
-            + (f"дождь {rain:.0f}%{rain_when}, " if _rain_real(rain, rain_mm) else "")
-            + f"ветер {wind_avg:.0f} м/с"
-        )
+        day_data.append({
+            "abbrev": _WEEKDAY_SHORT[dt_i.weekday()],
+            "icon": weather_icon(code, tmax, rain, wind_max, rain_mm),
+            "tmax": tmax,
+            "code": code,
+            "rain": rain,
+            "rain_mm": rain_mm,
+            "rain_when": rain_when,
+            "rain_real": _rain_real(rain, rain_mm),
+            "wind": wind_avg,
+        })
 
-    # LLM-итог недели
+    # LLM: компактные описания дней (с группировкой) + итог — один вызов
+    prompt_lines = [
+        f"{dd['abbrev']}: {DESC.get(dd['code'], 'ясно')}, до {dd['tmax']:+.0f}°C"
+        + (f", дождь {dd['rain']:.0f}%{dd['rain_when']}" if dd["rain_real"] else "")
+        + f", ветер {dd['wind']:.0f} м/с"
+        for dd in day_data
+    ]
+    groups = []
+    summary = ""
     try:
-        week_data_str = "\n".join(week_summary_lines)
-        summary = ai.llm(
-            f"Погода на неделю в {s['city']}:\n{week_data_str}\n\n"
-            "Напиши короткий метео-итог: 2-3 предложения про общую картину недели — "
-            "температура, осадки, динамика. Без слова 'зонт'. Без markdown. На русском.",
-            200, 0.6, tier="cheap"
-        ).strip()
-        if summary:
-            L += ["", "🌡️ <b>Метео-итог</b>", esc(summary)]
+        llm_result = ai.llm_json(
+            f"Погода на неделю в {s['city']}:\n" + "\n".join(prompt_lines) + "\n\n"
+            "Верни JSON:\n"
+            '{"groups":[{"abbrevs":["Пн"],"desc":"дождь утром и ночью"},'
+            '{"abbrevs":["Вт","Ср"],"desc":"облачно"}],"summary":"1-2 предложения"}\n\n'
+            "Правила: desc — 3-7 слов, суть без цифр; схожие соседние дни объединяй; "
+            "summary — 1-2 предложения без слова «зонт», без markdown.",
+            300, tier="cheap"
+        )
+        groups = llm_result.get("groups", [])
+        summary = (llm_result.get("summary") or "").strip()
     except Exception:
-        pass
+        groups = [{"abbrevs": [dd["abbrev"]], "desc": DESC.get(dd["code"], "")} for dd in day_data]
+
+    abbrev_map = {dd["abbrev"]: dd for dd in day_data}
+
+    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", ""]
+    for grp in groups:
+        abbrevs = grp.get("abbrevs") or []
+        desc = (grp.get("desc") or "").strip()
+        grp_days = [abbrev_map[a] for a in abbrevs if a in abbrev_map]
+        if not grp_days or not desc:
+            continue
+        rep = max(grp_days, key=lambda x: x["rain"])
+        icon = rep["icon"]
+        tmaxes = [gd["tmax"] for gd in grp_days]
+        tmin_g, tmax_g = min(tmaxes), max(tmaxes)
+        temp_str = f"+{tmin_g:.0f}…{tmax_g:.0f}°C" if tmax_g - tmin_g > 1 else f"до {tmax_g:+.0f}°C"
+        day_label = abbrevs[0] if len(abbrevs) == 1 else f"{abbrevs[0]}-{abbrevs[-1]}"
+        L.append(f"{icon} {day_label} — {esc(desc)}, {temp_str}")
+
+    if summary:
+        L += ["", "🌡️ <b>Метео-итог</b>", esc(summary)]
 
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
     await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)

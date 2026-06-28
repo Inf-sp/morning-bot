@@ -124,15 +124,12 @@ async def send_notif(bot, cid, q=None):
     for kind, label in NOTIF_TYPES:
         on = notif_on(cid, kind)
         mark = "🟢" if on else "⚪"
-        rows.append([
-            InlineKeyboardButton(f"{mark} {label}", callback_data=f"set_notiftgl_{kind}"),
-            InlineKeyboardButton("👀 Превью", callback_data=f"set_notiftest_{kind}"),
-        ])
+        rows.append([InlineKeyboardButton(f"{mark} {label}", callback_data=f"set_notiftgl_{kind}")])
     any_on = any(notif_on(cid, k) for k, _ in NOTIF_TYPES)
     if any_on:
         rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
-    text = "🔔 <b>Уведомления</b>\n\nНажми для включения/выключения. 🔔 — предпросмотр. 🟢 — включено."
+    text = "🔔 <b>Уведомления</b>\n\nНажми для включения/выключения. 🟢 — включено."
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
@@ -472,6 +469,16 @@ async def handle_callback(bot, cid, data, q=None):
                 memory.del_preference(c, i)
             await send_admin_prefs(b, c)
         await _admin_guard(bot, cid, _clr)
+    elif data == "set_admin_health":
+        await _admin_guard(bot, cid, send_admin_health)
+    elif data == "set_admin_run_notif":
+        await _admin_guard(bot, cid, send_admin_run_notif)
+    elif data.startswith("set_admin_runjob_"):
+        kind = data[len("set_admin_runjob_"):]
+        async def _do_job(b, c):
+            await b.send_message(chat_id=c, text="▶️ Запускаю…")
+            await _run_notif_test(b, c, kind)
+        await _admin_guard(bot, cid, _do_job)
 
 
 # ===== СОХРАНЕНИЯ / ЛЮБИМЫЕ (notes.py) =====
@@ -879,9 +886,11 @@ async def _admin_guard(bot, cid, fn):
 async def send_admin(bot, cid):
     """Главный экран администратора."""
     kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🩺 Статус сервисов", callback_data="set_admin_health")],
         [InlineKeyboardButton("👥 Пользователи", callback_data="set_admin_users")],
         [InlineKeyboardButton("💸 Расходы на LLM", callback_data="set_admin_cost")],
         [InlineKeyboardButton("🧠 Профиль памяти", callback_data="set_admin_prefs")],
+        [InlineKeyboardButton("📩 Запустить рассылку", callback_data="set_admin_run_notif")],
         [InlineKeyboardButton("◀️ Назад", callback_data="set_home")],
     ])
     await bot.send_message(
@@ -950,10 +959,15 @@ async def send_admin_cost(bot, cid):
         def _pct(t):
             return f"{round(t / total_tokens * 100)}%" if total_tokens else "0%"
 
-        # человекочитаемые имена провайдеров
-        _prov_names = {"groq": "Groq (бесплатно)", "gemini": "Gemini (бесплатно)",
-                       "claude": "Claude (Anthropic)", "openai": "OpenAI",
-                       "openrouter": "OpenRouter", "cloudflare": "Cloudflare"}
+        # все провайдеры в порядке приоритета + проверка настроен ли ключ
+        _PROV_ORDER = [
+            ("claude",      "Claude (Anthropic)", bool(config.ANTHROPIC_API_KEY)),
+            ("openai",      "OpenAI",             bool(config.OPENAI_API_KEY)),
+            ("gemini",      "Gemini (бесплатно)", True),
+            ("openrouter",  "OpenRouter",          bool(config.OPENROUTER_API_KEY)),
+            ("groq",        "Groq (бесплатно)",   bool(config.GROQ_API_KEY)),
+            ("cf",          "Cloudflare",          bool(config.CF_API_TOKEN and config.CF_ACCOUNT_ID)),
+        ]
 
         # человекочитаемые имена функций
         _mod_names = {"wardrobe": "👗 Гардероб", "balance": "🥗 Баланс/еда",
@@ -967,12 +981,16 @@ async def send_admin_cost(bot, cid):
                  f"Токенов: ~{total_tokens:,}",
                  f"Оценка: ~${usd_est:.3f}", ""]
 
-        # по провайдерам (с % и меткой)
-        top_provs = sorted(by_prov.items(), key=lambda x: -x[1])[:5]
+        # все провайдеры в порядке приоритета
         lines.append("<b>По провайдерам:</b>")
-        for p, t in top_provs:
-            label = _prov_names.get(p, p)
-            lines.append(f"  {esc(label)}: {t:,} tok ({_pct(t)})")
+        for key, label, configured in _PROV_ORDER:
+            tok = by_prov.get(key, 0)
+            if not configured:
+                lines.append(f"  {esc(label)}: — (нет ключа)")
+            elif tok:
+                lines.append(f"  {esc(label)}: {tok:,} tok ({_pct(tok)})")
+            else:
+                lines.append(f"  {esc(label)}: 0 tok")
 
         # по функциям — только заполненные модули
         known_mods = [(m, t) for m, t in by_mod.items() if m and m != "?"]
@@ -1052,3 +1070,80 @@ async def _admin_del_pref(bot, cid, i: int):
     import memory
     memory.del_preference(cid, i)
     await send_admin_prefs(bot, cid)
+
+
+async def send_admin_health(bot, cid):
+    """Inline-статус сервисов: API-ключи, DB, Weather, LLM."""
+    import ai as _ai
+    import store as _st
+    import weather as _w
+    import time as _time
+
+    lines = ["🩺 <b>Статус сервисов</b>", ""]
+
+    required = [
+        ("TELEGRAM_TOKEN", bool(config.TELEGRAM_TOKEN)),
+        ("GEMINI_API_KEY",  bool(config.GEMINI_API_KEY)),
+        ("DATABASE_URL",    bool(config.DATABASE_URL)),
+        ("CHAT_ID",         bool(config.CHAT_ID)),
+    ]
+    lines.append("<b>Обязательные ключи:</b>")
+    for k, ok in required:
+        lines.append(f"  {'✅' if ok else '❌'} {k}")
+
+    optional = [
+        ("ANTHROPIC_API_KEY",   bool(config.ANTHROPIC_API_KEY)),
+        ("GROQ_API_KEY",        bool(config.GROQ_API_KEY)),
+        ("OPENAI_API_KEY",      bool(config.OPENAI_API_KEY)),
+        ("OPENROUTER_API_KEY",  bool(config.OPENROUTER_API_KEY)),
+        ("CLOUDFLARE",          bool(config.CF_API_TOKEN and config.CF_ACCOUNT_ID)),
+        ("TAVILY_API_KEY",      bool(config.TAVILY_API_KEY)),
+        ("TMDB_API_KEY",        bool(config.TMDB_API_KEY)),
+        ("TICKETMASTER_API_KEY",bool(config.TICKETMASTER_API_KEY)),
+    ]
+    lines.append("")
+    lines.append("<b>Опциональные ключи:</b>")
+    for k, ok in optional:
+        lines.append(f"  {'✅' if ok else '⚪'} {k}")
+
+    lines.append("")
+    try:
+        _st._load("__health__")
+        lines.append("✅ DB: OK")
+    except Exception as e:
+        lines.append(f"❌ DB: {str(e)[:60]}")
+
+    try:
+        s = store.get_settings(cid)
+        _w.fetch_weather(s["lat"], s["lon"], 1)
+        lines.append("✅ Weather API: OK")
+    except Exception:
+        lines.append("❌ Weather API: недоступна")
+
+    log = _ai.get_cost_log()
+    week_ago = _time.time() - 7 * 86400
+    recent = [e for e in log if e.get("ts", 0) >= week_ago]
+    if recent:
+        total_tok = sum(e.get("tokens", 0) for e in recent)
+        lines.append(f"💸 LLM 7д: {len(recent)} вызовов, ~{total_tok:,} tok")
+    else:
+        lines.append("💸 LLM 7д: нет данных")
+
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
+    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
+
+
+async def send_admin_run_notif(bot, cid):
+    """Подменю: запустить любое уведомление прямо сейчас."""
+    rows = [
+        [InlineKeyboardButton(label, callback_data=f"set_admin_runjob_{kind}")]
+        for kind, label in NOTIF_TYPES
+    ]
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_admin")])
+    kb = InlineKeyboardMarkup(rows)
+    await bot.send_message(
+        chat_id=cid,
+        text="📩 <b>Запустить рассылку</b>\n\nВыбери уведомление — оно придёт тебе прямо сейчас:",
+        parse_mode="HTML",
+        reply_markup=kb,
+    )
