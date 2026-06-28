@@ -76,6 +76,8 @@ def menu_screen(key):
                 [("👩🏻‍⚕️ Вопрос врачу", "as_doctor")],
                 [("☕️ Личная мотивация", "as_motiv")],
                 [("📓 Дневник тревоги", "as_daycheck")],
+                [("🎚️ Мой лагом (настройки)", "set_lagom_g")],
+
             ])
         )
     if key == "m_food_gen":
