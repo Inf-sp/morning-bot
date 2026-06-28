@@ -64,7 +64,7 @@ def menu_screen(key):
                 [("✨ Сгенерировать образ", "w_look")],
                 [("💡 Улучшить гардероб", "w_improve")],
                 [("🛒 Проверка покупки", "w_check")],
-                [("👕 Шкаф", "set_wardrobe_g")],
+                [("🎚️ Мой шкаф (настройки)", "set_wardrobe_g")],
             ])
         )
     if key == "m_balance":
@@ -95,7 +95,7 @@ def menu_screen(key):
             + _MENU_FOOTER,
             _ikb([
                 [("🇳🇱 Нидерландский", "m_nl"), ("🇬🇧 Английский", "m_en")],
-                [("🗂️ Словарь", "set_dict_g")],
+                [("🎚️ Мой словарь (настройки)", "set_dict_g")],
                 [("🎚 Уровень языка", "a_levels")],
             ])
         )
@@ -146,7 +146,7 @@ async def send_food_menu(bot, cid):
     kb = _ikb([
         [("🍳 Завтрак", "a_food_breakfast"), ("🥗 Обед", "a_food_lunch"), ("🍽️ Ужин", "a_food_dinner")],
         [("🥕 Из того что есть", "as_fridge_cook")],
-        [("🧊 Холодильник", "set_fridge_g")],
+        [("🎚️ Мой холодильник (настройки)", "set_fridge_g")],
     ])
     await bot.send_message(
         chat_id=cid,

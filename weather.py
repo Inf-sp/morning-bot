@@ -393,7 +393,7 @@ async def send_weather(bot, cid, mode="today"):
                                 country=country, cc=cc,
                                 lat=s["lat"], lon=s["lon"], tz=str(TZ))
                 if mf:
-                    L += ["", "🔬 <b>Метео-факт</b>", esc(mf)]
+                    L += ["", "🌡️ <b>Метео-факт</b>", esc(mf)]
         else:
             fact = _world_fact()
             if fact:
@@ -439,7 +439,7 @@ async def send_weather(bot, cid, mode="today"):
                              country=s.get("country", ""), cc=cc,
                              lat=s["lat"], lon=s["lon"], tz=str(TZ))
             if mf:
-                L += ["", "🔬 <b>Метео-факт</b>", esc(mf)]
+                L += ["", "🌡️ <b>Метео-факт</b>", esc(mf)]
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
         return
 
