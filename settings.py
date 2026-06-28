@@ -632,20 +632,22 @@ async def export_notes(bot, cid):
 
 async def send_notes(bot, cid):
     notes_list = store.get_list(config.NOTES_KEY, cid)
-    n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     n_plan = sum(1 for n in notes_list if _note_bucket(n) == "plan")
+    plan_label = f"🧳 Мои планы ({n_plan})" if n_plan else "🧳 Мои планы"
     rows = [
-        [InlineKeyboardButton(f"⏳ Позже ({n_fav})", callback_data="as_bucket_fav"),
-         InlineKeyboardButton(f"🧳 Планы ({n_plan})", callback_data="as_bucket_plan")],
-        [InlineKeyboardButton("👕 Шкаф", callback_data="set_wardrobe"),
-         InlineKeyboardButton("🧊 Холодильник", callback_data="set_fridge")],
-        [InlineKeyboardButton("🗂️ Словарь", callback_data="set_dict"),
-         InlineKeyboardButton("🎯 Лагом", callback_data="set_lagom")],
-        [InlineKeyboardButton("❤️ Любимые", callback_data="set_love"),
-         InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
+        [InlineKeyboardButton(plan_label, callback_data="as_bucket_plan")],
+        [InlineKeyboardButton("👕 Мой шкаф", callback_data="set_wardrobe"),
+         InlineKeyboardButton("🧊 Мой холодильник", callback_data="set_fridge")],
+        [InlineKeyboardButton("🗂️ Мой словарь", callback_data="set_dict"),
+         InlineKeyboardButton("🎯 Мой лагом", callback_data="set_lagom")],
+        [InlineKeyboardButton("🎬 Мое кино", callback_data="as_love_movies"),
+         InlineKeyboardButton("🗺️ Мои страны", callback_data="as_love_countries")],
+        [InlineKeyboardButton("🎸 Мои артисты", callback_data="as_love_artists"),
+         InlineKeyboardButton("📖 Мои книги", callback_data="as_love_books")],
+        [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
     ]
     await bot.send_message(chat_id=cid, parse_mode="HTML",
-        text="💾 <b>Моя база</b>\n\nЗакладки, планы поездок, фильмы, книги и артисты.\n\nВыбери раздел 👇",
+        text="🗂️ <b>Моя база</b>\n\nПланы, гардероб, холодильник, словарь и любимое — всё в одном месте.\n\nВыбери раздел 👇",
         reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_plans(bot, cid):
@@ -781,7 +783,7 @@ async def send_love_section(bot, cid, key):
     rows = [[InlineKeyboardButton("📝 Добавить", callback_data=f"as_loveadd_{key}")]]
     if items:
         rows.append([InlineKeyboardButton("🗑 Выбрать для удаления", callback_data=f"as_loveclean_{key}")])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_love")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -825,7 +827,7 @@ async def handle_notes_callback(bot, cid, q, data):
     if data == "as_bucket_plan":
         await send_bucket(bot, cid, "plan"); return
     if data == "as_bucket_love":
-        await send_bucket(bot, cid, "love"); return
+        await send_notes(bot, cid); return
     if data.startswith("as_planview_"):
         await plan_view(bot, cid, int(data.split("_")[-1])); return
     if data.startswith("as_plandel_"):
