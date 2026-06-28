@@ -740,7 +740,7 @@ async def job_weekly_events(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "weekly_events"):
             continue
         try:
-            await leisure.send_weekly_events(context.bot, cid)
+            await leisure.send_weekly_events(_NokbBot(context.bot), cid)
         except Exception:
             logging.exception("job_weekly_events failed for cid=%s", cid)
 
@@ -845,6 +845,7 @@ def main():
     jq.run_daily(job_checkin_evening, time=_t("22:00"), days=tuple(range(7)))
     jq.run_daily(job_evening_weather,  time=_t("19:00"), days=tuple(range(7)))
     jq.run_daily(job_weekly_forecast,  time=_t("19:00"), days=(6,))            # вс
+    jq.run_daily(job_weekly_events,    time=_t("10:00"), days=(6,))            # вс
 
     logging.info("Bot started")
     app.run_polling(drop_pending_updates=True)

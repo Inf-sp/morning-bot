@@ -17,6 +17,7 @@ NOTIF_TYPES = [
     ("checkin_eve",   "🥸 Вечерний разбор (22:00)"),
     ("weekly_forecast","🌍 Недельный прогноз (вс 19:00)"),
     ("evening_weather","🌙 Погода на завтра (19:00)"),
+    ("weekly_events",  "🎵 События следующей недели (вс 10:00)"),
 ]
 STYLES = [
     "минимализм",
@@ -67,18 +68,81 @@ async def send_home(bot, cid):
         text="⚙️ <b>Настройки</b>\n\nЯзык, уведомления, город и параметры стиля.\n\nВыбери раздел 👇",
         parse_mode="HTML", reply_markup=home_kb(cid))
 
+async def _run_notif_test(bot, cid, kind):
+    """Предпросмотр уведомления: вызывает реальную send-функцию для kind."""
+    import verify
+    try:
+        if kind == "morning_brief":
+            import weather as _w
+            await _w.send_weather(bot, cid, "today")
+            await learning.send_morning_word(bot, cid)
+        elif kind == "weather_warn":
+            import weather as _w
+            s = store.get_settings(cid)
+            data = _w.fetch_weather(s["lat"], s["lon"], 2)
+            d = data["daily"]
+            wind = d["windspeed_10m_max"][0] or 0
+            code = d["weathercode"][0]
+            rain = d["precipitation_probability_max"][0] or 0
+            rain_mm = (d.get("precipitation_sum") or [None])[0]
+            text = _w.storm_alert(wind, code, rain, rain_mm, cc=s.get("cc", ""))
+            if not text:
+                parts = []
+                if wind > 10:
+                    parts.append(f"💨 ветер до {wind:.0f} м/с")
+                if rain > 70:
+                    parts.append(f"🌧 дождь {rain:.0f}%")
+                if code in {95, 96, 99}:
+                    parts.append("⛈ возможна гроза")
+                if not parts:
+                    parts.append("Сейчас без экстремальных условий")
+                text = "⚠️ <b>Погодное предупреждение</b>\n\n" + " • ".join(parts)
+            await bot.send_message(chat_id=cid, text=text, parse_mode="HTML")
+        elif kind == "lagom_daily":
+            import balance as _b
+            await _b.send_motiv_push(bot, cid)
+        elif kind == "grammar":
+            await learning.send_morning_word(bot, cid)
+        elif kind == "recipe_daily":
+            import balance as _b
+            await _b.send_recipe_push(bot, cid)
+        elif kind == "checkin_day":
+            await bot.send_message(chat_id=cid, parse_mode="HTML",
+                text="🫣 <b>Дневная разгрузка</b>\n\nСейчас не анализируй, просто выгрузи мысли.\n\n"
+                     "Каждая тревога - с новой строки.\n\nВечером проверим, что было фактами, а что шумом…")
+        elif kind == "vocab_review":
+            await learning.send_vocab_review(bot, cid)
+        elif kind == "checkin_eve":
+            import balance as _b
+            await _b.send_evening_review(bot, cid)
+        elif kind == "weekly_forecast":
+            import weather as _w
+            await _w.send_weather(bot, cid, "week")
+        elif kind == "evening_weather":
+            import weather as _w
+            await _w.send_weather(bot, cid, "tomorrow_plain")
+        elif kind == "weekly_events":
+            import leisure as _l
+            await _l.send_weekly_events(bot, cid)
+    except Exception as e:
+        await verify.safe_error(bot, cid, e, skill="notif_test")
+
+
 async def send_notif(bot, cid):
     rows = []
     for kind, label in NOTIF_TYPES:
         on = notif_on(cid, kind)
         mark = "🟢" if on else "⚪"
-        rows.append([InlineKeyboardButton(f"{mark} {label}", callback_data=f"set_notiftgl_{kind}")])
+        rows.append([
+            InlineKeyboardButton(f"{mark} {label}", callback_data=f"set_notiftgl_{kind}"),
+            InlineKeyboardButton("👀 Превью", callback_data=f"set_notiftest_{kind}"),
+        ])
     any_on = any(notif_on(cid, k) for k, _ in NOTIF_TYPES)
     if any_on:
         rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid,
-        text="🔔 <b>Уведомления</b>\n\nНажми, чтобы включить/выключить. 🟢 — включено.",
+        text="🔔 <b>Уведомления</b>\n\nНажми для включения/выключения. 🔔 — предпросмотр. 🟢 — включено.",
         parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
 async def toggle_notif(bot, cid, kind):
@@ -283,6 +347,8 @@ async def handle_callback(bot, cid, data, q=None):
         await send_notif(bot, cid)
     elif data.startswith("set_notiftgl_"):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):])
+    elif data.startswith("set_notiftest_"):
+        await _run_notif_test(bot, cid, data[len("set_notiftest_"):])
     elif data == "set_notif_off_all":
         await notif_off_all(bot, cid)
     elif data == "set_lang":
