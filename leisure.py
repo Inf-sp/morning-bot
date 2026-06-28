@@ -172,7 +172,7 @@ def content_recommend(kind, cid):
 Порекомендуй РОВНО 5 {what}, максимально точно под этот вкус.
 Обязательно дай СМЕСЬ: и фильмы, и сериалы — минимум 2 сериала из 5.{avoid}
 JSON: {{"items": [{{"title": "название (год)", "title_en": "оригинальное/английское название", "hook": "1 строка: на что похоже из его референсов и чем зацепит"}}]}}"""
-        return ai.llm_json(prompt, 1000)
+        return ai.llm_json(prompt, 1000, tier="leisure")
 
     # книги: референсы вкуса берём из "Мои книги" (настройки/БД, авто-загрузка из content.json)
     my_books = _ensure_books(cid)
@@ -205,7 +205,7 @@ JSON: {{"items": [{{"title": "название", "title_en": "оригиналь
  "plot": "коротко о сюжете, 2-3 предложения без жёстких спойлеров финала",
  "quote": "короткая цитата из книги",
  "hook": "1 строка: если понравились такие-то его книги - эта зайдёт тем-то"}}]}}"""
-    return ai.llm_json(prompt, 1300)
+    return ai.llm_json(prompt, 1300, tier="leisure")
 
 _TMDB_GENRES = {28:"боевик",12:"приключения",16:"анимация",35:"комедия",80:"криминал",99:"документальный",
     18:"драма",10751:"семейный",14:"фэнтези",36:"история",27:"ужасы",10402:"музыка",9648:"детектив",
@@ -783,7 +783,7 @@ async def send_listen(bot, cid):
                 '"why": ["пункт 1 - на кого из его любимых похоже и чем", "пункт 2"], '
                 '"tracks": ["трек 1 - короткая пометка", "трек 2", "трек 3"], '
                 '"fact": "1 интересный факт об исполнителе"}',
-                1000)
+                1000, tier="leisure")
         except Exception:
             cand = None
         if cand and cand.get("artist") and cand["artist"].strip().lower() not in known:
@@ -1071,7 +1071,7 @@ def travel_suggest_one(cid):
  "for_what":"ради чего ехать, 1 строка",
  "langs":"язык(и) + говорят ли на английском",
  "note":"главный нюанс/предупреждение, 1 строка"}}"""
-    return ai.llm_json(prompt, 700, tier="cheap")
+    return ai.llm_json(prompt, 700, tier="leisure")
 
 def _country_card(d):
     L = [f"{d.get('flag','')} <b>{esc(d.get('country',''))}</b>", ""]
@@ -1184,7 +1184,7 @@ async def send_plan(bot, cid):
  "lgbt":"1 строка про дружелюбность/безопасность",
  "fact":"1 интересный местный факт"}}"""
     try:
-        p = ai.llm_json(prompt, 1100)
+        p = ai.llm_json(prompt, 1100, tier="leisure")
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     if facts.get("cc"):

@@ -122,16 +122,20 @@ def _friendly(errs):
         return "⏳ ИИ временно перегружен — подожди минуту и попробуй снова."
     return "⚠️ ИИ временно недоступен — попробуй снова через пару минут."
 
-DEFAULT_ORDER = ("claude", "openai", "gemini", "openrouter", "groq", "cf")
-# Для обучения языку Claude идёт первым - качество объяснений важнее цены
-LEARN_ORDER = ("claude", "openai", "gemini", "openrouter", "groq", "cf")
-# Грамматика - Claude (дешёвый Haiku) первым; дальше бесплатные fallback'и
-GRAMMAR_ORDER = ("claude", "groq", "gemini", "openrouter", "openai", "cf")
+DEFAULT_ORDER  = ("claude", "openai", "gemini", "openrouter", "groq", "cf")
+# Грамматика/быстрые задачи: Groq (Llama-70b) первым — скорость, structured output
+GRAMMAR_ORDER  = ("groq", "gemini", "claude", "openrouter", "openai", "cf")
+# Досуг/рекомендации: Gemini первым — богатое знание культуры, кино, музыки, путешествий
+LEISURE_ORDER  = ("gemini", "openrouter", "claude", "openai", "groq", "cf")
 
-# --- тиры моделей (cost-aware): простые задачи -> cheap (Haiku), глубокие -> smart (Sonnet) ---
+# --- тиры: маршрутизация по задаче ---
+# cheap  → Groq первым (грамматика, переводы, простые lookup-и; Claude Haiku если дойдёт)
+# smart  → Claude первым (чат, рецепты, гардероб, мотивация — требуют рассуждений)
+# leisure → Gemini первым (досуг, путешествия, рекомендации — требуют знания мира)
 TIERS = {
-    "cheap": (GRAMMAR_ORDER, config.GRAMMAR_MODEL),   # Claude Haiku первым + бесплатные fallback'и
-    "smart": (DEFAULT_ORDER, None),                   # Claude Sonnet (ANTHROPIC_MODEL по умолчанию)
+    "cheap":   (GRAMMAR_ORDER, config.GRAMMAR_MODEL),
+    "smart":   (DEFAULT_ORDER, None),
+    "leisure": (LEISURE_ORDER, None),
 }
 
 def _resolve(tier, order, claude_model):
