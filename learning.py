@@ -668,7 +668,7 @@ def _dict_counts(cid):
         out[lang][_dict_kind(w)] += 1
     return out
 
-async def send_dict(bot, cid):
+async def send_dict(bot, cid, back="m_notes"):
     c = _dict_counts(cid)
     nl_total = c["nl"]["word"] + c["nl"]["phrase"]
     en_total = c["en"]["word"] + c["en"]["phrase"]
@@ -677,7 +677,7 @@ async def send_dict(bot, cid):
     rows = [
         [InlineKeyboardButton(f"🇳🇱 Нидерландский ({nl_total})", callback_data="a_dictlang_nl")],
         [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data="a_dictlang_en")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="set_home")],
+        [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ]
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 

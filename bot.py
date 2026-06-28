@@ -347,11 +347,20 @@ async def answer_callback(update, context):
     if data.startswith("movie_love_"):
         await leisure.movie_love(bot, cid, int(data.split("_")[-1]))
         return
+    if data.startswith("movie_seen_"):
+        await leisure.movie_seen(bot, cid, int(data.split("_")[-1]))
+        return
     if data.startswith("book_love_"):
         await leisure.book_love(bot, cid, int(data.split("_")[-1]))
         return
+    if data.startswith("book_seen_"):
+        await leisure.book_seen(bot, cid, int(data.split("_")[-1]))
+        return
     if data == "listen_love":
         await leisure.listen_love(bot, cid)
+        return
+    if data == "listen_seen":
+        await leisure.listen_seen(bot, cid)
         return
     if data.startswith("reco_"):
         await leisure.add_reco(bot, cid, int(data.split("_")[1]))
