@@ -323,10 +323,12 @@ def _chat(provider, history, system):
 def chat_chain(history, cid=None):
     system = _chat_system(cid)
     errs = []
-    for p in ("claude", "openai", "gemini", "openrouter", "groq", "cf"):
+    prompt_len = sum(len(m.get("content", "")) for m in history)
+    for p in DEFAULT_ORDER:
         try:
             out = _as_text(_chat(p, history, system))
             if out and out.strip():
+                _log_cost(p, p, "c" * prompt_len, out, "assistant")
                 return out
         except Exception as e:
             errs.append(f"{p}:{e}")
