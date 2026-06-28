@@ -673,7 +673,10 @@ async def send_daycheck(bot, cid):
     else:
         lines.append("Пока пусто. Напиши тревоги одним сообщением.")
     store.pending_input[cid] = "worry"
-    rows = [[InlineKeyboardButton("🧠 Разобрать тревоги", callback_data="as_worryreview")]] if worries else []
+    rows = []
+    if worries:
+        rows.append([InlineKeyboardButton("🧠 Разобрать тревоги", callback_data="as_worryreview")])
+        rows.append([InlineKeyboardButton("🧹 Очистить все тревоги", callback_data="worry_clearall")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_close")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -682,7 +685,9 @@ async def send_evening_review(bot, cid):
     cid = str(cid)
     store.challenge_state.pop(cid, None)
     store.game_state.pop(cid, None)
-    worries = store.get_list(config.WORRIES_KEY, cid)
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    all_worries = store.get_list(config.WORRIES_KEY, cid)
+    worries = [w for w in all_worries if w.get("date", today) == today]
     if not worries:
         await bot.send_message(chat_id=cid, parse_mode="HTML",
             text="🥸 <b>Вечерний разбор</b>\n\nСегодня тревог не записано. Если что-то крутится - выгрузи сейчас, каждую с новой строки.")
@@ -726,7 +731,8 @@ async def worry_clear_all(bot, cid):
 
 async def save_worries(bot, cid, text):
     cid = str(cid)
-    new = [{"text": w.strip(), "status": "pending"} for w in text.split("\n") if w.strip()]
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    new = [{"text": w.strip(), "status": "pending", "date": today} for w in text.split("\n") if w.strip()]
     existing = store.get_list(config.WORRIES_KEY, cid)
     store.set_list(config.WORRIES_KEY, cid, existing + new)
     await bot.send_message(chat_id=cid, text=f"📝 Записал в дневник тревоги: +{len(new)}. Вечером проверим, что реально случилось.")

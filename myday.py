@@ -285,7 +285,6 @@ def reset_day_cache(cid):
 def _day_menu_kb():
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🗓️ Погода на завтра", callback_data="a_w_tomorrow")],
         [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
         [InlineKeyboardButton("🌍 Сменить город", callback_data="a_setcity")],
     ])

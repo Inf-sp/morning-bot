@@ -684,7 +684,7 @@ async def job_morning_brief(context: ContextTypes.DEFAULT_TYPE):
             continue
         try:
             bot = _NokbBot(context.bot)
-            await weather.send_weather(bot, cid, "today")
+            await weather.send_weather(bot, cid, "tomorrow_plain")
             await learning.send_morning_word(bot, cid)
         except Exception:
             logging.exception("job_morning_brief failed for cid=%s", cid)
@@ -770,7 +770,7 @@ async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "checkin_eve"):
             continue
         try:
-            await balance.send_evening_review(_NokbBot(context.bot), cid)
+            await balance.send_evening_review(context.bot, cid)
         except Exception:
             logging.exception("job_checkin_evening failed for cid=%s", cid)
 
@@ -873,17 +873,16 @@ def main():
     jq = app.job_queue
     def _t(hm):
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
-    jq.run_daily(job_morning_brief,   time=_t("07:30"), days=tuple(range(7)))
-    jq.run_daily(job_weather_warn,    time=_t("08:15"), days=tuple(range(7)))
+    jq.run_daily(job_morning_brief,   time=_t("08:30"), days=tuple(range(7)))
+    jq.run_daily(job_weather_warn,    time=_t("08:45"), days=tuple(range(7)))
     jq.run_daily(job_lagom,           time=_t("09:00"), days=tuple(range(7)))
+    jq.run_daily(job_weekly_events,   time=_t("10:00"), days=(6,))             # вс
     jq.run_daily(job_grammar,         time=_t("11:00"), days=tuple(range(7)))
     jq.run_daily(job_recipe,          time=_t("12:30"), days=tuple(range(7)))
     jq.run_daily(job_checkin_day,     time=_t("14:00"), days=tuple(range(7)))
+    jq.run_daily(job_weekly_forecast, time=_t("19:00"), days=(6,))             # вс
     jq.run_daily(job_vocab_review,    time=_t("21:00"), days=tuple(range(7)))
     jq.run_daily(job_checkin_evening, time=_t("22:00"), days=tuple(range(7)))
-    jq.run_daily(job_evening_weather,  time=_t("19:00"), days=tuple(range(7)))
-    jq.run_daily(job_weekly_forecast,  time=_t("19:00"), days=(6,))            # вс
-    jq.run_daily(job_weekly_events,    time=_t("10:00"), days=(6,))            # вс
 
     logging.info("Bot started")
     app.run_polling(drop_pending_updates=True)
