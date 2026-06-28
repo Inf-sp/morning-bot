@@ -1,9 +1,9 @@
-"""Память пользователя («бот учится на тебе»): фокус дня, фидбек гардероба, наблюдения, Лагом, предпочтения.
+"""Память пользователя («бот учится на тебе»): фидбек гардероба, наблюдения, Лагом, предпочтения.
 
 Тонкий доменный слой поверх профиля в store (config.PROFILE_KEY). Без LLM и сети.
-Профиль - dict на пользователя: {"focus": {...}, "wardrobe_fb": [...], "observations": [...], "lagom": [...], "prefs": [...]}.
+Профиль - dict на пользователя: {"wardrobe_fb": [...], "observations": [...], "lagom": [...], "prefs": [...]}.
 """
-from datetime import date, datetime
+from datetime import datetime
 import json
 import re
 from pathlib import Path
@@ -42,36 +42,6 @@ def add_observation(cid, tag, text):
 def observations(cid, tag=None):
     obs = store.get_profile(cid).get("observations", [])
     return [o for o in obs if tag is None or o.get("tag") == tag]
-
-
-# ---------- фокус дня ----------
-def set_focus(cid, text):
-    """Сохранить фокус на завтра (с датой). Пустой текст - очистка."""
-    prof = store.get_profile(cid)
-    text = (text or "").strip()
-    if text:
-        prof["focus"] = {"date": _today(), "text": text}
-    else:
-        prof.pop("focus", None)
-    store.set_profile(cid, prof)
-
-
-def get_focus(cid):
-    """Сырой фокус {"date","text"} или {}."""
-    return store.get_profile(cid).get("focus", {}) or {}
-
-
-def fresh_focus(cid, max_age_days=1):
-    """Текст фокуса, если он свежий (<= max_age_days от сегодня), иначе ''."""
-    f = get_focus(cid)
-    txt = (f.get("text") or "").strip()
-    if not txt:
-        return ""
-    try:
-        age = (date.fromisoformat(_today()) - date.fromisoformat(f["date"])).days
-    except Exception:
-        return txt
-    return txt if 0 <= age <= max_age_days else ""
 
 
 # ---------- фидбек гардероба ----------

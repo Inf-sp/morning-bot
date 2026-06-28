@@ -683,7 +683,6 @@ async def send_evening_review(bot, cid):
         store.pending_input[cid] = "worry"
         return
     wlist = "\n".join(f"- {w['text']}" for w in worries)
-    focus = ""
     try:
         analysis = await ai.allm(
             "Ты спокойный психолог. Разбери тревоги человека с СДВГ по-доброму, на русском.\n"
@@ -694,26 +693,16 @@ async def send_evening_review(bot, cid):
             "В конце добавь блок:\n"
             "🧠 <b>Итог дня</b>\n{1-2 строки: где факты, а где шум и неопределённость}\n\n"
             "🌿 {тёплая короткая мысль на ночь}\n\n"
-            "В самом конце с новой строки добавь ровно одну строку вида:\n"
-            "FOCUS: <одно конкретное дело или намерение на завтра, коротко, без кавычек>\n\n"
             f"Тревоги:\n{wlist}", 800, 0.6)
         analysis = analysis.replace("**", "").replace("* ", "").strip()
-        m = re.search(r"FOCUS:\s*(.+)", analysis)
-        if m:
-            focus = m.group(1).strip().strip('"«»')
-            analysis = analysis[:m.start()].strip()
     except Exception as e:
         _log.warning("send_evening_review: LLM failed, analysis empty: %s", e)
         analysis = ""
-    if focus:
-        memory.set_focus(cid, focus)
     L = ["🥸 <b>Вечерний разбор</b>", "", "<b>Сегодня тебя беспокоили:</b>"]
     for w in worries:
         L.append(f"• {esc(w['text'])}")
     if analysis:
         L += ["", analysis]
-    if focus:
-        L += ["", f"🎯 <b>Фокус на завтра:</b> {esc(focus)}"]
     rows = [
         [InlineKeyboardButton("🧹 Очистить все тревоги", callback_data="worry_clearall")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_close")],
