@@ -577,17 +577,33 @@ async def health_command(update, context):
     import ai as _ai
     lines = ["<b>🩺 Health check</b>", ""]
 
-    # Env keys
-    keys = {
+    # Env keys — обязательные
+    required = {
         "TELEGRAM_TOKEN": bool(config.TELEGRAM_TOKEN),
         "GEMINI_API_KEY": bool(config.GEMINI_API_KEY),
+        "DATABASE_URL": bool(config.DATABASE_URL),
+        "CHAT_ID": bool(config.CHAT_ID),
+    }
+    lines.append("<b>Обязательные:</b>")
+    for k, ok in required.items():
+        lines.append(f"  {'✅' if ok else '❌'} {k}")
+
+    # Опциональные ключи
+    optional = {
         "ANTHROPIC_API_KEY": bool(config.ANTHROPIC_API_KEY),
         "GROQ_API_KEY": bool(config.GROQ_API_KEY),
-        "DATABASE_URL": bool(config.DATABASE_URL),
+        "OPENAI_API_KEY": bool(config.OPENAI_API_KEY),
+        "OPENROUTER_API_KEY": bool(config.OPENROUTER_API_KEY),
+        "CLOUDFLARE_API_TOKEN": bool(config.CF_API_TOKEN),
+        "CLOUDFLARE_ACCOUNT_ID": bool(config.CF_ACCOUNT_ID),
+        "TAVILY_API_KEY": bool(config.TAVILY_API_KEY),
+        "TMDB_API_KEY": bool(config.TMDB_API_KEY),
+        "TICKETMASTER_API_KEY": bool(config.TICKETMASTER_API_KEY),
+        "ZEROENTROPY_API_KEY": bool(config.ZEROENTROPY_API_KEY),
     }
-    lines.append("<b>Env:</b>")
-    for k, ok in keys.items():
-        lines.append(f"  {'✅' if ok else '❌'} {k}")
+    lines.append("<b>Опциональные:</b>")
+    for k, ok in optional.items():
+        lines.append(f"  {'✅' if ok else '⚪'} {k}")
 
     # DB
     try:
