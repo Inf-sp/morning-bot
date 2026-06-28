@@ -632,18 +632,18 @@ async def export_notes(bot, cid):
 
 async def send_notes(bot, cid):
     notes_list = store.get_list(config.NOTES_KEY, cid)
-    n_plan = sum(1 for n in notes_list if _note_bucket(n) == "plan")
-    plan_label = f"🧳 Мои планы ({n_plan})" if n_plan else "🧳 Мои планы"
+    n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     rows = [
-        [InlineKeyboardButton(plan_label, callback_data="as_bucket_plan")],
-        [InlineKeyboardButton("👕 Мой шкаф", callback_data="set_wardrobe"),
-         InlineKeyboardButton("🧊 Мой холодильник", callback_data="set_fridge")],
-        [InlineKeyboardButton("🗂️ Мой словарь", callback_data="set_dict"),
-         InlineKeyboardButton("🎯 Мой лагом", callback_data="set_lagom")],
-        [InlineKeyboardButton("🎬 Мое кино", callback_data="as_love_movies"),
-         InlineKeyboardButton("🗺️ Мои страны", callback_data="as_love_countries")],
-        [InlineKeyboardButton("🎸 Мои артисты", callback_data="as_love_artists"),
-         InlineKeyboardButton("📖 Мои книги", callback_data="as_love_books")],
+        [InlineKeyboardButton(f"⏳ Позже ({n_fav})", callback_data="as_bucket_fav")],
+        [InlineKeyboardButton("🧳 Мои поездки", callback_data="as_bucket_plan"),
+         InlineKeyboardButton("👕 Мой шкаф", callback_data="set_wardrobe")],
+        [InlineKeyboardButton("🧊 Мой холодильник", callback_data="set_fridge"),
+         InlineKeyboardButton("🗂️ Мой словарь", callback_data="set_dict")],
+        [InlineKeyboardButton("🎯 Мой лагом", callback_data="set_lagom"),
+         InlineKeyboardButton("🎬 Мое кино", callback_data="as_love_movies")],
+        [InlineKeyboardButton("🗺️ Мои страны", callback_data="as_love_countries"),
+         InlineKeyboardButton("🎸 Мои артисты", callback_data="as_love_artists")],
+        [InlineKeyboardButton("📖 Мои книги", callback_data="as_love_books")],
         [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
     ]
     await bot.send_message(chat_id=cid, parse_mode="HTML",
