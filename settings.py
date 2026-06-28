@@ -635,15 +635,14 @@ async def send_notes(bot, cid):
     n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     rows = [
         [InlineKeyboardButton(f"⏳ Позже ({n_fav})", callback_data="as_bucket_fav")],
-        [InlineKeyboardButton("🎚️ Мои поездки", callback_data="as_bucket_plan"),
-         InlineKeyboardButton("🎚️ Мой шкаф", callback_data="set_wardrobe")],
-        [InlineKeyboardButton("🎚️ Мой холодильник", callback_data="set_fridge"),
-         InlineKeyboardButton("🎚️ Мой словарь", callback_data="set_dict")],
-        [InlineKeyboardButton("🎚️ Мой лагом", callback_data="set_lagom"),
-         InlineKeyboardButton("🎚️ Мое кино", callback_data="as_love_movies")],
-        [InlineKeyboardButton("🎚️ Мои страны", callback_data="as_love_countries"),
-         InlineKeyboardButton("🎚️ Мои артисты", callback_data="as_love_artists")],
-        [InlineKeyboardButton("🎚️ Мои книги", callback_data="as_love_books")],
+        [InlineKeyboardButton("👕 Мой шкаф", callback_data="set_wardrobe"),
+         InlineKeyboardButton("🧊 Мой холодильник", callback_data="set_fridge")],
+        [InlineKeyboardButton("🗂️ Мой словарь", callback_data="set_dict"),
+         InlineKeyboardButton("🎯 Мой лагом", callback_data="set_lagom")],
+        [InlineKeyboardButton("🎬 Мое кино", callback_data="as_love_movies"),
+         InlineKeyboardButton("🗺️ Мои страны", callback_data="as_love_countries")],
+        [InlineKeyboardButton("🎸 Мои артисты", callback_data="as_love_artists"),
+         InlineKeyboardButton("📖 Мои книги", callback_data="as_love_books")],
         [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
     ]
     await bot.send_message(chat_id=cid, parse_mode="HTML",
@@ -654,17 +653,17 @@ async def send_plans(bot, cid):
     notes_list = store.get_list(config.NOTES_KEY, cid)
     items = [(i, n) for i, n in enumerate(notes_list) if _note_bucket(n) == "plan"]
     if not items:
-        await bot.send_message(chat_id=cid, text="🧳 <b>Планы</b>\n\nпусто", parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="as_notes")]]))
+        await bot.send_message(chat_id=cid, text="🧳 <b>Мои поездки</b>\n\nпусто", parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_fav")]]))
         return
     rows = []
     for i, n in items:
-        country = (n.get("country") or "План") if isinstance(n, dict) else "План"
+        country = (n.get("country") or "Поездка") if isinstance(n, dict) else "Поездка"
         d = n.get("date", "") if isinstance(n, dict) else ""
         rows.append([InlineKeyboardButton(f"🧳 {d} · {country}"[:40], callback_data=f"as_planview_{i}")])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_fav")])
     await bot.send_message(chat_id=cid, parse_mode="HTML",
-        text="🧳 <b>Планы</b>\n\nСохранённые планы поездок.\n\nВыбери план 👇",
+        text="🧳 <b>Мои поездки</b>\n\nСохранённые планы поездок.\n\nВыбери план 👇",
         reply_markup=InlineKeyboardMarkup(rows))
 
 async def plan_view(bot, cid, i):
@@ -718,7 +717,10 @@ async def send_bucket(bot, cid, bucket):
     if not count:
         txt = ("⏳ <b>Позже </b>\n\n"
                "Пусто — сохраняй интересное кнопкой «⏳ Позже» под ответами.")
-        rows = [[InlineKeyboardButton("◀️ Назад", callback_data="as_notes")]]
+        rows = [
+            [InlineKeyboardButton("🧳 Мои поездки", callback_data="as_bucket_plan")],
+            [InlineKeyboardButton("◀️ Назад", callback_data="as_notes")],
+        ]
         await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                                reply_markup=InlineKeyboardMarkup(rows)); return
     import re as _re
@@ -732,6 +734,7 @@ async def send_bucket(bot, cid, bucket):
         short = preview[:28] + ("…" if len(preview) > 28 else "")
         label = f"{src} · {short}"
         rows.append([InlineKeyboardButton(label, callback_data=f"fav_view_{i}")])
+    rows.append([InlineKeyboardButton("🧳 Мои поездки", callback_data="as_bucket_plan")])
     rows.append([InlineKeyboardButton("❌ Удалить", callback_data="as_clean_fav")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
