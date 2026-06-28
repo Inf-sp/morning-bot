@@ -419,7 +419,7 @@ async def text_router(update, context):
         except Exception as e:
             await verify.safe_error(bot, cid, e)
         return
-    if text == "🍳 Готовка":
+    if text == "🥣 Готовка":
         try:
             await menu.send_food_menu(bot, cid)
         except Exception as e:
