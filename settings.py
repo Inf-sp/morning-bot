@@ -123,7 +123,7 @@ async def _run_notif_test(bot, cid, kind):
         await verify.safe_error(bot, cid, e, skill="notif_test")
 
 
-async def send_notif(bot, cid):
+async def send_notif(bot, cid, q=None):
     rows = []
     for kind, label in NOTIF_TYPES:
         on = notif_on(cid, kind)
@@ -136,18 +136,24 @@ async def send_notif(bot, cid):
     if any_on:
         rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
-    await bot.send_message(chat_id=cid,
-        text="🔔 <b>Уведомления</b>\n\nНажми для включения/выключения. 🔔 — предпросмотр. 🟢 — включено.",
-        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    text = "🔔 <b>Уведомления</b>\n\nНажми для включения/выключения. 🔔 — предпросмотр. 🟢 — включено."
+    kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
 
-async def toggle_notif(bot, cid, kind):
+async def toggle_notif(bot, cid, kind, q=None):
     set_(cid, f"notif_{kind}", not notif_on(cid, kind))
-    await send_notif(bot, cid)
+    await send_notif(bot, cid, q)
 
-async def notif_off_all(bot, cid):
+async def notif_off_all(bot, cid, q=None):
     for kind, _ in NOTIF_TYPES:
         set_(cid, f"notif_{kind}", False)
-    await send_notif(bot, cid)
+    await send_notif(bot, cid, q)
 
 async def send_lang(bot, cid):
     cur = study_lang(cid)
@@ -345,13 +351,13 @@ async def handle_callback(bot, cid, data, q=None):
         import balance
         await balance.send_fridge(bot, cid, back="m_food")
     elif data == "set_notif":
-        await send_notif(bot, cid)
+        await send_notif(bot, cid, q)
     elif data.startswith("set_notiftgl_"):
-        await toggle_notif(bot, cid, data[len("set_notiftgl_"):])
+        await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
     elif data.startswith("set_notiftest_"):
         await _run_notif_test(bot, cid, data[len("set_notiftest_"):])
     elif data == "set_notif_off_all":
-        await notif_off_all(bot, cid)
+        await notif_off_all(bot, cid, q)
     elif data == "set_lang":
         await send_lang(bot, cid)
     elif data == "set_lang_nl":
