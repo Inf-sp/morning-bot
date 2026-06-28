@@ -143,16 +143,18 @@ def menu_screen(key):
 
 
 async def send_food_menu(bot, cid):
-    import asyncio
-    import balance
-    tip = await asyncio.to_thread(balance.fetch_food_tip, cid)
-    header = "🍳 <b>Готовка</b>"
-    body = f"\n\n{tip}" if tip else ""
     kb = _ikb([
         [("🍳 Завтрак", "a_food_breakfast"), ("🥗 Обед", "a_food_lunch"), ("🍽️ Ужин", "a_food_dinner")],
         [("🥕 Из того что есть", "as_fridge_cook")],
         [("🧊 Холодильник", "set_fridge_g")],
-        [("◀️ Назад", "m_close")],
     ])
-    await bot.send_message(chat_id=cid, text=header + body,
-                           parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(
+        chat_id=cid,
+        text=(
+            "🍳 <b>Готовка</b>\n\n"
+            "Еда без хаоса. Соберу понятное меню на день, разберу холодильник и честно скажу, что с ним не так."
+            + _MENU_FOOTER
+        ),
+        parse_mode="HTML",
+        reply_markup=kb,
+    )

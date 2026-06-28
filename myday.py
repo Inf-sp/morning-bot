@@ -310,9 +310,9 @@ def _build_day_text(cid):
     if wind_avg >= 8:
         wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
         wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
-        wind_str = f" • {wemoji} {wword}{wind_when} {wind_avg:.0f} м/с"
+        wind_str = f"{wemoji} {wword}{wind_when} {wind_avg:.0f} м/с"
     else:
-        wind_str = f" • 💨 Ветер {wind_avg:.0f} м/с"
+        wind_str = f"💨 Ветер {wind_avg:.0f} м/с"
 
     now = datetime.now(TZ)
     weekday_name = _WEEKDAYS[now.weekday()]
