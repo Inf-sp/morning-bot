@@ -543,6 +543,20 @@ async def set_city_text(bot, cid, name, show_brief=True):
         v = v.strip()
         if v and v not in variants:
             variants.append(v)
+    # LLM-нормализация: "Питер" → "Санкт-Петербург", "Лондон" → "London" и т.п.
+    try:
+        official = await ai.allm(
+            f"Какое официальное название у города «{raw}»? "
+            "Если это прозвище или сокращение (Питер, Нью-Йорк, Первопрестольная…), "
+            "верни официальное название. Если уже официальное — верни как есть. "
+            "Только название, без пояснений.",
+            40, 0.1, tier="cheap"
+        )
+        official = official.strip().strip("«»\"'.").split("\n")[0].strip()
+        if official and official.lower() not in {v.lower() for v in variants}:
+            variants.insert(0, official)
+    except Exception:
+        pass
     try:
         res = None
         # 1) Open-Meteo geocoder: по вариантам и языкам
@@ -585,13 +599,26 @@ async def set_city_text(bot, cid, name, show_brief=True):
         c = res[0]
         country = c.get("country", "")
         cc = c.get("country_code", "")
-        store.set_settings(cid, c["latitude"], c["longitude"], c["name"], country, cc)
+        city_name = c["name"]
+        try:
+            hint = f" ({country})" if country else ""
+            ru = await ai.allm(
+                f"Как правильно пишется название города «{city_name}»{hint} на русском языке, "
+                "как в Википедии? Ответь ТОЛЬКО названием города, без пояснений.",
+                40, 0.1, tier="cheap"
+            )
+            ru = ru.strip().strip("«»\"'.").split("\n")[0].strip()
+            if ru and len(ru) <= 80 and not any(ch.isdigit() for ch in ru):
+                city_name = ru
+        except Exception:
+            pass
+        store.set_settings(cid, c["latitude"], c["longitude"], city_name, country, cc)
         try:
             import myday
             myday.reset_day_cache(cid)
         except Exception:
             pass
-        await bot.send_message(chat_id=cid, text=f"✅ Готово. Город переключён на {c['name']}"
+        await bot.send_message(chat_id=cid, text=f"✅ Готово. Город переключён на {city_name}"
                                                  + (f", {country}." if country else "."))
         # сразу показываем обновлённую сводку "Мой день" (не во время онбординга)
         if show_brief:
