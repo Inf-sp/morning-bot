@@ -365,7 +365,7 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_lang_en":
         await set_lang(bot, cid, "английский")
     elif data == "set_levels":
-        await learning.send_levels(bot, cid, back="set_home")
+        await learning.send_levels(bot, cid, q=q, back="set_home")
     elif data == "set_city":
         store.pending_input[cid] = "setcity"
         await bot.send_message(chat_id=cid, text="🌍 Напиши город - переключу.")
@@ -635,14 +635,14 @@ async def send_notes(bot, cid):
     n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     rows = [
         [InlineKeyboardButton(f"⏳ Позже ({n_fav})", callback_data="as_bucket_fav")],
-        [InlineKeyboardButton("🎚️ Мой шкаф", callback_data="set_wardrobe"),
-         InlineKeyboardButton("🎚️ Мой холодильник", callback_data="set_fridge")],
-        [InlineKeyboardButton("🎚️ Мой словарь", callback_data="set_dict"),
-         InlineKeyboardButton("🎚️ Мой лагом", callback_data="set_lagom")],
-        [InlineKeyboardButton("🎚️ Мое кино", callback_data="as_love_movies"),
-         InlineKeyboardButton("🎚️ Мои страны", callback_data="as_love_countries")],
-        [InlineKeyboardButton("🎚️ Мои артисты", callback_data="as_love_artists"),
-         InlineKeyboardButton("🎚️ Мои книги", callback_data="as_love_books")],
+        [InlineKeyboardButton("🎚️ Шкаф", callback_data="set_wardrobe"),
+         InlineKeyboardButton("🎚️ Холодильник", callback_data="set_fridge")],
+        [InlineKeyboardButton("🎚️ Словарь", callback_data="set_dict"),
+         InlineKeyboardButton("🎚️ Лагом", callback_data="set_lagom")],
+        [InlineKeyboardButton("🎚️ Кино", callback_data="as_love_movies"),
+         InlineKeyboardButton("🎚️ Страны", callback_data="as_love_countries")],
+        [InlineKeyboardButton("🎚️ Артисты", callback_data="as_love_artists"),
+         InlineKeyboardButton("🎚️ Книги", callback_data="as_love_books")],
         [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
     ]
     await bot.send_message(chat_id=cid, parse_mode="HTML",
@@ -653,7 +653,7 @@ async def send_plans(bot, cid):
     notes_list = store.get_list(config.NOTES_KEY, cid)
     items = [(i, n) for i, n in enumerate(notes_list) if _note_bucket(n) == "plan"]
     if not items:
-        await bot.send_message(chat_id=cid, text="🧳 <b>Мои поездки</b>\n\nпусто", parse_mode="HTML",
+        await bot.send_message(chat_id=cid, text="🧳 <b> Поездки</b>\n\nпусто", parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_fav")]]))
         return
     rows = []
