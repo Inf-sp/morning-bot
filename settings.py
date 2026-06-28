@@ -51,7 +51,6 @@ def home_kb(cid):
     rows = [
         [InlineKeyboardButton("🌍 Сменить город", callback_data="set_city")],
         [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
-        [InlineKeyboardButton("🎚 Уровень языков", callback_data="set_levels")],
     ]
     if config.CHAT_ID and str(cid) == str(config.CHAT_ID):
         rows.append([InlineKeyboardButton("🔐 Администратор", callback_data="set_admin")])

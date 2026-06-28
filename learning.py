@@ -692,6 +692,7 @@ async def send_dict_lang(bot, cid, lang):
         [InlineKeyboardButton("❌ Удалить слово", callback_data=f"a_dictedit_{lang}_word")],
         [InlineKeyboardButton("❌ Удалить фразу", callback_data=f"a_dictedit_{lang}_phrase")],
         [InlineKeyboardButton("📝 Мои темы", callback_data=f"gm_custom_{lang}")],
+        [InlineKeyboardButton("🎚 Уровень языка", callback_data="a_levels")],
         [InlineKeyboardButton("◀️ Назад", callback_data="a_dict")],
     ]
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
