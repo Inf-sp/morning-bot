@@ -7,17 +7,16 @@ from util import esc
 
 SETTINGS_KEY = "user_settings.json"
 NOTIF_TYPES = [
-    ("morning_brief", "☀️ Утренний бриф (07:30)"),
-    ("weather_warn",  "⚠️ Погодное предупреждение (08:15)"),
-    ("lagom_daily",   "🍃 Лагом дня (09:00)"),
-    ("grammar",       "📚 Слова дня (11:00)"),
-    ("recipe_daily",  "🍽️ Рецепт дня (12:30)"),
-    ("checkin_day",   "🫣 Дневная разгрузка (14:00)"),
-    ("vocab_review",  "📖 Повтор словаря (21:00)"),
-    ("checkin_eve",   "🥸 Вечерний разбор (22:00)"),
-    ("weekly_forecast","🌍 Недельный прогноз (вс 19:00)"),
-    ("evening_weather","🌙 Погода на завтра (19:00)"),
+    ("morning_brief",  "☀️ Утренний бриф (08:30)"),
+    ("weather_warn",   "🌧 Погодное предупреждение (08:45)"),
+    ("lagom_daily",    "☕️ Лагом дня (09:00)"),
     ("weekly_events",  "🎵 События следующей недели (вс 10:00)"),
+    ("grammar",        "📚 Слово/фраза дня (11:00)"),
+    ("recipe_daily",   "🍽️ Рецепт дня (12:30)"),
+    ("checkin_day",    "🫣 Дневная разгрузка (14:00)"),
+    ("weekly_forecast","🌍 Недельный прогноз (вс 19:00)"),
+    ("vocab_review",   "📖 Повтор словаря (21:00)"),
+    ("checkin_eve",    "🥸 Вечерний разбор (22:00)"),
 ]
 STYLES = [
     "минимализм",
@@ -69,7 +68,7 @@ async def _run_notif_test(bot, cid, kind):
     try:
         if kind == "morning_brief":
             import weather as _w
-            await _w.send_weather(bot, cid, "today")
+            await _w.send_weather(bot, cid, "tomorrow_plain")
             await learning.send_morning_word(bot, cid)
         elif kind == "weather_warn":
             import weather as _w
@@ -113,9 +112,6 @@ async def _run_notif_test(bot, cid, kind):
         elif kind == "weekly_forecast":
             import weather as _w
             await _w.send_weather(bot, cid, "week")
-        elif kind == "evening_weather":
-            import weather as _w
-            await _w.send_weather(bot, cid, "tomorrow_plain")
         elif kind == "weekly_events":
             import leisure as _l
             await _l.send_weekly_events(bot, cid)

@@ -398,22 +398,15 @@ async def send_weather(bot, cid, mode="today"):
             fact = _world_fact()
             if fact:
                 L += ["", esc(fact)]
-        if mode == "tomorrow":
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
-                [InlineKeyboardButton("◀️ Назад", callback_data="a_plany")],
-            ])
-        else:
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
         return
 
     if mode == "tomorrow_plain":
-        # Рассылка 19:00 — погода на завтра без лишних кнопок
         day = 1
         dt = now + timedelta(days=1)
         flag = __import__("util").flag_from_cc(s.get("cc", "")) or ""
-        header = f"🌙 Погода на завтра • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} • {s['city']} {flag}"
+        header = f"Погода на завтра • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} • {s['city']} {flag}"
         code = d["weathercode"][day]
         tmax = d["temperature_2m_max"][day]
         rain = d["precipitation_probability_max"][day] or 0
@@ -435,74 +428,79 @@ async def send_weather(bot, cid, mode="today"):
         if alert:
             L += ["", alert]
         else:
-            mf = _meteo_fact(s["city"], tmax, rain, wind_ms, desc,
-                             country=s.get("country", ""), cc=cc,
-                             lat=s["lat"], lon=s["lon"], tz=str(TZ))
-            if mf:
-                L += ["", "🌡️ <b>Метео-факт</b>", esc(mf)]
+            try:
+                rain_desc = f"дождь {rain:.0f}%{rain_when}" if _rain_real(rain, rain_mm) else "без осадков"
+                summary = ai.llm(
+                    f"Погода завтра в {s['city']}: {desc}, до {tmax:+.0f}°C, {rain_desc}, "
+                    f"ветер {wind_avg:.0f} м/с.\n\n"
+                    "Напиши короткий метео-итог: 2-3 предложения — общая картина, что ждать. "
+                    "Без слова 'зонт'. Без markdown. На русском.",
+                    150, 0.6, tier="cheap"
+                ).strip()
+                if summary:
+                    L += ["", "🌡️ <b>Метео-итог</b>", esc(summary)]
+            except Exception:
+                pass
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
         return
 
-    # week: сегодня — в «Мой день», завтра — в «Погода на завтра»; неделя с послезавтра
-    _SKIP = 2
+    # week: 7 дней начиная с завтра, каждый день — отдельный блок
+    _SKIP = 1
     d1 = now + timedelta(days=_SKIP)
     d2 = now + timedelta(days=_SKIP + 6)
     if d1.month == d2.month:
         rng = f"{d1.day}–{d2.day} {_MONTHS[d1.month-1]}"
     else:
         rng = f"{d1.day} {_MONTHS[d1.month-1]} – {d2.day} {_MONTHS[d2.month-1]}"
-    tmins = d["temperature_2m_min"][_SKIP:_SKIP+7]
-    tmaxs = d["temperature_2m_max"][_SKIP:_SKIP+7]
-    rains = d["precipitation_probability_max"][_SKIP:_SKIP+7]
-    rmms = (d.get("precipitation_sum") or [None] * 9)[_SKIP:_SKIP+7]
-    winds = d["windspeed_10m_max"][_SKIP:_SKIP+7]
-    codes = d["weathercode"][_SKIP:_SKIP+7]
     flag = __import__("util").flag_from_cc(s.get("cc", ""))
-    _SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    _DAY_LABELS = ["Завтра", "Послезавтра"]
 
-    def _day_range_str(indices):
-        if not indices:
-            return ""
-        shorts = [_SHORT[(now + timedelta(days=i + _SKIP)).weekday()] for i in indices]
-        if len(shorts) == 1:
-            return shorts[0]
-        is_consec = all(indices[j+1] == indices[j]+1 for j in range(len(indices)-1))
-        return f"{shorts[0]}–{shorts[-1]}" if is_consec else ", ".join(shorts)
+    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>"]
 
-    # раскладка дней по рубрикам; приоритет: шторм > жара > дождь > комфорт
-    storm_i, hot_i, wet_i, comfort_i = [], [], [], []
+    week_summary_lines = []   # для LLM-итога
     for i in range(7):
-        t = tmaxs[i] or 0
-        rp = rains[i] or 0
-        mm = rmms[i]
-        wd = winds[i] or 0
-        code = codes[i]
-        is_storm = (wd > STORM_WIND_MS) or (code in SNOW_CODES) or (code in HEAVY_RAIN_CODES) \
-                   or (mm is not None and mm >= 15)
-        if is_storm:
-            storm_i.append(i)
-        elif t > 25:
-            hot_i.append(i)
-        elif _rain_real(rp, mm):
-            wet_i.append(i)
+        idx = _SKIP + i
+        if idx >= len(d["weathercode"]):
+            break
+        dt_i = now + timedelta(days=idx)
+        code = d["weathercode"][idx]
+        tmax = d["temperature_2m_max"][idx] or 0
+        rain = d["precipitation_probability_max"][idx] or 0
+        rain_mm = (d.get("precipitation_sum") or [None] * 10)[idx]
+        day_str = d["time"][idx]
+        wind_avg = _daytime_avg_wind(data, day_str) or (d["windspeed_10m_max"][idx] or 0)
+        icon = weather_icon(code, tmax, rain, d["windspeed_10m_max"][idx] or 0, rain_mm)
+        rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
+        rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
+        rain_block = f"Дождь{rain_when} {rain:.0f}% • " if _rain_real(rain, rain_mm) else ""
+        wind_str = f"💨 Ветер {wind_avg:.0f} м/с"
+        if i < len(_DAY_LABELS):
+            label = _DAY_LABELS[i]
         else:
-            comfort_i.append(i)
+            label = _WEEKDAYS[dt_i.weekday()]
+        date_str = f"{dt_i.day} {_MONTHS[dt_i.month - 1]}"
+        L += ["", f"{icon} <b>{esc(label)}, {date_str}</b>",
+              f"До {tmax:+.0f}°C • {rain_block}{wind_str}"]
+        week_summary_lines.append(
+            f"{label}: {DESC.get(code, '')}, до {tmax:+.0f}°C, "
+            + (f"дождь {rain:.0f}%{rain_when}, " if _rain_real(rain, rain_mm) else "")
+            + f"ветер {wind_avg:.0f} м/с"
+        )
 
-    def _gtmax(indices):
-        return max(tmaxs[i] for i in indices) if indices else 0
+    # LLM-итог недели
+    try:
+        week_data_str = "\n".join(week_summary_lines)
+        summary = ai.llm(
+            f"Погода на неделю в {s['city']}:\n{week_data_str}\n\n"
+            "Напиши короткий метео-итог: 2-3 предложения про общую картину недели — "
+            "температура, осадки, динамика. Без слова 'зонт'. Без markdown. На русском.",
+            200, 0.6, tier="cheap"
+        ).strip()
+        if summary:
+            L += ["", "🌡️ <b>Метео-итог</b>", esc(summary)]
+    except Exception:
+        pass
 
-    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", ""]
-    groups = []
-    if storm_i:
-        groups.append((min(storm_i), f"⚠️ {esc(_day_range_str(storm_i))}: до {_gtmax(storm_i):+.0f}°C — шторм, осторожно"))
-    if comfort_i:
-        groups.append((min(comfort_i), f"☀️ {esc(_day_range_str(comfort_i))}: до {_gtmax(comfort_i):+.0f}°C — комфортно"))
-    if wet_i:
-        groups.append((min(wet_i), f"🌧️ {esc(_day_range_str(wet_i))}: до {_gtmax(wet_i):+.0f}°C — возможны дожди"))
-    if hot_i:
-        groups.append((min(hot_i), f"🔥 {esc(_day_range_str(hot_i))}: до {_gtmax(hot_i):+.0f}°C — жара, осторожно"))
-    groups.sort(key=lambda x: x[0])
-    L.extend(line for _, line in groups)
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
     await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
 
