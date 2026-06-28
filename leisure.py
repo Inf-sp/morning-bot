@@ -758,14 +758,25 @@ async def send_listen(bot, cid):
              | set(str(d).lower() for d in disliked) | set(str(s).lower() for s in music_seen))
     avoid_all = ", ".join(list(arts) + booked + [str(d) for d in disliked] + [str(s) for s in music_seen])[:600]
     await bot.send_message(chat_id=cid, text="Подбираю исполнителя под твой вкус...")
+    web_block = ""
+    web = research.tavily_snippet(
+        f"new music similar to {anchors[:60]} indie alternative recommendations 2024 2025",
+        max_chars=500,
+    )
+    if web:
+        web_block = (
+            f"\nАктуальные данные из сети (используй для реальных названий треков и альбомов):\n{web}\n"
+        )
     data = None
     for _ in range(3):
         try:
             cand = ai.llm_json(
                 f"Любимые исполнители пользователя (его вкус): {anchors}.\n"
                 f"НЕ предлагай никого из этого списка (уже в закладках/любимых/отклонены): {avoid_all}.\n"
+                f"{web_block}"
                 "Предложи РОВНО ОДНОГО НОВОГО исполнителя, максимально близкого по вкусу "
                 "(электроника, синтипоп, альт, дрим-поп, дарквейв, арт-поп и близкое).\n"
+                "Треки указывай ТОЛЬКО реально существующие — без выдуманных названий.\n"
                 "Верни строго такой JSON:\n"
                 '{"artist": "имя исполнителя", '
                 '"desc": "1-2 строки образно о звучании", '
