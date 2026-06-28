@@ -862,10 +862,116 @@ async def find_concerts(bot, cid, mode="home"):
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 
 async def send_weekly_events(bot, cid):
-    """Пн 09:00 — Досуг на неделю: фильм + музыка."""
-    await bot.send_message(chat_id=cid, text="🎬 <b>Досуг на эту неделю</b>", parse_mode="HTML")
-    await send_recos(bot, cid, "movie")
-    await send_listen(bot, cid)
+    """Вс 10:00 — концерты артистов пользователя + кинопремьеры ближайших дней."""
+    import requests
+    from datetime import datetime, timedelta
+    from util import _MONTHS
+
+    s = store.get_settings(cid)
+    cc = (s.get("cc") or "NL").upper()
+    flag = util.flag_from_cc(cc) or "🏳"
+    cname = s.get("country") or "твоя страна"
+    now = datetime.now(config.TZ)
+    today_str = now.strftime("%Y-%m-%d")
+    date_to_str = (now + timedelta(days=21)).strftime("%Y-%m-%d")
+
+    def _fmt_date(ds):
+        try:
+            y, m, dd = ds.split("-")
+            return f"{int(dd)} {_MONTHS[int(m)-1]} {y}"
+        except Exception:
+            return ds
+
+    lines = ["🎵 <b>События следующей недели</b>", "", "Вот что я нашёл для тебя на ближайшие дни:", ""]
+
+    # --- Концерты ---
+    concert_lines = []
+    if config.TICKETMASTER_API_KEY:
+        artists = _ensure_artists(cid)
+        if artists:
+            TRIBUTE = ("tribute", "cover", "covers", "candlelight", "songs of", "the music of",
+                       "performed by", "celebrating", "by candle", "symphonic")
+            found = {}
+            seen_pairs = set()
+            date_from_tm = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            date_to_tm = (now + timedelta(days=21)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            for a in artists[:40]:
+                try:
+                    r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json",
+                        params={"apikey": config.TICKETMASTER_API_KEY, "keyword": a,
+                                "countryCode": cc, "classificationName": "music",
+                                "startDateTime": date_from_tm, "endDateTime": date_to_tm,
+                                "size": 3, "sort": "date,asc"}, timeout=15)
+                    for e in r.json().get("_embedded", {}).get("events", []):
+                        al = a.lower()
+                        name_l = e.get("name", "").lower()
+                        attractions = [att.get("name", "").lower()
+                                       for att in (e.get("_embedded", {}).get("attractions") or [])]
+                        attr_match = any(al in nm or nm in al for nm in attractions)
+                        if any(k in name_l for k in TRIBUTE):
+                            continue
+                        if not (al in name_l or attr_match):
+                            continue
+                        date_str = e.get("dates", {}).get("start", {}).get("localDate", "")
+                        pair = (al, date_str)
+                        if pair in seen_pairs:
+                            continue
+                        seen_pairs.add(pair)
+                        e["_artist"] = a
+                        found[e.get("id")] = e
+                except Exception:
+                    continue
+            events = sorted(found.values(),
+                            key=lambda e: e.get("dates", {}).get("start", {}).get("localDate", "9999"))
+            for e in events[:5]:
+                artist = e.get("_artist", "")
+                date_str = e.get("dates", {}).get("start", {}).get("localDate", "")
+                ven = (e.get("_embedded", {}).get("venues") or [{}])[0]
+                vn = ven.get("name", "")
+                city = (ven.get("city") or {}).get("name", "")
+                concert_lines.append(f"• <b>{esc(artist)}</b>")
+                venue_str = ", ".join(x for x in [vn, city] if x)
+                if venue_str:
+                    concert_lines.append(f"  {esc(venue_str)}")
+                if date_str:
+                    concert_lines.append(f"  {_fmt_date(date_str)}")
+                concert_lines.append("")
+
+    if concert_lines:
+        lines += ["🎤 <b>Концерты твоих исполнителей</b>", ""]
+        lines += concert_lines
+
+    # --- Кинопремьеры ---
+    movie_lines = []
+    if config.TMDB_API_KEY:
+        try:
+            r = requests.get("https://api.themoviedb.org/3/movie/upcoming",
+                params={"api_key": config.TMDB_API_KEY, "language": "ru-RU",
+                        "region": cc, "page": 1}, timeout=15)
+            results = r.json().get("results", [])
+            upcoming = [m for m in results
+                        if today_str <= m.get("release_date", "") <= date_to_str and m.get("title")]
+            upcoming.sort(key=lambda m: m.get("release_date", ""))
+            for m in upcoming[:5]:
+                title = m.get("title", "")
+                year = m.get("release_date", "")[:4]
+                movie_lines.append(f"• <b>{esc(title)} ({year})</b>")
+                movie_lines.append(f"  {_fmt_date(m.get('release_date', ''))}")
+                movie_lines.append("")
+        except Exception:
+            pass
+
+    if movie_lines:
+        lines += ["🎬 <b>Новые премьеры в кино</b>", ""]
+        lines += movie_lines
+
+    lines.append(f"📍 <i>Подбираю под твою страну: {esc(cname)} {flag}</i>")
+
+    if not concert_lines and not movie_lines:
+        lines = ["🎵 <b>События следующей недели</b>", "",
+                 f"Для {esc(cname)} ничего не нашёл на ближайшие дни."]
+
+    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML")
 
 
 async def concert_pick_country(bot, cid):
