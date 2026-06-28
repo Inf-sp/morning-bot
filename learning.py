@@ -691,6 +691,7 @@ async def send_dict_lang(bot, cid, lang):
         [InlineKeyboardButton("📝 Добавить новое слово или фразу", callback_data=f"a_dictadd_{lang}")],
         [InlineKeyboardButton("❌ Удалить слово", callback_data=f"a_dictedit_{lang}_word")],
         [InlineKeyboardButton("❌ Удалить фразу", callback_data=f"a_dictedit_{lang}_phrase")],
+        [InlineKeyboardButton("📝 Мои темы", callback_data=f"gm_custom_{lang}")],
         [InlineKeyboardButton("◀️ Назад", callback_data="a_dict")],
     ]
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
@@ -1096,26 +1097,32 @@ async def game_reveal(bot, cid, q):
 
 
 # ================= УРОВЕНЬ (/setup) =================
-def _levels_kb(nl_lvl, en_lvl):
+def _levels_kb(nl_lvl, en_lvl, back="set_home"):
     def _row(code, cur):
-        return [InlineKeyboardButton(("✅ " if l == cur else "") + l, callback_data=f"lvl_{code}_{l}")
-                for l in LEVELS]
+        hard = _is_b1plus(cur)
+        flag = "🇳🇱" if code == "nl" else "🇬🇧"
+        return [
+            InlineKeyboardButton(("✅ " if not hard else "") + f"{flag} Лёгкий", callback_data=f"lvl_{code}_A2"),
+            InlineKeyboardButton(("✅ " if hard else "") + f"{flag} Сложный", callback_data=f"lvl_{code}_B1"),
+        ]
     return InlineKeyboardMarkup([
         _row("nl", nl_lvl),
         _row("en", en_lvl),
-        [InlineKeyboardButton("◀️ Назад", callback_data="set_home")],
+        [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ])
 
-async def send_levels(bot, cid, q=None):
+async def send_levels(bot, cid, q=None, back="set_home"):
     nl_lvl = store.get_level(cid, "нидерландский")
     en_lvl = store.get_level(cid, "английский")
+    nl_label = "Сложный (B1+)" if _is_b1plus(nl_lvl) else "Лёгкий (A1–A2)"
+    en_label = "Сложный (B1+)" if _is_b1plus(en_lvl) else "Лёгкий (A1–A2)"
     text = (
         "🎚 <b>Уровень языков</b>\n\n"
-        f"🇳🇱 Нидерландский: <b>{nl_lvl}</b>\n"
-        f"🇬🇧 Английский: <b>{en_lvl}</b>\n\n"
+        f"🇳🇱 Нидерландский: <b>{nl_label}</b>\n"
+        f"🇬🇧 Английский: <b>{en_label}</b>\n\n"
         "Нажми уровень чтобы изменить:"
     )
-    kb = _levels_kb(nl_lvl, en_lvl)
+    kb = _levels_kb(nl_lvl, en_lvl, back)
     if q is not None:
         try:
             await q.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
@@ -1313,13 +1320,10 @@ async def gm_send_lang(bot, cid, code):
     lang = _gm_lang(code)
     flag = _LANG_FLAG[lang]
     rows = [
-        [("📘 A1 · Основы", f"gm_level_{code}_A1")],
-        [("📙 A2 · Продолжение", f"gm_level_{code}_A2")],
-        [("📗 B1 · Уверенный", f"gm_level_{code}_B1")],
-        [("📝 Мои темы", f"gm_custom_{code}")],
-        [("⬅️ Назад", "gm_home")],
+        [("📗 Лёгкий · A1–A2", f"gm_level_{code}_easy")],
+        [("📘 Сложный · B1+", f"gm_level_{code}_hard")],
+        [("◀️ Назад", f"m_{code}")],
     ]
-    # De/Het теперь в основном меню Обучение, не здесь
     await bot.send_message(
         chat_id=cid,
         text=f"📘 <b>Грамматика · {flag} {lang.capitalize()}</b>\n\nВыбери курс:",
@@ -1333,20 +1337,25 @@ async def gm_send_level(bot, cid, code, level):
     flag = _LANG_FLAG[lang]
     topics = _gm_ensure_system_topics(cid, lang)
     prog = _gm_progress(cid)
-    level_topics = [t for t in topics if t.get("level") == level and t.get("system")]
+
+    if level == "easy":
+        level_topics = [t for t in topics if t.get("level") in ("A1", "A2") and t.get("system")]
+        title = "📗 Лёгкий · A1–A2"
+    else:  # hard
+        level_topics = [t for t in topics if t.get("level") == "B1" and t.get("system")]
+        title = "📘 Сложный · B1+"
 
     rows = []
     for t in level_topics:
         status = prog.get(t["id"], "new")
         icon = "✅" if status == "done" else ("📍" if status == "current" else "▸")
         rows.append([(f"{icon} {t['title']}", f"gm_topic_{t['id']}")])
-    rows.append([("⬅️ Назад", f"gm_lang_{code}")])
+    rows.append([("◀️ Назад", f"gm_lang_{code}")])
 
-    emoji = _LEVEL_EMOJI.get(level, "📘")
     done_count = sum(1 for t in level_topics if prog.get(t["id"]) == "done")
     await bot.send_message(
         chat_id=cid,
-        text=f"{emoji} <b>{level} · {flag} {lang.capitalize()}</b>\n\n{done_count}/{len(level_topics)} пройдено",
+        text=f"{title} · {flag} {lang.capitalize()}\n\n{done_count}/{len(level_topics)} пройдено",
         parse_mode="HTML",
         reply_markup=_ikb(rows),
     )
@@ -1506,7 +1515,7 @@ async def gm_send_custom(bot, cid, code):
             ("❌", f"gm_deltopic_{t['id']}"),
         ])
     rows.append([("📝 Добавить тему", f"gm_addtopic_{code}")])
-    rows.append([("⬅️ Назад", f"gm_lang_{code}")])
+    rows.append([("◀️ Назад", f"a_dictlang_{code}")])
 
     header = f"📝 <b>Мои темы · {flag} {lang.capitalize()}</b>"
     body = "\n\nСвоих тем пока нет. Добавь первую!" if not topics else ""
@@ -1587,7 +1596,7 @@ async def dehet_answer(bot, cid, q, chosen):
             mark = "✅" if r["ok"] else f"❌ ({r['article']})"
             lines.append(f"{mark} <b>{esc(r['word'])}</b> — {r['article']}")
         store.dehet_state.pop(cid, None)
-        kb = _ikb([[("🔄 Ещё раз", "dh_start"), ("⬅️ Назад", "gm_lang_nl")]])
+        kb = _ikb([[("🔄 Ещё раз", "dh_start"), ("◀️ Назад", "m_nl")]])
         try:
             await q.edit_message_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
         except Exception:

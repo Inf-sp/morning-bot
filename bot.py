@@ -202,7 +202,7 @@ async def answer_callback(update, context):
             elif act == "game":
                 await learning.game_start(bot, cid)
             elif act == "levels":
-                await learning.send_levels(bot, cid)
+                await learning.send_levels(bot, cid, back="m_learn")
             elif act == "w_today":
                 await weather.send_weather(bot, cid, "today")
             elif act == "w_tomorrow":
