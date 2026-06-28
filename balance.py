@@ -311,19 +311,19 @@ async def send_fridge(bot, cid, q=None):
         available = sum(1 for it in items if it.get("on", True))
         by_cat = _fridge_by_cat(items)
         txt = f"🧊 <b>Мой холодильник</b> · {len(items)} продуктов · {available} в наличии\n\nВыбери категорию:"
-        rows = []
+        cat_btns = []
         for ci, cat in enumerate(_CAT_ORDER):
             if cat not in by_cat:
                 continue
             cat_items = by_cat[cat]
             on_cnt = sum(1 for _, it in cat_items if it.get("on", True))
             emoji = _CAT_EMOJI.get(cat, "📦")
-            rows.append([InlineKeyboardButton(
+            cat_btns.append(InlineKeyboardButton(
                 f"{emoji} {cat.capitalize()} · {on_cnt}/{len(cat_items)}",
                 callback_data=f"as_fridge_cat_{ci}_0"
-            )])
+            ))
+        rows = [cat_btns[i:i + 3] for i in range(0, len(cat_btns), 3)]
         rows.append([InlineKeyboardButton("📝 Добавить продукты", callback_data="as_fridge_add")])
-        rows.append([InlineKeyboardButton("🧊 Рецепт из остатков", callback_data="as_fridge_cook")])
         rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_food")])
 
     kb = InlineKeyboardMarkup(rows)
@@ -873,7 +873,7 @@ async def retry(bot, cid):
     await bot.send_chat_action(chat_id=cid, action="typing")
     nudge = hist + [{"role": "user", "content": "Продолжи мысль или дай более полезный вариант."}]
     try:
-        answer = await ai.achat_chain(nudge)
+        answer = await ai.achat_chain(nudge, cid)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     hist.append({"role": "assistant", "content": answer})

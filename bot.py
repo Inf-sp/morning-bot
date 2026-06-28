@@ -28,6 +28,16 @@ from util import ack_loading as _ack
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID
 
+class _NokbBot:
+    """Обёртка для push-джобов: убирает reply_markup из всех send_* (кнопки не нужны в уведомлениях)."""
+    def __init__(self, bot): self._bot = bot
+    def __getattr__(self, name):
+        orig = getattr(self._bot, name)
+        if name in ("send_message", "send_photo", "send_document", "send_animation", "send_chat_action"):
+            async def _w(*a, **kw): kw.pop("reply_markup", None); return await orig(*a, **kw)
+            return _w
+        return orig
+
 
 
 _WELCOME = menu.WELCOME
@@ -634,8 +644,9 @@ async def job_morning_brief(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "morning_brief"):
             continue
         try:
-            await weather.send_weather(context.bot, cid, "today")
-            await learning.send_morning_word(context.bot, cid)
+            bot = _NokbBot(context.bot)
+            await weather.send_weather(bot, cid, "today")
+            await learning.send_morning_word(bot, cid)
         except Exception:
             logging.exception("job_morning_brief failed for cid=%s", cid)
 
@@ -672,7 +683,7 @@ async def job_lagom(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "lagom_daily"):
             continue
         try:
-            await balance.send_motiv_push(context.bot, cid)
+            await balance.send_motiv_push(_NokbBot(context.bot), cid)
         except Exception:
             logging.exception("job_lagom failed for cid=%s", cid)
 
@@ -681,7 +692,7 @@ async def job_grammar(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "grammar"):
             continue
         try:
-            await learning.send_morning_word(context.bot, cid)
+            await learning.send_morning_word(_NokbBot(context.bot), cid)
         except Exception:
             logging.exception("job_grammar failed for cid=%s", cid)
 
@@ -702,7 +713,7 @@ async def job_recipe(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "recipe_daily"):
             continue
         try:
-            await balance.send_recipe_push(context.bot, cid)
+            await balance.send_recipe_push(_NokbBot(context.bot), cid)
         except Exception:
             logging.exception("job_recipe failed for cid=%s", cid)
 
@@ -711,7 +722,7 @@ async def job_vocab_review(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "vocab_review"):
             continue
         try:
-            await learning.send_vocab_review(context.bot, cid)
+            await learning.send_vocab_review(_NokbBot(context.bot), cid)
         except Exception:
             logging.exception("job_vocab_review failed for cid=%s", cid)
 
@@ -720,7 +731,7 @@ async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "checkin_eve"):
             continue
         try:
-            await balance.send_evening_review(context.bot, cid)
+            await balance.send_evening_review(_NokbBot(context.bot), cid)
         except Exception:
             logging.exception("job_checkin_evening failed for cid=%s", cid)
 
@@ -747,7 +758,7 @@ async def job_weekly_forecast(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "weekly_forecast"):
             continue
         try:
-            await weather.send_weather(context.bot, cid, "week")
+            await weather.send_weather(_NokbBot(context.bot), cid, "week")
         except Exception:
             logging.exception("job_weekly_forecast failed for cid=%s", cid)
 
@@ -757,7 +768,7 @@ async def job_evening_weather(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "evening_weather"):
             continue
         try:
-            await weather.send_weather(context.bot, cid, "tomorrow_plain")
+            await weather.send_weather(_NokbBot(context.bot), cid, "tomorrow_plain")
         except Exception:
             logging.exception("job_evening_weather failed for cid=%s", cid)
 
@@ -773,6 +784,16 @@ async def post_init(app):
             logging.info("Dedupe lists: applied")
     except Exception:
         logging.exception("Dedupe lists failed")
+    try:
+        if leisure.seed_movies_from_content():
+            logging.info("Movies seed: applied")
+    except Exception:
+        logging.exception("Movies seed failed")
+    try:
+        if memory.seed_owner_lagom():
+            logging.info("Owner lagom seed: applied")
+    except Exception:
+        logging.exception("Owner lagom seed failed")
     try:
         unhandled = verify.audit_callbacks()
         if unhandled:
@@ -817,13 +838,11 @@ def main():
     jq.run_daily(job_morning_brief,   time=_t("07:30"), days=tuple(range(7)))
     jq.run_daily(job_weather_warn,    time=_t("08:15"), days=tuple(range(7)))
     jq.run_daily(job_lagom,           time=_t("09:00"), days=tuple(range(7)))
-    jq.run_daily(job_weekly_events,   time=_t("09:00"), days=(0,))            # пн
     jq.run_daily(job_grammar,         time=_t("11:00"), days=tuple(range(7)))
     jq.run_daily(job_recipe,          time=_t("12:30"), days=tuple(range(7)))
     jq.run_daily(job_checkin_day,     time=_t("14:00"), days=tuple(range(7)))
     jq.run_daily(job_vocab_review,    time=_t("21:00"), days=tuple(range(7)))
     jq.run_daily(job_checkin_evening, time=_t("22:00"), days=tuple(range(7)))
-    jq.run_daily(job_live_lang,        time=_t("18:00"), days=tuple(range(7)))
     jq.run_daily(job_evening_weather,  time=_t("19:00"), days=tuple(range(7)))
     jq.run_daily(job_weekly_forecast,  time=_t("19:00"), days=(6,))            # вс
 

@@ -157,6 +157,27 @@ def _split_items(text: str) -> list:
     return lines
 
 
+def seed_owner_lagom() -> bool:
+    """Разово: вливает принципы из lagom.json в профиль владельца (CHAT_ID).
+    Маркер в store не даёт повторить — удалённые принципы не возвращаются."""
+    if not config.CHAT_ID:
+        return False
+    marker = f"lagom_{config.CHAT_ID}"
+    flags = store._load("_seed_flags") or {}
+    if flags.get(marker):
+        return False
+    disk = config._LAGOM_ITEMS or []
+    cur = get_lagom(config.CHAT_ID)
+    seen = {str(x).strip().lower() for x in cur}
+    merged = list(cur) + [it for it in disk
+                          if isinstance(it, str) and it.strip()
+                          and it.strip().lower() not in seen]
+    set_lagom(config.CHAT_ID, merged)
+    flags[marker] = True
+    store._save("_seed_flags", flags)
+    return True
+
+
 def add_lagom_batch(cid, text: str) -> list:
     """Парсит текст, добавляет каждый принцип отдельно. Возвращает список добавленных."""
     parts = _split_items(text)

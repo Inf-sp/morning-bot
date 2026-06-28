@@ -105,7 +105,7 @@ def menu_screen(key):
             + _MENU_FOOTER,
             _ikb([
                 [("✈️ Путешествия", "a_trav_go")],
-                [("🎬 Фильмы и сериалы", "a_watch")],
+                [("🎬 Кино", "a_watch")],
                 [("📖 Книги", "a_read")],
                 [("🎸 Музыка", "a_listen")],
                 [("🎫 Поиск по мероприятиям", "a_concerts_find")],

@@ -13,10 +13,8 @@ NOTIF_TYPES = [
     ("grammar",       "📚 Слова дня (11:00)"),
     ("recipe_daily",  "🍽️ Рецепт дня (12:30)"),
     ("checkin_day",   "🫣 Дневная разгрузка (14:00)"),
-    ("live_lang",     "💭 Живой язык (18:00)"),
     ("vocab_review",  "📖 Повтор словаря (21:00)"),
     ("checkin_eve",   "🥸 Вечерний разбор (22:00)"),
-    ("weekly_events", "🎬 Досуг на неделю (пн 09:00)"),
     ("weekly_forecast","🌍 Недельный прогноз (вс 19:00)"),
     ("evening_weather","🌙 Погода на завтра (19:00)"),
 ]
@@ -43,7 +41,7 @@ def set_(cid, key, value):
     store._save(SETTINGS_KEY, d)
 
 def notif_on(cid, kind):
-    return get(cid, f"notif_{kind}", True)
+    return get(cid, f"notif_{kind}", False)
 
 def study_lang(cid):
     return get(cid, "study_lang", "нидерландский")
@@ -427,7 +425,7 @@ def _top_cat(source):
 def _note_type(source):
     s = (source or "").lower()
     if "фильм" in s or "сериал" in s or "кино" in s:
-        return ("movie", config.MOVIE_BLACKLIST_KEY, config.WATCHLIST_KEY, "Фильмы и сериалы")
+        return ("movie", config.MOVIE_BLACKLIST_KEY, config.WATCHLIST_KEY, "Кино")
     if "книг" in s:
         return ("book", config.BOOK_BLACKLIST_KEY, config.BOOKS_KEY, "Книги")
     if "музык" in s or "концерт" in s:
@@ -659,7 +657,7 @@ async def send_bucket(bot, cid, bucket):
 
 
 LOVE_SECTIONS = [
-    ("🎬 Фильмы и сериалы", "movies"),
+    ("🎬 Кино", "movies"),
     ("🗺️ Мои страны", "countries"),
     ("🎸 Мои артисты", "artists"),
     ("📖 Мои книги", "books"),
@@ -684,7 +682,7 @@ def _love_items(cid, key):
     return []
 
 def _love_title(key):
-    return {"movies": "🎬 Фильмы и сериалы", "countries": "🗺️ Мои страны",
+    return {"movies": "🎬 Кино", "countries": "🗺️ Мои страны",
             "artists": "🎸 Мои артисты", "books": "📖 Мои книги"}.get(key, "Любимые")
 
 async def send_love_section(bot, cid, key):

@@ -122,6 +122,28 @@ def dedupe_lists():
             changed_any = True
     return changed_any
 
+def seed_movies_from_content():
+    """Разово: вливает films+series из content.json в watchlist владельца (CHAT_ID).
+    Маркер в store не даёт повторить — удалённые фильмы не возвращаются при рестарте."""
+    if not config.CHAT_ID:
+        return False
+    marker = f"movies_{config.CHAT_ID}"
+    flags = store._load("_seed_flags") or {}
+    if flags.get(marker):
+        return False
+    try:
+        from pathlib import Path
+        import json
+        raw = json.loads((Path(__file__).parent / "content.json").read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    titles = [t for t in raw.get("films", []) + raw.get("series", []) if isinstance(t, str) and t.strip()]
+    for title in titles:
+        _add_unique(config.WATCHLIST_KEY, config.CHAT_ID, title.strip())
+    flags[marker] = True
+    store._save("_seed_flags", flags)
+    return True
+
 def content_recommend(kind, cid):
     if kind == "movie":
         seen = store.get_list(config.WATCHLIST_KEY, cid)
@@ -350,7 +372,7 @@ async def send_recos(bot, cid, kind):
         await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
     disp = _display_title(it, tm)
     store.last_recos[str(cid)] = {"kind": kind, "items": [disp]}
-    store.last_source[str(cid)] = "Досуг · Фильмы и сериалы"
+    store.last_source[str(cid)] = "Досуг · Кино"
     store.last_answer[str(cid)] = f"{disp} - {it.get('hook','')}"
     await _send_movie_card(bot, cid, it, 0, tm=tm)
 
@@ -542,7 +564,7 @@ async def movie_love(bot, cid, i):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         _add_unique(config.WATCHLIST_KEY, cid, title)
-        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» - в любимые (Фильмы и сериалы). Вот ещё вариант 👇")
+        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» - в любимые (Кино). Вот ещё вариант 👇")
     try:
         data = content_recommend("movie", str(cid))
         items = data.get("items", [])
@@ -596,7 +618,7 @@ async def add_reco(bot, cid, i):
     title = rec["items"][i]
     kind = rec["kind"]
     key = config.WATCHLIST_KEY if kind == "movie" else config.READLIST_KEY
-    folder = "Фильмы и сериалы" if kind == "movie" else "Книги"
+    folder = "Кино" if kind == "movie" else "Книги"
     _add_unique(key, cid, title)
     if not _note_fav_exists(cid, title):
         store.add_to_list(config.NOTES_KEY, cid,
