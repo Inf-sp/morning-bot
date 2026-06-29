@@ -152,12 +152,12 @@ async def _save_wardrobe(cid, raw: str) -> list:
     import settings as _s
     saved = []
     try:
-        d = await ai.allm_json(
+        d = ai.llm_json(
             f"Пользователь описал гардероб: {secure.wrap_untrusted(raw, 'гардероб')}\n"
             "Извлеки в JSON:\n"
             '{"style":"стиль одной фразой или пусто","body":"параметры тела одной строкой или пусто",'
             '"items":{"tops":["..."],"bottoms":["..."],"shoes":["..."],"outerwear":["..."]}}',
-            600, tier="cheap", module="firstvisit",
+            600, tier="cheap",
         )
     except Exception:
         d = {}
@@ -211,11 +211,11 @@ async def _save_learn(cid, raw: str) -> list:
 async def _save_leisure(cid, raw: str) -> list:
     saved = []
     try:
-        d = await ai.allm_json(
+        d = ai.llm_json(
             f"Пользователь описал предпочтения в досуге: {secure.wrap_untrusted(raw, 'досуг')}\n"
             "Извлеки списки:\n"
             '{"movies":["название","..."],"artists":["имя","..."],"books":["книга","..."]}',
-            500, tier="cheap", route="openai", module="firstvisit",
+            500, tier="cheap", route="openai",
         )
     except Exception:
         d = {}

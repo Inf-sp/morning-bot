@@ -1,5 +1,4 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-import asyncio
 import logging
 import re
 import random
@@ -173,7 +172,7 @@ def content_recommend(kind, cid):
 Порекомендуй РОВНО 5 {what}, максимально точно под этот вкус.
 Обязательно дай СМЕСЬ: и фильмы, и сериалы — минимум 2 сериала из 5.{avoid}
 JSON: {{"items": [{{"title": "название (год)", "title_en": "оригинальное/английское название", "hook": "1 строка: на что похоже из его референсов и чем зацепит"}}]}}"""
-        return ai.llm_json(prompt, 1000, tier="leisure", module="leisure")
+        return ai.llm_json(prompt, 1000, tier="leisure")
 
     # книги: референсы вкуса берём из "Мои книги" (настройки/БД, авто-загрузка из content.json)
     my_books = _ensure_books(cid)
@@ -206,7 +205,7 @@ JSON: {{"items": [{{"title": "название", "title_en": "оригиналь
  "plot": "коротко о сюжете, 2-3 предложения без жёстких спойлеров финала",
  "quote": "короткая цитата из книги",
  "hook": "1 строка: если понравились такие-то его книги - эта зайдёт тем-то"}}]}}"""
-    return ai.llm_json(prompt, 1300, tier="leisure", module="leisure")
+    return ai.llm_json(prompt, 1300, tier="leisure")
 
 _TMDB_GENRES = {28:"боевик",12:"приключения",16:"анимация",35:"комедия",80:"криминал",99:"документальный",
     18:"драма",10751:"семейный",14:"фэнтези",36:"история",27:"ужасы",10402:"музыка",9648:"детектив",
@@ -217,10 +216,6 @@ _TMDB_GENRES = {28:"боевик",12:"приключения",16:"анимаци
 def _tmdb_lookup(title, title_en=""):
     if not config.TMDB_API_KEY:
         return None
-    cache_key = f"{title_en}|{title}".strip().lower()
-    cached = util.ttl_get("tmdb_lookup", cache_key, 86400)
-    if cached is not None:
-        return cached
     import requests
     for q in [t for t in (title_en, title) if t]:
         try:
@@ -249,34 +244,16 @@ def _tmdb_lookup(title, title_en=""):
                     overview = rid.json().get("overview", "")
                 except Exception:
                     pass
-            return util.ttl_set("tmdb_lookup", cache_key, {
-                "name": x.get("title") or x.get("name") or q,
-                "name_en": x.get("original_title") or x.get("original_name") or "",
-                "year": date[:4] if date else "", "rating": x.get("vote_average") or 0,
-                "genres": genres, "kind": kind,
-                "poster": (f"https://image.tmdb.org/t/p/w500{poster}" if poster else None),
-                "url": f"https://www.themoviedb.org/{kind}/{x.get('id')}",
-                "overview": overview,
-            })
+            return {"name": x.get("title") or x.get("name") or q,
+                    "name_en": x.get("original_title") or x.get("original_name") or "",
+                    "year": date[:4] if date else "", "rating": x.get("vote_average") or 0,
+                    "genres": genres, "kind": kind,
+                    "poster": (f"https://image.tmdb.org/t/p/w500{poster}" if poster else None),
+                    "url": f"https://www.themoviedb.org/{kind}/{x.get('id')}",
+                    "overview": overview}
         except Exception:
             continue
-    return util.ttl_set("tmdb_lookup", cache_key, None)
-
-def _tmdb_upcoming(cc):
-    if not config.TMDB_API_KEY:
-        return []
-    key = (cc or "").upper()
-    cached = util.ttl_get("tmdb_upcoming", key, 86400)
-    if cached is not None:
-        return cached
-    import requests
-    try:
-        r = requests.get("https://api.themoviedb.org/3/movie/upcoming",
-            params={"api_key": config.TMDB_API_KEY, "language": "ru-RU",
-                    "region": key, "page": 1}, timeout=15)
-        return util.ttl_set("tmdb_upcoming", key, r.json().get("results", []))
-    except Exception:
-        return util.ttl_set("tmdb_upcoming", key, [])
+    return None
 
 def _display_title(it, tm):
     """Название, которое реально показано пользователю (TMDb если есть, иначе от LLM)."""
@@ -393,7 +370,7 @@ async def send_recos(bot, cid, kind):
     items = []
     for _ in range(2):
         try:
-            data = await asyncio.to_thread(content_recommend, kind, str(cid))
+            data = content_recommend(kind, str(cid))
             items = data.get("items", []) if isinstance(data, dict) else []
         except Exception:
             items = []
@@ -401,7 +378,7 @@ async def send_recos(bot, cid, kind):
             break
     if not items:
         await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
-    it, tm = await asyncio.to_thread(_pick_good_movie, items, _movie_used(cid))
+    it, tm = _pick_good_movie(items, _movie_used(cid))
     if not it:
         await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
     disp = _display_title(it, tm)
@@ -417,7 +394,7 @@ async def movie_dislike(bot, cid, i):
         store.add_to_list(config.MOVIE_BLACKLIST_KEY, cid, title)
         await bot.send_message(chat_id=cid, text=f"Понял, больше не буду рекомендовать «{title}». Вот другой вариант 👇")
     try:
-        data = await asyncio.to_thread(content_recommend, "movie", str(cid))
+        data = content_recommend("movie", str(cid))
         items = data.get("items", [])
     except Exception:
         items = []
@@ -425,7 +402,7 @@ async def movie_dislike(bot, cid, i):
         return
     rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
     used = _movie_used(cid) | {str(x).lower() for x in rec["items"]}
-    it, tm = await asyncio.to_thread(_pick_good_movie, items, used)
+    it, tm = _pick_good_movie(items, used)
     if not it:
         return
     rec["items"].append(_display_title(it, tm))
@@ -562,7 +539,7 @@ async def send_books_reco(bot, cid):
     items = []
     for _ in range(2):
         try:
-            data = await asyncio.to_thread(content_recommend, "book", str(cid))
+            data = content_recommend("book", str(cid))
             items = data.get("items", []) if isinstance(data, dict) else []
         except Exception:
             items = []
@@ -581,7 +558,7 @@ async def book_dislike(bot, cid, i):
         store.add_to_list(config.BOOK_BLACKLIST_KEY, cid, title)
         await bot.send_message(chat_id=cid, text=f"Понял, «{title}» исключил. Вот другая книга 👇")
     try:
-        data = await asyncio.to_thread(content_recommend, "book", str(cid))
+        data = content_recommend("book", str(cid))
         items = data.get("items", [])
     except Exception:
         items = []
@@ -595,7 +572,7 @@ async def book_dislike(bot, cid, i):
 async def _advance_movie(bot, cid):
     """Загрузить следующую рекомендацию кино и показать карточку."""
     try:
-        data = await asyncio.to_thread(content_recommend, "movie", str(cid))
+        data = content_recommend("movie", str(cid))
         items = data.get("items", [])
     except Exception:
         items = []
@@ -603,7 +580,7 @@ async def _advance_movie(bot, cid):
         return
     rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
     used = _movie_used(cid) | {str(x).lower() for x in rec["items"]}
-    it, tm = await asyncio.to_thread(_pick_good_movie, items, used)
+    it, tm = _pick_good_movie(items, used)
     if not it:
         return
     rec["items"].append(_display_title(it, tm))
@@ -614,7 +591,7 @@ async def _advance_movie(bot, cid):
 async def _advance_book(bot, cid):
     """Загрузить следующую рекомендацию книги и показать карточку."""
     try:
-        data = await asyncio.to_thread(content_recommend, "book", str(cid))
+        data = content_recommend("book", str(cid))
         items = data.get("items", [])
     except Exception:
         items = []
@@ -695,14 +672,14 @@ async def add_reco(bot, cid, i):
                           {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": folder, "bucket": "fav"})
     await bot.send_message(chat_id=cid, text=f"⏳ Отложено «{folder}»: {title}. Вот ещё вариант 👇")
     try:
-        data = await asyncio.to_thread(content_recommend, kind, str(cid))
+        data = content_recommend(kind, str(cid))
         items = data.get("items", [])
     except Exception:
         items = []
     if not items:
         return
     if kind == "movie":
-        it, tm = await asyncio.to_thread(_pick_good_movie, items, set(rec["items"]))
+        it, tm = _pick_good_movie(items, set(rec["items"]))
         if not it:
             return
         rec["items"].append(_display_title(it, tm))
@@ -779,10 +756,9 @@ async def send_listen(bot, cid):
              | set(str(d).lower() for d in disliked) | set(str(s).lower() for s in music_seen))
     avoid_all = ", ".join(list(arts) + booked + [str(d) for d in disliked] + [str(s) for s in music_seen])[:600]
     web_block = ""
-    web = await asyncio.to_thread(
-        research.tavily_snippet,
+    web = research.tavily_snippet(
         f"new music similar to {anchors[:60]} indie alternative recommendations 2024 2025",
-        500,
+        max_chars=500,
     )
     if web:
         web_block = (
@@ -791,7 +767,7 @@ async def send_listen(bot, cid):
     data = None
     for _ in range(3):
         try:
-            cand = await ai.allm_json(
+            cand = ai.llm_json(
                 f"Любимые исполнители пользователя (его вкус): {anchors}.\n"
                 f"НЕ предлагай никого из этого списка (уже в закладках/любимых/отклонены): {avoid_all}.\n"
                 f"{web_block}"
@@ -804,7 +780,7 @@ async def send_listen(bot, cid):
                 '"why": ["пункт 1 - на кого из его любимых похоже и чем", "пункт 2"], '
                 '"tracks": ["трек 1 - короткая пометка", "трек 2", "трек 3"], '
                 '"fact": "1 интересный факт об исполнителе"}',
-                1000, tier="leisure", module="leisure")
+                1000, tier="leisure")
         except Exception:
             cand = None
         if cand and cand.get("artist") and cand["artist"].strip().lower() not in known:
@@ -845,70 +821,6 @@ def _ensure_artists(cid):
     """Возвращает список артистов пользователя (без авто-сида)."""
     return store.get_list(config.ARTISTS_KEY, cid)
 
-_TRIBUTE_MARKERS = ("tribute", "cover", "covers", "candlelight", "songs of", "the music of",
-                    "performed by", "celebrating", "by candle", "symphonic", "reimagined",
-                    "someone like", "a tribute", "in the style of", "plays the music", "experience:")
-
-def _ticketmaster_events_for_artist(artist, cc, start_dt="", end_dt="", size=3):
-    """Ticketmaster lookup with 24h cache. Returns raw events tagged with _artist."""
-    if not config.TICKETMASTER_API_KEY:
-        return []
-    cache_key = f"{artist}|{cc}|{start_dt}|{end_dt}|{size}".lower()
-    cached = util.ttl_get("ticketmaster", cache_key, 86400)
-    if cached is not None:
-        return cached
-    import requests
-    params = {
-        "apikey": config.TICKETMASTER_API_KEY,
-        "keyword": artist,
-        "countryCode": cc,
-        "classificationName": "music",
-        "size": size,
-        "sort": "date,asc",
-    }
-    if start_dt:
-        params["startDateTime"] = start_dt
-    if end_dt:
-        params["endDateTime"] = end_dt
-    try:
-        r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json", params=params, timeout=15)
-        events = []
-        al = artist.lower()
-        for e in r.json().get("_embedded", {}).get("events", []):
-            name_l = e.get("name", "").lower()
-            attractions = [att.get("name", "").lower()
-                           for att in (e.get("_embedded", {}).get("attractions") or [])]
-            attr_match = any(al in nm or nm in al for nm in attractions)
-            if any(k in name_l for k in _TRIBUTE_MARKERS):
-                continue
-            if not (al in name_l or attr_match):
-                continue
-            e["_artist"] = artist
-            events.append(e)
-        return util.ttl_set("ticketmaster", cache_key, events)
-    except Exception:
-        return util.ttl_set("ticketmaster", cache_key, [])
-
-async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3, limit=15):
-    tasks = [
-        asyncio.to_thread(_ticketmaster_events_for_artist, artist, cc, start_dt, end_dt, size)
-        for artist in artists[:limit]
-    ]
-    batches = await asyncio.gather(*tasks, return_exceptions=True)
-    found, seen_pairs = {}, set()
-    for batch in batches:
-        if isinstance(batch, Exception):
-            continue
-        for e in batch:
-            artist = e.get("_artist", "")
-            date = e.get("dates", {}).get("start", {}).get("localDate", "")
-            pair = (artist.lower(), date)
-            if pair in seen_pairs:
-                continue
-            seen_pairs.add(pair)
-            found[e.get("id") or f"{artist}:{date}:{e.get('name', '')}"] = e
-    return sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate", "9999"))
-
 async def find_concerts(bot, cid, mode="home"):
     if not config.TICKETMASTER_API_KEY:
         await bot.send_message(chat_id=cid,
@@ -934,13 +846,42 @@ async def find_concerts(bot, cid, mode="home"):
     else:
         cc, flag, cname = home_cc, home_flag, home_name
 
+    import requests
     from util import _MONTHS
-    events = await _ticketmaster_events_many(artists, cc, size=3, limit=15)
+    found = {}
+    seen_pairs = set()
+    TRIBUTE = ("tribute", "cover", "covers", "candlelight", "songs of", "the music of",
+               "performed by", "celebrating", "by candle", "symphonic", "reimagined",
+               "someone like", "a tribute", "in the style of", "plays the music", "experience:")
+    for a in artists[:40]:
+        try:
+            r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json",
+                params={"apikey": config.TICKETMASTER_API_KEY, "keyword": a, "countryCode": cc,
+                        "classificationName": "music", "size": 3, "sort": "date,asc"}, timeout=15)
+            for e in r.json().get("_embedded", {}).get("events", []):
+                al = a.lower()
+                name_l = e.get("name", "").lower()
+                attractions = [att.get("name", "").lower()
+                               for att in (e.get("_embedded", {}).get("attractions") or [])]
+                attr_match = any(al in nm or nm in al for nm in attractions)
+                if any(k in name_l for k in TRIBUTE):
+                    continue
+                if not (al in name_l or attr_match):
+                    continue
+                date = e.get("dates", {}).get("start", {}).get("localDate", "")
+                pair = (al, date)
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+                e["_artist"] = a
+                found[e.get("id")] = e
+        except Exception:
+            continue
 
     rows = [[InlineKeyboardButton("🌍 Сменить страну", callback_data="a_concerts_pick")]]
     kb = InlineKeyboardMarkup(rows)
 
-    if not events:
+    if not found:
         store.last_answer[str(cid)] = f"Мероприятия в {cname}: ничего не нашёл."
         await bot.send_message(chat_id=cid,
             text=f"🎤 <b>Концерты в {esc(cname)}</b>\n\nСейчас ничего не нашёл. Попробуй другую страну 🌍",
@@ -954,6 +895,7 @@ async def find_concerts(bot, cid, mode="home"):
         except Exception:
             return ds
 
+    events = sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate", "9999"))
     lines = [f"🎤 <b>Концерты в {esc(cname)}</b>", ""]
     for e in events[:20]:
         artist = e.get("_artist", "")
@@ -1037,11 +979,40 @@ async def send_weekly_events(bot, cid):
     if config.TICKETMASTER_API_KEY:
         artists = _ensure_artists(cid)
         if artists:
+            TRIBUTE = ("tribute", "cover", "covers", "candlelight", "songs of", "the music of",
+                       "performed by", "celebrating", "by candle", "symphonic")
+            found = {}
+            seen_pairs = set()
             date_from_tm = now.strftime("%Y-%m-%dT%H:%M:%SZ")
             date_to_tm = (now + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
-            events = await _ticketmaster_events_many(
-                artists, cc, start_dt=date_from_tm, end_dt=date_to_tm, size=3, limit=15
-            )
+            for a in artists[:40]:
+                try:
+                    r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json",
+                        params={"apikey": config.TICKETMASTER_API_KEY, "keyword": a,
+                                "countryCode": cc, "classificationName": "music",
+                                "startDateTime": date_from_tm, "endDateTime": date_to_tm,
+                                "size": 3, "sort": "date,asc"}, timeout=15)
+                    for e in r.json().get("_embedded", {}).get("events", []):
+                        al = a.lower()
+                        name_l = e.get("name", "").lower()
+                        attractions = [att.get("name", "").lower()
+                                       for att in (e.get("_embedded", {}).get("attractions") or [])]
+                        attr_match = any(al in nm or nm in al for nm in attractions)
+                        if any(k in name_l for k in TRIBUTE):
+                            continue
+                        if not (al in name_l or attr_match):
+                            continue
+                        date_str = e.get("dates", {}).get("start", {}).get("localDate", "")
+                        pair = (al, date_str)
+                        if pair in seen_pairs:
+                            continue
+                        seen_pairs.add(pair)
+                        e["_artist"] = a
+                        found[e.get("id")] = e
+                except Exception:
+                    continue
+            events = sorted(found.values(),
+                            key=lambda e: e.get("dates", {}).get("start", {}).get("localDate", "9999"))
             for e in events[:5]:
                 artist = e.get("_artist", "")
                 date_str = e.get("dates", {}).get("start", {}).get("localDate", "")
@@ -1066,7 +1037,10 @@ async def send_weekly_events(bot, cid):
     movie_lines = []
     if config.TMDB_API_KEY:
         try:
-            results = await asyncio.to_thread(_tmdb_upcoming, cc)
+            r = requests.get("https://api.themoviedb.org/3/movie/upcoming",
+                params={"api_key": config.TMDB_API_KEY, "language": "ru-RU",
+                        "region": cc, "page": 1}, timeout=15)
+            results = r.json().get("results", [])
             upcoming = [m for m in results
                         if today_str <= m.get("release_date", "") <= date_to_str
                         and _movie_title_ok(m.get("title", ""))]
@@ -1128,7 +1102,7 @@ def travel_suggest_one(cid):
  "for_what":"ради чего ехать, 1 строка",
  "langs":"язык(и) + говорят ли на английском",
  "note":"главный нюанс/предупреждение, 1 строка"}}"""
-    return ai.llm_json(prompt, 700, tier="leisure", module="travel")
+    return ai.llm_json(prompt, 700, tier="leisure")
 
 def _country_card(d):
     L = [f"{d.get('flag','')} <b>{esc(d.get('country',''))}</b>", ""]
@@ -1161,7 +1135,7 @@ async def send_go(bot, cid):
     d = None
     try:
         for _ in range(3):
-            cand = await asyncio.to_thread(travel_suggest_one, cid)
+            cand = travel_suggest_one(cid)
             cname = (cand.get("country") or "").strip().lower()
             if cname and cname not in skip_set:
                 d = cand
@@ -1170,12 +1144,12 @@ async def send_go(bot, cid):
             d = cand
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
-    facts = await asyncio.to_thread(research.country_facts, d.get("country", ""))
+    facts = research.country_facts(d.get("country", ""))
     if facts.get("cc"):
         d["flag"] = util.flag_from_cc(facts["cc"]) or d.get("flag", "")
     if facts.get("languages"):
         d["langs"] = ", ".join(facts["languages"][:3])
-    rfact = await asyncio.to_thread(research.wiki_fact, d.get("country", ""))
+    rfact = research.wiki_fact(d.get("country", ""))
     if rfact:
         d["fact"] = rfact
     if not research.grounded(facts):
@@ -1217,18 +1191,14 @@ async def send_plan(bot, cid):
     fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
     disliked = store.get_list(config.TRAVEL_DISLIKE_KEY, cid)
     skip = ", ".join([str(x) for x in visited] + fav_names + [str(x) for x in disliked] + [country])
-    facts = await asyncio.to_thread(research.country_facts, country)
+    facts = research.country_facts(country)
     fblock = research.facts_block(facts)
-    rfact = await asyncio.to_thread(research.wiki_fact, country)
+    rfact = research.wiki_fact(country)
     if not research.grounded(facts):
         _log.warning("[research] travel-plan: no grounding for %s", country)
     ground_line = (f"Проверенные факты (ИСТОЧНИК ИСТИНЫ для столицы/языка/региона/валюты, "
                    f"не противоречь им): {fblock}.\n" if fblock else "")
-    web_data = await asyncio.to_thread(
-        research.tavily_snippet,
-        f"{country} туризм путешествие достопримечательности 2025",
-        900,
-    )
+    web_data = research.tavily_snippet(f"{country} туризм путешествие достопримечательности 2025", max_chars=900)
     web_line = (f"Актуальная туристическая информация из сети (используй как дополнение к фактам):\n{web_data}\n"
                 if web_data else "")
     prompt = f"""Подробный план поездки в страну/направление: {country}. Вылет из: {home}.
@@ -1243,7 +1213,7 @@ async def send_plan(bot, cid):
  "lgbt":"1 строка про дружелюбность/безопасность",
  "fact":"1 интересный местный факт"}}"""
     try:
-        p = await ai.allm_json(prompt, 1100, tier="leisure", module="travel")
+        p = ai.llm_json(prompt, 1100, tier="leisure")
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     if facts.get("cc"):
