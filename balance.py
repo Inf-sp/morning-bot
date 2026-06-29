@@ -647,7 +647,7 @@ def _gen_motiv(cid):
         return "Одно действие прямо сейчас — встань и пройди круг по комнате."
     lagom_full = esc(lagom) if lagom else "Один шаг."
     lines = [
-        "☕️ <b>Мотивация:</b>", "",
+        "☕️ <b>Мотивация</b>", "",
         f"<b><i>{lagom_full}</i></b>", "",
         "<b>Действие</b>",
     ]
@@ -662,7 +662,7 @@ async def send_motiv_push(bot, cid):
     out = _gen_motiv(cid)
     store.last_source[str(cid)] = "Баланс · Мотивация"
     store.last_answer[str(cid)] = out
-    await bot.send_message(chat_id=cid, text=out, parse_mode="HTML", reply_markup=_MOTIV_KB)
+    await bot.send_message(chat_id=cid, text=out, parse_mode="HTML")
 
 
 # ---------- роли ----------
@@ -770,13 +770,12 @@ async def send_daycheck(bot, cid):
         for w in worries:
             lines.append(f"• {esc(w['text'])}")
         lines.append("")
-        lines.append("Напиши новые мысли сообщением или разбери текущие 👇")
+        lines.append("Напиши новые мысли сообщением или очисти список 👇")
     else:
         lines.append("Пока пусто. Напиши тревоги одним сообщением.")
     store.pending_input[cid] = "worry"
     rows = []
     if worries:
-        rows.append([InlineKeyboardButton("🧠 Разобрать тревоги", callback_data="as_worryreview")])
         rows.append([InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_close")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
@@ -796,28 +795,31 @@ async def send_evening_review(bot, cid):
         return
     wlist = "\n".join(f"- {w['text']}" for w in worries)
     try:
-        analysis = await ai.allm(
+        d = await ai.allm_json(
             "Ты спокойный психолог. Разбери тревоги человека с СДВГ по-доброму, на русском.\n"
-            "Для КАЖДОЙ тревоги дай блок строго в формате (Telegram HTML, без markdown, без звёздочек *):\n"
-            "📌 <b>{текст тревоги}</b>\n"
-            "Факт: {что реально известно}\n"
-            "Предположение: {что пока лишь догадка}\n\n"
-            "В конце добавь блок:\n"
-            "🧠 <b>Итог дня</b>\n{1-2 строки: где факты, а где шум и неопределённость}\n\n"
-            "🌿 {тёплая короткая мысль на ночь}\n\n"
-            f"Тревоги:\n{wlist}", 800, 0.6)
-        analysis = analysis.replace("**", "").replace("* ", "").strip()
+            "Нужно коротко, без медицинских назначений и без длинной поддержки.\n"
+            "Для каждой тревоги дай одну короткую интерпретацию: что может быть фактом, а что предположением.\n"
+            "Итог дня - 1 короткое предложение.\n"
+            'Верни JSON: {"items":[{"worry":"тревога как есть","note":"коротко, до 20 слов"}],'
+            '"summary":"короткий итог, до 22 слов"}\n\n'
+            f"Тревоги:\n{wlist}", 700, 0.5)
     except Exception as e:
         _log.warning("send_evening_review: LLM failed, analysis empty: %s", e)
-        analysis = ""
+        d = {}
     L = ["🥸 <b>Вечерний разбор</b>", "", "<b>Сегодня тебя беспокоили:</b>"]
-    for w in worries:
+    items = d.get("items") or []
+    for idx, w in enumerate(worries):
         L.append(f"• {esc(w['text'])}")
-    if analysis:
-        L += ["", analysis]
+        note = ""
+        if idx < len(items) and isinstance(items[idx], dict):
+            note = (items[idx].get("note") or "").strip()
+        if note:
+            L.append(f"<i>{esc(note)}</i>")
+    summary = (d.get("summary") or "").strip()
+    if summary:
+        L += ["", "<b>Итог дня:</b>", esc(summary)]
     rows = [
         [InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_close")],
     ]
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 

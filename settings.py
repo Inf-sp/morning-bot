@@ -9,7 +9,7 @@ SETTINGS_KEY = "user_settings.json"
 NOTIF_TYPES = [
     ("morning_brief",  "☀️ Утренний бриф"),
     ("weather_warn",   "🌧 Погодное предупреждение"),
-    ("lagom_daily",    "☕️ Лагом дня"),
+    ("lagom_daily",    "☕️ Мотивация дня"),
     ("recipe_daily",   "🍽️ Рецепт дня"),
     ("checkin_day",    "🫣 Дневная разгрузка"),
     ("evening_weather","🌆 Вечерняя погода"),
@@ -17,7 +17,6 @@ NOTIF_TYPES = [
     ("weekly_forecast","🌍 Недельный прогноз"),
     ("grammar",        "📚 Слова и фразы дня"),
     ("live_lang",      "💬 Живой язык"),
-    ("vocab_review",   "📖 Повтор словаря"),
     ("checkin_eve",    "🥸 Вечерний разбор"),
 ]
 
@@ -55,7 +54,7 @@ def _notif_label(kind: str, label: str) -> str:
         return f"{label} (1 раз в ВС в {'10:00' if kind == 'weekly_events' else '19:00'})"
     if kind in ("live_lang",):
         return f"{label} (ежедневно в 16:30)"
-    if kind in ("grammar", "vocab_review", "morning_brief", "weather_warn",
+    if kind in ("grammar", "morning_brief", "weather_warn",
                 "lagom_daily", "recipe_daily", "checkin_day", "evening_weather",
                 "checkin_eve"):
         times = {
@@ -66,7 +65,6 @@ def _notif_label(kind: str, label: str) -> str:
             "checkin_day": "14:00",
             "evening_weather": "19:00",
             "grammar": "11:00",
-            "vocab_review": "21:00",
             "checkin_eve": "22:00",
         }
         return f"{label} (ежедневно в {times[kind]})"
@@ -120,9 +118,9 @@ async def _run_notif_test(bot, cid, kind):
             import balance as _b
             await _b.send_motiv_push(bot, cid)
         elif kind == "grammar":
-            await learning.send_morning_word(bot, cid)
+            await learning.send_morning_word(bot, cid, with_kb=False)
         elif kind == "live_lang":
-            await learning.send_proverb_both(bot, cid)
+            await learning.send_proverb_both(bot, cid, with_kb=False)
         elif kind == "recipe_daily":
             import balance as _b
             await _b.send_recipe_push(bot, cid)
@@ -130,14 +128,12 @@ async def _run_notif_test(bot, cid, kind):
             await bot.send_message(chat_id=cid, parse_mode="HTML",
                 text="🫣 <b>Дневная разгрузка</b>\n\nСейчас не анализируй, просто выгрузи мысли.\n\n"
                      "Каждая тревога - с новой строки.\n\nВечером проверим, что было фактами, а что шумом…")
-        elif kind == "vocab_review":
-            await learning.send_vocab_review(bot, cid)
         elif kind == "checkin_eve":
             import balance as _b
             await _b.send_evening_review(bot, cid)
         elif kind == "weekly_forecast":
             import weather as _w
-            await _w.send_weather(bot, cid, "week")
+            await _w.send_weather(bot, cid, "week_plain")
         elif kind == "weekly_events":
             import leisure as _l
             await _l.send_weekly_events(bot, cid)
@@ -1050,23 +1046,24 @@ async def send_admin_cost(bot, cid):
 
         # все провайдеры в порядке приоритета + проверка настроен ли ключ
         _PROV_ORDER = [
-            ("claude",      "Claude (Anthropic)", bool(config.ANTHROPIC_API_KEY)),
+            ("claude",      "Claude", bool(config.ANTHROPIC_API_KEY)),
             ("openai",      "OpenAI",             bool(config.OPENAI_API_KEY)),
-            ("gemini",      "Gemini (бесплатно)", True),
+            ("gemini",      "Gemini", True),
             ("openrouter",  "OpenRouter",          bool(config.OPENROUTER_API_KEY)),
-            ("groq",        "Groq (бесплатно)",   bool(config.GROQ_API_KEY)),
+            ("groq",        "Groq",   bool(config.GROQ_API_KEY)),
             ("cf",          "Cloudflare",          bool(config.CF_API_TOKEN and config.CF_ACCOUNT_ID)),
         ]
 
         # человекочитаемые имена модулей в терминах пользовательских категорий
         _mod_names = {
             "wardrobe": "👕 Гардероб",
-            "balance": "🍃 Самозабота / 🥣 Готовка",
-            "weather": "☀️ Мой день / Погода",
+            "balance": "🍃 Самозабота",
+            "balance": "🥣 Готовка",
+            "weather": "☀️ Мой день",
             "learning": "📚 Обучение",
             "leisure": "🍿 Досуг",
             "myday": "☀️ Мой день",
-            "travel": "🍿 Досуг / Поездки",
+            "travel": "Поездки",
             "assistant": "💬 Чат",
             "content": "🍿 Досуг",
             "notes": "🗂️ Моя база",
@@ -1168,9 +1165,8 @@ async def send_admin_llmcheck(bot, cid):
     lines = ["🧪 <b>LLM check</b>", "", "Проверяю провайдеров по очереди…", ""]
     for label, route in probes:
         try:
-            out = await _ai.allm("Ответь одним словом: ok", 10, 0.0, route=route, module="admin")
-            reply = (out or "").strip().split()[0][:40] if out else "ok"
-            lines.append(f"✅ {label}: {reply}")
+            await _ai.allm("Ответь одним словом: ok", 10, 0.0, route=route, module="admin")
+            lines.append(f"✅ {label}: Хорошо")
         except Exception as e:
             msg = str(e).split(": ", 1)[-1][:80]
             lines.append(f"❌ {label}: {msg}")
