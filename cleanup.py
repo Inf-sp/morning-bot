@@ -54,13 +54,19 @@ def _ctx_items(cid, ctx):
         topics = _l.get_topics(cid, language)
         items = [(i, (t.get("text", "") if isinstance(t, dict) else str(t))) for i, t in enumerate(topics)]
         return f"{_l._flag(language)} Чистка: темы", items, f"a_topics_{lang}"
-    if ctx == "nb":
+    if ctx == "nb" or ctx.startswith("nb_"):
         import re as _re
+        import settings as _s
         _strip = lambda s: _re.sub(r"<[^>]+>", "", s).strip()
         notes = store.get_list(config.NOTES_KEY, cid)
+        group = ctx[len("nb_"):] if ctx.startswith("nb_") else None
         items = [(i, _strip(n.get("text", "") if isinstance(n, dict) else str(n)))
                  for i, n in enumerate(notes)
-                 if (n.get("bucket", "fav") if isinstance(n, dict) else "fav") == "fav"]
+                 if (n.get("bucket", "fav") if isinstance(n, dict) else "fav") == "fav"
+                 and (group is None or _s._fav_group(n.get("source", "Прочее") if isinstance(n, dict) else "Прочее") == group)]
+        if group:
+            label, _desc = _s._fav_group_info(group)
+            return f"{label} · удалить из Позже", items, f"as_bucket_favgrp_{group}"
         return "⭐ Чистка: закладки", items, "as_bucket_fav"
     if ctx in ("wl", "rl"):
         key = config.WATCHLIST_KEY if ctx == "wl" else config.READLIST_KEY
@@ -107,13 +113,13 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     pages = max(1, (total + CLEAN_PAGE - 1) // CLEAN_PAGE)
     page = max(0, min(page, pages - 1))
     chunk = items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]
-    lines = [f"🧹 <b>{esc(title)}</b>", f"Всего: {total} · отмечено: {len(sel)}", "",
-             "Отметь выученное ✅ и нажми «Удалить отмеченные»."]
+    hint = "Отметь лишнее ✅ и нажми «Удалить отмеченные»." if ctx == "nb" or ctx.startswith("nb_") else "Отметь выученное ✅ и нажми «Удалить отмеченные»."
+    lines = [f"🧹 <b>{esc(title)}</b>", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
     _lv_add_label = {
-        "lv_movies": "📝 Добавить фильм",
-        "lv_countries": "📝 Добавить страну",
-        "lv_artists": "📝 Добавить артиста",
-        "lv_books": "📝 Добавить книгу",
+        "lv_movies": "✏️ Добавить фильм",
+        "lv_countries": "✏️ Добавить страну",
+        "lv_artists": "✏️ Добавить артиста",
+        "lv_books": "✏️ Добавить книгу",
     }
     rows = []
     if ctx in _lv_add_label:
@@ -156,7 +162,7 @@ def _cleanup_delete(cid, ctx):
         language = "нидерландский" if lang == "nl" else "английский"
         topics = [t for i, t in enumerate(_l.get_topics(cid, language)) if i not in sel]
         store.set_list(_l._topics_key(language), cid, topics)
-    elif ctx == "nb":
+    elif ctx == "nb" or ctx.startswith("nb_"):
         notes = [n for i, n in enumerate(store.get_list(config.NOTES_KEY, cid)) if i not in sel]
         store.set_list(config.NOTES_KEY, cid, notes)
     elif ctx in ("wl", "rl"):
