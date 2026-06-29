@@ -541,6 +541,12 @@ def _fav_group_meta():
         ("other", "🗂 Прочее", "всё, что не попало в отдельную категорию"),
     ]
 
+def _fav_group_info(key: str):
+    for group_key, label, desc in _fav_group_meta():
+        if group_key == key:
+            return label, desc
+    return "🗂 Прочее", "всё, что не попало в отдельную категорию"
+
 async def note_delete_menu(bot, cid, i):
     notes_list = store.get_list(config.NOTES_KEY, cid)
     if i >= len(notes_list):
@@ -707,7 +713,7 @@ async def plan_view(bot, cid, i):
     ])
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
 
-async def fav_view(bot, cid, i):
+async def fav_view(bot, cid, i, back="as_bucket_fav", delete_cb=None):
     notes_list = store.get_list(config.NOTES_KEY, cid)
     if i >= len(notes_list) or _note_bucket(notes_list[i]) != "fav":
         await send_bucket(bot, cid, "fav"); return
@@ -718,8 +724,8 @@ async def fav_view(bot, cid, i):
     header = f"⭐ <b>{esc(src)}</b>" + (f" · {esc(d)}" if d else "")
     full = header + "\n\n" + text
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Удалить", callback_data=f"fav_del_{i}")],
-        [InlineKeyboardButton("◀️ К закладкам", callback_data="as_bucket_fav")],
+        [InlineKeyboardButton("❌ Удалить", callback_data=delete_cb or f"fav_del_{i}")],
+        [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ])
     chunks = [full[j:j + 4000] for j in range(0, len(full), 4000)]
     for idx, chunk in enumerate(chunks):
@@ -733,6 +739,44 @@ async def fav_view(bot, cid, i):
 async def fav_del(bot, cid, i):
     _pop_note(cid, i)
     await send_bucket(bot, cid, "fav")
+
+
+async def fav_del_group(bot, cid, group, i):
+    _pop_note(cid, i)
+    await send_fav_group(bot, cid, group)
+
+
+async def send_fav_group(bot, cid, group):
+    notes_list = store.get_list(config.NOTES_KEY, cid)
+    items = []
+    for i, n in enumerate(notes_list):
+        if _note_bucket(n) != "fav":
+            continue
+        src = n.get("source", "Прочее") if isinstance(n, dict) else "Прочее"
+        if _fav_group(src) == group:
+            items.append((i, n))
+
+    label, desc = _fav_group_info(group)
+    text = (
+        f"⏳ <b>Позже · {label}</b>\n\n"
+        f"Здесь лежат временные закладки: {esc(desc)}.\n"
+        "Открой карточку, чтобы увидеть её в исходном виде или удалить."
+    )
+    rows = []
+    import re as _re
+    _strip_html = lambda s: _re.sub(r"<[^>]+>", "", s).strip()
+    for i, n in items:
+        src = (n.get("source", "Прочее") if isinstance(n, dict) else "Прочее") or "Прочее"
+        date = (n.get("date", "") if isinstance(n, dict) else "") or ""
+        raw = (n.get("text", "") if isinstance(n, dict) else str(n)).strip()
+        preview = _strip_html(raw)
+        short = preview[:34] + ("…" if len(preview) > 34 else "")
+        prefix = f"{date} · " if date else ""
+        rows.append([InlineKeyboardButton(f"{prefix}{src} · {short}"[:60], callback_data=f"fav_viewg_{group}_{i}")])
+    if items:
+        rows.append([InlineKeyboardButton("❌ Удалить несколько", callback_data=f"as_clean_favgrp_{group}")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_fav")])
+    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
 
 async def send_bucket(bot, cid, bucket):
@@ -867,8 +911,10 @@ async def handle_notes_callback(bot, cid, q, data):
     if data == "as_bucket_fav":
         await send_bucket(bot, cid, "fav"); return
     if data.startswith("as_bucket_favgrp_"):
+        await send_fav_group(bot, cid, data[len("as_bucket_favgrp_"):]); return
+    if data.startswith("as_clean_favgrp_"):
         import cleanup
-        await cleanup.open_cleanup(bot, cid, f"nb_{data[len('as_bucket_favgrp_'):]}")
+        await cleanup.open_cleanup(bot, cid, f"nb_{data[len('as_clean_favgrp_'):]}")
         return
     if data == "as_bucket_plan":
         await send_bucket(bot, cid, "plan"); return
@@ -890,8 +936,16 @@ async def handle_notes_callback(bot, cid, q, data):
         await note_drop(bot, cid, int(data.split("_")[-1])); return
     if data.startswith("fav_view_"):
         await fav_view(bot, cid, int(data.split("_")[-1])); return
+    if data.startswith("fav_viewg_"):
+        group, idx = data[len("fav_viewg_"):].rsplit("_", 1)
+        await fav_view(bot, cid, int(idx), back=f"as_bucket_favgrp_{group}", delete_cb=f"fav_delg_{group}_{idx}")
+        return
     if data.startswith("fav_del_"):
         await fav_del(bot, cid, int(data.split("_")[-1])); return
+    if data.startswith("fav_delg_"):
+        group, idx = data[len("fav_delg_"):].rsplit("_", 1)
+        await fav_del_group(bot, cid, group, int(idx))
+        return
     if data == "as_clean_fav":
         import cleanup
         await cleanup.open_cleanup(bot, cid, "nb"); return
