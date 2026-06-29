@@ -990,10 +990,8 @@ async def send_admin_cost(bot, cid):
 
 async def send_admin_health(bot, cid):
     """Inline-статус сервисов: API-ключи, DB, Weather, LLM."""
-    import ai as _ai
     import store as _st
     import weather as _w
-    import time as _time
 
     lines = ["🩺 <b>Статус сервисов</b>", ""]
 
@@ -1005,7 +1003,7 @@ async def send_admin_health(bot, cid):
     ]
     lines.append("<b>Обязательные ключи:</b>")
     for k, ok in required:
-        lines.append(f"  {'✅' if ok else '❌'} {k}")
+        lines.append(f"• {'✅' if ok else '❌'} {k}")
 
     optional = [
         ("ANTHROPIC_API_KEY",   bool(config.ANTHROPIC_API_KEY)),
@@ -1020,7 +1018,7 @@ async def send_admin_health(bot, cid):
     lines.append("")
     lines.append("<b>Опциональные ключи:</b>")
     for k, ok in optional:
-        lines.append(f"  {'✅' if ok else '⚪'} {k}")
+        lines.append(f"• {'✅' if ok else '⚪'} {k}")
 
     lines.append("")
     try:
@@ -1035,15 +1033,6 @@ async def send_admin_health(bot, cid):
         lines.append("✅ Weather API: OK")
     except Exception:
         lines.append("❌ Weather API: недоступна")
-
-    log = _ai.get_cost_log()
-    week_ago = _time.time() - 7 * 86400
-    recent = [e for e in log if e.get("ts", 0) >= week_ago]
-    if recent:
-        total_tok = sum(e.get("tokens", 0) for e in recent)
-        lines.append(f"💸 LLM 7д: {len(recent)} вызовов, ~{total_tok:,} tok")
-    else:
-        lines.append("💸 LLM 7д: нет данных")
 
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
