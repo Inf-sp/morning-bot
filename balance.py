@@ -26,18 +26,22 @@ _FRIDGE_KEYWORDS: dict = {
     "заморозка": [
         "заморож", "замороз", "frozen", "diepvries",
         "картофель фри", "картошка фри", "фри",
-        "пельмен", "вареник", "равиоли",
+        "пельмен", "вареник", "равиоли", "драник",
+        "kipnugget", "nugget", "наггет", "пицц",
     ],
     "мясо и рыба": [
         # мясо и птица
-        "курич", "курен", "куриц", "говядин", "свинин", "фарш", "индейк", "баранин",
-        "сосис", "колбас", "ветчин", "бекон", "утк", "кролик", "стейк", "котлет",
-        "шашлык", "карбонад", "окорок", "грудин", "вырезк",
+        "курич", "курен", "куриц", "курин", "chicken", "kip", "kipfilet", "kippen",
+        "говядин", "свинин", "фарш", "индейк", "баранин",
+        "сосис", "колбас", "ветчин", "бекон", "салями", "утк", "кролик", "стейк", "котлет",
+        "шашлык", "карбонад", "окорок", "грудин", "вырезк", "мортаделл",
+        "крылыш", "желудоч",
+        "gehakt", "rund", "varken",
         # рыба и морепродукты
         "рыб", "лосос", "сёмг", "семг", "тунец", "треска", "сельд", "сёлд", "селед",
         "скумбри", "форел", "икр", "креветк", "мидии", "кальмар", "осьминог", "краб",
         "шпрот", "сардин", "анчоус", "палтус", "минтай", "хек", "судак", "карп",
-        "тиляпи", "дорад", "сибас",
+        "тиляпи", "дорад", "сибас", "haring", "zalm", "tonijn", "kabeljauw", "garnalen",
     ],
     "овощи": [
         "помидор", "томат", "огурец", "огурц", "морков", "репчат",
@@ -48,6 +52,8 @@ _FRIDGE_KEYWORDS: dict = {
         "редис", "тыкв", "артишок", "спаржа", "порей", "фенхел",
         "авокадо", "имбир", "пастернак", "топинамбур", "дайкон",
         "коул слоу", "кол слоу", "coleslaw", "cole slaw",
+        "komkommer", "tomaat", "tomaten", "wortel", "kool",
+        "bloemkool", "aardappel", "champignon", "paddenstoel", "гриб", "шампиньон",
     ],
     "фрукты": [
         "яблок", "банан", "апельсин", "лимон", "лайм", "мандарин", "груш",
@@ -56,6 +62,7 @@ _FRIDGE_KEYWORDS: dict = {
         "манго", "ананас", "смородин", "вишн", "черешн",
         "папайя", "гранат", "инжир", "хурм",
         "дын", "арбуз", "клюкв", "голубик", "брусник", "ежевик",
+        "appel", "banaan", "sinaasappel", "peer", "druif", "druiven",
     ],
     "молочное и яйца": [
         # проверяем до фруктов — иначе 'сливочное' матчит 'слив' из фруктов
@@ -63,38 +70,45 @@ _FRIDGE_KEYWORDS: dict = {
         "сметан", "сливк", "сыр", "пармезан", "моцарелл", "рикотт",
         "бри", "камамбер", "фет", "гауд", "эдам", "чеддер", "халум",
         "ряженк", "варенец", "айран", "кумыс", "яйц",
+        "melk", "kaas", "eieren", "yoghurt", "boter",
     ],
     "крупы и макароны": [
         "рис", "греч", "гречк", "овсянк", "овёс", "макарон", "спагетт", "паст", "лапш",
         "хлопь", "киноа", "булгур", "кускус", "перловк", "пшен", "чечевиц",
         "нут", "фасол", "горох", "боб", "ячмен", "полба", "амарант",
         "вермишел", "пенне", "фетучин", "тальятелл",
+        "rijst", "havermout", "noedel", "noodles",
+        "мук", "тток", "tteok", "topokki", "yopokki", "булугур",
     ],
     "хлеб и выпечка": [
         "хлеб", "батон", "булочк", "тост", "лаваш", "пита",
         "лепёшк", "лепешк", "багет", "чиабатт", "круасс",
         "бублик", "сушк", "хлебц", "хрустящ", "afbakbrood", "broodjes", "brood",
+        "тесто",
     ],
     "напитки": [
         # проверяем до фруктов — иначе 'сок апельсиновый' матчит 'апельсин' из фруктов
         "чай", "кофе", "сок", "морс", "компот", "квас", "лимонад",
         "минерал", "газировк", "энергетик", "пиво", "вино", "сидр",
-        "какао", "смузи", "напиток",
+        "какао", "смузи", "напиток", "cola",
     ],
     "снеки и сладости": [
         "печень", "шоколад", "конфет", "батончик", "чипс", "снэк", "сухар",
         "печен", "пирог", "торт", "кекс", "десерт", "морожен",
         "орех", "миндаль", "фисташ", "кешью", "фундук", "арахис",
         "пряник", "вафл", "мармелад", "зефир",
+        "noten", "chips", "koek", "koekje", "drop", "hagelslag",
     ],
     "специи и соусы": [
-        "соль", "специ", "приправ", "соус", "уксус", "горчиц", "кетчуп",
+        "соль", "сахар", "специ", "приправ", "соус", "уксус", "горчиц", "кетчуп",
         "майонез", "соев", "песто", "тахин", "хумус",
-        "масло оливк", "масло растит", "масло подсолн", "масло кунжут",
+        "масло оливк", "масло растит", "масло подсолн", "подсолнечн", "масло кунжут",
         "перец чёрн", "перец черн", "перец молот", "паприк", "карри", "куркум",
         "корица", "ваниль", "лавров", "орегано", "тимьян", "розмарин",
         "мускат", "чили", "острый соус",
         "мёд", "мед", "варень", "джем", "конфитюр",
+        "томатная паст", "бульон", "кубик", "намаз", "tom yam", "tom kha",
+        "peper", "zout",
     ],
 }
 _CAT_EMOJI: dict = {
@@ -151,16 +165,324 @@ _FRIDGE_NOT_PRODUCT_PATTERNS = [
     "редкие покупки", "редкая покупка", "редко покуп", "покупки", "купить",
     "редкие продукты", "редкий продукт",
     "список", "категория", "прочее", "другое",
+    "fresh market", "oost-europese supermarkt", "бумажные полотенца",
+]
+_FRIDGE_NOT_PRODUCT_EXACT = {
+    "свежий", "свежая", "копченый", "копчёный", "мягкое", "мягкий",
+    "мороженый", "мороженая", "мороженые", "замороженный", "замороженная",
+    "японские",
+    "ah", "jumbo", "deka", "lidl",
+}
+
+_FRIDGE_CAT_EXACT = {
+    "айсберг": "овощи",
+    "батончики": "снеки и сладости",
+    "желудочки": "мясо и рыба",
+    "крылышки": "мясо и рыба",
+    "салями": "мясо и рыба",
+    "томатная паста": "специи и соусы",
+    "подсолнечное масло": "специи и соусы",
+    "кокосовое молоко": "специи и соусы",
+    "намазка": "специи и соусы",
+}
+
+_FRIDGE_NAME_EXACT = {
+    "кол слоу": "коул слоу",
+    "коул слоу": "коул слоу",
+    "cole slaw": "коул слоу",
+    "coleslaw": "коул слоу",
+    "koolsla": "коул слоу",
+    "гречу": "гречка",
+    "гречка": "гречка",
+    "селедка": "сельдь",
+    "селёдка": "сельдь",
+    "сельдь": "сельдь",
+    "фри": "картофель фри",
+    "картошка фри": "картофель фри",
+    "курица ножки": "куриные ножки",
+    "ножки куриные": "куриные ножки",
+    "куриные ножки": "куриные ножки",
+    "копченая курица": "копчёная курица",
+    "копчёная курица": "копчёная курица",
+    "afbakbroodjes": "булочки",
+    "картофельные драники": "драники",
+    "драники": "драники",
+    "авокадо": "авокадо",
+    "крабовые палочки": "крабовые палочки",
+    "свежий хлеб": "хлеб",
+    "багет": "багет",
+    "яйца": "яйца",
+    "черри-томаты": "томаты",
+    "черри томаты": "томаты",
+    "томаты": "томаты",
+    "огурцы": "огурцы",
+    "редис": "редис",
+    "перец": "перец",
+    "котлета для бургера": "котлета",
+    "молоко": "молоко",
+    "чеснок": "чеснок",
+    "лук": "лук",
+    "спагетти": "спагетти",
+    "макароны": "макароны",
+    "соленый огурец": "солёный огурец",
+    "солёный огурец": "солёный огурец",
+    "сыр": "сыр",
+    "зеленый горошек": "горошек",
+    "зелёный горошек": "горошек",
+    "рис для плова": "рис",
+    "рис": "рис",
+    "йогурт греческий": "греческий йогурт",
+    "греческий йогурт": "греческий йогурт",
+    "батончики": "батончики",
+    "намаз на хлеб": "намазка",
+    "орехи": "орехи",
+    "креветки": "креветки",
+    "креветки в кляре": "креветки",
+    "зерновой творог": "творог",
+    "творог": "творог",
+    "кукуруза": "кукуруза",
+    "фасоль": "фасоль",
+    "айсберг": "айсберг",
+    "коул-слоу": "коул слоу",
+    "hagelslag": "hagelslag",
+    "фруктовый hagelslag": "hagelslag",
+    "замороженные овощи": "замороженные овощи",
+    "картофель": "картофель",
+    "масло сливочное": "сливочное масло",
+    "сливочное масло": "сливочное масло",
+    "плавленый сыр": "плавленый сыр",
+    "рисовая лапша": "рисовая лапша",
+    "кокосовое молоко": "кокосовое молоко",
+    "кинза": "кинза",
+    "петрушка": "петрушка",
+    "укроп": "укроп",
+    "зеленый лук": "зелёный лук",
+    "зелёный лук": "зелёный лук",
+    "фарш": "фарш",
+    "крылышки": "крылышки",
+    "желудочки": "желудочки",
+    "куриные желудочки": "желудочки",
+    "киви": "киви",
+    "виноград": "виноград",
+    "мандарины": "мандарины",
+    "яблоки": "яблоки",
+    "бананы": "бананы",
+    "черешня": "черешня",
+    "говядина": "говядина",
+    "тесто для гедз": "тесто гедза",
+    "подсолнечное масло": "подсолнечное масло",
+    "зеленый чай": "зелёный чай",
+    "зелёный чай": "зелёный чай",
+    "сырки": "сырки",
+    "пельмени": "пельмени",
+    "майонез": "майонез",
+    "пряники": "пряники",
+    "сосиски": "сосиски",
+    "салями закарпатская": "салями",
+    "салями": "салями",
+    "приправа для плова": "приправа",
+    "сухарики": "сухарики",
+    "крутоны": "сухарики",
+    "сахар": "сахар",
+    "соль": "соль",
+    "topokki": "ттокпокки",
+    "tteokbokki": "ттокпокки",
+    "yopokki": "ттокпокки",
+    "булугур": "булгур",
+    "булгур": "булгур",
+    "kipnuggets": "наггетсы",
+    "джем": "джем",
+    "пицца": "пицца",
+    "куриный бульон": "бульон",
+    "приправа": "приправа",
+    "лавровы лист": "лавровый лист",
+    "лавровый лист": "лавровый лист",
+    "вино": "вино",
+    "ветчина mortadella": "мортаделла",
+    "mortadella": "мортаделла",
+    "мука": "мука",
+    "томатная паста": "томатная паста",
+}
+
+_FRIDGE_SPLIT_PREFIXES = {
+    "фрукты": ["киви", "виноград", "мандарины", "яблоки", "бананы", "черешня"],
+    "курица": ["куриные ножки", "крылышки", "желудочки"],
+    "салатную смесь": ["айсберг", "коул слоу"],
+}
+
+_FRIDGE_LINE_SPLITS = {
+    "картофельные драники, фри": ["драники", "картофель фри"],
+    "свежий или копченый лосось": ["лосось"],
+    "свежий или копчёный лосось": ["лосось"],
+    "свежий хлеб или багет": ["хлеб", "багет"],
+    "масло сливочное или мягкое": ["сливочное масло"],
+    "спагетти и макароны": ["спагетти", "макароны"],
+}
+
+_FRIDGE_BRAND_PATTERNS = [
+    r"\s+-\s+.*$",
+    r"\s+из\s+ah\b.*$",
+    r"\s+из\s+jumbo\b.*$",
+    r"\s+deka\b.*$",
+    r"\s+lidl\b.*$",
+    r"\s+bonne maman\b.*$",
+    r"\s+crosta\s*&\s*mollica\b.*$",
+    r"\s+da michele\b.*$",
+    r"\s+ah\b.*$",
+    r"\s+\d+[,.]\d+\s*€.*$",
 ]
 
 
 def _fridge_cat(name: str) -> str:
     """Определить категорию продукта по ключевым словам."""
     n = name.lower()
+    if n in _FRIDGE_CAT_EXACT:
+        return _FRIDGE_CAT_EXACT[n]
+    if n in ("ui", "uien", "sla", "kropsla"):
+        return "овощи"
+    if n == "ham":
+        return "мясо и рыба"
+    if n in ("water", "mineraalwater"):
+        return "напитки"
+    if n == "watermeloen":
+        return "фрукты"
+    if n in ("paprika", "rode paprika", "gele paprika", "groene paprika"):
+        return "овощи"
+    if "перец" in n:
+        if any(k in n for k in ("чёрн", "черн", "молот", "душист", "чили", "cayenne", "кайен")):
+            return "специи и соусы"
+        return "овощи"
+    if "koolsla" in n or "coleslaw" in n or "cole slaw" in n or "коул слоу" in n or "кол слоу" in n:
+        return "овощи"
     for cat, keywords in _FRIDGE_KEYWORDS.items():
         if any(k in n for k in keywords):
             return cat
-    return "снеки и сладости"
+    return "прочее"
+
+
+def _fridge_clean_name(name: str) -> str:
+    """Приводит продукт к одному читаемому названию без смены смысла."""
+    n = re.sub(r"\s+", " ", str(name).lower().strip(" -—:•\t"))
+    for pattern in _FRIDGE_BRAND_PATTERNS:
+        n = re.sub(pattern, "", n).strip()
+    n = re.sub(r"\([^)]*\)", "", n).strip()
+    if n in _FRIDGE_NAME_EXACT:
+        return _FRIDGE_NAME_EXACT[n]
+    if n.startswith("свежий ") or n.startswith("свежая "):
+        n = re.sub(r"^свеж(ий|ая|ее|ие)\s+", "", n).strip()
+    if n.startswith("мороженый ") or n.startswith("мороженая ") or n.startswith("мороженые "):
+        n = re.sub(r"^морожен(ый|ая|ое|ые)\s+", "", n).strip()
+    if "koolsla" in n or "coleslaw" in n or "cole slaw" in n or "коул слоу" in n or "кол слоу" in n:
+        return "коул слоу"
+    if "греч" in n:
+        return "гречка"
+    if "карто" in n and "фри" in n:
+        return "картофель фри"
+    if "кур" in n and "нож" in n:
+        return "куриные ножки"
+    if "коп" in n and "кур" in n:
+        return "копчёная курица"
+    if "сельд" in n or "селед" in n or "селёд" in n:
+        return "сельдь"
+    if "лосос" in n:
+        return "лосось"
+    if "кревет" in n:
+        return "креветки"
+    if "краб" in n and "палоч" in n:
+        return "крабовые палочки"
+    if "котлет" in n:
+        return "котлета"
+    if "пицц" in n:
+        return "пицца"
+    if "тток" in n or "topokki" in n or "tteok" in n or "yopokki" in n:
+        return "ттокпокки"
+    if "томат" in n and "паст" in n:
+        return "томатная паста"
+    if "фасол" in n:
+        return "фасоль"
+    if "кукуруз" in n:
+        return "кукуруза"
+    if "том" in n and ("ям" in n or "кха" in n):
+        return "том ям"
+    if "бульон" in n:
+        return "бульон"
+    if "масло" in n and "подсолн" in n:
+        return "подсолнечное масло"
+    if "масло" in n and ("слив" in n or "мягк" in n):
+        return "сливочное масло"
+    words = n.split()
+    if len(words) > 2:
+        n = " ".join(words[:2])
+    return n
+
+
+def _fridge_split_input(text: str) -> list[str]:
+    """Разбивает пользовательский список на отдельные продукты."""
+    out: list[str] = []
+    for raw_line in str(text).splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        low = line.lower().strip(" -—:•\t")
+        if not _fridge_is_product(low):
+            continue
+        if low in _FRIDGE_LINE_SPLITS:
+            out.extend(_FRIDGE_LINE_SPLITS[low])
+            continue
+        for prefix, items in _FRIDGE_SPLIT_PREFIXES.items():
+            if low.startswith(prefix):
+                out.extend(items)
+                break
+        else:
+            inner = re.findall(r"\(([^)]*)\)", low)
+            line_no_parens = re.sub(r"\([^)]*\)", "", low)
+            chunks = [line_no_parens]
+            chunks.extend(inner)
+            for chunk in chunks:
+                chunk = re.sub(r"\s+-\s+.*$", "", chunk).strip()
+                parts = re.split(r",|;|/|\s+или\s+|\s+и\s+", chunk)
+                for part in parts:
+                    name = _fridge_clean_name(part)
+                    if _fridge_is_product(name):
+                        out.append(name)
+    result = []
+    seen = set()
+    for name in out:
+        key = name.casefold()
+        if key not in seen:
+            seen.add(key)
+            result.append(name)
+    return result
+
+
+def _fridge_reject_reason(line: str) -> str:
+    """Коротко объясняет, почему строка из большого списка не стала продуктом."""
+    low = str(line).lower().strip(" -—:•\t")
+    if not low:
+        return ""
+    if any(p in low for p in ("fresh market", "oost-europese supermarkt")):
+        return "это название магазина/раздела"
+    if "бумажные полотенца" in low:
+        return "это не продукт"
+    if "редкие покупки" in low or "редкие продукты" in low:
+        return "это заголовок, а не продукт"
+    if any(p in low for p in ("список", "категория", "прочее", "другое")):
+        return "это служебная строка"
+    if low in _FRIDGE_NOT_PRODUCT_EXACT:
+        return "это уточнение без продукта"
+    return ""
+
+
+def _fridge_rejected_lines(text: str) -> list[tuple[str, str]]:
+    rejected = []
+    for raw_line in str(text).splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        reason = _fridge_reject_reason(line)
+        if reason:
+            rejected.append((_fridge_clean_name(line), reason))
+    return rejected
 
 
 def _fridge_is_product(name: str) -> bool:
@@ -170,6 +492,8 @@ def _fridge_is_product(name: str) -> bool:
         return False
     if any(p in n for p in _FRIDGE_NOT_PRODUCT_PATTERNS):
         return False
+    if n in _FRIDGE_NOT_PRODUCT_EXACT:
+        return False
     return True
 
 
@@ -178,25 +502,25 @@ def _fridge_migrate(items: list) -> list:
     result = []
     for it in items:
         if isinstance(it, dict):
-            name = str(it.get("name", ""))
-            if not _fridge_is_product(name):
-                continue
-            cat = it.get("cat", "прочее")
-            detected = _fridge_cat(name)
-            if cat in _CAT_REMAP:
-                it = {**it, "cat": _CAT_REMAP[cat]}
-            elif cat not in _CAT_VALID:
-                # Неизвестная/устаревшая категория — перекласифицируем по имени
-                it = {**it, "cat": detected}
-            if detected != "прочее" and it.get("cat") != detected:
-                it = {**it, "cat": detected}
-            result.append(it)
+            names = _fridge_split_input(str(it.get("name", ""))) or [_fridge_clean_name(it.get("name", ""))]
+            for name in names:
+                if not _fridge_is_product(name):
+                    continue
+                detected = _fridge_cat(name)
+                result.append({**it, "name": name, "cat": detected})
         else:
-            s = str(it)
-            if not _fridge_is_product(s):
-                continue
-            result.append({"name": s, "cat": _fridge_cat(s), "on": True})
-    return result
+            for s in _fridge_split_input(str(it)):
+                if not _fridge_is_product(s):
+                    continue
+                result.append({"name": s, "cat": _fridge_cat(s), "on": True})
+    dedup = {}
+    for it in result:
+        key = it["name"].casefold()
+        if key in dedup:
+            dedup[key]["on"] = bool(dedup[key].get("on", True) or it.get("on", True))
+        else:
+            dedup[key] = it
+    return list(dedup.values())
 
 
 def _fridge_by_cat_display(items: list) -> dict:
@@ -208,7 +532,7 @@ def _fridge_by_cat_display(items: list) -> dict:
         for gi, it in by_cat.get(cat, []):
             target = cat if len(by_cat.get(cat, [])) >= FRIDGE_MIN_CAT or cat == "прочее" else _FRIDGE_FALLBACK_TARGET.get(cat, "прочее")
             result[target].append((gi, it))
-    return {cat: items for cat, items in result.items() if items}
+    return {cat: sorted(items, key=lambda x: x[1].get("name", "").casefold()) for cat, items in result.items() if items}
 
 
 def _fridge_available(items: list) -> list:
@@ -537,21 +861,43 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
 
 async def fridge_add_done(bot, cid, text, cat_idx: int = -1):
     cid_s = str(cid)
-    parts = re.split(r"[,\n;]+", text)
-    items_new = [p.strip().lower() for p in parts if _fridge_is_product(p)]
+    items_new = _fridge_split_input(text)
     items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
     existing = {it["name"].lower() for it in items}
     added = []
+    duplicates = []
     for name in items_new:
-        if name and name not in existing:
-            items.append({"name": name, "cat": _fridge_cat(name), "on": True})
-            existing.add(name)
+        key = name.lower()
+        if name and key not in existing:
+            cat = _fridge_cat(name)
+            items.append({"name": name, "cat": cat, "on": True})
+            existing.add(key)
             added.append(name)
+        elif name:
+            duplicates.append(name)
     store.set_list(config.FRIDGE_KEY, cid_s, items)
+    added_by_cat = {}
+    for name in added:
+        added_by_cat.setdefault(_fridge_cat(name), []).append(name)
+    rejected = _fridge_rejected_lines(text)
+    lines = ["🧊 <b>Холодильник обновлён</b>"]
     if added:
-        await bot.send_message(chat_id=cid, text=f"✏️ Добавлено: {', '.join(added)}")
+        lines += ["", "<b>Добавил:</b>"]
+        for cat in _CAT_ORDER:
+            names = sorted(set(added_by_cat.get(cat, [])))
+            if names:
+                emoji = _CAT_EMOJI.get(cat, "📦")
+                label = _CAT_BTN_LABEL.get(cat, cat.capitalize())
+                lines.append(f"{emoji} <b>{esc(label)}:</b> {esc(', '.join(names))}")
     else:
-        await bot.send_message(chat_id=cid, text="Все эти продукты уже есть в списке.")
+        lines += ["", "Новых продуктов не нашёл."]
+    if duplicates:
+        lines += ["", "<b>Уже было:</b>", esc(", ".join(sorted(set(duplicates))[:20]))]
+    if rejected:
+        lines += ["", "<b>Не добавил:</b>"]
+        for name, reason in rejected[:12]:
+            lines.append(f"• {esc(name)} — {esc(reason)}")
+    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML")
     if cat_idx >= 0:
         await send_fridge_cat(bot, cid, cat_idx, 0)
     else:
