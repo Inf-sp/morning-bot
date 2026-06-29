@@ -511,6 +511,36 @@ def _note_type(source):
 def _note_bucket(n):
     return n.get("bucket", "fav") if isinstance(n, dict) else "fav"
 
+def _fav_group(source: str) -> str:
+    s = (source or "").lower()
+    if "фильм" in s or "сериал" in s or "кино" in s:
+        return "movies"
+    if "книг" in s:
+        return "books"
+    if "музык" in s or "концерт" in s:
+        return "music"
+    if "путешеств" in s or "стран" in s:
+        return "travel"
+    if "гардероб" in s or "образ" in s or "покупк" in s:
+        return "wardrobe"
+    if "питан" in s or "рецепт" in s or "ед" in s or "холодиль" in s:
+        return "food"
+    if "здоров" in s or "мотивац" in s or "врач" in s or "тревог" in s or "баланс" in s:
+        return "health"
+    return "other"
+
+def _fav_group_meta():
+    return [
+        ("movies", "🎬 Кино", "фильмы и сериалы"),
+        ("books", "📚 Книги", "книги и списки к прочтению"),
+        ("music", "🎧 Музыка", "музыка, артисты и концерты"),
+        ("travel", "🧳 Поездки", "страны и поездки"),
+        ("food", "🍽 Еда", "рецепты и питание"),
+        ("wardrobe", "👕 Гардероб", "образы и покупки"),
+        ("health", "🍃 Самозабота", "здоровье и мотивация"),
+        ("other", "🗂 Прочее", "всё, что не попало в отдельную категорию"),
+    ]
+
 async def note_delete_menu(bot, cid, i):
     notes_list = store.get_list(config.NOTES_KEY, cid)
     if i >= len(notes_list):
@@ -714,27 +744,37 @@ async def send_bucket(bot, cid, bucket):
     items = [(i, n) for i, n in enumerate(notes_list) if _note_bucket(n) == "fav"]
     count = len(items)
     if not count:
-        txt = ("⏳ <b>Позже </b>\n\n"
-               "Пусто — сохраняй интересное кнопкой «⏳ Позже» под ответами.")
+        txt = ("⏳ <b>Позже</b>\n\n"
+               "Сюда попадают временные закладки из ответов: кино, книги, музыка, поездки, еда, гардероб и всё прочее.\n\n"
+               "Пока пусто — сохраняй интересное кнопкой «⏳ Позже» под ответами.")
         rows = [
             [InlineKeyboardButton("🧳 Мои поездки", callback_data="as_bucket_plan")],
+            [InlineKeyboardButton("🎬 Кино", callback_data="as_bucket_favgrp_movies"),
+             InlineKeyboardButton("📚 Книги", callback_data="as_bucket_favgrp_books")],
+            [InlineKeyboardButton("🎧 Музыка", callback_data="as_bucket_favgrp_music"),
+             InlineKeyboardButton("🧳 Поездки", callback_data="as_bucket_favgrp_travel")],
+            [InlineKeyboardButton("🍽 Еда", callback_data="as_bucket_favgrp_food"),
+             InlineKeyboardButton("👕 Гардероб", callback_data="as_bucket_favgrp_wardrobe")],
+            [InlineKeyboardButton("🍃 Самозабота", callback_data="as_bucket_favgrp_health"),
+             InlineKeyboardButton("🗂 Прочее", callback_data="as_bucket_favgrp_other")],
             [InlineKeyboardButton("◀️ Назад", callback_data="as_notes")],
         ]
         await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                                reply_markup=InlineKeyboardMarkup(rows)); return
-    import re as _re
-    _strip_html = lambda s: _re.sub(r"<[^>]+>", "", s)
-    txt = f"⏳ <b>Позже </b> · {count}"
+    groups = {key: [] for key, _, _ in _fav_group_meta()}
+    for idx, n in items:
+        src = n.get("source", "Прочее") if isinstance(n, dict) else "Прочее"
+        groups[_fav_group(src)].append((idx, n))
+
+    txt = ("⏳ <b>Позже</b>\n\n"
+           "Сюда попадают временные закладки из ответов: кино, книги, музыка, поездки, еда, гардероб и всё прочее.\n\n"
+           "Открой категорию, чтобы посмотреть и почистить её.")
     rows = []
-    for i, n in items:
-        src = (n.get("source", "Прочее") if isinstance(n, dict) else "Прочее") or "Прочее"
-        raw = (n.get("text", "") if isinstance(n, dict) else str(n)).strip()
-        preview = _strip_html(raw)
-        short = preview[:28] + ("…" if len(preview) > 28 else "")
-        label = f"{src} · {short}"
-        rows.append([InlineKeyboardButton(label, callback_data=f"fav_view_{i}")])
+    for key, label, desc in _fav_group_meta():
+        if groups.get(key):
+            rows.append([InlineKeyboardButton(f"{label} ({len(groups[key])})", callback_data=f"as_bucket_favgrp_{key}")])
     rows.append([InlineKeyboardButton("🧳 Мои поездки", callback_data="as_bucket_plan")])
-    rows.append([InlineKeyboardButton("❌ Удалить", callback_data="as_clean_fav")])
+    rows.append([InlineKeyboardButton("❌ Очистить всё", callback_data="as_clean_fav")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -826,6 +866,10 @@ async def handle_notes_callback(bot, cid, q, data):
         await send_notes(bot, cid); return
     if data == "as_bucket_fav":
         await send_bucket(bot, cid, "fav"); return
+    if data.startswith("as_bucket_favgrp_"):
+        import cleanup
+        await cleanup.open_cleanup(bot, cid, f"nb_{data[len('as_bucket_favgrp_'):]}")
+        return
     if data == "as_bucket_plan":
         await send_bucket(bot, cid, "plan"); return
     if data == "as_bucket_love":

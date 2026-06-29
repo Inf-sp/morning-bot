@@ -117,14 +117,13 @@ async def _send_grammar_task(bot, cid, d, code):
         [InlineKeyboardButton(d.get("a", "A"), callback_data="gram_a"),
          InlineKeyboardButton(d.get("b", "B"), callback_data="gram_b")],
         [InlineKeyboardButton("✨ Ещё пример из этой темы", callback_data=f"again_gram_{code}")],
-        [InlineKeyboardButton("▶️ Следующая тема", callback_data=f"next_gram_{code}")],
         [InlineKeyboardButton("🎲 Случайная тема", callback_data=f"rand_gram_{code}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(L2), parse_mode="HTML", reply_markup=kb)
 
 async def next_grammar(bot, cid, language):
-    """Следующая тема: полностью новая грамматика с объяснением."""
+    """Полностью новая грамматика с объяснением."""
     await send_grammar(bot, cid, language)
 
 async def random_grammar(bot, cid, language):
@@ -174,7 +173,6 @@ async def grammar_answer(bot, cid, chosen):
             L += ["", f"💡 {esc(st['rule'])}"]
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё пример из этой темы", callback_data=f"again_gram_{code}")],
-        [InlineKeyboardButton("➡️ Следующая тема", callback_data=f"next_gram_{code}")],
         [InlineKeyboardButton("🎲 Случайная тема", callback_data=f"rand_gram_{code}")],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
@@ -907,7 +905,7 @@ async def send_topics(bot, cid, language):
         lines.append("Пока пусто. Добавь тему, которую хочешь разобрать.")
     rows = [[InlineKeyboardButton("✏️ Добавить тему", callback_data=f"a_topicadd_{code}")]]
     if topics:
-        rows.append([InlineKeyboardButton("❌ Убрать выученные", callback_data=f"a_topicclean_{code}")])
+        rows.append([InlineKeyboardButton("❌ Очистить выученное", callback_data=f"a_topicclean_{code}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -1510,7 +1508,7 @@ async def gm_send_topic(bot, cid, topic_id):
         "awaiting_sentence": True,
     }
     kb = _ikb([
-        [("✅ Усвоил, далее →", f"gm_done_{topic_id}"), ("◀️ К темам", f"gm_level_{code}_{level}")],
+        [("✅ Усвоил", f"gm_done_{topic_id}"), ("◀️ К темам", f"gm_level_{code}_{level}")],
     ])
     await bot.send_message(
         chat_id=cid,
@@ -1544,7 +1542,6 @@ async def check_sentence(bot, cid, text):
     icon = "✅" if ok else "🤔"
 
     kb = _ikb([
-        [("➡️ Следующая тема", f"gm_done_{topic_id}")],
         [("✨ Ещё раз", f"gm_topic_{topic_id}"), ("◀️ К темам", f"gm_level_{code}_{level}")],
     ])
     L = [f"{icon} <i>{esc(text)}</i>", "", esc(feedback)]
@@ -1577,28 +1574,21 @@ async def gm_mark_done(bot, cid, topic_id):
         if t["id"] == topic_id:
             found = True
 
+    emoji = _LEVEL_EMOJI.get(level, "📘")
+    kb = _ikb([
+        [("📋 К списку тем", f"gm_level_{code}_{level}")],
+        [("✨ Ещё раз", f"gm_level_{code}_{level}"), ("◀️ К языку", f"gm_lang_{code}")],
+    ])
     if next_topic:
-        kb = _ikb([
-            [("➡️ Следующая тема", f"gm_topic_{next_topic['id']}")],
-            [("📋 К списку тем", f"gm_level_{code}_{level}")],
-        ])
-        await bot.send_message(
-            chat_id=cid,
-            text=f"✅ Тема пройдена!\n\nСледующая: <b>{esc(next_topic['title'])}</b>",
-            parse_mode="HTML",
-            reply_markup=kb,
-        )
+        done_text = "✅ Тема пройдена!\n\nОткрой список тем, когда будешь готов."
     else:
-        emoji = _LEVEL_EMOJI.get(level, "📘")
-        kb = _ikb([
-            [("✨ Ещё раз", f"gm_level_{code}_{level}"), ("◀️ К языку", f"gm_lang_{code}")],
-        ])
-        await bot.send_message(
-            chat_id=cid,
-            text=f"{emoji} <b>Курс {level} завершён!</b>\n\nВсе темы пройдены. Отличная работа!",
-            parse_mode="HTML",
-            reply_markup=kb,
-        )
+        done_text = f"{emoji} <b>Курс {level} завершён!</b>\n\nВсе темы пройдены. Отличная работа!"
+    await bot.send_message(
+        chat_id=cid,
+        text=done_text,
+        parse_mode="HTML",
+        reply_markup=kb,
+    )
 
 
 async def gm_send_custom(bot, cid, code):
