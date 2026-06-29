@@ -702,7 +702,7 @@ async def send_watchlist(bot, cid):
     lst = store.get_list(config.WATCHLIST_KEY, cid)
     rows = []
     if lst:
-        rows.append([InlineKeyboardButton("❌ Чистка списка", callback_data="a_watchclean")])
+        rows.append([InlineKeyboardButton("❌ Очистить список", callback_data="a_watchclean")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid,
         text="🍿 Посмотреть:\n" + ("\n".join(f"• {_list_text(x)}" for x in lst) if lst else "пусто"),
@@ -712,7 +712,7 @@ async def send_readlist(bot, cid):
     lst = store.get_list(config.READLIST_KEY, cid)
     rows = []
     if lst:
-        rows.append([InlineKeyboardButton("❌ Чистка списка", callback_data="a_readclean")])
+        rows.append([InlineKeyboardButton("❌ Очистить список", callback_data="a_readclean")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid,
         text="📚 Почитать:\n" + ("\n".join(f"• {_list_text(x)}" for x in lst) if lst else "пусто"),
