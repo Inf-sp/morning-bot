@@ -207,7 +207,7 @@ async def send_del(bot, cid):
         await bot.send_message(chat_id=cid, text="Шкаф пуст.", reply_markup=closet_kb()); return
     store.del_index[str(cid)] = flat
     rows = [[InlineKeyboardButton(f"❌ {it}", callback_data=f"w_delitem_{i}")] for i, (cat, it) in enumerate(flat[:40])]
-    rows.append([InlineKeyboardButton("↩ Отмена", callback_data="w_closet")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="w_closet")])
     await bot.send_message(chat_id=cid, text="Что удалить?", reply_markup=InlineKeyboardMarkup(rows))
 
 async def del_item(bot, cid, i):

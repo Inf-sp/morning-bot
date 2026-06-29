@@ -576,22 +576,6 @@ async def setup_command(update, context):
     await settings.send_home(context.bot, update.effective_chat.id)
 
 
-async def remember_command(update, context):
-    """Сохранить факт о пользователе в профиль памяти."""
-    cid = update.effective_chat.id
-    text = " ".join(context.args or []).strip()
-    if not text:
-        await update.message.reply_text(
-            "💡 Использование: /remember <факт>\n\n"
-            "Например: /remember не люблю острое\n/remember мёрзну утром"
-        )
-        return
-    text = secure.clamp(text, 200)
-    import memory
-    memory.add_preference(cid, text)
-    await update.message.reply_text(f"🧠 Запомнил: «{text}»")
-
-
 # ---------- Расписание ----------
 async def job_morning_brief(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
