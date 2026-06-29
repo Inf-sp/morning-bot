@@ -189,20 +189,23 @@ async def set_lang(bot, cid, lang):
 _BODY_PLACEHOLDER = "не указано"
 
 async def send_body(bot, cid):
+    store.pending_input[str(cid)] = "wardrobe_profile_input"
+    profile = get(cid, "wardrobe_profile", "")
     body = get(cid, "body", "")
-    style = get(cid, "style", "минимализм")
-    body_line = esc(body) if body else "<i>не задано</i>"
+    style = get(cid, "style", "")
+    fallback = ". ".join(x for x in [body, f"стиль: {style}" if style else ""] if x).strip()
+    profile_line = esc(profile or fallback) if (profile or fallback) else "<i>не задано</i>"
     txt = (
-        "🎚️ <b>Мои параметры </b>\n\n"
+        "🎚️ <b>Мои параметры</b>\n\n"
         "Бот использует эти данные при подборе образа и оценке покупок — "
         "чтобы советы по размеру и силуэту подходили именно тебе.\n\n"
-        f"<b>Параметры тела:</b> {body_line}\n"
-        f"<b>Стиль:</b> {esc(style)}\n\n"
-        "<i>Пример параметров: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32</i>"
+        f"<b>Сейчас сохранено:</b>\n{profile_line}\n\n"
+        "<b>Напиши одним сообщением:</b>\n"
+        "рост, размеры одежды, обуви и брюк, а также стиль одежды.\n\n"
+        "<i>Пример: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32. "
+        "Стиль: тёмные оттенки, оверсайз, минимум принтов.</i>"
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎚️ Параметры тела", callback_data="set_bodyinput")],
-        [InlineKeyboardButton("🎚️ Стиль", callback_data="set_stylepick")],
         [InlineKeyboardButton("◀️ Назад", callback_data="set_wardrobe")],
     ])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
@@ -227,10 +230,16 @@ async def set_style(bot, cid, i):
 def _item_label(it):
     return it if isinstance(it, str) else (it.get("name") or it.get("word") or str(it))
 
-def _list_kb(items, del_prefix, add_cb, back="set_home"):
-    rows = [[InlineKeyboardButton(f"❌ {_item_label(it)[:35]}", callback_data=f"{del_prefix}{i}")]
-            for i, it in enumerate(items[-40:])]
-    rows.append([InlineKeyboardButton("✏️ Добавить", callback_data=add_cb)])
+def _list_kb(items, del_prefix, add_cb, back="set_home", clean_cb=None):
+    rows = [[InlineKeyboardButton(_item_label(it)[:40], callback_data="noop")]
+            for it in items[-40:]]
+    if clean_cb and items:
+        rows.append([
+            InlineKeyboardButton("✏️ Добавить", callback_data=add_cb),
+            InlineKeyboardButton("❌ Убрать", callback_data=clean_cb),
+        ])
+    else:
+        rows.append([InlineKeyboardButton("✏️ Добавить", callback_data=add_cb)])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
     return InlineKeyboardMarkup(rows)
 
@@ -242,9 +251,13 @@ async def _send_list(bot, cid, title, items, del_prefix, add_cb, back="set_home"
 
 # --- Шкаф ---
 async def send_wardrobe(bot, cid, back="m_notes"):
+    if store.pending_input.get(str(cid)) == "wardrobe_profile_input":
+        store.pending_input.pop(str(cid), None)
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✏️ Добавить", callback_data="set_ward_add")],
-        [InlineKeyboardButton("❌ Убрать", callback_data="set_ward_del")],
+        [
+            InlineKeyboardButton("✏️ Добавить", callback_data="set_ward_add"),
+            InlineKeyboardButton("❌ Убрать", callback_data="set_ward_del"),
+        ],
         [InlineKeyboardButton("🎚️ Параметры", callback_data="set_body")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ])
@@ -255,9 +268,15 @@ async def send_wardrobe(bot, cid, back="m_notes"):
 async def send_countries(bot, cid):
     from util import country_flag
     items = store.get_list(config.COUNTRIES_KEY, cid)
-    rows = [[InlineKeyboardButton(f"❌ {country_flag(it)} {_item_label(it)[:33]}", callback_data=f"setdel_country_{i}")]
-            for i, it in enumerate(items[-40:])]
-    rows.append([InlineKeyboardButton("✏️ Добавить", callback_data="setadd_country")])
+    rows = [[InlineKeyboardButton(f"{country_flag(it)} {_item_label(it)[:36]}", callback_data="noop")]
+            for it in items[-40:]]
+    if items:
+        rows.append([
+            InlineKeyboardButton("✏️ Добавить", callback_data="setadd_country"),
+            InlineKeyboardButton("❌ Убрать", callback_data="set_clean_countries"),
+        ])
+    else:
+        rows.append([InlineKeyboardButton("✏️ Добавить", callback_data="setadd_country")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid, text="🗺️ <b>Мои страны</b>", parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -266,13 +285,14 @@ async def send_countries(bot, cid):
 async def send_artists(bot, cid):
     items = store.get_list(config.ARTISTS_KEY, cid)
     await bot.send_message(chat_id=cid, text="🎤 <b>Мои артисты</b>", parse_mode="HTML",
-                           reply_markup=_list_kb(items, "setdel_artist_", "setadd_artist"))
+                           reply_markup=_list_kb(items, "setdel_artist_", "setadd_artist",
+                                                 clean_cb="set_clean_artists"))
 
 # --- Книги ---
 
 # --- Лагом ---
 _LAGOM_INTRO = (
-    "☕️ <b>Лагом — твои установки и ценности</b>\n\n"
+    "☕️ <b>Лагом</b>\n\n"
     "Лагом (швед. <i>lagom</i> — «в самый раз») — твой личный свод принципов: "
     "что важно, как хочешь жить, что даёт энергию, а что забирает.\n\n"
     "Бот использует их в ☕️ Мотивация — "
@@ -286,9 +306,13 @@ async def send_lagom(bot, cid, back="m_notes"):
     items = memory.get_lagom(cid)
     txt = _LAGOM_INTRO.rstrip() if items else f"{_LAGOM_INTRO.rstrip()}\n\nПока пусто — добавь первый принцип 👇"
     rows = []
-    rows.append([InlineKeyboardButton("✏️ Добавить", callback_data="setadd_lagom")])
     if items:
-        rows.append([InlineKeyboardButton("❌ Убрать", callback_data="set_lagom_clean")])
+        rows.append([
+            InlineKeyboardButton("✏️ Добавить", callback_data="setadd_lagom"),
+            InlineKeyboardButton("❌ Убрать", callback_data="set_lagom_clean"),
+        ])
+    else:
+        rows.append([InlineKeyboardButton("✏️ Добавить", callback_data="setadd_lagom")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -296,7 +320,8 @@ async def send_lagom(bot, cid, back="m_notes"):
 async def send_books(bot, cid):
     items = store.get_list(config.BOOKS_KEY, cid)
     await bot.send_message(chat_id=cid, text="📚 <b>Мои книги</b>", parse_mode="HTML",
-                           reply_markup=_list_kb(items, "setdel_book_", "setadd_book"))
+                           reply_markup=_list_kb(items, "setdel_book_", "setadd_book",
+                                                 clean_cb="set_clean_books"))
 
 async def list_delete(bot, cid, kind, i):
     keymap = {"country": config.COUNTRIES_KEY, "artist": config.ARTISTS_KEY, "book": config.BOOKS_KEY}
@@ -410,6 +435,15 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "setadd_book":
         store.pending_input[cid] = "setadd_book"
         await bot.send_message(chat_id=cid, text="📚 Напиши название книги - добавлю в список.")
+    elif data == "set_clean_countries":
+        from cleanup import open_cleanup
+        await open_cleanup(bot, cid, "cfg_countries")
+    elif data == "set_clean_artists":
+        from cleanup import open_cleanup
+        await open_cleanup(bot, cid, "cfg_artists")
+    elif data == "set_clean_books":
+        from cleanup import open_cleanup
+        await open_cleanup(bot, cid, "cfg_books")
     elif data.startswith("setdel_country_"):
         await list_delete(bot, cid, "country", int(data.split("_")[-1]))
     elif data.startswith("setdel_artist_"):
@@ -862,9 +896,13 @@ async def send_love_section(bot, cid, key):
     else:
         body = "<i>пусто</i>"
     lines = [f"<b>{title}</b>", "", body]
-    rows = [[InlineKeyboardButton("✏️ Добавить", callback_data=f"as_loveadd_{key}")]]
     if items:
-        rows.append([InlineKeyboardButton("❌ Выбрать для удаления", callback_data=f"as_loveclean_{key}")])
+        rows = [[
+            InlineKeyboardButton("✏️ Добавить", callback_data=f"as_loveadd_{key}"),
+            InlineKeyboardButton("❌ Убрать", callback_data=f"as_loveclean_{key}"),
+        ]]
+    else:
+        rows = [[InlineKeyboardButton("✏️ Добавить", callback_data=f"as_loveadd_{key}")]]
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
