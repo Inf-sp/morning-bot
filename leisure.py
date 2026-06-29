@@ -62,7 +62,7 @@ async def collect_done(bot, cid, kind: str, text: str):
         n = len(added)
         label = {"artists": "артист(ов)", "movies": "фильм(ов)", "books": "книг(и)"}[kind]
         await bot.send_message(chat_id=cid,
-            text=f"✅ Сохранено {n} {label}. Генерирую рекомендации...", parse_mode="HTML")
+            text=f"✅ Сохранено {n} {label}.", parse_mode="HTML")
     # Повторно открываем нужный раздел
     if kind == "artists":
         await send_listen(bot, cid)
@@ -367,7 +367,6 @@ async def send_recos(bot, cid, kind):
     if not seen:
         await _ask_collect(bot, cid, "movies")
         return
-    await bot.send_message(chat_id=cid, text="Подбираю под твой вкус...")
     items = []
     for _ in range(2):
         try:
@@ -537,7 +536,6 @@ async def send_books_reco(bot, cid):
     if not _ensure_books(cid):
         await _ask_collect(bot, cid, "books")
         return
-    await bot.send_message(chat_id=cid, text="Подбираю книги под твой вкус...")
     items = []
     for _ in range(2):
         try:
@@ -757,7 +755,6 @@ async def send_listen(bot, cid):
     known = (set(a.lower() for a in arts) | set(b.lower() for b in booked)
              | set(str(d).lower() for d in disliked) | set(str(s).lower() for s in music_seen))
     avoid_all = ", ".join(list(arts) + booked + [str(d) for d in disliked] + [str(s) for s in music_seen])[:600]
-    await bot.send_message(chat_id=cid, text="Подбираю исполнителя под твой вкус...")
     web_block = ""
     web = research.tavily_snippet(
         f"new music similar to {anchors[:60]} indie alternative recommendations 2024 2025",
@@ -849,7 +846,6 @@ async def find_concerts(bot, cid, mode="home"):
     else:
         cc, flag, cname = home_cc, home_flag, home_name
 
-    await bot.send_message(chat_id=cid, text=f"Ищу мероприятия в {cname}, ~15-30 сек...")
     import requests
     from util import _MONTHS
     found = {}
@@ -1130,7 +1126,6 @@ def _travel_kb():
     ])
 
 async def send_go(bot, cid):
-    await bot.send_message(chat_id=cid, text="Подбираю страну...")
     visited = store.get_list(config.COUNTRIES_KEY, cid)
     favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
     fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
@@ -1196,7 +1191,6 @@ async def send_plan(bot, cid):
     fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
     disliked = store.get_list(config.TRAVEL_DISLIKE_KEY, cid)
     skip = ", ".join([str(x) for x in visited] + fav_names + [str(x) for x in disliked] + [country])
-    await bot.send_message(chat_id=cid, text="Собираю план поездки...")
     facts = research.country_facts(country)
     fblock = research.facts_block(facts)
     rfact = research.wiki_fact(country)
