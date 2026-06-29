@@ -721,12 +721,12 @@ async def send_dict_lang(bot, cid, lang, back="m_dict_settings"):
     txt = (f"{flag} <b>Словарь · {name}</b>\n\n"
            f"Слов: {c['word']} · Фраз: {c['phrase']} · Тем: {len(topics)}")
     rows = [
-        [InlineKeyboardButton("✏️ Добавить слово, фразу или тему", callback_data=f"a_dictadd_smart_{lang}")],
         [
             InlineKeyboardButton("❌ Слово", callback_data=f"a_dictedit_{lang}_word"),
             InlineKeyboardButton("❌ Фраза", callback_data=f"a_dictedit_{lang}_phrase"),
             InlineKeyboardButton("❌ Тема", callback_data=f"a_topicclean_{lang}"),
         ],
+        [InlineKeyboardButton("✏️ Добавить слово, фразу или тему", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ]
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
@@ -734,10 +734,8 @@ async def send_dict_lang(bot, cid, lang, back="m_dict_settings"):
 
 def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("📖 Словарь", callback_data=f"a_dictlang_{lang}"),
-            InlineKeyboardButton("✏️ Добавить", callback_data=f"a_dictadd_smart_{lang}"),
-        ]
+        [InlineKeyboardButton("📖 Словарь", callback_data=f"a_dictlang_{lang}")],
+        [InlineKeyboardButton("✏️ Добавить", callback_data=f"a_dictadd_smart_{lang}")],
     ])
 
 async def send_dict_edit(bot, cid, lang, kind):
@@ -866,9 +864,10 @@ async def send_topics(bot, cid, language):
             lines.append(f"{i}. {esc(txt)}")
     else:
         lines.append("Пока пусто. Добавь тему, которую хочешь разобрать.")
-    rows = [[InlineKeyboardButton("✏️ Добавить тему", callback_data=f"a_topicadd_{code}")]]
+    rows = []
     if topics:
         rows.append([InlineKeyboardButton("❌ Очистить выученное", callback_data=f"a_topicclean_{code}")])
+    rows.append([InlineKeyboardButton("✏️ Добавить тему", callback_data=f"a_topicadd_{code}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -1125,7 +1124,7 @@ async def game_reveal(bot, cid, q):
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 
 
-# ================= УРОВЕНЬ (/setup) =================
+# ================= УРОВЕНЬ ЯЗЫКА =================
 def _levels_kb(nl_lvl, en_lvl, back="set_home"):
     def _row(code, cur):
         hard = _is_b1plus(cur)

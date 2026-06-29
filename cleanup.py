@@ -82,7 +82,7 @@ def _ctx_items(cid, ctx):
     if ctx == "kast":
         flat = _wardrobe_flat(cid)
         items = [(i, it) for i, (cat, it) in enumerate(flat)]
-        return "🗄 Чистка: шкаф", items, "w_closet"
+        return "🗄 Чистка: шкаф", items, "m_wardrobe"
     if ctx == "kast_s":
         flat = _wardrobe_flat(cid)
         items = [(i, it) for i, (cat, it) in enumerate(flat)]
@@ -146,11 +146,6 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
         "lvls_books": "✏️ Добавить книгу",
     }
     rows = []
-    if ctx in _lv_add_label:
-        if ctx.startswith("lvls_"):
-            rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"ls_loveadd_{ctx[5:]}")])
-        else:
-            rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"as_loveadd_{ctx[3:]}")])
     if ctx == "fridge":
         for idx, lbl in chunk:
             mark = "✅" if idx in sel else "▫️"
@@ -168,6 +163,11 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     rows.append([InlineKeyboardButton("☑️ Отметить всё на странице", callback_data=f"cla_{ctx}_{page}")])
     if sel:
         rows.append([InlineKeyboardButton(f"❌ Удалить отмеченные ({len(sel)})", callback_data=f"cld_{ctx}_{page}")])
+    if ctx in _lv_add_label:
+        if ctx.startswith("lvls_"):
+            rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"ls_loveadd_{ctx[5:]}")])
+        else:
+            rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"as_loveadd_{ctx[3:]}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)

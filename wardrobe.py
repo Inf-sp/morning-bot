@@ -17,8 +17,8 @@ def _kb(rows):
 
 def closet_kb():
     return _kb([
-        [("🗄️ Показать всё", "w_show")],
-        [("✏️ Добавить вещь", "w_add"), ("❌ Удалить вещь", "w_del")],
+        [("❌ Убрать вещи", "w_del")],
+        [("✏️ Добавить вещь", "w_add")],
         [("◀️ Назад", "m_wardrobe")],
     ])
 
@@ -39,6 +39,7 @@ async def send_looks(bot, cid):
     if not wardrobe_text.strip():
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("✏️ Добавить вещи в шкаф", callback_data="set_closet"),
+        ], [
             InlineKeyboardButton("◀️ Назад", callback_data="m_wardrobe"),
         ]])
         await bot.send_message(
@@ -233,6 +234,7 @@ async def send_improve(bot, cid):
     if not wardrobe_text.strip():
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("✏️ Добавить вещи в шкаф", callback_data="set_closet"),
+        ], [
             InlineKeyboardButton("◀️ Назад", callback_data="m_wardrobe"),
         ]])
         await bot.send_message(
@@ -350,10 +352,8 @@ async def handle_callback(bot, cid, q, data):
     if data.startswith("w_fb_"):
         await look_feedback(bot, cid, data[len("w_fb_"):]); return
     if data == "w_closet":
-        try:
-            await q.message.edit_text("🗄 <b>Мой шкаф</b> - база вещей.", parse_mode="HTML", reply_markup=closet_kb())
-        except Exception:
-            await bot.send_message(chat_id=cid, text="🗄 <b>Мой шкаф</b> - база вещей.", parse_mode="HTML", reply_markup=closet_kb())
+        import cleanup
+        await cleanup.open_cleanup(bot, cid, "kast")
         return
     if data == "w_show":
         await send_show(bot, cid); return

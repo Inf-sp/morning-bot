@@ -416,7 +416,7 @@ async def text_router(update, context):
         _log.warning("[secure] injection flags: %s", flags)
 
     # Нажата любая кнопка нижнего меню -> сбрасываем незавершённый ввод (чтобы чат не «съел» сообщение настроек)
-    if text == "☀️ Мой день" or text in menu.LABEL_TO_KEY:
+    if text == "☀️ Мой день" or text in menu.LABEL_TO_KEY or text == "🗂️ Моя база":
         store.pending_input.pop(cid, None)
         store.micro_state.pop(cid, None)
 
@@ -426,7 +426,7 @@ async def text_router(update, context):
         except Exception as e:
             await verify.safe_error(bot, cid, e)
         return
-    if text == "🗂️ Моя база":
+    if text in ("🎚️ Настройки", "🗂️ Моя база"):
         try:
             await settings.send_notes(bot, cid)
         except Exception as e:
@@ -586,7 +586,7 @@ async def notes_command(update, context):
 
 async def setup_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
-    await settings.send_home(context.bot, update.effective_chat.id)
+    await settings.send_notes(context.bot, update.effective_chat.id)
 
 
 # ---------- Расписание ----------
@@ -753,8 +753,7 @@ async def post_init(app):
         logging.exception("Secrets scan failed")
     from telegram import BotCommand
     await app.bot.set_my_commands([
-        BotCommand("start", "меню и описание"),
-        BotCommand("setup", "настройки"),
+        BotCommand("start", "главное меню"),
     ])
 
 
