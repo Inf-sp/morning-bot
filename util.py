@@ -1,4 +1,5 @@
 import re
+import time
 from html import escape as _html_escape
 
 _WEEKDAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
@@ -13,6 +14,23 @@ def cap_sentence(t: str | None) -> str:
     """Заглавная первая буква для коротких LLM-фраз, не меняя остальной текст."""
     s = (t or "").strip()
     return s[:1].upper() + s[1:] if s else s
+
+_TTL_CACHE = {}
+
+def ttl_get(namespace: str, key: str, ttl_seconds: int):
+    """Простой process-local TTL-cache для внешних API."""
+    hit = _TTL_CACHE.get((namespace, key))
+    if not hit:
+        return None
+    ts, value = hit
+    if time.time() - ts > ttl_seconds:
+        _TTL_CACHE.pop((namespace, key), None)
+        return None
+    return value
+
+def ttl_set(namespace: str, key: str, value):
+    _TTL_CACHE[(namespace, key)] = (time.time(), value)
+    return value
 
 async def ack_loading(q) -> None:
     """Меняет клавиатуру на ⏳ пока идёт медленная LLM-операция. Ошибки игнорирует."""

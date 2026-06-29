@@ -625,7 +625,8 @@ async def job_weather_warn(context: ContextTypes.DEFAULT_TYPE):
             continue
         try:
             s = store.get_settings(cid)
-            data = weather.fetch_weather(s["lat"], s["lon"], 2)
+            import asyncio
+            data = await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 2)
             d = data["daily"]
             wind = d["windspeed_10m_max"][0] or 0
             code = d["weathercode"][0]
