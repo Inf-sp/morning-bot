@@ -944,7 +944,7 @@ async def send_weekly_events(bot, cid):
     cname = _country_place()
     now = datetime.now(config.TZ)
     today_str = now.strftime("%Y-%m-%d")
-    date_to_str = (now + timedelta(days=21)).strftime("%Y-%m-%d")
+    date_to_str = (now + timedelta(days=7)).strftime("%Y-%m-%d")
 
     def _fmt_date(ds):
         try:
@@ -957,7 +957,9 @@ async def send_weekly_events(bot, cid):
         if not title:
             return False
         # TMDB can return local titles in non-RU/EN scripts for region premieres.
-        return not re.search(r"[^A-Za-zА-Яа-яЁё0-9\s.,:;!?()«»\"'\\-–—]", title)
+        if not re.search(r"[A-Za-zА-Яа-яЁё]", title):
+            return False
+        return not re.search(r"[^A-Za-zА-Яа-яЁё0-9\s.,:;!?()«»\"'–—-]", title)
 
     def _movie_genre(m):
         gids = m.get("genre_ids") or []
@@ -972,7 +974,7 @@ async def send_weekly_events(bot, cid):
     lines = [
         "🎵 <b>События следующей недели</b>",
         "",
-        f"Вот что я нашёл для тебя на ближайшие дни в <b>{esc(cname)}</b>:",
+        f"Вот что я нашёл для тебя на ближайшие 7 дней в <b>{esc(cname)}</b>:",
         "",
     ]
 
@@ -986,7 +988,7 @@ async def send_weekly_events(bot, cid):
             found = {}
             seen_pairs = set()
             date_from_tm = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-            date_to_tm = (now + timedelta(days=21)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            date_to_tm = (now + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
             for a in artists[:40]:
                 try:
                     r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json",
