@@ -575,55 +575,6 @@ async def setup_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
     await settings.send_home(context.bot, update.effective_chat.id)
 
-async def health_command(update, context):
-    lines = ["<b>🩺 Health check</b>"]
-
-    # Env keys — обязательные
-    required = {
-        "TELEGRAM_TOKEN": bool(config.TELEGRAM_TOKEN),
-        "GEMINI_API_KEY": bool(config.GEMINI_API_KEY),
-        "DATABASE_URL": bool(config.DATABASE_URL),
-        "CHAT_ID": bool(config.CHAT_ID),
-    }
-    lines.extend(["", "🔒 <b>Обязательные</b>"])
-    for k, ok in required.items():
-        lines.append(f"  {'✅' if ok else '❌'} <code>{k}</code>")
-
-    # Опциональные ключи
-    optional = {
-        "ANTHROPIC_API_KEY": bool(config.ANTHROPIC_API_KEY),
-        "GROQ_API_KEY": bool(config.GROQ_API_KEY),
-        "OPENAI_API_KEY": bool(config.OPENAI_API_KEY),
-        "OPENROUTER_API_KEY": bool(config.OPENROUTER_API_KEY),
-        "CLOUDFLARE_API_TOKEN": bool(config.CF_API_TOKEN),
-        "CLOUDFLARE_ACCOUNT_ID": bool(config.CF_ACCOUNT_ID),
-        "TAVILY_API_KEY": bool(config.TAVILY_API_KEY),
-        "TMDB_API_KEY": bool(config.TMDB_API_KEY),
-        "TICKETMASTER_API_KEY": bool(config.TICKETMASTER_API_KEY),
-        "ZEROENTROPY_API_KEY": bool(config.ZEROENTROPY_API_KEY),
-    }
-    lines.extend(["", "🧩 <b>Опциональные</b>"])
-    for k, ok in optional.items():
-        lines.append(f"  {'✅' if ok else '⚪'} <code>{k}</code>")
-
-    lines.extend(["", "🗄 <b>Состояние</b>"])
-    try:
-        store._load("__health__")
-        lines.append("  ✅ DB: OK")
-    except Exception as e:
-        _log.warning("health: DB failed: %s", e)
-        lines.append("  ❌ DB: недоступна")
-
-    try:
-        s = store.get_settings(update.effective_chat.id)
-        weather.fetch_weather(s["lat"], s["lon"], 1)
-        lines.append("  ✅ Weather API: OK")
-    except Exception as e:
-        _log.warning("health: weather failed: %s", e)
-        lines.append("  ❌ Weather API: недоступна")
-
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
-
 
 async def remember_command(update, context):
     """Сохранить факт о пользователе в профиль памяти."""
@@ -641,39 +592,6 @@ async def remember_command(update, context):
     await update.message.reply_text(f"🧠 Запомнил: «{text}»")
 
 
-async def cost_command(update, context):
-    """Сводка расходов на LLM — только для администратора."""
-    cid = update.effective_chat.id
-    if config.CHAT_ID and str(cid) != str(config.CHAT_ID):
-        await update.message.reply_text("⛔ Только для администратора.")
-        return
-    await settings.send_admin_cost(context.bot, cid)
-
-
-async def llmcheck_command(update, context):
-    """Диагностика доступности LLM-провайдеров — только для администратора."""
-    cid = update.effective_chat.id
-    if config.CHAT_ID and str(cid) != str(config.CHAT_ID):
-        await update.message.reply_text("⛔ Только для администратора.")
-        return
-    await settings.send_admin_llmcheck(context.bot, cid)
-
-
-async def invite_command(update, context):
-    """Создать одноразовый инвайт-код — только для owner."""
-    cid = update.effective_chat.id
-    if not access.is_owner(cid):
-        await update.message.reply_text("⛔ Только для владельца бота.")
-        return
-    code = access.create_invite()
-    bot_me = await context.bot.get_me()
-    link = f"https://t.me/{bot_me.username}?start={code}"
-    await update.message.reply_text(
-        f"🔗 <b>Подарочный инвайт:</b>\n<a href=\"{link}\">{link}</a>\n\nОтправь другу — он нажмёт и получит доступ.",
-        parse_mode="HTML", disable_web_page_preview=True
-    )
-
-
 # ---------- Расписание ----------
 async def job_morning_brief(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
@@ -682,7 +600,6 @@ async def job_morning_brief(context: ContextTypes.DEFAULT_TYPE):
         try:
             bot = _NokbBot(context.bot)
             await weather.send_weather(bot, cid, "tomorrow_plain")
-            await learning.send_morning_word(bot, cid)
         except Exception:
             logging.exception("job_morning_brief failed for cid=%s", cid)
 
@@ -728,7 +645,7 @@ async def job_grammar(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "grammar"):
             continue
         try:
-            await learning.send_morning_word(_NokbBot(context.bot), cid)
+            await learning.send_morning_word(context.bot, cid)
         except Exception:
             logging.exception("job_grammar failed for cid=%s", cid)
 
@@ -758,7 +675,7 @@ async def job_vocab_review(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "vocab_review"):
             continue
         try:
-            await learning.send_vocab_review(_NokbBot(context.bot), cid)
+            await learning.send_vocab_review(context.bot, cid)
         except Exception:
             logging.exception("job_vocab_review failed for cid=%s", cid)
 
@@ -859,10 +776,6 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("notes", notes_command))
     app.add_handler(CommandHandler("setup", setup_command))
-    app.add_handler(CommandHandler("health", health_command))
-    app.add_handler(CommandHandler("cost", cost_command))
-    app.add_handler(CommandHandler("llmcheck", llmcheck_command))
-    app.add_handler(CommandHandler("invite", invite_command))
     app.add_handler(CallbackQueryHandler(answer_callback))
     app.add_handler(MessageHandler(filters.LOCATION, weather.location_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
@@ -876,6 +789,7 @@ def main():
     jq.run_daily(job_lagom,           time=_t("09:00"), days=tuple(range(7)))
     jq.run_daily(job_weekly_events,   time=_t("10:00"), days=(6,))             # вс
     jq.run_daily(job_grammar,         time=_t("11:00"), days=tuple(range(7)))
+    jq.run_daily(job_live_lang,       time=_t("16:30"), days=tuple(range(7)))
     jq.run_daily(job_recipe,          time=_t("12:30"), days=tuple(range(7)))
     jq.run_daily(job_checkin_day,     time=_t("14:00"), days=tuple(range(7)))
     jq.run_daily(job_weekly_forecast, time=_t("19:00"), days=(6,))             # вс

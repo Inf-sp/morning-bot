@@ -7,18 +7,18 @@ from util import esc
 
 SETTINGS_KEY = "user_settings.json"
 NOTIF_TYPES = [
-    ("morning_brief",  "☀️ Утренний бриф (08:30)"),
-    ("weather_warn",   "🌧 Погодное предупреждение (08:45)"),
-    ("lagom_daily",    "☕️ Лагом дня (09:00)"),
-    ("recipe_daily",   "🍽️ Рецепт дня (12:30)"),
-    ("checkin_day",    "🫣 Дневная разгрузка (14:00)"),
-    ("evening_weather","🌆 Вечерняя погода (19:00)"),
-    ("weekly_events",  "🎵 Афиша недели (вс 10:00)"),
-    ("weekly_forecast","🌍 Недельный прогноз (вс 19:00)"),
-    ("grammar",        "📝 Слово/фраза дня (11:00)"),
-    ("live_lang",      "💬 Живой язык — пословицы"),
-    ("vocab_review",   "📖 Повтор словаря (21:00)"),
-    ("checkin_eve",    "🥸 Вечерний разбор (22:00)"),
+    ("morning_brief",  "☀️ Утренний бриф"),
+    ("weather_warn",   "🌧 Погодное предупреждение"),
+    ("lagom_daily",    "☕️ Лагом дня"),
+    ("recipe_daily",   "🍽️ Рецепт дня"),
+    ("checkin_day",    "🫣 Дневная разгрузка"),
+    ("evening_weather","🌆 Вечерняя погода"),
+    ("weekly_events",  "🎵 Афиша недели"),
+    ("weekly_forecast","🌍 Недельный прогноз"),
+    ("grammar",        "📚 Слова и фразы дня"),
+    ("live_lang",      "💬 Живой язык"),
+    ("vocab_review",   "📖 Повтор словаря"),
+    ("checkin_eve",    "🥸 Вечерний разбор"),
 ]
 
 STYLES = [
@@ -54,7 +54,7 @@ def _notif_label(kind: str, label: str) -> str:
     if kind in ("weekly_events", "weekly_forecast"):
         return f"{label} (1 раз в ВС в {'10:00' if kind == 'weekly_events' else '19:00'})"
     if kind in ("live_lang",):
-        return f"{label} (ежедневно в 11:00)"
+        return f"{label} (ежедневно в 16:30)"
     if kind in ("grammar", "vocab_review", "morning_brief", "weather_warn",
                 "lagom_daily", "recipe_daily", "checkin_day", "evening_weather",
                 "checkin_eve"):
@@ -94,7 +94,6 @@ async def _run_notif_test(bot, cid, kind):
         if kind == "morning_brief":
             import weather as _w
             await _w.send_weather(bot, cid, "tomorrow_plain")
-            await learning.send_morning_word(bot, cid)
         elif kind == "weather_warn":
             import weather as _w
             s = store.get_settings(cid)
@@ -122,6 +121,8 @@ async def _run_notif_test(bot, cid, kind):
             await _b.send_motiv_push(bot, cid)
         elif kind == "grammar":
             await learning.send_morning_word(bot, cid)
+        elif kind == "live_lang":
+            await learning.send_proverb_both(bot, cid)
         elif kind == "recipe_daily":
             import balance as _b
             await _b.send_recipe_push(bot, cid)
@@ -959,20 +960,24 @@ async def send_admin_cost(bot, cid):
             ("cf",          "Cloudflare",          bool(config.CF_API_TOKEN and config.CF_ACCOUNT_ID)),
         ]
 
-        # человекочитаемые имена функций
-        _mod_names = {"wardrobe": "👗 Гардероб", "balance": "🥗 Баланс/еда",
-                      "weather": "🌤 Погода", "learning": "📚 Обучение",
-                      "leisure": "🎬 Досуг", "myday": "☀️ Мой день",
-                      "travel": "✈️ Путешествия", "assistant": "💬 Ассистент",
-                      "content": "🎵 Контент", "notes": "📝 Заметки"}
+        # человекочитаемые имена модулей в терминах пользовательских категорий
+        _mod_names = {
+            "wardrobe": "👕 Гардероб",
+            "balance": "🍃 Самозабота / 🥣 Готовка",
+            "weather": "☀️ Мой день / Погода",
+            "learning": "📚 Обучение",
+            "leisure": "🍿 Досуг",
+            "myday": "☀️ Мой день",
+            "travel": "🍿 Досуг / Поездки",
+            "assistant": "💬 Чат",
+            "content": "🍿 Досуг",
+            "notes": "🗂️ Моя база",
+        }
 
         lines = ["💸 <b>Расходы за 7 дней</b>", "",
                  f"Вызовов: {len(recent)}",
                  f"Токенов: ~{total_tokens:,}",
                  ""]
-        lines.append("ℹ️ <i>Не все провайдеры обязаны использоваться каждый период: "
-                     "маршрутизация идёт по приоритету и доступности ключей.</i>")
-        lines.append("")
 
         # все провайдеры в порядке приоритета
         lines.append("<b>По провайдерам:</b>")

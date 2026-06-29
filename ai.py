@@ -352,11 +352,11 @@ def chat_chain(history, cid=None):
 
 
 # --- async-обёртки для вызова из async-обработчиков без блокировки event loop ---
-async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None, tier=None, route=None):
-    return await asyncio.to_thread(llm, prompt, max_tokens, temperature, order, claude_model, tier, "", route)
+async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None, tier=None, route=None, module=""):
+    return await asyncio.to_thread(llm, prompt, max_tokens, temperature, order, claude_model, tier, module, route)
 
-async def allm_json(prompt, max_tokens=1200, order=None, claude_model=None, tier=None, route=None):
-    return await asyncio.to_thread(llm_json, prompt, max_tokens, order, claude_model, tier, "", route)
+async def allm_json(prompt, max_tokens=1200, order=None, claude_model=None, tier=None, route=None, module=""):
+    return await asyncio.to_thread(llm_json, prompt, max_tokens, order, claude_model, tier, module, route)
 
 async def achat_chain(history, cid=None):
     return await asyncio.to_thread(chat_chain, history, cid)

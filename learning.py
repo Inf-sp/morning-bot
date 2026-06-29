@@ -398,7 +398,7 @@ async def send_train_lang_select(bot, cid):
         [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
     ])
     await bot.send_message(chat_id=cid,
-        text="🧠 <b>Тренажёр слов</b>\n\nНовые слова и фразы можно добавить в /setup — настройки\n\n<b>Выбери язык для тренировки 👇</b>",
+        text="🧠 <b>Тренажёр слов</b>\n\nСлова и фразы для тренировки добавляются в разделе <b>Словарь</b>.\n\n<b>Выбери язык для тренировки 👇</b>",
         parse_mode="HTML", reply_markup=kb)
 
 
@@ -481,15 +481,19 @@ async def send_proverb(bot, cid, language):
             return s[0].upper() + s[1:] if s else s
 
         kind = esc(_cap(d.get("type") or ""))
-        header = f"💭{flag} <b>Живой язык</b>" + (f" · {kind}" if kind else "")
-        L = [header, "", f"<b>{esc(d.get('original', ''))}</b>"]
+        header = f"💬{flag} <b>Живой язык</b>"
+        L = [header]
+        if kind:
+            L.append(f"<b>Формат:</b> {kind}")
+        if d.get("original"):
+            L.append(f"• <b>{esc(d.get('original', ''))}</b>")
         if d.get("literal"):
-            L.append(esc(_cap(d["literal"])))
+            L.append(f"• Дословно: {esc(_cap(d['literal']))}")
         if d.get("meaning"):
-            L += ["", esc(_cap(d["meaning"]))]
+            L += ["", f"<b>Когда так говорят:</b>", f"• {esc(_cap(d['meaning']))}"]
         txt = "\n".join(L)
     except Exception:
-        txt = f"💭{flag} <b>Живой язык</b>\n\nНе удалось получить, попробуй ещё раз."
+        txt = f"💬{flag} <b>Живой язык</b>\n\n• Не удалось получить выражение.\n• Попробуй ещё раз чуть позже."
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=_proverb_kb(_code(language)))
 
 
@@ -510,19 +514,22 @@ async def send_proverb_both(bot, cid):
             return s[0].upper() + s[1:] if s else s
 
         kind = esc(_cap(d.get("type") or ""))
-        header = "💭 <b>Живой язык</b>" + (f" · {kind}" if kind else "")
-        L = [header, ""]
+        header = "💬 <b>Живой язык</b>"
+        L = [header]
+        if kind:
+            L.append(f"<b>Формат:</b> {kind}")
+        L.append("<b>Сегодняшнее выражение:</b>")
         if d.get("nl"):
-            L.append(f"🇳🇱 {esc(d['nl'])}")
+            L.append(f"• 🇳🇱 {esc(d['nl'])}")
         if d.get("en"):
-            L.append(f"🇬🇧 {esc(d['en'])}")
+            L.append(f"• 🇬🇧 {esc(d['en'])}")
         if d.get("ru"):
-            L.append(f"🇷🇺 {esc(_cap(d['ru']))}")
+            L.append(f"• 🇷🇺 {esc(_cap(d['ru']))}")
         if d.get("meaning"):
-            L += ["", esc(_cap(d["meaning"]))]
+            L += ["", "<b>Когда так говорят:</b>", f"• {esc(_cap(d['meaning']))}"]
         txt = "\n".join(L)
     except Exception:
-        txt = "💭 <b>Живой язык</b>\n\nНе удалось получить, попробуй ещё раз."
+        txt = "💬 <b>Живой язык</b>\n\n• Не удалось получить выражение.\n• Попробуй ещё раз чуть позже."
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё вариант", callback_data="a_proverb")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
@@ -721,7 +728,7 @@ async def send_dict_lang(bot, cid, lang):
     txt = (f"{flag} <b>Словарь · {name}</b>\n\n"
            f"Слов: {c['word']} · Фраз: {c['phrase']} · Тем: {len(topics)}")
     rows = [
-        [InlineKeyboardButton("➕ Добавить слово, фразу или тему", callback_data=f"a_dictadd_smart_{lang}")],
+        [InlineKeyboardButton("✏️ Добавить слово, фразу или тему", callback_data=f"a_dictadd_smart_{lang}")],
         [
             InlineKeyboardButton("❌ Слово", callback_data=f"a_dictedit_{lang}_word"),
             InlineKeyboardButton("❌ Фраза", callback_data=f"a_dictedit_{lang}_phrase"),
@@ -730,6 +737,15 @@ async def send_dict_lang(bot, cid, lang):
         [InlineKeyboardButton("◀️ Назад", callback_data="m_dict_settings")],
     ]
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+
+def _dict_manage_kb(lang: str):
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📖 Словарь", callback_data=f"a_dictlang_{lang}"),
+            InlineKeyboardButton("➕ Добавить", callback_data=f"a_dictadd_smart_{lang}"),
+        ]
+    ])
 
 async def send_dict_edit(bot, cid, lang, kind):
     """Редактирование списка = режим чистки (пагинация + мультивыбор)."""
@@ -740,13 +756,13 @@ async def del_word(bot, cid, i):
     if i < len(words):
         words.pop(i)
         store.set_list(config.DICT_KEY, cid, words)
+    import settings as _s
+    lang = _code(_s.study_lang(cid))
     await bot.send_message(
         chat_id=cid,
-        text=(
-            "✅ Слово удалено из текущего списка.\n"
-            "При желании его можно снова добавить через настройки: /setup → Мой словарь."
-        ),
+        text="✅ Слово удалено из текущего списка.\n\nЕсли хочешь, можно сразу открыть словарь или добавить новое.",
         parse_mode="HTML",
+        reply_markup=_dict_manage_kb(lang),
     )
 
 WEEK_TRACK = {
@@ -779,9 +795,10 @@ async def send_morning_word(bot, cid):
     title, phase, method = WEEK_TRACK[wd]
     words = _ensure_dict(cid)
     pool = [w for w in words if _dict_lang(w) == lang_code]
-    L = [f"📚{flag} <b>Daily Words • Повторение {lang_gen}</b>", "", esc(method)]
+    L = [f"📚{flag} <b>Слова и фразы дня</b>", "", f"<b>Сегодняшний фокус:</b> {esc(title)}", esc(method)]
     if wd >= 5 or not pool:
-        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
+        L += ["", "📖 Открой словарь, если хочешь добавить что-то новое или быстро повторить текущее."]
+        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=_dict_manage_kb(lang_code))
         return
     word_items = [w for w in pool if _dict_kind(w) == "word"]
     phrase_items = [w for w in pool if _dict_kind(w) == "phrase"]
@@ -817,9 +834,13 @@ async def send_morning_word(bot, cid):
             except ValueError:
                 pass
 
-    L += ["", "💡 Попробуй использовать эти слова сегодня в мыслях, сообщениях или разговорах."]
+    L += ["", "💡 Попробуй использовать 1-2 элемента сегодня в сообщениях, мыслях или разговоре."]
 
     rows = []
+    rows.append([
+        InlineKeyboardButton("📖 Словарь", callback_data=f"a_dictlang_{lang_code}"),
+        InlineKeyboardButton("➕ Добавить", callback_data=f"a_dictadd_smart_{lang_code}"),
+    ])
     if phrase_del_row:
         rows.append(phrase_del_row)
     if word_del_row:
@@ -843,15 +864,27 @@ async def send_vocab_review(bot, cid):
     words = _ensure_dict(cid)
     pool = [w for w in words if _dict_lang(w) == lang_code]
     if not pool:
+        await bot.send_message(
+            chat_id=cid,
+            text=(
+                f"📖{flag} <b>Повтор словаря</b>\n\n"
+                "• Список пока пуст.\n"
+                "• Открой словарь и добавь слова или фразы для повторения."
+            ),
+            parse_mode="HTML",
+            reply_markup=_dict_manage_kb(lang_code),
+        )
         return
     sample = _r.sample(pool, min(5, len(pool)))
-    lines = [f"📖{flag} <b>Повтор словаря</b>", ""]
+    lines = [f"📖{flag} <b>Повтор словаря</b>", "", "<b>На сегодня:</b>"]
     for w in sample:
         term = _cap(_w_field(w, "word", "nl", "en"))
         ru = _w_field(w, "ru")
         icon = "💬" if _dict_kind(w) == "phrase" else "📝"
         lines.append(f"{icon} <b>{esc(term)}</b> — {esc(ru)}")
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML")
+    lines += ["", "<b>Дальше:</b>", "• Открой словарь или добавь новые слова."]
+    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
+                           reply_markup=_dict_manage_kb(lang_code))
 
 
 # ================= ИЗУЧАЕМЫЕ ТЕМЫ (раздельно NL / EN) =================
