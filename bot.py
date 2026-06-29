@@ -645,7 +645,7 @@ async def job_grammar(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "grammar"):
             continue
         try:
-            await learning.send_morning_word(context.bot, cid)
+            await learning.send_morning_word(context.bot, cid, with_kb=False)
         except Exception:
             logging.exception("job_grammar failed for cid=%s", cid)
 
@@ -670,15 +670,6 @@ async def job_recipe(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logging.exception("job_recipe failed for cid=%s", cid)
 
-async def job_vocab_review(context: ContextTypes.DEFAULT_TYPE):
-    for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "vocab_review"):
-            continue
-        try:
-            await learning.send_vocab_review(context.bot, cid)
-        except Exception:
-            logging.exception("job_vocab_review failed for cid=%s", cid)
-
 async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "checkin_eve"):
@@ -702,7 +693,7 @@ async def job_live_lang(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "live_lang"):
             continue
         try:
-            await learning.send_proverb_both(context.bot, cid)
+            await learning.send_proverb_both(context.bot, cid, with_kb=False)
         except Exception:
             logging.exception("job_live_lang failed for cid=%s", cid)
 
@@ -711,7 +702,7 @@ async def job_weekly_forecast(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "weekly_forecast"):
             continue
         try:
-            await weather.send_weather(_NokbBot(context.bot), cid, "week")
+            await weather.send_weather(_NokbBot(context.bot), cid, "week_plain")
         except Exception:
             logging.exception("job_weekly_forecast failed for cid=%s", cid)
 
@@ -793,7 +784,7 @@ def main():
     jq.run_daily(job_recipe,          time=_t("12:30"), days=tuple(range(7)))
     jq.run_daily(job_checkin_day,     time=_t("14:00"), days=tuple(range(7)))
     jq.run_daily(job_weekly_forecast, time=_t("19:00"), days=(6,))             # вс
-    jq.run_daily(job_vocab_review,    time=_t("21:00"), days=tuple(range(7)))
+    jq.run_daily(job_evening_weather, time=_t("19:00"), days=(0, 1, 2, 3, 4, 5))
     jq.run_daily(job_checkin_evening, time=_t("22:00"), days=tuple(range(7)))
 
     logging.info("Bot started")

@@ -444,7 +444,8 @@ async def send_weather(bot, cid, mode="today"):
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
         return
 
-    # week: компактный формат — одна строка на день/группу
+    # week/week_plain: компактный формат — одна строка на день/группу
+    week_plain = mode == "week_plain"
     _SKIP = 1
     d1 = now + timedelta(days=_SKIP)
     d2 = now + timedelta(days=_SKIP + 6)
@@ -546,7 +547,7 @@ async def send_weather(bot, cid, mode="today"):
     if summary:
         L += ["", "🌡️ <b>Метео-итог</b>", esc(summary)]
 
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
+    kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
     await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
 
 

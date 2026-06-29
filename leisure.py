@@ -933,7 +933,15 @@ async def send_weekly_events(bot, cid):
     s = store.get_settings(cid)
     cc = (s.get("cc") or "NL").upper()
     flag = util.flag_from_cc(cc) or "🏳"
-    cname = s.get("country") or "твоя страна"
+    def _country_place():
+        country = (s.get("country") or "").strip()
+        low = country.lower()
+        if cc == "NL" or low in ("нидерланды", "netherlands", "the netherlands"):
+            return "Нидерландах"
+        return country or {"BE": "Бельгии", "DE": "Германии", "FR": "Франции",
+                           "GB": "Великобритании", "US": "США"}.get(cc, "твоей стране")
+
+    cname = _country_place()
     now = datetime.now(config.TZ)
     today_str = now.strftime("%Y-%m-%d")
     date_to_str = (now + timedelta(days=21)).strftime("%Y-%m-%d")
@@ -945,7 +953,28 @@ async def send_weekly_events(bot, cid):
         except Exception:
             return ds
 
-    lines = ["🎵 <b>События следующей недели</b>", "", "Вот что я нашёл для тебя на ближайшие дни:", ""]
+    def _movie_title_ok(title):
+        if not title:
+            return False
+        # TMDB can return local titles in non-RU/EN scripts for region premieres.
+        return not re.search(r"[^A-Za-zА-Яа-яЁё0-9\s.,:;!?()«»\"'\\-–—]", title)
+
+    def _movie_genre(m):
+        gids = m.get("genre_ids") or []
+        if 16 in gids:
+            return "Мультфильм"
+        for gid in gids:
+            name = _TMDB_GENRES.get(gid)
+            if name:
+                return name.capitalize()
+        return "Премьера"
+
+    lines = [
+        "🎵 <b>События следующей недели</b>",
+        "",
+        f"Вот что я нашёл для тебя на ближайшие дни в <b>{esc(cname)}</b>:",
+        "",
+    ]
 
     # --- Концерты ---
     concert_lines = []
@@ -992,17 +1021,19 @@ async def send_weekly_events(bot, cid):
                 ven = (e.get("_embedded", {}).get("venues") or [{}])[0]
                 vn = ven.get("name", "")
                 city = (ven.get("city") or {}).get("name", "")
-                concert_lines.append(f"• <b>{esc(artist)}</b>")
                 venue_str = ", ".join(x for x in [vn, city] if x)
+                details = []
                 if venue_str:
-                    concert_lines.append(f"  {esc(venue_str)}")
+                    details.append(esc(venue_str))
                 if date_str:
-                    concert_lines.append(f"  {_fmt_date(date_str)}")
-                concert_lines.append("")
+                    details.append(_fmt_date(date_str))
+                suffix = f" ({', '.join(details)})" if details else ""
+                concert_lines.append(f"• {esc(artist)}{suffix}")
 
     if concert_lines:
-        lines += ["🎤 <b>Концерты твоих исполнителей</b>", ""]
+        lines += ["<b>Концерты твоих исполнителей:</b>"]
         lines += concert_lines
+        lines.append("")
 
     # --- Кинопремьеры ---
     movie_lines = []
@@ -1013,22 +1044,24 @@ async def send_weekly_events(bot, cid):
                         "region": cc, "page": 1}, timeout=15)
             results = r.json().get("results", [])
             upcoming = [m for m in results
-                        if today_str <= m.get("release_date", "") <= date_to_str and m.get("title")]
+                        if today_str <= m.get("release_date", "") <= date_to_str
+                        and _movie_title_ok(m.get("title", ""))]
             upcoming.sort(key=lambda m: m.get("release_date", ""))
             for m in upcoming[:5]:
                 title = m.get("title", "")
-                year = m.get("release_date", "")[:4]
-                movie_lines.append(f"• <b>{esc(title)} ({year})</b>")
-                movie_lines.append(f"  {_fmt_date(m.get('release_date', ''))}")
-                movie_lines.append("")
+                genre = _movie_genre(m)
+                date = _fmt_date(m.get("release_date", ""))
+                details = ", ".join(x for x in [genre, date] if x)
+                movie_lines.append(f"• {esc(title)} ({esc(details)})")
         except Exception:
             pass
 
     if movie_lines:
-        lines += ["🎬 <b>Новые премьеры в кино</b>", ""]
+        lines += ["<b>Новые премьеры в кино:</b>"]
         lines += movie_lines
+        lines.append("")
 
-    lines.append(f"📍 <i>Подбираю под твою страну: {esc(cname)} {flag}</i>")
+    lines.append("Хорошей недели 😉")
 
     if not concert_lines and not movie_lines:
         lines = ["🎵 <b>События следующей недели</b>", "",
