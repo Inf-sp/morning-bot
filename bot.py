@@ -254,11 +254,11 @@ async def answer_callback(update, context):
                 await _ack(q); await leisure.send_listen(bot, cid)
             elif act == "listen_no":
                 await leisure.listen_dislike(bot, cid)
-            elif act == "food_breakfast":
+            elif act in ("food_breakfast", "recipe_breakfast"):
                 await _ack(q); await balance.send_recipe(bot, cid, "завтрак")
-            elif act == "food_lunch":
+            elif act in ("food_lunch", "recipe_lunch"):
                 await _ack(q); await balance.send_recipe(bot, cid, "обед")
-            elif act == "food_dinner":
+            elif act in ("food_dinner", "recipe_dinner"):
                 await _ack(q); await balance.send_recipe(bot, cid, "ужин")
         except Exception as e:
             await verify.safe_error(bot, cid, e)

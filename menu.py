@@ -84,9 +84,9 @@ def menu_screen(key):
         return (
             "👨‍🍳 <b>Сгенерировать рецепт</b>\n\nВыбери приём пищи 👇",
             _ikb([
-                [("🍳 Завтрак", "a_food_breakfast")],
-                [("🥗 Обед", "a_food_lunch")],
-                [("🍽️ Ужин", "a_food_dinner")],
+                [("🍳 Завтрак", "a_recipe_breakfast")],
+                [("🥗 Обед", "a_recipe_lunch")],
+                [("🍽️ Ужин", "a_recipe_dinner")],
                 [("◀️ Назад", "m_food")],
             ])
         )
@@ -160,7 +160,7 @@ def menu_screen(key):
 
 async def send_food_menu(bot, cid):
     kb = _ikb([
-        [("🍳 Завтрак", "a_food_breakfast"), ("🥗 Обед", "a_food_lunch"), ("🍽️ Ужин", "a_food_dinner")],
+        [("🍳 Завтрак", "a_recipe_breakfast"), ("🥗 Обед", "a_recipe_lunch"), ("🍽️ Ужин", "a_recipe_dinner")],
         [("🥕 Из того что есть", "as_fridge_cook")],
         [("🎚️ Холодильник (настройки)", "set_fridge_g")],
     ])
