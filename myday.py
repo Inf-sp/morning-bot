@@ -373,7 +373,6 @@ async def send_plany(bot, cid, force=False):
         or (not cache.get("has_fact") and _time.time() - cache.get("ts", 0) > 1800)
     )
     if stale:
-        await bot.send_message(chat_id=cid, text="Собираю сводку дня...")
         _build_day_text._has_fact = False
         try:
             text = await asyncio.to_thread(_build_day_text, cid)

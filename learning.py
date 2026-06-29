@@ -9,7 +9,7 @@ from cleanup import open_cleanup, send_cleanup, handle_cleanup  # noqa: F401
 _HERE = Path(__file__).parent
 import store
 import ai
-from util import esc
+from util import esc, ack_loading
 import verify
 import secure
 
@@ -429,7 +429,6 @@ async def translate_answer(bot, cid, text):
     st = store.challenge_state.pop(str(cid), None)
     if not st:
         return False
-    await bot.send_message(chat_id=cid, text="Проверяю...")
     try:
         r = check_translation(st["lang"], st["ru"], text)
     except Exception as e:
@@ -1027,7 +1026,6 @@ async def send_game(bot, cid):
     lang = cfg["lang"]
     ui = GAME_UI.get(lang, GAME_UI["русский"])
     recent = store.game_recent.get(str(cid), [])
-    await bot.send_message(chat_id=cid, text="...")
     try:
         d = game_data(lang, cfg["difficulty"], recent)
     except Exception as e:
@@ -1432,7 +1430,6 @@ async def gm_send_topic(bot, cid, topic_id):
 
     lesson = _gm_lesson(topic_id)
     if not lesson:
-        await bot.send_message(chat_id=cid, text="⏳ Генерирую урок...")
         try:
             lesson = _gm_gen_lesson(lang, title)
         except Exception as e:
@@ -1669,6 +1666,7 @@ async def handle_callback(bot, cid, q, data):
         code, level = rest.split("_", 1)
         await gm_send_level(bot, cid, code, level)
     elif data.startswith("gm_topic_"):
+        await ack_loading(q)
         await gm_send_topic(bot, cid, data[len("gm_topic_"):])
     elif data.startswith("gm_done_"):
         await gm_mark_done(bot, cid, data[len("gm_done_"):])

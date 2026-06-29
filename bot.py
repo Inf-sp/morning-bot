@@ -154,6 +154,7 @@ async def answer_callback(update, context):
         act = data[2:]
         try:
             if act == "plany":
+                await _ack(q)
                 await myday.send_plany(bot, cid)
             elif act == "gram_nl":
                 await _ack(q); await learning.send_grammar(bot, cid, "нидерландский", "🇳🇱")
@@ -170,10 +171,13 @@ async def answer_callback(update, context):
             elif act == "tr_en":
                 await _ack(q); await learning.do_translate(bot, cid, "английский")
             elif act == "proverb":
+                await _ack(q)
                 await learning.send_proverb_both(bot, cid)
             elif act == "proverb_nl":
+                await _ack(q)
                 await learning.send_proverb(bot, cid, "нидерландский")
             elif act == "proverb_en":
+                await _ack(q)
                 await learning.send_proverb(bot, cid, "английский")
             elif act == "topics_nl":
                 await learning.send_topics(bot, cid, "нидерландский")
@@ -228,13 +232,13 @@ async def answer_callback(update, context):
             elif act == "trav_go":
                 await _ack(q); await leisure.send_go(bot, cid)
             elif act == "trav_no":
-                await leisure.travel_dislike(bot, cid)
+                await _ack(q); await leisure.travel_dislike(bot, cid)
             elif act == "trav_plan":
                 await _ack(q); await leisure.send_plan(bot, cid)
             elif act == "trav_fav":
-                await leisure.travel_fav(bot, cid)
+                await _ack(q); await leisure.travel_fav(bot, cid)
             elif act == "trav_save":
-                await leisure.save_plan(bot, cid)
+                await _ack(q); await leisure.save_plan(bot, cid)
             elif act == "watch":
                 await _ack(q); await leisure.send_recos(bot, cid, "movie")
             elif act == "read":
@@ -250,17 +254,17 @@ async def answer_callback(update, context):
             elif act == "fav":
                 await leisure.send_fav(bot, cid)
             elif act == "concerts_find":
-                await leisure.find_concerts(bot, cid, "home")
+                await _ack(q); await leisure.find_concerts(bot, cid, "home")
             elif act == "concerts_pick":
                 await leisure.concert_pick_country(bot, cid)
             elif act in ("concerts_be", "concerts_de", "concerts_fr", "concerts_gb",
                          "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
                          "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
-                await leisure.find_concerts(bot, cid, act.split("_")[1])
+                await _ack(q); await leisure.find_concerts(bot, cid, act.split("_")[1])
             elif act == "listen":
                 await _ack(q); await leisure.send_listen(bot, cid)
             elif act == "listen_no":
-                await leisure.listen_dislike(bot, cid)
+                await _ack(q); await leisure.listen_dislike(bot, cid)
             elif act in ("food_breakfast", "recipe_breakfast"):
                 await _ack(q); await balance.send_recipe(bot, cid, "завтрак")
             elif act in ("food_lunch", "recipe_lunch"):
@@ -326,6 +330,7 @@ async def answer_callback(update, context):
         cfg = store.game_config.get(cid, {"lang": "русский"})
         cfg["difficulty"] = diff
         store.game_config[cid] = cfg
+        await _ack(q)
         await learning.send_game(bot, cid)
         return
     if data == "game_change_diff":
@@ -345,6 +350,7 @@ async def answer_callback(update, context):
         await learning.del_topic(bot, cid, parts[1], int(parts[2]))
         return
     if data == "game_again":
+        await _ack(q)
         await learning.send_game(bot, cid)
         return
     if data == "game_hint":
@@ -358,33 +364,43 @@ async def answer_callback(update, context):
         return
     # Развлечения / путешествия
     if data.startswith("movie_love_"):
+        await _ack(q)
         await leisure.movie_love(bot, cid, int(data.split("_")[-1]))
         return
     if data.startswith("movie_seen_"):
+        await _ack(q)
         await leisure.movie_seen(bot, cid, int(data.split("_")[-1]))
         return
     if data.startswith("book_love_"):
+        await _ack(q)
         await leisure.book_love(bot, cid, int(data.split("_")[-1]))
         return
     if data.startswith("book_seen_"):
+        await _ack(q)
         await leisure.book_seen(bot, cid, int(data.split("_")[-1]))
         return
     if data == "listen_love":
+        await _ack(q)
         await leisure.listen_love(bot, cid)
         return
     if data == "listen_seen":
+        await _ack(q)
         await leisure.listen_seen(bot, cid)
         return
     if data.startswith("reco_"):
+        await _ack(q)
         await leisure.add_reco(bot, cid, int(data.split("_")[1]))
         return
     if data.startswith("movie_no_"):
+        await _ack(q)
         await leisure.movie_dislike(bot, cid, int(data.split("_")[-1]))
         return
     if data.startswith("book_no_"):
+        await _ack(q)
         await leisure.book_dislike(bot, cid, int(data.split("_")[-1]))
         return
     if data.startswith("listen_"):
+        await _ack(q)
         await leisure.add_listen(bot, cid, int(data.split("_")[1]))
         return
     # Проверка дня (тревоги)
@@ -393,10 +409,12 @@ async def answer_callback(update, context):
         return
     # «Продолжить / ещё раз»
     if data == "chat_retry":
+        await _ack(q)
         await balance.retry(bot, cid)
         return
     # «Короче / Глубже» - переписать последний ответ
     if data in ("ans_short", "ans_deep"):
+        await _ack(q)
         await balance.reword(bot, cid, "short" if data == "ans_short" else "deep")
         return
 

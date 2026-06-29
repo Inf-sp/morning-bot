@@ -685,7 +685,6 @@ def _recipe_card(d):
     return _food_card(d, label="Рецепт дня")
 
 async def send_recipe(bot, cid, constraint="обычное блюдо"):
-    await bot.send_message(chat_id=cid, text="Подбираю...")
     try:
         d = await asyncio.to_thread(_gen_recipe, constraint, cid=cid)
     except Exception as e:
@@ -699,7 +698,6 @@ async def send_recipe(bot, cid, constraint="обычное блюдо"):
 
 async def send_recipe_featured(bot, cid):
     """Новый рецепт из меню — под результатом кнопки завтрак/обед/ужин."""
-    await bot.send_message(chat_id=cid, text="Подбираю рецепт...")
     try:
         d = await asyncio.to_thread(_gen_recipe, "любое блюдо под вкус пользователя", cid=cid)
     except Exception as e:
@@ -733,7 +731,6 @@ def _gen_leftovers_recipe(ingredients):
         500, tier="cheap")
 
 async def send_leftovers(bot, cid, ingredients):
-    await bot.send_message(chat_id=cid, text="Смотрю, что можно приготовить...")
     try:
         d = await asyncio.to_thread(_gen_leftovers_recipe, ingredients)
     except Exception as e:
@@ -1233,7 +1230,7 @@ _ONESHOT = {}
 async def handle_callback(bot, cid, q, data):
     # Кулинарный радар
     if data == "as_food":
-        await send_recipe(bot, cid, "обычное блюдо"); return
+        await util.ack_loading(q); await send_recipe(bot, cid, "обычное блюдо"); return
 
 # дневник тревоги
     if data == "as_daycheck":
@@ -1340,7 +1337,6 @@ async def retry(bot, cid):
     la = store.last_action.get(str(cid))
     if la and la[0] == "oneshot":
         gen, lbl, cb = _ONESHOT[la[1]]
-        await bot.send_message(chat_id=cid, text="Ещё вариант...")
         try:
             out = gen(cid)
         except Exception as e:

@@ -92,7 +92,6 @@ async def send_looks(bot, cid):
                + secure.wrap_untrusted(hints, "фидбек гардероба")) if hints else ""
     pref_hints = memory.profile_hints(cid)
     pref_line = ("\n" + secure.wrap_untrusted(pref_hints, "предпочтения")) if pref_hints else ""
-    await bot.send_message(chat_id=cid, text="Собираю образ под погоду...")
     profile_block = (f"\n{style_block}" if style_block else "")
     prompt = f"""Ты опытный стилист. Собери ОДИН образ из гардероба на сегодня.{profile_block}
 Погода: {wctx}
@@ -130,7 +129,6 @@ async def look_feedback(bot, cid, verdict):
     look = store.last_look.get(str(cid), "")
     memory.add_wardrobe_feedback(cid, look, verdict)
     if verdict == "nostyle":
-        await bot.send_message(chat_id=cid, text="🫪 Понял: не твой стиль. Подбираю другой...")
         await send_looks(bot, cid)
     else:
         await bot.send_message(chat_id=cid, text=_FB_ACK.get(verdict, "Запомнил — учту в следующих образах."))
@@ -246,7 +244,6 @@ async def send_improve(bot, cid):
         return
     user_style = _settings.get(cid, "style", "")
     style_ctx = f"Стиль пользователя: {user_style}." if user_style else "Стиль не указан — выведи его из гардероба."
-    await bot.send_message(chat_id=cid, text="Разбираю шкаф...")
     prompt = f"""Ты стилист с прямым, живым тоном — как умный друг, который шарит в одежде. {style_ctx}
 Разбери гардероб (обращайся на "ты", НЕ используй имя):
 {wardrobe_text}
@@ -288,7 +285,6 @@ async def send_improve(bot, cid):
 
 async def check_purchase(bot, cid, text):
     w = store.load_wardrobe(cid)
-    await bot.send_message(chat_id=cid, text="Оцениваю...")
     web_block = ""
     web_data = research.tavily_snippet(f"{text} отзывы обзор стоит ли покупать", max_chars=900)
     if web_data:
@@ -350,6 +346,8 @@ async def handle_callback(bot, cid, q, data):
     if data == "w_look":
         await util.ack_loading(q); await send_looks(bot, cid); return
     if data.startswith("w_fb_"):
+        if data == "w_fb_nostyle":
+            await util.ack_loading(q)
         await look_feedback(bot, cid, data[len("w_fb_"):]); return
     if data == "w_closet":
         import cleanup
