@@ -1182,14 +1182,18 @@ async def send_admin_llmcheck(bot, cid):
 async def send_admin_run_notif(bot, cid):
     """Подменю: запустить любое уведомление прямо сейчас."""
     rows = [
-        [InlineKeyboardButton(label, callback_data=f"set_admin_runjob_{kind}")]
+        [InlineKeyboardButton(_notif_label(kind, label), callback_data=f"set_admin_runjob_{kind}")]
         for kind, label in NOTIF_TYPES
     ]
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_admin")])
     kb = InlineKeyboardMarkup(rows)
     await bot.send_message(
         chat_id=cid,
-        text="📩 <b>Запустить рассылку</b>\n\nВыбери уведомление — оно придёт тебе прямо сейчас:",
+        text=(
+            "📩 <b>Запустить рассылку</b>\n\n"
+            "Выбери уведомление — оно придёт тебе прямо сейчас.\n"
+            "Время в кнопках показывает обычное расписание."
+        ),
         parse_mode="HTML",
         reply_markup=kb,
     )
