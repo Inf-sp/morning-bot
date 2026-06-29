@@ -3,58 +3,101 @@ import store
 import ai
 import verify
 
-# ---------- свободный чат ----------
 _MED_WORDS = ("боль", "болит", "температур", "симптом", "врач", "таблет", "лекарств", "горло",
               "кашель", "тошнот", "давлен", "head", "сыпь", "простуд", "грипп", "живот")
 
-_CATEGORY_TRIGGERS = [
-    ("👕 Гардероб", "m_wardrobe", (
-        "одежда", "надеть", "лук", "гардероб", "образ", "стиль",
-        "куртка", "рубашка", "джинсы", "обувь", "пиджак", "свитер",
-    )),
-    ("👨‍🍳 Кулинарный радар", "m_food", (
-        "рецепт", "приготовить", "ужин", "обед", "завтрак",
-        "поесть", "холодильник", "блюдо", "готовить", "поужинать",
-    )),
-    ("🎯 Мотивация", "as_motiv", (
-        "мотивац", "прокрастин", "не могу начать", "застрял",
-        "лень", "не хочу делать", "не могу заставить",
-    )),
-    ("📓 Дневник тревоги", "as_daycheck", (
-        "тревог", "тревож", "беспокоит", "не могу успокоиться",
-        "крутится в голове", "переживаю", "нервничаю",
-    )),
-    ("📚 Обучение", "m_learn", (
-        "нидерландск", "тренажёр", "пословица",
-        "язык учить", "повторить слова", "учить слова", "учёба",
-    )),
-    ("✈️ Путешествия", "a_trav_go", (
-        "путешест", "поездка", "куда поехать", "тур ",
-        "перелёт", "виза", "маршрут", "страну посетить",
-    )),
-    ("🍿 Досуг", "m_leisure", (
-        "фильм", "сериал", "книга", "музыка", "концерт",
-        "послушать", "посмотреть", "почитать",
-    )),
-    ("☀️ Мой день", "a_w_today", (
-        "погод", "дождь", "зонт", "похолодан", "потеплеет", "прогноз",
-    )),
+# (ключевые слова, action)
+_INTENT_MAP = [
+    (("завтрак", "обед", "ужин", "поесть", "приготовить", "рецепт",
+      "покушать", "голоден", "голодна", "что поесть", "что покушать",
+      "что приготовить", "чего поесть"), "meal_picker"),
+    (("что посмотреть", "фильм", "сериал", "кино"), "movie"),
+    (("что почитать", "почитать", "книгу", "книжку"), "book"),
+    (("что послушать", "послушать", "музыку", "музыка", "плейлист"), "music"),
+    (("куда поехать", "путешест", "поездка", "отпуск", "маршрут"), "travel"),
+    (("мотивац", "прокрастин", "лень", "грустн", "грустно",
+      "не могу начать", "застрял", "настроени"), "motivation"),
+    (("нидерландск", "голландск", "dutch", "де/хет", "de/het"), "grammar_nl"),
+    (("английск", "english", "phrasal"), "grammar_en"),
+    (("одеться", "что надеть", "образ дня", "образ на"), "outfit"),
+    (("погода", "дождь", "температура", "зонт", "прогноз"), "weather"),
+    (("тревог", "тревож", "беспокоюсь", "стресс", "переживаю", "нервничаю"), "worry"),
 ]
 
+_FALLBACK_KB = InlineKeyboardMarkup([
+    [InlineKeyboardButton("☀️ Мой день",   callback_data="a_w_today"),
+     InlineKeyboardButton("👕 Гардероб",   callback_data="m_wardrobe")],
+    [InlineKeyboardButton("🍃 Самозабота", callback_data="m_balance"),
+     InlineKeyboardButton("📚 Обучение",   callback_data="m_learn")],
+    [InlineKeyboardButton("🍿 Досуг",      callback_data="m_leisure"),
+     InlineKeyboardButton("🥣 Готовка",    callback_data="m_food")],
+])
 
-def _detect_categories(text: str) -> list[tuple[str, str]]:
+
+def _detect_intent(text: str):
     t = text.lower()
-    return [
-        (label, cb)
-        for label, cb, keywords in _CATEGORY_TRIGGERS
-        if any(kw in t for kw in keywords)
-    ]
+    for keywords, action in _INTENT_MAP:
+        if any(kw in t for kw in keywords):
+            return action
+    return None
+
+
+async def _run_intent(bot, cid, action):
+    import balance, leisure, learning, wardrobe
+    import weather as wx
+    if action == "meal_picker":
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🌅 Завтрак", callback_data="a_food_breakfast"),
+            InlineKeyboardButton("☀️ Обед",    callback_data="a_food_lunch"),
+            InlineKeyboardButton("🌙 Ужин",    callback_data="a_food_dinner"),
+        ]])
+        await bot.send_message(chat_id=cid, text="🍽 <b>Что готовим?</b>",
+                               parse_mode="HTML", reply_markup=kb)
+    elif action == "movie":
+        await leisure.send_recos(bot, cid, "movie")
+    elif action == "book":
+        await leisure.send_recos(bot, cid, "book")
+    elif action == "music":
+        await leisure.send_listen(bot, cid)
+    elif action == "travel":
+        await leisure.send_go(bot, cid)
+    elif action == "motivation":
+        await balance.send_motiv_push(bot, cid)
+    elif action == "grammar_nl":
+        await learning.gm_send_lang(bot, cid, "nl")
+    elif action == "grammar_en":
+        await learning.gm_send_lang(bot, cid, "en")
+    elif action == "outfit":
+        await wardrobe.send_looks(bot, cid)
+    elif action == "weather":
+        await wx.send_weather(bot, cid, "today")
+    elif action == "worry":
+        await balance.send_daycheck(bot, cid)
 
 
 async def chat_reply(bot, cid, text):
     store.last_action[str(cid)] = None
     store.last_source[str(cid)] = "Ассистент"
+
+    # Медицинские слова — подсказка, но не прерываем роутинг
+    if any(w in text.lower() for w in _MED_WORDS):
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("👩🏻‍⚕️ Вопрос врачу", callback_data="as_doctor")]])
+        await bot.send_message(
+            chat_id=cid,
+            text="👩🏻‍⚕️ <b>Похоже на вопрос о здоровье</b>\n\n«Вопрос врачу» даст структурированный разбор.",
+            parse_mode="HTML", reply_markup=kb)
+        return
+
     await bot.send_chat_action(chat_id=cid, action="typing")
+
+    # Intent-роутинг — сразу запускаем нужную функцию
+    intent = _detect_intent(text)
+    if intent:
+        await _run_intent(bot, cid, intent)
+        store.last_surface[str(cid)] = "chat"
+        return
+
+    # Фолбэк — LLM-ответ + кнопки главного меню
     hist = store.chat_history.get(str(cid), [])
     hist.append({"role": "user", "content": text})
     hist = hist[-10:]
@@ -64,19 +107,7 @@ async def chat_reply(bot, cid, text):
         await verify.safe_error(bot, cid, e); return
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
-    await verify.safe_send(bot, cid, (answer or "").strip() or "Пусто, попробуй ещё раз.", surface="chat")
     store.last_answer[str(cid)] = answer
     store.last_surface[str(cid)] = "chat"
-    if any(w in text.lower() for w in _MED_WORDS):
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("👩🏻‍⚕️ Вопрос врачу", callback_data="as_doctor")]])
-        await bot.send_message(chat_id=cid,
-            text="👩🏻‍⚕️ Похоже на вопрос о здоровье. В разделе 🍃 Самозабота → «Вопрос врачу» дам подробный структурированный разбор.",
-            reply_markup=kb)
-    cats = _detect_categories(text)
-    if cats:
-        rows = [[InlineKeyboardButton(label, callback_data=cb)] for label, cb in cats]
-        await bot.send_message(
-            chat_id=cid,
-            text="💡 Похоже, это связано с разделами бота:",
-            reply_markup=InlineKeyboardMarkup(rows),
-        )
+    await verify.safe_send(bot, cid, (answer or "").strip() or "Пусто, попробуй ещё раз.",
+                           surface="chat", reply_markup=_FALLBACK_KB)
