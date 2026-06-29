@@ -173,7 +173,7 @@ async def grammar_answer(bot, cid, chosen):
         if st.get("rule"):
             L += ["", f"💡 {esc(st['rule'])}"]
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Ещё пример из этой темы", callback_data=f"again_gram_{code}")],
+        [InlineKeyboardButton("✨ Ещё пример из этой темы", callback_data=f"again_gram_{code}")],
         [InlineKeyboardButton("➡️ Следующая тема", callback_data=f"next_gram_{code}")],
         [InlineKeyboardButton("🎲 Случайная тема", callback_data=f"rand_gram_{code}")],
     ])
@@ -450,7 +450,7 @@ async def translate_answer(bot, cid, text):
         L += ["", f"💡 {esc(r['note'])}"]
     code = _code(st["lang"])
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Ещё пример", callback_data=f"again_tr_{code}")],
+        [InlineKeyboardButton("✨ Ещё пример", callback_data=f"again_tr_{code}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
@@ -907,7 +907,7 @@ async def send_topics(bot, cid, language):
         lines.append("Пока пусто. Добавь тему, которую хочешь разобрать.")
     rows = [[InlineKeyboardButton("✏️ Добавить тему", callback_data=f"a_topicadd_{code}")]]
     if topics:
-        rows.append([InlineKeyboardButton("🧹 Убрать выученные", callback_data=f"a_topicclean_{code}")])
+        rows.append([InlineKeyboardButton("❌ Убрать выученные", callback_data=f"a_topicclean_{code}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -1397,14 +1397,14 @@ def _dehet_card(st):
 
 _DEHET_KB = _ikb([
     [("de", "dh_de"), ("het", "dh_het")],
-    [("⬅️ Стоп", "gm_lang_nl")],
+    [("◀️ Стоп", "gm_lang_nl")],
 ])
 
 
 async def gm_send_home(bot, cid):
     kb = _ikb([
         [("🇳🇱 Нидерландский", "gm_lang_nl"), ("🇬🇧 Английский", "gm_lang_en")],
-        [("⬅️ Назад", "m_learn")],
+        [("◀️ Назад", "m_learn")],
     ])
     await bot.send_message(
         chat_id=cid,
@@ -1510,7 +1510,7 @@ async def gm_send_topic(bot, cid, topic_id):
         "awaiting_sentence": True,
     }
     kb = _ikb([
-        [("✅ Усвоил, далее →", f"gm_done_{topic_id}"), ("⬅️ К темам", f"gm_level_{code}_{level}")],
+        [("✅ Усвоил, далее →", f"gm_done_{topic_id}"), ("◀️ К темам", f"gm_level_{code}_{level}")],
     ])
     await bot.send_message(
         chat_id=cid,
@@ -1545,7 +1545,7 @@ async def check_sentence(bot, cid, text):
 
     kb = _ikb([
         [("➡️ Следующая тема", f"gm_done_{topic_id}")],
-        [("🔄 Ещё раз", f"gm_topic_{topic_id}"), ("⬅️ К темам", f"gm_level_{code}_{level}")],
+        [("✨ Ещё раз", f"gm_topic_{topic_id}"), ("◀️ К темам", f"gm_level_{code}_{level}")],
     ])
     L = [f"{icon} <i>{esc(text)}</i>", "", esc(feedback)]
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
@@ -1591,7 +1591,7 @@ async def gm_mark_done(bot, cid, topic_id):
     else:
         emoji = _LEVEL_EMOJI.get(level, "📘")
         kb = _ikb([
-            [("📋 Ещё раз", f"gm_level_{code}_{level}"), ("⬅️ К языку", f"gm_lang_{code}")],
+            [("✨ Ещё раз", f"gm_level_{code}_{level}"), ("◀️ К языку", f"gm_lang_{code}")],
         ])
         await bot.send_message(
             chat_id=cid,
@@ -1694,7 +1694,7 @@ async def dehet_answer(bot, cid, q, chosen):
             mark = "✅" if r["ok"] else f"❌ ({r['article']})"
             lines.append(f"{mark} <b>{esc(r['word'])}</b> — {r['article']}")
         store.dehet_state.pop(cid, None)
-        kb = _ikb([[("🔄 Ещё раз", "dh_start"), ("◀️ Назад", "m_nl")]])
+        kb = _ikb([[("✨ Ещё раз", "dh_start"), ("◀️ Назад", "m_nl")]])
         try:
             await q.edit_message_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
         except Exception:

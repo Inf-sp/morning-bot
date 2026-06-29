@@ -522,8 +522,8 @@ async def note_delete_menu(bot, cid, i):
     if typ:
         rows.append([InlineKeyboardButton("🚫 В чёрный список", callback_data=f"as_noteblack_{i}")])
         rows.append([InlineKeyboardButton("❤️ В любимые", callback_data=f"as_notelove_{i}")])
-    rows.append([InlineKeyboardButton("🗑 Просто удалить", callback_data=f"as_notedrop_{i}")])
-    rows.append([InlineKeyboardButton("⬅️ Отмена", callback_data="as_notes")])
+    rows.append([InlineKeyboardButton("❌ Просто удалить", callback_data=f"as_notedrop_{i}")])
+    rows.append([InlineKeyboardButton("◀️ Отмена", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, text=f"Что сделать с «{t[:60]}»?",
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -571,7 +571,7 @@ async def note_to_love(bot, cid, i):
 async def note_drop(bot, cid, i):
     n = _pop_note(cid, i)
     bucket = _note_bucket(n) if n else "fav"
-    await bot.send_message(chat_id=cid, text="🗑 Удалил.")
+    await bot.send_message(chat_id=cid, text="❌ Удалил.")
     await send_bucket(bot, cid, bucket)
 
 async def export_notes(bot, cid):
@@ -672,7 +672,7 @@ async def plan_view(bot, cid, i):
     n = notes_list[i]
     text = n.get("text", "") if isinstance(n, dict) else str(n)
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🗑 Удалить план", callback_data=f"as_plandel_{i}")],
+        [InlineKeyboardButton("❌ Удалить план", callback_data=f"as_plandel_{i}")],
         [InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_plan")],
     ])
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
@@ -688,8 +688,8 @@ async def fav_view(bot, cid, i):
     header = f"⭐ <b>{esc(src)}</b>" + (f" · {esc(d)}" if d else "")
     full = header + "\n\n" + text
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🗑 Удалить", callback_data=f"fav_del_{i}")],
-        [InlineKeyboardButton("⬅️ К закладкам", callback_data="as_bucket_fav")],
+        [InlineKeyboardButton("❌ Удалить", callback_data=f"fav_del_{i}")],
+        [InlineKeyboardButton("◀️ К закладкам", callback_data="as_bucket_fav")],
     ])
     chunks = [full[j:j + 4000] for j in range(0, len(full), 4000)]
     for idx, chunk in enumerate(chunks):
@@ -784,7 +784,7 @@ async def send_love_section(bot, cid, key):
     lines = [f"<b>{title}</b>", "", body]
     rows = [[InlineKeyboardButton("✏️ Добавить", callback_data=f"as_loveadd_{key}")]]
     if items:
-        rows.append([InlineKeyboardButton("🗑 Выбрать для удаления", callback_data=f"as_loveclean_{key}")])
+        rows.append([InlineKeyboardButton("❌ Выбрать для удаления", callback_data=f"as_loveclean_{key}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -913,7 +913,7 @@ async def send_admin_users(bot, cid):
             lines.append(f"👑 Owner{name_part}")
         else:
             lines.append(f"👤 {uid}{name_part}")
-            rows.append([InlineKeyboardButton(f"🗑 Удалить {uid}{name_part}", callback_data=f"set_admin_revoke_{uid}")])
+            rows.append([InlineKeyboardButton(f"❌ Удалить {uid}{name_part}", callback_data=f"set_admin_revoke_{uid}")])
 
     if pending:
         lines.append("")

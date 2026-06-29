@@ -602,7 +602,7 @@ async def my_recipe_del(bot, cid, idx):
         name = recipes[idx].get("name", "рецепт")
         recipes.pop(idx)
         store.set_list(config.MY_RECIPES_KEY, cid_s, recipes)
-        await bot.send_message(chat_id=cid, text=f"🗑 «{util.esc(name)}» удалён из базы рецептов.")
+        await bot.send_message(chat_id=cid, text=f"❌ «{util.esc(name)}» удалён из базы рецептов.")
     await send_my_recipes(bot, cid)
 
 
@@ -752,7 +752,7 @@ async def handle_role(bot, cid, role, text):
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     store.last_action[str(cid)] = ("role", role, text)
-    cont = ("🔄 Ещё совет", "chat_retry") if role == "state" else ("🔄 Продолжить", "chat_retry")
+    cont = ("✨ Ещё совет", "chat_retry") if role == "state" else ("🔄 Продолжить", "chat_retry")
     await _send(bot, cid, out, kb=_ans_kb(*cont), surface="chat" if role == "state" else "card")
 
 
@@ -777,7 +777,7 @@ async def send_daycheck(bot, cid):
     rows = []
     if worries:
         rows.append([InlineKeyboardButton("🧠 Разобрать тревоги", callback_data="as_worryreview")])
-        rows.append([InlineKeyboardButton("🧹 Очистить все тревоги", callback_data="worry_clearall")])
+        rows.append([InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_close")])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -816,7 +816,7 @@ async def send_evening_review(bot, cid):
     if analysis:
         L += ["", analysis]
     rows = [
-        [InlineKeyboardButton("🧹 Очистить все тревоги", callback_data="worry_clearall")],
+        [InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_close")],
     ]
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
@@ -828,7 +828,7 @@ async def worry_clear_all(bot, cid):
         summary = f"Разобрано тревог: {len(worries)}"
         store.add_to_list(config.DIARY_KEY, cid, {"date": datetime.now(TZ).strftime("%d.%m"), "text": summary})
     store.set_list(config.WORRIES_KEY, cid, [])
-    await bot.send_message(chat_id=cid, text="🧹 Дневник тревог очищен. Лёгкой ночи.")
+    await bot.send_message(chat_id=cid, text="❌ Дневник тревог очищен. Лёгкой ночи.")
 
 async def save_worries(bot, cid, text):
     cid = str(cid)
