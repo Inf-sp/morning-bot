@@ -993,7 +993,7 @@ async def send_admin_health(bot, cid):
     import store as _st
     import weather as _w
 
-    lines = ["🩺 <b>Статус сервисов</b>", ""]
+    lines = ["🩺 <b>Статус сервисов</b>"]
 
     required = [
         ("TELEGRAM_TOKEN", bool(config.TELEGRAM_TOKEN)),
@@ -1001,9 +1001,9 @@ async def send_admin_health(bot, cid):
         ("DATABASE_URL",    bool(config.DATABASE_URL)),
         ("CHAT_ID",         bool(config.CHAT_ID)),
     ]
-    lines.append("<b>Обязательные ключи:</b>")
+    lines.extend(["", "🔒 <b>Обязательные ключи</b>"])
     for k, ok in required:
-        lines.append(f"• {'✅' if ok else '❌'} {k}")
+        lines.append(f"  {'✅' if ok else '❌'} <code>{k}</code>")
 
     optional = [
         ("ANTHROPIC_API_KEY",   bool(config.ANTHROPIC_API_KEY)),
@@ -1015,24 +1015,23 @@ async def send_admin_health(bot, cid):
         ("TMDB_API_KEY",        bool(config.TMDB_API_KEY)),
         ("TICKETMASTER_API_KEY",bool(config.TICKETMASTER_API_KEY)),
     ]
-    lines.append("")
-    lines.append("<b>Опциональные ключи:</b>")
+    lines.extend(["", "🧩 <b>Опциональные ключи</b>"])
     for k, ok in optional:
-        lines.append(f"• {'✅' if ok else '⚪'} {k}")
+        lines.append(f"  {'✅' if ok else '⚪'} <code>{k}</code>")
 
-    lines.append("")
+    lines.extend(["", "🗄 <b>Состояние</b>"])
     try:
         _st._load("__health__")
-        lines.append("✅ DB: OK")
+        lines.append("  ✅ DB: OK")
     except Exception as e:
-        lines.append(f"❌ DB: {str(e)[:60]}")
+        lines.append(f"  ❌ DB: {str(e)[:60]}")
 
     try:
         s = store.get_settings(cid)
         _w.fetch_weather(s["lat"], s["lon"], 1)
-        lines.append("✅ Weather API: OK")
+        lines.append("  ✅ Weather API: OK")
     except Exception:
-        lines.append("❌ Weather API: недоступна")
+        lines.append("  ❌ Weather API: недоступна")
 
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)

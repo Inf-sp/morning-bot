@@ -576,7 +576,7 @@ async def setup_command(update, context):
     await settings.send_home(context.bot, update.effective_chat.id)
 
 async def health_command(update, context):
-    lines = ["<b>🩺 Health check</b>", ""]
+    lines = ["<b>🩺 Health check</b>"]
 
     # Env keys — обязательные
     required = {
@@ -585,9 +585,9 @@ async def health_command(update, context):
         "DATABASE_URL": bool(config.DATABASE_URL),
         "CHAT_ID": bool(config.CHAT_ID),
     }
-    lines.append("<b>Обязательные:</b>")
+    lines.extend(["", "🔒 <b>Обязательные</b>"])
     for k, ok in required.items():
-        lines.append(f"• {'✅' if ok else '❌'} {k}")
+        lines.append(f"  {'✅' if ok else '❌'} <code>{k}</code>")
 
     # Опциональные ключи
     optional = {
@@ -602,26 +602,25 @@ async def health_command(update, context):
         "TICKETMASTER_API_KEY": bool(config.TICKETMASTER_API_KEY),
         "ZEROENTROPY_API_KEY": bool(config.ZEROENTROPY_API_KEY),
     }
-    lines.append("<b>Опциональные:</b>")
+    lines.extend(["", "🧩 <b>Опциональные</b>"])
     for k, ok in optional.items():
-        lines.append(f"• {'✅' if ok else '⚪'} {k}")
+        lines.append(f"  {'✅' if ok else '⚪'} <code>{k}</code>")
 
-    # DB
+    lines.extend(["", "🗄 <b>Состояние</b>"])
     try:
         store._load("__health__")
-        lines.append("✅ DB: OK")
+        lines.append("  ✅ DB: OK")
     except Exception as e:
         _log.warning("health: DB failed: %s", e)
-        lines.append("❌ DB: недоступна")
+        lines.append("  ❌ DB: недоступна")
 
-    # Weather
     try:
         s = store.get_settings(update.effective_chat.id)
         weather.fetch_weather(s["lat"], s["lon"], 1)
-        lines.append("✅ Weather API: OK")
+        lines.append("  ✅ Weather API: OK")
     except Exception as e:
         _log.warning("health: weather failed: %s", e)
-        lines.append("❌ Weather API: недоступна")
+        lines.append("  ❌ Weather API: недоступна")
 
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
