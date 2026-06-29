@@ -452,6 +452,8 @@ async def handle_callback(bot, cid, data, q=None):
         await _admin_guard(bot, cid, send_admin_cost)
     elif data == "set_admin_health":
         await _admin_guard(bot, cid, send_admin_health)
+    elif data == "set_admin_llmcheck":
+        await _admin_guard(bot, cid, send_admin_llmcheck)
     elif data == "set_admin_run_notif":
         await _admin_guard(bot, cid, send_admin_run_notif)
     elif data.startswith("set_admin_runjob_"):
@@ -868,6 +870,7 @@ async def send_admin(bot, cid):
     """Главный экран администратора."""
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("📡 Статус сервисов", callback_data="set_admin_health")],
+        [InlineKeyboardButton("🧪 LLM check", callback_data="set_admin_llmcheck")],
         [InlineKeyboardButton("👥 Пользователи", callback_data="set_admin_users")],
         [InlineKeyboardButton("💸 Расходы на LLM", callback_data="set_admin_cost")],
         [InlineKeyboardButton("📩 Запустить рассылку", callback_data="set_admin_run_notif")],
@@ -931,11 +934,6 @@ async def send_admin_cost(bot, cid):
             by_prov[prov] = by_prov.get(prov, 0) + tok
             total_tokens += tok
 
-        # грубая оценка в USD
-        haiku_tok = sum(e.get("tokens", 0) for e in recent if "haiku" in e.get("model", "").lower())
-        other_tok = total_tokens - haiku_tok
-        usd_est = haiku_tok / 1_000_000 * 0.75 + other_tok / 1_000_000 * 3.0
-
         def _pct(t):
             return f"{round(t / total_tokens * 100)}%" if total_tokens else "0%"
 
@@ -959,14 +957,17 @@ async def send_admin_cost(bot, cid):
         lines = ["💸 <b>Расходы за 7 дней</b>", "",
                  f"Вызовов: {len(recent)}",
                  f"Токенов: ~{total_tokens:,}",
-                 f"Оценка: ~${usd_est:.3f}", ""]
+                 ""]
+        lines.append("ℹ️ <i>Не все провайдеры обязаны использоваться каждый период: "
+                     "маршрутизация идёт по приоритету и доступности ключей.</i>")
+        lines.append("")
 
         # все провайдеры в порядке приоритета
         lines.append("<b>По провайдерам:</b>")
         for key, label, configured in _PROV_ORDER:
             tok = by_prov.get(key, 0)
             if not configured:
-                lines.append(f"  {esc(label)}: — (нет ключа)")
+                lines.append(f"  {esc(label)}: —")
             elif tok:
                 lines.append(f"  {esc(label)}: {tok:,} tok ({_pct(tok)})")
             else:
@@ -1033,6 +1034,32 @@ async def send_admin_health(bot, cid):
     except Exception:
         lines.append("  ❌ Weather API: недоступна")
 
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
+    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
+
+
+async def send_admin_llmcheck(bot, cid):
+    """Проверка доступности всех LLM-провайдеров по очереди."""
+    import ai as _ai
+
+    probes = [
+        ("Claude", "claude"),
+        ("OpenAI", "openai"),
+        ("OpenRouter", "openrouter"),
+        ("Cloudflare", "cf"),
+        ("Gemini", "gemini"),
+        ("Groq", "groq"),
+    ]
+    lines = ["🧪 <b>LLM check</b>", "", "Проверяю провайдеров по очереди…", ""]
+    for label, route in probes:
+        try:
+            out = await _ai.allm("Ответь одним словом: ok", 10, 0.0, route=route, module="admin")
+            reply = (out or "").strip().split()[0][:40] if out else "ok"
+            lines.append(f"✅ {label}: {reply}")
+        except Exception as e:
+            msg = str(e).split(": ", 1)[-1][:80]
+            lines.append(f"❌ {label}: {msg}")
+    lines += ["", "<i>Проверка идёт последовательно, чтобы увидеть реальный ответ каждого провайдера.</i>"]
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
 

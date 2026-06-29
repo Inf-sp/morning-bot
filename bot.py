@@ -650,6 +650,15 @@ async def cost_command(update, context):
     await settings.send_admin_cost(context.bot, cid)
 
 
+async def llmcheck_command(update, context):
+    """Диагностика доступности LLM-провайдеров — только для администратора."""
+    cid = update.effective_chat.id
+    if config.CHAT_ID and str(cid) != str(config.CHAT_ID):
+        await update.message.reply_text("⛔ Только для администратора.")
+        return
+    await settings.send_admin_llmcheck(context.bot, cid)
+
+
 async def invite_command(update, context):
     """Создать одноразовый инвайт-код — только для owner."""
     cid = update.effective_chat.id
@@ -852,6 +861,7 @@ def main():
     app.add_handler(CommandHandler("setup", setup_command))
     app.add_handler(CommandHandler("health", health_command))
     app.add_handler(CommandHandler("cost", cost_command))
+    app.add_handler(CommandHandler("llmcheck", llmcheck_command))
     app.add_handler(CommandHandler("invite", invite_command))
     app.add_handler(CallbackQueryHandler(answer_callback))
     app.add_handler(MessageHandler(filters.LOCATION, weather.location_handler))

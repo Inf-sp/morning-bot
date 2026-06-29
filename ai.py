@@ -130,6 +130,16 @@ GRAMMAR_ORDER  = ("groq", "gemini", "claude", "openrouter", "openai", "cf")
 # Досуг/рекомендации: Gemini первым — богатое знание культуры, кино, музыки, путешествий
 LEISURE_ORDER  = ("gemini", "openrouter", "claude", "openai", "groq", "cf")
 
+# Явные пресеты: позволяют приоритизировать конкретный провайдер, не меняя код вызова по всему проекту.
+PROVIDER_ORDER = {
+    "claude": DEFAULT_ORDER,
+    "openai": ("openai", "claude", "gemini", "openrouter", "groq", "cf"),
+    "openrouter": ("openrouter", "claude", "openai", "gemini", "groq", "cf"),
+    "cf": ("cf", "claude", "openai", "gemini", "openrouter", "groq"),
+    "groq": ("groq", "gemini", "claude", "openrouter", "openai", "cf"),
+    "gemini": ("gemini", "claude", "openrouter", "groq", "openai", "cf"),
+}
+
 # --- тиры: маршрутизация по задаче ---
 # cheap  → Groq первым (грамматика, переводы, простые lookup-и; Claude Haiku если дойдёт)
 # smart  → Claude первым (чат, рецепты, гардероб, мотивация — требуют рассуждений)
@@ -140,10 +150,13 @@ TIERS = {
     "leisure": (LEISURE_ORDER, None),
 }
 
-def _resolve(tier, order, claude_model):
-    """Явные order/claude_model имеют приоритет; иначе берём орден/модель из тира."""
+def _resolve(tier, order, claude_model, route=None):
+    """Явные order/claude_model имеют приоритет; иначе берём орден/модель из тира.
+    route позволяет принудительно поставить конкретного провайдера первым."""
     if order is not None or claude_model is not None:
         return order or DEFAULT_ORDER, claude_model
+    if route:
+        return PROVIDER_ORDER.get(route, DEFAULT_ORDER), None
     o, m = TIERS.get(tier or "smart", (DEFAULT_ORDER, None))
     return o, m
 
@@ -159,10 +172,10 @@ def _caller_module() -> str:
                 return m
     return ""
 
-def llm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None, tier=None, module=""):
+def llm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None, tier=None, module="", route=None):
     if not module:
         module = _caller_module()
-    order, claude_model = _resolve(tier, order, claude_model)
+    order, claude_model = _resolve(tier, order, claude_model, route=route)
     calls = {
         "claude": lambda: _gen_claude(prompt, max_tokens, claude_model),
         "openai": lambda: _gen_openai(prompt, max_tokens, temperature),
@@ -226,12 +239,12 @@ def _repair_inner_quotes(raw):
         i += 1
     return "".join(out)
 
-def llm_json(prompt, max_tokens=1200, order=None, claude_model=None, tier=None, module=""):
+def llm_json(prompt, max_tokens=1200, order=None, claude_model=None, tier=None, module="", route=None):
     if not module:
         module = _caller_module()
     raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
                        "Внутри строковых значений НЕ используй двойные кавычки - "
-                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order, claude_model, tier, module)
+                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order, claude_model, tier, module, route)
     raw = re.sub(r"```(json)?", "", raw).strip()
     m = re.search(r"\{.*\}", raw, re.S)
     if m:
@@ -339,11 +352,11 @@ def chat_chain(history, cid=None):
 
 
 # --- async-обёртки для вызова из async-обработчиков без блокировки event loop ---
-async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None, tier=None):
-    return await asyncio.to_thread(llm, prompt, max_tokens, temperature, order, claude_model, tier)
+async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None, tier=None, route=None):
+    return await asyncio.to_thread(llm, prompt, max_tokens, temperature, order, claude_model, tier, "", route)
 
-async def allm_json(prompt, max_tokens=1200, order=None, claude_model=None, tier=None):
-    return await asyncio.to_thread(llm_json, prompt, max_tokens, order, claude_model, tier)
+async def allm_json(prompt, max_tokens=1200, order=None, claude_model=None, tier=None, route=None):
+    return await asyncio.to_thread(llm_json, prompt, max_tokens, order, claude_model, tier, "", route)
 
 async def achat_chain(history, cid=None):
     return await asyncio.to_thread(chat_chain, history, cid)

@@ -71,7 +71,7 @@ JSON (без переносов строк внутри значений):
  "correct": "a или b",
  "rule": "почему именно этот вариант верный, 1-2 строки"
 }}"""
-    return ai.llm_json(prompt, 1400, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
+    return ai.llm_json(prompt, 1400, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL, route="openrouter")
 
 def _study_words(cid, language):
     """До 8 слов нужного языка из словаря - для примеров грамматики/тренажёра."""
@@ -256,7 +256,7 @@ def _word_meanings(word: str, language: str) -> list:
             "Перечисли ВСЕ его значения на русском. "
             "Если значение одно — верни пустой массив. "
             'JSON: {"meanings": ["значение 1", "значение 2"]}',
-            200, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL
+            200, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL, route="openai"
         )
         meanings = d.get("meanings", []) if isinstance(d, dict) else []
         return [str(m).strip() for m in meanings if str(m).strip()]

@@ -215,7 +215,7 @@ async def _save_leisure(cid, raw: str) -> list:
             f"Пользователь описал предпочтения в досуге: {secure.wrap_untrusted(raw, 'досуг')}\n"
             "Извлеки списки:\n"
             '{"movies":["название","..."],"artists":["имя","..."],"books":["книга","..."]}',
-            500, tier="cheap",
+            500, tier="cheap", route="openai",
         )
     except Exception:
         d = {}
