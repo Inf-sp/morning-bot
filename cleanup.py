@@ -152,12 +152,9 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
         else:
             rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"as_loveadd_{ctx[3:]}")])
     if ctx == "fridge":
-        product_buttons = []
         for idx, lbl in chunk:
             mark = "✅" if idx in sel else "▫️"
-            product_buttons.append(InlineKeyboardButton(f"{mark} {lbl[:18]}", callback_data=f"clt_{ctx}_{idx}_{page}"))
-        for i in range(0, len(product_buttons), 2):
-            rows.append(product_buttons[i:i + 2])
+            rows.append([InlineKeyboardButton(f"{mark} {lbl[:40]}", callback_data=f"clt_{ctx}_{idx}_{page}")])
     else:
         for idx, lbl in chunk:
             mark = "✅" if idx in sel else "▫️"
