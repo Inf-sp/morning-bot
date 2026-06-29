@@ -867,7 +867,7 @@ async def _admin_guard(bot, cid, fn):
 async def send_admin(bot, cid):
     """Главный экран администратора."""
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🩺 Статус сервисов", callback_data="set_admin_health")],
+        [InlineKeyboardButton("📡 Статус сервисов", callback_data="set_admin_health")],
         [InlineKeyboardButton("👥 Пользователи", callback_data="set_admin_users")],
         [InlineKeyboardButton("💸 Расходы на LLM", callback_data="set_admin_cost")],
         [InlineKeyboardButton("📩 Запустить рассылку", callback_data="set_admin_run_notif")],

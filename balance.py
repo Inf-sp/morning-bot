@@ -249,7 +249,7 @@ def _recipe_kb():
 def _recipe_typed_kb():
     """Клавиатура после «Новый рецепт» — только выбор типа приёма пищи."""
     return _kb([
-        [("🍳 Завтрак", "a_food_breakfast"), ("🥗 Обед", "a_food_lunch"), ("🍽️ Ужин", "a_food_dinner")],
+        [("🍳 Завтрак", "a_recipe_breakfast"), ("🥗 Обед", "a_recipe_lunch"), ("🍽️ Ужин", "a_recipe_dinner")],
         [("◀️ Назад", "m_food")],
     ])
 

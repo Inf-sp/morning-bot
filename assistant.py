@@ -8,20 +8,27 @@ _MED_WORDS = ("боль", "болит", "температур", "симптом"
 
 # (ключевые слова, action)
 _INTENT_MAP = [
+    (("что сегодня", "что на сегодня", "план на день", "дела на день", "расписан", "планировать день", "мой день"),
+     "day_plan"),
     (("завтрак", "обед", "ужин", "поесть", "приготовить", "рецепт",
       "покушать", "голоден", "голодна", "что поесть", "что покушать",
       "что приготовить", "чего поесть"), "meal_picker"),
+    (("холодильник", "из холодильника", "что есть дома", "что есть в холодильнике", "остатки"),
+     "fridge"),
     (("что посмотреть", "фильм", "сериал", "кино"), "movie"),
     (("что почитать", "почитать", "книгу", "книжку"), "book"),
     (("что послушать", "послушать", "музыку", "музыка", "плейлист"), "music"),
     (("куда поехать", "путешест", "поездка", "отпуск", "маршрут"), "travel"),
+    (("концерт", "мероприят", "событи", "афиша", "выступлен"), "concerts"),
     (("мотивац", "прокрастин", "лень", "грустн", "грустно",
       "не могу начать", "застрял", "настроени"), "motivation"),
     (("нидерландск", "голландск", "dutch", "де/хет", "de/het"), "grammar_nl"),
     (("английск", "english", "phrasal"), "grammar_en"),
+    (("словар", "лексик", "перевод", "какое слово", "слово дня"), "dictionary"),
     (("одеться", "что надеть", "образ дня", "образ на"), "outfit"),
     (("погода", "дождь", "температура", "зонт", "прогноз"), "weather"),
     (("тревог", "тревож", "беспокоюсь", "стресс", "переживаю", "нервничаю"), "worry"),
+    (("заметк", "сохран", "запомни это", "мои заметки", "база"), "notes"),
 ]
 
 _FALLBACK_KB = InlineKeyboardMarkup([
@@ -43,16 +50,20 @@ def _detect_intent(text: str):
 
 
 async def _run_intent(bot, cid, action):
-    import balance, leisure, learning, wardrobe
+    import balance, leisure, learning, wardrobe, myday, settings
     import weather as wx
     if action == "meal_picker":
         kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🌅 Завтрак", callback_data="a_food_breakfast"),
-            InlineKeyboardButton("☀️ Обед",    callback_data="a_food_lunch"),
-            InlineKeyboardButton("🌙 Ужин",    callback_data="a_food_dinner"),
+            InlineKeyboardButton("🌅 Завтрак", callback_data="a_recipe_breakfast"),
+            InlineKeyboardButton("☀️ Обед",    callback_data="a_recipe_lunch"),
+            InlineKeyboardButton("🌙 Ужин",    callback_data="a_recipe_dinner"),
         ]])
         await bot.send_message(chat_id=cid, text="🍽 <b>Что готовим?</b>",
                                parse_mode="HTML", reply_markup=kb)
+    elif action == "day_plan":
+        await myday.send_plany(bot, cid)
+    elif action == "fridge":
+        await balance.send_fridge_recipe(bot, cid)
     elif action == "movie":
         await leisure.send_recos(bot, cid, "movie")
     elif action == "book":
@@ -61,18 +72,24 @@ async def _run_intent(bot, cid, action):
         await leisure.send_listen(bot, cid)
     elif action == "travel":
         await leisure.send_go(bot, cid)
+    elif action == "concerts":
+        await leisure.find_concerts(bot, cid, "home")
     elif action == "motivation":
         await balance.send_motiv_push(bot, cid)
     elif action == "grammar_nl":
         await learning.gm_send_lang(bot, cid, "nl")
     elif action == "grammar_en":
         await learning.gm_send_lang(bot, cid, "en")
+    elif action == "dictionary":
+        await learning.send_dict(bot, cid)
     elif action == "outfit":
         await wardrobe.send_looks(bot, cid)
     elif action == "weather":
         await wx.send_weather(bot, cid, "today")
     elif action == "worry":
         await balance.send_daycheck(bot, cid)
+    elif action == "notes":
+        await settings.send_notes(bot, cid)
 
 
 async def chat_reply(bot, cid, text):
