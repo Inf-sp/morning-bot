@@ -84,7 +84,7 @@ def home_kb(cid):
 
 async def send_home(bot, cid):
     await bot.send_message(chat_id=cid,
-        text="⚙️ <b>Настройки</b>\n\nЯзык, уведомления, город и параметры стиля.\n\nВыбери раздел 👇",
+        text="🎚️ <b>Настройки</b>\n\nЯзык, уведомления, город и параметры стиля.\n\nВыбери раздел 👇",
         parse_mode="HTML", reply_markup=home_kb(cid))
 
 async def _run_notif_test(bot, cid, kind):
@@ -197,7 +197,7 @@ async def send_body(bot, cid):
     style = get(cid, "style", "минимализм")
     body_line = esc(body) if body else "<i>не задано</i>"
     txt = (
-        "📐 <b>Мои параметры </b>\n\n"
+        "🎚️ <b>Мои параметры </b>\n\n"
         "Бот использует эти данные при подборе образа и оценке покупок — "
         "чтобы советы по размеру и силуэту подходили именно тебе.\n\n"
         f"<b>Параметры тела:</b> {body_line}\n"
@@ -205,8 +205,8 @@ async def send_body(bot, cid):
         "<i>Пример параметров: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32</i>"
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✏️ Параметры тела", callback_data="set_bodyinput")],
-        [InlineKeyboardButton("🎨 Стиль", callback_data="set_stylepick")],
+        [InlineKeyboardButton("🎚️ Параметры тела", callback_data="set_bodyinput")],
+        [InlineKeyboardButton("🎚️ Стиль", callback_data="set_stylepick")],
         [InlineKeyboardButton("◀️ Назад", callback_data="set_wardrobe")],
     ])
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
@@ -234,7 +234,7 @@ def _item_label(it):
 def _list_kb(items, del_prefix, add_cb, back="set_home"):
     rows = [[InlineKeyboardButton(f"❌ {_item_label(it)[:35]}", callback_data=f"{del_prefix}{i}")]
             for i, it in enumerate(items[-40:])]
-    rows.append([InlineKeyboardButton("📝 Добавить", callback_data=add_cb)])
+    rows.append([InlineKeyboardButton("✏️ Добавить", callback_data=add_cb)])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
     return InlineKeyboardMarkup(rows)
 
@@ -247,9 +247,9 @@ async def _send_list(bot, cid, title, items, del_prefix, add_cb, back="set_home"
 # --- Шкаф ---
 async def send_wardrobe(bot, cid, back="m_notes"):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📝 Добавить", callback_data="set_ward_add")],
+        [InlineKeyboardButton("✏️ Добавить", callback_data="set_ward_add")],
         [InlineKeyboardButton("❌ Убрать", callback_data="set_ward_del")],
-        [InlineKeyboardButton("📐 Параметры", callback_data="set_body")],
+        [InlineKeyboardButton("🎚️ Параметры", callback_data="set_body")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ])
     await bot.send_message(chat_id=cid, text="👕 <b>Мой шкаф</b>\n\nБаза вещей и параметры для подбора одежды.",
@@ -261,7 +261,7 @@ async def send_countries(bot, cid):
     items = store.get_list(config.COUNTRIES_KEY, cid)
     rows = [[InlineKeyboardButton(f"❌ {country_flag(it)} {_item_label(it)[:33]}", callback_data=f"setdel_country_{i}")]
             for i, it in enumerate(items[-40:])]
-    rows.append([InlineKeyboardButton("📝 Добавить", callback_data="setadd_country")])
+    rows.append([InlineKeyboardButton("✏️ Добавить", callback_data="setadd_country")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
     await bot.send_message(chat_id=cid, text="🗺️ <b>Мои страны</b>", parse_mode="HTML",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -290,7 +290,7 @@ async def send_lagom(bot, cid, back="m_notes"):
     items = memory.get_lagom(cid)
     txt = _LAGOM_INTRO.rstrip() if items else f"{_LAGOM_INTRO.rstrip()}\n\nПока пусто — добавь первый принцип 👇"
     rows = []
-    rows.append([InlineKeyboardButton("📝 Добавить", callback_data="setadd_lagom")])
+    rows.append([InlineKeyboardButton("✏️ Добавить", callback_data="setadd_lagom")])
     if items:
         rows.append([InlineKeyboardButton("❌ Убрать", callback_data="set_lagom_clean")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
@@ -434,7 +434,7 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_bodyinput":
         store.pending_input[cid] = "bodyinput"
         await bot.send_message(chat_id=cid,
-            text="✏️ <b>Параметры тела</b>\n\nНапиши свободным текстом — рост, размер одежды, размер обуви и брюк.\n\n"
+            text="🎚️ <b>Параметры тела</b>\n\nНапиши свободным текстом — рост, размер одежды, размер обуви и брюк.\n\n"
                  "<i>Пример: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32</i>",
             parse_mode="HTML")
     elif data == "set_admin":
@@ -782,7 +782,7 @@ async def send_love_section(bot, cid, key):
     else:
         body = "<i>пусто</i>"
     lines = [f"<b>{title}</b>", "", body]
-    rows = [[InlineKeyboardButton("📝 Добавить", callback_data=f"as_loveadd_{key}")]]
+    rows = [[InlineKeyboardButton("✏️ Добавить", callback_data=f"as_loveadd_{key}")]]
     if items:
         rows.append([InlineKeyboardButton("🗑 Выбрать для удаления", callback_data=f"as_loveclean_{key}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])

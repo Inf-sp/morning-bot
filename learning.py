@@ -743,7 +743,7 @@ def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("📖 Словарь", callback_data=f"a_dictlang_{lang}"),
-            InlineKeyboardButton("➕ Добавить", callback_data=f"a_dictadd_smart_{lang}"),
+            InlineKeyboardButton("✏️ Добавить", callback_data=f"a_dictadd_smart_{lang}"),
         ]
     ])
 
@@ -839,7 +839,7 @@ async def send_morning_word(bot, cid):
     rows = []
     rows.append([
         InlineKeyboardButton("📖 Словарь", callback_data=f"a_dictlang_{lang_code}"),
-        InlineKeyboardButton("➕ Добавить", callback_data=f"a_dictadd_smart_{lang_code}"),
+        InlineKeyboardButton("✏️ Добавить", callback_data=f"a_dictadd_smart_{lang_code}"),
     ])
     if phrase_del_row:
         rows.append(phrase_del_row)
@@ -905,7 +905,7 @@ async def send_topics(bot, cid, language):
             lines.append(f"{i}. {esc(txt)}")
     else:
         lines.append("Пока пусто. Добавь тему, которую хочешь разобрать.")
-    rows = [[InlineKeyboardButton("✍🏻 Добавить тему", callback_data=f"a_topicadd_{code}")]]
+    rows = [[InlineKeyboardButton("✏️ Добавить тему", callback_data=f"a_topicadd_{code}")]]
     if topics:
         rows.append([InlineKeyboardButton("🧹 Убрать выученные", callback_data=f"a_topicclean_{code}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")])
@@ -1612,7 +1612,7 @@ async def gm_send_custom(bot, cid, code):
             (f"📝 {t['title'][:28]}", f"gm_topic_{t['id']}"),
             ("❌", f"gm_deltopic_{t['id']}"),
         ])
-    rows.append([("📝 Добавить тему", f"gm_addtopic_{code}")])
+    rows.append([("✏️ Добавить тему", f"gm_addtopic_{code}")])
     rows.append([("◀️ Назад", f"a_dictlang_{code}")])
 
     header = f"📝 <b>Мои темы · {flag} {lang.capitalize()}</b>"
