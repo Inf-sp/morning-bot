@@ -113,7 +113,7 @@ def menu_screen(key):
                 [("🧠 Тренажёр", "a_train_nl"), ("📘 Грамматика", "gm_lang_nl")],
                 [("💭 Живой язык", "a_proverb_nl"), ("🕵️ Игра-детектив", "gamelang_nl")],
                 [("🧩 Артикли De / Het", "dh_start")],
-                [("📖 Словарь", "a_dictlang_nl")],
+                [("📖 Словарь", "a_dictlang_nl_from_lang")],
                 [("◀️ Назад", "m_learn")],
             ])
         )
@@ -125,7 +125,7 @@ def menu_screen(key):
             _ikb([
                 [("🧠 Тренажёр", "a_train_en"), ("📘 Грамматика", "gm_lang_en")],
                 [("💭 Живой язык", "a_proverb_en"), ("🕵️ Игра-детектив", "gamelang_en")],
-                [("📖 Словарь", "a_dictlang_en")],
+                [("📖 Словарь", "a_dictlang_en_from_lang")],
                 [("◀️ Назад", "m_learn")],
             ])
         )
@@ -147,8 +147,8 @@ def menu_screen(key):
             "Списки, которые бот использует для рекомендаций фильмов, поездок, музыки и книг."
             + _MENU_FOOTER,
             _ikb([
-                [("🎚️ Кино", "as_love_movies"), ("🎚️ Страны", "as_love_countries")],
-                [("🎚️ Артисты", "as_love_artists"), ("🎚️ Книги", "as_love_books")],
+                [("🎚️ Кино", "ls_love_movies"), ("🎚️ Страны", "ls_love_countries")],
+                [("🎚️ Артисты", "ls_love_artists"), ("🎚️ Книги", "ls_love_books")],
                 [("◀️ Назад", "m_leisure")],
             ])
         )

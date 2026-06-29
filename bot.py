@@ -92,6 +92,9 @@ async def answer_callback(update, context):
         await learning.handle_callback(bot, cid, q, data)
         return
     # Баланс (врач/мотивация/рецепты/тревоги/холодильник) vs Закладки/Любимое
+    if data.startswith("ls_"):
+        await settings.handle_notes_callback(bot, cid, q, data)
+        return
     if data.startswith("as_"):
         if data.startswith(("as_food", "as_fridge", "as_recipe", "as_my_recipe",
                              "as_daycheck", "as_motiv", "as_doctor")):
@@ -190,6 +193,10 @@ async def answer_callback(update, context):
                 await learning.send_dict_lang(bot, cid, "nl")
             elif act == "dictlang_en":
                 await learning.send_dict_lang(bot, cid, "en")
+            elif act == "dictlang_nl_from_lang":
+                await learning.send_dict_lang(bot, cid, "nl", back="m_nl")
+            elif act == "dictlang_en_from_lang":
+                await learning.send_dict_lang(bot, cid, "en", back="m_en")
             elif act.startswith("dictadd_smart_"):
                 lang = act.split("_")[2]
                 store.pending_input[cid] = f"dictadd_smart_{lang}"
@@ -537,6 +544,8 @@ async def text_router(update, context):
             await firstvisit.handle_response(bot, cid, kind[len("firstvisit_"):], text); return
         if kind.startswith("loveadd_"):
             await settings.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
+        if kind.startswith("loveaddls_"):
+            await settings.love_add_done(bot, cid, kind[len("loveaddls_"):], text, origin="leisure"); return
         if kind.startswith("gm_addtopic_"):
             code = kind[len("gm_addtopic_"):]
             await learning.add_topic_done(bot, cid, code, text); return
