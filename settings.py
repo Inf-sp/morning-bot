@@ -993,7 +993,7 @@ async def send_admin_health(bot, cid):
     import store as _st
     import weather as _w
 
-    lines = ["🩺 <b>Статус сервисов</b>"]
+    lines = ["📡 <b>Статус сервисов</b>"]
 
     required = [
         ("TELEGRAM_TOKEN", bool(config.TELEGRAM_TOKEN)),
@@ -1001,7 +1001,7 @@ async def send_admin_health(bot, cid):
         ("DATABASE_URL",    bool(config.DATABASE_URL)),
         ("CHAT_ID",         bool(config.CHAT_ID)),
     ]
-    lines.extend(["", "🔒 <b>Обязательные ключи</b>"])
+    lines.extend(["", "<b>Обязательные ключи</b>"])
     for k, ok in required:
         lines.append(f"  {'✅' if ok else '❌'} <code>{k}</code>")
 
@@ -1015,11 +1015,11 @@ async def send_admin_health(bot, cid):
         ("TMDB_API_KEY",        bool(config.TMDB_API_KEY)),
         ("TICKETMASTER_API_KEY",bool(config.TICKETMASTER_API_KEY)),
     ]
-    lines.extend(["", "🧩 <b>Опциональные ключи</b>"])
+    lines.extend(["", "<b>Опциональные ключи</b>"])
     for k, ok in optional:
         lines.append(f"  {'✅' if ok else '⚪'} <code>{k}</code>")
 
-    lines.extend(["", "🗄 <b>Состояние</b>"])
+    lines.extend(["", "<b>Состояние</b>"])
     try:
         _st._load("__health__")
         lines.append("  ✅ DB: OK")
