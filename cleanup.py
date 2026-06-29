@@ -129,7 +129,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
         ])
     rows.append([InlineKeyboardButton("☑️ Отметить всё на странице", callback_data=f"cla_{ctx}_{page}")])
     if sel:
-        rows.append([InlineKeyboardButton(f"🗑 Удалить отмеченные ({len(sel)})", callback_data=f"cld_{ctx}_{page}")])
+        rows.append([InlineKeyboardButton(f"❌ Удалить отмеченные ({len(sel)})", callback_data=f"cld_{ctx}_{page}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
