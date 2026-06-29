@@ -190,6 +190,12 @@ async def answer_callback(update, context):
                 await learning.send_dict_lang(bot, cid, "nl")
             elif act == "dictlang_en":
                 await learning.send_dict_lang(bot, cid, "en")
+            elif act.startswith("dictadd_smart_"):
+                lang = act.split("_")[2]
+                store.pending_input[cid] = f"dictadd_smart_{lang}"
+                await bot.send_message(chat_id=cid, text=(
+                    "✍🏻 Пришли слово, фразу или тему для изучения — можно сразу несколько.\n"
+                    "Я сам пойму что это: слово, фраза или грамматическая тема."))
             elif act.startswith("dictadd_"):
                 lang = act.split("_")[1]
                 store.pending_input[cid] = f"dictadd_{lang}"
@@ -480,6 +486,8 @@ async def text_router(update, context):
             await settings.memory_add_done(bot, cid, text); return
         if kind == "setcity":
             await weather.set_city_text(bot, cid, text); return
+        if kind.startswith("dictadd_smart_"):
+            await learning.add_smart_batch(bot, cid, text, kind.split("_")[2]); return
         if kind.startswith("dictadd_"):
             await learning.add_words_batch(bot, cid, text, kind.split("_")[1]); return
         if kind == "topicadd_nl":

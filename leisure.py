@@ -304,10 +304,10 @@ def _movie_card(it, tm):
 
 def _movie_kb(i):
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Не интересно", callback_data=f"movie_no_{i}")],
+        [InlineKeyboardButton("⏳ Смотреть позже", callback_data=f"reco_{i}")],
         [InlineKeyboardButton("❤️ Любимое", callback_data=f"movie_love_{i}"),
          InlineKeyboardButton("✅ Смотрел", callback_data=f"movie_seen_{i}")],
-        [InlineKeyboardButton("⏳ Позже", callback_data=f"reco_{i}"),
-         InlineKeyboardButton("❌ Не интересно", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
