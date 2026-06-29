@@ -9,6 +9,11 @@ _MONTHS = ["января", "февраля", "марта", "апреля", "ма
 def esc(t: str | None) -> str:
     return _html_escape(t or "", quote=False)
 
+def cap_sentence(t: str | None) -> str:
+    """Заглавная первая буква для коротких LLM-фраз, не меняя остальной текст."""
+    s = (t or "").strip()
+    return s[:1].upper() + s[1:] if s else s
+
 async def ack_loading(q) -> None:
     """Меняет клавиатуру на ⏳ пока идёт медленная LLM-операция. Ошибки игнорирует."""
     try:

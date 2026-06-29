@@ -10,7 +10,7 @@ _log = logging.getLogger(__name__)
 import ai
 import rerank
 import util
-from util import esc
+from util import esc, cap_sentence
 import verify
 import secure
 import memory
@@ -817,7 +817,7 @@ async def send_evening_review(bot, cid):
             L.append(f"<i>{esc(note)}</i>")
     summary = (d.get("summary") or "").strip()
     if summary:
-        L += ["", "<b>Итог дня:</b>", esc(summary)]
+        L += ["", "<b>Итог дня:</b>", esc(cap_sentence(summary))]
     rows = [
         [InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")],
     ]

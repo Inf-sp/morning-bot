@@ -9,7 +9,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 import ai
-from util import esc, _WEEKDAYS, _WEEKDAY_SHORT, _MONTHS
+from util import esc, cap_sentence, _WEEKDAYS, _WEEKDAY_SHORT, _MONTHS
 import verify
 
 TZ = config.TZ
@@ -438,7 +438,7 @@ async def send_weather(bot, cid, mode="today"):
                     150, 0.6, tier="cheap"
                 ).strip()
                 if summary:
-                    L += ["", "🌡️ <b>Метео-итог</b>", esc(summary)]
+                    L += ["", "🌡️ <b>Метео-итог</b>", esc(cap_sentence(summary))]
             except Exception:
                 pass
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
@@ -545,7 +545,7 @@ async def send_weather(bot, cid, mode="today"):
         L.append(f"{icon} {day_label} — {esc(desc)}, {temp_str}")
 
     if summary:
-        L += ["", "🌡️ <b>Метео-итог</b>", esc(summary)]
+        L += ["", "🌡️ <b>Метео-итог</b>", esc(cap_sentence(summary))]
 
     kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
     await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
