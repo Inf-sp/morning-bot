@@ -20,8 +20,8 @@ TZ = config.TZ
 _food_tip_cache: dict = {}  # cid -> {"date": ..., "text": ...}
 
 # ===== Холодильник: категории =====
-# Порядок dict определяет приоритет матчинга — молочное и напитки раньше фруктов,
-# чтобы 'масло сливочное' и 'сок апельсиновый' не уходили в фрукты.
+# Порядок dict определяет приоритет матчинга. Сначала более специфичные группы,
+# потом широкие, чтобы "масло сливочное" и "сок апельсиновый" не улетали не туда.
 _FRIDGE_KEYWORDS: dict = {
     "мясо и рыба": [
         # мясо и птица
@@ -33,19 +33,6 @@ _FRIDGE_KEYWORDS: dict = {
         "скумбри", "форел", "икр", "креветк", "мидии", "кальмар", "осьминог", "краб",
         "шпрот", "сардин", "анчоус", "палтус", "минтай", "хек", "судак", "карп",
         "тиляпи", "дорад", "сибас",
-    ],
-    "молочное": [
-        # проверяем до фруктов — иначе 'сливочное' матчит 'слив' из фруктов
-        "масло слив", "сливочн", "молок", "кефир", "йогурт", "творог",
-        "сметан", "сливк", "сыр", "пармезан", "моцарелл", "рикотт",
-        "бри", "камамбер", "фет", "гауд", "эдам", "чеддер", "халум",
-        "ряженк", "варенец", "айран", "кумыс", "яйц",
-    ],
-    "напитки": [
-        # проверяем до фруктов — иначе 'сок апельсиновый' матчит 'апельсин' из фруктов
-        "чай", "кофе", "сок", "морс", "компот", "квас", "лимонад",
-        "минерал", "газировк", "энергетик", "пиво", "вино", "сидр",
-        "какао", "смузи", "напиток",
     ],
     "овощи": [
         "помидор", "томат", "огурец", "огурц", "морков", "репчат",
@@ -64,16 +51,33 @@ _FRIDGE_KEYWORDS: dict = {
         "папайя", "гранат", "инжир", "хурм",
         "дын", "арбуз", "клюкв", "голубик", "брусник", "ежевик",
     ],
-    "крупы": [
+    "молочное и яйца": [
+        # проверяем до фруктов — иначе 'сливочное' матчит 'слив' из фруктов
+        "масло слив", "сливочн", "молок", "кефир", "йогурт", "творог",
+        "сметан", "сливк", "сыр", "пармезан", "моцарелл", "рикотт",
+        "бри", "камамбер", "фет", "гауд", "эдам", "чеддер", "халум",
+        "ряженк", "варенец", "айран", "кумыс", "яйц",
+    ],
+    "крупы и макароны": [
         "рис", "гречк", "овсянк", "овёс", "макарон", "спагетт", "паст", "лапш",
         "хлопь", "киноа", "булгур", "кускус", "перловк", "пшен", "чечевиц",
         "нут", "фасол", "горох", "боб", "ячмен", "полба", "амарант",
         "вермишел", "пенне", "фетучин", "тальятелл",
     ],
-    "хлеб": [
+    "хлеб и выпечка": [
         "хлеб", "батон", "булочк", "тост", "лаваш", "пита",
         "лепёшк", "лепешк", "багет", "чиабатт", "круасс",
         "бублик", "сушк", "хлебц", "хрустящ",
+    ],
+    "напитки": [
+        # проверяем до фруктов — иначе 'сок апельсиновый' матчит 'апельсин' из фруктов
+        "чай", "кофе", "сок", "морс", "компот", "квас", "лимонад",
+        "минерал", "газировк", "энергетик", "пиво", "вино", "сидр",
+        "какао", "смузи", "напиток",
+    ],
+    "снеки и сладости": [
+        "печень", "шоколад", "конфет", "батончик", "чипс", "снэк", "сухар",
+        "печен", "пирог", "торт", "кекс", "десерт", "морожен",
     ],
     "специи и соусы": [
         "соль", "специ", "приправ", "соус", "уксус", "горчиц", "кетчуп",
@@ -86,28 +90,50 @@ _FRIDGE_KEYWORDS: dict = {
     ],
 }
 _CAT_EMOJI: dict = {
-    "мясо и рыба": "🥩", "овощи": "🥦", "фрукты": "🍎", "молочное": "🥛",
-    "крупы": "🌾", "хлеб": "🍞", "специи и соусы": "🧂", "напитки": "🥤",
+    "мясо и рыба": "🥩", "овощи": "🥦", "фрукты": "🍎", "молочное и яйца": "🥛",
+    "крупы и макароны": "🍝", "хлеб и выпечка": "🍞", "специи и соусы": "🧂",
+    "напитки": "🥤", "снеки и сладости": "🍪",
     "прочее": "📦",
 }
 # Короткие названия для кнопок (чтобы помещались в 2 столбца)
 _CAT_BTN_LABEL: dict = {
-    "мясо и рыба": "Мясо/рыба", "специи и соусы": "Специи",
+    "мясо и рыба": "Мясо/рыба", "молочное и яйца": "Молочное",
+    "крупы и макароны": "Крупы/паста", "хлеб и выпечка": "Хлеб/выпечка",
+    "специи и соусы": "Специи", "снеки и сладости": "Снеки",
 }
 _CAT_ORDER = [
-    "мясо и рыба", "овощи", "фрукты", "молочное",
-    "крупы", "хлеб", "специи и соусы", "напитки", "прочее",
+    "мясо и рыба", "овощи", "фрукты", "молочное и яйца",
+    "крупы и макароны", "хлеб и выпечка", "напитки", "специи и соусы",
+    "снеки и сладости", "прочее",
 ]
 
 # Устаревшие категории → новые (для миграции существующих записей)
 _CAT_REMAP = {
     "мясо":     "мясо и рыба",
     "рыба":     "мясо и рыба",
+    "молочное": "молочное и яйца",
+    "крупы":    "крупы и макароны",
+    "хлеб":     "хлеб и выпечка",
     "специи":   "специи и соусы",
+    "напитки":  "напитки",
+    "сладости": "снеки и сладости",
+    "снеки":    "снеки и сладости",
 }
 _CAT_VALID = frozenset(_CAT_ORDER)
+_FRIDGE_FALLBACK_TARGET = {
+    "овощи": "овощи",
+    "фрукты": "фрукты",
+    "молочное и яйца": "молочное и яйца",
+    "крупы и макароны": "крупы и макароны",
+    "хлеб и выпечка": "хлеб и выпечка",
+    "напитки": "напитки",
+    "специи и соусы": "специи и соусы",
+    "снеки и сладости": "снеки и сладости",
+    "мясо и рыба": "мясо и рыба",
+    "прочее": "прочее",
+}
 
-FRIDGE_MIN_CAT = 5  # минимум продуктов для отдельной кнопки категории
+FRIDGE_MIN_CAT = 3  # минимум продуктов для отдельной кнопки категории
 
 
 def _fridge_cat(name: str) -> str:
@@ -141,20 +167,12 @@ def _fridge_by_cat_display(items: list) -> dict:
     """Словарь cat → [(global_idx, item)] для отображения.
     Категории с менее чем FRIDGE_MIN_CAT продуктами сливаются в 'прочее'."""
     by_cat = _fridge_by_cat(items)
-    result: dict = {}
-    overflow: list = []
+    result: dict = {cat: [] for cat in _CAT_ORDER}
     for cat in _CAT_ORDER:
-        if cat not in by_cat:
-            continue
-        cat_items = by_cat[cat]
-        if cat != "прочее" and len(cat_items) < FRIDGE_MIN_CAT:
-            overflow.extend(cat_items)
-        else:
-            result[cat] = list(cat_items)
-    if overflow:
-        result.setdefault("прочее", [])
-        result["прочее"] = overflow + result["прочее"]
-    return result
+        for gi, it in by_cat.get(cat, []):
+            target = cat if len(by_cat.get(cat, [])) >= FRIDGE_MIN_CAT or cat == "прочее" else _FRIDGE_FALLBACK_TARGET.get(cat, "прочее")
+            result[target].append((gi, it))
+    return {cat: items for cat, items in result.items() if items}
 
 
 def _fridge_available(items: list) -> list:
@@ -178,23 +196,18 @@ def _food_tip_context(cid) -> str:
 def _food_card(d, label="Рецепт дня") -> str:
     """Единый формат карточки рецепта для радара и нового рецепта."""
     name = esc(str(d.get("name", "")).strip())
-    time_ = esc(str(d.get("time", "")).strip())
-    servings = esc(str(d.get("servings", "")).strip())
     ingredients = esc(str(d.get("ingredients", "")).strip())
     steps = d.get("steps") or []
     if isinstance(steps, str):
         steps = [steps]
-    lines = [f"<b>{label}: {name}</b>"]
-    if time_ or servings:
-        meta = " • ".join(p for p in [f"⏱️ {time_}", f"🍽️ {servings}"] if p.split()[-1:])
-        lines += ["", meta]
+    lines = [f"🥣 <b>{label} • {name}</b>"]
     if ingredients:
-        lines += ["", f"Ингредиенты: {ingredients}"]
+        lines += ["", "<b>Ингредиенты:</b>", ingredients]
     if steps:
-        lines += ["", "Приготовление:"]
+        lines += ["", "<b>Приготовление:</b>"]
         for step in steps:
             lines.append(f"• {esc(str(step).strip())}")
-    lines += ["", "😋 Приятного аппетита!"]
+    lines += ["", "<b>😋 Приятного аппетита!</b>"]
     return "\n".join(lines)
 
 def fetch_food_tip(cid) -> str:
@@ -304,7 +317,8 @@ def _gen_recipe(constraint, cid=None):
         'JSON (без markdown): {"name":"Название блюда","time":"X мин","servings":"1 порц.",'
         '"ingredients":"список через запятую",'
         '"steps":["Глагол + действие + конкретика","шаг 2","шаг 3"],'
-        '"full":"полный рецепт: <b>Ингредиенты</b> со списком «• », затем <b>Приготовление</b> с пунктами «• »"}',
+        '"full":"тот же рецепт в том же стиле: сначала заголовок, затем <b>Ингредиенты</b>, затем <b>Приготовление</b>, затем <b>😋 Приятного аппетита!</b>. '
+        'Без времени и порции, без лишнего текста."}',
         900, tier="cheap")
 
 def _recipe_card(d):
@@ -413,7 +427,7 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
                 f"{emoji} {label} {on_cnt}/{len(cat_items)}",
                 callback_data=f"as_fridge_cat_{ci}_0"
             ))
-        rows = [cat_btns[i:i + 2] for i in range(0, len(cat_btns), 2)]
+        rows = [[btn] for btn in cat_btns]
         rows.append([InlineKeyboardButton("📝 Добавить продукты", callback_data="as_fridge_add")])
         rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
 
@@ -451,22 +465,15 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
            "🟢 — есть в наличии  ⚪ — закончилось\n"
            "Нажми продукт чтобы изменить статус, ❌ чтобы удалить.")
 
-    # Два продукта в строку: [🟢 имя ❌ | 🟢 имя ❌]
-    item_btns = []
+    # Один продукт в строку: [🟢 имя | ❌]
+    rows = []
     for gi, it in chunk:
         mark = "🟢" if it.get("on", True) else "⚪"
         name_short = it["name"][:13]
-        item_btns.append((
+        rows.append([
             InlineKeyboardButton(f"{mark} {name_short}", callback_data=f"as_fridge_tgl_{gi}_{cat_idx}_{page}"),
             InlineKeyboardButton("❌", callback_data=f"as_fridge_del_{gi}_{cat_idx}_{page}"),
-        ))
-    rows = []
-    for i in range(0, len(item_btns), 2):
-        pair = item_btns[i:i + 2]
-        if len(pair) == 2:
-            rows.append([pair[0][0], pair[0][1], pair[1][0], pair[1][1]])
-        else:
-            rows.append([pair[0][0], pair[0][1]])
+        ])
 
     if pages > 1:
         rows.append([
@@ -580,7 +587,7 @@ async def send_my_recipe_full(bot, cid, idx):
         await bot.send_message(chat_id=cid, text="Рецепт не найден."); return
     d = recipes[idx]
     store.last_recipe[cid_s] = d
-    txt = f"📖 <b>{util.esc(d.get('name',''))}</b>\n\n{d.get('full','')}"
+    txt = _food_card(d, label="Рецепт")
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить из базы", callback_data=f"as_my_recipe_del_{idx}")],
         [InlineKeyboardButton("◀️  к списку", callback_data="as_my_recipes")],
@@ -705,7 +712,7 @@ async def doctor_answer(bot, cid, symptoms):
     if _is_med_question(symptoms):
         prompt = f"{_med_system()}\n\nВопрос про лекарство: {safe_symptoms}"
         try:
-            out = await ai.allm(prompt, 900, 0.4)
+            out = await ai.allm(prompt, 900, 0.4, route="claude")
         except Exception as e:
             await verify.safe_error(bot, cid, e); return
         store.last_source[str(cid)] = "Здоровье · Лекарство"
@@ -726,7 +733,7 @@ async def doctor_answer(bot, cid, symptoms):
     else:
         prompt = f"{base}\n\nСимптомы: {safe_symptoms}"
     try:
-        out = await ai.allm(prompt, 900, 0.5)
+        out = await ai.allm(prompt, 900, 0.5, route="claude")
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     store.last_source[str(cid)] = "Здоровье · Врач"
@@ -740,7 +747,8 @@ async def handle_role(bot, cid, role, text):
         await verify.safe_send(bot, cid, secure.CRISIS_MSG, surface="health"); return
     await bot.send_chat_action(chat_id=cid, action="typing")
     try:
-        out = await ai.allm(_role_system(role) + "\n\nЗапрос пользователя:\n" + text, 1500, 0.7)
+        route = "claude" if role == "state" else "openrouter"
+        out = await ai.allm(_role_system(role) + "\n\nЗапрос пользователя:\n" + text, 1500, 0.7, route=route)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     store.last_action[str(cid)] = ("role", role, text)
