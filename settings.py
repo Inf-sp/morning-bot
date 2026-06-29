@@ -21,14 +21,6 @@ NOTIF_TYPES = [
     ("checkin_eve",    "🥸 Вечерний разбор (22:00)"),
 ]
 
-# Группировка для отображения в send_notif
-_NOTIF_GROUPS = [
-    ("🗓 День", ["morning_brief", "weather_warn", "lagom_daily", "recipe_daily",
-                 "checkin_day", "evening_weather"]),
-    ("📅 Неделя", ["weekly_events", "weekly_forecast"]),
-    ("📚 Обучение", ["grammar", "live_lang", "vocab_review"]),
-    ("🧠 Самозабота", ["checkin_eve"]),
-]
 STYLES = [
     "минимализм",
     "скандинавский стиль",
@@ -56,6 +48,29 @@ def notif_on(cid, kind):
 
 def study_lang(cid):
     return get(cid, "study_lang", "нидерландский")
+
+
+def _notif_label(kind: str, label: str) -> str:
+    if kind in ("weekly_events", "weekly_forecast"):
+        return f"{label} (1 раз в ВС в {'10:00' if kind == 'weekly_events' else '19:00'})"
+    if kind in ("live_lang",):
+        return f"{label} (ежедневно в 11:00)"
+    if kind in ("grammar", "vocab_review", "morning_brief", "weather_warn",
+                "lagom_daily", "recipe_daily", "checkin_day", "evening_weather",
+                "checkin_eve"):
+        times = {
+            "morning_brief": "08:30",
+            "weather_warn": "08:45",
+            "lagom_daily": "09:00",
+            "recipe_daily": "12:30",
+            "checkin_day": "14:00",
+            "evening_weather": "19:00",
+            "grammar": "11:00",
+            "vocab_review": "21:00",
+            "checkin_eve": "22:00",
+        }
+        return f"{label} (ежедневно в {times[kind]})"
+    return label
 
 
 def home_kb(cid):
@@ -132,13 +147,10 @@ async def _run_notif_test(bot, cid, kind):
 async def send_notif(bot, cid, q=None):
     kind_to_label = dict(NOTIF_TYPES)
     rows = []
-    for group_title, kinds in _NOTIF_GROUPS:
-        rows.append([InlineKeyboardButton(f"— {group_title} —", callback_data="noop")])
-        for kind in kinds:
-            label = kind_to_label.get(kind, kind)
-            on = notif_on(cid, kind)
-            mark = "🟢" if on else "⚪"
-            rows.append([InlineKeyboardButton(f"{mark} {label}", callback_data=f"set_notiftgl_{kind}")])
+    for kind, label in NOTIF_TYPES:
+        on = notif_on(cid, kind)
+        mark = "🟢" if on else "⚪"
+        rows.append([InlineKeyboardButton(f"{mark} {_notif_label(kind, label)}", callback_data=f"set_notiftgl_{kind}")])
     any_on = any(notif_on(cid, k) for k, _ in NOTIF_TYPES)
     if any_on:
         rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
