@@ -23,13 +23,17 @@ _food_tip_cache: dict = {}  # cid -> {"date": ..., "text": ...}
 # Порядок dict определяет приоритет матчинга. Сначала более специфичные группы,
 # потом широкие, чтобы "масло сливочное" и "сок апельсиновый" не улетали не туда.
 _FRIDGE_KEYWORDS: dict = {
+    "заморозка": [
+        "заморож", "замороз", "frozen", "diepvries",
+        "картофель фри", "картошка фри", "фри",
+    ],
     "мясо и рыба": [
         # мясо и птица
         "курич", "курен", "говядин", "свинин", "фарш", "индейк", "баранин",
         "сосис", "колбас", "ветчин", "бекон", "утк", "кролик", "стейк", "котлет",
         "шашлык", "карбонад", "окорок", "грудин", "вырезк",
         # рыба и морепродукты
-        "рыб", "лосос", "сёмг", "семг", "тунец", "треска", "сельд", "сёлд",
+        "рыб", "лосос", "сёмг", "семг", "тунец", "треска", "сельд", "сёлд", "селед",
         "скумбри", "форел", "икр", "креветк", "мидии", "кальмар", "осьминог", "краб",
         "шпрот", "сардин", "анчоус", "палтус", "минтай", "хек", "судак", "карп",
         "тиляпи", "дорад", "сибас",
@@ -42,6 +46,7 @@ _FRIDGE_KEYWORDS: dict = {
         "кинза", "базилик", "рукол", "горошек", "кукуруз",
         "редис", "тыкв", "артишок", "спаржа", "порей", "фенхел",
         "авокадо", "имбир", "пастернак", "топинамбур", "дайкон",
+        "коул слоу", "coleslaw", "cole slaw",
     ],
     "фрукты": [
         "яблок", "банан", "апельсин", "лимон", "лайм", "мандарин", "груш",
@@ -67,7 +72,7 @@ _FRIDGE_KEYWORDS: dict = {
     "хлеб и выпечка": [
         "хлеб", "батон", "булочк", "тост", "лаваш", "пита",
         "лепёшк", "лепешк", "багет", "чиабатт", "круасс",
-        "бублик", "сушк", "хлебц", "хрустящ",
+        "бублик", "сушк", "хлебц", "хрустящ", "afbakbrood", "broodjes", "brood",
     ],
     "напитки": [
         # проверяем до фруктов — иначе 'сок апельсиновый' матчит 'апельсин' из фруктов
@@ -92,7 +97,7 @@ _FRIDGE_KEYWORDS: dict = {
 _CAT_EMOJI: dict = {
     "мясо и рыба": "🥩", "овощи": "🥦", "фрукты": "🍎", "молочное и яйца": "🥛",
     "крупы и макароны": "🍝", "хлеб и выпечка": "🍞", "специи и соусы": "🧂",
-    "напитки": "🥤", "снеки и сладости": "🍪",
+    "напитки": "🥤", "снеки и сладости": "🍪", "заморозка": "❄️",
     "прочее": "📦",
 }
 # Короткие названия для кнопок (чтобы помещались в 2 столбца)
@@ -100,11 +105,12 @@ _CAT_BTN_LABEL: dict = {
     "мясо и рыба": "Мясо/рыба", "молочное и яйца": "Молочное",
     "крупы и макароны": "Крупы/паста", "хлеб и выпечка": "Хлеб/выпечка",
     "специи и соусы": "Специи", "снеки и сладости": "Снеки",
+    "заморозка": "Заморозка",
 }
 _CAT_ORDER = [
     "мясо и рыба", "овощи", "фрукты", "молочное и яйца",
     "крупы и макароны", "хлеб и выпечка", "напитки", "специи и соусы",
-    "снеки и сладости", "прочее",
+    "снеки и сладости", "заморозка", "прочее",
 ]
 
 # Устаревшие категории → новые (для миграции существующих записей)
@@ -118,6 +124,8 @@ _CAT_REMAP = {
     "напитки":  "напитки",
     "сладости": "снеки и сладости",
     "снеки":    "снеки и сладости",
+    "заморозка": "заморозка",
+    "замороженное": "заморозка",
 }
 _CAT_VALID = frozenset(_CAT_ORDER)
 _FRIDGE_FALLBACK_TARGET = {
@@ -130,6 +138,7 @@ _FRIDGE_FALLBACK_TARGET = {
     "специи и соусы": "специи и соусы",
     "снеки и сладости": "снеки и сладости",
     "мясо и рыба": "мясо и рыба",
+    "заморозка": "заморозка",
     "прочее": "прочее",
 }
 
@@ -156,6 +165,10 @@ def _fridge_migrate(items: list) -> list:
             elif cat not in _CAT_VALID:
                 # Неизвестная/устаревшая категория — перекласифицируем по имени
                 it = {**it, "cat": _fridge_cat(it.get("name", ""))}
+            elif cat == "прочее":
+                detected = _fridge_cat(it.get("name", ""))
+                if detected != "прочее":
+                    it = {**it, "cat": detected}
             result.append(it)
         else:
             s = str(it)
@@ -428,7 +441,10 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
                 callback_data=f"as_fridge_cat_{ci}_0"
             ))
         rows = [[btn] for btn in cat_btns]
-        rows.append([InlineKeyboardButton("✏️ Добавить продукты", callback_data="as_fridge_add")])
+        rows.append([
+            InlineKeyboardButton("✏️ Добавить", callback_data="as_fridge_add"),
+            InlineKeyboardButton("❌ Убрать", callback_data="as_fridge_clean"),
+        ])
         rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
 
     kb = InlineKeyboardMarkup(rows)
@@ -441,7 +457,7 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
 
 
-# ---------- Экран категории (пагинация + toggle + delete) ----------
+# ---------- Экран категории (пагинация + toggle + отдельная чистка) ----------
 async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
     cid_s = str(cid)
     items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
@@ -463,17 +479,19 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
     on_cnt = sum(1 for _, it in cat_items if it.get("on", True))
     txt = (f"{emoji} <b>{cat.capitalize()}</b> · {total} продуктов · {on_cnt} в наличии\n\n"
            "🟢 — есть в наличии  ⚪ — закончилось\n"
-           "Нажми продукт чтобы изменить статус, ❌ чтобы удалить.")
+           "Нажми продукт, чтобы изменить статус.")
 
-    # Один продукт в строку: [🟢 имя | ❌]
+    # Два продукта в строку. Удаление вынесено в отдельный режим чистки.
     rows = []
+    product_buttons = []
     for gi, it in chunk:
         mark = "🟢" if it.get("on", True) else "⚪"
-        name_short = it["name"][:13]
-        rows.append([
-            InlineKeyboardButton(f"{mark} {name_short}", callback_data=f"as_fridge_tgl_{gi}_{cat_idx}_{page}"),
-            InlineKeyboardButton("❌", callback_data=f"as_fridge_del_{gi}_{cat_idx}_{page}"),
-        ])
+        name_short = it["name"][:18]
+        product_buttons.append(
+            InlineKeyboardButton(f"{mark} {name_short}", callback_data=f"as_fridge_tgl_{gi}_{cat_idx}_{page}")
+        )
+    for i in range(0, len(product_buttons), 2):
+        rows.append(product_buttons[i:i + 2])
 
     if pages > 1:
         rows.append([
@@ -481,7 +499,10 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
             InlineKeyboardButton(f"{page+1}/{pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"as_fridge_cat_{cat_idx}_{(page+1) % pages}"),
         ])
-    rows.append([InlineKeyboardButton("✏️ Добавить", callback_data=f"as_fridge_add_{cat_idx}")])
+    rows.append([
+        InlineKeyboardButton("✏️ Добавить", callback_data=f"as_fridge_add_{cat_idx}"),
+        InlineKeyboardButton("❌ Убрать", callback_data="as_fridge_clean"),
+    ])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_fridge_home")])
 
     kb = InlineKeyboardMarkup(rows)
@@ -508,7 +529,7 @@ async def fridge_add_done(bot, cid, text, cat_idx: int = -1):
             added.append(name)
     store.set_list(config.FRIDGE_KEY, cid_s, items)
     if added:
-        await bot.send_message(chat_id=cid, text=f"➕ Добавлено: {', '.join(added)}")
+        await bot.send_message(chat_id=cid, text=f"✏️ Добавлено: {', '.join(added)}")
     else:
         await bot.send_message(chat_id=cid, text="Все эти продукты уже есть в списке.")
     if cat_idx >= 0:
@@ -902,12 +923,12 @@ async def handle_callback(bot, cid, q, data):
             ci = -1
         store.pending_input[str(cid)] = f"fridge_add_{ci}"
         await bot.send_message(chat_id=cid,
-            text="➕ Напиши продукты через запятую или с новой строки — добавлю в список.",
+            text="✏️ Напиши продукты через запятую или с новой строки — добавлю в список.",
             reply_markup=_back_kb()); return
     if data == "as_fridge_add":
         store.pending_input[str(cid)] = "fridge_add_-1"
         await bot.send_message(chat_id=cid,
-            text="➕ Напиши продукты через запятую или с новой строки — добавлю в список.",
+            text="✏️ Напиши продукты через запятую или с новой строки — добавлю в список.",
             reply_markup=_back_kb()); return
     if data == "as_fridge_cook":
         await util.ack_loading(q); await send_fridge_recipe(bot, cid); return
