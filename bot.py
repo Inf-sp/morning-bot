@@ -279,12 +279,12 @@ async def answer_callback(update, context):
     # Тренажёр слов
     if data.startswith("train_"):
         sub = data[len("train_"):]
-        if sub in ("a", "b"):
-            await learning.train_answer(bot, cid, sub)
-        elif sub in ("true", "false"):
-            await learning.train_answer(bot, cid, sub == "true")
-        elif sub == "reveal":
-            await learning.train_reveal(bot, cid)
+        if sub.startswith("ans_"):
+            try:
+                ans_idx = int(sub[4:])
+            except ValueError:
+                return
+            await learning.train_quiz_answer(bot, cid, ans_idx)
         elif sub == "next":
             await _ack(q); await learning.train_next(bot, cid)
         return
@@ -482,8 +482,6 @@ async def text_router(update, context):
             await onboard.handle_name(bot, cid, text); return
         if kind == "onboard_city":
             await onboard.handle_city(bot, cid, text); return
-        if kind == "set_mem_add":
-            await settings.memory_add_done(bot, cid, text); return
         if kind == "setcity":
             await weather.set_city_text(bot, cid, text); return
         if kind.startswith("dictadd_smart_"):
@@ -529,10 +527,6 @@ async def text_router(update, context):
                     text=f"✅ Добавлено {n} {label}:\n\n{preview}{suffix}",
                     parse_mode="HTML")
             await settings.send_lagom(bot, cid); return
-        if kind == "train_translate":
-            await learning.train_translate_answer(bot, cid, text); return
-        if kind == "train_card":
-            await learning.train_card_answer(bot, cid, text); return
         if kind.startswith("collect_"):
             await leisure.collect_done(bot, cid, kind[len("collect_"):], text); return
         if kind.startswith("firstvisit_"):
