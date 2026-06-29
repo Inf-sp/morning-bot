@@ -189,6 +189,21 @@ def _daytime_avg_wind(data, day_str):
     return sum(day_vals) / len(day_vals) if day_vals else None
 
 
+# ---------- блок для myday ----------
+def weather_block(data, day, city):
+    d = data["daily"]
+    code = d["weathercode"][day]
+    desc = DESC.get(code, "")
+    tmin, tmax = d["temperature_2m_min"][day], d["temperature_2m_max"][day]
+    wind = d["windspeed_10m_max"][day]
+    rain = d["precipitation_probability_max"][day]
+    rain_mm = (d.get("precipitation_sum") or [None])[day] if d.get("precipitation_sum") else None
+    lines = [f"📍 {city}", f"{desc}, {tmin:.0f}-{tmax:.0f}°C", f"💨 ветер до {wind:.0f} м/с"]
+    if rain and _rain_real(rain, rain_mm):
+        lines.append(f"вероятность дождя {rain:.0f}%")
+    return "\n".join(lines)
+
+
 # ---------- мировой факт ----------
 WORLD_POINTS = [
     ("🇰🇼", "Кувейте", 29.37, 47.98), ("🇦🇪", "Дубае", 25.20, 55.27), ("🇮🇳", "Дели", 28.61, 77.21),
@@ -415,12 +430,12 @@ async def send_weather(bot, cid, mode="today"):
         else:
             try:
                 rain_desc = f"дождь {rain:.0f}%{rain_when}" if _rain_real(rain, rain_mm) else "без осадков"
-                summary = await ai.allm(
+                summary = ai.llm(
                     f"Погода завтра в {s['city']}: {desc}, до {tmax:+.0f}°C, {rain_desc}, "
                     f"ветер {wind_avg:.0f} м/с.\n\n"
                     "Напиши короткий метео-итог: 2-3 предложения — общая картина, что ждать. "
                     "Без слова 'зонт'. Без markdown. На русском.",
-                    150, 0.6, tier="cheap", module="weather"
+                    150, 0.6, tier="cheap"
                 ).strip()
                 if summary:
                     L += ["", "🌡️ <b>Метео-итог</b>", esc(cap_sentence(summary))]
@@ -481,7 +496,7 @@ async def send_weather(bot, cid, mode="today"):
     groups = []
     summary = ""
     try:
-        llm_result = await ai.allm_json(
+        llm_result = ai.llm_json(
             f"Погода на неделю в {s['city']}:\n" + "\n".join(prompt_lines) + "\n\n"
             "Верни JSON:\n"
             '{"groups":[{"abbrevs":["Пн"],"desc":"дождь утром и ночью"},'
@@ -490,7 +505,7 @@ async def send_weather(bot, cid, mode="today"):
             "объединять ТОЛЬКО идущие подряд дни (Ср-Чт-Пт — можно, Пн-Сб через пропуск — нельзя); "
             "все 7 дней должны войти в группы; "
             "summary — 1-2 предложения без слова «зонт», без markdown.",
-            300, tier="cheap", module="weather"
+            300, tier="cheap"
         )
         groups = llm_result.get("groups", [])
         summary = (llm_result.get("summary") or "").strip()

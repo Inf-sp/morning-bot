@@ -17,6 +17,8 @@ import memory
 
 TZ = config.TZ
 
+_food_tip_cache: dict = {}  # cid -> {"date": ..., "text": ...}
+
 # ===== Холодильник: категории =====
 # Порядок dict определяет приоритет матчинга. Сначала более специфичные группы,
 # потом широкие, чтобы "масло сливочное" и "сок апельсиновый" не улетали не туда.
@@ -537,6 +539,20 @@ def _fridge_available(items: list) -> list:
     """Имена продуктов с on=True (для рецепта)."""
     return [it["name"] for it in _fridge_migrate(items) if it.get("on", True)]
 
+def _food_tip_context(cid) -> str:
+    import memory
+    lagom = memory.get_lagom(cid)
+    recipes = store.get_list(config.MY_RECIPES_KEY, cid)
+    parts = []
+    if lagom:
+        parts.append("Ценности и стиль жизни: " + "; ".join(str(x) for x in lagom[:8]))
+    if recipes:
+        parts.append("Любимые рецепты уже есть: " + ", ".join(str(r) for r in recipes[:6]))
+    hints = memory.profile_hints(cid)
+    if hints:
+        parts.append(hints)
+    return "\n".join(parts)
+
 def _food_card(d, label="Рецепт дня") -> str:
     """Единый формат карточки рецепта для радара и нового рецепта."""
     name = esc(str(d.get("name", "")).strip())
@@ -553,6 +569,29 @@ def _food_card(d, label="Рецепт дня") -> str:
             lines.append(f"• {esc(str(step).strip())}")
     lines += ["", "<b>😋 Приятного аппетита!</b>"]
     return "\n".join(lines)
+
+def fetch_food_tip(cid) -> str:
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    cache = _food_tip_cache.get(str(cid))
+    if cache and cache.get("date") == today:
+        return cache["text"]
+    ctx = _food_tip_context(cid)
+    prompt = (
+        "Ты кулинарный советник. Предложи один интересный рецепт, который понравится этому человеку.\n"
+        + (ctx + "\n" if ctx else "")
+        + "Учти стиль жизни — не повторяй уже знакомые блюда из списка любимых.\n"
+        "Верни JSON (без markdown): "
+        '{"name":"Название блюда","time":"X мин","servings":"1 порц.",'
+        '"ingredients":"короткий список через запятую",'
+        '"steps":["шаг 1 (до 15 слов)","шаг 2","шаг 3"]}'
+    )
+    try:
+        d = ai.llm_json(prompt, 400, tier="cheap")
+        text = _food_card(d) if d.get("name") else ""
+    except Exception:
+        text = ""
+    _food_tip_cache[str(cid)] = {"date": today, "text": text}
+    return text
 
 DOCTOR_INTRO = (
     "👩🏻‍⚕️ Врач\n\n"
@@ -640,7 +679,7 @@ def _gen_recipe(constraint, cid=None):
         '"steps":["Глагол + действие + конкретика","шаг 2","шаг 3"],'
         '"full":"тот же рецепт в том же стиле: сначала заголовок, затем <b>Ингредиенты</b>, затем <b>Приготовление</b>, затем <b>😋 Приятного аппетита!</b>. '
         'Без времени и порции, без лишнего текста."}',
-        900, tier="cheap", module="food")
+        900, tier="cheap")
 
 def _recipe_card(d):
     return _food_card(d, label="Рецепт дня")
@@ -689,7 +728,7 @@ def _gen_leftovers_recipe(ingredients):
         'JSON: {"name":"название","time":"X мин","servings":"1 порц.",'
         '"ingredients":"список использованных продуктов через запятую",'
         '"steps":["шаг 1 (до 15 слов)","шаг 2","шаг 3"]}',
-        500, tier="cheap", module="food")
+        500, tier="cheap")
 
 async def send_leftovers(bot, cid, ingredients):
     try:

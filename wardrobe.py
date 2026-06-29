@@ -1,4 +1,3 @@
-import asyncio
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import re
 import config
@@ -26,7 +25,6 @@ def closet_kb():
 def _look_result_kb():
     return _kb([
         [("😍 Надел", "w_fb_worn"), ("🫪 Не мой стиль", "w_fb_nostyle")],
-        [("🥶 Было холодно", "w_fb_cold"), ("🥵 Было жарко", "w_fb_hot")],
         [("◀️ Назад", "m_wardrobe")],
     ])
 
@@ -65,7 +63,7 @@ async def send_looks(bot, cid):
     style_block = "\n".join(x for x in [profile_line, style_line, body_line] if x)
     tmax = None
     try:
-        wdata = await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 2)
+        wdata = weather.fetch_weather(s["lat"], s["lon"], 2)
         wd = wdata["daily"]
         tmax = round(wd["temperature_2m_max"][0])
         tmin = round(wd["temperature_2m_min"][0])
@@ -105,7 +103,7 @@ async def send_looks(bot, cid):
 JSON (без markdown):
 {{"intro":"1 строка про погоду и логику образа","items":["вещь 1 полным названием","вещь 2","вещь 3"],"add":"1 совет что добавить (аксессуар) и почему"}}"""
     try:
-        d = await ai.allm_json(prompt, 700, module="wardrobe")
+        d = ai.llm_json(prompt, 700)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     items = d.get("items", [])
@@ -175,12 +173,12 @@ async def send_show(bot, cid):
 async def _parse_and_add(bot, cid, text):
     w = store.load_wardrobe(cid)
     cats = ", ".join(w.keys()) or "футболки, рубашки, свитшоты, верхняя одежда, брюки, джинсы, обувь, аксессуары"
-    parsed = await ai.allm_json(
+    parsed = ai.llm_json(
         f"Разбери вещи по категориям. Категории: {cats} (можно создать новую).\n"
         f"Вещи:\n{secure.wrap_untrusted(text, 'список вещей')}\n"
         "Каждую вещь пиши ПОЛНЫМ названием в порядке: тип + цвет + детали/бренд "
         "(напр. «Футболка белая Uniqlo плотная», «Шорты серые тонкие»). Сохраняй бренд если указан.\n"
-        'JSON: {"категория": ["полное название вещи"]}.', 700, tier="cheap", module="wardrobe")
+        'JSON: {"категория": ["полное название вещи"]}.', 700, tier="cheap")
     return store.merge_wardrobe(parsed, cid)
 
 async def add_item(bot, cid, text):
@@ -259,7 +257,7 @@ async def send_improve(bot, cid):
 "accessories":"Casio, кольца, цепь... — аксессуары одной строкой с характером",
 "outfit":"Готовый образ из рекомендаций: верх + низ + обувь + акцент"}}"""
     try:
-        d = await ai.allm_json(prompt, 1000, module="wardrobe")
+        d = ai.llm_json(prompt, 1000)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     def _bullets(items):
@@ -288,11 +286,7 @@ async def send_improve(bot, cid):
 async def check_purchase(bot, cid, text):
     w = store.load_wardrobe(cid)
     web_block = ""
-    web_data = await asyncio.to_thread(
-        research.tavily_snippet,
-        f"{text} отзывы обзор стоит ли покупать",
-        900,
-    )
+    web_data = research.tavily_snippet(f"{text} отзывы обзор стоит ли покупать", max_chars=900)
     if web_data:
         web_block = (
             "\nАктуальная информация о товаре из сети (используй как дополнительный контекст):\n"
@@ -320,7 +314,7 @@ async def check_purchase(bot, cid, text):
 
 Если гардероб пустой — честно скажи что оценка приблизительная."""
     try:
-        d = await ai.allm_json(prompt, 600, tier="smart", module="wardrobe")
+        d = ai.llm_json(prompt, 600, tier="smart")
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     verdict = d.get("verdict", "")
