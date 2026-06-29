@@ -10,13 +10,24 @@ NOTIF_TYPES = [
     ("morning_brief",  "☀️ Утренний бриф (08:30)"),
     ("weather_warn",   "🌧 Погодное предупреждение (08:45)"),
     ("lagom_daily",    "☕️ Лагом дня (09:00)"),
-    ("weekly_events",  "🎵 События следующей недели (вс 10:00)"),
-    ("grammar",        "📚 Слово/фраза дня (11:00)"),
     ("recipe_daily",   "🍽️ Рецепт дня (12:30)"),
     ("checkin_day",    "🫣 Дневная разгрузка (14:00)"),
+    ("evening_weather","🌆 Вечерняя погода (19:00)"),
+    ("weekly_events",  "🎵 Афиша недели (вс 10:00)"),
     ("weekly_forecast","🌍 Недельный прогноз (вс 19:00)"),
+    ("grammar",        "📝 Слово/фраза дня (11:00)"),
+    ("live_lang",      "💬 Живой язык — пословицы"),
     ("vocab_review",   "📖 Повтор словаря (21:00)"),
     ("checkin_eve",    "🥸 Вечерний разбор (22:00)"),
+]
+
+# Группировка для отображения в send_notif
+_NOTIF_GROUPS = [
+    ("🗓 День", ["morning_brief", "weather_warn", "lagom_daily", "recipe_daily",
+                 "checkin_day", "evening_weather"]),
+    ("📅 Неделя", ["weekly_events", "weekly_forecast"]),
+    ("📚 Обучение", ["grammar", "live_lang", "vocab_review"]),
+    ("🧠 Самозабота", ["checkin_eve"]),
 ]
 STYLES = [
     "минимализм",
@@ -119,11 +130,15 @@ async def _run_notif_test(bot, cid, kind):
 
 
 async def send_notif(bot, cid, q=None):
+    kind_to_label = dict(NOTIF_TYPES)
     rows = []
-    for kind, label in NOTIF_TYPES:
-        on = notif_on(cid, kind)
-        mark = "🟢" if on else "⚪"
-        rows.append([InlineKeyboardButton(f"{mark} {label}", callback_data=f"set_notiftgl_{kind}")])
+    for group_title, kinds in _NOTIF_GROUPS:
+        rows.append([InlineKeyboardButton(f"— {group_title} —", callback_data="noop")])
+        for kind in kinds:
+            label = kind_to_label.get(kind, kind)
+            on = notif_on(cid, kind)
+            mark = "🟢" if on else "⚪"
+            rows.append([InlineKeyboardButton(f"{mark} {label}", callback_data=f"set_notiftgl_{kind}")])
     any_on = any(notif_on(cid, k) for k, _ in NOTIF_TYPES)
     if any_on:
         rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
