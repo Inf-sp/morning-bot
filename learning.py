@@ -249,7 +249,7 @@ JSON (без переносов строк внутри значений):
 def _word_meanings(word: str, language: str) -> list:
     """Все значения слова (tier=cheap). Пустой список если значение одно."""
     try:
-        d = ai.llm_json(
+        d = await ai.allm_json(
             f"Слово на языке {language}: «{word}». "
             "Перечисли ВСЕ его значения на русском. "
             "Если значение одно — верни пустой массив. "
@@ -472,7 +472,7 @@ async def send_proverb(bot, cid, language):
             '"type":"фразовый глагол / идиома / разговорная фраза",'
             '"literal":"дословный перевод на русский",'
             '"meaning":"значение + когда так говорят, 1-2 строки на русском"}',
-            400, tier="cheap")
+            400, tier="cheap", module="learning")
         def _cap(s):
             s = (s or "").strip()
             return s[0].upper() + s[1:] if s else s
@@ -495,7 +495,7 @@ async def send_proverb(bot, cid, language):
 async def send_proverb_both(bot, cid, with_kb=True):
     """Живой язык NL + EN: фразовый глагол, идиома или разговорная фраза."""
     try:
-        d = ai.llm_json(
+        d = await ai.allm_json(
             "Ты эксперт по живому разговорному языку. "
             "Выдай одно выражение — фразовый глагол, идиому или частую разговорную фразу.\n"
             'JSON: {"nl":"выражение на нидерландском",'
@@ -503,7 +503,7 @@ async def send_proverb_both(bot, cid, with_kb=True):
             '"ru":"дословный перевод на русский",'
             '"type":"фразовый глагол / идиома / разговорная фраза",'
             '"meaning":"значение + когда так говорят, 1-2 строки на русском"}',
-            500, tier="cheap")
+            500, tier="cheap", module="learning")
         def _cap(s):
             s = (s or "").strip()
             return s[0].upper() + s[1:] if s else s
@@ -627,7 +627,7 @@ async def add_smart_batch(bot, cid, text, lang="nl"):
         'Верни ТОЛЬКО JSON: {"items":[{"word":"термин или название темы","ru":"перевод (пустой для тем)","lang":"nl|en","kind":"word|phrase|topic"}]}'
     )
     try:
-        d = ai.llm_json(f"{spec}\n\n{secure.wrap_untrusted(text, 'text')}", 1200, tier="cheap")
+        d = await ai.allm_json(f"{spec}\n\n{secure.wrap_untrusted(text, 'text')}", 1200, tier="cheap", module="learning")
         items = d.get("items", []) if isinstance(d, dict) else []
     except Exception:
         items = []
@@ -886,14 +886,15 @@ async def _add_one_topic(bot, cid, text, language):
     store.add_to_list(_topics_key(language), cid, {"text": text})
     flag = _flag(language)
     try:
-        breakdown = ai.llm(
+        breakdown = await ai.allm(
             f"Пользователь учит {language}. Он добавил тему/фразу для изучения: "
             f"{secure.wrap_untrusted(text, 'тема')}\n"
             "Дай короткий разбор простыми словами на русском (Telegram HTML, теги <b>):\n"
             "- если это фраза/конструкция: разбери по частям (что значит каждое слово), "
             "выдели грамматическое правило одним предложением.\n"
             "- если это грамматическая тема: объясни суть в 2-3 строки с мини-примером.\n"
-            "Без markdown, компактно, по делу.", 500, 0.6, tier="cheap").strip()
+            "Без markdown, компактно, по делу.", 500, 0.6, tier="cheap", module="learning")
+        breakdown = breakdown.strip()
     except Exception:
         breakdown = ""
     L = [f"Добавил в 🤓 Изучаемая тема {flag}", "", f"<b>Будем изучать:</b> {esc(text)}"]

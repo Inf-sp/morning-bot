@@ -70,16 +70,6 @@ def _notif_label(kind: str, label: str) -> str:
         return f"{label} (ежедневно в {times[kind]})"
     return label
 
-
-def home_kb(cid):
-    rows = [
-        [InlineKeyboardButton("🌍 Сменить город", callback_data="set_city")],
-        [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
-    ]
-    if config.CHAT_ID and str(cid) == str(config.CHAT_ID):
-        rows.append([InlineKeyboardButton("🔐 Администратор", callback_data="set_admin")])
-    return InlineKeyboardMarkup(rows)
-
 async def send_home(bot, cid):
     await send_notes(bot, cid)
 
@@ -1095,7 +1085,7 @@ async def send_admin_cost(bot, cid):
         _mod_names = {
             "wardrobe": "👕 Гардероб",
             "balance": "🍃 Самозабота",
-            "balance": "🥣 Готовка",
+            "food": "🥣 Готовка",
             "weather": "☀️ Мой день",
             "learning": "📚 Обучение",
             "leisure": "🍿 Досуг",
