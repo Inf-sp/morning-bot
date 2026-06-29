@@ -376,7 +376,7 @@ async def train_quiz_answer(bot, cid, idx):
             L.append(f"<i>{esc(sentence_ru)}</i>")
 
     st["round"] = st.get("round", 0) + 1
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("▶️ Следующее", callback_data="train_next")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("✨ Следующее задание", callback_data="train_next")]])
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
 
 

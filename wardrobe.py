@@ -18,8 +18,7 @@ def _kb(rows):
 def closet_kb():
     return _kb([
         [("🗄️ Показать всё", "w_show")],
-        [("✏️ Добавить вещь", "w_add")],
-        [("❌ Удалить вещь", "w_del")],
+        [("✏️ Добавить вещь", "w_add"), ("❌ Удалить вещь", "w_del")],
         [("◀️ Назад", "m_wardrobe")],
     ])
 
@@ -54,11 +53,13 @@ async def send_looks(bot, cid):
         return
     s = store.get_settings(cid)
     # Персональный профиль из настроек пользователя
+    user_profile = _settings.get(cid, "wardrobe_profile", "")
     user_style = _settings.get(cid, "style", "")
     user_body = _settings.get(cid, "body", "")
-    style_line = f"Стиль пользователя: {user_style}." if user_style else ""
-    body_line = f"Параметры тела: {user_body}." if user_body else ""
-    style_block = "\n".join(x for x in [style_line, body_line] if x)
+    profile_line = f"Профиль пользователя: {user_profile}." if user_profile else ""
+    style_line = f"Стиль пользователя: {user_style}." if user_style and not user_profile else ""
+    body_line = f"Параметры тела: {user_body}." if user_body and not user_profile else ""
+    style_block = "\n".join(x for x in [profile_line, style_line, body_line] if x)
     tmax = None
     try:
         wdata = weather.fetch_weather(s["lat"], s["lon"], 2)
@@ -293,12 +294,14 @@ async def check_purchase(bot, cid, text):
             "\nАктуальная информация о товаре из сети (используй как дополнительный контекст):\n"
             + secure.wrap_untrusted(web_data, "web") + "\n"
         )
+    user_profile = _settings.get(cid, "wardrobe_profile", "")
     user_style = _settings.get(cid, "style", "")
     user_body = _settings.get(cid, "body", "")
-    style_ctx = f"Стиль: {user_style}. " if user_style else ""
-    body_ctx = f"Параметры тела: {user_body}. " if user_body else ""
+    profile_ctx = f"Профиль пользователя: {user_profile}. " if user_profile else ""
+    style_ctx = f"Стиль: {user_style}. " if user_style and not user_profile else ""
+    body_ctx = f"Параметры тела: {user_body}. " if user_body and not user_profile else ""
     prompt = f"""Ты честный стилист-аналитик. Пользователь думает купить: {text}
-{style_ctx}{body_ctx}
+{profile_ctx}{style_ctx}{body_ctx}
 Гардероб пользователя:
 {store.wardrobe_to_text(w)}
 {web_block}

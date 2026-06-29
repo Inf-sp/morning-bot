@@ -492,6 +492,10 @@ async def text_router(update, context):
             await learning.add_topic(bot, cid, text, "нидерландский"); return
         if kind == "topicadd_en":
             await learning.add_topic(bot, cid, text, "английский"); return
+        if kind == "wardrobe_profile_input":
+            settings.set_(cid, "wardrobe_profile", text.strip())
+            await bot.send_message(chat_id=cid, text="🎚️ <b>Параметры сохранены</b>", parse_mode="HTML")
+            await settings.send_wardrobe(bot, cid); return
         if kind == "bodyinput":
             settings.set_(cid, "body", text)
             await bot.send_message(chat_id=cid, text="Готово, параметры сохранены.")

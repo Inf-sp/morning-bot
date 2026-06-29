@@ -90,6 +90,19 @@ def _ctx_items(cid, ctx):
                  "artists": "🎸 Чистка: артисты", "books": "📖 Чистка: книги"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
         return title, items, "as_bucket_love"
+    if ctx.startswith("cfg_"):
+        key = ctx[len("cfg_"):]
+        store_key = {"countries": config.COUNTRIES_KEY,
+                     "artists": config.ARTISTS_KEY,
+                     "books": config.BOOKS_KEY}.get(key)
+        title = {"countries": "🧳 Чистка: страны",
+                 "artists": "🎸 Чистка: артисты",
+                 "books": "📖 Чистка: книги"}.get(key, "Чистка")
+        back = {"countries": "set_countries",
+                "artists": "set_artists",
+                "books": "set_books"}.get(key, "set_home")
+        items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
+        return title, items, back
     if ctx == "fridge":
         raw = store.get_list(config.FRIDGE_KEY, cid)
         items = [(i, it["name"] if isinstance(it, dict) else it) for i, it in enumerate(raw)]
@@ -182,6 +195,13 @@ def _cleanup_delete(cid, ctx):
         key = ctx[len("lv_"):]
         store_key = {"movies": config.WATCHLIST_KEY, "countries": config.COUNTRIES_KEY,
                      "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
+        if store_key:
+            store.set_list(store_key, cid, [it for i, it in enumerate(store.get_list(store_key, cid)) if i not in sel])
+    elif ctx.startswith("cfg_"):
+        key = ctx[len("cfg_"):]
+        store_key = {"countries": config.COUNTRIES_KEY,
+                     "artists": config.ARTISTS_KEY,
+                     "books": config.BOOKS_KEY}.get(key)
         if store_key:
             store.set_list(store_key, cid, [it for i, it in enumerate(store.get_list(store_key, cid)) if i not in sel])
     elif ctx == "fridge":
