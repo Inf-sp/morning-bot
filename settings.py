@@ -921,19 +921,21 @@ async def love_delete(bot, cid, key, i):
         store.set_list(store_key, cid, items)
     await send_love_section(bot, cid, key)
 
-async def love_add_start(bot, cid, key):
-    store.pending_input[str(cid)] = f"loveadd_{key}"
+async def love_add_start(bot, cid, key, origin="base"):
+    prefix = "loveaddls" if origin == "leisure" else "loveadd"
+    store.pending_input[str(cid)] = f"{prefix}_{key}"
     name = {"movies": "фильм или сериал", "countries": "страну",
             "artists": "артиста", "books": "книгу"}.get(key, "элемент")
     await bot.send_message(chat_id=cid, text=f"Напиши {name} — добавлю в любимые.")
 
-async def love_add_done(bot, cid, key, text):
+async def love_add_done(bot, cid, key, text, origin="base"):
     store_key = _love_key_of(key)
     if store_key:
         store.add_to_list(store_key, cid, text.strip())
     import cleanup as _cl
     await bot.send_message(chat_id=cid, text="Добавлено.")
-    await _cl.open_cleanup(bot, cid, f"lv_{key}")
+    ctx_prefix = "lvls" if origin == "leisure" else "lv"
+    await _cl.open_cleanup(bot, cid, f"{ctx_prefix}_{key}")
 
 
 async def handle_notes_callback(bot, cid, q, data):
@@ -983,6 +985,15 @@ async def handle_notes_callback(bot, cid, q, data):
     if data == "as_clean_fav":
         import cleanup
         await cleanup.open_cleanup(bot, cid, "nb"); return
+    if data.startswith("ls_loveclean_"):
+        import cleanup
+        await cleanup.open_cleanup(bot, cid, f"lvls_{data[len('ls_loveclean_'):]}"); return
+    if data.startswith("ls_loveadd_"):
+        await love_add_start(bot, cid, data[len("ls_loveadd_"):], origin="leisure"); return
+    if data.startswith("ls_love_"):
+        key = data[len("ls_love_"):]
+        import cleanup as _cl
+        await _cl.open_cleanup(bot, cid, f"lvls_{key}"); return
     if data.startswith("as_loveclean_"):
         import cleanup
         await cleanup.open_cleanup(bot, cid, f"lv_{data[len('as_loveclean_'):]}"); return

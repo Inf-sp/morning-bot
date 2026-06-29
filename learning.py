@@ -713,7 +713,7 @@ async def send_dict(bot, cid, back="m_notes"):
     ]
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
-async def send_dict_lang(bot, cid, lang):
+async def send_dict_lang(bot, cid, lang, back="m_dict_settings"):
     c = _dict_counts(cid)[lang]
     topics = get_topics(cid, "нидерландский" if lang == "nl" else "английский")
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
@@ -727,7 +727,7 @@ async def send_dict_lang(bot, cid, lang):
             InlineKeyboardButton("❌ Фраза", callback_data=f"a_dictedit_{lang}_phrase"),
             InlineKeyboardButton("❌ Тема", callback_data=f"a_topicclean_{lang}"),
         ],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_dict_settings")],
+        [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ]
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 

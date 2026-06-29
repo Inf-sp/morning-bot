@@ -21,6 +21,11 @@ def _list_label(it):
     return it.get("name", "") if isinstance(it, dict) else str(it)
 
 
+def _sort_items(items):
+    """Сортирует отображение по алфавиту, сохраняя исходные id для удаления."""
+    return sorted(items, key=lambda item: (item[1] or "").casefold().strip())
+
+
 def _wardrobe_flat(cid):
     """Плоский стабильный список (категория, вещь) шкафа."""
     flat = []
@@ -82,14 +87,15 @@ def _ctx_items(cid, ctx):
         flat = _wardrobe_flat(cid)
         items = [(i, it) for i, (cat, it) in enumerate(flat)]
         return "🗄 Чистка: шкаф", items, "set_wardrobe"
-    if ctx.startswith("lv_"):
-        key = ctx[len("lv_"):]
+    if ctx.startswith("lv_") or ctx.startswith("lvls_"):
+        is_leisure = ctx.startswith("lvls_")
+        key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
         store_key = {"movies": config.WATCHLIST_KEY, "countries": config.COUNTRIES_KEY,
                      "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
         title = {"movies": "🎬 Чистка: фильмы", "countries": "🧳 Чистка: страны",
                  "artists": "🎸 Чистка: артисты", "books": "📖 Чистка: книги"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
-        return title, items, "as_bucket_love"
+        return title, items, "m_leisure_settings" if is_leisure else "as_notes"
     if ctx.startswith("cfg_"):
         key = ctx[len("cfg_"):]
         store_key = {"countries": config.COUNTRIES_KEY,
@@ -120,6 +126,7 @@ def _ctx_items(cid, ctx):
 
 async def send_cleanup(bot, cid, ctx, page=0, q=None):
     title, items, back = _ctx_items(cid, ctx)
+    items = _sort_items(items)
     sel = _sel(cid, ctx)
     sel &= {i for i, _ in items}
     total = len(items)
@@ -133,13 +140,28 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
         "lv_countries": "✏️ Добавить страну",
         "lv_artists": "✏️ Добавить артиста",
         "lv_books": "✏️ Добавить книгу",
+        "lvls_movies": "✏️ Добавить фильм",
+        "lvls_countries": "✏️ Добавить страну",
+        "lvls_artists": "✏️ Добавить артиста",
+        "lvls_books": "✏️ Добавить книгу",
     }
     rows = []
     if ctx in _lv_add_label:
-        rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"as_loveadd_{ctx[3:]}")])
-    for idx, lbl in chunk:
-        mark = "✅" if idx in sel else "▫️"
-        rows.append([InlineKeyboardButton(f"{mark} {lbl[:36]}", callback_data=f"clt_{ctx}_{idx}_{page}")])
+        if ctx.startswith("lvls_"):
+            rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"ls_loveadd_{ctx[5:]}")])
+        else:
+            rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"as_loveadd_{ctx[3:]}")])
+    if ctx == "fridge":
+        product_buttons = []
+        for idx, lbl in chunk:
+            mark = "✅" if idx in sel else "▫️"
+            product_buttons.append(InlineKeyboardButton(f"{mark} {lbl[:18]}", callback_data=f"clt_{ctx}_{idx}_{page}"))
+        for i in range(0, len(product_buttons), 2):
+            rows.append(product_buttons[i:i + 2])
+    else:
+        for idx, lbl in chunk:
+            mark = "✅" if idx in sel else "▫️"
+            rows.append([InlineKeyboardButton(f"{mark} {lbl[:36]}", callback_data=f"clt_{ctx}_{idx}_{page}")])
     if pages > 1:
         rows.append([
             InlineKeyboardButton("◀️", callback_data=f"clp_{ctx}_{(page - 1) % pages}"),
@@ -191,8 +213,8 @@ def _cleanup_delete(cid, ctx):
                 if not w[cat]:
                     del w[cat]
         store.save_wardrobe(w, cid)
-    elif ctx.startswith("lv_"):
-        key = ctx[len("lv_"):]
+    elif ctx.startswith("lv_") or ctx.startswith("lvls_"):
+        key = ctx[len("lvls_"):] if ctx.startswith("lvls_") else ctx[len("lv_"):]
         store_key = {"movies": config.WATCHLIST_KEY, "countries": config.COUNTRIES_KEY,
                      "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
         if store_key:
@@ -234,6 +256,7 @@ async def handle_cleanup(bot, cid, data, q=None):
         return
     if op == "cla":
         _, items, _ = _ctx_items(cid, ctx)
+        items = _sort_items(items)
         page_ids = {i for i, _ in items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]}
         sel = _sel(cid, ctx)
         if page_ids <= sel:
