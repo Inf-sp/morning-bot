@@ -641,6 +641,63 @@ async def add_words_batch(bot, cid, text, lang="nl"):
     await bot.send_message(chat_id=cid, text="📖 Добавлено - " + "; ".join(parts))
     await send_dict_lang(bot, cid, lang)
 
+async def add_smart_batch(bot, cid, text, lang="nl"):
+    """Добавляет слова, фразы или темы — LLM сам определяет тип каждого элемента."""
+    language = "нидерландский" if lang == "nl" else "английский"
+    spec = (
+        "Разбей текст на отдельные элементы. Для каждого определи тип:\n"
+        "- 'word': одно иностранное слово (нидерландское существительное — с артиклем de/het)\n"
+        "- 'phrase': выражение из нескольких слов на иностранном языке\n"
+        "- 'topic': грамматическая или лексическая тема для изучения (русское название, например 'прошедшее время')\n"
+        f"Если язык элемента неочевиден, используй '{lang}'.\n"
+        'Верни ТОЛЬКО JSON: {"items":[{"word":"термин или название темы","ru":"перевод (пустой для тем)","lang":"nl|en","kind":"word|phrase|topic"}]}'
+    )
+    try:
+        d = ai.llm_json(f"{spec}\n\n{secure.wrap_untrusted(text, 'text')}", 1200, tier="cheap")
+        items = d.get("items", []) if isinstance(d, dict) else []
+    except Exception:
+        items = []
+    if not items:
+        raw = re.split(r"[\n;,]+", text)
+        items = [{"word": x.strip(), "ru": "", "lang": lang, "kind": "word"} for x in raw if x.strip()]
+
+    added = {"nl": {"word": 0, "phrase": 0}, "en": {"word": 0, "phrase": 0}}
+    topics_added = 0
+    for it in items:
+        kind = it.get("kind", "word")
+        term = (it.get("word") or "").strip()
+        if not term:
+            continue
+        if kind == "topic":
+            store.add_to_list(_topics_key(language), cid, {"text": term})
+            topics_added += 1
+        else:
+            term, extra_ru = _split_term(term)
+            if not term:
+                continue
+            ru = (it.get("ru") or "").strip() or extra_ru
+            lng = "en" if it.get("lang") == "en" else "nl"
+            knd = _kind_of(term)
+            store.add_to_list(config.DICT_KEY, cid, {"lang": lng, "word": _cap(term)[:80], "ru": ru, "kind": knd})
+            added[lng][knd] += 1
+
+    parts = []
+    for lng, flag in (("nl", "🇳🇱"), ("en", "🇬🇧")):
+        seg = []
+        if added[lng]["word"]:
+            seg.append(f"слов: {added[lng]['word']}")
+        if added[lng]["phrase"]:
+            seg.append(f"фраз: {added[lng]['phrase']}")
+        if seg:
+            parts.append(f"{flag} " + ", ".join(seg))
+    if topics_added:
+        parts.append(f"тем: {topics_added}")
+    if not parts:
+        await bot.send_message(chat_id=cid, text="Не удалось распознать. Попробуй ещё раз."); return
+    await bot.send_message(chat_id=cid, text="✅ Добавлено — " + "; ".join(parts))
+    await send_dict_lang(bot, cid, lang)
+
+
 def _w_field(w, *keys):
     for k in keys:
         if isinstance(w, dict) and w.get(k):
@@ -683,17 +740,19 @@ async def send_dict(bot, cid, back="m_notes"):
 
 async def send_dict_lang(bot, cid, lang):
     c = _dict_counts(cid)[lang]
+    topics = get_topics(cid, "нидерландский" if lang == "nl" else "английский")
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     name = "Нидерландский" if lang == "nl" else "Английский"
     txt = (f"{flag} <b>Словарь · {name}</b>\n\n"
-           f"Слов: {c['word']} · Фраз: {c['phrase']}\n\nВыбери действие 👇")
+           f"Слов: {c['word']} · Фраз: {c['phrase']} · Тем: {len(topics)}")
     rows = [
-        [InlineKeyboardButton("📝 Добавить новое слово или фразу", callback_data=f"a_dictadd_{lang}")],
-        [InlineKeyboardButton("❌ Удалить слово", callback_data=f"a_dictedit_{lang}_word")],
-        [InlineKeyboardButton("❌ Удалить фразу", callback_data=f"a_dictedit_{lang}_phrase")],
-        [InlineKeyboardButton("📝 Мои темы", callback_data=f"gm_custom_{lang}")],
-        [InlineKeyboardButton("🎚 Уровень языка", callback_data="a_levels")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="a_dict")],
+        [InlineKeyboardButton("➕ Добавить слово, фразу или тему", callback_data=f"a_dictadd_smart_{lang}")],
+        [
+            InlineKeyboardButton("❌ Слово", callback_data=f"a_dictedit_{lang}_word"),
+            InlineKeyboardButton("❌ Фраза", callback_data=f"a_dictedit_{lang}_phrase"),
+            InlineKeyboardButton("❌ Тема", callback_data=f"a_topicclean_{lang}"),
+        ],
+        [InlineKeyboardButton("◀️ Назад", callback_data="m_dict_settings")],
     ]
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
@@ -1144,23 +1203,38 @@ SYSTEM_TOPICS = {
         "A1": [
             "Порядок слов (SVO)",
             "Артикли de/het",
-            "Спряжение глаголов",
+            "Спряжение глаголов в настоящем",
             "Отрицание niet/geen",
             "Вопросительные предложения",
+            "Личные местоимения",
+            "Множественное число существительных",
+            "Числительные и время",
+            "Притяжательные местоимения",
+            "Предлоги места",
         ],
         "A2": [
-            "Perfectum",
+            "Perfectum (voltooide tijd)",
             "Инверсия",
             "Разделяемые глаголы",
             "Er-конструкции",
-            "Степени сравнения",
+            "Степени сравнения прилагательных",
+            "Imperfectum (onvoltooid verleden)",
+            "Придаточные с dat/omdat",
+            "Возвратные глаголы (zich)",
+            "Предлоги времени",
+            "Сочинительные союзы",
         ],
         "B1": [
-            "Страдательный залог",
+            "Страдательный залог (passief)",
             "Косвенная речь",
             "Придаточные с omdat/want",
-            "Модальные глаголы",
-            "Относительные местоимения",
+            "Модальные глаголы (moeten/mogen/kunnen)",
+            "Относительные местоимения (die/dat/wie/wat)",
+            "Futurum (zullen/gaan)",
+            "Условные предложения с als",
+            "Отделяемые и неотделяемые приставки",
+            "Плюсквамперфект",
+            "Инфинитивные обороты с te",
         ],
     },
     "английский": {
@@ -1170,20 +1244,35 @@ SYSTEM_TOPICS = {
             "Вопросы с do/does",
             "Отрицание don't/doesn't",
             "There is/are",
+            "Личные и притяжательные местоимения",
+            "Множественное число существительных",
+            "Предлоги места (in/on/at/under)",
+            "Числительные и время",
+            "Глагол to be",
         ],
         "A2": [
             "Present Continuous",
             "Past Simple",
-            "Going to",
+            "Going to (планы)",
             "Модальные can/must/should",
-            "Степени сравнения",
+            "Степени сравнения прилагательных",
+            "Past Continuous",
+            "Future Simple (will)",
+            "Предлоги времени (in/on/at/since/for)",
+            "Союзы but/because/so/although",
+            "Вопросительные слова (who/what/where/when/why/how)",
         ],
         "B1": [
             "Present Perfect",
             "Passive Voice",
             "Reported Speech",
             "Conditionals 1 & 2",
-            "Придаточные предложения",
+            "Придаточные времени и условия",
+            "Past Perfect",
+            "Модальные could/would/might",
+            "Герундий и инфинитив",
+            "Относительные придаточные (who/which/that)",
+            "Фразовые глаголы (phrasal verbs)",
         ],
     },
 }

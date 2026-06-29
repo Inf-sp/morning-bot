@@ -123,6 +123,8 @@ def _friendly(errs):
     return "⚠️ ИИ временно недоступен — попробуй снова через пару минут."
 
 DEFAULT_ORDER  = ("claude", "openai", "gemini", "openrouter", "groq", "cf")
+# Чат: Gemini первым — лучше поддерживает диалог, свободный и живой стиль
+CHAT_ORDER     = ("gemini", "claude", "openrouter", "groq", "openai", "cf")
 # Грамматика/быстрые задачи: Groq (Llama-70b) первым — скорость, structured output
 GRAMMAR_ORDER  = ("groq", "gemini", "claude", "openrouter", "openai", "cf")
 # Досуг/рекомендации: Gemini первым — богатое знание культуры, кино, музыки, путешествий
@@ -331,7 +333,7 @@ def chat_chain(history, cid=None):
     system = _chat_system(cid)
     errs = []
     prompt_len = sum(len(m.get("content", "")) for m in history)
-    for p in DEFAULT_ORDER:
+    for p in CHAT_ORDER:
         try:
             out = _as_text(_chat(p, history, system))
             if out and out.strip():
