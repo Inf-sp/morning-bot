@@ -73,7 +73,7 @@ def menu_screen(key):
             + _MENU_FOOTER,
             _ikb([
                 [("👩🏻‍⚕️ Вопрос врачу", "as_doctor")],
-                [("☕️ Личная мотивация", "as_motiv")],
+                [("☕️ Мотивация", "as_motiv")],
                 [("📓 Дневник тревоги", "as_daycheck")],
                 [("🎚️ Лагом (настройки)", "set_lagom")],
 
