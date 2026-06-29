@@ -12,45 +12,25 @@ import memory
 import research
 import settings as _settings
 
-HOME_TEXT = (
-    "👕 <b>Гардероб</b>\n\n"
-    "Одежда без хаоса: соберу образ по погоде, помогу улучшить шкаф и проверить покупку.\n\n"
-    "<b>Выбери действие 👇</b>"
-)
-
-
-
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
-
-def home_kb():
-    return _kb([
-        [("✨ Сгенерировать образ", "w_look")],
-        [("🧥 Улучшить гардероб", "w_improve")],
-        [("🔎 Проверка покупки", "w_check")],
-    ])
 
 def closet_kb():
     return _kb([
         [("🗄️ Показать всё", "w_show")],
         [("✏️ Добавить вещь", "w_add")],
         [("❌ Удалить вещь", "w_del")],
-        [(" В меню", "w_home")],
+        [("◀️ Назад", "m_wardrobe")],
     ])
 
 def _look_result_kb():
     return _kb([
-        [("😍 Надел", "w_fb_worn")],
-        [("🫪 Не нравится", "w_fb_nostyle")],
-        [("◀️ Назад", "w_home")],
+        [("😍 Надел", "w_fb_worn"), ("🫪 Не мой стиль", "w_fb_nostyle")],
+        [("◀️ Назад", "m_wardrobe")],
     ])
 
 def _back_kb():
-    return _kb([[("◀️ Назад", "w_home")]])
-
-
-async def send_home(bot, cid):
-    await bot.send_message(chat_id=cid, text=HOME_TEXT, parse_mode="HTML", reply_markup=home_kb())
+    return _kb([[("◀️ Назад", "m_wardrobe")]])
 
 
 # ---------- генерация лука по погоде ----------
@@ -300,7 +280,7 @@ async def send_improve(bot, cid):
     store.last_source[str(cid)] = "Гардероб · Улучшение"
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
-        reply_markup=_kb([[("⏳ Позже", "as_fav")], [("◀️ Назад", "w_home")]]))
+        reply_markup=_kb([[("⏳ Позже", "as_fav")], [("◀️ Назад", "m_wardrobe")]]))
 
 
 async def check_purchase(bot, cid, text):
@@ -351,7 +331,7 @@ async def check_purchase(bot, cid, text):
     store.last_source[str(cid)] = "Гардероб · Покупка"
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
     await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
-        reply_markup=_kb([[("⏳ Позже", "as_fav")], [("◀️ Назад", "w_home")]]))
+        reply_markup=_kb([[("⏳ Позже", "as_fav")], [("◀️ Назад", "m_wardrobe")]]))
 
 
 # ---------- добавление файлом (старый режим, оставлен) ----------
@@ -362,12 +342,6 @@ async def ingest(bot, cid, text):
 
 # ---------- роутер кнопок ----------
 async def handle_callback(bot, cid, q, data):
-    if data == "w_home":
-        try:
-            await q.message.edit_text(HOME_TEXT, parse_mode="HTML", reply_markup=home_kb())
-        except Exception:
-            await bot.send_message(chat_id=cid, text=HOME_TEXT, parse_mode="HTML", reply_markup=home_kb())
-        return
     if data == "w_look":
         await util.ack_loading(q); await send_looks(bot, cid); return
     if data.startswith("w_fb_"):
