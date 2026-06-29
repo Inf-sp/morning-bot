@@ -37,7 +37,7 @@ def home_kb():
 def closet_kb():
     return _kb([
         [("🗄️ Показать всё", "w_show")],
-        [("🏷 Добавить вещь", "w_add")],
+        [("✏️ Добавить вещь", "w_add")],
         [("🧹 Удалить вещь", "w_del")],
         [(" В меню", "w_home")],
     ])
@@ -63,7 +63,7 @@ async def send_looks(bot, cid):
     wardrobe_text = store.wardrobe_to_text(w)
     if not wardrobe_text.strip():
         kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("👔 Добавить вещи в шкаф", callback_data="set_closet"),
+            InlineKeyboardButton("✏️ Добавить вещи в шкаф", callback_data="set_closet"),
             InlineKeyboardButton("◀️ Назад", callback_data="m_wardrobe"),
         ]])
         await bot.send_message(
@@ -256,7 +256,7 @@ async def send_improve(bot, cid):
     wardrobe_text = store.wardrobe_to_text(w)
     if not wardrobe_text.strip():
         kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("👔 Добавить вещи в шкаф", callback_data="set_closet"),
+            InlineKeyboardButton("✏️ Добавить вещи в шкаф", callback_data="set_closet"),
             InlineKeyboardButton("◀️ Назад", callback_data="m_wardrobe"),
         ]])
         await bot.send_message(

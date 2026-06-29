@@ -409,7 +409,7 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
     if not items:
         txt = "🧊 <b>Мой холодильник</b>\n\nПусто — добавь продукты, которые обычно есть дома."
         rows = [
-            [InlineKeyboardButton("📝 Добавить продукты", callback_data="as_fridge_add")],
+            [InlineKeyboardButton("✏️ Добавить продукты", callback_data="as_fridge_add")],
             [InlineKeyboardButton("◀️ Назад", callback_data=back)],
         ]
     else:
@@ -428,7 +428,7 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
                 callback_data=f"as_fridge_cat_{ci}_0"
             ))
         rows = [[btn] for btn in cat_btns]
-        rows.append([InlineKeyboardButton("📝 Добавить продукты", callback_data="as_fridge_add")])
+        rows.append([InlineKeyboardButton("✏️ Добавить продукты", callback_data="as_fridge_add")])
         rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
 
     kb = InlineKeyboardMarkup(rows)
@@ -481,7 +481,7 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
             InlineKeyboardButton(f"{page+1}/{pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"as_fridge_cat_{cat_idx}_{(page+1) % pages}"),
         ])
-    rows.append([InlineKeyboardButton("📝 Добавить", callback_data=f"as_fridge_add_{cat_idx}")])
+    rows.append([InlineKeyboardButton("✏️ Добавить", callback_data=f"as_fridge_add_{cat_idx}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_fridge_home")])
 
     kb = InlineKeyboardMarkup(rows)
