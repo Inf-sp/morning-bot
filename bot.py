@@ -576,7 +576,6 @@ async def setup_command(update, context):
     await settings.send_home(context.bot, update.effective_chat.id)
 
 async def health_command(update, context):
-    import ai as _ai
     lines = ["<b>🩺 Health check</b>", ""]
 
     # Env keys — обязательные
@@ -588,7 +587,7 @@ async def health_command(update, context):
     }
     lines.append("<b>Обязательные:</b>")
     for k, ok in required.items():
-        lines.append(f"  {'✅' if ok else '❌'} {k}")
+        lines.append(f"• {'✅' if ok else '❌'} {k}")
 
     # Опциональные ключи
     optional = {
@@ -605,7 +604,7 @@ async def health_command(update, context):
     }
     lines.append("<b>Опциональные:</b>")
     for k, ok in optional.items():
-        lines.append(f"  {'✅' if ok else '⚪'} {k}")
+        lines.append(f"• {'✅' if ok else '⚪'} {k}")
 
     # DB
     try:
@@ -623,18 +622,6 @@ async def health_command(update, context):
     except Exception as e:
         _log.warning("health: weather failed: %s", e)
         lines.append("❌ Weather API: недоступна")
-
-    # LLM cost summary (последние 7 дней)
-    import ai as _ai2
-    import time as _t
-    log = _ai2.get_cost_log()
-    week_ago = _t.time() - 7 * 86400
-    recent = [e for e in log if e.get("ts", 0) >= week_ago]
-    if recent:
-        total_tok = sum(e.get("tokens", 0) for e in recent)
-        lines.append(f"💸 LLM 7д: {len(recent)} вызовов, ~{total_tok:,} tok")
-    else:
-        lines.append("💸 LLM 7д: нет данных")
 
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
