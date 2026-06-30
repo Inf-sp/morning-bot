@@ -804,20 +804,8 @@ def main():
     jq.run_daily(job_evening_weather, time=_t("19:00"), days=(0, 1, 2, 3, 4, 5))
     jq.run_daily(job_checkin_evening, time=_t("22:00"), days=tuple(range(7)))
 
-    if config.WEBHOOK_URL:
-        webhook_path = "/" + config.WEBHOOK_PATH.strip("/")
-        webhook_url = config.WEBHOOK_URL + webhook_path
-        logging.info("Bot started via webhook: %s", webhook_url)
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=config.PORT,
-            url_path=webhook_path.strip("/"),
-            webhook_url=webhook_url,
-            drop_pending_updates=True,
-        )
-    else:
-        logging.info("Bot started via polling")
-        app.run_polling(drop_pending_updates=True)
+    logging.info("Bot started via polling")
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
