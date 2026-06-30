@@ -1,6 +1,5 @@
 import asyncio
 import re
-import uuid
 from pathlib import Path
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 import config
@@ -9,7 +8,7 @@ from cleanup import open_cleanup, send_cleanup, handle_cleanup  # noqa: F401
 _HERE = Path(__file__).parent
 import store
 import ai
-from util import esc, ack_loading
+from util import esc
 import verify
 import secure
 
@@ -31,152 +30,6 @@ def _code(language):
 
 def _flag(language):
     return "🇳🇱" if language == "нидерландский" else "🇬🇧"
-
-def _adj(language):
-    return "Нидерландская" if language == "нидерландский" else "Английская"
-
-
-# ================= ГРАММАТИКА =================
-def grammar_data(language, level, topic=None, study_topics=None, study_words=None):
-    in_lang = _is_b1plus(level) and language == "нидерландский"
-    lang_rule = ("Объяснение - на русском простыми словами; пример и задание на нидерландском с переводом." if in_lang
-                 else "Объяснение простым русским, пример на изучаемом языке с переводом.")
-    book = ("Ориентируйся на программу учебника TaalCompleet. " if language == "нидерландский" else "")
-    if topic:
-        topic_rule = f'Тема СТРОГО: "{topic}". Дай НОВЫЙ пример и новое задание по этой же теме.'
-    elif study_topics:
-        topic_rule = ("Выбери тему из списка тем, которые пользователь хочет изучать: "
-                      + "; ".join(study_topics[:10]) + ". Бери одну из них.")
-    else:
-        topic_rule = f"Выбери одну тему уровня {level}, каждый раз НОВУЮ."
-    words_rule = ("Если уместно, построй пример и задание вокруг одного из слов пользователя: "
-                  + ", ".join(study_words[:8]) + " - используй слово естественно. " if study_words else "")
-    prompt = f"""Ты опытный преподаватель языка {language}, объясняешь грамматику взрослому ученику уровня {level}. {book}
-{topic_rule} {words_rule}{lang_rule}
-Цель: чтобы после прочтения ученик понял ОДНО правило и смог применить его сам.
-Объясняй живо и по сути: дай чёткое правило, покажи тему в настоящем и прошедшем времени рядом, предупреди о типичной ошибке.
-JSON (без переносов строк внутри значений):
-{{
- "title": "название темы",
- "explain": "объяснение правила простыми словами, 2-4 коротких предложения - суть, когда применяется, как образуется",
- "present": "пример в настоящем времени на {language}",
- "present_ru": "перевод",
- "past": "пример в прошедшем времени на {language} (или 'N.v.t.' если неприменимо)",
- "past_ru": "перевод или пусто",
- "mistake": "типичная ошибка изучающих по этой теме и как правильно, 1 предложение",
- "task": "предложение с ровно одним пропуском ____ на {language}; в предложении не должно быть ни одного из вариантов A или B кроме самого пропуска",
- "task_ru": "перевод задания на русский",
- "a": "вариант A",
- "b": "вариант B",
- "correct": "a или b",
- "rule": "почему именно этот вариант верный, 1-2 строки"
-}}"""
-    return ai.llm_json(prompt, 1400, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL, route="openrouter")
-
-def _study_words(cid, language):
-    """До 8 слов нужного языка из словаря - для примеров грамматики/тренажёра."""
-    code = _code(language)
-    words = [_cap(_w_field(w, "word", "nl", "en"))
-             for w in _ensure_dict(cid)
-             if _dict_lang(w) == code and _dict_kind(w) == "word"]
-    return [w for w in words if w][:8]
-
-async def send_grammar(bot, cid, language, flag=None, topic=None, random=False):
-    level = store.get_level(cid, language)
-    study_topics = [t.get("text", "") if isinstance(t, dict) else str(t)
-                    for t in get_topics(cid, language)]
-    study_words = _study_words(cid, language)
-    try:
-        d = grammar_data(language, level, topic, None if random or topic else study_topics, study_words)
-    except Exception as e:
-        await verify.safe_error(bot, cid, e); return
-    store.grammar_state[str(cid)] = {"correct": d.get("correct", "a"), "rule": d.get("rule", ""),
-                                     "a": d.get("a", ""), "b": d.get("b", ""),
-                                     "task": d.get("task", ""), "task_ru": d.get("task_ru", ""),
-                                     "topic": d.get("title", ""), "lang": language}
-    code = _code(language)
-    # Сообщение 1: грамматика (объяснение)
-    L = [f"📖 {_flag(language)} <b>{_adj(language)} грамматика</b>", ""]
-    L.append(f"<b>Тема:</b> {esc(d.get('title',''))}")
-    if d.get("explain"):
-        L += ["", esc(d["explain"])]
-    L += ["", "<b>Пример:</b>"]
-    if d.get("present"):
-        L.append(f"Настоящее время - {esc(d.get('present',''))} → {esc(d.get('present_ru',''))}")
-    if d.get("past") and d.get("past") != "N.v.t.":
-        L.append(f"Прошедшее время - {esc(d.get('past',''))} → {esc(d.get('past_ru',''))}")
-    if d.get("mistake"):
-        L += ["", f"⚠️ <b>Частая ошибка:</b> {esc(d['mistake'])}"]
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
-    # Сообщение 2: задание
-    await _send_grammar_task(bot, cid, d, code)
-
-async def _send_grammar_task(bot, cid, d, code):
-    L2 = ["✍🏻 <b>Задание</b>", "", esc(d.get("task", "")), "", "Выбери вариант 👇"]
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(d.get("a", "A"), callback_data="gram_a"),
-         InlineKeyboardButton(d.get("b", "B"), callback_data="gram_b")],
-        [InlineKeyboardButton("✨ Ещё пример из этой темы", callback_data=f"again_gram_{code}")],
-        [InlineKeyboardButton("🎲 Случайная тема", callback_data=f"rand_gram_{code}")],
-        [InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")],
-    ])
-    await bot.send_message(chat_id=cid, text="\n".join(L2), parse_mode="HTML", reply_markup=kb)
-
-async def next_grammar(bot, cid, language):
-    """Полностью новая грамматика с объяснением."""
-    await send_grammar(bot, cid, language)
-
-async def random_grammar(bot, cid, language):
-    """Случайная тема: новая грамматика уровня, игнорируя список изучаемых тем."""
-    await send_grammar(bot, cid, language, random=True)
-
-async def again_grammar(bot, cid, language):
-    """Ещё пример: новое задание на ТУ ЖЕ тему, без повтора объяснения грамматики."""
-    st = store.grammar_state.get(str(cid)) or {}
-    topic = st.get("topic")
-    level = store.get_level(cid, language)
-    try:
-        d = grammar_data(language, level, topic, study_words=_study_words(cid, language))
-    except Exception as e:
-        await verify.safe_error(bot, cid, e); return
-    store.grammar_state[str(cid)] = {"correct": d.get("correct", "a"), "rule": d.get("rule", ""),
-                                     "a": d.get("a", ""), "b": d.get("b", ""),
-                                     "task": d.get("task", ""), "task_ru": d.get("task_ru", ""),
-                                     "topic": d.get("title", topic), "lang": language}
-    await _send_grammar_task(bot, cid, d, _code(language))
-
-async def grammar_answer(bot, cid, chosen):
-    st = store.grammar_state.get(str(cid))
-    if not st:
-        await bot.send_message(chat_id=cid, text="Задание устарело, запроси новое."); return
-    code = _code(st.get("lang", "нидерландский"))
-    right = st["a"] if st["correct"] == "a" else st["b"]
-    task_parts = (st.get("task") or "").split("____", 1)
-    completed = ""
-    if len(task_parts) == 2:
-        completed = esc(task_parts[0]) + f"<b>{esc(right)}</b>" + esc(task_parts[1])
-    if chosen == st["correct"]:
-        L = ["✅ <b>Верно!</b>"]
-        if completed:
-            L += ["", completed]
-        if st.get("task_ru"):
-            L += ["", esc(st["task_ru"])]
-        if st.get("rule"):
-            L += ["", f"💡 {esc(st['rule'])}"]
-    else:
-        L = [f"❌ <b>Неверно.</b> Правильно: <b>{esc(right)}</b>"]
-        if completed:
-            L += ["", completed]
-        if st.get("task_ru"):
-            L += ["", esc(st["task_ru"])]
-        if st.get("rule"):
-            L += ["", f"💡 {esc(st['rule'])}"]
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Ещё пример из этой темы", callback_data=f"again_gram_{code}")],
-        [InlineKeyboardButton("🎲 Случайная тема", callback_data=f"rand_gram_{code}")],
-    ])
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
-
 
 # ================= ТРЕНАЖЁР СЛОВ =================
 TRAIN_FORMATS = ["gap", "tf", "card"]  # legacy — не используется в новом квизе
@@ -252,15 +105,15 @@ def _clip_poll_explanation(text, limit=200):
 
 
 def _train_explanation(word, meaning, sentence="", sentence_ru="", mnemonic=""):
-    lines = [f"Слово {word} — «{meaning}»."]
+    lines = [f"{word} → {meaning}"]
     if sentence:
         context = f"{sentence}"
         if sentence_ru:
-            context += f" — {sentence_ru}"
-        lines += ["", "Минутка контекста", context]
+            context += f" → {sentence_ru}"
+        lines.append(context)
     if mnemonic:
-        lines.append(f"Ассоциация: {mnemonic}")
-    return _clip_poll_explanation("\n".join(lines))
+        lines.append(f"Зацепка: {mnemonic}")
+    return _clip_poll_explanation("\n".join(lines), limit=160)
 
 
 async def _gen_train_quiz_card(word, ru, language):
@@ -277,7 +130,7 @@ async def _gen_train_quiz_card(word, ru, language):
 2. Оба варианта — одна часть речи.
 3. Варианты примерно одинаковой длины, без очевидно самого длинного ответа.
 4. Неправильный вариант — похожая ловушка: частая ошибка, созвучие, близкое значение или ложный друг. Не случайное слово.
-5. Контекстное предложение должно быть коротким, естественным и реально помогать запомнить слово.
+5. Контекстное предложение должно быть очень коротким, бытовым и понятным для человека с СДВГ: одна простая сцена, без лишних деталей.
 6. Если пользователь выбрал неверный вариант, объяснение должно назвать, как этот неверный смысл выражается на {language}.
 
 Верни JSON:
@@ -287,8 +140,8 @@ async def _gen_train_quiz_card(word, ru, language):
   "correct": "правильный вариант на русском",
   "wrong": ["неверный вариант"],
   "wrong_map": {{"неверный вариант": "как это будет на {language}"}},
-  "mnemonic": "короткая ассоциация для запоминания, можно слегка глупую",
-  "meaning": "краткое значение целевого слова на русском"
+  "mnemonic": "очень короткая ассоциация для запоминания, до 8 слов",
+  "meaning": "краткое значение целевого слова на русском, до 4 слов"
 }}
 """
     try:
@@ -512,20 +365,20 @@ async def _send_train_feedback(bot, cid, idx, st):
         lines = [
             "✅ <b>Верно.</b>",
             "",
-            f"Слово <b>{esc(word)}</b> переводится как «{esc(meaning)}».",
+            f"<b>{esc(word)}</b> → {esc(meaning)}",
         ]
     else:
         lines = [
             "❌ <b>Не совсем так.</b>",
             "",
-            f"Слово <b>{esc(word)}</b> переводится как «{esc(meaning)}».",
+            f"<b>{esc(word)}</b> → {esc(meaning)}",
             f"Твой ответ: «{esc(chosen)}»" + (f" — это <b>{esc(chosen_fl)}</b>." if chosen_fl else "."),
         ]
 
     if sentence:
         context = f"«{esc(sentence)}»"
         if sentence_ru:
-            context += f" — {esc(sentence_ru)}"
+            context += f" → {esc(sentence_ru)}"
         lines += ["", "<b>Минутка контекста</b>", context]
     if mnemonic:
         lines.append(f"<b>Ассоциация</b> {esc(mnemonic)}")
@@ -823,15 +676,14 @@ async def add_words_batch(bot, cid, text, lang="nl"):
     await send_dict_lang(bot, cid, lang)
 
 async def add_smart_batch(bot, cid, text, lang="nl"):
-    """Добавляет слова, фразы или темы — LLM сам определяет тип каждого элемента."""
+    """Добавляет слова или фразы — LLM сам определяет тип каждого элемента."""
     language = "нидерландский" if lang == "nl" else "английский"
     spec = (
         "Разбей текст на отдельные элементы. Для каждого определи тип:\n"
         "- 'word': одно иностранное слово (нидерландское существительное — с артиклем de/het)\n"
         "- 'phrase': выражение из нескольких слов на иностранном языке\n"
-        "- 'topic': грамматическая или лексическая тема для изучения (русское название, например 'прошедшее время')\n"
         f"Если язык элемента неочевиден, используй '{lang}'.\n"
-        'Верни ТОЛЬКО JSON: {"items":[{"word":"термин или название темы","ru":"перевод (пустой для тем)","lang":"nl|en","kind":"word|phrase|topic"}]}'
+        'Верни ТОЛЬКО JSON: {"items":[{"word":"иностранный термин или фраза","ru":"перевод","lang":"nl|en","kind":"word|phrase"}]}'
     )
     try:
         d = await ai.allm_json(f"{spec}\n\n{secure.wrap_untrusted(text, 'text')}", 1200, tier="cheap", module="learning")
@@ -843,24 +695,19 @@ async def add_smart_batch(bot, cid, text, lang="nl"):
         items = [{"word": x.strip(), "ru": "", "lang": lang, "kind": "word"} for x in raw if x.strip()]
 
     added = {"nl": {"word": 0, "phrase": 0}, "en": {"word": 0, "phrase": 0}}
-    topics_added = 0
     for it in items:
         kind = it.get("kind", "word")
         term = (it.get("word") or "").strip()
         if not term:
             continue
-        if kind == "topic":
-            store.add_to_list(_topics_key(language), cid, {"text": term})
-            topics_added += 1
-        else:
-            term, extra_ru = _split_term(term)
-            if not term:
-                continue
-            ru = (it.get("ru") or "").strip() or extra_ru
-            lng = "en" if it.get("lang") == "en" else "nl"
-            knd = _kind_of(term)
-            store.add_to_list(config.DICT_KEY, cid, {"lang": lng, "word": _cap(term)[:80], "ru": ru, "kind": knd})
-            added[lng][knd] += 1
+        term, extra_ru = _split_term(term)
+        if not term:
+            continue
+        ru = (it.get("ru") or "").strip() or extra_ru
+        lng = "en" if it.get("lang") == "en" else "nl"
+        knd = "phrase" if kind == "phrase" else _kind_of(term)
+        store.add_to_list(config.DICT_KEY, cid, {"lang": lng, "word": _cap(term)[:80], "ru": ru, "kind": knd})
+        added[lng][knd] += 1
 
     parts = []
     for lng, flag in (("nl", "🇳🇱"), ("en", "🇬🇧")):
@@ -871,8 +718,6 @@ async def add_smart_batch(bot, cid, text, lang="nl"):
             seg.append(f"фраз: {added[lng]['phrase']}")
         if seg:
             parts.append(f"{flag} " + ", ".join(seg))
-    if topics_added:
-        parts.append(f"тем: {topics_added}")
     if not parts:
         await bot.send_message(chat_id=cid, text="Не удалось распознать. Попробуй ещё раз."); return
     await bot.send_message(chat_id=cid, text="✅ Добавлено — " + "; ".join(parts))
@@ -921,18 +766,16 @@ async def send_dict(bot, cid, back="m_notes"):
 
 async def send_dict_lang(bot, cid, lang, back="m_dict_settings"):
     c = _dict_counts(cid)[lang]
-    topics = get_topics(cid, "нидерландский" if lang == "nl" else "английский")
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     name = "Нидерландский" if lang == "nl" else "Английский"
     txt = (f"{flag} <b>Словарь · {name}</b>\n\n"
-           f"Слов: {c['word']} · Фраз: {c['phrase']} · Тем: {len(topics)}")
+           f"Слов: {c['word']} · Фраз: {c['phrase']}")
     rows = [
         [
             InlineKeyboardButton("❌ Слово", callback_data=f"a_dictedit_{lang}_word"),
             InlineKeyboardButton("❌ Фраза", callback_data=f"a_dictedit_{lang}_phrase"),
-            InlineKeyboardButton("❌ Тема", callback_data=f"a_topicclean_{lang}"),
         ],
-        [InlineKeyboardButton("✏️ Добавить слово, фразу или тему", callback_data=f"a_dictadd_smart_{lang}")],
+        [InlineKeyboardButton("✏️ Добавить слово или фразу", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ]
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
@@ -1050,107 +893,6 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(rows) if rows else None,
     )
-
-
-# ================= ИЗУЧАЕМЫЕ ТЕМЫ (раздельно NL / EN) =================
-def _topics_key(language):
-    return config.TOPICS_NL_KEY if language == "нидерландский" else config.TOPICS_EN_KEY
-
-def get_topics(cid, language):
-    return store.get_list(_topics_key(language), cid)
-
-async def send_topics(bot, cid, language):
-    code = _code(language)
-    topics = get_topics(cid, language)
-    flag = _flag(language)
-    lines = [f"🤓 <b>{flag} Изучаемые темы</b>", f"Всего: {len(topics)}", ""]
-    if topics:
-        for i, t in enumerate(topics, 1):
-            txt = t.get("text", "") if isinstance(t, dict) else str(t)
-            lines.append(f"{i}. {esc(txt)}")
-    else:
-        lines.append("Пока пусто. Добавь тему, которую хочешь разобрать.")
-    rows = []
-    if topics:
-        rows.append([InlineKeyboardButton("❌ Очистить выученное", callback_data=f"a_topicclean_{code}")])
-    rows.append([InlineKeyboardButton("✏️ Добавить тему", callback_data=f"a_topicadd_{code}")])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")])
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
-                           reply_markup=InlineKeyboardMarkup(rows))
-
-def _split_topics(text):
-    """Дробит сообщение на отдельные темы по строкам/«;», убирая маркеры списка.
-    Тема может быть из нескольких слов, поэтому по пробелам/запятым НЕ режем."""
-    items = []
-    for line in re.split(r"[\n;]+", text or ""):
-        t = _BULLET_RE.sub("", line.strip()).strip()
-        if t:
-            items.append(t)
-    return items
-
-async def _add_one_topic(bot, cid, text, language):
-    """Сохраняет одну тему и показывает грамматический разбор."""
-    store.add_to_list(_topics_key(language), cid, {"text": text})
-    flag = _flag(language)
-    try:
-        breakdown = await ai.allm(
-            f"Пользователь учит {language}. Он добавил тему/фразу для изучения: "
-            f"{secure.wrap_untrusted(text, 'тема')}\n"
-            "Дай короткий разбор простыми словами на русском (Telegram HTML, теги <b>):\n"
-            "- если это фраза/конструкция: разбери по частям (что значит каждое слово), "
-            "выдели грамматическое правило одним предложением.\n"
-            "- если это грамматическая тема: объясни суть в 2-3 строки с мини-примером.\n"
-            "Без markdown, компактно, по делу.", 500, 0.6, tier="cheap", module="learning")
-        breakdown = breakdown.strip()
-    except Exception:
-        breakdown = ""
-    L = [f"Добавил в 🤓 Изучаемая тема {flag}", "", f"<b>Будем изучать:</b> {esc(text)}"]
-    if breakdown:
-        L += ["", breakdown]
-    code = _code(language)
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton(" К темам", callback_data=f"a_topics_{code}")]])
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
-
-def _topics_overview(topics, language):
-    """Одним запросом - краткая суть по каждой теме (тема -> суть)."""
-    joined = "\n".join(f"- {t}" for t in topics)
-    try:
-        d = ai.llm_json(
-            f"Пользователь учит {language}. Он добавил темы для изучения:\n{joined}\n"
-            "Для КАЖДОЙ темы дай очень короткую суть на русском (1 строка - главное правило/смысл).\n"
-            'Верни ТОЛЬКО JSON: {"items":[{"topic":"тема как есть","tip":"короткая суть"}]}',
-            1000, tier="cheap")
-        return {(i.get("topic") or "").strip(): (i.get("tip") or "").strip()
-                for i in d.get("items", [])} if isinstance(d, dict) else {}
-    except Exception:
-        return {}
-
-async def add_topic(bot, cid, text, language):
-    """Добавляет тему(ы). Если в сообщении несколько - дробит и добавляет каждую отдельно."""
-    topics = _split_topics(text)
-    if not topics:
-        return
-    if len(topics) == 1:
-        await _add_one_topic(bot, cid, topics[0], language)
-        return
-    for t in topics:
-        store.add_to_list(_topics_key(language), cid, {"text": t})
-    tips = _topics_overview(topics, language)
-    flag, code = _flag(language), _code(language)
-    L = [f"Добавил в 🤓 Изучаемые темы {flag}: {len(topics)}", ""]
-    for t in topics:
-        tip = tips.get(t, "")
-        L.append(f"• <b>{esc(t)}</b>" + (f" — {esc(tip)}" if tip else ""))
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton(" К темам", callback_data=f"a_topics_{code}")]])
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
-
-async def del_topic(bot, cid, code, i):
-    language = "нидерландский" if code == "nl" else "английский"
-    topics = store.get_list(_topics_key(language), cid)
-    if i < len(topics):
-        topics.pop(i)
-        store.set_list(_topics_key(language), cid, topics)
-    await send_topics(bot, cid, language)
 
 
 # ================= ИГРА-ДЕТЕКТИВ =================
@@ -1366,7 +1108,7 @@ async def send_levels(bot, cid, q=None, back="set_home"):
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
 
 
-# ===== МИКРО-ГРАММАТИКА (grammar_micro) =====
+# ===== DE/HET =====
 
 _ikb = lambda rows: InlineKeyboardMarkup(
     [[InlineKeyboardButton(t, callback_data=d) for t, d in row] for row in rows]
@@ -1451,104 +1193,10 @@ SYSTEM_TOPICS = {
     },
 }
 
-_LANG_NAME = {"nl": "нидерландский", "en": "английский"}
-_LANG_CODE = {"нидерландский": "nl", "английский": "en"}
-_LANG_FLAG = {"нидерландский": "🇳🇱", "английский": "🇬🇧"}
-_LEVEL_EMOJI = {"A1": "📘", "A2": "📙", "B1": "📗"}
-
-
-def _gm_lang(code):
-    return _LANG_NAME.get(code, "нидерландский")
-
-
-def _gm_topics(cid, lang):
-    raw = store.get_list(config.MICRO_TOPICS_KEY, cid)
-    return raw.get(lang, []) if isinstance(raw, dict) else []
-
-
-def _gm_save_topics(cid, lang, topics):
-    raw = store.get_list(config.MICRO_TOPICS_KEY, cid)
-    d = raw if isinstance(raw, dict) else {}
-    d[lang] = topics
-    store.set_list(config.MICRO_TOPICS_KEY, cid, d)
-
-
-def _gm_progress(cid):
-    raw = store.get_list(config.MICRO_PROGRESS_KEY, cid)
-    return raw if isinstance(raw, dict) else {}
-
-
-def _gm_save_progress(cid, prog):
-    store.set_list(config.MICRO_PROGRESS_KEY, cid, prog)
-
-
-def _gm_lesson(topic_id):
-    raw = store.get_list(config.MICRO_LESSONS_KEY, topic_id)
-    return raw if isinstance(raw, dict) and raw else None
-
-
-def _gm_save_lesson(topic_id, lesson):
-    store.set_list(config.MICRO_LESSONS_KEY, topic_id, lesson)
-
-
-def _gm_ensure_system_topics(cid, lang):
-    topics = _gm_topics(cid, lang)
-    existing = {t["title"] for t in topics if t.get("system")}
-    changed = False
-    for level, titles in SYSTEM_TOPICS.get(lang, {}).items():
-        for title in titles:
-            if title not in existing:
-                topics.append({
-                    "id": uuid.uuid4().hex[:12],
-                    "level": level,
-                    "title": title,
-                    "system": True,
-                })
-                changed = True
-    if changed:
-        _gm_save_topics(cid, lang, topics)
-    return _gm_topics(cid, lang)
-
-
-def _gm_find_topic(cid, topic_id):
-    for lang in ("нидерландский", "английский"):
-        for t in _gm_topics(cid, lang):
-            if t["id"] == topic_id:
-                return t, lang
-    return None, None
-
-
-def _gm_gen_lesson(lang, title):
-    prompt = (
-        f"Создай микро-урок по грамматике ({lang}), тема: «{title}».\n"
-        "JSON (без переносов внутри строк):\n"
-        "{\n"
-        ' "pattern": "шаблон предложения [Субъект + Глагол + ...], коротко",\n'
-        ' "rule": "правило 1-2 предложения: когда применяется и как строится",\n'
-        ' "examples": [\n'
-        f'   {{"foreign": "пример на изучаемом языке", "ru": "перевод"}},\n'
-        f'   {{"foreign": "второй пример на изучаемом языке", "ru": "перевод"}}\n'
-        " ],\n"
-        ' "hint": "шаблон с заменителями слов для составления своего предложения"\n'
-        "}"
-    )
-    return ai.llm_json(prompt, 600, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
-
-
-def _gm_check(lang, title, pattern, sentence):
-    prompt = (
-        f"Пользователь изучает грамматику ({lang}), тема «{title}», паттерн: {pattern}.\n"
-        f"Его предложение: {sentence}\n"
-        "Проверь ТОЛЬКО применение паттерна (не орфографию, не стиль).\n"
-        'JSON: {"ok": true/false, "feedback": "фидбек 1-2 строки на русском"}'
-    )
-    return ai.llm_json(prompt, 200, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
-
-
-def _gm_gen_dehet_words():
+def _dehet_gen_words():
     prompt = (
         "Дай 7 нидерландских существительных уровня A1-A2 с правильным артиклем de или het.\n"
-        "Разные темы: дом, природа, еда, тело, транспорт, вещи. Примерно 4 de и 3 het (или наоборот).\n"
+        "Разные категории: дом, природа, еда, тело, транспорт, вещи. Примерно 4 de и 3 het (или наоборот).\n"
         'JSON (только массив): [{"word": "huis", "article": "het"}, ...]'
     )
     return ai.llm_json(prompt, 300, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
@@ -1563,254 +1211,13 @@ def _dehet_card(st):
 
 _DEHET_KB = _ikb([
     [("de", "dh_de"), ("het", "dh_het")],
-    [("◀️ Стоп", "gm_lang_nl")],
+    [("◀️ Стоп", "m_nl")],
 ])
-
-
-async def gm_send_home(bot, cid):
-    kb = _ikb([
-        [("🇳🇱 Нидерландский", "gm_lang_nl"), ("🇬🇧 Английский", "gm_lang_en")],
-        [("◀️ Назад", "m_learn")],
-    ])
-    await bot.send_message(
-        chat_id=cid,
-        text="📘 <b>Микро-грамматика</b>\n\nОдин шаблон — один урок. Читаешь, пробуешь, идёшь дальше.",
-        parse_mode="HTML",
-        reply_markup=kb,
-    )
-
-
-async def gm_send_lang(bot, cid, code):
-    lang = _gm_lang(code)
-    flag = _LANG_FLAG[lang]
-    rows = [
-        [("📗 Лёгкий · A1–A2", f"gm_level_{code}_easy")],
-        [("📘 Сложный · B1+", f"gm_level_{code}_hard")],
-        [("◀️ Назад", f"m_{code}")],
-    ]
-    await bot.send_message(
-        chat_id=cid,
-        text=f"📘 <b>Грамматика · {flag} {lang.capitalize()}</b>\n\nВыбери курс:",
-        parse_mode="HTML",
-        reply_markup=_ikb(rows),
-    )
-
-
-async def gm_send_level(bot, cid, code, level):
-    lang = _gm_lang(code)
-    flag = _LANG_FLAG[lang]
-    topics = _gm_ensure_system_topics(cid, lang)
-    prog = _gm_progress(cid)
-
-    if level == "easy":
-        level_topics = [t for t in topics if t.get("level") in ("A1", "A2") and t.get("system")]
-        title = "📗 Лёгкий · A1–A2"
-    else:  # hard
-        level_topics = [t for t in topics if t.get("level") == "B1" and t.get("system")]
-        title = "📘 Сложный · B1+"
-
-    rows = []
-    for t in level_topics:
-        status = prog.get(t["id"], "new")
-        icon = "✅" if status == "done" else ("📍" if status == "current" else "▸")
-        rows.append([(f"{icon} {t['title']}", f"gm_topic_{t['id']}")])
-    rows.append([("◀️ Назад", f"gm_lang_{code}")])
-
-    done_count = sum(1 for t in level_topics if prog.get(t["id"]) == "done")
-    await bot.send_message(
-        chat_id=cid,
-        text=f"{title} · {flag} {lang.capitalize()}\n\n{done_count}/{len(level_topics)} пройдено",
-        parse_mode="HTML",
-        reply_markup=_ikb(rows),
-    )
-
-
-async def gm_send_topic(bot, cid, topic_id):
-    topic, lang = _gm_find_topic(cid, topic_id)
-    if not topic:
-        await bot.send_message(chat_id=cid, text="Тема не найдена.")
-        return
-
-    flag = _LANG_FLAG[lang]
-    title = topic["title"]
-    level = topic.get("level", "A1")
-    code = _LANG_CODE[lang]
-
-    lesson = _gm_lesson(topic_id)
-    if not lesson:
-        try:
-            lesson = _gm_gen_lesson(lang, title)
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-            return
-        _gm_save_lesson(topic_id, lesson)
-
-    prog = _gm_progress(cid)
-    if prog.get(topic_id) != "done":
-        prog[topic_id] = "current"
-        _gm_save_progress(cid, prog)
-
-    pattern = lesson.get("pattern", "")
-    rule = lesson.get("rule", "")
-    examples = lesson.get("examples", [])
-    hint = lesson.get("hint", pattern)
-
-    L = [f"📘 {flag} <b>{esc(title)}</b>", ""]
-    L.append(f"<b>Шаблон:</b> {esc(pattern)}")
-    L += ["", f"<b>Правило:</b> {esc(rule)}"]
-    if examples:
-        L += ["", "<b>Примеры:</b>"]
-        for i, ex in enumerate(examples[:3], 1):
-            L.append(f"{i}. {esc(ex.get('foreign', ''))} — <i>{esc(ex.get('ru', ''))}</i>")
-    L += ["", "<i>Прочитай вслух. Покрути в голове. Всё.</i>"]
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
-
-    store.micro_state[cid] = {
-        "topic_id": topic_id,
-        "lang": lang,
-        "title": title,
-        "pattern": pattern,
-        "level": level,
-        "code": code,
-        "awaiting_sentence": True,
-    }
-    kb = _ikb([
-        [("✅ Усвоил", f"gm_done_{topic_id}"), ("◀️ К темам", f"gm_level_{code}_{level}")],
-    ])
-    await bot.send_message(
-        chat_id=cid,
-        text=f"✍️ <b>Твоя очередь!</b>\n\nНапиши ОДНО предложение по шаблону:\n<code>{esc(hint)}</code>",
-        parse_mode="HTML",
-        reply_markup=kb,
-    )
-
-
-async def check_sentence(bot, cid, text):
-    st = store.micro_state.get(cid, {})
-    if not st.get("awaiting_sentence"):
-        return False
-    store.micro_state[cid] = {**st, "awaiting_sentence": False}
-
-    topic_id = st["topic_id"]
-    lang = st["lang"]
-    title = st["title"]
-    pattern = st["pattern"]
-    level = st.get("level", "A1")
-    code = st.get("code", _LANG_CODE.get(lang, "nl"))
-
-    try:
-        result = _gm_check(lang, title, pattern, secure.wrap_untrusted(text, "предложение"))
-    except Exception as e:
-        await verify.safe_error(bot, cid, e)
-        return True
-
-    ok = result.get("ok", False)
-    feedback = result.get("feedback", "")
-    icon = "✅" if ok else "🤔"
-
-    kb = _ikb([
-        [("✨ Ещё раз", f"gm_topic_{topic_id}"), ("◀️ К темам", f"gm_level_{code}_{level}")],
-    ])
-    L = [f"{icon} <i>{esc(text)}</i>", "", esc(feedback)]
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
-    return True
-
-
-async def gm_mark_done(bot, cid, topic_id):
-    store.micro_state.pop(cid, None)
-    topic, lang = _gm_find_topic(cid, topic_id)
-
-    prog = _gm_progress(cid)
-    prog[topic_id] = "done"
-    _gm_save_progress(cid, prog)
-
-    if not lang:
-        await bot.send_message(chat_id=cid, text="✅ Тема пройдена.")
-        return
-
-    level = topic.get("level", "A1")
-    code = _LANG_CODE[lang]
-    level_topics = [t for t in _gm_topics(cid, lang) if t.get("level") == level and t.get("system")]
-
-    next_topic = None
-    found = False
-    for t in level_topics:
-        if found and prog.get(t["id"]) != "done":
-            next_topic = t
-            break
-        if t["id"] == topic_id:
-            found = True
-
-    emoji = _LEVEL_EMOJI.get(level, "📘")
-    kb = _ikb([
-        [("📋 К списку тем", f"gm_level_{code}_{level}")],
-        [("✨ Ещё раз", f"gm_level_{code}_{level}"), ("◀️ К языку", f"gm_lang_{code}")],
-    ])
-    if next_topic:
-        done_text = "✅ Тема пройдена!\n\nОткрой список тем, когда будешь готов."
-    else:
-        done_text = f"{emoji} <b>Курс {level} завершён!</b>\n\nВсе темы пройдены. Отличная работа!"
-    await bot.send_message(
-        chat_id=cid,
-        text=done_text,
-        parse_mode="HTML",
-        reply_markup=kb,
-    )
-
-
-async def gm_send_custom(bot, cid, code):
-    lang = _gm_lang(code)
-    flag = _LANG_FLAG[lang]
-    topics = [t for t in _gm_topics(cid, lang) if not t.get("system")]
-
-    rows = []
-    for t in topics:
-        rows.append([
-            (f"📝 {t['title'][:28]}", f"gm_topic_{t['id']}"),
-            ("❌", f"gm_deltopic_{t['id']}"),
-        ])
-    rows.append([("✏️ Добавить тему", f"gm_addtopic_{code}")])
-    rows.append([("◀️ Назад", f"a_dictlang_{code}")])
-
-    header = f"📝 <b>Мои темы · {flag} {lang.capitalize()}</b>"
-    body = "\n\nСвоих тем пока нет. Добавь первую!" if not topics else ""
-    await bot.send_message(
-        chat_id=cid, text=header + body, parse_mode="HTML", reply_markup=_ikb(rows)
-    )
-
-
-async def gm_delete_topic(bot, cid, topic_id):
-    topic, lang = _gm_find_topic(cid, topic_id)
-    if not lang:
-        await bot.send_message(chat_id=cid, text="Тема не найдена.")
-        return
-    code = _LANG_CODE[lang]
-    topics = [t for t in _gm_topics(cid, lang) if t["id"] != topic_id]
-    _gm_save_topics(cid, lang, topics)
-    _gm_save_lesson(topic_id, {})
-    prog = _gm_progress(cid)
-    prog.pop(topic_id, None)
-    _gm_save_progress(cid, prog)
-    await bot.send_message(chat_id=cid, text="✅ Тема удалена.")
-    await gm_send_custom(bot, cid, code)
-
-
-async def add_topic_done(bot, cid, code, name):
-    lang = _gm_lang(code)
-    name = name.strip()
-    if not name:
-        await bot.send_message(chat_id=cid, text="Название не может быть пустым.")
-        return
-    topics = _gm_topics(cid, lang)
-    topics.append({"id": uuid.uuid4().hex[:12], "level": "custom", "title": name, "system": False})
-    _gm_save_topics(cid, lang, topics)
-    await bot.send_message(chat_id=cid, text=f"✅ Тема «{esc(name)}» добавлена.", parse_mode="HTML")
-    await gm_send_custom(bot, cid, code)
 
 
 async def send_dehet_trainer(bot, cid):
     try:
-        words = _gm_gen_dehet_words()
+        words = _dehet_gen_words()
     except Exception as e:
         await verify.safe_error(bot, cid, e)
         return
@@ -1829,7 +1236,7 @@ async def send_dehet_trainer(bot, cid):
 async def dehet_answer(bot, cid, q, chosen):
     st = store.dehet_state.get(cid)
     if not st:
-        await bot.send_message(chat_id=cid, text="Сессия устарела. Начни заново через меню Грамматика.")
+        await bot.send_message(chat_id=cid, text="Сессия устарела. Начни заново через «Артикли».")
         return
     words = st["words"]
     idx = st["idx"]
@@ -1865,32 +1272,7 @@ async def dehet_answer(bot, cid, q, chosen):
 
 
 async def handle_callback(bot, cid, q, data):
-    if data == "gm_home":
-        await gm_send_home(bot, cid)
-    elif data.startswith("gm_lang_"):
-        await gm_send_lang(bot, cid, data[8:])
-    elif data.startswith("gm_level_"):
-        rest = data[len("gm_level_"):]
-        code, level = rest.split("_", 1)
-        await gm_send_level(bot, cid, code, level)
-    elif data.startswith("gm_topic_"):
-        await ack_loading(q)
-        await gm_send_topic(bot, cid, data[len("gm_topic_"):])
-    elif data.startswith("gm_done_"):
-        await gm_mark_done(bot, cid, data[len("gm_done_"):])
-    elif data.startswith("gm_custom_"):
-        await gm_send_custom(bot, cid, data[len("gm_custom_"):])
-    elif data.startswith("gm_addtopic_"):
-        code = data[len("gm_addtopic_"):]
-        lang = _gm_lang(code)
-        store.pending_input[cid] = f"gm_addtopic_{code}"
-        flag = _LANG_FLAG[lang]
-        await bot.send_message(
-            chat_id=cid, text=f"✍️ Введи название темы для {flag} {lang}:"
-        )
-    elif data.startswith("gm_deltopic_"):
-        await gm_delete_topic(bot, cid, data[len("gm_deltopic_"):])
-    elif data == "dh_start":
+    if data == "dh_start":
         await send_dehet_trainer(bot, cid)
     elif data in ("dh_de", "dh_het"):
         await dehet_answer(bot, cid, q, data[3:])

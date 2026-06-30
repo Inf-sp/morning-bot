@@ -15,8 +15,8 @@ NOTIF_TYPES = [
     ("evening_weather","🌆 Вечерняя погода"),
     ("weekly_events",  "🎵 Афиша недели"),
     ("weekly_forecast","🌍 Недельный прогноз"),
-    ("grammar_nl",     "📚🇳🇱 Слова и фразы дня"),
-    ("grammar_en",     "📚🇬🇧 Слова и фразы дня"),
+    ("daily_words_nl", "📚🇳🇱 Слова и фразы дня"),
+    ("daily_words_en", "📚🇬🇧 Слова и фразы дня"),
     ("live_lang",      "💭 Живой язык"),
     ("checkin_eve",    "🥸 Вечерний разбор"),
 ]
@@ -45,8 +45,10 @@ def set_(cid, key, value):
 
 def notif_on(cid, kind):
     value = get(cid, f"notif_{kind}", None)
-    if value is None and kind in ("grammar_nl", "grammar_en"):
-        return get(cid, "notif_grammar", False)
+    if value is None and kind in ("daily_words_nl", "daily_words_en"):
+        legacy_kind = "grammar_nl" if kind.endswith("_nl") else "grammar_en"
+        legacy_value = get(cid, f"notif_{legacy_kind}", None)
+        return get(cid, "notif_grammar", False) if legacy_value is None else bool(legacy_value)
     return bool(value)
 
 def study_lang(cid):
@@ -58,7 +60,7 @@ def _notif_label(kind: str, label: str) -> str:
         return f"{label} (1 раз в ВС в {'10:00' if kind == 'weekly_events' else '19:00'})"
     if kind in ("live_lang",):
         return f"{label} (ежедневно в 16:30)"
-    if kind in ("grammar_nl", "grammar_en", "morning_brief", "weather_warn",
+    if kind in ("daily_words_nl", "daily_words_en", "morning_brief", "weather_warn",
                 "lagom_daily", "recipe_daily", "checkin_day", "evening_weather",
                 "checkin_eve"):
         times = {
@@ -68,8 +70,8 @@ def _notif_label(kind: str, label: str) -> str:
             "recipe_daily": "12:30",
             "checkin_day": "14:00",
             "evening_weather": "19:00",
-            "grammar_nl": "11:00",
-            "grammar_en": "11:00",
+            "daily_words_nl": "11:00",
+            "daily_words_en": "11:00",
             "checkin_eve": "22:00",
         }
         return f"{label} (ежедневно в {times[kind]})"
@@ -110,9 +112,9 @@ async def _run_notif_test(bot, cid, kind):
         elif kind == "lagom_daily":
             import balance as _b
             await _b.send_motiv_push(bot, cid)
-        elif kind == "grammar_nl":
+        elif kind == "daily_words_nl":
             await learning.send_morning_word(bot, cid, language="нидерландский", with_kb=False)
-        elif kind == "grammar_en":
+        elif kind == "daily_words_en":
             await learning.send_morning_word(bot, cid, language="английский", with_kb=False)
         elif kind == "live_lang":
             await learning.send_proverb_both(bot, cid, with_kb=False)

@@ -87,8 +87,8 @@ async def answer_callback(update, context):
     if data.startswith("fav_"):
         await settings.handle_notes_callback(bot, cid, q, data)
         return
-    # Микро-грамматика и тренажёр de/het
-    if data.startswith("gm_") or data.startswith("dh_"):
+    # Тренажёр de/het
+    if data.startswith("dh_"):
         await learning.handle_callback(bot, cid, q, data)
         return
     # Баланс (врач/мотивация/рецепты/тревоги/холодильник) vs Закладки/Любимое
@@ -156,10 +156,6 @@ async def answer_callback(update, context):
             if act == "plany":
                 await _ack(q)
                 await myday.send_plany(bot, cid)
-            elif act == "gram_nl":
-                await _ack(q); await learning.send_grammar(bot, cid, "нидерландский", "🇳🇱")
-            elif act == "gram_en":
-                await _ack(q); await learning.send_grammar(bot, cid, "английский", "🇬🇧")
             elif act == "train":
                 await learning.send_train_lang_select(bot, cid)
             elif act == "train_nl":
@@ -179,18 +175,6 @@ async def answer_callback(update, context):
             elif act == "proverb_en":
                 await _ack(q)
                 await learning.send_proverb(bot, cid, "английский")
-            elif act == "topics_nl":
-                await learning.send_topics(bot, cid, "нидерландский")
-            elif act == "topics_en":
-                await learning.send_topics(bot, cid, "английский")
-            elif act == "topicadd_nl":
-                store.pending_input[cid] = "topicadd_nl"
-                await bot.send_message(chat_id=cid, text="🇳🇱 Напиши тему для изучения - можно сразу несколько, каждую с новой строки. Добавлю и разберу.")
-            elif act == "topicadd_en":
-                store.pending_input[cid] = "topicadd_en"
-                await bot.send_message(chat_id=cid, text="🇬🇧 Напиши тему для изучения - можно сразу несколько, каждую с новой строки. Добавлю и разберу.")
-            elif act.startswith("topicclean_"):
-                await cleanup.open_cleanup(bot, cid, f"t_{act.split('_')[1]}")
             elif act == "dict":
                 await learning.send_dict(bot, cid)
             elif act == "dictlang_nl":
@@ -205,8 +189,8 @@ async def answer_callback(update, context):
                 lang = act.split("_")[2]
                 store.pending_input[cid] = f"dictadd_smart_{lang}"
                 await bot.send_message(chat_id=cid, text=(
-                    "✍🏻 Пришли слово, фразу или тему для изучения — можно сразу несколько.\n"
-                    "Я сам пойму что это: слово, фраза или грамматическая тема."))
+                    "✍🏻 Пришли слово или фразу для изучения — можно сразу несколько.\n"
+                    "Я сам пойму что это: слово или фраза."))
             elif act.startswith("dictadd_"):
                 lang = act.split("_")[1]
                 store.pending_input[cid] = f"dictadd_{lang}"
@@ -283,10 +267,6 @@ async def answer_callback(update, context):
         store.set_level(cid, language, level)
         await learning.send_levels(bot, cid, q)
         return
-    # Грамматика
-    if data in ("gram_a", "gram_b"):
-        await learning.grammar_answer(bot, cid, "a" if data == "gram_a" else "b")
-        return
     # Тренажёр слов
     if data.startswith("train_"):
         sub = data[len("train_"):]
@@ -306,18 +286,6 @@ async def answer_callback(update, context):
             await _ack(q); await learning.do_translate(bot, cid, "нидерландский")
         elif what == "tr_en":
             await _ack(q); await learning.do_translate(bot, cid, "английский")
-        elif what == "gram_nl":
-            await _ack(q); await learning.again_grammar(bot, cid, "нидерландский")
-        elif what == "gram_en":
-            await _ack(q); await learning.again_grammar(bot, cid, "английский")
-        return
-    if data.startswith("next_gram_"):
-        lang = "нидерландский" if data.endswith("_nl") else "английский"
-        await _ack(q); await learning.next_grammar(bot, cid, lang)
-        return
-    if data.startswith("rand_gram_"):
-        lang = "нидерландский" if data.endswith("_nl") else "английский"
-        await _ack(q); await learning.random_grammar(bot, cid, lang)
         return
     # Игра
     if data.startswith("gamelang_"):
@@ -344,10 +312,6 @@ async def answer_callback(update, context):
         return
     if data.startswith("worddel_"):
         await learning.del_word(bot, cid, int(data.split("_")[1]))
-        return
-    if data.startswith("topicdel_"):
-        parts = data.split("_")  # topicdel_nl_3
-        await learning.del_topic(bot, cid, parts[1], int(parts[2]))
         return
     if data == "game_again":
         await _ack(q)
@@ -436,7 +400,6 @@ async def text_router(update, context):
     # Нажата любая кнопка нижнего меню -> сбрасываем незавершённый ввод (чтобы чат не «съел» сообщение настроек)
     if text in ("☀️ Мой день", "/setup", "/admin") or text in menu.LABEL_TO_KEY or text == "🗂️ Моя база":
         store.pending_input.pop(cid, None)
-        store.micro_state.pop(cid, None)
 
     if text == "☀️ Мой день":
         try:
@@ -494,11 +457,6 @@ async def text_router(update, context):
         if await learning.translate_answer(bot, cid, text):
             return
 
-    # Микро-грамматика: практическое предложение
-    if store.micro_state.get(cid, {}).get("awaiting_sentence"):
-        if await learning.check_sentence(bot, cid, text):
-            return
-
     # Pending-ввод
     if cid in store.pending_input:
         kind = store.pending_input.pop(cid)
@@ -525,10 +483,6 @@ async def text_router(update, context):
             await learning.add_smart_batch(bot, cid, text, kind.split("_")[2]); return
         if kind.startswith("dictadd_"):
             await learning.add_words_batch(bot, cid, text, kind.split("_")[1]); return
-        if kind == "topicadd_nl":
-            await learning.add_topic(bot, cid, text, "нидерландский"); return
-        if kind == "topicadd_en":
-            await learning.add_topic(bot, cid, text, "английский"); return
         if kind == "wardrobe_profile_input":
             settings.set_(cid, "wardrobe_profile", text.strip())
             await bot.send_message(chat_id=cid, text="🎚️ <b>Параметры сохранены</b>", parse_mode="HTML")
@@ -576,9 +530,6 @@ async def text_router(update, context):
             await settings.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
         if kind.startswith("loveaddls_"):
             await settings.love_add_done(bot, cid, kind[len("loveaddls_"):], text, origin="leisure"); return
-        if kind.startswith("gm_addtopic_"):
-            code = kind[len("gm_addtopic_"):]
-            await learning.add_topic_done(bot, cid, code, text); return
 
     # Fallback: pending_input мог быть сброшен при рестарте — проверяем профиль
     ob_step = onboard.get_text_step(cid)
@@ -680,15 +631,15 @@ async def job_lagom(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logging.exception("job_lagom failed for cid=%s", cid)
 
-async def job_grammar(context: ContextTypes.DEFAULT_TYPE):
+async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         try:
-            if settings.notif_on(cid, "grammar_nl"):
+            if settings.notif_on(cid, "daily_words_nl"):
                 await learning.send_morning_word(context.bot, cid, language="нидерландский", with_kb=False)
-            if settings.notif_on(cid, "grammar_en"):
+            if settings.notif_on(cid, "daily_words_en"):
                 await learning.send_morning_word(context.bot, cid, language="английский", with_kb=False)
         except Exception:
-            logging.exception("job_grammar failed for cid=%s", cid)
+            logging.exception("job_daily_words failed for cid=%s", cid)
 
 async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
@@ -823,7 +774,7 @@ def main():
     jq.run_daily(job_weather_warn,    time=_t("08:45"), days=tuple(range(7)))
     jq.run_daily(job_lagom,           time=_t("09:00"), days=tuple(range(7)))
     jq.run_daily(job_weekly_events,   time=_t("10:00"), days=(6,))             # вс
-    jq.run_daily(job_grammar,         time=_t("11:00"), days=tuple(range(7)))
+    jq.run_daily(job_daily_words,     time=_t("11:00"), days=tuple(range(7)))
     jq.run_daily(job_live_lang,       time=_t("16:30"), days=tuple(range(7)))
     jq.run_daily(job_recipe,          time=_t("12:30"), days=tuple(range(7)))
     jq.run_daily(job_checkin_day,     time=_t("14:00"), days=tuple(range(7)))
