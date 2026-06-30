@@ -82,11 +82,11 @@ def _ctx_items(cid, ctx):
     if ctx == "kast":
         flat = _wardrobe_flat(cid)
         items = [(i, it) for i, (cat, it) in enumerate(flat)]
-        return "🗄 Чистка: шкаф", items, "m_wardrobe"
+        return "Чистка: шкаф", items, "m_wardrobe"
     if ctx == "kast_s":
         flat = _wardrobe_flat(cid)
         items = [(i, it) for i, (cat, it) in enumerate(flat)]
-        return "🗄 Чистка: шкаф", items, "set_wardrobe"
+        return "Чистка: шкаф", items, "set_wardrobe"
     if ctx.startswith("lv_") or ctx.startswith("lvls_"):
         is_leisure = ctx.startswith("lvls_")
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
@@ -112,7 +112,7 @@ def _ctx_items(cid, ctx):
     if ctx == "fridge":
         raw = store.get_list(config.FRIDGE_KEY, cid)
         items = [(i, it["name"] if isinstance(it, dict) else it) for i, it in enumerate(raw)]
-        return "🧊 Чистка: холодильник", items, "as_fridge"
+        return "Чистка: холодильник", items, "as_fridge"
     if ctx == "recipes":
         recipes = store.get_list(config.MY_RECIPES_KEY, cid)
         items = [(i, r.get("name", f"Рецепт {i+1}")) for i, r in enumerate(recipes)]
@@ -120,7 +120,7 @@ def _ctx_items(cid, ctx):
     if ctx == "lagom":
         import memory
         items = [(i, it) for i, it in enumerate(memory.get_lagom(cid))]
-        return "🍃 Чистка: Лагом", items, "set_lagom"
+        return "Чистка: Здоровье", items, "set_lagom"
     return "Чистка", [], "m_learn"
 
 
