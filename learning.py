@@ -501,7 +501,7 @@ async def send_proverb(bot, cid, language):
             s = (s or "").strip()
             return s[0].upper() + s[1:] if s else s
 
-        header = f"💬{flag} <b>Живой язык</b>"
+        header = f"💭{flag} <b>Живой язык</b>"
         L = [header, ""]
         L.append("<b>Сегодняшнее выражение:</b>")
         if d.get("original"):
@@ -512,7 +512,7 @@ async def send_proverb(bot, cid, language):
             L += ["", f"<b>Когда так говорят:</b>", f"• {esc(_cap(d['meaning']))}"]
         txt = "\n".join(L)
     except Exception:
-        txt = f"💬{flag} <b>Живой язык</b>\n\n• Не удалось получить выражение.\n• Попробуй ещё раз чуть позже."
+        txt = f"💭{flag} <b>Живой язык</b>\n\n• Не удалось получить выражение.\n• Попробуй ещё раз чуть позже."
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=_proverb_kb(_code(language)))
 
 
@@ -532,7 +532,7 @@ async def send_proverb_both(bot, cid, with_kb=True):
             s = (s or "").strip()
             return s[0].upper() + s[1:] if s else s
 
-        header = "💬 <b>Живой язык</b>"
+        header = "💭 <b>Живой язык</b>"
         L = [header, ""]
         L.append("<b>Сегодняшнее выражение:</b>")
         if d.get("nl"):
@@ -545,7 +545,7 @@ async def send_proverb_both(bot, cid, with_kb=True):
             L += ["", "<b>Когда так говорят:</b>", f"• {esc(_cap(d['meaning']))}"]
         txt = "\n".join(L)
     except Exception:
-        txt = "💬 <b>Живой язык</b>\n\n• Не удалось получить выражение.\n• Попробуй ещё раз чуть позже."
+        txt = "💭 <b>Живой язык</b>\n\n• Не удалось получить выражение.\n• Попробуй ещё раз чуть позже."
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё вариант", callback_data="a_proverb")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
