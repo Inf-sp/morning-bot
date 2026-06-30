@@ -16,7 +16,7 @@ NOTIF_TYPES = [
     ("weekly_events",  "🎵 Афиша недели"),
     ("weekly_forecast","🌍 Недельный прогноз"),
     ("grammar",        "📚 Слова и фразы дня"),
-    ("live_lang",      "💬 Живой язык"),
+    ("live_lang",      "💭 Живой язык"),
     ("checkin_eve",    "🥸 Вечерний разбор"),
 ]
 

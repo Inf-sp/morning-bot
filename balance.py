@@ -1210,7 +1210,7 @@ async def worry_clear_all(bot, cid):
         summary = f"Разобрано тревог: {len(worries)}"
         store.add_to_list(config.DIARY_KEY, cid, {"date": datetime.now(TZ).strftime("%d.%m"), "text": summary})
     store.set_list(config.WORRIES_KEY, cid, [])
-    await bot.send_message(chat_id=cid, text="❌ Дневник тревог очищен. Лёгкой ночи.")
+    await bot.send_message(chat_id=cid, text="✅ Дневник тревог очищен. Приятного настроения!")
 
 async def save_worries(bot, cid, text):
     cid = str(cid)
