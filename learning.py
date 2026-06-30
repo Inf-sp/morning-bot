@@ -182,11 +182,11 @@ async def grammar_answer(bot, cid, chosen):
 TRAIN_FORMATS = ["gap", "tf", "card"]  # legacy — не используется в новом квизе
 
 def _train_words(cid, language):
-    """Слова нужного языка из словаря с переводом: [(word, ru), ...]."""
+    """Только записи kind=word нужного языка из словаря с переводом: [(word, ru), ...]."""
     code = _code(language)
     out = []
     for w in _ensure_dict(cid):
-        if _dict_lang(w) == code:
+        if _dict_lang(w) == code and _dict_kind(w) == "word":
             term = _cap(_w_field(w, "word", "nl", "en"))
             ru = _w_field(w, "ru")
             if term and ru:
@@ -238,10 +238,8 @@ def _u16_len(text):
 
 
 def _train_question(word):
-    prefix = "Переведи слово «"
-    suffix = "»"
-    text = f"{prefix}{word}{suffix}"
-    return text, [MessageEntity(MessageEntity.BOLD, _u16_len(prefix), _u16_len(word))]
+    text = str(word)
+    return text, [MessageEntity(MessageEntity.BOLD, 0, _u16_len(text))]
 
 
 async def _gen_train_quiz_card(word, ru, language):
@@ -254,10 +252,10 @@ async def _gen_train_quiz_card(word, ru, language):
 Сделай quiz poll на перевод целевого слова. Контекстное предложение нужно только для последующего объяснения.
 
 Жёсткие правила вариантов ответа:
-1. Ровно 3 варианта на русском: один правильный и два неправильных.
-2. Все 3 варианта — одна часть речи с правильным ответом.
+1. Ровно 2 варианта на русском: один правильный и один неправильный.
+2. Оба варианта — одна часть речи.
 3. Варианты примерно одинаковой длины, без очевидно самого длинного ответа.
-4. Неправильные варианты — похожие ловушки: частые ошибки, созвучия, близкие значения или ложные друзья. Не случайные слова.
+4. Неправильный вариант — похожая ловушка: частая ошибка, созвучие, близкое значение или ложный друг. Не случайное слово.
 5. Контекстное предложение должно быть коротким, естественным и реально помогать запомнить слово.
 6. Если пользователь выбрал неверный вариант, объяснение должно назвать, как этот неверный смысл выражается на {language}.
 
@@ -266,8 +264,8 @@ async def _gen_train_quiz_card(word, ru, language):
   "sentence": "короткое предложение на {language} с целевым словом",
   "sentence_ru": "перевод предложения на русский",
   "correct": "правильный вариант на русском",
-  "wrong": ["неверный вариант 1", "неверный вариант 2"],
-  "wrong_map": {{"неверный вариант 1": "как это будет на {language}", "неверный вариант 2": "как это будет на {language}"}},
+  "wrong": ["неверный вариант"],
+  "wrong_map": {{"неверный вариант": "как это будет на {language}"}},
   "mnemonic": "короткая ассоциация для запоминания, можно слегка глупую",
   "meaning": "краткое значение целевого слова на русском"
 }}
@@ -281,28 +279,28 @@ async def _gen_train_quiz_card(word, ru, language):
             "sentence": sentence or word,
             "sentence_ru": sentence_ru or ru,
             "correct": ru,
-            "wrong": wrong[:2],
+            "wrong": wrong[:1],
             "wrong_map": {},
             "mnemonic": "",
             "meaning": ru,
         }
 
-    wrong = [str(x).strip() for x in (d.get("wrong") or []) if str(x).strip()][:2]
+    wrong = [str(x).strip() for x in (d.get("wrong") or []) if str(x).strip()][:1]
     correct = str(d.get("correct") or ru).strip()
     options = [correct] + wrong
-    if len(wrong) < 2 or len(set(x.lower() for x in options)) < 3 or not _same_len(options):
+    if len(wrong) < 1 or len(set(x.lower() for x in options)) < 2 or not _same_len(options):
         fallback_wrong = await asyncio.to_thread(_gen_distractors, word, ru, language, "fl_to_ru")
         for item in fallback_wrong:
             item = str(item).strip()
             if item and item.lower() not in {x.lower() for x in [correct] + wrong}:
                 wrong.append(item)
-            if len(wrong) >= 2:
+            if len(wrong) >= 1:
                 break
     return {
         "sentence": str(d.get("sentence") or word).strip(),
         "sentence_ru": str(d.get("sentence_ru") or "").strip(),
         "correct": correct,
-        "wrong": wrong[:2],
+        "wrong": wrong[:1],
         "wrong_map": d.get("wrong_map") if isinstance(d.get("wrong_map"), dict) else {},
         "mnemonic": str(d.get("mnemonic") or "").strip(),
         "meaning": str(d.get("meaning") or correct).strip(),
@@ -357,7 +355,7 @@ async def train_start(bot, cid, language):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(
             "📖 Открыть словарь", callback_data=f"a_dictlang_{code}")]])
         await bot.send_message(chat_id=cid,
-            text=f"{_flag(language)} В словаре нет слов с переводом. Добавь слова через словарь.",
+            text=f"{_flag(language)} В словаре нет отдельных слов с переводом. Добавь записи типа «слово» через словарь.",
             reply_markup=kb)
         return
     store.train_state[str(cid)] = {"lang": language, "round": 0, "used": []}
@@ -373,7 +371,7 @@ async def _render_quiz(bot, cid):
     language = st["lang"]
     words = _train_words(cid, language)
     if not words:
-        await bot.send_message(chat_id=cid, text="В словаре нет слов с переводом."); return
+        await bot.send_message(chat_id=cid, text="В словаре нет отдельных слов с переводом."); return
 
     # Выбираем слово (без повторов пока не исчерпаем весь список)
     used = st.get("used", [])
@@ -390,11 +388,11 @@ async def _render_quiz(bot, cid):
     correct_answer = card.get("correct") or ru
     wrong = list(card.get("wrong") or [])
 
-    # Фолбэк: берём слова из словаря если LLM не сгенерировал
-    if len(wrong) < 2:
+    # Фолбэк: берём слово из словаря если LLM не сгенерировал дистрактор.
+    if len(wrong) < 1:
         other = [(w, r) for w, r in words if w != word]
         _r.shuffle(other)
-        for ow, oru in other[:2 - len(wrong)]:
+        for ow, oru in other[:1 - len(wrong)]:
             wrong.append(oru)
 
     clean_wrong = []
@@ -404,11 +402,11 @@ async def _render_quiz(bot, cid):
         if item and item.lower() not in seen:
             clean_wrong.append(item)
             seen.add(item.lower())
-        if len(clean_wrong) >= 2:
+        if len(clean_wrong) >= 1:
             break
-    options = [correct_answer] + clean_wrong[:2]
-    if len(options) < 3:
-        await bot.send_message(chat_id=cid, text="Не удалось собрать три хороших варианта. Попробуй ещё раз.", reply_markup=_train_again_kb())
+    options = [correct_answer] + clean_wrong[:1]
+    if len(options) < 2:
+        await bot.send_message(chat_id=cid, text="Не удалось собрать два хороших варианта. Попробуй ещё раз.", reply_markup=_train_again_kb())
         return
     _r.shuffle(options)
     correct_idx = options.index(correct_answer)
@@ -434,7 +432,8 @@ async def _render_quiz(bot, cid):
         options=[str(x)[:100] for x in options[:10]],
         type="quiz",
         correct_option_id=correct_idx,
-        is_anonymous=False,
+        is_anonymous=True,
+        explanation="Переведи слово",
         reply_markup=_train_again_kb(),
     )
     if getattr(msg, "poll", None):
