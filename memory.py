@@ -18,8 +18,6 @@ _FB_CAP = 20
 # коды вердиктов фидбека гардероба -> человеческие ярлыки
 WARDROBE_VERDICTS = {
     "worn": "надел",
-    "cold": "было холодно",
-    "hot": "было жарко",
     "nostyle": "не нравится",
 }
 
@@ -71,10 +69,6 @@ def wardrobe_hints(cid, recent=10):
         if v == "nostyle" and f.get("look"):
             nostyle_looks.append(f["look"])
     parts = []
-    if counts.get("cold"):
-        parts.append(f"часто мёрзнет в образах (×{counts['cold']}) - не одевай слишком легко")
-    if counts.get("hot"):
-        parts.append(f"часто жарко (×{counts['hot']}) - не перегружай слоями")
     if nostyle_looks:
         parts.append("не его стиль: " + "; ".join(nostyle_looks[-2:]))
     if counts.get("worn"):
