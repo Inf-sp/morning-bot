@@ -485,13 +485,14 @@ def _proverb_entities_card(flag, original, literal, meaning):
     header = f"💭{flag} Живой язык" if flag else "💭 Живой язык"
     add(header, MessageEntity.BOLD)
     add("\n\n")
-    add("Сегодняшнее выражение:\n")
     if original:
-        add(f"{original}\n", MessageEntity.BLOCKQUOTE)
-    if literal:
-        add(f"→ {literal}\n")
+        quote = f"({original}"
+        if literal:
+            quote += f" → {literal}"
+        quote += ")"
+        add(quote, MessageEntity.BLOCKQUOTE)
     if meaning:
-        add("\nКогда так говорят:\n")
+        add("\n\nКогда так говорят\n")
         add(meaning)
     return "".join(chunks).rstrip(), entities
 
@@ -539,7 +540,7 @@ async def send_proverb_both(bot, cid, with_kb=True):
             return s[0].upper() + s[1:] if s else s
 
         original = _cap(d.get("nl", "")) or _cap(d.get("en", ""))
-        literal = " / ".join(x for x in [_cap(d.get("en", "")), _cap(d.get("ru", ""))] if x)
+        literal = _cap(d.get("ru", ""))
         txt, entities = _proverb_entities_card(" ", original, literal, _cap(d.get("meaning", "")))
     except Exception:
         txt, entities = _proverb_entities_card(" ", "", "", "Не удалось получить выражение.\nПопробуй ещё раз чуть позже.")
