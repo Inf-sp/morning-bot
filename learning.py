@@ -380,8 +380,6 @@ async def _send_train_feedback(bot, cid, idx, st):
         if sentence_ru:
             context += f" → {esc(sentence_ru)}"
         lines += ["", context]
-    if mnemonic:
-        lines += ["", esc(mnemonic)]
 
     st["round"] = st.get("round", 0) + 1
     kb = InlineKeyboardMarkup([
