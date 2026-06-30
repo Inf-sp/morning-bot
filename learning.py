@@ -47,6 +47,56 @@ def _train_words(cid, language):
     return out
 
 
+def _train_phrases(cid, language):
+    """Только записи kind=phrase нужного языка из словаря с переводом: [(phrase, ru), ...]."""
+    code = _code(language)
+    out = []
+    for w in _ensure_dict(cid):
+        if _dict_lang(w) == code and _dict_kind(w) == "phrase":
+            phrase = _w_field(w, "word", "nl", "en")
+            ru = _w_field(w, "ru")
+            if phrase and ru:
+                out.append((str(phrase).strip(), str(ru).strip()))
+    return out
+
+
+def _should_train_new_word(round_no):
+    """30% новых слов: 3, 6 и 9 раунды в каждом блоке из 10."""
+    try:
+        return int(round_no) % 10 in {2, 5, 8}
+    except Exception:
+        return False
+
+
+async def _gen_train_new_word(cid, language, words, used_new):
+    """Новое частотное слово выше B1, близкое к уже добавленному словарю."""
+    existing = {str(w).strip().lower() for w, _ in words}
+    blocked = existing | {str(w).strip().lower() for w in (used_new or [])}
+    anchors = ", ".join(w for w, _ in words[:40])
+    lang_code = _code(language)
+    prompt = (
+        f"Язык: {language} ({lang_code}).\n"
+        f"Слова из словаря пользователя: {anchors}.\n"
+        "Подбери РОВНО ОДНО новое слово для тренажёра.\n"
+        "Требования:\n"
+        "1. Слово должно быть частотным в реальной живой речи.\n"
+        "2. Уровень выше B1: B2 или аккуратный C1, но без книжной редкости.\n"
+        "3. Оно должно быть тематически или семантически связано с уже добавленными словами.\n"
+        "4. Не возвращай фразы, имена, бренды, артикли и формы спряжения.\n"
+        f"5. Не повторяй эти слова: {', '.join(sorted(blocked))[:700]}.\n"
+        'JSON: {"word": "слово", "ru": "короткий перевод на русский"}'
+    )
+    try:
+        d = await ai.allm_json(prompt, 350, tier="smart", route="gemini", module="learning")
+    except Exception:
+        return None
+    word = _cap(str(d.get("word") or "").strip())
+    ru = str(d.get("ru") or "").strip()
+    if not word or not ru or " " in word or word.lower() in blocked:
+        return None
+    return word, ru
+
+
 def _gen_distractors(word_fl, word_ru, lang, direction):
     """LLM: 2 неправильных, но реалистичных варианта ответа."""
     if direction == "fl_to_ru":
@@ -105,12 +155,11 @@ def _clip_poll_explanation(text, limit=200):
 
 
 def _train_explanation(sentence="", sentence_ru=""):
-    lines = []
-    if sentence:
-        lines.append(str(sentence).strip())
-    if sentence_ru:
-        lines.append(str(sentence_ru).strip())
-    return _clip_poll_explanation("\n".join(lines), limit=160)
+    sentence = str(sentence or "").strip()
+    sentence_ru = str(sentence_ru or "").strip()
+    if sentence and sentence_ru:
+        return _clip_poll_explanation(f"{sentence} → {sentence_ru}", limit=160)
+    return _clip_poll_explanation(sentence_ru or sentence, limit=160)
 
 
 async def _gen_train_quiz_card(word, ru, language):
@@ -141,7 +190,7 @@ async def _gen_train_quiz_card(word, ru, language):
 }}
 """
     try:
-        d = await ai.allm_json(prompt, 900, tier="smart", route="claude", module="learning")
+        d = await ai.allm_json(prompt, 900, tier="smart", route="gemini", module="learning")
     except Exception:
         sentence, sentence_ru = await asyncio.to_thread(_gen_context, word, language)
         wrong = await asyncio.to_thread(_gen_distractors, word, ru, language, "fl_to_ru")
@@ -173,6 +222,47 @@ async def _gen_train_quiz_card(word, ru, language):
         "wrong_map": d.get("wrong_map") if isinstance(d.get("wrong_map"), dict) else {},
         "meaning": str(d.get("meaning") or correct).strip(),
     }
+
+
+async def _gen_phrase_quiz_card(phrase, ru, language):
+    """Quiz poll для фразы: какое слово пропущено."""
+    prompt = f"""
+Ты методист тренажёра фраз для языка: {language}.
+Целевая фраза: «{phrase}».
+Перевод на русский: «{ru}».
+
+Сделай quiz poll: в исходной фразе пропусти ОДНО смысловое слово и дай 3 варианта.
+
+Жёсткие правила:
+1. blank_phrase — та же фраза, но одно слово заменено на ____.
+2. correct — ровно пропущенное слово из фразы, без артиклей и лишних слов.
+3. wrong — два неправильных слова на {language}, той же части речи и похожей длины.
+4. Не пропускай артикль, предлог, местоимение, частицу или имя собственное.
+5. Если фраза короткая, выбирай самый полезный глагол/существительное/прилагательное.
+6. explanation — коротко по-русски, почему correct подходит в этой фразе.
+
+Верни JSON:
+{{
+  "blank_phrase": "фраза с ____",
+  "correct": "пропущенное слово",
+  "wrong": ["неверный вариант 1", "неверный вариант 2"],
+  "sentence_ru": "перевод всей фразы на русский",
+  "explanation": "короткое объяснение"
+}}
+"""
+    try:
+        d = await ai.allm_json(prompt, 700, tier="smart", route="gemini", module="learning")
+    except Exception:
+        return {}
+    wrong = [str(x).strip() for x in (d.get("wrong") or []) if str(x).strip()][:2]
+    return {
+        "blank_phrase": str(d.get("blank_phrase") or "").strip(),
+        "correct": str(d.get("correct") or "").strip(),
+        "wrong": wrong,
+        "sentence_ru": str(d.get("sentence_ru") or ru).strip(),
+        "explanation": str(d.get("explanation") or "").strip(),
+    }
+
 
 def train_data(language, level, word, ru, fmt):
     """Задание тренажёра вокруг слова `word` (перевод `ru`) в формате fmt (gap/tf)."""
@@ -213,26 +303,33 @@ def _train_back_target(language=None):
     return "m_nl" if _code(language or "нидерландский") == "nl" else "m_en"
 
 
-def _train_again_kb(language=None):
+def _train_again_kb(language=None, mode="word"):
+    label = "✨ Ещё фразу" if mode == "phrase" else "✨ Ещё слово"
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Ещё слово", callback_data="train_next")],
+        [InlineKeyboardButton(label, callback_data="train_next")],
         [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(language))],
     ])
 
-async def train_start(bot, cid, language):
+async def train_start(bot, cid, language, mode="word"):
     store.challenge_state.pop(str(cid), None)
     store.game_state.pop(str(cid), None)
     store.pending_input.pop(str(cid), None)
-    if not _train_words(cid, language):
+    entries = _train_phrases(cid, language) if mode == "phrase" else _train_words(cid, language)
+    if not entries:
         code = _code(language)
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(
-            "📖 Открыть словарь", callback_data=f"a_dictlang_{code}")]])
+            "📖 Открыть словарь", callback_data=f"a_dictlang_{code}_from_lang")]])
+        label = "фраз с переводом" if mode == "phrase" else "отдельных слов с переводом"
+        item_type = "фраза" if mode == "phrase" else "слово"
         await bot.send_message(chat_id=cid,
-            text=f"{_flag(language)} В словаре нет отдельных слов с переводом. Добавь записи типа «слово» через словарь.",
+            text=f"{_flag(language)} В словаре нет {label}. Добавь записи типа «{item_type}» через словарь.",
             reply_markup=kb)
         return
-    store.train_state[str(cid)] = {"lang": language, "round": 0, "used": []}
-    await _render_quiz(bot, cid)
+    store.train_state[str(cid)] = {"lang": language, "mode": mode, "round": 0, "used": []}
+    if mode == "phrase":
+        await _render_phrase_quiz(bot, cid)
+    else:
+        await _render_quiz(bot, cid)
 
 
 async def _render_quiz(bot, cid):
@@ -246,16 +343,28 @@ async def _render_quiz(bot, cid):
     if not words:
         await bot.send_message(chat_id=cid, text="В словаре нет отдельных слов с переводом."); return
 
-    # Выбираем слово (без повторов пока не исчерпаем весь список)
-    used = st.get("used", [])
-    available = [(i, w) for i, w in enumerate(words) if i not in used]
-    if not available:
-        used = []
-        available = list(enumerate(words))
+    # В 30% раундов пробуем новое частотное слово выше B1, близкое к словарю.
+    word_source = "dict"
+    used_new = st.get("used_new", [])
+    new_word = None
+    if _should_train_new_word(st.get("round", 0)):
+        new_word = await _gen_train_new_word(cid, language, words, used_new)
+    if new_word:
+        word, ru = new_word
+        used_new.append(word)
+        st["used_new"] = used_new[-50:]
+        word_source = "new"
+    else:
+        # Выбираем слово (без повторов пока не исчерпаем весь список)
+        used = st.get("used", [])
+        available = [(i, w) for i, w in enumerate(words) if i not in used]
+        if not available:
+            used = []
+            available = list(enumerate(words))
+            st["used"] = used
+        idx, (word, ru) = _r.choice(available)
+        used.append(idx)
         st["used"] = used
-    idx, (word, ru) = _r.choice(available)
-    used.append(idx)
-    st["used"] = used
 
     card = await _gen_train_quiz_card(word, ru, language)
     correct_answer = card.get("correct") or ru
@@ -297,6 +406,7 @@ async def _render_quiz(bot, cid):
         "wrong_map": card.get("wrong_map") or {},
         "options": options,
         "correct_idx": correct_idx,
+        "word_source": word_source,
     })
 
     question, question_entities = _train_question(word)
@@ -315,6 +425,82 @@ async def _render_quiz(bot, cid):
         is_anonymous=True,
         explanation=explanation,
         reply_markup=_train_again_kb(language),
+    )
+    if getattr(msg, "poll", None):
+        store.train_polls[msg.poll.id] = str(cid)
+
+
+async def _render_phrase_quiz(bot, cid):
+    import random as _r
+    store.pending_input.pop(str(cid), None)
+    st = store.train_state.get(str(cid))
+    if not st:
+        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    language = st["lang"]
+    phrases = _train_phrases(cid, language)
+    if not phrases:
+        await bot.send_message(chat_id=cid, text="В словаре нет фраз с переводом."); return
+
+    used = st.get("used", [])
+    available = [(i, p) for i, p in enumerate(phrases) if i not in used]
+    if not available:
+        used = []
+        available = list(enumerate(phrases))
+        st["used"] = used
+    idx, (phrase, ru) = _r.choice(available)
+    used.append(idx)
+    st["used"] = used
+
+    card = await _gen_phrase_quiz_card(phrase, ru, language)
+    correct_answer = card.get("correct") or ""
+    wrong = list(card.get("wrong") or [])
+    clean_wrong = []
+    seen = {str(correct_answer).lower()}
+    for item in wrong:
+        item = str(item).strip()
+        if item and item.lower() not in seen:
+            clean_wrong.append(item)
+            seen.add(item.lower())
+        if len(clean_wrong) >= 2:
+            break
+    blank_phrase = card.get("blank_phrase") or ""
+    if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 2:
+        await bot.send_message(
+            chat_id=cid,
+            text="Не удалось собрать хорошее задание по фразе. Попробуй ещё раз.",
+            reply_markup=_train_again_kb(language, mode="phrase"),
+        )
+        return
+
+    options = [correct_answer] + clean_wrong[:2]
+    _r.shuffle(options)
+    correct_idx = options.index(correct_answer)
+    st.update({
+        "mode": "phrase",
+        "word": phrase,
+        "ru": ru,
+        "sentence": blank_phrase,
+        "sentence_ru": card.get("sentence_ru") or ru,
+        "meaning": correct_answer,
+        "phrase_explanation": card.get("explanation") or "",
+        "wrong_map": {},
+        "options": options,
+        "correct_idx": correct_idx,
+    })
+
+    explanation = _train_explanation(
+        st.get("sentence", ""),
+        st.get("sentence_ru", ""),
+    )
+    msg = await bot.send_poll(
+        chat_id=cid,
+        question=f"Какое слово пропущено?\n{blank_phrase}"[:300],
+        options=[str(x)[:100] for x in options[:10]],
+        type="quiz",
+        correct_option_id=correct_idx,
+        is_anonymous=True,
+        explanation=explanation,
+        reply_markup=_train_again_kb(language, mode="phrase"),
     )
     if getattr(msg, "poll", None):
         store.train_polls[msg.poll.id] = str(cid)
@@ -357,8 +543,29 @@ async def _send_train_feedback(bot, cid, idx, st):
     meaning = st.get("meaning") or correct
     wrong_map = st.get("wrong_map") or {}
     chosen_fl = wrong_map.get(chosen) or wrong_map.get(chosen.lower()) or ""
+    mode = st.get("mode", "word")
 
-    if idx == correct_idx:
+    if mode == "phrase":
+        full_phrase = word
+        if idx == correct_idx:
+            lines = [
+                "✅ <b>Верно.</b>",
+                "",
+                f"{esc(sentence)} → <b>{esc(correct)}</b>",
+            ]
+        else:
+            lines = [
+                "❌ <b>Не совсем так.</b>",
+                "",
+                f"{esc(sentence)} → <b>{esc(correct)}</b>",
+                f"Твой ответ: «{esc(chosen)}».",
+            ]
+        lines += ["", f"<b>{esc(full_phrase)}</b>"]
+        if sentence_ru:
+            lines.append(esc(sentence_ru))
+        if st.get("phrase_explanation"):
+            lines += ["", esc(st.get("phrase_explanation", ""))]
+    elif idx == correct_idx:
         lines = [
             "✅ <b>Верно.</b>",
             "",
@@ -372,15 +579,16 @@ async def _send_train_feedback(bot, cid, idx, st):
             f"Твой ответ: «{esc(chosen)}»" + (f" — это <b>{esc(chosen_fl)}</b>." if chosen_fl else "."),
         ]
 
-    if sentence:
+    if mode != "phrase" and sentence:
         context = f"{esc(sentence)}"
         if sentence_ru:
             context += f" → {esc(sentence_ru)}"
         lines += ["", context]
 
     st["round"] = st.get("round", 0) + 1
+    next_label = "✨ Ещё фразу" if mode == "phrase" else "✨ Ещё слово"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Ещё слово", callback_data="train_next")],
+        [InlineKeyboardButton(next_label, callback_data="train_next")],
         [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(lang))],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
@@ -391,7 +599,22 @@ async def train_next(bot, cid):
     if not st:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
     store.pending_input.pop(str(cid), None)
-    await _render_quiz(bot, cid)
+    if st.get("mode") == "phrase":
+        await _render_phrase_quiz(bot, cid)
+    else:
+        await _render_quiz(bot, cid)
+
+
+async def send_train_kind_select(bot, cid, language):
+    code = _code(language)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔤 Слова", callback_data=f"a_train_words_{code}")],
+        [InlineKeyboardButton("💬 Фразы", callback_data=f"a_train_phrases_{code}")],
+        [InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")],
+    ])
+    await bot.send_message(chat_id=cid,
+        text=f"{_flag(language)} <b>Тренажёр</b>\n\nВыбери, что тренировать:",
+        parse_mode="HTML", reply_markup=kb)
 
 
 async def send_train_lang_select(bot, cid):
@@ -401,7 +624,7 @@ async def send_train_lang_select(bot, cid):
         [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
     ])
     await bot.send_message(chat_id=cid,
-        text="🧠 <b>Тренажёр слов</b>\n\nСлова и фразы для тренировки добавляются в разделе <b>Словарь</b>.\n\n<b>Выбери язык для тренировки 👇</b>",
+        text="🧠 <b>Тренажёр</b>\n\nСлова и фразы для тренировки добавляются в разделе <b>Словарь</b>.\n\n<b>Выбери язык для тренировки 👇</b>",
         parse_mode="HTML", reply_markup=kb)
 
 
@@ -442,12 +665,12 @@ async def translate_answer(bot, cid, text):
     if r.get("ok"):
         L.append("✅ Верно")
         if r.get("correct"):
-            L += ["", f"💡 Естественнее: {esc(r['correct'])}"]
+            L += ["", f"💡 {esc(st['ru'])} → {esc(r['correct'])}"]
     else:
         if r.get("error"):
             L += [f"❌ Ошибка: {esc(r['error'])}"]
         if r.get("correct"):
-            L += ["", f"✅ Лучше: {esc(r['correct'])}"]
+            L += ["", f"✅ {esc(st['ru'])} → {esc(r['correct'])}"]
     if r.get("note"):
         L += ["", f"💡 {esc(r['note'])}"]
     code = _code(st["lang"])
@@ -475,6 +698,11 @@ def _as_list(value):
     if isinstance(value, str) and value.strip():
         return [value.strip()]
     return []
+
+
+def _cap_first(text):
+    text = (text or "").strip()
+    return text[:1].upper() + text[1:] if text else text
 
 
 def _proverb_entities_card(flag, original, analogs=None, meaning="", examples=None):
@@ -505,20 +733,22 @@ def _proverb_entities_card(flag, original, analogs=None, meaning="", examples=No
         add("\n\n")
         add("Как это переводится?", MessageEntity.BOLD)
         add("\n")
-        for i, analog in enumerate(analogs[:4]):
+        visible_analogs = analogs[:4]
+        for i, analog in enumerate(visible_analogs):
             if i:
-                add(" или " if i == len(analogs[:4]) - 1 else ", ")
-            add(f"«{analog}»", MessageEntity.BOLD)
+                add(" или " if i == len(visible_analogs) - 1 else ", ")
+            add(f"«{_cap_first(analog) if i == 0 else analog}»")
+        if meaning:
+            add(f" ({meaning})")
         add(".")
     examples = _as_list(examples)
     if examples:
         add("\n\n")
         add("Как говорить ПРАВИЛЬНО", MessageEntity.BOLD)
         add("\n")
-    if meaning:
-        add(f"{meaning}")
-        add("\n".join(f"• {example}" for example in examples[:2]))
+        add(examples[0])
     add("\n\n")
+    add("Прочитай вслух. Покрути в голове. Всё.")
     return "".join(chunks).rstrip(), entities
 
 async def send_proverb(bot, cid, language):
@@ -534,8 +764,7 @@ async def send_proverb(bot, cid, language):
             '"type":"фразовый глагол / идиома / разговорная фраза",'
             '"analogs":["русский аналог 1","русский аналог 2","русский аналог 3","русский аналог 4"],'
             '"meaning":"контекст употребления на русском, коротко; пустая строка если не нужен",'
-            '"examples":["пример на ' + language + ' — перевод на русский",'
-            '"пример на ' + language + ' — перевод на русский"]}',
+            '"examples":["один пример на ' + language + ' → перевод на русский"]}',
             400, tier="cheap", route="gemini", module="learning")
         def _cap(s):
             s = (s or "").strip()
@@ -566,8 +795,7 @@ async def send_proverb_both(bot, cid, with_kb=True):
             '"analogs":["русский аналог 1","русский аналог 2","русский аналог 3","русский аналог 4"],'
             '"type":"фразовый глагол / идиома / разговорная фраза",'
             '"meaning":"контекст употребления на русском, коротко; пустая строка если не нужен",'
-            '"examples":["пример на нидерландском или английском — перевод на русский",'
-            '"пример на нидерландском или английском — перевод на русский"]}',
+            '"examples":["один пример на нидерландском или английском → перевод на русский"]}',
             500, tier="cheap", route="gemini", module="learning")
         def _cap(s):
             s = (s or "").strip()
@@ -659,7 +887,7 @@ async def try_add_dict_from_chat(bot, cid, text):
     return True
 
 def _parse_simple_pairs(text, lang_hint):
-    """Быстрый путь без LLM для строк вида «de aandacht - внимание»."""
+    """Быстрый путь без LLM для строк вида «de aandacht → внимание»."""
     chunks = [x.strip() for x in re.split(r"[\n;]+", text or "") if x.strip()]
     if not chunks:
         return []
@@ -674,8 +902,8 @@ def _parse_simple_pairs(text, lang_hint):
 def _parse_batch(text, lang_hint):
     """Разбирает присланный текст на отдельные слова/фразы с авто-определением языка и типа."""
     spec = ("Раздели текст на отдельные единицы (разделители: новые строки, запятые, точки с запятой, маркеры списка, нумерация). "
-            "Строки часто в формате «термин - перевод» или «термин — перевод»: в word клади ТОЛЬКО иностранный термин, "
-            "перевод - в ru. Для КАЖДОГО элемента определи: lang (nl - нидерландский или en - английский), "
+            "Основной формат: «термин → перевод»; также понимай старый ввод через -, —, : или =. В word клади ТОЛЬКО иностранный термин, "
+            "перевод клади в ru. Для КАЖДОГО элемента определи: lang (nl - нидерландский или en - английский), "
             "kind (word - одно слово, в т.ч. существительное с артиклем de/het/the; phrase - выражение из нескольких слов), "
             "и перевод ru на русский. Нидерландские существительные - с артиклем de/het. "
             f"Если язык элемента неочевиден, ставь \"{lang_hint}\". "
@@ -802,9 +1030,10 @@ async def send_dict(bot, cid, back="m_notes"):
     en_total = c["en"]["word"] + c["en"]["phrase"]
     txt = (f"🗂️ <b>Мой словарь</b>\n\nВсего: {nl_total + en_total} "
            f"(🇳🇱 {nl_total} · 🇬🇧 {en_total})\n\nВыбери язык 👇")
+    origin = {"m_notes": "notes", "m_learn": "learn", "m_dict_settings": "settings"}.get(back, "notes")
     rows = [
-        [InlineKeyboardButton(f"🇳🇱 Нидерландский ({nl_total})", callback_data="a_dictlang_nl")],
-        [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data="a_dictlang_en")],
+        [InlineKeyboardButton(f"🇳🇱 Нидерландский ({nl_total})", callback_data=f"a_dictlang_nl_from_{origin}")],
+        [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data=f"a_dictlang_en_from_{origin}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ]
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
@@ -963,7 +1192,64 @@ def _dot(s):
         s += "."
     return s
 
-def game_data(clue_lang, difficulty, recent):
+
+def _game_norm(s):
+    return re.sub(r"[^0-9a-zа-яё]+", "", (s or "").lower())
+
+
+def _game_same(a, b):
+    a, b = _game_norm(a), _game_norm(b)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    if len(a) >= 5 and len(b) >= 5 and (a in b or b in a):
+        return True
+    if abs(len(a) - len(b)) <= 2:
+        diff = sum(1 for x, y in zip(a, b) if x != y) + abs(len(a) - len(b))
+        return diff <= 2
+    return False
+
+
+def _game_is_recent(d, recent):
+    names = [d.get("answer", "")] + list(d.get("aliases") or [])
+    return any(_game_same(name, old) for name in names for old in (recent or []))
+
+
+def _game_recent(cid):
+    prof = store.get_profile(cid)
+    persisted = prof.get("game_recent", []) if isinstance(prof, dict) else []
+    mem = store.game_recent.get(str(cid), [])
+    out = []
+    for name in list(persisted) + list(mem):
+        name = (name or "").strip()
+        if name and not any(_game_same(name, old) for old in out):
+            out.append(name)
+    out = out[-80:]
+    store.game_recent[str(cid)] = out
+    return out
+
+
+def _set_game_recent(cid, rec):
+    rec = [str(x).strip() for x in (rec or []) if str(x).strip()]
+    rec = rec[-80:]
+    store.game_recent[str(cid)] = rec
+    prof = store.get_profile(cid)
+    prof["game_recent"] = rec
+    store.set_profile(cid, prof)
+
+
+def _remember_game_answer(cid, d):
+    names = [d.get("answer", "")] + list(d.get("aliases") or [])
+    rec = _game_recent(cid)
+    for name in names:
+        name = (name or "").strip()
+        if name and not any(_game_same(name, old) for old in rec):
+            rec.append(name)
+    _set_game_recent(cid, rec)
+
+
+def game_data(clue_lang, difficulty, recent, attempt=0):
     if difficulty == "easy":
         subject = ("животное, птицу, рыбу, насекомое, фрукт, овощ, бытовой предмет или транспортное средство "
                    "(примеры: слон, орёл, акула, яблоко, велосипед, холодильник). "
@@ -976,17 +1262,21 @@ def game_data(clue_lang, difficulty, recent):
     else:
         subject = "известного персонажа или историческую личность (кино, наука, история, музыка, литература)"
         diff_desc = "исторические личности, актёры, более тонкие подсказки"
-    avoid = ("Не загадывай: " + ", ".join(recent[-30:])) if recent else ""
+    avoid = ("Не загадывай ничего из этого списка и их переводы/синонимы: " + ", ".join(recent[-80:])) if recent else ""
     prompt = f"""Игра-детектив. Загадай: {subject}.
 Сложность: {diff_desc}. ВЕСЬ текст на языке: {clue_lang}. {avoid}
+Попытка генерации: {attempt + 1}. Если сомневаешься, выбирай менее очевидный вариант, которого не было в списке.
 Каждая подсказка и каждое предложение заканчивается точкой.
+Стиль: улики должны быть атмосферными и чуть кинематографичными, но короткими. Не сухой список фактов.
+Добавь 1 деталь действия/сцены в каждой улике: след, привычка, жест, звук, место, предмет, последствия.
+Не повторяй одинаковые формулировки между уликами.
 Ответь строго, каждое поле с новой строки, без markdown:
 CLUES: 4 улики на языке {clue_lang}, через | , от косвенной к более явной — конкретные детали (форма, цвет, происхождение, функция, ощущения), без имени/названия
 ANSWER: название на языке {clue_lang}
 ALIASES: то же название на русском, английском и нидерландском через |
 HINT: ещё одна явная подсказка на языке {clue_lang}
 HINT2: совсем простая, почти очевидная подсказка (но без названия), на языке {clue_lang}
-EXPLAIN: 1-2 предложения — что это такое (на языке {clue_lang})"""
+EXPLAIN: 2 живых предложения — что это такое и почему улики вели именно к нему (на языке {clue_lang})"""
     raw = ai.llm(prompt, 900, 1.0, tier="cheap")
     out = {}
     for key, field in (("CLUES", "clues"), ("ANSWER", "answer"), ("ALIASES", "aliases"),
@@ -1020,11 +1310,22 @@ async def send_game(bot, cid):
     cfg = store.game_config.get(str(cid), {"lang": "английский", "difficulty": "easy"})
     lang = cfg["lang"]
     ui = GAME_UI.get(lang, GAME_UI["русский"])
-    recent = store.game_recent.get(str(cid), [])
+    recent = _game_recent(cid)
     try:
-        d = game_data(lang, cfg["difficulty"], recent)
+        d = {}
+        for attempt in range(5):
+            cand = game_data(lang, cfg["difficulty"], recent, attempt=attempt)
+            if cand.get("answer") and not _game_is_recent(cand, recent):
+                d = cand
+                break
+            if cand.get("answer"):
+                recent = recent + [cand.get("answer", "")] + list(cand.get("aliases") or [])
+        if not d:
+            await bot.send_message(chat_id=cid, text="Не смог загадать новое без повтора. Попробуй ещё раз через минуту.")
+            return
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
+    _remember_game_answer(cid, d)
     hints = [_dot(h) for h in [d.get("hint"), d.get("hint2")] if (h or "").strip()]
     store.game_state[str(cid)] = {"answer": d.get("answer", ""), "aliases": d.get("aliases", []),
                                   "quote": d.get("quote", ""), "hints": hints, "hint_i": 0,
@@ -1063,7 +1364,7 @@ async def game_answer(bot, cid, text):
     correct = any(_fuzzy(guess, p) for p in pool if p)
     if correct:
         store.game_state.pop(str(cid), None)
-        rec = store.game_recent.get(str(cid), []); rec.append(st["answer"]); store.game_recent[str(cid)] = rec[-30:]
+        _remember_game_answer(cid, st)
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton(ui["again"], callback_data="game_again")],
             [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
@@ -1077,7 +1378,7 @@ async def game_answer(bot, cid, text):
     st["tries"] = st.get("tries", 0) + 1
     if st["tries"] >= 2:
         store.game_state.pop(str(cid), None)
-        rec = store.game_recent.get(str(cid), []); rec.append(st["answer"]); store.game_recent[str(cid)] = rec[-30:]
+        _remember_game_answer(cid, st)
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(ui["again"], callback_data="game_again")]])
         await bot.send_message(chat_id=cid, text=f"{ui['wrong']}. {st['answer']}.", reply_markup=kb)
     else:
@@ -1106,6 +1407,7 @@ async def game_reveal(bot, cid, q):
     ui = GAME_UI.get(store.game_config.get(str(cid), {}).get("lang", "русский"), GAME_UI["русский"])
     if not st:
         return
+    _remember_game_answer(cid, st)
     body = st.get("explain") or st.get("quote", "")
     txt = f"<b>{ui['found']}</b>\n\n{ui['answer']}:\n<b>{esc(st.get('answer', ''))}</b>"
     if body:

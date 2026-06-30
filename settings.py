@@ -663,10 +663,10 @@ async def send_notes(bot, cid):
     notes_list = store.get_list(config.NOTES_KEY, cid)
     n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     rows = [
-        [InlineKeyboardButton("🌍 Город", callback_data="set_city")],
+        [InlineKeyboardButton(f"⭐️ Позже ({n_fav})", callback_data="as_bucket_fav")],
+        [InlineKeyboardButton("🌍 Сменить город", callback_data="set_city")],
         [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
         [InlineKeyboardButton("🎚️ Уровень языка", callback_data="set_levels")],
-        [InlineKeyboardButton(f"⏳ Позже ({n_fav})", callback_data="as_bucket_fav")],
         [InlineKeyboardButton("🎚️ Гардероб", callback_data="set_wardrobe")],
         [InlineKeyboardButton("🎚️ Готовка", callback_data="set_fridge")],
         [InlineKeyboardButton("🎚️ Обучение", callback_data="set_dict")],
@@ -763,7 +763,7 @@ async def send_fav_group(bot, cid, group):
 
     label, desc = _fav_group_info(group)
     text = (
-        f"⏳ <b>Позже · {label}</b>\n\n"
+        f"⭐️ <b>Позже · {label}</b>\n\n"
         f"Здесь лежат временные закладки: {esc(desc)}.\n"
         "Открой карточку, чтобы увидеть её в исходном виде или удалить."
     )
