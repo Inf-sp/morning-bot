@@ -472,7 +472,15 @@ def _proverb_kb(code):
 def _u16_len(text):
     return len((text or "").encode("utf-16-le")) // 2
 
-def _proverb_entities_card(flag, original, literal, meaning, examples=None):
+def _as_list(value):
+    if isinstance(value, list):
+        return [str(x).strip() for x in value if str(x).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
+def _proverb_entities_card(flag, original, analogs=None, meaning="", examples=None):
     chunks = []
     entities = []
 
@@ -482,27 +490,40 @@ def _proverb_entities_card(flag, original, literal, meaning, examples=None):
         if entity_type:
             entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
 
+    def add_bold_text(text):
+        offset = _u16_len("".join(chunks))
+        chunks.append(text)
+        length = _u16_len(text)
+        entities.append(MessageEntity(MessageEntity.BOLD, offset, length))
+        return offset, length
+
     header = f"💭{flag} Живой язык" if flag else "💭 Живой язык"
     add(header, MessageEntity.BOLD)
     add("\n\n")
     if original:
-        quote = original
-        if literal:
-            quote += f" → {literal}"
-        add(quote, MessageEntity.BLOCKQUOTE)
-    if meaning:
+        offset, length = add_bold_text(original)
+        entities.append(MessageEntity(MessageEntity.BLOCKQUOTE, offset, length))
+    analogs = _as_list(analogs)
+    if analogs:
         add("\n\n")
-        add("Когда так говорят", MessageEntity.BOLD)
+        add("Как это переводится?", MessageEntity.BOLD)
         add("\n")
-        add(meaning)
-    examples = [str(x).strip() for x in (examples or []) if str(x).strip()]
+        add("Ближайшие русские аналоги: ")
+        for i, analog in enumerate(analogs[:4]):
+            if i:
+                add(" или " if i == len(analogs[:4]) - 1 else ", ")
+            add(f"«{analog}»", MessageEntity.BOLD)
+        if meaning:
+            add(f" ({meaning})")
+        add(".")
+    examples = _as_list(examples)
     if examples:
         add("\n\n")
-        add("Примеры", MessageEntity.BOLD)
+        add("Как говорить ПРАВИЛЬНО", MessageEntity.BOLD)
         add("\n")
-        add("\n".join(f"{i}. {example}" for i, example in enumerate(examples[:2], start=1)))
+        add("\n".join(f"• {example}" for example in examples[:2]))
     add("\n\n")
-    add("Прочитай вслух. Покрути в голове. Всё.", MessageEntity.ITALIC)
+    add("Прочитай вслух. Покрути в голове. Всё.")
     return "".join(chunks).rstrip(), entities
 
 async def send_proverb(bot, cid, language):
@@ -511,14 +532,16 @@ async def send_proverb(bot, cid, language):
         d = await ai.allm_json(
             "Ты эксперт по живому разговорному языку. "
             f"Твоя цель — научить говорить как местный житель. "
+            f"Пиши только проверенные, естественные выражения на языке: {language}. "
+            "Перевод на русский должен передавать реальный смысл, не буквальную кальку. "
             f"Выдай одно полезное выражение на {language}: фразовый глагол, идиому или частую разговорную фразу.\n"
             'JSON: {"original":"выражение на ' + language + '",'
             '"type":"фразовый глагол / идиома / разговорная фраза",'
-            '"literal":"дословный перевод на русский",'
-            '"meaning":"когда так говорят, 1 короткая строка на русском",'
+            '"analogs":["русский аналог 1","русский аналог 2","русский аналог 3","русский аналог 4"],'
+            '"meaning":"контекст употребления на русском, коротко; пустая строка если не нужен",'
             '"examples":["пример на ' + language + ' — перевод на русский",'
             '"пример на ' + language + ' — перевод на русский"]}',
-            400, tier="cheap", module="learning")
+            400, tier="cheap", route="gemini", module="learning")
         def _cap(s):
             s = (s or "").strip()
             return s[0].upper() + s[1:] if s else s
@@ -526,7 +549,7 @@ async def send_proverb(bot, cid, language):
         txt, entities = _proverb_entities_card(
             flag,
             _cap(d.get("original", "")),
-            _cap(d.get("literal", "")),
+            d.get("analogs") or d.get("literal") or d.get("ru") or [],
             _cap(d.get("meaning", "")),
             d.get("examples") or [],
         )
@@ -540,22 +563,23 @@ async def send_proverb_both(bot, cid, with_kb=True):
     try:
         d = await ai.allm_json(
             "Ты эксперт по живому разговорному языку. "
+            "Пиши только проверенные, естественные выражения. "
+            "Перевод на русский должен передавать реальный смысл, не буквальную кальку. "
             "Выдай одно выражение — фразовый глагол, идиому или частую разговорную фразу.\n"
             'JSON: {"nl":"выражение на нидерландском",'
             '"en":"живой английский эквивалент (не перевод, а аналог)",'
-            '"ru":"дословный перевод на русский",'
+            '"analogs":["русский аналог 1","русский аналог 2","русский аналог 3","русский аналог 4"],'
             '"type":"фразовый глагол / идиома / разговорная фраза",'
-            '"meaning":"когда так говорят, 1 короткая строка на русском",'
+            '"meaning":"контекст употребления на русском, коротко; пустая строка если не нужен",'
             '"examples":["пример на нидерландском или английском — перевод на русский",'
             '"пример на нидерландском или английском — перевод на русский"]}',
-            500, tier="cheap", module="learning")
+            500, tier="cheap", route="gemini", module="learning")
         def _cap(s):
             s = (s or "").strip()
             return s[0].upper() + s[1:] if s else s
 
         original = _cap(d.get("nl", "")) or _cap(d.get("en", ""))
-        literal = _cap(d.get("ru", ""))
-        txt, entities = _proverb_entities_card(" ", original, literal, _cap(d.get("meaning", "")), d.get("examples") or [])
+        txt, entities = _proverb_entities_card(" ", original, d.get("analogs") or d.get("ru") or [], _cap(d.get("meaning", "")), d.get("examples") or [])
     except Exception:
         txt, entities = _proverb_entities_card(" ", "", "", "Не удалось получить выражение.\nПопробуй ещё раз чуть позже.")
     kb = InlineKeyboardMarkup([
