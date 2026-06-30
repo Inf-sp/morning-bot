@@ -155,9 +155,17 @@ async def answer_callback(update, context):
             elif act == "train":
                 await learning.send_train_lang_select(bot, cid)
             elif act == "train_nl":
-                await _ack(q); await learning.train_start(bot, cid, "нидерландский")
+                await _ack(q); await learning.send_train_kind_select(bot, cid, "нидерландский")
             elif act == "train_en":
-                await _ack(q); await learning.train_start(bot, cid, "английский")
+                await _ack(q); await learning.send_train_kind_select(bot, cid, "английский")
+            elif act == "train_words_nl":
+                await _ack(q); await learning.train_start(bot, cid, "нидерландский", mode="word")
+            elif act == "train_words_en":
+                await _ack(q); await learning.train_start(bot, cid, "английский", mode="word")
+            elif act == "train_phrases_nl":
+                await _ack(q); await learning.train_start(bot, cid, "нидерландский", mode="phrase")
+            elif act == "train_phrases_en":
+                await _ack(q); await learning.train_start(bot, cid, "английский", mode="phrase")
             elif act == "tr_nl":
                 await _ack(q); await learning.do_translate(bot, cid, "нидерландский")
             elif act == "tr_en":
@@ -181,6 +189,18 @@ async def answer_callback(update, context):
                 await learning.send_dict_lang(bot, cid, "nl", back="m_nl")
             elif act == "dictlang_en_from_lang":
                 await learning.send_dict_lang(bot, cid, "en", back="m_en")
+            elif act == "dictlang_nl_from_notes":
+                await learning.send_dict_lang(bot, cid, "nl", back="a_dict")
+            elif act == "dictlang_en_from_notes":
+                await learning.send_dict_lang(bot, cid, "en", back="a_dict")
+            elif act == "dictlang_nl_from_learn":
+                await learning.send_dict_lang(bot, cid, "nl", back="set_dict_g")
+            elif act == "dictlang_en_from_learn":
+                await learning.send_dict_lang(bot, cid, "en", back="set_dict_g")
+            elif act == "dictlang_nl_from_settings":
+                await learning.send_dict_lang(bot, cid, "nl", back="m_dict_settings")
+            elif act == "dictlang_en_from_settings":
+                await learning.send_dict_lang(bot, cid, "en", back="m_dict_settings")
             elif act.startswith("dictadd_smart_"):
                 lang = act.split("_")[2]
                 store.pending_input[cid] = f"dictadd_smart_{lang}"
@@ -584,8 +604,7 @@ async def job_morning_brief(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "morning_brief"):
             continue
         try:
-            bot = _NokbBot(context.bot)
-            await weather.send_weather(bot, cid, "tomorrow_plain")
+            await myday.send_plany(_NokbBot(context.bot), cid, force=True)
         except Exception:
             logging.exception("job_morning_brief failed for cid=%s", cid)
 
@@ -766,7 +785,7 @@ def main():
     jq = app.job_queue
     def _t(hm):
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
-    jq.run_daily(job_morning_brief,   time=_t("08:30"), days=tuple(range(7)))
+    jq.run_daily(job_morning_brief,   time=_t("08:30"), days=tuple(range(7)))   # Мой день без кнопок
     jq.run_daily(job_weather_warn,    time=_t("08:45"), days=tuple(range(7)))
     jq.run_daily(job_lagom,           time=_t("09:00"), days=tuple(range(7)))
     jq.run_daily(job_weekly_events,   time=_t("10:00"), days=(6,))             # вс

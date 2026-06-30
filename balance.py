@@ -544,7 +544,9 @@ def _food_card(d, label="Рецепт дня") -> str:
     steps = d.get("steps") or []
     if isinstance(steps, str):
         steps = [steps]
-    lines = [f"🥣 <b>{label} • {name}</b>"]
+    lines = [f"🥣 <b>{label}</b>"]
+    if name:
+        lines += ["", f"<b>{name}</b>"]
     if ingredients:
         lines += ["", "<b>Ингредиенты:</b>", ingredients]
     if steps:
