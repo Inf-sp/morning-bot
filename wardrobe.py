@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import re
 import config
@@ -25,17 +26,65 @@ def closet_kb():
 
 def _look_result_kb():
     return _kb([
-        [("😍 Надел", "w_fb_worn"), ("🫪 Не мой стиль", "w_fb_nostyle")],
-        [("🥶 Было холодно", "w_fb_cold"), ("🥵 Было жарко", "w_fb_hot")],
+        [("😍 Надел", "w_fb_worn"), ("🫪 Не моё", "w_fb_nostyle")],
         [("◀️ Назад", "m_wardrobe")],
     ])
 
 def _back_kb():
     return _kb([[("◀️ Назад", "m_wardrobe")]])
 
+def _today_label():
+    now = datetime.now(config.TZ)
+    weekdays = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
+    months = [
+        "января", "февраля", "марта", "апреля", "мая", "июня",
+        "июля", "августа", "сентября", "октября", "ноября", "декабря",
+    ]
+    return f"• {weekdays[now.weekday()]}, {now.day} {months[now.month - 1]}"
+
+def _day_key():
+    return datetime.now(config.TZ).date().isoformat()
+
+def _build_look_text(items, intro="", add=""):
+    lines = ["✨ <b>Образ на сегодня</b>", _today_label(), ""]
+    if intro:
+        lines.append(esc(intro))
+        lines.append("")
+    lines += [f"• {esc(str(it))}" for it in items]
+    if add:
+        lines += ["", "<b>Можно добавить:</b>", esc(add)]
+    return "\n".join(lines)
+
+def _get_cached_look(cid):
+    cached = store.get_wardrobe_daylook(cid)
+    if not isinstance(cached, dict):
+        return None
+    if cached.get("date") != _day_key():
+        return None
+    items = cached.get("items") or []
+    if not items:
+        return None
+    return cached
+
+def _save_cached_look(cid, items, intro="", add=""):
+    store.set_wardrobe_daylook(cid, {
+        "date": _day_key(),
+        "items": list(items or []),
+        "intro": intro or "",
+        "add": add or "",
+        "text": _build_look_text(items, intro=intro, add=add),
+    })
+
 
 # ---------- генерация лука по погоде ----------
 async def send_looks(bot, cid):
+    cached = _get_cached_look(cid)
+    if cached:
+        store.last_source[str(cid)] = "Гардероб · Образ"
+        store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", cached.get("text", ""))
+        store.last_look[str(cid)] = ", ".join(str(it) for it in cached.get("items", []))[:120]
+        await bot.send_message(chat_id=cid, text=cached["text"], parse_mode="HTML", reply_markup=_look_result_kb())
+        return
     w = store.load_wardrobe(cid)
     wardrobe_text = store.wardrobe_to_text(w)
     if not wardrobe_text.strip():
@@ -109,17 +158,18 @@ JSON (без markdown):
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     items = d.get("items", [])
+    if not items:
+        await bot.send_message(chat_id=cid, text="Не удалось собрать образ. Попробуй ещё раз.", reply_markup=_look_result_kb())
+        return
     rl = store.recent_looks.get(str(cid), [])
     rl.append(", ".join(items)[:80])
     store.recent_looks[str(cid)] = rl[-3:]
     store.last_look[str(cid)] = ", ".join(str(it) for it in items)[:120]   # для фидбека
-    L = ["✨ <b>Новый образ</b>", ""]
-    L += [f"• {esc(str(it))}" for it in items]
-    if d.get("add"):
-        L += ["", "<b>Можно добавить:</b>", esc(d["add"])]
+    text = _build_look_text(items, intro=d.get("intro", ""), add=d.get("add", ""))
+    _save_cached_look(cid, items, intro=d.get("intro", ""), add=d.get("add", ""))
     store.last_source[str(cid)] = "Гардероб · Образ"
-    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=_look_result_kb())
+    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", text)
+    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=_look_result_kb())
 
 
 # ---------- фидбек по образу ----------
@@ -131,6 +181,7 @@ async def look_feedback(bot, cid, verdict):
     look = store.last_look.get(str(cid), "")
     memory.add_wardrobe_feedback(cid, look, verdict)
     if verdict == "nostyle":
+        store.clear_wardrobe_daylook(cid)
         await send_looks(bot, cid)
     else:
         await bot.send_message(chat_id=cid, text=_FB_ACK.get(verdict, "Запомнил — учту в следующих образах."))
@@ -351,10 +402,11 @@ async def ingest(bot, cid, text):
 async def handle_callback(bot, cid, q, data):
     if data == "w_look":
         await util.ack_loading(q); await send_looks(bot, cid); return
-    if data.startswith("w_fb_"):
-        if data == "w_fb_nostyle":
-            await util.ack_loading(q)
-        await look_feedback(bot, cid, data[len("w_fb_"):]); return
+    if data == "w_fb_nostyle":
+        await util.ack_loading(q)
+        await look_feedback(bot, cid, "nostyle"); return
+    if data == "w_fb_worn":
+        await look_feedback(bot, cid, "worn"); return
     if data == "w_closet":
         import cleanup
         await cleanup.open_cleanup(bot, cid, "kast")

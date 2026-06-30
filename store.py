@@ -83,6 +83,21 @@ def set_profile(chat_id, prof):
     d[str(chat_id)] = prof
     _save(config.PROFILE_KEY, d)
 
+def get_wardrobe_daylook(chat_id):
+    """Кэш дневного образа: {"date": "YYYY-MM-DD", "text": "...", "items": [...]}."""
+    return get_profile(chat_id).get("wardrobe_daylook", {})
+
+def set_wardrobe_daylook(chat_id, data):
+    prof = get_profile(chat_id)
+    prof["wardrobe_daylook"] = data
+    set_profile(chat_id, prof)
+
+def clear_wardrobe_daylook(chat_id):
+    prof = get_profile(chat_id)
+    if "wardrobe_daylook" in prof:
+        prof.pop("wardrobe_daylook", None)
+        set_profile(chat_id, prof)
+
 def get_level(chat_id, language):
     return _load(config.LEVELS_FILE).get(str(chat_id), {}).get(language, "B1")
 

@@ -592,6 +592,54 @@ def _kind_of(term):
     t = re.sub(r"^(de|het|een|the|a|an)\s+", "", (term or "").strip().lower())
     return "word" if len(t.split()) <= 1 else "phrase"
 
+_DICT_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|внеси)\b", re.I)
+_DICT_WORD_RE = re.compile(r"\b(?:в\s+)?(?:мой\s+)?словар[ьяьею]*\b", re.I)
+_DICT_LANG_RE = re.compile(r"\b(?:на\s+)?(нидерландском|голландском|dutch|nl|английском|english|en)\b", re.I)
+_DICT_KIND_RE = re.compile(r"\b(слово|слова|фразу|выражение|термин)\b", re.I)
+
+def _dict_lang_hint(text):
+    t = (text or "").lower()
+    if any(x in t for x in ("английск", "english", " en ")):
+        return "en"
+    if any(x in t for x in ("нидерланд", "голланд", "dutch", " nl ")):
+        return "nl"
+    return "nl"
+
+def _extract_chat_dict_add(text):
+    """Команда из свободного чата: «добавь в словарь слово ...» -> полезная часть."""
+    if not _DICT_ADD_VERB_RE.search(text or "") or not _DICT_WORD_RE.search(text or ""):
+        return None, None
+    lang = _dict_lang_hint(f" {text} ")
+    payload = _DICT_ADD_VERB_RE.sub(" ", text, count=1)
+    payload = _DICT_WORD_RE.sub(" ", payload)
+    payload = _DICT_KIND_RE.sub(" ", payload)
+    payload = _DICT_LANG_RE.sub(" ", payload)
+    payload = re.sub(r"\s+", " ", payload).strip(" \t\n\r:;,.-–—")
+    if len(payload) < 2:
+        return None, None
+    return payload, lang
+
+async def try_add_dict_from_chat(bot, cid, text):
+    """Перехватывает явную просьбу добавить слово/фразу в словарь из обычного чата."""
+    payload, lang = _extract_chat_dict_add(text)
+    if not payload:
+        return False
+    await add_words_batch(bot, cid, payload, lang)
+    return True
+
+def _parse_simple_pairs(text, lang_hint):
+    """Быстрый путь без LLM для строк вида «de aandacht - внимание»."""
+    chunks = [x.strip() for x in re.split(r"[\n;]+", text or "") if x.strip()]
+    if not chunks:
+        return []
+    items = []
+    for chunk in chunks:
+        term, ru = _split_term(chunk)
+        if not term or not ru:
+            return []
+        items.append({"word": term, "ru": ru, "lang": lang_hint})
+    return items
+
 def _parse_batch(text, lang_hint):
     """Разбирает присланный текст на отдельные слова/фразы с авто-определением языка и типа."""
     spec = ("Раздели текст на отдельные единицы (разделители: новые строки, запятые, точки с запятой, маркеры списка, нумерация). "
@@ -606,10 +654,12 @@ def _parse_batch(text, lang_hint):
 
 async def add_words_batch(bot, cid, text, lang="nl"):
     """Добавляет много слов/фраз разом: каждое отдельной записью, авто-тип (слово/фраза) и язык."""
-    try:
-        items = _parse_batch(text, lang)
-    except Exception:
-        items = []
+    items = _parse_simple_pairs(text, lang)
+    if not items:
+        try:
+            items = _parse_batch(text, lang)
+        except Exception:
+            items = []
     if not items:
         # фолбэк: бьём по строкам/запятым, язык = текущий, без перевода
         raw = re.split(r"[\n;,]+", text)

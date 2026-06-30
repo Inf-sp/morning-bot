@@ -577,6 +577,10 @@ async def text_router(update, context):
     if ob_step == "city":
         await onboard.handle_city(bot, cid, text); return
 
+    # Быстрая команда из чата: «добавь в словарь слово de Aandacht - внимание»
+    if await learning.try_add_dict_from_chat(bot, cid, text):
+        return
+
     # Свободный чат
     await assistant.chat_reply(bot, cid, text)
 
