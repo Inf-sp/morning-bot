@@ -3,7 +3,7 @@ from telegram import Update
 
 _log = logging.getLogger(__name__)
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
-                          ContextTypes, CallbackQueryHandler)
+                          ContextTypes, CallbackQueryHandler, PollAnswerHandler)
 from datetime import datetime
 
 import config
@@ -613,6 +613,10 @@ async def document_handler(update, context):
     await wardrobe.ingest(context.bot, cid, txt)
 
 
+async def poll_answer_handler(update, context):
+    await learning.handle_train_poll_answer(context.bot, update.poll_answer)
+
+
 # ---------- Команды-обёртки ----------
 async def notes_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
@@ -807,6 +811,7 @@ def main():
     app.add_handler(CommandHandler("setup", setup_command))
     app.add_handler(CommandHandler("admin", admin_command))
     app.add_handler(CallbackQueryHandler(answer_callback))
+    app.add_handler(PollAnswerHandler(poll_answer_handler))
     app.add_handler(MessageHandler(filters.LOCATION, weather.location_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
