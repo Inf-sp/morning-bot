@@ -21,11 +21,15 @@ def main_kb(cid=None):
         ["👕 Гардероб", "🚑 Здоровье"],
         ["📚 Обучение", "🍿 Досуг"],
         ["🥣 Готовка", "🎚️ Настройки"],
-        ["/setup"],
     ]
-    if access.is_owner(cid):
-        rows[-1].append("/admin")
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
+
+
+def start_kb(cid=None):
+    rows = [[("🎚️ Настройки", "m_notes")]]
+    if access.is_owner(cid):
+        rows.append([("🔐 Администратор", "set_admin")])
+    return _ikb(rows)
 
 # Нижнее меню: Мой день широкий первый + категории в два столбца
 MAIN_LABELS = [
