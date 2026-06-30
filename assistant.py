@@ -28,8 +28,7 @@ _INTENT_MAP = [
     (("концерт", "мероприят", "событи", "афиша", "выступлен"), "concerts"),
     (("мотивац", "прокрастин", "лень", "грустн", "грустно",
       "не могу начать", "застрял", "настроени"), "motivation"),
-    (("нидерландск", "голландск", "dutch", "де/хет", "de/het"), "grammar_nl"),
-    (("английск", "english", "phrasal"), "grammar_en"),
+    (("нидерландск", "голландск", "dutch", "английск", "english", "phrasal", "де/хет", "de/het"), "learn"),
     (("словар", "лексик", "перевод", "какое слово", "слово дня"), "dictionary"),
     (("одеться", "что надеть", "образ дня", "образ на"), "outfit"),
     (("погода", "дождь", "температура", "зонт", "прогноз"), "weather"),
@@ -93,10 +92,9 @@ async def _run_intent(bot, cid, action):
         await leisure.find_concerts(bot, cid, "home")
     elif action == "motivation":
         await balance.send_motiv_push(bot, cid)
-    elif action == "grammar_nl":
-        await learning.gm_send_lang(bot, cid, "nl")
-    elif action == "grammar_en":
-        await learning.gm_send_lang(bot, cid, "en")
+    elif action == "learn":
+        text, kb = __import__("menu").menu_screen("m_learn")
+        await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
     elif action == "dictionary":
         await learning.send_dict(bot, cid)
     elif action == "outfit":

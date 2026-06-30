@@ -1,7 +1,7 @@
 """Движок чистки списков: пагинация + мультивыбор.
 
 Используется из learning, notes, wardrobe, balance, bot.
-Контексты: d_<lang>_<kind> (словарь), t_<lang> (темы), nb (закладки),
+Контексты: d_<lang>_<kind> (словарь), nb (закладки),
            wl/rl (watchlist/readlist), kast (шкаф), lv_<key> (любимые),
            fridge (холодильник), recipes (рецепты).
 """
@@ -52,13 +52,6 @@ def _ctx_items(cid, ctx):
                 ru = _l._w_field(w, "ru")
                 items.append((i, f"{term} — {ru}".strip(" —")))
         return f"{flag} Чистка: {label}", items, f"a_dictlang_{lang}"
-    if ctx.startswith("t_"):
-        import learning as _l
-        _, lang = ctx.split("_")
-        language = "нидерландский" if lang == "nl" else "английский"
-        topics = _l.get_topics(cid, language)
-        items = [(i, (t.get("text", "") if isinstance(t, dict) else str(t))) for i, t in enumerate(topics)]
-        return f"{_l._flag(language)} Чистка: темы", items, f"a_topics_{lang}"
     if ctx == "nb" or ctx.startswith("nb_"):
         import re as _re
         import settings as _s
@@ -187,12 +180,6 @@ def _cleanup_delete(cid, ctx):
         import learning as _l
         words = [w for i, w in enumerate(_l._ensure_dict(cid)) if i not in sel]
         store.set_list(config.DICT_KEY, cid, words)
-    elif ctx.startswith("t_"):
-        import learning as _l
-        _, lang = ctx.split("_")
-        language = "нидерландский" if lang == "nl" else "английский"
-        topics = [t for i, t in enumerate(_l.get_topics(cid, language)) if i not in sel]
-        store.set_list(_l._topics_key(language), cid, topics)
     elif ctx == "nb" or ctx.startswith("nb_"):
         notes = [n for i, n in enumerate(store.get_list(config.NOTES_KEY, cid)) if i not in sel]
         store.set_list(config.NOTES_KEY, cid, notes)

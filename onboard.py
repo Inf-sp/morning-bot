@@ -79,7 +79,7 @@ async def handle_city(bot, cid, text: str):
     store.pending_input.pop(str(cid), None)
     await bot.send_message(
         chat_id=cid,
-        text="🌐 Какие языки изучаешь? Настрою тренажёр и грамматику.",
+        text="🌐 Какие языки изучаешь? Настрою тренажёр и словарь.",
         reply_markup=_LANG_KB,
     )
 
