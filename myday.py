@@ -299,19 +299,17 @@ def _build_day_text(cid):
     rain = d["precipitation_probability_max"][0] or 0
     rain_mm = (d.get("precipitation_sum") or [None])[0] if d.get("precipitation_sum") else None
     wind_ms = d["windspeed_10m_max"][0] or 0
-    _avg = weather._daytime_avg_wind(data, day_str)
-    wind_avg = _avg if _avg is not None else wind_ms
     icon = weather.weather_icon(code, tmax, rain, wind_ms, rain_mm)
-    wemoji, wword = weather.wind_scale(wind_avg)
+    wemoji, wword = weather.wind_scale(wind_ms)
     rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
     rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
     # ветер: подробно только если сильный, без направления
-    if wind_avg >= 8:
+    if wind_ms >= 8:
         wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
         wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
-        wind_str = f"{wemoji} {wword}{wind_when} {wind_avg:.0f} м/с"
+        wind_str = f"{wemoji} {wword}{wind_when} {wind_ms:.0f} м/с"
     else:
-        wind_str = f"💨 Ветер {wind_avg:.0f} м/с"
+        wind_str = f"💨 Ветер {wind_ms:.0f} м/с"
 
     now = datetime.now(TZ)
     weekday_name = _WEEKDAYS[now.weekday()]
