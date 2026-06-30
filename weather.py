@@ -189,21 +189,6 @@ def _daytime_avg_wind(data, day_str):
     return sum(day_vals) / len(day_vals) if day_vals else None
 
 
-# ---------- блок для myday ----------
-def weather_block(data, day, city):
-    d = data["daily"]
-    code = d["weathercode"][day]
-    desc = DESC.get(code, "")
-    tmin, tmax = d["temperature_2m_min"][day], d["temperature_2m_max"][day]
-    wind = d["windspeed_10m_max"][day]
-    rain = d["precipitation_probability_max"][day]
-    rain_mm = (d.get("precipitation_sum") or [None])[day] if d.get("precipitation_sum") else None
-    lines = [f"📍 {city}", f"{desc}, {tmin:.0f}-{tmax:.0f}°C", f"💨 ветер до {wind:.0f} м/с"]
-    if rain and _rain_real(rain, rain_mm):
-        lines.append(f"вероятность дождя {rain:.0f}%")
-    return "\n".join(lines)
-
-
 # ---------- мировой факт ----------
 WORLD_POINTS = [
     ("🇰🇼", "Кувейте", 29.37, 47.98), ("🇦🇪", "Дубае", 25.20, 55.27), ("🇮🇳", "Дели", 28.61, 77.21),
