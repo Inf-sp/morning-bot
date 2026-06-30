@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 import re
 import config
 import store
@@ -42,18 +42,34 @@ def _today_label():
     ]
     return f"• {weekdays[now.weekday()]}, {now.day} {months[now.month - 1]}"
 
+def _u16_len(text):
+    return len((text or "").encode("utf-16-le")) // 2
+
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
 
-def _build_look_text(items, intro="", add=""):
-    lines = ["✨ <b>Образ на сегодня</b>", _today_label(), ""]
+def _build_look_message(items, intro="", add_text=""):
+    chunks = []
+    entities = []
+
+    def push(text, entity_type=None):
+        offset = _u16_len("".join(chunks))
+        chunks.append(text)
+        if entity_type:
+            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
+
+    push("✨ Образ на сегодня", MessageEntity.BOLD)
+    push("\n\n")
     if intro:
-        lines.append(esc(intro))
-        lines.append("")
-    lines += [f"• {esc(str(it))}" for it in items]
-    if add:
-        lines += ["", "<b>Можно добавить</b>", esc(add)]
-    return "\n".join(lines)
+        push(f"{intro}\n")
+    if items:
+        quote = "\n".join(f"• {str(it).strip()}" for it in items if str(it).strip())
+        if quote:
+            push(f"{quote}\n", MessageEntity.BLOCKQUOTE)
+    if add_text:
+        push(add_text, MessageEntity.ITALIC)
+    text = "".join(chunks).rstrip()
+    return text, entities
 
 def _get_cached_look(cid):
     cached = store.get_wardrobe_daylook(cid)
@@ -67,12 +83,13 @@ def _get_cached_look(cid):
     return cached
 
 def _save_cached_look(cid, items, intro="", add=""):
+    text, _ = _build_look_message(items, intro=intro, add_text=add)
     store.set_wardrobe_daylook(cid, {
         "date": _day_key(),
         "items": list(items or []),
         "intro": intro or "",
         "add": add or "",
-        "text": _build_look_text(items, intro=intro, add=add),
+        "text": text,
     })
 
 
@@ -81,9 +98,10 @@ async def send_looks(bot, cid):
     cached = _get_cached_look(cid)
     if cached:
         store.last_source[str(cid)] = "Гардероб · Образ"
-        store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", cached.get("text", ""))
+        store.last_answer[str(cid)] = cached.get("text", "")
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached.get("items", []))[:120]
-        await bot.send_message(chat_id=cid, text=cached["text"], parse_mode="HTML", reply_markup=_look_result_kb())
+        text, entities = _build_look_message(cached.get("items", []), intro=cached.get("intro", ""), add_text=cached.get("add", ""))
+        await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=_look_result_kb())
         return
     w = store.load_wardrobe(cid)
     wardrobe_text = store.wardrobe_to_text(w)
@@ -165,11 +183,11 @@ JSON (без markdown):
     rl.append(", ".join(items)[:80])
     store.recent_looks[str(cid)] = rl[-3:]
     store.last_look[str(cid)] = ", ".join(str(it) for it in items)[:120]   # для фидбека
-    text = _build_look_text(items, intro=d.get("intro", ""), add=d.get("add", ""))
+    text, entities = _build_look_message(items, intro=d.get("intro", ""), add_text=d.get("add", ""))
     _save_cached_look(cid, items, intro=d.get("intro", ""), add=d.get("add", ""))
     store.last_source[str(cid)] = "Гардероб · Образ"
-    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", text)
-    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=_look_result_kb())
+    store.last_answer[str(cid)] = text
+    await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=_look_result_kb())
 
 
 # ---------- фидбек по образу ----------
