@@ -471,6 +471,32 @@ def _proverb_kb(code):
         [InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")],
     ])
 
+def _u16_len(text):
+    return len((text or "").encode("utf-16-le")) // 2
+
+def _proverb_entities_card(flag, original, literal, meaning):
+    chunks = []
+    entities = []
+
+    def add(text, entity_type=None):
+        offset = _u16_len("".join(chunks))
+        chunks.append(text)
+        if entity_type:
+            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
+
+    header = f"💭{flag} Живой язык" if flag else "💭 Живой язык"
+    add(header, MessageEntity.BOLD)
+    add("\n\n")
+    add("Сегодняшнее выражение:\n")
+    if original:
+        add(f"{original}\n", MessageEntity.BLOCKQUOTE)
+    if literal:
+        add(f"→ {literal}\n")
+    if meaning:
+        add("\nКогда так говорят:\n")
+        add(meaning)
+    return "".join(chunks).rstrip(), entities
+
 async def send_proverb(bot, cid, language):
     flag = _flag(language)
     try:
@@ -487,19 +513,15 @@ async def send_proverb(bot, cid, language):
             s = (s or "").strip()
             return s[0].upper() + s[1:] if s else s
 
-        header = f"💭{flag} <b>Живой язык</b>"
-        L = [header, ""]
-        L.append("<b>Сегодняшнее выражение:</b>")
-        if d.get("original"):
-            L.append(f"• <b>{esc(_cap(d.get('original', '')))}</b>")
-        if d.get("literal"):
-            L.append(f"• 🇷🇺 {esc(_cap(d['literal']))}")
-        if d.get("meaning"):
-            L += ["", f"<b>Когда так говорят:</b>", f"• {esc(_cap(d['meaning']))}"]
-        txt = "\n".join(L)
+        txt, entities = _proverb_entities_card(
+            flag,
+            _cap(d.get("original", "")),
+            _cap(d.get("literal", "")),
+            _cap(d.get("meaning", "")),
+        )
     except Exception:
-        txt = f"💭{flag} <b>Живой язык</b>\n\n• Не удалось получить выражение.\n• Попробуй ещё раз чуть позже."
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=_proverb_kb(_code(language)))
+        txt, entities = _proverb_entities_card(flag, "", "", "Не удалось получить выражение.\nПопробуй ещё раз чуть позже.")
+    await bot.send_message(chat_id=cid, text=txt, entities=entities, reply_markup=_proverb_kb(_code(language)))
 
 
 async def send_proverb_both(bot, cid, with_kb=True):
@@ -518,25 +540,16 @@ async def send_proverb_both(bot, cid, with_kb=True):
             s = (s or "").strip()
             return s[0].upper() + s[1:] if s else s
 
-        header = "💭 <b>Живой язык</b>"
-        L = [header, ""]
-        L.append("<b>Сегодняшнее выражение:</b>")
-        if d.get("nl"):
-            L.append(f"• 🇳🇱 {esc(_cap(d['nl']))}")
-        if d.get("en"):
-            L.append(f"• 🇬🇧 {esc(_cap(d['en']))}")
-        if d.get("ru"):
-            L.append(f"• 🇷🇺 {esc(_cap(d['ru']))}")
-        if d.get("meaning"):
-            L += ["", "<b>Когда так говорят:</b>", f"• {esc(_cap(d['meaning']))}"]
-        txt = "\n".join(L)
+        original = _cap(d.get("nl", "")) or _cap(d.get("en", ""))
+        literal = " / ".join(x for x in [_cap(d.get("en", "")), _cap(d.get("ru", ""))] if x)
+        txt, entities = _proverb_entities_card(" ", original, literal, _cap(d.get("meaning", "")))
     except Exception:
-        txt = "💭 <b>Живой язык</b>\n\n• Не удалось получить выражение.\n• Попробуй ещё раз чуть позже."
+        txt, entities = _proverb_entities_card(" ", "", "", "Не удалось получить выражение.\nПопробуй ещё раз чуть позже.")
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё вариант", callback_data="a_proverb")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
     ]) if with_kb else None
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=txt, entities=entities, reply_markup=kb)
 
 
 # ================= СЛОВАРЬ (раздельно NL / EN) =================
