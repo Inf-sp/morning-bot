@@ -2,6 +2,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import store
 import ai
 import verify
+import util
 
 _MED_WORDS = ("боль", "болит", "температур", "симптом", "врач", "таблет", "лекарств", "горло",
               "кашель", "тошнот", "давлен", "head", "сыпь", "простуд", "грипп", "живот")
@@ -118,13 +119,24 @@ async def chat_reply(bot, cid, text):
     hist = store.chat_history.get(str(cid), [])
     hist.append({"role": "user", "content": text})
     hist = hist[-10:]
+    pending = await bot.send_message(chat_id=cid, text="⏳ <b>Генерация…</b>", parse_mode="HTML")
     try:
         answer = await ai.achat_chain(hist, cid)
     except Exception as e:
+        try:
+            await pending.delete()
+        except Exception:
+            pass
         await verify.safe_error(bot, cid, e); return
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
     store.last_answer[str(cid)] = answer
     store.last_surface[str(cid)] = "chat"
-    await verify.safe_send(bot, cid, (answer or "").strip() or "Пусто, попробуй ещё раз.",
-                           surface="chat", reply_markup=_FALLBACK_KB)
+    ok = await util.edit_html(
+        pending,
+        (answer or "").strip() or "Пусто, попробуй ещё раз.",
+        reply_markup=_FALLBACK_KB,
+    )
+    if not ok:
+        await verify.safe_send(bot, cid, (answer or "").strip() or "Пусто, попробуй ещё раз.",
+                               surface="chat", reply_markup=_FALLBACK_KB)

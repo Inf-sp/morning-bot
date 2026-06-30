@@ -1095,7 +1095,7 @@ async def send_admin_cost(bot, cid):
         _mod_names = {
             "wardrobe": "👕 Гардероб",
             "balance": "🍃 Самозабота",
-            "balance": "🥣 Готовка",
+            "food": "🥣 Готовка",
             "weather": "☀️ Мой день",
             "learning": "📚 Обучение",
             "leisure": "🍿 Досуг",
