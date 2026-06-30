@@ -15,8 +15,8 @@ NOTIF_TYPES = [
     ("evening_weather","🌆 Вечерняя погода"),
     ("weekly_events",  "🎵 Афиша недели"),
     ("weekly_forecast","🌍 Недельный прогноз"),
-    ("daily_words_nl", "📚🇳🇱 Слова и фразы дня"),
-    ("daily_words_en", "📚🇬🇧 Слова и фразы дня"),
+    ("daily_words_nl", "🇳🇱 Нидерландский"),
+    ("daily_words_en", "🇬🇧 Английский"),
     ("live_lang",      "💭 Живой язык"),
     ("checkin_eve",    "🥸 Вечерний разбор"),
 ]
