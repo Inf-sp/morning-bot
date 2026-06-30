@@ -21,7 +21,7 @@ def main_kb(cid=None):
         ["📚 Обучение", "🍿 Досуг"],
         ["🥣 Готовка", "🎚️ Настройки"],
     ]
-    return ReplyKeyboardMarkup(rows, resize_keyboard=True)
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
 
 # Нижнее меню: Мой день широкий первый + категории в два столбца
 MAIN_LABELS = [
@@ -45,7 +45,7 @@ LABEL_TO_KEY = {
 }
 
 _MENU_FOOTER = (
-    "\n\nИзменить параметры или посмотреть сохранённую информацию можно в 🎚️ </b>Настройках.</b>"
+    "\n\nИзменить параметры или посмотреть сохранённую информацию можно в 🎚️ <b>Настройках</b>."
 )
 
 def _ikb(rows):
@@ -154,7 +154,7 @@ def menu_screen(key):
                 [("◀️ Назад", "m_leisure")],
             ])
         )
-    return ("Меню снизу 👇", None)
+    return ("Выбери раздел в нижнем меню.", None)
 
 
 async def send_food_menu(bot, cid):

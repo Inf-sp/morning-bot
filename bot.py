@@ -120,7 +120,7 @@ async def answer_callback(update, context):
     # Навигация по подменю - редактируем сообщение на месте
     if data == "m_close":
         try:
-            await q.message.edit_text("Готово 👇 Меню снизу.")
+            await q.message.edit_text("Готово.")
         except Exception:
             pass
         return
