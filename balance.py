@@ -1103,7 +1103,7 @@ async def send_daycheck(bot, cid):
     store.challenge_state.pop(cid, None)   # фикс: ответ не уйдёт в Обратный перевод
     store.game_state.pop(cid, None)
     worries = store.get_list(config.WORRIES_KEY, cid)
-    lines = ["📓 <b>Дневник тревоги</b>", "",
+    lines = ["📓 <b>Дневник тревог</b>", "",
              "Сюда выгружай всё, что крутится в голове. Не анализируй - просто запиши.",
              "Каждую тревогу с новой строки. Вечером проверим, что было фактами, а что шумом.", ""]
     if worries:
