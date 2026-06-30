@@ -353,13 +353,11 @@ async def send_weather(bot, cid, mode="today"):
         rain_mm = (d.get("precipitation_sum") or [None] * (day + 1))[day] if d.get("precipitation_sum") else None
         wind_ms = d["windspeed_10m_max"][day] or 0
         day_str = d["time"][day]
-        _avg = _daytime_avg_wind(data, day_str)
-        wind_avg = _avg if _avg is not None else wind_ms
         icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
-        wemoji, wword = wind_scale(wind_avg)
+        wemoji, wword = wind_scale(wind_ms)
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-        wind_str = f"{wemoji} {wword} {wind_avg:.0f} м/с" if wind_avg >= 8 else f"💨 Ветер {wind_avg:.0f} м/с"
+        wind_str = f"{wemoji} {wword} {wind_ms:.0f} м/с" if wind_ms >= 8 else f"💨 Ветер {wind_ms:.0f} м/с"
 
         L = [f"<b>{esc(header)}</b>", "",
              f"{icon} До {tmax:+.0f}°C • {rain_text(rain, rain_mm, rain_when)}{wind_str}"]
@@ -398,13 +396,11 @@ async def send_weather(bot, cid, mode="today"):
         rain_mm = (d.get("precipitation_sum") or [None] * (day + 1))[day] if d.get("precipitation_sum") else None
         wind_ms = d["windspeed_10m_max"][day] or 0
         day_str = d["time"][day]
-        _avg = _daytime_avg_wind(data, day_str)
-        wind_avg = _avg if _avg is not None else wind_ms
         icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
-        wemoji, wword = wind_scale(wind_avg)
+        wemoji, wword = wind_scale(wind_ms)
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-        wind_str = f"{wemoji} {wword} {wind_avg:.0f} м/с" if wind_avg >= 8 else f"💨 Ветер {wind_avg:.0f} м/с"
+        wind_str = f"{wemoji} {wword} {wind_ms:.0f} м/с" if wind_ms >= 8 else f"💨 Ветер {wind_ms:.0f} м/с"
         desc = DESC.get(code, "")
         cc = s.get("cc", "")
         alert = storm_alert(wind_ms, code, rain, rain_mm, cc=cc)
@@ -417,7 +413,7 @@ async def send_weather(bot, cid, mode="today"):
                 rain_desc = f"дождь {rain:.0f}%{rain_when}" if _rain_real(rain, rain_mm) else "без осадков"
                 summary = await ai.allm(
                     f"Погода завтра в {s['city']}: {desc}, до {tmax:+.0f}°C, {rain_desc}, "
-                    f"ветер {wind_avg:.0f} м/с.\n\n"
+                    f"ветер {wind_ms:.0f} м/с.\n\n"
                     "Напиши короткий метео-итог: 2-3 предложения — общая картина, что ждать. "
                     "Без слова 'зонт'. Без markdown. На русском.",
                     150, 0.6, tier="cheap", module="weather"
@@ -453,7 +449,6 @@ async def send_weather(bot, cid, mode="today"):
         rain_mm = (d.get("precipitation_sum") or [None] * 10)[idx]
         day_str = d["time"][idx]
         wind_max = d["windspeed_10m_max"][idx] or 0
-        wind_avg = _daytime_avg_wind(data, day_str) or wind_max
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
         day_data.append({
@@ -465,7 +460,7 @@ async def send_weather(bot, cid, mode="today"):
             "rain_mm": rain_mm,
             "rain_when": rain_when,
             "rain_real": _rain_real(rain, rain_mm),
-            "wind": wind_avg,
+            "wind": wind_max,
         })
 
     # LLM: компактные описания дней (с группировкой) + итог — один вызов

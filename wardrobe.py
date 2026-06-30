@@ -52,7 +52,7 @@ def _build_look_text(items, intro="", add=""):
         lines.append("")
     lines += [f"• {esc(str(it))}" for it in items]
     if add:
-        lines += ["", "<b>Можно добавить:</b>", esc(add)]
+        lines += ["", "<b>Можно добавить</b>", esc(add)]
     return "\n".join(lines)
 
 def _get_cached_look(cid):
@@ -122,7 +122,7 @@ async def send_looks(bot, cid):
         rain_prob = wd["precipitation_probability_max"][0] or 0
         rain_mm = (wd.get("precipitation_sum") or [None])[0]
         has_rain = weather._rain_real(rain_prob, rain_mm)
-        wctx = (f"Сегодня: +{tmax}°C (ночью +{tmin}°C), ветер {wind_ms} м/с"
+        wctx = (f"Сегодня: +{tmax}°C (ночью +{tmin}°C), ветер до {wind_ms} м/с"
                 + (", ожидается дождь" if has_rain else ""))
     except Exception:
         wctx = "нет данных"
