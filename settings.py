@@ -330,6 +330,8 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_dict_g":
         import learning
         await learning.send_dict(bot, cid, back="m_learn")
+    elif data == "set_leisure_settings":
+        await send_leisure_settings(bot, cid)
     elif data == "set_fridge":
         import balance
         await balance.send_fridge(bot, cid, back="m_notes")
@@ -659,23 +661,31 @@ async def send_notes(bot, cid):
     notes_list = store.get_list(config.NOTES_KEY, cid)
     n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     rows = [
-        [InlineKeyboardButton("🌍 Город", callback_data="set_city"),
-         InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
+        [InlineKeyboardButton("🌍 Город", callback_data="set_city")],
+        [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
         [InlineKeyboardButton("🎚️ Уровень языка", callback_data="set_levels")],
         [InlineKeyboardButton(f"⏳ Позже ({n_fav})", callback_data="as_bucket_fav")],
-        [InlineKeyboardButton("🎚️ Гардероб", callback_data="set_wardrobe"),
-         InlineKeyboardButton("🎚️ Готовка", callback_data="set_fridge")],
-        [InlineKeyboardButton("🎚️ Обучение", callback_data="set_dict"),
-         InlineKeyboardButton("🎚️ Здоровье", callback_data="set_lagom")],
-        [InlineKeyboardButton("🎚️ Кино", callback_data="as_love_movies"),
-         InlineKeyboardButton("🎚️ Страны", callback_data="as_love_countries")],
-        [InlineKeyboardButton("🎚️ Артисты", callback_data="as_love_artists"),
-         InlineKeyboardButton("🎚️ Книги", callback_data="as_love_books")],
+        [InlineKeyboardButton("🎚️ Гардероб", callback_data="set_wardrobe")],
+        [InlineKeyboardButton("🎚️ Готовка", callback_data="set_fridge")],
+        [InlineKeyboardButton("🎚️ Обучение", callback_data="set_dict")],
+        [InlineKeyboardButton("🎚️ Здоровье", callback_data="set_lagom")],
+        [InlineKeyboardButton("🎚️ Досуг", callback_data="set_leisure_settings")],
         [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
     ]
     await bot.send_message(chat_id=cid, parse_mode="HTML",
         text="🎚️ <b>Настройки</b>\n\nСохранения, списки и параметры бота в одном месте.\n\nВыбери раздел 👇",
         reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def send_leisure_settings(bot, cid):
+    rows = [[InlineKeyboardButton(title, callback_data=f"as_love_{key}")] for title, key in LOVE_SECTIONS]
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
+    await bot.send_message(
+        chat_id=cid,
+        text="🍿 <b>Настройки досуга</b>\n\nКино, страны, артисты и книги для рекомендаций.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
 
 async def send_plans(bot, cid):
     notes_list = store.get_list(config.NOTES_KEY, cid)
