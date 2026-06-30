@@ -238,8 +238,29 @@ def _u16_len(text):
 
 
 def _train_question(word):
-    text = str(word)
-    return text, [MessageEntity(MessageEntity.BOLD, 0, _u16_len(text))]
+    prefix = "Переведи слово «"
+    suffix = "»"
+    text = f"{prefix}{word}{suffix}"
+    return text, [MessageEntity(MessageEntity.BOLD, _u16_len(prefix), _u16_len(str(word)))]
+
+
+def _clip_poll_explanation(text, limit=200):
+    text = re.sub(r"\s+\n", "\n", (text or "").strip())
+    if len(text) <= limit:
+        return text
+    return text[:limit - 1].rstrip() + "…"
+
+
+def _train_explanation(word, meaning, sentence="", sentence_ru="", mnemonic=""):
+    lines = [f"Слово {word} — «{meaning}»."]
+    if sentence:
+        context = f"{sentence}"
+        if sentence_ru:
+            context += f" — {sentence_ru}"
+        lines += ["", "Минутка контекста", context]
+    if mnemonic:
+        lines.append(f"Ассоциация: {mnemonic}")
+    return _clip_poll_explanation("\n".join(lines))
 
 
 async def _gen_train_quiz_card(word, ru, language):
@@ -343,6 +364,7 @@ def _word_meanings(word: str, language: str) -> list:
 
 def _train_again_kb():
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Ещё слово", callback_data="train_next")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
     ])
 
@@ -424,6 +446,13 @@ async def _render_quiz(bot, cid):
     })
 
     question, question_entities = _train_question(word)
+    explanation = _train_explanation(
+        word,
+        st["meaning"],
+        st.get("sentence", ""),
+        st.get("sentence_ru", ""),
+        st.get("mnemonic", ""),
+    )
 
     msg = await bot.send_poll(
         chat_id=cid,
@@ -433,7 +462,7 @@ async def _render_quiz(bot, cid):
         type="quiz",
         correct_option_id=correct_idx,
         is_anonymous=True,
-        explanation="Переведи слово",
+        explanation=explanation,
         reply_markup=_train_again_kb(),
     )
     if getattr(msg, "poll", None):
@@ -503,7 +532,7 @@ async def _send_train_feedback(bot, cid, idx, st):
 
     st["round"] = st.get("round", 0) + 1
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Следующее задание", callback_data="train_next")],
+        [InlineKeyboardButton("✨ Ещё слово", callback_data="train_next")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
