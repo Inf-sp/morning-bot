@@ -253,7 +253,7 @@ async def send_wardrobe(bot, cid, back="m_notes"):
         [InlineKeyboardButton("✏️ Добавить", callback_data="set_ward_add")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ])
-    await bot.send_message(chat_id=cid, text="👕 <b>Мой шкаф</b>\n\nБаза вещей и параметры для подбора одежды.",
+    await bot.send_message(chat_id=cid, text="👕 <b>Мой гардероб</b>\n\nБаза вещей и параметры для подбора одежды.",
                            parse_mode="HTML", reply_markup=kb)
 
 # --- Страны ---
@@ -394,7 +394,7 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "setadd_lagom":
         store.pending_input[cid] = "setadd_lagom"
         await bot.send_message(chat_id=cid,
-            text="☕️ Напиши установку или принцип — добавлю в Лагом.\n\n"
+            text="☕️ Напиши установку или принцип — добавлю в здоровье.\n\n"
                  "<i>Например: «Меньше экрана, больше природы»</i>",
             parse_mode="HTML")
     elif data.startswith("setdel_lagom_"):
@@ -551,7 +551,7 @@ def _fav_group_meta():
         ("travel", "🧳 Поездки", "страны и поездки"),
         ("food", "🍽 Еда", "рецепты и питание"),
         ("wardrobe", "👕 Гардероб", "образы и покупки"),
-        ("health", "🍃 Самозабота", "здоровье и мотивация"),
+        ("health", "🚑 Здоровье", "здоровье и мотивация"),
         ("other", "🗂 Прочее", "всё, что не попало в отдельную категорию"),
     ]
 
@@ -688,10 +688,10 @@ async def send_notes(bot, cid):
         [InlineKeyboardButton("🗣 Язык", callback_data="set_lang"),
          InlineKeyboardButton("🎚️ Уровень языка", callback_data="set_levels")],
         [InlineKeyboardButton(f"⏳ Позже ({n_fav})", callback_data="as_bucket_fav")],
-        [InlineKeyboardButton("🎚️ Шкаф", callback_data="set_wardrobe"),
-         InlineKeyboardButton("🎚️ Холодильник", callback_data="set_fridge")],
-        [InlineKeyboardButton("🎚️ Словарь", callback_data="set_dict"),
-         InlineKeyboardButton("🎚️ Лагом", callback_data="set_lagom")],
+        [InlineKeyboardButton("🎚️ Гардероб", callback_data="set_wardrobe"),
+         InlineKeyboardButton("🎚️ Готовка", callback_data="set_fridge")],
+        [InlineKeyboardButton("🎚️ Обучение", callback_data="set_dict"),
+         InlineKeyboardButton("🎚️ Здоровье", callback_data="set_lagom")],
         [InlineKeyboardButton("🎚️ Кино", callback_data="as_love_movies"),
          InlineKeyboardButton("🎚️ Страны", callback_data="as_love_countries")],
         [InlineKeyboardButton("🎚️ Артисты", callback_data="as_love_artists"),
@@ -819,7 +819,7 @@ async def send_bucket(bot, cid, bucket):
              InlineKeyboardButton("🧳 Поездки", callback_data="as_bucket_favgrp_travel")],
             [InlineKeyboardButton("🍽 Еда", callback_data="as_bucket_favgrp_food"),
              InlineKeyboardButton("👕 Гардероб", callback_data="as_bucket_favgrp_wardrobe")],
-            [InlineKeyboardButton("🍃 Самозабота", callback_data="as_bucket_favgrp_health"),
+            [InlineKeyboardButton("🚑 Здоровье", callback_data="as_bucket_favgrp_health"),
              InlineKeyboardButton("🗂 Прочее", callback_data="as_bucket_favgrp_other")],
             [InlineKeyboardButton("◀️ Назад", callback_data="as_notes")],
         ]
@@ -1094,7 +1094,7 @@ async def send_admin_cost(bot, cid):
         # человекочитаемые имена модулей в терминах пользовательских категорий
         _mod_names = {
             "wardrobe": "👕 Гардероб",
-            "balance": "🍃 Самозабота",
+            "balance": "🚑 Здоровье",
             "food": "🥣 Готовка",
             "weather": "☀️ Мой день",
             "learning": "📚 Обучение",
