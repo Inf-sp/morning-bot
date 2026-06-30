@@ -853,12 +853,12 @@ def _chunks(items, size):
     return [items[i:i + size] for i in range(0, len(items), size)]
 
 
-async def send_morning_word(bot, cid, with_kb=True):
+async def send_morning_word(bot, cid, language=None, with_kb=True):
     """11:00 - Daily Words: метод дня недели + порция (3 слова + 2 фразы) из словаря."""
     import random as _r
     from datetime import datetime
     import settings
-    language = settings.study_lang(cid)
+    language = language or settings.study_lang(cid)
     lang_code = _code(language)
     flag = _flag(language)
     wd = datetime.now(config.TZ).weekday()
