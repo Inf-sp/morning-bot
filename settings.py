@@ -688,8 +688,6 @@ async def send_notes(bot, cid):
          InlineKeyboardButton("🎚️ Книги", callback_data="as_love_books")],
         [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
     ]
-    if config.CHAT_ID and str(cid) == str(config.CHAT_ID):
-        rows.append([InlineKeyboardButton("🔐 Администратор", callback_data="set_admin")])
     await bot.send_message(chat_id=cid, parse_mode="HTML",
         text="🎚️ <b>Настройки</b>\n\nСохранения, списки и параметры бота в одном месте.\n\nВыбери раздел 👇",
         reply_markup=InlineKeyboardMarkup(rows))
