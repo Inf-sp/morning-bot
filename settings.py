@@ -15,7 +15,8 @@ NOTIF_TYPES = [
     ("evening_weather","🌆 Вечерняя погода"),
     ("weekly_events",  "🎵 Афиша недели"),
     ("weekly_forecast","🌍 Недельный прогноз"),
-    ("grammar",        "📚 Слова и фразы дня"),
+    ("grammar_nl",     "📚🇳🇱 Слова и фразы дня"),
+    ("grammar_en",     "📚🇬🇧 Слова и фразы дня"),
     ("live_lang",      "💭 Живой язык"),
     ("checkin_eve",    "🥸 Вечерний разбор"),
 ]
@@ -43,7 +44,10 @@ def set_(cid, key, value):
     store._save(SETTINGS_KEY, d)
 
 def notif_on(cid, kind):
-    return get(cid, f"notif_{kind}", False)
+    value = get(cid, f"notif_{kind}", None)
+    if value is None and kind in ("grammar_nl", "grammar_en"):
+        return get(cid, "notif_grammar", False)
+    return bool(value)
 
 def study_lang(cid):
     return get(cid, "study_lang", "нидерландский")
@@ -54,7 +58,7 @@ def _notif_label(kind: str, label: str) -> str:
         return f"{label} (1 раз в ВС в {'10:00' if kind == 'weekly_events' else '19:00'})"
     if kind in ("live_lang",):
         return f"{label} (ежедневно в 16:30)"
-    if kind in ("grammar", "morning_brief", "weather_warn",
+    if kind in ("grammar_nl", "grammar_en", "morning_brief", "weather_warn",
                 "lagom_daily", "recipe_daily", "checkin_day", "evening_weather",
                 "checkin_eve"):
         times = {
@@ -64,7 +68,8 @@ def _notif_label(kind: str, label: str) -> str:
             "recipe_daily": "12:30",
             "checkin_day": "14:00",
             "evening_weather": "19:00",
-            "grammar": "11:00",
+            "grammar_nl": "11:00",
+            "grammar_en": "11:00",
             "checkin_eve": "22:00",
         }
         return f"{label} (ежедневно в {times[kind]})"
@@ -105,8 +110,10 @@ async def _run_notif_test(bot, cid, kind):
         elif kind == "lagom_daily":
             import balance as _b
             await _b.send_motiv_push(bot, cid)
-        elif kind == "grammar":
-            await learning.send_morning_word(bot, cid, with_kb=False)
+        elif kind == "grammar_nl":
+            await learning.send_morning_word(bot, cid, language="нидерландский", with_kb=False)
+        elif kind == "grammar_en":
+            await learning.send_morning_word(bot, cid, language="английский", with_kb=False)
         elif kind == "live_lang":
             await learning.send_proverb_both(bot, cid, with_kb=False)
         elif kind == "recipe_daily":
@@ -158,21 +165,6 @@ async def notif_off_all(bot, cid, q=None):
     for kind, _ in NOTIF_TYPES:
         set_(cid, f"notif_{kind}", False)
     await send_notif(bot, cid, q)
-
-async def send_lang(bot, cid):
-    cur = study_lang(cid)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(("✅ " if cur == "нидерландский" else "") + "🇳🇱 Нидерландский", callback_data="set_lang_nl")],
-        [InlineKeyboardButton(("✅ " if cur == "английский" else "") + "🇬🇧 Английский", callback_data="set_lang_en")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="set_home")],
-    ])
-    await bot.send_message(chat_id=cid, text="🗣 <b>Язык для утренней грамматики/слова дня</b>",
-                           parse_mode="HTML", reply_markup=kb)
-
-async def set_lang(bot, cid, lang):
-    set_(cid, "study_lang", lang)
-    await bot.send_message(chat_id=cid, text=f"Готово. Язык уведомлений по обучению: {lang}.")
-    await send_home(bot, cid)
 
 _BODY_PLACEHOLDER = "не указано"
 
@@ -352,12 +344,6 @@ async def handle_callback(bot, cid, data, q=None):
         await _run_notif_test(bot, cid, data[len("set_notiftest_"):])
     elif data == "set_notif_off_all":
         await notif_off_all(bot, cid, q)
-    elif data == "set_lang":
-        await send_lang(bot, cid)
-    elif data == "set_lang_nl":
-        await set_lang(bot, cid, "нидерландский")
-    elif data == "set_lang_en":
-        await set_lang(bot, cid, "английский")
     elif data == "set_levels":
         await learning.send_levels(bot, cid, q=q, back="set_home")
     elif data == "set_city":
@@ -675,8 +661,7 @@ async def send_notes(bot, cid):
     rows = [
         [InlineKeyboardButton("🌍 Город", callback_data="set_city"),
          InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
-        [InlineKeyboardButton("🗣 Язык", callback_data="set_lang"),
-         InlineKeyboardButton("🎚️ Уровень языка", callback_data="set_levels")],
+        [InlineKeyboardButton("🎚️ Уровень языка", callback_data="set_levels")],
         [InlineKeyboardButton(f"⏳ Позже ({n_fav})", callback_data="as_bucket_fav")],
         [InlineKeyboardButton("🎚️ Гардероб", callback_data="set_wardrobe"),
          InlineKeyboardButton("🎚️ Готовка", callback_data="set_fridge")],

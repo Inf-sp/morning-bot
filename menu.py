@@ -106,7 +106,7 @@ def menu_screen(key):
             + _MENU_FOOTER,
             _ikb([
                 [("🎚️ Нидерландский", "a_dictlang_nl"), ("🎚️ Английский", "a_dictlang_en")],
-                [("🎚️ Уровень языка (настройка)", "a_levels")],
+                [("🎚️ Уровень языка", "a_levels")],
                 [("◀️ Назад", "m_learn")],
             ])
         )
