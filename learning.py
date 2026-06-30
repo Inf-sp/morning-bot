@@ -331,40 +331,17 @@ async def _render_quiz(bot, cid):
     st.update({"word": word, "ru": ru, "direction": direction,
                "options": options, "correct_idx": correct_idx})
 
-    flag = _flag(language)
     if direction == "fl_to_ru":
-        lang_label = "по-нидерландски" if _code(language) == "nl" else "по-английски"
-        question = f"<b>{esc(word)}</b>\n\nКакой правильный перевод?"
+        question = f"{word}: правильный перевод?"
     else:
-        lang_label = "нидерландском" if _code(language) == "nl" else "английском"
-        question = f"<b>{esc(ru)}</b>\n\nКак это на {lang_label}?"
+        question = f"{ru}: как это сказать?"
 
-    L = [f"🧠 {flag} <b>Тренажёр</b>", "", question]
-    buttons = [[InlineKeyboardButton(esc(opt), callback_data=f"train_ans_{i}")]
-               for i, opt in enumerate(options)]
-    buttons.append([InlineKeyboardButton("🗳 Quiz poll", callback_data="train_poll")])
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
-                           reply_markup=InlineKeyboardMarkup(buttons))
-
-
-async def send_train_poll(bot, cid):
-    st = store.train_state.get(str(cid))
-    if not st:
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново.")
-        return
-    options = [str(x)[:100] for x in st.get("options", [])]
-    if len(options) < 2:
-        return
-    word = st.get("word", "")
-    ru = st.get("ru", "")
-    direction = st.get("direction", "fl_to_ru")
-    question = f"{word}: правильный перевод?" if direction == "fl_to_ru" else f"{ru}: как это сказать?"
     await bot.send_poll(
         chat_id=cid,
         question=question[:300],
-        options=options[:10],
+        options=[str(x)[:100] for x in options[:10]],
         type="quiz",
-        correct_option_id=int(st.get("correct_idx", 0)),
+        correct_option_id=correct_idx,
         is_anonymous=False,
         reply_markup=_train_again_kb(),
     )

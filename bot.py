@@ -298,8 +298,6 @@ async def answer_callback(update, context):
             await learning.train_quiz_answer(bot, cid, ans_idx)
         elif sub == "next":
             await _ack(q); await learning.train_next(bot, cid)
-        elif sub == "poll":
-            await learning.send_train_poll(bot, cid)
         return
     # «Ещё»
     if data.startswith("again_"):

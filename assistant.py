@@ -4,8 +4,13 @@ import ai
 import verify
 import util
 
-_MED_WORDS = ("боль", "болит", "температур", "симптом", "врач", "таблет", "лекарств", "горло",
-              "кашель", "тошнот", "давлен", "head", "сыпь", "простуд", "грипп", "живот")
+_MED_WORDS = ("боль", "болит", "симптом", "врач", "горло", "кашель", "тошнот", "давлен",
+              "сыпь", "простуд", "грипп", "живот", "голова", "мигрень", "насморк")
+_MEDICINE_WORDS = ("лекарств", "таблет", "препарат", "доз", "мг ", " мг", "капл", "сироп",
+                   "мазь", "антибиотик", "парацетамол", "ибупрофен", "риталин", "concerta")
+_BODY_TEMP_HINTS = ("у меня температур", "температура тела", "высокая температура",
+                    "температура 37", "температура 38", "температура 39", "температура 40")
+_WEATHER_HINTS = ("погода", "на улице", "прогноз", "зонт", "ветер", "дождь")
 
 # (ключевые слова, action)
 _INTENT_MAP = [
@@ -48,6 +53,17 @@ def _detect_intent(text: str):
         if any(kw in t for kw in keywords):
             return action
     return None
+
+
+def _looks_medical(text: str) -> bool:
+    t = text.lower()
+    if any(kw in t for kw in _MEDICINE_WORDS):
+        return True
+    if any(kw in t for kw in _BODY_TEMP_HINTS):
+        return True
+    if "температур" in t and any(kw in t for kw in _WEATHER_HINTS):
+        return False
+    return any(kw in t for kw in _MED_WORDS)
 
 
 async def _run_intent(bot, cid, action):
@@ -97,13 +113,10 @@ async def chat_reply(bot, cid, text):
     store.last_action[str(cid)] = None
     store.last_source[str(cid)] = "Ассистент"
 
-    # Медицинские слова — подсказка, но не прерываем роутинг
-    if any(w in text.lower() for w in _MED_WORDS):
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("👩🏻‍⚕️ Вопрос врачу", callback_data="as_doctor")]])
-        await bot.send_message(
-            chat_id=cid,
-            text="👩🏻‍⚕️ <b>Похоже на вопрос о здоровье</b>\n\n«Вопрос врачу» даст структурированный разбор.",
-            parse_mode="HTML", reply_markup=kb)
+    # Явные вопросы о здоровье сразу идут в медицинский сценарий.
+    if _looks_medical(text):
+        import balance
+        await balance.doctor_answer(bot, cid, text)
         return
 
     await bot.send_chat_action(chat_id=cid, action="typing")
