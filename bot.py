@@ -87,10 +87,6 @@ async def answer_callback(update, context):
     if data.startswith("fav_"):
         await settings.handle_notes_callback(bot, cid, q, data)
         return
-    # Тренажёр de/het
-    if data.startswith("dh_"):
-        await learning.handle_callback(bot, cid, q, data)
-        return
     # Баланс (врач/мотивация/рецепты/тревоги/холодильник) vs Закладки/Любимое
     if data.startswith("ls_"):
         await settings.handle_notes_callback(bot, cid, q, data)

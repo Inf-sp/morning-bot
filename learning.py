@@ -104,15 +104,12 @@ def _clip_poll_explanation(text, limit=200):
     return text[:limit - 1].rstrip() + "…"
 
 
-def _train_explanation(word, meaning, sentence="", sentence_ru="", mnemonic=""):
-    lines = [f"{word} → {meaning}"]
+def _train_explanation(sentence="", sentence_ru=""):
+    lines = []
     if sentence:
-        context = f"{sentence}"
-        if sentence_ru:
-            context += f" → {sentence_ru}"
-        lines.append(context)
-    if mnemonic:
-        lines.append(f"Зацепка: {mnemonic}")
+        lines.append(str(sentence).strip())
+    if sentence_ru:
+        lines.append(str(sentence_ru).strip())
     return _clip_poll_explanation("\n".join(lines), limit=160)
 
 
@@ -126,9 +123,9 @@ async def _gen_train_quiz_card(word, ru, language):
 Сделай quiz poll на перевод целевого слова. Контекстное предложение нужно только для последующего объяснения.
 
 Жёсткие правила вариантов ответа:
-1. Ровно 2 варианта на русском: один правильный и один неправильный.
-2. Оба варианта — одна часть речи.
-3. Варианты примерно одинаковой длины, без очевидно самого длинного ответа.
+1. Ровно 3 варианта на русском: один правильный и два неправильных.
+2. Все варианты — одна часть речи.
+3. Все варианты примерно одинаковой длины, без очевидно самого длинного ответа.
 4. Неправильный вариант — похожая ловушка: частая ошибка, созвучие, близкое значение или ложный друг. Не случайное слово.
 5. Контекстное предложение должно быть очень коротким, бытовым и понятным для человека с СДВГ: одна простая сцена, без лишних деталей.
 6. Если пользователь выбрал неверный вариант, объяснение должно назвать, как этот неверный смысл выражается на {language}.
@@ -138,9 +135,8 @@ async def _gen_train_quiz_card(word, ru, language):
   "sentence": "короткое предложение на {language} с целевым словом",
   "sentence_ru": "перевод предложения на русский",
   "correct": "правильный вариант на русском",
-  "wrong": ["неверный вариант"],
+  "wrong": ["неверный вариант 1", "неверный вариант 2"],
   "wrong_map": {{"неверный вариант": "как это будет на {language}"}},
-  "mnemonic": "очень короткая ассоциация для запоминания, до 8 слов",
   "meaning": "краткое значение целевого слова на русском, до 4 слов"
 }}
 """
@@ -153,30 +149,28 @@ async def _gen_train_quiz_card(word, ru, language):
             "sentence": sentence or word,
             "sentence_ru": sentence_ru or ru,
             "correct": ru,
-            "wrong": wrong[:1],
+            "wrong": wrong[:2],
             "wrong_map": {},
-            "mnemonic": "",
             "meaning": ru,
         }
 
-    wrong = [str(x).strip() for x in (d.get("wrong") or []) if str(x).strip()][:1]
+    wrong = [str(x).strip() for x in (d.get("wrong") or []) if str(x).strip()][:2]
     correct = str(d.get("correct") or ru).strip()
     options = [correct] + wrong
-    if len(wrong) < 1 or len(set(x.lower() for x in options)) < 2 or not _same_len(options):
+    if len(wrong) < 2 or len(set(x.lower() for x in options)) < 3 or not _same_len(options):
         fallback_wrong = await asyncio.to_thread(_gen_distractors, word, ru, language, "fl_to_ru")
         for item in fallback_wrong:
             item = str(item).strip()
             if item and item.lower() not in {x.lower() for x in [correct] + wrong}:
                 wrong.append(item)
-            if len(wrong) >= 1:
+            if len(wrong) >= 2:
                 break
     return {
         "sentence": str(d.get("sentence") or word).strip(),
         "sentence_ru": str(d.get("sentence_ru") or "").strip(),
         "correct": correct,
-        "wrong": wrong[:1],
+        "wrong": wrong[:2],
         "wrong_map": d.get("wrong_map") if isinstance(d.get("wrong_map"), dict) else {},
-        "mnemonic": str(d.get("mnemonic") or "").strip(),
         "meaning": str(d.get("meaning") or correct).strip(),
     }
 
@@ -215,10 +209,14 @@ def _word_meanings(word: str, language: str) -> list:
         return []
 
 
-def _train_again_kb():
+def _train_back_target(language=None):
+    return "m_nl" if _code(language or "нидерландский") == "nl" else "m_en"
+
+
+def _train_again_kb(language=None):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё слово", callback_data="train_next")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
+        [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(language))],
     ])
 
 async def train_start(bot, cid, language):
@@ -264,10 +262,10 @@ async def _render_quiz(bot, cid):
     wrong = list(card.get("wrong") or [])
 
     # Фолбэк: берём слово из словаря если LLM не сгенерировал дистрактор.
-    if len(wrong) < 1:
+    if len(wrong) < 2:
         other = [(w, r) for w, r in words if w != word]
         _r.shuffle(other)
-        for ow, oru in other[:1 - len(wrong)]:
+        for ow, oru in other[:2 - len(wrong)]:
             wrong.append(oru)
 
     clean_wrong = []
@@ -277,11 +275,15 @@ async def _render_quiz(bot, cid):
         if item and item.lower() not in seen:
             clean_wrong.append(item)
             seen.add(item.lower())
-        if len(clean_wrong) >= 1:
+        if len(clean_wrong) >= 2:
             break
-    options = [correct_answer] + clean_wrong[:1]
-    if len(options) < 2:
-        await bot.send_message(chat_id=cid, text="Не удалось собрать два хороших варианта. Попробуй ещё раз.", reply_markup=_train_again_kb())
+    options = [correct_answer] + clean_wrong[:2]
+    if len(options) < 3:
+        await bot.send_message(
+            chat_id=cid,
+            text="Не удалось собрать три хороших варианта. Попробуй ещё раз.",
+            reply_markup=_train_again_kb(language),
+        )
         return
     _r.shuffle(options)
     correct_idx = options.index(correct_answer)
@@ -292,7 +294,6 @@ async def _render_quiz(bot, cid):
         "sentence": card.get("sentence") or word,
         "sentence_ru": card.get("sentence_ru") or "",
         "meaning": card.get("meaning") or correct_answer,
-        "mnemonic": card.get("mnemonic") or "",
         "wrong_map": card.get("wrong_map") or {},
         "options": options,
         "correct_idx": correct_idx,
@@ -300,11 +301,8 @@ async def _render_quiz(bot, cid):
 
     question, question_entities = _train_question(word)
     explanation = _train_explanation(
-        word,
-        st["meaning"],
         st.get("sentence", ""),
         st.get("sentence_ru", ""),
-        st.get("mnemonic", ""),
     )
 
     msg = await bot.send_poll(
@@ -316,7 +314,7 @@ async def _render_quiz(bot, cid):
         correct_option_id=correct_idx,
         is_anonymous=True,
         explanation=explanation,
-        reply_markup=_train_again_kb(),
+        reply_markup=_train_again_kb(language),
     )
     if getattr(msg, "poll", None):
         store.train_polls[msg.poll.id] = str(cid)
@@ -359,7 +357,6 @@ async def _send_train_feedback(bot, cid, idx, st):
     meaning = st.get("meaning") or correct
     wrong_map = st.get("wrong_map") or {}
     chosen_fl = wrong_map.get(chosen) or wrong_map.get(chosen.lower()) or ""
-    mnemonic = st.get("mnemonic", "")
 
     if idx == correct_idx:
         lines = [
@@ -384,7 +381,7 @@ async def _send_train_feedback(bot, cid, idx, st):
     st["round"] = st.get("round", 0) + 1
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё слово", callback_data="train_next")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
+        [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(lang))],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
@@ -508,22 +505,20 @@ def _proverb_entities_card(flag, original, analogs=None, meaning="", examples=No
         add("\n\n")
         add("Как это переводится?", MessageEntity.BOLD)
         add("\n")
-        add("Ближайшие русские аналоги: ")
         for i, analog in enumerate(analogs[:4]):
             if i:
                 add(" или " if i == len(analogs[:4]) - 1 else ", ")
             add(f"«{analog}»", MessageEntity.BOLD)
-        if meaning:
-            add(f" ({meaning})")
         add(".")
     examples = _as_list(examples)
     if examples:
         add("\n\n")
         add("Как говорить ПРАВИЛЬНО", MessageEntity.BOLD)
         add("\n")
+    if meaning:
+        add(f"{meaning}")
         add("\n".join(f"• {example}" for example in examples[:2]))
     add("\n\n")
-    add("Прочитай вслух. Покрути в голове. Всё.")
     return "".join(chunks).rstrip(), entities
 
 async def send_proverb(bot, cid, language):
@@ -1158,12 +1153,6 @@ async def send_levels(bot, cid, q=None, back="set_home"):
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
 
 
-# ===== DE/HET =====
-
-_ikb = lambda rows: InlineKeyboardMarkup(
-    [[InlineKeyboardButton(t, callback_data=d) for t, d in row] for row in rows]
-)
-
 SYSTEM_TOPICS = {
     "нидерландский": {
         "A1": [
@@ -1242,87 +1231,3 @@ SYSTEM_TOPICS = {
         ],
     },
 }
-
-def _dehet_gen_words():
-    prompt = (
-        "Дай 7 нидерландских существительных уровня A1-A2 с правильным артиклем de или het.\n"
-        "Разные категории: дом, природа, еда, тело, транспорт, вещи. Примерно 4 de и 3 het (или наоборот).\n"
-        'JSON (только массив): [{"word": "huis", "article": "het"}, ...]'
-    )
-    return ai.llm_json(prompt, 300, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
-
-
-def _dehet_card(st):
-    idx = st["idx"]
-    total = len(st["words"])
-    word = st["words"][idx]["word"]
-    return f"🧩 <b>de / het</b>  ·  {idx + 1} из {total}\n\n<b>      {esc(word)}</b>"
-
-
-_DEHET_KB = _ikb([
-    [("de", "dh_de"), ("het", "dh_het")],
-    [("◀️ Стоп", "m_nl")],
-])
-
-
-async def send_dehet_trainer(bot, cid):
-    try:
-        words = _dehet_gen_words()
-    except Exception as e:
-        await verify.safe_error(bot, cid, e)
-        return
-    if not isinstance(words, list) or not words:
-        await bot.send_message(chat_id=cid, text="Не удалось сгенерировать слова, попробуй ещё.")
-        return
-    store.dehet_state[cid] = {"words": words, "idx": 0, "score": 0, "results": []}
-    await bot.send_message(
-        chat_id=cid,
-        text=_dehet_card(store.dehet_state[cid]),
-        parse_mode="HTML",
-        reply_markup=_DEHET_KB,
-    )
-
-
-async def dehet_answer(bot, cid, q, chosen):
-    st = store.dehet_state.get(cid)
-    if not st:
-        await bot.send_message(chat_id=cid, text="Сессия устарела. Начни заново через «Артикли».")
-        return
-    words = st["words"]
-    idx = st["idx"]
-    word_data = words[idx]
-    correct = word_data["article"]
-    ok = chosen == correct
-    if ok:
-        st["score"] += 1
-    st["results"].append({"word": word_data["word"], "article": correct, "ok": ok})
-    st["idx"] += 1
-
-    feedback = f"{'✅' if ok else f'❌ (верно: {correct})'} <b>{esc(word_data['word'])}</b>\n\n"
-
-    if st["idx"] >= len(words):
-        score = st["score"]
-        total = len(words)
-        lines = [f"🎯 <b>Результат: {score}/{total}</b>", ""]
-        for r in st["results"]:
-            mark = "✅" if r["ok"] else f"❌ ({r['article']})"
-            lines.append(f"{mark} <b>{esc(r['word'])}</b> — {r['article']}")
-        store.dehet_state.pop(cid, None)
-        kb = _ikb([[("✨ Ещё раз", "dh_start"), ("◀️ Назад", "m_nl")]])
-        try:
-            await q.edit_message_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
-        except Exception:
-            await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
-    else:
-        text = feedback + _dehet_card(st)
-        try:
-            await q.edit_message_text(text, parse_mode="HTML", reply_markup=_DEHET_KB)
-        except Exception:
-            await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=_DEHET_KB)
-
-
-async def handle_callback(bot, cid, q, data):
-    if data == "dh_start":
-        await send_dehet_trainer(bot, cid)
-    elif data in ("dh_de", "dh_het"):
-        await dehet_answer(bot, cid, q, data[3:])
