@@ -1,7 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 WELCOME = (
-    "👋 <b>Привет! Я DM — твой помощник на каждый день.\n\n"
+    "👋 <b>Привет! Я DM — твой помощник на каждый день.</b>\n\n"
     "Помогаю с погодой, одеждой, языками, рецептами, досугом и полезными привычками.\n\n"
     "<b>Разделы</b>\n"
     "☀️ <b>Мой день</b> — погода, сводка и советы.\n"
