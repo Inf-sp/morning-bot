@@ -1,5 +1,4 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
-import access
 
 WELCOME = (
     "👋 <b>Привет! Я DM — твой помощник на каждый день.</b>\n\n"
@@ -23,13 +22,6 @@ def main_kb(cid=None):
         ["🥣 Готовка", "🎚️ Настройки"],
     ]
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
-
-
-def start_kb(cid=None):
-    rows = [[("🎚️ Настройки", "m_notes")]]
-    if access.is_owner(cid):
-        rows.append([("🔐 Администратор", "set_admin")])
-    return _ikb(rows)
 
 # Нижнее меню: Мой день широкий первый + категории в два столбца
 MAIN_LABELS = [

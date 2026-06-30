@@ -51,8 +51,8 @@ async def start(update, context):
     if args:
         code = args[0].strip()
         if access.is_allowed(cid):
-            await update.message.reply_text(_WELCOME, parse_mode="HTML", reply_markup=menu.start_kb(cid))
-            await update.message.reply_text("Меню снизу 👇", reply_markup=menu.main_kb(cid))
+            await update.message.reply_text(_WELCOME, parse_mode="HTML")
+            await update.message.reply_text("", reply_markup=menu.main_kb(cid))
             return
         if access.use_invite(code, cid):
             await onboard.start(context.bot, cid)
@@ -64,8 +64,8 @@ async def start(update, context):
         await update.message.reply_text("⛔ Бот приватный. Попроси владельца прислать инвайт.")
         return
 
-    await update.message.reply_text(_WELCOME, parse_mode="HTML", reply_markup=menu.start_kb(cid))
-    await update.message.reply_text("Меню снизу 👇", reply_markup=menu.main_kb(cid))
+    await update.message.reply_text(_WELCOME, parse_mode="HTML")
+    await update.message.reply_text("", reply_markup=menu.main_kb(cid))
 
 
 # ---------- Диспетчер инлайн-кнопок ----------
@@ -798,7 +798,7 @@ async def post_init(app):
     await app.bot.set_my_commands([
         BotCommand("start", "главное меню"),
         BotCommand("setup", "настройки"),
-        BotCommand("admin", "админ"),
+        BotCommand("admin", "администратор"),
     ])
 
 
