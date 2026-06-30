@@ -135,7 +135,6 @@ def menu_screen(key):
                 [("🧠 Тренажёр", "a_train_nl")], 
                 [("💭 Живой язык", "a_proverb_nl")], 
                 [("🕵️ Игра-детектив", "gamelang_nl")],
-                [("🧩 Артикли", "dh_start")],
                 [("◀️ Назад", "m_learn")],
             ])
         )
