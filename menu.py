@@ -141,7 +141,7 @@ def menu_screen(key):
             _ikb([
                 [("✈️ Путешествия", "a_trav_go"), ("🎬 Кино", "a_watch")],
                 [("📖 Книги", "a_read"), ("🎸 Музыка", "a_listen"), ("🎫 Концерты", "a_concerts_find")],
-                [("🎚️ Досуг (настройки)", "m_leisure_settings")],
+                [("🎚️ Настройки досуга", "m_leisure_settings")],
             ])
         )
     if key == "m_leisure_settings":
