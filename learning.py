@@ -2,7 +2,7 @@ import asyncio
 import re
 import uuid
 from pathlib import Path
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 import config
 from cleanup import open_cleanup, send_cleanup, handle_cleanup  # noqa: F401
 
@@ -233,6 +233,17 @@ def _same_len(options):
     return bool(lens) and max(lens) - min(lens) <= max(6, int(max(lens) * 0.45))
 
 
+def _u16_len(text):
+    return len((text or "").encode("utf-16-le")) // 2
+
+
+def _train_question(word):
+    prefix = "Переведи слово «"
+    suffix = "»"
+    text = f"{prefix}{word}{suffix}"
+    return text, [MessageEntity(MessageEntity.BOLD, _u16_len(prefix), _u16_len(word))]
+
+
 async def _gen_train_quiz_card(word, ru, language):
     """Smart LLM: context sentence + pedagogically useful distractors."""
     prompt = f"""
@@ -240,14 +251,14 @@ async def _gen_train_quiz_card(word, ru, language):
 Целевое слово: «{word}».
 Базовый перевод: «{ru}».
 
-Сделай quiz poll на перевод целевого слова в контекстном предложении.
+Сделай quiz poll на перевод целевого слова. Контекстное предложение нужно только для последующего объяснения.
 
 Жёсткие правила вариантов ответа:
 1. Ровно 3 варианта на русском: один правильный и два неправильных.
 2. Все 3 варианта — одна часть речи с правильным ответом.
 3. Варианты примерно одинаковой длины, без очевидно самого длинного ответа.
 4. Неправильные варианты — похожие ловушки: частые ошибки, созвучия, близкие значения или ложные друзья. Не случайные слова.
-5. Предложение должно быть коротким, естественным и реально помогать запомнить слово.
+5. Контекстное предложение должно быть коротким, естественным и реально помогать запомнить слово.
 6. Если пользователь выбрал неверный вариант, объяснение должно назвать, как этот неверный смысл выражается на {language}.
 
 Верни JSON:
@@ -414,11 +425,12 @@ async def _render_quiz(bot, cid):
         "correct_idx": correct_idx,
     })
 
-    question = f"Переведи слово «{word}» в предложении: «{st['sentence']}»"
+    question, question_entities = _train_question(word)
 
     msg = await bot.send_poll(
         chat_id=cid,
         question=question[:300],
+        question_entities=question_entities,
         options=[str(x)[:100] for x in options[:10]],
         type="quiz",
         correct_option_id=correct_idx,
@@ -471,22 +483,24 @@ async def _send_train_feedback(bot, cid, idx, st):
     if idx == correct_idx:
         lines = [
             "✅ <b>Верно.</b>",
+            "",
             f"Слово <b>{esc(word)}</b> переводится как «{esc(meaning)}».",
         ]
     else:
         lines = [
             "❌ <b>Не совсем так.</b>",
+            "",
             f"Слово <b>{esc(word)}</b> переводится как «{esc(meaning)}».",
             f"Твой ответ: «{esc(chosen)}»" + (f" — это <b>{esc(chosen_fl)}</b>." if chosen_fl else "."),
         ]
 
     if sentence:
-        context = f"💡 <b>Минутка контекста:</b> «{esc(sentence)}»"
+        context = f"«{esc(sentence)}»"
         if sentence_ru:
             context += f" — {esc(sentence_ru)}"
-        lines += ["", context]
+        lines += ["", "<b>Минутка контекста</b>", context]
     if mnemonic:
-        lines.append(f"<b>Ассоциация:</b> {esc(mnemonic)}")
+        lines.append(f"<b>Ассоциация</b> {esc(mnemonic)}")
 
     st["round"] = st.get("round", 0) + 1
     kb = InlineKeyboardMarkup([
