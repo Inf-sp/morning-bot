@@ -334,7 +334,6 @@ def _word_meanings(word: str, language: str) -> list:
 
 def _train_again_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Ещё задание", callback_data="train_next")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
     ])
 
