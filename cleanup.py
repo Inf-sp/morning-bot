@@ -160,7 +160,6 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
             InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"clp_{ctx}_{(page + 1) % pages}"),
         ])
-    rows.append([InlineKeyboardButton("☑️ Отметить всё на странице", callback_data=f"cla_{ctx}_{page}")])
     if sel:
         rows.append([InlineKeyboardButton(f"❌ Удалить отмеченные ({len(sel)})", callback_data=f"cld_{ctx}_{page}")])
     if ctx in _lv_add_label:
