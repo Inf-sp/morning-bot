@@ -153,6 +153,6 @@ async def _finish(bot, cid):
     await bot.send_message(
         chat_id=cid,
         text=menu.WELCOME,
-        parse_mode="HTML",
-        reply_markup=menu.MAIN_KB,
+        entities=menu.WELCOME_ENTITIES,
+        reply_markup=menu.main_kb(cid),
     )

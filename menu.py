@@ -1,18 +1,49 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, ReplyKeyboardMarkup
 
-WELCOME = (
-    "👋 <b>Привет! Я DM — твой помощник на каждый день.</b>\n\n"
-    "<b>Помогаю с погодой, одеждой, языками, рецептами, досугом и полезными привычками.</b>\n\n"
-    "<b>Разделы</b>\n"
-    "☀️ <b>Мой день</b> — погода, сводка и советы.\n"
-    "👕 <b>Гардероб</b> — что надеть и покупки.\n"
-    "🧬 <b>Здоровье</b> — мотивация, тревоги и здоровье.\n"
-    "📚 <b>Обучение</b> — языки, игра и практика.\n"
-    "🍿 <b>Досуг</b> — фильмы, книги, музыка и поездки.\n"
-    "🥣 <b>Готовка</b> — рецепты и идеи из продуктов.\n\n"
-    "Просто напиши вопрос в чат и я помогу 💬\n\n"
-    "Изменить параметры или посмотреть сохранённую информацию можно в 🎚️ <b>Настройках</b>."
-)
+
+def _u16_len(text):
+    return len((text or "").encode("utf-16-le")) // 2
+
+
+def _build_welcome():
+    chunks = []
+    entities = []
+
+    def add(text, entity_type=None):
+        offset = _u16_len("".join(chunks))
+        chunks.append(text)
+        if entity_type:
+            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
+
+    add("DM — помощник на каждый день", MessageEntity.BOLD)
+    add("\n\n")
+    add("Помогаю с погодой, одеждой, языками, рецептами, досугом и полезными привычками.")
+    add("\n\n━━━━━━━━━━━━━━━━\n")
+    add("Разделы", MessageEntity.BOLD)
+    add("\n")
+    add("1. ☀️ Мой день — погода, сводка и советы.\n")
+    add("2. 👕 Гардероб — что надеть и что докупить.\n")
+    add("3. 🚑 Здоровье — врач, лекарства, мотивация и тревоги.\n")
+    add("4. 📚 Обучение — языки, quiz-тренажёр и практика.\n")
+    add("5. 🍿 Досуг — фильмы, книги, музыка и поездки.\n")
+    add("6. 🥣 Готовка — рецепты и идеи из продуктов.\n")
+    add("\n")
+    add("Просто напиши вопрос в чат — я сам отправлю его в нужный раздел.", MessageEntity.BLOCKQUOTE)
+    add("\n\n")
+    add("Что изменилось", MessageEntity.BOLD)
+    add("\n")
+    add(
+        "• Медицинские вопросы сразу уходят в сценарий врача.\n"
+        "• Вопросы про лекарства получают отдельный справочный разбор.\n"
+        "• Тренажёр слов работает как native Telegram quiz poll с контекстом.\n"
+        "• Слова и фразы дня можно включать отдельно для 🇳🇱 и 🇬🇧.\n",
+        MessageEntity.EXPANDABLE_BLOCKQUOTE,
+    )
+    add("\n🎚️ Настройки — параметры, уведомления, уровень языка и сохранённые списки.")
+    return "".join(chunks), entities
+
+
+WELCOME, WELCOME_ENTITIES = _build_welcome()
 
 def main_kb(cid=None):
     rows = [
