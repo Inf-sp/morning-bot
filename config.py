@@ -26,6 +26,9 @@ OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "").rstrip("/")
+WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", "/telegram").strip() or "/telegram"
+PORT = int(os.environ.get("PORT", "8080"))
 
 TZ = ZoneInfo("Europe/Amsterdam")
 

@@ -32,6 +32,22 @@ async def send_html(bot, cid, text: str | None, reply_markup=None) -> None:
     except BadRequest:
         await bot.send_message(chat_id=cid, text=html, reply_markup=reply_markup)
 
+async def edit_html(message, text: str | None, reply_markup=None) -> bool:
+    """Редактирует сообщение как Telegram HTML. Возвращает False, если нужно отправить заново."""
+    from telegram.error import BadRequest
+    html = tg_html(text or "")
+    try:
+        await message.edit_text(html, parse_mode="HTML", reply_markup=reply_markup)
+        return True
+    except BadRequest:
+        try:
+            await message.edit_text(html, reply_markup=reply_markup)
+            return True
+        except Exception:
+            return False
+    except Exception:
+        return False
+
 # Имя страны (ru/en, нижний регистр) -> ISO-2 код. Офлайн, без LLM.
 _COUNTRY_CC = {
     "нидерланды": "NL", "голландия": "NL", "netherlands": "NL", "holland": "NL",

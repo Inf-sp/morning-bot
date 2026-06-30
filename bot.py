@@ -298,6 +298,8 @@ async def answer_callback(update, context):
             await learning.train_quiz_answer(bot, cid, ans_idx)
         elif sub == "next":
             await _ack(q); await learning.train_next(bot, cid)
+        elif sub == "poll":
+            await learning.send_train_poll(bot, cid)
         return
     # «Ещё»
     if data.startswith("again_"):
@@ -625,7 +627,8 @@ async def job_weather_warn(context: ContextTypes.DEFAULT_TYPE):
             continue
         try:
             s = store.get_settings(cid)
-            data = weather.fetch_weather(s["lat"], s["lon"], 2)
+            import asyncio
+            data = await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 2)
             d = data["daily"]
             wind = d["windspeed_10m_max"][0] or 0
             code = d["weathercode"][0]
@@ -801,8 +804,20 @@ def main():
     jq.run_daily(job_evening_weather, time=_t("19:00"), days=(0, 1, 2, 3, 4, 5))
     jq.run_daily(job_checkin_evening, time=_t("22:00"), days=tuple(range(7)))
 
-    logging.info("Bot started")
-    app.run_polling(drop_pending_updates=True)
+    if config.WEBHOOK_URL:
+        webhook_path = "/" + config.WEBHOOK_PATH.strip("/")
+        webhook_url = config.WEBHOOK_URL + webhook_path
+        logging.info("Bot started via webhook: %s", webhook_url)
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=config.PORT,
+            url_path=webhook_path.strip("/"),
+            webhook_url=webhook_url,
+            drop_pending_updates=True,
+        )
+    else:
+        logging.info("Bot started via polling")
+        app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
