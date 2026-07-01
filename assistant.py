@@ -60,6 +60,15 @@ def _strip_title_emoji(line: str) -> str:
     return _LEADING_EMOJI_RE.sub("", line or "").strip()
 
 
+def _strip_final_intro(line: str) -> str:
+    return re.sub(
+        r"^(?:последн(?:ий|ее)\s+(?:совет|предложение)|итог|важно|вывод)\s*:\s*",
+        "",
+        line or "",
+        flags=re.I,
+    ).strip()
+
+
 def _assistant_entities_card(answer: str):
     raw_lines = [_clean_assistant_line(line) for line in (answer or "").splitlines()]
     lines = [line for line in raw_lines if line]
@@ -94,6 +103,9 @@ def _assistant_entities_card(answer: str):
 
         normalized_lines.append(normalized)
         quote_flags.append(is_quote)
+
+    if normalized_lines:
+        normalized_lines[-1] = _strip_final_intro(normalized_lines[-1])
 
     for idx, normalized in enumerate(normalized_lines):
         entity_type = MessageEntity.BLOCKQUOTE if quote_flags[idx] else None
