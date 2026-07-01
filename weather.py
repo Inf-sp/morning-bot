@@ -99,8 +99,21 @@ def _finish_sentence(text):
 def rain_text(rain, rain_mm=None, when=""):
     """Кусок строки про дождь. Пусто, если дождя по сути нет."""
     if rain and _rain_real(rain, rain_mm):
-        return f"Дождь{when} {rain:.0f}% • "
+        return f"Дождь{when} {rain:.0f}%"
     return ""
+
+
+def _weather_main_lines(icon, tmax, rain, rain_mm, rain_when, wind_ms):
+    rain_part = rain_text(rain, rain_mm, rain_when)
+    wemoji, wword = wind_scale(wind_ms)
+    wind_str = f"{wemoji} {wword} {wind_ms:.0f} м/с" if wind_ms >= 8 else f"💨 Ветер {wind_ms:.0f} м/с"
+
+    first = f"{icon} До {tmax:+.0f}°C"
+    if rain_part:
+        first += f" • {rain_part}"
+    if wind_ms >= 8:
+        return [first, "", wind_str]
+    return [f"{first} • {wind_str}"]
 
 
 def rain_character(code, rain_mm, rain_prob, data, day_str):
@@ -339,7 +352,12 @@ async def send_weather(bot, cid, mode="today"):
             icon = weather_icon(d["weathercode"][0], tmx, rn, wd, mm)
             wemoji, wword = wind_scale(wd)
             wind_str = f"{wemoji} {wword} {wd:.0f} м/с" if wd >= 8 else f"💨 Ветер {wd:.0f} м/с"
-            L += [f"<b>{label}:</b>", f"{icon} До {tmx:+.0f}°C • {rain_text(rn, mm)}{wind_str}", ""]
+            rain_part = rain_text(rn, mm)
+            line = f"{icon} До {tmx:+.0f}°C"
+            if rain_part:
+                line += f" • {rain_part}"
+            line += f" • {wind_str}"
+            L += [f"<b>{label}:</b>", line, ""]
         joke = _joke_outfit(s["city"], d["temperature_2m_max"][0], d["precipitation_probability_max"][0] or 0,
                             d["windspeed_10m_max"][0] or 0, DESC.get(d["weathercode"][0], ""), "сегодня")
         if joke:
@@ -361,13 +379,11 @@ async def send_weather(bot, cid, mode="today"):
         wind_ms = d["windspeed_10m_max"][day] or 0
         day_str = d["time"][day]
         icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
-        wemoji, wword = wind_scale(wind_ms)
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-        wind_str = f"{wemoji} {wword} {wind_ms:.0f} м/с" if wind_ms >= 8 else f"💨 Ветер {wind_ms:.0f} м/с"
 
-        L = [f"<b>{esc(header)}</b>", "",
-             f"{icon} До {tmax:+.0f}°C • {rain_text(rain, rain_mm, rain_when)}{wind_str}"]
+        L = [f"<b>{esc(header)}</b>", ""]
+        L += _weather_main_lines(icon, tmax, rain, rain_mm, rain_when, wind_ms)
 
         if mode == "tomorrow":
             desc = DESC.get(code, "")
@@ -404,15 +420,13 @@ async def send_weather(bot, cid, mode="today"):
         wind_ms = d["windspeed_10m_max"][day] or 0
         day_str = d["time"][day]
         icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
-        wemoji, wword = wind_scale(wind_ms)
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-        wind_str = f"{wemoji} {wword} {wind_ms:.0f} м/с" if wind_ms >= 8 else f"💨 Ветер {wind_ms:.0f} м/с"
         desc = DESC.get(code, "")
         cc = s.get("cc", "")
         alert = storm_alert(wind_ms, code, rain, rain_mm, cc=cc)
-        L = [f"<b>{esc(header)}</b>", "",
-             f"{icon} До {tmax:+.0f}°C • {rain_text(rain, rain_mm, rain_when)}{wind_str}"]
+        L = [f"<b>{esc(header)}</b>", ""]
+        L += _weather_main_lines(icon, tmax, rain, rain_mm, rain_when, wind_ms)
         if alert:
             L += ["", alert]
         else:
