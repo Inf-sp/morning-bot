@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+import html
 import logging
 import re
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -76,7 +77,7 @@ _FRIDGE_KEYWORDS: dict = {
         "нут", "фасол", "горох", "боб", "ячмен", "полба", "амарант",
         "вермишел", "пенне", "фетучин", "тальятелл",
         "rijst", "havermout", "noedel", "noodles",
-        "мук", "тток", "tteok", "topokki", "yopokki", "булугур",
+        "мук", "крахмал", "тток", "tteok", "topokki", "yopokki", "булугур",
     ],
     "хлеб и выпечка": [
         "хлеб", "батон", "булочк", "тост", "лаваш", "пита",
@@ -169,6 +170,7 @@ _FRIDGE_NOT_PRODUCT_EXACT = {
     "свежий", "свежая", "копченый", "копчёный", "мягкое", "мягкий",
     "мороженый", "мороженая", "мороженые", "замороженный", "замороженная",
     "японские",
+    "продукты", "продукт", "мой холодильник", "холодильник",
     "ah", "jumbo", "deka", "lidl",
 }
 
@@ -176,6 +178,7 @@ _FRIDGE_CAT_EXACT = {
     "айсберг": "овощи",
     "батончики": "снеки и сладости",
     "желудочки": "мясо и рыба",
+    "крахмал": "крупы и макароны",
     "крылышки": "мясо и рыба",
     "салями": "мясо и рыба",
     "томатная паста": "специи и соусы",
@@ -300,6 +303,7 @@ _FRIDGE_NAME_EXACT = {
     "mortadella": "мортаделла",
     "мука": "мука",
     "томатная паста": "томатная паста",
+    "крахмал": "крахмал",
 }
 
 _FRIDGE_SPLIT_PREFIXES = {
@@ -331,6 +335,17 @@ _FRIDGE_BRAND_PATTERNS = [
 ]
 
 
+def _fridge_normalize_input(text: str) -> str:
+    """Подготовить пользовательский список: HTML/маркированный текст -> строки продуктов."""
+    t = html.unescape(str(text or ""))
+    t = re.sub(r"(?i)<\s*br\s*/?\s*>", "\n", t)
+    t = re.sub(r"(?i)<\s*/\s*li\s*>", "\n", t)
+    t = re.sub(r"(?i)<\s*li[^>]*>", "\n", t)
+    t = re.sub(r"(?i)<\s*/?\s*(ul|ol)[^>]*>", "\n", t)
+    t = re.sub(r"<[^>]+>", "", t)
+    return t
+
+
 def _fridge_cat(name: str) -> str:
     """Определить категорию продукта по ключевым словам."""
     n = name.lower()
@@ -360,7 +375,9 @@ def _fridge_cat(name: str) -> str:
 
 def _fridge_clean_name(name: str) -> str:
     """Приводит продукт к одному читаемому названию без смены смысла."""
-    n = re.sub(r"\s+", " ", str(name).lower().strip(" -—:•\t"))
+    n = _fridge_normalize_input(name)
+    n = re.sub(r"\s+", " ", str(n).lower().strip(" -—:•\t"))
+    n = re.sub(r"^[^\wа-яё]+", "", n, flags=re.IGNORECASE).strip()
     for pattern in _FRIDGE_BRAND_PATTERNS:
         n = re.sub(pattern, "", n).strip()
     n = re.sub(r"\([^)]*\)", "", n).strip()
@@ -417,7 +434,7 @@ def _fridge_clean_name(name: str) -> str:
 def _fridge_split_input(text: str) -> list[str]:
     """Разбивает пользовательский список на отдельные продукты."""
     out: list[str] = []
-    for raw_line in str(text).splitlines():
+    for raw_line in _fridge_normalize_input(text).splitlines():
         line = raw_line.strip()
         if not line:
             continue
@@ -473,7 +490,7 @@ def _fridge_reject_reason(line: str) -> str:
 
 def _fridge_rejected_lines(text: str) -> list[tuple[str, str]]:
     rejected = []
-    for raw_line in str(text).splitlines():
+    for raw_line in _fridge_normalize_input(text).splitlines():
         line = raw_line.strip()
         if not line:
             continue
@@ -747,9 +764,11 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
                 f"{emoji} {label} {on_cnt}/{len(cat_items)}",
                 callback_data=f"as_fridge_cat_{ci}_0"
             ))
-        rows = [[btn] for btn in cat_btns]
-        rows.append([InlineKeyboardButton("❌ Убрать", callback_data="as_fridge_clean")])
-        rows.append([InlineKeyboardButton("✏️ Добавить", callback_data="as_fridge_add")])
+        rows = [[
+            InlineKeyboardButton("✏️ Добавить", callback_data="as_fridge_add"),
+            InlineKeyboardButton("❌ Удалить", callback_data="as_fridge_clean"),
+        ]]
+        rows.extend([[btn] for btn in cat_btns])
         rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
 
     kb = InlineKeyboardMarkup(rows)
@@ -787,7 +806,10 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
            "Нажми продукт, чтобы изменить статус.")
 
     # Один продукт в строку: названия должны читаться полностью.
-    rows = []
+    rows = [[
+        InlineKeyboardButton("✏️ Добавить", callback_data=f"as_fridge_add_{cat_idx}"),
+        InlineKeyboardButton("❌ Удалить", callback_data="as_fridge_clean"),
+    ]]
     for gi, it in chunk:
         mark = "🟢" if it.get("on", True) else "⚪"
         name_short = it["name"][:40]
@@ -801,8 +823,6 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
             InlineKeyboardButton(f"{page+1}/{pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"as_fridge_cat_{cat_idx}_{(page+1) % pages}"),
         ])
-    rows.append([InlineKeyboardButton("❌ Убрать", callback_data="as_fridge_clean")])
-    rows.append([InlineKeyboardButton("✏️ Добавить", callback_data=f"as_fridge_add_{cat_idx}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_fridge_home")])
 
     kb = InlineKeyboardMarkup(rows)
@@ -858,6 +878,36 @@ async def fridge_add_done(bot, cid, text, cat_idx: int = -1):
         await send_fridge_cat(bot, cid, cat_idx, 0)
     else:
         await send_fridge(bot, cid)
+
+
+def _fridge_payload_from_chat(text: str) -> str:
+    raw = str(text or "").strip()
+    low = raw.lower()
+    if "<li" in low and "продукт" in low:
+        return _fridge_normalize_input(raw)
+
+    patterns = [
+        r"(?:добавь|добавить|закинь|запиши|сохрани)\s+"
+        r"(?:это\s+)?(?:в\s+)?(?:список\s+)?(?:моих\s+)?"
+        r"(?:продуктов|продукты|холодильник)\s*[:\-—]?\s*(.+)",
+        r"(?:в\s+)?(?:продукты|холодильник)\s*[:\-—]\s*(.+)",
+        r"🛒\s*продукты\s*[:\-—]?\s*(.+)",
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, raw, flags=re.IGNORECASE | re.DOTALL)
+        if m:
+            return m.group(1).strip()
+    return ""
+
+
+async def try_add_fridge_from_chat(bot, cid, text) -> bool:
+    payload = _fridge_payload_from_chat(text)
+    if not payload:
+        return False
+    if not _fridge_split_input(payload):
+        return False
+    await fridge_add_done(bot, cid, payload)
+    return True
 
 
 async def fridge_toggle(bot, cid, idx: int, cat_idx: int, page: int, q=None):
@@ -917,7 +967,7 @@ async def send_my_recipes(bot, cid):
         for i, r in enumerate(recipes):
             name = r.get("name", f"Рецепт {i+1}")[:30]
             rows.append([InlineKeyboardButton(f"📖 {name}", callback_data=f"as_my_recipe_{i}")])
-        rows.append([InlineKeyboardButton("❌ Убрать", callback_data="as_recipe_clean")])
+        rows.insert(0, [InlineKeyboardButton("❌ Удалить", callback_data="as_recipe_clean")])
         rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
         kb = InlineKeyboardMarkup(rows)
     await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
