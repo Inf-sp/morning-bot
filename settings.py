@@ -1052,11 +1052,10 @@ async def send_admin(bot, cid):
         return
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("👥 Пользователи", callback_data="set_admin_users")],
-        [InlineKeyboardButton("📡 Статус сервисов", callback_data="set_admin_health"),
-        InlineKeyboardButton("🧪 LLM check", callback_data="set_admin_llmcheck")],
-        [InlineKeyboardButton("💸 Расходы на LLM", callback_data="set_admin_cost"),
+        [InlineKeyboardButton("Статус сервисов", callback_data="set_admin_health"),
+        InlineKeyboardButton("LLM check", callback_data="set_admin_llmcheck")],
+        [InlineKeyboardButton("Расходы на LLM", callback_data="set_admin_cost"),
         InlineKeyboardButton(ADMIN_RUN_NOTIF_TITLE, callback_data="set_admin_run_notif")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="set_home")],
     ])
     await bot.send_message(
         chat_id=cid,
@@ -1181,7 +1180,7 @@ async def send_admin_health(bot, cid):
     import store as _st
     import weather as _w
 
-    lines = ["📡 <b>Статус сервисов</b>"]
+    lines = ["<b>Статус сервисов</b>"]
 
     required = [
         ("TELEGRAM_TOKEN", bool(config.TELEGRAM_TOKEN)),
@@ -1237,7 +1236,7 @@ async def send_admin_llmcheck(bot, cid):
         ("Gemini", "gemini"),
         ("Groq", "groq"),
     ]
-    lines = ["🧪 <b>LLM check</b>", "", "Проверяю провайдеров по очереди…", ""]
+    lines = ["<b>LLM check</b>", "", "Проверяю провайдеров по очереди…", ""]
     for label, route in probes:
         try:
             await _ai.allm("Ответь одним словом: ok", 10, 0.0, route=route, module="admin")
