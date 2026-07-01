@@ -61,12 +61,13 @@ def _build_look_message(items, intro="", add_text=""):
     push("✨ Образ на сегодня", MessageEntity.BOLD)
     push("\n\n")
     if intro:
-        push(f"{intro}\n")
+        push(f"{intro}\n\n")
     if items:
         quote = "\n".join(f"• {str(it).strip()}" for it in items if str(it).strip())
         if quote:
             push(f"{quote}\n", MessageEntity.BLOCKQUOTE)
     if add_text:
+        push("\n\n")
         push(add_text, MessageEntity.ITALIC)
     text = "".join(chunks).rstrip()
     return text, entities

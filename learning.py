@@ -748,7 +748,7 @@ def _proverb_entities_card(flag, original, analogs=None, meaning="", examples=No
         add("\n")
         add(examples[0])
     add("\n\n")
-    add("Прочитай вслух. Покрути в голове. Всё.")
+    add("Прочитай вслух. Покрути в голове. Всё.", MessageEntity.ITALIC)
     return "".join(chunks).rstrip(), entities
 
 async def send_proverb(bot, cid, language):
@@ -1115,7 +1115,8 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
     _title, _phase, method = WEEK_TRACK[wd]
     words = _ensure_dict(cid)
     pool = [w for w in words if _dict_lang(w) == lang_code]
-    L = [f"📚{flag} <b>Слова и фразы дня</b>", "", esc(method)]
+    method_line = f"<i>{esc(method)}</i>" if method.startswith("Прочитай вслух") else esc(method)
+    L = [f"📚{flag} <b>Слова и фразы дня</b>", "", method_line]
     if wd >= 5 or not pool:
         L += ["", "📖 Открой словарь, если хочешь добавить что-то новое или быстро повторить текущее."]
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
