@@ -86,7 +86,7 @@ def _finish_dot(value):
     return value
 
 
-def _build_entity_card(title, summary="", quote="", bullets=None, final=""):
+def _build_entity_card(title, summary="", quote="", bullets=None, final="", bullet_label="Что важно:"):
     chunks = []
     entities = []
 
@@ -111,7 +111,7 @@ def _build_entity_card(title, summary="", quote="", bullets=None, final=""):
     clean_bullets = [_finish_dot(x) for x in (bullets or []) if _clean_text(x)]
     if clean_bullets:
         push("\n\n")
-        push("Это значит:")
+        push(_clean_text(bullet_label).rstrip(":") + ":", MessageEntity.BOLD)
         push("\n")
         push("\n".join(f"- {x}" for x in clean_bullets))
 
@@ -457,11 +457,12 @@ async def send_improve(bot, cid):
         d.get("verdict") or "",
         bullets,
         final,
+        bullet_label="На что обратить внимание:",
     )
     store.last_source[str(cid)] = "Гардероб · Улучшение"
     store.last_answer[str(cid)] = text
     await bot.send_message(chat_id=cid, text=text, entities=entities,
-        reply_markup=_kb([[("⏳ Позже", "as_fav")], [("◀️ Назад", "m_wardrobe")]]))
+        reply_markup=_kb([[("◀️ Назад", "m_wardrobe")]]))
 
 
 async def check_purchase(bot, cid, text):
@@ -510,6 +511,7 @@ async def check_purchase(bot, cid, text):
         f"Вердикт: {verdict}" if verdict else "",
         d.get("why") or [],
         d.get("outro") or "Покупай только если вещь закрывает реальный пробел в гардеробе.",
+        bullet_label="Почему:",
     )
     store.last_source[str(cid)] = "Гардероб · Покупка"
     store.last_answer[str(cid)] = text_out

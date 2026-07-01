@@ -3,7 +3,7 @@ from datetime import datetime
 import html
 import logging
 import re
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 import config
 import store
 
@@ -584,6 +584,56 @@ DOCTOR_INTRO = (
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
 
+def _u16_len(text):
+    return len((text or "").encode("utf-16-le")) // 2
+
+def _clean_card_text(value):
+    value = re.sub(r"<[^>]+>", "", str(value or ""))
+    value = re.sub(r"^[\s\U0001F1E6-\U0001FAFF\u2600-\u27BF\u200D\uFE0F]+", "", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+def _finish_dot(value):
+    value = _clean_card_text(value)
+    if value and value[-1] not in ".!?…":
+        return value + "."
+    return value
+
+def _build_entity_card(title, summary="", quote="", bullets=None, final="", bullet_label="Рекомендации:"):
+    chunks = []
+    entities = []
+
+    def push(text, entity_type=None):
+        offset = _u16_len("".join(chunks))
+        chunks.append(text)
+        if entity_type and text:
+            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
+
+    push(_clean_card_text(title).rstrip(".:"), MessageEntity.BOLD)
+
+    summary = _finish_dot(summary)
+    if summary:
+        push("\n\n")
+        push(summary)
+
+    quote = _finish_dot(quote)
+    if quote:
+        push("\n\n")
+        push(quote, MessageEntity.BLOCKQUOTE)
+
+    clean_bullets = [_finish_dot(x) for x in (bullets or []) if _clean_card_text(x)]
+    if clean_bullets:
+        push("\n\n")
+        push(_clean_card_text(bullet_label).rstrip(":") + ":", MessageEntity.BOLD)
+        push("\n")
+        push("\n".join(f"- {x}" for x in clean_bullets))
+
+    final = _finish_dot(final)
+    if final:
+        push("\n\n")
+        push(final)
+
+    return "".join(chunks).rstrip(), entities
+
 # универсальная клавиатура под ответом: [Продолжить][Короче|Глубже][⭐][В меню]
 def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry", depth=True):
     rows = []
@@ -1069,10 +1119,13 @@ def _role_system(role):
                 "Выслушай, разложи ситуацию на 1-3 конкретных шага, поддержи коротко. Без воды, с эмодзи. "
         )
     if role == "doctor":
-        return ("Ты помощник по здоровью. Дай разбор СТРОГО в формате, кратко, с эмодзи:\n"
-                "👩🏻‍⚕️ Разбор симптомов\n\n📍 Основная жалоба:\n{коротко}\n\n🔎 На что похоже:\n{1-2 предложения}\n\n"
-                "✅ Рекомендации:\n• пункт\n• пункт\n\n🚨 Срочно к врачу:\n{когда}\n\nИтог: {одно короткое предложение}\n\n"
-                )
+        return ("Ты помощник по здоровью. Это справочная информация, не диагноз. "
+                "Отвечай кратко и верни строго валидный JSON без markdown:\n"
+                "{\"title\":\"Разбор симптомов\","
+                "\"summary\":\"1 короткое предложение: основная жалоба\","
+                "\"quote\":\"1-2 предложения: на что это может быть похоже, без диагноза\","
+                "\"bullets\":[\"рекомендация\", \"когда срочно к врачу\"],"
+                "\"final\":\"короткий безопасный итог с точкой\"}")
     return "Ты полезный ассистент."
 
 _MED_RE = ("лекарств", "таблет", "препарат", "доз", "мг ", " мг", "метилфенидат", "ибупрофен",
@@ -1084,21 +1137,46 @@ def _is_med_question(text):
     return any(k in t for k in _MED_RE)
 
 def _med_system():
-    return ("Ты помощник по лекарствам. Дай СПРАВОЧНУЮ информацию о препарате СТРОГО в формате, кратко, с эмодзи:\n"
-            "💊 {название и доза если есть}\n\n"
-            "📍 Зачем:\n{коротко}\n\n"
-            "⏱️ Когда работает:\n{через сколько и сколько держится}\n\n"
-            "⚠️ Часто бывает:\n• побочка\n• побочка\n\n"
-            "💡 Важно:\n• пункт\n• пункт\n\n"
-            "🚨 К врачу если:\n• симптом\n• симптом\n\n"
-            "Итог: {одно короткое предложение}\n\n"
-            "Это общая справочная информация, не назначение. Дозы и схему определяет врач.")
+    return ("Ты помощник по лекарствам. Это справочная информация, не назначение. "
+            "Не подбирай дозировку и схему. Верни строго валидный JSON без markdown:\n"
+            "{\"title\":\"Разбор лекарства\","
+            "\"summary\":\"1 короткое предложение: о каком препарате вопрос\","
+            "\"quote\":\"1-2 предложения: зачем применяют и что важно знать\","
+            "\"bullets\":[\"частая побочка или риск\", \"когда обратиться к врачу\", \"что уточнить у врача\"],"
+            "\"final\":\"короткий безопасный итог с точкой\"}")
 
 def _doctor_candidates(symptoms):
     data = ai.llm_json(
         f"Пользователь описал: {symptoms}\nДай 6 коротких справочных тезисов (общая информация о возможных "
         "причинах/состояниях при таких симптомах; НЕ диагноз). JSON: {\"items\": [\"тезис\", ...]}", 900, tier="cheap")
     return [x for x in data.get("items", []) if isinstance(x, str) and x.strip()]
+
+def _fallback_health_card(title, user_text):
+    return {
+        "title": title,
+        "summary": f"Запрос: {_clean_card_text(user_text)[:160]}",
+        "quote": "По описанию нельзя поставить диагноз заочно, но можно оценить риски и ближайшие действия.",
+        "bullets": [
+            "Следи за усилением симптомов, температурой, дыханием, болью и общим состоянием",
+            "Обратись к врачу срочно, если состояние быстро ухудшается или симптомы выраженные",
+            "Не начинай лекарства и дозировки без инструкции врача или фармацевта",
+        ],
+        "final": "Это справочная информация, не диагноз и не назначение.",
+    }
+
+async def _send_health_card(bot, cid, data, kb=None):
+    text, entities = _build_entity_card(
+        data.get("title") or "Разбор симптомов",
+        data.get("summary") or "",
+        data.get("quote") or "",
+        data.get("bullets") or [],
+        data.get("final") or "Это справочная информация, не диагноз и не назначение.",
+        bullet_label=data.get("bullet_label") or "Рекомендации:",
+    )
+    store.last_answer[str(cid)] = text
+    store.last_source.setdefault(str(cid), "Здоровье")
+    store.last_surface[str(cid)] = "health"
+    await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb)
 
 async def doctor_answer(bot, cid, symptoms):
     if secure.is_dangerous_med(symptoms):
@@ -1109,12 +1187,13 @@ async def doctor_answer(bot, cid, symptoms):
     if _is_med_question(symptoms):
         prompt = f"{_med_system()}\n\nВопрос про лекарство: {safe_symptoms}"
         try:
-            out = await ai.allm(prompt, 900, 0.4, route="claude")
+            d = await ai.allm_json(prompt, 900, route="claude", module="health")
         except Exception as e:
-            await verify.safe_error(bot, cid, e); return
+            _log.warning("doctor medicine AI failed, using fallback: %r", e, exc_info=True)
+            d = _fallback_health_card("Разбор лекарства", symptoms)
         store.last_source[str(cid)] = "Здоровье · Лекарство"
         store.last_action[str(cid)] = ("role", "doctor", symptoms)
-        await _send(bot, cid, out, kb=_ans_kb(None, None, depth=False), surface="health")
+        await _send_health_card(bot, cid, d, kb=_ans_kb(None, None, depth=False))
         return
     passages = []
     try:
@@ -1130,12 +1209,13 @@ async def doctor_answer(bot, cid, symptoms):
     else:
         prompt = f"{base}\n\nСимптомы: {safe_symptoms}"
     try:
-        out = await ai.allm(prompt, 900, 0.5, route="claude")
+        d = await ai.allm_json(prompt, 900, route="claude", module="health")
     except Exception as e:
-        await verify.safe_error(bot, cid, e); return
+        _log.warning("doctor symptoms AI failed, using fallback: %r", e, exc_info=True)
+        d = _fallback_health_card("Разбор симптомов", symptoms)
     store.last_source[str(cid)] = "Здоровье · Врач"
     store.last_action[str(cid)] = ("role", "doctor", symptoms)
-    await _send(bot, cid, out, kb=_ans_kb(None, None, depth=False), surface="health")
+    await _send_health_card(bot, cid, d, kb=_ans_kb(None, None, depth=False))
 
 async def handle_role(bot, cid, role, text):
     if role == "doctor":

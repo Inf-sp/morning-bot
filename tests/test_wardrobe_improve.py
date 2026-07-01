@@ -28,12 +28,15 @@ def test_wardrobe_entity_card_format():
         "Вердикт: БРАТЬ.",
         ["сочетается с белой футболкой", "не дублирует базу"],
         "Можно брать, если посадка нормальная.",
+        bullet_label="Почему:",
     )
 
     assert text.startswith("Проверка покупки\n\nСерые брюки.")
     assert "Вердикт: БРАТЬ." in text
-    assert "Это значит:\n- сочетается с белой футболкой." in text
-    assert "Это значит:\n\n- сочетается" not in text
+    assert "Почему:\n- сочетается с белой футболкой." in text
+    assert "Почему:\n\n- сочетается" not in text
     assert "- не дублирует базу.\n\nМожно брать, если посадка нормальная." in text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
     assert any(e.type == MessageEntity.BLOCKQUOTE for e in entities)
+    label_offset = text.index("Почему:")
+    assert any(e.type == MessageEntity.BOLD and e.offset == label_offset for e in entities)

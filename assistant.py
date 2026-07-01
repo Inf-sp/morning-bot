@@ -99,7 +99,7 @@ def _assistant_entities_card(answer: str):
             normalized = normalized.lstrip(">» ").strip()
 
         if normalized.lower().startswith(("это значит", "значит:")):
-            normalized = "Это значит:"
+            normalized = "Что важно:"
 
         normalized_lines.append(normalized)
         quote_flags.append(is_quote)
@@ -108,13 +108,14 @@ def _assistant_entities_card(answer: str):
         normalized_lines[-1] = _strip_final_intro(normalized_lines[-1])
 
     for idx, normalized in enumerate(normalized_lines):
-        entity_type = MessageEntity.BLOCKQUOTE if quote_flags[idx] else None
+        next_line = normalized_lines[idx + 1] if idx != len(normalized_lines) - 1 else ""
+        is_list_label = normalized.endswith(":") and next_line.startswith("- ")
+        entity_type = MessageEntity.BLOCKQUOTE if quote_flags[idx] else MessageEntity.BOLD if is_list_label else None
         add(normalized, entity_type)
         if idx != len(normalized_lines) - 1:
-            next_line = normalized_lines[idx + 1]
             if (
                 normalized.startswith("- ") and next_line.startswith("- ")
-                or normalized == "Это значит:" and next_line.startswith("- ")
+                or is_list_label
             ):
                 add("\n")
             else:
