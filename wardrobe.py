@@ -126,10 +126,11 @@ async def send_looks(bot, cid):
     user_profile = _settings.get(cid, "wardrobe_profile", "")
     user_style = _settings.get(cid, "style", "")
     user_body = _settings.get(cid, "body", "")
+    priority_line = _settings.priority_context(cid)
     profile_line = f"Профиль пользователя: {user_profile}." if user_profile else ""
     style_line = f"Стиль пользователя: {user_style}." if user_style and not user_profile else ""
     body_line = f"Параметры тела: {user_body}." if user_body and not user_profile else ""
-    style_block = "\n".join(x for x in [profile_line, style_line, body_line] if x)
+    style_block = "\n".join(x for x in [priority_line, profile_line, style_line, body_line] if x)
     tmax = None
     try:
         wdata = await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 2)
@@ -370,11 +371,12 @@ async def check_purchase(bot, cid, text):
     user_profile = _settings.get(cid, "wardrobe_profile", "")
     user_style = _settings.get(cid, "style", "")
     user_body = _settings.get(cid, "body", "")
+    priority_ctx = (_settings.priority_context(cid) + " ") if _settings.priority_context(cid) else ""
     profile_ctx = f"Профиль пользователя: {user_profile}. " if user_profile else ""
     style_ctx = f"Стиль: {user_style}. " if user_style and not user_profile else ""
     body_ctx = f"Параметры тела: {user_body}. " if user_body and not user_profile else ""
     prompt = f"""Ты честный стилист-аналитик. Пользователь думает купить: {text}
-{profile_ctx}{style_ctx}{body_ctx}
+{priority_ctx}{profile_ctx}{style_ctx}{body_ctx}
 Гардероб пользователя:
 {store.wardrobe_to_text(w)}
 {web_block}

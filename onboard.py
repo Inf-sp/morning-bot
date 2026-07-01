@@ -1,4 +1,4 @@
-"""Онбординг нового пользователя: имя → город → языки → уровень → готово."""
+"""Онбординг нового пользователя: имя → город → языки → уровень → приоритеты → готово."""
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import store
 from util import esc
@@ -18,6 +18,21 @@ def _lvl_kb(code: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(l, callback_data=f"ob_lvl_{code}_{l}") for l in levels]
     ])
+
+
+def _prio_kb(cid) -> InlineKeyboardMarkup:
+    import settings as _s
+    selected = set(_s.priorities(cid))
+    buttons = [
+        InlineKeyboardButton(
+            ("✅ " if key in selected else "⬜ ") + label,
+            callback_data=f"ob_prio_{key}",
+        )
+        for key, label in _s.PRIORITY_OPTIONS
+    ]
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    rows.append([InlineKeyboardButton("Готово", callback_data="ob_prio_done")])
+    return InlineKeyboardMarkup(rows)
 
 
 def _save_step(cid, step: str | None):
@@ -90,7 +105,7 @@ async def handle_callback(bot, cid, q, data: str):
     if data.startswith("ob_lang_"):
         choice = data[len("ob_lang_"):]
         if choice == "skip":
-            await _finish(bot, cid)
+            await _ask_priorities(bot, cid, q)
             return
         import settings as _s
         if choice == "both":
@@ -117,11 +132,32 @@ async def handle_callback(bot, cid, q, data: str):
         if queue:
             await _ask_next_level(bot, cid, q)
         else:
+            await _ask_priorities(bot, cid, q)
+        return
+
+    if data.startswith("ob_prio_"):
+        key = data[len("ob_prio_"):]
+        if key == "done":
             await _finish(bot, cid)
+            return
+        import settings as _s
+        valid = {k for k, _ in _s.PRIORITY_OPTIONS}
+        if key in valid:
+            selected = _s.priorities(cid)
+            if key in selected:
+                selected = [k for k in selected if k != key]
+            else:
+                selected.append(key)
+            _s.set_(cid, "priorities", selected)
+            if key == "quiet" and key in selected:
+                for kind, _label in _s.NOTIF_TYPES:
+                    if kind not in ("morning_brief", "weather_warn"):
+                        _s.set_(cid, f"notif_{kind}", False)
+        await _ask_priorities(bot, cid, q)
         return
 
     if data == "ob_done":
-        await _finish(bot, cid)
+        await _ask_priorities(bot, cid, q)
 
 
 async def _ask_next_level(bot, cid, q):
@@ -143,6 +179,24 @@ async def _ask_next_level(bot, cid, q):
             text=f"{flag} Какой у тебя уровень {lang}?",
             reply_markup=_lvl_kb(code),
         )
+
+
+async def _ask_priorities(bot, cid, q=None):
+    st = _ob.setdefault(str(cid), {})
+    st["step"] = "prio"
+    _ob[str(cid)] = st
+    text = (
+        "🎯 Что для тебя сейчас важнее?\n\n"
+        "Можно выбрать несколько пунктов. Я буду учитывать это в брифе, советах и рекомендациях."
+    )
+    kb = _prio_kb(cid)
+    if q is not None:
+        try:
+            await q.edit_message_text(text, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
 async def _finish(bot, cid):
