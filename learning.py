@@ -1154,7 +1154,7 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
             except ValueError:
                 pass
 
-    L += ["", "💡 Попробуй использовать 1-2 элемента сегодня в сообщениях, мыслях или разговоре."]
+    L += ["", "<i>Попробуй использовать 1-2 элемента сегодня в сообщениях, мыслях или разговоре.</i>"]
 
     rows = []
     if with_kb:
