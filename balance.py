@@ -15,6 +15,7 @@ from util import esc, cap_sentence
 import verify
 import secure
 import memory
+import settings
 
 TZ = config.TZ
 
@@ -644,8 +645,9 @@ def _my_recipe_pref(cid):
 
 def _gen_recipe(constraint, cid=None):
     pref = _my_recipe_pref(cid)
+    pr = (settings.priority_context(cid) + "\n") if cid and settings.priority_context(cid) else ""
     return ai.llm_json(
-        f"{pref}Ты — шеф-повар с идеальной логикой. "
+        f"{pr}{pref}Ты — шеф-повар с идеальной логикой. "
         f"Создай 1 рецепт ({constraint}), 1 человек, электрическая плита, духовка SAGE.\n"
         "Правила:\n"
         "• Каждый продукт из ингредиентов обязан появиться в шагах приготовления.\n"
@@ -1024,7 +1026,9 @@ def _gen_motiv(cid):
     angles = ["физическое действие", "ограничение", "мини-ритуал", "перезагрузку", "один микрошаг"]
     angle = random.choice(angles)
     lagom_ctx = f"Принцип лагома пользователя: «{lagom}»\n" if lagom else ""
+    priority_ctx = f"{settings.priority_context(cid)}\n" if settings.priority_context(cid) else ""
     prompt = (
+        f"{priority_ctx}"
         f"{lagom_ctx}"
         f"Предложи {angle} на основе этого принципа. "
         "Без философии и клише. Конкретно, коротко, на русском. "

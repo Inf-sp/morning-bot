@@ -17,6 +17,7 @@ import balance
 import learning
 import research
 import memory
+import settings
 from util import esc, _WEEKDAYS, _MONTHS, flag_from_cc, country_flag
 import verify
 
@@ -315,11 +316,14 @@ def _build_day_text(cid):
     weekday_name = _WEEKDAYS[now.weekday()]
     is_weekend = now.weekday() >= 5
     word_line = _word_of_day(cid)
+    pr_labels = settings.priority_labels(cid)
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     flag = flag_from_cc(s.get("cc", "")) or (country_flag(s.get("country", "")) if s.get("country") else "")
     title_flag = f" {flag}" if flag else ""
     L = [f"<b>Мой день • {esc(header)} • {esc(s.get('city',''))}{title_flag}</b>", ""]
+    if pr_labels:
+        L += [f"🎯 <b>Фокус:</b> {esc(', '.join(pr_labels))}", ""]
     L.append(f"<b>{icon} Погода сегодня</b>")
     L.append(f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}")
     hum = weather.humidity_phrase(data, day_str, tmax, s.get("cc", ""))
@@ -335,8 +339,11 @@ def _build_day_text(cid):
         fact = ""
     if fact:
         L += ["<b>🔬 Интересный факт</b>", esc(fact.strip()), ""]
-    hack_cat, hack_text = daily_lifehack(
-        cid, rain=rain >= 40, hot=tmax >= 24, is_weekend=is_weekend)
+    pr = set(settings.priorities(cid))
+    hack_cat, hack_text = ("", "")
+    if "quiet" not in pr:
+        hack_cat, hack_text = daily_lifehack(
+            cid, rain=rain >= 40, hot=tmax >= 24, is_weekend=is_weekend)
     if hack_text:
         L += [f"<b>💡 База знаний</b>", esc(hack_text)]
     try:

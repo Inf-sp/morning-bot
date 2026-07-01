@@ -27,6 +27,15 @@ NOTIF_TYPES = [
     ("checkin_eve",    "🥸 Вечерний разбор"),
 ]
 
+PRIORITY_OPTIONS = [
+    ("health", "Здоровье"),
+    ("learning", "Учёба"),
+    ("food", "Еда"),
+    ("wardrobe", "Гардероб"),
+    ("leisure", "Досуг"),
+    ("quiet", "Минимум уведомлений"),
+]
+
 STYLES = [
     "минимализм",
     "скандинавский стиль",
@@ -59,6 +68,26 @@ def notif_on(cid, kind):
 
 def study_lang(cid):
     return get(cid, "study_lang", "нидерландский")
+
+
+def priorities(cid):
+    saved = get(cid, "priorities", [])
+    if not isinstance(saved, list):
+        return []
+    valid = {key for key, _ in PRIORITY_OPTIONS}
+    return [key for key in saved if key in valid]
+
+
+def priority_labels(cid):
+    selected = set(priorities(cid))
+    return [label for key, label in PRIORITY_OPTIONS if key in selected]
+
+
+def priority_context(cid):
+    labels = priority_labels(cid)
+    if not labels:
+        return ""
+    return "Приоритеты пользователя: " + ", ".join(labels) + "."
 
 
 def _notif_label(kind: str, label: str) -> str:
@@ -199,6 +228,57 @@ async def notif_off_all(bot, cid, q=None):
     for kind, _ in NOTIF_TYPES:
         set_(cid, f"notif_{kind}", False)
     await send_notif(bot, cid, q)
+
+
+def _priorities_kb(cid):
+    selected = set(priorities(cid))
+    buttons = [
+        InlineKeyboardButton(
+            ("✅ " if key in selected else "⬜ ") + label,
+            callback_data=f"set_prio_{key}",
+        )
+        for key, label in PRIORITY_OPTIONS
+    ]
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def send_priorities(bot, cid, q=None):
+    labels = priority_labels(cid)
+    current = ", ".join(labels) if labels else "не выбраны"
+    text = (
+        "🎯 <b>Приоритеты</b>\n\n"
+        "Выбери, на что боту обращать больше внимания в брифе, советах и рекомендациях.\n\n"
+        f"<b>Сейчас:</b> {esc(current)}"
+    )
+    kb = _priorities_kb(cid)
+    if q is not None:
+        try:
+            await q.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+
+
+async def toggle_priority(bot, cid, key, q=None):
+    valid = {k for k, _ in PRIORITY_OPTIONS}
+    if key not in valid:
+        await send_priorities(bot, cid, q)
+        return
+    selected = priorities(cid)
+    if key in selected:
+        selected = [k for k in selected if k != key]
+    else:
+        selected.append(key)
+    set_(cid, "priorities", selected)
+    if key == "quiet" and key in selected:
+        for kind, _ in NOTIF_TYPES:
+            if kind not in ("morning_brief", "weather_warn"):
+                set_(cid, f"notif_{kind}", False)
+    await send_priorities(bot, cid, q)
+
 
 _BODY_PLACEHOLDER = "не указано"
 
@@ -387,6 +467,10 @@ async def handle_callback(bot, cid, data, q=None):
         await balance.send_fridge(bot, cid, back="m_food")
     elif data == "set_notif":
         await send_notif(bot, cid, q)
+    elif data == "set_priorities":
+        await send_priorities(bot, cid, q)
+    elif data.startswith("set_prio_"):
+        await toggle_priority(bot, cid, data[len("set_prio_"):], q)
     elif data.startswith("set_notiftgl_"):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
     elif data.startswith("set_notiftest_"):
@@ -711,15 +795,16 @@ async def send_notes(bot, cid):
     n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     rows = [
         [InlineKeyboardButton(f"⭐️ Ознакомиться позже ({n_fav})", callback_data="as_bucket_fav")],
+        [InlineKeyboardButton("🔔 Уведомления по расписанию", callback_data="set_notif")],
         [
-            InlineKeyboardButton("Уведомления", callback_data="set_notif"),
             InlineKeyboardButton("Город", callback_data="set_city"),
+            InlineKeyboardButton("Приоритеты", callback_data="set_priorities"),
             InlineKeyboardButton("Язык", callback_data="set_levels"),
         ],
         [
             InlineKeyboardButton("Словарь", callback_data="set_dict"),
             InlineKeyboardButton("Вещи", callback_data="set_wardrobe"),
-            InlineKeyboardButton("Профиль", callback_data="set_body"),
+            InlineKeyboardButton("Размеры", callback_data="set_body"),
         ],
         [
             InlineKeyboardButton("Продукты", callback_data="set_fridge"),
