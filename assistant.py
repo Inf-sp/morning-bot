@@ -38,16 +38,6 @@ _INTENT_MAP = [
     (("заметк", "сохран", "запомни это", "мои заметки", "база"), "notes"),
 ]
 
-_FALLBACK_KB = InlineKeyboardMarkup([
-    [InlineKeyboardButton("☀️ Мой день",   callback_data="a_w_today"),
-     InlineKeyboardButton("👕 Гардероб",   callback_data="m_wardrobe")],
-    [InlineKeyboardButton("🚑 Здоровье", callback_data="m_balance"),
-     InlineKeyboardButton("📚 Обучение",   callback_data="m_learn")],
-    [InlineKeyboardButton("🍿 Досуг",      callback_data="m_leisure"),
-     InlineKeyboardButton("🥣 Готовка",    callback_data="m_food")],
-])
-
-
 _LEADING_EMOJI_RE = re.compile(
     r"^[\s\U0001F1E6-\U0001FAFF\u2600-\u27BF\uFE0F]+"
 )
@@ -91,7 +81,9 @@ def _assistant_entities_card(answer: str):
     if body:
         add("\n\n")
 
-    for idx, line in enumerate(body):
+    normalized_lines = []
+    quote_flags = []
+    for line in body:
         normalized = line.strip()
         is_quote = normalized.startswith((">", "»"))
         if is_quote:
@@ -100,10 +92,21 @@ def _assistant_entities_card(answer: str):
         if normalized.lower().startswith(("это значит", "значит:")):
             normalized = "Это значит:"
 
-        entity_type = MessageEntity.BLOCKQUOTE if is_quote else None
+        normalized_lines.append(normalized)
+        quote_flags.append(is_quote)
+
+    for idx, normalized in enumerate(normalized_lines):
+        entity_type = MessageEntity.BLOCKQUOTE if quote_flags[idx] else None
         add(normalized, entity_type)
-        if idx != len(body) - 1:
-            add("\n" if normalized.startswith("- ") else "\n\n")
+        if idx != len(normalized_lines) - 1:
+            next_line = normalized_lines[idx + 1]
+            if (
+                normalized.startswith("- ") and next_line.startswith("- ")
+                or normalized == "Это значит:" and next_line.startswith("- ")
+            ):
+                add("\n")
+            else:
+                add("\n\n")
 
     # Если модель дала короткий ответ без явной цитаты, не выдумываем цитируемый блок.
     return "".join(chunks).rstrip(), entities
@@ -189,7 +192,7 @@ async def chat_reply(bot, cid, text):
         store.last_surface[str(cid)] = "chat"
         return
 
-    # Фолбэк — LLM-ответ + кнопки главного меню
+    # Фолбэк - LLM-ответ без прикрепленного главного меню
     hist = store.chat_history.get(str(cid), [])
     hist.append({"role": "user", "content": text})
     hist = hist[-10:]
@@ -209,12 +212,12 @@ async def chat_reply(bot, cid, text):
     out_text, entities = _assistant_entities_card((answer or "").strip() or "Пусто, попробуй ещё раз.")
     ok = False
     try:
-        await pending.edit_text(out_text, entities=entities, reply_markup=_FALLBACK_KB)
+        await pending.edit_text(out_text, entities=entities)
         ok = True
     except Exception:
         ok = False
     if not ok:
         try:
-            await bot.send_message(chat_id=cid, text=out_text, entities=entities, reply_markup=_FALLBACK_KB)
+            await bot.send_message(chat_id=cid, text=out_text, entities=entities)
         except Exception:
-            await verify.safe_send(bot, cid, out_text, surface="chat", reply_markup=_FALLBACK_KB)
+            await verify.safe_send(bot, cid, out_text, surface="chat")
