@@ -1,4 +1,5 @@
 import pytest
+from telegram import MessageEntity
 
 import learning
 
@@ -30,6 +31,31 @@ def test_fallback_phrase_quiz_card_builds_valid_task():
     assert card["blank_phrase"] == "Ik ben ____"
     assert len(card["wrong"]) == 2
     assert "____" in card["blank_phrase"]
+
+
+@pytest.mark.unit
+def test_phrase_poll_question_is_formatted_with_entities():
+    question, entities = learning._phrase_poll_question("Ik maak me zorgen om ____", "Я переживаю за тебя")
+
+    assert question.startswith("Фраза-тренажёр\n\nIk maak me zorgen om ____")
+    assert "Перевод: Я переживаю за тебя" in question
+    assert "Выбери пропущенное слово" in question
+    assert "Какое слово пропущено?" not in question
+    assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
+    assert any(e.type == MessageEntity.BLOCKQUOTE for e in entities)
+
+
+@pytest.mark.unit
+def test_phrase_poll_explanation_shows_correct_answer():
+    explanation = learning._phrase_poll_explanation(
+        "Ik maak me zorgen om ____",
+        "jou",
+        "Ik maak me zorgen om jou",
+        "Я переживаю за тебя",
+    )
+
+    assert "Ответ: jou" in explanation
+    assert "Ik maak me zorgen om jou" in explanation
 
 
 @pytest.mark.unit

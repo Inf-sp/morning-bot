@@ -26,6 +26,10 @@ OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
+SERPAPI_API_KEY = os.environ.get("SERPAPI_API_KEY", "")
+EVENTBRITE_API_KEY = os.environ.get("EVENTBRITE_API_KEY", "") or os.environ.get("EVENTBRITE_TOKEN", "")
+RESTCOUNTRIES_BASE_URL = os.environ.get("RESTCOUNTRIES_BASE_URL", "https://restcountries.com/v3.1").rstrip("/")
+RESTCOUNTRIES_API_KEY = os.environ.get("RESTCOUNTRIES_API_KEY", "")
 
 TZ = ZoneInfo("Europe/Amsterdam")
 

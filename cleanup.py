@@ -86,7 +86,7 @@ def _ctx_items(cid, ctx):
         store_key = {"movies": config.WATCHLIST_KEY, "countries": config.COUNTRIES_KEY,
                      "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
         title = {"movies": "🎬 Чистка: фильмы", "countries": "🧳 Чистка: страны",
-                 "artists": "🎸 Чистка: артисты", "books": "📖 Чистка: книги"}.get(key, "Чистка")
+                 "artists": "🎸 Чистка: музыканты", "books": "📖 Чистка: книги"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
         return title, items, "m_leisure_settings" if is_leisure else "as_notes"
     if ctx.startswith("cfg_"):
@@ -95,7 +95,7 @@ def _ctx_items(cid, ctx):
                      "artists": config.ARTISTS_KEY,
                      "books": config.BOOKS_KEY}.get(key)
         title = {"countries": "🧳 Чистка: страны",
-                 "artists": "🎸 Чистка: артисты",
+                 "artists": "🎸 Чистка: музыканты",
                  "books": "📖 Чистка: книги"}.get(key, "Чистка")
         back = {"countries": "set_countries",
                 "artists": "set_artists",

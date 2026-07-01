@@ -1,10 +1,26 @@
 import re
+import time
 from html import escape as _html_escape
 
 _WEEKDAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 _WEEKDAY_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 _MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня",
            "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+_TTL_CACHE = {}
+
+def ttl_get(namespace: str, key: str, ttl: int):
+    hit = _TTL_CACHE.get((namespace, key))
+    if not hit:
+        return None
+    ts, value = hit
+    if time.time() - ts > ttl:
+        _TTL_CACHE.pop((namespace, key), None)
+        return None
+    return value
+
+def ttl_set(namespace: str, key: str, value):
+    _TTL_CACHE[(namespace, key)] = (time.time(), value)
+    return value
 
 def esc(t: str | None) -> str:
     return _html_escape(t or "", quote=False)
