@@ -89,6 +89,13 @@ def _rain_real(rain, rain_mm=None):
     return True
 
 
+def _finish_sentence(text):
+    text = (text or "").strip()
+    if text and text[-1] not in ".!?…":
+        return text + "."
+    return text
+
+
 def rain_text(rain, rain_mm=None, when=""):
     """Кусок строки про дождь. Пусто, если дождя по сути нет."""
     if rain and _rain_real(rain, rain_mm):
@@ -419,7 +426,7 @@ async def send_weather(bot, cid, mode="today"):
                     150, 0.6, tier="cheap", module="weather"
                 ).strip()
                 if summary:
-                    L += ["", "🌡️ <b>Метео-итог</b>", esc(cap_sentence(summary))]
+                    L += ["", "🌡️ <b>Метео-итог</b>", esc(_finish_sentence(cap_sentence(summary)))]
             except Exception:
                 pass
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
@@ -525,7 +532,7 @@ async def send_weather(bot, cid, mode="today"):
         L.append(f"{icon} {day_label} — {esc(desc)}, {temp_str}")
 
     if summary:
-        L += ["", "🌡️ <b>Метео-итог</b>", esc(cap_sentence(summary))]
+        L += ["", "🌡️ <b>Метео-итог</b>", esc(_finish_sentence(cap_sentence(summary)))]
 
     kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
     await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
