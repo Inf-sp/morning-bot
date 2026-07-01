@@ -1,8 +1,10 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+import re
+from html import unescape
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 import store
 import ai
 import verify
-import util
 
 _MED_WORDS = ("боль", "болит", "симптом", "врач", "горло", "кашель", "тошнот", "давлен",
               "сыпь", "простуд", "грипп", "живот", "голова", "мигрень", "насморк")
@@ -44,6 +46,67 @@ _FALLBACK_KB = InlineKeyboardMarkup([
     [InlineKeyboardButton("🍿 Досуг",      callback_data="m_leisure"),
      InlineKeyboardButton("🥣 Готовка",    callback_data="m_food")],
 ])
+
+
+_LEADING_EMOJI_RE = re.compile(
+    r"^[\s\U0001F1E6-\U0001FAFF\u2600-\u27BF\uFE0F]+"
+)
+
+
+def _u16_len(text: str) -> int:
+    return len((text or "").encode("utf-16-le")) // 2
+
+
+def _clean_assistant_line(line: str) -> str:
+    line = unescape(line or "").strip()
+    line = re.sub(r"</?(?:b|strong|i|em|code)>", "", line, flags=re.I)
+    line = re.sub(r"^#{1,6}\s*", "", line)
+    line = re.sub(r"\*\*(.*?)\*\*", r"\1", line)
+    line = re.sub(r"__(.*?)__", r"\1", line)
+    return line.strip()
+
+
+def _strip_title_emoji(line: str) -> str:
+    return _LEADING_EMOJI_RE.sub("", line or "").strip()
+
+
+def _assistant_entities_card(answer: str):
+    raw_lines = [_clean_assistant_line(line) for line in (answer or "").splitlines()]
+    lines = [line for line in raw_lines if line]
+    if not lines:
+        lines = ["Пусто", "Попробуй ещё раз."]
+
+    title = _strip_title_emoji(lines[0]).rstrip(".:") or "Ответ"
+    body = lines[1:]
+    chunks = []
+    entities = []
+
+    def add(text: str, entity_type=None):
+        offset = _u16_len("".join(chunks))
+        chunks.append(text)
+        if entity_type and text:
+            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
+
+    add(title, MessageEntity.BOLD)
+    if body:
+        add("\n\n")
+
+    for idx, line in enumerate(body):
+        normalized = line.strip()
+        is_quote = normalized.startswith((">", "»"))
+        if is_quote:
+            normalized = normalized.lstrip(">» ").strip()
+
+        if normalized.lower().startswith(("это значит", "значит:")):
+            normalized = "Это значит:"
+
+        entity_type = MessageEntity.BLOCKQUOTE if is_quote else None
+        add(normalized, entity_type)
+        if idx != len(body) - 1:
+            add("\n" if normalized.startswith("- ") else "\n\n")
+
+    # Если модель дала короткий ответ без явной цитаты, не выдумываем цитируемый блок.
+    return "".join(chunks).rstrip(), entities
 
 
 def _detect_intent(text: str):
@@ -143,11 +206,15 @@ async def chat_reply(bot, cid, text):
     store.chat_history[str(cid)] = hist[-10:]
     store.last_answer[str(cid)] = answer
     store.last_surface[str(cid)] = "chat"
-    ok = await util.edit_html(
-        pending,
-        (answer or "").strip() or "Пусто, попробуй ещё раз.",
-        reply_markup=_FALLBACK_KB,
-    )
+    out_text, entities = _assistant_entities_card((answer or "").strip() or "Пусто, попробуй ещё раз.")
+    ok = False
+    try:
+        await pending.edit_text(out_text, entities=entities, reply_markup=_FALLBACK_KB)
+        ok = True
+    except Exception:
+        ok = False
     if not ok:
-        await verify.safe_send(bot, cid, (answer or "").strip() or "Пусто, попробуй ещё раз.",
-                               surface="chat", reply_markup=_FALLBACK_KB)
+        try:
+            await bot.send_message(chat_id=cid, text=out_text, entities=entities, reply_markup=_FALLBACK_KB)
+        except Exception:
+            await verify.safe_send(bot, cid, out_text, surface="chat", reply_markup=_FALLBACK_KB)
