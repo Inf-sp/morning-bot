@@ -232,7 +232,6 @@ async def send_wardrobe(bot, cid, back="m_notes"):
     if store.pending_input.get(str(cid)) == "wardrobe_profile_input":
         store.pending_input.pop(str(cid), None)
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎚️ Параметры", callback_data="set_body")],
         [InlineKeyboardButton("❌ Убрать", callback_data="set_ward_del")],
         [InlineKeyboardButton("✏️ Добавить", callback_data="set_ward_add")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
@@ -664,22 +663,25 @@ async def send_notes(bot, cid):
     n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     rows = [
         [InlineKeyboardButton(f"⭐️ Ознакомиться позже ({n_fav})", callback_data="as_bucket_fav")],
-        [InlineKeyboardButton("🌍 Сменить город", callback_data="set_city")],
-        [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
         [
-            InlineKeyboardButton("👕 Гардероб", callback_data="set_wardrobe"),
-            InlineKeyboardButton("🥣 Готовка", callback_data="set_fridge"),
-            InlineKeyboardButton("📚 Обучение", callback_data="set_dict"),
+            InlineKeyboardButton("Уведомления", callback_data="set_notif"),
+            InlineKeyboardButton("Город", callback_data="set_city"),
+            InlineKeyboardButton("Язык", callback_data="set_levels"),
         ],
         [
-            InlineKeyboardButton("💭 Язык", callback_data="set_levels"),
-            InlineKeyboardButton("🚑 Здоровье", callback_data="set_lagom"),
-            InlineKeyboardButton("🎬 Кино", callback_data="as_love_movies"),
+            InlineKeyboardButton("Словарь", callback_data="set_dict"),
+            InlineKeyboardButton("Вещи", callback_data="set_wardrobe"),
+            InlineKeyboardButton("Профиль", callback_data="set_body"),
         ],
         [
-            InlineKeyboardButton("🗺️ Страны", callback_data="as_love_countries"),
-            InlineKeyboardButton("🎸 Артисты", callback_data="as_love_artists"),
-            InlineKeyboardButton("📖 Книги", callback_data="as_love_books"),
+            InlineKeyboardButton("Продукты", callback_data="set_fridge"),
+            InlineKeyboardButton("Лагом", callback_data="set_lagom"),
+            InlineKeyboardButton("Кино", callback_data="as_love_movies"),
+        ],
+        [
+            InlineKeyboardButton("Страны", callback_data="as_love_countries"),
+            InlineKeyboardButton("Артисты", callback_data="as_love_artists"),
+            InlineKeyboardButton("Книги", callback_data="as_love_books"),
         ],
         [
             InlineKeyboardButton("📤 Экспорт в файл", callback_data="as_export"),
@@ -688,10 +690,7 @@ async def send_notes(bot, cid):
     await bot.send_message(chat_id=cid, parse_mode="HTML",
         text=(
             "🎚️ <b>Настройки</b>\n\n"
-            "<b>Профиль и уведомления</b>\n"
-            "<b>Настройки обучения</b>\n"
-            "<b>Мои списки</b>\n"
-            "<b>Действия</b>"
+            "Настройте бота под себя и управляйте личными данными."
         ),
         reply_markup=InlineKeyboardMarkup(rows))
 
