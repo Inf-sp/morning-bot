@@ -6,7 +6,7 @@ import learning
 from util import esc
 
 SETTINGS_KEY = "user_settings.json"
-ADMIN_RUN_NOTIF_TITLE = "📩 Запустить рассылку"
+ADMIN_RUN_NOTIF_TITLE = "Превью рассылки"
 ADMIN_RUN_NOTIF_TEXT = (
     f"<b>{ADMIN_RUN_NOTIF_TITLE}</b>\n\n"
     "Выбери уведомление — оно придёт тебе прямо сейчас.\n"
