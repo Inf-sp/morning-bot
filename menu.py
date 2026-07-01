@@ -156,11 +156,11 @@ def menu_screen(key):
             "Фильмы, музыка, книги и путешествия — под твой вкус."
             + _MENU_FOOTER,
             _ikb([
-                [("✈️ Путешествия", "a_trav_go")], 
-                [("🎬 Кино", "a_watch")],
-                [("📖 Книги", "a_read")], 
-                [("🎸 Музыка", "a_listen")], 
-                [("🎫 Концерты", "a_concerts_find")],
+                [("✈️ Планирование путешествий", "a_trav_go")], 
+                [("🎫 Поиск по концертам", "a_concerts_find")],
+                [("🎸 Подбор музыкантов", "a_listen")], 
+                [("🎬 Подбор кино", "a_watch")],
+                [("📖 Подбор книг", "a_read")], 
                 [("🎚️ Настройки досуга", "m_leisure_settings")],
             ])
         )
@@ -171,7 +171,7 @@ def menu_screen(key):
             + _MENU_FOOTER,
             _ikb([
                 [("🎚️ Кино", "ls_love_movies"), ("🎚️ Страны", "ls_love_countries")],
-                [("🎚️ Артисты", "ls_love_artists"), ("🎚️ Книги", "ls_love_books")],
+                [("🎚️ Музыканты", "ls_love_artists"), ("🎚️ Книги", "ls_love_books")],
                 [("◀️ Назад", "m_leisure")],
             ])
         )

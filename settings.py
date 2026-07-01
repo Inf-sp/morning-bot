@@ -379,7 +379,7 @@ async def send_countries(bot, cid):
 # --- Артисты ---
 async def send_artists(bot, cid):
     items = store.get_list(config.ARTISTS_KEY, cid)
-    await bot.send_message(chat_id=cid, text="🎤 <b>Мои артисты</b>", parse_mode="HTML",
+    await bot.send_message(chat_id=cid, text="🎤 <b>Мои музыканты</b>", parse_mode="HTML",
                            reply_markup=_list_kb(items, "setdel_artist_", "setadd_artist",
                                                  clean_cb="set_clean_artists"))
 
@@ -769,7 +769,7 @@ async def export_notes(bot, cid):
     lines.append("❤️ ЛЮБИМЫЕ")
     sections = [
         ("Мои страны", store.get_list(config.COUNTRIES_KEY, cid)),
-        ("Мои артисты", store.get_list(config.ARTISTS_KEY, cid)),
+        ("Мои музыканты", store.get_list(config.ARTISTS_KEY, cid)),
         ("Мои книги", store.get_list(config.BOOKS_KEY, cid)),
     ]
     any_love = False
@@ -981,7 +981,7 @@ async def send_bucket(bot, cid, bucket):
 LOVE_SECTIONS = [
     ("🎬 Кино", "movies"),
     ("🗺️ Мои страны", "countries"),
-    ("🎸 Мои артисты", "artists"),
+    ("🎸 Мои музыканты", "artists"),
     ("📖 Мои книги", "books"),
 ]
 
@@ -1005,7 +1005,7 @@ def _love_items(cid, key):
 
 def _love_title(key):
     return {"movies": "🎬 Мое кино", "countries": "🗺️ Мои страны",
-            "artists": "🎸 Мои артисты", "books": "📖 Мои книги"}.get(key, "Любимые")
+            "artists": "🎸 Мои музыканты", "books": "📖 Мои книги"}.get(key, "Любимые")
 
 async def send_love_section(bot, cid, key):
     if key == "recipes":

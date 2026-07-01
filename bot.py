@@ -247,7 +247,7 @@ async def answer_callback(update, context):
                 await _ack(q); await leisure.find_concerts(bot, cid, "home")
             elif act == "concerts_pick":
                 await leisure.concert_pick_country(bot, cid)
-            elif act in ("concerts_be", "concerts_de", "concerts_fr", "concerts_gb",
+            elif act in ("concerts_nl", "concerts_be", "concerts_de", "concerts_fr", "concerts_gb",
                          "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
                          "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
                 await _ack(q); await leisure.find_concerts(bot, cid, act.split("_")[1])

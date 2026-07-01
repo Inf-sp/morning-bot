@@ -53,6 +53,52 @@ def test_country_facts_cached(monkeypatch):
 
 
 @pytest.mark.unit
+def test_country_facts_uses_configured_restcountries_base(monkeypatch):
+    research._CF_CACHE.clear()
+    urls = []
+    monkeypatch.setattr(research.config, "RESTCOUNTRIES_BASE_URL", "https://rest.test/v3.1/")
+
+    def fake(url, *a, **k):
+        urls.append(url)
+        return _Resp(200, _DE)
+
+    monkeypatch.setattr(research.requests, "get", fake)
+    assert research.country_facts("Германия")["cc"] == "DE"
+    assert urls == ["https://rest.test/v3.1/alpha/DE"]
+
+
+@pytest.mark.unit
+def test_country_facts_sends_optional_api_key(monkeypatch):
+    research._CF_CACHE.clear()
+    seen = {}
+    monkeypatch.setattr(research.config, "RESTCOUNTRIES_API_KEY", "secret")
+
+    def fake(url, *a, **k):
+        seen["headers"] = k.get("headers")
+        return _Resp(200, _DE)
+
+    monkeypatch.setattr(research.requests, "get", fake)
+    assert research.country_facts("Германия")["capital"] == "Berlin"
+    assert seen["headers"] == {"Authorization": "Bearer secret", "X-API-Key": "secret"}
+
+
+@pytest.mark.unit
+def test_country_facts_falls_back_to_translation(monkeypatch):
+    research._CF_CACHE.clear()
+    urls = []
+
+    def fake(url, *a, **k):
+        urls.append(url)
+        if "/translation/" in url:
+            return _Resp(200, _DE)
+        return _Resp(404, {})
+
+    monkeypatch.setattr(research.requests, "get", fake)
+    assert research.country_facts("Deutschland")["capital"] == "Berlin"
+    assert any("/translation/Deutschland" in url for url in urls)
+
+
+@pytest.mark.unit
 def test_wiki_fact_picks_sentence(monkeypatch):
     long = ("Берлин - столица Германии и один из крупнейших городов Европы. "
             "Город известен своей историей и культурой на протяжении веков.")
@@ -75,3 +121,21 @@ def test_facts_block_and_grounded():
     assert "столица: Berlin" in block and "валюта: EUR" in block
     assert research.grounded(d) is True
     assert research.grounded({}) is False
+
+
+@pytest.mark.unit
+def test_serpapi_search_normalizes_results(monkeypatch):
+    class Resp:
+        def json(self):
+            return {"organic_results": [
+                {"title": "Songkick", "link": "https://songkick.com/a", "snippet": "tour dates"},
+                {"title": "No link"},
+            ]}
+
+    monkeypatch.setattr(research.config, "SERPAPI_API_KEY", "key")
+    research._SERP_CACHE.clear()
+    monkeypatch.setattr(research.requests, "get", lambda *a, **k: Resp())
+
+    assert research.serpapi_search("artist concerts") == [
+        {"title": "Songkick", "url": "https://songkick.com/a", "content": "tour dates"}
+    ]

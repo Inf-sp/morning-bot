@@ -240,7 +240,7 @@ async def _save_leisure(cid, raw: str) -> list:
         saved.append(f"Фильмы ({len(movies)}): {', '.join(str(m) for m in movies[:3])}…")
     if artists:
         store.set_list(config.ARTISTS_KEY, cid, [str(a)[:80] for a in artists[:30]])
-        saved.append(f"Артисты ({len(artists)}): {', '.join(str(a) for a in artists[:3])}…")
+        saved.append(f"Музыканты ({len(artists)}): {', '.join(str(a) for a in artists[:3])}…")
     if books:
         store.set_list(config.BOOKS_KEY, cid, [str(b)[:80] for b in books[:30]])
         saved.append(f"Книги ({len(books)}): {', '.join(str(b) for b in books[:3])}…")

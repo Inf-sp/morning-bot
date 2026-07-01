@@ -10,6 +10,7 @@ import re
 import time
 import random
 import requests
+from urllib.parse import quote
 
 _log = logging.getLogger(__name__)
 import util
@@ -301,6 +302,46 @@ def weather_records(lat: float, lon: float, tz: str = "UTC", years: int = 10) ->
 
 
 # ================= REST COUNTRIES =================
+_RESTCOUNTRIES_FIELDS = "cca2,capital,languages,region,currencies"
+
+def _restcountries_base_url():
+    return (getattr(config, "RESTCOUNTRIES_BASE_URL", "") or "https://restcountries.com/v3.1").rstrip("/")
+
+def _restcountries_headers():
+    key = getattr(config, "RESTCOUNTRIES_API_KEY", "") or ""
+    return {"Authorization": f"Bearer {key}", "X-API-Key": key} if key else None
+
+def _country_query_steps(name, cc):
+    seen = set()
+    steps = []
+    if cc:
+        steps.append(("alpha", cc.upper()))
+    elif re.fullmatch(r"[A-Za-z]{2}", name):
+        steps.append(("alpha", name.upper()))
+    steps.extend([("translation", name), ("name", name)])
+    out = []
+    for kind, value in steps:
+        key = (kind, value.lower())
+        if value and key not in seen:
+            seen.add(key)
+            out.append((kind, value))
+    return out
+
+def _parse_country_payload(payload, fallback_cc=""):
+    c = payload[0] if isinstance(payload, list) and payload else (payload if isinstance(payload, dict) else None)
+    if not c:
+        return {}
+    langs = list((c.get("languages") or {}).values())
+    cur = list((c.get("currencies") or {}).keys())
+    cap = c.get("capital") or []
+    return {
+        "cc": c.get("cca2", "") or fallback_cc,
+        "capital": cap[0] if cap else "",
+        "languages": langs,
+        "region": c.get("region", ""),
+        "currency": cur[0] if cur else "",
+    }
+
 def country_facts(name):
     """Проверенные факты о стране -> {cc, capital, languages, region, currency} или {}."""
     name = (name or "").strip()
@@ -311,24 +352,22 @@ def country_facts(name):
     if hit and (time.time() - hit[0]) < _CF_TTL:
         return hit[1]
     cc = util.cc_of(name)   # офлайн ru/en -> ISO; для известных стран запрос точнее
-    url = (f"https://restcountries.com/v3.1/alpha/{cc}" if cc
-           else f"https://restcountries.com/v3.1/name/{name}")
-    out = {}
+    base_url = _restcountries_base_url()
+    headers = _restcountries_headers()
     try:
-        r = requests.get(url, params={"fields": "cca2,capital,languages,region,currencies"}, timeout=12)
-        if r.status_code == 200:
-            arr = r.json()
-            c = arr[0] if isinstance(arr, list) and arr else (arr if isinstance(arr, dict) else None)
-            if c:
-                langs = list((c.get("languages") or {}).values())
-                cur = list((c.get("currencies") or {}).keys())
-                cap = c.get("capital") or []
-                out = {"cc": c.get("cca2", "") or cc, "capital": cap[0] if cap else "",
-                       "languages": langs, "region": c.get("region", ""),
-                       "currency": cur[0] if cur else ""}
+        for kind, value in _country_query_steps(name, cc):
+            url = f"{base_url}/{kind}/{quote(value)}"
+            r = requests.get(url, params={"fields": _RESTCOUNTRIES_FIELDS}, headers=headers, timeout=12)
+            if r.status_code != 200:
+                continue
+            out = _parse_country_payload(r.json(), cc)
+            if out:
+                _CF_CACHE[key] = (time.time(), out)
+                return out
     except Exception as e:
         _log.warning("research: country_facts(%s) failed, not caching: %s", name, e)
         return {}
+    out = {}
     _CF_CACHE[key] = (time.time(), out)
     return out
 
@@ -545,6 +584,7 @@ def gemini_search_facts_multi(city: str, country: str, cc: str = "",
 
 _TV_CACHE: dict = {}    # query -> (ts, results)
 _TV_TTL = 86400         # 24h — запросы дорогие, кешируем на сутки
+_SERP_CACHE: dict = {}
 
 
 def tavily_search(query: str, max_results: int = 5) -> list:
@@ -588,3 +628,53 @@ def tavily_snippet(query: str, max_chars: int = 1200) -> str:
             parts.append(chunk)
             total += len(chunk)
     return "\n---\n".join(parts)
+
+
+def serpapi_search(query: str, max_results: int = 5) -> list:
+    """Google Search через SerpAPI. Возвращает list[{title, url, content}] или [] при ошибке/нет ключа."""
+    if not config.SERPAPI_API_KEY:
+        return []
+    key = f"{query}:{max_results}"
+    cached = _SERP_CACHE.get(key)
+    if cached and time.time() - cached[0] < _TV_TTL:
+        return cached[1]
+    try:
+        r = requests.get(
+            "https://serpapi.com/search.json",
+            params={
+                "engine": "google",
+                "q": query,
+                "api_key": config.SERPAPI_API_KEY,
+                "num": max_results,
+                "hl": "en",
+            },
+            timeout=15,
+        )
+        organic = r.json().get("organic_results") or []
+        results = []
+        for item in organic[:max_results]:
+            url = (item.get("link") or "").strip()
+            title = (item.get("title") or "").strip()
+            content = (item.get("snippet") or "").strip()
+            if url:
+                results.append({"title": title, "url": url, "content": content})
+        _SERP_CACHE[key] = (time.time(), results)
+        return results
+    except Exception as e:
+        _log.warning("serpapi_search failed: %s", str(e)[:120])
+        return []
+
+
+def web_search(query: str, max_results: int = 5) -> list:
+    """Общий web fallback: Tavily + SerpAPI, один формат результата, дедуп по URL."""
+    out, seen = [], set()
+    for provider in (tavily_search, serpapi_search):
+        for item in provider(query, max_results=max_results):
+            url = (item.get("url") or "").strip()
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            out.append(item)
+            if len(out) >= max_results:
+                return out
+    return out

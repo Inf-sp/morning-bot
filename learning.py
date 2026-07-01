@@ -162,6 +162,41 @@ def _train_explanation(sentence="", sentence_ru=""):
     return _clip_poll_explanation(sentence_ru or sentence, limit=160)
 
 
+def _phrase_poll_question(blank_phrase, sentence_ru):
+    chunks = []
+    entities = []
+
+    def add(text, entity_type=None):
+        offset = _u16_len("".join(chunks))
+        chunks.append(text)
+        if entity_type and text:
+            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
+
+    add("Фраза-тренажёр", MessageEntity.BOLD)
+    add("\n\n")
+    add(str(blank_phrase or "").strip(), MessageEntity.BLOCKQUOTE)
+    if sentence_ru:
+        add("\n\n")
+        add("Перевод:", MessageEntity.BOLD)
+        add(f" {str(sentence_ru).strip()}")
+    add("\n\n")
+    add("Выбери пропущенное слово из вариантов ниже.")
+    return "".join(chunks).strip()[:300], entities
+
+
+def _phrase_poll_explanation(blank_phrase, correct, full_phrase, sentence_ru, extra=""):
+    parts = []
+    if correct:
+        parts.append(f"Ответ: {correct}")
+    if full_phrase:
+        parts.append(str(full_phrase).strip())
+    if sentence_ru:
+        parts.append(str(sentence_ru).strip())
+    if extra:
+        parts.append(str(extra).strip())
+    return _clip_poll_explanation("\n".join(parts), limit=200)
+
+
 async def _gen_train_quiz_card(word, ru, language):
     """Smart LLM: context sentence + pedagogically useful distractors."""
     prompt = f"""
@@ -573,13 +608,18 @@ async def _render_phrase_quiz(bot, cid):
         "correct_idx": correct_idx,
     })
 
-    explanation = _train_explanation(
-        st.get("sentence", ""),
+    question, question_entities = _phrase_poll_question(blank_phrase, st.get("sentence_ru", ""))
+    explanation = _phrase_poll_explanation(
+        blank_phrase,
+        correct_answer,
+        phrase,
         st.get("sentence_ru", ""),
+        card.get("explanation") or "",
     )
     msg = await bot.send_poll(
         chat_id=cid,
-        question=f"Какое слово пропущено?\n{blank_phrase}"[:300],
+        question=question,
+        question_entities=question_entities,
         options=[str(x)[:100] for x in options[:10]],
         type="quiz",
         correct_option_id=correct_idx,

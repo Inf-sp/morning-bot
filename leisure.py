@@ -310,8 +310,9 @@ def _clip(text, limit=450):
     return (cut[:sp] if sp > 0 else cut).rstrip(" ,.;:—-") + "…"
 
 def _movie_card(it, tm):
-    title = (tm["name"] if tm else it.get("title", ""))
-    year = f" ({tm['year']})" if tm and tm["year"] else ""
+    it = it if isinstance(it, dict) else {"title": str(it)}
+    title = (tm.get("name") if tm else "") or it.get("title", "")
+    year = f" ({tm.get('year')})" if tm and tm.get("year") else ""
     kind = (tm.get("kind") if tm else "") or ""
     icon = "📺" if kind == "tv" else "🎬"
     type_label = "Сериал" if kind == "tv" else ("Фильм" if kind == "movie" else "")
@@ -323,8 +324,8 @@ def _movie_card(it, tm):
     if genre_bits:
         cap.append("")
         cap.append(f"🎭 {esc(genre_bits)}")
-    if tm and tm["rating"]:
-        cap.append(f"⭐ {tm['rating']:.1f}/10 TMDb")
+    if tm and tm.get("rating"):
+        cap.append(f"⭐ {tm.get('rating'):.1f}/10 TMDb")
     if tm and tm.get("overview"):
         cap.append("")
         cap.append(esc(_clip(tm["overview"])))
@@ -346,6 +347,14 @@ def _movie_kb(i):
 
 MIN_TMDB_RATING = 7.0
 
+_MOVIE_FALLBACKS = [
+    {"title": "Решение уйти", "title_en": "Decision to Leave", "hook": "изящный детектив с холодной романтикой и сильной режиссурой"},
+    {"title": "Пылающий", "title_en": "Burning", "hook": "медленный корейский триллер с тревожной пустотой и недосказанностью"},
+    {"title": "Разделение", "title_en": "Severance", "hook": "сериал про офисный абсурд, контроль и очень цепкую загадку"},
+    {"title": "Медведь", "title_en": "The Bear", "hook": "нервный сериал про работу, семью и попытку собрать жизнь заново"},
+    {"title": "Патерсон", "title_en": "Paterson", "hook": "тихое кино про ритм дней, наблюдательность и внутреннюю опору"},
+]
+
 def _movie_used(cid):
     """Множество названий, которые нельзя повторять: любимые, знакомые, чёрный список, закладки."""
     wl = store.get_list(config.WATCHLIST_KEY, cid)
@@ -358,6 +367,13 @@ def _movie_used(cid):
     for x in list(wl) + list(ms) + list(bl) + noted:
         used.add((x if isinstance(x, str) else str(x)).lower())
     return used
+
+def _fallback_movie_items(cid):
+    used = _movie_used(cid)
+    return [
+        dict(x) for x in _MOVIE_FALLBACKS
+        if x["title"].lower() not in used and x["title_en"].lower() not in used
+    ]
 
 def _normalize_movie_items(items):
     """LLM иногда возвращает строки или неполные объекты вместо ожидаемых dict."""
@@ -404,6 +420,7 @@ def _pick_good_movie(items, used_titles):
     return fallback if fallback else (items[0] if items else None, None)
 
 async def _send_movie_card(bot, cid, it, i, tm="__lookup__"):
+    it = it if isinstance(it, dict) else {"title": str(it)}
     if tm == "__lookup__":
         tm = _tmdb_lookup(it.get("title", ""), it.get("title_en", "")) if config.TMDB_API_KEY else None
     title, text = _movie_card(it, tm)
@@ -414,7 +431,11 @@ async def _send_movie_card(bot, cid, it, i, tm="__lookup__"):
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+    try:
+        await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+    except Exception:
+        plain = re.sub(r"<[^>]+>", "", text)
+        await bot.send_message(chat_id=cid, text=plain, reply_markup=kb)
 
 async def send_recos(bot, cid, kind):
     if kind == "book":
@@ -434,6 +455,8 @@ async def send_recos(bot, cid, kind):
             items = []
         if items:
             break
+    if not items:
+        items = _fallback_movie_items(cid)
     if not items:
         await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
     it, tm = await asyncio.to_thread(_pick_good_movie, items, _movie_used(cid))
@@ -509,6 +532,7 @@ def _book_kb(i):
          InlineKeyboardButton("✅ Читал", callback_data=f"book_seen_{i}")],
         [InlineKeyboardButton("⏳ Позже", callback_data=f"reco_{i}"),
          InlineKeyboardButton("❌ Пропустить", callback_data=f"book_no_{i}")],
+        [InlineKeyboardButton("🎚️ Настройки книг", callback_data="set_books")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
@@ -696,12 +720,12 @@ async def book_seen(bot, cid, i):
     await _advance_book(bot, cid)
 
 async def listen_love(bot, cid):
-    """Артист - в любимые (Мои артисты), затем следующая рекомендация."""
+    """Артист - в любимые (Мои музыканты), затем следующая рекомендация."""
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
         artist = rec["items"][0]
         _add_unique(config.ARTISTS_KEY, cid, artist)
-        await bot.send_message(chat_id=cid, text=f"❤️ «{artist}» — в любимые (Мои артисты). Вот ещё вариант 👇")
+        await bot.send_message(chat_id=cid, text=f"❤️ «{artist}» — в любимые (Мои музыканты). Вот ещё вариант 👇")
     await send_listen(bot, cid)
 
 async def listen_seen(bot, cid):
@@ -790,6 +814,7 @@ def _listen_kb():
          InlineKeyboardButton("✅ Знакомо", callback_data="listen_seen")],
         [InlineKeyboardButton("⏳ Позже", callback_data="listen_0"),
          InlineKeyboardButton("❌ Пропустить", callback_data="a_listen_no")],
+        [InlineKeyboardButton("🎚️ Настройка музыкантов", callback_data="set_artists")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
@@ -930,6 +955,103 @@ def _ticketmaster_events_for_artist(artist, cc, start_dt="", end_dt="", size=3):
     except Exception:
         return util.ttl_set("ticketmaster", cache_key, [])
 
+def _ticketmaster_music_events(cc, size=10):
+    if not config.TICKETMASTER_API_KEY:
+        return []
+    cache_key = f"music-events|{cc}|{size}".lower()
+    cached = util.ttl_get("ticketmaster", cache_key, 21600)
+    if cached is not None:
+        return cached
+    import requests
+    try:
+        r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json",
+                         params={
+                             "apikey": config.TICKETMASTER_API_KEY,
+                             "countryCode": cc,
+                             "classificationName": "music",
+                             "size": size,
+                             "sort": "date,asc",
+                         },
+                         timeout=15)
+        events = []
+        for e in r.json().get("_embedded", {}).get("events", []):
+            name_l = e.get("name", "").lower()
+            if any(k in name_l for k in _TRIBUTE_MARKERS):
+                continue
+            e["_artist"] = e.get("name", "")
+            events.append(e)
+        return util.ttl_set("ticketmaster", cache_key, events)
+    except Exception:
+        return util.ttl_set("ticketmaster", cache_key, [])
+
+def _concert_country_search_name(name, cc=""):
+    by_cc = {
+        "NL": "Netherlands", "BE": "Belgium", "DE": "Germany", "FR": "France",
+        "GB": "United Kingdom", "ES": "Spain", "IT": "Italy", "AT": "Austria",
+        "CH": "Switzerland", "PL": "Poland", "SE": "Sweden", "DK": "Denmark",
+        "PT": "Portugal",
+    }
+    return by_cc.get((cc or "").upper(), str(name or "").strip() or "Netherlands")
+
+def _eventbrite_events(query, country_name, size=10):
+    if not config.EVENTBRITE_API_KEY:
+        return []
+    cache_key = f"eventbrite|{query}|{country_name}|{size}".lower()
+    cached = util.ttl_get("eventbrite", cache_key, 21600)
+    if cached is not None:
+        return cached
+    import requests
+    try:
+        r = requests.get(
+            "https://www.eventbriteapi.com/v3/events/search/",
+            headers={"Authorization": f"Bearer {config.EVENTBRITE_API_KEY}"},
+            params={
+                "q": query,
+                "location.address": country_name,
+                "categories": "103",
+                "sort_by": "date",
+                "expand": "venue",
+                "page_size": size,
+            },
+            timeout=15,
+        )
+        events = []
+        for e in r.json().get("events", []):
+            name = (e.get("name") or {}).get("text") or ""
+            url = e.get("url") or ""
+            start = (e.get("start") or {}).get("local") or ""
+            venue = e.get("venue") or {}
+            city = ((venue.get("address") or {}).get("city") or "").strip()
+            venue_name = (venue.get("name") or "").strip()
+            if not name or any(k in name.lower() for k in _TRIBUTE_MARKERS):
+                continue
+            events.append({
+                "id": e.get("id") or url or name,
+                "name": name,
+                "url": url,
+                "_artist": query,
+                "_source": "Eventbrite",
+                "dates": {"start": {"localDate": start[:10]}},
+                "_embedded": {"venues": [{"name": venue_name, "city": {"name": city}}]},
+            })
+        return util.ttl_set("eventbrite", cache_key, events)
+    except Exception:
+        return util.ttl_set("eventbrite", cache_key, [])
+
+async def _eventbrite_events_many(artists, country_name, size=3, limit=10):
+    tasks = [
+        asyncio.to_thread(_eventbrite_events, artist, country_name, size)
+        for artist in artists[:limit]
+    ]
+    batches = await asyncio.gather(*tasks, return_exceptions=True)
+    found = {}
+    for batch in batches:
+        if isinstance(batch, Exception):
+            continue
+        for e in batch:
+            found[e.get("id") or e.get("url") or e.get("name", "")] = e
+    return sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate", "9999"))
+
 async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3, limit=15):
     tasks = [
         asyncio.to_thread(_ticketmaster_events_for_artist, artist, cc, start_dt, end_dt, size)
@@ -950,6 +1072,50 @@ async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3,
             found[e.get("id") or f"{artist}:{date}:{e.get('name', '')}"] = e
     return sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate", "9999"))
 
+def _web_concert_links_for_artists(artists, country_name, limit_artists=8, per_artist=2):
+    """Fallback через веб-поиск: Songkick/Bandsintown/официальные страницы, если Ticketmaster пуст."""
+    rows, seen = [], set()
+    domains = ("songkick.com", "bandsintown.com", "eventbrite.", "ticketmaster.", "eventim.", "livenation.")
+    for artist in artists[:limit_artists]:
+        query = f'{artist} concerts {country_name} Songkick Bandsintown official tour'
+        for result in research.web_search(query, max_results=6):
+            url = (result.get("url") or "").strip()
+            title = (result.get("title") or "").strip()
+            if not url or url in seen:
+                continue
+            low = url.lower()
+            if not any(domain in low for domain in domains):
+                continue
+            seen.add(url)
+            rows.append({"artist": str(artist), "title": title or str(artist), "url": url})
+            if sum(1 for r in rows if r["artist"] == str(artist)) >= per_artist:
+                break
+    return rows
+
+def _concert_place_name(name, cc=""):
+    cc = (cc or "").upper()
+    by_cc = {
+        "NL": "Нидерландах",
+        "BE": "Бельгии",
+        "DE": "Германии",
+        "FR": "Франции",
+        "GB": "Великобритании",
+        "ES": "Испании",
+        "IT": "Италии",
+        "AT": "Австрии",
+        "CH": "Швейцарии",
+        "PL": "Польше",
+        "SE": "Швеции",
+        "DK": "Дании",
+        "PT": "Португалии",
+    }
+    if cc in by_cc:
+        return by_cc[cc]
+    low = str(name or "").strip().lower()
+    if low in ("нидерланды", "netherlands", "nl"):
+        return "Нидерландах"
+    return str(name or "твоей стране").strip()
+
 async def find_concerts(bot, cid, mode="home"):
     if not config.TICKETMASTER_API_KEY:
         await bot.send_message(chat_id=cid,
@@ -964,7 +1130,8 @@ async def find_concerts(bot, cid, mode="home"):
     home_cc = (s.get("cc") or "NL").upper()
     home_flag = util.flag_from_cc(home_cc) or "🏳"
     home_name = s.get("country") or "твоя страна"
-    CC_MAP = {"be": ("BE", "🇧🇪", "Бельгия"), "de": ("DE", "🇩🇪", "Германия"),
+    CC_MAP = {"nl": ("NL", "🇳🇱", "Нидерланды"),
+              "be": ("BE", "🇧🇪", "Бельгия"), "de": ("DE", "🇩🇪", "Германия"),
               "fr": ("FR", "🇫🇷", "Франция"), "gb": ("GB", "🇬🇧", "Великобритания"),
               "es": ("ES", "🇪🇸", "Испания"), "it": ("IT", "🇮🇹", "Италия"),
               "at": ("AT", "🇦🇹", "Австрия"), "ch": ("CH", "🇨🇭", "Швейцария"),
@@ -974,17 +1141,33 @@ async def find_concerts(bot, cid, mode="home"):
         cc, flag, cname = CC_MAP[mode]
     else:
         cc, flag, cname = home_cc, home_flag, home_name
+    cname_place = _concert_place_name(cname, cc)
 
     from util import _MONTHS
     events = await _ticketmaster_events_many(artists, cc, size=3, limit=15)
+    web_links = []
+    source_label = "Концерты твоих артистов"
+    eventbrite_country = _concert_country_search_name(cname, cc)
+    if not events:
+        events = await _eventbrite_events_many(artists, eventbrite_country, size=3, limit=10)
+        if events:
+            source_label = "Концерты твоих артистов · Eventbrite"
+    if not events:
+        web_links = await asyncio.to_thread(_web_concert_links_for_artists, artists, cname, 8, 1)
+        events = await asyncio.to_thread(_ticketmaster_music_events, cc, 12)
+        source_label = "Ближайшие музыкальные события"
+    if not events:
+        events = await asyncio.to_thread(_eventbrite_events, "music concert", eventbrite_country, 12)
+        if events:
+            source_label = "Ближайшие музыкальные события · Eventbrite"
 
     rows = [[InlineKeyboardButton("🌍 Сменить страну", callback_data="a_concerts_pick")]]
     kb = InlineKeyboardMarkup(rows)
 
-    if not events:
-        store.last_answer[str(cid)] = f"Мероприятия в {cname}: ничего не нашёл."
+    if not events and not web_links:
+        store.last_answer[str(cid)] = f"Мероприятия в {cname_place}: ничего не нашёл."
         await bot.send_message(chat_id=cid,
-            text=f"🎤 <b>Концерты в {esc(cname)}</b>\n\nСейчас ничего не нашёл. Попробуй другую страну 🌍",
+            text=f"🎤 <b>Концерты в {esc(cname_place)}</b>\n\nСейчас ничего не нашёл. Попробуй другую страну 🌍",
             parse_mode="HTML", reply_markup=kb)
         return
 
@@ -995,7 +1178,15 @@ async def find_concerts(bot, cid, mode="home"):
         except Exception:
             return ds
 
-    lines = [f"🎤 <b>Концерты в {esc(cname)}</b>", ""]
+    lines = [f"🎤 <b>Концерты в {esc(cname_place)}</b>", ""]
+    if web_links:
+        lines += ["<b>Нашёл вне Ticketmaster</b>"]
+        for r in web_links[:8]:
+            lines.append(f"• <b>{esc(r['artist'])}</b> — {esc(r['title'])}")
+            lines.append(f"  {esc(r['url'])}")
+        lines.append("")
+    if events:
+        lines += [f"<b>{esc(source_label)}</b>", ""]
     for e in events[:20]:
         artist = e.get("_artist", "")
         name = e.get("name", "")
@@ -1136,11 +1327,26 @@ async def send_weekly_events(bot, cid):
 
 
 async def concert_pick_country(bot, cid):
-    codes = [("be", "🇧🇪 Бельгия"), ("de", "🇩🇪 Германия"), ("fr", "🇫🇷 Франция"),
-             ("gb", "🇬🇧 Великобр."), ("es", "🇪🇸 Испания"), ("it", "🇮🇹 Италия"),
-             ("at", "🇦🇹 Австрия"), ("ch", "🇨🇭 Швейцария"), ("pl", "🇵🇱 Польша"),
-             ("se", "🇸🇪 Швеция"), ("dk", "🇩🇰 Дания"), ("pt", "🇵🇹 Португалия")]
-    rows = [[InlineKeyboardButton(lbl, callback_data=f"a_concerts_{cc}")] for cc, lbl in codes]
+    countries = [
+        ("at", "Австрия", "🇦🇹 Австрия"),
+        ("be", "Бельгия", "🇧🇪 Бельгия"),
+        ("gb", "Великобритания", "🇬🇧 Великобр."),
+        ("de", "Германия", "🇩🇪 Германия"),
+        ("dk", "Дания", "🇩🇰 Дания"),
+        ("es", "Испания", "🇪🇸 Испания"),
+        ("it", "Италия", "🇮🇹 Италия"),
+        ("nl", "Нидерланды", "🇳🇱 Нидерланды"),
+        ("pl", "Польша", "🇵🇱 Польша"),
+        ("pt", "Португалия", "🇵🇹 Португалия"),
+        ("fr", "Франция", "🇫🇷 Франция"),
+        ("ch", "Швейцария", "🇨🇭 Швейцария"),
+        ("se", "Швеция", "🇸🇪 Швеция"),
+    ]
+    buttons = [
+        InlineKeyboardButton(label, callback_data=f"a_concerts_{cc}")
+        for cc, _name, label in sorted(countries, key=lambda x: x[1])
+    ]
+    rows = [buttons[i:i + 3] for i in range(0, len(buttons), 3)]
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -1189,6 +1395,7 @@ def _travel_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🧳 Собрать план поездки", callback_data="a_trav_plan")],
         [InlineKeyboardButton("❌ Пропустить", callback_data="a_trav_no")],
+        [InlineKeyboardButton("🎚️ Настройки стран", callback_data="set_countries")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
