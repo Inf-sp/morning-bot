@@ -28,16 +28,6 @@ from util import ack_loading as _ack
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID
 
-class _NokbBot:
-    """Обёртка для push-джобов: убирает reply_markup из всех send_* (кнопки не нужны в уведомлениях)."""
-    def __init__(self, bot): self._bot = bot
-    def __getattr__(self, name):
-        orig = getattr(self._bot, name)
-        if name in ("send_message", "send_photo", "send_document", "send_animation", "send_chat_action"):
-            async def _w(*a, **kw): kw.pop("reply_markup", None); return await orig(*a, **kw)
-            return _w
-        return orig
-
 
 
 _WELCOME = menu.WELCOME
@@ -604,36 +594,16 @@ async def job_morning_brief(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "morning_brief"):
             continue
         try:
-            await myday.send_plany(_NokbBot(context.bot), cid, force=True)
+            await settings.send_scheduled_notification(context.bot, cid, "morning_brief")
         except Exception:
             logging.exception("job_morning_brief failed for cid=%s", cid)
 
 async def job_weather_warn(context: ContextTypes.DEFAULT_TYPE):
-    _WARN_CODES = {95, 96, 99}
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "weather_warn"):
             continue
         try:
-            s = store.get_settings(cid)
-            import asyncio
-            data = await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 2)
-            d = data["daily"]
-            wind = d["windspeed_10m_max"][0] or 0
-            code = d["weathercode"][0]
-            rain = d["precipitation_probability_max"][0] or 0
-            rain_mm = (d.get("precipitation_sum") or [None])[0]
-            if wind > 10 or code in _WARN_CODES or rain > 70:
-                text = weather.storm_alert(wind, code, rain, rain_mm, cc=s.get("cc", ""))
-                if not text:
-                    parts = []
-                    if wind > 10:
-                        parts.append(f"💨 ветер до {wind:.0f} м/с")
-                    if rain > 70:
-                        parts.append(f"🌧 дождь {rain:.0f}%")
-                    if code in _WARN_CODES:
-                        parts.append("⛈ возможна гроза")
-                    text = "⚠️ <b>Погодное предупреждение</b>\n\n" + " • ".join(parts)
-                await context.bot.send_message(chat_id=cid, text=text, parse_mode="HTML")
+            await settings.send_scheduled_notification(context.bot, cid, "weather_warn")
         except Exception:
             logging.exception("job_weather_warn failed for cid=%s", cid)
 
@@ -642,7 +612,7 @@ async def job_lagom(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "lagom_daily"):
             continue
         try:
-            await balance.send_motiv_push(_NokbBot(context.bot), cid)
+            await settings.send_scheduled_notification(context.bot, cid, "lagom_daily")
         except Exception:
             logging.exception("job_lagom failed for cid=%s", cid)
 
@@ -650,9 +620,9 @@ async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         try:
             if settings.notif_on(cid, "daily_words_nl"):
-                await learning.send_morning_word(context.bot, cid, language="нидерландский", with_kb=False)
+                await settings.send_scheduled_notification(context.bot, cid, "daily_words_nl")
             if settings.notif_on(cid, "daily_words_en"):
-                await learning.send_morning_word(context.bot, cid, language="английский", with_kb=False)
+                await settings.send_scheduled_notification(context.bot, cid, "daily_words_en")
         except Exception:
             logging.exception("job_daily_words failed for cid=%s", cid)
 
@@ -661,10 +631,7 @@ async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "checkin_day"):
             continue
         try:
-            store.pending_input[str(cid)] = "worry"
-            await context.bot.send_message(chat_id=cid, parse_mode="HTML",
-                text="🫣 <b>Дневная разгрузка</b>\n\nСейчас не анализируй, просто выгрузи мысли.\n\n"
-                     "Каждая тревога - с новой строки.\n\nВечером проверим, что было фактами, а что шумом…")
+            await settings.send_scheduled_notification(context.bot, cid, "checkin_day")
         except Exception:
             logging.exception("job_checkin_day failed for cid=%s", cid)
 
@@ -673,7 +640,7 @@ async def job_recipe(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "recipe_daily"):
             continue
         try:
-            await balance.send_recipe_push(_NokbBot(context.bot), cid)
+            await settings.send_scheduled_notification(context.bot, cid, "recipe_daily")
         except Exception:
             logging.exception("job_recipe failed for cid=%s", cid)
 
@@ -682,7 +649,7 @@ async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "checkin_eve"):
             continue
         try:
-            await balance.send_evening_review(context.bot, cid)
+            await settings.send_scheduled_notification(context.bot, cid, "checkin_eve")
         except Exception:
             logging.exception("job_checkin_evening failed for cid=%s", cid)
 
@@ -691,7 +658,7 @@ async def job_weekly_events(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "weekly_events"):
             continue
         try:
-            await leisure.send_weekly_events(_NokbBot(context.bot), cid)
+            await settings.send_scheduled_notification(context.bot, cid, "weekly_events")
         except Exception:
             logging.exception("job_weekly_events failed for cid=%s", cid)
 
@@ -700,7 +667,7 @@ async def job_live_lang(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "live_lang"):
             continue
         try:
-            await learning.send_proverb_both(context.bot, cid, with_kb=False)
+            await settings.send_scheduled_notification(context.bot, cid, "live_lang")
         except Exception:
             logging.exception("job_live_lang failed for cid=%s", cid)
 
@@ -709,7 +676,7 @@ async def job_weekly_forecast(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "weekly_forecast"):
             continue
         try:
-            await weather.send_weather(_NokbBot(context.bot), cid, "week_plain")
+            await settings.send_scheduled_notification(context.bot, cid, "weekly_forecast")
         except Exception:
             logging.exception("job_weekly_forecast failed for cid=%s", cid)
 
@@ -719,7 +686,7 @@ async def job_evening_weather(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "evening_weather"):
             continue
         try:
-            await weather.send_weather(_NokbBot(context.bot), cid, "tomorrow_plain")
+            await settings.send_scheduled_notification(context.bot, cid, "evening_weather")
         except Exception:
             logging.exception("job_evening_weather failed for cid=%s", cid)
 
