@@ -6,6 +6,12 @@ import learning
 from util import esc
 
 SETTINGS_KEY = "user_settings.json"
+ADMIN_RUN_NOTIF_TITLE = "📩 Запустить рассылку"
+ADMIN_RUN_NOTIF_TEXT = (
+    f"<b>{ADMIN_RUN_NOTIF_TITLE}</b>\n\n"
+    "Выбери уведомление — оно придёт тебе прямо сейчас.\n"
+    "Время в кнопках показывает обычное расписание."
+)
 NOTIF_TYPES = [
     ("morning_brief",  "☀️ Утренний бриф"),
     ("weather_warn",   "🌧 Погодное предупреждение"),
@@ -1014,11 +1020,11 @@ async def _admin_guard(bot, cid, fn):
 async def send_admin(bot, cid):
     """Главный экран администратора."""
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📡 Статус сервисов", callback_data="set_admin_health")],
-        [InlineKeyboardButton("🧪 LLM check", callback_data="set_admin_llmcheck")],
         [InlineKeyboardButton("👥 Пользователи", callback_data="set_admin_users")],
-        [InlineKeyboardButton("💸 Расходы на LLM", callback_data="set_admin_cost")],
-        [InlineKeyboardButton("📩 Запустить рассылку", callback_data="set_admin_run_notif")],
+        [InlineKeyboardButton("📡 Статус сервисов", callback_data="set_admin_health"),
+        InlineKeyboardButton("🧪 LLM check", callback_data="set_admin_llmcheck")],
+        [InlineKeyboardButton("💸 Расходы на LLM", callback_data="set_admin_cost"),
+        InlineKeyboardButton(ADMIN_RUN_NOTIF_TITLE, callback_data="set_admin_run_notif")],
         [InlineKeyboardButton("◀️ Назад", callback_data="set_home")],
     ])
     await bot.send_message(
@@ -1223,11 +1229,7 @@ async def send_admin_run_notif(bot, cid):
     kb = InlineKeyboardMarkup(rows)
     await bot.send_message(
         chat_id=cid,
-        text=(
-            "📩 <b>Запустить рассылку</b>\n\n"
-            "Выбери уведомление — оно придёт тебе прямо сейчас.\n"
-            "Время в кнопках показывает обычное расписание."
-        ),
+        text=ADMIN_RUN_NOTIF_TEXT,
         parse_mode="HTML",
         reply_markup=kb,
     )
