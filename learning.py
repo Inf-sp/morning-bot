@@ -304,32 +304,43 @@ def _train_back_target(language=None):
 
 
 def _train_again_kb(language=None, mode="word"):
-    label = "✨ Ещё фразу" if mode == "phrase" else "✨ Ещё слово"
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(label, callback_data="train_next")],
+        [InlineKeyboardButton("✨ Ещё", callback_data="train_next")],
         [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(language))],
     ])
 
-async def train_start(bot, cid, language, mode="word"):
+def _train_available_modes(cid, language):
+    modes = []
+    if _train_phrases(cid, language):
+        modes.append("phrase")
+    if _train_words(cid, language):
+        modes.append("word")
+    return modes
+
+
+async def train_start(bot, cid, language, mode=None):
     store.challenge_state.pop(str(cid), None)
     store.game_state.pop(str(cid), None)
     store.pending_input.pop(str(cid), None)
-    entries = _train_phrases(cid, language) if mode == "phrase" else _train_words(cid, language)
-    if not entries:
+    available_modes = _train_available_modes(cid, language)
+    if not available_modes:
         code = _code(language)
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(
             "📖 Открыть словарь", callback_data=f"a_dictlang_{code}_from_lang")]])
-        label = "фраз с переводом" if mode == "phrase" else "отдельных слов с переводом"
-        item_type = "фраза" if mode == "phrase" else "слово"
         await bot.send_message(chat_id=cid,
-            text=f"{_flag(language)} В словаре нет {label}. Добавь записи типа «{item_type}» через словарь.",
+            text=f"{_flag(language)} В словаре нет слов или фраз с переводом. Добавь записи через словарь.",
             reply_markup=kb)
         return
-    store.train_state[str(cid)] = {"lang": language, "mode": mode, "round": 0, "used": []}
-    if mode == "phrase":
-        await _render_phrase_quiz(bot, cid)
-    else:
-        await _render_quiz(bot, cid)
+    start_mode = mode if mode in available_modes else available_modes[0]
+    store.train_state[str(cid)] = {
+        "lang": language,
+        "mode": start_mode,
+        "next_mode": start_mode,
+        "round": 0,
+        "used_words": [],
+        "used_phrases": [],
+    }
+    await _render_next_train_quiz(bot, cid)
 
 
 async def _render_quiz(bot, cid):
@@ -341,6 +352,10 @@ async def _render_quiz(bot, cid):
     language = st["lang"]
     words = _train_words(cid, language)
     if not words:
+        if _train_phrases(cid, language):
+            st["next_mode"] = "phrase"
+            await _render_phrase_quiz(bot, cid)
+            return
         await bot.send_message(chat_id=cid, text="В словаре нет отдельных слов с переводом."); return
 
     # В 30% раундов пробуем новое частотное слово выше B1, близкое к словарю.
@@ -356,15 +371,15 @@ async def _render_quiz(bot, cid):
         word_source = "new"
     else:
         # Выбираем слово (без повторов пока не исчерпаем весь список)
-        used = st.get("used", [])
+        used = st.get("used_words", [])
         available = [(i, w) for i, w in enumerate(words) if i not in used]
         if not available:
             used = []
             available = list(enumerate(words))
-            st["used"] = used
+            st["used_words"] = used
         idx, (word, ru) = _r.choice(available)
         used.append(idx)
-        st["used"] = used
+        st["used_words"] = used
 
     card = await _gen_train_quiz_card(word, ru, language)
     correct_answer = card.get("correct") or ru
@@ -398,6 +413,8 @@ async def _render_quiz(bot, cid):
     correct_idx = options.index(correct_answer)
 
     st.update({
+        "mode": "word",
+        "next_mode": "phrase" if _train_phrases(cid, language) else "word",
         "word": word,
         "ru": ru,
         "sentence": card.get("sentence") or word,
@@ -439,17 +456,21 @@ async def _render_phrase_quiz(bot, cid):
     language = st["lang"]
     phrases = _train_phrases(cid, language)
     if not phrases:
+        if _train_words(cid, language):
+            st["next_mode"] = "word"
+            await _render_quiz(bot, cid)
+            return
         await bot.send_message(chat_id=cid, text="В словаре нет фраз с переводом."); return
 
-    used = st.get("used", [])
+    used = st.get("used_phrases", [])
     available = [(i, p) for i, p in enumerate(phrases) if i not in used]
     if not available:
         used = []
         available = list(enumerate(phrases))
-        st["used"] = used
+        st["used_phrases"] = used
     idx, (phrase, ru) = _r.choice(available)
     used.append(idx)
-    st["used"] = used
+    st["used_phrases"] = used
 
     card = await _gen_phrase_quiz_card(phrase, ru, language)
     correct_answer = card.get("correct") or ""
@@ -477,6 +498,7 @@ async def _render_phrase_quiz(bot, cid):
     correct_idx = options.index(correct_answer)
     st.update({
         "mode": "phrase",
+        "next_mode": "word" if _train_words(cid, language) else "phrase",
         "word": phrase,
         "ru": ru,
         "sentence": blank_phrase,
@@ -586,12 +608,22 @@ async def _send_train_feedback(bot, cid, idx, st):
         lines += ["", context]
 
     st["round"] = st.get("round", 0) + 1
-    next_label = "✨ Ещё фразу" if mode == "phrase" else "✨ Ещё слово"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(next_label, callback_data="train_next")],
+        [InlineKeyboardButton("✨ Ещё", callback_data="train_next")],
         [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(lang))],
     ])
     await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
+
+
+async def _render_next_train_quiz(bot, cid):
+    st = store.train_state.get(str(cid))
+    if not st:
+        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    mode = st.get("next_mode") or st.get("mode") or "phrase"
+    if mode == "phrase":
+        await _render_phrase_quiz(bot, cid)
+    else:
+        await _render_quiz(bot, cid)
 
 
 async def train_next(bot, cid):
@@ -599,22 +631,11 @@ async def train_next(bot, cid):
     if not st:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
     store.pending_input.pop(str(cid), None)
-    if st.get("mode") == "phrase":
-        await _render_phrase_quiz(bot, cid)
-    else:
-        await _render_quiz(bot, cid)
+    await _render_next_train_quiz(bot, cid)
 
 
 async def send_train_kind_select(bot, cid, language):
-    code = _code(language)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔤 Слова", callback_data=f"a_train_words_{code}")],
-        [InlineKeyboardButton("💬 Фразы", callback_data=f"a_train_phrases_{code}")],
-        [InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")],
-    ])
-    await bot.send_message(chat_id=cid,
-        text=f"{_flag(language)} <b>Тренажёр</b>\n\nВыбери, что тренировать:",
-        parse_mode="HTML", reply_markup=kb)
+    await train_start(bot, cid, language)
 
 
 async def send_train_lang_select(bot, cid):
@@ -751,6 +772,23 @@ def _proverb_entities_card(flag, original, analogs=None, meaning="", examples=No
     add("Прочитай вслух. Покрути в голове. Всё.", MessageEntity.ITALIC)
     return "".join(chunks).rstrip(), entities
 
+
+def _proverb_fallback(language):
+    if language == "английский":
+        return {
+            "original": "Cut corners",
+            "analogs": ["сделать спустя рукава", "сэкономить на качестве", "срезать углы"],
+            "meaning": "делать быстрее или дешевле, жертвуя качеством",
+            "examples": ["Don’t cut corners on this report. → Не делай этот отчёт спустя рукава."],
+        }
+    return {
+        "original": "Geen gedoe",
+        "analogs": ["без лишней возни", "без заморочек", "без шума"],
+        "meaning": "когда хочется сделать что-то просто и без усложнений",
+        "examples": ["Ik wil gewoon geen gedoe. → Я просто хочу без лишней возни."],
+    }
+
+
 async def send_proverb(bot, cid, language):
     flag = _flag(language)
     try:
@@ -770,15 +808,26 @@ async def send_proverb(bot, cid, language):
             s = (s or "").strip()
             return s[0].upper() + s[1:] if s else s
 
+        original = _cap(d.get("original", ""))
+        if not original:
+            d = _proverb_fallback(language)
+            original = d["original"]
         txt, entities = _proverb_entities_card(
             flag,
-            _cap(d.get("original", "")),
+            original,
             d.get("analogs") or d.get("literal") or d.get("ru") or [],
             _cap(d.get("meaning", "")),
             d.get("examples") or [],
         )
     except Exception:
-        txt, entities = _proverb_entities_card(flag, "", "", "Не удалось получить выражение.\nПопробуй ещё раз чуть позже.")
+        d = _proverb_fallback(language)
+        txt, entities = _proverb_entities_card(
+            flag,
+            d["original"],
+            d["analogs"],
+            d["meaning"],
+            d["examples"],
+        )
     await bot.send_message(chat_id=cid, text=txt, entities=entities, reply_markup=_proverb_kb(_code(language)))
 
 
@@ -802,9 +851,13 @@ async def send_proverb_both(bot, cid, with_kb=True):
             return s[0].upper() + s[1:] if s else s
 
         original = _cap(d.get("nl", "")) or _cap(d.get("en", ""))
+        if not original:
+            d = _proverb_fallback("английский")
+            original = d["original"]
         txt, entities = _proverb_entities_card(" ", original, d.get("analogs") or d.get("ru") or [], _cap(d.get("meaning", "")), d.get("examples") or [])
     except Exception:
-        txt, entities = _proverb_entities_card(" ", "", "", "Не удалось получить выражение.\nПопробуй ещё раз чуть позже.")
+        d = _proverb_fallback("английский")
+        txt, entities = _proverb_entities_card(" ", d["original"], d["analogs"], d["meaning"], d["examples"])
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё вариант", callback_data="a_proverb")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
@@ -1103,6 +1156,14 @@ def _chunks(items, size):
     return [items[i:i + size] for i in range(0, len(items), size)]
 
 
+def _morning_method_line(method, word_items, phrase_items):
+    if not phrase_items and "фраз" in method.lower():
+        return "В словаре пока нет фраз. Сегодня повтори слова, а фразы можно добавить через словарь."
+    if not word_items and "слов" in method.lower():
+        return "В словаре пока нет отдельных слов. Сегодня повтори фразы или добавь новые слова через словарь."
+    return method
+
+
 async def send_morning_word(bot, cid, language=None, with_kb=True):
     """11:00 - Daily Words: метод дня недели + порция (3 слова + 2 фразы) из словаря."""
     import random as _r
@@ -1115,14 +1176,17 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
     _title, _phase, method = WEEK_TRACK[wd]
     words = _ensure_dict(cid)
     pool = [w for w in words if _dict_lang(w) == lang_code]
-    method_line = f"<i>{esc(method)}</i>" if method.startswith("Прочитай вслух") else esc(method)
-    L = [f"📚{flag} <b>Слова и фразы дня</b>", "", method_line]
     if wd >= 5 or not pool:
+        method_line = f"<i>{esc(method)}</i>" if method.startswith("Прочитай вслух") else esc(method)
+        L = [f"📚{flag} <b>Слова и фразы дня</b>", "", method_line]
         L += ["", "📖 Открой словарь, если хочешь добавить что-то новое или быстро повторить текущее."]
         await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
         return
     word_items = [w for w in pool if _dict_kind(w) == "word"]
     phrase_items = [w for w in pool if _dict_kind(w) == "phrase"]
+    method = _morning_method_line(method, word_items, phrase_items)
+    method_line = f"<i>{esc(method)}</i>" if method.startswith("Прочитай вслух") else esc(method)
+    L = [f"📚{flag} <b>Слова и фразы дня</b>", "", method_line]
     chosen_phrases = _r.sample(phrase_items, min(2, len(phrase_items)))
     chosen_words = _r.sample(word_items, min(3, len(word_items)))
     if not chosen_phrases and not chosen_words:
@@ -1172,19 +1236,28 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
 
 # ================= ИГРА-ДЕТЕКТИВ =================
 GAME_UI = {
-    "русский": {"diff_q": "Выбери сложность:", "easy": "Лёгкая", "med": "Средняя", "hard": "Тяжёлая",
-                "title": "🕵️ Игра-детектив", "who": "Кто это?", "hint": "💡 Подсказка", "reveal": "😞 Сдаюсь", "suspect": "Подозреваемый:", "analyse": "Анализ", "found": "✅ Дело раскрыто!", "answer": "Ответ", "give": "Знаешь ответ? Напиши его или нажми «😞 Сдаюсь»",
-                "again": "🕵️ Загадать ещё", "chdiff": "🎚 Сложность", "chlang": "🌐 Язык", "back": " Обучение", "nohint": "Подсказок больше нет.",
-                "correct": "✅ Верно!", "wrong": "❌ Не то", "retry": "Ещё попытка - напиши ответ или возьми подсказку."},
-    "английский": {"diff_q": "Choose difficulty:", "easy": "Easy", "med": "Medium", "hard": "Hard",
-                "title": "🕵️ Detective Game", "who": "Who am I?", "hint": "💡 Hint", "reveal": "😞 Give up", "suspect": "Suspect:", "analyse": "Analysis", "found": "✅ Case solved!", "answer": "Answer", "give": "Know it? Type the name or tap «😞 Give up»",
-                "again": "🕵️ New character", "chdiff": "🎚 Difficulty", "chlang": "🌐 Language", "back": " Learning", "nohint": "No more hints.",
-                "correct": "✅ Correct!", "wrong": "❌ Not quite", "retry": "Try again - type a name or take a hint."},
-    "нидерландский": {"diff_q": "Kies niveau:", "easy": "Makkelijk", "med": "Gemiddeld", "hard": "Moeilijk",
-                "title": "🕵️ Detectivespel", "who": "Wie ben ik?", "hint": "💡 Hint", "reveal": "😞 Opgeven", "suspect": "Verdachte:", "analyse": "Analyse", "found": "✅ Opgelost!", "answer": "Antwoord", "give": "Weet je het? Typ de naam of tik «😞 Opgeven»",
-                "again": "🕵️ Nog een", "chdiff": "🎚 Niveau", "chlang": "🌐 Taal", "back": " Leren", "nohint": "Geen hints meer.",
-                "correct": "✅ Goed!", "wrong": "❌ Niet juist", "retry": "Nog een poging - typ een naam of neem een hint."},
+    "русский": {
+        "diff_q": "Выбери сложность:",
+        "easy": "Лёгкая",
+        "hard": "Тяжёлая",
+        "title": "🕵️ Игра-детектив",
+        "who": "Кто это?",
+        "hint": "💡 Подсказка",
+        "reveal": "😞 Сдаюсь",
+        "suspect": "Подозреваемый:",
+        "found": "✅ Дело раскрыто!",
+        "answer": "Ответ",
+        "again": "🕵️ Загадать ещё",
+        "back": "◀️ Назад",
+        "nohint": "Подсказок больше нет.",
+        "wrong": "❌ Не то",
+        "retry": "Ещё попытка - напиши ответ или возьми подсказку.",
+    },
 }
+
+def _game_ui(_lang=None):
+    return GAME_UI["русский"]
+
 
 def _dot(s):
     """Гарантирует точку в конце предложения/подсказки."""
@@ -1299,7 +1372,7 @@ async def game_start(bot, cid):
     await bot.send_message(chat_id=cid, text="🕵️ Игра-детектив. На каком языке играем?", reply_markup=game_lang_kb())
 
 async def ask_difficulty(bot, cid, lang):
-    ui = GAME_UI.get(lang, GAME_UI["русский"])
+    ui = _game_ui(lang)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["easy"], callback_data="gamediff_easy")],
         [InlineKeyboardButton(ui["hard"], callback_data="gamediff_hard")],
@@ -1310,7 +1383,7 @@ async def send_game(bot, cid):
     store.challenge_state.pop(str(cid), None)   # фикс: чтобы перевод не перехватывал
     cfg = store.game_config.get(str(cid), {"lang": "английский", "difficulty": "easy"})
     lang = cfg["lang"]
-    ui = GAME_UI.get(lang, GAME_UI["русский"])
+    ui = _game_ui(lang)
     recent = _game_recent(cid)
     try:
         d = {}
@@ -1355,7 +1428,7 @@ async def game_answer(bot, cid, text):
     if not st:
         return False
     cfg = store.game_config.get(str(cid), {"lang": "русский"})
-    ui = GAME_UI.get(cfg["lang"], GAME_UI["русский"])
+    ui = _game_ui(cfg["lang"])
     guess = text.lower().strip()
     names = [st["answer"]] + st.get("aliases", [])
     pool = []
@@ -1391,7 +1464,7 @@ async def game_answer(bot, cid, text):
 
 async def game_hint(bot, cid, q):
     st = store.game_state.get(str(cid))
-    ui = GAME_UI.get(store.game_config.get(str(cid), {}).get("lang", "русский"), GAME_UI["русский"])
+    ui = _game_ui(store.game_config.get(str(cid), {}).get("lang", "русский"))
     hints = (st or {}).get("hints") or []
     i = (st or {}).get("hint_i", 0)
     if st and i < len(hints):
@@ -1405,7 +1478,7 @@ async def game_hint(bot, cid, q):
 
 async def game_reveal(bot, cid, q):
     st = store.game_state.pop(str(cid), None)
-    ui = GAME_UI.get(store.game_config.get(str(cid), {}).get("lang", "русский"), GAME_UI["русский"])
+    ui = _game_ui(store.game_config.get(str(cid), {}).get("lang", "русский"))
     if not st:
         return
     _remember_game_answer(cid, st)

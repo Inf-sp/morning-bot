@@ -145,9 +145,9 @@ async def answer_callback(update, context):
             elif act == "train":
                 await learning.send_train_lang_select(bot, cid)
             elif act == "train_nl":
-                await _ack(q); await learning.send_train_kind_select(bot, cid, "нидерландский")
+                await _ack(q); await learning.train_start(bot, cid, "нидерландский")
             elif act == "train_en":
-                await _ack(q); await learning.send_train_kind_select(bot, cid, "английский")
+                await _ack(q); await learning.train_start(bot, cid, "английский")
             elif act == "train_words_nl":
                 await _ack(q); await learning.train_start(bot, cid, "нидерландский", mode="word")
             elif act == "train_words_en":
@@ -546,6 +546,9 @@ async def text_router(update, context):
 
     # Быстрая команда из чата: «добавь в словарь слово de Aandacht - внимание»
     if await learning.try_add_dict_from_chat(bot, cid, text):
+        return
+    # Быстрая команда из чата: «добавь в продукты крахмал»
+    if await balance.try_add_fridge_from_chat(bot, cid, text):
         return
 
     # Свободный чат
