@@ -23,6 +23,16 @@ def test_train_phrases_reads_only_phrase_entries(monkeypatch):
 
 
 @pytest.mark.unit
+def test_fallback_phrase_quiz_card_builds_valid_task():
+    card = learning._fallback_phrase_quiz_card("Ik ben onderweg", "Я в пути", "нидерландский")
+
+    assert card["correct"] == "onderweg"
+    assert card["blank_phrase"] == "Ik ben ____"
+    assert len(card["wrong"]) == 2
+    assert "____" in card["blank_phrase"]
+
+
+@pytest.mark.unit
 def test_game_recent_matches_aliases_and_translations():
     data = {"answer": "Sherlock Holmes", "aliases": ["Шерлок Холмс", "Sherlock Holmes"]}
 

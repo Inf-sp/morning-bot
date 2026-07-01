@@ -264,6 +264,55 @@ async def _gen_phrase_quiz_card(phrase, ru, language):
     }
 
 
+_PHRASE_SKIP = {
+    "a", "an", "the", "to", "of", "in", "on", "at", "for", "with", "and", "or", "but",
+    "i", "you", "he", "she", "it", "we", "they", "me", "my", "your", "his", "her",
+    "de", "het", "een", "ik", "je", "jij", "hij", "zij", "ze", "we", "wij", "mijn",
+    "jouw", "zijn", "haar", "en", "of", "maar", "op", "in", "aan", "van", "voor",
+}
+
+_PHRASE_DISTRACTORS = {
+    "нидерландский": ["maken", "denken", "werken", "vragen", "kijken", "nodig", "samen", "later"],
+    "английский": ["make", "think", "work", "ask", "look", "need", "together", "later"],
+}
+
+
+def _fallback_phrase_quiz_card(phrase, ru, language):
+    phrase = str(phrase or "").strip()
+    tokens = list(re.finditer(r"[\wÀ-ÖØ-öø-ÿ'-]+", phrase, flags=re.UNICODE))
+    candidates = []
+    for match in tokens:
+        word = match.group(0).strip("'’")
+        low = word.lower()
+        if len(word) >= 3 and low not in _PHRASE_SKIP and not word[:1].isupper():
+            candidates.append(match)
+    if not candidates:
+        candidates = [m for m in tokens if len(m.group(0).strip("'’")) >= 2]
+    if not candidates:
+        return {}
+
+    match = max(candidates, key=lambda m: len(m.group(0)))
+    correct = match.group(0).strip("'’")
+    blank_phrase = phrase[:match.start()] + "____" + phrase[match.end():]
+    seen = {correct.lower()}
+    wrong = []
+    for item in _PHRASE_DISTRACTORS.get(language, _PHRASE_DISTRACTORS["английский"]):
+        if item.lower() not in seen:
+            wrong.append(item)
+            seen.add(item.lower())
+        if len(wrong) == 2:
+            break
+    if len(wrong) < 2:
+        return {}
+    return {
+        "blank_phrase": blank_phrase,
+        "correct": correct,
+        "wrong": wrong,
+        "sentence_ru": str(ru or "").strip(),
+        "explanation": f"В этой фразе пропущено слово «{correct}».",
+    }
+
+
 def train_data(language, level, word, ru, fmt):
     """Задание тренажёра вокруг слова `word` (перевод `ru`) в формате fmt (gap/tf)."""
     base = (f"Ты преподаватель языка {language}, уровень ученика {level}. "
@@ -486,12 +535,26 @@ async def _render_phrase_quiz(bot, cid):
             break
     blank_phrase = card.get("blank_phrase") or ""
     if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 2:
-        await bot.send_message(
-            chat_id=cid,
-            text="Не удалось собрать хорошее задание по фразе. Попробуй ещё раз.",
-            reply_markup=_train_again_kb(language, mode="phrase"),
-        )
-        return
+        card = _fallback_phrase_quiz_card(phrase, ru, language)
+        correct_answer = card.get("correct") or ""
+        wrong = list(card.get("wrong") or [])
+        clean_wrong = []
+        seen = {str(correct_answer).lower()}
+        for item in wrong:
+            item = str(item).strip()
+            if item and item.lower() not in seen:
+                clean_wrong.append(item)
+                seen.add(item.lower())
+            if len(clean_wrong) >= 2:
+                break
+        blank_phrase = card.get("blank_phrase") or ""
+        if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 2:
+            await bot.send_message(
+                chat_id=cid,
+                text="Не удалось собрать хорошее задание по фразе. Попробуй ещё раз.",
+                reply_markup=_train_again_kb(language, mode="phrase"),
+            )
+            return
 
     options = [correct_answer] + clean_wrong[:2]
     _r.shuffle(options)

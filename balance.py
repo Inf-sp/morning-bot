@@ -1088,28 +1088,28 @@ def _gen_motiv(cid):
     )
     try:
         d = ai.llm_json(prompt, 300, tier="smart")
-        steps = [esc(str(s).strip()) for s in (d.get("steps") or []) if str(s).strip()]
-        why = esc(str(d.get("why", "")).strip())
+        steps = [str(s).strip() for s in (d.get("steps") or []) if str(s).strip()]
+        why = str(d.get("why", "")).strip()
     except Exception:
-        return "Одно действие прямо сейчас — встань и пройди круг по комнате."
-    lagom_full = esc(lagom) if lagom else "Один шаг."
-    lines = [
-        "☕️ <b>Мотивация</b>", "",
-        f"<b><i>{lagom_full}</i></b>", "",
-        "<b>Действие</b>",
-    ]
-    lines += [f"• {s}" for s in steps]
-    if why:
-        lines += ["", f"<b>Зачем:</b> {why}"]
-    return "\n".join(lines)
+        steps = ["Встань и пройди круг по комнате"]
+        why = "Движение быстро снижает внутренний шум и помогает начать с малого"
+    lagom_full = lagom if lagom else "Один шаг лучше идеального плана."
+    return _build_entity_card(
+        "Мотивация",
+        lagom_full,
+        why,
+        steps,
+        "Сделай первый шаг сейчас, без подготовки.",
+        bullet_label="Действие:",
+    )
 
 
 async def send_motiv_push(bot, cid):
     """09:00 — плановая мотивация (без 'Секунду...')."""
-    out = _gen_motiv(cid)
+    out, entities = _gen_motiv(cid)
     store.last_source[str(cid)] = "Баланс · Мотивация"
     store.last_answer[str(cid)] = out
-    await bot.send_message(chat_id=cid, text=out, parse_mode="HTML")
+    await bot.send_message(chat_id=cid, text=out, entities=entities)
 
 
 # ---------- роли ----------
@@ -1338,12 +1338,13 @@ async def handle_callback(bot, cid, q, data):
     if data == "as_motiv":
         await util.ack_loading(q)
         try:
-            out = _gen_motiv(cid)
+            out, entities = _gen_motiv(cid)
         except Exception as e:
             await verify.safe_error(bot, cid, e); return
         store.last_source[str(cid)] = "Баланс · Мотивация"
         store.last_answer[str(cid)] = out
-        await _send(bot, cid, out, kb=_MOTIV_KB, surface="card")
+        store.last_surface[str(cid)] = "card"
+        await bot.send_message(chat_id=cid, text=out, entities=entities, reply_markup=_MOTIV_KB)
         return
     # одноразовая генерация (прочее)
     if data in _ONESHOT:
