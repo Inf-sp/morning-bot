@@ -86,22 +86,39 @@ def _notif_label(kind: str, label: str) -> str:
 async def send_home(bot, cid):
     await send_notes(bot, cid)
 
-async def _run_notif_test(bot, cid, kind):
-    """Предпросмотр уведомления: вызывает реальную send-функцию для kind."""
-    import verify
-    try:
-        if kind == "morning_brief":
-            import weather as _w
-            await _w.send_weather(bot, cid, "tomorrow_plain")
-        elif kind == "weather_warn":
-            import weather as _w
-            s = store.get_settings(cid)
-            data = _w.fetch_weather(s["lat"], s["lon"], 2)
-            d = data["daily"]
-            wind = d["windspeed_10m_max"][0] or 0
-            code = d["weathercode"][0]
-            rain = d["precipitation_probability_max"][0] or 0
-            rain_mm = (d.get("precipitation_sum") or [None])[0]
+
+class _NoKbBot:
+    """Обёртка для push-уведомлений: убирает кнопки, как в плановых рассылках."""
+    def __init__(self, bot):
+        self._bot = bot
+
+    def __getattr__(self, name):
+        orig = getattr(self._bot, name)
+        if name in ("send_message", "send_photo", "send_document", "send_animation", "send_chat_action"):
+            async def _w(*a, **kw):
+                kw.pop("reply_markup", None)
+                return await orig(*a, **kw)
+            return _w
+        return orig
+
+
+async def send_scheduled_notification(bot, cid, kind):
+    """Отправить ровно то уведомление, которое уходит из плановой рассылки."""
+    if kind == "morning_brief":
+        import myday as _m
+        await _m.send_plany(_NoKbBot(bot), cid, force=True)
+    elif kind == "weather_warn":
+        import asyncio
+        import weather as _w
+        _WARN_CODES = {95, 96, 99}
+        s = store.get_settings(cid)
+        data = await asyncio.to_thread(_w.fetch_weather, s["lat"], s["lon"], 2)
+        d = data["daily"]
+        wind = d["windspeed_10m_max"][0] or 0
+        code = d["weathercode"][0]
+        rain = d["precipitation_probability_max"][0] or 0
+        rain_mm = (d.get("precipitation_sum") or [None])[0]
+        if wind > 10 or code in _WARN_CODES or rain > 70:
             text = _w.storm_alert(wind, code, rain, rain_mm, cc=s.get("cc", ""))
             if not text:
                 parts = []
@@ -109,37 +126,46 @@ async def _run_notif_test(bot, cid, kind):
                     parts.append(f"💨 ветер до {wind:.0f} м/с")
                 if rain > 70:
                     parts.append(f"🌧 дождь {rain:.0f}%")
-                if code in {95, 96, 99}:
+                if code in _WARN_CODES:
                     parts.append("⛈ возможна гроза")
-                if not parts:
-                    parts.append("Сейчас без экстремальных условий")
                 text = "⚠️ <b>Погодное предупреждение</b>\n\n" + " • ".join(parts)
             await bot.send_message(chat_id=cid, text=text, parse_mode="HTML")
-        elif kind == "lagom_daily":
-            import balance as _b
-            await _b.send_motiv_push(bot, cid)
-        elif kind == "daily_words_nl":
-            await learning.send_morning_word(bot, cid, language="нидерландский", with_kb=False)
-        elif kind == "daily_words_en":
-            await learning.send_morning_word(bot, cid, language="английский", with_kb=False)
-        elif kind == "live_lang":
-            await learning.send_proverb_both(bot, cid, with_kb=False)
-        elif kind == "recipe_daily":
-            import balance as _b
-            await _b.send_recipe_push(bot, cid)
-        elif kind == "checkin_day":
-            await bot.send_message(chat_id=cid, parse_mode="HTML",
-                text="🫣 <b>Дневная разгрузка</b>\n\nСейчас не анализируй, просто выгрузи мысли.\n\n"
-                     "Каждая тревога - с новой строки.\n\nВечером проверим, что было фактами, а что шумом…")
-        elif kind == "checkin_eve":
-            import balance as _b
-            await _b.send_evening_review(bot, cid)
-        elif kind == "weekly_forecast":
-            import weather as _w
-            await _w.send_weather(bot, cid, "week_plain")
-        elif kind == "weekly_events":
-            import leisure as _l
-            await _l.send_weekly_events(bot, cid)
+    elif kind == "lagom_daily":
+        import balance as _b
+        await _b.send_motiv_push(_NoKbBot(bot), cid)
+    elif kind == "daily_words_nl":
+        await learning.send_morning_word(bot, cid, language="нидерландский", with_kb=False)
+    elif kind == "daily_words_en":
+        await learning.send_morning_word(bot, cid, language="английский", with_kb=False)
+    elif kind == "live_lang":
+        await learning.send_proverb_both(bot, cid, with_kb=False)
+    elif kind == "recipe_daily":
+        import balance as _b
+        await _b.send_recipe_push(_NoKbBot(bot), cid)
+    elif kind == "checkin_day":
+        store.pending_input[str(cid)] = "worry"
+        await bot.send_message(chat_id=cid, parse_mode="HTML",
+            text="🫣 <b>Дневная разгрузка</b>\n\nСейчас не анализируй, просто выгрузи мысли.\n\n"
+                 "Каждая тревога - с новой строки.\n\nВечером проверим, что было фактами, а что шумом…")
+    elif kind == "checkin_eve":
+        import balance as _b
+        await _b.send_evening_review(bot, cid)
+    elif kind == "weekly_forecast":
+        import weather as _w
+        await _w.send_weather(_NoKbBot(bot), cid, "week_plain")
+    elif kind == "weekly_events":
+        import leisure as _l
+        await _l.send_weekly_events(_NoKbBot(bot), cid)
+    elif kind == "evening_weather":
+        import weather as _w
+        await _w.send_weather(_NoKbBot(bot), cid, "tomorrow_plain")
+
+
+async def _run_notif_test(bot, cid, kind):
+    """Предпросмотр уведомления: вызывает тот же код, что и плановая рассылка."""
+    import verify
+    try:
+        await send_scheduled_notification(bot, cid, kind)
     except Exception as e:
         await verify.safe_error(bot, cid, e, skill="notif_test")
 
@@ -350,7 +376,10 @@ async def handle_callback(bot, cid, data, q=None):
     elif data.startswith("set_notiftgl_"):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
     elif data.startswith("set_notiftest_"):
-        await _run_notif_test(bot, cid, data[len("set_notiftest_"):])
+        kind = data[len("set_notiftest_"):]
+        async def _do_test(b, c):
+            await _run_notif_test(b, c, kind)
+        await _admin_guard(bot, cid, _do_test)
     elif data == "set_notif_off_all":
         await notif_off_all(bot, cid, q)
     elif data == "set_levels":
@@ -471,7 +500,6 @@ async def handle_callback(bot, cid, data, q=None):
     elif data.startswith("set_admin_runjob_"):
         kind = data[len("set_admin_runjob_"):]
         async def _do_job(b, c):
-            await b.send_message(chat_id=c, text="▶️ Запускаю…")
             await _run_notif_test(b, c, kind)
         await _admin_guard(bot, cid, _do_job)
 
@@ -1019,6 +1047,9 @@ async def _admin_guard(bot, cid, fn):
 
 async def send_admin(bot, cid):
     """Главный экран администратора."""
+    if not _is_admin(cid):
+        await bot.send_message(chat_id=cid, text="⛔ Только для администратора.")
+        return
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("👥 Пользователи", callback_data="set_admin_users")],
         [InlineKeyboardButton("📡 Статус сервисов", callback_data="set_admin_health"),
