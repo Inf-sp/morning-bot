@@ -20,5 +20,8 @@ def test_assistant_entities_card_uses_entities_without_markup():
     assert "<b>" not in text
     assert "🚫" not in text
     assert ">" not in text
+    assert "Это значит:\n- нельзя двигать логотип" in text
+    assert "Это значит:\n\n- нельзя двигать логотип" not in text
+    assert "- нельзя менять размер логотипа\n\nМожно менять только фон." in text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
     assert any(e.type == MessageEntity.BLOCKQUOTE for e in entities)
