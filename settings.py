@@ -663,19 +663,40 @@ async def send_notes(bot, cid):
     notes_list = store.get_list(config.NOTES_KEY, cid)
     n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     rows = [
-        [InlineKeyboardButton(f"⭐️ Позже ({n_fav})", callback_data="as_bucket_fav")],
-        [InlineKeyboardButton("🌍 Сменить город", callback_data="set_city")],
-        [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
+        [
+            InlineKeyboardButton("🌍 Сменить город", callback_data="set_city"),
+            InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif"),
+        ],
         [InlineKeyboardButton("🎚️ Уровень языка", callback_data="set_levels")],
-        [InlineKeyboardButton("🎚️ Гардероб", callback_data="set_wardrobe")],
-        [InlineKeyboardButton("🎚️ Готовка", callback_data="set_fridge")],
-        [InlineKeyboardButton("🎚️ Обучение", callback_data="set_dict")],
-        [InlineKeyboardButton("🎚️ Здоровье", callback_data="set_lagom")],
-        [InlineKeyboardButton("🎚️ Досуг", callback_data="set_leisure_settings")],
-        [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
+        [
+            InlineKeyboardButton("👕 Гардероб", callback_data="set_wardrobe"),
+            InlineKeyboardButton("🍽️ Готовка", callback_data="set_fridge"),
+        ],
+        [
+            InlineKeyboardButton("📚 Обучение", callback_data="set_dict"),
+            InlineKeyboardButton("🚑 Здоровье", callback_data="set_lagom"),
+        ],
+        [
+            InlineKeyboardButton("🎬 Кино", callback_data="as_love_movies"),
+            InlineKeyboardButton("🗺️ Страны", callback_data="as_love_countries"),
+        ],
+        [
+            InlineKeyboardButton("🎸 Артисты", callback_data="as_love_artists"),
+            InlineKeyboardButton("📖 Книги", callback_data="as_love_books"),
+        ],
+        [
+            InlineKeyboardButton(f"⏳ Позже ({n_fav})", callback_data="as_bucket_fav"),
+            InlineKeyboardButton("📤 Экспорт", callback_data="as_export"),
+        ],
     ]
     await bot.send_message(chat_id=cid, parse_mode="HTML",
-        text="🎚️ <b>Настройки</b>\n\nСохранения, списки и параметры бота в одном месте.\n\nВыбери раздел 👇",
+        text=(
+            "🎚️ <b>Настройки</b>\n\n"
+            "<b>Профиль и уведомления</b>\n"
+            "<b>Настройки обучения</b>\n"
+            "<b>Мои списки</b>\n"
+            "<b>Действия</b>"
+        ),
         reply_markup=InlineKeyboardMarkup(rows))
 
 
