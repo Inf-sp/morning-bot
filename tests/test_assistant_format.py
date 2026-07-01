@@ -25,3 +25,18 @@ def test_assistant_entities_card_uses_entities_without_markup():
     assert "- нельзя менять размер логотипа\n\nМожно менять только фон." in text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
     assert any(e.type == MessageEntity.BLOCKQUOTE for e in entities)
+
+
+@pytest.mark.unit
+def test_assistant_entities_card_strips_final_intro_label():
+    text, _ = assistant._assistant_entities_card(
+        "Запрещено\n\n"
+        "Очень важный пункт.\n\n"
+        "Это значит:\n"
+        "- нельзя двигать логотип\n"
+        "- нельзя менять размер логотипа\n\n"
+        "Последний совет: Можно менять только фон."
+    )
+
+    assert "Последний совет:" not in text
+    assert "- нельзя менять размер логотипа\n\nМожно менять только фон." in text
