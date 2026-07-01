@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 import re
@@ -13,6 +14,8 @@ import secure
 import memory
 import research
 import settings as _settings
+
+_log = logging.getLogger(__name__)
 
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
@@ -70,6 +73,54 @@ def _build_look_message(items, intro="", add_text=""):
         push(add_text, MessageEntity.ITALIC)
     text = "".join(chunks).rstrip()
     return text, entities
+
+
+def _clean_text(value):
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _finish_dot(value):
+    value = _clean_text(value)
+    if value and value[-1] not in ".!?…":
+        return value + "."
+    return value
+
+
+def _build_entity_card(title, summary="", quote="", bullets=None, final=""):
+    chunks = []
+    entities = []
+
+    def push(text, entity_type=None):
+        offset = _u16_len("".join(chunks))
+        chunks.append(text)
+        if entity_type and text:
+            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
+
+    push(_clean_text(title).rstrip(".:"), MessageEntity.BOLD)
+
+    summary = _finish_dot(summary)
+    if summary:
+        push("\n\n")
+        push(summary)
+
+    quote = _finish_dot(quote)
+    if quote:
+        push("\n\n")
+        push(quote, MessageEntity.BLOCKQUOTE)
+
+    clean_bullets = [_finish_dot(x) for x in (bullets or []) if _clean_text(x)]
+    if clean_bullets:
+        push("\n\n")
+        push("Это значит:")
+        push("\n")
+        push("\n".join(f"- {x}" for x in clean_bullets))
+
+    final = _finish_dot(final)
+    if final:
+        push("\n\n")
+        push(final)
+
+    return "".join(chunks).rstrip(), entities
 
 def _get_cached_look(cid):
     cached = store.get_wardrobe_daylook(cid)
@@ -208,8 +259,8 @@ async def look_feedback(bot, cid, verdict):
 
 # ---------- шкаф ----------
 ZONES = [
-    ("Верх", ["футбол", "рубаш", "свит", "толстов", "худи", "лонгслив", "поло", "верхн", "куртк", "ветровк", "пиджак"]),
-    ("Низ", ["джинс", "брюк", "штан", "шорт", "юбк"]),
+    ("Верх", ["верх", "футбол", "рубаш", "свит", "толстов", "худи", "лонгслив", "поло", "верхн", "куртк", "ветровк", "пиджак"]),
+    ("Низ", ["низ", "джинс", "брюк", "штан", "шорт", "юбк"]),
     ("Обувь", ["обув", "кроссов", "ботин", "кед", "туфл", "сандал"]),
     ("Аксессуары", ["аксессуар", "часы", "кольц", "ремен", "шапк", "кепк", "очк", "шарф", "сумк", "цепоч", "носк", "украшен"]),
 ]
@@ -220,6 +271,18 @@ def _zone_of(category):
         if any(k in c for k in keys):
             return zone
     return "Другое"
+
+
+def _flat_wardrobe_items(w):
+    items = []
+    for cat, values in (w or {}).items():
+        if cat == "_v" or not isinstance(values, list):
+            continue
+        for value in values:
+            value = str(value).strip()
+            if value:
+                items.append((str(cat), value))
+    return items
 
 async def send_show(bot, cid):
     w = store.load_wardrobe(cid)
@@ -298,6 +361,56 @@ async def del_item(bot, cid, i):
 
 
 # ---------- улучшить гардероб ----------
+def _fallback_improve_data(w):
+    items = _flat_wardrobe_items(w)
+    zones = {}
+    for cat, item in items:
+        zones.setdefault(_zone_of(cat), []).append(item)
+
+    works = []
+    weak = []
+    replace = []
+
+    if zones.get("Верх"):
+        works.append(f"{zones['Верх'][0]} — уже даёт базу для верхнего слоя")
+    if zones.get("Низ"):
+        works.append(f"{zones['Низ'][0]} — закрывает основу силуэта")
+    if zones.get("Обувь"):
+        works.append(f"{zones['Обувь'][0]} — помогает собрать образ до конца")
+
+    if not zones.get("Верх"):
+        weak.append("Не хватает верха — образы сложнее собирать в разную погоду")
+        replace.append("добавить базовый верх → плотная футболка или рубашка спокойного цвета")
+    if not zones.get("Низ"):
+        weak.append("Не хватает низа — гардероб держится без понятного силуэта")
+        replace.append("добавить низ → прямые джинсы или лёгкие брюки")
+    if not zones.get("Обувь"):
+        weak.append("Не хватает обуви — образ выглядит незавершённым")
+        replace.append("добавить обувь → нейтральные кеды или кроссовки")
+    if not zones.get("Аксессуары"):
+        replace.append("добавить аксессуар → часы, ремень или простая цепь для акцента")
+
+    if not weak:
+        weak.append("Слабое место видно только после примерок — по списку база выглядит рабочей")
+    if not replace:
+        replace.append("обновлять точечно → докупать только то, что закрывает конкретный пробел")
+
+    outfit_parts = []
+    for zone in ("Верх", "Низ", "Обувь", "Аксессуары"):
+        if zones.get(zone):
+            outfit_parts.append(zones[zone][0])
+
+    return {
+        "style": "База с практичным уклоном: главное — собрать понятные силуэты и не перегружать детали.",
+        "verdict": "Гардероб можно разобрать по категориям, но точность ниже без ИИ-разбора. Начни с баланса верха, низа и обуви.",
+        "works": works[:3],
+        "weak": weak[:3],
+        "replace": replace[:3],
+        "accessories": "Выбирай один спокойный акцент: часы, ремень, кольцо или цепь.",
+        "outfit": " + ".join(outfit_parts) if outfit_parts else "",
+    }
+
+
 async def send_improve(bot, cid):
     w = store.load_wardrobe(cid)
     wardrobe_text = store.wardrobe_to_text(w)
@@ -331,27 +444,23 @@ async def send_improve(bot, cid):
     try:
         d = await ai.allm_json(prompt, 1000, module="wardrobe")
     except Exception as e:
-        await verify.safe_error(bot, cid, e); return
-    def _bullets(items):
-        return [f"• {esc(str(x))}" for x in (items or []) if str(x).strip()]
-    L = ["🧥 <b>Улучшить гардероб</b>"]
-    if d.get("style"):
-        L += ["", f"<b>Стиль:</b> {esc(d['style'])}"]
-    if d.get("verdict"):
-        L += [f"<b>Вердикт:</b> {esc(d['verdict'])}"]
-    if d.get("works"):
-        L += ["", "🟢 <b>Работает</b>"] + _bullets(d["works"])
-    if d.get("weak"):
-        L += ["", "❌ <b>Слабые элементы</b>"] + _bullets(d["weak"])
-    if d.get("replace"):
-        L += ["", "🛒 <b>Замены</b>"] + _bullets(d["replace"])
-    if d.get("accessories"):
-        L += ["", f"⌚ <b>Аксессуары</b>\n{esc(d['accessories'])}"]
-    if d.get("outfit"):
-        L += ["", f"✨ <b>Готовый образ</b>\n{esc(d['outfit'])}"]
+        _log.warning("wardrobe improve AI failed, using fallback: %r", e, exc_info=True)
+        d = _fallback_improve_data(w)
+    bullets = []
+    bullets += [str(x) for x in (d.get("works") or [])[:2]]
+    bullets += [str(x) for x in (d.get("weak") or [])[:2]]
+    bullets += [str(x) for x in (d.get("replace") or [])[:2]]
+    final = d.get("outfit") or d.get("accessories") or "Меняй гардероб точечно, а не всем списком сразу."
+    text, entities = _build_entity_card(
+        "Разбор гардероба",
+        d.get("style") or "Коротко разбираю базу, силуэты и слабые места.",
+        d.get("verdict") or "",
+        bullets,
+        final,
+    )
     store.last_source[str(cid)] = "Гардероб · Улучшение"
-    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
+    store.last_answer[str(cid)] = text
+    await bot.send_message(chat_id=cid, text=text, entities=entities,
         reply_markup=_kb([[("⏳ Позже", "as_fav")], [("◀️ Назад", "m_wardrobe")]]))
 
 
@@ -395,21 +504,17 @@ async def check_purchase(bot, cid, text):
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     verdict = d.get("verdict", "")
-    emoji = "✅" if "НЕ" not in verdict.upper() else "⚠️"
-    L = [
-        f"🔎 <b>Проверка покупки</b>",
-        f"<i>{esc(text)}</i>",
-        "",
-        f"{emoji} <b>Вердикт: {esc(verdict)}</b>",
-    ]
-    if d.get("why"):
-        L += ["", "<b>Почему:</b>"] + [f"• {esc(str(x))}" for x in d["why"]]
-    if d.get("outro"):
-        L += ["", "<b>Вывод:</b>", esc(d["outro"])]
+    text_out, entities = _build_entity_card(
+        "Проверка покупки",
+        _clean_text(text),
+        f"Вердикт: {verdict}" if verdict else "",
+        d.get("why") or [],
+        d.get("outro") or "Покупай только если вещь закрывает реальный пробел в гардеробе.",
+    )
     store.last_source[str(cid)] = "Гардероб · Покупка"
-    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML",
-        reply_markup=_kb([[("⏳ Позже", "as_fav")], [("◀️ Назад", "m_wardrobe")]]))
+    store.last_answer[str(cid)] = text_out
+    await bot.send_message(chat_id=cid, text=text_out, entities=entities,
+        reply_markup=_kb([[("◀️ Назад", "m_wardrobe")]]))
 
 
 # ---------- добавление файлом (старый режим, оставлен) ----------
