@@ -349,7 +349,7 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_notif_off_all":
         await notif_off_all(bot, cid, q)
     elif data == "set_levels":
-        await learning.send_levels(bot, cid, q=q, back="set_home")
+        await learning.send_levels(bot, cid, back="set_home")
     elif data == "set_city":
         store.pending_input[cid] = "setcity"
         await bot.send_message(chat_id=cid, text="🌍 Напиши город - переключу.")
