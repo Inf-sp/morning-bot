@@ -13,6 +13,7 @@ import research
 import settings
 from util import country_flag, esc
 import verify
+from ui import leisure as leisure_ui
 
 # ===== КОНТЕНТ (content.py) =====
 
@@ -299,42 +300,11 @@ _BAD_TMDB = ("making of", "behind the scenes", "bonus", "featurette",
 
 def _clip(text, limit=450):
     """Аккуратно обрезает описание по концу предложения/слова, без обрыва на полуслове."""
-    text = (text or "").strip()
-    if len(text) <= limit:
-        return text
-    cut = text[:limit]
-    end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
-    if end >= int(limit * 0.5):
-        return cut[:end + 1].strip()
-    sp = cut.rfind(" ")
-    return (cut[:sp] if sp > 0 else cut).rstrip(" ,.;:—-") + "…"
+    return leisure_ui.clip(text, limit=limit)
 
 def _movie_card(it, tm):
-    it = it if isinstance(it, dict) else {"title": str(it)}
-    title = (tm.get("name") if tm else "") or it.get("title", "")
-    year = f" ({tm.get('year')})" if tm and tm.get("year") else ""
-    kind = (tm.get("kind") if tm else "") or ""
-    icon = "📺" if kind == "tv" else "🎬"
-    type_label = "Сериал" if kind == "tv" else ("Фильм" if kind == "movie" else "")
-    cap = [f"{icon} <b>{esc(title)}{year}</b>"]
-    en = (tm.get("name_en") if tm else "") or it.get("title_en", "")
-    if en and en.lower() != title.lower():
-        cap.append(f"<i>{esc(en)}</i>")
-    genre_bits = " · ".join(x for x in [type_label, (tm.get("genres") if tm else "")] if x)
-    if genre_bits:
-        cap.append("")
-        cap.append(f"🎭 {esc(genre_bits)}")
-    if tm and tm.get("rating"):
-        cap.append(f"⭐ {tm.get('rating'):.1f}/10 TMDb")
-    if tm and tm.get("overview"):
-        cap.append("")
-        cap.append(esc(_clip(tm["overview"])))
-    cap.append("")
-    cap.append(f"💡 {esc(it.get('hook', ''))}")
-    if tm and tm.get("url"):
-        cap.append("")
-        cap.append(f"🔗 {tm['url']}")
-    return title, "\n".join(cap)
+    title, msg = leisure_ui.movie_card(it, tm)
+    return title, msg.text
 
 def _movie_kb(i):
     return InlineKeyboardMarkup([
@@ -504,26 +474,7 @@ def _book_cover(title, title_en=""):
     return None
 
 def _book_text(it):
-    author = esc(it.get("author", ""))
-    title = esc(it.get("title", ""))
-    en = esc(it.get("title_en", ""))
-    year = esc(str(it.get("year", "")))
-    head_meta = ", ".join(x for x in [en, year] if x)
-    head = f"{author} • «{title}»" if author else f"«{title}»"
-    if head_meta:
-        head += f" <i>({head_meta})</i>"
-    L = [f"📚 <b>{head}</b>"]
-    if it.get("desc"):
-        L += ["", esc(it["desc"])]
-    why = it.get("why") or []
-    if isinstance(why, list) and why:
-        L += ["", "🎯 <b>Почему стоит читать</b>"] + [f"• {esc(str(w)).lstrip('-–— ')}" for w in why]
-    if it.get("plot"):
-        L += ["", "✍🏻 <b>Коротко о сюжете</b>", esc(it["plot"])]
-    if it.get("quote"):
-        quote = str(it["quote"]).strip().strip("«»\"")
-        L += ["", "💬 <b>Цитата</b>", f"«{esc(quote)}»"]
-    return "\n".join(L)
+    return leisure_ui.book_text(it).text
 
 def _book_kb(i):
     return InlineKeyboardMarkup([
@@ -880,19 +831,9 @@ async def send_listen(bot, cid):
     artist = data.get("artist", "")
     store.last_recos[str(cid)] = {"kind": "listen", "items": [artist]}
     store.last_source[str(cid)] = "Досуг · Музыка"
-    L = [f"🎸 <b>{esc(artist)}</b>"]
-    if data.get("desc"):
-        L += ["", esc(data["desc"])]
-    why = data.get("why") or []
-    if isinstance(why, list) and why:
-        L += ["", "🎯 <b>Почему тебе зайдёт:</b>"] + [f"• {esc(str(w))}" for w in why]
-    tracks = data.get("tracks") or []
-    if isinstance(tracks, list) and tracks:
-        L += ["", "🎧 <b>С чего начать:</b>"] + [f"• {esc(str(t))}" for t in tracks]
-    if data.get("fact"):
-        L += ["", "💡 <b>Факт:</b>", esc(data["fact"])]
-    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", "\n".join(L))
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=_listen_kb())
+    msg = leisure_ui.artist_card(data)
+    store.last_answer[str(cid)] = leisure_ui.plain_from_html(msg.text)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=_listen_kb())
 
 async def add_listen(bot, cid, i):
     from datetime import datetime
@@ -1375,18 +1316,7 @@ def travel_suggest_one(cid):
     return ai.llm_json(prompt, 700, tier="leisure")
 
 def _country_card(d):
-    L = [f"{d.get('flag','')} <b>{esc(d.get('country',''))}</b>", ""]
-    if d.get("about"):
-        L += [esc(d["about"]), ""]
-    if d.get("for_what"):
-        L += [f"🎯 <b>Ради чего ехать:</b> {esc(d['for_what'])}", ""]
-    if d.get("langs"):
-        L += [f"🗣️ <b>Язык:</b> {esc(d['langs'])}", ""]
-    if d.get("note"):
-        L += [f"⚠️ <b>Главный нюанс:</b> {esc(d['note'])}"]
-    if d.get("fact"):
-        L += ["", f"🔎 <b>Факт:</b> {esc(d['fact'])}"]
-    return "\n".join(L).strip()
+    return leisure_ui.country_card(d).text
 
 def _travel_kb():
     return InlineKeyboardMarkup([
@@ -1495,23 +1425,9 @@ async def send_plan(bot, cid):
         p["flag"] = util.flag_from_cc(facts["cc"]) or p.get("flag", "")
     if rfact:
         p["fact"] = rfact
-    L = [f"{p.get('flag','')} <b>{esc(p.get('title', country))}</b>"]
-    if p.get("about"):
-        L += ["", esc(p["about"])]
-    if p.get("why"):
-        L += ["", "🎯 <b>Почему тебе подойдёт</b>"] + [f"• {esc(str(w))}" for w in p["why"]]
-    if p.get("best_time"):
-        L += ["", "📅 <b>Лучшее время</b>", esc(p["best_time"])]
-    if p.get("budget"):
-        L += ["", "💰 <b>Бюджет</b>"] + [f"• {esc(str(b))}" for b in p["budget"]]
-    if p.get("spots"):
-        L += ["", "📸 <b>Не пропусти</b>"] + [f"• {esc(str(sp))}" for sp in p["spots"]]
-    if p.get("lgbt"):
-        L += ["", "🏳️‍🌈 <b>LGBTQ+</b>", esc(p["lgbt"])]
-    if p.get("fact"):
-        L += ["", "🍲 <b>Интересный факт</b>", esc(p["fact"])]
-    plan_text = "\n".join(L)
-    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", plan_text)
+    msg = leisure_ui.travel_plan(p, country)
+    plan_text = msg.text
+    store.last_answer[str(cid)] = leisure_ui.plain_from_html(plan_text)
     store.last_source[str(cid)] = "Путешествия · План"
     store.last_recipe[str(cid)] = {**(store.last_recipe.get(str(cid)) or {}), "plan_text": plan_text}
     kb = InlineKeyboardMarkup([
@@ -1519,7 +1435,7 @@ async def send_plan(bot, cid):
         [InlineKeyboardButton("💾 Сохранить план поездки", callback_data="a_trav_save")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
-    await bot.send_message(chat_id=cid, text=plan_text, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=plan_text, parse_mode=msg.parse_mode, reply_markup=kb)
 
 async def save_plan(bot, cid):
     from datetime import datetime
