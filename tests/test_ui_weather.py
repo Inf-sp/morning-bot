@@ -33,3 +33,15 @@ def test_weather_week_forecast_builds_compact_html():
     assert "🌧️ Пн-Ср — дождь утром, +18…+20°C" in msg.text
     assert "🌡️ <b>Метео-итог</b>" in msg.text
     assert "Будет влажно." in msg.text
+
+
+@pytest.mark.unit
+def test_weather_city_and_storm_messages():
+    alert = weather.storm_alert(["wind", "rain"], 16, is_nl=True)
+    assert alert.parse_mode == "HTML"
+    assert "⚠️ <b>Штормовое предупреждение</b> (Code Geel)" in alert.text
+    assert "NS" in alert.text
+
+    assert "Не нашёл город" in weather.city_not_found("X").text
+    assert weather.city_changed("Амстердам", "Нидерланды").text.endswith("Амстердам, Нидерланды.")
+    assert weather.location_changed("Амстердам").text == "Готово. Ты находишься в городе Амстердам."
