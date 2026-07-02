@@ -1,7 +1,7 @@
 import asyncio
 import re
 from pathlib import Path
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 from cleanup import open_cleanup, send_cleanup, handle_cleanup  # noqa: F401
 
@@ -12,6 +12,7 @@ from util import esc
 import verify
 import secure
 from ui import dictionary as dict_ui
+from ui import learning as learning_ui
 
 LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 
@@ -137,15 +138,9 @@ def _same_len(options):
     return bool(lens) and max(lens) - min(lens) <= max(6, int(max(lens) * 0.45))
 
 
-def _u16_len(text):
-    return len((text or "").encode("utf-16-le")) // 2
-
-
 def _train_question(word):
-    prefix = "Переведи слово «"
-    suffix = "»"
-    text = f"{prefix}{word}{suffix}"
-    return text, [MessageEntity(MessageEntity.BOLD, _u16_len(prefix), _u16_len(str(word)))]
+    msg = learning_ui.train_question(word)
+    return msg.text, msg.entities
 
 
 def _clip_poll_explanation(text, limit=200):
@@ -164,25 +159,8 @@ def _train_explanation(sentence="", sentence_ru=""):
 
 
 def _phrase_poll_question(blank_phrase, sentence_ru):
-    chunks = []
-    entities = []
-
-    def add(text, entity_type=None):
-        offset = _u16_len("".join(chunks))
-        chunks.append(text)
-        if entity_type and text:
-            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
-
-    add("Фраза-тренажёр", MessageEntity.BOLD)
-    add("\n\n")
-    add(str(blank_phrase or "").strip(), MessageEntity.BLOCKQUOTE)
-    if sentence_ru:
-        add("\n\n")
-        add("Перевод:", MessageEntity.BOLD)
-        add(f" {str(sentence_ru).strip()}")
-    add("\n\n")
-    add("Выбери пропущенное слово из вариантов ниже.")
-    return "".join(chunks).strip()[:300], entities
+    msg = learning_ui.phrase_poll_question(blank_phrase, sentence_ru)
+    return msg.text, msg.entities
 
 
 def _phrase_poll_explanation(blank_phrase, correct, full_phrase, sentence_ru, extra=""):
@@ -814,67 +792,9 @@ def _proverb_kb(code):
         [InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")],
     ])
 
-def _u16_len(text):
-    return len((text or "").encode("utf-16-le")) // 2
-
-def _as_list(value):
-    if isinstance(value, list):
-        return [str(x).strip() for x in value if str(x).strip()]
-    if isinstance(value, str) and value.strip():
-        return [value.strip()]
-    return []
-
-
-def _cap_first(text):
-    text = (text or "").strip()
-    return text[:1].upper() + text[1:] if text else text
-
-
 def _proverb_entities_card(flag, original, analogs=None, meaning="", examples=None):
-    chunks = []
-    entities = []
-
-    def add(text, entity_type=None):
-        offset = _u16_len("".join(chunks))
-        chunks.append(text)
-        if entity_type:
-            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
-
-    def add_bold_text(text):
-        offset = _u16_len("".join(chunks))
-        chunks.append(text)
-        length = _u16_len(text)
-        entities.append(MessageEntity(MessageEntity.BOLD, offset, length))
-        return offset, length
-
-    header = f"💭{flag} Живой язык" if flag else "💭 Живой язык"
-    add(header, MessageEntity.BOLD)
-    add("\n\n")
-    if original:
-        offset, length = add_bold_text(original)
-        entities.append(MessageEntity(MessageEntity.BLOCKQUOTE, offset, length))
-    analogs = _as_list(analogs)
-    if analogs:
-        add("\n\n")
-        add("Как это переводится?", MessageEntity.BOLD)
-        add("\n")
-        visible_analogs = analogs[:4]
-        for i, analog in enumerate(visible_analogs):
-            if i:
-                add(" или " if i == len(visible_analogs) - 1 else ", ")
-            add(f"«{_cap_first(analog) if i == 0 else analog}»")
-        if meaning:
-            add(f" ({meaning})")
-        add(".")
-    examples = _as_list(examples)
-    if examples:
-        add("\n\n")
-        add("Как говорить ПРАВИЛЬНО", MessageEntity.BOLD)
-        add("\n")
-        add(examples[0])
-    add("\n\n")
-    add("Прочитай вслух. Покрути в голове. Всё.", MessageEntity.ITALIC)
-    return "".join(chunks).rstrip(), entities
+    msg = learning_ui.proverb_card(flag, original, analogs, meaning, examples)
+    return msg.text, msg.entities
 
 
 def _proverb_fallback(language):
@@ -1253,22 +1173,18 @@ async def send_dict(bot, cid, back="m_notes"):
     c = _dict_counts(cid)
     nl_total = c["nl"]["word"] + c["nl"]["phrase"]
     en_total = c["en"]["word"] + c["en"]["phrase"]
-    txt = (f"🗂️ <b>Мой словарь</b>\n\nВсего: {nl_total + en_total} "
-           f"(🇳🇱 {nl_total} · 🇬🇧 {en_total})\n\nВыбери язык 👇")
+    msg = dict_ui.dict_overview(nl_total, en_total)
     origin = {"m_notes": "notes", "m_learn": "learn", "m_dict_settings": "settings"}.get(back, "notes")
     rows = [
         [InlineKeyboardButton(f"🇳🇱 Нидерландский ({nl_total})", callback_data=f"a_dictlang_nl_from_{origin}")],
         [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data=f"a_dictlang_en_from_{origin}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ]
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_dict_lang(bot, cid, lang, back="m_dict_settings"):
     c = _dict_counts(cid)[lang]
-    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-    name = "Нидерландский" if lang == "nl" else "Английский"
-    txt = (f"{flag} <b>Словарь · {name}</b>\n\n"
-           f"Слов: {c['word']} · Фраз: {c['phrase']}")
+    msg = dict_ui.dict_language(lang, c)
     rows = [
         [
             InlineKeyboardButton("❌ Слово", callback_data=f"a_dictedit_{lang}_word"),
@@ -1277,7 +1193,7 @@ async def send_dict_lang(bot, cid, lang, back="m_dict_settings"):
         [InlineKeyboardButton("✏️ Добавить слово или фразу", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ]
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=InlineKeyboardMarkup(rows))
 
 
 def _dict_manage_kb(lang: str):
@@ -1299,11 +1215,11 @@ async def del_word(bot, cid, i):
         store.set_list(config.DICT_KEY, cid, words)
     import settings as _s
     lang = _code(_s.study_lang(cid))
-    label = f" <b>{esc(removed)}</b>" if removed else ""
+    msg = dict_ui.dict_deleted(esc(removed) if removed else "")
     await bot.send_message(
         chat_id=cid,
-        text=f"✅ Слово{label} удалено из текущего списка.\n\nЕсли хочешь, можно сразу открыть словарь или добавить новое.",
-        parse_mode="HTML",
+        text=msg.text,
+        parse_mode=msg.parse_mode,
         reply_markup=_dict_manage_kb(lang),
     )
 

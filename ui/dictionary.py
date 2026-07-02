@@ -1,6 +1,6 @@
 from telegram import MessageEntity
 
-from .builder import MessageBuilder
+from .builder import MessageBuilder, MessageSpec
 
 
 def _lang_adj(code):
@@ -108,3 +108,34 @@ def dict_duplicate_confirmation(duplicate_items):
         b.add(f"\n...и ещё {len(duplicate_items) - 8}")
     b.blank().text_line("Повторно не добавляю их, чтобы словарь оставался чистым.")
     return b.build()
+
+
+def dict_overview(nl_total, en_total):
+    total = nl_total + en_total
+    return MessageSpec(
+        text=(
+            f"🗂️ <b>Мой словарь</b>\n\nВсего: {total} "
+            f"(🇳🇱 {nl_total} · 🇬🇧 {en_total})\n\nВыбери язык 👇"
+        ),
+        parse_mode="HTML",
+    )
+
+
+def dict_language(lang, counts):
+    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+    name = "Нидерландский" if lang == "nl" else "Английский"
+    return MessageSpec(
+        text=(f"{flag} <b>Словарь · {name}</b>\n\nСлов: {counts['word']} · Фраз: {counts['phrase']}"),
+        parse_mode="HTML",
+    )
+
+
+def dict_deleted(removed_html=""):
+    label = f" <b>{removed_html}</b>" if removed_html else ""
+    return MessageSpec(
+        text=(
+            f"✅ Слово{label} удалено из текущего списка.\n\n"
+            "Если хочешь, можно сразу открыть словарь или добавить новое."
+        ),
+        parse_mode="HTML",
+    )

@@ -20,6 +20,7 @@ import memory
 import settings
 from util import esc, _WEEKDAYS, _MONTHS, flag_from_cc, country_flag
 import verify
+from ui import myday as myday_ui
 
 TZ = config.TZ
 
@@ -320,43 +321,43 @@ def _build_day_text(cid):
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     flag = flag_from_cc(s.get("cc", "")) or (country_flag(s.get("country", "")) if s.get("country") else "")
-    title_flag = f" {flag}" if flag else ""
-    L = [f"<b>Мой день • {esc(header)} • {esc(s.get('city',''))}{title_flag}</b>", ""]
-    if pr_labels:
-        L += [f"🎯 <b>Фокус:</b> {esc(', '.join(pr_labels))}", ""]
-    L.append(f"<b>{icon} Погода сегодня</b>")
-    L.append(f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}")
+    weather_title = f"{icon} Погода сегодня"
+    weather_line = f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}"
     hum = weather.humidity_phrase(data, day_str, tmax, s.get("cc", ""))
-    if hum:
-        L.append(f"💧 {hum}")
-    L.append("")
-    if word_line:
-        L += ["<b>📚 Слово дня</b>", esc(word_line), ""]
     try:
         fact = city_fact(s.get("city", ""), s.get("country", ""), cid, cc=s.get("cc", ""))
     except Exception as e:
         _log.warning("myday: city_fact failed: %s", e)
         fact = ""
-    if fact:
-        L += ["<b>🔬 Интересный факт</b>", esc(fact.strip()), ""]
     pr = set(settings.priorities(cid))
     hack_cat, hack_text = ("", "")
     if "quiet" not in pr:
         hack_cat, hack_text = daily_lifehack(
             cid, rain=rain >= 40, hot=tmax >= 24, is_weekend=is_weekend)
-    if hack_text:
-        L += [f"<b>💡 База знаний</b>", esc(hack_text)]
     try:
         q_data = _fetch_quote(cid)
     except Exception as e:
         _log.warning("myday: _fetch_quote failed: %s", e)
         q_data = {}
     raw_quote = _strip_quotes(q_data.get("quote", ""))
+    quote_line = ""
     if raw_quote and _quote_valid(raw_quote):
         src = esc(q_data.get("src", "")).strip()
-        line = f"«{esc(raw_quote)}»" + (f" — {src}" if src else "")
-        L += ["", "<b>💭 Цитата</b>", line]
-    text = "\n".join(L).strip()
+        quote_line = f"«{esc(raw_quote)}»" + (f" — {src}" if src else "")
+    msg = myday_ui.day_summary(
+        header,
+        s.get("city", ""),
+        flag=flag,
+        priorities=pr_labels,
+        weather_title=weather_title,
+        weather_line=weather_line,
+        humidity=hum,
+        word_line=word_line,
+        fact=fact,
+        lifehack=hack_text,
+        quote_line=quote_line,
+    )
+    text = msg.text
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя
     _, _uw = verify.grade_umbrella(text, weather._rain_real(rain, rain_mm))
     for w in _uw:
