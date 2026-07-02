@@ -30,3 +30,28 @@ def test_dictionary_duplicate_message_spec_for_word():
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in msg.entities)
     quote_offset = msg.text.index("Toevoegen - добавлять")
     assert any(e.type == MessageEntity.BLOCKQUOTE and e.offset == quote_offset for e in msg.entities)
+
+
+@pytest.mark.unit
+def test_dictionary_overview_message_spec():
+    msg = dictionary.dict_overview(3, 2)
+
+    assert msg.parse_mode == "HTML"
+    assert "🗂️ <b>Мой словарь</b>" in msg.text
+    assert "Всего: 5 (🇳🇱 3 · 🇬🇧 2)" in msg.text
+
+
+@pytest.mark.unit
+def test_dictionary_language_message_spec():
+    msg = dictionary.dict_language("nl", {"word": 4, "phrase": 1})
+
+    assert msg.parse_mode == "HTML"
+    assert msg.text == "🇳🇱 <b>Словарь · Нидерландский</b>\n\nСлов: 4 · Фраз: 1"
+
+
+@pytest.mark.unit
+def test_dictionary_deleted_message_spec():
+    msg = dictionary.dict_deleted("Toevoegen")
+
+    assert msg.parse_mode == "HTML"
+    assert "✅ Слово <b>Toevoegen</b> удалено" in msg.text
