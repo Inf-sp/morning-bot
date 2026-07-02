@@ -122,6 +122,57 @@ def test_dict_add_confirmation_card_for_word_uses_entities():
 
 
 @pytest.mark.unit
+def test_dict_item_key_normalizes_case_and_spaces():
+    assert learning._dict_item_key("nl", "phrase", "Je  hand opsteken") == learning._dict_item_key(
+        "nl", "phrase", "je hand OPSTEKEN"
+    )
+
+
+@pytest.mark.unit
+def test_dict_duplicate_confirmation_card_uses_entities():
+    text, entities = learning._dict_duplicate_confirmation_card([
+        {"lang": "nl", "kind": "phrase", "word": "Je hand opsteken", "ru": "Поднять руку"},
+    ])
+
+    assert text.startswith("Словарь")
+    assert "✅ Фраза уже есть в нидерландских фразах" in text
+    assert "Je hand opsteken - Поднять руку" in text
+    assert "Повторно не добавляю" in text
+    assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
+    quote_offset = text.index("Je hand opsteken - Поднять руку")
+    assert any(e.type == MessageEntity.BLOCKQUOTE and e.offset == quote_offset for e in entities)
+
+
+@pytest.mark.unit
+@pytest.mark.anyio
+async def test_add_words_batch_skips_existing_duplicate(monkeypatch):
+    sent = []
+    stored = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(learning, "_ensure_dict", lambda cid: [
+        {"lang": "nl", "kind": "phrase", "word": "Je hand opsteken", "ru": "Поднять руку"},
+    ])
+    monkeypatch.setattr(learning.store, "add_to_list", lambda *args: stored.append(args))
+
+    await learning.add_words_batch(
+        Bot(),
+        "cid",
+        "Je hand opsteken (Поднять руку)",
+        "nl",
+        detailed_confirmation=True,
+    )
+
+    assert stored == []
+    assert sent
+    assert "✅ Фраза уже есть в нидерландских фразах" in sent[0]["text"]
+    assert any(e.type == MessageEntity.BLOCKQUOTE for e in sent[0]["entities"])
+
+
+@pytest.mark.unit
 def test_game_recent_matches_aliases_and_translations():
     data = {"answer": "Sherlock Holmes", "aliases": ["Шерлок Холмс", "Sherlock Holmes"]}
 
