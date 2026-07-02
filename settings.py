@@ -7,12 +7,6 @@ from util import esc
 from ui import settings as settings_ui
 
 SETTINGS_KEY = "user_settings.json"
-ADMIN_RUN_NOTIF_TITLE = "Превью рассылки"
-ADMIN_RUN_NOTIF_TEXT = (
-    f"<b>{ADMIN_RUN_NOTIF_TITLE}</b>\n\n"
-    "Выбери уведомление — оно придёт тебе прямо сейчас.\n"
-    "Время в кнопках показывает обычное расписание."
-)
 NOTIF_TYPES = [
     ("morning_brief",  "☀️ Утренний бриф"),
     ("weather_warn",   "🌧 Погодное предупреждение"),
@@ -331,8 +325,8 @@ def _list_kb(items, del_prefix, add_cb, back="set_home", clean_cb=None):
 
 async def _send_list(bot, cid, title, items, del_prefix, add_cb, back="set_home"):
     """Лагом и аналогичные экраны с intro-текстом: элементы только в кнопках."""
-    txt = title if items else f"{title}\n\nПока пусто — добавь первый элемент 👇"
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
+    msg = settings_ui.list_section(title, items)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode,
                            reply_markup=_list_kb(items, del_prefix, add_cb, back))
 
 # --- Шкаф ---
@@ -346,8 +340,8 @@ async def send_wardrobe(bot, cid, back="m_notes"):
         ],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ])
-    await bot.send_message(chat_id=cid, text="👕 <b>Мой гардероб</b>\n\nБаза вещей и параметры для подбора одежды.",
-                           parse_mode="HTML", reply_markup=kb)
+    msg = settings_ui.wardrobe_home()
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
 
 # --- Страны ---
 async def send_countries(bot, cid):
@@ -364,33 +358,23 @@ async def send_countries(bot, cid):
     rows.extend([[InlineKeyboardButton(f"{country_flag(it)} {_item_label(it)[:36]}", callback_data="noop")]
                  for it in items[-40:]])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
-    await bot.send_message(chat_id=cid, text="🗺️ <b>Мои страны</b>", parse_mode="HTML",
+    msg = settings_ui.countries_home()
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode,
                            reply_markup=InlineKeyboardMarkup(rows))
 
 # --- Артисты ---
 async def send_artists(bot, cid):
     items = store.get_list(config.ARTISTS_KEY, cid)
-    await bot.send_message(chat_id=cid, text="🎤 <b>Мои музыканты</b>", parse_mode="HTML",
+    msg = settings_ui.artists_home(items)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode,
                            reply_markup=_list_kb(items, "setdel_artist_", "setadd_artist",
                                                  clean_cb="set_clean_artists"))
 
 # --- Книги ---
 
-# --- Лагом ---
-_LAGOM_INTRO = (
-    "☕️ <b>Лагом</b>\n\n"
-    "Лагом (швед. <i>lagom</i> — «в самый раз») — твой личный свод принципов: "
-    "что важно, как хочешь жить, что даёт энергию, а что забирает.\n\n"
-    "Бот использует их в ☕️ Мотивация — "
-    "чтобы советы звучали именно про тебя, а не общими словами.\n\n"
-    "<b>Примеры:</b> «Меньше, но лучше» · «Физическая активность каждый день» · "
-    "«Не сравниваю себя с другими»\n\n"
-)
-
 async def send_lagom(bot, cid, back="m_notes"):
     import memory
     items = memory.get_lagom(cid)
-    txt = _LAGOM_INTRO.rstrip() if items else f"{_LAGOM_INTRO.rstrip()}\n\nПока пусто — добавь первый принцип 👇"
     rows = []
     if items:
         rows.append([
@@ -400,12 +384,14 @@ async def send_lagom(bot, cid, back="m_notes"):
     else:
         rows.append([InlineKeyboardButton("✏️ Добавить", callback_data="setadd_lagom")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
+    msg = settings_ui.lagom_home(items)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode,
                            reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_books(bot, cid):
     items = store.get_list(config.BOOKS_KEY, cid)
-    await bot.send_message(chat_id=cid, text="📚 <b>Мои книги</b>", parse_mode="HTML",
+    msg = settings_ui.books_home(items)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode,
                            reply_markup=_list_kb(items, "setdel_book_", "setadd_book",
                                                  clean_cb="set_clean_books"))
 
@@ -424,13 +410,11 @@ async def list_delete(bot, cid, kind, i):
         await send_books(bot, cid)
 
 async def list_add_done(bot, cid, kind, text):
-    from util import esc
     keymap = {"country": config.COUNTRIES_KEY, "artist": config.ARTISTS_KEY, "book": config.BOOKS_KEY}
-    icons = {"country": "🧳", "artist": "🎤", "book": "📚"}
     item = text.strip()
     store.add_to_list(keymap[kind], cid, item)
-    await bot.send_message(chat_id=cid,
-        text=f"✅ {icons.get(kind, '')} «{esc(item)}» добавлено.", parse_mode="HTML")
+    msg = settings_ui.list_added(kind, item)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     if kind == "country":
         await send_countries(bot, cid)
     elif kind == "artist":
@@ -475,7 +459,8 @@ async def handle_callback(bot, cid, data, q=None):
         await learning.send_levels(bot, cid, back="set_home")
     elif data == "set_city":
         store.pending_input[cid] = "setcity"
-        await bot.send_message(chat_id=cid, text="🌍 Напиши город - переключу.")
+        msg = settings_ui.city_input()
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     elif data == "set_body":
         await send_body(bot, cid)
     elif data == "set_wardrobe":
@@ -485,10 +470,8 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_ward_add":
         store.pending_input[cid] = "wardrobe_add_set"
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_wardrobe")]])
-        await bot.send_message(chat_id=cid,
-            text="🏷 Напиши вещь: тип + цвет + детали/бренд.\n"
-                 "<i>Напр.: «Футболка белая Uniqlo» или «Шорты серые тонкие». Можно списком.</i>",
-            parse_mode="HTML", reply_markup=kb)
+        msg = settings_ui.wardrobe_item_input()
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
     elif data == "set_ward_del":
         from cleanup import open_cleanup
         await open_cleanup(bot, cid, "kast_s")
@@ -496,10 +479,8 @@ async def handle_callback(bot, cid, data, q=None):
         await send_lagom(bot, cid, back="m_notes")
     elif data == "setadd_lagom":
         store.pending_input[cid] = "setadd_lagom"
-        await bot.send_message(chat_id=cid,
-            text="☕️ Напиши установку или принцип — добавлю в здоровье.\n\n"
-                 "<i>Например: «Меньше экрана, больше природы»</i>",
-            parse_mode="HTML")
+        msg = settings_ui.lagom_input()
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     elif data.startswith("setdel_lagom_"):
         import memory
         memory.del_lagom(cid, int(data.split("_")[-1]))
@@ -515,13 +496,16 @@ async def handle_callback(bot, cid, data, q=None):
         await send_books(bot, cid)
     elif data == "setadd_country":
         store.pending_input[cid] = "setadd_country"
-        await bot.send_message(chat_id=cid, text="🧳 Напиши страну - добавлю в список.")
+        msg = settings_ui.list_add_prompt("country")
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     elif data == "setadd_artist":
         store.pending_input[cid] = "setadd_artist"
-        await bot.send_message(chat_id=cid, text="🎤 Напиши имя артиста - добавлю в список.")
+        msg = settings_ui.list_add_prompt("artist")
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     elif data == "setadd_book":
         store.pending_input[cid] = "setadd_book"
-        await bot.send_message(chat_id=cid, text="📚 Напиши название книги - добавлю в список.")
+        msg = settings_ui.list_add_prompt("book")
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     elif data == "set_clean_countries":
         from cleanup import open_cleanup
         await open_cleanup(bot, cid, "cfg_countries")
@@ -541,19 +525,14 @@ async def handle_callback(bot, cid, data, q=None):
         await send_style_pick(bot, cid)
     elif data == "set_stylecustom":
         store.pending_input[cid] = "styleinput"
-        await bot.send_message(chat_id=cid,
-            text="🎨 Опиши свой стиль — как хочешь выглядеть, что нравится, что нет.\n\n"
-                 "<i>Например: «Люблю тёмные оттенки, оверсайз-силуэты, минимум принтов. "
-                 "Стараюсь избегать костюмов.»</i>",
-            parse_mode="HTML")
+        msg = settings_ui.style_custom_input()
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     elif data.startswith("set_style_"):
         await set_style(bot, cid, int(data.split("_")[-1]))
     elif data == "set_bodyinput":
         store.pending_input[cid] = "bodyinput"
-        await bot.send_message(chat_id=cid,
-            text="🎚️ <b>Параметры тела</b>\n\nНапиши свободным текстом — рост, размер одежды, размер обуви и брюк.\n\n"
-                 "<i>Пример: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32</i>",
-            parse_mode="HTML")
+        msg = settings_ui.body_input()
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     elif data == "set_admin":
         await _admin_guard(bot, cid, send_admin)
     elif data == "set_admin_users":
@@ -565,9 +544,10 @@ async def handle_callback(bot, cid, data, q=None):
             code = _acc.create_invite()
             me = await b.get_me()
             link = f"https://t.me/{me.username}?start={code}"
+            msg = settings_ui.admin_invite(link)
             await b.send_message(chat_id=c,
-                text=f"🔗 <b>Подарочный инвайт :</b>\n<a href=\"{link}\">{link}</a>",
-                parse_mode="HTML", disable_web_page_preview=True,
+                text=msg.text,
+                parse_mode=msg.parse_mode, disable_web_page_preview=True,
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Пользователи", callback_data="set_admin_users")]]))
         await _admin_guard(bot, cid, _do_invite)
     elif data.startswith("set_admin_revoke_"):
@@ -603,11 +583,13 @@ async def save_fav(bot, cid, q=None):
     if not txt:
         txt = store.last_answer.get(str(cid), "")
     if not txt:
-        await bot.send_message(chat_id=cid, text="Нечего сохранять."); return
+        msg = settings_ui.nothing_to_save()
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode); return
     source = store.last_source.get(str(cid), "Прочее")
     store.add_to_list(config.NOTES_KEY, cid, {"date": datetime.now(config.TZ).strftime("%d.%m"),
                                               "text": txt, "source": source, "bucket": "fav"})
-    await bot.send_message(chat_id=cid, text="⏳ Сохранено во временные закладки.")
+    msg = settings_ui.saved_to_later()
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
 
 def _top_cat(source):
     return (source or "Прочее").split(" · ")[0]
@@ -676,7 +658,8 @@ async def note_delete_menu(bot, cid, i):
         rows.append([InlineKeyboardButton("❤️ В любимые", callback_data=f"as_notelove_{i}")])
     rows.append([InlineKeyboardButton("❌ Просто удалить", callback_data=f"as_notedrop_{i}")])
     rows.append([InlineKeyboardButton("◀️ Отмена", callback_data="as_notes")])
-    await bot.send_message(chat_id=cid, text=f"Что сделать с «{t[:60]}»?",
+    msg = settings_ui.note_action_prompt(t)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode,
                            reply_markup=InlineKeyboardMarkup(rows))
 
 def _pop_note(cid, i):
@@ -698,9 +681,11 @@ async def note_to_blacklist(bot, cid, i):
     t = _note_text(n)
     if black_key:
         store.add_to_list(black_key, cid, t)
-        await bot.send_message(chat_id=cid, text=f"🚫 «{t[:50]}» - в чёрный список «{cat}». Больше не порекомендую.")
+        msg = settings_ui.note_blacklisted(t, cat)
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     else:
-        await bot.send_message(chat_id=cid, text="Удалил из закладок.")
+        msg = settings_ui.note_removed_from_later()
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     await send_bucket(bot, cid, "fav")
 
 async def note_to_love(bot, cid, i):
@@ -715,15 +700,18 @@ async def note_to_love(bot, cid, i):
             store.add_to_list(fav_key, cid, {"name": t, "flag": country_flag(t)})
         else:
             store.add_to_list(fav_key, cid, t)
-        await bot.send_message(chat_id=cid, text=f"❤️ «{t[:50]}» - в любимые, раздел «{cat}».")
+        msg = settings_ui.note_moved_to_favorites(t, cat)
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     else:
-        await bot.send_message(chat_id=cid, text="Удалил из закладок.")
+        msg = settings_ui.note_removed_from_later()
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     await send_bucket(bot, cid, "fav")
 
 async def note_drop(bot, cid, i):
     n = _pop_note(cid, i)
     bucket = _note_bucket(n) if n else "fav"
-    await bot.send_message(chat_id=cid, text="❌ Удалил.")
+    msg = settings_ui.note_deleted()
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     await send_bucket(bot, cid, bucket)
 
 async def export_notes(bot, cid):
@@ -832,7 +820,8 @@ async def send_plans(bot, cid):
     notes_list = store.get_list(config.NOTES_KEY, cid)
     items = [(i, n) for i, n in enumerate(notes_list) if _note_bucket(n) == "plan"]
     if not items:
-        await bot.send_message(chat_id=cid, text="🧳 <b> Поездки</b>\n\nпусто", parse_mode="HTML",
+        msg = settings_ui.trips_empty()
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode,
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_fav")]]))
         return
     rows = []
@@ -841,8 +830,9 @@ async def send_plans(bot, cid):
         d = n.get("date", "") if isinstance(n, dict) else ""
         rows.append([InlineKeyboardButton(f"🧳 {d} · {country}"[:40], callback_data=f"as_planview_{i}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_fav")])
-    await bot.send_message(chat_id=cid, parse_mode="HTML",
-        text="🧳 <b>Мои поездки</b>\n\nСохранённые планы поездок.\n\nВыбери план 👇",
+    msg = settings_ui.trips_home()
+    await bot.send_message(chat_id=cid, parse_mode=msg.parse_mode,
+        text=msg.text,
         reply_markup=InlineKeyboardMarkup(rows))
 
 async def plan_view(bot, cid, i):
@@ -865,8 +855,7 @@ async def fav_view(bot, cid, i, back="as_bucket_fav", delete_cb=None):
     text = (n.get("text", "") if isinstance(n, dict) else str(n)).strip()
     src = n.get("source", "") if isinstance(n, dict) else ""
     d = n.get("date", "") if isinstance(n, dict) else ""
-    header = f"⭐ <b>{esc(src)}</b>" + (f" · {esc(d)}" if d else "")
-    full = header + "\n\n" + text
+    full = settings_ui.favorite_card(src, d, text).text
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить", callback_data=delete_cb or f"fav_del_{i}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
@@ -901,11 +890,7 @@ async def send_fav_group(bot, cid, group):
             items.append((i, n))
 
     label, desc = _fav_group_info(group)
-    text = (
-        f"⭐️ <b>Позже · {label}</b>\n\n"
-        f"Здесь лежат временные закладки: {esc(desc)}.\n"
-        "Открой карточку, чтобы увидеть её в исходном виде или удалить."
-    )
+    msg = settings_ui.later_group(label, desc)
     rows = []
     import re as _re
     _strip_html = lambda s: _re.sub(r"<[^>]+>", "", s).strip()
@@ -920,7 +905,7 @@ async def send_fav_group(bot, cid, group):
     if items:
         rows.append([InlineKeyboardButton("❌ Удалить несколько", callback_data=f"as_clean_favgrp_{group}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_fav")])
-    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=InlineKeyboardMarkup(rows))
 
 
 async def send_bucket(bot, cid, bucket):
@@ -932,9 +917,7 @@ async def send_bucket(bot, cid, bucket):
     items = [(i, n) for i, n in enumerate(notes_list) if _note_bucket(n) == "fav"]
     count = len(items)
     if not count:
-        txt = ("⏳ <b>Позже</b>\n\n"
-               "Сюда попадают временные закладки из ответов: кино, книги, музыка, поездки, еда, гардероб и всё прочее.\n\n"
-               "Пока пусто — сохраняй интересное кнопкой «⏳ Позже» под ответами.")
+        msg = settings_ui.later_home_empty()
         rows = [
             [InlineKeyboardButton("🧳 Мои поездки", callback_data="as_bucket_plan")],
             [InlineKeyboardButton("🎬 Кино", callback_data="as_bucket_favgrp_movies"),
@@ -947,16 +930,14 @@ async def send_bucket(bot, cid, bucket):
              InlineKeyboardButton("🗂 Прочее", callback_data="as_bucket_favgrp_other")],
             [InlineKeyboardButton("◀️ Назад", callback_data="as_notes")],
         ]
-        await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode,
                                reply_markup=InlineKeyboardMarkup(rows)); return
     groups = {key: [] for key, _, _ in _fav_group_meta()}
     for idx, n in items:
         src = n.get("source", "Прочее") if isinstance(n, dict) else "Прочее"
         groups[_fav_group(src)].append((idx, n))
 
-    txt = ("⏳ <b>Позже</b>\n\n"
-           "Сюда попадают временные закладки из ответов: кино, книги, музыка, поездки, еда, гардероб и всё прочее.\n\n"
-           "Открой категорию, чтобы посмотреть и почистить её.")
+    msg = settings_ui.later_home()
     rows = []
     for key, label, desc in _fav_group_meta():
         if groups.get(key):
@@ -964,7 +945,7 @@ async def send_bucket(bot, cid, bucket):
     rows.append([InlineKeyboardButton("🧳 Мои поездки", callback_data="as_bucket_plan")])
     rows.append([InlineKeyboardButton("❌ Очистить всё", callback_data="as_clean_fav")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML",
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode,
                            reply_markup=InlineKeyboardMarkup(rows))
 
 
@@ -978,8 +959,8 @@ LOVE_SECTIONS = [
 async def send_love_home(bot, cid, back="m_notes"):
     rows = [[InlineKeyboardButton(title, callback_data=f"as_love_{key}")] for title, key in LOVE_SECTIONS]
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
-    await bot.send_message(chat_id=cid, text="❤️ <b>Любимые</b>\n\nТвои топ-категории.\n\nВыбери раздел 👇",
-                           parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    msg = settings_ui.favorites_home()
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=InlineKeyboardMarkup(rows))
 
 def _love_items(cid, key):
     if key == "movies":
@@ -1004,12 +985,7 @@ async def send_love_section(bot, cid, key):
         return
     items = _love_items(cid, key)
     title = _love_title(key)
-    if items:
-        preview = "\n".join(f"• {esc(str(it))}" for it in items[:50])
-        body = preview
-    else:
-        body = "<i>пусто</i>"
-    lines = [f"<b>{title}</b>", "", body]
+    msg = settings_ui.favorite_section(title, items)
     rows = []
     if items:
         rows.append([
@@ -1019,7 +995,7 @@ async def send_love_section(bot, cid, key):
     else:
         rows.append([InlineKeyboardButton("✏️ Добавить", callback_data=f"as_loveadd_{key}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode,
                            reply_markup=InlineKeyboardMarkup(rows))
 
 def _love_key_of(key):
@@ -1041,14 +1017,16 @@ async def love_add_start(bot, cid, key, origin="base"):
     store.pending_input[str(cid)] = f"{prefix}_{key}"
     name = {"movies": "фильм или сериал", "countries": "страну",
             "artists": "артиста", "books": "книгу"}.get(key, "элемент")
-    await bot.send_message(chat_id=cid, text=f"Напиши {name} — добавлю в любимые.")
+    msg = settings_ui.favorite_add_prompt(name)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
 
 async def love_add_done(bot, cid, key, text, origin="base"):
     store_key = _love_key_of(key)
     if store_key:
         store.add_to_list(store_key, cid, text.strip())
     import cleanup as _cl
-    await bot.send_message(chat_id=cid, text="Добавлено.")
+    msg = settings_ui.favorite_added()
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     ctx_prefix = "lvls" if origin == "leisure" else "lv"
     await _cl.open_cleanup(bot, cid, f"{ctx_prefix}_{key}")
 
@@ -1132,7 +1110,8 @@ def _is_admin(cid) -> bool:
 async def _admin_guard(bot, cid, fn):
     """Выполнить fn(bot, cid) только если cid — администратор."""
     if not _is_admin(cid):
-        await bot.send_message(chat_id=cid, text="⛔ Только для администратора.")
+        msg = settings_ui.admin_only()
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
         return
     await fn(bot, cid)
 
@@ -1140,19 +1119,21 @@ async def _admin_guard(bot, cid, fn):
 async def send_admin(bot, cid):
     """Главный экран администратора."""
     if not _is_admin(cid):
-        await bot.send_message(chat_id=cid, text="⛔ Только для администратора.")
+        msg = settings_ui.admin_only()
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
         return
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("👥 Пользователи", callback_data="set_admin_users")],
         [InlineKeyboardButton("Статус сервисов", callback_data="set_admin_health"),
         InlineKeyboardButton("LLM check", callback_data="set_admin_llmcheck")],
         [InlineKeyboardButton("Расходы на LLM", callback_data="set_admin_cost"),
-        InlineKeyboardButton(ADMIN_RUN_NOTIF_TITLE, callback_data="set_admin_run_notif")],
+        InlineKeyboardButton(settings_ui.ADMIN_RUN_NOTIF_TITLE, callback_data="set_admin_run_notif")],
     ])
+    msg = settings_ui.admin_home()
     await bot.send_message(
         chat_id=cid,
-        text="🔐 <b>Администратор</b>\n\nСервисный раздел. Только для владельца.",
-        parse_mode="HTML",
+        text=msg.text,
+        parse_mode=msg.parse_mode,
         reply_markup=kb,
     )
 
@@ -1163,26 +1144,23 @@ async def send_admin_users(bot, cid):
     allowed = _acc.get_allowed_cids()
     pending = _acc.pending_invites()
 
-    lines = ["👥 <b>Пользователи</b>", ""]
+    entries = []
     rows = []
     for uid in allowed:
         prof = store.get_profile(uid)
         name = prof.get("name", "")
-        name_part = f" · {esc(name)}" if name else ""
+        name_part = f" · {name}" if name else ""
         if _acc.is_owner(uid):
-            lines.append(f"👑 Owner{name_part}")
+            entries.append((uid, name, True))
         else:
-            lines.append(f"👤 {uid}{name_part}")
+            entries.append((uid, name, False))
             rows.append([InlineKeyboardButton(f"❌ Удалить {uid}{name_part}", callback_data=f"set_admin_revoke_{uid}")])
-
-    if pending:
-        lines.append("")
-        lines.append(f"⏳ Активных инвайтов: {len(pending)}")
 
     rows.append([InlineKeyboardButton("🔗 Создать инвайт", callback_data="set_admin_invite")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_admin")])
 
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
+    msg = settings_ui.admin_users(entries, pending_count=len(pending))
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode,
                            reply_markup=InlineKeyboardMarkup(rows))
 
 
@@ -1194,7 +1172,7 @@ async def send_admin_cost(bot, cid):
     week_ago = _time.time() - 7 * 86400
     recent = [e for e in log if e.get("ts", 0) >= week_ago]
     if not recent:
-        text = "💸 <b>Расходы за 7 дней</b>\n\nДанных пока нет."
+        msg = settings_ui.admin_cost_empty()
     else:
         by_mod: dict = {}
         by_prov: dict = {}
@@ -1235,36 +1213,24 @@ async def send_admin_cost(bot, cid):
             "notes": "🎚️ Настройки",
         }
 
-        lines = ["💸 <b>Расходы за 7 дней</b>", "",
-                 f"Вызовов: {len(recent)}",
-                 f"Токенов: ~{total_tokens:,}",
-                 ""]
-
-        # все провайдеры в порядке приоритета
-        lines.append("<b>По провайдерам:</b>")
+        providers = []
         for key, label, configured in _PROV_ORDER:
             tok = by_prov.get(key, 0)
-            if not configured:
-                lines.append(f"  {esc(label)}: —")
-            elif tok:
-                lines.append(f"  {esc(label)}: {tok:,} tok ({_pct(tok)})")
-            else:
-                lines.append(f"  {esc(label)}: 0 tok")
+            providers.append((label, configured, tok, _pct(tok)))
 
         # по функциям — только заполненные модули
+        modules = []
         known_mods = [(m, t) for m, t in by_mod.items() if m and m != "?"]
         if known_mods:
             top_mods = sorted(known_mods, key=lambda x: -x[1])[:5]
-            lines.append("")
-            lines.append("<b>Где тратится:</b>")
             for m, t in top_mods:
                 label = _mod_names.get(m, m)
-                lines.append(f"  {esc(label)}: {t:,} tok ({_pct(t)})")
+                modules.append((label, t, _pct(t)))
 
-        text = "\n".join(lines)
+        msg = settings_ui.admin_cost_summary(len(recent), total_tokens, providers, modules)
 
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
-    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
 
 
 async def send_admin_health(bot, cid):
@@ -1272,17 +1238,12 @@ async def send_admin_health(bot, cid):
     import store as _st
     import weather as _w
 
-    lines = ["<b>Статус сервисов</b>"]
-
     required = [
         ("TELEGRAM_TOKEN", bool(config.TELEGRAM_TOKEN)),
         ("GEMINI_API_KEY",  bool(config.GEMINI_API_KEY)),
         ("DATABASE_URL",    bool(config.DATABASE_URL)),
         ("CHAT_ID",         bool(config.CHAT_ID)),
     ]
-    lines.extend(["", "<b>Обязательные ключи</b>"])
-    for k, ok in required:
-        lines.append(f"  {'✅' if ok else '❌'} <code>{k}</code>")
 
     optional = [
         ("ANTHROPIC_API_KEY",   bool(config.ANTHROPIC_API_KEY)),
@@ -1294,26 +1255,24 @@ async def send_admin_health(bot, cid):
         ("TMDB_API_KEY",        bool(config.TMDB_API_KEY)),
         ("TICKETMASTER_API_KEY",bool(config.TICKETMASTER_API_KEY)),
     ]
-    lines.extend(["", "<b>Опциональные ключи</b>"])
-    for k, ok in optional:
-        lines.append(f"  {'✅' if ok else '⚪'} <code>{k}</code>")
 
-    lines.extend(["", "<b>Состояние</b>"])
+    state_lines = []
     try:
         _st._load("__health__")
-        lines.append("  ✅ DB: OK")
+        state_lines.append("  ✅ DB: OK")
     except Exception as e:
-        lines.append(f"  ❌ DB: {str(e)[:60]}")
+        state_lines.append(f"  ❌ DB: {esc(str(e)[:60])}")
 
     try:
         s = store.get_settings(cid)
         _w.fetch_weather(s["lat"], s["lon"], 1)
-        lines.append("  ✅ Weather API: OK")
+        state_lines.append("  ✅ Weather API: OK")
     except Exception:
-        lines.append("  ❌ Weather API: недоступна")
+        state_lines.append("  ❌ Weather API: недоступна")
 
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    msg = settings_ui.admin_health(required, optional, state_lines)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
 
 
 async def send_admin_llmcheck(bot, cid):
@@ -1328,17 +1287,17 @@ async def send_admin_llmcheck(bot, cid):
         ("Gemini", "gemini"),
         ("Groq", "groq"),
     ]
-    lines = ["<b>LLM check</b>", "", "Проверяю провайдеров по очереди…", ""]
+    results = []
     for label, route in probes:
         try:
             await _ai.allm("Ответь одним словом: ok", 10, 0.0, route=route, module="admin")
-            lines.append(f"✅ {label}: Хорошо")
+            results.append((label, True, ""))
         except Exception as e:
             msg = str(e).split(": ", 1)[-1][:80]
-            lines.append(f"❌ {label}: {msg}")
-    lines += ["", "<i>Проверка идёт последовательно, чтобы увидеть реальный ответ каждого провайдера.</i>"]
+            results.append((label, False, msg))
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    msg = settings_ui.admin_llm_check(results)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
 
 
 async def send_admin_run_notif(bot, cid):
@@ -1349,9 +1308,10 @@ async def send_admin_run_notif(bot, cid):
     ]
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_admin")])
     kb = InlineKeyboardMarkup(rows)
+    msg = settings_ui.admin_run_notifications()
     await bot.send_message(
         chat_id=cid,
-        text=ADMIN_RUN_NOTIF_TEXT,
-        parse_mode="HTML",
+        text=msg.text,
+        parse_mode=msg.parse_mode,
         reply_markup=kb,
     )

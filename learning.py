@@ -649,52 +649,13 @@ async def _send_train_feedback(bot, cid, idx, st):
     chosen_fl = wrong_map.get(chosen) or wrong_map.get(chosen.lower()) or ""
     mode = st.get("mode", "word")
 
-    if mode == "phrase":
-        full_phrase = word
-        if idx == correct_idx:
-            lines = [
-                "✅ <b>Верно.</b>",
-                "",
-                f"{esc(sentence)} → <b>{esc(correct)}</b>",
-            ]
-        else:
-            lines = [
-                "❌ <b>Не совсем так.</b>",
-                "",
-                f"{esc(sentence)} → <b>{esc(correct)}</b>",
-                f"Твой ответ: «{esc(chosen)}».",
-            ]
-        lines += ["", f"<b>{esc(full_phrase)}</b>"]
-        if sentence_ru:
-            lines.append(esc(sentence_ru))
-        if st.get("phrase_explanation"):
-            lines += ["", esc(st.get("phrase_explanation", ""))]
-    elif idx == correct_idx:
-        lines = [
-            "✅ <b>Верно.</b>",
-            "",
-            f"<b>{esc(word)}</b> → {esc(meaning)}",
-        ]
-    else:
-        lines = [
-            "❌ <b>Не совсем так.</b>",
-            "",
-            f"<b>{esc(word)}</b> → {esc(meaning)}",
-            f"Твой ответ: «{esc(chosen)}»" + (f" — это <b>{esc(chosen_fl)}</b>." if chosen_fl else "."),
-        ]
-
-    if mode != "phrase" and sentence:
-        context = f"{esc(sentence)}"
-        if sentence_ru:
-            context += f" → {esc(sentence_ru)}"
-        lines += ["", context]
-
+    msg = learning_ui.train_result(st, idx, correct_idx, options, chosen_fl=chosen_fl)
     st["round"] = st.get("round", 0) + 1
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё", callback_data="train_next")],
         [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(lang))],
     ])
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
 
 
 async def _render_next_train_quiz(bot, cid):
@@ -726,9 +687,10 @@ async def send_train_lang_select(bot, cid):
         [InlineKeyboardButton("🇬🇧 Английский", callback_data="a_train_en")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
     ])
+    msg = learning_ui.train_lang_select()
     await bot.send_message(chat_id=cid,
-        text="🧠 <b>Тренажёр</b>\n\nСлова и фразы для тренировки добавляются в разделе <b>Словарь</b>.\n\n<b>Выбери язык для тренировки 👇</b>",
-        parse_mode="HTML", reply_markup=kb)
+        text=msg.text,
+        parse_mode=msg.parse_mode, reply_markup=kb)
 
 
 # ================= ОБРАТНЫЙ ПЕРЕВОД =================
@@ -752,9 +714,10 @@ async def do_translate(bot, cid, lang):
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     store.challenge_state[str(cid)] = {"ru": ru, "lang": lang}
+    msg = learning_ui.translate_prompt(_flag(lang), ru, lang)
     await bot.send_message(chat_id=cid,
-        text=f"📝 <b>{_flag(lang)} Обратный перевод</b>\n\nФраза: «{esc(ru)}»\n\nНапиши перевод на {lang} следующим сообщением.",
-        parse_mode="HTML")
+        text=msg.text,
+        parse_mode=msg.parse_mode)
 
 async def translate_answer(bot, cid, text):
     st = store.challenge_state.pop(str(cid), None)
@@ -764,24 +727,13 @@ async def translate_answer(bot, cid, text):
         r = check_translation(st["lang"], st["ru"], text)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return True
-    L = [f"📝 <b>{_flag(st['lang'])} Обратный перевод</b>", "", f"Твой ответ: {esc(text)}", ""]
-    if r.get("ok"):
-        L.append("✅ Верно")
-        if r.get("correct"):
-            L += ["", f"💡 {esc(st['ru'])} → {esc(r['correct'])}"]
-    else:
-        if r.get("error"):
-            L += [f"❌ Ошибка: {esc(r['error'])}"]
-        if r.get("correct"):
-            L += ["", f"✅ {esc(st['ru'])} → {esc(r['correct'])}"]
-    if r.get("note"):
-        L += ["", f"💡 {esc(r['note'])}"]
+    msg = learning_ui.translate_result(_flag(st["lang"]), st["lang"], st["ru"], text, r)
     code = _code(st["lang"])
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё пример", callback_data=f"again_tr_{code}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")],
     ])
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
     return True
 
 
@@ -1266,28 +1218,27 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
     pool = [w for w in words if _dict_lang(w) == lang_code]
     if wd >= 5 or not pool:
         method_line = f"<i>{esc(method)}</i>" if method.startswith("Прочитай вслух") else esc(method)
-        L = [f"📚{flag} <b>Слова и фразы дня</b>", "", method_line]
-        L += ["", "📖 Открой словарь, если хочешь добавить что-то новое или быстро повторить текущее."]
-        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
+        msg = learning_ui.morning_words(flag, method_line, empty_hint=True)
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
         return
     word_items = [w for w in pool if _dict_kind(w) == "word"]
     phrase_items = [w for w in pool if _dict_kind(w) == "phrase"]
     method = _morning_method_line(method, word_items, phrase_items)
     method_line = f"<i>{esc(method)}</i>" if method.startswith("Прочитай вслух") else esc(method)
-    L = [f"📚{flag} <b>Слова и фразы дня</b>", "", method_line]
     chosen_phrases = _r.sample(phrase_items, min(2, len(phrase_items)))
     chosen_words = _r.sample(word_items, min(3, len(word_items)))
     if not chosen_phrases and not chosen_words:
-        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
+        msg = learning_ui.morning_words(flag, method_line)
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
         return
 
     phrase_del_row = []
+    phrase_lines = []
     if chosen_phrases:
-        L += ["", "💬 <b>Фразы</b>"]
         for w in chosen_phrases:
             word = _cap(_w_field(w, "word", "nl", "en"))
             ru = _w_field(w, "ru")
-            L.append(f"• {esc(word)} → {esc(ru)}")
+            phrase_lines.append((word, ru))
             try:
                 idx = words.index(w)
                 phrase_del_row.append(InlineKeyboardButton(f"❌ {word[:30]}", callback_data=f"worddel_{idx}"))
@@ -1295,19 +1246,19 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
                 pass
 
     word_del_row = []
+    word_lines = []
     if chosen_words:
-        L += ["", "📖 <b>Слова</b>"]
         for w in chosen_words:
             word = _cap(_w_field(w, "word", "nl", "en"))
             ru = _w_field(w, "ru")
-            L.append(f"• {esc(word)} → {esc(ru)}")
+            word_lines.append((word, ru))
             try:
                 idx = words.index(w)
                 word_del_row.append(InlineKeyboardButton(f"❌ {word[:14]}", callback_data=f"worddel_{idx}"))
             except ValueError:
                 pass
 
-    L += ["", "<i>Попробуй использовать 1-2 элемента сегодня в сообщениях, мыслях или разговоре.</i>"]
+    msg = learning_ui.morning_words(flag, method_line, phrase_lines, word_lines)
 
     rows = []
     if with_kb:
@@ -1316,8 +1267,8 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
 
     await bot.send_message(
         chat_id=cid,
-        text="\n".join(L),
-        parse_mode="HTML",
+        text=msg.text,
+        parse_mode=msg.parse_mode,
         reply_markup=InlineKeyboardMarkup(rows) if rows else None,
     )
 
@@ -1457,7 +1408,8 @@ def game_lang_kb():
 
 async def game_start(bot, cid):
     store.challenge_state.pop(str(cid), None)
-    await bot.send_message(chat_id=cid, text="🕵️ Игра-детектив. На каком языке играем?", reply_markup=game_lang_kb())
+    msg = learning_ui.game_start()
+    await bot.send_message(chat_id=cid, text=msg.text, reply_markup=game_lang_kb())
 
 async def ask_difficulty(bot, cid, lang):
     ui = _game_ui(lang)
@@ -1498,8 +1450,8 @@ async def send_game(bot, cid):
         [InlineKeyboardButton("◀️ Назад", callback_data="game_change")],
     ])
     clues = "\n".join(f"•{c.strip()}" for c in d.get("clues", "").split("\n") if c.strip())
-    L = [f"<b>{ui['title']}</b>", "", f"<b>{ui['suspect']}</b>", clues, "", f"<b>{ui['who']} 🤔</b>"]
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
+    msg = learning_ui.game_card(ui, clues)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
 
 def _fuzzy(a, b):
     if not a or not b:
@@ -1532,10 +1484,8 @@ async def game_answer(bot, cid, text):
             [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
         ])
         body = st.get("explain") or st.get("quote", "")
-        txt = f"<b>{ui['found']}</b>\n\n{ui['answer']}:\n<b>{esc(st['answer'])}</b>"
-        if body:
-            txt += f"\n\n{esc(body)}"
-        await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+        msg = learning_ui.game_found(ui, st["answer"], body)
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
         return True
     st["tries"] = st.get("tries", 0) + 1
     if st["tries"] >= 2:
@@ -1557,9 +1507,8 @@ async def game_hint(bot, cid, q):
     i = (st or {}).get("hint_i", 0)
     if st and i < len(hints):
         st["hint_i"] = i + 1
-        await q.message.reply_text(
-            f"<b>{ui['hint']}</b>\n\n<b>{esc(hints[i])}</b>\n\n{ui['who']}",
-            parse_mode="HTML")
+        msg = learning_ui.game_hint(ui, hints[i])
+        await q.message.reply_text(msg.text, parse_mode=msg.parse_mode)
     else:
         await q.message.reply_text(ui["nohint"])
 
@@ -1571,14 +1520,12 @@ async def game_reveal(bot, cid, q):
         return
     _remember_game_answer(cid, st)
     body = st.get("explain") or st.get("quote", "")
-    txt = f"<b>{ui['found']}</b>\n\n{ui['answer']}:\n<b>{esc(st.get('answer', ''))}</b>"
-    if body:
-        txt += f"\n\n{esc(body)}"
+    msg = learning_ui.game_found(ui, st.get("answer", ""), body)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["again"], callback_data="game_again")],
         [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
     ])
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
 
 
 # ================= УРОВЕНЬ ЯЗЫКА =================
@@ -1601,20 +1548,15 @@ async def send_levels(bot, cid, q=None, back="set_home"):
     en_lvl = store.get_level(cid, "английский")
     nl_label = "Сложный (B1+)" if _is_b1plus(nl_lvl) else "Лёгкий (A1–A2)"
     en_label = "Сложный (B1+)" if _is_b1plus(en_lvl) else "Лёгкий (A1–A2)"
-    text = (
-        "🎚 <b>Уровень языков</b>\n\n"
-        f"🇳🇱 Нидерландский: <b>{nl_label}</b>\n"
-        f"🇬🇧 Английский: <b>{en_label}</b>\n\n"
-        "Нажми уровень чтобы изменить:"
-    )
+    msg = learning_ui.levels(nl_label, en_label)
     kb = _levels_kb(nl_lvl, en_lvl, back)
     if q is not None:
         try:
-            await q.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            await q.message.edit_text(msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
 
 
 SYSTEM_TOPICS = {
