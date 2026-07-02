@@ -75,6 +75,14 @@ def test_chat_dict_short_form_does_not_capture_plain_dictionary_request():
 
 
 @pytest.mark.unit
+def test_chat_dict_word_request_extracts_payload_in_any_order():
+    payload, lang = learning._extract_chat_dict_add("Слово toevoegen (добавлять) добавить в словарь")
+
+    assert payload == "toevoegen (добавлять)"
+    assert lang == "nl"
+
+
+@pytest.mark.unit
 def test_split_term_reads_parenthesized_russian_translation():
     term, ru = learning._split_term("Je hand opsteken (Поднять руку)")
 
@@ -88,11 +96,27 @@ def test_dict_add_confirmation_card_uses_entities():
         {"lang": "nl", "kind": "phrase", "word": "Je hand opsteken", "ru": "Поднять руку"},
     ])
 
-    assert text.startswith("Добавлено в словарь")
-    assert "Фраза добавлена в словарь нидерландских фраз." in text
+    assert text.startswith("Словарь")
+    assert "✅ Фраза добавлена в словарь (нидерландских фраз)" in text
     assert "Je hand opsteken - Поднять руку" in text
+    assert "Теперь эта фраза будет попадаться в тренировках по нидерландскому" in text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
-    assert any(e.type == MessageEntity.BLOCKQUOTE for e in entities)
+    quote_offset = text.index("Je hand opsteken - Поднять руку")
+    assert any(e.type == MessageEntity.BLOCKQUOTE and e.offset == quote_offset for e in entities)
+
+
+@pytest.mark.unit
+def test_dict_add_confirmation_card_for_word_uses_entities():
+    text, entities = learning._dict_add_confirmation_card([
+        {"lang": "nl", "kind": "word", "word": "Toevoegen", "ru": "добавлять"},
+    ])
+
+    assert "✅ Слово добавлено в словарь (нидерландских слов)" in text
+    assert "Toevoegen - добавлять" in text
+    assert "Теперь это слово будет попадаться в тренировках по нидерландскому" in text
+    assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
+    quote_offset = text.index("Toevoegen - добавлять")
+    assert any(e.type == MessageEntity.BLOCKQUOTE and e.offset == quote_offset for e in entities)
 
 
 @pytest.mark.unit

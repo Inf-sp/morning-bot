@@ -1103,9 +1103,17 @@ def _dict_add_confirmation_card(added_items):
     def kind_bucket(kind):
         return "фраз" if kind == "phrase" else "слов"
 
+    def explanation(item):
+        kind = "фраза" if item["kind"] == "phrase" else "слово"
+        pronoun = "эта" if item["kind"] == "phrase" else "это"
+        lang = "нидерландскому" if item["lang"] == "nl" else "английскому"
+        if item.get("ru"):
+            return f"Теперь {pronoun} {kind} будет попадаться в тренировках по {lang} с переводом на русский."
+        return f"Теперь {pronoun} {kind} будет храниться в словаре и попадаться в тренировках по {lang}."
+
     first = added_items[0]
     single = len(added_items) == 1
-    title = "Добавлено в словарь"
+    title = "Словарь"
     add(title, MessageEntity.BOLD)
     add("\n\n")
 
@@ -1113,16 +1121,16 @@ def _dict_add_confirmation_card(added_items):
         kind = kind_word(first["kind"])
         added_form = "добавлена" if first["kind"] == "phrase" else "добавлено"
         add(
-            f"{kind.capitalize()} {added_form} в словарь {lang_adj(first['lang'])} {kind_bucket(first['kind'])}.",
-            MessageEntity.BLOCKQUOTE,
+            f"✅ {kind.capitalize()} {added_form} в словарь ({lang_adj(first['lang'])} {kind_bucket(first['kind'])})",
+            MessageEntity.BOLD,
         )
         add("\n\n")
-        add("В словарь:", MessageEntity.BOLD)
-        add("\n")
         line = first["word"]
         if first.get("ru"):
             line += f" - {first['ru']}"
-        add(line)
+        add(line, MessageEntity.BLOCKQUOTE)
+        add("\n\n")
+        add(explanation(first))
     else:
         counts = {}
         for item in added_items:
@@ -1134,19 +1142,19 @@ def _dict_add_confirmation_card(added_items):
                 n = counts.get((code, kind), 0)
                 if n:
                     summary.append(f"{n} в словарь {lang_adj(code)} {kind_bucket(kind)}")
-        add("Добавлено: " + "; ".join(summary) + ".", MessageEntity.BLOCKQUOTE)
+        add("✅ Добавлено: " + "; ".join(summary), MessageEntity.BOLD)
         add("\n\n")
-        add("В словарь:", MessageEntity.BOLD)
-        add("\n")
         for idx, item in enumerate(added_items[:8]):
             line = item["word"]
             if item.get("ru"):
                 line += f" - {item['ru']}"
-            add(f"- {line}")
+            add(line, MessageEntity.BLOCKQUOTE)
             if idx != min(len(added_items), 8) - 1:
                 add("\n")
         if len(added_items) > 8:
             add(f"\n...и ещё {len(added_items) - 8}")
+        add("\n\n")
+        add("Новые записи будут храниться в словаре и попадаться в тренировках по языку.")
 
     return "".join(chunks), entities
 
