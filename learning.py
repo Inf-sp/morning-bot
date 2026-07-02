@@ -1163,6 +1163,63 @@ def _dict_add_confirmation_card(added_items):
 
     return "".join(chunks), entities
 
+def _dict_item_key(lang, kind, word):
+    normalized = re.sub(r"\s+", " ", (word or "").strip()).casefold()
+    return lang, kind, normalized
+
+def _dict_duplicate_confirmation_card(duplicate_items):
+    chunks = []
+    entities = []
+
+    def add(text: str, entity_type=None):
+        offset = _u16_len("".join(chunks))
+        chunks.append(text)
+        if entity_type and text:
+            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
+
+    def lang_loc(code):
+        return "нидерландских" if code == "nl" else "английских"
+
+    def kind_word(kind):
+        return "фраза" if kind == "phrase" else "слово"
+
+    def kind_loc(kind):
+        return "фразах" if kind == "phrase" else "словах"
+
+    first = duplicate_items[0]
+    single = len(duplicate_items) == 1
+
+    add("Словарь", MessageEntity.BOLD)
+    add("\n\n")
+
+    if single:
+        kind = kind_word(first["kind"])
+        present_form = "уже есть" if first["kind"] == "phrase" else "уже есть"
+        add(f"✅ {kind.capitalize()} {present_form} в {lang_loc(first['lang'])} {kind_loc(first['kind'])}")
+        add("\n\n")
+        line = first["word"]
+        if first.get("ru"):
+            line += f" - {first['ru']}"
+        add(line, MessageEntity.BLOCKQUOTE)
+        add("\n\n")
+        add("Повторно не добавляю, чтобы словарь оставался чистым и тренировки не дублировали одно и то же.")
+    else:
+        add("✅ Эти записи уже есть в словаре")
+        add("\n\n")
+        for idx, item in enumerate(duplicate_items[:8]):
+            line = item["word"]
+            if item.get("ru"):
+                line += f" - {item['ru']}"
+            add(line, MessageEntity.BLOCKQUOTE)
+            if idx != min(len(duplicate_items), 8) - 1:
+                add("\n")
+        if len(duplicate_items) > 8:
+            add(f"\n...и ещё {len(duplicate_items) - 8}")
+        add("\n\n")
+        add("Повторно не добавляю их, чтобы словарь оставался чистым.")
+
+    return "".join(chunks), entities
+
 async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False):
     """Добавляет много слов/фраз разом: каждое отдельной записью, авто-тип (слово/фраза) и язык."""
     items = _parse_simple_pairs(text, lang)
@@ -1177,6 +1234,11 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
         items = [{"word": x.strip(), "ru": "", "lang": lang} for x in raw if x.strip()]
     added = {"nl": {"word": 0, "phrase": 0}, "en": {"word": 0, "phrase": 0}}
     added_items = []
+    duplicate_items = []
+    existing_keys = {
+        _dict_item_key(_dict_lang(w), _dict_kind(w), _w_field(w, "word", "nl", "en"))
+        for w in _ensure_dict(cid)
+    }
     for it in items:
         # чистим маркеры списка и отделяем перевод, прилипший к слову
         term, extra_ru = _split_term(it.get("word") or "")
@@ -1186,10 +1248,21 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
         lng = "en" if it.get("lang") == "en" else "nl"
         knd = _kind_of(term)   # тип по самому термину (одно слово = слово)
         word = _cap(term)[:80]
+        key = _dict_item_key(lng, knd, word)
+        if key in existing_keys:
+            duplicate_items.append({"lang": lng, "word": word, "ru": ru, "kind": knd})
+            continue
         store.add_to_list(config.DICT_KEY, cid, {"lang": lng, "word": word, "ru": ru, "kind": knd})
+        existing_keys.add(key)
         added[lng][knd] += 1
         added_items.append({"lang": lng, "word": word, "ru": ru, "kind": knd})
     if not any(added[l][k] for l in added for k in added[l]):
+        if detailed_confirmation and duplicate_items:
+            out_text, entities = _dict_duplicate_confirmation_card(duplicate_items)
+            await bot.send_message(chat_id=cid, text=out_text, entities=entities, reply_markup=_dict_manage_kb(lang))
+            return
+        if duplicate_items:
+            await bot.send_message(chat_id=cid, text="Эти слова или фразы уже есть в словаре."); return
         await bot.send_message(chat_id=cid, text="Не удалось распознать слова. Попробуй ещё раз."); return
     if detailed_confirmation:
         out_text, entities = _dict_add_confirmation_card(added_items)
