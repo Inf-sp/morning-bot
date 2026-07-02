@@ -133,30 +133,30 @@ def rain_character(code, rain_mm, rain_prob, data, day_str):
 
 
 def humidity_phrase(data, day_str, tmax, cc):
-    """Короткая фраза о комфорте с учётом влажности; '' если нечего добавить."""
+    """Заголовок и пояснение о комфорте с учётом влажности; ('', '') если нечего добавить."""
     try:
         hours = data["hourly"]["time"]
         hum_vals = data["hourly"].get("relativehumidity_2m") or []
     except Exception:
-        return ""
+        return "", ""
     if not hum_vals:
-        return ""
+        return "", ""
     day_hum = [
         v for t, v in zip(hours, hum_vals)
         if t.startswith(day_str) and 6 <= int(t[11:13]) < 21 and v is not None
     ]
     if not day_hum:
-        return ""
+        return "", ""
     rh = sum(day_hum) / len(day_hum)
     if rh >= 80 and tmax >= 22:
-        return "Высокая влажность — будет казаться жарче"
+        return "💧 Высокая влажность", "Может ощущаться теплее, чем показывает температура"
     if rh >= 70 and tmax >= 20:
-        return "Из-за влажности может казаться жарче"
+        return "💧 Высокая влажность", "Из-за влажности может казаться жарче"
     if rh >= 75 and (cc or "").upper() == "NL":
-        return "Вечерами у каналов будет свежо"
+        return "💧 Высокая влажность", "Вечерами у каналов будет свежо"
     if rh < 35:
-        return "Воздух сухой"
-    return ""
+        return "💧 Низкая влажность", "Воздух сухой"
+    return "", ""
 
 
 # ---------- иконка ----------
@@ -265,7 +265,7 @@ def storm_alert(wind_ms, code, rain, rain_mm=None, cc=""):
         reasons.append("rain")
     if not reasons:
         return ""
-    return weather_ui.storm_alert(reasons, wind_ms, is_nl=(cc or "").upper() == "NL").text
+    return weather_ui.storm_alert_html(reasons, wind_ms, is_nl=(cc or "").upper() == "NL")
 
 def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="",
                 country="", cc="", lat=None, lon=None, tz="UTC"):
@@ -348,7 +348,7 @@ async def send_weather(bot, cid, mode="today"):
                             d["windspeed_10m_max"][0] or 0, DESC.get(d["weathercode"][0], ""), "сегодня")
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
         msg = weather_ui.full_forecast(header, periods, joke)
-        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
 
     if mode in ("today", "tomorrow"):
@@ -389,7 +389,7 @@ async def send_weather(bot, cid, mode="today"):
             fact = _world_fact()
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
         msg = weather_ui.day_forecast(header, main_lines, alert=alert, fact_title=fact_title, fact=fact)
-        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
 
     if mode == "tomorrow_plain":
@@ -428,7 +428,7 @@ async def send_weather(bot, cid, mode="today"):
             except Exception:
                 pass
         msg = weather_ui.day_forecast(header, main_lines, alert=alert, fact_title="Метео-итог", fact=fact)
-        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
         return
 
     # week/week_plain: компактный формат — одна строка на день/группу
@@ -532,7 +532,7 @@ async def send_weather(bot, cid, mode="today"):
 
     kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
     msg = weather_ui.week_forecast(rng, s["city"], flag, ui_groups, summary)
-    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 # ---------- смена города ----------

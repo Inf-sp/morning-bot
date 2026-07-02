@@ -40,24 +40,24 @@ async def ack_loading(q) -> None:
         pass
 
 async def send_html(bot, cid, text: str | None, reply_markup=None) -> None:
-    """Одиночное сообщение в Telegram HTML с чисткой markdown и откатом на plain."""
+    """Одиночное сообщение в Telegram с чисткой markdown; форматирование через entities."""
     from telegram.error import BadRequest
-    html = tg_html(text or "")
+    plain, entities = html_to_entities(tg_html(text or ""))
     try:
-        await bot.send_message(chat_id=cid, text=html, parse_mode="HTML", reply_markup=reply_markup)
+        await bot.send_message(chat_id=cid, text=plain, entities=entities, reply_markup=reply_markup)
     except BadRequest:
-        await bot.send_message(chat_id=cid, text=html, reply_markup=reply_markup)
+        await bot.send_message(chat_id=cid, text=plain, reply_markup=reply_markup)
 
 async def edit_html(message, text: str | None, reply_markup=None) -> bool:
-    """Редактирует сообщение как Telegram HTML. Возвращает False, если нужно отправить заново."""
+    """Редактирует сообщение (форматирование через entities). Возвращает False, если нужно отправить заново."""
     from telegram.error import BadRequest
-    html = tg_html(text or "")
+    plain, entities = html_to_entities(tg_html(text or ""))
     try:
-        await message.edit_text(html, parse_mode="HTML", reply_markup=reply_markup)
+        await message.edit_text(plain, entities=entities, reply_markup=reply_markup)
         return True
     except BadRequest:
         try:
-            await message.edit_text(html, reply_markup=reply_markup)
+            await message.edit_text(plain, reply_markup=reply_markup)
             return True
         except Exception:
             return False
@@ -157,3 +157,60 @@ def tg_html(text: str | None) -> str:
     # 6) убрать лишние пустые строки (макс одна подряд)
     t = re.sub(r"\n{3,}", "\n\n", t).strip()
     return t
+
+
+_ENTITY_TYPE = {"b": "bold", "i": "italic", "u": "underline", "s": "strikethrough", "code": "code", "pre": "pre"}
+_HTML_TOKEN_RE = re.compile(r'<(/?)(\w+)((?:\s+\w+="[^"]*")*)\s*>')
+_HTML_ATTR_RE = re.compile(r'(\w+)="([^"]*)"')
+
+
+def u16_len(text: str) -> int:
+    return len((text or "").encode("utf-16-le")) // 2
+
+
+def html_to_entities(text: str | None):
+    """Разбирает Telegram-HTML (только теги из tg_html) в (plain_text, [MessageEntity]).
+    Нужен там, где раньше отправляли parse_mode='HTML', а теперь — entities."""
+    from telegram import MessageEntity
+
+    if not text:
+        return "", []
+
+    plain_parts = []
+    entities = []
+    open_stack = []  # [(tag, u16_offset_start, url_or_None)]
+    pos = 0
+    for m in _HTML_TOKEN_RE.finditer(text):
+        chunk = _html_unescape(text[pos:m.start()])
+        plain_parts.append(chunk)
+        pos = m.end()
+
+        is_close, tag, attrs = m.group(1), m.group(2).lower(), m.group(3)
+        if tag not in _ENTITY_TYPE and tag != "a":
+            continue
+        offset_now = u16_len("".join(plain_parts))
+        if not is_close:
+            url = None
+            if tag == "a":
+                am = _HTML_ATTR_RE.search(attrs)
+                url = am.group(2) if am else None
+            open_stack.append((tag, offset_now, url))
+        else:
+            for i in range(len(open_stack) - 1, -1, -1):
+                if open_stack[i][0] == tag:
+                    open_tag, start, url = open_stack.pop(i)
+                    length = offset_now - start
+                    if length > 0:
+                        if open_tag == "a" and url:
+                            entities.append(MessageEntity(MessageEntity.TEXT_LINK, start, length, url=url))
+                        elif open_tag in _ENTITY_TYPE:
+                            entities.append(MessageEntity(_ENTITY_TYPE[open_tag], start, length))
+                    break
+    plain_parts.append(_html_unescape(text[pos:]))
+    plain = "".join(plain_parts)
+    entities.sort(key=lambda e: e.offset)
+    return plain, entities
+
+
+def _html_unescape(s: str) -> str:
+    return s.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")

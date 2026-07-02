@@ -72,7 +72,7 @@ async def show_prompt(bot, cid, section: str):
     await bot.send_message(
         chat_id=cid,
         text=msg.text,
-        parse_mode=msg.parse_mode,
+        entities=msg.entities,
         reply_markup=_SKIP_KB[section],
     )
 
@@ -105,7 +105,7 @@ async def handle_response(bot, cid, section: str, text: str):
         await bot.send_message(
             chat_id=cid,
             text=msg.text,
-            parse_mode=msg.parse_mode,
+            entities=msg.entities,
         )
     await _show_section(bot, cid, section)
 

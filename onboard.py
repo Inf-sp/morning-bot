@@ -61,7 +61,7 @@ async def start(bot, cid):
     await bot.send_message(
         chat_id=cid,
         text=msg.text,
-        parse_mode=msg.parse_mode,
+        entities=msg.entities,
     )
 
 
@@ -77,7 +77,7 @@ async def handle_name(bot, cid, text: str):
     await bot.send_message(
         chat_id=cid,
         text=msg.text,
-        parse_mode=msg.parse_mode,
+        entities=msg.entities,
     )
 
 

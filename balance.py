@@ -743,7 +743,6 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
 
     if not items:
         msg = food_ui.fridge_home_empty()
-        txt = msg.text
         rows = [
             [InlineKeyboardButton("✏️ Добавить продукты", callback_data="as_fridge_add")],
             [InlineKeyboardButton("◀️ Назад", callback_data=back)],
@@ -752,7 +751,6 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
         available = sum(1 for it in items if it.get("on", True))
         by_cat = _fridge_by_cat_display(items)
         msg = food_ui.fridge_home(len(items), available)
-        txt = msg.text
         present_cats = [c for c in _CAT_ORDER if c in by_cat]
         cat_btns = []
         for ci, cat in enumerate(present_cats):
@@ -774,11 +772,11 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
-            await q.message.edit_text(txt, parse_mode="HTML", reply_markup=kb)
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 # ---------- Экран категории (пагинация + toggle + отдельная чистка) ----------
@@ -801,8 +799,7 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
 
     emoji = _CAT_EMOJI.get(cat, "📦")
     on_cnt = sum(1 for _, it in cat_items if it.get("on", True))
-    msg = food_ui.fridge_category(f"{emoji} <b>{cat.capitalize()}</b>", total, on_cnt)
-    txt = msg.text
+    msg = food_ui.fridge_category(emoji, cat.capitalize(), total, on_cnt)
 
     # Один продукт в строку: названия должны читаться полностью.
     rows = [[
@@ -827,11 +824,11 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
-            await q.message.edit_text(txt, parse_mode="HTML", reply_markup=kb)
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 async def fridge_add_done(bot, cid, text, cat_idx: int = -1):
@@ -856,7 +853,7 @@ async def fridge_add_done(bot, cid, text, cat_idx: int = -1):
         added_by_cat.setdefault(_fridge_cat(name), []).append(name)
     rejected = _fridge_rejected_lines(text)
     msg = food_ui.fridge_updated(added_by_cat, added, duplicates, rejected, _CAT_ORDER, _CAT_EMOJI, _CAT_BTN_LABEL)
-    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     if cat_idx >= 0:
         await send_fridge_cat(bot, cid, cat_idx, 0)
     else:
@@ -940,11 +937,9 @@ async def send_my_recipes(bot, cid):
     recipes = store.get_list(config.MY_RECIPES_KEY, cid_s)
     if not recipes:
         msg = food_ui.my_recipes_empty()
-        txt = msg.text
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="as_notes")]])
     else:
         msg = food_ui.my_recipes_list(recipes)
-        txt = msg.text
         rows = []
         for i, r in enumerate(recipes):
             name = r.get("name", f"Рецепт {i+1}")[:30]
@@ -952,7 +947,7 @@ async def send_my_recipes(bot, cid):
         rows.insert(0, [InlineKeyboardButton("❌ Удалить", callback_data="as_recipe_clean")])
         rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
         kb = InlineKeyboardMarkup(rows)
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 async def send_my_recipe_full(bot, cid, idx):

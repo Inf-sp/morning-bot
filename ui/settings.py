@@ -1,41 +1,49 @@
-from .builder import MessageSpec
-from util import esc
+from .builder import MessageBuilder, MessageSpec
 
 ADMIN_RUN_NOTIF_TITLE = "Превью рассылки"
 
 
 def notifications():
-    return MessageSpec(
-        text="🔔 <b>Уведомления</b>\n\nНажми для включения/выключения. 🟢 — включено.",
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold("🔔 Уведомления")
+    b.blank()
+    b.text_line("Нажми для включения/выключения. 🟢 — включено.")
+    return b.build()
 
 
 def priorities(current):
-    return MessageSpec(
-        text=(
-            "🎯 <b>Приоритеты</b>\n\n"
-            "Выбери, на что боту обращать больше внимания в брифе, советах и рекомендациях.\n\n"
-            f"<b>Сейчас:</b> {esc(current)}"
-        ),
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold("🎯 Приоритеты")
+    b.blank()
+    b.text_line("Выбери, на что боту обращать больше внимания в брифе, советах и рекомендациях.")
+    b.blank()
+    b.bold("Сейчас:")
+    b.text_line(f" {current}")
+    return b.build()
 
 
 def body_profile(profile_line):
-    return MessageSpec(
-        text=(
-            "🎚️ <b>Мои параметры</b>\n\n"
-            "Бот использует эти данные при подборе образа и оценке покупок — "
-            "чтобы советы по размеру и силуэту подходили именно тебе.\n\n"
-            f"<b>Сейчас сохранено:</b>\n{profile_line}\n\n"
-            "<b>Напиши одним сообщением:</b>\n"
-            "рост, размеры одежды, обуви и брюк, а также стиль одежды.\n\n"
-            "<i>Пример: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32. "
-            "Стиль: тёмные оттенки, оверсайз, минимум принтов.</i>"
-        ),
-        parse_mode="HTML",
+    b = MessageBuilder()
+    b.bold("🎚️ Мои параметры")
+    b.blank()
+    b.text_line(
+        "Бот использует эти данные при подборе образа и оценке покупок — "
+        "чтобы советы по размеру и силуэту подходили именно тебе."
     )
+    b.blank()
+    b.bold("Сейчас сохранено:")
+    b.newline()
+    b.text_line(profile_line)
+    b.blank()
+    b.bold("Напиши одним сообщением:")
+    b.newline()
+    b.text_line("рост, размеры одежды, обуви и брюк, а также стиль одежды.")
+    b.blank()
+    b.italic(
+        "Пример: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32. "
+        "Стиль: тёмные оттенки, оверсайз, минимум принтов."
+    )
+    return b.build()
 
 
 def city_input():
@@ -43,23 +51,18 @@ def city_input():
 
 
 def wardrobe_item_input():
-    return MessageSpec(
-        text=(
-            "🏷 Напиши вещь: тип + цвет + детали/бренд.\n"
-            "<i>Напр.: «Футболка белая Uniqlo» или «Шорты серые тонкие». Можно списком.</i>"
-        ),
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.text_line("🏷 Напиши вещь: тип + цвет + детали/бренд.\n")
+    b.italic("Напр.: «Футболка белая Uniqlo» или «Шорты серые тонкие». Можно списком.")
+    return b.build()
 
 
 def lagom_input():
-    return MessageSpec(
-        text=(
-            "☕️ Напиши установку или принцип — добавлю в здоровье.\n\n"
-            "<i>Например: «Меньше экрана, больше природы»</i>"
-        ),
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.text_line("☕️ Напиши установку или принцип — добавлю в здоровье.")
+    b.blank()
+    b.italic("Например: «Меньше экрана, больше природы»")
+    return b.build()
 
 
 def list_add_prompt(kind):
@@ -73,87 +76,99 @@ def list_add_prompt(kind):
 
 def list_added(kind, item):
     icons = {"country": "🧳", "artist": "🎤", "book": "📚"}
-    return MessageSpec(text=f"✅ {icons.get(kind, '')} «{esc(item)}» добавлено.", parse_mode="HTML")
+    return MessageSpec(text=f"✅ {icons.get(kind, '')} «{item}» добавлено.")
 
 
 def style_custom_input():
-    return MessageSpec(
-        text=(
-            "🎨 Опиши свой стиль — как хочешь выглядеть, что нравится, что нет.\n\n"
-            "<i>Например: «Люблю тёмные оттенки, оверсайз-силуэты, минимум принтов. "
-            "Стараюсь избегать костюмов.»</i>"
-        ),
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.text_line("🎨 Опиши свой стиль — как хочешь выглядеть, что нравится, что нет.")
+    b.blank()
+    b.italic("Например: «Люблю тёмные оттенки, оверсайз-силуэты, минимум принтов. Стараюсь избегать костюмов.»")
+    return b.build()
 
 
 def body_input():
-    return MessageSpec(
-        text=(
-            "🎚️ <b>Параметры тела</b>\n\n"
-            "Напиши свободным текстом — рост, размер одежды, размер обуви и брюк.\n\n"
-            "<i>Пример: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32</i>"
-        ),
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold("🎚️ Параметры тела")
+    b.blank()
+    b.text_line("Напиши свободным текстом — рост, размер одежды, размер обуви и брюк.")
+    b.blank()
+    b.italic("Пример: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32")
+    return b.build()
 
 
 def style_pick():
-    return MessageSpec(
-        text="🎨 <b>Стиль одежды</b>\n\nВыбери из предложенных или опиши своими словами — бот учтёт при подборе образа:",
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold("🎨 Стиль одежды")
+    b.blank()
+    b.text_line("Выбери из предложенных или опиши своими словами — бот учтёт при подборе образа:")
+    return b.build()
 
 
 def settings_home():
-    return MessageSpec(
-        text="🎚️ <b>Настройки</b>\n\nНастройте бота под себя и управляйте личными данными.",
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold("🎚️ Настройки")
+    b.blank()
+    b.text_line("Настройте бота под себя и управляйте личными данными.")
+    return b.build()
 
 
 def leisure_settings():
-    return MessageSpec(
-        text="🍿 <b>Настройки досуга</b>\n\nКино, страны, артисты и книги для рекомендаций.",
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold("🍿 Настройки досуга")
+    b.blank()
+    b.text_line("Кино, страны, артисты и книги для рекомендаций.")
+    return b.build()
 
 
 def list_section(title, items, empty_hint="Пока пусто — добавь первый элемент 👇"):
-    text = title if items else f"{title}\n\n{empty_hint}"
-    return MessageSpec(text=text, parse_mode="HTML")
+    b = MessageBuilder()
+    b.bold(title)
+    if not items:
+        b.blank()
+        b.text_line(empty_hint)
+    return b.build()
 
 
 def wardrobe_home():
-    return MessageSpec(
-        text="👕 <b>Мой гардероб</b>\n\nБаза вещей и параметры для подбора одежды.",
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold("👕 Мой гардероб")
+    b.blank()
+    b.text_line("База вещей и параметры для подбора одежды.")
+    return b.build()
 
 
 def countries_home():
-    return MessageSpec(text="🗺️ <b>Мои страны</b>", parse_mode="HTML")
+    return MessageBuilder().bold("🗺️ Мои страны").build()
 
 
 def artists_home(items):
-    return list_section("🎤 <b>Мои музыканты</b>", items)
+    return list_section("🎤 Мои музыканты", items)
 
 
 def books_home(items):
-    return list_section("📚 <b>Мои книги</b>", items)
+    return list_section("📚 Мои книги", items)
 
 
 def lagom_home(items):
-    intro = (
-        "☕️ <b>Лагом</b>\n\n"
-        "Лагом (швед. <i>lagom</i> — «в самый раз») — твой личный свод принципов: "
-        "что важно, как хочешь жить, что даёт энергию, а что забирает.\n\n"
-        "Бот использует их в ☕️ Мотивация — "
-        "чтобы советы звучали именно про тебя, а не общими словами.\n\n"
-        "<b>Примеры:</b> «Меньше, но лучше» · «Физическая активность каждый день» · "
-        "«Не сравниваю себя с другими»"
+    b = MessageBuilder()
+    b.bold("☕️ Лагом")
+    b.blank()
+    b.text_line("Лагом (швед. ")
+    b.italic("lagom")
+    b.text_line(
+        " — «в самый раз») — твой личный свод принципов: "
+        "что важно, как хочешь жить, что даёт энергию, а что забирает."
     )
-    return list_section(intro, items, empty_hint="Пока пусто — добавь первый принцип 👇")
+    b.blank()
+    b.text_line("Бот использует их в ☕️ Мотивация — чтобы советы звучали именно про тебя, а не общими словами.")
+    b.blank()
+    b.bold("Примеры:")
+    b.text_line(" «Меньше, но лучше» · «Физическая активность каждый день» · «Не сравниваю себя с другими»")
+    if not items:
+        b.blank()
+        b.text_line("Пока пусто — добавь первый принцип 👇")
+    return b.build()
 
 
 def nothing_to_save():
@@ -185,66 +200,84 @@ def note_deleted():
 
 
 def favorite_card(source, date, text):
+    """Текст заметки произвольный (из q.message.text_html) — держим на HTML, рендерится через send_html."""
+    from util import esc
     header = f"⭐ <b>{esc(source)}</b>" + (f" · {esc(date)}" if date else "")
     return MessageSpec(text=header + "\n\n" + text, parse_mode="HTML")
 
 
 def trips_empty():
-    return MessageSpec(text="🧳 <b>Поездки</b>\n\nПока пусто.", parse_mode="HTML")
+    b = MessageBuilder()
+    b.bold("🧳 Поездки")
+    b.blank()
+    b.text_line("Пока пусто.")
+    return b.build()
 
 
 def trips_home():
-    return MessageSpec(
-        text="🧳 <b>Мои поездки</b>\n\nСохранённые планы поездок.\n\nВыбери план 👇",
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold("🧳 Мои поездки")
+    b.blank()
+    b.text_line("Сохранённые планы поездок.")
+    b.blank()
+    b.text_line("Выбери план 👇")
+    return b.build()
 
 
 def later_home_empty():
-    return MessageSpec(
-        text=(
-            "⏳ <b>Позже</b>\n\n"
-            "Сюда попадают временные закладки из ответов: кино, книги, музыка, "
-            "поездки, еда, гардероб и всё прочее.\n\n"
-            "Пока пусто — сохраняй интересное кнопкой «⏳ Позже» под ответами."
-        ),
-        parse_mode="HTML",
+    b = MessageBuilder()
+    b.bold("⏳ Позже")
+    b.blank()
+    b.text_line(
+        "Сюда попадают временные закладки из ответов: кино, книги, музыка, "
+        "поездки, еда, гардероб и всё прочее."
     )
+    b.blank()
+    b.text_line("Пока пусто — сохраняй интересное кнопкой «⏳ Позже» под ответами.")
+    return b.build()
 
 
 def later_home():
-    return MessageSpec(
-        text=(
-            "⏳ <b>Позже</b>\n\n"
-            "Сюда попадают временные закладки из ответов: кино, книги, музыка, "
-            "поездки, еда, гардероб и всё прочее.\n\n"
-            "Открой категорию, чтобы посмотреть и почистить её."
-        ),
-        parse_mode="HTML",
+    b = MessageBuilder()
+    b.bold("⏳ Позже")
+    b.blank()
+    b.text_line(
+        "Сюда попадают временные закладки из ответов: кино, книги, музыка, "
+        "поездки, еда, гардероб и всё прочее."
     )
+    b.blank()
+    b.text_line("Открой категорию, чтобы посмотреть и почистить её.")
+    return b.build()
 
 
 def later_group(label, desc):
-    return MessageSpec(
-        text=(
-            f"⭐️ <b>Позже · {esc(label)}</b>\n\n"
-            f"Здесь лежат временные закладки: {esc(desc)}.\n"
-            "Открой карточку, чтобы увидеть её в исходном виде или удалить."
-        ),
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold(f"⭐️ Позже · {label}")
+    b.blank()
+    b.text_line(f"Здесь лежат временные закладки: {desc}.\n")
+    b.text_line("Открой карточку, чтобы увидеть её в исходном виде или удалить.")
+    return b.build()
 
 
 def favorites_home():
-    return MessageSpec(
-        text="❤️ <b>Любимые</b>\n\nТвои топ-категории.\n\nВыбери раздел 👇",
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold("❤️ Любимые")
+    b.blank()
+    b.text_line("Твои топ-категории.")
+    b.blank()
+    b.text_line("Выбери раздел 👇")
+    return b.build()
 
 
 def favorite_section(title, items):
-    body = "\n".join(f"• {esc(str(it))}" for it in items[:50]) if items else "<i>пусто</i>"
-    return MessageSpec(text=f"<b>{esc(title)}</b>\n\n{body}", parse_mode="HTML")
+    b = MessageBuilder()
+    b.bold(title)
+    b.blank()
+    if items:
+        b.text_line("\n".join(f"• {it}" for it in items[:50]))
+    else:
+        b.italic("пусто")
+    return b.build()
 
 
 def favorite_add_prompt(name):
@@ -260,89 +293,110 @@ def admin_only():
 
 
 def admin_home():
-    return MessageSpec(
-        text="🔐 <b>Администратор</b>\n\nСервисный раздел. Только для владельца.",
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold("🔐 Администратор")
+    b.blank()
+    b.text_line("Сервисный раздел. Только для владельца.")
+    return b.build()
 
 
 def admin_users(entries, pending_count=0):
-    lines = ["👥 <b>Пользователи</b>", ""]
+    b = MessageBuilder()
+    b.bold("👥 Пользователи")
     for uid, name, is_owner in entries:
-        name_part = f" · {esc(name)}" if name else ""
-        if is_owner:
-            lines.append(f"👑 Owner{name_part}")
-        else:
-            lines.append(f"👤 {esc(uid)}{name_part}")
+        name_part = f" · {name}" if name else ""
+        b.newline()
+        b.text_line(f"👑 Owner{name_part}" if is_owner else f"👤 {uid}{name_part}")
     if pending_count:
-        lines.extend(["", f"⏳ Активных инвайтов: {pending_count}"])
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+        b.blank()
+        b.text_line(f"⏳ Активных инвайтов: {pending_count}")
+    return b.build()
 
 
 def admin_cost_empty():
-    return MessageSpec(text="💸 <b>Расходы за 7 дней</b>\n\nДанных пока нет.", parse_mode="HTML")
+    b = MessageBuilder()
+    b.bold("💸 Расходы за 7 дней")
+    b.blank()
+    b.text_line("Данных пока нет.")
+    return b.build()
 
 
 def admin_cost_summary(call_count, total_tokens, providers, modules):
-    lines = [
-        "💸 <b>Расходы за 7 дней</b>",
-        "",
-        f"Вызовов: {call_count}",
-        f"Токенов: ~{total_tokens:,}",
-        "",
-        "<b>По провайдерам:</b>",
-    ]
+    b = MessageBuilder()
+    b.bold("💸 Расходы за 7 дней")
+    b.newline()
+    b.newline()
+    b.text_line(f"Вызовов: {call_count}\nТокенов: ~{total_tokens:,}")
+    b.blank()
+    b.bold("По провайдерам:")
     for label, configured, tokens, percent in providers:
-        safe_label = esc(label)
+        b.newline()
         if not configured:
-            lines.append(f"  {safe_label}: —")
+            b.text_line(f"  {label}: —")
         elif tokens:
-            lines.append(f"  {safe_label}: {tokens:,} tok ({percent})")
+            b.text_line(f"  {label}: {tokens:,} tok ({percent})")
         else:
-            lines.append(f"  {safe_label}: 0 tok")
+            b.text_line(f"  {label}: 0 tok")
     if modules:
-        lines.extend(["", "<b>Где тратится:</b>"])
+        b.blank()
+        b.bold("Где тратится:")
         for label, tokens, percent in modules:
-            lines.append(f"  {esc(label)}: {tokens:,} tok ({percent})")
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+            b.newline()
+            b.text_line(f"  {label}: {tokens:,} tok ({percent})")
+    return b.build()
 
 
 def admin_health(required, optional, state_lines):
-    lines = ["<b>Статус сервисов</b>", "", "<b>Обязательные ключи</b>"]
+    b = MessageBuilder()
+    b.bold("Статус сервисов")
+    b.blank()
+    b.bold("Обязательные ключи")
     for key, ok in required:
-        lines.append(f"  {'✅' if ok else '❌'} <code>{esc(key)}</code>")
-    lines.extend(["", "<b>Опциональные ключи</b>"])
+        b.newline()
+        b.text_line(f"  {'✅' if ok else '❌'} ")
+        b.code(key)
+    b.blank()
+    b.bold("Опциональные ключи")
     for key, ok in optional:
-        lines.append(f"  {'✅' if ok else '⚪'} <code>{esc(key)}</code>")
-    lines.extend(["", "<b>Состояние</b>"])
-    lines.extend(esc(line) for line in state_lines)
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+        b.newline()
+        b.text_line(f"  {'✅' if ok else '⚪'} ")
+        b.code(key)
+    b.blank()
+    b.bold("Состояние")
+    for line in state_lines:
+        b.newline()
+        b.text_line(line)
+    return b.build()
 
 
 def admin_llm_check(results):
-    lines = ["<b>LLM check</b>", "", "Проверяю провайдеров по очереди…", ""]
+    b = MessageBuilder()
+    b.bold("LLM check")
+    b.blank()
+    b.text_line("Проверяю провайдеров по очереди…")
     for label, ok, detail in results:
+        b.blank()
         if ok:
-            lines.append(f"✅ {esc(label)}: Хорошо")
+            b.text_line(f"✅ {label}: Хорошо")
         else:
-            lines.append(f"❌ {esc(label)}: {esc(detail)}")
-    lines += ["", "<i>Проверка идёт последовательно, чтобы увидеть реальный ответ каждого провайдера.</i>"]
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+            b.text_line(f"❌ {label}: {detail}")
+    b.blank()
+    b.italic("Проверка идёт последовательно, чтобы увидеть реальный ответ каждого провайдера.")
+    return b.build()
 
 
 def admin_run_notifications():
-    return MessageSpec(
-        text=(
-            f"<b>{ADMIN_RUN_NOTIF_TITLE}</b>\n\n"
-            "Выбери уведомление — оно придёт тебе прямо сейчас.\n"
-            "Время в кнопках показывает обычное расписание."
-        ),
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold(ADMIN_RUN_NOTIF_TITLE)
+    b.blank()
+    b.text_line("Выбери уведомление — оно придёт тебе прямо сейчас.\nВремя в кнопках показывает обычное расписание.")
+    return b.build()
 
 
 def admin_invite(link):
-    return MessageSpec(
-        text=f"🔗 <b>Подарочный инвайт:</b>\n<a href=\"{esc(link)}\">{esc(link)}</a>",
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.text_line("🔗 ")
+    b.bold("Подарочный инвайт:")
+    b.newline()
+    b.link(link, link)
+    return b.build()

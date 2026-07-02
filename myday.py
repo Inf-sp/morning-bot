@@ -279,7 +279,7 @@ def _word_of_day(cid):
         parts.append(f"🇬🇧 {_cap(en)}")
     return " → ".join(parts)
 
-_day_cache = {}  # cid -> {"date":..., "text":..., "has_fact": bool, "ts": float}
+_day_cache = {}  # cid -> {"date":..., "text":..., "entities":..., "has_fact": bool, "ts": float}
 
 def reset_day_cache(cid):
     _day_cache.pop(str(cid), None)
@@ -302,16 +302,16 @@ def _build_day_text(cid):
     rain_mm = (d.get("precipitation_sum") or [None])[0] if d.get("precipitation_sum") else None
     wind_ms = d["windspeed_10m_max"][0] or 0
     icon = weather.weather_icon(code, tmax, rain, wind_ms, rain_mm)
-    wemoji, wword = weather.wind_scale(wind_ms)
     rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
     rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-    # ветер: подробно только если сильный, без направления
+    # ветер: отдельным блоком показываем только если сильный
+    wind_title, wind_line = "", ""
     if wind_ms >= 8:
+        _, wword = weather.wind_scale(wind_ms)
         wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
         wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
-        wind_str = f"{wemoji} {wword}{wind_when} {wind_ms:.0f} м/с"
-    else:
-        wind_str = f"💨 Ветер {wind_ms:.0f} м/с"
+        wind_title = f"⚠️ {wword}"
+        wind_line = f"До {wind_ms:.0f} м/с{wind_when}"
 
     now = datetime.now(TZ)
     weekday_name = _WEEKDAYS[now.weekday()]
@@ -322,8 +322,9 @@ def _build_day_text(cid):
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     flag = flag_from_cc(s.get("cc", "")) or (country_flag(s.get("country", "")) if s.get("country") else "")
     weather_title = f"{icon} Погода сегодня"
-    weather_line = f"До {tmax:+.0f}°C • {weather.rain_text(rain, rain_mm, rain_when)}{wind_str}"
-    hum = weather.humidity_phrase(data, day_str, tmax, s.get("cc", ""))
+    rain_part = weather.rain_text(rain, rain_mm, rain_when)
+    weather_line = f"До {tmax:+.0f}°C" + (f" • {rain_part}" if rain_part else "")
+    hum_title, hum_line = weather.humidity_phrase(data, day_str, tmax, s.get("cc", ""))
     try:
         fact = city_fact(s.get("city", ""), s.get("country", ""), cid, cc=s.get("cc", ""))
     except Exception as e:
@@ -351,7 +352,10 @@ def _build_day_text(cid):
         priorities=pr_labels,
         weather_title=weather_title,
         weather_line=weather_line,
-        humidity=hum,
+        wind_title=wind_title,
+        wind_line=wind_line,
+        humidity_title=hum_title,
+        humidity_line=hum_line,
         word_line=word_line,
         fact=fact,
         lifehack=hack_text,
@@ -364,7 +368,7 @@ def _build_day_text(cid):
         _log.warning("[verify] weather: %s", w)
     # помечаем, есть ли факт — чтобы кешировать короче если нет
     _build_day_text._has_fact = bool(fact)
-    return text
+    return text, msg.entities
 
 async def send_plany(bot, cid, force=False):
     import time as _time
@@ -381,16 +385,18 @@ async def send_plany(bot, cid, force=False):
     if stale:
         _build_day_text._has_fact = False
         try:
-            text = await asyncio.to_thread(_build_day_text, cid)
+            text, entities = await asyncio.to_thread(_build_day_text, cid)
         except Exception as e:
             await verify.safe_error(bot, cid, e); return
         _day_cache[str(cid)] = {
-            "date": today, "text": text,
+            "date": today, "text": text, "entities": entities,
             "has_fact": getattr(_build_day_text, "_has_fact", False),
             "ts": _time.time(),
         }
-    text = _day_cache[str(cid)]["text"]
-    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=_day_menu_kb())
+    cached = _day_cache[str(cid)]
+    await bot.send_message(
+        chat_id=cid, text=cached["text"], entities=cached.get("entities"), reply_markup=_day_menu_kb()
+    )
 
 async def handle_callback(bot, cid, q, data):
     if data == "md_refresh":

@@ -15,6 +15,15 @@ def u16_len(text: str) -> int:
     return len((text or "").encode("utf-16-le")) // 2
 
 
+def from_html(html_text: str) -> MessageSpec:
+    """Собирает готовый HTML-текст (составленный из нескольких кусков/эскейпов) в MessageSpec
+    с entities — удобно, когда проще склеить строки с тегами, чем звать MessageBuilder по кускам."""
+    from util import html_to_entities
+
+    plain, entities = html_to_entities(html_text)
+    return MessageSpec(text=plain, entities=entities)
+
+
 class MessageBuilder:
     def __init__(self):
         self._chunks = []
@@ -37,8 +46,22 @@ class MessageBuilder:
     def bold(self, text: str):
         return self.add(text, MessageEntity.BOLD)
 
+    def italic(self, text: str):
+        return self.add(text, MessageEntity.ITALIC)
+
+    def code(self, text: str):
+        return self.add(text, MessageEntity.CODE)
+
     def quote(self, text: str):
         return self.add(text, MessageEntity.BLOCKQUOTE)
+
+    def link(self, text: str, url: str):
+        offset = u16_len(self.text)
+        self._chunks.append(text)
+        if text:
+            entity = MessageEntity(MessageEntity.TEXT_LINK, offset, u16_len(text), url=url)
+            self._entities.append(entity)
+        return self
 
     def blank(self):
         return self.add("\n\n")

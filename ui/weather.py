@@ -1,4 +1,4 @@
-from .builder import MessageSpec
+from .builder import MessageSpec, from_html
 from util import esc, cap_sentence
 
 
@@ -8,7 +8,7 @@ def full_forecast(header, periods, joke=""):
         lines += [f"<b>{esc(period['label'])}:</b>", period["line"], ""]
     if joke:
         lines.append(esc(joke))
-    return MessageSpec(text="\n".join(lines).strip(), parse_mode="HTML")
+    return from_html("\n".join(lines).strip())
 
 
 def day_forecast(header, main_lines, alert="", fact_title="", fact=""):
@@ -21,7 +21,7 @@ def day_forecast(header, main_lines, alert="", fact_title="", fact=""):
             lines += ["", f"🌡️ <b>{esc(fact_title)}</b>", esc(fact)]
         else:
             lines += ["", esc(fact)]
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+    return from_html("\n".join(lines))
 
 
 def week_forecast(rng, city, flag, groups, summary=""):
@@ -32,7 +32,7 @@ def week_forecast(rng, city, flag, groups, summary=""):
         )
     if summary:
         lines += ["", "🌡️ <b>Метео-итог</b>", esc(_finish_sentence(cap_sentence(summary)))]
-    return MessageSpec(text="\n".join(lines).strip(), parse_mode="HTML")
+    return from_html("\n".join(lines).strip())
 
 
 def _finish_sentence(text):
@@ -42,7 +42,7 @@ def _finish_sentence(text):
     return text
 
 
-def storm_alert(reasons, wind_ms, is_nl=False):
+def _storm_alert_lines(reasons, wind_ms, is_nl=False):
     lines = ["⚠️ <b>Штормовое предупреждение</b>" + (" (Code Geel)" if is_nl else ""), ""]
     if "wind" in reasons:
         lines.append(f"Ожидаются шквалы до {wind_ms:.0f} м/с. Закрепи велосипед, убери лёгкие предметы с балкона.")
@@ -57,7 +57,16 @@ def storm_alert(reasons, wind_ms, is_nl=False):
             lines.append("Сильный дождь и риск подтоплений. Проверь прогноз осадков перед выходом.")
     if "snow" in reasons:
         lines.append("Снег и гололёд. Осторожно на дорогах, заложи время на дорогу.")
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+    return lines
+
+
+def storm_alert(reasons, wind_ms, is_nl=False):
+    return from_html("\n".join(_storm_alert_lines(reasons, wind_ms, is_nl)))
+
+
+def storm_alert_html(reasons, wind_ms, is_nl=False):
+    """HTML-фрагмент штормового предупреждения — для встраивания внутрь day_forecast()."""
+    return "\n".join(_storm_alert_lines(reasons, wind_ms, is_nl))
 
 
 def city_not_found(raw):

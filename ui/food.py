@@ -1,8 +1,9 @@
-from .builder import MessageSpec
+from .builder import MessageBuilder, MessageSpec
 from util import esc
 
 
 def food_card(data, label="Рецепт дня"):
+    """HTML-текст карточки: рендерится через util.send_html (там же оживают LLM-теги в поле 'full')."""
     name = esc(str(data.get("name", "")).strip())
     ingredients = esc(str(data.get("ingredients", "")).strip())
     steps = data.get("steps") or []
@@ -22,71 +23,85 @@ def food_card(data, label="Рецепт дня"):
 
 
 def fridge_home_empty():
-    return MessageSpec(
-        text="🧊 <b>Мой холодильник</b>\n\nПусто — добавь продукты, которые обычно есть дома.",
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold("🧊 Мой холодильник")
+    b.blank()
+    b.text_line("Пусто — добавь продукты, которые обычно есть дома.")
+    return b.build()
 
 
 def fridge_home(count, available):
-    return MessageSpec(
-        text=f"🧊 <b>Мой холодильник</b> · {count} продуктов · {available} в наличии\n\nВыбери категорию:",
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold("🧊 Мой холодильник")
+    b.text_line(f" · {count} продуктов · {available} в наличии")
+    b.blank()
+    b.text_line("Выбери категорию:")
+    return b.build()
 
 
-def fridge_category(title, total, available):
-    return MessageSpec(
-        text=(
-            f"{title} · {total} продуктов · {available} в наличии\n\n"
-            "🟢 — есть в наличии  ⚪ — закончилось\n"
-            "Нажми продукт, чтобы изменить статус."
-        ),
-        parse_mode="HTML",
+def fridge_category(emoji, label, total, available):
+    b = MessageBuilder()
+    b.text_line(f"{emoji} ")
+    b.bold(label)
+    b.text_line(
+        f" · {total} продуктов · {available} в наличии\n\n"
+        "🟢 — есть в наличии  ⚪ — закончилось\n"
+        "Нажми продукт, чтобы изменить статус."
     )
+    return b.build()
 
 
 def fridge_updated(added_by_cat, added, duplicates, rejected, cat_order, cat_emoji, cat_labels):
-    lines = ["🧊 <b>Холодильник обновлён</b>"]
+    b = MessageBuilder()
+    b.bold("🧊 Холодильник обновлён")
     if added:
-        lines += ["", "<b>Добавил:</b>"]
+        b.blank()
+        b.bold("Добавил:")
         for cat in cat_order:
             names = sorted(set(added_by_cat.get(cat, [])))
             if names:
                 emoji = cat_emoji.get(cat, "📦")
                 label = cat_labels.get(cat, cat.capitalize())
-                lines.append(f"{emoji} <b>{esc(label)}:</b> {esc(', '.join(names))}")
+                b.newline()
+                b.text_line(f"{emoji} ")
+                b.bold(f"{label}:")
+                b.text_line(f" {', '.join(names)}")
     else:
-        lines += ["", "Новых продуктов не нашёл."]
+        b.blank()
+        b.text_line("Новых продуктов не нашёл.")
     if duplicates:
-        lines += ["", "<b>Уже было:</b>", esc(", ".join(sorted(set(duplicates))[:20]))]
+        b.blank()
+        b.bold("Уже было:")
+        b.newline()
+        b.text_line(", ".join(sorted(set(duplicates))[:20]))
     if rejected:
-        lines += ["", "<b>Не добавил:</b>"]
+        b.blank()
+        b.bold("Не добавил:")
         for name, reason in rejected[:12]:
-            lines.append(f"• {esc(name)} — {esc(reason)}")
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+            b.newline()
+            b.text_line(f"• {name} — {reason}")
+    return b.build()
 
 
 def fridge_empty_for_recipe():
-    return MessageSpec(
-        text=(
-            "🧊 Холодильник пуст или все продукты отмечены как отсутствующие.\n\n"
-            "Отметь 🟢, что есть сейчас, и попробуй снова."
-        )
-    )
+    return MessageBuilder().text_line(
+        "🧊 Холодильник пуст или все продукты отмечены как отсутствующие.\n\n"
+        "Отметь 🟢, что есть сейчас, и попробуй снова."
+    ).build()
 
 
 def my_recipes_empty():
-    return MessageSpec(
-        text=(
-            "🍳 <b>Мои рецепты</b>\n\nПусто. Сохраняй рецепты кнопкой "
-            "«❤️ Сохранить рецепт» под любым рецептом."
-        ),
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.bold("🍳 Мои рецепты")
+    b.blank()
+    b.text_line("Пусто. Сохраняй рецепты кнопкой «❤️ Сохранить рецепт» под любым рецептом.")
+    return b.build()
 
 
 def my_recipes_list(recipes):
-    text = "🍳 <b>Мои рецепты</b> — {}\n\n".format(len(recipes))
-    text += "\n".join(f"• {esc(r.get('name', '?'))}" for r in recipes)
-    return MessageSpec(text=text, parse_mode="HTML")
+    b = MessageBuilder()
+    b.bold("🍳 Мои рецепты")
+    b.text_line(f" — {len(recipes)}")
+    b.blank()
+    b.text_line("\n".join(f"• {r.get('name', '?')}" for r in recipes))
+    return b.build()

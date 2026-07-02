@@ -30,10 +30,9 @@ def test_fridge_updated_groups_added_items():
         {"молочка": "Молочка"},
     )
 
-    assert msg.parse_mode == "HTML"
-    assert "🧊 <b>Холодильник обновлён</b>" in msg.text
-    assert "🥛 <b>Молочка:</b> молоко" in msg.text
-    assert "<b>Уже было:</b>\nсыр" in msg.text
+    assert "🧊 Холодильник обновлён" in msg.text
+    assert "🥛 Молочка: молоко" in msg.text
+    assert "Уже было:\nсыр" in msg.text
     assert "• камень — не продукт" in msg.text
 
 
@@ -41,6 +40,5 @@ def test_fridge_updated_groups_added_items():
 def test_my_recipes_list_escapes_names():
     msg = food.my_recipes_list([{"name": "Паста <быстро>"}])
 
-    assert msg.parse_mode == "HTML"
-    assert "🍳 <b>Мои рецепты</b> — 1" in msg.text
-    assert "• Паста &lt;быстро&gt;" in msg.text
+    assert "🍳 Мои рецепты — 1" in msg.text
+    assert "• Паста <быстро>" in msg.text
