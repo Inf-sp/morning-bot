@@ -1,10 +1,10 @@
 import re
-from html import unescape
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import store
 import ai
 import verify
+from ui import assistant as assistant_ui
 
 _MED_WORDS = ("боль", "болит", "симптом", "врач", "горло", "кашель", "тошнот", "давлен",
               "сыпь", "простуд", "грипп", "живот", "голова", "мигрень", "насморк")
@@ -38,91 +38,9 @@ _INTENT_MAP = [
     (("заметк", "сохран", "запомни это", "мои заметки", "база"), "notes"),
 ]
 
-_LEADING_EMOJI_RE = re.compile(
-    r"^[\s\U0001F1E6-\U0001FAFF\u2600-\u27BF\uFE0F]+"
-)
-
-
-def _u16_len(text: str) -> int:
-    return len((text or "").encode("utf-16-le")) // 2
-
-
-def _clean_assistant_line(line: str) -> str:
-    line = unescape(line or "").strip()
-    line = re.sub(r"</?(?:b|strong|i|em|code)>", "", line, flags=re.I)
-    line = re.sub(r"^#{1,6}\s*", "", line)
-    line = re.sub(r"\*\*(.*?)\*\*", r"\1", line)
-    line = re.sub(r"__(.*?)__", r"\1", line)
-    return line.strip()
-
-
-def _strip_title_emoji(line: str) -> str:
-    return _LEADING_EMOJI_RE.sub("", line or "").strip()
-
-
-def _strip_final_intro(line: str) -> str:
-    return re.sub(
-        r"^(?:последн(?:ий|ее)\s+(?:совет|предложение)|итог|важно|вывод)\s*:\s*",
-        "",
-        line or "",
-        flags=re.I,
-    ).strip()
-
-
 def _assistant_entities_card(answer: str):
-    raw_lines = [_clean_assistant_line(line) for line in (answer or "").splitlines()]
-    lines = [line for line in raw_lines if line]
-    if not lines:
-        lines = ["Пусто", "Попробуй ещё раз."]
-
-    title = _strip_title_emoji(lines[0]).rstrip(".:") or "Ответ"
-    body = lines[1:]
-    chunks = []
-    entities = []
-
-    def add(text: str, entity_type=None):
-        offset = _u16_len("".join(chunks))
-        chunks.append(text)
-        if entity_type and text:
-            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
-
-    add(title, MessageEntity.BOLD)
-    if body:
-        add("\n\n")
-
-    normalized_lines = []
-    quote_flags = []
-    for line in body:
-        normalized = line.strip()
-        is_quote = normalized.startswith((">", "»"))
-        if is_quote:
-            normalized = normalized.lstrip(">» ").strip()
-
-        if normalized.lower().startswith(("это значит", "значит:")):
-            normalized = "Что важно:"
-
-        normalized_lines.append(normalized)
-        quote_flags.append(is_quote)
-
-    if normalized_lines:
-        normalized_lines[-1] = _strip_final_intro(normalized_lines[-1])
-
-    for idx, normalized in enumerate(normalized_lines):
-        next_line = normalized_lines[idx + 1] if idx != len(normalized_lines) - 1 else ""
-        is_list_label = normalized.endswith(":") and next_line.startswith("- ")
-        entity_type = MessageEntity.BLOCKQUOTE if quote_flags[idx] else MessageEntity.BOLD if is_list_label else None
-        add(normalized, entity_type)
-        if idx != len(normalized_lines) - 1:
-            if (
-                normalized.startswith("- ") and next_line.startswith("- ")
-                or is_list_label
-            ):
-                add("\n")
-            else:
-                add("\n\n")
-
-    # Если модель дала короткий ответ без явной цитаты, не выдумываем цитируемый блок.
-    return "".join(chunks).rstrip(), entities
+    msg = assistant_ui.assistant_answer(answer)
+    return msg.text, msg.entities
 
 
 def _detect_intent(text: str):
@@ -222,15 +140,15 @@ async def chat_reply(bot, cid, text):
     store.chat_history[str(cid)] = hist[-10:]
     store.last_answer[str(cid)] = answer
     store.last_surface[str(cid)] = "chat"
-    out_text, entities = _assistant_entities_card((answer or "").strip() or "Пусто, попробуй ещё раз.")
+    msg = assistant_ui.assistant_answer((answer or "").strip() or "Пусто, попробуй ещё раз.")
     ok = False
     try:
-        await pending.edit_text(out_text, entities=entities)
+        await pending.edit_text(msg.text, entities=msg.entities)
         ok = True
     except Exception:
         ok = False
     if not ok:
         try:
-            await bot.send_message(chat_id=cid, text=out_text, entities=entities)
+            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
         except Exception:
-            await verify.safe_send(bot, cid, out_text, surface="chat")
+            await verify.safe_send(bot, cid, msg.text, surface="chat")
