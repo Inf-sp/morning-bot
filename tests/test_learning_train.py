@@ -97,7 +97,7 @@ def test_dict_add_confirmation_card_uses_entities():
     ])
 
     assert text.startswith("Словарь")
-    assert "✅ Фраза добавлена в нидерландские фразы" in text
+    assert "Фраза добавлена в словарь ✅" in text
     assert "Je hand opsteken - Поднять руку" in text
     assert "Теперь эта фраза будет попадаться в тренировках по нидерландскому" in text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
@@ -113,7 +113,7 @@ def test_dict_add_confirmation_card_for_word_uses_entities():
         {"lang": "nl", "kind": "word", "word": "Toevoegen", "ru": "добавлять"},
     ])
 
-    assert "✅ Слово добавлено в нидерландские слова" in text
+    assert "Слово добавлено в словарь ✅" in text
     assert "Toevoegen - добавлять" in text
     assert "Теперь это слово будет попадаться в тренировках по нидерландскому" in text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
@@ -135,11 +135,26 @@ def test_dict_duplicate_confirmation_card_uses_entities():
     ])
 
     assert text.startswith("Словарь")
-    assert "✅ Фраза уже есть в нидерландских фразах" in text
+    assert "🫪 Фраза уже есть в словаре" in text
     assert "Je hand opsteken - Поднять руку" in text
     assert "Повторно не добавляю" in text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
     quote_offset = text.index("Je hand opsteken - Поднять руку")
+    assert any(e.type == MessageEntity.BLOCKQUOTE and e.offset == quote_offset for e in entities)
+
+
+@pytest.mark.unit
+def test_dict_duplicate_confirmation_card_for_word_uses_entities():
+    text, entities = learning._dict_duplicate_confirmation_card([
+        {"lang": "nl", "kind": "word", "word": "Toevoegen", "ru": "добавлять"},
+    ])
+
+    assert text.startswith("Словарь")
+    assert "🫪 Слово уже есть в словаре" in text
+    assert "Toevoegen - добавлять" in text
+    assert "Повторно не добавляю" in text
+    assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
+    quote_offset = text.index("Toevoegen - добавлять")
     assert any(e.type == MessageEntity.BLOCKQUOTE and e.offset == quote_offset for e in entities)
 
 
@@ -168,7 +183,7 @@ async def test_add_words_batch_skips_existing_duplicate(monkeypatch):
 
     assert stored == []
     assert sent
-    assert "✅ Фраза уже есть в нидерландских фразах" in sent[0]["text"]
+    assert "Фраза уже есть в словаре 🫪" in sent[0]["text"]
     assert any(e.type == MessageEntity.BLOCKQUOTE for e in sent[0]["entities"])
 
 
