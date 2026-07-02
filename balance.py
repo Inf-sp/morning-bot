@@ -3,7 +3,7 @@ from datetime import datetime
 import html
 import logging
 import re
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 
@@ -14,6 +14,8 @@ import util
 from util import esc, cap_sentence
 import verify
 import secure
+from ui import balance as balance_ui
+from ui import food as food_ui
 import memory
 import settings
 
@@ -557,22 +559,7 @@ def _fridge_available(items: list) -> list:
 
 def _food_card(d, label="Рецепт дня") -> str:
     """Единый формат карточки рецепта для радара и нового рецепта."""
-    name = esc(str(d.get("name", "")).strip())
-    ingredients = esc(str(d.get("ingredients", "")).strip())
-    steps = d.get("steps") or []
-    if isinstance(steps, str):
-        steps = [steps]
-    lines = [f"🥣 <b>{label}</b>"]
-    if name:
-        lines += ["", f"<b>{name}</b>"]
-    if ingredients:
-        lines += ["", "<b>Ингредиенты:</b>", ingredients]
-    if steps:
-        lines += ["", "<b>Приготовление:</b>"]
-        for step in steps:
-            lines.append(f"• {esc(str(step).strip())}")
-    lines += ["", "<b>😋 Приятного аппетита!</b>"]
-    return "\n".join(lines)
+    return food_ui.food_card(d, label=label).text
 
 DOCTOR_INTRO = (
     "👩🏻‍⚕️ Врач\n\n"
@@ -584,55 +571,15 @@ DOCTOR_INTRO = (
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
 
-def _u16_len(text):
-    return len((text or "").encode("utf-16-le")) // 2
-
 def _clean_card_text(value):
-    value = re.sub(r"<[^>]+>", "", str(value or ""))
-    value = re.sub(r"^[\s\U0001F1E6-\U0001FAFF\u2600-\u27BF\u200D\uFE0F]+", "", value)
-    return re.sub(r"\s+", " ", value).strip()
+    return balance_ui.clean_card_text(value)
 
 def _finish_dot(value):
-    value = _clean_card_text(value)
-    if value and value[-1] not in ".!?…":
-        return value + "."
-    return value
+    return balance_ui.finish_dot(value)
 
 def _build_entity_card(title, summary="", quote="", bullets=None, final="", bullet_label="Рекомендации:"):
-    chunks = []
-    entities = []
-
-    def push(text, entity_type=None):
-        offset = _u16_len("".join(chunks))
-        chunks.append(text)
-        if entity_type and text:
-            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
-
-    push(_clean_card_text(title).rstrip(".:"), MessageEntity.BOLD)
-
-    summary = _finish_dot(summary)
-    if summary:
-        push("\n\n")
-        push(summary)
-
-    quote = _finish_dot(quote)
-    if quote:
-        push("\n\n")
-        push(quote, MessageEntity.BLOCKQUOTE)
-
-    clean_bullets = [_finish_dot(x) for x in (bullets or []) if _clean_card_text(x)]
-    if clean_bullets:
-        push("\n\n")
-        push(_clean_card_text(bullet_label).rstrip(":") + ":", MessageEntity.BOLD)
-        push("\n")
-        push("\n".join(f"- {x}" for x in clean_bullets))
-
-    final = _finish_dot(final)
-    if final:
-        push("\n\n")
-        push(final)
-
-    return "".join(chunks).rstrip(), entities
+    msg = balance_ui.entity_card(title, summary, quote, bullets, final, bullet_label)
+    return msg.text, msg.entities
 
 # универсальная клавиатура под ответом: [Продолжить][Короче|Глубже][⭐][В меню]
 def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry", depth=True):
@@ -796,7 +743,8 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
         store.set_list(config.FRIDGE_KEY, cid_s, items)
 
     if not items:
-        txt = "🧊 <b>Мой холодильник</b>\n\nПусто — добавь продукты, которые обычно есть дома."
+        msg = food_ui.fridge_home_empty()
+        txt = msg.text
         rows = [
             [InlineKeyboardButton("✏️ Добавить продукты", callback_data="as_fridge_add")],
             [InlineKeyboardButton("◀️ Назад", callback_data=back)],
@@ -804,7 +752,8 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
     else:
         available = sum(1 for it in items if it.get("on", True))
         by_cat = _fridge_by_cat_display(items)
-        txt = f"🧊 <b>Мой холодильник</b> · {len(items)} продуктов · {available} в наличии\n\nВыбери категорию:"
+        msg = food_ui.fridge_home(len(items), available)
+        txt = msg.text
         present_cats = [c for c in _CAT_ORDER if c in by_cat]
         cat_btns = []
         for ci, cat in enumerate(present_cats):
@@ -853,9 +802,8 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
 
     emoji = _CAT_EMOJI.get(cat, "📦")
     on_cnt = sum(1 for _, it in cat_items if it.get("on", True))
-    txt = (f"{emoji} <b>{cat.capitalize()}</b> · {total} продуктов · {on_cnt} в наличии\n\n"
-           "🟢 — есть в наличии  ⚪ — закончилось\n"
-           "Нажми продукт, чтобы изменить статус.")
+    msg = food_ui.fridge_category(f"{emoji} <b>{cat.capitalize()}</b>", total, on_cnt)
+    txt = msg.text
 
     # Один продукт в строку: названия должны читаться полностью.
     rows = [[
@@ -908,24 +856,8 @@ async def fridge_add_done(bot, cid, text, cat_idx: int = -1):
     for name in added:
         added_by_cat.setdefault(_fridge_cat(name), []).append(name)
     rejected = _fridge_rejected_lines(text)
-    lines = ["🧊 <b>Холодильник обновлён</b>"]
-    if added:
-        lines += ["", "<b>Добавил:</b>"]
-        for cat in _CAT_ORDER:
-            names = sorted(set(added_by_cat.get(cat, [])))
-            if names:
-                emoji = _CAT_EMOJI.get(cat, "📦")
-                label = _CAT_BTN_LABEL.get(cat, cat.capitalize())
-                lines.append(f"{emoji} <b>{esc(label)}:</b> {esc(', '.join(names))}")
-    else:
-        lines += ["", "Новых продуктов не нашёл."]
-    if duplicates:
-        lines += ["", "<b>Уже было:</b>", esc(", ".join(sorted(set(duplicates))[:20]))]
-    if rejected:
-        lines += ["", "<b>Не добавил:</b>"]
-        for name, reason in rejected[:12]:
-            lines.append(f"• {esc(name)} — {esc(reason)}")
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML")
+    msg = food_ui.fridge_updated(added_by_cat, added, duplicates, rejected, _CAT_ORDER, _CAT_EMOJI, _CAT_BTN_LABEL)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
     if cat_idx >= 0:
         await send_fridge_cat(bot, cid, cat_idx, 0)
     else:
@@ -984,9 +916,8 @@ async def send_fridge_recipe(bot, cid):
     raw = store.get_list(config.FRIDGE_KEY, str(cid))
     available = _fridge_available(raw)
     if not available:
-        await bot.send_message(chat_id=cid,
-            text="🧊 Холодильник пуст или все продукты отмечены как отсутствующие.\n\n"
-                 "Отметь 🟢, что есть сейчас, и попробуй снова.")
+        msg = food_ui.fridge_empty_for_recipe()
+        await bot.send_message(chat_id=cid, text=msg.text)
         return
     await send_leftovers(bot, cid, ", ".join(available))
 
@@ -1009,12 +940,12 @@ async def send_my_recipes(bot, cid):
     cid_s = str(cid)
     recipes = store.get_list(config.MY_RECIPES_KEY, cid_s)
     if not recipes:
-        txt = ("🍳 <b>Мои рецепты</b>\n\nПусто. Сохраняй рецепты кнопкой "
-               "«❤️ Сохранить рецепт» под любым рецептом.")
+        msg = food_ui.my_recipes_empty()
+        txt = msg.text
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="as_notes")]])
     else:
-        txt = "🍳 <b>Мои рецепты</b> — {}\n\n".format(len(recipes))
-        txt += "\n".join(f"• {util.esc(r.get('name', '?'))}" for r in recipes)
+        msg = food_ui.my_recipes_list(recipes)
+        txt = msg.text
         rows = []
         for i, r in enumerate(recipes):
             name = r.get("name", f"Рецепт {i+1}")[:30]
