@@ -97,10 +97,12 @@ def test_dict_add_confirmation_card_uses_entities():
     ])
 
     assert text.startswith("Словарь")
-    assert "✅ Фраза добавлена в словарь (нидерландских фраз)" in text
+    assert "✅ Фраза добавлена в нидерландские фразы" in text
     assert "Je hand opsteken - Поднять руку" in text
     assert "Теперь эта фраза будет попадаться в тренировках по нидерландскому" in text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
+    status_offset = text.index("✅ Фраза добавлена")
+    assert not any(e.type == MessageEntity.BOLD and e.offset == status_offset for e in entities)
     quote_offset = text.index("Je hand opsteken - Поднять руку")
     assert any(e.type == MessageEntity.BLOCKQUOTE and e.offset == quote_offset for e in entities)
 
@@ -111,7 +113,7 @@ def test_dict_add_confirmation_card_for_word_uses_entities():
         {"lang": "nl", "kind": "word", "word": "Toevoegen", "ru": "добавлять"},
     ])
 
-    assert "✅ Слово добавлено в словарь (нидерландских слов)" in text
+    assert "✅ Слово добавлено в нидерландские слова" in text
     assert "Toevoegen - добавлять" in text
     assert "Теперь это слово будет попадаться в тренировках по нидерландскому" in text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)

@@ -1097,11 +1097,17 @@ def _dict_add_confirmation_card(added_items):
     def lang_adj(code):
         return "нидерландских" if code == "nl" else "английских"
 
+    def lang_acc(code):
+        return "нидерландские" if code == "nl" else "английские"
+
     def kind_word(kind):
         return "фраза" if kind == "phrase" else "слово"
 
     def kind_bucket(kind):
         return "фраз" if kind == "phrase" else "слов"
+
+    def kind_bucket_acc(kind):
+        return "фразы" if kind == "phrase" else "слова"
 
     def explanation(item):
         kind = "фраза" if item["kind"] == "phrase" else "слово"
@@ -1121,8 +1127,7 @@ def _dict_add_confirmation_card(added_items):
         kind = kind_word(first["kind"])
         added_form = "добавлена" if first["kind"] == "phrase" else "добавлено"
         add(
-            f"✅ {kind.capitalize()} {added_form} в словарь ({lang_adj(first['lang'])} {kind_bucket(first['kind'])})",
-            MessageEntity.BOLD,
+            f"✅ {kind.capitalize()} {added_form} в {lang_acc(first['lang'])} {kind_bucket_acc(first['kind'])}",
         )
         add("\n\n")
         line = first["word"]
