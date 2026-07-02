@@ -971,6 +971,7 @@ async def send_proverb_both(bot, cid, with_kb=True):
 # ================= СЛОВАРЬ (раздельно NL / EN) =================
 _BULLET_RE = re.compile(r"^[\s\-\*•·–—>»\d\.\)\(]+")
 _TERM_SEP_RE = re.compile(r"\s+[-–—=:]\s+|\t+")
+_PAREN_TRANSLATION_RE = re.compile(r"^(.+?)\s*[\(\[]\s*([^()\[\]]{1,160})\s*[\)\]]\s*$")
 
 def _split_term(s):
     """Убирает маркеры списка и отделяет перевод, если он на той же строке (через - – — : =)."""
@@ -978,6 +979,11 @@ def _split_term(s):
     parts = _TERM_SEP_RE.split(s, maxsplit=1)
     if len(parts) == 2:
         return parts[0].strip(), parts[1].strip()
+    m = _PAREN_TRANSLATION_RE.match(s)
+    if m:
+        term, ru = m.group(1).strip(), m.group(2).strip()
+        if re.search(r"[А-Яа-яЁё]", ru):
+            return term, ru
     return s, ""
 
 def _cap(s):
@@ -1009,6 +1015,7 @@ def _kind_of(term):
 
 _DICT_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|внеси)\b", re.I)
 _DICT_WORD_RE = re.compile(r"\b(?:в\s+)?(?:мой\s+)?словар[ьяьею]*\b", re.I)
+_DICT_LEADING_RE = re.compile(r"^\s*в\s+(?:мой\s+)?словар[ьяьею]*\b", re.I)
 _DICT_LANG_RE = re.compile(r"\b(?:на\s+)?(нидерландском|голландском|dutch|nl|английском|english|en)\b", re.I)
 _DICT_KIND_RE = re.compile(r"\b(слово|слова|фразу|выражение|термин)\b", re.I)
 
@@ -1022,7 +1029,17 @@ def _dict_lang_hint(text):
 
 def _extract_chat_dict_add(text):
     """Команда из свободного чата: «добавь в словарь слово ...» -> полезная часть."""
-    if not _DICT_ADD_VERB_RE.search(text or "") or not _DICT_WORD_RE.search(text or ""):
+    text = text or ""
+    if _DICT_LEADING_RE.search(text):
+        lang = _dict_lang_hint(f" {text} ")
+        payload = _DICT_LEADING_RE.sub(" ", text, count=1)
+        payload = _DICT_KIND_RE.sub(" ", payload)
+        payload = _DICT_LANG_RE.sub(" ", payload)
+        payload = re.sub(r"\s+", " ", payload).strip(" \t\n\r:;,.-–—")
+        if len(payload) < 2:
+            return None, None
+        return payload, lang
+    if not _DICT_ADD_VERB_RE.search(text) or not _DICT_WORD_RE.search(text):
         return None, None
     lang = _dict_lang_hint(f" {text} ")
     payload = _DICT_ADD_VERB_RE.sub(" ", text, count=1)
@@ -1039,7 +1056,7 @@ async def try_add_dict_from_chat(bot, cid, text):
     payload, lang = _extract_chat_dict_add(text)
     if not payload:
         return False
-    await add_words_batch(bot, cid, payload, lang)
+    await add_words_batch(bot, cid, payload, lang, detailed_confirmation=True)
     return True
 
 def _parse_simple_pairs(text, lang_hint):
@@ -1067,7 +1084,73 @@ def _parse_batch(text, lang_hint):
     d = ai.llm_json(f"{spec}\n\n{secure.wrap_untrusted(text, 'текст для разбора')}", 1500, tier="cheap")
     return d.get("items", []) if isinstance(d, dict) else []
 
-async def add_words_batch(bot, cid, text, lang="nl"):
+def _dict_add_confirmation_card(added_items):
+    chunks = []
+    entities = []
+
+    def add(text: str, entity_type=None):
+        offset = _u16_len("".join(chunks))
+        chunks.append(text)
+        if entity_type and text:
+            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
+
+    def lang_adj(code):
+        return "нидерландских" if code == "nl" else "английских"
+
+    def kind_word(kind):
+        return "фраза" if kind == "phrase" else "слово"
+
+    def kind_bucket(kind):
+        return "фраз" if kind == "phrase" else "слов"
+
+    first = added_items[0]
+    single = len(added_items) == 1
+    title = "Добавлено в словарь"
+    add(title, MessageEntity.BOLD)
+    add("\n\n")
+
+    if single:
+        kind = kind_word(first["kind"])
+        added_form = "добавлена" if first["kind"] == "phrase" else "добавлено"
+        add(
+            f"{kind.capitalize()} {added_form} в словарь {lang_adj(first['lang'])} {kind_bucket(first['kind'])}.",
+            MessageEntity.BLOCKQUOTE,
+        )
+        add("\n\n")
+        add("В словарь:", MessageEntity.BOLD)
+        add("\n")
+        line = first["word"]
+        if first.get("ru"):
+            line += f" - {first['ru']}"
+        add(line)
+    else:
+        counts = {}
+        for item in added_items:
+            key = (item["lang"], item["kind"])
+            counts[key] = counts.get(key, 0) + 1
+        summary = []
+        for code in ("nl", "en"):
+            for kind in ("word", "phrase"):
+                n = counts.get((code, kind), 0)
+                if n:
+                    summary.append(f"{n} в словарь {lang_adj(code)} {kind_bucket(kind)}")
+        add("Добавлено: " + "; ".join(summary) + ".", MessageEntity.BLOCKQUOTE)
+        add("\n\n")
+        add("В словарь:", MessageEntity.BOLD)
+        add("\n")
+        for idx, item in enumerate(added_items[:8]):
+            line = item["word"]
+            if item.get("ru"):
+                line += f" - {item['ru']}"
+            add(f"- {line}")
+            if idx != min(len(added_items), 8) - 1:
+                add("\n")
+        if len(added_items) > 8:
+            add(f"\n...и ещё {len(added_items) - 8}")
+
+    return "".join(chunks), entities
+
+async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False):
     """Добавляет много слов/фраз разом: каждое отдельной записью, авто-тип (слово/фраза) и язык."""
     items = _parse_simple_pairs(text, lang)
     if not items:
@@ -1080,6 +1163,7 @@ async def add_words_batch(bot, cid, text, lang="nl"):
         raw = re.split(r"[\n;,]+", text)
         items = [{"word": x.strip(), "ru": "", "lang": lang} for x in raw if x.strip()]
     added = {"nl": {"word": 0, "phrase": 0}, "en": {"word": 0, "phrase": 0}}
+    added_items = []
     for it in items:
         # чистим маркеры списка и отделяем перевод, прилипший к слову
         term, extra_ru = _split_term(it.get("word") or "")
@@ -1088,10 +1172,16 @@ async def add_words_batch(bot, cid, text, lang="nl"):
         ru = (it.get("ru") or "").strip() or extra_ru
         lng = "en" if it.get("lang") == "en" else "nl"
         knd = _kind_of(term)   # тип по самому термину (одно слово = слово)
-        store.add_to_list(config.DICT_KEY, cid, {"lang": lng, "word": _cap(term)[:80], "ru": ru, "kind": knd})
+        word = _cap(term)[:80]
+        store.add_to_list(config.DICT_KEY, cid, {"lang": lng, "word": word, "ru": ru, "kind": knd})
         added[lng][knd] += 1
+        added_items.append({"lang": lng, "word": word, "ru": ru, "kind": knd})
     if not any(added[l][k] for l in added for k in added[l]):
         await bot.send_message(chat_id=cid, text="Не удалось распознать слова. Попробуй ещё раз."); return
+    if detailed_confirmation:
+        out_text, entities = _dict_add_confirmation_card(added_items)
+        await bot.send_message(chat_id=cid, text=out_text, entities=entities, reply_markup=_dict_manage_kb(lang))
+        return
     parts = []
     for lng, flag in (("nl", "🇳🇱"), ("en", "🇬🇧")):
         seg = []
