@@ -4,49 +4,12 @@ import store
 import ai
 import config
 import secure
-from util import esc
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from ui import onboarding as onboarding_ui
 
 _SKIP_KB = {
     s: InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить", callback_data=f"fv_skip_{s}")]])
     for s in ("wardrobe", "learn", "leisure", "balance")
-}
-
-_PROMPTS = {
-    "wardrobe": (
-        "👕 <b>Настроим гардероб</b>\n\n"
-        "Напиши в свободном виде:\n"
-        "• Твой стиль одежды (минимализм, casual, streetwear…)\n"
-        "• Любимые вещи или бренды\n"
-        "• Размеры: одежда, обувь, брюки\n\n"
-        "<i>Пример: Люблю минимализм и оверсайз. Uniqlo, Nike. "
-        "Размер M, обувь EU 43, брюки W32 L32</i>"
-    ),
-    "learn": (
-        "📚 <b>Настроим обучение</b>\n\n"
-        "Какие языки изучаешь и какой у тебя уровень?\n\n"
-        "<i>Пример: нидерландский A2, английский B1</i>"
-    ),
-    "leisure": (
-        "🍿 <b>Расскажи о своих предпочтениях</b>\n\n"
-        "Напиши в любом виде:\n"
-        "• Любимые фильмы и сериалы\n"
-        "• Любимые исполнители\n"
-        "• Любимые книги\n\n"
-        "<i>Пример:\n"
-        "Фильмы: Паразиты, Эйфория, Настоящий детектив\n"
-        "Музыка: The xx, Massive Attack, Portishead\n"
-        "Книги: Дюна, Мастер и Маргарита</i>"
-    ),
-    "balance": (
-        "🧠 <b>Немного о тебе</b>\n\n"
-        "Расскажи о предпочтениях в еде и здоровье:\n"
-        "• Диета или ограничения (без мяса, без глютена…)\n"
-        "• Цели (энергия, здоровый вес, лучший сон…)\n"
-        "• Что любишь или не ешь\n\n"
-        "<i>Пример: не ем мясо, хочу больше энергии, "
-        "люблю азиатскую кухню, аллергия на орехи</i>"
-    ),
 }
 
 _SECTION_KEY = {
@@ -105,10 +68,11 @@ def needs_setup(cid, section: str) -> bool:
 
 async def show_prompt(bot, cid, section: str):
     store.pending_input[str(cid)] = f"firstvisit_{section}"
+    msg = onboarding_ui.firstvisit_prompt(section)
     await bot.send_message(
         chat_id=cid,
-        text=_PROMPTS[section],
-        parse_mode="HTML",
+        text=msg.text,
+        parse_mode=msg.parse_mode,
         reply_markup=_SKIP_KB[section],
     )
 
@@ -137,11 +101,11 @@ async def handle_response(bot, cid, section: str, text: str):
         saved = []
 
     if saved:
-        lines = "\n".join(f"• {esc(s)}" for s in saved)
+        msg = onboarding_ui.firstvisit_saved(saved)
         await bot.send_message(
             chat_id=cid,
-            text=f"✅ <b>Сохранено</b>\n\n{lines}",
-            parse_mode="HTML",
+            text=msg.text,
+            parse_mode=msg.parse_mode,
         )
     await _show_section(bot, cid, section)
 

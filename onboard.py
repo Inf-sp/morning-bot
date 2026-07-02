@@ -1,7 +1,7 @@
 """Онбординг нового пользователя: имя → город → языки → уровень → приоритеты → готово."""
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import store
-from util import esc
+from ui import onboarding as onboarding_ui
 
 # in-memory кеш шага (быстрый доступ; _onboard_step в профиле — персистентный бэкап)
 _ob: dict = {}
@@ -57,14 +57,11 @@ async def start(bot, cid):
     _ob[str(cid)] = {"step": "name", "langs": []}
     _save_step(cid, "name")
     store.pending_input[str(cid)] = "onboard_name"
+    msg = onboarding_ui.onboard_start()
     await bot.send_message(
         chat_id=cid,
-        text=(
-            "👋 <b>Добро пожаловать!</b>\n\n"
-            "Давай познакомимся — это займёт меньше минуты, и бот сразу будет знать тебя.\n\n"
-            "Как тебя зовут?"
-        ),
-        parse_mode="HTML",
+        text=msg.text,
+        parse_mode=msg.parse_mode,
     )
 
 
@@ -76,13 +73,11 @@ async def handle_name(bot, cid, text: str):
     _ob.setdefault(str(cid), {})["step"] = "city"
     _save_step(cid, "city")
     store.pending_input[str(cid)] = "onboard_city"
+    msg = onboarding_ui.onboard_name_saved(name)
     await bot.send_message(
         chat_id=cid,
-        text=(
-            f"Приятно познакомиться, <b>{esc(name)}</b>! 🙌\n\n"
-            "🌍 Из какого ты города? Напиши текстом — настрою погоду и контекст для советов."
-        ),
-        parse_mode="HTML",
+        text=msg.text,
+        parse_mode=msg.parse_mode,
     )
 
 
@@ -92,9 +87,10 @@ async def handle_city(bot, cid, text: str):
     _ob.setdefault(str(cid), {})["step"] = "lang"
     _save_step(cid, None)          # текстовый ввод больше не нужен
     store.pending_input.pop(str(cid), None)
+    msg = onboarding_ui.onboard_language_question()
     await bot.send_message(
         chat_id=cid,
-        text="🌐 Какие языки изучаешь? Настрою тренажёр и словарь.",
+        text=msg.text,
         reply_markup=_LANG_KB,
     )
 
@@ -166,17 +162,16 @@ async def _ask_next_level(bot, cid, q):
     if not queue:
         await _finish(bot, cid); return
     code = queue[0]
-    flag = "🇳🇱" if code == "nl" else "🇬🇧"
-    lang = "нидерландского" if code == "nl" else "английского"
+    msg = onboarding_ui.onboard_level_question(code)
     try:
         await q.edit_message_text(
-            f"{flag} Какой у тебя уровень {lang}?",
+            msg.text,
             reply_markup=_lvl_kb(code),
         )
     except Exception:
         await bot.send_message(
             chat_id=cid,
-            text=f"{flag} Какой у тебя уровень {lang}?",
+            text=msg.text,
             reply_markup=_lvl_kb(code),
         )
 
@@ -185,18 +180,15 @@ async def _ask_priorities(bot, cid, q=None):
     st = _ob.setdefault(str(cid), {})
     st["step"] = "prio"
     _ob[str(cid)] = st
-    text = (
-        "🎯 Что для тебя сейчас важнее?\n\n"
-        "Можно выбрать несколько пунктов. Я буду учитывать это в брифе, советах и рекомендациях."
-    )
+    msg = onboarding_ui.onboard_priorities_question()
     kb = _prio_kb(cid)
     if q is not None:
         try:
-            await q.edit_message_text(text, reply_markup=kb)
+            await q.edit_message_text(msg.text, reply_markup=kb)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, reply_markup=kb)
 
 
 async def _finish(bot, cid):

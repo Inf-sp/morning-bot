@@ -4,6 +4,7 @@ import config
 import store
 import learning
 from util import esc
+from ui import settings as settings_ui
 
 SETTINGS_KEY = "user_settings.json"
 ADMIN_RUN_NOTIF_TITLE = "Превью рассылки"
@@ -210,15 +211,16 @@ async def send_notif(bot, cid, q=None):
     if any_on:
         rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
-    text = "🔔 <b>Уведомления</b>\n\nНажми для включения/выключения. 🟢 — включено."
+    msg = settings_ui.notifications()
+    text = msg.text
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
-            await q.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            await q.message.edit_text(text, parse_mode=msg.parse_mode, reply_markup=kb)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=text, parse_mode=msg.parse_mode, reply_markup=kb)
 
 async def toggle_notif(bot, cid, kind, q=None):
     set_(cid, f"notif_{kind}", not notif_on(cid, kind))
@@ -247,19 +249,16 @@ def _priorities_kb(cid):
 async def send_priorities(bot, cid, q=None):
     labels = priority_labels(cid)
     current = ", ".join(labels) if labels else "не выбраны"
-    text = (
-        "🎯 <b>Приоритеты</b>\n\n"
-        "Выбери, на что боту обращать больше внимания в брифе, советах и рекомендациях.\n\n"
-        f"<b>Сейчас:</b> {esc(current)}"
-    )
+    msg = settings_ui.priorities(current)
+    text = msg.text
     kb = _priorities_kb(cid)
     if q is not None:
         try:
-            await q.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            await q.message.edit_text(text, parse_mode=msg.parse_mode, reply_markup=kb)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=text, parse_mode=msg.parse_mode, reply_markup=kb)
 
 
 async def toggle_priority(bot, cid, key, q=None):
@@ -289,20 +288,11 @@ async def send_body(bot, cid):
     style = get(cid, "style", "")
     fallback = ". ".join(x for x in [body, f"стиль: {style}" if style else ""] if x).strip()
     profile_line = esc(profile or fallback) if (profile or fallback) else "<i>не задано</i>"
-    txt = (
-        "🎚️ <b>Мои параметры</b>\n\n"
-        "Бот использует эти данные при подборе образа и оценке покупок — "
-        "чтобы советы по размеру и силуэту подходили именно тебе.\n\n"
-        f"<b>Сейчас сохранено:</b>\n{profile_line}\n\n"
-        "<b>Напиши одним сообщением:</b>\n"
-        "рост, размеры одежды, обуви и брюк, а также стиль одежды.\n\n"
-        "<i>Пример: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32. "
-        "Стиль: тёмные оттенки, оверсайз, минимум принтов.</i>"
-    )
+    msg = settings_ui.body_profile(profile_line)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("◀️ Назад", callback_data="set_wardrobe")],
     ])
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
 
 async def send_style_pick(bot, cid):
     cur = get(cid, "style", "минимализм")
@@ -310,9 +300,10 @@ async def send_style_pick(bot, cid):
             for i, s in enumerate(STYLES)]
     rows.append([InlineKeyboardButton("✏️ Описать своими словами", callback_data="set_stylecustom")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_body")])
+    msg = settings_ui.style_pick()
     await bot.send_message(chat_id=cid,
-        text="🎨 <b>Стиль одежды</b>\n\nВыбери из предложенных или опиши своими словами — бот учтёт при подборе образа:",
-        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+        text=msg.text,
+        parse_mode=msg.parse_mode, reply_markup=InlineKeyboardMarkup(rows))
 
 async def set_style(bot, cid, i):
     if 0 <= i < len(STYLES):
@@ -820,21 +811,20 @@ async def send_notes(bot, cid):
             InlineKeyboardButton("📤 Экспорт в файл", callback_data="as_export"),
         ],
     ]
-    await bot.send_message(chat_id=cid, parse_mode="HTML",
-        text=(
-            "🎚️ <b>Настройки</b>\n\n"
-            "Настройте бота под себя и управляйте личными данными."
-        ),
+    msg = settings_ui.settings_home()
+    await bot.send_message(chat_id=cid, parse_mode=msg.parse_mode,
+        text=msg.text,
         reply_markup=InlineKeyboardMarkup(rows))
 
 
 async def send_leisure_settings(bot, cid):
     rows = [[InlineKeyboardButton(title, callback_data=f"as_love_{key}")] for title, key in LOVE_SECTIONS]
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
+    msg = settings_ui.leisure_settings()
     await bot.send_message(
         chat_id=cid,
-        text="🍿 <b>Настройки досуга</b>\n\nКино, страны, артисты и книги для рекомендаций.",
-        parse_mode="HTML",
+        text=msg.text,
+        parse_mode=msg.parse_mode,
         reply_markup=InlineKeyboardMarkup(rows),
     )
 
