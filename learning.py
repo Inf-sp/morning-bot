@@ -1016,8 +1016,19 @@ def _kind_of(term):
 _DICT_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|внеси)\b", re.I)
 _DICT_WORD_RE = re.compile(r"\b(?:в\s+)?(?:мой\s+)?словар[ьяьею]*\b", re.I)
 _DICT_LEADING_RE = re.compile(r"^\s*в\s+(?:мой\s+)?словар[ьяьею]*\b", re.I)
-_DICT_LANG_RE = re.compile(r"\b(?:на\s+)?(нидерландском|голландском|dutch|nl|английском|english|en)\b", re.I)
+_DICT_LANG_RE = re.compile(
+    r"\b(?:на\s+)?("
+    r"нидерландск(?:ом|ое|ого|ий|ую|ая|ие|их)|голландск(?:ом|ое|ого|ий|ую|ая|ие|их)|dutch|nl|"
+    r"английск(?:ом|ое|ого|ий|ую|ая|ие|их)|english|en"
+    r")\b",
+    re.I,
+)
 _DICT_KIND_RE = re.compile(r"\b(слово|слова|фразу|выражение|термин)\b", re.I)
+_DICT_QUESTION_PAYLOAD_RE = re.compile(r"^(?:како(?:е|й|ую)|что|что-то)\b", re.I)
+_DICT_PAYLOAD_PREFIX_RE = re.compile(
+    r"^(?:(?:ну|пожалуйста|плиз|нужно|надо|можешь|можно|мне|нам|хочу|давай|нов(?:ое|ый|ую|ая|ые))\s+)+",
+    re.I,
+)
 
 def _dict_lang_hint(text):
     t = (text or "").lower()
@@ -1036,10 +1047,14 @@ def _extract_chat_dict_add(text):
         payload = _DICT_KIND_RE.sub(" ", payload)
         payload = _DICT_LANG_RE.sub(" ", payload)
         payload = re.sub(r"\s+", " ", payload).strip(" \t\n\r:;,.-–—")
+        payload = _DICT_PAYLOAD_PREFIX_RE.sub("", payload).strip(" \t\n\r:;,.-–—")
         if len(payload) < 2:
             return None, None
         return payload, lang
-    if not _DICT_ADD_VERB_RE.search(text) or not _DICT_WORD_RE.search(text):
+    has_add_verb = bool(_DICT_ADD_VERB_RE.search(text))
+    has_dict_word = bool(_DICT_WORD_RE.search(text))
+    has_kind_word = bool(_DICT_KIND_RE.search(text))
+    if not has_add_verb or not (has_dict_word or has_kind_word):
         return None, None
     lang = _dict_lang_hint(f" {text} ")
     payload = _DICT_ADD_VERB_RE.sub(" ", text, count=1)
@@ -1047,7 +1062,8 @@ def _extract_chat_dict_add(text):
     payload = _DICT_KIND_RE.sub(" ", payload)
     payload = _DICT_LANG_RE.sub(" ", payload)
     payload = re.sub(r"\s+", " ", payload).strip(" \t\n\r:;,.-–—")
-    if len(payload) < 2:
+    payload = _DICT_PAYLOAD_PREFIX_RE.sub("", payload).strip(" \t\n\r:;,.-–—")
+    if len(payload) < 2 or _DICT_QUESTION_PAYLOAD_RE.search(payload):
         return None, None
     return payload, lang
 

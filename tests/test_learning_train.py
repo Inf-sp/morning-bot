@@ -83,6 +83,46 @@ def test_chat_dict_word_request_extracts_payload_in_any_order():
 
 
 @pytest.mark.unit
+def test_chat_dict_word_request_without_dictionary_word_extracts_payload():
+    payload, lang = learning._extract_chat_dict_add("Добавь слово Toevoegen")
+
+    assert payload == "Toevoegen"
+    assert lang == "nl"
+
+
+@pytest.mark.unit
+def test_chat_dict_word_request_strips_service_words_and_lang_adjective():
+    payload, lang = learning._extract_chat_dict_add("Нужно добавить английское слово apple")
+
+    assert payload == "apple"
+    assert lang == "en"
+
+
+@pytest.mark.unit
+def test_chat_dict_word_request_strips_polite_prefix():
+    payload, lang = learning._extract_chat_dict_add("Пожалуйста добавь новое слово book")
+
+    assert payload == "book"
+    assert lang == "nl"
+
+
+@pytest.mark.unit
+def test_chat_dict_phrase_request_without_dictionary_word_extracts_payload():
+    payload, lang = learning._extract_chat_dict_add("Добавь фразу Je hand opsteken")
+
+    assert payload == "Je hand opsteken"
+    assert lang == "nl"
+
+
+@pytest.mark.unit
+def test_chat_dict_question_is_not_treated_as_add_request():
+    payload, lang = learning._extract_chat_dict_add("Какое слово добавить?")
+
+    assert payload is None
+    assert lang is None
+
+
+@pytest.mark.unit
 def test_split_term_reads_parenthesized_russian_translation():
     term, ru = learning._split_term("Je hand opsteken (Поднять руку)")
 
@@ -97,7 +137,7 @@ def test_dict_add_confirmation_card_uses_entities():
     ])
 
     assert text.startswith("Словарь")
-    assert "Фраза добавлена в словарь ✅" in text
+    assert "✅ Фраза добавлена в нидерландские фразы" in text
     assert "Je hand opsteken - Поднять руку" in text
     assert "Теперь эта фраза будет попадаться в тренировках по нидерландскому" in text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
@@ -113,7 +153,7 @@ def test_dict_add_confirmation_card_for_word_uses_entities():
         {"lang": "nl", "kind": "word", "word": "Toevoegen", "ru": "добавлять"},
     ])
 
-    assert "Слово добавлено в словарь ✅" in text
+    assert "✅ Слово добавлено в нидерландские слова" in text
     assert "Toevoegen - добавлять" in text
     assert "Теперь это слово будет попадаться в тренировках по нидерландскому" in text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
@@ -135,7 +175,7 @@ def test_dict_duplicate_confirmation_card_uses_entities():
     ])
 
     assert text.startswith("Словарь")
-    assert "🫪 Фраза уже есть в словаре" in text
+    assert "✅ Фраза уже есть в нидерландских фразах" in text
     assert "Je hand opsteken - Поднять руку" in text
     assert "Повторно не добавляю" in text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
@@ -150,7 +190,7 @@ def test_dict_duplicate_confirmation_card_for_word_uses_entities():
     ])
 
     assert text.startswith("Словарь")
-    assert "🫪 Слово уже есть в словаре" in text
+    assert "✅ Слово уже есть в нидерландских словах" in text
     assert "Toevoegen - добавлять" in text
     assert "Повторно не добавляю" in text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
@@ -183,8 +223,38 @@ async def test_add_words_batch_skips_existing_duplicate(monkeypatch):
 
     assert stored == []
     assert sent
-    assert "Фраза уже есть в словаре 🫪" in sent[0]["text"]
+    assert "✅ Фраза уже есть в нидерландских фразах" in sent[0]["text"]
     assert any(e.type == MessageEntity.BLOCKQUOTE for e in sent[0]["entities"])
+
+
+@pytest.mark.unit
+@pytest.mark.anyio
+async def test_add_words_batch_uses_parser_detected_language(monkeypatch):
+    sent = []
+    stored = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(learning, "_ensure_dict", lambda cid: [])
+    monkeypatch.setattr(learning, "_parse_batch", lambda text, lang: [
+        {"word": "apple", "ru": "яблоко", "lang": "en", "kind": "word"},
+    ])
+    monkeypatch.setattr(learning.store, "add_to_list", lambda *args: stored.append(args))
+
+    await learning.add_words_batch(
+        Bot(),
+        "cid",
+        "apple",
+        "nl",
+        detailed_confirmation=True,
+    )
+
+    assert stored
+    assert stored[0][2]["lang"] == "en"
+    assert stored[0][2]["kind"] == "word"
+    assert "✅ Слово добавлено в английские слова" in sent[0]["text"]
 
 
 @pytest.mark.unit
