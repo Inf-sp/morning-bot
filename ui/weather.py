@@ -1,3 +1,25 @@
+"""Погодные сообщения.
+
+Намеренно НЕ мигрировано на компонентный API MessageBuilder (section/line/bullet/
+warning/tip/divider/spacer): все функции здесь строят составные сообщения через
+склейку HTML-фрагментов (список строк с тегами -> from_html), а не через
+последовательные вызовы билдера. Причины:
+  - `full_forecast`/`week_forecast`: заголовок + список периодов/дней + опциональный
+    итог собираются в одну HTML-строку и парсятся разом — компонентные вызовы
+    не дают того же контроля над структурой без потери читаемости.
+  - `day_forecast`: принимает `alert` — уже готовый HTML-фрагмент, произведённый
+    `storm_alert_html()` в другом месте (см. корневой weather.py), и встраивает
+    его как есть в свои `lines` перед общим `from_html`. MessageBuilder не умеет
+    принимать/сливать чужой HTML-фрагмент внутрь себя, поэтому здесь нельзя
+    перейти на компоненты, не сломав это встраивание.
+  - `storm_alert`/`storm_alert_html`: используют общий `_storm_alert_lines()`;
+    `storm_alert_html` обязана возвращать сырой HTML-фрагмент (не MessageSpec) —
+    это законтрактовано вызовом из `day_forecast` выше.
+  - `city_not_found`/`city_changed`/`location_changed`: однострочные сообщения без
+    структуры заголовок+контент — компоненты (section/warning/tip) здесь неуместны
+    семантически, обычный MessageSpec с f-строкой проще и достаточен.
+"""
+
 from .builder import MessageSpec, from_html
 from util import esc, cap_sentence
 

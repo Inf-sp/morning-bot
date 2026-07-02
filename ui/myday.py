@@ -19,54 +19,37 @@ def day_summary(
 ):
     title_flag = f" {flag}" if flag else ""
     b = MessageBuilder()
-    b.bold(f"Мой день • {header} • {city}{title_flag}")
-    b.blank()
+    b.section(f"Мой день • {header} • {city}{title_flag}")
 
     priorities = [p for p in (priorities or []) if p]
     if priorities:
         b.text_line("🎯 ")
         b.bold("Фокус:")
-        b.text_line(f" {', '.join(priorities)}")
-        b.blank()
+        b.line(f" {', '.join(priorities)}")
 
-    b.bold(weather_title)
-    b.newline()
-    b.text_line(weather_line)
-    b.blank()
+    b.section(weather_title)
+    b.line(weather_line)
     if wind_title:
-        b.bold(wind_title)
-        b.newline()
-        b.text_line(wind_line)
-        b.blank()
+        b.warning(wind_title)
+        b.line(wind_line)
     if humidity_title:
-        b.bold(humidity_title)
-        b.newline()
-        b.text_line(humidity_line)
-        b.blank()
+        b.section(humidity_title)
+        b.line(humidity_line)
 
     if word_line:
-        b.bold("📚 Слово дня")
-        b.newline()
-        b.text_line(word_line)
-        b.blank()
+        b.section("📚 Слово дня")
+        b.line(word_line)
 
     if fact:
-        b.bold("🔬 Интересный факт")
-        b.newline()
-        b.text_line(str(fact).strip())
-        b.blank()
+        b.section("🔬 Интересный факт")
+        b.line(str(fact).strip())
 
     if lifehack:
-        b.bold("💡 База знаний")
-        b.newline()
-        b.text_line(lifehack)
+        b.section("💡 База знаний")
+        b.line(lifehack)
 
     if quote_line:
-        b.blank()
-        b.bold("💭 Цитата")
-        b.newline()
-        b.text_line(quote_line)
+        b.section("💭 Цитата")
+        b.line(quote_line)
 
-    msg = b.build()
-    msg.text = msg.text.strip()
-    return msg
+    return b.build_stripped()

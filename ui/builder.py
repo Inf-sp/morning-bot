@@ -24,10 +24,25 @@ def from_html(html_text: str) -> MessageSpec:
     return MessageSpec(text=plain, entities=entities)
 
 
+WARNING_EMOJI = "⚠️"
+TIP_EMOJI = "💡"
+BULLET_MARK = "•"
+DIVIDER_LINE = "—" * 16
+
+
 class MessageBuilder:
+    """Низкоуровневый билдер: пишет чанки текста и запоминает entities по UTF-16 offset.
+
+    Поверх него — компонентные методы (section/line/bullet/warning/tip/divider/spacer),
+    задающие ЕДИНЫЙ визуальный язык бота: одинаковый отступ вокруг заголовков, одинаковый
+    вид предупреждений/советов и т.д. Правь оформление здесь — оно применится сразу во всех
+    сообщениях, использующих эти методы, а не в каждой функции ui/*.py по отдельности.
+    """
+
     def __init__(self):
         self._chunks = []
         self._entities = []
+        self._has_content = False
 
     @property
     def text(self) -> str:
@@ -38,6 +53,8 @@ class MessageBuilder:
         self._chunks.append(text)
         if entity_type and text:
             self._entities.append(MessageEntity(entity_type, offset, u16_len(text)))
+        if text.strip():
+            self._has_content = True
         return self
 
     def text_line(self, text: str):
@@ -61,6 +78,7 @@ class MessageBuilder:
         if text:
             entity = MessageEntity(MessageEntity.TEXT_LINK, offset, u16_len(text), url=url)
             self._entities.append(entity)
+            self._has_content = True
         return self
 
     def blank(self):
@@ -69,6 +87,63 @@ class MessageBuilder:
     def newline(self):
         return self.add("\n")
 
+    def _ensure_blank_line(self):
+        """Гарантирует ровно одну пустую строку перед следующим блоком, независимо от того,
+        сколько переносов строк уже висит в хвосте буфера (0, 1 или больше)."""
+        if not self._has_content:
+            return self
+        text = self.text
+        trailing_newlines = len(text) - len(text.rstrip("\n"))
+        needed = 2 - trailing_newlines
+        if needed > 0:
+            self.add("\n" * needed)
+        return self
+
+    # ---------- компоненты: единый визуальный язык бота ----------
+
+    def section(self, title: str):
+        """Заголовок раздела: bold-строка. Сама расставляет отступы —
+        ровно одну пустую строку перед собой (если после неё уже что-то было) и перевод строки после."""
+        self._ensure_blank_line()
+        self.bold(title)
+        self.newline()
+        return self
+
+    def line(self, text: str):
+        """Обычная строка контента раздела."""
+        self.text_line(text)
+        self.newline()
+        return self
+
+    def bullet(self, text: str):
+        """Пункт списка: '• текст'."""
+        self.text_line(f"{BULLET_MARK} {text}")
+        self.newline()
+        return self
+
+    def warning(self, text: str, emoji: str = WARNING_EMOJI):
+        """Блок-предупреждение: 'emoji жирный текст' отдельной строкой с отступами вокруг."""
+        self._ensure_blank_line()
+        self.text_line(f"{emoji} ")
+        self.bold(text)
+        self.newline()
+        return self
+
+    def tip(self, text: str, emoji: str = TIP_EMOJI):
+        """Блок-совет: тот же вид, что и warning(), другой emoji по умолчанию."""
+        return self.warning(text, emoji=emoji)
+
+    def divider(self):
+        """Визуальный разделитель между смысловыми блоками одного сообщения."""
+        self._ensure_blank_line()
+        self.text_line(DIVIDER_LINE)
+        self.newline()
+        return self
+
+    def spacer(self):
+        """Явный контроль пустой строки, когда авто-отступов section()/warning() недостаточно."""
+        return self._ensure_blank_line()
+
     def build(self, reply_markup=None, parse_mode=None) -> MessageSpec:
         return MessageSpec(
             text=self.text,
@@ -76,3 +151,12 @@ class MessageBuilder:
             reply_markup=reply_markup,
             parse_mode=parse_mode,
         )
+
+    def build_stripped(self, reply_markup=None, parse_mode=None) -> MessageSpec:
+        """Как build(), но обрезает финальный текст от краевых пустых строк.
+        Безопасно для entities: section()/warning()/divider() добавляют пустые строки
+        только МЕЖДУ блоками (has_content-гейт), поэтому единственное, что может остаться
+        по краям — концевой перевод строки после последнего блока; entities его не занимают."""
+        msg = self.build(reply_markup=reply_markup, parse_mode=parse_mode)
+        msg.text = msg.text.strip()
+        return msg

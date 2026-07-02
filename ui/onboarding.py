@@ -3,40 +3,37 @@ from .builder import MessageBuilder, MessageSpec
 
 def _firstvisit_wardrobe():
     b = MessageBuilder()
-    b.bold("👕 Настроим гардероб")
-    b.blank()
-    b.text_line(
+    b.section("👕 Настроим гардероб")
+    b.line(
         "Напиши в свободном виде:\n"
         "• Твой стиль одежды (минимализм, casual, streetwear…)\n"
         "• Любимые вещи или бренды\n"
         "• Размеры: одежда, обувь, брюки"
     )
-    b.blank()
+    b.spacer()
     b.italic("Пример: Люблю минимализм и оверсайз. Uniqlo, Nike. Размер M, обувь EU 43, брюки W32 L32")
     return b.build()
 
 
 def _firstvisit_learn():
     b = MessageBuilder()
-    b.bold("📚 Настроим обучение")
-    b.blank()
-    b.text_line("Какие языки изучаешь и какой у тебя уровень?")
-    b.blank()
+    b.section("📚 Настроим обучение")
+    b.line("Какие языки изучаешь и какой у тебя уровень?")
+    b.spacer()
     b.italic("Пример: нидерландский A2, английский B1")
     return b.build()
 
 
 def _firstvisit_leisure():
     b = MessageBuilder()
-    b.bold("🍿 Расскажи о своих предпочтениях")
-    b.blank()
-    b.text_line(
+    b.section("🍿 Расскажи о своих предпочтениях")
+    b.line(
         "Напиши в любом виде:\n"
         "• Любимые фильмы и сериалы\n"
         "• Любимые исполнители\n"
         "• Любимые книги"
     )
-    b.blank()
+    b.spacer()
     b.italic(
         "Пример:\n"
         "Фильмы: Паразиты, Эйфория, Настоящий детектив\n"
@@ -48,15 +45,14 @@ def _firstvisit_leisure():
 
 def _firstvisit_balance():
     b = MessageBuilder()
-    b.bold("🧠 Немного о тебе")
-    b.blank()
-    b.text_line(
+    b.section("🧠 Немного о тебе")
+    b.line(
         "Расскажи о предпочтениях в еде и здоровье:\n"
         "• Диета или ограничения (без мяса, без глютена…)\n"
         "• Цели (энергия, здоровый вес, лучший сон…)\n"
         "• Что любишь или не ешь"
     )
-    b.blank()
+    b.spacer()
     b.italic("Пример: не ем мясо, хочу больше энергии, люблю азиатскую кухню, аллергия на орехи")
     return b.build()
 
@@ -75,20 +71,19 @@ def firstvisit_prompt(section):
 
 def firstvisit_saved(saved_items):
     b = MessageBuilder()
-    b.bold("✅ Сохранено")
-    b.blank()
-    b.text_line("\n".join(f"• {item}" for item in saved_items))
-    return b.build()
+    b.section("✅ Сохранено")
+    for item in saved_items:
+        b.bullet(item)
+    return b.build_stripped()
 
 
 def onboard_start():
     b = MessageBuilder()
-    b.bold("👋 Добро пожаловать!")
-    b.blank()
-    b.text_line("Давай познакомимся — это займёт меньше минуты, и бот сразу будет знать тебя.")
-    b.blank()
-    b.text_line("Как тебя зовут?")
-    return b.build()
+    b.section("👋 Добро пожаловать!")
+    b.line("Давай познакомимся — это займёт меньше минуты, и бот сразу будет знать тебя.")
+    b.spacer()
+    b.line("Как тебя зовут?")
+    return b.build_stripped()
 
 
 def onboard_name_saved(name):

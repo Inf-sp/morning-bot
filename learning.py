@@ -655,7 +655,7 @@ async def _send_train_feedback(bot, cid, idx, st):
         [InlineKeyboardButton("✨ Ещё", callback_data="train_next")],
         [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(lang))],
     ])
-    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 async def _render_next_train_quiz(bot, cid):
@@ -690,7 +690,7 @@ async def send_train_lang_select(bot, cid):
     msg = learning_ui.train_lang_select()
     await bot.send_message(chat_id=cid,
         text=msg.text,
-        parse_mode=msg.parse_mode, reply_markup=kb)
+        entities=msg.entities, reply_markup=kb)
 
 
 # ================= ОБРАТНЫЙ ПЕРЕВОД =================
@@ -717,7 +717,7 @@ async def do_translate(bot, cid, lang):
     msg = learning_ui.translate_prompt(_flag(lang), ru, lang)
     await bot.send_message(chat_id=cid,
         text=msg.text,
-        parse_mode=msg.parse_mode)
+        entities=msg.entities)
 
 async def translate_answer(bot, cid, text):
     st = store.challenge_state.pop(str(cid), None)
@@ -733,7 +733,7 @@ async def translate_answer(bot, cid, text):
         [InlineKeyboardButton("✨ Ещё пример", callback_data=f"again_tr_{code}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=f"m_{code}")],
     ])
-    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
     return True
 
 
@@ -1451,7 +1451,7 @@ async def send_game(bot, cid):
     ])
     clues = "\n".join(f"•{c.strip()}" for c in d.get("clues", "").split("\n") if c.strip())
     msg = learning_ui.game_card(ui, clues)
-    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 def _fuzzy(a, b):
     if not a or not b:
@@ -1485,7 +1485,7 @@ async def game_answer(bot, cid, text):
         ])
         body = st.get("explain") or st.get("quote", "")
         msg = learning_ui.game_found(ui, st["answer"], body)
-        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return True
     st["tries"] = st.get("tries", 0) + 1
     if st["tries"] >= 2:
@@ -1508,7 +1508,7 @@ async def game_hint(bot, cid, q):
     if st and i < len(hints):
         st["hint_i"] = i + 1
         msg = learning_ui.game_hint(ui, hints[i])
-        await q.message.reply_text(msg.text, parse_mode=msg.parse_mode)
+        await q.message.reply_text(msg.text, entities=msg.entities)
     else:
         await q.message.reply_text(ui["nohint"])
 
@@ -1525,7 +1525,7 @@ async def game_reveal(bot, cid, q):
         [InlineKeyboardButton(ui["again"], callback_data="game_again")],
         [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
     ])
-    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 # ================= УРОВЕНЬ ЯЗЫКА =================
@@ -1552,11 +1552,11 @@ async def send_levels(bot, cid, q=None, back="set_home"):
     kb = _levels_kb(nl_lvl, en_lvl, back)
     if q is not None:
         try:
-            await q.message.edit_text(msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 SYSTEM_TOPICS = {

@@ -1170,7 +1170,7 @@ async def send_daycheck(bot, cid):
     if worries:
         rows.append([InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_close")])
-    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode,
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_evening_review(bot, cid):
@@ -1182,7 +1182,7 @@ async def send_evening_review(bot, cid):
     worries = [w for w in all_worries if w.get("date", today) == today]
     if not worries:
         msg = balance_ui.evening_review_empty()
-        await bot.send_message(chat_id=cid, parse_mode=msg.parse_mode, text=msg.text)
+        await bot.send_message(chat_id=cid, entities=msg.entities, text=msg.text)
         store.pending_input[cid] = "worry"
         return
     wlist = "\n".join(f"- {w['text']}" for w in worries)
@@ -1204,7 +1204,7 @@ async def send_evening_review(bot, cid):
     rows = [
         [InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")],
     ]
-    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
 async def worry_clear_all(bot, cid):
     cid = str(cid)

@@ -42,9 +42,9 @@ def assistant_answer(answer: str):
     title = _strip_title_emoji(lines[0]).rstrip(".:") or "Ответ"
     body = lines[1:]
     b = MessageBuilder()
-    b.bold(title)
+    b.section(title)
     if body:
-        b.blank()
+        b.spacer()
 
     normalized_lines = []
     quote_flags = []
@@ -77,6 +77,4 @@ def assistant_answer(answer: str):
             else:
                 b.blank()
 
-    msg = b.build()
-    msg.text = msg.text.rstrip()
-    return msg
+    return b.build_stripped()

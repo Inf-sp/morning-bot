@@ -310,7 +310,7 @@ def _build_day_text(cid):
         _, wword = weather.wind_scale(wind_ms)
         wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
         wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
-        wind_title = f"⚠️ {wword}"
+        wind_title = wword
         wind_line = f"До {wind_ms:.0f} м/с{wind_when}"
 
     now = datetime.now(TZ)

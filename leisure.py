@@ -303,8 +303,7 @@ def _clip(text, limit=450):
     return leisure_ui.clip(text, limit=limit)
 
 def _movie_card(it, tm):
-    title, msg = leisure_ui.movie_card(it, tm)
-    return title, msg.text
+    return leisure_ui.movie_card(it, tm)
 
 def _movie_kb(i):
     return InlineKeyboardMarkup([
@@ -392,19 +391,18 @@ async def _send_movie_card(bot, cid, it, i, tm="__lookup__"):
     it = it if isinstance(it, dict) else {"title": str(it)}
     if tm == "__lookup__":
         tm = _tmdb_lookup(it.get("title", ""), it.get("title_en", "")) if config.TMDB_API_KEY else None
-    title, text = _movie_card(it, tm)
+    title, msg = _movie_card(it, tm)
     kb = _movie_kb(i)
     if tm and tm.get("poster"):
         try:
-            await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=text, parse_mode="HTML", reply_markup=kb)
+            await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=msg.text, caption_entities=msg.entities, reply_markup=kb)
             return
         except Exception:
             pass
     try:
-        await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
     except Exception:
-        plain = re.sub(r"<[^>]+>", "", text)
-        await bot.send_message(chat_id=cid, text=plain, reply_markup=kb)
+        await bot.send_message(chat_id=cid, text=msg.text, reply_markup=kb)
 
 async def send_recos(bot, cid, kind):
     if kind == "book":
@@ -474,7 +472,7 @@ def _book_cover(title, title_en=""):
     return None
 
 def _book_text(it):
-    return leisure_ui.book_text(it).text
+    return leisure_ui.book_text(it)
 
 def _book_kb(i):
     return InlineKeyboardMarkup([
@@ -486,16 +484,16 @@ def _book_kb(i):
     ])
 
 async def _send_book_card(bot, cid, it, i):
-    text = _book_text(it)
+    msg = _book_text(it)
     kb = _book_kb(i)
     cover = _book_cover(it.get("title", ""), it.get("title_en", ""))
     if cover:
         try:
-            await bot.send_photo(chat_id=cid, photo=cover, caption=text, parse_mode="HTML", reply_markup=kb)
+            await bot.send_photo(chat_id=cid, photo=cover, caption=msg.text, caption_entities=msg.entities, reply_markup=kb)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 _FALLBACK_BOOKS = [
     {"title": "Мастер и Маргарита", "title_en": "The Master and Margarita", "year": "1967",
@@ -833,7 +831,7 @@ async def send_listen(bot, cid):
     store.last_source[str(cid)] = "Досуг · Музыка"
     msg = leisure_ui.artist_card(data)
     store.last_answer[str(cid)] = leisure_ui.plain_from_html(msg.text)
-    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=_listen_kb())
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_listen_kb())
 
 async def add_listen(bot, cid, i):
     from datetime import datetime
@@ -1316,7 +1314,7 @@ def travel_suggest_one(cid):
     return ai.llm_json(prompt, 700, tier="leisure")
 
 def _country_card(d):
-    return leisure_ui.country_card(d).text
+    return leisure_ui.country_card(d)
 
 def _travel_kb():
     return InlineKeyboardMarkup([
@@ -1355,11 +1353,12 @@ async def send_go(bot, cid):
         d["fact"] = rfact
     if not research.grounded(facts):
         print("[research] travel: no grounding for", d.get("country", ""))
-    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", _country_card(d))
+    country_msg = _country_card(d)
+    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", country_msg.text)
     store.last_source[str(cid)] = "Путешествия"
     store.suggested_countries[str(cid)] = d.get("country", "")
     store.last_recipe[str(cid)] = d
-    await bot.send_message(chat_id=cid, text=_country_card(d), parse_mode="HTML", reply_markup=_travel_kb())
+    await bot.send_message(chat_id=cid, text=country_msg.text, entities=country_msg.entities, reply_markup=_travel_kb())
 
 async def travel_dislike(bot, cid):
     c = store.suggested_countries.get(str(cid))

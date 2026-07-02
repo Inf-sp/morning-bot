@@ -38,11 +38,11 @@ def test_fallback_movie_items_skips_used(monkeypatch):
 
 @pytest.mark.unit
 def test_movie_card_tolerates_partial_tmdb_data():
-    title, text = leisure._movie_card({"title": "Патерсон", "hook": "тихое кино"}, {"name": "Патерсон"})
+    title, msg = leisure._movie_card({"title": "Патерсон", "hook": "тихое кино"}, {"name": "Патерсон"})
 
     assert title == "Патерсон"
-    assert "Патерсон" in text
-    assert "тихое кино" in text
+    assert "Патерсон" in msg.text
+    assert "тихое кино" in msg.text
 
 
 @pytest.mark.unit
@@ -123,7 +123,7 @@ def test_eventbrite_events_normalizes_response(monkeypatch):
 
 
 def test_book_text_uses_editorial_structure():
-    text = leisure._book_text({
+    msg = leisure._book_text({
         "author": "Олдос Хаксли",
         "title": "Дивный новый мир",
         "year": "1932",
@@ -133,10 +133,12 @@ def test_book_text_uses_editorial_structure():
         "quote": "Лучше быть несчастным в свободе.",
         "hook": "лишний итог",
     })
+    text = msg.text
 
-    assert text.startswith("📚 <b>Олдос Хаксли • «Дивный новый мир» <i>(1932)</i></b>")
-    assert "🎯 <b>Почему стоит читать</b>" in text
-    assert "✍🏻 <b>Коротко о сюжете</b>\nБернард" in text
-    assert "💬 <b>Цитата</b>\n«Лучше быть несчастным в свободе.»" in text
+    assert text.startswith("📚 Олдос Хаксли • «Дивный новый мир» (1932)")
+    assert "Почему стоит читать" in text
+    assert "Коротко о сюжете\nБернард" in text
+    assert "Цитата\n«Лучше быть несчастным в свободе.»" in text
+    assert any(e.type == "bold" for e in msg.entities)
     assert "-Анти" not in text
     assert "лишний итог" not in text

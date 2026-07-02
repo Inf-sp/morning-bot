@@ -14,10 +14,20 @@ def _bold_texts(msg):
 
 @pytest.mark.unit
 def test_settings_core_messages():
-    assert "🔔 Уведомления" in settings.notifications().text
-    assert "Сейчас: здоровье" in settings.priorities("здоровье").text
-    assert "🎚️ Настройки" in settings.settings_home().text
-    assert "🍿 Настройки досуга" in settings.leisure_settings().text
+    notif = settings.notifications()
+    assert "🔔 Уведомления" in _bold_texts(notif)
+    assert notif.text == "🔔 Уведомления\nНажми для включения/выключения. 🟢 — включено."
+
+    prio = settings.priorities("здоровье")
+    assert "Сейчас: здоровье" in prio.text
+    assert "🎯 Приоритеты" in _bold_texts(prio)
+    assert "Сейчас:" in _bold_texts(prio)
+
+    home = settings.settings_home()
+    assert "🎚️ Настройки" in _bold_texts(home)
+
+    leisure = settings.leisure_settings()
+    assert "🍿 Настройки досуга" in _bold_texts(leisure)
 
 
 @pytest.mark.unit
@@ -26,15 +36,33 @@ def test_settings_body_profile_message():
 
     assert "Сейчас сохранено:\nрост 178" in msg.text
     assert "Напиши одним сообщением" in msg.text
-    assert "Сейчас сохранено:" in _bold_texts(msg)
+    bold = _bold_texts(msg)
+    assert "🎚️ Мои параметры" in bold
+    assert "Сейчас сохранено:" in bold
+    assert "Напиши одним сообщением:" in bold
+    assert not msg.text.startswith("\n")
+    assert not msg.text.endswith("\n")
+    assert "\n\n\n" not in msg.text
 
 
 @pytest.mark.unit
 def test_settings_list_messages():
-    assert "Пока пусто" in settings.artists_home([]).text
-    assert "🎤 Мои музыканты" in settings.artists_home(["Eefje"]).text
-    assert "Пока пусто — добавь первый принцип" in settings.lagom_home([]).text
-    assert "Лагом" in settings.lagom_home(["меньше, но лучше"]).text
+    empty = settings.artists_home([])
+    assert "Пока пусто" in empty.text
+    assert "🎤 Мои музыканты" in _bold_texts(empty)
+
+    full = settings.artists_home(["Eefje"])
+    assert "🎤 Мои музыканты" in _bold_texts(full)
+    assert full.text == "🎤 Мои музыканты"
+
+    lagom_empty = settings.lagom_home([])
+    assert "Пока пусто — добавь первый принцип" in lagom_empty.text
+    assert "☕️ Лагом" in _bold_texts(lagom_empty)
+    assert "Примеры:" in _bold_texts(lagom_empty)
+
+    lagom_full = settings.lagom_home(["меньше, но лучше"])
+    assert "Лагом" in lagom_full.text
+    assert "Пока пусто" not in lagom_full.text
 
 
 @pytest.mark.unit
@@ -59,20 +87,40 @@ def test_settings_saved_and_later_messages():
     assert settings.note_removed_from_later().text == "Удалил из закладок."
     assert "в любимые" in settings.note_moved_to_favorites("Фильм", "Кино").text
     assert settings.note_deleted().text == "❌ Удалил."
-    assert "Пока пусто" in settings.trips_empty().text
-    assert "Мои поездки" in settings.trips_home().text
-    assert "Позже" in settings.later_home_empty().text
-    assert "Открой категорию" in settings.later_home().text
-    assert "Позже · 🎬 Кино" in settings.later_group("🎬 Кино", "фильмы").text
+
+    trips_empty = settings.trips_empty()
+    assert "Пока пусто" in trips_empty.text
+    assert "🧳 Поездки" in _bold_texts(trips_empty)
+
+    trips_home = settings.trips_home()
+    assert "Мои поездки" in trips_home.text
+    assert "🧳 Мои поездки" in _bold_texts(trips_home)
+    assert "\n\n\n" not in trips_home.text
+
+    later_empty = settings.later_home_empty()
+    assert "Позже" in later_empty.text
+    assert "⏳ Позже" in _bold_texts(later_empty)
+
+    later_home = settings.later_home()
+    assert "Открой категорию" in later_home.text
+
+    later_group = settings.later_group("🎬 Кино", "фильмы")
+    assert "Позже · 🎬 Кино" in later_group.text
+    assert "⭐️ Позже · 🎬 Кино" in _bold_texts(later_group)
 
 
 @pytest.mark.unit
 def test_settings_favorite_messages_keep_user_content_verbatim():
-    msg = settings.favorite_section("🎬 Мое кино", ["A < B"])
+    msg = settings.favorite_section("🎬 Мое кино", ["A < B", "C"])
 
     assert "🎬 Мое кино" in _bold_texts(msg)
     assert "A < B" in msg.text
-    assert any(e.type == "italic" for e in settings.favorite_section("Книги", []).entities)
+    assert msg.text == "🎬 Мое кино\n\n• A < B\n• C"
+
+    empty = settings.favorite_section("Книги", [])
+    assert any(e.type == "italic" for e in empty.entities)
+    assert empty.text == "Книги\n\nпусто"
+
     assert settings.favorite_card("Src <x>", "01.01", "body").parse_mode == "HTML"
     assert "Src &lt;x&gt;" in settings.favorite_card("Src <x>", "01.01", "body").text
     assert "Напиши книгу" in settings.favorite_add_prompt("книгу").text
@@ -82,12 +130,19 @@ def test_settings_favorite_messages_keep_user_content_verbatim():
 @pytest.mark.unit
 def test_settings_admin_messages():
     assert settings.admin_only().text == "⛔ Только для администратора."
-    assert "Администратор" in settings.admin_home().text
-    assert settings.ADMIN_RUN_NOTIF_TITLE in settings.admin_run_notifications().text
+
+    home = settings.admin_home()
+    assert "Администратор" in home.text
+    assert "🔐 Администратор" in _bold_texts(home)
+
+    run_notif = settings.admin_run_notifications()
+    assert settings.ADMIN_RUN_NOTIF_TITLE in run_notif.text
+    assert settings.ADMIN_RUN_NOTIF_TITLE in _bold_texts(run_notif)
 
     users = settings.admin_users([("1", "Ann <Boss>", True), ("2", "", False)], pending_count=2)
     assert "Ann <Boss>" in users.text
     assert "Активных инвайтов: 2" in users.text
+    assert "👥 Пользователи" in _bold_texts(users)
 
 
 @pytest.mark.unit
@@ -106,9 +161,14 @@ def test_settings_admin_status_messages_keep_dynamic_parts_verbatim():
     assert "bad & down" in health.text
     assert any(e.type == "code" for e in health.entities)
 
-    llm = settings.admin_llm_check([("OpenAI", False, "bad <key>")])
+    llm = settings.admin_llm_check([("OpenAI", True, ""), ("Claude", False, "bad <key>")])
     assert "bad <key>" in llm.text
+    assert "✅ OpenAI: Хорошо" in llm.text
+    assert "❌ Claude: bad <key>" in llm.text
+    assert "LLM check" in _bold_texts(llm)
+    assert "\n\n\n" not in llm.text
 
     invite = settings.admin_invite("https://t.me/bot?start=a<b")
     assert "https://t.me/bot?start=a<b" in invite.text
     assert any(e.type == "text_link" and e.url == "https://t.me/bot?start=a<b" for e in invite.entities)
+    assert "Подарочный инвайт:" in _bold_texts(invite)

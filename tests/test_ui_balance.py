@@ -4,6 +4,15 @@ from telegram import MessageEntity
 from ui import balance
 
 
+def _slice_u16(text, offset, length):
+    u16 = text.encode("utf-16-le")
+    return u16[offset * 2:(offset + length) * 2].decode("utf-16-le")
+
+
+def _entities_of_type(msg, entity_type):
+    return [_slice_u16(msg.text, e.offset, e.length) for e in msg.entities if e.type == entity_type]
+
+
 @pytest.mark.unit
 def test_balance_entity_card_message_spec():
     msg = balance.entity_card(
@@ -28,9 +37,29 @@ def test_balance_entity_card_message_spec():
 def test_balance_worries_diary_message_spec():
     msg = balance.worries_diary([{"text": "опоздаю <на поезд>"}])
 
-    assert msg.parse_mode == "HTML"
-    assert "📓 <b>Дневник тревог</b>" in msg.text
-    assert "опоздаю &lt;на поезд&gt;" in msg.text
+    assert msg.text.startswith("📓 Дневник тревог")
+    assert "опоздаю <на поезд>" in msg.text
+    assert "📓 Дневник тревог" in _entities_of_type(msg, "bold")
+    assert "Тревоги за сегодня:" in _entities_of_type(msg, "bold")
+    assert "• опоздаю <на поезд>" in msg.text
+
+
+@pytest.mark.unit
+def test_balance_worries_diary_empty_message_spec():
+    msg = balance.worries_diary([])
+
+    assert msg.text.startswith("📓 Дневник тревог")
+    assert "Пока пусто. Напиши тревоги одним сообщением." in msg.text
+    assert _entities_of_type(msg, "bold") == ["📓 Дневник тревог"]
+
+
+@pytest.mark.unit
+def test_balance_evening_review_empty_message_spec():
+    msg = balance.evening_review_empty()
+
+    assert msg.text.startswith("🥸 Вечерний разбор")
+    assert "Сегодня тревог не записано." in msg.text
+    assert _entities_of_type(msg, "bold") == ["🥸 Вечерний разбор"]
 
 
 @pytest.mark.unit
@@ -41,7 +70,8 @@ def test_balance_evening_review_message_spec():
         "день был спокойнее, чем казалось",
     )
 
-    assert msg.parse_mode == "HTML"
-    assert "🥸 <b>Вечерний разбор</b>" in msg.text
-    assert "<i>это предположение, не факт</i>" in msg.text
+    assert msg.text.startswith("🥸 Вечерний разбор")
+    assert "Сегодня тебя беспокоили:" in _entities_of_type(msg, "bold")
+    assert "это предположение, не факт" in _entities_of_type(msg, "italic")
+    assert "Итог дня:" in _entities_of_type(msg, "bold")
     assert "День был спокойнее" in msg.text

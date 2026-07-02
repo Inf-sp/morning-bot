@@ -1,6 +1,6 @@
 import re
 
-from .builder import MessageSpec
+from .builder import MessageSpec, from_html
 from util import esc
 
 
@@ -17,6 +17,7 @@ def clip(text, limit=450):
 
 
 def movie_card(item, tm):
+    """Составная карточка (условные блоки + esc()-нутые поля) -> from_html."""
     item = item if isinstance(item, dict) else {"title": str(item)}
     title = (tm.get("name") if tm else "") or item.get("title", "")
     year = f" ({tm.get('year')})" if tm and tm.get("year") else ""
@@ -37,10 +38,11 @@ def movie_card(item, tm):
     lines += ["", f"💡 {esc(item.get('hook', ''))}"]
     if tm and tm.get("url"):
         lines += ["", f"🔗 {tm['url']}"]
-    return title, MessageSpec(text="\n".join(lines), parse_mode="HTML")
+    return title, from_html("\n".join(lines))
 
 
 def book_text(item):
+    """Составная карточка (условные блоки + esc()-нутые поля) -> from_html."""
     author = esc(item.get("author", ""))
     title = esc(item.get("title", ""))
     en = esc(item.get("title_en", ""))
@@ -60,10 +62,11 @@ def book_text(item):
     if item.get("quote"):
         quote = str(item["quote"]).strip().strip("«»\"")
         lines += ["", "💬 <b>Цитата</b>", f"«{esc(quote)}»"]
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+    return from_html("\n".join(lines))
 
 
 def artist_card(data):
+    """Составная карточка (условные блоки + esc()-нутые поля) -> from_html."""
     artist = data.get("artist", "")
     lines = [f"🎸 <b>{esc(artist)}</b>"]
     if data.get("desc"):
@@ -76,10 +79,11 @@ def artist_card(data):
         lines += ["", "🎧 <b>С чего начать:</b>"] + [f"• {esc(str(t))}" for t in tracks]
     if data.get("fact"):
         lines += ["", "💡 <b>Факт:</b>", esc(data["fact"])]
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+    return from_html("\n".join(lines))
 
 
 def country_card(data):
+    """Составная карточка (условные блоки + esc()-нутые поля) -> from_html."""
     lines = [f"{data.get('flag','')} <b>{esc(data.get('country',''))}</b>", ""]
     if data.get("about"):
         lines += [esc(data["about"]), ""]
@@ -91,10 +95,13 @@ def country_card(data):
         lines += [f"⚠️ <b>Главный нюанс:</b> {esc(data['note'])}"]
     if data.get("fact"):
         lines += ["", f"🔎 <b>Факт:</b> {esc(data['fact'])}"]
-    return MessageSpec(text="\n".join(lines).strip(), parse_mode="HTML")
+    return from_html("\n".join(lines).strip())
 
 
 def travel_plan(plan, fallback_country):
+    """Текст плана путешествия персистируется как HTML в NOTES_KEY (bucket='plan', full=True)
+    и позже режется на chunks по 4000 символов в settings.fav_view — резать entities по offset'ам
+    в таком сценарии небезопасно, поэтому держим на HTML, как favorite_card в settings.py."""
     country = plan.get("title", fallback_country)
     lines = [f"{plan.get('flag','')} <b>{esc(country)}</b>"]
     if plan.get("about"):

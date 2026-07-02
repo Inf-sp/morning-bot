@@ -38,3 +38,21 @@ def test_myday_summary_message_spec():
     assert "📚 Слово дня" in bold
     assert "💭 Цитата" in bold
     assert "У каналов свежо" in msg.text
+    assert "\n\n\n" not in msg.text
+
+
+@pytest.mark.unit
+def test_myday_wind_block_uses_warning_component():
+    msg = myday.day_summary(
+        "Четверг, 2 июля",
+        "Amsterdam",
+        weather_title="☀️ Погода сегодня",
+        weather_line="До +22°C",
+        wind_title="Сильный ветер",
+        wind_line="До 12 м/с (утром, днём)",
+    )
+
+    assert "⚠️ Сильный ветер" in msg.text
+    assert "Сильный ветер" in _bold_texts(msg)
+    assert "До 12 м/с (утром, днём)" in msg.text
+    assert "\n\n\n" not in msg.text

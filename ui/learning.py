@@ -16,14 +16,14 @@ def train_question(word):
 
 def phrase_poll_question(blank_phrase, sentence_ru):
     b = MessageBuilder()
-    b.bold("Фраза-тренажёр")
-    b.blank()
+    b.section("Фраза-тренажёр")
+    b.spacer()
     b.quote(str(blank_phrase or "").strip())
     if sentence_ru:
-        b.blank()
+        b.spacer()
         b.bold("Перевод:")
         b.text_line(f" {str(sentence_ru).strip()}")
-    b.blank()
+    b.spacer()
     b.text_line("Выбери пропущенное слово из вариантов ниже.")
     msg = b.build()
     msg.text = msg.text.strip()[:300]
@@ -46,8 +46,8 @@ def _cap_first(text):
 def proverb_card(flag, original, analogs=None, meaning="", examples=None):
     b = MessageBuilder()
     header = f"💭{flag} Живой язык" if flag else "💭 Живой язык"
-    b.bold(header)
-    b.blank()
+    b.section(header)
+    b.spacer()
 
     if original:
         offset = u16_len(b.text)
@@ -58,9 +58,7 @@ def proverb_card(flag, original, analogs=None, meaning="", examples=None):
 
     analogs = _as_list(analogs)
     if analogs:
-        b.blank()
-        b.bold("Как это переводится?")
-        b.newline()
+        b.section("Как это переводится?")
         visible_analogs = analogs[:4]
         for i, analog in enumerate(visible_analogs):
             if i:
@@ -72,12 +70,10 @@ def proverb_card(flag, original, analogs=None, meaning="", examples=None):
 
     examples = _as_list(examples)
     if examples:
-        b.blank()
-        b.bold("Как говорить ПРАВИЛЬНО")
-        b.newline()
+        b.section("Как говорить ПРАВИЛЬНО")
         b.text_line(examples[0])
 
-    b.blank()
+    b.spacer()
     b.add("Прочитай вслух. Покрути в голове. Всё.", MessageEntity.ITALIC)
     msg = b.build()
     msg.text = msg.text.rstrip()
@@ -93,75 +89,109 @@ def train_result(state, idx, correct_idx, options, chosen_fl=""):
     meaning = state.get("meaning") or correct
     mode = state.get("mode", "word")
 
+    b = MessageBuilder()
     if mode == "phrase":
         if idx == correct_idx:
-            lines = ["✅ <b>Верно.</b>", "", f"{esc(sentence)} → <b>{esc(correct)}</b>"]
+            b.section("✅ Верно.")
         else:
-            lines = [
-                "❌ <b>Не совсем так.</b>",
-                "",
-                f"{esc(sentence)} → <b>{esc(correct)}</b>",
-                f"Твой ответ: «{esc(chosen)}».",
-            ]
-        lines += ["", f"<b>{esc(word)}</b>"]
+            b.section("❌ Не совсем так.")
+        b.spacer()
+        b.text_line(f"{sentence} → ")
+        b.bold(correct)
+        b.newline()
+        if idx != correct_idx:
+            b.text_line(f"Твой ответ: «{chosen}».")
+            b.newline()
+        b.spacer()
+        b.bold(word)
+        b.newline()
         if sentence_ru:
-            lines.append(esc(sentence_ru))
+            b.line(sentence_ru)
         if state.get("phrase_explanation"):
-            lines += ["", esc(state.get("phrase_explanation", ""))]
-        return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+            b.spacer()
+            b.line(state.get("phrase_explanation", ""))
+        msg = b.build()
+        msg.text = msg.text.rstrip("\n")
+        return msg
 
     if idx == correct_idx:
-        lines = ["✅ <b>Верно.</b>", "", f"<b>{esc(word)}</b> → {esc(meaning)}"]
+        b.section("✅ Верно.")
     else:
-        lines = [
-            "❌ <b>Не совсем так.</b>",
-            "",
-            f"<b>{esc(word)}</b> → {esc(meaning)}",
-            f"Твой ответ: «{esc(chosen)}»" + (f" — это <b>{esc(chosen_fl)}</b>." if chosen_fl else "."),
-        ]
+        b.section("❌ Не совсем так.")
+    b.spacer()
+    b.bold(word)
+    b.text_line(f" → {meaning}")
+    b.newline()
+    if idx != correct_idx:
+        b.text_line(f"Твой ответ: «{chosen}»")
+        if chosen_fl:
+            b.text_line(" — это ")
+            b.bold(chosen_fl)
+            b.text_line(".")
+        else:
+            b.text_line(".")
+        b.newline()
     if sentence:
-        context = f"{esc(sentence)}"
+        b.spacer()
+        context = sentence
         if sentence_ru:
-            context += f" → {esc(sentence_ru)}"
-        lines += ["", context]
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+            context += f" → {sentence_ru}"
+        b.line(context)
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
 
 
 def train_lang_select():
-    return MessageSpec(
-        text=(
-            "🧠 <b>Тренажёр</b>\n\n"
-            "Слова и фразы для тренировки добавляются в разделе <b>Словарь</b>.\n\n"
-            "<b>Выбери язык для тренировки 👇</b>"
-        ),
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.section("🧠 Тренажёр")
+    b.spacer()
+    b.text_line("Слова и фразы для тренировки добавляются в разделе ")
+    b.bold("Словарь")
+    b.text_line(".")
+    b.spacer()
+    b.bold("Выбери язык для тренировки 👇")
+    return b.build()
 
 
 def translate_prompt(flag, ru, lang):
-    return MessageSpec(
-        text=f"📝 <b>{flag} Обратный перевод</b>\n\nФраза: «{esc(ru)}»\n\nНапиши перевод на {lang} следующим сообщением.",
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.section(f"📝 {flag} Обратный перевод")
+    b.spacer()
+    b.line(f"Фраза: «{ru}»")
+    b.spacer()
+    b.text_line(f"Напиши перевод на {lang} следующим сообщением.")
+    return b.build()
 
 
 def translate_result(flag, lang, ru, answer, result):
-    lines = [f"📝 <b>{flag} Обратный перевод</b>", "", f"Твой ответ: {esc(answer)}", ""]
+    b = MessageBuilder()
+    b.section(f"📝 {flag} Обратный перевод")
+    b.spacer()
+    b.line(f"Твой ответ: {answer}")
+    b.spacer()
     if result.get("ok"):
-        lines.append("✅ Верно")
+        b.text_line("✅ Верно")
         if result.get("correct"):
-            lines += ["", f"💡 {esc(ru)} → {esc(result['correct'])}"]
+            b.spacer()
+            b.text_line(f"💡 {ru} → {result['correct']}")
     else:
         if result.get("error"):
-            lines += [f"❌ Ошибка: {esc(result['error'])}"]
+            b.text_line(f"❌ Ошибка: {result['error']}")
         if result.get("correct"):
-            lines += ["", f"✅ {esc(ru)} → {esc(result['correct'])}"]
+            b.spacer()
+            b.text_line(f"✅ {ru} → {result['correct']}")
     if result.get("note"):
-        lines += ["", f"💡 {esc(result['note'])}"]
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+        b.spacer()
+        b.text_line(f"💡 {result['note']}")
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
 
 
 def morning_words(flag, method_line, phrases=None, words=None, empty_hint=False):
+    """method_line приходит от вызывающего кода уже HTML-фрагментом (может быть обёрнут в <i>),
+    а word/ru — esc()-нутые поля словаря -> остаётся на HTML parse_mode, как travel_plan в leisure.py."""
     lines = [f"📚{flag} <b>Слова и фразы дня</b>", "", method_line]
     if empty_hint:
         lines += ["", "📖 Открой словарь, если хочешь добавить что-то новое или быстро повторить текущее."]
@@ -184,28 +214,48 @@ def game_start():
 
 
 def game_card(ui, clues):
-    lines = [f"<b>{ui['title']}</b>", "", f"<b>{ui['suspect']}</b>", clues, "", f"<b>{ui['who']} 🤔</b>"]
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+    b = MessageBuilder()
+    b.section(ui["title"])
+    b.section(ui["suspect"])
+    b.line(clues)
+    b.section(f"{ui['who']} 🤔")
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
 
 
 def game_found(ui, answer, body=""):
-    text = f"<b>{ui['found']}</b>\n\n{ui['answer']}:\n<b>{esc(answer)}</b>"
+    b = MessageBuilder()
+    b.section(ui["found"])
+    b.spacer()
+    b.text_line(f"{ui['answer']}:\n")
+    b.bold(answer)
     if body:
-        text += f"\n\n{esc(body)}"
-    return MessageSpec(text=text, parse_mode="HTML")
+        b.spacer()
+        b.text_line(body)
+    return b.build()
 
 
 def game_hint(ui, hint):
-    return MessageSpec(text=f"<b>{ui['hint']}</b>\n\n<b>{esc(hint)}</b>\n\n{ui['who']}", parse_mode="HTML")
+    b = MessageBuilder()
+    b.section(ui["hint"])
+    b.spacer()
+    b.bold(hint)
+    b.spacer()
+    b.text_line(ui["who"])
+    return b.build()
 
 
 def levels(nl_label, en_label):
-    return MessageSpec(
-        text=(
-            "🎚 <b>Уровень языков</b>\n\n"
-            f"🇳🇱 Нидерландский: <b>{nl_label}</b>\n"
-            f"🇬🇧 Английский: <b>{en_label}</b>\n\n"
-            "Нажми уровень чтобы изменить:"
-        ),
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.section("🎚 Уровень языков")
+    b.spacer()
+    b.text_line("🇳🇱 Нидерландский: ")
+    b.bold(nl_label)
+    b.newline()
+    b.text_line("🇬🇧 Английский: ")
+    b.bold(en_label)
+    b.newline()
+    b.spacer()
+    b.text_line("Нажми уровень чтобы изменить:")
+    return b.build()

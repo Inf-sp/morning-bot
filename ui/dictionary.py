@@ -52,15 +52,16 @@ def dict_add_confirmation(added_items):
     first = added_items[0]
     single = len(added_items) == 1
 
-    b.bold("Словарь").blank()
+    b.section("Словарь")
+    b.spacer()
 
     if single:
         kind = _kind_word(first["kind"])
         added_form = "добавлена" if first["kind"] == "phrase" else "добавлено"
-        b.text_line(
+        b.line(
             f"✅ {kind.capitalize()} {added_form} в {_lang_acc(first['lang'])} {_kind_bucket_acc(first['kind'])}"
         )
-        b.blank().quote(_line(first)).blank().text_line(_added_explanation(first))
+        b.spacer().quote(_line(first)).spacer().text_line(_added_explanation(first))
         return b.build()
 
     counts = {}
@@ -81,7 +82,7 @@ def dict_add_confirmation(added_items):
             b.newline()
     if len(added_items) > 8:
         b.add(f"\n...и ещё {len(added_items) - 8}")
-    b.blank().text_line("Новые записи будут храниться в словаре и попадаться в тренировках по языку.")
+    b.spacer().text_line("Новые записи будут храниться в словаре и попадаться в тренировках по языку.")
     return b.build()
 
 
@@ -90,27 +91,31 @@ def dict_duplicate_confirmation(duplicate_items):
     first = duplicate_items[0]
     single = len(duplicate_items) == 1
 
-    b.bold("Словарь").blank()
+    b.section("Словарь")
+    b.spacer()
 
     if single:
         kind = _kind_word(first["kind"])
-        b.text_line(f"✅ {kind.capitalize()} уже есть в {_lang_adj(first['lang'])} {_kind_loc(first['kind'])}")
-        b.blank().quote(_line(first)).blank()
+        b.line(f"✅ {kind.capitalize()} уже есть в {_lang_adj(first['lang'])} {_kind_loc(first['kind'])}")
+        b.spacer().quote(_line(first)).spacer()
         b.text_line("Повторно не добавляю, чтобы словарь оставался чистым и тренировки не дублировали одно и то же.")
         return b.build()
 
-    b.text_line("✅ Эти записи уже есть в словаре").blank()
+    b.line("✅ Эти записи уже есть в словаре")
+    b.spacer()
     for idx, item in enumerate(duplicate_items[:8]):
         b.quote(_line(item))
         if idx != min(len(duplicate_items), 8) - 1:
             b.newline()
     if len(duplicate_items) > 8:
         b.add(f"\n...и ещё {len(duplicate_items) - 8}")
-    b.blank().text_line("Повторно не добавляю их, чтобы словарь оставался чистым.")
+    b.spacer().text_line("Повторно не добавляю их, чтобы словарь оставался чистым.")
     return b.build()
 
 
 def dict_overview(nl_total, en_total):
+    """Короткая карточка-меню (заголовок + одна строка счётчиков) — остаётся на HTML,
+    компоненты избыточны для однострочного сообщения без структуры разделов."""
     total = nl_total + en_total
     return MessageSpec(
         text=(
@@ -122,6 +127,7 @@ def dict_overview(nl_total, en_total):
 
 
 def dict_language(lang, counts):
+    """Короткая карточка-меню (заголовок + одна строка счётчиков) — остаётся на HTML, см. dict_overview()."""
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     name = "Нидерландский" if lang == "nl" else "Английский"
     return MessageSpec(
@@ -131,6 +137,8 @@ def dict_language(lang, counts):
 
 
 def dict_deleted(removed_html=""):
+    """Принимает уже esc()-нутый HTML-фрагмент от вызывающей стороны (вставляется как <b>{removed_html}</b>),
+    поэтому остаётся на HTML, как favorite_card в settings.py — компоненты тут не подходят."""
     label = f" <b>{removed_html}</b>" if removed_html else ""
     return MessageSpec(
         text=(

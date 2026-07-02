@@ -5,45 +5,38 @@ ADMIN_RUN_NOTIF_TITLE = "Превью рассылки"
 
 def notifications():
     b = MessageBuilder()
-    b.bold("🔔 Уведомления")
-    b.blank()
-    b.text_line("Нажми для включения/выключения. 🟢 — включено.")
-    return b.build()
+    b.section("🔔 Уведомления")
+    b.line("Нажми для включения/выключения. 🟢 — включено.")
+    return b.build_stripped()
 
 
 def priorities(current):
     b = MessageBuilder()
-    b.bold("🎯 Приоритеты")
-    b.blank()
-    b.text_line("Выбери, на что боту обращать больше внимания в брифе, советах и рекомендациях.")
-    b.blank()
+    b.section("🎯 Приоритеты")
+    b.line("Выбери, на что боту обращать больше внимания в брифе, советах и рекомендациях.")
+    b.spacer()
     b.bold("Сейчас:")
-    b.text_line(f" {current}")
-    return b.build()
+    b.line(f" {current}")
+    return b.build_stripped()
 
 
 def body_profile(profile_line):
     b = MessageBuilder()
-    b.bold("🎚️ Мои параметры")
-    b.blank()
-    b.text_line(
+    b.section("🎚️ Мои параметры")
+    b.line(
         "Бот использует эти данные при подборе образа и оценке покупок — "
         "чтобы советы по размеру и силуэту подходили именно тебе."
     )
-    b.blank()
-    b.bold("Сейчас сохранено:")
-    b.newline()
-    b.text_line(profile_line)
-    b.blank()
-    b.bold("Напиши одним сообщением:")
-    b.newline()
-    b.text_line("рост, размеры одежды, обуви и брюк, а также стиль одежды.")
-    b.blank()
+    b.section("Сейчас сохранено:")
+    b.line(profile_line)
+    b.section("Напиши одним сообщением:")
+    b.line("рост, размеры одежды, обуви и брюк, а также стиль одежды.")
+    b.spacer()
     b.italic(
         "Пример: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32. "
         "Стиль: тёмные оттенки, оверсайз, минимум принтов."
     )
-    return b.build()
+    return b.build_stripped()
 
 
 def city_input():
@@ -89,57 +82,51 @@ def style_custom_input():
 
 def body_input():
     b = MessageBuilder()
-    b.bold("🎚️ Параметры тела")
-    b.blank()
-    b.text_line("Напиши свободным текстом — рост, размер одежды, размер обуви и брюк.")
-    b.blank()
+    b.section("🎚️ Параметры тела")
+    b.line("Напиши свободным текстом — рост, размер одежды, размер обуви и брюк.")
+    b.spacer()
     b.italic("Пример: рост 178 см, размер M/L, обувь EU 43, брюки W32 L32")
-    return b.build()
+    return b.build_stripped()
 
 
 def style_pick():
     b = MessageBuilder()
-    b.bold("🎨 Стиль одежды")
-    b.blank()
-    b.text_line("Выбери из предложенных или опиши своими словами — бот учтёт при подборе образа:")
-    return b.build()
+    b.section("🎨 Стиль одежды")
+    b.line("Выбери из предложенных или опиши своими словами — бот учтёт при подборе образа:")
+    return b.build_stripped()
 
 
 def settings_home():
     b = MessageBuilder()
-    b.bold("🎚️ Настройки")
-    b.blank()
-    b.text_line("Настройте бота под себя и управляйте личными данными.")
-    return b.build()
+    b.section("🎚️ Настройки")
+    b.line("Настройте бота под себя и управляйте личными данными.")
+    return b.build_stripped()
 
 
 def leisure_settings():
     b = MessageBuilder()
-    b.bold("🍿 Настройки досуга")
-    b.blank()
-    b.text_line("Кино, страны, артисты и книги для рекомендаций.")
-    return b.build()
+    b.section("🍿 Настройки досуга")
+    b.line("Кино, страны, артисты и книги для рекомендаций.")
+    return b.build_stripped()
 
 
 def list_section(title, items, empty_hint="Пока пусто — добавь первый элемент 👇"):
     b = MessageBuilder()
-    b.bold(title)
+    b.section(title)
     if not items:
-        b.blank()
-        b.text_line(empty_hint)
-    return b.build()
+        b.line(empty_hint)
+    return b.build_stripped()
 
 
 def wardrobe_home():
     b = MessageBuilder()
-    b.bold("👕 Мой гардероб")
-    b.blank()
-    b.text_line("База вещей и параметры для подбора одежды.")
-    return b.build()
+    b.section("👕 Мой гардероб")
+    b.line("База вещей и параметры для подбора одежды.")
+    return b.build_stripped()
 
 
 def countries_home():
-    return MessageBuilder().bold("🗺️ Мои страны").build()
+    return MessageBuilder().section("🗺️ Мои страны").build_stripped()
 
 
 def artists_home(items):
@@ -152,23 +139,19 @@ def books_home(items):
 
 def lagom_home(items):
     b = MessageBuilder()
-    b.bold("☕️ Лагом")
-    b.blank()
+    b.section("☕️ Лагом")
     b.text_line("Лагом (швед. ")
     b.italic("lagom")
-    b.text_line(
+    b.line(
         " — «в самый раз») — твой личный свод принципов: "
         "что важно, как хочешь жить, что даёт энергию, а что забирает."
     )
-    b.blank()
-    b.text_line("Бот использует их в ☕️ Мотивация — чтобы советы звучали именно про тебя, а не общими словами.")
-    b.blank()
-    b.bold("Примеры:")
-    b.text_line(" «Меньше, но лучше» · «Физическая активность каждый день» · «Не сравниваю себя с другими»")
+    b.line("Бот использует их в ☕️ Мотивация — чтобы советы звучали именно про тебя, а не общими словами.")
+    b.section("Примеры:")
+    b.line(" «Меньше, но лучше» · «Физическая активность каждый день» · «Не сравниваю себя с другими»")
     if not items:
-        b.blank()
-        b.text_line("Пока пусто — добавь первый принцип 👇")
-    return b.build()
+        b.line("Пока пусто — добавь первый принцип 👇")
+    return b.build_stripped()
 
 
 def nothing_to_save():
@@ -208,76 +191,71 @@ def favorite_card(source, date, text):
 
 def trips_empty():
     b = MessageBuilder()
-    b.bold("🧳 Поездки")
-    b.blank()
-    b.text_line("Пока пусто.")
-    return b.build()
+    b.section("🧳 Поездки")
+    b.line("Пока пусто.")
+    return b.build_stripped()
 
 
 def trips_home():
     b = MessageBuilder()
-    b.bold("🧳 Мои поездки")
-    b.blank()
-    b.text_line("Сохранённые планы поездок.")
-    b.blank()
-    b.text_line("Выбери план 👇")
-    return b.build()
+    b.section("🧳 Мои поездки")
+    b.line("Сохранённые планы поездок.")
+    b.spacer()
+    b.line("Выбери план 👇")
+    return b.build_stripped()
 
 
 def later_home_empty():
     b = MessageBuilder()
-    b.bold("⏳ Позже")
-    b.blank()
-    b.text_line(
+    b.section("⏳ Позже")
+    b.line(
         "Сюда попадают временные закладки из ответов: кино, книги, музыка, "
         "поездки, еда, гардероб и всё прочее."
     )
-    b.blank()
-    b.text_line("Пока пусто — сохраняй интересное кнопкой «⏳ Позже» под ответами.")
-    return b.build()
+    b.spacer()
+    b.line("Пока пусто — сохраняй интересное кнопкой «⏳ Позже» под ответами.")
+    return b.build_stripped()
 
 
 def later_home():
     b = MessageBuilder()
-    b.bold("⏳ Позже")
-    b.blank()
-    b.text_line(
+    b.section("⏳ Позже")
+    b.line(
         "Сюда попадают временные закладки из ответов: кино, книги, музыка, "
         "поездки, еда, гардероб и всё прочее."
     )
-    b.blank()
-    b.text_line("Открой категорию, чтобы посмотреть и почистить её.")
-    return b.build()
+    b.spacer()
+    b.line("Открой категорию, чтобы посмотреть и почистить её.")
+    return b.build_stripped()
 
 
 def later_group(label, desc):
     b = MessageBuilder()
-    b.bold(f"⭐️ Позже · {label}")
-    b.blank()
+    b.section(f"⭐️ Позже · {label}")
     b.text_line(f"Здесь лежат временные закладки: {desc}.\n")
-    b.text_line("Открой карточку, чтобы увидеть её в исходном виде или удалить.")
-    return b.build()
+    b.line("Открой карточку, чтобы увидеть её в исходном виде или удалить.")
+    return b.build_stripped()
 
 
 def favorites_home():
     b = MessageBuilder()
-    b.bold("❤️ Любимые")
-    b.blank()
-    b.text_line("Твои топ-категории.")
-    b.blank()
-    b.text_line("Выбери раздел 👇")
-    return b.build()
+    b.section("❤️ Любимые")
+    b.line("Твои топ-категории.")
+    b.spacer()
+    b.line("Выбери раздел 👇")
+    return b.build_stripped()
 
 
 def favorite_section(title, items):
     b = MessageBuilder()
-    b.bold(title)
-    b.blank()
+    b.section(title)
+    b.spacer()
     if items:
-        b.text_line("\n".join(f"• {it}" for it in items[:50]))
+        for it in items[:50]:
+            b.bullet(it)
     else:
         b.italic("пусто")
-    return b.build()
+    return b.build_stripped()
 
 
 def favorite_add_prompt(name):
@@ -294,10 +272,9 @@ def admin_only():
 
 def admin_home():
     b = MessageBuilder()
-    b.bold("🔐 Администратор")
-    b.blank()
-    b.text_line("Сервисный раздел. Только для владельца.")
-    return b.build()
+    b.section("🔐 Администратор")
+    b.line("Сервисный раздел. Только для владельца.")
+    return b.build_stripped()
 
 
 def admin_users(entries, pending_count=0):
@@ -308,17 +285,16 @@ def admin_users(entries, pending_count=0):
         b.newline()
         b.text_line(f"👑 Owner{name_part}" if is_owner else f"👤 {uid}{name_part}")
     if pending_count:
-        b.blank()
-        b.text_line(f"⏳ Активных инвайтов: {pending_count}")
-    return b.build()
+        b.spacer()
+        b.line(f"⏳ Активных инвайтов: {pending_count}")
+    return b.build_stripped()
 
 
 def admin_cost_empty():
     b = MessageBuilder()
-    b.bold("💸 Расходы за 7 дней")
-    b.blank()
-    b.text_line("Данных пока нет.")
-    return b.build()
+    b.section("💸 Расходы за 7 дней")
+    b.line("Данных пока нет.")
+    return b.build_stripped()
 
 
 def admin_cost_summary(call_count, total_tokens, providers, modules):
@@ -327,70 +303,60 @@ def admin_cost_summary(call_count, total_tokens, providers, modules):
     b.newline()
     b.newline()
     b.text_line(f"Вызовов: {call_count}\nТокенов: ~{total_tokens:,}")
-    b.blank()
-    b.bold("По провайдерам:")
+    b.section("По провайдерам:")
     for label, configured, tokens, percent in providers:
-        b.newline()
         if not configured:
-            b.text_line(f"  {label}: —")
+            b.line(f"  {label}: —")
         elif tokens:
-            b.text_line(f"  {label}: {tokens:,} tok ({percent})")
+            b.line(f"  {label}: {tokens:,} tok ({percent})")
         else:
-            b.text_line(f"  {label}: 0 tok")
+            b.line(f"  {label}: 0 tok")
     if modules:
-        b.blank()
-        b.bold("Где тратится:")
+        b.section("Где тратится:")
         for label, tokens, percent in modules:
-            b.newline()
-            b.text_line(f"  {label}: {tokens:,} tok ({percent})")
-    return b.build()
+            b.line(f"  {label}: {tokens:,} tok ({percent})")
+    return b.build_stripped()
 
 
 def admin_health(required, optional, state_lines):
     b = MessageBuilder()
-    b.bold("Статус сервисов")
-    b.blank()
-    b.bold("Обязательные ключи")
+    b.section("Статус сервисов")
+    b.section("Обязательные ключи")
     for key, ok in required:
-        b.newline()
         b.text_line(f"  {'✅' if ok else '❌'} ")
         b.code(key)
-    b.blank()
-    b.bold("Опциональные ключи")
-    for key, ok in optional:
         b.newline()
+    b.section("Опциональные ключи")
+    for key, ok in optional:
         b.text_line(f"  {'✅' if ok else '⚪'} ")
         b.code(key)
-    b.blank()
-    b.bold("Состояние")
-    for line in state_lines:
         b.newline()
-        b.text_line(line)
-    return b.build()
+    b.section("Состояние")
+    for line in state_lines:
+        b.line(line)
+    return b.build_stripped()
 
 
 def admin_llm_check(results):
     b = MessageBuilder()
-    b.bold("LLM check")
-    b.blank()
-    b.text_line("Проверяю провайдеров по очереди…")
+    b.section("LLM check")
+    b.line("Проверяю провайдеров по очереди…")
     for label, ok, detail in results:
-        b.blank()
+        b.spacer()
         if ok:
-            b.text_line(f"✅ {label}: Хорошо")
+            b.line(f"✅ {label}: Хорошо")
         else:
-            b.text_line(f"❌ {label}: {detail}")
-    b.blank()
+            b.line(f"❌ {label}: {detail}")
+    b.spacer()
     b.italic("Проверка идёт последовательно, чтобы увидеть реальный ответ каждого провайдера.")
-    return b.build()
+    return b.build_stripped()
 
 
 def admin_run_notifications():
     b = MessageBuilder()
-    b.bold(ADMIN_RUN_NOTIF_TITLE)
-    b.blank()
-    b.text_line("Выбери уведомление — оно придёт тебе прямо сейчас.\nВремя в кнопках показывает обычное расписание.")
-    return b.build()
+    b.section(ADMIN_RUN_NOTIF_TITLE)
+    b.line("Выбери уведомление — оно придёт тебе прямо сейчас.\nВремя в кнопках показывает обычное расписание.")
+    return b.build_stripped()
 
 
 def admin_invite(link):
