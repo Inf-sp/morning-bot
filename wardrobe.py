@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import re
 import config
 import store
@@ -14,6 +14,7 @@ import secure
 import memory
 import research
 import settings as _settings
+from ui import wardrobe as wardrobe_ui
 
 _log = logging.getLogger(__name__)
 
@@ -44,83 +45,21 @@ def _today_label():
     ]
     return f"• {weekdays[now.weekday()]}, {now.day} {months[now.month - 1]}"
 
-def _u16_len(text):
-    return len((text or "").encode("utf-16-le")) // 2
-
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
 
 def _build_look_message(items, intro="", add_text=""):
-    chunks = []
-    entities = []
-
-    def push(text, entity_type=None):
-        offset = _u16_len("".join(chunks))
-        chunks.append(text)
-        if entity_type:
-            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
-
-    push("✨ Образ на сегодня", MessageEntity.BOLD)
-    push("\n\n")
-    if intro:
-        push(f"{intro}\n\n")
-    if items:
-        quote = "\n".join(f"• {str(it).strip()}" for it in items if str(it).strip())
-        if quote:
-            push(f"{quote}\n", MessageEntity.BLOCKQUOTE)
-    if add_text:
-        push("\n\n")
-        push(add_text, MessageEntity.ITALIC)
-    text = "".join(chunks).rstrip()
-    return text, entities
+    msg = wardrobe_ui.look_message(items, intro=intro, add_text=add_text)
+    return msg.text, msg.entities
 
 
 def _clean_text(value):
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
-def _finish_dot(value):
-    value = _clean_text(value)
-    if value and value[-1] not in ".!?…":
-        return value + "."
-    return value
-
-
 def _build_entity_card(title, summary="", quote="", bullets=None, final="", bullet_label="Что важно:"):
-    chunks = []
-    entities = []
-
-    def push(text, entity_type=None):
-        offset = _u16_len("".join(chunks))
-        chunks.append(text)
-        if entity_type and text:
-            entities.append(MessageEntity(entity_type, offset, _u16_len(text)))
-
-    push(_clean_text(title).rstrip(".:"), MessageEntity.BOLD)
-
-    summary = _finish_dot(summary)
-    if summary:
-        push("\n\n")
-        push(summary)
-
-    quote = _finish_dot(quote)
-    if quote:
-        push("\n\n")
-        push(quote, MessageEntity.BLOCKQUOTE)
-
-    clean_bullets = [_finish_dot(x) for x in (bullets or []) if _clean_text(x)]
-    if clean_bullets:
-        push("\n\n")
-        push(_clean_text(bullet_label).rstrip(":") + ":", MessageEntity.BOLD)
-        push("\n")
-        push("\n".join(f"- {x}" for x in clean_bullets))
-
-    final = _finish_dot(final)
-    if final:
-        push("\n\n")
-        push(final)
-
-    return "".join(chunks).rstrip(), entities
+    msg = wardrobe_ui.entity_card(title, summary, quote, bullets, final, bullet_label)
+    return msg.text, msg.entities
 
 def _get_cached_look(cid):
     cached = store.get_wardrobe_daylook(cid)
