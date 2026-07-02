@@ -9,8 +9,9 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 import ai
-from util import esc, cap_sentence, _WEEKDAYS, _WEEKDAY_SHORT, _MONTHS
+from util import cap_sentence, _WEEKDAYS, _WEEKDAY_SHORT, _MONTHS
 import verify
+from ui import weather as weather_ui
 
 TZ = config.TZ
 
@@ -335,7 +336,7 @@ async def send_weather(bot, cid, mode="today"):
         except Exception:
             temps = probs = precs = winds = []
         day_str = d["time"][0]
-        L = [f"<b>{esc(header)}</b>", ""]
+        periods = []
         parts = [("Утром", 6, 12), ("Днём", 12, 18), ("Вечером", 18, 24)]
         for label, h1, h2 in parts:
             t_vals, p_vals, w_vals, mm_vals, code_v = [], [], [], [], 1
@@ -357,13 +358,12 @@ async def send_weather(bot, cid, mode="today"):
             if rain_part:
                 line += f" • {rain_part}"
             line += f" • {wind_str}"
-            L += [f"<b>{label}:</b>", line, ""]
+            periods.append({"label": label, "line": line})
         joke = _joke_outfit(s["city"], d["temperature_2m_max"][0], d["precipitation_probability_max"][0] or 0,
                             d["windspeed_10m_max"][0] or 0, DESC.get(d["weathercode"][0], ""), "сегодня")
-        if joke:
-            L.append(esc(joke))
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
-        await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
+        msg = weather_ui.full_forecast(header, periods, joke)
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
         return
 
     if mode in ("today", "tomorrow"):
@@ -382,30 +382,29 @@ async def send_weather(bot, cid, mode="today"):
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
 
-        L = [f"<b>{esc(header)}</b>", ""]
-        L += _weather_main_lines(icon, tmax, rain, rain_mm, rain_when, wind_ms)
+        main_lines = _weather_main_lines(icon, tmax, rain, rain_mm, rain_when, wind_ms)
+        alert = ""
+        fact_title = ""
+        fact = ""
 
         if mode == "tomorrow":
             desc = DESC.get(code, "")
             cc = s.get("cc", "")
             country = s.get("country", "")
             alert = storm_alert(wind_ms, code, rain, rain_mm, cc=cc)
-            if alert:
-                # экстремальная погода: показываем угрозу, метео-факт блокируется
-                L += ["", alert]
-            else:
+            if not alert:
                 date_lbl = header.split("•")[1].strip() if "•" in header else ""
                 mf = _meteo_fact(s["city"], tmax, rain, wind_ms, desc, date_lbl,
                                 country=country, cc=cc,
                                 lat=s["lat"], lon=s["lon"], tz=str(TZ))
                 if mf:
-                    L += ["", "🌡️ <b>Метео-факт</b>", esc(mf)]
+                    fact_title = "Метео-факт"
+                    fact = mf
         else:
             fact = _world_fact()
-            if fact:
-                L += ["", esc(fact)]
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
-        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=kb)
+        msg = weather_ui.day_forecast(header, main_lines, alert=alert, fact_title=fact_title, fact=fact)
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
         return
 
     if mode == "tomorrow_plain":
@@ -425,10 +424,10 @@ async def send_weather(bot, cid, mode="today"):
         desc = DESC.get(code, "")
         cc = s.get("cc", "")
         alert = storm_alert(wind_ms, code, rain, rain_mm, cc=cc)
-        L = [f"<b>{esc(header)}</b>", ""]
-        L += _weather_main_lines(icon, tmax, rain, rain_mm, rain_when, wind_ms)
+        main_lines = _weather_main_lines(icon, tmax, rain, rain_mm, rain_when, wind_ms)
+        fact = ""
         if alert:
-            L += ["", alert]
+            pass
         else:
             try:
                 rain_desc = f"дождь {rain:.0f}%{rain_when}" if _rain_real(rain, rain_mm) else "без осадков"
@@ -440,10 +439,11 @@ async def send_weather(bot, cid, mode="today"):
                     150, 0.6, tier="cheap", module="weather"
                 ).strip()
                 if summary:
-                    L += ["", "🌡️ <b>Метео-итог</b>", esc(_finish_sentence(cap_sentence(summary)))]
+                    fact = _finish_sentence(cap_sentence(summary))
             except Exception:
                 pass
-        await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML")
+        msg = weather_ui.day_forecast(header, main_lines, alert=alert, fact_title="Метео-итог", fact=fact)
+        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
         return
 
     # week/week_plain: компактный формат — одна строка на день/группу
@@ -530,7 +530,7 @@ async def send_weather(bot, cid, mode="today"):
 
     abbrev_map = {dd["abbrev"]: dd for dd in day_data}
 
-    L = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(s['city'])} {flag}</b>", ""]
+    ui_groups = []
     for grp in groups:
         abbrevs = grp.get("abbrevs") or []
         desc = (grp.get("desc") or "").strip()
@@ -543,13 +543,11 @@ async def send_weather(bot, cid, mode="today"):
         tmin_g, tmax_g = min(tmaxes), max(tmaxes)
         temp_str = f"+{tmin_g:.0f}…{tmax_g:.0f}°C" if tmax_g - tmin_g > 1 else f"до {tmax_g:+.0f}°C"
         day_label = abbrevs[0] if len(abbrevs) == 1 else f"{abbrevs[0]}-{abbrevs[-1]}"
-        L.append(f"{icon} {day_label} — {esc(desc)}, {temp_str}")
-
-    if summary:
-        L += ["", "🌡️ <b>Метео-итог</b>", esc(_finish_sentence(cap_sentence(summary)))]
+        ui_groups.append({"icon": icon, "label": day_label, "desc": desc, "temp": temp_str})
 
     kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="a_plany")]])
-    await bot.send_message(chat_id=cid, text="\n".join(L).strip(), parse_mode="HTML", reply_markup=kb)
+    msg = weather_ui.week_forecast(rng, s["city"], flag, ui_groups, summary)
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=kb)
 
 
 # ---------- смена города ----------
