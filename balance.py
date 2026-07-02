@@ -11,7 +11,6 @@ _log = logging.getLogger(__name__)
 import ai
 import rerank
 import util
-from util import esc, cap_sentence
 import verify
 import secure
 from ui import balance as balance_ui
@@ -1170,23 +1169,13 @@ async def send_daycheck(bot, cid):
     store.challenge_state.pop(cid, None)   # фикс: ответ не уйдёт в Обратный перевод
     store.game_state.pop(cid, None)
     worries = store.get_list(config.WORRIES_KEY, cid)
-    lines = ["📓 <b>Дневник тревог</b>", "",
-             "Сюда выгружай всё, что крутится в голове. Не анализируй - просто запиши.",
-             "Каждую тревогу с новой строки. Вечером проверим, что было фактами, а что шумом.", ""]
-    if worries:
-        lines.append("<b>Тревоги за сегодня:</b>")
-        for w in worries:
-            lines.append(f"• {esc(w['text'])}")
-        lines.append("")
-        lines.append("Напиши новые мысли сообщением или очисти список 👇")
-    else:
-        lines.append("Пока пусто. Напиши тревоги одним сообщением.")
+    msg = balance_ui.worries_diary(worries)
     store.pending_input[cid] = "worry"
     rows = []
     if worries:
         rows.append([InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_close")])
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML",
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode,
                            reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_evening_review(bot, cid):
@@ -1197,8 +1186,8 @@ async def send_evening_review(bot, cid):
     all_worries = store.get_list(config.WORRIES_KEY, cid)
     worries = [w for w in all_worries if w.get("date", today) == today]
     if not worries:
-        await bot.send_message(chat_id=cid, parse_mode="HTML",
-            text="🥸 <b>Вечерний разбор</b>\n\nСегодня тревог не записано. Если что-то крутится - выгрузи сейчас, каждую с новой строки.")
+        msg = balance_ui.evening_review_empty()
+        await bot.send_message(chat_id=cid, parse_mode=msg.parse_mode, text=msg.text)
         store.pending_input[cid] = "worry"
         return
     wlist = "\n".join(f"- {w['text']}" for w in worries)
@@ -1214,22 +1203,13 @@ async def send_evening_review(bot, cid):
     except Exception as e:
         _log.warning("send_evening_review: LLM failed, analysis empty: %s", e)
         d = {}
-    L = ["🥸 <b>Вечерний разбор</b>", "", "<b>Сегодня тебя беспокоили:</b>"]
     items = d.get("items") or []
-    for idx, w in enumerate(worries):
-        L.append(f"• {esc(w['text'])}")
-        note = ""
-        if idx < len(items) and isinstance(items[idx], dict):
-            note = (items[idx].get("note") or "").strip()
-        if note:
-            L.append(f"<i>{esc(note)}</i>")
     summary = (d.get("summary") or "").strip()
-    if summary:
-        L += ["", "<b>Итог дня:</b>", esc(cap_sentence(summary))]
+    msg = balance_ui.evening_review(worries, items, summary)
     rows = [
         [InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")],
     ]
-    await bot.send_message(chat_id=cid, text="\n".join(L), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=InlineKeyboardMarkup(rows))
 
 async def worry_clear_all(bot, cid):
     cid = str(cid)
@@ -1238,7 +1218,8 @@ async def worry_clear_all(bot, cid):
         summary = f"Разобрано тревог: {len(worries)}"
         store.add_to_list(config.DIARY_KEY, cid, {"date": datetime.now(TZ).strftime("%d.%m"), "text": summary})
     store.set_list(config.WORRIES_KEY, cid, [])
-    await bot.send_message(chat_id=cid, text="✅ Дневник тревог очищен. Приятного настроения!")
+    msg = balance_ui.worries_cleared()
+    await bot.send_message(chat_id=cid, text=msg.text)
 
 async def save_worries(bot, cid, text):
     cid = str(cid)
@@ -1246,7 +1227,8 @@ async def save_worries(bot, cid, text):
     new = [{"text": w.strip(), "status": "pending", "date": today} for w in text.split("\n") if w.strip()]
     existing = store.get_list(config.WORRIES_KEY, cid)
     store.set_list(config.WORRIES_KEY, cid, existing + new)
-    await bot.send_message(chat_id=cid, text=f"📝 Записал в дневник тревоги: +{len(new)}. Вечером проверим, что реально случилось.")
+    msg = balance_ui.worries_saved(len(new))
+    await bot.send_message(chat_id=cid, text=msg.text)
 
 
 _MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("◀️ Назад", "m_balance")]])

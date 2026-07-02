@@ -265,22 +265,7 @@ def storm_alert(wind_ms, code, rain, rain_mm=None, cc=""):
         reasons.append("rain")
     if not reasons:
         return ""
-    is_nl = (cc or "").upper() == "NL"
-    L = ["⚠️ <b>Штормовое предупреждение</b>" + (" (Code Geel)" if is_nl else ""), ""]
-    if "wind" in reasons:
-        L.append(f"Ожидаются шквалы до {wind_ms:.0f} м/с. Закрепи велосипед, убери лёгкие предметы с балкона.")
-        if is_nl:
-            L.append("Высокий риск задержек и отмен поездов NS - ветки на путях парализуют движение. Проверь приложение NS.")
-        else:
-            L.append("Возможны задержки транспорта из-за ветра. Заложи время на дорогу.")
-    if "rain" in reasons:
-        if is_nl:
-            L.append("Сильный дождь и риск подтоплений. Сверься с Buienradar перед выходом.")
-        else:
-            L.append("Сильный дождь и риск подтоплений. Проверь прогноз осадков перед выходом.")
-    if "snow" in reasons:
-        L.append("Снег и гололёд. Осторожно на дорогах, заложи время на дорогу.")
-    return "\n".join(L)
+    return weather_ui.storm_alert(reasons, wind_ms, is_nl=(cc or "").upper() == "NL").text
 
 def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="",
                 country="", cc="", lat=None, lon=None, tz="UTC"):
@@ -613,8 +598,8 @@ async def set_city_text(bot, cid, name, show_brief=True):
                     break
         if not res:
             store.pending_input[str(cid)] = "setcity"
-            await bot.send_message(chat_id=cid,
-                text=f"😕 Не нашёл город: {raw}.\n\n🌍 Проверь написание и пришли название ещё раз.")
+            msg = weather_ui.city_not_found(raw)
+            await bot.send_message(chat_id=cid, text=msg.text)
             return
         c = res[0]
         country = c.get("country", "")
@@ -638,8 +623,8 @@ async def set_city_text(bot, cid, name, show_brief=True):
             myday.reset_day_cache(cid)
         except Exception:
             pass
-        await bot.send_message(chat_id=cid, text=f"✅ Готово. Город переключён на {city_name}"
-                                                 + (f", {country}." if country else "."))
+        msg = weather_ui.city_changed(city_name, country)
+        await bot.send_message(chat_id=cid, text=msg.text)
         # сразу показываем обновлённую сводку "Мой день" (не во время онбординга)
         if show_brief:
             try:
@@ -672,7 +657,8 @@ async def location_handler(update, context):
         myday.reset_day_cache(cid)
     except Exception:
         pass
-    await update.message.reply_text(f"Готово. Ты находишься в городе {city}" + (f", {country}." if country else "."))
+    msg = weather_ui.location_changed(city, country)
+    await update.message.reply_text(msg.text)
     try:
         await send_weather(context.bot, cid, "today")
     except Exception:

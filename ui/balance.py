@@ -1,6 +1,8 @@
 import re
 
 from .builder import MessageBuilder
+from .builder import MessageSpec
+from util import esc, cap_sentence
 
 
 def clean_card_text(value):
@@ -40,3 +42,54 @@ def entity_card(title, summary="", quote="", bullets=None, final="", bullet_labe
     msg = b.build()
     msg.text = msg.text.rstrip()
     return msg
+
+
+def worries_diary(worries):
+    lines = [
+        "📓 <b>Дневник тревог</b>",
+        "",
+        "Сюда выгружай всё, что крутится в голове. Не анализируй - просто запиши.",
+        "Каждую тревогу с новой строки. Вечером проверим, что было фактами, а что шумом.",
+        "",
+    ]
+    if worries:
+        lines.append("<b>Тревоги за сегодня:</b>")
+        for worry in worries:
+            lines.append(f"• {esc(worry['text'])}")
+        lines += ["", "Напиши новые мысли сообщением или очисти список 👇"]
+    else:
+        lines.append("Пока пусто. Напиши тревоги одним сообщением.")
+    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+
+
+def evening_review_empty():
+    return MessageSpec(
+        text=(
+            "🥸 <b>Вечерний разбор</b>\n\n"
+            "Сегодня тревог не записано. Если что-то крутится - выгрузи сейчас, каждую с новой строки."
+        ),
+        parse_mode="HTML",
+    )
+
+
+def evening_review(worries, items=None, summary=""):
+    lines = ["🥸 <b>Вечерний разбор</b>", "", "<b>Сегодня тебя беспокоили:</b>"]
+    items = items or []
+    for idx, worry in enumerate(worries):
+        lines.append(f"• {esc(worry['text'])}")
+        note = ""
+        if idx < len(items) and isinstance(items[idx], dict):
+            note = (items[idx].get("note") or "").strip()
+        if note:
+            lines.append(f"<i>{esc(note)}</i>")
+    if summary:
+        lines += ["", "<b>Итог дня:</b>", esc(cap_sentence(summary))]
+    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+
+
+def worries_cleared():
+    return MessageSpec(text="✅ Дневник тревог очищен. Приятного настроения!")
+
+
+def worries_saved(count):
+    return MessageSpec(text=f"📝 Записал в дневник тревоги: +{count}. Вечером проверим, что реально случилось.")
