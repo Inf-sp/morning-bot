@@ -2,7 +2,9 @@ import asyncio
 
 import pytest
 
+import config
 import leisure
+import store
 
 
 @pytest.mark.unit
@@ -223,6 +225,67 @@ def test_ticketmaster_events_for_artist_does_not_cache_on_http_error(monkeypatch
 
 
 @pytest.mark.unit
+def test_ticketmaster_get_retries_on_429_and_succeeds(monkeypatch):
+    """Регрессия: с большими списками артистов бесплатный тариф Ticketmaster отдавал 429
+    почти на все параллельные запросы, и это тихо трактовалось как 'у артиста нет концертов'."""
+    monkeypatch.setattr(leisure.time, "sleep", lambda *_: None)  # не ждать реальные задержки в тесте
+
+    calls = {"n": 0}
+
+    class Resp:
+        def __init__(self, status_code):
+            self.status_code = status_code
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise Exception(f"HTTP {self.status_code}")
+
+        def json(self):
+            return {"ok": True}
+
+    def fake_get(url, params=None, timeout=None):
+        calls["n"] += 1
+        return Resp(429) if calls["n"] < 3 else Resp(200)
+
+    import requests
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    r = leisure._ticketmaster_get("https://app.ticketmaster.com/discovery/v2/events.json", {})
+
+    assert r.status_code == 200
+    assert calls["n"] == 3  # 2 попытки словили 429, третья прошла
+
+
+@pytest.mark.unit
+def test_ticketmaster_get_does_not_retry_on_non_rate_limit_error(monkeypatch):
+    """Сетевые/прочие ошибки не должны запускать retry-цикл с задержками - это не поможет
+    и просто блокирует поток на секунды впустую."""
+    sleep_calls = []
+    monkeypatch.setattr(leisure.time, "sleep", lambda d: sleep_calls.append(d))
+
+    class FailingResp:
+        status_code = 404
+
+        def raise_for_status(self):
+            raise Exception("HTTP 404")
+
+    import requests
+    monkeypatch.setattr(requests, "get", lambda *a, **k: FailingResp())
+
+    with pytest.raises(Exception):
+        leisure._ticketmaster_get("https://app.ticketmaster.com/discovery/v2/events.json", {})
+
+    assert sleep_calls == []  # ни одной задержки - сразу пробросили ошибку
+
+
+@pytest.mark.unit
+def test_ticketmaster_events_many_limits_concurrency(monkeypatch):
+    """Параллелизм запросов к Ticketmaster ограничен _TICKETMASTER_CONCURRENCY,
+    иначе список из 30+ артистов заваливает бесплатный тариф API."""
+    assert leisure._TICKETMASTER_CONCURRENCY._value == 5
+
+
+@pytest.mark.unit
 def test_concert_genre_prefers_subgenre_over_genre():
     e = {"classifications": [{"genre": {"name": "Rock"}, "subGenre": {"name": "Alternative Rock"}}]}
     assert leisure._concert_genre(e) == "Alternative Rock"
@@ -267,6 +330,111 @@ class _CapturingBot:
 
     async def send_message(self, **kw):
         self.sent.append(kw)
+
+
+@pytest.mark.unit
+def test_concerts_cache_set_and_get_roundtrip():
+    cid = "cache-cid-1"
+    events = [_tm_event("Romy", "2026-08-21", city="Biddinghuizen", event_id="1")]
+
+    leisure._concerts_cache_set(cid, "NL", events)
+
+    assert leisure._concerts_cache_get(cid, "NL") == events
+
+
+@pytest.mark.unit
+def test_concerts_cache_get_returns_none_when_country_differs():
+    cid = "cache-cid-2"
+    leisure._concerts_cache_set(cid, "NL", [_tm_event("Romy", "2026-08-21")])
+
+    assert leisure._concerts_cache_get(cid, "DE") is None
+
+
+@pytest.mark.unit
+def test_concerts_cache_get_returns_none_when_stale(monkeypatch):
+    cid = "cache-cid-3"
+    leisure._concerts_cache_set(cid, "NL", [_tm_event("Romy", "2026-08-21")])
+
+    import time
+    future = time.time() + leisure._CONCERTS_CACHE_TTL + 1
+    monkeypatch.setattr(time, "time", lambda: future)
+
+    assert leisure._concerts_cache_get(cid, "NL") is None
+
+
+@pytest.mark.unit
+def test_concerts_cache_get_returns_none_when_missing():
+    assert leisure._concerts_cache_get("cache-cid-missing", "NL") is None
+
+
+@pytest.mark.unit
+def test_find_concerts_uses_cache_without_hitting_api(monkeypatch):
+    cid = "cache-cid-4"
+    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
+    monkeypatch.setattr(leisure, "_ensure_artists", lambda cid: ["Romy"])
+    leisure._concerts_cache_set(cid, "NL", [
+        _tm_event("Romy", "2026-08-21", city="Biddinghuizen", event_id="1") | {"url": "https://tm/romy"},
+    ])
+
+    called = {"n": 0}
+
+    async def should_not_be_called(*a, **kw):
+        called["n"] += 1
+        return []
+
+    monkeypatch.setattr(leisure, "_ticketmaster_events_many", should_not_be_called)
+    monkeypatch.setattr(leisure, "_eventbrite_events_many", should_not_be_called)
+
+    bot = _CapturingBot()
+    asyncio.run(leisure.find_concerts(bot, cid))
+
+    assert called["n"] == 0
+    assert "Romy" in bot.sent[0]["text"]
+
+
+@pytest.mark.unit
+def test_find_concerts_refreshes_cache_when_stale(monkeypatch):
+    cid = "cache-cid-5"
+    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
+    monkeypatch.setattr(leisure, "_ensure_artists", lambda cid: ["Romy"])
+
+    async def fake_many(artists, cc, start_dt="", end_dt="", size=3, limit=40):
+        return [_tm_event("Romy", "2026-08-21", city="Biddinghuizen", event_id="1")]
+
+    monkeypatch.setattr(leisure, "_ticketmaster_events_many", fake_many)
+
+    bot = _CapturingBot()
+    asyncio.run(leisure.find_concerts(bot, cid))
+
+    assert leisure._concerts_cache_get(cid, "NL") is not None
+
+
+@pytest.mark.unit
+def test_refresh_concerts_cache_populates_cache(monkeypatch):
+    cid = "cache-cid-6"
+    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
+    monkeypatch.setattr(leisure, "_ensure_artists", lambda cid: ["Romy"])
+
+    async def fake_many(artists, cc, start_dt="", end_dt="", size=3, limit=40):
+        return [_tm_event("Romy", "2026-09-01", city="Amsterdam", event_id="1")]
+
+    monkeypatch.setattr(leisure, "_ticketmaster_events_many", fake_many)
+
+    asyncio.run(leisure.refresh_concerts_cache(cid))
+
+    cached = leisure._concerts_cache_get(cid, "NL")
+    assert cached and cached[0]["_artist"] == "Romy"
+
+
+@pytest.mark.unit
+def test_refresh_concerts_cache_skips_users_without_artists(monkeypatch):
+    cid = "cache-cid-7"
+    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
+    monkeypatch.setattr(leisure, "_ensure_artists", lambda cid: [])
+
+    asyncio.run(leisure.refresh_concerts_cache(cid))
+
+    assert leisure._concerts_cache_get(cid, "NL") is None
 
 
 @pytest.mark.unit
@@ -338,6 +506,178 @@ def test_eventbrite_events_does_not_cache_on_http_error(monkeypatch):
 
     assert events == []
     assert cached_calls == []
+
+
+@pytest.mark.unit
+def test_ticketmaster_city_events_sends_classification_and_keyword(monkeypatch):
+    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
+    monkeypatch.setattr(leisure.util, "ttl_get", lambda *a, **k: None)
+    monkeypatch.setattr(leisure.util, "ttl_set", lambda ns, key, value: value)
+
+    captured = {}
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"_embedded": {"events": []}}
+
+    def fake_get(url, params=None, timeout=None):
+        captured.update(params)
+        return Resp()
+
+    import requests
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    leisure._ticketmaster_city_events("NL", city="Amsterdam", classification_name="arts&theatre",
+                                       keyword="festival", size=15)
+
+    assert captured["countryCode"] == "NL"
+    assert captured["city"] == "Amsterdam"
+    assert captured["classificationName"] == "arts&theatre"
+    assert captured["keyword"] == "festival"
+    assert captured["size"] == 15
+
+
+@pytest.mark.unit
+def test_ticketmaster_city_events_does_not_cache_on_http_error(monkeypatch):
+    class FailingResp:
+        def raise_for_status(self):
+            raise Exception("HTTP 500")
+
+    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
+    monkeypatch.setattr(leisure.util, "ttl_get", lambda *a, **k: None)
+    cached_calls = []
+    monkeypatch.setattr(leisure.util, "ttl_set", lambda ns, key, value: cached_calls.append(value) or value)
+    import requests
+    monkeypatch.setattr(requests, "get", lambda *a, **k: FailingResp())
+
+    events = leisure._ticketmaster_city_events("NL", classification_name="music")
+
+    assert events == []
+    assert cached_calls == []
+
+
+@pytest.mark.unit
+def test_afisha_genre_matches_comedy_requires_comedy_marker():
+    comedy_event = {"classifications": [{"genre": {"name": "Comedy"}}]}
+    theatre_event = {"classifications": [{"genre": {"name": "Theatre"}}]}
+    assert leisure._afisha_genre_matches(comedy_event, "comedy") is True
+    assert leisure._afisha_genre_matches(theatre_event, "comedy") is False
+
+
+@pytest.mark.unit
+def test_afisha_genre_matches_exhibitions_excludes_stage_genres():
+    exhibition_event = {"classifications": [{"genre": {"name": "Miscellaneous"}}]}
+    theatre_event = {"classifications": [{"genre": {"name": "Theatre"}}]}
+    assert leisure._afisha_genre_matches(exhibition_event, "exhibitions") is True
+    assert leisure._afisha_genre_matches(theatre_event, "exhibitions") is False
+
+
+@pytest.mark.unit
+def test_afisha_genre_matches_concerts_category_always_true():
+    assert leisure._afisha_genre_matches({}, "concerts") is True
+    assert leisure._afisha_genre_matches({}, "festivals") is True
+
+
+@pytest.mark.unit
+def test_find_afisha_category_renders_category_events(monkeypatch):
+    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
+
+    async def fake_category_events(category_key, cc, city, start_dt, end_dt, size=10):
+        return [_tm_event("Cirque du Soleil", "2026-09-10", city="Amsterdam", event_id="1")
+                | {"url": "https://ticketmaster.com/cirque"}]
+
+    monkeypatch.setattr(leisure, "_afisha_category_events", fake_category_events)
+
+    bot = _CapturingBot()
+    asyncio.run(leisure.find_afisha_category(bot, "cid-afisha-1", "theatre"))
+
+    sent = bot.sent[0]
+    assert "Cirque du Soleil" in sent["text"]
+    assert "Amsterdam" in sent["text"]
+    assert "Театры" in sent["text"]
+    link_entities = [e for e in sent["entities"] if e.type == "text_link"]
+    assert any(e.url == "https://ticketmaster.com/cirque" for e in link_entities)
+
+
+@pytest.mark.unit
+def test_find_afisha_category_unknown_key_does_nothing(monkeypatch):
+    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
+    bot = _CapturingBot()
+    asyncio.run(leisure.find_afisha_category(bot, "cid-afisha-2", "not-a-category"))
+    assert bot.sent == []
+
+
+@pytest.mark.unit
+def test_send_city_digest_skips_empty_categories_and_ranks_concerts(monkeypatch):
+    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
+    monkeypatch.setattr(leisure, "_ensure_artists", lambda cid: ["Romy"])
+
+    async def fake_many(artists, cc, start_dt="", end_dt="", size=3, limit=40):
+        return [_tm_event("Romy", "2026-09-01", city="Amsterdam", event_id="1")]
+
+    async def fake_category_events(category_key, cc, city, start_dt, end_dt, size=10):
+        if category_key == "theatre":
+            return [_tm_event("Hamlet", "2026-09-05", city="Amsterdam", event_id="2")]
+        return []  # фестивали/стендап/выставки пусты
+
+    monkeypatch.setattr(leisure, "_ticketmaster_events_many", fake_many)
+    monkeypatch.setattr(leisure, "_afisha_category_events", fake_category_events)
+
+    bot = _CapturingBot()
+    asyncio.run(leisure.send_city_digest(bot, "cid-afisha-3"))
+
+    text = bot.sent[0]["text"]
+    assert "Romy" in text
+    assert "Hamlet" in text
+    assert "Фестивали" not in text  # пустая категория не рендерится
+    assert "Стендап" not in text
+    assert "Выставки" not in text
+
+
+@pytest.mark.unit
+def test_send_city_digest_uses_llm_ranking_when_many_concerts(monkeypatch):
+    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
+    monkeypatch.setattr(leisure, "_ensure_artists", lambda cid: ["A", "B", "C", "D", "E"])
+
+    async def fake_many(artists, cc, start_dt="", end_dt="", size=3, limit=40):
+        return [_tm_event(a, f"2026-09-0{i+1}", city="Amsterdam", event_id=str(i))
+                for i, a in enumerate(["A", "B", "C", "D", "E"])]
+
+    async def fake_category_events(category_key, cc, city, start_dt, end_dt, size=10):
+        return []
+
+    async def fake_rank(events, artists):
+        return events[:2]  # LLM выбрал 2 лучших
+
+    monkeypatch.setattr(leisure, "_ticketmaster_events_many", fake_many)
+    monkeypatch.setattr(leisure, "_afisha_category_events", fake_category_events)
+    monkeypatch.setattr(leisure, "_rank_concerts_by_taste", fake_rank)
+
+    bot = _CapturingBot()
+    asyncio.run(leisure.send_city_digest(bot, "cid-afisha-4"))
+
+    text = bot.sent[0]["text"]
+    assert text.count("🎫 Концерты") == 1
+    # LLM вернул только A и B - остальные три артиста не должны попасть в дайджест
+    assert "A" in text and "B" in text
+    assert "C" not in text and "D" not in text and "E" not in text
+
+
+@pytest.mark.unit
+def test_rank_concerts_by_taste_falls_back_on_llm_error(monkeypatch):
+    events = [_tm_event("Romy", "2026-09-01"), _tm_event("Other", "2026-09-02")]
+
+    async def failing_llm(*a, **kw):
+        raise Exception("LLM down")
+
+    monkeypatch.setattr(leisure.ai, "allm_json", failing_llm)
+
+    result = asyncio.run(leisure._rank_concerts_by_taste(events, ["Romy"]))
+
+    assert result == events[:3]
 
 
 def test_book_text_uses_editorial_structure():

@@ -73,6 +73,7 @@ MOTIV_LAGOM_SEEN_KEY = "motiv_lagom_seen.json"
 MICRO_TOPICS_KEY = "micro_topics.json"
 MICRO_LESSONS_KEY = "micro_lessons.json"
 MICRO_PROGRESS_KEY = "micro_progress.json"
+CONCERTS_CACHE_KEY = "concerts_cache.json"  # {cid: {"ts": epoch, "cc": "NL", "events": [...]}}, обновляется по вс
 COST_LOG_KEY = "cost_log.json"     # лог LLM-вызовов для сводки расходов
 ALLOWED_CIDS_KEY = "allowed_cids.json"    # список разрешённых chat_id (мульти-юзер)
 PENDING_INVITES_KEY = "pending_invites.json"  # одноразовые инвайт-коды {code: ts}

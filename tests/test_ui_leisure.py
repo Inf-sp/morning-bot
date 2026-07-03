@@ -315,3 +315,58 @@ def test_concerts_list_empty_shows_hint():
     msg = leisure.concerts_list("Концерты в Нидерландах", [])
 
     assert "ничего не нашёл" in msg.text
+
+
+@pytest.mark.unit
+def test_afisha_category_list_renders_title_place_date_and_hidden_link():
+    msg = leisure.afisha_category_list("Театры в Нидерландах", [{
+        "artist": "Hamlet", "place": "🇳🇱 Amsterdam", "date": "5 сентября 2026",
+        "url": "https://ticketmaster.com/hamlet",
+    }])
+
+    assert "Hamlet" in msg.text
+    assert "Amsterdam" in msg.text
+    assert "5 сентября 2026" in msg.text
+    assert "https://ticketmaster.com/hamlet" not in msg.text
+    link_entities = [e for e in msg.entities if e.type == "text_link"]
+    assert any(e.url == "https://ticketmaster.com/hamlet" for e in link_entities)
+
+
+@pytest.mark.unit
+def test_afisha_category_list_empty_shows_hint():
+    msg = leisure.afisha_category_list("Театры в Нидерландах", [])
+
+    assert "ничего не нашёл" in msg.text
+
+
+@pytest.mark.unit
+def test_city_digest_renders_only_non_empty_categories():
+    msg = leisure.city_digest("Амстердам", [
+        {"label": "🎫 Концерты", "events": [
+            {"artist": "Romy", "place": "🇳🇱 Amsterdam", "date": "1 сентября 2026",
+             "url": "https://ticketmaster.com/romy"},
+        ]},
+        {"label": "🎪 Фестивали", "events": []},
+        {"label": "🎭 Театры", "events": [
+            {"artist": "Hamlet", "place": "🇳🇱 Amsterdam", "date": "5 сентября 2026", "url": ""},
+        ]},
+    ])
+
+    assert "Амстердам" in msg.text
+    assert "🎫 Концерты" in msg.text
+    assert "Romy" in msg.text
+    assert "🎭 Театры" in msg.text
+    assert "Hamlet" in msg.text
+    assert "🎪 Фестивали" not in msg.text  # пустая категория не рендерится
+    link_entities = [e for e in msg.entities if e.type == "text_link"]
+    assert any(e.url == "https://ticketmaster.com/romy" for e in link_entities)
+
+
+@pytest.mark.unit
+def test_city_digest_all_empty_shows_hint():
+    msg = leisure.city_digest("Амстердам", [
+        {"label": "🎫 Концерты", "events": []},
+        {"label": "🎭 Театры", "events": []},
+    ])
+
+    assert "ничего не нашёл" in msg.text

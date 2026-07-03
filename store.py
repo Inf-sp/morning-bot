@@ -183,7 +183,7 @@ _PER_USER_KEYS = {
     config.LAGOM_KEY, config.DIARY_KEY, config.CITY_FACTS_KEY, config.LIFEHACK_KEY,
     config.FRIDGE_KEY, config.MY_RECIPES_KEY, config.LEFTOVER_RECIPES_SEEN_KEY, config.QUOTE_AUTHORS_KEY,
     config.MOTIV_LAGOM_SEEN_KEY, config.MICRO_TOPICS_KEY, config.MICRO_LESSONS_KEY,
-    config.MICRO_PROGRESS_KEY,
+    config.MICRO_PROGRESS_KEY, config.CONCERTS_CACHE_KEY,
 }
 
 def purge_user(cid):

@@ -251,6 +251,10 @@ async def answer_callback(update, context):
                          "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
                          "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
                 await _ack(q); await leisure.find_concerts(bot, cid, act.split("_")[1])
+            elif act == "city_digest":
+                await _ack(q); await leisure.send_city_digest(bot, cid)
+            elif act.startswith("afisha_"):
+                await _ack(q); await leisure.find_afisha_category(bot, cid, act[len("afisha_"):], "home")
             elif act == "listen":
                 await _ack(q); await leisure.send_listen(bot, cid)
             elif act == "listen_no":
@@ -665,6 +669,17 @@ async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logging.exception("job_checkin_evening failed for cid=%s", cid)
 
+async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
+    """Прогревает недельный кэш концертов перед рассылкой «Афиша недели» (10:00 вс),
+    чтобы сама рассылка и последующие интерактивные «Концерты» читали кэш, а не ждали Ticketmaster."""
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "weekly_events"):
+            continue
+        try:
+            await leisure.refresh_concerts_cache(cid)
+        except Exception:
+            logging.exception("job_refresh_concerts_cache failed for cid=%s", cid)
+
 async def job_weekly_events(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "weekly_events"):
@@ -767,6 +782,7 @@ def main():
     jq.run_daily(job_morning_brief,   time=_t("08:30"), days=tuple(range(7)))   # Мой день без кнопок
     jq.run_daily(job_weather_warn,    time=_t("08:45"), days=tuple(range(7)))
     jq.run_daily(job_lagom,           time=_t("09:00"), days=tuple(range(7)))
+    jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(6,))      # вс, прогрев кэша концертов
     jq.run_daily(job_weekly_events,   time=_t("10:00"), days=(6,))             # вс
     jq.run_daily(job_daily_words,     time=_t("11:00"), days=tuple(range(7)))
     jq.run_daily(job_live_lang,       time=_t("16:30"), days=tuple(range(7)))
