@@ -1262,7 +1262,7 @@ _ONESHOT = {}
 async def handle_callback(bot, cid, q, data):
     # Кулинарный радар
     if data == "as_food":
-        await util.ack_loading(q); await send_recipe(bot, cid, "обычное блюдо"); return
+        await util.ack_loading(q); await send_recipe(bot, cid, "обычное блюдо"); await util.clear_loading(q); return
 
 # дневник тревоги
     if data == "as_daycheck":
@@ -1275,11 +1275,13 @@ async def handle_callback(bot, cid, q, data):
         try:
             out, entities = _gen_motiv(cid)
         except Exception as e:
+            await util.clear_loading(q)
             await verify.safe_error(bot, cid, e); return
         store.last_source[str(cid)] = "Баланс · Мотивация"
         store.last_answer[str(cid)] = out
         store.last_surface[str(cid)] = "card"
         await bot.send_message(chat_id=cid, text=out, entities=entities, reply_markup=_MOTIV_KB)
+        await util.clear_loading(q)
         return
     # одноразовая генерация (прочее)
     if data in _ONESHOT:
@@ -1288,10 +1290,12 @@ async def handle_callback(bot, cid, q, data):
         try:
             out = gen(cid)
         except Exception as e:
+            await util.clear_loading(q)
             await verify.safe_error(bot, cid, e); return
         store.last_action[str(cid)] = ("oneshot", data)
         store.last_source[str(cid)] = {"as_motiv": "Здоровье · Мотивация"}.get(data, "Ассистент")
         await _send(bot, cid, out, kb=_ans_kb(lbl, cb))
+        await util.clear_loading(q)
         return
     # врач
     if data == "as_doctor":
@@ -1323,7 +1327,7 @@ async def handle_callback(bot, cid, q, data):
             text="✏️ Напиши продукты через запятую или с новой строки — добавлю в список.",
             reply_markup=_back_kb()); return
     if data == "as_fridge_cook":
-        await util.ack_loading(q); await send_fridge_recipe(bot, cid); return
+        await util.ack_loading(q); await send_fridge_recipe(bot, cid); await util.clear_loading(q); return
     if data == "as_fridge_clean":
         import cleanup
         await cleanup.open_cleanup(bot, cid, "fridge"); return

@@ -15,8 +15,8 @@ def _bold_texts(msg):
 @pytest.mark.unit
 def test_settings_core_messages():
     notif = settings.notifications()
-    assert "🔔 Уведомления" in _bold_texts(notif)
-    assert notif.text == "🔔 Уведомления\nНажми для включения/выключения. 🟢 — включено."
+    assert "Рассылки" in _bold_texts(notif)
+    assert notif.text == "Рассылки\nНажми для включения/выключения. 🟢 — включено."
 
     prio = settings.priorities("здоровье")
     assert "Сейчас: здоровье" in prio.text

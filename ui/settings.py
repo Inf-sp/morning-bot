@@ -5,7 +5,7 @@ ADMIN_RUN_NOTIF_TITLE = "Превью рассылки"
 
 def notifications():
     b = MessageBuilder()
-    b.section("🔔 Уведомления")
+    b.section("Рассылки")
     b.line("Нажми для включения/выключения. 🟢 — включено.")
     return b.build_stripped()
 

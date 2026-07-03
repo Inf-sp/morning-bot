@@ -12,19 +12,19 @@ _log = logging.getLogger(__name__)
 
 SETTINGS_KEY = "user_settings.json"
 NOTIF_TYPES = [
-    ("morning_brief",  "☀️ Утренний бриф"),
-    ("weather_warn",   "🌧 Погодное предупреждение"),
-    ("lagom_daily",    "☕️ Мотивация дня"),
-    ("recipe_daily",   "🍽️ Рецепт дня"),
-    ("checkin_day",    "🫣 Дневная разгрузка"),
-    ("evening_weather","🌆 Вечерняя погода"),
-    ("weekly_events",  "🎵 Афиша недели"),
-    ("favorite_artists","⭐ Новые концерты любимых артистов"),
-    ("weekly_forecast","🌍 Недельный прогноз"),
-    ("daily_words_nl", "🇳🇱 Нидерландский"),
-    ("daily_words_en", "🇬🇧 Английский"),
-    ("live_lang",      "💭 Живой язык"),
-    ("checkin_eve",    "🥸 Вечерний разбор"),
+    ("morning_brief",  "Утренний бриф"),
+    ("weather_warn",   "Погодное предупреждение"),
+    ("lagom_daily",    "Мотивация дня"),
+    ("recipe_daily",   "Рецепт дня"),
+    ("checkin_day",    "Дневная разгрузка"),
+    ("evening_weather","Вечерняя погода"),
+    ("weekly_events",  "Афиша недели"),
+    ("favorite_artists","Новые концерты любимых артистов"),
+    ("weekly_forecast","Недельный прогноз"),
+    ("daily_words_nl", "Нидерландский"),
+    ("daily_words_en", "Английский"),
+    ("live_lang",      "Живой язык"),
+    ("checkin_eve",    "Вечерний разбор"),
 ]
 
 PRIORITY_OPTIONS = [
@@ -871,7 +871,7 @@ async def send_notes(bot, cid):
     n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     rows = [
         [InlineKeyboardButton(f"⭐️ Ознакомиться позже ({n_fav})", callback_data="as_bucket_fav")],
-        [InlineKeyboardButton("🔔 Уведомления по расписанию", callback_data="set_notif")],
+        [InlineKeyboardButton("🔔 Рассылки по расписанию", callback_data="set_notif")],
         [
             InlineKeyboardButton("Город", callback_data="set_city"),
             InlineKeyboardButton("Приоритеты", callback_data="set_priorities"),

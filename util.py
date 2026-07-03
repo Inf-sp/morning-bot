@@ -51,6 +51,13 @@ async def ack_loading(q) -> None:
     except Exception:
         pass
 
+async def clear_loading(q) -> None:
+    """Убирает клавиатуру-индикатор загрузки после того, как готовый ответ уже отправлен новым сообщением."""
+    try:
+        await q.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
 async def send_html(bot, cid, text: str | None, reply_markup=None) -> None:
     """Одиночное сообщение в Telegram с чисткой markdown; форматирование через entities."""
     from telegram.error import BadRequest
