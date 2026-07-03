@@ -278,3 +278,40 @@ def test_leisure_clip_short_and_long_text():
 
     assert len(clipped) <= 61
     assert clipped != long_text
+
+
+@pytest.mark.unit
+def test_concerts_list_renders_artist_place_genre_price_date_and_hidden_link():
+    msg = leisure.concerts_list("Концерты в Нидерландах", [{
+        "artist": "Romy", "flag": "🇳🇱", "place": "Netherlands, Biddinghuizen",
+        "genre": "Электроника", "price": "от 35 EUR", "date": "21 августа 2026",
+        "url": "https://ticketmaster.com/romy",
+    }])
+
+    assert "Romy" in msg.text
+    assert "Netherlands, Biddinghuizen" in msg.text
+    assert "Электроника" in msg.text
+    assert "от 35 EUR" in msg.text
+    assert "21 августа 2026" in msg.text
+    assert "https://ticketmaster.com/romy" not in msg.text
+    link_entities = [e for e in msg.entities if e.type == "text_link"]
+    assert any(e.url == "https://ticketmaster.com/romy" for e in link_entities)
+
+
+@pytest.mark.unit
+def test_concerts_list_skips_missing_genre_price_and_url():
+    msg = leisure.concerts_list("Концерты в Нидерландах", [{
+        "artist": "Romy", "flag": "🇳🇱", "place": "Netherlands, Biddinghuizen",
+        "genre": "", "price": "", "date": "21 августа 2026", "url": "",
+    }])
+
+    assert "Подробнее" not in msg.text
+    assert "🎵" not in msg.text
+    assert "💶" not in msg.text
+
+
+@pytest.mark.unit
+def test_concerts_list_empty_shows_hint():
+    msg = leisure.concerts_list("Концерты в Нидерландах", [])
+
+    assert "ничего не нашёл" in msg.text

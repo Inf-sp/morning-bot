@@ -1032,6 +1032,37 @@ def _web_concert_links_for_artists(artists, country_name, limit_artists=8, per_a
                 break
     return rows
 
+_GENRE_TRANSLATIONS = {
+    "rock": "Рок", "pop": "Поп", "hip-hop/rap": "Хип-хоп", "hip hop": "Хип-хоп",
+    "electronic": "Электроника", "dance/electronic": "Электроника", "jazz": "Джаз",
+    "classical": "Классика", "r&b": "R&B", "country": "Кантри", "metal": "Метал",
+    "reggae": "Регги", "blues": "Блюз", "folk": "Фолк", "world": "Мировая музыка",
+    "alternative": "Альтернатива", "indie": "Инди", "punk": "Панк", "other": "",
+    "undefined": "",
+}
+
+def _concert_genre(e):
+    """Жанр из Ticketmaster classifications (genre/subGenre); '' если не найден или не музыка."""
+    for c in (e.get("classifications") or []):
+        genre = (c.get("genre") or {}).get("name", "")
+        sub = (c.get("subGenre") or {}).get("name", "")
+        label = sub if sub and sub.lower() not in ("other", "undefined") else genre
+        if not label or label.lower() in ("other", "undefined"):
+            continue
+        return _GENRE_TRANSLATIONS.get(label.lower(), label)
+    return ""
+
+def _concert_min_price(e):
+    """Минимальная цена из Ticketmaster priceRanges, отформатированная как '25 EUR'; '' если нет данных."""
+    ranges = e.get("priceRanges") or []
+    mins = [r.get("min") for r in ranges if isinstance(r.get("min"), (int, float))]
+    if not mins:
+        return ""
+    best = min(mins)
+    currency = (ranges[0].get("currency") or "").upper()
+    amount = int(best) if best == int(best) else round(best, 2)
+    return f"от {amount} {currency}".strip()
+
 def _concert_place_name(name, cc=""):
     cc = (cc or "").upper()
     by_cc = {
@@ -1084,32 +1115,18 @@ async def find_concerts(bot, cid, mode="home"):
     cname_place = _concert_place_name(cname, cc)
 
     from util import _MONTHS
-    events = await _ticketmaster_events_many(artists, cc, size=3, limit=40)
-    web_links = []
-    source_label = "Концерты твоих артистов"
+    from datetime import datetime, timedelta
+    now = datetime.now(config.TZ)
+    date_from = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    date_to = (now + timedelta(days=182)).strftime("%Y-%m-%dT%H:%M:%SZ")  # ~6 месяцев
+
+    events = await _ticketmaster_events_many(artists, cc, start_dt=date_from, end_dt=date_to, size=10, limit=40)
     eventbrite_country = _concert_country_search_name(cname, cc)
     if not events:
-        events = await _eventbrite_events_many(artists, eventbrite_country, size=3, limit=40)
-        if events:
-            source_label = "Концерты твоих артистов · Eventbrite"
-    if not events:
-        web_links = await asyncio.to_thread(_web_concert_links_for_artists, artists, cname, 8, 1)
-        events = await asyncio.to_thread(_ticketmaster_music_events, cc, 12)
-        source_label = "Ближайшие музыкальные события"
-    if not events:
-        events = await asyncio.to_thread(_eventbrite_events, "music concert", eventbrite_country, 12)
-        if events:
-            source_label = "Ближайшие музыкальные события · Eventbrite"
+        events = await _eventbrite_events_many(artists, eventbrite_country, size=10, limit=40)
 
     rows = [[InlineKeyboardButton("🌍 Сменить страну", callback_data="a_concerts_pick")]]
     kb = InlineKeyboardMarkup(rows)
-
-    if not events and not web_links:
-        store.last_answer[str(cid)] = f"Мероприятия в {cname_place}: ничего не нашёл."
-        await bot.send_message(chat_id=cid,
-            text=f"🎤 <b>Концерты в {esc(cname_place)}</b>\n\nСейчас ничего не нашёл. Попробуй другую страну 🌍",
-            parse_mode="HTML", reply_markup=kb)
-        return
 
     def _fmt_date(ds):
         try:
@@ -1118,37 +1135,33 @@ async def find_concerts(bot, cid, mode="home"):
         except Exception:
             return ds
 
-    lines = [f"🎤 <b>Концерты в {esc(cname_place)}</b>", ""]
-    if web_links:
-        lines += ["<b>Нашёл вне Ticketmaster</b>"]
-        for r in web_links[:8]:
-            lines.append(f"• <b>{esc(r['artist'])}</b> — {esc(r['title'])}")
-            lines.append(f"  {esc(r['url'])}")
-        lines.append("")
-    if events:
-        lines += [f"<b>{esc(source_label)}</b>", ""]
-    for e in events[:20]:
+    place_label = f"Концерты в {cname_place} — ближайшие 6 месяцев"
+    seen_artist_events = set()
+    rows_data = []
+    for e in events:
         artist = e.get("_artist", "")
-        name = e.get("name", "")
         date = e.get("dates", {}).get("start", {}).get("localDate", "")
-        ven = (e.get("_embedded", {}).get("venues") or [{}])[0]
-        vn = ven.get("name", "")
-        city = (ven.get("city") or {}).get("name", "")
-        url = e.get("url", "")
-        lines.append(f"<b>{esc(artist)}</b>")
-        if name and name.lower() != artist.lower():
-            lines.append(esc(name))
-        if vn or city:
-            lines.append(f"📍 {flag} {esc(vn)}{', ' + esc(city) if city else ''}")
-        if date:
-            lines.append(f"📅 {_fmt_date(date)}")
-        if url:
-            lines.append(f"🎟 {url}")
-        lines.append("")
-    txt = "\n".join(lines)
+        city = ((e.get("_embedded", {}).get("venues") or [{}])[0].get("city") or {}).get("name", "")
+        dedup_key = (artist.lower(), date, city.lower())
+        if dedup_key in seen_artist_events:
+            continue
+        seen_artist_events.add(dedup_key)
+
+        place = ", ".join(x for x in [eventbrite_country, city] if x)
+        rows_data.append({
+            "artist": artist,
+            "flag": flag,
+            "place": place,
+            "genre": _concert_genre(e),
+            "price": _concert_min_price(e),
+            "date": _fmt_date(date) if date else "",
+            "url": e.get("url", ""),
+        })
+
+    msg = leisure_ui.concerts_list(place_label, rows_data)
     store.last_source[str(cid)] = "Досуг · Концерты"
-    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", txt)
-    await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML", reply_markup=kb)
+    store.last_answer[str(cid)] = msg.text
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 async def send_weekly_events(bot, cid):
     """Вс 10:00 — концерты артистов пользователя + кинопремьеры ближайших дней."""

@@ -1191,6 +1191,7 @@ async def send_daycheck(bot, cid):
     worries = store.get_list(config.WORRIES_KEY, cid)
     msg = balance_ui.worries_diary(worries)
     store.pending_input[cid] = "worry"
+    settings.set_(cid, "_worry_prompt_ts", datetime.now(TZ).timestamp())
     rows = []
     if worries:
         rows.append([InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")])
@@ -1209,6 +1210,7 @@ async def send_evening_review(bot, cid):
         msg = balance_ui.evening_review_empty()
         await bot.send_message(chat_id=cid, entities=msg.entities, text=msg.text)
         store.pending_input[cid] = "worry"
+        settings.set_(cid, "_worry_prompt_ts", datetime.now(TZ).timestamp())
         return
     wlist = "\n".join(f"- {w['text']}" for w in worries)
     try:

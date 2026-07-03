@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
@@ -6,6 +7,8 @@ import learning
 import util
 from util import esc
 from ui import settings as settings_ui
+
+_log = logging.getLogger(__name__)
 
 SETTINGS_KEY = "user_settings.json"
 NOTIF_TYPES = [
@@ -199,6 +202,8 @@ async def send_scheduled_notification(bot, cid, kind):
         await _b.send_recipe_push(_NoKbBot(bot), cid)
     elif kind == "checkin_day":
         store.pending_input[str(cid)] = "worry"
+        set_(cid, "_worry_prompt_ts", datetime.now(config.TZ).timestamp())
+        _log.info("checkin_day: pending_input=worry set for cid=%s", cid)
         await bot.send_message(chat_id=cid, parse_mode="HTML",
             text="🫣 <b>Дневная разгрузка</b>\n\nСейчас не анализируй, просто выгрузи мысли.\n\n"
                  "Каждая тревога - с новой строки.\n\nВечером проверим, что было фактами, а что шумом…")

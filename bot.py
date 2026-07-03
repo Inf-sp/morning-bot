@@ -467,6 +467,7 @@ async def text_router(update, context):
     if cid in store.pending_input:
         kind = store.pending_input.pop(cid)
         if kind == "worry":
+            _log.info("worry: routed via pending_input for cid=%s", cid)
             await balance.save_worries(bot, cid, text); return
         if kind == "favorite":
             await leisure.add_fav(bot, cid, text); return
@@ -543,6 +544,14 @@ async def text_router(update, context):
         await onboard.handle_name(bot, cid, text); return
     if ob_step == "city":
         await onboard.handle_city(bot, cid, text); return
+
+    # Fallback: недавняя "Дневная разгрузка" — pending_input мог потеряться,
+    # но персистентная метка (survives рестарт) ещё в окне — не теряем текст.
+    worry_ts = settings.get(cid, "_worry_prompt_ts", 0)
+    if worry_ts and (datetime.now(config.TZ).timestamp() - worry_ts) < 1800:
+        settings.set_(cid, "_worry_prompt_ts", 0)
+        _log.info("worry: routed via fallback timestamp for cid=%s", cid)
+        await balance.save_worries(bot, cid, text); return
 
     # Быстрая команда из чата: «добавь в словарь слово de Aandacht - внимание»
     if await learning.try_add_dict_from_chat(bot, cid, text):

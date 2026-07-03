@@ -1,3 +1,4 @@
+import random
 import re
 import time
 from html import escape as _html_escape
@@ -7,6 +8,17 @@ _WEEKDAY_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 _MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня",
            "июля", "августа", "сентября", "октября", "ноября", "декабря"]
 _TTL_CACHE = {}
+
+LOADING_PHRASES = [
+    "⏳ Готовлю ответ…",
+    "🔎 Ищу нужную информацию…",
+    "🔎 Собираю данные…",
+    "⏳ Анализирую запрос…",
+    "⏳ Формулирую ответ…",
+]
+
+def loading_phrase() -> str:
+    return random.choice(LOADING_PHRASES)
 
 def ttl_get(namespace: str, key: str, ttl: int):
     hit = _TTL_CACHE.get((namespace, key))
@@ -31,10 +43,10 @@ def cap_sentence(t: str | None) -> str:
     return s[:1].upper() + s[1:] if s else s
 
 async def ack_loading(q) -> None:
-    """Меняет клавиатуру на ⏳ пока идёт медленная LLM-операция. Ошибки игнорирует."""
+    """Меняет клавиатуру на статус ожидания пока идёт медленная LLM-операция. Ошибки игнорирует."""
     try:
         from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⏳ Генерация…", callback_data="noop")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton(loading_phrase(), callback_data="noop")]])
         await q.edit_message_reply_markup(reply_markup=kb)
     except Exception:
         pass

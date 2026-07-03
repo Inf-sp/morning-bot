@@ -3,6 +3,7 @@ import re
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import store
 import ai
+import util
 import verify
 from ui import assistant as assistant_ui
 
@@ -127,7 +128,7 @@ async def chat_reply(bot, cid, text):
     hist = store.chat_history.get(str(cid), [])
     hist.append({"role": "user", "content": text})
     hist = hist[-10:]
-    pending = await bot.send_message(chat_id=cid, text="⏳ <b>Генерация…</b>", parse_mode="HTML")
+    pending = await bot.send_message(chat_id=cid, text=f"<b>{util.loading_phrase()}</b>", parse_mode="HTML")
     try:
         answer = await ai.achat_chain(hist, cid)
     except Exception as e:

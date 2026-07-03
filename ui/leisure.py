@@ -136,6 +136,35 @@ def artist_card(data):
     return b.build_stripped()
 
 
+def concerts_list(place_label, events, empty_hint=""):
+    """Список концертов твоих артистов -> MessageBuilder. Каждое событие - мини-блок:
+    имя артиста, место, жанр, цена от, дата, скрытая ссылка "Подробнее…"."""
+    b = MessageBuilder()
+    b.text_line("🎤 ")
+    b.bold(place_label)
+    b.newline()
+    if not events:
+        b.spacer()
+        b.line(empty_hint or "Сейчас ничего не нашёл. Попробуй другую страну 🌍")
+        return b.build_stripped()
+    for ev in events:
+        b.spacer()
+        b.bold(ev.get("artist", ""))
+        b.newline()
+        if ev.get("place"):
+            b.line(f"📍 {ev.get('flag', '')} {ev['place']}")
+        if ev.get("genre"):
+            b.line(f"🎵 {ev['genre']}")
+        if ev.get("price"):
+            b.line(f"💶 {ev['price']}")
+        if ev.get("date"):
+            b.line(f"🗓️ {ev['date']}")
+        if ev.get("url"):
+            b.link("Подробнее…", ev["url"])
+            b.newline()
+    return b.build_stripped()
+
+
 def country_card(data):
     """Составная карточка (условные блоки) -> MessageBuilder."""
     b = MessageBuilder()

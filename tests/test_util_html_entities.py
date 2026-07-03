@@ -132,3 +132,14 @@ def test_chunk_text_with_entities_clips_entity_crossing_chunk_boundary():
     assert len(second_entities) == 1
     assert second_entities[0].offset == 0
     assert second_entities[0].length == 3
+
+
+@pytest.mark.unit
+def test_loading_phrase_returns_one_of_known_variants():
+    assert util.loading_phrase() in util.LOADING_PHRASES
+
+
+@pytest.mark.unit
+def test_loading_phrase_is_randomized():
+    seen = {util.loading_phrase() for _ in range(50)}
+    assert len(seen) > 1  # с высокой вероятностью выпадет больше одного варианта из 5

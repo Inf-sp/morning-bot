@@ -223,6 +223,105 @@ def test_ticketmaster_events_for_artist_does_not_cache_on_http_error(monkeypatch
 
 
 @pytest.mark.unit
+def test_concert_genre_prefers_subgenre_over_genre():
+    e = {"classifications": [{"genre": {"name": "Rock"}, "subGenre": {"name": "Alternative Rock"}}]}
+    assert leisure._concert_genre(e) == "Alternative Rock"
+
+
+@pytest.mark.unit
+def test_concert_genre_translates_known_genre():
+    e = {"classifications": [{"genre": {"name": "Pop"}, "subGenre": {"name": "Undefined"}}]}
+    assert leisure._concert_genre(e) == "Поп"
+
+
+@pytest.mark.unit
+def test_concert_genre_empty_when_no_classifications():
+    assert leisure._concert_genre({}) == ""
+    assert leisure._concert_genre({"classifications": [{"genre": {"name": "Other"}}]}) == ""
+
+
+@pytest.mark.unit
+def test_concert_min_price_picks_lowest_across_ranges():
+    e = {"priceRanges": [
+        {"type": "standard", "currency": "EUR", "min": 45.0, "max": 89.5},
+        {"type": "vip", "currency": "EUR", "min": 25.0, "max": 150.0},
+    ]}
+    assert leisure._concert_min_price(e) == "от 25 EUR"
+
+
+@pytest.mark.unit
+def test_concert_min_price_keeps_decimals_when_not_round():
+    e = {"priceRanges": [{"currency": "USD", "min": 29.99, "max": 60.0}]}
+    assert leisure._concert_min_price(e) == "от 29.99 USD"
+
+
+@pytest.mark.unit
+def test_concert_min_price_empty_when_no_price_ranges():
+    assert leisure._concert_min_price({}) == ""
+    assert leisure._concert_min_price({"priceRanges": []}) == ""
+
+
+class _CapturingBot:
+    def __init__(self):
+        self.sent = []
+
+    async def send_message(self, **kw):
+        self.sent.append(kw)
+
+
+@pytest.mark.unit
+def test_find_concerts_renders_clean_artist_cards_with_hidden_link(monkeypatch):
+    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
+    monkeypatch.setattr(leisure, "_ensure_artists", lambda cid: ["Romy"])
+
+    async def fake_many(artists, cc, start_dt="", end_dt="", size=3, limit=40):
+        return [_tm_event("Romy", "2026-08-21", city="Biddinghuizen", event_id="1")
+                | {"url": "https://ticketmaster.com/romy",
+                   "classifications": [{"genre": {"name": "Electronic"}, "subGenre": {"name": "Undefined"}}],
+                   "priceRanges": [{"currency": "EUR", "min": 35.0, "max": 80.0}]}]
+
+    monkeypatch.setattr(leisure, "_ticketmaster_events_many", fake_many)
+
+    bot = _CapturingBot()
+    asyncio.run(leisure.find_concerts(bot, "cid-concerts-1"))
+
+    sent = bot.sent[0]
+    text = sent["text"]
+    assert "Romy" in text
+    assert "Biddinghuizen" in text
+    assert "21 августа 2026" in text
+    assert "Электроника" in text
+    assert "от 35 EUR" in text
+    assert "Подробнее…" in text
+    link_entities = [e for e in sent["entities"] if e.type == "text_link"]
+    assert any(e.url == "https://ticketmaster.com/romy" for e in link_entities)
+    assert "https://ticketmaster.com/romy" not in text  # ссылка спрятана под текст
+    assert "Нашёл вне Ticketmaster" not in text
+    assert "bandsintown" not in text.lower()
+
+
+@pytest.mark.unit
+def test_find_concerts_deduplicates_same_artist_same_show(monkeypatch):
+    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
+    monkeypatch.setattr(leisure, "_ensure_artists", lambda cid: ["Romy"])
+
+    dup_event = _tm_event("Romy", "2026-08-21", city="Biddinghuizen", event_id="1") | {
+        "url": "https://ticketmaster.com/romy"
+    }
+
+    async def fake_many(artists, cc, start_dt="", end_dt="", size=3, limit=40):
+        return [dup_event, dict(dup_event)]  # тот же артист/дата/город дважды
+
+    monkeypatch.setattr(leisure, "_ticketmaster_events_many", fake_many)
+
+    bot = _CapturingBot()
+    asyncio.run(leisure.find_concerts(bot, "cid-concerts-2"))
+
+    text = bot.sent[0]["text"]
+    assert text.count("Romy") == 1
+
+
+@pytest.mark.unit
 def test_eventbrite_events_does_not_cache_on_http_error(monkeypatch):
     class FailingResp:
         def raise_for_status(self):
