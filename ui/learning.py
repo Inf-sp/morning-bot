@@ -152,6 +152,104 @@ def train_result(state, idx, correct_idx, options, chosen_fl=""):
     return msg
 
 
+def phrase_intro_card(phrase, sentence_ru, construction, construction_meaning, forbidden, other_forms):
+    """Этап 1 тренажёра фраз: фраза целиком + разбор устойчивой конструкции, без пропусков."""
+    b = MessageBuilder()
+    b.section("🧩 Фраза-тренажёр")
+    b.spacer()
+    b.quote(str(phrase or "").strip())
+    if sentence_ru:
+        b.spacer()
+        b.bold("Перевод:")
+        b.text_line(f" {str(sentence_ru).strip()}")
+        b.newline()
+
+    if construction:
+        b.tip(construction)
+        if construction_meaning:
+            b.text_line(f" = {str(construction_meaning).strip()}")
+            b.newline()
+
+    forbidden = [str(x).strip() for x in (forbidden or []) if str(x).strip()]
+    if forbidden:
+        b.spacer()
+        b.text_line("Нельзя говорить: ")
+        b.text_line(", ".join(f"✗ {x}" for x in forbidden[:3]))
+        b.newline()
+
+    if other_forms:
+        b.spacer()
+        b.bold("Другие значения этого слова:")
+        b.newline()
+        for item in other_forms[:3]:
+            pos = str(item.get("pos") or "").strip()
+            meaning = str(item.get("meaning") or "").strip()
+            if pos and meaning:
+                b.bullet(f"{pos} — {meaning}")
+
+    b.spacer()
+    b.text_line("Дальше попробуем восстановить эту фразу по памяти.")
+    return b.build()
+
+
+def phrase_broken_question(broken_phrase):
+    """Этап 3 тренажёра фраз: во фразе намеренная ошибка, нужно найти неверное слово."""
+    b = MessageBuilder()
+    b.section("🔍 Найди ошибку")
+    b.spacer()
+    b.quote(str(broken_phrase or "").strip())
+    b.spacer()
+    b.text_line("Какое слово здесь неверное?")
+    return b.build()
+
+
+def phrase_broken_result(is_correct, broken_phrase, full_phrase, correct_word, why):
+    b = MessageBuilder()
+    b.section("✅ Верно." if is_correct else "❌ Не совсем так.")
+    b.spacer()
+    b.text_line("Неверно: ")
+    b.bold(str(correct_word or "").strip())
+    b.newline()
+    if full_phrase:
+        b.spacer()
+        b.text_line("Правильно: ")
+        b.bold(str(full_phrase).strip())
+        b.newline()
+    if why:
+        b.spacer()
+        b.line(str(why).strip())
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
+def phrase_situation_question(situation):
+    """Этап 4 тренажёра фраз: бытовая ситуация, нужно выбрать подходящий вариант фразы."""
+    b = MessageBuilder()
+    b.section("🎭 Ситуация")
+    b.spacer()
+    b.line(str(situation or "").strip())
+    b.spacer()
+    b.text_line("Как сказать?")
+    return b.build()
+
+
+def phrase_situation_result(is_correct, chosen, correct):
+    b = MessageBuilder()
+    b.section("✅ Верно." if is_correct else "❌ Не совсем так.")
+    b.spacer()
+    if not is_correct:
+        b.text_line("Твой ответ: ")
+        b.bold(str(chosen or "").strip())
+        b.newline()
+        b.spacer()
+    b.text_line("Правильно: ")
+    b.bold(str(correct or "").strip())
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
 def train_lang_select():
     b = MessageBuilder()
     b.section("🧠 Тренажёр")

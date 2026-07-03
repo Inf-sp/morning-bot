@@ -285,6 +285,32 @@ async def answer_callback(update, context):
         elif sub == "next":
             await _ack(q); await learning.train_next(bot, cid)
         return
+    # Тренажёр фраз: переход от этапа 1 (разбор конструкции) к этапу 2 (quiz)
+    if data == "phrase_intro_go":
+        await learning.phrase_intro_continue(bot, cid)
+        return
+    # Тренажёр фраз: этап 3 «найди ошибку»
+    if data == "phrase_stage_broken":
+        await learning.phrase_stage_broken(bot, cid)
+        return
+    if data.startswith("phrase_broken_ans_"):
+        try:
+            ans_idx = int(data[len("phrase_broken_ans_"):])
+        except ValueError:
+            return
+        await learning.phrase_broken_answer(bot, cid, ans_idx)
+        return
+    # Тренажёр фраз: этап 4 «ситуация»
+    if data == "phrase_stage_situation":
+        await learning.phrase_stage_situation(bot, cid)
+        return
+    if data.startswith("phrase_situation_ans_"):
+        try:
+            ans_idx = int(data[len("phrase_situation_ans_"):])
+        except ValueError:
+            return
+        await learning.phrase_situation_answer(bot, cid, ans_idx)
+        return
     # «Ещё»
     if data.startswith("again_"):
         what = data[len("again_"):]
