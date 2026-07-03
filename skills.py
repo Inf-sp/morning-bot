@@ -29,7 +29,7 @@ SKILLS = {s.name: s for s in (
           fallback="⚠️ Не получилось сгенерировать. Попробуй ещё раз."),
     Skill("wardrobe_feedback", "Гардероб", "card",
           entrypoints=("w_look", "w_improve", "w_check", "wardrobe_check", "w_fb_worn",
-                       "w_fb_cold", "w_fb_hot", "w_fb_nostyle"),
+                       "w_fb_nostyle"),
           memory=("WARDROBE_FILE", "SETTINGS_FILE", "recent_looks", "last_look", "PROFILE_KEY"),
           fallback="⚠️ Не удалось разобрать гардероб. Попробуй ещё раз."),
     Skill("language_micro_lesson", "Грамматика и тренажёр слов", "card",

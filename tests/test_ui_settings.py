@@ -23,6 +23,11 @@ def test_settings_core_messages():
     assert "🎯 Приоритеты" in _bold_texts(prio)
     assert "Сейчас:" in _bold_texts(prio)
 
+    cuis = settings.cuisines("Азиатская")
+    assert "Сейчас: Азиатская" in cuis.text
+    assert "🍽️ Кухни" in _bold_texts(cuis)
+    assert "Сейчас:" in _bold_texts(cuis)
+
     home = settings.settings_home()
     assert "🎚️ Настройки" in _bold_texts(home)
 

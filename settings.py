@@ -32,6 +32,15 @@ PRIORITY_OPTIONS = [
     ("quiet", "Минимум уведомлений"),
 ]
 
+CUISINE_OPTIONS = [
+    ("asian", "🥢 Азиатская"),
+    ("russian", "🇷🇺 Русская"),
+    ("italian", "🍝 Итальянская"),
+    ("mediterranean", "🫒 Средиземноморская"),
+    ("mexican", "🌮 Мексиканская"),
+    ("french", "🥐 Французская"),
+]
+
 STYLES = [
     "минимализм",
     "скандинавский стиль",
@@ -84,6 +93,26 @@ def priority_context(cid):
     if not labels:
         return ""
     return "Приоритеты пользователя: " + ", ".join(labels) + "."
+
+
+def cuisines(cid):
+    saved = get(cid, "cuisines", [])
+    if not isinstance(saved, list):
+        return []
+    valid = {key for key, _ in CUISINE_OPTIONS}
+    return [key for key in saved if key in valid]
+
+
+def cuisine_labels(cid):
+    selected = set(cuisines(cid))
+    return [label for key, label in CUISINE_OPTIONS if key in selected]
+
+
+def cuisine_context(cid):
+    labels = cuisine_labels(cid)
+    if not labels:
+        return ""
+    return "Предпочитаемые кухни пользователя: " + ", ".join(labels) + "."
 
 
 def _notif_label(kind: str, label: str) -> str:
@@ -238,7 +267,23 @@ def _priorities_kb(cid):
         for key, label in PRIORITY_OPTIONS
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    cuisine_mark = " ✓" if cuisines(cid) else ""
+    rows.append([InlineKeyboardButton(f"🍽️ Кухни{cuisine_mark}", callback_data="set_cuisines")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _cuisines_kb(cid):
+    selected = set(cuisines(cid))
+    buttons = [
+        InlineKeyboardButton(
+            ("✅ " if key in selected else "⬜ ") + label,
+            callback_data=f"set_cuisine_{key}",
+        )
+        for key, label in CUISINE_OPTIONS
+    ]
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_priorities")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -273,6 +318,35 @@ async def toggle_priority(bot, cid, key, q=None):
             if kind not in ("morning_brief", "weather_warn"):
                 set_(cid, f"notif_{kind}", False)
     await send_priorities(bot, cid, q)
+
+
+async def send_cuisines(bot, cid, q=None):
+    labels = cuisine_labels(cid)
+    current = ", ".join(labels) if labels else "не выбраны"
+    msg = settings_ui.cuisines(current)
+    text = msg.text
+    kb = _cuisines_kb(cid)
+    if q is not None:
+        try:
+            await q.message.edit_text(text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, entities=msg.entities, reply_markup=kb)
+
+
+async def toggle_cuisine(bot, cid, key, q=None):
+    valid = {k for k, _ in CUISINE_OPTIONS}
+    if key not in valid:
+        await send_cuisines(bot, cid, q)
+        return
+    selected = cuisines(cid)
+    if key in selected:
+        selected = [k for k in selected if k != key]
+    else:
+        selected.append(key)
+    set_(cid, "cuisines", selected)
+    await send_cuisines(bot, cid, q)
 
 
 _BODY_PLACEHOLDER = "не указано"
@@ -448,6 +522,10 @@ async def handle_callback(bot, cid, data, q=None):
         await send_priorities(bot, cid, q)
     elif data.startswith("set_prio_"):
         await toggle_priority(bot, cid, data[len("set_prio_"):], q)
+    elif data == "set_cuisines":
+        await send_cuisines(bot, cid, q)
+    elif data.startswith("set_cuisine_"):
+        await toggle_cuisine(bot, cid, data[len("set_cuisine_"):], q)
     elif data.startswith("set_notiftgl_"):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
     elif data.startswith("set_notiftest_"):

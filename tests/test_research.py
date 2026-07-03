@@ -103,6 +103,7 @@ def test_wiki_fact_picks_sentence(monkeypatch):
     long = ("Берлин - столица Германии и один из крупнейших городов Европы. "
             "Город известен своей историей и культурой на протяжении веков.")
     monkeypatch.setattr(research, "wiki_summary", lambda title, lang: long if lang == "ru" else "")
+    monkeypatch.setattr(research, "_wiki_search_en", lambda *a, **k: "")
     out = research.wiki_fact("Берлин")
     assert out and out.endswith(".")
 

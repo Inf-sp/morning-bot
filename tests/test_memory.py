@@ -30,20 +30,20 @@ def test_observations_cap():
 def test_wardrobe_feedback_cap_and_unknown_verdict():
     memory.add_wardrobe_feedback(CID, "look", "не-такой-код")   # игнор
     for i in range(30):
-        memory.add_wardrobe_feedback(CID, f"образ {i}", "cold")
+        memory.add_wardrobe_feedback(CID, f"образ {i}", "worn")
     fb = store.get_profile(CID).get("wardrobe_fb", [])
     assert len(fb) == 20                           # _FB_CAP
-    assert all(x["verdict"] == "cold" for x in fb)
+    assert all(x["verdict"] == "worn" for x in fb)
 
 
 @pytest.mark.unit
 def test_wardrobe_hints_empty_and_format():
     assert memory.wardrobe_hints(CID) == ""
-    memory.add_wardrobe_feedback(CID, "белая футболка, шорты", "cold")
-    memory.add_wardrobe_feedback(CID, "белая футболка, шорты", "cold")
+    memory.add_wardrobe_feedback(CID, "белая футболка, шорты", "worn")
+    memory.add_wardrobe_feedback(CID, "белая футболка, шорты", "worn")
     memory.add_wardrobe_feedback(CID, "пиджак, брюки", "nostyle")
     h = memory.wardrobe_hints(CID)
-    assert "мёрзнет" in h and "×2" in h
+    assert "носит охотно похожие образы" in h and "×2" in h
     assert "не его стиль" in h and "пиджак" in h
 
 

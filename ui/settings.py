@@ -20,6 +20,16 @@ def priorities(current):
     return b.build_stripped()
 
 
+def cuisines(current):
+    b = MessageBuilder()
+    b.section("🍽️ Кухни")
+    b.line("Выбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника с их учётом.")
+    b.spacer()
+    b.bold("Сейчас:")
+    b.line(f" {current}")
+    return b.build_stripped()
+
+
 def body_profile(profile_line):
     b = MessageBuilder()
     b.section("🎚️ Мои параметры")

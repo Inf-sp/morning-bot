@@ -660,8 +660,11 @@ def _my_recipe_pref(cid):
 def _gen_recipe(constraint, cid=None):
     pref = _my_recipe_pref(cid)
     pr = (settings.priority_context(cid) + "\n") if cid and settings.priority_context(cid) else ""
+    cz = (settings.cuisine_context(cid) + "\n") if cid and settings.cuisine_context(cid) else ""
+    avoid = _leftover_recent(cid) if cid else []
+    avoid_line = f"Не предлагай эти блюда (уже были из холодильника): {', '.join(avoid)}.\n" if avoid else ""
     return ai.llm_json(
-        f"{pr}{pref}Ты — шеф-повар с идеальной логикой. "
+        f"{pr}{cz}{avoid_line}{pref}Ты — шеф-повар с идеальной логикой. "
         f"Создай 1 рецепт ({constraint}), 1 человек, электрическая плита, духовка SAGE.\n"
         "Правила:\n"
         "• Каждый продукт из ингредиентов обязан появиться в шагах приготовления.\n"
@@ -720,8 +723,9 @@ async def send_recipe_push(bot, cid):
 def _gen_leftovers_recipe(ingredients, cid=None):
     avoid = _leftover_recent(cid) if cid else []
     avoid_line = f"Не предлагай снова: {', '.join(avoid)}.\n" if avoid else ""
+    cz = (settings.cuisine_context(cid) + " Учитывай как пожелание к стилю блюда, но используй только доступные продукты.\n") if cid and settings.cuisine_context(cid) else ""
     return ai.llm_json(
-        f"{avoid_line}Есть продукты: {secure.wrap_untrusted(ingredients, 'продукты')}. "
+        f"{avoid_line}{cz}Есть продукты: {secure.wrap_untrusted(ingredients, 'продукты')}. "
         "Предложи 1 простой рецепт только из них (+ базовые специи, максимум 1 доп продукт). 1 человек.\n"
         'JSON: {"name":"название","time":"X мин","servings":"1 порц.",'
         '"ingredients":"список использованных продуктов через запятую",'
