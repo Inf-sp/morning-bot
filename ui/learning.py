@@ -26,7 +26,18 @@ def phrase_poll_question(blank_phrase, sentence_ru):
     b.spacer()
     b.text_line("Выбери пропущенное слово из вариантов ниже.")
     msg = b.build()
-    msg.text = msg.text.strip()[:300]
+    stripped = msg.text.strip()
+    leading_trim = u16_len(msg.text[:len(msg.text) - len(msg.text.lstrip())])
+    limit = 300
+    msg.text = stripped[:limit]
+    new_len = u16_len(msg.text)
+    kept_entities = []
+    for e in msg.entities or []:
+        offset = e.offset - leading_trim
+        if offset < 0 or offset + e.length > new_len:
+            continue
+        kept_entities.append(MessageEntity(e.type, offset, e.length, url=getattr(e, "url", None)))
+    msg.entities = kept_entities
     return msg
 
 

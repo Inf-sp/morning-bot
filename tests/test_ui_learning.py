@@ -25,6 +25,20 @@ def test_learning_phrase_poll_question_message_spec():
 
 
 @pytest.mark.unit
+def test_learning_phrase_poll_question_clips_entities_when_truncated_to_300():
+    long_phrase = "x" * 400
+    msg = learning.phrase_poll_question(long_phrase, "перевод")
+
+    assert len(msg.text) == 300
+    u16_len = len(msg.text.encode("utf-16-le")) // 2
+    for e in msg.entities:
+        assert 0 <= e.offset
+        assert e.offset + e.length <= u16_len
+        # entity text must still resolve to real content, not garbage past the cut
+        assert _slice_u16(msg.text, e.offset, e.length)
+
+
+@pytest.mark.unit
 def test_learning_train_question_bolds_word():
     msg = learning.train_question("Toevoegen")
 
