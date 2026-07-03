@@ -13,18 +13,32 @@ def _entities_of_type(msg, entity_type):
 
 
 @pytest.mark.unit
-def test_food_card_escapes_recipe_fields():
+def test_food_card_keeps_html_like_chars_verbatim_and_bolds_headers():
     msg = food.food_card({
         "name": "Омлет <сыр>",
         "ingredients": "яйца & молоко",
         "steps": ["смешать", "жарить <5 минут>"],
     })
 
-    assert msg.parse_mode == "HTML"
-    assert "🥣 <b>Рецепт дня</b>" in msg.text
-    assert "<b>Омлет &lt;сыр&gt;</b>" in msg.text
-    assert "яйца &amp; молоко" in msg.text
-    assert "• жарить &lt;5 минут&gt;" in msg.text
+    assert "🥣 Рецепт дня" in msg.text
+    assert "Омлет <сыр>" in msg.text
+    assert "яйца & молоко" in msg.text
+    assert "• жарить <5 минут>" in msg.text
+    assert _entities_of_type(msg, "bold") == [
+        "🥣 Рецепт дня",
+        "Омлет <сыр>",
+        "Ингредиенты:",
+        "Приготовление:",
+        "😋 Приятного аппетита!",
+    ]
+
+
+@pytest.mark.unit
+def test_food_card_minimal_data_has_no_leaked_html():
+    msg = food.food_card({"name": "", "ingredients": "", "steps": []})
+
+    assert "<" not in msg.text and ">" not in msg.text
+    assert _entities_of_type(msg, "bold") == ["🥣 Рецепт дня", "😋 Приятного аппетита!"]
 
 
 @pytest.mark.unit

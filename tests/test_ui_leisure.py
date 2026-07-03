@@ -41,6 +41,7 @@ def test_leisure_book_text_message_spec():
     assert "Почему стоит читать" in _bold_texts(msg)
     assert "• Анти-Оруэлл" in msg.text
     assert "Цитата" in _bold_texts(msg)
+    assert "\n\n\n" not in msg.text
     _assert_no_leaked_html(msg)
 
 
@@ -94,6 +95,7 @@ def test_leisure_movie_card_message_spec():
     assert "Paterson" in _italic_texts(msg)
     assert "⭐ 7.4/10 TMDb" in msg.text
     assert "🔗 https://example.com/paterson" in msg.text
+    assert "\n\n\n" not in msg.text
     _assert_no_leaked_html(msg)
 
 
@@ -144,6 +146,8 @@ def test_leisure_artist_card_message_spec():
     assert "The xx" in _bold_texts(msg)
     assert "Почему тебе зайдёт:" in _bold_texts(msg)
     assert "С чего начать:" in _bold_texts(msg)
+    assert "Факт:" in _bold_texts(msg)
+    assert "\n\n\n" not in msg.text
     _assert_no_leaked_html(msg)
 
 
@@ -211,13 +215,20 @@ def test_leisure_country_and_plan_cards():
     assert "🇳🇱 Нидерланды" in country.text
     assert "Нидерланды" in _bold_texts(country)
     assert "Ради чего ехать:" in _bold_texts(country)
+    assert "Язык:" in _bold_texts(country)
+    assert "Главный нюанс:" in _bold_texts(country)
+    assert "Факт:" in _bold_texts(country)
     assert "за городами" in country.text
+    assert "\n\n\n" not in country.text
     _assert_no_leaked_html(country)
 
-    # travel_plan остаётся на HTML (parse_mode) — persist в NOTES_KEY + чанкинг в settings.fav_view
-    assert plan.parse_mode == "HTML"
-    assert "🎯 <b>Почему тебе подойдёт</b>" in plan.text
-    assert "💰 <b>Бюджет</b>" in plan.text
+    assert "🇳🇱 Нидерланды" in plan.text
+    assert "Почему тебе подойдёт" in _bold_texts(plan)
+    assert "Бюджет" in _bold_texts(plan)
+    assert "• музеи" in plan.text
+    assert "• эконом" in plan.text
+    assert "\n\n\n" not in plan.text
+    _assert_no_leaked_html(plan)
 
 
 @pytest.mark.unit

@@ -1,25 +1,34 @@
 from .builder import MessageBuilder, MessageSpec
-from util import esc
 
 
 def food_card(data, label="Рецепт дня"):
-    """HTML-текст карточки: рендерится через util.send_html (там же оживают LLM-теги в поле 'full')."""
-    name = esc(str(data.get("name", "")).strip())
-    ingredients = esc(str(data.get("ingredients", "")).strip())
+    """Карточка рецепта. Не пишется в БД как HTML: живёт в store.last_recipe/last_answer
+    только до рестарта, а в заметки (NOTES_KEY) попадает через save_fav, который берёт
+    entities напрямую из уже отправленного сообщения — MessageBuilder тут ничем не хуже HTML."""
+    name = str(data.get("name", "")).strip()
+    ingredients = str(data.get("ingredients", "")).strip()
     steps = data.get("steps") or []
     if isinstance(steps, str):
         steps = [steps]
-    lines = [f"🥣 <b>{esc(label)}</b>"]
+    b = MessageBuilder()
+    b.section(f"🥣 {label}")
     if name:
-        lines += ["", f"<b>{name}</b>"]
+        b.spacer()
+        b.bold(name)
     if ingredients:
-        lines += ["", "<b>Ингредиенты:</b>", ingredients]
+        b.spacer()
+        b.bold("Ингредиенты:")
+        b.newline()
+        b.line(ingredients)
     if steps:
-        lines += ["", "<b>Приготовление:</b>"]
+        b.spacer()
+        b.bold("Приготовление:")
+        b.newline()
         for step in steps:
-            lines.append(f"• {esc(str(step).strip())}")
-    lines += ["", "<b>😋 Приятного аппетита!</b>"]
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+            b.bullet(str(step).strip())
+    b.spacer()
+    b.bold("😋 Приятного аппетита!")
+    return b.build_stripped()
 
 
 def fridge_home_empty():

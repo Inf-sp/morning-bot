@@ -1,7 +1,6 @@
 from telegram import MessageEntity
 
 from .builder import MessageBuilder, MessageSpec, u16_len
-from util import esc
 
 
 def train_question(word):
@@ -200,24 +199,36 @@ def translate_result(flag, lang, ru, answer, result):
     return msg
 
 
-def morning_words(flag, method_line, phrases=None, words=None, empty_hint=False):
-    """method_line приходит от вызывающего кода уже HTML-фрагментом (может быть обёрнут в <i>),
-    а word/ru — esc()-нутые поля словаря -> остаётся на HTML parse_mode, как travel_plan в leisure.py."""
-    lines = [f"📚{flag} <b>Слова и фразы дня</b>", "", method_line]
+def morning_words(flag, method, is_read_aloud=False, phrases=None, words=None, empty_hint=False):
+    """method приходит СЫРЫМ текстом (без esc()/HTML-тегов) — функция сама решает оформление:
+    is_read_aloud оборачивает его в italic(), иначе выводится обычной строкой."""
+    b = MessageBuilder()
+    b.section(f"📚{flag} Слова и фразы дня")
+    if is_read_aloud:
+        b.italic(method)
+        b.newline()
+    else:
+        b.line(method)
     if empty_hint:
-        lines += ["", "📖 Открой словарь, если хочешь добавить что-то новое или быстро повторить текущее."]
-        return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+        b.spacer()
+        b.text_line("📖 Открой словарь, если хочешь добавить что-то новое или быстро повторить текущее.")
+        msg = b.build()
+        msg.text = msg.text.rstrip("\n")
+        return msg
     if phrases:
-        lines += ["", "💬 <b>Фразы</b>"]
+        b.section("💬 Фразы")
         for word, ru in phrases:
-            lines.append(f"• {esc(word)} → {esc(ru)}")
+            b.bullet(f"{word} → {ru}")
     if words:
-        lines += ["", "📖 <b>Слова</b>"]
+        b.section("📖 Слова")
         for word, ru in words:
-            lines.append(f"• {esc(word)} → {esc(ru)}")
+            b.bullet(f"{word} → {ru}")
     if phrases or words:
-        lines += ["", "<i>Попробуй использовать 1-2 элемента сегодня в сообщениях, мыслях или разговоре.</i>"]
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+        b.spacer()
+        b.italic("Попробуй использовать 1-2 элемента сегодня в сообщениях, мыслях или разговоре.")
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
 
 
 def game_start():

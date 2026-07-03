@@ -225,5 +225,5 @@ async def _save_balance(cid, raw: str) -> list:
 async def _show_section(bot, cid, section: str):
     import menu
     key = _SECTION_KEY.get(section, "m_leisure")
-    text, kb = menu.menu_screen(key)
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb, parse_mode="HTML")
+    text, entities, kb = menu.menu_screen(key)
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb, entities=entities)

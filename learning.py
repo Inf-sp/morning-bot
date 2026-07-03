@@ -8,7 +8,6 @@ from cleanup import open_cleanup, send_cleanup, handle_cleanup  # noqa: F401
 _HERE = Path(__file__).parent
 import store
 import ai
-from util import esc
 import verify
 import secure
 from ui import dictionary as dict_ui
@@ -1132,7 +1131,7 @@ async def send_dict(bot, cid, back="m_notes"):
         [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data=f"a_dictlang_en_from_{origin}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ]
-    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
 async def send_dict_lang(bot, cid, lang, back="m_dict_settings"):
     c = _dict_counts(cid)[lang]
@@ -1145,7 +1144,7 @@ async def send_dict_lang(bot, cid, lang, back="m_dict_settings"):
         [InlineKeyboardButton("✏️ Добавить слово или фразу", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ]
-    await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode, reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
 
 def _dict_manage_kb(lang: str):
@@ -1167,11 +1166,11 @@ async def del_word(bot, cid, i):
         store.set_list(config.DICT_KEY, cid, words)
     import settings as _s
     lang = _code(_s.study_lang(cid))
-    msg = dict_ui.dict_deleted(esc(removed) if removed else "")
+    msg = dict_ui.dict_deleted(removed or "")
     await bot.send_message(
         chat_id=cid,
         text=msg.text,
-        parse_mode=msg.parse_mode,
+        entities=msg.entities,
         reply_markup=_dict_manage_kb(lang),
     )
 
@@ -1217,19 +1216,17 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
     words = _ensure_dict(cid)
     pool = [w for w in words if _dict_lang(w) == lang_code]
     if wd >= 5 or not pool:
-        method_line = f"<i>{esc(method)}</i>" if method.startswith("Прочитай вслух") else esc(method)
-        msg = learning_ui.morning_words(flag, method_line, empty_hint=True)
-        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
+        msg = learning_ui.morning_words(flag, method, is_read_aloud=method.startswith("Прочитай вслух"), empty_hint=True)
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
         return
     word_items = [w for w in pool if _dict_kind(w) == "word"]
     phrase_items = [w for w in pool if _dict_kind(w) == "phrase"]
     method = _morning_method_line(method, word_items, phrase_items)
-    method_line = f"<i>{esc(method)}</i>" if method.startswith("Прочитай вслух") else esc(method)
     chosen_phrases = _r.sample(phrase_items, min(2, len(phrase_items)))
     chosen_words = _r.sample(word_items, min(3, len(word_items)))
     if not chosen_phrases and not chosen_words:
-        msg = learning_ui.morning_words(flag, method_line)
-        await bot.send_message(chat_id=cid, text=msg.text, parse_mode=msg.parse_mode)
+        msg = learning_ui.morning_words(flag, method, is_read_aloud=method.startswith("Прочитай вслух"))
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
         return
 
     phrase_del_row = []
@@ -1258,7 +1255,7 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
             except ValueError:
                 pass
 
-    msg = learning_ui.morning_words(flag, method_line, phrase_lines, word_lines)
+    msg = learning_ui.morning_words(flag, method, is_read_aloud=method.startswith("Прочитай вслух"), phrases=phrase_lines, words=word_lines)
 
     rows = []
     if with_kb:
@@ -1268,7 +1265,7 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
     await bot.send_message(
         chat_id=cid,
         text=msg.text,
-        parse_mode=msg.parse_mode,
+        entities=msg.entities,
         reply_markup=InlineKeyboardMarkup(rows) if rows else None,
     )
 

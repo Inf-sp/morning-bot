@@ -114,36 +114,36 @@ def dict_duplicate_confirmation(duplicate_items):
 
 
 def dict_overview(nl_total, en_total):
-    """Короткая карточка-меню (заголовок + одна строка счётчиков) — остаётся на HTML,
-    компоненты избыточны для однострочного сообщения без структуры разделов."""
+    """Короткая карточка-меню (заголовок + одна строка счётчиков)."""
     total = nl_total + en_total
-    return MessageSpec(
-        text=(
-            f"🗂️ <b>Мой словарь</b>\n\nВсего: {total} "
-            f"(🇳🇱 {nl_total} · 🇬🇧 {en_total})\n\nВыбери язык 👇"
-        ),
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.section("🗂️ Мой словарь")
+    b.spacer()
+    b.line(f"Всего: {total} (🇳🇱 {nl_total} · 🇬🇧 {en_total})")
+    b.spacer()
+    b.line("Выбери язык 👇")
+    return b.build_stripped()
 
 
 def dict_language(lang, counts):
-    """Короткая карточка-меню (заголовок + одна строка счётчиков) — остаётся на HTML, см. dict_overview()."""
+    """Короткая карточка-меню (заголовок + одна строка счётчиков), см. dict_overview()."""
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     name = "Нидерландский" if lang == "nl" else "Английский"
-    return MessageSpec(
-        text=(f"{flag} <b>Словарь · {name}</b>\n\nСлов: {counts['word']} · Фраз: {counts['phrase']}"),
-        parse_mode="HTML",
-    )
+    b = MessageBuilder()
+    b.section(f"{flag} Словарь · {name}")
+    b.spacer()
+    b.line(f"Слов: {counts['word']} · Фраз: {counts['phrase']}")
+    return b.build_stripped()
 
 
-def dict_deleted(removed_html=""):
-    """Принимает уже esc()-нутый HTML-фрагмент от вызывающей стороны (вставляется как <b>{removed_html}</b>),
-    поэтому остаётся на HTML, как favorite_card в settings.py — компоненты тут не подходят."""
-    label = f" <b>{removed_html}</b>" if removed_html else ""
-    return MessageSpec(
-        text=(
-            f"✅ Слово{label} удалено из текущего списка.\n\n"
-            "Если хочешь, можно сразу открыть словарь или добавить новое."
-        ),
-        parse_mode="HTML",
-    )
+def dict_deleted(removed=""):
+    """Принимает сырое (не эскейпленное) имя удалённого слова и сама оборачивает его в bold()."""
+    b = MessageBuilder()
+    b.text_line("✅ Слово")
+    if removed:
+        b.text_line(" ")
+        b.bold(removed)
+    b.text_line(" удалено из текущего списка.")
+    b.spacer()
+    b.text_line("Если хочешь, можно сразу открыть словарь или добавить новое.")
+    return b.build_stripped()

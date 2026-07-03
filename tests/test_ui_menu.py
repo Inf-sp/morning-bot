@@ -51,9 +51,28 @@ def test_menu_welcome_lists_sections_without_bullet_marks():
 def test_menu_screen_message_spec_has_html_and_keyboard():
     msg = menu.menu_screen("m_learn")
 
-    assert msg.parse_mode == "HTML"
-    assert msg.text.startswith("📚 <b>Обучение</b>")
-    assert "Настройках" in msg.text
+    assert msg.parse_mode is None
+    assert msg.text == (
+        "📚 Обучение\n\n"
+        "Выбери язык — и вперёд!\n\n"
+        "Изменить параметры или посмотреть сохранённую информацию можно в 🎚️ Настройках."
+    )
+    assert _bold_texts(msg) == ["Обучение", "Настройках"]
+    assert msg.reply_markup is not None
+
+
+@pytest.mark.unit
+def test_menu_screen_wardrobe_message_spec_has_html_and_keyboard():
+    msg = menu.menu_screen("m_wardrobe")
+
+    assert msg.parse_mode is None
+    assert msg.text == (
+        "👕 Гардероб\n\n"
+        "Одежда без хаоса. Подберу образ, помогу разобрать шкаф и выбрать, что стоит докупить. "
+        "Чем полнее гардероб, тем точнее рекомендации.\n\n"
+        "Изменить параметры или посмотреть сохранённую информацию можно в 🎚️ Настройках."
+    )
+    assert _bold_texts(msg) == ["Гардероб", "Настройках"]
     assert msg.reply_markup is not None
 
 
@@ -63,14 +82,19 @@ def test_menu_screen_unknown_key_returns_fallback():
 
     assert msg.text == "Выбери раздел в нижнем меню."
     assert msg.reply_markup is None
-    assert msg.parse_mode == "HTML"
+    assert msg.parse_mode is None
+    assert not msg.entities
 
 
 @pytest.mark.unit
 def test_food_menu_message_spec_has_html_and_keyboard():
     msg = menu.food_menu()
 
-    assert msg.parse_mode == "HTML"
-    assert msg.text.startswith("🥣 <b>Готовка</b>")
-    assert "Настройках" in msg.text
+    assert msg.parse_mode is None
+    assert msg.text == (
+        "🥣 Готовка\n\n"
+        "Еда без хаоса. Соберу понятное меню на день, разберу холодильник и честно скажу, что с ним не так.\n\n"
+        "Изменить параметры или посмотреть сохранённую информацию можно в 🎚️ Настройках."
+    )
+    assert _bold_texts(msg) == ["Готовка", "Настройках"]
     assert msg.reply_markup is not None

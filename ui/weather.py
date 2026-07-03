@@ -1,60 +1,74 @@
 """Погодные сообщения.
 
-Намеренно НЕ мигрировано на компонентный API MessageBuilder (section/line/bullet/
-warning/tip/divider/spacer): все функции здесь строят составные сообщения через
-склейку HTML-фрагментов (список строк с тегами -> from_html), а не через
-последовательные вызовы билдера. Причины:
-  - `full_forecast`/`week_forecast`: заголовок + список периодов/дней + опциональный
-    итог собираются в одну HTML-строку и парсятся разом — компонентные вызовы
-    не дают того же контроля над структурой без потери читаемости.
-  - `day_forecast`: принимает `alert` — уже готовый HTML-фрагмент, произведённый
-    `storm_alert_html()` в другом месте (см. корневой weather.py), и встраивает
-    его как есть в свои `lines` перед общим `from_html`. MessageBuilder не умеет
-    принимать/сливать чужой HTML-фрагмент внутрь себя, поэтому здесь нельзя
-    перейти на компоненты, не сломав это встраивание.
+`full_forecast`/`week_forecast`/`day_forecast` собраны на компонентном API
+MessageBuilder (section/line/warning/embed) — единый визуальный язык бота.
+Все три сохраняют исходный формат "заголовок, пустая строка, контент": после
+`section(header)` идёт явный `newline()`, потому что сами компоненты не
+добавляют отступ ПОСЛЕ себя (только ПЕРЕД следующим блоком) — без этого
+`newline()` контент прилипал бы к заголовку.
+
+`day_forecast` получает `alert` как уже готовую HTML-строку (её производит
+`storm_alert_html()` в корневом weather.py) и сама конвертирует её через
+`from_html()` в MessageSpec, чтобы встроить через `embed()` — так сигнатура
+`day_forecast(header, main_lines, alert=...)` не меняется, а вызывающему коду
+не нужно ничего знать про builder.
+
+Остаются вне компонентов:
   - `storm_alert`/`storm_alert_html`: используют общий `_storm_alert_lines()`;
     `storm_alert_html` обязана возвращать сырой HTML-фрагмент (не MessageSpec) —
-    это законтрактовано вызовом из `day_forecast` выше.
-  - `city_not_found`/`city_changed`/`location_changed`: однострочные сообщения без
-    структуры заголовок+контент — компоненты (section/warning/tip) здесь неуместны
-    семантически, обычный MessageSpec с f-строкой проще и достаточен.
+    это законтрактовано вызовом из `day_forecast` выше и прямым использованием
+    в корневом weather.py.
+  - `city_not_found`/`city_changed`/`location_changed`: однострочные сообщения
+    без структуры заголовок+контент — это не "HTML в строгом смысле", просто
+    f-строка в MessageSpec; компоненты (section/warning/tip) тут семантически
+    не нужны, разбивать нечего.
 """
 
-from .builder import MessageSpec, from_html
-from util import esc, cap_sentence
+from .builder import MessageBuilder, MessageSpec, from_html
+from util import cap_sentence
 
 
 def full_forecast(header, periods, joke=""):
-    lines = [f"<b>{esc(header)}</b>", ""]
+    b = MessageBuilder()
+    b.section(header)
+    b.newline()
     for period in periods:
-        lines += [f"<b>{esc(period['label'])}:</b>", period["line"], ""]
+        b.section(f"{period['label']}:")
+        b.line(period["line"])
+        b.newline()
     if joke:
-        lines.append(esc(joke))
-    return from_html("\n".join(lines).strip())
+        b.line(joke)
+    return b.build_stripped()
 
 
 def day_forecast(header, main_lines, alert="", fact_title="", fact=""):
-    lines = [f"<b>{esc(header)}</b>", ""]
-    lines += list(main_lines or [])
+    b = MessageBuilder()
+    b.section(header)
+    b.newline()
+    for line in main_lines or []:
+        b.line(line)
     if alert:
-        lines += ["", alert]
+        b.embed(from_html(alert))
     elif fact:
         if fact_title:
-            lines += ["", f"🌡️ <b>{esc(fact_title)}</b>", esc(fact)]
+            b.warning(fact_title, emoji="🌡️")
+            b.line(fact)
         else:
-            lines += ["", esc(fact)]
-    return from_html("\n".join(lines))
+            b.spacer()
+            b.line(fact)
+    return b.build_stripped()
 
 
 def week_forecast(rng, city, flag, groups, summary=""):
-    lines = [f"<b>Ближайшая неделя • {esc(rng)} • {esc(city)} {flag}</b>", ""]
+    b = MessageBuilder()
+    b.section(f"Ближайшая неделя • {rng} • {city} {flag}")
+    b.newline()
     for group in groups:
-        lines.append(
-            f"{group['icon']} {esc(group['label'])} — {esc(group['desc'])}, {group['temp']}"
-        )
+        b.line(f"{group['icon']} {group['label']} — {group['desc']}, {group['temp']}")
     if summary:
-        lines += ["", "🌡️ <b>Метео-итог</b>", esc(_finish_sentence(cap_sentence(summary)))]
-    return from_html("\n".join(lines).strip())
+        b.warning("Метео-итог", emoji="🌡️")
+        b.line(_finish_sentence(cap_sentence(summary)))
+    return b.build_stripped()
 
 
 def _finish_sentence(text):

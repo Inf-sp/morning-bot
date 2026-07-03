@@ -90,8 +90,8 @@ async def _run_intent(bot, cid, action):
     elif action == "motivation":
         await balance.send_motiv_push(bot, cid)
     elif action == "learn":
-        text, kb = __import__("menu").menu_screen("m_learn")
-        await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+        text, entities, kb = __import__("menu").menu_screen("m_learn")
+        await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb)
     elif action == "dictionary":
         await learning.send_dict(bot, cid)
     elif action == "outfit":

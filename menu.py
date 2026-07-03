@@ -48,7 +48,7 @@ def _back(parent="m_close"):
 
 def menu_screen(key):
     msg = menu_ui.menu_screen(key)
-    return msg.text, msg.reply_markup
+    return msg.text, msg.entities, msg.reply_markup
 
 
 async def send_food_menu(bot, cid):
@@ -56,6 +56,6 @@ async def send_food_menu(bot, cid):
     await bot.send_message(
         chat_id=cid,
         text=msg.text,
-        parse_mode=msg.parse_mode,
+        entities=msg.entities,
         reply_markup=msg.reply_markup,
     )

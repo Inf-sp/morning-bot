@@ -214,3 +214,59 @@ def html_to_entities(text: str | None):
 
 def _html_unescape(s: str) -> str:
     return s.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+
+
+def entities_to_json(entities) -> list:
+    """list[MessageEntity] -> список JSON-совместимых словарей, для хранения в JSONB (store.py).
+    Обратная операция — entities_from_json()."""
+    out = []
+    for e in entities or []:
+        item = {"type": str(e.type), "offset": e.offset, "length": e.length}
+        url = getattr(e, "url", None)
+        if url:
+            item["url"] = url
+        out.append(item)
+    return out
+
+
+def entities_from_json(data) -> list:
+    """Обратная операция к entities_to_json() — список словарей из JSONB -> list[MessageEntity]."""
+    from telegram import MessageEntity
+
+    return [
+        MessageEntity(item["type"], item["offset"], item["length"], url=item.get("url"))
+        for item in (data or [])
+    ]
+
+
+def chunk_text_with_entities(text: str, entities, limit: int = 4000):
+    """Режет text на части по limit UTF-16-юнитов, сохраняя форматирование: каждая entity
+    либо целиком попадает в один чанк со сдвинутым offset, либо (если пересекает границу)
+    обрезается по границе чанка — никогда не выходит за пределы своего чанка с невалидным
+    offset/length. Возвращает [(chunk_text, chunk_entities), ...]."""
+    entities = sorted(entities or [], key=lambda e: e.offset)
+    u16 = (text or "").encode("utf-16-le")
+    total = len(u16) // 2
+    if total <= limit:
+        return [(text or "", list(entities))]
+
+    chunks = []
+    start = 0
+    while start < total:
+        end = min(start + limit, total)
+        chunk_text = u16[start * 2:end * 2].decode("utf-16-le")
+        chunk_entities = []
+        for e in entities:
+            e_start, e_end = e.offset, e.offset + e.length
+            if e_end <= start or e_start >= end:
+                continue
+            clipped_start = max(e_start, start) - start
+            clipped_end = min(e_end, end) - start
+            if clipped_end > clipped_start:
+                from telegram import MessageEntity
+                chunk_entities.append(
+                    MessageEntity(e.type, clipped_start, clipped_end - clipped_start, url=getattr(e, "url", None))
+                )
+        chunks.append((chunk_text, chunk_entities))
+        start = end
+    return chunks

@@ -128,11 +128,11 @@ async def answer_callback(update, context):
         await _ack(q)
         await firstvisit.show_prompt(bot, cid, _FV_SECTION[data]); return
     if data.startswith("m_"):
-        text, kb = menu.menu_screen(data)
+        text, entities, kb = menu.menu_screen(data)
         try:
-            await q.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            await q.message.edit_text(text, reply_markup=kb, entities=entities)
         except Exception:
-            await bot.send_message(chat_id=cid, text=text, reply_markup=kb, parse_mode="HTML")
+            await bot.send_message(chat_id=cid, text=text, reply_markup=kb, entities=entities)
         return
 
     # Действия
@@ -446,8 +446,8 @@ async def text_router(update, context):
         if key in _FV and firstvisit.needs_setup(cid, _FV[key]):
             await firstvisit.show_prompt(bot, cid, _FV[key])
             return
-        t, kb = menu.menu_screen(key)
-        await bot.send_message(chat_id=cid, text=t, reply_markup=kb, parse_mode="HTML")
+        t, entities, kb = menu.menu_screen(key)
+        await bot.send_message(chat_id=cid, text=t, reply_markup=kb, entities=entities)
         return
 
     # Режим добавления одежды (файлом)

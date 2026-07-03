@@ -144,6 +144,20 @@ class MessageBuilder:
         """Явный контроль пустой строки, когда авто-отступов section()/warning() недостаточно."""
         return self._ensure_blank_line()
 
+    def embed(self, msg: MessageSpec):
+        """Вставляет уже готовый MessageSpec (text+entities) из другой функции — например
+        встроить отдельно собранное штормовое предупреждение внутрь прогноза погоды.
+        Сдвигает offset каждой entity на текущую позицию (в UTF-16 units), ничего не
+        парсит заново. Сама расставляет отступ перед собой, как section()/warning()."""
+        self._ensure_blank_line()
+        offset = u16_len(self.text)
+        self._chunks.append(msg.text)
+        for e in (msg.entities or []):
+            self._entities.append(MessageEntity(e.type, e.offset + offset, e.length, url=getattr(e, "url", None)))
+        if msg.text.strip():
+            self._has_content = True
+        return self
+
     def build(self, reply_markup=None, parse_mode=None) -> MessageSpec:
         return MessageSpec(
             text=self.text,

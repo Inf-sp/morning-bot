@@ -556,9 +556,9 @@ def _fridge_available(items: list) -> list:
     """Имена продуктов с on=True (для рецепта)."""
     return [it["name"] for it in _fridge_migrate(items) if it.get("on", True)]
 
-def _food_card(d, label="Рецепт дня") -> str:
+def _food_card(d, label="Рецепт дня"):
     """Единый формат карточки рецепта для радара и нового рецепта."""
-    return food_ui.food_card(d, label=label).text
+    return food_ui.food_card(d, label=label)
 
 DOCTOR_INTRO = (
     "👩🏻‍⚕️ Врач\n\n"
@@ -671,8 +671,8 @@ async def send_recipe(bot, cid, constraint="обычное блюдо"):
     store.last_action[str(cid)] = ("recipe", constraint)
     card = _recipe_card(d)
     store.last_source[str(cid)] = "Питание · Рецепт"
-    store.last_answer[str(cid)] = card
-    await util.send_html(bot, cid, card, reply_markup=_recipe_kb())
+    store.last_answer[str(cid)] = card.text
+    await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=_recipe_kb())
 
 async def send_recipe_featured(bot, cid):
     """Новый рецепт из меню — под результатом кнопки завтрак/обед/ужин."""
@@ -684,8 +684,8 @@ async def send_recipe_featured(bot, cid):
     store.last_action[str(cid)] = ("recipe", "featured")
     card = _recipe_card(d)
     store.last_source[str(cid)] = "Питание · Рецепт"
-    store.last_answer[str(cid)] = card
-    await util.send_html(bot, cid, card, reply_markup=_recipe_typed_kb())
+    store.last_answer[str(cid)] = card.text
+    await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=_recipe_typed_kb())
 
 async def send_recipe_push(bot, cid):
     """Уведомление 12:30 — без кнопок."""
@@ -695,8 +695,8 @@ async def send_recipe_push(bot, cid):
         await verify.safe_error(bot, cid, e); return
     card = _recipe_card(d)
     store.last_source[str(cid)] = "Питание · Рецепт"
-    store.last_answer[str(cid)] = card
-    await util.send_html(bot, cid, card)
+    store.last_answer[str(cid)] = card.text
+    await bot.send_message(chat_id=cid, text=card.text, entities=card.entities)
 
 
 def _gen_leftovers_recipe(ingredients):
@@ -717,8 +717,8 @@ async def send_leftovers(bot, cid, ingredients):
     store.last_action[str(cid)] = ("leftovers", ingredients)
     card = _food_card(d, label="Рецепт из холодильника")
     store.last_source[str(cid)] = "Питание · Остатки"
-    store.last_answer[str(cid)] = card
-    await util.send_html(bot, cid, card, reply_markup=_fridge_recipe_kb())
+    store.last_answer[str(cid)] = card.text
+    await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=_fridge_recipe_kb())
 
 
 _FRIDGE_PAGE = 8  # продуктов на страницу в категории
@@ -957,12 +957,12 @@ async def send_my_recipe_full(bot, cid, idx):
         await bot.send_message(chat_id=cid, text="Рецепт не найден."); return
     d = recipes[idx]
     store.last_recipe[cid_s] = d
-    txt = _food_card(d, label="Рецепт")
+    card = _food_card(d, label="Рецепт")
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить из базы", callback_data=f"as_my_recipe_del_{idx}")],
         [InlineKeyboardButton("◀️  к списку", callback_data="as_my_recipes")],
     ])
-    await util.send_html(bot, cid, txt, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=kb)
 
 
 async def my_recipe_del(bot, cid, idx):

@@ -85,13 +85,83 @@ def test_learning_translate_and_levels_messages():
 
 
 @pytest.mark.unit
-def test_learning_morning_words_message():
-    msg = learning.morning_words("🇳🇱", "<i>Повтори</i>", [("Je hand opsteken", "Поднять руку")], [("Huis", "Дом")])
+def test_learning_morning_words_message_with_phrases_and_words():
+    msg = learning.morning_words(
+        "🇳🇱",
+        "Повтори",
+        is_read_aloud=True,
+        phrases=[("Je hand opsteken", "Поднять руку")],
+        words=[("Huis", "Дом")],
+    )
 
-    assert msg.parse_mode == "HTML"
-    assert "💬 <b>Фразы</b>" in msg.text
+    assert msg.parse_mode is None
+    assert msg.text == (
+        "📚🇳🇱 Слова и фразы дня\n"
+        "Повтори\n\n"
+        "💬 Фразы\n"
+        "• Je hand opsteken → Поднять руку\n\n"
+        "📖 Слова\n"
+        "• Huis → Дом\n\n"
+        "Попробуй использовать 1-2 элемента сегодня в сообщениях, мыслях или разговоре."
+    )
+    assert _entities_of_type(msg, MessageEntity.BOLD) == ["📚🇳🇱 Слова и фразы дня", "💬 Фразы", "📖 Слова"]
+    assert _entities_of_type(msg, MessageEntity.ITALIC) == [
+        "Повтори",
+        "Попробуй использовать 1-2 элемента сегодня в сообщениях, мыслях или разговоре.",
+    ]
+
+
+@pytest.mark.unit
+def test_learning_morning_words_empty_hint_plain_method():
+    msg = learning.morning_words("🇳🇱", "Обычный метод", empty_hint=True)
+
+    assert msg.text == (
+        "📚🇳🇱 Слова и фразы дня\n"
+        "Обычный метод\n\n"
+        "📖 Открой словарь, если хочешь добавить что-то новое или быстро повторить текущее."
+    )
+    assert _entities_of_type(msg, MessageEntity.BOLD) == ["📚🇳🇱 Слова и фразы дня"]
+    assert _entities_of_type(msg, MessageEntity.ITALIC) == []
+
+
+@pytest.mark.unit
+def test_learning_morning_words_empty_hint_read_aloud_method():
+    msg = learning.morning_words("🇳🇱", "Прочитай вслух метод", is_read_aloud=True, empty_hint=True)
+
+    assert msg.text == (
+        "📚🇳🇱 Слова и фразы дня\n"
+        "Прочитай вслух метод\n\n"
+        "📖 Открой словарь, если хочешь добавить что-то новое или быстро повторить текущее."
+    )
+    assert _entities_of_type(msg, MessageEntity.ITALIC) == ["Прочитай вслух метод"]
+
+
+@pytest.mark.unit
+def test_learning_morning_words_only_phrases_no_words():
+    msg = learning.morning_words("🇳🇱", "Обычный метод", phrases=[("Je hand opsteken", "Поднять руку")])
+
+    assert "💬 Фразы" in msg.text
     assert "• Je hand opsteken → Поднять руку" in msg.text
-    assert "📖 <b>Слова</b>" in msg.text
+    assert "📖 Слова" not in msg.text
+    assert _entities_of_type(msg, MessageEntity.BOLD) == ["📚🇳🇱 Слова и фразы дня", "💬 Фразы"]
+
+
+@pytest.mark.unit
+def test_learning_morning_words_only_words_no_phrases():
+    msg = learning.morning_words("🇳🇱", "Обычный метод", words=[("Huis", "Дом")])
+
+    assert "📖 Слова" in msg.text
+    assert "• Huis → Дом" in msg.text
+    assert "💬 Фразы" not in msg.text
+    assert _entities_of_type(msg, MessageEntity.BOLD) == ["📚🇳🇱 Слова и фразы дня", "📖 Слова"]
+
+
+@pytest.mark.unit
+def test_learning_morning_words_no_phrases_or_words_no_tip():
+    msg = learning.morning_words("🇳🇱", "Обычный метод")
+
+    assert msg.text == "📚🇳🇱 Слова и фразы дня\nОбычный метод"
+    assert _entities_of_type(msg, MessageEntity.ITALIC) == []
 
 
 @pytest.mark.unit

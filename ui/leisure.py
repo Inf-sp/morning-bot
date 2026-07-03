@@ -1,7 +1,8 @@
 import re
 
-from .builder import MessageSpec, from_html
-from util import esc
+from telegram import MessageEntity
+
+from .builder import MessageBuilder, MessageSpec, u16_len
 
 
 def clip(text, limit=450):
@@ -17,108 +18,208 @@ def clip(text, limit=450):
 
 
 def movie_card(item, tm):
-    """Составная карточка (условные блоки + esc()-нутые поля) -> from_html."""
+    """Составная карточка (условные блоки) -> MessageBuilder."""
     item = item if isinstance(item, dict) else {"title": str(item)}
     title = (tm.get("name") if tm else "") or item.get("title", "")
     year = f" ({tm.get('year')})" if tm and tm.get("year") else ""
     kind = (tm.get("kind") if tm else "") or ""
     icon = "📺" if kind == "tv" else "🎬"
     type_label = "Сериал" if kind == "tv" else ("Фильм" if kind == "movie" else "")
-    lines = [f"{icon} <b>{esc(title)}{year}</b>"]
     en = (tm.get("name_en") if tm else "") or item.get("title_en", "")
+
+    b = MessageBuilder()
+    b.text_line(f"{icon} ")
+    b.bold(f"{title}{year}")
+    b.newline()
     if en and en.lower() != title.lower():
-        lines.append(f"<i>{esc(en)}</i>")
+        b.italic(en)
+        b.newline()
     genre_bits = " · ".join(x for x in [type_label, (tm.get("genres") if tm else "")] if x)
     if genre_bits:
-        lines += ["", f"🎭 {esc(genre_bits)}"]
+        b.spacer()
+        b.line(f"🎭 {genre_bits}")
     if tm and tm.get("rating"):
-        lines.append(f"⭐ {tm.get('rating'):.1f}/10 TMDb")
+        b.line(f"⭐ {tm.get('rating'):.1f}/10 TMDb")
     if tm and tm.get("overview"):
-        lines += ["", esc(clip(tm["overview"]))]
-    lines += ["", f"💡 {esc(item.get('hook', ''))}"]
+        b.spacer()
+        b.line(clip(tm["overview"]))
+    b.spacer()
+    b.line(f"💡 {item.get('hook', '')}")
     if tm and tm.get("url"):
-        lines += ["", f"🔗 {tm['url']}"]
-    return title, from_html("\n".join(lines))
+        b.spacer()
+        b.line(f"🔗 {tm['url']}")
+    return title, b.build_stripped()
 
 
 def book_text(item):
-    """Составная карточка (условные блоки + esc()-нутые поля) -> from_html."""
-    author = esc(item.get("author", ""))
-    title = esc(item.get("title", ""))
-    en = esc(item.get("title_en", ""))
-    year = esc(str(item.get("year", "")))
+    """Составная карточка (условные блоки) -> MessageBuilder."""
+    author = item.get("author", "")
+    title = item.get("title", "")
+    en = item.get("title_en", "")
+    year = str(item.get("year", ""))
     head_meta = ", ".join(x for x in [en, year] if x)
     head = f"{author} • «{title}»" if author else f"«{title}»"
-    if head_meta:
-        head += f" <i>({head_meta})</i>"
-    lines = [f"📚 <b>{head}</b>"]
+
+    b = MessageBuilder()
+    b.text_line("📚 ")
+    if not head_meta:
+        b.bold(head)
+    else:
+        # "(meta)" одновременно жирный (продолжение заголовка) и курсивный —
+        # как в исходном "<b>...<i>(meta)</i></b>": вложенные entity на одном диапазоне,
+        # весь head+" (meta)" остаётся одной непрерывной bold-entity.
+        meta_text = f"({head_meta})"
+        head_and_gap_offset = u16_len(b.text)
+        b.bold(f"{head} {meta_text}")
+        meta_offset = head_and_gap_offset + u16_len(head) + 1
+        b._entities.append(MessageEntity(MessageEntity.ITALIC, meta_offset, u16_len(meta_text)))
+    b.newline()
     if item.get("desc"):
-        lines += ["", esc(item["desc"])]
+        b.spacer()
+        b.line(item["desc"])
     why = item.get("why") or []
     if isinstance(why, list) and why:
-        lines += ["", "🎯 <b>Почему стоит читать</b>"] + [f"• {esc(str(w)).lstrip('-–— ')}" for w in why]
+        b.spacer()
+        b.text_line("🎯 ")
+        b.bold("Почему стоит читать")
+        b.newline()
+        for w in why:
+            b.bullet(str(w).lstrip("-–— "))
     if item.get("plot"):
-        lines += ["", "✍🏻 <b>Коротко о сюжете</b>", esc(item["plot"])]
+        b.spacer()
+        b.text_line("✍🏻 ")
+        b.bold("Коротко о сюжете")
+        b.newline()
+        b.line(item["plot"])
     if item.get("quote"):
         quote = str(item["quote"]).strip().strip("«»\"")
-        lines += ["", "💬 <b>Цитата</b>", f"«{esc(quote)}»"]
-    return from_html("\n".join(lines))
+        b.spacer()
+        b.text_line("💬 ")
+        b.bold("Цитата")
+        b.newline()
+        b.line(f"«{quote}»")
+    return b.build_stripped()
 
 
 def artist_card(data):
-    """Составная карточка (условные блоки + esc()-нутые поля) -> from_html."""
+    """Составная карточка (условные блоки) -> MessageBuilder."""
     artist = data.get("artist", "")
-    lines = [f"🎸 <b>{esc(artist)}</b>"]
+    b = MessageBuilder()
+    b.text_line("🎸 ")
+    b.bold(artist)
+    b.newline()
     if data.get("desc"):
-        lines += ["", esc(data["desc"])]
+        b.spacer()
+        b.line(data["desc"])
     why = data.get("why") or []
     if isinstance(why, list) and why:
-        lines += ["", "🎯 <b>Почему тебе зайдёт:</b>"] + [f"• {esc(str(w))}" for w in why]
+        b.spacer()
+        b.text_line("🎯 ")
+        b.bold("Почему тебе зайдёт:")
+        b.newline()
+        for w in why:
+            b.bullet(str(w))
     tracks = data.get("tracks") or []
     if isinstance(tracks, list) and tracks:
-        lines += ["", "🎧 <b>С чего начать:</b>"] + [f"• {esc(str(t))}" for t in tracks]
+        b.spacer()
+        b.text_line("🎧 ")
+        b.bold("С чего начать:")
+        b.newline()
+        for t in tracks:
+            b.bullet(str(t))
     if data.get("fact"):
-        lines += ["", "💡 <b>Факт:</b>", esc(data["fact"])]
-    return from_html("\n".join(lines))
+        b.spacer()
+        b.text_line("💡 ")
+        b.bold("Факт:")
+        b.newline()
+        b.line(data["fact"])
+    return b.build_stripped()
 
 
 def country_card(data):
-    """Составная карточка (условные блоки + esc()-нутые поля) -> from_html."""
-    lines = [f"{data.get('flag','')} <b>{esc(data.get('country',''))}</b>", ""]
+    """Составная карточка (условные блоки) -> MessageBuilder."""
+    b = MessageBuilder()
+    b.text_line(f"{data.get('flag', '')} ")
+    b.bold(data.get("country", ""))
+    b.newline()
     if data.get("about"):
-        lines += [esc(data["about"]), ""]
+        b.spacer()
+        b.line(data["about"])
     if data.get("for_what"):
-        lines += [f"🎯 <b>Ради чего ехать:</b> {esc(data['for_what'])}", ""]
+        b.spacer()
+        b.text_line("🎯 ")
+        b.bold("Ради чего ехать:")
+        b.line(f" {data['for_what']}")
     if data.get("langs"):
-        lines += [f"🗣️ <b>Язык:</b> {esc(data['langs'])}", ""]
+        b.spacer()
+        b.text_line("🗣️ ")
+        b.bold("Язык:")
+        b.line(f" {data['langs']}")
     if data.get("note"):
-        lines += [f"⚠️ <b>Главный нюанс:</b> {esc(data['note'])}"]
+        b.spacer()
+        b.text_line("⚠️ ")
+        b.bold("Главный нюанс:")
+        b.line(f" {data['note']}")
     if data.get("fact"):
-        lines += ["", f"🔎 <b>Факт:</b> {esc(data['fact'])}"]
-    return from_html("\n".join(lines).strip())
+        b.spacer()
+        b.text_line("🔎 ")
+        b.bold("Факт:")
+        b.line(f" {data['fact']}")
+    return b.build_stripped()
 
 
 def travel_plan(plan, fallback_country):
-    """Текст плана путешествия персистируется как HTML в NOTES_KEY (bucket='plan', full=True)
-    и позже режется на chunks по 4000 символов в settings.fav_view — резать entities по offset'ам
-    в таком сценарии небезопасно, поэтому держим на HTML, как favorite_card в settings.py."""
+    """Текст плана путешествия персистируется как (text, entities) в NOTES_KEY (bucket='plan')
+    и режется на chunks через util.chunk_text_with_entities в settings.plan_view — компоненты
+    подходят так же, как для остальных карточек этого файла."""
     country = plan.get("title", fallback_country)
-    lines = [f"{plan.get('flag','')} <b>{esc(country)}</b>"]
+    b = MessageBuilder()
+    b.text_line(f"{plan.get('flag', '')} ")
+    b.bold(country)
+    b.newline()
     if plan.get("about"):
-        lines += ["", esc(plan["about"])]
+        b.spacer()
+        b.line(plan["about"])
     if plan.get("why"):
-        lines += ["", "🎯 <b>Почему тебе подойдёт</b>"] + [f"• {esc(str(w))}" for w in plan["why"]]
+        b.spacer()
+        b.text_line("🎯 ")
+        b.bold("Почему тебе подойдёт")
+        b.newline()
+        for w in plan["why"]:
+            b.bullet(str(w))
     if plan.get("best_time"):
-        lines += ["", "📅 <b>Лучшее время</b>", esc(plan["best_time"])]
+        b.spacer()
+        b.text_line("📅 ")
+        b.bold("Лучшее время")
+        b.newline()
+        b.line(plan["best_time"])
     if plan.get("budget"):
-        lines += ["", "💰 <b>Бюджет</b>"] + [f"• {esc(str(b))}" for b in plan["budget"]]
+        b.spacer()
+        b.text_line("💰 ")
+        b.bold("Бюджет")
+        b.newline()
+        for item in plan["budget"]:
+            b.bullet(str(item))
     if plan.get("spots"):
-        lines += ["", "📸 <b>Не пропусти</b>"] + [f"• {esc(str(sp))}" for sp in plan["spots"]]
+        b.spacer()
+        b.text_line("📸 ")
+        b.bold("Не пропусти")
+        b.newline()
+        for spot in plan["spots"]:
+            b.bullet(str(spot))
     if plan.get("lgbt"):
-        lines += ["", "🏳️‍🌈 <b>LGBTQ+</b>", esc(plan["lgbt"])]
+        b.spacer()
+        b.text_line("🏳️‍🌈 ")
+        b.bold("LGBTQ+")
+        b.newline()
+        b.line(plan["lgbt"])
     if plan.get("fact"):
-        lines += ["", "🍲 <b>Интересный факт</b>", esc(plan["fact"])]
-    return MessageSpec(text="\n".join(lines), parse_mode="HTML")
+        b.spacer()
+        b.text_line("🍲 ")
+        b.bold("Интересный факт")
+        b.newline()
+        b.line(plan["fact"])
+    return b.build_stripped()
 
 
 def plain_from_html(text):

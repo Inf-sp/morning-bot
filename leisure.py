@@ -1425,16 +1425,18 @@ async def send_plan(bot, cid):
     if rfact:
         p["fact"] = rfact
     msg = leisure_ui.travel_plan(p, country)
-    plan_text = msg.text
-    store.last_answer[str(cid)] = leisure_ui.plain_from_html(plan_text)
+    store.last_answer[str(cid)] = msg.text
     store.last_source[str(cid)] = "Путешествия · План"
-    store.last_recipe[str(cid)] = {**(store.last_recipe.get(str(cid)) or {}), "plan_text": plan_text}
+    store.last_recipe[str(cid)] = {
+        **(store.last_recipe.get(str(cid)) or {}),
+        "plan_text": msg.text, "plan_entities": util.entities_to_json(msg.entities),
+    }
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Пропустить", callback_data="a_trav_no")],
         [InlineKeyboardButton("💾 Сохранить план поездки", callback_data="a_trav_save")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
-    await bot.send_message(chat_id=cid, text=plan_text, parse_mode=msg.parse_mode, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 async def save_plan(bot, cid):
     from datetime import datetime
@@ -1445,8 +1447,8 @@ async def save_plan(bot, cid):
         await bot.send_message(chat_id=cid, text="Сначала собери план поездки."); return
     store.add_to_list(config.NOTES_KEY, cid, {
         "date": datetime.now(config.TZ).strftime("%d.%m"),
-        "text": plan, "source": "План поездки", "bucket": "plan", "full": True,
-        "country": country,
+        "text": plan, "entities": d.get("plan_entities", []),
+        "source": "План поездки", "bucket": "plan", "country": country,
     })
     await bot.send_message(chat_id=cid, text=f"💾 План поездки ({country}) сохранён в «Мои сохранения» → «Планы».")
     await send_go(bot, cid)

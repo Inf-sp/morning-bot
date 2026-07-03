@@ -1,6 +1,6 @@
 import pytest
 
-from ui.builder import MessageBuilder
+from ui.builder import MessageBuilder, from_html
 
 
 def _slice_u16(text, offset, length):
@@ -107,3 +107,35 @@ def test_build_stripped_trims_trailing_newline_without_breaking_entities():
     assert msg.text == "Заголовок\nтекст"
     bold = _entities_of_type(msg, "bold")
     assert bold == ["Заголовок"]
+
+
+@pytest.mark.unit
+def test_embed_shifts_entities_and_adds_blank_line_when_content_exists():
+    sub = from_html("⚠️ <b>Штормовое предупреждение</b>\n\nОжидаются шквалы.")
+    msg = MessageBuilder().section("Погода на завтра").line("До +18°C").embed(sub).build_stripped()
+
+    assert msg.text == "Погода на завтра\nДо +18°C\n\n⚠️ Штормовое предупреждение\n\nОжидаются шквалы."
+    bold = _entities_of_type(msg, "bold")
+    assert bold == ["Погода на завтра", "Штормовое предупреждение"]
+
+
+@pytest.mark.unit
+def test_embed_on_empty_builder_has_no_leading_blank_line():
+    sub = from_html("<b>Заголовок</b>\nтекст")
+    msg = MessageBuilder().embed(sub).build()
+
+    assert msg.text == "Заголовок\nтекст"
+    assert _entities_of_type(msg, "bold") == ["Заголовок"]
+
+
+@pytest.mark.unit
+def test_embed_preserves_link_entity_url():
+    from telegram import MessageEntity
+    from ui.builder import MessageSpec
+
+    sub = MessageSpec(text="перейти", entities=[MessageEntity(MessageEntity.TEXT_LINK, 0, 7, url="https://example.com")])
+    msg = MessageBuilder().line("шапка").embed(sub).build()
+
+    link_entities = [e for e in msg.entities if e.type == "text_link"]
+    assert len(link_entities) == 1
+    assert link_entities[0].url == "https://example.com"

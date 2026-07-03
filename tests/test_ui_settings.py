@@ -121,10 +121,34 @@ def test_settings_favorite_messages_keep_user_content_verbatim():
     assert any(e.type == "italic" for e in empty.entities)
     assert empty.text == "Книги\n\nпусто"
 
-    assert settings.favorite_card("Src <x>", "01.01", "body").parse_mode == "HTML"
-    assert "Src &lt;x&gt;" in settings.favorite_card("Src <x>", "01.01", "body").text
+    card = settings.favorite_card("Src <x>", "01.01", "body")
+    assert card.text == "⭐ Src <x> · 01.01\n\nbody"
+    assert "Src <x>" in _bold_texts(card)
     assert "Напиши книгу" in settings.favorite_add_prompt("книгу").text
     assert settings.favorite_added().text == "Добавлено."
+
+
+@pytest.mark.unit
+def test_favorite_card_embeds_body_entities_with_shifted_offsets():
+    from telegram import MessageEntity
+
+    body_entities = [MessageEntity(MessageEntity.BOLD, 0, 6), MessageEntity(MessageEntity.ITALIC, 7, 4)]
+    card = settings.favorite_card("Кино", "", "жирный курс", body_entities)
+
+    assert card.text == "⭐ Кино\n\nжирный курс"
+    assert "Кино" in _bold_texts(card)
+    bold_texts = _bold_texts(card)
+    italic_texts = [_slice_u16(card.text, e.offset, e.length) for e in card.entities if e.type == "italic"]
+    assert "жирный" in bold_texts
+    assert italic_texts == ["курс"]
+
+
+@pytest.mark.unit
+def test_favorite_card_without_source_date_has_no_dot_separator():
+    card = settings.favorite_card("Кино", "", "текст заметки")
+
+    assert card.text == "⭐ Кино\n\nтекст заметки"
+    assert not card.entities or all(e.type != "italic" for e in card.entities)
 
 
 @pytest.mark.unit

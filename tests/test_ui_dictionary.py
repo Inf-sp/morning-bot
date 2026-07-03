@@ -99,22 +99,35 @@ def test_dictionary_duplicate_message_spec_for_multiple_items():
 def test_dictionary_overview_message_spec():
     msg = dictionary.dict_overview(3, 2)
 
-    assert msg.parse_mode == "HTML"
-    assert "🗂️ <b>Мой словарь</b>" in msg.text
-    assert "Всего: 5 (🇳🇱 3 · 🇬🇧 2)" in msg.text
+    assert msg.text == "🗂️ Мой словарь\n\nВсего: 5 (🇳🇱 3 · 🇬🇧 2)\n\nВыбери язык 👇"
+    assert _entities_of_type(msg, "bold") == ["🗂️ Мой словарь"]
 
 
 @pytest.mark.unit
 def test_dictionary_language_message_spec():
     msg = dictionary.dict_language("nl", {"word": 4, "phrase": 1})
 
-    assert msg.parse_mode == "HTML"
-    assert msg.text == "🇳🇱 <b>Словарь · Нидерландский</b>\n\nСлов: 4 · Фраз: 1"
+    assert msg.text == "🇳🇱 Словарь · Нидерландский\n\nСлов: 4 · Фраз: 1"
+    assert _entities_of_type(msg, "bold") == ["🇳🇱 Словарь · Нидерландский"]
 
 
 @pytest.mark.unit
-def test_dictionary_deleted_message_spec():
+def test_dictionary_deleted_message_spec_with_word():
     msg = dictionary.dict_deleted("Toevoegen")
 
-    assert msg.parse_mode == "HTML"
-    assert "✅ Слово <b>Toevoegen</b> удалено" in msg.text
+    assert msg.text == (
+        "✅ Слово Toevoegen удалено из текущего списка.\n\n"
+        "Если хочешь, можно сразу открыть словарь или добавить новое."
+    )
+    assert _entities_of_type(msg, "bold") == ["Toevoegen"]
+
+
+@pytest.mark.unit
+def test_dictionary_deleted_message_spec_without_word():
+    msg = dictionary.dict_deleted("")
+
+    assert msg.text == (
+        "✅ Слово удалено из текущего списка.\n\n"
+        "Если хочешь, можно сразу открыть словарь или добавить новое."
+    )
+    assert _entities_of_type(msg, "bold") == []

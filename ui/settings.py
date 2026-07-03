@@ -182,11 +182,19 @@ def note_deleted():
     return MessageSpec(text="❌ Удалил.")
 
 
-def favorite_card(source, date, text):
-    """Текст заметки произвольный (из q.message.text_html) — держим на HTML, рендерится через send_html."""
-    from util import esc
-    header = f"⭐ <b>{esc(source)}</b>" + (f" · {esc(date)}" if date else "")
-    return MessageSpec(text=header + "\n\n" + text, parse_mode="HTML")
+def favorite_card(source, date, text, entities=None):
+    """Заголовок заметки + произвольное тело. Тело приходит как (text, entities) напрямую
+    из уже отправленного Telegram-сообщения (q.message.entities) — никакого HTML-парсинга
+    не нужно, entities только сдвигаются под заголовок через embed()."""
+    b = MessageBuilder()
+    b.text_line("⭐ ")
+    b.bold(source)
+    if date:
+        b.text_line(f" · {date}")
+    b.newline()
+    b.spacer()
+    b.embed(MessageSpec(text=text, entities=entities))
+    return b.build()
 
 
 def trips_empty():

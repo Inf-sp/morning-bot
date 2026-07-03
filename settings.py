@@ -578,18 +578,24 @@ async def handle_callback(bot, cid, data, q=None):
 # ===== СОХРАНЕНИЯ / ЛЮБИМЫЕ (notes.py) =====
 
 async def save_fav(bot, cid, q=None):
-    # Берём оригинальный текст сообщения (с HTML-форматированием) прямо из callback
-    txt = ""
+    # Берём оригинальный текст сообщения прямо из callback — entities уже структурированы
+    # Telegram-ом (Message.entities/caption_entities), без похода через HTML-строку.
+    txt, txt_entities = "", []
     if q is not None and q.message:
-        txt = q.message.text_html or q.message.caption_html or ""
+        txt = q.message.text or q.message.caption or ""
+        txt_entities = list(q.message.entities or q.message.caption_entities or [])
     if not txt:
         txt = store.last_answer.get(str(cid), "")
+        txt_entities = []
     if not txt:
         msg = settings_ui.nothing_to_save()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities); return
     source = store.last_source.get(str(cid), "Прочее")
-    store.add_to_list(config.NOTES_KEY, cid, {"date": datetime.now(config.TZ).strftime("%d.%m"),
-                                              "text": txt, "source": source, "bucket": "fav"})
+    store.add_to_list(config.NOTES_KEY, cid, {
+        "date": datetime.now(config.TZ).strftime("%d.%m"),
+        "text": txt, "entities": util.entities_to_json(txt_entities),
+        "source": source, "bucket": "fav",
+    })
     msg = settings_ui.saved_to_later()
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
 
@@ -843,32 +849,40 @@ async def plan_view(bot, cid, i):
         await send_plans(bot, cid); return
     n = notes_list[i]
     text = n.get("text", "") if isinstance(n, dict) else str(n)
+    entities = util.entities_from_json(n.get("entities") if isinstance(n, dict) else None)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить план", callback_data=f"as_plandel_{i}")],
         [InlineKeyboardButton("◀️ Назад", callback_data="as_bucket_plan")],
     ])
-    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+    chunks = util.chunk_text_with_entities(text, entities, 4000)
+    for idx, (chunk_text, chunk_entities) in enumerate(chunks):
+        markup = kb if idx == len(chunks) - 1 else None
+        try:
+            await bot.send_message(chat_id=cid, text=chunk_text, entities=chunk_entities, reply_markup=markup)
+        except Exception:
+            await bot.send_message(chat_id=cid, text=chunk_text, reply_markup=markup)
 
 async def fav_view(bot, cid, i, back="as_bucket_fav", delete_cb=None):
     notes_list = store.get_list(config.NOTES_KEY, cid)
     if i >= len(notes_list) or _note_bucket(notes_list[i]) != "fav":
         await send_bucket(bot, cid, "fav"); return
     n = notes_list[i]
-    text = (n.get("text", "") if isinstance(n, dict) else str(n)).strip()
+    text = (n.get("text", "") if isinstance(n, dict) else str(n)).rstrip()
+    body_entities = util.entities_from_json(n.get("entities") if isinstance(n, dict) else None)
     src = n.get("source", "") if isinstance(n, dict) else ""
     d = n.get("date", "") if isinstance(n, dict) else ""
-    full = settings_ui.favorite_card(src, d, text).text
+    full = settings_ui.favorite_card(src, d, text, body_entities)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить", callback_data=delete_cb or f"fav_del_{i}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ])
-    chunks = [full[j:j + 4000] for j in range(0, len(full), 4000)]
-    for idx, chunk in enumerate(chunks):
+    chunks = util.chunk_text_with_entities(full.text, full.entities, 4000)
+    for idx, (chunk_text, chunk_entities) in enumerate(chunks):
         markup = kb if idx == len(chunks) - 1 else None
         try:
-            await bot.send_message(chat_id=cid, text=chunk, parse_mode="HTML", reply_markup=markup)
+            await bot.send_message(chat_id=cid, text=chunk_text, entities=chunk_entities, reply_markup=markup)
         except Exception:
-            await bot.send_message(chat_id=cid, text=chunk, reply_markup=markup)
+            await bot.send_message(chat_id=cid, text=chunk_text, reply_markup=markup)
 
 
 async def fav_del(bot, cid, i):
