@@ -605,7 +605,7 @@ def _recipe_typed_kb():
 
 def _fridge_recipe_kb():
     return _kb([
-        [("🔄 Заменить", "as_fridge_cook")],
+        [("✨ Заменить", "as_fridge_cook")],
         [("◀️ Назад", "m_food")],
     ])
 

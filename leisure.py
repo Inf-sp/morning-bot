@@ -874,22 +874,23 @@ def _ticketmaster_events_for_artist(artist, cc, start_dt="", end_dt="", size=3):
         params["endDateTime"] = end_dt
     try:
         r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json", params=params, timeout=15)
-        events = []
-        al = artist.lower()
-        for e in r.json().get("_embedded", {}).get("events", []):
-            name_l = e.get("name", "").lower()
-            attractions = [att.get("name", "").lower()
-                           for att in (e.get("_embedded", {}).get("attractions") or [])]
-            attr_match = any(al in nm or nm in al for nm in attractions)
-            if any(k in name_l for k in _TRIBUTE_MARKERS):
-                continue
-            if not (al in name_l or attr_match):
-                continue
-            e["_artist"] = artist
-            events.append(e)
-        return util.ttl_set("ticketmaster", cache_key, events)
+        r.raise_for_status()
     except Exception:
-        return util.ttl_set("ticketmaster", cache_key, [])
+        return []
+    events = []
+    al = artist.lower()
+    for e in r.json().get("_embedded", {}).get("events", []):
+        name_l = e.get("name", "").lower()
+        attractions = [att.get("name", "").lower()
+                       for att in (e.get("_embedded", {}).get("attractions") or [])]
+        attr_match = any(al in nm or nm in al for nm in attractions)
+        if any(k in name_l for k in _TRIBUTE_MARKERS):
+            continue
+        if not (al in name_l or attr_match):
+            continue
+        e["_artist"] = artist
+        events.append(e)
+    return util.ttl_set("ticketmaster", cache_key, events)
 
 def _ticketmaster_music_events(cc, size=10):
     if not config.TICKETMASTER_API_KEY:
@@ -909,16 +910,17 @@ def _ticketmaster_music_events(cc, size=10):
                              "sort": "date,asc",
                          },
                          timeout=15)
-        events = []
-        for e in r.json().get("_embedded", {}).get("events", []):
-            name_l = e.get("name", "").lower()
-            if any(k in name_l for k in _TRIBUTE_MARKERS):
-                continue
-            e["_artist"] = e.get("name", "")
-            events.append(e)
-        return util.ttl_set("ticketmaster", cache_key, events)
+        r.raise_for_status()
     except Exception:
-        return util.ttl_set("ticketmaster", cache_key, [])
+        return []
+    events = []
+    for e in r.json().get("_embedded", {}).get("events", []):
+        name_l = e.get("name", "").lower()
+        if any(k in name_l for k in _TRIBUTE_MARKERS):
+            continue
+        e["_artist"] = e.get("name", "")
+        events.append(e)
+    return util.ttl_set("ticketmaster", cache_key, events)
 
 def _concert_country_search_name(name, cc=""):
     by_cc = {
@@ -951,30 +953,31 @@ def _eventbrite_events(query, country_name, size=10):
             },
             timeout=15,
         )
-        events = []
-        for e in r.json().get("events", []):
-            name = (e.get("name") or {}).get("text") or ""
-            url = e.get("url") or ""
-            start = (e.get("start") or {}).get("local") or ""
-            venue = e.get("venue") or {}
-            city = ((venue.get("address") or {}).get("city") or "").strip()
-            venue_name = (venue.get("name") or "").strip()
-            if not name or any(k in name.lower() for k in _TRIBUTE_MARKERS):
-                continue
-            events.append({
-                "id": e.get("id") or url or name,
-                "name": name,
-                "url": url,
-                "_artist": query,
-                "_source": "Eventbrite",
-                "dates": {"start": {"localDate": start[:10]}},
-                "_embedded": {"venues": [{"name": venue_name, "city": {"name": city}}]},
-            })
-        return util.ttl_set("eventbrite", cache_key, events)
+        r.raise_for_status()
     except Exception:
-        return util.ttl_set("eventbrite", cache_key, [])
+        return []
+    events = []
+    for e in r.json().get("events", []):
+        name = (e.get("name") or {}).get("text") or ""
+        url = e.get("url") or ""
+        start = (e.get("start") or {}).get("local") or ""
+        venue = e.get("venue") or {}
+        city = ((venue.get("address") or {}).get("city") or "").strip()
+        venue_name = (venue.get("name") or "").strip()
+        if not name or any(k in name.lower() for k in _TRIBUTE_MARKERS):
+            continue
+        events.append({
+            "id": e.get("id") or url or name,
+            "name": name,
+            "url": url,
+            "_artist": query,
+            "_source": "Eventbrite",
+            "dates": {"start": {"localDate": start[:10]}},
+            "_embedded": {"venues": [{"name": venue_name, "city": {"name": city}}]},
+        })
+    return util.ttl_set("eventbrite", cache_key, events)
 
-async def _eventbrite_events_many(artists, country_name, size=3, limit=10):
+async def _eventbrite_events_many(artists, country_name, size=3, limit=40):
     tasks = [
         asyncio.to_thread(_eventbrite_events, artist, country_name, size)
         for artist in artists[:limit]
@@ -986,9 +989,9 @@ async def _eventbrite_events_many(artists, country_name, size=3, limit=10):
             continue
         for e in batch:
             found[e.get("id") or e.get("url") or e.get("name", "")] = e
-    return sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate", "9999"))
+    return sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate") or "9999-99-99")
 
-async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3, limit=15):
+async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3, limit=40):
     tasks = [
         asyncio.to_thread(_ticketmaster_events_for_artist, artist, cc, start_dt, end_dt, size)
         for artist in artists[:limit]
@@ -1001,12 +1004,13 @@ async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3,
         for e in batch:
             artist = e.get("_artist", "")
             date = e.get("dates", {}).get("start", {}).get("localDate", "")
-            pair = (artist.lower(), date)
+            city = ((e.get("_embedded", {}).get("venues") or [{}])[0].get("city") or {}).get("name", "")
+            pair = (artist.lower(), date, city.lower())
             if pair in seen_pairs:
                 continue
             seen_pairs.add(pair)
             found[e.get("id") or f"{artist}:{date}:{e.get('name', '')}"] = e
-    return sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate", "9999"))
+    return sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate") or "9999-99-99")
 
 def _web_concert_links_for_artists(artists, country_name, limit_artists=8, per_artist=2):
     """Fallback через веб-поиск: Songkick/Bandsintown/официальные страницы, если Ticketmaster пуст."""
@@ -1080,12 +1084,12 @@ async def find_concerts(bot, cid, mode="home"):
     cname_place = _concert_place_name(cname, cc)
 
     from util import _MONTHS
-    events = await _ticketmaster_events_many(artists, cc, size=3, limit=15)
+    events = await _ticketmaster_events_many(artists, cc, size=3, limit=40)
     web_links = []
     source_label = "Концерты твоих артистов"
     eventbrite_country = _concert_country_search_name(cname, cc)
     if not events:
-        events = await _eventbrite_events_many(artists, eventbrite_country, size=3, limit=10)
+        events = await _eventbrite_events_many(artists, eventbrite_country, size=3, limit=40)
         if events:
             source_label = "Концерты твоих артистов · Eventbrite"
     if not events:
@@ -1208,7 +1212,7 @@ async def send_weekly_events(bot, cid):
             date_from_tm = now.strftime("%Y-%m-%dT%H:%M:%SZ")
             date_to_tm = (now + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
             events = await _ticketmaster_events_many(
-                artists, cc, start_dt=date_from_tm, end_dt=date_to_tm, size=3, limit=15
+                artists, cc, start_dt=date_from_tm, end_dt=date_to_tm, size=3, limit=40
             )
             for e in events[:5]:
                 artist = e.get("_artist", "")
