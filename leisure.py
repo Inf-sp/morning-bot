@@ -914,49 +914,6 @@ def _ticketmaster_events_for_artist(artist, cc, start_dt="", end_dt="", size=3):
         events.append(e)
     return util.ttl_set("ticketmaster", cache_key, events)
 
-def _ticketmaster_music_events(cc, size=10):
-    return _ticketmaster_city_events(cc, classification_name="music", size=size)
-
-def _ticketmaster_city_events(cc, city="", classification_name=None, keyword=None,
-                               start_dt="", end_dt="", size=10):
-    """Общий фид событий в стране/городе без привязки к артисту — для категорий Афиши.
-    classification_name -> Ticketmaster segment (music/arts&theatre/...), keyword -> текстовый поиск."""
-    if not config.TICKETMASTER_API_KEY:
-        return []
-    cache_key = f"city-events|{cc}|{city}|{classification_name}|{keyword}|{start_dt}|{end_dt}|{size}".lower()
-    cached = util.ttl_get("ticketmaster", cache_key, 21600)
-    if cached is not None:
-        return cached
-    import requests
-    params = {
-        "apikey": config.TICKETMASTER_API_KEY,
-        "countryCode": cc,
-        "size": size,
-        "sort": "date,asc",
-    }
-    if city:
-        params["city"] = city
-    if classification_name:
-        params["classificationName"] = classification_name
-    if keyword:
-        params["keyword"] = keyword
-    if start_dt:
-        params["startDateTime"] = start_dt
-    if end_dt:
-        params["endDateTime"] = end_dt
-    try:
-        r = requests.get("https://app.ticketmaster.com/discovery/v2/events.json", params=params, timeout=15)
-        r.raise_for_status()
-    except Exception:
-        return []
-    events = []
-    for e in r.json().get("_embedded", {}).get("events", []):
-        name_l = e.get("name", "").lower()
-        if any(k in name_l for k in _TRIBUTE_MARKERS):
-            continue
-        e["_artist"] = e.get("name", "")
-        events.append(e)
-    return util.ttl_set("ticketmaster", cache_key, events)
 
 def _concert_country_search_name(name, cc=""):
     by_cc = {
@@ -1105,38 +1062,6 @@ def _concert_min_price(e):
     amount = int(best) if best == int(best) else round(best, 2)
     return f"от {amount} {currency}".strip()
 
-# key, label, Ticketmaster classificationName, keyword, Eventbrite category_id
-AFISHA_CATEGORIES = [
-    ("concerts", "🎫 Концерты", "music", None, "103"),
-    ("festivals", "🎪 Фестивали", None, "festival", None),
-    ("theatre", "🎭 Театры", "arts&theatre", None, "105"),
-    ("comedy", "😂 Стендап", "arts&theatre", None, "105"),
-    ("exhibitions", "🖼️ Выставки", "arts&theatre", None, "105"),
-]
-
-_COMEDY_GENRE_MARKERS = ("comedy", "stand-up", "standup")
-_THEATRE_EXCLUDE_FOR_EXHIBITIONS = ("theatre", "theater", "comedy", "stand-up", "standup",
-                                    "dance", "magic", "opera", "musical")
-
-def _afisha_genre_matches(e, category_key):
-    """Постфильтр внутри общего Ticketmaster-сегмента arts&theatre: разводит
-    Театры/Стендап/Выставки по classifications[].genre.name, т.к. единого segment на каждую нет."""
-    if category_key not in ("comedy", "exhibitions", "theatre"):
-        return True
-    genres = [((c.get("genre") or {}).get("name") or "").lower()
-              for c in (e.get("classifications") or [])]
-    genres += [((c.get("subGenre") or {}).get("name") or "").lower()
-               for c in (e.get("classifications") or [])]
-    if category_key == "comedy":
-        return any(any(m in g for m in _COMEDY_GENRE_MARKERS) for g in genres)
-    if category_key == "exhibitions":
-        # нет отдельного genre "exhibition" на большинстве рынков — считаем выставкой то,
-        # что попало в arts&theatre, но явно не относится к сценическим жанрам
-        return not any(any(m in g for m in _THEATRE_EXCLUDE_FOR_EXHIBITIONS) for g in genres)
-    if category_key == "theatre":
-        return any(m in g for g in genres for m in ("theatre", "theater", "musical", "opera", "dance"))
-    return True
-
 def _concert_place_name(name, cc=""):
     cc = (cc or "").upper()
     by_cc = {
@@ -1210,6 +1135,105 @@ async def refresh_concerts_cache(cid):
     _concerts_cache_set(cid, cc, events)
 
 
+_SEEN_CONCERTS_LIMIT = 300  # ограничение размера истории «виденных» concert ID на пользователя
+
+
+def _concert_event_id(e):
+    """Стабильный ID концерта для сравнения «уже видел / новый»: нативный id источника,
+    иначе (артист, дата, город) — тот же ключ, которым события дедуплицируются в _ticketmaster_events_many/_eventbrite_events_many."""
+    if e.get("id"):
+        return str(e["id"])
+    artist = e.get("_artist", "")
+    date = e.get("dates", {}).get("start", {}).get("localDate", "")
+    city = ((e.get("_embedded", {}).get("venues") or [{}])[0].get("city") or {}).get("name", "")
+    return f"{artist.lower()}:{date}:{city.lower()}"
+
+
+def _seen_concerts_has_history(cid):
+    return str(cid) in store._load(config.SEEN_CONCERTS_KEY)
+
+
+def _seen_concerts_get(cid):
+    return set(store._load(config.SEEN_CONCERTS_KEY).get(str(cid), []))
+
+
+def _seen_concerts_add(cid, ids):
+    d = store._load(config.SEEN_CONCERTS_KEY)
+    merged = list(dict.fromkeys([*d.get(str(cid), []), *ids]))
+    d[str(cid)] = merged[-_SEEN_CONCERTS_LIMIT:]
+    store._save(config.SEEN_CONCERTS_KEY, d)
+
+
+async def _fetch_favorite_events(cid):
+    """Концерты избранных артистов пользователя в его стране: сперва недельный кэш (его прогревает
+    job_refresh_concerts_cache по вс перед этой же проверкой), иначе живой запрос. [] если артистов/ключа нет."""
+    artists = _ensure_artists(cid)
+    if not artists or not config.TICKETMASTER_API_KEY:
+        return []
+    s = store.get_settings(cid)
+    cc = (s.get("cc") or "NL").upper()
+    cname = s.get("country") or "твоя страна"
+    cached = _concerts_cache_get(cid, cc)
+    if cached is not None:
+        return cached
+    return await _fetch_concerts(artists, cc, cname)
+
+
+async def find_new_favorite_concerts(cid):
+    """Сравнивает свежие концерты избранных артистов с уже виденными и возвращает только новые
+    (без побочных эффектов — запись в seen делает вызывающий код после успешной отправки)."""
+    events = await _fetch_favorite_events(cid)
+    seen = _seen_concerts_get(cid)
+    return [e for e in events if _concert_event_id(e) not in seen]
+
+
+async def send_new_concerts_notif(bot, cid):
+    """⭐ Новые концерты любимых артистов — событийное уведомление: молчит, если ничего
+    нового не появилось с прошлой проверки (в отличие от еженедельной «Афиши»).
+    При первом включении (нет истории seen) тихо запоминает текущие концерты, ничего не шлёт —
+    иначе первый запуск продублировал бы всю афишу как «новое»."""
+    if not _seen_concerts_has_history(cid):
+        events = await _fetch_favorite_events(cid)
+        _seen_concerts_add(cid, [_concert_event_id(e) for e in events])
+        return
+
+    new_events = await find_new_favorite_concerts(cid)
+    if not new_events:
+        return
+    s = store.get_settings(cid)
+    cc = (s.get("cc") or "NL").upper()
+    flag = util.flag_from_cc(cc) or "🏳"
+
+    from util import _MONTHS
+
+    def _fmt_date(ds):
+        try:
+            y, m, dd = ds.split("-")
+            return f"{int(dd)} {_MONTHS[int(m)-1]} {y}"
+        except Exception:
+            return ds
+
+    rows_data = []
+    for e in new_events:
+        date = e.get("dates", {}).get("start", {}).get("localDate", "")
+        city = ((e.get("_embedded", {}).get("venues") or [{}])[0].get("city") or {}).get("name", "")
+        rows_data.append({
+            "artist": e.get("_artist", ""),
+            "flag": flag,
+            "place": city,
+            "genre": _concert_genre(e),
+            "price": _concert_min_price(e),
+            "date": _fmt_date(date) if date else "",
+            "url": e.get("url", ""),
+        })
+
+    msg = leisure_ui.concerts_list("Новые концерты твоих артистов", rows_data)
+    store.last_source[str(cid)] = "Досуг · Концерты"
+    store.last_answer[str(cid)] = msg.text
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, disable_web_page_preview=True)
+    _seen_concerts_add(cid, [_concert_event_id(e) for e in new_events])
+
+
 async def find_concerts(bot, cid, mode="home"):
     if not config.TICKETMASTER_API_KEY:
         await bot.send_message(chat_id=cid,
@@ -1280,111 +1304,10 @@ async def find_concerts(bot, cid, mode="home"):
     msg = leisure_ui.concerts_list(place_label, rows_data)
     store.last_source[str(cid)] = "Досуг · Концерты"
     store.last_answer[str(cid)] = msg.text
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
+                           disable_web_page_preview=True)
 
 
-def _afisha_home_place(cid):
-    """Город/страна/cc пользователя + отформатированное название страны для афиши."""
-    s = store.get_settings(cid)
-    cc = (s.get("cc") or "NL").upper()
-    flag = util.flag_from_cc(cc) or "🏳"
-    cname = s.get("country") or "твоя страна"
-    city = s.get("city") or ""
-    return {"cc": cc, "flag": flag, "cname": cname, "city": city,
-            "cname_place": _concert_place_name(cname, cc)}
-
-
-async def _afisha_category_events(category_key, cc, city, start_dt, end_dt, size=10):
-    """Список сырых событий Ticketmaster (+ Eventbrite фолбэк) для одной категории Афиши,
-    уже отфильтрованных постфильтром жанра и без привязки к артисту."""
-    cat = next((c for c in AFISHA_CATEGORIES if c[0] == category_key), None)
-    if not cat:
-        return []
-    _, _, classification_name, keyword, eventbrite_cat = cat
-    events = await asyncio.to_thread(
-        _ticketmaster_city_events, cc, city, classification_name, keyword, start_dt, end_dt, size)
-    events = [e for e in events if _afisha_genre_matches(e, category_key)]
-    if not events and eventbrite_cat:
-        eventbrite_country = _concert_country_search_name("", cc)
-        query = keyword or category_key
-        events = await asyncio.to_thread(_eventbrite_events, query, eventbrite_country, size, eventbrite_cat)
-    return events
-
-
-def _afisha_event_row(e, flag, city_fallback=""):
-    from util import _MONTHS
-
-    def _fmt_date(ds):
-        try:
-            y, m, dd = ds.split("-")
-            return f"{int(dd)} {_MONTHS[int(m)-1]} {y}"
-        except Exception:
-            return ds
-
-    date = e.get("dates", {}).get("start", {}).get("localDate", "")
-    city = ((e.get("_embedded", {}).get("venues") or [{}])[0].get("city") or {}).get("name", "") or city_fallback
-    return {
-        "artist": e.get("_artist") or e.get("name", ""),
-        "place": f"{flag} {city}".strip() if city else "",
-        "date": _fmt_date(date) if date else "",
-        "url": e.get("url", ""),
-    }
-
-
-async def send_city_digest(bot, cid):
-    """«📍 В моём городе» — саммари лучших мероприятий из всех 5 категорий Афиши сразу.
-    Концерты фильтруются по вкусу пользователя (артисты + LLM-ранжирование), остальные
-    категории - просто ближайшие по дате, без персонального фильтра (нет данных для матчинга)."""
-    if not config.TICKETMASTER_API_KEY:
-        await bot.send_message(chat_id=cid,
-            text="🎫 Поиск мероприятий требует бесплатный ключ Ticketmaster.\n"
-                 "Заведи его на developer.ticketmaster.com и добавь на Railway переменную TICKETMASTER_API_KEY.")
-        return
-
-    place = _afisha_home_place(cid)
-    cc, flag, city = place["cc"], place["flag"], place["city"]
-
-    from datetime import datetime, timedelta
-    now = datetime.now(config.TZ)
-    date_from = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    date_to = (now + timedelta(days=182)).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    artists = _ensure_artists(cid)
-
-    async def _concerts_top():
-        if not artists:
-            return []
-        events = await _ticketmaster_events_many(artists, cc, start_dt=date_from, end_dt=date_to, size=5, limit=40)
-        if not events:
-            eventbrite_country = _concert_country_search_name("", cc)
-            events = await _eventbrite_events_many(artists, eventbrite_country, size=5, limit=40)
-        if len(events) <= 3:
-            return events[:3]
-        return await _rank_concerts_by_taste(events, artists)
-
-    async def _category_top(category_key):
-        # city не передаём: настройки хранят локализованное название ("Алкмар"), а Ticketmaster
-        # ждёт точное официальное имя города ("Alkmaar") - без надёжной транслитерации это давало
-        # 0 результатов почти всегда. Ищем по всей стране (cc), как и Концерты.
-        events = await _afisha_category_events(category_key, cc, "", date_from, date_to, size=10)
-        return events[:3]
-
-    results = await asyncio.gather(
-        _concerts_top(),
-        *[_category_top(key) for key, *_ in AFISHA_CATEGORIES if key != "concerts"],
-        return_exceptions=True,
-    )
-    results = [r if not isinstance(r, Exception) else [] for r in results]
-
-    categories = []
-    for (key, label, *_rest), events in zip(AFISHA_CATEGORIES, results):
-        categories.append({"label": label, "events": [_afisha_event_row(e, flag) for e in events]})
-
-    city_label = city or place["cname_place"]
-    msg = leisure_ui.city_digest(city_label, categories)
-    store.last_source[str(cid)] = "Досуг · В моём городе"
-    store.last_answer[str(cid)] = msg.text
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
 
 
 async def _rank_concerts_by_taste(events, artists):
@@ -1529,7 +1452,7 @@ async def send_weekly_events(bot, cid):
         lines = ["🎵 <b>События следующей недели</b>", "",
                  f"Для {esc(cname)} ничего не нашёл на ближайшие дни."]
 
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML")
+    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", disable_web_page_preview=True)
 
 
 async def concert_pick_country(bot, cid):

@@ -19,6 +19,7 @@ NOTIF_TYPES = [
     ("checkin_day",    "🫣 Дневная разгрузка"),
     ("evening_weather","🌆 Вечерняя погода"),
     ("weekly_events",  "🎵 Афиша недели"),
+    ("favorite_artists","⭐ Новые концерты любимых артистов"),
     ("weekly_forecast","🌍 Недельный прогноз"),
     ("daily_words_nl", "🇳🇱 Нидерландский"),
     ("daily_words_en", "🇬🇧 Английский"),
@@ -119,6 +120,8 @@ def cuisine_context(cid):
 
 
 def _notif_label(kind: str, label: str) -> str:
+    if kind == "favorite_artists":
+        return f"{label} (проверка по ВС, только если есть новое)"
     if kind in ("weekly_events", "weekly_forecast"):
         return f"{label} (1 раз в ВС в {'10:00' if kind == 'weekly_events' else '19:00'})"
     if kind in ("live_lang",):
@@ -216,6 +219,9 @@ async def send_scheduled_notification(bot, cid, kind):
     elif kind == "weekly_events":
         import leisure as _l
         await _l.send_weekly_events(_NoKbBot(bot), cid)
+    elif kind == "favorite_artists":
+        import leisure as _l
+        await _l.send_new_concerts_notif(_NoKbBot(bot), cid)
     elif kind == "evening_weather":
         import weather as _w
         await _w.send_weather(_NoKbBot(bot), cid, "tomorrow_plain")

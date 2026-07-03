@@ -251,8 +251,6 @@ async def answer_callback(update, context):
                          "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
                          "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
                 await _ack(q); await leisure.find_concerts(bot, cid, act.split("_")[1])
-            elif act == "city_digest":
-                await _ack(q); await leisure.send_city_digest(bot, cid)
             elif act == "listen":
                 await _ack(q); await leisure.send_listen(bot, cid)
             elif act == "listen_no":
@@ -687,6 +685,16 @@ async def job_weekly_events(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logging.exception("job_weekly_events failed for cid=%s", cid)
 
+async def job_favorite_artists(context: ContextTypes.DEFAULT_TYPE):
+    """⭐ Новые концерты любимых артистов — шлёт только если появилось что-то новое."""
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "favorite_artists"):
+            continue
+        try:
+            await settings.send_scheduled_notification(context.bot, cid, "favorite_artists")
+        except Exception:
+            logging.exception("job_favorite_artists failed for cid=%s", cid)
+
 async def job_live_lang(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "live_lang"):
@@ -782,6 +790,7 @@ def main():
     jq.run_daily(job_lagom,           time=_t("09:00"), days=tuple(range(7)))
     jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(6,))      # вс, прогрев кэша концертов
     jq.run_daily(job_weekly_events,   time=_t("10:00"), days=(6,))             # вс
+    jq.run_daily(job_favorite_artists, time=_t("10:05"), days=(6,))            # вс, только если есть новое
     jq.run_daily(job_daily_words,     time=_t("11:00"), days=tuple(range(7)))
     jq.run_daily(job_live_lang,       time=_t("16:30"), days=tuple(range(7)))
     jq.run_daily(job_recipe,          time=_t("12:30"), days=tuple(range(7)))

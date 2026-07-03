@@ -165,35 +165,6 @@ def concerts_list(place_label, events, empty_hint=""):
     return b.build_stripped()
 
 
-def city_digest(city_label, categories):
-    """«В моём городе» — саммари лучших мероприятий из всех категорий Афиши -> MessageBuilder.
-    categories: [{"label": "🎫 Концерты", "events": [{artist, place, date, url}, ...]}, ...]."""
-    b = MessageBuilder()
-    b.text_line("📍 ")
-    b.bold(f"В городе {city_label}")
-    b.newline()
-    if not any(c.get("events") for c in categories):
-        b.spacer()
-        b.line("Сейчас ничего не нашёл. Попробуй другой город 🌍")
-        return b.build_stripped()
-    for cat in categories:
-        events = cat.get("events") or []
-        if not events:
-            continue
-        b.section(cat.get("label", ""))
-        for ev in events:
-            b.bold(ev.get("artist", ""))
-            b.newline()
-            if ev.get("place"):
-                b.line(f"📍 {ev['place']}")
-            if ev.get("date"):
-                b.line(f"🗓️ {ev['date']}")
-            if ev.get("url"):
-                b.link("Подробнее…", ev["url"])
-                b.newline()
-    return b.build_stripped()
-
-
 def country_card(data):
     """Составная карточка (условные блоки) -> MessageBuilder."""
     b = MessageBuilder()

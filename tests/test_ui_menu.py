@@ -77,12 +77,12 @@ def test_menu_screen_wardrobe_message_spec_has_html_and_keyboard():
 
 
 @pytest.mark.unit
-def test_menu_screen_leisure_links_to_concerts_and_city_digest():
+def test_menu_screen_leisure_links_to_concerts():
     msg = menu.menu_screen("m_leisure")
 
     callbacks = [c for row in msg.reply_markup.inline_keyboard for c in [b.callback_data for b in row]]
     assert "a_concerts_find" in callbacks
-    assert "a_city_digest" in callbacks
+    assert "a_city_digest" not in callbacks  # вкладка «В моём городе» убрана
     assert "m_afisha" not in callbacks  # вкладка Афиша убрана
 
 
