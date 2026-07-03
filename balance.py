@@ -604,7 +604,10 @@ def _recipe_typed_kb():
     ])
 
 def _fridge_recipe_kb():
-    return _recipe_typed_kb()
+    return _kb([
+        [("🔄 Заменить", "as_fridge_cook")],
+        [("◀️ Назад", "m_food")],
+    ])
 
 def _back_kb():
     return _kb([[("◀️ Назад", "m_close")]])
@@ -627,6 +630,21 @@ async def _send(bot, cid, text, kb=None, surface="card"):
         except Exception:
             # если HTML невалиден - отправляем как обычный текст, без падения
             await bot.send_message(chat_id=cid, text=c, reply_markup=markup)
+
+
+_LEFTOVER_RECENT_LIMIT = 12
+
+def _leftover_recent(cid):
+    """Последние названия блюд из остатков — для anti-repeat в промпте."""
+    return store.get_list(config.LEFTOVER_RECIPES_SEEN_KEY, cid)
+
+def _leftover_remember(cid, name):
+    """Добавляет название в историю anti-repeat, храня не больше _LEFTOVER_RECENT_LIMIT штук."""
+    if not name:
+        return
+    recent = _leftover_recent(cid)
+    recent = [n for n in recent if n.lower() != name.lower()] + [name]
+    store.set_list(config.LEFTOVER_RECIPES_SEEN_KEY, cid, recent[-_LEFTOVER_RECENT_LIMIT:])
 
 
 # ---------- Кулинарный радар ----------
@@ -699,9 +717,11 @@ async def send_recipe_push(bot, cid):
     await bot.send_message(chat_id=cid, text=card.text, entities=card.entities)
 
 
-def _gen_leftovers_recipe(ingredients):
+def _gen_leftovers_recipe(ingredients, cid=None):
+    avoid = _leftover_recent(cid) if cid else []
+    avoid_line = f"Не предлагай снова: {', '.join(avoid)}.\n" if avoid else ""
     return ai.llm_json(
-        f"Есть продукты: {secure.wrap_untrusted(ingredients, 'продукты')}. "
+        f"{avoid_line}Есть продукты: {secure.wrap_untrusted(ingredients, 'продукты')}. "
         "Предложи 1 простой рецепт только из них (+ базовые специи, максимум 1 доп продукт). 1 человек.\n"
         'JSON: {"name":"название","time":"X мин","servings":"1 порц.",'
         '"ingredients":"список использованных продуктов через запятую",'
@@ -710,11 +730,12 @@ def _gen_leftovers_recipe(ingredients):
 
 async def send_leftovers(bot, cid, ingredients):
     try:
-        d = await asyncio.to_thread(_gen_leftovers_recipe, ingredients)
+        d = await asyncio.to_thread(_gen_leftovers_recipe, ingredients, cid)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("leftovers", ingredients)
+    _leftover_remember(cid, d.get("name", ""))
     card = _food_card(d, label="Рецепт из холодильника")
     store.last_source[str(cid)] = "Питание · Остатки"
     store.last_answer[str(cid)] = card.text

@@ -181,7 +181,7 @@ _PER_USER_KEYS = {
     config.MUSIC_DISLIKE_KEY, config.TRAVEL_DISLIKE_KEY, config.WORRIES_KEY,
     config.NOTES_KEY, config.DICT_KEY, config.TOPICS_NL_KEY, config.TOPICS_EN_KEY,
     config.LAGOM_KEY, config.DIARY_KEY, config.CITY_FACTS_KEY, config.LIFEHACK_KEY,
-    config.FRIDGE_KEY, config.MY_RECIPES_KEY, config.QUOTE_AUTHORS_KEY,
+    config.FRIDGE_KEY, config.MY_RECIPES_KEY, config.LEFTOVER_RECIPES_SEEN_KEY, config.QUOTE_AUTHORS_KEY,
     config.MOTIV_LAGOM_SEEN_KEY, config.MICRO_TOPICS_KEY, config.MICRO_LESSONS_KEY,
     config.MICRO_PROGRESS_KEY,
 }

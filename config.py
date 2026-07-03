@@ -66,6 +66,7 @@ CITY_FACT_IDX_KEY = "city_fact_idx.json"   # anti-repeat индексы кура
 LIFEHACK_KEY = "lifehacks_seen.json"
 FRIDGE_KEY = "fridge.json"
 MY_RECIPES_KEY = "my_recipes.json"
+LEFTOVER_RECIPES_SEEN_KEY = "leftover_recipes_seen.json"  # anti-repeat: {cid: [последние N названий]}
 QUOTE_AUTHORS_KEY = "quote_authors_seen.json"
 FOOD_TIP_KEY = "food_tip_cache.json"
 MOTIV_LAGOM_SEEN_KEY = "motiv_lagom_seen.json"
