@@ -8,3 +8,11 @@ __pycache__/
 .DS_Store
 facts/
 graphify-out/
+
+# Персональные seed-данные владельца бота (одноразовая миграция в БД при первом запуске,
+# не должны публиковаться в репозитории)
+artists.json
+wardrobe.json
+content.json
+lagom.json
+countries.json
