@@ -1238,7 +1238,6 @@ async def find_concerts(bot, cid, mode="home"):
     cname_place = _concert_place_name(cname, cc)
 
     from util import _MONTHS
-    eventbrite_country = _concert_country_search_name(cname, cc)
 
     events = _concerts_cache_get(cid, cc)
     if events is None:
@@ -1267,7 +1266,7 @@ async def find_concerts(bot, cid, mode="home"):
             continue
         seen_artist_events.add(dedup_key)
 
-        place = ", ".join(x for x in [eventbrite_country, city] if x)
+        place = city
         rows_data.append({
             "artist": artist,
             "flag": flag,
@@ -1332,37 +1331,6 @@ def _afisha_event_row(e, flag, city_fallback=""):
     }
 
 
-async def find_afisha_category(bot, cid, category_key, mode="home"):
-    """Отдельная категория Афиши (Фестивали/Театры/Стендап/Выставки) — ближайшие в стране пользователя,
-    без персонального фильтра по вкусу (в отличие от Концертов, где фильтруем по ARTISTS_KEY)."""
-    if not config.TICKETMASTER_API_KEY:
-        await bot.send_message(chat_id=cid,
-            text="🎫 Поиск мероприятий требует бесплатный ключ Ticketmaster.\n"
-                 "Заведи его на developer.ticketmaster.com и добавь на Railway переменную TICKETMASTER_API_KEY.")
-        return
-    cat = next((c for c in AFISHA_CATEGORIES if c[0] == category_key), None)
-    if not cat:
-        return
-    _, label, _, _, _ = cat
-
-    place = _afisha_home_place(cid)
-    cc, flag, cname_place = place["cc"], place["flag"], place["cname_place"]
-
-    from datetime import datetime, timedelta
-    now = datetime.now(config.TZ)
-    date_from = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    date_to = (now + timedelta(days=182)).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    events = await _afisha_category_events(category_key, cc, place["city"], date_from, date_to, size=20)
-    rows_data = [_afisha_event_row(e, flag) for e in events[:20]]
-
-    place_label = f"{label} в {cname_place} — ближайшие 6 месяцев"
-    msg = leisure_ui.afisha_category_list(place_label, rows_data)
-    store.last_source[str(cid)] = f"Досуг · {label}"
-    store.last_answer[str(cid)] = msg.text
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
-
-
 async def send_city_digest(bot, cid):
     """«📍 В моём городе» — саммари лучших мероприятий из всех 5 категорий Афиши сразу.
     Концерты фильтруются по вкусу пользователя (артисты + LLM-ранжирование), остальные
@@ -1395,7 +1363,10 @@ async def send_city_digest(bot, cid):
         return await _rank_concerts_by_taste(events, artists)
 
     async def _category_top(category_key):
-        events = await _afisha_category_events(category_key, cc, city, date_from, date_to, size=10)
+        # city не передаём: настройки хранят локализованное название ("Алкмар"), а Ticketmaster
+        # ждёт точное официальное имя города ("Alkmaar") - без надёжной транслитерации это давало
+        # 0 результатов почти всегда. Ищем по всей стране (cc), как и Концерты.
+        events = await _afisha_category_events(category_key, cc, "", date_from, date_to, size=10)
         return events[:3]
 
     results = await asyncio.gather(
@@ -1413,9 +1384,7 @@ async def send_city_digest(bot, cid):
     msg = leisure_ui.city_digest(city_label, categories)
     store.last_source[str(cid)] = "Досуг · В моём городе"
     store.last_answer[str(cid)] = msg.text
-    rows = [[InlineKeyboardButton("🎭 Вся афиша", callback_data="m_afisha")]]
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
 
 
 async def _rank_concerts_by_taste(events, artists):

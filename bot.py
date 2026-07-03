@@ -253,8 +253,6 @@ async def answer_callback(update, context):
                 await _ack(q); await leisure.find_concerts(bot, cid, act.split("_")[1])
             elif act == "city_digest":
                 await _ack(q); await leisure.send_city_digest(bot, cid)
-            elif act.startswith("afisha_"):
-                await _ack(q); await leisure.find_afisha_category(bot, cid, act[len("afisha_"):], "home")
             elif act == "listen":
                 await _ack(q); await leisure.send_listen(bot, cid)
             elif act == "listen_no":

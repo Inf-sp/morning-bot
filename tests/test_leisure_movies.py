@@ -461,6 +461,7 @@ def test_find_concerts_renders_clean_artist_cards_with_hidden_link(monkeypatch):
     assert "Электроника" in text
     assert "от 35 EUR" in text
     assert "Подробнее…" in text
+    assert "Netherlands" not in text  # место - только город, без названия страны
     link_entities = [e for e in sent["entities"] if e.type == "text_link"]
     assert any(e.url == "https://ticketmaster.com/romy" for e in link_entities)
     assert "https://ticketmaster.com/romy" not in text  # ссылка спрятана под текст
@@ -579,35 +580,6 @@ def test_afisha_genre_matches_exhibitions_excludes_stage_genres():
 def test_afisha_genre_matches_concerts_category_always_true():
     assert leisure._afisha_genre_matches({}, "concerts") is True
     assert leisure._afisha_genre_matches({}, "festivals") is True
-
-
-@pytest.mark.unit
-def test_find_afisha_category_renders_category_events(monkeypatch):
-    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
-
-    async def fake_category_events(category_key, cc, city, start_dt, end_dt, size=10):
-        return [_tm_event("Cirque du Soleil", "2026-09-10", city="Amsterdam", event_id="1")
-                | {"url": "https://ticketmaster.com/cirque"}]
-
-    monkeypatch.setattr(leisure, "_afisha_category_events", fake_category_events)
-
-    bot = _CapturingBot()
-    asyncio.run(leisure.find_afisha_category(bot, "cid-afisha-1", "theatre"))
-
-    sent = bot.sent[0]
-    assert "Cirque du Soleil" in sent["text"]
-    assert "Amsterdam" in sent["text"]
-    assert "Театры" in sent["text"]
-    link_entities = [e for e in sent["entities"] if e.type == "text_link"]
-    assert any(e.url == "https://ticketmaster.com/cirque" for e in link_entities)
-
-
-@pytest.mark.unit
-def test_find_afisha_category_unknown_key_does_nothing(monkeypatch):
-    monkeypatch.setattr(leisure.config, "TICKETMASTER_API_KEY", "key")
-    bot = _CapturingBot()
-    asyncio.run(leisure.find_afisha_category(bot, "cid-afisha-2", "not-a-category"))
-    assert bot.sent == []
 
 
 @pytest.mark.unit

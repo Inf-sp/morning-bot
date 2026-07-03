@@ -77,25 +77,13 @@ def test_menu_screen_wardrobe_message_spec_has_html_and_keyboard():
 
 
 @pytest.mark.unit
-def test_menu_screen_afisha_has_five_category_buttons():
-    msg = menu.menu_screen("m_afisha")
-
-    assert "Афиша" in _bold_texts(msg)
-    callbacks = [c for row in msg.reply_markup.inline_keyboard for c in [b.callback_data for b in row]]
-    assert callbacks == [
-        "a_concerts_find", "a_afisha_festivals", "a_afisha_theatre",
-        "a_afisha_comedy", "a_afisha_exhibitions", "m_leisure",
-    ]
-
-
-@pytest.mark.unit
-def test_menu_screen_leisure_links_to_afisha_and_city_digest():
+def test_menu_screen_leisure_links_to_concerts_and_city_digest():
     msg = menu.menu_screen("m_leisure")
 
     callbacks = [c for row in msg.reply_markup.inline_keyboard for c in [b.callback_data for b in row]]
-    assert "m_afisha" in callbacks
+    assert "a_concerts_find" in callbacks
     assert "a_city_digest" in callbacks
-    assert "a_concerts_find" not in callbacks  # переехала внутрь Афиши
+    assert "m_afisha" not in callbacks  # вкладка Афиша убрана
 
 
 @pytest.mark.unit

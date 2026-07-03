@@ -318,28 +318,6 @@ def test_concerts_list_empty_shows_hint():
 
 
 @pytest.mark.unit
-def test_afisha_category_list_renders_title_place_date_and_hidden_link():
-    msg = leisure.afisha_category_list("Театры в Нидерландах", [{
-        "artist": "Hamlet", "place": "🇳🇱 Amsterdam", "date": "5 сентября 2026",
-        "url": "https://ticketmaster.com/hamlet",
-    }])
-
-    assert "Hamlet" in msg.text
-    assert "Amsterdam" in msg.text
-    assert "5 сентября 2026" in msg.text
-    assert "https://ticketmaster.com/hamlet" not in msg.text
-    link_entities = [e for e in msg.entities if e.type == "text_link"]
-    assert any(e.url == "https://ticketmaster.com/hamlet" for e in link_entities)
-
-
-@pytest.mark.unit
-def test_afisha_category_list_empty_shows_hint():
-    msg = leisure.afisha_category_list("Театры в Нидерландах", [])
-
-    assert "ничего не нашёл" in msg.text
-
-
-@pytest.mark.unit
 def test_city_digest_renders_only_non_empty_categories():
     msg = leisure.city_digest("Амстердам", [
         {"label": "🎫 Концерты", "events": [

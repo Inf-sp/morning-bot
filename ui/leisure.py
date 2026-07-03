@@ -165,31 +165,6 @@ def concerts_list(place_label, events, empty_hint=""):
     return b.build_stripped()
 
 
-def afisha_category_list(place_label, events, empty_hint=""):
-    """Список мероприятий одной категории Афиши (Фестивали/Театры/Стендап/Выставки) -> MessageBuilder.
-    Мини-блок без жанра/цены (эти данные специфичны для концертов): название, место, дата, ссылка."""
-    b = MessageBuilder()
-    b.text_line("🎭 ")
-    b.bold(place_label)
-    b.newline()
-    if not events:
-        b.spacer()
-        b.line(empty_hint or "Сейчас ничего не нашёл. Попробуй другой город 🌍")
-        return b.build_stripped()
-    for ev in events:
-        b.spacer()
-        b.bold(ev.get("artist", ""))
-        b.newline()
-        if ev.get("place"):
-            b.line(f"📍 {ev['place']}")
-        if ev.get("date"):
-            b.line(f"🗓️ {ev['date']}")
-        if ev.get("url"):
-            b.link("Подробнее…", ev["url"])
-            b.newline()
-    return b.build_stripped()
-
-
 def city_digest(city_label, categories):
     """«В моём городе» — саммари лучших мероприятий из всех категорий Афиши -> MessageBuilder.
     categories: [{"label": "🎫 Концерты", "events": [{artist, place, date, url}, ...]}, ...]."""
