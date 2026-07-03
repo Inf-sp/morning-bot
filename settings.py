@@ -961,10 +961,18 @@ async def fav_view(bot, cid, i, back="as_bucket_fav", delete_cb=None):
     src = n.get("source", "") if isinstance(n, dict) else ""
     d = n.get("date", "") if isinstance(n, dict) else ""
     full = settings_ui.favorite_card(src, d, text, body_entities)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Удалить", callback_data=delete_cb or f"fav_del_{i}")],
-        [InlineKeyboardButton("◀️ Назад", callback_data=back)],
-    ])
+    typ, _, _, _ = _note_type(src)
+    if typ:
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("❤️ В любимые", callback_data=f"as_notelove_{i}"),
+             InlineKeyboardButton("🚫 Скрыть", callback_data=f"as_noteblack_{i}")],
+            [InlineKeyboardButton("◀️ Назад", callback_data=back)],
+        ])
+    else:
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("❌ Удалить", callback_data=delete_cb or f"fav_del_{i}")],
+            [InlineKeyboardButton("◀️ Назад", callback_data=back)],
+        ])
     chunks = util.chunk_text_with_entities(full.text, full.entities, 4000)
     for idx, (chunk_text, chunk_entities) in enumerate(chunks):
         markup = kb if idx == len(chunks) - 1 else None

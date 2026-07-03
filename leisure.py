@@ -308,8 +308,8 @@ def _movie_card(it, tm):
 
 def _movie_kb(i):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}")],
-        [InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}"),
+         InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
@@ -697,7 +697,7 @@ async def add_reco(bot, cid, i):
     if not _note_fav_exists(cid, title):
         store.add_to_list(config.NOTES_KEY, cid,
                           {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": folder, "bucket": "fav"})
-    await bot.send_message(chat_id=cid, text=f"⏳ Отложено «{folder}»: {title}. Вот ещё вариант 👇")
+    await bot.send_message(chat_id=cid, text=f"⭐️ Сохранено «{folder}»: {title}. Вот ещё вариант 👇")
     try:
         data = await asyncio.to_thread(content_recommend, kind, str(cid))
         items = data.get("items", []) if isinstance(data, dict) else []
