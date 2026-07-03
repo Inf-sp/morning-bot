@@ -281,7 +281,7 @@ def test_leisure_clip_short_and_long_text():
 
 
 @pytest.mark.unit
-def test_concerts_list_renders_artist_place_genre_price_date_and_hidden_link():
+def test_concerts_list_renders_artist_place_price_date_and_hidden_link():
     msg = leisure.concerts_list("Концерты в Нидерландах", [{
         "artist": "Romy", "flag": "🇳🇱", "place": "Netherlands, Biddinghuizen",
         "genre": "Электроника", "price": "от 35 EUR", "date": "21 августа 2026",
@@ -290,7 +290,7 @@ def test_concerts_list_renders_artist_place_genre_price_date_and_hidden_link():
 
     assert "Romy" in msg.text
     assert "Netherlands, Biddinghuizen" in msg.text
-    assert "Электроника" in msg.text
+    assert "Электроника" not in msg.text
     assert "от 35 EUR" in msg.text
     assert "21 августа 2026" in msg.text
     assert "https://ticketmaster.com/romy" not in msg.text

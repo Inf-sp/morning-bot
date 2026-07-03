@@ -191,6 +191,12 @@ async def answer_callback(update, context):
                 await learning.send_dict_lang(bot, cid, "nl", back="m_dict_settings")
             elif act == "dictlang_en_from_settings":
                 await learning.send_dict_lang(bot, cid, "en", back="m_dict_settings")
+            elif act.startswith("dictcheckdelall_"):
+                lang = act.split("_")[1]
+                await learning.dict_broken_delete_all(bot, cid, lang)
+            elif act.startswith("dictcheck_"):
+                lang = act.split("_")[1]
+                await learning.send_dict_broken(bot, cid, lang)
             elif act.startswith("dictadd_smart_"):
                 lang = act.split("_")[2]
                 store.pending_input[cid] = f"dictadd_smart_{lang}"

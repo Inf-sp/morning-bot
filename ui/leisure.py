@@ -138,7 +138,7 @@ def artist_card(data):
 
 def concerts_list(place_label, events, empty_hint=""):
     """Список концертов твоих артистов -> MessageBuilder. Каждое событие - мини-блок:
-    имя артиста, место, жанр, цена от, дата, скрытая ссылка "Подробнее…"."""
+    имя артиста, место, цена от, дата, скрытая ссылка "Подробнее…"."""
     b = MessageBuilder()
     b.text_line("🎤 ")
     b.bold(place_label)
@@ -153,8 +153,6 @@ def concerts_list(place_label, events, empty_hint=""):
         b.newline()
         if ev.get("place"):
             b.line(f"📍 {ev.get('flag', '')} {ev['place']}")
-        if ev.get("genre"):
-            b.line(f"🎵 {ev['genre']}")
         if ev.get("price"):
             b.line(f"💶 {ev['price']}")
         if ev.get("date"):

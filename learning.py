@@ -1189,6 +1189,39 @@ def _dict_duplicate_confirmation_card(duplicate_items):
     msg = dict_ui.dict_duplicate_confirmation(duplicate_items)
     return msg.text, msg.entities
 
+_CYRILLIC_RE = re.compile(r"[а-яА-ЯёЁ]")
+_PLACEHOLDER_RU_RE = re.compile(r"^\??\.?\.?\.?\??$")
+
+def _is_bad_dict_item(word, ru):
+    """True, если перевод отсутствует/заглушка, или word перепутан с ru (кириллица вместо иностранного слова)."""
+    word = (word or "").strip()
+    ru = (ru or "").strip()
+    if not ru or _PLACEHOLDER_RU_RE.match(ru):
+        return True
+    if ru.casefold() == word.casefold():
+        return True
+    if _CYRILLIC_RE.search(word):
+        return True
+    return False
+
+async def _translate_to_ru(term, lang):
+    """Попытка через LLM перевести term (nl/en) на русский, когда парсер не нашёл перевод."""
+    language = "нидерландский" if lang == "nl" else "английский"
+    prompt = (
+        f"Переведи термин с {language} языка на русский одним словом или короткой фразой.\n"
+        f"Термин: «{term}».\n"
+        'Если это не похоже на реальное слово/фразу на этом языке — верни пустую строку.\n'
+        'Верни ТОЛЬКО JSON: {"ru": "перевод или пустая строка"}'
+    )
+    try:
+        d = await ai.allm_json(prompt, 200, tier="cheap", module="learning")
+    except Exception:
+        return ""
+    ru = str(d.get("ru") or "").strip() if isinstance(d, dict) else ""
+    if not ru or _PLACEHOLDER_RU_RE.match(ru) or ru.casefold() == term.casefold():
+        return ""
+    return ru
+
 async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False):
     """Добавляет много слов/фраз разом: каждое отдельной записью, авто-тип (слово/фраза) и язык."""
     items = _parse_simple_pairs(text, lang)
@@ -1204,6 +1237,7 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
     added = {"nl": {"word": 0, "phrase": 0}, "en": {"word": 0, "phrase": 0}}
     added_items = []
     duplicate_items = []
+    unrecognized_items = []
     existing_keys = {
         _dict_item_key(_dict_lang(w), _dict_kind(w), _w_field(w, "word", "nl", "en"))
         for w in _ensure_dict(cid)
@@ -1215,8 +1249,18 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
             continue
         ru = (it.get("ru") or "").strip() or extra_ru
         lng = "en" if it.get("lang") == "en" else "nl"
+        # LLM/пользователь могли перепутать стороны (термин на русском, перевод — иностранный)
+        if _CYRILLIC_RE.search(term) and ru and not _CYRILLIC_RE.search(ru):
+            term, ru = ru, term
+        if _is_bad_dict_item(term, ru):
+            translated = await _translate_to_ru(term, lng)
+            if translated:
+                ru = translated
         knd = _kind_of(term)   # тип по самому термину (одно слово = слово)
         word = _cap(term)[:80]
+        if _is_bad_dict_item(word, ru):
+            unrecognized_items.append(word)
+            continue
         key = _dict_item_key(lng, knd, word)
         if key in existing_keys:
             duplicate_items.append({"lang": lng, "word": word, "ru": ru, "kind": knd})
@@ -1232,7 +1276,16 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
             return
         if duplicate_items:
             await bot.send_message(chat_id=cid, text="Эти слова или фразы уже есть в словаре."); return
+        if unrecognized_items:
+            await bot.send_message(chat_id=cid,
+                text="Не удалось найти перевод: " + ", ".join(unrecognized_items[:10]) +
+                     ". Пришли в формате «термин → перевод».")
+            return
         await bot.send_message(chat_id=cid, text="Не удалось распознать слова. Попробуй ещё раз."); return
+    if unrecognized_items:
+        await bot.send_message(chat_id=cid,
+            text="⚠️ Без перевода, не добавлено: " + ", ".join(unrecognized_items[:10]) +
+                 ". Пришли их в формате «термин → перевод».")
     if detailed_confirmation:
         msg = dict_ui.dict_add_confirmation(added_items)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_dict_manage_kb(lang))
@@ -1269,6 +1322,7 @@ async def add_smart_batch(bot, cid, text, lang="nl"):
         items = [{"word": x.strip(), "ru": "", "lang": lang, "kind": "word"} for x in raw if x.strip()]
 
     added = {"nl": {"word": 0, "phrase": 0}, "en": {"word": 0, "phrase": 0}}
+    unrecognized_items = []
     for it in items:
         kind = it.get("kind", "word")
         term = (it.get("word") or "").strip()
@@ -1279,9 +1333,25 @@ async def add_smart_batch(bot, cid, text, lang="nl"):
             continue
         ru = (it.get("ru") or "").strip() or extra_ru
         lng = "en" if it.get("lang") == "en" else "nl"
+        if _CYRILLIC_RE.search(term) and ru and not _CYRILLIC_RE.search(ru):
+            term, ru = ru, term
+        if _is_bad_dict_item(term, ru):
+            translated = await _translate_to_ru(term, lng)
+            if translated:
+                ru = translated
         knd = "phrase" if kind == "phrase" else _kind_of(term)
-        store.add_to_list(config.DICT_KEY, cid, {"lang": lng, "word": _cap(term)[:80], "ru": ru, "kind": knd})
+        word = _cap(term)[:80]
+        if _is_bad_dict_item(word, ru):
+            unrecognized_items.append(word)
+            continue
+        store.add_to_list(config.DICT_KEY, cid, {"lang": lng, "word": word, "ru": ru, "kind": knd})
         added[lng][knd] += 1
+
+    if unrecognized_items and not any(added[l][k] for l in added for k in added[l]):
+        await bot.send_message(chat_id=cid,
+            text="Не удалось найти перевод: " + ", ".join(unrecognized_items[:10]) +
+                 ". Пришли в формате «термин → перевод».")
+        return
 
     parts = []
     for lng, flag in (("nl", "🇳🇱"), ("en", "🇬🇧")):
@@ -1294,6 +1364,10 @@ async def add_smart_batch(bot, cid, text, lang="nl"):
             parts.append(f"{flag} " + ", ".join(seg))
     if not parts:
         await bot.send_message(chat_id=cid, text="Не удалось распознать. Попробуй ещё раз."); return
+    if unrecognized_items:
+        await bot.send_message(chat_id=cid,
+            text="⚠️ Без перевода, не добавлено: " + ", ".join(unrecognized_items[:10]) +
+                 ". Пришли их в формате «термин → перевод».")
     await bot.send_message(chat_id=cid, text="✅ Добавлено — " + "; ".join(parts))
     await send_dict_lang(bot, cid, lang)
 
@@ -1347,9 +1421,51 @@ async def send_dict_lang(bot, cid, lang, back="m_dict_settings"):
             InlineKeyboardButton("❌ Фраза", callback_data=f"a_dictedit_{lang}_phrase"),
         ],
         [InlineKeyboardButton("✏️ Добавить слово или фразу", callback_data=f"a_dictadd_smart_{lang}")],
+        [InlineKeyboardButton("🩹 Проверить словарь", callback_data=f"a_dictcheck_{lang}")],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ]
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
+
+
+def _find_broken_dict_items(cid, lang):
+    """Записи словаря без нормального перевода (пустой/заглушка/перепутанные языки)."""
+    words = _ensure_dict(cid)
+    broken = []
+    for idx, w in enumerate(words):
+        if _dict_lang(w) != lang:
+            continue
+        word = _w_field(w, "word", "nl", "en")
+        ru = _w_field(w, "ru")
+        if _is_bad_dict_item(word, ru):
+            broken.append((idx, word or "(пусто)", ru))
+    return broken
+
+
+async def send_dict_broken(bot, cid, lang):
+    """Показывает записи словаря без перевода/с перепутанными языками — с кнопками удаления."""
+    broken = _find_broken_dict_items(cid, lang)
+    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+    if not broken:
+        await bot.send_message(chat_id=cid, text=f"{flag} В словаре нет битых записей без перевода.",
+            reply_markup=_dict_manage_kb(lang))
+        return
+    lines = [f"• {word} → {ru or '(нет перевода)'}" for _, word, ru in broken]
+    text = f"{flag} Найдено записей без перевода: {len(broken)}\n\n" + "\n".join(lines[:30])
+    rows = [[InlineKeyboardButton(f"❌ {word[:30]}", callback_data=f"worddel_{idx}")] for idx, word, _ in broken[:30]]
+    rows.append([InlineKeyboardButton("🗑 Удалить все", callback_data=f"a_dictcheckdelall_{lang}")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data=f"a_dictlang_{lang}")])
+    await bot.send_message(chat_id=cid, text=text, reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def dict_broken_delete_all(bot, cid, lang):
+    broken_idx = {idx for idx, _, _ in _find_broken_dict_items(cid, lang)}
+    if broken_idx:
+        words = _ensure_dict(cid)
+        words = [w for i, w in enumerate(words) if i not in broken_idx]
+        store.set_list(config.DICT_KEY, cid, words)
+    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+    await bot.send_message(chat_id=cid, text=f"{flag} Удалено записей без перевода: {len(broken_idx)}.",
+        reply_markup=_dict_manage_kb(lang))
 
 
 def _dict_manage_kb(lang: str):

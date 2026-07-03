@@ -103,15 +103,15 @@ def test_settings_saved_and_later_messages():
     assert "\n\n\n" not in trips_home.text
 
     later_empty = settings.later_home_empty()
-    assert "Позже" in later_empty.text
-    assert "⏳ Позже" in _bold_texts(later_empty)
+    assert "Сохранить" in later_empty.text
+    assert "⭐️ Сохранить" in _bold_texts(later_empty)
 
     later_home = settings.later_home()
     assert "Открой категорию" in later_home.text
 
     later_group = settings.later_group("🎬 Кино", "фильмы")
-    assert "Позже · 🎬 Кино" in later_group.text
-    assert "⭐️ Позже · 🎬 Кино" in _bold_texts(later_group)
+    assert "Сохранить · 🎬 Кино" in later_group.text
+    assert "⭐️ Сохранить · 🎬 Кино" in _bold_texts(later_group)
 
 
 @pytest.mark.unit

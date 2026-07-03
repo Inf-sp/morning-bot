@@ -870,7 +870,7 @@ async def send_notes(bot, cid):
     notes_list = store.get_list(config.NOTES_KEY, cid)
     n_fav = sum(1 for n in notes_list if _note_bucket(n) == "fav")
     rows = [
-        [InlineKeyboardButton(f"⭐️ Ознакомиться позже ({n_fav})", callback_data="as_bucket_fav")],
+        [InlineKeyboardButton(f"⭐️ Сохранённые ({n_fav})", callback_data="as_bucket_fav")],
         [InlineKeyboardButton("🔔 Рассылки по расписанию", callback_data="set_notif")],
         [
             InlineKeyboardButton("Город", callback_data="set_city"),

@@ -458,7 +458,7 @@ def test_find_concerts_renders_clean_artist_cards_with_hidden_link(monkeypatch):
     assert "Romy" in text
     assert "Biddinghuizen" in text
     assert "21 августа 2026" in text
-    assert "Электроника" in text
+    assert "Электроника" not in text
     assert "от 35 EUR" in text
     assert "Подробнее…" in text
     assert "Netherlands" not in text  # место - только город, без названия страны

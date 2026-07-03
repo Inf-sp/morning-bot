@@ -64,8 +64,8 @@ def _ctx_items(cid, ctx):
                  and (group is None or _s._fav_group(n.get("source", "Прочее") if isinstance(n, dict) else "Прочее") == group)]
         if group:
             label, _desc = _s._fav_group_info(group)
-            return f"{label} · удалить из Позже", items, f"as_bucket_favgrp_{group}"
-        return "⭐ Чистка: закладки", items, "as_bucket_fav"
+            return f"{label} · удалить из Сохранить", items, f"as_bucket_favgrp_{group}"
+        return "⭐ Чистка: сохранение", items, "as_bucket_fav"
     if ctx in ("wl", "rl"):
         key = config.WATCHLIST_KEY if ctx == "wl" else config.READLIST_KEY
         title = "🍿 Чистка: посмотреть" if ctx == "wl" else "📚 Чистка: почитать"
