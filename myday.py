@@ -304,14 +304,12 @@ def _build_day_text(cid):
     icon = weather.weather_icon(code, tmax, rain, wind_ms, rain_mm)
     rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
     rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-    # ветер: отдельным блоком показываем только если сильный
-    wind_title, wind_line = "", ""
-    if wind_ms >= 8:
-        _, wword = weather.wind_scale(wind_ms)
-        wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
-        wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
-        wind_title = wword
-        wind_line = f"До {wind_ms:.0f} м/с{wind_when}"
+    # ветер: показываем всегда, отдельным блоком с усиленным описанием при сильном ветре
+    _, wword = weather.wind_scale(wind_ms)
+    wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
+    wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
+    wind_title = wword
+    wind_line = f"До {wind_ms:.0f} м/с{wind_when}"
 
     now = datetime.now(TZ)
     weekday_name = _WEEKDAYS[now.weekday()]

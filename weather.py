@@ -98,8 +98,8 @@ def _finish_sentence(text):
 
 
 def rain_text(rain, rain_mm=None, when=""):
-    """Кусок строки про дождь. Пусто, если дождя по сути нет."""
-    if rain and _rain_real(rain, rain_mm):
+    """Кусок строки про дождь. Пусто, только если вероятность нулевая."""
+    if rain:
         return f"Дождь{when} {rain:.0f}%"
     return ""
 
