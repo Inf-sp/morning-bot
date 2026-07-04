@@ -308,8 +308,8 @@ def _movie_card(it, tm):
 
 def _movie_kb(i):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}"),
-         InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}")],
+        [InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
@@ -441,22 +441,7 @@ async def movie_dislike(bot, cid, i):
         title = rec["items"][i]
         store.add_to_list(config.MOVIE_BLACKLIST_KEY, cid, title)
         await bot.send_message(chat_id=cid, text=f"Понял, больше не буду рекомендовать «{title}». Вот другой вариант 👇")
-    try:
-        data = await asyncio.to_thread(content_recommend, "movie", str(cid))
-        items = _normalize_movie_items(data.get("items", []) if isinstance(data, dict) else [])
-    except Exception:
-        items = []
-    if not items:
-        return
-    rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
-    used = _movie_used(cid) | {str(x).lower() for x in rec["items"]}
-    it, tm = await asyncio.to_thread(_pick_good_movie, items, used)
-    if not it:
-        return
-    rec["items"].append(_display_title(it, tm))
-    store.last_recos[str(cid)] = rec
-    ni = len(rec["items"]) - 1
-    await _send_movie_card(bot, cid, it, ni, tm=tm)
+    await _advance_movie(bot, cid)
 
 def _book_cover(title, title_en=""):
     import requests
@@ -598,18 +583,24 @@ async def book_dislike(bot, cid, i):
 
 async def _advance_movie(bot, cid):
     """Загрузить следующую рекомендацию кино и показать карточку."""
-    try:
-        data = await asyncio.to_thread(content_recommend, "movie", str(cid))
-        items = _normalize_movie_items(data.get("items", []) if isinstance(data, dict) else [])
-    except Exception:
-        items = []
+    items = []
+    for _ in range(2):
+        try:
+            data = await asyncio.to_thread(content_recommend, "movie", str(cid))
+            items = _normalize_movie_items(data.get("items", []) if isinstance(data, dict) else [])
+        except Exception:
+            items = []
+        if items:
+            break
     if not items:
-        return
+        items = _fallback_movie_items(cid)
+    if not items:
+        await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
     rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
     used = _movie_used(cid) | {str(x).lower() for x in rec["items"]}
     it, tm = await asyncio.to_thread(_pick_good_movie, items, used)
     if not it:
-        return
+        await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
     rec["items"].append(_display_title(it, tm))
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1
