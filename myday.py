@@ -293,23 +293,41 @@ def _day_menu_kb():
 
 def _build_day_text(cid):
     s = store.get_settings(cid)
-    data = weather.fetch_weather(s["lat"], s["lon"], 2)
-    d = data["daily"]
-    day_str = d["time"][0]
-    code = d["weathercode"][0]
-    tmax = d["temperature_2m_max"][0]
-    rain = d["precipitation_probability_max"][0] or 0
-    rain_mm = (d.get("precipitation_sum") or [None])[0] if d.get("precipitation_sum") else None
-    wind_ms = d["windspeed_10m_max"][0] or 0
-    icon = weather.weather_icon(code, tmax, rain, wind_ms, rain_mm)
-    rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
-    rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-    # ветер: показываем всегда, отдельным блоком с усиленным описанием при сильном ветре
-    _, wword = weather.wind_scale(wind_ms)
-    wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
-    wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
-    wind_title = wword
-    wind_line = f"До {wind_ms:.0f} м/с{wind_when}"
+    try:
+        data = weather.fetch_weather(s["lat"], s["lon"], 2)
+    except Exception as e:
+        _log.warning("myday: fetch_weather failed: %s", e)
+        data = None
+
+    if data:
+        d = data["daily"]
+        day_str = d["time"][0]
+        code = d["weathercode"][0]
+        tmax = d["temperature_2m_max"][0]
+        rain = d["precipitation_probability_max"][0] or 0
+        rain_mm = (d.get("precipitation_sum") or [None])[0] if d.get("precipitation_sum") else None
+        wind_ms = d["windspeed_10m_max"][0] or 0
+        icon = weather.weather_icon(code, tmax, rain, wind_ms, rain_mm)
+        rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
+        rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
+        # ветер: показываем всегда, отдельным блоком с усиленным описанием при сильном ветре
+        _, wword = weather.wind_scale(wind_ms)
+        wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
+        wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
+        wind_title = wword
+        wind_line = f"До {wind_ms:.0f} м/с{wind_when}"
+        weather_title = f"{icon} Погода сегодня"
+        rain_part = weather.rain_text(rain, rain_mm, rain_when)
+        weather_line = f"До {tmax:+.0f}°C" + (f" • {rain_part}" if rain_part else "")
+        hum_title, hum_line = weather.humidity_phrase(data, day_str, tmax, s.get("cc", ""))
+    else:
+        rain = 0
+        rain_mm = None
+        tmax = None
+        wind_title, wind_line = "", ""
+        weather_title = "☁️ Погода сейчас недоступна"
+        weather_line = "Не удалось получить прогноз — остальная сводка всё равно готова."
+        hum_title, hum_line = "", ""
 
     now = datetime.now(TZ)
     weekday_name = _WEEKDAYS[now.weekday()]
@@ -319,10 +337,6 @@ def _build_day_text(cid):
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     flag = flag_from_cc(s.get("cc", "")) or (country_flag(s.get("country", "")) if s.get("country") else "")
-    weather_title = f"{icon} Погода сегодня"
-    rain_part = weather.rain_text(rain, rain_mm, rain_when)
-    weather_line = f"До {tmax:+.0f}°C" + (f" • {rain_part}" if rain_part else "")
-    hum_title, hum_line = weather.humidity_phrase(data, day_str, tmax, s.get("cc", ""))
     try:
         fact = city_fact(s.get("city", ""), s.get("country", ""), cid, cc=s.get("cc", ""))
     except Exception as e:
@@ -332,7 +346,7 @@ def _build_day_text(cid):
     hack_cat, hack_text = ("", "")
     if "quiet" not in pr:
         hack_cat, hack_text = daily_lifehack(
-            cid, rain=rain >= 40, hot=tmax >= 24, is_weekend=is_weekend)
+            cid, rain=rain >= 40, hot=(tmax is not None and tmax >= 24), is_weekend=is_weekend)
     try:
         q_data = _fetch_quote(cid)
     except Exception as e:
