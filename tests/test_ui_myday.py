@@ -42,17 +42,14 @@ def test_myday_summary_message_spec():
 
 
 @pytest.mark.unit
-def test_myday_wind_block_uses_warning_component():
+def test_myday_wind_is_inline_with_temperature_and_rain():
     msg = myday.day_summary(
         "Четверг, 2 июля",
         "Amsterdam",
         weather_title="☀️ Погода сегодня",
-        weather_line="До +22°C",
-        wind_title="Сильный ветер",
-        wind_line="До 12 м/с (утром, днём)",
+        weather_line="До +22°C • Дождь (вечером) 78% • Умеренный ветер до 7 м/с (днём)",
     )
 
-    assert "⚠️ Сильный ветер" in msg.text
-    assert "Сильный ветер" in _bold_texts(msg)
-    assert "До 12 м/с (утром, днём)" in msg.text
+    assert "До +22°C • Дождь (вечером) 78% • Умеренный ветер до 7 м/с (днём)" in msg.text
+    assert "⚠️" not in msg.text
     assert "\n\n\n" not in msg.text

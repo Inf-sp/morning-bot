@@ -310,21 +310,19 @@ def _build_day_text(cid):
         icon = weather.weather_icon(code, tmax, rain, wind_ms, rain_mm)
         rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
         rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-        # ветер: показываем всегда, отдельным блоком с усиленным описанием при сильном ветре
+        # ветер: показываем всегда, в одной строке с температурой и дождём, без эмодзи
         _, wword = weather.wind_scale(wind_ms)
         wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
         wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
-        wind_title = wword
-        wind_line = f"До {wind_ms:.0f} м/с{wind_when}"
+        wind_part = f"{wword} до {wind_ms:.0f} м/с{wind_when}"
         weather_title = f"{icon} Погода сегодня"
         rain_part = weather.rain_text(rain, rain_mm, rain_when)
-        weather_line = f"До {tmax:+.0f}°C" + (f" • {rain_part}" if rain_part else "")
+        weather_line = f"До {tmax:+.0f}°C" + (f" • {rain_part}" if rain_part else "") + f" • {wind_part}"
         hum_title, hum_line = weather.humidity_phrase(data, day_str, tmax, s.get("cc", ""))
     else:
         rain = 0
         rain_mm = None
         tmax = None
-        wind_title, wind_line = "", ""
         weather_title = "☁️ Погода сейчас недоступна"
         weather_line = "Не удалось получить прогноз — остальная сводка всё равно готова."
         hum_title, hum_line = "", ""
@@ -364,8 +362,6 @@ def _build_day_text(cid):
         priorities=pr_labels,
         weather_title=weather_title,
         weather_line=weather_line,
-        wind_title=wind_title,
-        wind_line=wind_line,
         humidity_title=hum_title,
         humidity_line=hum_line,
         word_line=word_line,

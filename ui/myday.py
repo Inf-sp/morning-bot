@@ -8,8 +8,6 @@ def day_summary(
     priorities=None,
     weather_title="",
     weather_line="",
-    wind_title="",
-    wind_line="",
     humidity_title="",
     humidity_line="",
     word_line="",
@@ -29,9 +27,6 @@ def day_summary(
 
     b.section(weather_title)
     b.line(weather_line)
-    if wind_title:
-        b.warning(wind_title)
-        b.line(wind_line)
     if humidity_title:
         b.section(humidity_title)
         b.line(humidity_line)
