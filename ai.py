@@ -258,9 +258,15 @@ def llm_json(prompt, max_tokens=1200, order=None, claude_model=None, tier=None, 
         lambda s: json.JSONDecoder(strict=False).raw_decode(_repair_inner_quotes(s))[0],
     ):
         try:
-            return attempt(raw)
+            parsed = attempt(raw)
         except Exception:
             continue
+        # Вызывающие ждут JSON-объект (dict). Модель иногда отдаёт строку/массив/число -
+        # не отдаём такое наружу, иначе p["..."] / p.get(...) падают вне try у вызывающего.
+        if isinstance(parsed, dict):
+            return parsed
+        if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+            return parsed[0]
     # последний шанс - пустой dict, чтобы вызывающий показал понятную ошибку
     raise Exception("Не удалось разобрать ответ ИИ (JSON). Попробуй ещё раз.")
 
