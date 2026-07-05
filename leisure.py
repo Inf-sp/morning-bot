@@ -312,43 +312,59 @@ def _movie_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}"),
          InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
+         InlineKeyboardButton("😊 По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
 
-# Жанры для меню «По жанру» (2 столбца): (эмодзи+имя, genre_id).
-_GENRE_MENU = [
-    ("🎬 Драма", 18), ("🎭 Комедия", 35),
-    ("😱 Ужасы", 27), ("🚀 Фантастика", 878),
-    ("🔍 Детектив", 9648), ("🔪 Триллер", 53),
-    ("❤️ Романтика", 10749), ("⚔️ Боевик", 28),
-    ("🧙 Фэнтези", 14), ("🕵️ Криминал", 80),
+# Полный набор жанров — для экрана предпочтений (чекбоксы).
+_GENRE_ALL = [
+    ("🎭 Комедия", 35), ("😱 Ужасы", 27),
+    ("🚀 Фантастика", 878), ("🔪 Триллер", 53),
+    ("❤️ Романтика", 10749), ("🎬 Драма", 18),
+    ("⚔️ Боевик", 28), ("🔍 Детектив", 9648),
+    ("🕵️ Криминал", 80), ("🧙 Фэнтези", 14),
     ("🗺️ Приключения", 12), ("🤠 Вестерн", 37),
     ("🎞️ Документальный", 99), ("👨‍👩‍👧 Семейный", 10751),
 ]
 
-# Настроения: ключ → (подпись, набор genre_id-подсказок для фолбэка).
+# Шесть популярных жанров для быстрого меню «По жанру» (2 столбца, помещается на экран).
+# Остальные жанры остаются в предпочтениях и в алгоритме ранжирования.
+_GENRE_MENU = [
+    ("😂 Комедия", 35), ("😱 Ужасы", 27),
+    ("🚀 Фантастика", 878), ("🔪 Триллер", 53),
+    ("❤️ Романтика", 10749), ("🎭 Драма", 18),
+]
+
+# Настроения (8 вариантов, 2 столбца): ключ → подпись.
+# Удалённые настроения свёрнуты внутрь оставшихся — см. _MOOD_GENRES/_mood_to_genres.
 _MOOD_MENU = [
-    ("light", "😄 Что-нибудь лёгкое"), ("think", "🧠 Хочу подумать"),
-    ("sad", "😢 Что-то грустное"), ("romance", "❤️ Романтика"),
-    ("scary", "😱 Страшное"), ("twist", "🤯 Неожиданная концовка"),
-    ("thrill", "🔥 Захватывающее"), ("atmo", "🌌 Атмосферное"),
-    ("unusual", "🎭 Необычное"), ("detective", "🕵️ Детективное"),
-    ("epic", "🚀 Масштабное"), ("slow", "🎬 Медленное и красивое"),
-    ("nonstop", "💥 Без остановки"), ("cozy", "😌 Для спокойного вечера"),
-    ("duo", "👨‍👩‍👧 Для просмотра вдвоём"), ("oneeve", "🍿 На один вечер"),
-    ("puzzle", "🧩 Запутанное"),
+    ("light", "😄 Что-нибудь лёгкое"), ("scary", "😱 Страшное"),
+    ("think", "🧠 Хочу подумать"), ("thrill", "🔥 Захватывающее"),
+    ("romance", "❤️ Романтика"), ("atmo", "🌌 Атмосферное"),
+    ("puzzle", "🧩 Запутанное"), ("action", "💥 Экшен"),
 ]
 
 # Настроение → жанры-подсказки (детерминированный фолбэк, если LLM недоступен).
+# Свёрнутые настроения усиливают соответствующие: «медленное и красивое» и «спокойный
+# вечер» → атмосферное; «масштабное»/«без остановки» → экшен; «необычное» → подумать;
+# «неожиданная концовка» → запутанное (плюс ключевые слова в _mood_keywords).
 _MOOD_GENRES = {
-    "light": [35, 10751, 12], "think": [878, 18, 9648], "sad": [18, 10749],
-    "romance": [10749, 35], "scary": [27, 53], "twist": [53, 9648, 878],
-    "thrill": [28, 53], "atmo": [878, 14, 18], "unusual": [878, 14, 18],
-    "detective": [9648, 80, 53], "epic": [12, 878, 36], "slow": [18, 10749],
-    "nonstop": [28, 12, 53], "cozy": [35, 10751, 10749], "duo": [35, 10749, 12],
-    "oneeve": [53, 28, 35], "puzzle": [9648, 53, 878],
+    "light": [35, 10751, 12],
+    "scary": [27, 53],
+    "think": [878, 18, 9648, 14],   # + «необычное» (нестандартные проекты)
+    "thrill": [28, 53, 9648],
+    "romance": [10749, 35],
+    "atmo": [878, 14, 18],          # + «медленное и красивое», «спокойный вечер»
+    "puzzle": [9648, 53, 878],      # + «неожиданная концовка»
+    "action": [28, 12, 878, 36],    # + «без остановки», «масштабное» (эпик)
+}
+
+# Ключевые слова TMDb для тонкой настройки настроения (id ключевых слов TMDb).
+# «Запутанное»/«неожиданная концовка» — plot twist (id 9673).
+_MOOD_KEYWORDS = {
+    "puzzle": [9673],
 }
 
 
@@ -358,7 +374,6 @@ def _movie_genre_menu_kb():
                for label, gid in _GENRE_MENU]
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i:i + 2])
-    rows.append([InlineKeyboardButton("😊 По настроению", callback_data="movie_mood_menu")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="a_watch")])
     return InlineKeyboardMarkup(rows)
 
@@ -744,7 +759,7 @@ async def _advance_book(bot, cid):
     await _send_book_card(bot, cid, it, ni)
 
 async def send_movie_genre_menu(bot, cid, q=None):
-    text = "🎭 Выбери жанр — подберу под твой вкус внутри него:"
+    text = "🎭 Выбери жанр — подберу фильм или сериал под твой вкус внутри него."
     kb = _movie_genre_menu_kb()
     if q is not None:
         try:
@@ -755,7 +770,7 @@ async def send_movie_genre_menu(bot, cid, q=None):
 
 
 async def send_movie_mood_menu(bot, cid, q=None):
-    text = "😊 Какое настроение? Подберу фильм или сериал под него:"
+    text = "😊 Какое настроение? Подберу фильм или сериал специально под него."
     kb = _movie_mood_menu_kb()
     if q is not None:
         try:
@@ -766,7 +781,7 @@ async def send_movie_mood_menu(bot, cid, q=None):
 
 
 # ---------- экран «Предпочтения кино» ----------
-_PREF_GENRES = [(label, gid) for label, gid in _GENRE_MENU]
+_PREF_GENRES = [(label, gid) for label, gid in _GENRE_ALL]
 _PREF_COUNTRIES = [("🇺🇸 США", "US"), ("🇬🇧 Британия", "GB"), ("🇰🇷 Корея", "KR"),
                    ("🇯🇵 Япония", "JP"), ("🇫🇷 Франция", "FR"), ("🇩🇪 Германия", "DE")]
 _PREF_TYPE = [("🎬 Фильмы", "movie"), ("📺 Сериалы", "tv"), ("🎲 Без разницы", "")]
@@ -861,7 +876,8 @@ async def send_movie_by_genre(bot, cid, genre_id):
 async def send_movie_by_mood(bot, cid, mood_key):
     """Рекомендация по настроению: LLM-классификатор настроения → жанры → TMDb discover."""
     genre_ids = await asyncio.to_thread(_mood_to_genres, mood_key)
-    it, tm = await asyncio.to_thread(_discover_pick, cid, genre_ids, _movie_prefs(cid))
+    keywords = _MOOD_KEYWORDS.get(mood_key)
+    it, tm = await asyncio.to_thread(_discover_pick, cid, genre_ids, _movie_prefs(cid), keywords)
     if not it:
         await bot.send_message(chat_id=cid, text="Под это настроение пока не нашёл нового. Попробуй другое 👇",
                                reply_markup=_movie_mood_menu_kb())
@@ -896,22 +912,28 @@ def _mood_to_genres(mood_key):
         return fallback
 
 
-def _discover_pick(cid, genre_ids, prefs):
-    """Берёт кандидатов из discover (movie+tv), фильтрует по вкусу/исключениям, ранжирует."""
+def _discover_pick(cid, genre_ids, prefs, keywords=None):
+    """Берёт кандидатов из discover (movie+tv), фильтрует по вкусу/исключениям, ранжирует.
+
+    keywords — id ключевых слов TMDb для тонкой настройки настроения (напр. plot twist).
+    """
     min_rating = (prefs or {}).get("min_rating") or movie_engine.RATING_STEPS[0]
     taste = movie_engine.taste_profile(cid, resolve_details=False)
     excluded = movie_engine._excluded_norms(cid)
-    for mr in [r for r in movie_engine.RATING_STEPS if r <= min_rating] or [movie_engine.RATING_STEPS[-1]]:
-        pool = {}
-        for kind in ("movie", "tv"):
-            for c in tmdb.discover(kind, genre_ids=genre_ids, min_rating=mr):
-                if not c.get("id") or movie_engine._norm(c.get("name")) in excluded:
-                    continue
-                pool[f"{c['kind']}:{c['id']}"] = c
-        if pool:
-            ranked = movie_engine.rank(list(pool.values()), taste, prefs)
-            c = ranked[0]
-            return _candidate_to_card(cid, c)
+    steps = [r for r in movie_engine.RATING_STEPS if r <= min_rating] or [movie_engine.RATING_STEPS[-1]]
+    # Сначала пробуем с ключевыми словами (тонкая настройка настроения), затем без них —
+    # keywords должны быть приоритетом, а не жёстким фильтром.
+    for kw in ([keywords, None] if keywords else [None]):
+        for mr in steps:
+            pool = {}
+            for kind in ("movie", "tv"):
+                for c in tmdb.discover(kind, genre_ids=genre_ids, min_rating=mr, keywords=kw):
+                    if not c.get("id") or movie_engine._norm(c.get("name")) in excluded:
+                        continue
+                    pool[f"{c['kind']}:{c['id']}"] = c
+            if pool:
+                ranked = movie_engine.rank(list(pool.values()), taste, prefs)
+                return _candidate_to_card(cid, ranked[0])
     return None, None
 
 
