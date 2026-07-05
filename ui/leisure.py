@@ -18,50 +18,54 @@ def clip(text, limit=450):
 
 
 def movie_card(item, tm):
-    """Составная карточка (условные блоки) -> MessageBuilder."""
+    """Карточка рекомендации кино, спроектированная под быстрое решение (3-5 сек).
+
+    Иерархия сверху вниз: что это (заголовок) → стоит ли смотреть и что за жанр
+    (рейтинг · тип · жанры) → насколько долго (одна строка) → о чём (короткое
+    описание) → почему именно мне (персональная причина).
+    """
     item = item if isinstance(item, dict) else {"title": str(item)}
     title = (tm.get("name") if tm else "") or item.get("title", "")
     year = f" ({tm.get('year')})" if tm and tm.get("year") else ""
     kind = (tm.get("kind") if tm else "") or ""
     icon = "📺" if kind == "tv" else "🎬"
     type_label = "Сериал" if kind == "tv" else ("Фильм" if kind == "movie" else "")
-    en = (tm.get("name_en") if tm else "") or item.get("title_en", "")
 
     b = MessageBuilder()
+
+    # 1. Что это — заголовок.
     b.text_line(f"{icon} ")
     b.bold(f"{title}{year}")
     b.newline()
-    if en and en.lower() != title.lower():
-        b.italic(en)
-        b.newline()
-    genre_bits = " · ".join(x for x in [type_label, (tm.get("genres") if tm else "")] if x)
-    if genre_bits:
-        b.spacer()
-        b.line(f"🎭 {genre_bits}")
+
+    # 2. Стоит ли смотреть + что за жанр — одна строка-якорь без источника рейтинга.
+    meta_parts = []
     if tm and tm.get("rating"):
-        b.line(f"⭐ {tm.get('rating'):.1f}/10 TMDb")
+        meta_parts.append(f"⭐ {tm['rating']:.1f}")
+    if type_label:
+        meta_parts.append(type_label)
+    if tm and tm.get("genres"):
+        meta_parts.append(tm["genres"])
+    if meta_parts:
+        b.spacer()
+        b.line(" · ".join(meta_parts))
 
-    # Детали сериала/фильма (если пришли из tmdb.detail)
-    for line in _detail_lines(tm):
-        b.line(line)
+    # 3. Насколько это долго — компактная строка деталей (одна).
+    detail = _detail_line(tm)
+    if detail:
+        b.line(detail)
 
+    # 4. О чём — короткое описание (2-4 строки).
     if tm and tm.get("overview"):
         b.spacer()
-        b.line(clip(tm["overview"]))
+        b.line(clip(tm["overview"], limit=260))
 
-    # Почему рекомендовано: заметный блок «Потому что вам понравился X».
-    because = (tm or {}).get("because")
-    hook = item.get("hook", "")
-    if because:
+    # 5. Почему именно мне — персональная причина.
+    reason = _reason_line(item, tm)
+    if reason:
         b.spacer()
-        b.line(f"💡 Потому что вам понравился «{because}»")
-    elif hook:
-        b.spacer()
-        b.line(f"💡 {hook}")
+        b.line(reason)
 
-    if tm and tm.get("url"):
-        b.spacer()
-        b.line(f"🔗 {tm['url']}")
     return title, b.build_stripped()
 
 
@@ -69,40 +73,54 @@ _MONTHS_RU = ["", "января", "февраля", "марта", "апреля"
               "июля", "августа", "сентября", "октября", "ноября", "декабря"]
 
 
-def _detail_lines(tm):
-    """Строки с деталями: сериал (сезоны/статус/след.серия/длит.) или фильм (длит./страна/студия)."""
+def _clip_title(s, limit=40):
+    s = (s or "").strip()
+    return s if len(s) <= limit else s[:limit - 1].rstrip() + "…"
+
+
+def _reason_line(item, tm):
+    """Персональная причина «почему мне» — без шаблонных фраз."""
+    because = (tm or {}).get("because")
+    if because:
+        return f"💡 Потому что вам понравился «{_clip_title(because)}»"
+    hook = (item.get("hook") or "").strip()
+    return f"💡 {hook}" if hook else ""
+
+
+def _detail_line(tm):
+    """Одна компактная строка длительности/объёма. Статус сериала — ровно один вариант."""
     if not tm:
-        return []
-    lines = []
+        return ""
     kind = tm.get("kind")
     if kind == "tv":
+        parts = []
+        # Статус — только ОДИН вариант (без дубля «продолжается» + «новый сезон ожидается»).
+        status = (tm.get("status") or "").lower()
+        ongoing = status in ("returning series", "in production", "planned")
+        nxt = tm.get("next_episode")
+        if ongoing and isinstance(nxt, dict) and nxt.get("air_date"):
+            parts.append(f"Следующая серия — {_fmt_date(nxt['air_date'])}")
+        elif ongoing:
+            parts.append("Новый сезон ожидается")
+        elif status:
+            parts.append("Завершено")
         seasons, eps = tm.get("seasons"), tm.get("episodes")
         if seasons:
             plural_s = "сезон" if seasons == 1 else ("сезона" if 2 <= seasons <= 4 else "сезонов")
-            part = f"📊 {seasons} {plural_s}"
+            vol = f"{seasons} {plural_s}"
             if eps:
-                part += f" • {eps} серий"
-            lines.append(part)
-        status = (tm.get("status") or "").lower()
-        ongoing = status in ("returning series", "in production", "planned")
-        if status:
-            lines.append("🎥 Продолжается" if ongoing else "✅ Завершено")
-        nxt = tm.get("next_episode")
-        if nxt and isinstance(nxt, dict) and nxt.get("air_date"):
-            lines.append(f"⏳ Следующая серия — {_fmt_date(nxt['air_date'])}")
-        elif ongoing:
-            lines.append("⏳ Новый сезон ожидается")
-        if tm.get("episode_runtime"):
-            lines.append(f"⏱️ Серия ~{tm['episode_runtime']} мин")
-    elif kind == "movie":
+                vol += f" • {eps} серий"
+            parts.append(vol)
+        return " · ".join(parts)
+    if kind == "movie":
+        parts = []
         if tm.get("runtime"):
-            lines.append(f"⏱️ {tm['runtime']} мин")
+            parts.append(f"{tm['runtime']} мин")
         countries = tm.get("countries") or []
         if countries:
-            lines.append(f"🌍 {', '.join(countries[:2])}")
-        if tm.get("studio"):
-            lines.append(f"🎬 {tm['studio']}")
-    return lines
+            parts.append(", ".join(countries[:2]))
+        return " · ".join(parts)
+    return ""
 
 
 def _fmt_date(iso):

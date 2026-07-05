@@ -13,6 +13,8 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 # Грамматика - самый дешёвый Claude (Haiku), баланс качества и цены
 GRAMMAR_MODEL = os.environ.get("GRAMMAR_MODEL", "claude-haiku-4-5")
+# Разбор гардероба - самый сильный Claude (Opus) для длинного анализа стиля
+WARDROBE_MODEL = os.environ.get("WARDROBE_MODEL", "claude-opus-4-8")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 CF_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
 CF_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")

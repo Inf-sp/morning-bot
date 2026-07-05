@@ -760,23 +760,30 @@ async def _advance_book(bot, cid):
 
 async def send_movie_genre_menu(bot, cid, q=None):
     text = "🎭 Выбери жанр — подберу фильм или сериал под твой вкус внутри него."
-    kb = _movie_genre_menu_kb()
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=kb); return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    await _show_menu_over_card(bot, cid, text, _movie_genre_menu_kb(), q)
 
 
 async def send_movie_mood_menu(bot, cid, q=None):
     text = "😊 Какое настроение? Подберу фильм или сериал специально под него."
-    kb = _movie_mood_menu_kb()
+    await _show_menu_over_card(bot, cid, text, _movie_mood_menu_kb(), q)
+
+
+async def _show_menu_over_card(bot, cid, text, kb, q):
+    """Показывает текстовое меню поверх текущего сообщения.
+
+    Если сообщение текстовое — редактирует его. Если это карточка с постером
+    (media), edit_text невозможен: снимаем кнопки у старой карточки (чтобы по ней
+    нельзя было случайно нажать) и отправляем меню новым сообщением.
+    """
     if q is not None:
         try:
-            await q.message.edit_text(text, reply_markup=kb); return
+            await q.message.edit_text(text, reply_markup=kb)
+            return
         except Exception:
-            pass
+            try:
+                await q.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 

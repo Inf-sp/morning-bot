@@ -92,9 +92,12 @@ def test_leisure_movie_card_message_spec():
 
     assert title == "Патерсон"
     assert "Патерсон (2016)" in _bold_texts(msg)
-    assert "Paterson" in _italic_texts(msg)
-    assert "⭐ 7.4/10 TMDb" in msg.text
-    assert "🔗 https://example.com/paterson" in msg.text
+    # Новый дизайн: рейтинг без источника, тип и жанры в одной строке-якоре.
+    assert "⭐ 7.4 · Фильм · драма" in msg.text
+    assert "/10 TMDb" not in msg.text
+    # Ссылка TMDb и дубль оригинального названия убраны.
+    assert "🔗" not in msg.text
+    assert "https://example.com/paterson" not in msg.text
     assert "\n\n\n" not in msg.text
     _assert_no_leaked_html(msg)
 

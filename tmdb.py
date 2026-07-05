@@ -70,15 +70,37 @@ def _kind_of(x, default=None):
     return default
 
 
+def _is_readable(s):
+    """True, если строка содержит буквы кириллицы или латиницы (читаемо для рус. юзера).
+
+    Названия на тайском/японском/корейском/китайском/арабском и т.п. считаем нечитаемыми —
+    для них лучше показать латинское оригинальное название.
+    """
+    return any(("а" <= c.lower() <= "я") or ("a" <= c.lower() <= "z") for c in s)
+
+
+def _display_name(localized, original):
+    """Выбирает читаемое название: локализованное, если читаемо; иначе латинский оригинал."""
+    localized = (localized or "").strip()
+    original = (original or "").strip()
+    if localized and _is_readable(localized):
+        return localized
+    if original and _is_readable(original):
+        return original
+    return localized or original
+
+
 def normalize(x, kind=None):
     """Приводит сырой TMDb-объект к единому dict карточки."""
     kind = _kind_of(x, kind) or ("tv" if x.get("name") else "movie")
     genre_ids = x.get("genre_ids") or [g.get("id") for g in (x.get("genres") or []) if isinstance(g, dict)]
     genres = ", ".join(GENRES.get(g, "") for g in genre_ids[:3] if GENRES.get(g))
+    localized = x.get("title") or x.get("name") or ""
+    original = x.get("original_title") or x.get("original_name") or ""
     return {
         "id": x.get("id"),
-        "name": x.get("title") or x.get("name") or "",
-        "name_en": x.get("original_title") or x.get("original_name") or "",
+        "name": _display_name(localized, original),
+        "name_en": original,
         "year": _year(x),
         "rating": x.get("vote_average") or 0,
         "genre_ids": [g for g in genre_ids if g],

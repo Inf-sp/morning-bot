@@ -141,10 +141,43 @@ def test_card_shows_series_details_and_reason():
           "status": "Returning Series", "next_episode": {"air_date": "2024-10-18"},
           "episode_runtime": 50, "overview": "о", "because": "Тьма", "url": "u"}
     _, msg = lu.movie_card({"title": "Разделение", "hook": ""}, tm)
-    assert "📊 2 сезона • 16 серий" in msg.text
-    assert "🎥 Продолжается" in msg.text
+    # Новый компактный формат: одна строка деталей, статус — ровно один вариант.
+    assert "2 сезона • 16 серий" in msg.text
     assert "Следующая серия — 18 октября" in msg.text
+    # Нет дубля статуса: раз есть дата серии, «Продолжается»/«Новый сезон» не показываем.
+    assert "Продолжается" not in msg.text
+    assert "Новый сезон ожидается" not in msg.text
     assert "Потому что вам понравился «Тьма»" in msg.text
+
+
+@pytest.mark.unit
+def test_normalize_uses_latin_when_localized_unreadable():
+    # Тайское локализованное название → показываем латинский оригинал.
+    d = tmdb.normalize({"id": 1, "name": "กุหลาบเกราะเพชร", "original_name": "Petch Roy Ruk",
+                        "vote_average": 8.0, "genre_ids": [18], "media_type": "tv",
+                        "first_air_date": "2019-01-01"})
+    assert d["name"] == "Petch Roy Ruk"
+
+
+@pytest.mark.unit
+def test_card_finished_series_single_status():
+    from ui import leisure as lu
+    tm = {"kind": "tv", "name": "X", "year": "2019", "genres": "драма", "rating": 8.0,
+          "seasons": 1, "episodes": 15, "status": "Ended", "next_episode": None,
+          "episode_runtime": 97, "overview": "о", "because": "Y"}
+    _, msg = lu.movie_card({"title": "X", "hook": ""}, tm)
+    assert "Завершено · 1 сезон • 15 серий" in msg.text
+    assert "Новый сезон" not in msg.text and "Продолжается" not in msg.text
+
+
+@pytest.mark.unit
+def test_reason_clips_long_anchor():
+    from ui import leisure as lu
+    long_anchor = "Изгнанный из отряда героя, я решил поселиться в глубинке одиноко"
+    tm = {"kind": "movie", "name": "A", "year": "2020", "genres": "драма", "rating": 7.5,
+          "runtime": 100, "countries": ["JP"], "overview": "о", "because": long_anchor}
+    _, msg = lu.movie_card({"title": "A", "hook": ""}, tm)
+    assert "…»" in msg.text  # длинный anchor обрезан
 
 
 @pytest.mark.unit
@@ -154,4 +187,7 @@ def test_card_shows_movie_details():
           "rating": 7.9, "runtime": 116, "countries": ["US"], "studio": "Paramount",
           "overview": "о", "because": "Дюна", "url": "u"}
     _, msg = lu.movie_card({"title": "Прибытие", "hook": ""}, tm)
-    assert "⏱️ 116 мин" in msg.text and "🌍 US" in msg.text and "🎬 Paramount" in msg.text
+    # Новый формат: длительность и страна в одной строке; студия убрана как лишняя.
+    assert "116 мин · US" in msg.text
+    assert "Paramount" not in msg.text
+    assert "/10 TMDb" not in msg.text
