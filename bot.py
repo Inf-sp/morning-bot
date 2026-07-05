@@ -397,6 +397,32 @@ async def answer_callback(update, context):
         await learning.game_start(bot, cid)
         return
     # Развлечения / путешествия
+    if data == "movie_prefs":
+        await _ack(q)
+        await leisure.send_movie_prefs(bot, cid, q)
+        return
+    if data.startswith("mpref_"):
+        await _ack(q)
+        await leisure.toggle_movie_pref(bot, cid, data, q)
+        return
+    if data == "movie_genre_menu":
+        await _ack(q)
+        await leisure.send_movie_genre_menu(bot, cid, q)
+        return
+    if data == "movie_mood_menu":
+        await _ack(q)
+        await leisure.send_movie_mood_menu(bot, cid, q)
+        return
+    if data.startswith("movie_g_"):
+        await util.ack_loading(q)
+        await leisure.send_movie_by_genre(bot, cid, data[len("movie_g_"):])
+        await util.clear_loading(q)
+        return
+    if data.startswith("movie_mood_"):
+        await util.ack_loading(q)
+        await leisure.send_movie_by_mood(bot, cid, data[len("movie_mood_"):])
+        await util.clear_loading(q)
+        return
     if data.startswith("movie_love_"):
         await _ack(q)
         await leisure.movie_love(bot, cid, int(data.split("_")[-1]))

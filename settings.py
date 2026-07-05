@@ -939,6 +939,7 @@ async def send_notes(bot, cid):
 
 async def send_leisure_settings(bot, cid):
     rows = [[InlineKeyboardButton(title, callback_data=f"as_love_{key}")] for title, key in LOVE_SECTIONS]
+    rows.append([InlineKeyboardButton("🎬 Предпочтения кино", callback_data="movie_prefs")])
     rows.extend(setup_again_rows(cid, "leisure"))
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
     msg = settings_ui.leisure_settings()

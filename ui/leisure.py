@@ -40,15 +40,78 @@ def movie_card(item, tm):
         b.line(f"🎭 {genre_bits}")
     if tm and tm.get("rating"):
         b.line(f"⭐ {tm.get('rating'):.1f}/10 TMDb")
+
+    # Детали сериала/фильма (если пришли из tmdb.detail)
+    for line in _detail_lines(tm):
+        b.line(line)
+
     if tm and tm.get("overview"):
         b.spacer()
         b.line(clip(tm["overview"]))
-    b.spacer()
-    b.line(f"💡 {item.get('hook', '')}")
+
+    # Почему рекомендовано: заметный блок «Потому что вам понравился X».
+    because = (tm or {}).get("because")
+    hook = item.get("hook", "")
+    if because:
+        b.spacer()
+        b.line(f"💡 Потому что вам понравился «{because}»")
+    elif hook:
+        b.spacer()
+        b.line(f"💡 {hook}")
+
     if tm and tm.get("url"):
         b.spacer()
         b.line(f"🔗 {tm['url']}")
     return title, b.build_stripped()
+
+
+_MONTHS_RU = ["", "января", "февраля", "марта", "апреля", "мая", "июня",
+              "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+
+
+def _detail_lines(tm):
+    """Строки с деталями: сериал (сезоны/статус/след.серия/длит.) или фильм (длит./страна/студия)."""
+    if not tm:
+        return []
+    lines = []
+    kind = tm.get("kind")
+    if kind == "tv":
+        seasons, eps = tm.get("seasons"), tm.get("episodes")
+        if seasons:
+            plural_s = "сезон" if seasons == 1 else ("сезона" if 2 <= seasons <= 4 else "сезонов")
+            part = f"📊 {seasons} {plural_s}"
+            if eps:
+                part += f" • {eps} серий"
+            lines.append(part)
+        status = (tm.get("status") or "").lower()
+        ongoing = status in ("returning series", "in production", "planned")
+        if status:
+            lines.append("🎥 Продолжается" if ongoing else "✅ Завершено")
+        nxt = tm.get("next_episode")
+        if nxt and isinstance(nxt, dict) and nxt.get("air_date"):
+            lines.append(f"⏳ Следующая серия — {_fmt_date(nxt['air_date'])}")
+        elif ongoing:
+            lines.append("⏳ Новый сезон ожидается")
+        if tm.get("episode_runtime"):
+            lines.append(f"⏱️ Серия ~{tm['episode_runtime']} мин")
+    elif kind == "movie":
+        if tm.get("runtime"):
+            lines.append(f"⏱️ {tm['runtime']} мин")
+        countries = tm.get("countries") or []
+        if countries:
+            lines.append(f"🌍 {', '.join(countries[:2])}")
+        if tm.get("studio"):
+            lines.append(f"🎬 {tm['studio']}")
+    return lines
+
+
+def _fmt_date(iso):
+    """'2024-10-18' → '18 октября'."""
+    try:
+        y, m, d = iso.split("-")
+        return f"{int(d)} {_MONTHS_RU[int(m)]}"
+    except (ValueError, IndexError):
+        return iso
 
 
 def book_text(item):

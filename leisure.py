@@ -12,6 +12,8 @@ import ai
 import util
 import research
 import settings
+import tmdb
+import movie_engine
 from util import country_flag, esc
 import verify
 from ui import leisure as leisure_ui
@@ -308,10 +310,67 @@ def _movie_card(it, tm):
 
 def _movie_kb(i):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}")],
-        [InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}"),
+         InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
+
+
+# Жанры для меню «По жанру» (2 столбца): (эмодзи+имя, genre_id).
+_GENRE_MENU = [
+    ("🎬 Драма", 18), ("🎭 Комедия", 35),
+    ("😱 Ужасы", 27), ("🚀 Фантастика", 878),
+    ("🔍 Детектив", 9648), ("🔪 Триллер", 53),
+    ("❤️ Романтика", 10749), ("⚔️ Боевик", 28),
+    ("🧙 Фэнтези", 14), ("🕵️ Криминал", 80),
+    ("🗺️ Приключения", 12), ("🤠 Вестерн", 37),
+    ("🎞️ Документальный", 99), ("👨‍👩‍👧 Семейный", 10751),
+]
+
+# Настроения: ключ → (подпись, набор genre_id-подсказок для фолбэка).
+_MOOD_MENU = [
+    ("light", "😄 Что-нибудь лёгкое"), ("think", "🧠 Хочу подумать"),
+    ("sad", "😢 Что-то грустное"), ("romance", "❤️ Романтика"),
+    ("scary", "😱 Страшное"), ("twist", "🤯 Неожиданная концовка"),
+    ("thrill", "🔥 Захватывающее"), ("atmo", "🌌 Атмосферное"),
+    ("unusual", "🎭 Необычное"), ("detective", "🕵️ Детективное"),
+    ("epic", "🚀 Масштабное"), ("slow", "🎬 Медленное и красивое"),
+    ("nonstop", "💥 Без остановки"), ("cozy", "😌 Для спокойного вечера"),
+    ("duo", "👨‍👩‍👧 Для просмотра вдвоём"), ("oneeve", "🍿 На один вечер"),
+    ("puzzle", "🧩 Запутанное"),
+]
+
+# Настроение → жанры-подсказки (детерминированный фолбэк, если LLM недоступен).
+_MOOD_GENRES = {
+    "light": [35, 10751, 12], "think": [878, 18, 9648], "sad": [18, 10749],
+    "romance": [10749, 35], "scary": [27, 53], "twist": [53, 9648, 878],
+    "thrill": [28, 53], "atmo": [878, 14, 18], "unusual": [878, 14, 18],
+    "detective": [9648, 80, 53], "epic": [12, 878, 36], "slow": [18, 10749],
+    "nonstop": [28, 12, 53], "cozy": [35, 10751, 10749], "duo": [35, 10749, 12],
+    "oneeve": [53, 28, 35], "puzzle": [9648, 53, 878],
+}
+
+
+def _movie_genre_menu_kb():
+    rows = []
+    buttons = [InlineKeyboardButton(label, callback_data=f"movie_g_{gid}")
+               for label, gid in _GENRE_MENU]
+    for i in range(0, len(buttons), 2):
+        rows.append(buttons[i:i + 2])
+    rows.append([InlineKeyboardButton("😊 По настроению", callback_data="movie_mood_menu")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="a_watch")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _movie_mood_menu_kb():
+    rows = []
+    buttons = [InlineKeyboardButton(label, callback_data=f"movie_mood_{key}")
+               for key, label in _MOOD_MENU]
+    for i in range(0, len(buttons), 2):
+        rows.append(buttons[i:i + 2])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="movie_genre_menu")])
+    return InlineKeyboardMarkup(rows)
 
 MIN_TMDB_RATING = 7.0
 
@@ -413,10 +472,90 @@ async def send_recos(bot, cid, kind):
     if not seen:
         await _ask_collect(bot, cid, "movies")
         return
+    # Основной путь — TMDb-движок (Recommendations + Similar по любимым).
+    it, tm = await _tmdb_engine_pick(cid)
+    if it is None:
+        # Фолбэк — LLM-подбор (старый путь).
+        it, tm = await _llm_movie_pick(cid, _movie_used(cid))
+    if not it:
+        await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
+    disp = _display_title(it, tm)
+    movie_engine.mark_shown(cid, disp)
+    store.last_recos[str(cid)] = {"kind": kind, "items": [disp]}
+    store.last_source[str(cid)] = "Досуг · Кино"
+    store.last_answer[str(cid)] = f"{disp} - {it.get('hook','')}"
+    await _send_movie_card(bot, cid, it, 0, tm=tm)
+
+
+def _movie_prefs(cid):
+    """Предпочтения кино из настроек → dict для движка (приоритеты, не запреты)."""
+    g = settings.get(cid, "movie_genres", []) or []
+    countries = settings.get(cid, "movie_countries", []) or []
+    return {
+        "genres": [int(x) for x in g if str(x).isdigit()],
+        "type_pref": settings.get(cid, "movie_type_pref", "") or None,
+        "series_status": settings.get(cid, "movie_series_status", "") or None,
+        "recency": settings.get(cid, "movie_recency", "") or None,
+        "min_rating": _as_float(settings.get(cid, "movie_min_rating", None)),
+        "countries": countries,
+    }
+
+
+def _as_float(v):
+    try:
+        return float(v) if v not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+async def _tmdb_engine_pick(cid, prefs=None):
+    """Возвращает (it, tm) из TMDb-движка или (None, None), если данных мало.
+
+    tm — нормализованный TMDb-dict кандидата (совместим с карточкой), дополненный
+    деталями и полем because. it — лёгкий dict с title/hook для совместимости.
+    """
+    if prefs is None:
+        prefs = _movie_prefs(cid)
+    try:
+        cands, taste = await asyncio.to_thread(movie_engine.recommend, cid, prefs)
+    except Exception:
+        return None, None
+    if not cands:
+        return None, None
+    c = cands[0]
+    return _candidate_to_card(cid, c)
+
+
+def _candidate_to_card(cid, c):
+    """Обогащает кандидата деталями и строит (it, tm) для карточки."""
+    tm = dict(c)
+    try:
+        det = tmdb.detail(c.get("id"), c.get("kind"))
+        if det:
+            det["because"] = c.get("because")
+            det["anchors"] = c.get("anchors")
+            tm = det
+    except Exception:
+        pass
+    it = {"title": tm.get("name", ""), "title_en": tm.get("name_en", ""),
+          "hook": _reason_text(tm)}
+    return it, tm
+
+
+def _reason_text(tm):
+    """Автопричина «Потому что вам понравился X» из данных TMDb."""
+    because = tm.get("because")
+    if because:
+        return f"Потому что вам понравился «{because}»"
+    return ""
+
+
+async def _llm_movie_pick(cid, used):
+    """Старый LLM-путь как фолбэк движка."""
     items = []
     for _ in range(2):
         try:
-            data = await asyncio.to_thread(content_recommend, kind, str(cid))
+            data = await asyncio.to_thread(content_recommend, "movie", str(cid))
             items = _normalize_movie_items(data.get("items", []) if isinstance(data, dict) else [])
         except Exception:
             items = []
@@ -425,15 +564,8 @@ async def send_recos(bot, cid, kind):
     if not items:
         items = _fallback_movie_items(cid)
     if not items:
-        await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
-    it, tm = await asyncio.to_thread(_pick_good_movie, items, _movie_used(cid))
-    if not it:
-        await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
-    disp = _display_title(it, tm)
-    store.last_recos[str(cid)] = {"kind": kind, "items": [disp]}
-    store.last_source[str(cid)] = "Досуг · Кино"
-    store.last_answer[str(cid)] = f"{disp} - {it.get('hook','')}"
-    await _send_movie_card(bot, cid, it, 0, tm=tm)
+        return None, None
+    return await asyncio.to_thread(_pick_good_movie, items, used)
 
 async def movie_dislike(bot, cid, i):
     rec = store.last_recos.get(str(cid))
@@ -583,25 +715,16 @@ async def book_dislike(bot, cid, i):
 
 async def _advance_movie(bot, cid):
     """Загрузить следующую рекомендацию кино и показать карточку."""
-    items = []
-    for _ in range(2):
-        try:
-            data = await asyncio.to_thread(content_recommend, "movie", str(cid))
-            items = _normalize_movie_items(data.get("items", []) if isinstance(data, dict) else [])
-        except Exception:
-            items = []
-        if items:
-            break
-    if not items:
-        items = _fallback_movie_items(cid)
-    if not items:
-        await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
     rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
-    used = _movie_used(cid) | {str(x).lower() for x in rec["items"]}
-    it, tm = await asyncio.to_thread(_pick_good_movie, items, used)
+    it, tm = await _tmdb_engine_pick(cid)
+    if it is None:
+        used = _movie_used(cid) | {str(x).lower() for x in rec["items"]}
+        it, tm = await _llm_movie_pick(cid, used)
     if not it:
         await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
-    rec["items"].append(_display_title(it, tm))
+    disp = _display_title(it, tm)
+    movie_engine.mark_shown(cid, disp)
+    rec["items"].append(disp)
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1
     await _send_movie_card(bot, cid, it, ni, tm=tm)
@@ -619,6 +742,178 @@ async def _advance_book(bot, cid):
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1
     await _send_book_card(bot, cid, it, ni)
+
+async def send_movie_genre_menu(bot, cid, q=None):
+    text = "🎭 Выбери жанр — подберу под твой вкус внутри него:"
+    kb = _movie_genre_menu_kb()
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=kb); return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+async def send_movie_mood_menu(bot, cid, q=None):
+    text = "😊 Какое настроение? Подберу фильм или сериал под него:"
+    kb = _movie_mood_menu_kb()
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=kb); return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+# ---------- экран «Предпочтения кино» ----------
+_PREF_GENRES = [(label, gid) for label, gid in _GENRE_MENU]
+_PREF_COUNTRIES = [("🇺🇸 США", "US"), ("🇬🇧 Британия", "GB"), ("🇰🇷 Корея", "KR"),
+                   ("🇯🇵 Япония", "JP"), ("🇫🇷 Франция", "FR"), ("🇩🇪 Германия", "DE")]
+_PREF_TYPE = [("🎬 Фильмы", "movie"), ("📺 Сериалы", "tv"), ("🎲 Без разницы", "")]
+_PREF_STATUS = [("✅ Завершённые", "completed"), ("🔄 Любые", "")]
+_PREF_RECENCY = [("🆕 Новинки", "new"), ("📚 Любые годы", "")]
+_PREF_RATING = [("6.5", "6.5"), ("7.0", "7.0"), ("7.5", "7.5"), ("8.0", "8.0")]
+
+
+def _movie_prefs_kb(cid):
+    gsel = {int(x) for x in (settings.get(cid, "movie_genres", []) or []) if str(x).isdigit()}
+    csel = set(settings.get(cid, "movie_countries", []) or [])
+    tpref = settings.get(cid, "movie_type_pref", "") or ""
+    spref = settings.get(cid, "movie_series_status", "") or ""
+    rpref = settings.get(cid, "movie_recency", "") or ""
+    rating = str(settings.get(cid, "movie_min_rating", "") or "")
+    rows = []
+    rows.append([InlineKeyboardButton("— Любимые жанры —", callback_data="noop")])
+    gbtns = [InlineKeyboardButton(("✅ " if gid in gsel else "⬜ ") + label,
+                                  callback_data=f"mpref_g_{gid}") for label, gid in _PREF_GENRES]
+    for i in range(0, len(gbtns), 2):
+        rows.append(gbtns[i:i + 2])
+    rows.append([InlineKeyboardButton("— Тип —", callback_data="noop")])
+    rows.append([InlineKeyboardButton(("● " if tpref == v else "○ ") + label,
+                                      callback_data=f"mpref_type_{v or 'any'}") for label, v in _PREF_TYPE])
+    rows.append([InlineKeyboardButton("— Сериалы —", callback_data="noop")])
+    rows.append([InlineKeyboardButton(("● " if spref == v else "○ ") + label,
+                                      callback_data=f"mpref_status_{v or 'any'}") for label, v in _PREF_STATUS])
+    rows.append([InlineKeyboardButton("— Новинки —", callback_data="noop")])
+    rows.append([InlineKeyboardButton(("● " if rpref == v else "○ ") + label,
+                                      callback_data=f"mpref_recency_{v or 'any'}") for label, v in _PREF_RECENCY])
+    rows.append([InlineKeyboardButton("— Мин. рейтинг —", callback_data="noop")])
+    rows.append([InlineKeyboardButton(("● " if rating == v else "○ ") + f"⭐ {label}",
+                                      callback_data=f"mpref_rating_{v}") for label, v in _PREF_RATING])
+    rows.append([InlineKeyboardButton("— Страны —", callback_data="noop")])
+    cbtns = [InlineKeyboardButton(("✅ " if v in csel else "⬜ ") + label,
+                                  callback_data=f"mpref_c_{v}") for label, v in _PREF_COUNTRIES]
+    for i in range(0, len(cbtns), 2):
+        rows.append(cbtns[i:i + 2])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_leisure_settings")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def send_movie_prefs(bot, cid, q=None):
+    text = ("🎬 Предпочтения кино\n\n"
+            "Это приоритеты, а не жёсткие фильтры — я учитываю их при подборе, "
+            "но всё равно могу предложить что-то за их пределами.")
+    kb = _movie_prefs_kb(cid)
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=kb); return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+async def toggle_movie_pref(bot, cid, data, q=None):
+    """Обработка mpref_* переключателей."""
+    if data.startswith("mpref_g_"):
+        gid = data[len("mpref_g_"):]
+        cur = [str(x) for x in (settings.get(cid, "movie_genres", []) or [])]
+        cur = [x for x in cur if x != gid] if gid in cur else cur + [gid]
+        settings.set_(cid, "movie_genres", cur)
+    elif data.startswith("mpref_c_"):
+        cc = data[len("mpref_c_"):]
+        cur = list(settings.get(cid, "movie_countries", []) or [])
+        cur = [x for x in cur if x != cc] if cc in cur else cur + [cc]
+        settings.set_(cid, "movie_countries", cur)
+    elif data.startswith("mpref_type_"):
+        v = data[len("mpref_type_"):]
+        settings.set_(cid, "movie_type_pref", "" if v == "any" else v)
+    elif data.startswith("mpref_status_"):
+        v = data[len("mpref_status_"):]
+        settings.set_(cid, "movie_series_status", "" if v == "any" else v)
+    elif data.startswith("mpref_recency_"):
+        v = data[len("mpref_recency_"):]
+        settings.set_(cid, "movie_recency", "" if v == "any" else v)
+    elif data.startswith("mpref_rating_"):
+        settings.set_(cid, "movie_min_rating", data[len("mpref_rating_"):])
+    await send_movie_prefs(bot, cid, q)
+
+
+async def send_movie_by_genre(bot, cid, genre_id):
+    """Рекомендация внутри жанра: TMDb discover + учёт вкуса пользователя."""
+    it, tm = await asyncio.to_thread(_discover_pick, cid, [int(genre_id)], _movie_prefs(cid))
+    if not it:
+        await bot.send_message(chat_id=cid, text="В этом жанре пока не нашёл нового. Попробуй другой 👇",
+                               reply_markup=_movie_genre_menu_kb())
+        return
+    await _show_discovered(bot, cid, it, tm)
+
+
+async def send_movie_by_mood(bot, cid, mood_key):
+    """Рекомендация по настроению: LLM-классификатор настроения → жанры → TMDb discover."""
+    genre_ids = await asyncio.to_thread(_mood_to_genres, mood_key)
+    it, tm = await asyncio.to_thread(_discover_pick, cid, genre_ids, _movie_prefs(cid))
+    if not it:
+        await bot.send_message(chat_id=cid, text="Под это настроение пока не нашёл нового. Попробуй другое 👇",
+                               reply_markup=_movie_mood_menu_kb())
+        return
+    await _show_discovered(bot, cid, it, tm)
+
+
+async def _show_discovered(bot, cid, it, tm):
+    disp = _display_title(it, tm)
+    movie_engine.mark_shown(cid, disp)
+    rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
+    rec["items"].append(disp)
+    store.last_recos[str(cid)] = rec
+    store.last_source[str(cid)] = "Досуг · Кино"
+    await _send_movie_card(bot, cid, it, len(rec["items"]) - 1, tm=tm)
+
+
+def _mood_to_genres(mood_key):
+    """LLM классифицирует настроение в набор TMDb genre_id. Фолбэк — статичная карта."""
+    fallback = _MOOD_GENRES.get(mood_key, [18])
+    label = dict(_MOOD_MENU).get(mood_key, mood_key)
+    valid = ", ".join(f"{gid}={name}" for gid, name in tmdb.GENRES.items() if gid < 10000)
+    try:
+        data = ai.llm_json(
+            f"Пользователь хочет кино под настроение: «{label}».\n"
+            f"Доступные жанры TMDb (id=имя): {valid}\n"
+            'Верни JSON {"genre_ids":[id,...]} — 1-3 самых подходящих жанра под это настроение.',
+            200, tier="cheap")
+        ids = [int(g) for g in (data or {}).get("genre_ids", []) if int(g) in tmdb.GENRES]
+        return ids or fallback
+    except Exception:
+        return fallback
+
+
+def _discover_pick(cid, genre_ids, prefs):
+    """Берёт кандидатов из discover (movie+tv), фильтрует по вкусу/исключениям, ранжирует."""
+    min_rating = (prefs or {}).get("min_rating") or movie_engine.RATING_STEPS[0]
+    taste = movie_engine.taste_profile(cid, resolve_details=False)
+    excluded = movie_engine._excluded_norms(cid)
+    for mr in [r for r in movie_engine.RATING_STEPS if r <= min_rating] or [movie_engine.RATING_STEPS[-1]]:
+        pool = {}
+        for kind in ("movie", "tv"):
+            for c in tmdb.discover(kind, genre_ids=genre_ids, min_rating=mr):
+                if not c.get("id") or movie_engine._norm(c.get("name")) in excluded:
+                    continue
+                pool[f"{c['kind']}:{c['id']}"] = c
+        if pool:
+            ranked = movie_engine.rank(list(pool.values()), taste, prefs)
+            c = ranked[0]
+            return _candidate_to_card(cid, c)
+    return None, None
+
 
 async def movie_love(bot, cid, i):
     """Фильм/сериал — в любимые (watchlist), затем следующая рекомендация."""
@@ -682,13 +977,20 @@ async def add_reco(bot, cid, i):
     title = rec["items"][i]
     kind = rec["kind"]
     folder = "Кино" if kind == "movie" else "Книги"
-    # для книг — в список «прочту», для фильмов — только в закладки (не в любимые/anchor)
+    # Книги — в список «прочту». Кино — сохранение усиливает вкус (умное обучение по ТЗ):
+    # добавляем в watchlist (anchor), поэтому TMDb-движок учтёт похожее в след. подборах.
     if kind != "movie":
         _add_unique(config.READLIST_KEY, cid, title)
+    else:
+        _add_unique(config.WATCHLIST_KEY, cid, title)
     if not _note_fav_exists(cid, title):
         store.add_to_list(config.NOTES_KEY, cid,
                           {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": folder, "bucket": "fav"})
     await bot.send_message(chat_id=cid, text=f"⭐️ Сохранено «{folder}»: {title}. Вот ещё вариант 👇")
+    if kind == "movie":
+        # Следующая карточка — через TMDb-движок (LLM-фолбэк внутри).
+        await _advance_movie(bot, cid)
+        return
     try:
         data = await asyncio.to_thread(content_recommend, kind, str(cid))
         items = data.get("items", []) if isinstance(data, dict) else []
@@ -696,21 +998,11 @@ async def add_reco(bot, cid, i):
         items = []
     if not items:
         return
-    if kind == "movie":
-        items = _normalize_movie_items(items)
-        it, tm = await asyncio.to_thread(_pick_good_movie, items, set(rec["items"]))
-        if not it:
-            return
-        rec["items"].append(_display_title(it, tm))
-        store.last_recos[str(cid)] = rec
-        ni = len(rec["items"]) - 1
-        await _send_movie_card(bot, cid, it, ni, tm=tm)
-    else:
-        it = _pick_good_book(items, cid, extra_skip=rec["items"])
-        rec["items"].append(it.get("title", ""))
-        store.last_recos[str(cid)] = rec
-        ni = len(rec["items"]) - 1
-        await _send_book_card(bot, cid, it, ni)
+    it = _pick_good_book(items, cid, extra_skip=rec["items"])
+    rec["items"].append(it.get("title", ""))
+    store.last_recos[str(cid)] = rec
+    ni = len(rec["items"]) - 1
+    await _send_book_card(bot, cid, it, ni)
 
 def _list_text(it):
     return it.get("name", "") if isinstance(it, dict) else str(it)
