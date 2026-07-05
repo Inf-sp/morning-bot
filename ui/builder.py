@@ -133,6 +133,18 @@ class MessageBuilder:
         """Блок-совет: тот же вид, что и warning(), другой emoji по умолчанию."""
         return self.warning(text, emoji=emoji)
 
+    def metric(self, label: str, value, width: int = 22):
+        """Строка метрики админ-панели: 'label ···· value' (§1 design system).
+
+        Точки-заполнитель выравнивают значения в узком столбце телефона; значение — жирным.
+        width — целевая ширина зоны 'label + точки' в символах."""
+        value = str(value)
+        pad = max(1, width - len(label) - 1)
+        self.text_line(f"{label} {'·' * pad} ")
+        self.bold(value)
+        self.newline()
+        return self
+
     def divider(self):
         """Визуальный разделитель между смысловыми блоками одного сообщения."""
         self._ensure_blank_line()

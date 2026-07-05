@@ -82,6 +82,8 @@ SEEN_CONCERTS_KEY = "seen_concerts.json"  # {cid: [concert_id, ...]} — для 
 COST_LOG_KEY = "cost_log.json"     # лог LLM-вызовов для сводки расходов
 ALLOWED_CIDS_KEY = "allowed_cids.json"    # список разрешённых chat_id (мульти-юзер)
 PENDING_INVITES_KEY = "pending_invites.json"  # одноразовые инвайт-коды {code: ts}
+ERROR_LOG_KEY = "error_log.json"   # rolling-лог ошибок для админ-экрана «Логи» {log: [{ts, source, kind, msg}]}
+ACTIVITY_KEY = "activity.json"     # last_seen + счётчики активности: {cid: {last_ts, count, days:[YYYY-MM-DD]}}
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}
 

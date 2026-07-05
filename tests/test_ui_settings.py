@@ -157,47 +157,8 @@ def test_favorite_card_without_source_date_has_no_dot_separator():
 
 
 @pytest.mark.unit
-def test_settings_admin_messages():
+def test_settings_admin_only_kept():
+    # admin_only и превью-рассылка остались в старом UI, остальное переехало в ui/admin
     assert settings.admin_only().text == "⛔ Только для администратора."
-
-    home = settings.admin_home()
-    assert "Администратор" in home.text
-    assert "🔐 Администратор" in _bold_texts(home)
-
     run_notif = settings.admin_run_notifications()
     assert settings.ADMIN_RUN_NOTIF_TITLE in run_notif.text
-    assert settings.ADMIN_RUN_NOTIF_TITLE in _bold_texts(run_notif)
-
-    users = settings.admin_users([("1", "Ann <Boss>", True), ("2", "", False)], pending_count=2)
-    assert "Ann <Boss>" in users.text
-    assert "Активных инвайтов: 2" in users.text
-    assert "👥 Пользователи" in _bold_texts(users)
-
-
-@pytest.mark.unit
-def test_settings_admin_status_messages_keep_dynamic_parts_verbatim():
-    cost = settings.admin_cost_summary(
-        2,
-        1234,
-        [("OpenAI", True, 1000, "80%"), ("Claude", False, 0, "0%")],
-        [("💬 Чат", 1000, "80%")],
-    )
-    assert "Токенов: ~1,234" in cost.text
-    assert "Claude: —" in cost.text
-
-    health = settings.admin_health([("TOKEN<", False)], [("OPT", True)], ["  ❌ DB: bad & down"])
-    assert "TOKEN<" in health.text
-    assert "bad & down" in health.text
-    assert any(e.type == "code" for e in health.entities)
-
-    llm = settings.admin_llm_check([("OpenAI", True, ""), ("Claude", False, "bad <key>")])
-    assert "bad <key>" in llm.text
-    assert "✅ OpenAI: Хорошо" in llm.text
-    assert "❌ Claude: bad <key>" in llm.text
-    assert "LLM check" in _bold_texts(llm)
-    assert "\n\n\n" not in llm.text
-
-    invite = settings.admin_invite("https://t.me/bot?start=a<b")
-    assert "https://t.me/bot?start=a<b" in invite.text
-    assert any(e.type == "text_link" and e.url == "https://t.me/bot?start=a<b" for e in invite.entities)
-    assert "Подарочный инвайт:" in _bold_texts(invite)

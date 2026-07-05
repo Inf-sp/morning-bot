@@ -123,6 +123,12 @@ async def safe_error(bot, cid, exc, *, skill=None):
     import traceback
     _log.error("[error] %r", exc, exc_info=True)
     traceback.print_exc()
+    try:
+        import tracking
+        src = "llm" if getattr(skill, "name", "") else "app"
+        tracking.log_error(src, str(exc), kind=type(exc).__name__)
+    except Exception:
+        pass
     msg = str(exc)
     if msg.startswith(("⏳", "⚠️")):          # уже безопасный текст из ai._friendly
         out = msg

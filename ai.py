@@ -15,8 +15,11 @@ _log = logging.getLogger(__name__)
 _COST_MAX = 500  # максимум записей в rolling-буфере
 
 
-def _log_cost(provider: str, model: str, prompt: str, result: str, module: str = ""):
-    """Добавить запись о LLM-вызове в rolling-буфер (хранится в store)."""
+def _log_cost(provider: str, model: str, prompt: str, result: str, module: str = "", ms: int = 0, ok: bool = True):
+    """Добавить запись о LLM-вызове в rolling-буфер (хранится в store).
+
+    ms  — latency вызова в миллисекундах (для «ср. ответ» в админке);
+    ok  — успешность (для «ошибок сегодня»)."""
     try:
         tokens = (len(prompt) + len(result or "")) // 4
         entry = {
@@ -25,6 +28,8 @@ def _log_cost(provider: str, model: str, prompt: str, result: str, module: str =
             "model": model or "",
             "tokens": tokens,
             "module": module or "",
+            "ms": int(ms),
+            "ok": bool(ok),
         }
         buf = store._load(config.COST_LOG_KEY).get("log", [])
         buf.append(entry)
@@ -186,14 +191,22 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None,
     }
     errs = []
     for name in order:
+        t0 = time.time()
         try:
             out = _as_text(calls[name]())
             if out and out.strip():
-                _log_cost(name, claude_model if name == "claude" else name, prompt, out, module)
+                ms = int((time.time() - t0) * 1000)
+                _log_cost(name, claude_model if name == "claude" else name, prompt, out, module, ms=ms, ok=True)
                 return out
         except Exception as e:
             errs.append(f"{name}:{e}")
-    raise Exception(_friendly(errs))
+    _friendly_msg = _friendly(errs)
+    try:
+        import tracking
+        tracking.log_error("llm", "; ".join(errs)[:200] or _friendly_msg, kind="all-providers-failed")
+    except Exception:
+        pass
+    raise Exception(_friendly_msg)
 
 def _repair_inner_quotes(raw):
     """Чинит неэкранированные двойные кавычки внутри строковых значений JSON.

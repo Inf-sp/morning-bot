@@ -23,6 +23,7 @@ import verify
 import secure
 import onboard
 import firstvisit
+import tracking
 from util import ack_loading as _ack
 
 TZ = config.TZ
@@ -67,6 +68,7 @@ async def answer_callback(update, context):
     if not access.is_allowed(cid):
         await bot.send_message(chat_id=cid, text="⛔ Бот приватный. Попроси владельца прислать инвайт.")
         return
+    tracking.touch(cid)
 
     # Онбординг новых пользователей
     if data.startswith("ob_"):
@@ -488,6 +490,7 @@ async def text_router(update, context):
     if not access.is_allowed(cid):
         await bot.send_message(chat_id=cid, text="⛔ Бот приватный. Попроси владельца прислать инвайт.")
         return
+    tracking.touch(cid)
 
     flags = secure.injection_flags(text)
     if flags:

@@ -662,15 +662,53 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_admin":
         await _admin_guard(bot, cid, send_admin)
     elif data == "set_admin_users":
-        await _admin_guard(bot, cid, send_admin_users)
+        import admin as _adm
+        await _admin_guard(bot, cid, _adm.send_users)
+    elif data == "set_admin_analytics":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_analytics(b, c, 1))
+    elif data == "set_admin_analytics_7":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_analytics(b, c, 7))
+    elif data == "set_admin_analytics_30":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_analytics(b, c, 30))
+    elif data == "set_admin_llm":
+        import admin as _adm
+        await _admin_guard(bot, cid, _adm.send_llm)
+    elif data == "set_admin_llm_hist":
+        import admin as _adm
+        await _admin_guard(bot, cid, _adm.send_llm_history)
+    elif data == "set_admin_services":
+        import admin as _adm
+        await _admin_guard(bot, cid, _adm.send_services)
+    elif data == "set_admin_broadcasts":
+        import admin as _adm
+        await _admin_guard(bot, cid, _adm.send_broadcasts)
+    elif data == "set_admin_logs":
+        import admin as _adm
+        await _admin_guard(bot, cid, _adm.send_logs)
+    elif data.startswith("set_admin_logs_"):
+        import admin as _adm
+        sub = data[len("set_admin_logs_"):]
+        if sub == "clear":
+            await _admin_guard(bot, cid, _adm.clear_logs)
+        else:
+            await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, sub))
+    elif data == "set_admin_tools":
+        await _admin_guard(bot, cid, send_admin_run_notif)
+    elif data.startswith("set_admin_cost_"):
+        import admin as _adm
+        days = int(data[len("set_admin_cost_"):])
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_cost(b, c, days))
     elif data == "set_admin_invite":
         async def _do_invite(b, c):
             import access as _acc
-            import secrets as _sec
             code = _acc.create_invite()
             me = await b.get_me()
             link = f"https://t.me/{me.username}?start={code}"
-            msg = settings_ui.admin_invite(link)
+            from ui import admin as _admin_ui
+            msg = _admin_ui.invite(link)
             await b.send_message(chat_id=c,
                 text=msg.text,
                 entities=msg.entities, disable_web_page_preview=True,
@@ -682,14 +720,15 @@ async def handle_callback(bot, cid, data, q=None):
             import access as _acc
             _acc.revoke_user(target)
             store.purge_user(target)
-            await send_admin_users(b, c)
+            import admin as _adm
+            await _adm.send_users(b, c)
         await _admin_guard(bot, cid, _do_revoke)
     elif data == "set_admin_cost":
-        await _admin_guard(bot, cid, send_admin_cost)
-    elif data == "set_admin_health":
-        await _admin_guard(bot, cid, send_admin_health)
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_cost(b, c, 7))
     elif data == "set_admin_llmcheck":
-        await _admin_guard(bot, cid, send_admin_llmcheck)
+        import admin as _adm
+        await _admin_guard(bot, cid, _adm.send_llm_check)
     elif data == "set_admin_run_notif":
         await _admin_guard(bot, cid, send_admin_run_notif)
     elif data.startswith("set_admin_runjob_"):
@@ -1268,187 +1307,13 @@ async def _admin_guard(bot, cid, fn):
 
 
 async def send_admin(bot, cid):
-    """Главный экран администратора."""
+    """Главный экран администратора (Дом). Делегирует в модуль admin."""
     if not _is_admin(cid):
         msg = settings_ui.admin_only()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
         return
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("👥 Пользователи", callback_data="set_admin_users")],
-        [InlineKeyboardButton("Статус сервисов", callback_data="set_admin_health"),
-        InlineKeyboardButton("LLM check", callback_data="set_admin_llmcheck")],
-        [InlineKeyboardButton("Расходы на LLM", callback_data="set_admin_cost"),
-        InlineKeyboardButton(settings_ui.ADMIN_RUN_NOTIF_TITLE, callback_data="set_admin_run_notif")],
-    ])
-    msg = settings_ui.admin_home()
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
-        reply_markup=kb,
-    )
-
-
-async def send_admin_users(bot, cid):
-    """Список пользователей с инвайтами и кнопками отзыва."""
-    import access as _acc
-    allowed = _acc.get_allowed_cids()
-    pending = _acc.pending_invites()
-
-    entries = []
-    rows = []
-    for uid in allowed:
-        prof = store.get_profile(uid)
-        name = prof.get("name", "")
-        name_part = f" · {name}" if name else ""
-        if _acc.is_owner(uid):
-            entries.append((uid, name, True))
-        else:
-            entries.append((uid, name, False))
-            rows.append([InlineKeyboardButton(f"❌ Удалить {uid}{name_part}", callback_data=f"set_admin_revoke_{uid}")])
-
-    rows.append([InlineKeyboardButton("🔗 Создать инвайт", callback_data="set_admin_invite")])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_admin")])
-
-    msg = settings_ui.admin_users(entries, pending_count=len(pending))
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=InlineKeyboardMarkup(rows))
-
-
-async def send_admin_cost(bot, cid):
-    """Сводка расходов на LLM за последние 7 дней."""
-    import ai as _ai
-    import time as _time
-    log = _ai.get_cost_log()
-    week_ago = _time.time() - 7 * 86400
-    recent = [e for e in log if e.get("ts", 0) >= week_ago]
-    if not recent:
-        msg = settings_ui.admin_cost_empty()
-    else:
-        by_mod: dict = {}
-        by_prov: dict = {}
-        total_tokens = 0
-        for e in recent:
-            mod = e.get("module") or "?"
-            prov = e.get("provider") or "?"
-            tok = e.get("tokens", 0)
-            by_mod[mod] = by_mod.get(mod, 0) + tok
-            by_prov[prov] = by_prov.get(prov, 0) + tok
-            total_tokens += tok
-
-        def _pct(t):
-            return f"{round(t / total_tokens * 100)}%" if total_tokens else "0%"
-
-        # все провайдеры в порядке приоритета + проверка настроен ли ключ
-        _PROV_ORDER = [
-            ("claude",      "Claude", bool(config.ANTHROPIC_API_KEY)),
-            ("openai",      "OpenAI",             bool(config.OPENAI_API_KEY)),
-            ("gemini",      "Gemini", True),
-            ("openrouter",  "OpenRouter",          bool(config.OPENROUTER_API_KEY)),
-            ("groq",        "Groq",   bool(config.GROQ_API_KEY)),
-            ("cf",          "Cloudflare",          bool(config.CF_API_TOKEN and config.CF_ACCOUNT_ID)),
-        ]
-
-        # человекочитаемые имена модулей в терминах пользовательских категорий
-        _mod_names = {
-            "wardrobe": "👕 Гардероб",
-            "balance": "🚑 Здоровье",
-            "food": "🥣 Готовка",
-            "weather": "☀️ Мой день",
-            "learning": "📚 Обучение",
-            "leisure": "🍿 Досуг",
-            "myday": "☀️ Мой день",
-            "travel": "Поездки",
-            "assistant": "💬 Чат",
-            "content": "🍿 Досуг",
-            "notes": "🎚️ Настройки",
-        }
-
-        providers = []
-        for key, label, configured in _PROV_ORDER:
-            tok = by_prov.get(key, 0)
-            providers.append((label, configured, tok, _pct(tok)))
-
-        # по функциям — только заполненные модули
-        modules = []
-        known_mods = [(m, t) for m, t in by_mod.items() if m and m != "?"]
-        if known_mods:
-            top_mods = sorted(known_mods, key=lambda x: -x[1])[:5]
-            for m, t in top_mods:
-                label = _mod_names.get(m, m)
-                modules.append((label, t, _pct(t)))
-
-        msg = settings_ui.admin_cost_summary(len(recent), total_tokens, providers, modules)
-
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def send_admin_health(bot, cid):
-    """Inline-статус сервисов: API-ключи, DB, Weather, LLM."""
-    import store as _st
-    import weather as _w
-
-    required = [
-        ("TELEGRAM_TOKEN", bool(config.TELEGRAM_TOKEN)),
-        ("GEMINI_API_KEY",  bool(config.GEMINI_API_KEY)),
-        ("DATABASE_URL",    bool(config.DATABASE_URL)),
-        ("CHAT_ID",         bool(config.CHAT_ID)),
-    ]
-
-    optional = [
-        ("ANTHROPIC_API_KEY",   bool(config.ANTHROPIC_API_KEY)),
-        ("GROQ_API_KEY",        bool(config.GROQ_API_KEY)),
-        ("OPENAI_API_KEY",      bool(config.OPENAI_API_KEY)),
-        ("OPENROUTER_API_KEY",  bool(config.OPENROUTER_API_KEY)),
-        ("CLOUDFLARE",          bool(config.CF_API_TOKEN and config.CF_ACCOUNT_ID)),
-        ("TAVILY_API_KEY",      bool(config.TAVILY_API_KEY)),
-        ("TMDB_API_KEY",        bool(config.TMDB_API_KEY)),
-        ("TICKETMASTER_API_KEY",bool(config.TICKETMASTER_API_KEY)),
-    ]
-
-    state_lines = []
-    try:
-        _st._load("__health__")
-        state_lines.append("  ✅ DB: OK")
-    except Exception as e:
-        state_lines.append(f"  ❌ DB: {esc(str(e)[:60])}")
-
-    try:
-        s = store.get_settings(cid)
-        _w.fetch_weather(s["lat"], s["lon"], 1)
-        state_lines.append("  ✅ Weather API: OK")
-    except Exception:
-        state_lines.append("  ❌ Weather API: недоступна")
-
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
-    msg = settings_ui.admin_health(required, optional, state_lines)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def send_admin_llmcheck(bot, cid):
-    """Проверка доступности всех LLM-провайдеров по очереди."""
-    import ai as _ai
-
-    probes = [
-        ("Claude", "claude"),
-        ("OpenAI", "openai"),
-        ("OpenRouter", "openrouter"),
-        ("Cloudflare", "cf"),
-        ("Gemini", "gemini"),
-        ("Groq", "groq"),
-    ]
-    results = []
-    for label, route in probes:
-        try:
-            await _ai.allm("Ответь одним словом: ok", 10, 0.0, route=route, module="admin")
-            results.append((label, True, ""))
-        except Exception as e:
-            msg = str(e).split(": ", 1)[-1][:80]
-            results.append((label, False, msg))
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin")]])
-    msg = settings_ui.admin_llm_check(results)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    import admin as _admin
+    await _admin.send_home(bot, cid)
 
 
 async def send_admin_run_notif(bot, cid):
