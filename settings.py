@@ -7,8 +7,36 @@ import learning
 import util
 from util import esc
 from ui import settings as settings_ui
+import onboarding_status as obs
 
 _log = logging.getLogger(__name__)
+
+
+def setup_again_rows(cid, section: str) -> list:
+    """Ряд(ы) для настроек раздела: кнопка «Настроить раздел заново».
+
+    Кнопка доступна, если раздел уже пройден/пропущен/заполнен автоматически.
+    Если раздел был именно пропущен — над кнопкой добавляется заметный текст-
+    приглашение (его отрисовывает сам экран через ``setup_again_banner``).
+    """
+    if section not in obs.SECTIONS or not obs.is_settled(cid, section):
+        return []
+    label = "🔄 Пройти настройку" if obs.is_skipped(cid, section) else "🔄 Настроить раздел заново"
+    return [[InlineKeyboardButton(label, callback_data=f"fv_restart_{section}")]]
+
+
+async def send_setup_again_banner(bot, cid, section: str) -> None:
+    """Отдельным сообщением показывает приглашение, если раздел был пропущен.
+
+    Отправляется до основного экрана. Отдельным сообщением — чтобы не сдвигать
+    UTF-16 offset у entities основного текста.
+    """
+    if section in obs.SECTIONS and obs.is_skipped(cid, section):
+        await bot.send_message(
+            chat_id=cid,
+            text=("⚠️ Настройка этого раздела была пропущена. "
+                  "Можно пройти её сейчас — это займёт меньше минуты."),
+        )
 
 SETTINGS_KEY = "user_settings.json"
 NOTIF_TYPES = [
@@ -420,14 +448,15 @@ async def _send_list(bot, cid, title, items, del_prefix, add_cb, back="set_home"
 async def send_wardrobe(bot, cid, back="m_notes"):
     if store.pending_input.get(str(cid)) == "wardrobe_profile_input":
         store.pending_input.pop(str(cid), None)
-    kb = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("✏️ Добавить", callback_data="set_ward_add"),
-            InlineKeyboardButton("❌ Удалить", callback_data="set_ward_del"),
-        ],
-        [InlineKeyboardButton("◀️ Назад", callback_data=back)],
-    ])
+    rows = [[
+        InlineKeyboardButton("✏️ Добавить", callback_data="set_ward_add"),
+        InlineKeyboardButton("❌ Удалить", callback_data="set_ward_del"),
+    ]]
+    rows.extend(setup_again_rows(cid, "wardrobe"))
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
+    kb = InlineKeyboardMarkup(rows)
     msg = settings_ui.wardrobe_home()
+    await send_setup_again_banner(bot, cid, "wardrobe")
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 # --- Страны ---
@@ -470,8 +499,10 @@ async def send_lagom(bot, cid, back="m_notes"):
         ])
     else:
         rows.append([InlineKeyboardButton("✏️ Добавить", callback_data="setadd_lagom")])
+    rows.extend(setup_again_rows(cid, "health"))
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
     msg = settings_ui.lagom_home(items)
+    await send_setup_again_banner(bot, cid, "health")
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -904,8 +935,10 @@ async def send_notes(bot, cid):
 
 async def send_leisure_settings(bot, cid):
     rows = [[InlineKeyboardButton(title, callback_data=f"as_love_{key}")] for title, key in LOVE_SECTIONS]
+    rows.extend(setup_again_rows(cid, "leisure"))
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
     msg = settings_ui.leisure_settings()
+    await send_setup_again_banner(bot, cid, "leisure")
     await bot.send_message(
         chat_id=cid,
         text=msg.text,

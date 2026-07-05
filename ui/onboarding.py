@@ -43,30 +43,81 @@ def _firstvisit_leisure():
     return b.build()
 
 
-def _firstvisit_balance():
+def _firstvisit_health():
     b = MessageBuilder()
-    b.section("🧠 Немного о тебе")
+    b.section("🚑 Немного о твоём самочувствии")
     b.line(
-        "Расскажи о предпочтениях в еде и здоровье:\n"
-        "• Диета или ограничения (без мяса, без глютена…)\n"
-        "• Цели (энергия, здоровый вес, лучший сон…)\n"
-        "• Что любишь или не ешь"
+        "Что хочешь отслеживать или улучшить? Например:\n"
+        "• сон, энергия, тревожность\n"
+        "• привычки, спорт, питание\n\n"
+        "Отметь галочками кнопками ниже или напиши своими словами."
     )
     b.spacer()
-    b.italic("Пример: не ем мясо, хочу больше энергии, люблю азиатскую кухню, аллергия на орехи")
+    b.italic("Это просто твои личные цели — без медицинских выводов и диагнозов.")
+    return b.build()
+
+
+def _firstvisit_cooking():
+    b = MessageBuilder()
+    b.section("🥣 Настроим готовку")
+    b.line(
+        "Расскажи о предпочтениях в еде:\n"
+        "• Диета или ограничения (без мяса, без глютена…)\n"
+        "• Что любишь или не ешь\n"
+        "• Любимые кухни"
+    )
+    b.spacer()
+    b.italic("Пример: не ем мясо, люблю азиатскую кухню, аллергия на орехи")
     return b.build()
 
 
 _FIRSTVISIT_BUILDERS = {
     "wardrobe": _firstvisit_wardrobe,
-    "learn": _firstvisit_learn,
+    "learning": _firstvisit_learn,
     "leisure": _firstvisit_leisure,
-    "balance": _firstvisit_balance,
+    "health": _firstvisit_health,
+    "cooking": _firstvisit_cooking,
 }
 
 
 def firstvisit_prompt(section):
     return _FIRSTVISIT_BUILDERS[section]()
+
+
+_MERGE_TITLES = {
+    "wardrobe": "гардеробе",
+    "learning": "обучении",
+    "leisure": "досуге",
+    "health": "разделе здоровья",
+    "cooking": "готовке",
+}
+
+
+def firstvisit_leisure_titles_prompt():
+    b = MessageBuilder()
+    b.section("🍿 Любимые названия")
+    b.line(
+        "Напиши в любом виде:\n"
+        "• Любимые фильмы и сериалы\n"
+        "• Любимые исполнители\n"
+        "• Любимые книги"
+    )
+    b.spacer()
+    b.italic(
+        "Пример:\n"
+        "Фильмы: Паразиты, Настоящий детектив\n"
+        "Музыка: The xx, Portishead\n"
+        "Книги: Дюна, Мастер и Маргарита"
+    )
+    return b.build()
+
+
+def firstvisit_merge_question(section):
+    b = MessageBuilder()
+    b.section("Как сохранить новые данные?")
+    where = _MERGE_TITLES.get(section, "разделе")
+    b.line(f"В {where} уже есть данные. Добавить к текущим или заменить старые?")
+    return b.build_stripped()
 
 
 def firstvisit_saved(saved_items):

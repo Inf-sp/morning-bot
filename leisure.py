@@ -308,8 +308,8 @@ def _movie_card(it, tm):
 
 def _movie_kb(i):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}")],
         [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}")],
+        [InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
@@ -461,8 +461,8 @@ def _book_text(it):
 
 def _book_kb(i):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}"),
-         InlineKeyboardButton("✨ Заменить", callback_data=f"book_no_{i}")],
+        [InlineKeyboardButton("✨ Заменить", callback_data=f"book_no_{i}"),
+         InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}")],
         [InlineKeyboardButton("🎚️ Настройки книг", callback_data="set_books")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
@@ -747,8 +747,8 @@ async def add_fav(bot, cid, text):
 
 def _listen_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("⭐️ Сохранить", callback_data="listen_0"),
-         InlineKeyboardButton("✨ Заменить", callback_data="a_listen_no")],
+        [InlineKeyboardButton("✨ Заменить", callback_data="a_listen_no"),
+         InlineKeyboardButton("⭐️ Сохранить", callback_data="listen_0")],
         [InlineKeyboardButton("🎚️ Настройка музыкантов", callback_data="set_artists")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])

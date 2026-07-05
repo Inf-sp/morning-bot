@@ -1,118 +1,328 @@
-"""Первый вход в раздел: быстрый опрос для заполнения профиля пользователя."""
+"""Первый вход в раздел: быстрый опрос для заполнения профиля пользователя.
+
+Статусы онбординга (см. onboarding_status): пропуск («Пропустить») больше не
+блокирует опрос навсегда — раздел можно перепройти через кнопку «Настроить
+раздел заново» в настройках. При повторном прохождении, если в разделе уже есть
+данные, бот спрашивает: добавить к текущим / заменить старые / отмена.
+"""
 import re
 import store
 import ai
 import config
 import secure
+import onboarding_status as obs
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 from ui import onboarding as onboarding_ui
 
-_SKIP_KB = {
-    s: InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить", callback_data=f"fv_skip_{s}")]])
-    for s in ("wardrobe", "learn", "leisure", "balance")
-}
+# Разделы онбординга: wardrobe, learning, leisure, health, cooking.
+# «Здоровье» (health) и «Готовка» (cooking) — независимые разделы; раньше это
+# был единый `balance`.
+_SECTIONS = obs.SECTIONS
 
+# Секция -> ключ меню (для показа экрана раздела после опроса).
 _SECTION_KEY = {
     "wardrobe": "m_wardrobe",
-    "learn":    "m_learn",
+    "learning": "m_learn",
     "leisure":  "m_leisure",
-    "balance":  "m_balance",
+    "health":   "m_balance",
+    "cooking":  "m_food",
 }
 
-
-def _mark(cid, section):
-    prof = store.get_profile(cid)
-    prof[f"_fv_{section}"] = True
-    store.set_profile(cid, prof)
+# Меню-ключ -> секция (обратный маппинг для роутинга входа в раздел).
+MENU_KEY_TO_SECTION = {v: k for k, v in _SECTION_KEY.items()}
 
 
-def needs_setup(cid, section: str) -> bool:
-    """True — раздел не настроен и опрос ещё не проходили."""
-    prof = store.get_profile(cid)
-    if prof.get(f"_fv_{section}"):
-        return False
+def _skip_kb(section: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("⏭ Пропустить", callback_data=f"fv_skip_{section}")]]
+    )
+
+
+# Разделы с выбором тегов-чекбоксов вместо свободного текста.
+# По образцу кухонь: заранее заданный список популярных вариантов + мультивыбор.
+_TAG_OPTIONS = {
+    "health": [
+        ("sleep", "😴 Сон"),
+        ("energy", "⚡ Энергия"),
+        ("anxiety", "🌊 Тревожность"),
+        ("habits", "🔁 Привычки"),
+        ("sport", "🏃 Спорт"),
+        ("nutrition", "🥗 Питание"),
+    ],
+    "leisure": [
+        ("drama", "🎭 Драма"),
+        ("comedy", "😂 Комедия"),
+        ("scifi", "🚀 Фантастика"),
+        ("thriller", "🔪 Триллер"),
+        ("documentary", "🎬 Док"),
+        ("rock", "🎸 Рок"),
+        ("electronic", "🎧 Электроника"),
+        ("classic", "🎻 Классика"),
+        ("fiction", "📖 Худ. лит-ра"),
+        ("nonfiction", "📚 Нон-фикшн"),
+    ],
+}
+
+# Временный выбор тегов на время опроса: {cid: {section: set(keys)}}
+_tag_selection: dict = {}
+
+
+def _tag_labels(section: str, keys) -> list:
+    return [label for key, label in _TAG_OPTIONS[section] if key in keys]
+
+
+def _tags_kb(cid, section: str) -> InlineKeyboardMarkup:
+    selected = _tag_selection.get(str(cid), {}).get(section, set())
+    buttons = [
+        InlineKeyboardButton(
+            ("✅ " if key in selected else "⬜ ") + label,
+            callback_data=f"fv_tag_{section}_{key}",
+        )
+        for key, label in _TAG_OPTIONS[section]
+    ]
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    rows.append([InlineKeyboardButton("✅ Готово", callback_data=f"fv_tagdone_{section}")])
+    if section == "leisure":
+        # Помимо жанров-тегов можно ввести конкретные названия текстом.
+        rows.append([InlineKeyboardButton("✍️ Ввести названия", callback_data="fv_leisure_text")])
+    rows.append([InlineKeyboardButton("⏭ Пропустить", callback_data=f"fv_skip_{section}")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _merge_choice_kb(section: str) -> InlineKeyboardMarkup:
+    """Клавиатура выбора «добавить / заменить / отмена» перед повторным сохранением."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("♻️ Заменить старые", callback_data=f"fv_replace_{section}")],
+        [InlineKeyboardButton("➕ Добавить к текущим", callback_data=f"fv_merge_{section}")],
+        [InlineKeyboardButton("✖️ Отмена", callback_data=f"fv_cancel_{section}")],
+    ])
+
+
+# ---------- проверка «нужен ли опрос» ----------
+
+def _has_data(cid, section: str) -> bool:
+    """Есть ли в разделе реальные данные (эвристика заполнённости)."""
     if section == "wardrobe":
         import settings as _s
         w = store.load_wardrobe(cid)
         has_wardrobe = bool(store.wardrobe_to_text(w).strip())
         has_style = bool(_s.get(cid, "style") or _s.get(cid, "body"))
-        if has_wardrobe or has_style:
-            _mark(cid, section)  # уже заполнен — помечаем, чтобы не проверять снова
-            return False
-        return True
-    if section == "learn":
+        return has_wardrobe or has_style
+    if section == "learning":
         import settings as _s
         has_lang = bool(_s.get(cid, "study_lang"))
         has_level = bool(store.get_level(cid, "нидерландский") or store.get_level(cid, "английский"))
-        if has_lang or has_level:
-            _mark(cid, section)
-            return False
-        return True
+        return has_lang or has_level
     if section == "leisure":
-        has_any = (
-            store.get_list(config.ARTISTS_KEY, cid)
+        prof = store.get_profile(cid)
+        return bool(
+            prof.get("leisure_genres")
+            or store.get_list(config.ARTISTS_KEY, cid)
             or store.get_list(config.WATCHLIST_KEY, cid)
             or store.get_list(config.BOOKS_KEY, cid)
         )
-        if has_any:
-            _mark(cid, section)
-            return False
-        return True
-    if section == "balance":
-        if prof.get("diet_prefs"):
-            _mark(cid, section)
-            return False
-        return True
+    if section == "health":
+        prof = store.get_profile(cid)
+        return bool(prof.get("health_focus") or prof.get("diet_prefs"))
+    if section == "cooking":
+        import settings as _s
+        prof = store.get_profile(cid)
+        return bool(_s.cuisines(cid) or prof.get("diet_prefs") or store.get_list(config.FRIDGE_KEY, cid))
     return False
 
 
+def needs_setup(cid, section: str) -> bool:
+    """True — раздел не настроен и опрос ещё не проходили (первый показ)."""
+    status = obs.get(cid, section)
+    if status != obs.NOT_STARTED:
+        return False
+    if _has_data(cid, section):
+        # Данные уже есть — помечаем auto_configured, чтобы не спрашивать снова.
+        obs.set_status(cid, section, obs.AUTO_CONFIGURED)
+        return False
+    return True
+
+
+# ---------- показ опроса ----------
+
 async def show_prompt(bot, cid, section: str):
-    store.pending_input[str(cid)] = f"firstvisit_{section}"
     msg = onboarding_ui.firstvisit_prompt(section)
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
-        reply_markup=_SKIP_KB[section],
-    )
-
-
-async def skip(bot, cid, section: str):
-    """Пользователь нажал «Пропустить» — помечаем и показываем раздел."""
-    _mark(cid, section)
-    store.pending_input.pop(str(cid), None)
-    await _show_section(bot, cid, section)
-
-
-async def handle_response(bot, cid, section: str, text: str):
-    store.pending_input.pop(str(cid), None)
-    _mark(cid, section)
-    raw = secure.clamp(text)
-
-    if section == "wardrobe":
-        saved = await _save_wardrobe(cid, raw)
-    elif section == "learn":
-        saved = await _save_learn(cid, raw)
-    elif section == "leisure":
-        saved = await _save_leisure(cid, raw)
-    elif section == "balance":
-        saved = await _save_balance(cid, raw)
-    else:
-        saved = []
-
-    if saved:
-        msg = onboarding_ui.firstvisit_saved(saved)
+    if section in _TAG_OPTIONS:
+        # Разделы с тегами: чекбоксы вместо свободного текста.
+        _tag_selection.setdefault(str(cid), {})[section] = set()
         await bot.send_message(
             chat_id=cid,
             text=msg.text,
             entities=msg.entities,
+            reply_markup=_tags_kb(cid, section),
         )
+        return
+    store.pending_input[str(cid)] = f"firstvisit_{section}"
+    await bot.send_message(
+        chat_id=cid,
+        text=msg.text,
+        entities=msg.entities,
+        reply_markup=_skip_kb(section),
+    )
+
+
+async def toggle_tag(bot, cid, section: str, key: str, q=None):
+    """Переключить тег-чекбокс в опросе (health/leisure)."""
+    if section not in _TAG_OPTIONS:
+        return
+    valid = {k for k, _ in _TAG_OPTIONS[section]}
+    if key not in valid:
+        return
+    sel = _tag_selection.setdefault(str(cid), {}).setdefault(section, set())
+    if key in sel:
+        sel.discard(key)
+    else:
+        sel.add(key)
+    if q is not None:
+        try:
+            await q.message.edit_reply_markup(reply_markup=_tags_kb(cid, section))
+            return
+        except Exception:
+            pass
+
+
+async def leisure_text_prompt(bot, cid):
+    """Переход из тегов-жанров Досуга в текстовый ввод названий фильмов/музыки/книг.
+
+    Отмеченные жанры сохраняются сразу (без merge-вопроса — на этом шаге раздел
+    ещё в процессе настройки), затем запрашивается текст с названиями.
+    """
+    keys = _tag_selection.get(str(cid), {}).pop("leisure", set())
+    labels = _tag_labels("leisure", keys)
+    if labels:
+        await _save_leisure(cid, ", ".join(labels), mode="add")
+    store.pending_input[str(cid)] = "firstvisit_leisure_titles"
+    msg = onboarding_ui.firstvisit_leisure_titles_prompt()
+    await bot.send_message(
+        chat_id=cid,
+        text=msg.text,
+        entities=msg.entities,
+        reply_markup=_skip_kb("leisure"),
+    )
+
+
+async def tags_done(bot, cid, section: str):
+    """Кнопка «Готово» в опросе-тегах: собрать выбор и сохранить как ответ опроса."""
+    if section not in _TAG_OPTIONS:
+        return
+    keys = _tag_selection.get(str(cid), {}).pop(section, set())
+    labels = _tag_labels(section, keys)
+    if not labels:
+        # Ничего не выбрано — трактуем как пропуск.
+        await skip(bot, cid, section)
+        return
+    raw = ", ".join(labels)
+    if _has_data(cid, section):
+        store.pending_input[str(cid)] = "_fv_buffer"
+        _pending_buffer[str(cid)] = (section, raw)
+        msg = onboarding_ui.firstvisit_merge_question(section)
+        await bot.send_message(
+            chat_id=cid,
+            text=msg.text,
+            entities=msg.entities,
+            reply_markup=_merge_choice_kb(section),
+        )
+        return
+    await _apply_response(bot, cid, section, raw, mode="replace")
+
+
+async def restart(bot, cid, section: str):
+    """Кнопка «Настроить раздел заново» — тот же опрос, что при первом входе."""
+    if section not in _SECTIONS:
+        return
+    await show_prompt(bot, cid, section)
+
+
+async def skip(bot, cid, section: str):
+    """Пользователь нажал «Пропустить» — помечаем skipped (не блокирует возврат)."""
+    obs.set_status(cid, section, obs.SKIPPED)
+    store.pending_input.pop(str(cid), None)
+    await _show_section(bot, cid, section)
+
+
+# ---------- ответ на опрос ----------
+
+async def handle_response(bot, cid, section: str, text: str):
+    """Пользователь прислал текст опроса.
+
+    Если раздел уже содержит данные — не затираем молча: спрашиваем режим
+    сохранения (добавить/заменить/отмена), а текст откладываем в буфер.
+    Иначе — сохраняем сразу (режим «заменить» на пустом = просто запись).
+    """
+    store.pending_input.pop(str(cid), None)
+    raw = secure.clamp(text)
+
+    # leisure_titles — под-режим Досуга (названия текстом); данные и merge-вопрос
+    # относятся к самому разделу leisure.
+    data_section = "leisure" if section == "leisure_titles" else section
+
+    if _has_data(cid, data_section):
+        store.pending_input[str(cid)] = "_fv_buffer"
+        _pending_buffer[str(cid)] = (section, raw)
+        msg = onboarding_ui.firstvisit_merge_question(data_section)
+        await bot.send_message(
+            chat_id=cid,
+            text=msg.text,
+            entities=msg.entities,
+            reply_markup=_merge_choice_kb(section),
+        )
+        return
+
+    await _apply_response(bot, cid, section, raw, mode="replace")
+
+
+# Буфер отложенного ответа опроса на время выбора merge/replace: {cid: (section, raw)}
+_pending_buffer: dict = {}
+
+
+async def resolve_merge(bot, cid, section: str, mode: str):
+    """Обработка кнопок fv_merge_/fv_replace_/fv_cancel_."""
+    store.pending_input.pop(str(cid), None)
+    buffered = _pending_buffer.pop(str(cid), None)
+    if not buffered or buffered[0] != section:
+        await _show_section(bot, cid, section)
+        return
+    _, raw = buffered
+    if mode == "cancel":
+        await _show_section(bot, cid, section)
+        return
+    await _apply_response(bot, cid, section, raw, mode=mode)
+
+
+async def _apply_response(bot, cid, section: str, raw: str, mode: str):
+    """Сохранить ответ опроса в выбранном режиме и пометить раздел completed."""
+    if section == "wardrobe":
+        saved = await _save_wardrobe(cid, raw, mode)
+    elif section == "learning":
+        saved = await _save_learn(cid, raw, mode)
+    elif section == "leisure":
+        saved = await _save_leisure(cid, raw, mode)
+    elif section == "leisure_titles":
+        saved = await _save_leisure_titles(cid, raw, mode)
+        section = "leisure"  # статус ставим на сам раздел
+    elif section == "health":
+        saved = await _save_health(cid, raw, mode)
+    elif section == "cooking":
+        saved = await _save_cooking(cid, raw, mode)
+    else:
+        saved = []
+
+    obs.set_status(cid, section, obs.COMPLETED)
+
+    if saved:
+        msg = onboarding_ui.firstvisit_saved(saved)
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     await _show_section(bot, cid, section)
 
 
 # ---------- сохранение по разделам ----------
 
-async def _save_wardrobe(cid, raw: str) -> list:
+async def _save_wardrobe(cid, raw: str, mode: str) -> list:
     import settings as _s
     saved = []
     try:
@@ -133,10 +343,11 @@ async def _save_wardrobe(cid, raw: str) -> list:
         saved.append(f"Параметры: {d['body']}")
     items = d.get("items") or {}
     if isinstance(items, dict):
-        added = store.merge_wardrobe(
-            {k: [str(v) for v in lst] for k, lst in items.items() if isinstance(lst, list)},
-            cid,
-        )
+        norm = {k: [str(v) for v in lst] for k, lst in items.items() if isinstance(lst, list)}
+        if mode == "replace":
+            # Полная замена гардероба: очищаем и пишем заново.
+            store.save_wardrobe({}, cid)
+        added = store.merge_wardrobe(norm, cid)
         if added:
             saved.append(f"Вещей в шкафу: {added}")
     if not saved:
@@ -145,10 +356,9 @@ async def _save_wardrobe(cid, raw: str) -> list:
     return saved
 
 
-async def _save_learn(cid, raw: str) -> list:
+async def _save_learn(cid, raw: str, mode: str) -> list:
     import settings as _s
     saved = []
-    # Парсим "нидерландский A2, английский B1" и т.п.
     lang_map = {"нидерландский": "нидерландский", "nl": "нидерландский", "dutch": "нидерландский",
                 "английский": "английский", "en": "английский", "english": "английский"}
     levels = {"a1", "a2", "b1", "b2", "c1", "c2"}
@@ -166,13 +376,49 @@ async def _save_learn(cid, raw: str) -> list:
         store.set_level(cid, detected_lang, level_found)
         saved.append(f"Уровень: {level_found}")
     if not saved:
-        # Не смогли распознать — сохраняем первый найденный язык как нидерландский
         _s.set_(cid, "study_lang", "нидерландский")
         saved.append("Язык обучения: нидерландский (по умолчанию)")
     return saved
 
 
-async def _save_leisure(cid, raw: str) -> list:
+async def _save_leisure(cid, raw: str, mode: str) -> list:
+    """Досуг: любимые жанры (теги). Названия фильмов/книг добавляются в самом разделе."""
+    prof = store.get_profile(cid)
+    new = raw[:300]
+    if mode == "add" and prof.get("leisure_genres"):
+        # Объединяем метки-жанры без дублей, сохраняя порядок.
+        existing = [g.strip() for g in prof["leisure_genres"].split(",") if g.strip()]
+        seen = {g.lower() for g in existing}
+        for g in (x.strip() for x in new.split(",") if x.strip()):
+            if g.lower() not in seen:
+                seen.add(g.lower())
+                existing.append(g)
+        combined = ", ".join(existing)[:400]
+    else:
+        combined = new
+    prof["leisure_genres"] = combined
+    store.set_profile(cid, prof)
+    return [f"Любимые жанры: {new}"]
+
+
+def _merge_list(key, cid, new_items, mode, cap=30):
+    """Списочное сохранение: add — merge без дублей, replace — перезапись."""
+    new_items = [str(x)[:80] for x in new_items][:cap]
+    if mode == "add":
+        existing = store.get_list(key, cid)
+        seen = {x.lower() for x in existing}
+        merged = list(existing)
+        for it in new_items:
+            if it.lower() not in seen:
+                seen.add(it.lower())
+                merged.append(it)
+        store.set_list(key, cid, merged[:cap])
+    else:
+        store.set_list(key, cid, new_items)
+
+
+async def _save_leisure_titles(cid, raw: str, mode: str) -> list:
+    """Досуг (текстовый ввод): извлекает названия фильмов/музыки/книг из текста."""
     saved = []
     try:
         d = await ai.allm_json(
@@ -183,8 +429,8 @@ async def _save_leisure(cid, raw: str) -> list:
         )
     except Exception:
         d = {}
+
     def _split_raw(text, prefix_variants):
-        """Fallback: ищем блок после ключевого слова."""
         low = text.lower()
         for pv in prefix_variants:
             idx = low.find(pv)
@@ -200,24 +446,43 @@ async def _save_leisure(cid, raw: str) -> list:
     books = d.get("books") if isinstance(d.get("books"), list) else _split_raw(raw, ["книг"])
 
     if movies:
-        store.set_list(config.WATCHLIST_KEY, cid, [str(m)[:80] for m in movies[:30]])
+        _merge_list(config.WATCHLIST_KEY, cid, movies, mode)
         saved.append(f"Фильмы ({len(movies)}): {', '.join(str(m) for m in movies[:3])}…")
     if artists:
-        store.set_list(config.ARTISTS_KEY, cid, [str(a)[:80] for a in artists[:30]])
+        _merge_list(config.ARTISTS_KEY, cid, artists, mode)
         saved.append(f"Музыканты ({len(artists)}): {', '.join(str(a) for a in artists[:3])}…")
     if books:
-        store.set_list(config.BOOKS_KEY, cid, [str(b)[:80] for b in books[:30]])
+        _merge_list(config.BOOKS_KEY, cid, books, mode)
         saved.append(f"Книги ({len(books)}): {', '.join(str(b) for b in books[:3])}…")
     if not saved:
         saved.append("Предпочтения сохранены")
     return saved
 
 
-async def _save_balance(cid, raw: str) -> list:
+async def _save_health(cid, raw: str, mode: str) -> list:
+    """Здоровье: пользовательские фокус-цели как теги/текст, без медицинских выводов."""
     prof = store.get_profile(cid)
-    prof["diet_prefs"] = raw[:500]
+    new = raw[:500]
+    if mode == "add" and prof.get("health_focus"):
+        combined = f"{prof['health_focus']}; {new}"[:800]
+    else:
+        combined = new
+    prof["health_focus"] = combined
     store.set_profile(cid, prof)
-    return [f"Предпочтения в питании: {raw[:80]}…" if len(raw) > 80 else raw]
+    return [f"Что отслеживаем: {new[:80]}…" if len(new) > 80 else new]
+
+
+async def _save_cooking(cid, raw: str, mode: str) -> list:
+    """Готовка: предпочтения в еде (diet_prefs)."""
+    prof = store.get_profile(cid)
+    new = raw[:500]
+    if mode == "add" and prof.get("diet_prefs"):
+        combined = f"{prof['diet_prefs']}; {new}"[:800]
+    else:
+        combined = new
+    prof["diet_prefs"] = combined
+    store.set_profile(cid, prof)
+    return [f"Предпочтения в еде: {new[:80]}…" if len(new) > 80 else new]
 
 
 # ---------- показ раздела ----------
@@ -225,5 +490,8 @@ async def _save_balance(cid, raw: str) -> list:
 async def _show_section(bot, cid, section: str):
     import menu
     key = _SECTION_KEY.get(section, "m_leisure")
+    if key == "m_food":
+        await menu.send_food_menu(bot, cid)
+        return
     text, entities, kb = menu.menu_screen(key)
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb, entities=entities)

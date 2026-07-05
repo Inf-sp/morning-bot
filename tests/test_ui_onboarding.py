@@ -26,7 +26,7 @@ def test_firstvisit_prompt_message_spec():
 
 @pytest.mark.unit
 def test_firstvisit_prompt_section_title_immediately_followed_by_content():
-    msg = onboarding.firstvisit_prompt("learn")
+    msg = onboarding.firstvisit_prompt("learning")
 
     assert msg.text == (
         "📚 Настроим обучение\n"

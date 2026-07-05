@@ -83,6 +83,100 @@ def _save_cached_look(cid, items, intro="", add=""):
     })
 
 
+# ---------- главный экран раздела (панель состояния) ----------
+def _wardrobe_home_kb():
+    return _kb([
+        [("✨ Образ на сегодня", "w_look")],
+        [("🧥 Разбор гардероба", "w_improve")],
+        [("🔎 Проверка покупки", "w_check")],
+        [("🎚️ Настройки гардероба", "set_wardrobe_g")],
+    ])
+
+
+async def send_home(bot, cid, q=None):
+    """Динамическая панель состояния раздела «Гардероб».
+
+    Статистика пересчитывается на лету из store.load_wardrobe, поэтому всегда
+    актуальна после любых изменений шкафа.
+    """
+    w = store.load_wardrobe(cid)
+    total, counts = wardrobe_stats(w)
+    params_filled = _params_filled(cid)
+    missing = []
+    if total <= 0:
+        missing.append("👕 Шкаф")
+    if not params_filled:
+        missing.append("👤 Мои параметры")
+    msg = wardrobe_ui.home_screen(total, counts, ZONE_ORDER, ZONE_EMOJI, params_filled, missing)
+    kb = _wardrobe_home_kb()
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+_PRIORITY_BLOCK = (
+    "ПОРЯДОК ВАЖНОСТИ рекомендаций (сверху вниз, при конфликте — компромисс, "
+    "не ориентируйся только на температуру):\n"
+    "1. Защита от дождя\n2. Комфорт по температуре\n3. Защита от ветра\n"
+    "4. Соответствие стилю пользователя\n5. Не повторять недавние образы\n"
+    "6. Прошлые оценки «Надел»/«Не моё»\n"
+    "Порядок анализа погоды: осадки → температура → ветер → солнце/облачность.\n"
+    "Практичность важнее красоты: не предлагай промокнуть ради образа.\n"
+    "Примеры компромисса: +23 и дождь → футболка + лёгкая ветровка/дождевик; "
+    "+18 и дождь → кофта + дождевик; +28 и дождь → футболка + дождевик (не толстовка); "
+    "+12 и ветер → слои + ветровка/куртка."
+)
+
+
+def _build_weather_rules(cid, w, flags):
+    """Формирует блок погодных правил для промпта и фиксирует пробелы гардероба.
+
+    Возвращает (rules_text, gap_note). gap_note — честная фраза для ответа, если
+    под погоду нужной одежды нет; иначе пустая строка.
+    """
+    if not flags:
+        return "", ""
+    rules = []
+    gap_note = ""
+    has_rain_outer = _has_rain_outerwear(w)
+    if flags["rain_daytime"]:
+        if has_rain_outer:
+            rules.append(
+                "ДОЖДЬ: приоритет верхней одежды — дождевик > лёгкая непромокаемая ветровка > "
+                "непромокаемая куртка (в прохладу) > обычная ветровка. Бери защиту от дождя из гардероба."
+            )
+        else:
+            rules.append(
+                "ДОЖДЬ ожидается, но в гардеробе НЕТ дождевика/ветровки/непромокаемой верхней одежды. "
+                "Не выдумывай такие вещи — честно напиши, что подходящей защиты от дождя в шкафу нет."
+            )
+            gap_note = ("Сегодня пригодились бы дождевик или лёгкая ветровка. "
+                        "В гардеробе таких вещей пока нет.")
+            add_wardrobe_gap(cid, "непромокаемая верхняя одежда", "дождливая погода", priority=True)
+    if flags["heavy_rain"]:
+        rules.append(
+            "ЛИВЕНЬ: предпочти непромокаемую обувь и кроссовки вместо замши, куртку с капюшоном/дождевик. "
+            "Если таких вещей нет — предупреди пользователя."
+        )
+    if flags["strong_wind"]:
+        rules.append(
+            "СИЛЬНЫЙ ВЕТЕР: избегай лёгких льняных рубашек как верхнего слоя, очень свободных вещей и "
+            "открытой обуви в прохладу; ветровка получает приоритет."
+        )
+    if flags["sunny"]:
+        rules.append(
+            "СОЛНЦЕ/ЖАРА: можно порекомендовать кепку, солнцезащитные очки, лёгкие натуральные ткани — "
+            "ТОЛЬКО если они реально есть в гардеробе."
+        )
+    if not rules:
+        return "", ""
+    return _PRIORITY_BLOCK + "\n" + "\n".join(rules), gap_note
+
+
 # ---------- генерация лука по погоде ----------
 async def send_looks(bot, cid):
     cached = _get_cached_look(cid)
@@ -122,19 +216,36 @@ async def send_looks(bot, cid):
     body_line = f"Параметры тела: {user_body}." if user_body and not user_profile else ""
     style_block = "\n".join(x for x in [priority_line, profile_line, style_line, body_line] if x)
     tmax = None
+    flags = None
+    has_rain = False
     try:
         wdata = await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 2)
         wd = wdata["daily"]
+        day_str = (wd.get("time") or [None])[0] or _day_key()
         tmax = round(wd["temperature_2m_max"][0])
         tmin = round(wd["temperature_2m_min"][0])
         wind_ms = round(wd["windspeed_10m_max"][0])
-        rain_prob = wd["precipitation_probability_max"][0] or 0
-        rain_mm = (wd.get("precipitation_sum") or [None])[0]
-        has_rain = weather._rain_real(rain_prob, rain_mm)
-        wctx = (f"Сегодня: +{tmax}°C (ночью +{tmin}°C), ветер до {wind_ms} м/с"
-                + (", ожидается дождь" if has_rain else ""))
+        rain_prob_day = wd["precipitation_probability_max"][0] or 0
+        rain_mm_day = (wd.get("precipitation_sum") or [None])[0]
+        weathercode = (wd.get("weathercode") or [None])[0]
+        flags = weather.daytime_outfit_weather(
+            wdata, day_str, tmax, wind_ms, rain_prob_day, rain_mm_day, weathercode)
+        has_rain = flags["rain_daytime"]
+        cond = weather.DESC.get(weathercode, "")
+        wparts = [f"днём до +{tmax}°C (ночью +{tmin}°C)"]
+        if cond:
+            wparts.append(cond)
+        wparts.append(f"ветер до {flags['wind_ms']} м/с" + (" (сильный)" if flags["strong_wind"] else ""))
+        if has_rain:
+            mm_txt = f", {flags['rain_mm']} мм" if flags.get("rain_mm") else ""
+            wparts.append(f"дождь вероятностью {flags['rain_prob']}%{mm_txt}"
+                          + (", возможен ливень" if flags["heavy_rain"] else ""))
+        elif flags["sunny"]:
+            wparts.append("солнечно")
+        wctx = "Сегодня: " + ", ".join(wparts)
     except Exception:
         wctx = "нет данных"
+        flags = None
         has_rain = False
     if tmax is not None and tmax >= 24 and not has_rain:
         temp_rule = (f"tmax={tmax}°C, ЖАРКО — ЗАПРЕЩЕНО: ветровки, флис, куртки, толстовки, слои. "
@@ -143,8 +254,9 @@ async def send_looks(bot, cid):
         temp_rule = (f"tmax={tmax}°C, ТЕПЛО — лёгкие брюки/джинсы + футболка или рубашка. "
                      "Без тяжёлых слоёв и ветровок.")
     else:
-        temp_rule = (f"tmax={tmax}°C, ПРОХЛАДНО{'/ дождь' if has_rain else ''} — "
+        temp_rule = (f"tmax={tmax}°C, ПРОХЛАДНО{' / дождь' if has_rain else ''} — "
                      "слои уместны, можно ветровку или флис, закрытая обувь.")
+    weather_rules, gap_note = _build_weather_rules(cid, w, flags)
     recent = store.recent_looks.get(str(cid), [])
     avoid = ("\nНе повторяй образы за последние 3 дня: " + "; ".join(recent)) if recent else ""
     hints = memory.wardrobe_hints(cid)
@@ -153,9 +265,10 @@ async def send_looks(bot, cid):
     pref_hints = memory.profile_hints(cid)
     pref_line = ("\n" + secure.wrap_untrusted(pref_hints, "предпочтения")) if pref_hints else ""
     profile_block = (f"\n{style_block}" if style_block else "")
+    weather_block = (f"\n{weather_rules}" if weather_rules else "")
     prompt = f"""Ты опытный стилист. Собери ОДИН образ из гардероба на сегодня.{profile_block}
 Погода: {wctx}
-ТЕМПЕРАТУРНОЕ ПРАВИЛО (строго, не нарушать): {temp_rule}{fb_line}{pref_line}
+ТЕМПЕРАТУРНОЕ ПРАВИЛО (строго, не нарушать): {temp_rule}{weather_block}{fb_line}{pref_line}
 Гардероб пользователя (ТОЛЬКО эти вещи, другие не добавлять):
 {wardrobe_text}
 Правила: 1 верх + 1 низ + обувь (+ опц. аксессуар-совет). Сочетание по цвету и стилю.
@@ -174,8 +287,12 @@ JSON (без markdown):
     rl.append(", ".join(items)[:80])
     store.recent_looks[str(cid)] = rl[-3:]
     store.last_look[str(cid)] = ", ".join(str(it) for it in items)[:120]   # для фидбека
-    text, entities = _build_look_message(items, intro=d.get("intro", ""), add_text=d.get("add", ""))
-    _save_cached_look(cid, items, intro=d.get("intro", ""), add=d.get("add", ""))
+    intro = d.get("intro", "")
+    if gap_note:
+        # Честно сообщаем о пробеле под дождь прямо в образе.
+        intro = (intro + " " + gap_note).strip() if intro else gap_note
+    text, entities = _build_look_message(items, intro=intro, add_text=d.get("add", ""))
+    _save_cached_look(cid, items, intro=intro, add=d.get("add", ""))
     store.last_source[str(cid)] = "Гардероб · Образ"
     store.last_answer[str(cid)] = text
     await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=_look_result_kb())
@@ -197,12 +314,22 @@ async def look_feedback(bot, cid, verdict):
 
 
 # ---------- шкаф ----------
+# Порядок важен: «Верхняя одежда» проверяется раньше «Верх», иначе «куртка»/«ветровка»
+# по подстроке «верх» ушли бы в «Верх».
 ZONES = [
-    ("Верх", ["верх", "футбол", "рубаш", "свит", "толстов", "худи", "лонгслив", "поло", "верхн", "куртк", "ветровк", "пиджак"]),
+    ("Верхняя одежда", ["верхняя одежд", "верхн", "куртк", "ветровк", "пиджак", "пальто",
+                        "плащ", "дождевик", "парк", "пуховик", "тренч", "анорак", "бомбер",
+                        "жилет"]),
+    ("Верх", ["верх", "футбол", "рубаш", "свит", "толстов", "худи", "лонгслив", "поло", "майк", "кофт"]),
     ("Низ", ["низ", "джинс", "брюк", "штан", "шорт", "юбк"]),
     ("Обувь", ["обув", "кроссов", "ботин", "кед", "туфл", "сандал"]),
     ("Аксессуары", ["аксессуар", "часы", "кольц", "ремен", "шапк", "кепк", "очк", "шарф", "сумк", "цепоч", "носк", "украшен"]),
 ]
+
+# Порядок зон для отображения статистики и шкафа.
+ZONE_ORDER = ["Верх", "Низ", "Верхняя одежда", "Обувь", "Аксессуары", "Другое"]
+ZONE_EMOJI = {"Верх": "👕", "Низ": "👖", "Верхняя одежда": "🧥",
+              "Обувь": "👟", "Аксессуары": "⌚", "Другое": "🎒"}
 
 def _zone_of(category):
     c = category.lower()
@@ -223,6 +350,54 @@ def _flat_wardrobe_items(w):
                 items.append((str(cat), value))
     return items
 
+# ---------- статистика и готовность гардероба ----------
+def wardrobe_stats(w):
+    """Считает вещи по зонам. Возвращает (total, {zone: count}) с полным набором зон."""
+    counts = {z: 0 for z in ZONE_ORDER}
+    total = 0
+    for cat, item in _flat_wardrobe_items(w):
+        counts[_zone_of(cat)] += 1
+        total += 1
+    return total, counts
+
+
+def _params_filled(cid):
+    """Заполнены ли личные параметры для точных рекомендаций.
+
+    Отдельных полей пол/рост/вес в модели нет — ориентируемся на свободный
+    профиль или связку стиль+тело.
+    """
+    profile = _settings.get(cid, "wardrobe_profile", "")
+    style = _settings.get(cid, "style", "")
+    body = _settings.get(cid, "body", "")
+    return bool(profile or (style and body))
+
+
+# --- слабые места гардероба (персистентный список пробелов) ---
+_RAIN_OUTER_MARKERS = ("дождевик", "ветровк", "непромокаем", "мембран", "raincoat",
+                       "waterproof", "плащ", "тренч", "анорак")
+
+
+def _has_rain_outerwear(w):
+    """Есть ли в гардеробе верх для дождя (по ключевым словам)."""
+    text = store.wardrobe_to_text(w).lower()
+    return any(m in text for m in _RAIN_OUTER_MARKERS)
+
+
+def get_wardrobe_gaps(cid):
+    return store.get_list(config.WARDROBE_GAPS_KEY, cid)
+
+
+def add_wardrobe_gap(cid, item, reason, priority=True):
+    """Добавляет пробел гардероба без дублей (по item, case-insensitive)."""
+    gaps = store.get_list(config.WARDROBE_GAPS_KEY, cid)
+    if any(g.get("item", "").lower() == item.lower() for g in gaps):
+        return False
+    gaps.append({"item": item, "reason": reason, "priority": bool(priority)})
+    store.set_list(config.WARDROBE_GAPS_KEY, cid, gaps)
+    return True
+
+
 async def send_show(bot, cid):
     w = store.load_wardrobe(cid)
     if not w:
@@ -234,12 +409,10 @@ async def send_show(bot, cid):
             continue
         z = _zone_of(cat)
         grouped.setdefault(z, []).extend(items)
-    zone_emoji = {"Верх": "👕", "Низ": "👖", "Обувь": "👟", "Аксессуары": "⌚", "Другое": "🎒"}
-    order = ["Верх", "Низ", "Обувь", "Аксессуары", "Другое"]
     lines = ["🗄 <b>Мой шкаф</b>", ""]
-    for z in order:
+    for z in ZONE_ORDER:
         if grouped.get(z):
-            lines.append(f"{zone_emoji.get(z,'•')} <b>{z}</b>")
+            lines.append(f"{ZONE_EMOJI.get(z,'•')} <b>{z}</b>")
             lines += [f"   - {esc(it)}" for it in grouped[z]]
             lines.append("")
     await bot.send_message(chat_id=cid, text="\n".join(lines).strip(), parse_mode="HTML", reply_markup=closet_kb())
@@ -386,6 +559,12 @@ async def send_improve(bot, cid):
         _log.warning("wardrobe improve AI failed, using fallback: %r", e, exc_info=True)
         d = _fallback_improve_data(w)
     bullets = []
+    # Персистентные пробелы (например, непромокаемая верхняя одежда после дождливого дня)
+    # показываем ПЕРВЫМИ — это приоритетные покупки.
+    gaps = get_wardrobe_gaps(cid)
+    priority_gaps = [g for g in gaps if g.get("priority")]
+    for g in priority_gaps[:2]:
+        bullets.append(f"{g.get('item', '').capitalize()} — приоритетная покупка ({g.get('reason', '')})")
     bullets += [str(x) for x in (d.get("works") or [])[:2]]
     bullets += [str(x) for x in (d.get("weak") or [])[:2]]
     bullets += [str(x) for x in (d.get("replace") or [])[:2]]
@@ -444,11 +623,19 @@ async def check_purchase(bot, cid, text):
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     verdict = d.get("verdict", "")
+    why = list(d.get("why") or [])
+    total, _ = wardrobe_stats(w)
+    if total <= 0:
+        why.insert(0, (
+            "Сейчас рекомендация основана в основном на характеристиках вещи и отзывах из "
+            "интернета. После заполнения гардероба я смогу оценивать совместимость покупки с "
+            "твоими вещами и выявлять дубликаты."
+        ))
     text_out, entities = _build_entity_card(
         "Проверка покупки",
         _clean_text(text),
         f"Вердикт: {verdict}" if verdict else "",
-        d.get("why") or [],
+        why,
         d.get("outro") or "Покупай только если вещь закрывает реальный пробел в гардеробе.",
         bullet_label="Почему:",
     )

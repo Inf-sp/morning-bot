@@ -110,8 +110,6 @@ async def answer_callback(update, context):
         except Exception:
             pass
         return
-    if data == "m_food":
-        await menu.send_food_menu(bot, cid); return
     if data == "m_notes":
         await settings.send_notes(bot, cid); return
     if data == "m_food_gen":
@@ -121,12 +119,46 @@ async def answer_callback(update, context):
         section = data[len("fv_skip_"):]
         await _ack(q)
         await firstvisit.skip(bot, cid, section); return
-    # Первичный опрос при входе в раздел (wardrobe / learn / leisure / balance)
-    _FV_SECTION = {"m_wardrobe": "wardrobe", "m_learn": "learn",
-                   "m_leisure": "leisure", "m_balance": "balance"}
+    # Теги-чекбоксы в опросе (fv_tag_{section}_{key})
+    if data == "fv_leisure_text":
+        await _ack(q)
+        await firstvisit.leisure_text_prompt(bot, cid); return
+    if data.startswith("fv_tagdone_"):
+        await _ack(q)
+        await firstvisit.tags_done(bot, cid, data[len("fv_tagdone_"):]); return
+    if data.startswith("fv_tag_"):
+        rest = data[len("fv_tag_"):]
+        section, _, key = rest.partition("_")
+        await _ack(q)
+        await firstvisit.toggle_tag(bot, cid, section, key, q); return
+    # Пройти опрос заново (из настроек раздела / баннера «пропущено»)
+    if data.startswith("fv_restart_"):
+        section = data[len("fv_restart_"):]
+        await _ack(q)
+        await firstvisit.restart(bot, cid, section); return
+    # Выбор режима сохранения при повторном прохождении
+    if data.startswith("fv_merge_"):
+        await _ack(q)
+        await firstvisit.resolve_merge(bot, cid, data[len("fv_merge_"):], "add"); return
+    if data.startswith("fv_replace_"):
+        await _ack(q)
+        await firstvisit.resolve_merge(bot, cid, data[len("fv_replace_"):], "replace"); return
+    if data.startswith("fv_cancel_"):
+        await _ack(q)
+        await firstvisit.resolve_merge(bot, cid, data[len("fv_cancel_"):], "cancel"); return
+    # Первичный опрос при входе в раздел (wardrobe / learning / leisure / health / cooking)
+    if data == "m_food" and firstvisit.needs_setup(cid, "cooking"):
+        await _ack(q)
+        await firstvisit.show_prompt(bot, cid, "cooking"); return
+    if data == "m_food":
+        await menu.send_food_menu(bot, cid); return
+    _FV_SECTION = {"m_wardrobe": "wardrobe", "m_learn": "learning",
+                   "m_leisure": "leisure", "m_balance": "health"}
     if data in _FV_SECTION and firstvisit.needs_setup(cid, _FV_SECTION[data]):
         await _ack(q)
         await firstvisit.show_prompt(bot, cid, _FV_SECTION[data]); return
+    if data == "m_wardrobe":
+        await wardrobe.send_home(bot, cid, q); return
     if data.startswith("m_"):
         text, entities, kb = menu.menu_screen(data)
         try:
@@ -465,6 +497,9 @@ async def text_router(update, context):
         return
     if text == "🥣 Готовка":
         try:
+            if firstvisit.needs_setup(cid, "cooking"):
+                await firstvisit.show_prompt(bot, cid, "cooking")
+                return
             await menu.send_food_menu(bot, cid)
         except Exception as e:
             await verify.safe_error(bot, cid, e)
@@ -473,10 +508,13 @@ async def text_router(update, context):
     if text in menu.LABEL_TO_KEY:
         key = menu.LABEL_TO_KEY[text]
         # Первый вход в раздел с пустым профилем — опрос
-        _FV = {"m_wardrobe": "wardrobe", "m_learn": "learn",
-               "m_leisure": "leisure", "m_balance": "balance"}
+        _FV = {"m_wardrobe": "wardrobe", "m_learn": "learning",
+               "m_leisure": "leisure", "m_balance": "health"}
         if key in _FV and firstvisit.needs_setup(cid, _FV[key]):
             await firstvisit.show_prompt(bot, cid, _FV[key])
+            return
+        if key == "m_wardrobe":
+            await wardrobe.send_home(bot, cid)
             return
         t, entities, kb = menu.menu_screen(key)
         await bot.send_message(chat_id=cid, text=t, reply_markup=kb, entities=entities)

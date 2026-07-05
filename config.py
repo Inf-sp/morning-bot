@@ -37,6 +37,7 @@ TZ = ZoneInfo("Europe/Amsterdam")
 SETTINGS_FILE = "settings.json"
 LEVELS_FILE = "levels.json"
 WARDROBE_FILE = "wardrobe.json"
+WARDROBE_GAPS_KEY = "wardrobe_gaps.json"
 FAVORITES_KEY = "favorites.json"
 DIARY_KEY = "diary.json"
 ARTISTS_KEY = "artists.json"

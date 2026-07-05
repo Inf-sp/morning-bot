@@ -19,6 +19,14 @@ TZ = config.TZ
 RAIN_PROB_MIN = 50
 # Минимум реальных осадков (мм) для подтверждения дождя при высокой вероятности
 RAIN_MM_MIN = 0.1
+# Сильный дождь/ливень: мм осадков за сутки (или пик за час в дневном окне)
+HEAVY_RAIN_MM_DAY = 4.0
+HEAVY_RAIN_MM_HOUR = 2.0
+# Сильный ветер (м/с): согласовано с wind_scale («Сильный ветер» начинается с 8)
+STRONG_WIND_MS = 8
+# Дневное окно «когда пользователь обычно выходит из дома» (часы)
+DAYTIME_START_H = 8
+DAYTIME_END_H = 22
 
 DESC = {0: "ясно", 1: "малооблачно", 2: "переменно облачно", 3: "пасмурно", 45: "туман", 48: "туман",
         51: "морось", 53: "морось", 55: "морось", 61: "дождь", 63: "дождь", 65: "сильный дождь",
@@ -208,6 +216,54 @@ def _daytime_avg_wind(data, day_str):
     day_vals = [v for t, v in zip(hours, vals)
                 if t.startswith(day_str) and 6 <= int(t[11:13]) < 21 and v is not None]
     return sum(day_vals) / len(day_vals) if day_vals else None
+
+
+def _daytime_max(data, day_str, key):
+    """Максимум hourly-показателя в дневном окне DAYTIME_START_H..DAYTIME_END_H."""
+    try:
+        hours = data["hourly"]["time"]
+        vals = data["hourly"][key]
+    except (KeyError, TypeError):
+        return None
+    day_vals = [v for t, v in zip(hours, vals)
+                if t.startswith(day_str)
+                and DAYTIME_START_H <= int(t[11:13]) < DAYTIME_END_H
+                and v is not None]
+    return max(day_vals) if day_vals else None
+
+
+def daytime_outfit_weather(data, day_str, tmax, wind_ms, rain_prob_day, rain_mm_day, weathercode):
+    """Погодные флаги для подбора образа с учётом дневного окна 8–22.
+
+    Возвращает dict с числами и булевыми флагами. Дождь оценивается по максимуму
+    в дневном окне (когда человек выходит из дома), с фолбэком на суточный агрегат.
+    """
+    prob_win = _daytime_max(data, day_str, "precipitation_probability")
+    mm_win = _daytime_max(data, day_str, "precipitation")
+    wind_win = _daytime_max(data, day_str, "windspeed_10m")
+
+    rain_prob = prob_win if prob_win is not None else (rain_prob_day or 0)
+    rain_mm = mm_win if mm_win is not None else rain_mm_day
+    wind = wind_win if wind_win is not None else wind_ms
+
+    rain_daytime = _rain_real(rain_prob, rain_mm)
+    heavy_rain = bool(
+        (rain_mm_day is not None and rain_mm_day >= HEAVY_RAIN_MM_DAY)
+        or (mm_win is not None and mm_win >= HEAVY_RAIN_MM_HOUR)
+        or (weathercode in (65, 80, 81, 82, 95, 96, 99))
+    )
+    strong_wind = wind is not None and wind >= STRONG_WIND_MS
+    sunny = (weathercode in (0, 1)) and (tmax is not None and tmax >= 24) and not rain_daytime
+
+    return {
+        "rain_prob": round(rain_prob) if rain_prob is not None else 0,
+        "rain_mm": round(rain_mm, 1) if rain_mm is not None else None,
+        "wind_ms": round(wind) if wind is not None else wind_ms,
+        "rain_daytime": rain_daytime,
+        "heavy_rain": heavy_rain,
+        "strong_wind": strong_wind,
+        "sunny": sunny,
+    }
 
 
 # ---------- мировой факт ----------
