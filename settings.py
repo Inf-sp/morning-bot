@@ -55,6 +55,12 @@ NOTIF_TYPES = [
     ("checkin_eve",    "Вечерний разбор"),
 ]
 
+# Персональные факторы, влияющие на содержимое «Погодного предупреждения».
+PERSONAL_FLAGS = [
+    ("bike", "🚲 Езжу на велосипеде"),
+    ("pollen_allergy", "🌿 Аллергия на пыльцу"),
+]
+
 PRIORITY_OPTIONS = [
     ("health", "Здоровье"),
     ("learning", "Учёба"),
@@ -198,27 +204,13 @@ async def send_scheduled_notification(bot, cid, kind):
     elif kind == "weather_warn":
         import asyncio
         import weather as _w
-        _WARN_CODES = {95, 96, 99}
+        import weather_warn as _ww
         s = store.get_settings(cid)
         data = await asyncio.to_thread(_w.fetch_weather, s["lat"], s["lon"], 2)
-        d = data["daily"]
-        wind = d["windspeed_10m_max"][0] or 0
-        code = d["weathercode"][0]
-        rain = d["precipitation_probability_max"][0] or 0
-        rain_mm = (d.get("precipitation_sum") or [None])[0]
-        if wind > 10 or code in _WARN_CODES or rain > 70:
-            text = _w.storm_alert(wind, code, rain, rain_mm, cc=s.get("cc", ""))
-            if not text:
-                parts = []
-                if wind > 10:
-                    parts.append(f"💨 ветер до {wind:.0f} м/с")
-                if rain > 70:
-                    parts.append(f"🌧 дождь {rain:.0f}%")
-                if code in _WARN_CODES:
-                    parts.append("⛈ возможна гроза")
-                text = "⚠️ <b>Погодное предупреждение</b>\n\n" + " • ".join(parts)
-            plain, entities = util.html_to_entities(text)
-            await bot.send_message(chat_id=cid, text=plain, entities=entities)
+        msg = _ww.build_warning(data, cid)
+        # Тихий день без значимых погодных факторов — ничего не отправляем.
+        if msg is not None:
+            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     elif kind == "lagom_daily":
         import balance as _b
         await _b.send_motiv_push(_NoKbBot(bot), cid)
@@ -274,6 +266,10 @@ async def send_notif(bot, cid, q=None):
     any_on = any(notif_on(cid, k) for k, _ in NOTIF_TYPES)
     if any_on:
         rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
+    # Персональные факторы для «Погодного предупреждения»
+    for flag, label in PERSONAL_FLAGS:
+        mark = "🟢" if get(cid, flag, False) else "⚪"
+        rows.append([InlineKeyboardButton(f"{mark} {label}", callback_data=f"set_pflag_{flag}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_home")])
     msg = settings_ui.notifications()
     text = msg.text
@@ -293,6 +289,12 @@ async def toggle_notif(bot, cid, kind, q=None):
 async def notif_off_all(bot, cid, q=None):
     for kind, _ in NOTIF_TYPES:
         set_(cid, f"notif_{kind}", False)
+    await send_notif(bot, cid, q)
+
+async def toggle_personal_flag(bot, cid, flag, q=None):
+    valid = {f for f, _ in PERSONAL_FLAGS}
+    if flag in valid:
+        set_(cid, flag, not get(cid, flag, False))
     await send_notif(bot, cid, q)
 
 
@@ -570,6 +572,8 @@ async def handle_callback(bot, cid, data, q=None):
         await toggle_cuisine(bot, cid, data[len("set_cuisine_"):], q)
     elif data.startswith("set_notiftgl_"):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
+    elif data.startswith("set_pflag_"):
+        await toggle_personal_flag(bot, cid, data[len("set_pflag_"):], q)
     elif data.startswith("set_notiftest_"):
         kind = data[len("set_notiftest_"):]
         async def _do_test(b, c):

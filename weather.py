@@ -47,8 +47,8 @@ def fetch_weather(lat, lon, days=2):
     r = requests.get("https://api.open-meteo.com/v1/forecast", params={
         "latitude": lat, "longitude": lon,
         "current": "temperature_2m,apparent_temperature,weathercode",
-        "hourly": "precipitation_probability,precipitation,windspeed_10m,temperature_2m,relativehumidity_2m",
-        "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,weathercode,windspeed_10m_max,winddirection_10m_dominant",
+        "hourly": "precipitation_probability,precipitation,windspeed_10m,windgusts_10m,temperature_2m,relativehumidity_2m,uv_index",
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,weathercode,windspeed_10m_max,windgusts_10m_max,winddirection_10m_dominant,uv_index_max",
         "timezone": "Europe/Amsterdam", "wind_speed_unit": "ms", "forecast_days": days
     }, timeout=20)
     r.raise_for_status()

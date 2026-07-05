@@ -28,6 +28,27 @@ from .builder import MessageBuilder, MessageSpec, from_html
 from util import cap_sentence
 
 
+def weather_warning(events, when="", advice=None):
+    """Новый формат погодного предупреждения: события → когда → что сделать.
+
+    events — строки событий (с эмодзи); when — интервал/период; advice — список
+    рекомендаций (2–4). Всё уже отобрано и обрезано вызывающим кодом.
+    """
+    b = MessageBuilder()
+    b.section("⚠️ Погодное предупреждение")
+    b.newline()
+    for ev in events:
+        b.line(ev)
+    if when:
+        b.section("🕒 Когда:")
+        b.line(when)
+    if advice:
+        b.section("🎒 Что сделать:")
+        for a in advice:
+            b.bullet(a)
+    return b.build_stripped()
+
+
 def full_forecast(header, periods, joke=""):
     b = MessageBuilder()
     b.section(header)
