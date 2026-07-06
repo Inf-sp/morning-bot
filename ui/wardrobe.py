@@ -112,72 +112,139 @@ def _finish_dot(value):
     return value
 
 
-def look_message(items, intro="", add_text=""):
+_STARS_5 = "★★★★★"
+_STARS_EMPTY_5 = "☆☆☆☆☆"
+
+
+def _stars5(score):
+    """Число 1-5 → строка звёзд (5 позиций)."""
+    try:
+        filled = max(0, min(5, round(float(score))))
+    except (TypeError, ValueError):
+        filled = 0
+    return _STARS_5[:filled] + _STARS_EMPTY_5[filled:]
+
+
+def look_message(look_data):
+    """Образ на сегодня как консультация персонального стилиста.
+
+    look_data: {weather_intro, items[{emoji,name,why}], why_works, palette,
+                style, comfort, practicality, recommendation}
+    """
+    look_data = look_data or {}
     b = MessageBuilder()
     b.section("✨ Образ на сегодня")
-    if intro:
+
+    weather_intro = _clean_text(look_data.get("weather_intro"))
+    if weather_intro:
         b.spacer()
-        b.line(intro)
+        b.line(weather_intro)
+
+    items = [it for it in (look_data.get("items") or []) if _clean_text(_item_name(it))]
     if items:
-        quote = "\n".join(f"• {str(it).strip()}" for it in items if str(it).strip())
-        if quote:
+        b.section("Что надеваем")
+        for it in items:
+            emoji = _clean_text(it.get("emoji")) if isinstance(it, dict) else ""
+            name = _clean_text(_item_name(it))
+            why = _finish_dot(it.get("why")) if isinstance(it, dict) else ""
             b.spacer()
-            b.quote(quote)
+            b.text_line(f"{emoji} " if emoji else "")
+            b.bold(name)
             b.newline()
-    if add_text:
+            if why:
+                b.line(why)
+
+    why_works = _finish_dot(look_data.get("why_works"))
+    if why_works:
+        b.section("Почему этот образ работает")
+        b.line(why_works)
+
+    palette = _clean_text(look_data.get("palette"))
+    style = _clean_text(look_data.get("style"))
+    comfort = look_data.get("comfort")
+    practicality = look_data.get("practicality")
+    if palette or style or comfort is not None or practicality is not None:
+        b.divider()
+        if palette:
+            b.text_line("🎨 Палитра: ")
+            b.bold(palette)
+            b.newline()
+        if style:
+            b.text_line("👔 Стиль: ")
+            b.bold(style)
+            b.newline()
+        if comfort is not None:
+            b.text_line("⭐ Комфорт: ")
+            b.bold(_stars5(comfort))
+            b.newline()
+        if practicality is not None:
+            b.text_line("🎯 Практичность: ")
+            b.bold(_stars5(practicality))
+            b.newline()
+
+    recommendation = _finish_dot(look_data.get("recommendation"))
+    if recommendation:
         b.spacer()
-        b.add(add_text, MessageEntity.ITALIC)
+        b.add(recommendation, MessageEntity.ITALIC)
+
     return b.build_stripped()
+
+
+def _item_name(it):
+    return it.get("name") if isinstance(it, dict) else it
+
+
+def _wardrobe_verdict(total):
+    """Живая оценка наполненности шкафа, без канцелярита."""
+    if total <= 0:
+        return "Пусто — самое время начать."
+    if total < 6:
+        return "Вещей пока мало для разнообразных образов."
+    if total < 15:
+        return "База есть, можно уже собирать образы."
+    return "Шкаф заполнен хорошо — есть, из чего выбирать."
 
 
 def home_screen(total, zone_counts, zone_order, zone_emoji, params_filled, missing):
-    """Динамическая панель состояния раздела «Гардероб».
-
-    total — всего вещей; zone_counts — {zone: n}; missing — список
-    (emoji_label,) недостающих пунктов для точных рекомендаций.
-    """
+    """Главный экран раздела «Гардероб»: польза, состояние шкафа, действия."""
     b = MessageBuilder()
-    b.text_line("👕 ")
+    b.text_line("👟 ")
     b.bold("Гардероб")
     b.newline()
     b.spacer()
-    b.line("Одежда без хаоса: подберу образ по погоде, разберу шкаф и подскажу, что докупить.")
+    b.line("Каждое утро — точный образ по погоде, без лишних раздумий у шкафа.")
 
     b.spacer()
     if total <= 0:
-        b.line("👕 В шкафу пока нет вещей.")
+        b.line("В шкафу пока нет вещей.")
         b.spacer()
-        b.line("Добавь несколько вещей в шкаф, и я смогу:")
-        b.bullet("собирать образ на сегодня")
-        b.bullet("анализировать гардероб")
-        b.bullet("советовать, что стоит докупить")
-        b.bullet("проверять новые покупки на совместимость")
+        b.line("Добавь первые вещи — и я подберу образ, разберу гардероб и подскажу, что докупить.")
     else:
-        b.line(f"👕 В шкафу: {total} вещей")
+        b.text_line(f"👕 В шкафу {total} " + _pluralize_items(total))
+        b.newline()
+        b.line(_wardrobe_verdict(total))
         b.spacer()
         for z in zone_order:
-            b.bullet(f"{z} — {zone_counts.get(z, 0)}")
+            n = zone_counts.get(z, 0)
+            if n > 0:
+                b.bullet(f"{zone_emoji.get(z, '•')} {z} — {n}")
 
-    # Готовность раздела
-    b.spacer()
-    if total > 0 and params_filled:
-        b.line("🟢 Гардероб готов к работе.")
-    else:
-        b.line("⚠️ Для более точных рекомендаций осталось заполнить:")
+    if missing:
+        b.spacer()
+        b.line("Чуть точнее образы будут, если добавить:")
         for label in missing:
             b.bullet(label)
 
-    # Готовность функций
-    b.spacer()
-    has_items = total > 0
-    b.line(("✅ Образ на сегодня — готов" if has_items
-            else "⚠️ Образ на сегодня — добавьте вещи в шкаф"))
-    b.line(("✅ Разбор гардероба — готов" if has_items
-            else "⚠️ Разбор гардероба — добавьте вещи в шкаф"))
-    b.line(("✅ Проверка покупки — готова" if has_items
-            else "⚠️ Проверка покупки — доступна (без гардероба — менее точно)"))
-
     return b.build_stripped()
+
+
+def _pluralize_items(n):
+    n = abs(int(n))
+    if n % 10 == 1 and n % 100 != 11:
+        return "вещь"
+    if 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
+        return "вещи"
+    return "вещей"
 
 
 def entity_card(title, summary="", quote="", bullets=None, final="", bullet_label="Что важно:"):
@@ -205,4 +272,18 @@ def entity_card(title, summary="", quote="", bullets=None, final="", bullet_labe
         b.spacer()
         b.line(final)
 
+    return b.build_stripped()
+
+
+def zone_picker_screen():
+    b = MessageBuilder()
+    b.section("🧹 Что удалить")
+    b.line("Выбери категорию.")
+    return b.build_stripped()
+
+
+def subcat_picker_screen(zone):
+    b = MessageBuilder()
+    b.section(f"🧹 {_clean_text(zone)}")
+    b.line("Выбери подкатегорию.")
     return b.build_stripped()

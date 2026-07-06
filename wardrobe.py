@@ -48,8 +48,8 @@ def _today_label():
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
 
-def _build_look_message(items, intro="", add_text=""):
-    msg = wardrobe_ui.look_message(items, intro=intro, add_text=add_text)
+def _build_look_message(look_data):
+    msg = wardrobe_ui.look_message(look_data)
     return msg.text, msg.entities
 
 
@@ -62,23 +62,31 @@ def _build_entity_card(title, summary="", quote="", bullets=None, final="", bull
     return msg.text, msg.entities
 
 def _get_cached_look(cid):
-    cached = store.get_wardrobe_daylook(cid)
-    if not isinstance(cached, dict):
-        return None
-    if cached.get("date") != _day_key():
-        return None
-    items = cached.get("items") or []
-    if not items:
+    cached = store.get_valid_wardrobe_daylook(cid)   # ссылочная целостность (version+id)
+    if not cached or cached.get("date") != _day_key():   # день — бизнес-правило «раз в день»
         return None
     return cached
 
-def _save_cached_look(cid, items, intro="", add=""):
-    text, _ = _build_look_message(items, intro=intro, add_text=add)
+def _item_name(it):
+    return it.get("name") if isinstance(it, dict) else it
+
+def _resolve_item_ids(w, names):
+    """Сопоставляет имена вещей (как их вернула LLM) с их id в текущем гардеробе.
+    Регистронезависимое точное совпадение; вещь без совпадения не попадает в
+    результат — защита от того, что LLM вернула вещь не из списка."""
+    by_name = {it["name"].lower(): it["id"]
+               for zone in (w or {}).get("zones", {}).values()
+               for items in zone.values() for it in items}
+    return [by_name[n.lower()] for n in names if n.lower() in by_name]
+
+def _save_cached_look(cid, item_ids, look_data):
+    text, _ = _build_look_message(look_data)
+    w = store.load_wardrobe(cid)
     store.set_wardrobe_daylook(cid, {
         "date": _day_key(),
-        "items": list(items or []),
-        "intro": intro or "",
-        "add": add or "",
+        "version": w.get("_v", 0),
+        "item_ids": list(item_ids or []),
+        "look_data": look_data,
         "text": text,
     })
 
@@ -103,9 +111,7 @@ async def send_home(bot, cid, q=None):
     total, counts = wardrobe_stats(w)
     params_filled = _params_filled(cid)
     missing = []
-    if total <= 0:
-        missing.append("👕 Шкаф")
-    if not params_filled:
+    if total > 0 and not params_filled:
         missing.append("👤 Мои параметры")
     msg = wardrobe_ui.home_screen(total, counts, ZONE_ORDER, ZONE_EMOJI, params_filled, missing)
     kb = _wardrobe_home_kb()
@@ -132,12 +138,25 @@ _PRIORITY_BLOCK = (
 )
 
 
+def _resync_wardrobe_gaps(cid, w):
+    """Снимает персистентные пробелы, которые уже закрыты вещами в шкафу (симметрично
+    add_wardrobe_gap, который их только добавляет). Вызывается при каждой генерации
+    образа — «пробел снова появляется при следующей проверке», если вещь удалена."""
+    if not _has_rain_outerwear(w):
+        return
+    gaps = get_wardrobe_gaps(cid)
+    kept = [g for g in gaps if g.get("item", "").lower() != "непромокаемая верхняя одежда"]
+    if len(kept) != len(gaps):
+        store.set_list(config.WARDROBE_GAPS_KEY, cid, kept)
+
+
 def _build_weather_rules(cid, w, flags):
     """Формирует блок погодных правил для промпта и фиксирует пробелы гардероба.
 
     Возвращает (rules_text, gap_note). gap_note — честная фраза для ответа, если
     под погоду нужной одежды нет; иначе пустая строка.
     """
+    _resync_wardrobe_gaps(cid, w)
     if not flags:
         return "", ""
     rules = []
@@ -181,10 +200,11 @@ def _build_weather_rules(cid, w, flags):
 async def send_looks(bot, cid):
     cached = _get_cached_look(cid)
     if cached:
+        cached_names = [_item_name(it) for it in (cached.get("look_data") or {}).get("items", [])]
         store.last_source[str(cid)] = "Гардероб · Образ"
         store.last_answer[str(cid)] = cached.get("text", "")
-        store.last_look[str(cid)] = ", ".join(str(it) for it in cached.get("items", []))[:120]
-        text, entities = _build_look_message(cached.get("items", []), intro=cached.get("intro", ""), add_text=cached.get("add", ""))
+        store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
+        text, entities = _build_look_message(cached.get("look_data", {}))
         await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=_look_result_kb())
         return
     w = store.load_wardrobe(cid)
@@ -235,10 +255,17 @@ async def send_looks(bot, cid):
         wparts = [f"днём до +{tmax}°C (ночью +{tmin}°C)"]
         if cond:
             wparts.append(cond)
+        apparent = (wdata.get("current") or {}).get("apparent_temperature")
+        if apparent is not None:
+            apparent = round(apparent)
+            if abs(apparent - tmax) >= 2:
+                wparts.append(f"ощущается как +{apparent}°C")
         wparts.append(f"ветер до {flags['wind_ms']} м/с" + (" (сильный)" if flags["strong_wind"] else ""))
         if has_rain:
             mm_txt = f", {flags['rain_mm']} мм" if flags.get("rain_mm") else ""
-            wparts.append(f"дождь вероятностью {flags['rain_prob']}%{mm_txt}"
+            rain_periods = weather._periods(wdata, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
+            when_txt = f" ({'/'.join(rain_periods)})" if rain_periods else ""
+            wparts.append(f"дождь вероятностью {flags['rain_prob']}%{mm_txt}{when_txt}"
                           + (", возможен ливень" if flags["heavy_rain"] else ""))
         elif flags["sunny"]:
             wparts.append("солнечно")
@@ -266,20 +293,32 @@ async def send_looks(bot, cid):
     pref_line = ("\n" + secure.wrap_untrusted(pref_hints, "предпочтения")) if pref_hints else ""
     profile_block = (f"\n{style_block}" if style_block else "")
     weather_block = (f"\n{weather_rules}" if weather_rules else "")
-    prompt = f"""Ты опытный стилист. Собери ОДИН образ из гардероба на сегодня.{profile_block}
+    prompt = f"""Ты — персональный стилист уровня Thread, Whering и GQ. Собери ОДИН образ из гардероба на сегодня.
+Никогда не ограничивайся перечислением одежды — каждая вещь и весь образ должны звучать как рекомендация профессионального стилиста, объясняющего свою идею клиенту.{profile_block}
 Погода: {wctx}
 ТЕМПЕРАТУРНОЕ ПРАВИЛО (строго, не нарушать): {temp_rule}{weather_block}{fb_line}{pref_line}
 Гардероб пользователя (ТОЛЬКО эти вещи, другие не добавлять):
 {wardrobe_text}
-Правила: 1 верх + 1 низ + обувь (+ опц. аксессуар-совет). Сочетание по цвету и стилю.
+Правила: 1 верх + 1 низ + обувь (+ опц. аксессуар). Сочетание по цвету, силуэту и стилю.
 Каждую вещь пиши ПОЛНЫМ названием из списка выше (напр. «Белая футболка Uniqlo», не «Верх: белая»).{avoid}
-JSON (без markdown):
-{{"intro":"1 строка про погоду и логику образа","items":["вещь 1 полным названием","вещь 2","вещь 3"],"add":"1 совет что добавить (аксессуар) и почему"}}"""
+Обращайся на «ты», без имени. Никакой воды и шаблонных фраз («вот образ», «хорошего дня»).
+
+Верни строго валидный JSON (без markdown):
+{{"weather_intro":"2-3 предложения: погода (температура, ощущаемая, дождь/ветер/солнце) и главная идея образа",
+"items":[{{"emoji":"👕","name":"вещь полным названием","why":"1 предложение — почему выбрана именно эта вещь"}}, "... 3-4 вещи: верх, низ, обувь, опц. аксессуар"],
+"why_works":"3-5 предложений: сочетание цветов, сочетание силуэтов, почему вещи подходят друг другу, почему комплект уместен именно под сегодняшнюю погоду",
+"palette":"нейтральная|контрастная|тёплая|холодная",
+"style":"Scandinavian Minimalism|Smart Casual|Streetwear|Old Money|Classic Casual|Japanese Minimalism",
+"comfort":число 1-5,
+"practicality":число 1-5,
+"recommendation":"1 предложение с одной рекомендацией докупить, если в гардеробе не хватает вещи для идеального образа, иначе пустая строка"}}"""
     try:
-        d = await ai.allm_json(prompt, 700, module="wardrobe")
+        d = await ai.allm_json(prompt, 900, module="wardrobe")
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
-    items = d.get("items", [])
+    raw_items = d.get("items", [])
+    items = [it.get("name", "") if isinstance(it, dict) else str(it) for it in raw_items]
+    items = [it for it in items if it.strip()]
     if not items:
         await bot.send_message(chat_id=cid, text="Не удалось собрать образ. Попробуй ещё раз.", reply_markup=_look_result_kb())
         return
@@ -287,12 +326,23 @@ JSON (без markdown):
     rl.append(", ".join(items)[:80])
     store.recent_looks[str(cid)] = rl[-3:]
     store.last_look[str(cid)] = ", ".join(str(it) for it in items)[:120]   # для фидбека
-    intro = d.get("intro", "")
+    weather_intro = d.get("weather_intro", "")
     if gap_note:
         # Честно сообщаем о пробеле под дождь прямо в образе.
-        intro = (intro + " " + gap_note).strip() if intro else gap_note
-    text, entities = _build_look_message(items, intro=intro, add_text=d.get("add", ""))
-    _save_cached_look(cid, items, intro=intro, add=d.get("add", ""))
+        weather_intro = (weather_intro + " " + gap_note).strip() if weather_intro else gap_note
+    look_data = {
+        "weather_intro": weather_intro,
+        "items": raw_items,
+        "why_works": d.get("why_works", ""),
+        "palette": d.get("palette", ""),
+        "style": d.get("style", ""),
+        "comfort": d.get("comfort"),
+        "practicality": d.get("practicality"),
+        "recommendation": d.get("recommendation", ""),
+    }
+    text, entities = _build_look_message(look_data)
+    item_ids = _resolve_item_ids(w, items)
+    _save_cached_look(cid, item_ids, look_data=look_data)
     store.last_source[str(cid)] = "Гардероб · Образ"
     store.last_answer[str(cid)] = text
     await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=_look_result_kb())
@@ -316,6 +366,8 @@ async def look_feedback(bot, cid, verdict):
 # ---------- шкаф ----------
 # Порядок важен: «Верхняя одежда» проверяется раньше «Верх», иначе «куртка»/«ветровка»
 # по подстроке «верх» ушли бы в «Верх».
+# _zone_of используется только для миграции старых записей и как fallback в
+# _guess_subcategory — новые вещи получают zone/subcategory явно от LLM.
 ZONES = [
     ("Верхняя одежда", ["верхняя одежд", "верхн", "куртк", "ветровк", "пиджак", "пальто",
                         "плащ", "дождевик", "парк", "пуховик", "тренч", "анорак", "бомбер",
@@ -326,8 +378,9 @@ ZONES = [
     ("Аксессуары", ["аксессуар", "часы", "кольц", "ремен", "шапк", "кепк", "очк", "шарф", "сумк", "цепоч", "носк", "украшен"]),
 ]
 
-# Порядок зон для отображения статистики и шкафа.
-ZONE_ORDER = ["Верх", "Низ", "Верхняя одежда", "Обувь", "Аксессуары", "Другое"]
+# Порядок зон для отображения статистики и шкафа (владелец — store.py, здесь алиас
+# для обратной совместимости импортов ui/тестов).
+ZONE_ORDER = store.ZONE_ORDER
 ZONE_EMOJI = {"Верх": "👕", "Низ": "👖", "Верхняя одежда": "🧥",
               "Обувь": "👟", "Аксессуары": "⌚", "Другое": "🎒"}
 
@@ -339,15 +392,64 @@ def _zone_of(category):
     return "Другое"
 
 
-def _flat_wardrobe_items(w):
-    items = []
-    for cat, values in (w or {}).items():
-        if cat == "_v" or not isinstance(values, list):
+_SUBCAT_KEYWORDS = {
+    "Футболки": ["футболк", "майк"], "Поло": ["поло"], "Рубашки": ["рубаш"],
+    "Лонгсливы": ["лонгслив"], "Свитеры": ["свитер", "свитш", "джемпер"],
+    "Кардиганы": ["кардиган"], "Худи": ["худи", "толстовк"], "Пиджаки": ["пиджак"],
+    "Ветровки": ["ветровк"], "Куртки": ["куртк", "бомбер", "анорак", "жилет"], "Пальто": ["пальто"],
+    "Пуховики": ["пуховик"], "Плащи": ["плащ", "тренч", "дождевик"],
+    "Джинсы": ["джинс"], "Брюки": ["брюк", "штан"], "Чиносы": ["чино"],
+    "Шорты": ["шорт"], "Спортивные брюки": ["спортивн"],
+    "Кеды": ["кед"], "Кроссовки": ["кроссов"], "Лоферы": ["лофер"],
+    "Ботинки": ["ботин"], "Сандалии": ["сандал"], "Тапочки": ["тапоч"],
+    "Кепки": ["кепк"], "Шапки": ["шапк"], "Ремни": ["ремен", "ремн"], "Часы": ["час"],
+    "Очки": ["очк"], "Украшения": ["украшен", "цепоч", "кольц"], "Шарфы": ["шарф"],
+    "Перчатки": ["перчат"], "Сумки": ["сумк"],
+}
+
+
+def _guess_subcategory(zone, name, fallback_text=""):
+    """Fallback-эвристика (без LLM): по ключевым словам в названии вещи внутри
+    зоны. Если по названию ничего не нашлось — вторая попытка по fallback_text
+    (например, исходная строка-категория при миграции старых записей). Возвращает
+    валидную подкатегорию из store.ZONE_SUBCATS[zone] или «Другое»."""
+    valid = set(store.ZONE_SUBCATS.get(zone, ["Другое"]))
+    for text in (str(name).lower(), str(fallback_text).lower()):
+        if not text:
             continue
-        for value in values:
-            value = str(value).strip()
-            if value:
-                items.append((str(cat), value))
+        for subcat, keys in _SUBCAT_KEYWORDS.items():
+            if subcat in valid and any(k in text for k in keys):
+                return subcat
+    return "Другое"
+
+
+def normalize_parsed_item(raw):
+    """Валидирует/нормализует один сырой объект от LLM (добавление вещи) в готовый
+    для store.add_wardrobe_items item без id. None, если нет названия."""
+    if not isinstance(raw, dict) or not str(raw.get("name") or "").strip():
+        return None
+    name = str(raw["name"]).strip()
+    zone = raw.get("zone") if raw.get("zone") in store.ZONE_SUBCATS else _zone_of(name)
+    subcat = raw.get("subcategory")
+    if subcat not in store.ZONE_SUBCATS.get(zone, []):
+        subcat = _guess_subcategory(zone, name)
+    return {
+        "zone": zone, "subcategory": subcat, "name": name,
+        "color": str(raw.get("color") or "").strip(),
+        "color_secondary": (str(raw["color_secondary"]).strip() or None) if raw.get("color_secondary") else None,
+        "material": (str(raw["material"]).strip() or None) if raw.get("material") else None,
+        "style": (str(raw.get("style") or "").strip() or None),
+        "season": None,
+    }
+
+
+def _flat_wardrobe_items(w):
+    """[(zone, subcategory, item_dict), ...] по всему гардеробу."""
+    items = []
+    for zone, subs in (w or {}).get("zones", {}).items():
+        for subcat, values in subs.items():
+            for item in values:
+                items.append((zone, subcat, item))
     return items
 
 # ---------- статистика и готовность гардероба ----------
@@ -355,8 +457,8 @@ def wardrobe_stats(w):
     """Считает вещи по зонам. Возвращает (total, {zone: count}) с полным набором зон."""
     counts = {z: 0 for z in ZONE_ORDER}
     total = 0
-    for cat, item in _flat_wardrobe_items(w):
-        counts[_zone_of(cat)] += 1
+    for zone, _subcat, _item in _flat_wardrobe_items(w):
+        counts[zone if zone in counts else "Другое"] += 1
         total += 1
     return total, counts
 
@@ -400,15 +502,13 @@ def add_wardrobe_gap(cid, item, reason, priority=True):
 
 async def send_show(bot, cid):
     w = store.load_wardrobe(cid)
-    if not w:
+    total, _ = wardrobe_stats(w)
+    if not total:
         await bot.send_message(chat_id=cid, text="Шкаф пуст. Добавь вещи через «🏷 Добавить вещь».", reply_markup=closet_kb())
         return
     grouped = {}
-    for cat, items in w.items():
-        if cat == "_v" or not isinstance(items, list):
-            continue
-        z = _zone_of(cat)
-        grouped.setdefault(z, []).extend(items)
+    for zone, subcat, item in _flat_wardrobe_items(w):
+        grouped.setdefault(zone, []).append(item["name"])
     lines = ["🗄 <b>Мой шкаф</b>", ""]
     for z in ZONE_ORDER:
         if grouped.get(z):
@@ -417,16 +517,23 @@ async def send_show(bot, cid):
             lines.append("")
     await bot.send_message(chat_id=cid, text="\n".join(lines).strip(), parse_mode="HTML", reply_markup=closet_kb())
 
+_ZONES_DESC = "; ".join(f"{z}: {', '.join(subs)}" for z, subs in store.ZONE_SUBCATS.items())
+
 async def _parse_and_add(bot, cid, text):
-    w = store.load_wardrobe(cid)
-    cats = ", ".join(w.keys()) or "футболки, рубашки, свитшоты, верхняя одежда, брюки, джинсы, обувь, аксессуары"
     parsed = await ai.allm_json(
-        f"Разбери вещи по категориям. Категории: {cats} (можно создать новую).\n"
+        f"Разбери вещи по атрибутам. Зоны и подкатегории (используй ТОЛЬКО эти значения, "
+        f"если не подходит ни одна — subcategory=\"Другое\"): {_ZONES_DESC}\n"
         f"Вещи:\n{secure.wrap_untrusted(text, 'список вещей')}\n"
-        "Каждую вещь пиши ПОЛНЫМ названием в порядке: тип + цвет + детали/бренд "
-        "(напр. «Футболка белая Uniqlo плотная», «Шорты серые тонкие»). Сохраняй бренд если указан.\n"
-        'JSON: {"категория": ["полное название вещи"]}.', 700, tier="cheap", module="wardrobe")
-    return store.merge_wardrobe(parsed, cid)
+        "Для каждой вещи верни: zone (одна из зон выше, если не ясно — \"Другое\"), "
+        "subcategory (строго из списка для этой зоны), name (полное название: тип + цвет + бренд/детали), "
+        "color (основной цвет), color_secondary (доп. цвет или пусто), material (материал или пусто), "
+        "style (Casual/Formal/Sport/Streetwear и т.п. или пусто). Сохраняй бренд если указан.\n"
+        'JSON: {"items": [{"zone":"","subcategory":"","name":"","color":"","color_secondary":"",'
+        '"material":"","style":""}]}', 900, tier="cheap", module="wardrobe")
+    norm = [normalize_parsed_item(it) for it in (parsed.get("items") or [])]
+    norm = [it for it in norm if it]
+    store.add_wardrobe_items(cid, norm)
+    return len(norm)
 
 async def add_item(bot, cid, text):
     try:
@@ -442,34 +549,51 @@ async def add_item_settings(bot, cid, text):
         await verify.safe_error(bot, cid, e); return
     await bot.send_message(chat_id=cid, text=f"Добавлено в шкаф ({added}).")
 
-async def send_del(bot, cid):
-    w = store.load_wardrobe(cid)
-    flat = []
-    for cat, items in w.items():
-        if cat == "_v" or not isinstance(items, list):
-            continue
-        for it in items:
-            flat.append((cat, it))
-    if not flat:
-        await bot.send_message(chat_id=cid, text="Шкаф пуст.", reply_markup=closet_kb()); return
-    store.del_index[str(cid)] = flat
-    rows = [[InlineKeyboardButton(f"❌ {it}", callback_data=f"w_delitem_{i}")] for i, (cat, it) in enumerate(flat[:40])]
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="w_closet")])
-    await bot.send_message(chat_id=cid, text="Что удалить?", reply_markup=InlineKeyboardMarkup(rows))
+# ---------- удаление: навигация Зона → Подкатегория → мультивыбор (cleanup.py) ----------
+# origin-слаг вместо полного callback «назад» — чтобы не протаскивать "_" сквозь разбор data.split("_").
+ZONE_SLUG = {"Верх": "top", "Низ": "bot", "Верхняя одежда": "out",
+             "Обувь": "shoe", "Аксессуары": "acc", "Другое": "oth"}
+ZONE_BY_SLUG = {slug: zone for zone, slug in ZONE_SLUG.items()}
+_ORIGIN_BACK = {"m": "m_wardrobe", "s": "set_wardrobe"}
 
-async def del_item(bot, cid, i):
-    flat = store.del_index.get(str(cid), [])
-    if i >= len(flat):
-        await bot.send_message(chat_id=cid, text="Уже удалено."); return
-    cat, it = flat[i]
+
+async def send_del_zones(bot, cid, q=None, origin="m"):
     w = store.load_wardrobe(cid)
-    if cat in w and it in w[cat]:
-        w[cat].remove(it)
-        if not w[cat]:
-            del w[cat]
-        store.save_wardrobe(w, cid)
-    await bot.send_message(chat_id=cid, text="Удалено. Шкаф стал легче.")
-    await send_del(bot, cid)
+    total, counts = wardrobe_stats(w)
+    if not total:
+        await bot.send_message(chat_id=cid, text="Шкаф пуст.", reply_markup=closet_kb()); return
+    rows = [[InlineKeyboardButton(f"{ZONE_EMOJI.get(z,'•')} {z} ({counts.get(z,0)})",
+                                  callback_data=f"w_delz_{ZONE_SLUG[z]}_{origin}")]
+            for z in ZONE_ORDER if counts.get(z, 0) > 0]
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data=_ORIGIN_BACK.get(origin, "m_wardrobe"))])
+    msg = wardrobe_ui.zone_picker_screen()
+    kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def send_del_subcats(bot, cid, zone_slug, origin="m", q=None):
+    zone = ZONE_BY_SLUG.get(zone_slug)
+    w = store.load_wardrobe(cid)
+    subs = w.get("zones", {}).get(zone, {}) if zone else {}
+    rows = [[InlineKeyboardButton(f"{sc} ({len(items)})",
+                                  callback_data=f"w_delsc_{zone_slug}_{i}_{origin}")]
+            for i, sc in enumerate(store.ZONE_SUBCATS.get(zone, [])) if (items := subs.get(sc, []))]
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data=f"w_del_{origin}")])
+    msg = wardrobe_ui.subcat_picker_screen(zone or "Другое")
+    kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 # ---------- улучшить гардероб ----------
@@ -477,8 +601,8 @@ def _fallback_improve_data(w):
     """Резервный разбор по зонам (без ИИ) в новой схеме карточки-стилиста."""
     items = _flat_wardrobe_items(w)
     zones = {}
-    for cat, item in items:
-        zones.setdefault(_zone_of(cat), []).append(item)
+    for zone, _subcat, item in items:
+        zones.setdefault(zone, []).append(item["name"])
 
     strengths = []
     if zones.get("Верх"):
@@ -705,8 +829,7 @@ async def handle_callback(bot, cid, q, data):
     if data == "w_fb_worn":
         await look_feedback(bot, cid, "worn"); return
     if data == "w_closet":
-        import cleanup
-        await cleanup.open_cleanup(bot, cid, "kast")
+        await send_del_zones(bot, cid, q=q, origin="m")
         return
     if data == "w_show":
         await send_show(bot, cid); return
@@ -715,11 +838,17 @@ async def handle_callback(bot, cid, q, data):
         await bot.send_message(chat_id=cid, text="🏷 Напиши вещь в формате: тип + цвет + детали/бренд.\n"
                                "Напр.: «Футболка белая Uniqlo плотная» или «Шорты серые тонкие». Можно списком.",
                                reply_markup=_back_kb()); return
+    if data.startswith("w_del_"):
+        await send_del_zones(bot, cid, q=q, origin=data[len("w_del_"):]); return
     if data == "w_del":
+        await send_del_zones(bot, cid, q=q, origin="m"); return
+    if data.startswith("w_delz_"):
+        _, zone_slug, origin = data.split("_")[1:]
+        await send_del_subcats(bot, cid, zone_slug, origin=origin, q=q); return
+    if data.startswith("w_delsc_"):
+        _, zone_slug, idx, origin = data.split("_")[1:]
         import cleanup
-        await cleanup.open_cleanup(bot, cid, "kast"); return
-    if data.startswith("w_delitem_"):
-        await del_item(bot, cid, int(data.split("_")[-1])); return
+        await cleanup.open_cleanup(bot, cid, f"kast_{zone_slug}_{idx}_{origin}"); return
     if data == "w_improve":
         await util.ack_loading(q); await send_improve(bot, cid); await util.clear_loading(q); return
     if data == "w_check":

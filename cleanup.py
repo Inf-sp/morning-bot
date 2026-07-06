@@ -2,7 +2,8 @@
 
 Используется из learning, notes, wardrobe, balance, bot.
 Контексты: d_<lang>_<kind> (словарь), nb (закладки),
-           wl/rl (watchlist/readlist), kast (шкаф), lv_<key> (любимые),
+           wl/rl (watchlist/readlist), kast_<zone_slug>_<subcat_idx>_<origin>
+           (шкаф — вещи одной подкатегории, адресация по id вещи), lv_<key> (любимые),
            fridge (холодильник), recipes (рецепты).
 """
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -26,15 +27,12 @@ def _sort_items(items):
     return sorted(items, key=lambda item: (item[1] or "").casefold().strip())
 
 
-def _wardrobe_flat(cid):
-    """Плоский стабильный список (категория, вещь) шкафа."""
-    flat = []
-    for cat, items in store.load_wardrobe(cid).items():
-        if cat == "_v" or not isinstance(items, list):
-            continue
-        for it in items:
-            flat.append((cat, it))
-    return flat
+def _wardrobe_flat(cid, zone, subcat):
+    """[(item_id, item_name), ...] вещей одной подкатегории — адресация по
+    стабильному id вещи, а не по пересчитываемому позиционному индексу."""
+    w = store.load_wardrobe(cid)
+    items = w.get("zones", {}).get(zone, {}).get(subcat, [])
+    return [(it["id"], it["name"]) for it in items]
 
 
 def _ctx_items(cid, ctx):
@@ -72,14 +70,14 @@ def _ctx_items(cid, ctx):
         back = "a_watchlist" if ctx == "wl" else "a_readlist"
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(key, cid))]
         return title, items, back
-    if ctx == "kast":
-        flat = _wardrobe_flat(cid)
-        items = [(i, it) for i, (cat, it) in enumerate(flat)]
-        return "Чистка: шкаф", items, "m_wardrobe"
-    if ctx == "kast_s":
-        flat = _wardrobe_flat(cid)
-        items = [(i, it) for i, (cat, it) in enumerate(flat)]
-        return "Чистка: шкаф", items, "set_wardrobe"
+    if ctx.startswith("kast_"):
+        import wardrobe as _w
+        _, zone_slug, subcat_idx, origin = ctx.split("_")
+        zone = _w.ZONE_BY_SLUG.get(zone_slug, "Другое")
+        subcats = store.ZONE_SUBCATS.get(zone, ["Другое"])
+        subcat = subcats[int(subcat_idx)] if int(subcat_idx) < len(subcats) else "Другое"
+        items = _wardrobe_flat(cid, zone, subcat)
+        return f"Чистка: {subcat}", items, f"w_delz_{zone_slug}_{origin}"
     if ctx.startswith("lv_") or ctx.startswith("lvls_"):
         is_leisure = ctx.startswith("lvls_")
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
@@ -186,16 +184,8 @@ def _cleanup_delete(cid, ctx):
     elif ctx in ("wl", "rl"):
         key = config.WATCHLIST_KEY if ctx == "wl" else config.READLIST_KEY
         store.set_list(key, cid, [it for i, it in enumerate(store.get_list(key, cid)) if i not in sel])
-    elif ctx in ("kast", "kast_s"):
-        flat = _wardrobe_flat(cid)
-        drop = {flat[i] for i in sel if i < len(flat)}
-        w = store.load_wardrobe(cid)
-        for cat, it in drop:
-            if cat in w and it in w[cat]:
-                w[cat].remove(it)
-                if not w[cat]:
-                    del w[cat]
-        store.save_wardrobe(w, cid)
+    elif ctx.startswith("kast_"):
+        store.remove_wardrobe_items(cid, sel)
     elif ctx.startswith("lv_") or ctx.startswith("lvls_"):
         key = ctx[len("lvls_"):] if ctx.startswith("lvls_") else ctx[len("lv_"):]
         store_key = {"movies": config.WATCHLIST_KEY, "countries": config.COUNTRIES_KEY,
@@ -229,7 +219,15 @@ async def handle_cleanup(bot, cid, data, q=None):
     parts = data.split("_")
     op = parts[0]
     if op == "clt":
-        page, idx, ctx = int(parts[-1]), int(parts[-2]), "_".join(parts[1:-2])
+        page = int(parts[-1])
+        idx_raw = parts[-2]
+        ctx = "_".join(parts[1:-2])
+        # индекс — int для большинства контекстов, но uuid-строка для гардероба (kast_*):
+        # приводим только если это действительно число, иначе оставляем строкой как есть.
+        try:
+            idx = int(idx_raw)
+        except ValueError:
+            idx = idx_raw
         _sel(cid, ctx).symmetric_difference_update({idx})
         await send_cleanup(bot, cid, ctx, page, q=q)
         return

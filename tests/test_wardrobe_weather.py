@@ -76,10 +76,29 @@ def test_zone_of(cat, zone):
     assert wardrobe._zone_of(cat) == zone
 
 
+def _w(zones):
+    """Собирает гардероб новой схемы: {zone: {subcat: ["имя", ...]}} -> полная схема с id."""
+    out = {"_v": 0, "zones": {}}
+    i = 0
+    for zone, subs in zones.items():
+        out["zones"][zone] = {}
+        for subcat, names in subs.items():
+            items = []
+            for name in names:
+                i += 1
+                items.append({"id": str(i), "name": name, "zone": zone, "subcategory": subcat,
+                             "color": "", "color_secondary": None, "material": None,
+                             "style": None, "season": None})
+            out["zones"][zone][subcat] = items
+    return out
+
+
 # ---------- статистика ----------
 @pytest.mark.unit
 def test_wardrobe_stats_counts_by_zone():
-    w = {"куртки": ["куртка"], "футболки": ["белая", "серая"], "джинсы": ["джинсы"]}
+    w = _w({"Верхняя одежда": {"Куртки": ["куртка"]},
+            "Верх": {"Футболки": ["белая", "серая"]},
+            "Низ": {"Джинсы": ["джинсы"]}})
     total, counts = wardrobe.wardrobe_stats(w)
     assert total == 4
     assert counts["Верхняя одежда"] == 1
@@ -91,8 +110,8 @@ def test_wardrobe_stats_counts_by_zone():
 # ---------- слабые места ----------
 @pytest.mark.unit
 def test_has_rain_outerwear():
-    assert wardrobe._has_rain_outerwear({"куртки": ["дождевик"]}) is True
-    assert wardrobe._has_rain_outerwear({"футболки": ["белая"]}) is False
+    assert wardrobe._has_rain_outerwear(_w({"Верхняя одежда": {"Куртки": ["дождевик"]}})) is True
+    assert wardrobe._has_rain_outerwear(_w({"Верх": {"Футболки": ["белая"]}})) is False
 
 
 @pytest.mark.unit
@@ -108,7 +127,7 @@ def test_add_wardrobe_gap_dedups():
 def test_build_weather_rules_records_gap_when_no_rain_outer():
     flags = {"rain_daytime": True, "heavy_rain": False, "strong_wind": False, "sunny": False,
              "rain_prob": 70, "rain_mm": 3.0, "wind_ms": 4}
-    w = {"футболки": ["белая"]}  # нет дождевой верхней одежды
+    w = _w({"Верх": {"Футболки": ["белая"]}})  # нет дождевой верхней одежды
     rules, gap_note = wardrobe._build_weather_rules(CID, w, flags)
     assert gap_note  # честная фраза есть
     assert "дождевик" in gap_note.lower()
@@ -119,9 +138,21 @@ def test_build_weather_rules_records_gap_when_no_rain_outer():
 def test_build_weather_rules_no_gap_when_rain_outer_present():
     flags = {"rain_daytime": True, "heavy_rain": False, "strong_wind": False, "sunny": False,
              "rain_prob": 70, "rain_mm": 3.0, "wind_ms": 4}
-    w = {"куртки": ["дождевик"]}
+    w = _w({"Верхняя одежда": {"Куртки": ["дождевик"]}})
     rules, gap_note = wardrobe._build_weather_rules(CID, w, flags)
     assert gap_note == ""
+    assert wardrobe.get_wardrobe_gaps(CID) == []
+
+
+@pytest.mark.unit
+def test_build_weather_rules_resyncs_existing_gap_when_item_added():
+    # Пробел записан ранее (например, был удалён дождевик), но сейчас в шкафу он снова есть.
+    wardrobe.add_wardrobe_gap(CID, "непромокаемая верхняя одежда", "дождливая погода", priority=True)
+    assert wardrobe.get_wardrobe_gaps(CID)
+    flags = {"rain_daytime": True, "heavy_rain": False, "strong_wind": False, "sunny": False,
+             "rain_prob": 70, "rain_mm": 3.0, "wind_ms": 4}
+    w = _w({"Верхняя одежда": {"Куртки": ["дождевик"]}})
+    wardrobe._build_weather_rules(CID, w, flags)
     assert wardrobe.get_wardrobe_gaps(CID) == []
 
 
@@ -134,24 +165,34 @@ def test_params_filled():
     assert wardrobe._params_filled(CID) is True
 
 
-# ---------- панель состояния (рендер) ----------
+# ---------- главный экран (рендер) ----------
 @pytest.mark.unit
-def test_home_screen_empty_shows_hint_and_missing():
+def test_home_screen_empty_shows_hint_and_no_ready_wording():
     from ui import wardrobe as uw
     msg = uw.home_screen(0, {z: 0 for z in wardrobe.ZONE_ORDER},
-                         wardrobe.ZONE_ORDER, wardrobe.ZONE_EMOJI, False,
-                         ["👕 Шкаф", "👤 Мои параметры"])
+                         wardrobe.ZONE_ORDER, wardrobe.ZONE_EMOJI, False, [])
     assert "пока нет вещей" in msg.text
-    assert "Образ на сегодня — добавьте вещи" in msg.text
-    assert "👕 Шкаф" in msg.text
+    assert "готов" not in msg.text.lower()
+    assert "готова" not in msg.text.lower()
+    assert "статус" not in msg.text.lower()
 
 
 @pytest.mark.unit
-def test_home_screen_ready_shows_green_and_counts():
+def test_home_screen_filled_shows_counts_and_hides_zero_categories():
     from ui import wardrobe as uw
     counts = {"Верх": 9, "Низ": 6, "Верхняя одежда": 3, "Обувь": 5, "Аксессуары": 5, "Другое": 0}
     msg = uw.home_screen(28, counts, wardrobe.ZONE_ORDER, wardrobe.ZONE_EMOJI, True, [])
-    assert "В шкафу: 28" in msg.text
+    assert "28" in msg.text
     assert "Верхняя одежда — 3" in msg.text
-    assert "🟢 Гардероб готов к работе." in msg.text
-    assert "✅ Проверка покупки — готова" in msg.text
+    assert "Другое — 0" not in msg.text
+    assert "готов" not in msg.text.lower()
+    assert "готова" not in msg.text.lower()
+
+
+@pytest.mark.unit
+def test_home_screen_missing_params_shown_without_boilerplate_phrase():
+    from ui import wardrobe as uw
+    counts = {"Верх": 2, "Низ": 1, "Верхняя одежда": 0, "Обувь": 1, "Аксессуары": 0, "Другое": 0}
+    msg = uw.home_screen(4, counts, wardrobe.ZONE_ORDER, wardrobe.ZONE_EMOJI, False, ["👤 Мои параметры"])
+    assert "👤 Мои параметры" in msg.text
+    assert "для более точных рекомендаций осталось заполнить" not in msg.text.lower()

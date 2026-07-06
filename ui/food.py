@@ -5,7 +5,7 @@ MEAL_EMOJI = {
     "breakfast": "🍳",
     "lunch": "🥗",
     "dinner": "🍽️",
-    "fridge": "🧊",
+    "fridge": "🥕",
 }
 MEAL_LABEL = {
     "breakfast": "Завтрак",
@@ -73,6 +73,8 @@ def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallba
     if not cuisine_emoji and cuisine_label:
         cuisine_emoji = DEFAULT_CUISINE_EMOJI
     chef_tip = str(data.get("chef_tip") or "").strip()
+    if chef_tip and chef_tip[-1] not in ".!?…":
+        chef_tip += "."
 
     b = MessageBuilder()
     meal_emoji = MEAL_EMOJI.get(meal, "🥣")

@@ -1,5 +1,6 @@
 import os
 import json
+import copy
 import logging
 from pathlib import Path
 import config
@@ -84,7 +85,9 @@ def set_profile(chat_id, prof):
     _save(config.PROFILE_KEY, d)
 
 def get_wardrobe_daylook(chat_id):
-    """Кэш дневного образа: {"date": "YYYY-MM-DD", "text": "...", "items": [...]}."""
+    """Кэш дневного образа: {"date","version","item_ids","look_data","text"}.
+    Читать напрямую не стоит — используйте get_valid_wardrobe_daylook для проверки
+    ссылочной целостности (версия гардероба + существование вещей по id)."""
     return get_profile(chat_id).get("wardrobe_daylook", {})
 
 def set_wardrobe_daylook(chat_id, data):
@@ -106,8 +109,62 @@ def set_level(chat_id, language, level):
     d.setdefault(str(chat_id), {})[language] = level
     _save(config.LEVELS_FILE, d)
 
+ZONE_SUBCATS = {
+    "Верх": ["Футболки", "Поло", "Рубашки", "Лонгсливы", "Свитеры", "Кардиганы",
+             "Худи", "Пиджаки", "Другое"],
+    "Верхняя одежда": ["Ветровки", "Куртки", "Пальто", "Пуховики", "Плащи", "Другое"],
+    "Низ": ["Джинсы", "Брюки", "Чиносы", "Шорты", "Спортивные брюки", "Другое"],
+    "Обувь": ["Кеды", "Кроссовки", "Лоферы", "Ботинки", "Сандалии", "Тапочки", "Другое"],
+    "Аксессуары": ["Кепки", "Шапки", "Ремни", "Часы", "Очки", "Украшения", "Шарфы",
+                   "Перчатки", "Сумки", "Другое"],
+    "Другое": ["Другое"],
+}
+ZONE_ORDER = ["Верх", "Низ", "Верхняя одежда", "Обувь", "Аксессуары", "Другое"]
+
+def _empty_wardrobe() -> dict:
+    """Новый пустой гардероб. Функция, а не модульная константа — иначе
+    вложенный dict "zones" оказался бы общей ссылкой между всеми пользователями."""
+    return {"_v": 0, "zones": {}}
+
+
+def _all_item_ids(w) -> set:
+    return {it["id"] for zone in (w or {}).get("zones", {}).values()
+            for items in zone.values() for it in items}
+
+
+def _migrate_legacy_wardrobe(old: dict) -> dict:
+    """Старый плоский формат {категория_строка: [вещь_строка,...]} -> новая схема
+    с zone/subcategory/id. Без LLM-вызова: zone/subcategory угадываются эвристикой
+    (локальный импорт wardrobe — избегаем цикла store<->wardrobe на уровне модуля)."""
+    import uuid
+    import wardrobe as _wardrobe_mod
+    new = {"_v": 0, "zones": {}}
+    for cat, items in (old or {}).items():
+        if cat == "_v" or not isinstance(items, list):
+            continue
+        zone = _wardrobe_mod._zone_of(str(cat))
+        for raw_name in items:
+            name = str(raw_name).strip()
+            if not name:
+                continue
+            # Название вещи не всегда содержит тип (может быть просто "белая") —
+            # старая категория (например "футболки") часто несёт этот смысл, поэтому
+            # угадываем сначала по названию вещи, а если не нашлось — по категории.
+            subcat = _wardrobe_mod._guess_subcategory(zone, name, fallback_text=str(cat))
+            bucket = new["zones"].setdefault(zone, {}).setdefault(subcat, [])
+            if any(x["name"].lower() == name.lower() for x in bucket):
+                continue
+            bucket.append({
+                "id": uuid.uuid4().hex, "name": name, "zone": zone, "subcategory": subcat,
+                "color": "", "color_secondary": None, "material": None,
+                "style": None, "season": None,
+            })
+    return new
+
+
 def load_wardrobe(cid=None):
-    """Per-user wardrobe. Для CHAT_ID одноразово мигрирует глобальный wardrobe.json."""
+    """Per-user wardrobe. Для CHAT_ID одноразово мигрирует глобальный wardrobe.json.
+    Старый плоский формат конвертируется в {"_v","zones"} при первом чтении."""
     if cid is not None:
         key = f"wardrobe_user_{cid}"
         w = _load(key)
@@ -115,9 +172,16 @@ def load_wardrobe(cid=None):
             # Одноразовая миграция: глобальный шкаф владельца → per-user ключ
             global_w = _load(config.WARDROBE_FILE)
             if isinstance(global_w, dict) and any(k != "_v" for k in global_w):
-                _save(key, global_w)
-                return global_w
-        return w or {}
+                w = global_w
+        if not w:
+            return _empty_wardrobe()
+        if "zones" not in w:
+            w = _migrate_legacy_wardrobe(w)
+            _save(key, w)
+        # В in-memory fallback-режиме _load не делает глубокую копию вложенных dict
+        # (только list верхнего уровня) — без неё мутация возвращённого объекта до
+        # save_wardrobe могла бы незаметно повлиять на _mem напрямую.
+        return copy.deepcopy(w)
     return _load(config.WARDROBE_FILE) or {}
 
 def save_wardrobe(w, cid=None):
@@ -126,23 +190,100 @@ def save_wardrobe(w, cid=None):
     else:
         _save(config.WARDROBE_FILE, w)
 
-def merge_wardrobe(new_items: dict, cid=None):
+
+def mutate_wardrobe(cid, mutator_fn):
+    """Единственный легитимный способ изменить гардероб. mutator_fn(w) мутирует w
+    на месте. Всегда: инкремент версии, сохранение, инвалидация зависимых кэшей."""
     w = load_wardrobe(cid)
-    added = 0
-    for cat, items in new_items.items():
-        cat = cat.lower().strip()
-        w.setdefault(cat, [])
-        for it in items:
-            it = it.strip().lower()
-            if it and it not in {x.lower() for x in w[cat]}:
-                w[cat].append(it)
-                added += 1
+    before_ids = _all_item_ids(w)
+    result = mutator_fn(w)
+    if result is not None:
+        w = result
+    w["_v"] = int(w.get("_v", 0)) + 1
     save_wardrobe(w, cid)
-    return added
+    after_ids = _all_item_ids(w)
+    _invalidate_dependents(cid, removed_ids=before_ids - after_ids,
+                           added_ids=after_ids - before_ids)
+    return w
+
+
+def add_wardrobe_items(cid, items: list) -> list:
+    """items — нормализованные объекты без id (id генерируется здесь).
+    Дедуп по (subcategory, name.lower()) в рамках зоны."""
+    import uuid
+
+    def _mut(w):
+        for it in items:
+            it = dict(it)
+            it["id"] = uuid.uuid4().hex
+            bucket = w.setdefault("zones", {}).setdefault(it["zone"], {}).setdefault(it["subcategory"], [])
+            if not any(existing["name"].lower() == it["name"].lower() for existing in bucket):
+                bucket.append(it)
+
+    mutate_wardrobe(cid, _mut)
+    return items
+
+
+def remove_wardrobe_items(cid, item_ids) -> int:
+    """Удаляет вещи по id. Возвращает число реально удалённых."""
+    item_ids = set(item_ids)
+    removed = {"n": 0}
+
+    def _mut(w):
+        for zone in w.get("zones", {}).values():
+            for subcat, lst in list(zone.items()):
+                before = len(lst)
+                zone[subcat] = [it for it in lst if it.get("id") not in item_ids]
+                removed["n"] += before - len(zone[subcat])
+
+    mutate_wardrobe(cid, _mut)
+    return removed["n"]
+
+
+def reset_wardrobe(cid):
+    """Полная замена гардероба пустым (используется при mode=replace в анкете)."""
+    save_wardrobe(_empty_wardrobe(), cid)
+    clear_wardrobe_daylook(cid)
+
+
+def get_valid_wardrobe_daylook(cid):
+    """Читает wardrobe_daylook и валидирует ссылочную целостность: версия должна
+    совпадать с текущей версией гардероба, и все item_ids обязаны существовать в
+    текущем шкафу. Невалидный кэш = {} (как будто его нет вовсе) — единственная
+    точка чтения кэша образа дня, устраняет «призрачные вещи» структурно."""
+    cached = get_wardrobe_daylook(cid)
+    if not isinstance(cached, dict) or not cached:
+        return {}
+    w = load_wardrobe(cid)
+    if cached.get("version") != w.get("_v", 0):
+        return {}
+    ids = set(cached.get("item_ids") or [])
+    if not ids or not (ids <= _all_item_ids(w)):
+        return {}
+    return cached
+
+
+def _invalidate_dependents(cid, removed_ids, added_ids):
+    """Единая точка синхронизации кэшей при любой мутации гардероба. Согласно
+    текущему скоупу зависимых кэшей — только wardrobe_daylook требует активной
+    инвалидации (recent_looks/last_look — текстовые снапшоты на момент показа,
+    wardrobe_gaps пересчитывается отдельно в wardrobe._resync_wardrobe_gaps,
+    send_improve не персистится вовсе)."""
+    if not removed_ids:
+        return
+    daylook = get_wardrobe_daylook(cid)
+    if daylook and (set(daylook.get("item_ids") or []) & removed_ids):
+        clear_wardrobe_daylook(cid)
+
 
 def wardrobe_to_text(w):
-    return "\n".join(f"{c.capitalize()}: {', '.join(i)}" for c, i in w.items()
-                     if c != "_v" and isinstance(i, list))
+    """Текст для LLM-промптов: 'Подкатегория: вещь1, вещь2' построчно."""
+    lines = []
+    for subs in (w or {}).get("zones", {}).values():
+        for subcat, items in subs.items():
+            if items:
+                lines.append(f"{subcat}: " + ", ".join(it["name"] for it in items))
+    return "\n".join(lines)
 
 def _migrate_flat(key, chat_id, d) -> dict:
     """Если данные — плоский список (legacy), мигрируем в per-user dict для CHAT_ID."""
@@ -222,7 +363,6 @@ last_action = {}        # chat_id -> ("oneshot", key) | ("role", role, text) | N
 last_answer = {}        # chat_id -> текст последнего ответа ассистента (для «Сохранить в заметки»)
 last_recipe = {}        # chat_id -> dict рецепта (для «Полный рецепт»)
 recent_looks = {}       # chat_id -> [последние луки] (не повторять 3 дня)
-del_index = {}          # chat_id -> [(категория, вещь)] для удаления
 last_word = {}          # chat_id -> последнее показанное слово/фраза (для «Добавить слово»)
 game_recent = {}        # chat_id -> [последние загаданные персонажи]
 list_sel = {}           # "chat_id:ctx" -> set(индексов) для чистки списков

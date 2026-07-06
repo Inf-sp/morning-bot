@@ -599,8 +599,8 @@ async def handle_callback(bot, cid, data, q=None):
         msg = settings_ui.wardrobe_item_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
     elif data == "set_ward_del":
-        from cleanup import open_cleanup
-        await open_cleanup(bot, cid, "kast_s")
+        import wardrobe
+        await wardrobe.send_del_zones(bot, cid, origin="s")
     elif data == "set_lagom":
         await send_lagom(bot, cid, back="m_notes")
     elif data == "setadd_lagom":

@@ -324,14 +324,18 @@ async def _apply_response(bot, cid, section: str, raw: str, mode: str):
 
 async def _save_wardrobe(cid, raw: str, mode: str) -> list:
     import settings as _s
+    import wardrobe as _w
     saved = []
+    zones_desc = "; ".join(f"{z}: {', '.join(subs)}" for z, subs in store.ZONE_SUBCATS.items())
     try:
         d = await ai.allm_json(
             f"Пользователь описал гардероб: {secure.wrap_untrusted(raw, 'гардероб')}\n"
             "Извлеки в JSON:\n"
             '{"style":"стиль одной фразой или пусто","body":"параметры тела одной строкой или пусто",'
-            '"items":{"tops":["..."],"bottoms":["..."],"shoes":["..."],"outerwear":["..."]}}',
-            600, tier="cheap", module="firstvisit",
+            '"items":[{"zone":"","subcategory":"","name":"","color":"","color_secondary":"",'
+            '"material":"","style":""}]}\n'
+            f"Зоны и подкатегории (используй ТОЛЬКО эти значения): {zones_desc}",
+            700, tier="cheap", module="firstvisit",
         )
     except Exception:
         d = {}
@@ -341,15 +345,16 @@ async def _save_wardrobe(cid, raw: str, mode: str) -> list:
     if d.get("body"):
         _s.set_(cid, "body", str(d["body"])[:200])
         saved.append(f"Параметры: {d['body']}")
-    items = d.get("items") or {}
-    if isinstance(items, dict):
-        norm = {k: [str(v) for v in lst] for k, lst in items.items() if isinstance(lst, list)}
+    raw_items = d.get("items") or []
+    if isinstance(raw_items, list) and raw_items:
+        norm = [_w.normalize_parsed_item(it) for it in raw_items]
+        norm = [it for it in norm if it]
         if mode == "replace":
             # Полная замена гардероба: очищаем и пишем заново.
-            store.save_wardrobe({}, cid)
-        added = store.merge_wardrobe(norm, cid)
-        if added:
-            saved.append(f"Вещей в шкафу: {added}")
+            store.reset_wardrobe(cid)
+        if norm:
+            store.add_wardrobe_items(cid, norm)
+            saved.append(f"Вещей в шкафу: {len(norm)}")
     if not saved:
         _s.set_(cid, "style", raw[:120])
         saved.append("Стиль сохранён")

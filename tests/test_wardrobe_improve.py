@@ -4,13 +4,30 @@ from telegram import MessageEntity
 import wardrobe
 
 
+def _wardrobe(zones):
+    """{zone: {subcat: ["имя", ...]}} -> полная схема гардероба с id."""
+    out = {"_v": 0, "zones": {}}
+    i = 0
+    for zone, subs in zones.items():
+        out["zones"][zone] = {}
+        for subcat, names in subs.items():
+            items = []
+            for name in names:
+                i += 1
+                items.append({"id": str(i), "name": name, "zone": zone, "subcategory": subcat,
+                             "color": "", "color_secondary": None, "material": None,
+                             "style": None, "season": None})
+            out["zones"][zone][subcat] = items
+    return out
+
+
 @pytest.mark.unit
 def test_fallback_improve_data_returns_stylist_sections():
-    data = wardrobe._fallback_improve_data({
-        "верх": ["белая футболка"],
-        "низ": ["синие джинсы"],
-        "обувь": ["белые кеды"],
-    })
+    data = wardrobe._fallback_improve_data(_wardrobe({
+        "Верх": {"Футболки": ["белая футболка"]},
+        "Низ": {"Джинсы": ["синие джинсы"]},
+        "Обувь": {"Кеды": ["белые кеды"]},
+    }))
 
     # Новая схема карточки-стилиста.
     assert isinstance(data["score"], int) and 0 <= data["score"] <= 100

@@ -62,26 +62,41 @@ def test_wardrobe_entity_card_title_only():
 
 @pytest.mark.unit
 def test_wardrobe_look_message_spec():
-    msg = wardrobe.look_message(
-        ["белая футболка", "синие джинсы"], intro="Сегодня сухо.", add_text="Возьми куртку."
-    )
+    msg = wardrobe.look_message({
+        "weather_intro": "Сегодня сухо и тепло.",
+        "items": [
+            {"emoji": "👕", "name": "белая футболка", "why": "Лёгкая база под сегодняшнюю жару"},
+            {"emoji": "👖", "name": "синие джинсы", "why": "Держит силуэт и подходит к футболке"},
+        ],
+        "why_works": "Нейтральные цвета сочетаются друг с другом.",
+        "palette": "нейтральная",
+        "style": "Smart Casual",
+        "comfort": 5,
+        "practicality": 4,
+        "recommendation": "Возьми куртку.",
+    })
 
     assert msg.text.startswith("✨ Образ на сегодня")
-    assert "Сегодня сухо." in msg.text
-    assert "• белая футболка" in msg.text
-    assert "• синие джинсы" in msg.text
+    assert "Сегодня сухо и тепло." in msg.text
+    assert "Что надеваем" in msg.text
+    assert "белая футболка" in msg.text
+    assert "Лёгкая база под сегодняшнюю жару." in msg.text
+    assert "синие джинсы" in msg.text
+    assert "Почему этот образ работает" in msg.text
+    assert "Нейтральные цвета сочетаются друг с другом." in msg.text
+    assert "🎨 Палитра: " in msg.text and "нейтральная" in msg.text
+    assert "👔 Стиль: " in msg.text and "Smart Casual" in msg.text
+    assert "⭐ Комфорт: " in msg.text and "★★★★★" in msg.text
+    assert "🎯 Практичность: " in msg.text and "★★★★☆" in msg.text
     assert "\n\n\n" not in msg.text
 
     bold = _entities_of_type(msg, MessageEntity.BOLD)
     assert bold[0].offset == 0
     assert _slice_u16(msg.text, bold[0].offset, bold[0].length) == "✨ Образ на сегодня"
 
-    quote_entities = _entities_of_type(msg, MessageEntity.BLOCKQUOTE)
-    assert len(quote_entities) == 1
-    quote_entity = quote_entities[0]
-    assert _slice_u16(msg.text, quote_entity.offset, quote_entity.length) == (
-        "• белая футболка\n• синие джинсы"
-    )
+    item_bold_texts = _bold_texts(msg)
+    assert "белая футболка" in item_bold_texts
+    assert "синие джинсы" in item_bold_texts
 
     italic_entities = _entities_of_type(msg, MessageEntity.ITALIC)
     assert len(italic_entities) == 1
@@ -92,7 +107,7 @@ def test_wardrobe_look_message_spec():
 
 @pytest.mark.unit
 def test_wardrobe_look_message_title_only():
-    msg = wardrobe.look_message([])
+    msg = wardrobe.look_message({})
 
     assert msg.text == "✨ Образ на сегодня"
     bold = _entities_of_type(msg, MessageEntity.BOLD)

@@ -12,7 +12,7 @@ def notifications():
 
 def priorities(current):
     b = MessageBuilder()
-    b.section("🎯 Приоритеты")
+    b.section("Приоритеты")
     b.line("Выбери, на что боту обращать больше внимания в брифе, советах и рекомендациях.")
     b.spacer()
     b.bold("Сейчас:")
@@ -22,7 +22,7 @@ def priorities(current):
 
 def cuisines(current):
     b = MessageBuilder()
-    b.section("🍽️ Кухни")
+    b.section("Кухни")
     b.line("Выбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника с их учётом.")
     b.spacer()
     b.bold("Сейчас:")
