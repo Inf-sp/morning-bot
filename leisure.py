@@ -541,27 +541,57 @@ async def _tmdb_engine_pick(cid, prefs=None):
     return _candidate_to_card(cid, c)
 
 
-def _candidate_to_card(cid, c):
-    """Обогащает кандидата деталями и строит (it, tm) для карточки."""
+def _candidate_to_card(cid, c, reason=None):
+    """Обогащает кандидата деталями и строит (it, tm) для карточки.
+
+    reason — явный источник рекомендации, если не «обычная» (Recommendations/Similar
+    по любимому): {"kind": "genre"|"mood", "label": "Комедия"|"Хочу подумать"}.
+    Если reason не передан, источник — anchor-поля кандидата (because/via/anchors).
+
+    ВАЖНО: tmdb.detail() отдаёт объект из общего TTL-кэша (по ссылке, не копию) —
+    его нельзя мутировать напрямую, иначе персональное поле «because» одного
+    пользователя утечёт в карточку другого пользователя/другого запроса для того же
+    тайтла (баг: «Потому что понравился Элита» у сериала, никак не связанного с Элитой).
+    Поэтому здесь всегда делаем dict(det) перед добавлением полей.
+    """
     tm = dict(c)
     try:
         det = tmdb.detail(c.get("id"), c.get("kind"))
         if det:
-            det["because"] = c.get("because")
-            det["anchors"] = c.get("anchors")
+            det = dict(det)  # копия — не мутируем общий кэш tmdb.detail
             tm = det
     except Exception:
         pass
+    if reason is not None:
+        tm["reason"] = reason
+    else:
+        tm["because"] = c.get("because")
+        tm["via"] = c.get("via")
+        tm["anchors"] = c.get("anchors")
     it = {"title": tm.get("name", ""), "title_en": tm.get("name_en", ""),
           "hook": _reason_text(tm)}
     return it, tm
 
 
 def _reason_text(tm):
-    """Автопричина «Потому что вам понравился X» из данных TMDb."""
+    """Причина рекомендации — плоский текст (для it["hook"], фолбэков без карточки-TMDb)."""
+    reason = tm.get("reason")
+    if reason:
+        return _reason_label(reason)
     because = tm.get("because")
     if because:
-        return f"Потому что вам понравился «{because}»"
+        verb = "понравился" if tm.get("via") == "recommendations" else "похоже на"
+        return f"Потому что вам {verb} «{because}»" if verb == "понравился" else f"Похоже на «{because}»"
+    return ""
+
+
+def _reason_label(reason):
+    kind = reason.get("kind")
+    label = reason.get("label", "")
+    if kind == "genre":
+        return f"Подборка в жанре «{label}»"
+    if kind == "mood":
+        return f"Подборка для настроения «{label}»"
     return ""
 
 
@@ -871,8 +901,22 @@ async def toggle_movie_pref(bot, cid, data, q=None):
 
 
 async def send_movie_by_genre(bot, cid, genre_id):
-    """Рекомендация внутри жанра: TMDb discover + учёт вкуса пользователя."""
-    it, tm = await asyncio.to_thread(_discover_pick, cid, [int(genre_id)], _movie_prefs(cid))
+    """Рекомендация внутри жанра: TMDb discover + учёт вкуса пользователя.
+
+    Жанр — обязательный фильтр (не подсказка): показанный тайтл ОБЯЗАН иметь этот
+    genre_id в TMDb genre_ids, иначе его нельзя показывать (см. _discover_pick require_genre_ids).
+    """
+    genre_id = int(genre_id)
+    raw_label = dict((gid, lbl) for lbl, gid in _GENRE_MENU).get(genre_id) or tmdb.GENRES.get(genre_id, "")
+    label = re.sub(r"^\S+\s+", "", raw_label) if raw_label else raw_label  # без ведущего эмодзи кнопки
+    reason = {"kind": "genre", "label": label}
+    try:
+        it, tm = await asyncio.to_thread(
+            _discover_pick, cid, [genre_id], _movie_prefs(cid),
+            require_genre_ids=[genre_id], reason=reason)
+    except Exception as e:
+        await verify.safe_error(bot, cid, e)
+        return
     if not it:
         await bot.send_message(chat_id=cid, text="В этом жанре пока не нашёл нового. Попробуй другой 👇",
                                reply_markup=_movie_genre_menu_kb())
@@ -881,10 +925,23 @@ async def send_movie_by_genre(bot, cid, genre_id):
 
 
 async def send_movie_by_mood(bot, cid, mood_key):
-    """Рекомендация по настроению: LLM-классификатор настроения → жанры → TMDb discover."""
-    genre_ids = await asyncio.to_thread(_mood_to_genres, mood_key)
-    keywords = _MOOD_KEYWORDS.get(mood_key)
-    it, tm = await asyncio.to_thread(_discover_pick, cid, genre_ids, _movie_prefs(cid), keywords)
+    """Рекомендация по настроению: LLM-классификатор настроения → жанры → TMDb discover.
+
+    Настроение — обязательный критерий: показанный тайтл ОБЯЗАН иметь хотя бы один
+    жанр из набора настроения (или подходящее ключевое слово), иначе его нельзя показывать.
+    """
+    raw_label = dict(_MOOD_MENU).get(mood_key, mood_key)
+    label = re.sub(r"^\S+\s+", "", raw_label) if raw_label else raw_label  # без ведущего эмодзи кнопки
+    reason = {"kind": "mood", "label": label}
+    try:
+        genre_ids = await asyncio.to_thread(_mood_to_genres, mood_key)
+        keywords = _MOOD_KEYWORDS.get(mood_key)
+        it, tm = await asyncio.to_thread(
+            _discover_pick, cid, genre_ids, _movie_prefs(cid), keywords=keywords,
+            require_any_genre_ids=genre_ids, reason=reason)
+    except Exception as e:
+        await verify.safe_error(bot, cid, e)
+        return
     if not it:
         await bot.send_message(chat_id=cid, text="Под это настроение пока не нашёл нового. Попробуй другое 👇",
                                reply_markup=_movie_mood_menu_kb())
@@ -919,10 +976,33 @@ def _mood_to_genres(mood_key):
         return fallback
 
 
-def _discover_pick(cid, genre_ids, prefs, keywords=None):
+def _passes_genre_gate(c, require_genre_ids=None, require_any_genre_ids=None):
+    """Обязательная пост-проверка жанра/настроения перед показом карточки (§Проверка перед
+    отправкой карточки). TMDb discover с with_genres обычно уже фильтрует верно, но это
+    защита от края случаев (устаревший кэш, неполные genre_ids в ответе API) — жанр/настроение
+    не должны быть просто «подсказкой», это обязательное условие показа.
+
+    require_genre_ids   — жанр обязателен (ВСЕ id должны быть в genre_ids кандидата, AND).
+    require_any_genre_ids — настроение: достаточно ХОТЯ БЫ ОДНОГО совпадения (OR).
+    """
+    genre_ids = set(c.get("genre_ids") or [])
+    if require_genre_ids and not set(require_genre_ids).issubset(genre_ids):
+        return False
+    if require_any_genre_ids and not genre_ids.intersection(require_any_genre_ids):
+        return False
+    return True
+
+
+def _discover_pick(cid, genre_ids, prefs, keywords=None,
+                    require_genre_ids=None, require_any_genre_ids=None, reason=None):
     """Берёт кандидатов из discover (movie+tv), фильтрует по вкусу/исключениям, ранжирует.
 
     keywords — id ключевых слов TMDb для тонкой настройки настроения (напр. plot twist).
+    require_genre_ids / require_any_genre_ids — обязательный пост-фильтр (см. _passes_genre_gate):
+    жанр/настроение не имеют права быть просто приоритетом, показанный тайтл обязан ему
+    соответствовать. Перебираем ранжированный список, а не берём слепо топ-1, — если лидер
+    не проходит гейт (пограничный случай неполных данных TMDb), пробуем следующего.
+    reason — источник рекомендации для карточки (genre/mood), а не anchor-«понравился».
     """
     min_rating = (prefs or {}).get("min_rating") or movie_engine.RATING_STEPS[0]
     taste = movie_engine.taste_profile(cid, resolve_details=False)
@@ -937,10 +1017,12 @@ def _discover_pick(cid, genre_ids, prefs, keywords=None):
                 for c in tmdb.discover(kind, genre_ids=genre_ids, min_rating=mr, keywords=kw):
                     if not c.get("id") or movie_engine._norm(c.get("name")) in excluded:
                         continue
+                    if not _passes_genre_gate(c, require_genre_ids, require_any_genre_ids):
+                        continue
                     pool[f"{c['kind']}:{c['id']}"] = c
             if pool:
                 ranked = movie_engine.rank(list(pool.values()), taste, prefs)
-                return _candidate_to_card(cid, ranked[0])
+                return _candidate_to_card(cid, ranked[0], reason=reason)
     return None, None
 
 

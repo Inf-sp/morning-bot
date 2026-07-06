@@ -79,10 +79,32 @@ def _clip_title(s, limit=40):
 
 
 def _reason_line(item, tm):
-    """Персональная причина «почему мне» — без шаблонных фраз."""
-    because = (tm or {}).get("because")
+    """Персональная причина «почему мне» — единственный источник истины: реальный
+    источник рекомендации (§ниже), никогда не шаблонная/случайная фраза.
+
+    Источники, в порядке проверки:
+    - reason={"kind": "genre"|"mood", ...} — подбор по жанру/настроению (TMDb Discover),
+      никак не связан с конкретным любимым тайтлом → не пишем «понравился», а называем
+      реальный критерий подбора.
+    - because + via — обычная рекомендация от TMDb Recommendations/Similar по любимому:
+      Recommendations → «понравился», Similar → «похоже на» (разные степени уверенности).
+    - иначе — old-path LLM-хук (item["hook"]) как есть.
+    """
+    tm = tm or {}
+    reason = tm.get("reason")
+    if reason:
+        kind = reason.get("kind")
+        label = _clip_title(reason.get("label", ""))
+        if kind == "genre":
+            return f"🎭 Подборка в жанре «{label}»"
+        if kind == "mood":
+            return f"😊 Подборка для настроения «{label}»"
+    because = tm.get("because")
     if because:
-        return f"💡 Потому что вам понравился «{_clip_title(because)}»"
+        title = _clip_title(because)
+        if tm.get("via") == "similar":
+            return f"💡 Похоже на «{title}»"
+        return f"💡 Потому что вам понравился «{title}»"
     hook = (item.get("hook") or "").strip()
     return f"💡 {hook}" if hook else ""
 

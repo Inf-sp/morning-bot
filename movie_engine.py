@@ -118,12 +118,19 @@ def collect_candidates(taste):
     """Пул кандидатов из Recommendations + Similar по каждому anchor.
 
     Возвращает dict нормализованный_id → candidate, где candidate имеет:
-    поля TMDb + because(anchor title) + anchors(set) + freq.
+    поля TMDb + because(anchor title) + anchors(set) + freq + via(endpoint источника,
+    "recommendations"|"similar" — нужен для точного текста причины: TMDb Recommendations
+    даёт «Потому что понравился X», Similar — «Похоже на X», это разные утверждения).
+
+    Если один и тот же тайтл встречается и через recommendations, и через similar (или
+    от нескольких anchors), сохраняем самый ранний найденный via — recommendations сильнее
+    как сигнал вкуса, поэтому проверяем его первым и не перезаписываем при повторных находках.
     """
     pool = {}
+    endpoints = (("recommendations", tmdb.recommendations), ("similar", tmdb.similar))
     for a in taste.get("anchors", []):
         aid, kind, atitle = a["id"], a["kind"], a["title"]
-        for fn in (tmdb.recommendations, tmdb.similar):
+        for via, fn in endpoints:
             for c in fn(aid, kind):
                 cid_ = c.get("id")
                 if not cid_:
@@ -135,6 +142,7 @@ def collect_candidates(taste):
                 else:
                     cand = dict(c)
                     cand["because"] = atitle
+                    cand["via"] = via
                     cand["anchors"] = {atitle}
                     cand["freq"] = 1
                     pool[key] = cand

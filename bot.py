@@ -24,6 +24,7 @@ import secure
 import onboard
 import firstvisit
 import tracking
+import util
 from util import ack_loading as _ack
 
 TZ = config.TZ
@@ -417,13 +418,21 @@ async def answer_callback(update, context):
         return
     if data.startswith("movie_g_"):
         await util.ack_loading(q)
-        await leisure.send_movie_by_genre(bot, cid, data[len("movie_g_"):])
-        await util.clear_loading(q)
+        try:
+            await leisure.send_movie_by_genre(bot, cid, data[len("movie_g_"):])
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+        finally:
+            await util.clear_loading(q)
         return
     if data.startswith("movie_mood_"):
         await util.ack_loading(q)
-        await leisure.send_movie_by_mood(bot, cid, data[len("movie_mood_"):])
-        await util.clear_loading(q)
+        try:
+            await leisure.send_movie_by_mood(bot, cid, data[len("movie_mood_"):])
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+        finally:
+            await util.clear_loading(q)
         return
     if data.startswith("movie_love_"):
         await _ack(q)
