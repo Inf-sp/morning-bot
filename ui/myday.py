@@ -19,12 +19,6 @@ def day_summary(
     b = MessageBuilder()
     b.section(f"Мой день • {header} • {city}{title_flag}")
 
-    priorities = [p for p in (priorities or []) if p]
-    if priorities:
-        b.text_line("🎯 ")
-        b.bold("Фокус:")
-        b.line(f" {', '.join(priorities)}")
-
     b.section(weather_title)
     b.line(weather_line)
     if humidity_title:
