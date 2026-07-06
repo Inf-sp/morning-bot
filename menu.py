@@ -10,7 +10,7 @@ WELCOME, WELCOME_ENTITIES = _WELCOME.text, _WELCOME.entities
 def main_kb(cid=None):
     rows = [
         ["☀️ Мой день"],
-        ["👕 Гардероб", "🥣 Готовка"],
+        ["👟 Гардероб", "🥣 Готовка"],
         ["📚 Обучение", "🚑 Здоровье"],
         ["🍿 Досуг", "🎚️ Настройки"],
     ]
@@ -19,7 +19,7 @@ def main_kb(cid=None):
 
 MAIN_LABELS = [
     "☀️ Мой день",
-    "👕 Гардероб",
+    "👟 Гардероб",
     "🥣 Готовка",
     "📚 Обучение",
     "🚑 Здоровье",
@@ -29,7 +29,7 @@ MAIN_LABELS = [
 
 
 LABEL_TO_KEY = {
-    "👕 Гардероб": "m_wardrobe",
+    "👟 Гардероб": "m_wardrobe",
     "🥣 Готовка": "m_food",
     "📚 Обучение": "m_learn",
     "🚑 Здоровье": "m_balance",
