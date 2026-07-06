@@ -10,9 +10,9 @@ WELCOME, WELCOME_ENTITIES = _WELCOME.text, _WELCOME.entities
 def main_kb(cid=None):
     rows = [
         ["☀️ Мой день"],
-        ["👕 Гардероб", "🚑 Здоровье"],
-        ["📚 Обучение", "🍿 Досуг"],
-        ["🥣 Готовка", "🎚️ Настройки"],
+        ["👕 Гардероб", "🥣 Готовка"],
+        ["📚 Обучение", "🚑 Здоровье"],
+        ["🍿 Досуг", "🎚️ Настройки"],
     ]
     return ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
 
@@ -20,20 +20,20 @@ def main_kb(cid=None):
 MAIN_LABELS = [
     "☀️ Мой день",
     "👕 Гардероб",
-    "🚑 Здоровье",
-    "📚 Обучение",
-    "🍿 Досуг",
     "🥣 Готовка",
+    "📚 Обучение",
+    "🚑 Здоровье",
+    "🍿 Досуг",
     "🎚️ Настройки",
 ]
 
 
 LABEL_TO_KEY = {
     "👕 Гардероб": "m_wardrobe",
-    "🚑 Здоровье": "m_balance",
-    "📚 Обучение": "m_learn",
-    "🍿 Досуг": "m_leisure",
     "🥣 Готовка": "m_food",
+    "📚 Обучение": "m_learn",
+    "🚑 Здоровье": "m_balance",
+    "🍿 Досуг": "m_leisure",
     "🎚️ Настройки": "m_notes",
 }
 
