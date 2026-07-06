@@ -196,12 +196,13 @@ def test_movie_kb_inside_category_has_exactly_4_action_buttons_plus_back():
 
 
 @pytest.mark.unit
-def test_movie_kb_without_category_keeps_genre_mood_row():
-    """Обычная (не категорийная) карточка — прежнее поведение не тронуто."""
+def test_movie_kb_without_category_has_exactly_4_action_buttons_plus_back():
+    """Обычная (не категорийная) карточка — тоже без строки «По жанру/По настроению»,
+    выбор происходит на приветственном экране раздела (send_movie_home)."""
     kb = leisure._movie_kb(0)
     labels = [btn.text for row in kb.inline_keyboard for btn in row]
-    assert "🎭 По жанру" in labels
-    assert "😊 По настроению" in labels
+    assert labels == ["✨ Заменить", "⭐️ Сохранить", "❤️ В любимые", "✅ Уже видел", "◀️ Назад"]
+    assert not any("жанру" in l or "настроению" in l for l in labels)
 
 
 @pytest.mark.unit
@@ -319,7 +320,7 @@ def test_advance_movie_without_category_uses_normal_engine(monkeypatch):
     assert calls["engine"] == 1
     assert calls["category"] == 0
     labels = [btn.text for row in sent[-1].inline_keyboard for btn in row]
-    assert "🎭 По жанру" in labels  # обычная карточка сохраняет прежний вид
+    assert labels == ["✨ Заменить", "⭐️ Сохранить", "❤️ В любимые", "✅ Уже видел", "◀️ Назад"]
 
 
 # ---------- приветственный экран раздела «Кино» (вместо мгновенной рекомендации) ----------

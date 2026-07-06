@@ -309,13 +309,13 @@ def _movie_card(it, tm):
     return leisure_ui.movie_card(it, tm)
 
 def _movie_kb(i, category=None):
-    """Клавиатура карточки кино.
+    """Клавиатура карточки кино — всегда 4 кнопки действия + Назад, без строки
+    «По жанру/По настроению» (выбор происходит на приветственном экране раздела,
+    см. send_movie_home).
 
     category=None       — обычная рекомендация (Recommendations/Similar по любимым):
-                           4 кнопки действия + строка «По жанру/По настроению» + Назад в Досуг.
-    category={"kind"..} — карточка внутри жанра/настроения: те же 4 кнопки действия
-                           (Заменить/Сохранить/В любимые/Уже видел), БЕЗ строки
-                           «По жанру/По настроению» (уже внутри неё), а «Назад» возвращает
+                           «Назад» ведёт в общее меню Досуга.
+    category={"kind"..} — карточка внутри жанра/настроения: «Назад» возвращает
                            в меню жанров/настроений, а не в общее меню Досуга.
     """
     rows = [
@@ -325,8 +325,6 @@ def _movie_kb(i, category=None):
          InlineKeyboardButton("✅ Уже видел", callback_data=f"movie_seen_{i}")],
     ]
     if category is None:
-        rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
-                     InlineKeyboardButton("😊 По настроению", callback_data="movie_mood_menu")])
         rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
     else:
         back_to = "movie_genre_menu" if category.get("kind") == "genre" else "movie_mood_menu"
