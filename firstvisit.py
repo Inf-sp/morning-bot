@@ -1,9 +1,6 @@
 """Первый вход в раздел: быстрый опрос для заполнения профиля пользователя.
 
-Статусы онбординга (см. onboarding_status): пропуск («Пропустить») больше не
-блокирует опрос навсегда — раздел можно перепройти через кнопку «Настроить
-раздел заново» в настройках. При повторном прохождении, если в разделе уже есть
-данные, бот спрашивает: добавить к текущим / заменить старые / отмена.
+Статусы онбординга — см. onboarding_status.
 """
 import re
 import store
@@ -87,15 +84,6 @@ def _tags_kb(cid, section: str) -> InlineKeyboardMarkup:
         rows.append([InlineKeyboardButton("✍️ Ввести названия", callback_data="fv_leisure_text")])
     rows.append([InlineKeyboardButton("⏭ Пропустить", callback_data=f"fv_skip_{section}")])
     return InlineKeyboardMarkup(rows)
-
-
-def _merge_choice_kb(section: str) -> InlineKeyboardMarkup:
-    """Клавиатура выбора «добавить / заменить / отмена» перед повторным сохранением."""
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("♻️ Заменить старые", callback_data=f"fv_replace_{section}")],
-        [InlineKeyboardButton("➕ Добавить к текущим", callback_data=f"fv_merge_{section}")],
-        [InlineKeyboardButton("✖️ Отмена", callback_data=f"fv_cancel_{section}")],
-    ])
 
 
 # ---------- проверка «нужен ли опрос» ----------
@@ -217,25 +205,7 @@ async def tags_done(bot, cid, section: str):
         await skip(bot, cid, section)
         return
     raw = ", ".join(labels)
-    if _has_data(cid, section):
-        store.pending_input[str(cid)] = "_fv_buffer"
-        _pending_buffer[str(cid)] = (section, raw)
-        msg = onboarding_ui.firstvisit_merge_question(section)
-        await bot.send_message(
-            chat_id=cid,
-            text=msg.text,
-            entities=msg.entities,
-            reply_markup=_merge_choice_kb(section),
-        )
-        return
     await _apply_response(bot, cid, section, raw, mode="replace")
-
-
-async def restart(bot, cid, section: str):
-    """Кнопка «Настроить раздел заново» — тот же опрос, что при первом входе."""
-    if section not in _SECTIONS:
-        return
-    await show_prompt(bot, cid, section)
 
 
 async def skip(bot, cid, section: str):
@@ -248,50 +218,10 @@ async def skip(bot, cid, section: str):
 # ---------- ответ на опрос ----------
 
 async def handle_response(bot, cid, section: str, text: str):
-    """Пользователь прислал текст опроса.
-
-    Если раздел уже содержит данные — не затираем молча: спрашиваем режим
-    сохранения (добавить/заменить/отмена), а текст откладываем в буфер.
-    Иначе — сохраняем сразу (режим «заменить» на пустом = просто запись).
-    """
+    """Пользователь прислал текст опроса — сохраняем сразу."""
     store.pending_input.pop(str(cid), None)
     raw = secure.clamp(text)
-
-    # leisure_titles — под-режим Досуга (названия текстом); данные и merge-вопрос
-    # относятся к самому разделу leisure.
-    data_section = "leisure" if section == "leisure_titles" else section
-
-    if _has_data(cid, data_section):
-        store.pending_input[str(cid)] = "_fv_buffer"
-        _pending_buffer[str(cid)] = (section, raw)
-        msg = onboarding_ui.firstvisit_merge_question(data_section)
-        await bot.send_message(
-            chat_id=cid,
-            text=msg.text,
-            entities=msg.entities,
-            reply_markup=_merge_choice_kb(section),
-        )
-        return
-
     await _apply_response(bot, cid, section, raw, mode="replace")
-
-
-# Буфер отложенного ответа опроса на время выбора merge/replace: {cid: (section, raw)}
-_pending_buffer: dict = {}
-
-
-async def resolve_merge(bot, cid, section: str, mode: str):
-    """Обработка кнопок fv_merge_/fv_replace_/fv_cancel_."""
-    store.pending_input.pop(str(cid), None)
-    buffered = _pending_buffer.pop(str(cid), None)
-    if not buffered or buffered[0] != section:
-        await _show_section(bot, cid, section)
-        return
-    _, raw = buffered
-    if mode == "cancel":
-        await _show_section(bot, cid, section)
-        return
-    await _apply_response(bot, cid, section, raw, mode=mode)
 
 
 async def _apply_response(bot, cid, section: str, raw: str, mode: str):

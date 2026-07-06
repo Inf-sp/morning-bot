@@ -134,21 +134,6 @@ async def answer_callback(update, context):
         section, _, key = rest.partition("_")
         await _ack(q)
         await firstvisit.toggle_tag(bot, cid, section, key, q); return
-    # Пройти опрос заново (из настроек раздела / баннера «пропущено»)
-    if data.startswith("fv_restart_"):
-        section = data[len("fv_restart_"):]
-        await _ack(q)
-        await firstvisit.restart(bot, cid, section); return
-    # Выбор режима сохранения при повторном прохождении
-    if data.startswith("fv_merge_"):
-        await _ack(q)
-        await firstvisit.resolve_merge(bot, cid, data[len("fv_merge_"):], "add"); return
-    if data.startswith("fv_replace_"):
-        await _ack(q)
-        await firstvisit.resolve_merge(bot, cid, data[len("fv_replace_"):], "replace"); return
-    if data.startswith("fv_cancel_"):
-        await _ack(q)
-        await firstvisit.resolve_merge(bot, cid, data[len("fv_cancel_"):], "cancel"); return
     # Первичный опрос при входе в раздел (wardrobe / learning / leisure / health / cooking)
     if data == "m_food" and firstvisit.needs_setup(cid, "cooking"):
         await _ack(q)

@@ -1868,18 +1868,12 @@ async def send_levels(bot, cid, q=None, back="set_home"):
     en_label = "Сложный (B1+)" if _is_b1plus(en_lvl) else "Лёгкий (A1–A2)"
     msg = learning_ui.levels(nl_label, en_label)
     kb = _levels_kb(nl_lvl, en_lvl, back)
-    import settings as _s
-    extra = _s.setup_again_rows(cid, "learning")
-    if extra:
-        kb = InlineKeyboardMarkup(list(kb.inline_keyboard[:-1]) + extra + [list(kb.inline_keyboard[-1])])
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
             return
         except Exception:
             pass
-    import settings as _s2
-    await _s2.send_setup_again_banner(bot, cid, "learning")
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 

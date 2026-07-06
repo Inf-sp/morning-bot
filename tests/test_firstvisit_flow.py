@@ -1,4 +1,4 @@
-"""firstvisit: статусы, пропуск, теги-чекбоксы и merge/replace при повторе."""
+"""firstvisit: статусы, пропуск, теги-чекбоксы."""
 import asyncio
 
 import pytest
@@ -26,7 +26,6 @@ def _clean():
         store._mem.pop(key, None)
     store.pending_input.pop(str(CID), None)
     firstvisit._tag_selection.pop(str(CID), None)
-    firstvisit._pending_buffer.pop(str(CID), None)
     yield
     for key in (config.PROFILE_KEY, config.WATCHLIST_KEY, config.ARTISTS_KEY, config.BOOKS_KEY):
         store._mem.pop(key, None)
@@ -37,8 +36,6 @@ def test_skip_sets_skipped_status():
     bot = _FakeBot()
     asyncio.run(firstvisit.skip(bot, CID, "wardrobe"))
     assert obs.get(CID, "wardrobe") == obs.SKIPPED
-    # skipped не блокирует повторный показ — needs_setup всё равно False (не not_started),
-    # но раздел «settled», т.е. доступен через «Настроить заново».
     assert obs.is_settled(CID, "wardrobe")
 
 
@@ -72,51 +69,6 @@ def test_tags_done_with_no_selection_is_skip():
 
 
 @pytest.mark.unit
-def test_repeat_asks_merge_when_data_exists():
-    bot = _FakeBot()
-    store.set_profile(CID, {"health_focus": "🥗 Питание"})
-    asyncio.run(firstvisit.show_prompt(bot, CID, "health"))
-    firstvisit._tag_selection[str(CID)]["health"] = {"sleep"}
-    asyncio.run(firstvisit.tags_done(bot, CID, "health"))
-    # Данные уже были → вопрос про merge/replace, статус ещё не completed.
-    assert any("сохранить новые данные" in m["text"].lower() for m in bot.messages)
-    assert obs.get(CID, "health") != obs.COMPLETED
-    assert firstvisit._pending_buffer.get(str(CID)) is not None
-
-
-@pytest.mark.unit
-def test_resolve_merge_add_appends():
-    bot = _FakeBot()
-    store.set_profile(CID, {"health_focus": "🥗 Питание"})
-    firstvisit._pending_buffer[str(CID)] = ("health", "😴 Сон")
-    asyncio.run(firstvisit.resolve_merge(bot, CID, "health", "add"))
-    prof = store.get_profile(CID)
-    assert "Питание" in prof["health_focus"] and "Сон" in prof["health_focus"]
-    assert obs.get(CID, "health") == obs.COMPLETED
-
-
-@pytest.mark.unit
-def test_resolve_merge_replace_overwrites():
-    bot = _FakeBot()
-    store.set_profile(CID, {"health_focus": "🥗 Питание"})
-    firstvisit._pending_buffer[str(CID)] = ("health", "😴 Сон")
-    asyncio.run(firstvisit.resolve_merge(bot, CID, "health", "replace"))
-    prof = store.get_profile(CID)
-    assert "Питание" not in prof["health_focus"]
-    assert "Сон" in prof["health_focus"]
-
-
-@pytest.mark.unit
-def test_resolve_merge_cancel_keeps_old():
-    bot = _FakeBot()
-    store.set_profile(CID, {"health_focus": "🥗 Питание"})
-    firstvisit._pending_buffer[str(CID)] = ("health", "😴 Сон")
-    asyncio.run(firstvisit.resolve_merge(bot, CID, "health", "cancel"))
-    prof = store.get_profile(CID)
-    assert prof["health_focus"] == "🥗 Питание"
-
-
-@pytest.mark.unit
 def test_leisure_text_prompt_saves_genres_and_switches_to_text(monkeypatch):
     bot = _FakeBot()
     asyncio.run(firstvisit.show_prompt(bot, CID, "leisure"))
@@ -140,14 +92,3 @@ def test_leisure_titles_saved_via_handle_response(monkeypatch):
     assert "Паразиты" in store.get_list(config.WATCHLIST_KEY, CID)
     assert obs.get(CID, "leisure") == obs.COMPLETED
 
-
-@pytest.mark.unit
-def test_leisure_genres_add_dedups():
-    bot = _FakeBot()
-    store.set_profile(CID, {"leisure_genres": "🎭 Драма"})
-    firstvisit._pending_buffer[str(CID)] = ("leisure", "🎭 Драма, 😂 Комедия")
-    asyncio.run(firstvisit.resolve_merge(bot, CID, "leisure", "add"))
-    prof = store.get_profile(CID)
-    # Драма не задублировалась, комедия добавилась.
-    assert prof["leisure_genres"].count("Драма") == 1
-    assert "Комедия" in prof["leisure_genres"]

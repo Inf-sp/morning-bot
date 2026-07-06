@@ -52,17 +52,10 @@ def menu_screen(key):
 
 
 async def send_food_menu(bot, cid):
-    import settings as _s
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     msg = menu_ui.food_menu()
-    kb = msg.reply_markup
-    extra = _s.setup_again_rows(cid, "cooking")
-    if extra and kb is not None:
-        kb = InlineKeyboardMarkup(list(kb.inline_keyboard) + extra)
-    await _s.send_setup_again_banner(bot, cid, "cooking")
     await bot.send_message(
         chat_id=cid,
         text=msg.text,
         entities=msg.entities,
-        reply_markup=kb,
+        reply_markup=msg.reply_markup,
     )

@@ -84,15 +84,6 @@ def firstvisit_prompt(section):
     return _FIRSTVISIT_BUILDERS[section]()
 
 
-_MERGE_TITLES = {
-    "wardrobe": "гардеробе",
-    "learning": "обучении",
-    "leisure": "досуге",
-    "health": "разделе здоровья",
-    "cooking": "готовке",
-}
-
-
 def firstvisit_leisure_titles_prompt():
     b = MessageBuilder()
     b.section("🍿 Любимые названия")
@@ -110,14 +101,6 @@ def firstvisit_leisure_titles_prompt():
         "Книги: Дюна, Мастер и Маргарита"
     )
     return b.build()
-
-
-def firstvisit_merge_question(section):
-    b = MessageBuilder()
-    b.section("Как сохранить новые данные?")
-    where = _MERGE_TITLES.get(section, "разделе")
-    b.line(f"В {where} уже есть данные. Добавить к текущим или заменить старые?")
-    return b.build_stripped()
 
 
 def firstvisit_saved(saved_items):
