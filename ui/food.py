@@ -2,9 +2,9 @@ from .builder import MessageBuilder, MessageSpec
 
 # Эмодзи категории приёма пищи (§7 спеки) — используется в заголовке карточки.
 MEAL_EMOJI = {
-    "breakfast": "🍳",
+    "breakfast": "🥐",
     "lunch": "🥗",
-    "dinner": "🍽️",
+    "dinner": "🍲",
     "fridge": "🥕",
 }
 MEAL_LABEL = {
@@ -40,6 +40,49 @@ CUISINE_RU = {
 }
 
 
+# Национальные прилагательные по коду кухни — используются для подстраховки:
+# если модель всё же вставила прилагательное кухни в name (например «Итальянские
+# тосты»), срезаем его перед показом, чтобы не дублировать кухню с заголовком
+# карточки («🍳 Завтрак • 🇮🇹 Итальянская кухня\nИтальянские тосты» выглядит как
+# повтор). Формы во всех родах/числах, т.к. согласование с существительным заранее
+# неизвестно.
+_CUISINE_ADJECTIVES = {
+    "asian": ["азиатск"],
+    "russian": ["русск"],
+    "italian": ["итальянск"],
+    "mediterranean": ["средиземноморск"],
+    "mexican": ["мексиканск"],
+    "french": ["французск"],
+    "japanese": ["японск"],
+    "korean": ["корейск"],
+    "chinese": ["китайск"],
+    "thai": ["тайск"],
+    "vietnamese": ["вьетнамск"],
+    "indian": ["индийск"],
+    "turkish": ["турецк"],
+    "greek": ["греческ"],
+    "spanish": ["испанск"],
+    "german": ["немецк"],
+    "american": ["американск"],
+    "georgian": ["грузинск"],
+}
+
+
+def _strip_cuisine_from_name(name: str, cuisine_code: str) -> str:
+    """Убирает национальное прилагательное кухни из начала названия блюда (см. выше)."""
+    stems = _CUISINE_ADJECTIVES.get(cuisine_code)
+    if not stems or not name:
+        return name
+    words = name.split(" ", 1)
+    if not words:
+        return name
+    first_word_lower = words[0].lower()
+    if any(first_word_lower.startswith(stem) for stem in stems):
+        rest = words[1] if len(words) > 1 else ""
+        return rest[:1].upper() + rest[1:] if rest else name
+    return name
+
+
 def _step_line(step) -> str:
     """Рендерит один шаг приготовления: строка или {"text":..., "minutes":...} (§7)."""
     if isinstance(step, dict):
@@ -72,6 +115,9 @@ def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallba
         cuisine_emoji = cuisine_emoji_fallback.get(cuisine_code, "")
     if not cuisine_emoji and cuisine_label:
         cuisine_emoji = DEFAULT_CUISINE_EMOJI
+    if cuisine_label:
+        # кухня уже показана в заголовке — не дублируем её прилагательным в name
+        name = _strip_cuisine_from_name(name, cuisine_code)
     chef_tip = str(data.get("chef_tip") or "").strip()
     if chef_tip and chef_tip[-1] not in ".!?…":
         chef_tip += "."

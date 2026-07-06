@@ -126,7 +126,7 @@ def test_food_card_shows_meal_emoji_and_cuisine_origin():
         meal="breakfast",
     )
 
-    assert "🍳 Завтрак • 🇯🇵 Японская кухня" in msg.text
+    assert "🥐 Завтрак • 🇯🇵 Японская кухня" in msg.text
     assert "• Взбейте яйца — 2 мин." in msg.text
     assert "Совет шефа:" in msg.text
     assert "Не давай омлету подгореть снизу." in msg.text
@@ -182,3 +182,48 @@ def test_fit_caption_truncates_long_card_within_telegram_limit():
     assert u16_len(fitted.text) <= food.TELEGRAM_CAPTION_LIMIT
     assert fitted.text.endswith("…")
     assert all(e.offset + e.length <= u16_len(fitted.text) for e in fitted.entities)
+
+
+@pytest.mark.unit
+def test_food_card_strips_cuisine_adjective_from_name_to_avoid_duplication():
+    msg = food.food_card(
+        {
+            "name": "Итальянские тосты с авокадо",
+            "cuisine": "italian",
+            "cuisine_emoji": "🇮🇹",
+            "ingredients": "хлеб, авокадо",
+        },
+        label="Завтрак",
+        meal="breakfast",
+    )
+
+    assert "🇮🇹 Итальянская кухня" in msg.text
+    assert "Итальянские тосты с авокадо" not in msg.text
+    assert "Тосты с авокадо" in msg.text
+
+
+@pytest.mark.unit
+def test_food_card_strips_cuisine_adjective_regardless_of_grammatical_form():
+    cases = [
+        ("Японский омлет", "japanese", "Омлет"),
+        ("Турецкая шакшука", "turkish", "Шакшука"),
+        ("Греческий салат", "greek", "Салат"),
+    ]
+    for name, cuisine, expected in cases:
+        msg = food.food_card({"name": name, "cuisine": cuisine, "ingredients": "x"}, label="Обед", meal="lunch")
+        assert expected in msg.text
+        assert name not in msg.text
+
+
+@pytest.mark.unit
+def test_food_card_keeps_name_untouched_without_cuisine():
+    msg = food.food_card({"name": "Итальянские тосты с авокадо", "ingredients": "хлеб"})
+
+    assert "Итальянские тосты с авокадо" in msg.text
+
+
+@pytest.mark.unit
+def test_food_card_keeps_name_when_adjective_is_the_whole_name():
+    msg = food.food_card({"name": "Итальянское", "cuisine": "italian", "ingredients": "x"}, label="Обед", meal="lunch")
+
+    assert "Итальянское" in msg.text

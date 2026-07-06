@@ -57,7 +57,8 @@ def _env_secret_values():
         import config
         names = ("TELEGRAM_TOKEN", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY",
                  "OPENAI_API_KEY", "OPENROUTER_API_KEY", "CF_API_TOKEN", "TICKETMASTER_API_KEY",
-                 "TMDB_API_KEY", "ZEROENTROPY_API_KEY", "DATABASE_URL", "UNSPLASH_ACCESS_KEY")
+                 "TMDB_API_KEY", "ZEROENTROPY_API_KEY", "DATABASE_URL", "UNSPLASH_ACCESS_KEY",
+                 "PEXELS_API_KEY")
         return [getattr(config, n, "") for n in names]
     except Exception:
         return []

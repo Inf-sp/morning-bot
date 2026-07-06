@@ -68,9 +68,9 @@ async def _run_intent(bot, cid, action):
     import weather as wx
     if action == "meal_picker":
         kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🌅 Завтрак", callback_data="a_recipe_breakfast"),
-            InlineKeyboardButton("☀️ Обед",    callback_data="a_recipe_lunch"),
-            InlineKeyboardButton("🌙 Ужин",    callback_data="a_recipe_dinner"),
+            InlineKeyboardButton("🥐 Завтрак", callback_data="a_recipe_breakfast"),
+            InlineKeyboardButton("🥗 Обед",    callback_data="a_recipe_lunch"),
+            InlineKeyboardButton("🍲 Ужин",    callback_data="a_recipe_dinner"),
         ]])
         await bot.send_message(chat_id=cid, text="🍽 <b>Что готовим?</b>",
                                parse_mode="HTML", reply_markup=kb)

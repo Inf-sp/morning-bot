@@ -18,7 +18,7 @@ from ui import food as food_ui
 import memory
 import settings
 import menu
-import unsplash
+import photo_provider
 
 TZ = config.TZ
 
@@ -609,7 +609,7 @@ def _recipe_typed_kb():
     """Клавиатура после «рецепта дня» (send_recipe_featured, вне категорий очереди) —
     выбор типа приёма пищи; нажатие уводит в новую систему очередей через enter_meal."""
     return _kb([
-        [("🍳 Завтрак", "a_recipe_breakfast"), ("🥗 Обед", "a_recipe_lunch"), ("🍽️ Ужин", "a_recipe_dinner")],
+        [("🥐 Завтрак", "a_recipe_breakfast"), ("🥗 Обед", "a_recipe_lunch"), ("🍲 Ужин", "a_recipe_dinner")],
         [("◀️ Назад", "m_food")],
     ])
 
@@ -820,7 +820,10 @@ _MEAL_CONSTRAINT = {
 
 
 async def _send_queue_card(bot, cid, meal, d):
-    """Отправляет карточку рецепта из очереди активной категории, с фото (если доступно)."""
+    """Отправляет карточку рецепта из очереди активной категории, с фото (если доступно).
+
+    Фото подбирает единый photo_provider (Pexels первым, Unsplash фолбэком, со
+    scoring и кэшем) — см. photo_provider.get_dish_photo."""
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe_queue", meal)
     store.last_source[str(cid)] = "Питание · Рецепт"
@@ -828,17 +831,15 @@ async def _send_queue_card(bot, cid, meal, d):
     card = food_ui.food_card(d, label=label, meal=meal, cuisine_emoji_fallback=RECIPE_CUISINE_EMOJI_FALLBACK)
     store.last_answer[str(cid)] = card.text
     kb = _recipe_kb()
-    photo_url = None
-    query = d.get("search_query_en") or d.get("name")
-    if query:
-        try:
-            photo_url = await asyncio.to_thread(unsplash.get_dish_photo_url, query)
-        except Exception:
-            photo_url = None
-    if photo_url:
+    photo = None
+    try:
+        photo = await asyncio.to_thread(photo_provider.get_dish_photo, d)
+    except Exception:
+        photo = None
+    if photo and photo.get("photo_url"):
         caption_msg = food_ui.fit_caption(card)
         try:
-            await bot.send_photo(chat_id=cid, photo=photo_url, caption=caption_msg.text,
+            await bot.send_photo(chat_id=cid, photo=photo["photo_url"], caption=caption_msg.text,
                                   caption_entities=caption_msg.entities, reply_markup=kb)
             return
         except Exception:
@@ -1067,16 +1068,28 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
         "• В ингредиентах всегда добавляй базу (масло, соль, перец), если нужна для готовки.\n"
         "• chef_tip — НЕ банальный совет (запрещены клише вроде «используйте свежие продукты», "
         "«не пересаливайте», «дайте настояться») — только неочевидный приём именно для этого блюда.\n"
+        "• name — НЕ включай национальное прилагательное или название кухни (не «Итальянские тосты», "
+        "не «Японский омлет», не «Турецкий завтрак») — кухня уже отдельным полем cuisine и так будет "
+        "показана в заголовке карточки. Пиши только сам предмет блюда (например «Тосты с авокадо», "
+        "«Омлет с луком», «Шакшука»).\n"
         f"{cuisine_codes_line}"
         "• cuisine_emoji — эмодзи флага страны происхождения блюда (например 🇯🇵, 🇮🇹, 🇰🇷, 🇹🇷).\n"
-        "• search_query_en — короткий (2-4 слова) поисковый запрос на английском для поиска фото блюда "
-        "на Unsplash (например \"shakshuka\" или \"japanese omelette\"), только название блюда, без лишних слов.\n"
+        "• Поля для поиска фото готового блюда (все на английском, только сами значения без лишних слов):\n"
+        "  - photo_query — точный запрос: название блюда + кухня (например \"shakshuka turkish breakfast\").\n"
+        "  - main_ingredients_en — 2-3 главных ингредиента через запятую (например \"eggs, tomatoes\").\n"
+        "  - dish_type_en — тип блюда одним-двумя словами (например \"omelette\", \"stew\", \"salad\").\n"
+        "  - meal_type_en — тип приёма пищи на английском (\"breakfast\"/\"lunch\"/\"dinner\").\n"
+        "  Эти поля должны описывать ГОТОВОЕ приготовленное блюдо крупным планом, а не сырые продукты, "
+        "не кухню/стол/ресторан и не абстрактную сцену — фото ищется по ним через API стоковых фото.\n"
         "• Разнообразие внутри списка: не более 2 рецептов одной кухни подряд, но общий перекос в сторону "
         "любимых кухонь пользователя (см. предпочтения выше) сохраняй.\n"
         f"• Верни ровно {n} рецептов в массиве, без повторов названий внутри самого списка.\n"
         'JSON (без markdown, объект с одним ключом "recipes"): {"recipes":[{'
         '"name":"Название блюда","cuisine":"код кухни","cuisine_emoji":"🇯🇵",'
-        '"search_query_en":"short english query",'
+        '"photo_query":"exact dish name + cuisine",'
+        '"main_ingredients_en":"eggs, tomatoes",'
+        '"dish_type_en":"omelette",'
+        '"meal_type_en":"breakfast",'
         '"time":"X мин","servings":"1 порц.",'
         '"ingredients":"список через запятую",'
         '"steps":[{"text":"Глагол + действие + конкретика","minutes":2},{"text":"шаг 2","minutes":4}],'

@@ -11,7 +11,10 @@ def _fake_recipes(n=10, cuisine="italian", prefix="Рецепт"):
             "name": f"{prefix} {i}",
             "cuisine": cuisine,
             "cuisine_emoji": "🇮🇹",
-            "search_query_en": "pasta",
+            "photo_query": "pasta italian food",
+            "main_ingredients_en": "pasta, cheese",
+            "dish_type_en": "pasta",
+            "meal_type_en": "dinner",
             "ingredients": "паста, сыр",
             "chef_tip": "совет",
             "steps": [{"text": "Шаг", "minutes": 5}],
@@ -70,7 +73,7 @@ def test_enter_meal_generates_queue_and_shows_first_recipe(monkeypatch):
     bot = FakeBot()
     batch = _fake_recipes()
     monkeypatch.setattr(balance, "_gen_recipe_batch", lambda *a, **kw: batch)
-    monkeypatch.setattr(balance.unsplash, "get_dish_photo_url", lambda *a, **kw: None)
+    monkeypatch.setattr(balance.photo_provider, "get_dish_photo", lambda *a, **kw: None)
 
     _run(balance.enter_meal(bot, cid, "breakfast"))
 
@@ -88,7 +91,7 @@ def test_show_next_recipe_stays_within_active_category(monkeypatch):
     bot = FakeBot()
     batch = _fake_recipes()
     monkeypatch.setattr(balance, "_gen_recipe_batch", lambda *a, **kw: batch)
-    monkeypatch.setattr(balance.unsplash, "get_dish_photo_url", lambda *a, **kw: None)
+    monkeypatch.setattr(balance.photo_provider, "get_dish_photo", lambda *a, **kw: None)
 
     _run(balance.enter_meal(bot, cid, "breakfast"))
     for _ in range(3):
@@ -109,7 +112,7 @@ def test_show_next_recipe_regenerates_queue_when_exhausted(monkeypatch):
         return _fake_recipes(prefix=f"batch{calls['n']}")
 
     monkeypatch.setattr(balance, "_gen_recipe_batch", gen)
-    monkeypatch.setattr(balance.unsplash, "get_dish_photo_url", lambda *a, **kw: None)
+    monkeypatch.setattr(balance.photo_provider, "get_dish_photo", lambda *a, **kw: None)
 
     _run(balance.enter_meal(bot, cid, "dinner"))
     assert calls["n"] == 1
@@ -185,7 +188,7 @@ def test_enter_meal_appends_batch_names_to_history(monkeypatch):
     bot = FakeBot()
     batch = _fake_recipes(n=5)
     monkeypatch.setattr(balance, "_gen_recipe_batch", lambda *a, **kw: batch)
-    monkeypatch.setattr(balance.unsplash, "get_dish_photo_url", lambda *a, **kw: None)
+    monkeypatch.setattr(balance.photo_provider, "get_dish_photo", lambda *a, **kw: None)
 
     _run(balance.enter_meal(bot, cid, "breakfast"))
 
@@ -224,7 +227,7 @@ def test_show_next_recipe_decreases_previous_cuisine_weight_on_replace(monkeypat
     bot = FakeBot()
     batch = _fake_recipes(cuisine="japanese")
     monkeypatch.setattr(balance, "_gen_recipe_batch", lambda *a, **kw: batch)
-    monkeypatch.setattr(balance.unsplash, "get_dish_photo_url", lambda *a, **kw: None)
+    monkeypatch.setattr(balance.photo_provider, "get_dish_photo", lambda *a, **kw: None)
 
     _run(balance.enter_meal(bot, cid, "dinner"))
     assert balance.get_cuisine_weights(cid).get("japanese", 0) == 0

@@ -277,9 +277,9 @@ def _word_of_day(cid):
             pass
     parts = []
     if nl:
-        parts.append(f"🇳🇱 {_cap(nl)}")
+        parts.append(f"{_cap(nl)} 🇳🇱")
     if en:
-        parts.append(f"🇬🇧 {_cap(en)}")
+        parts.append(f"{_cap(en)} 🇬🇧")
     parts.append(_cap(ru))
     return " → ".join(parts)
 
