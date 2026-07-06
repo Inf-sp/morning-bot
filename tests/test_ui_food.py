@@ -109,3 +109,76 @@ def test_my_recipes_list_uses_bullet_component_per_recipe():
 
     assert msg.text == "🍳 Мои рецепты — 2\n\n• Паста\n• Суп"
     assert _entities_of_type(msg, "bold") == ["🍳 Мои рецепты"]
+
+
+@pytest.mark.unit
+def test_food_card_shows_meal_emoji_and_cuisine_origin():
+    msg = food.food_card(
+        {
+            "name": "Японский омлет",
+            "ingredients": "яйца, соль, перец",
+            "cuisine": "japanese",
+            "cuisine_emoji": "🇯🇵",
+            "chef_tip": "Не давай омлету подгореть снизу.",
+            "steps": [{"text": "Взбейте яйца", "minutes": 2}],
+        },
+        label="Завтрак",
+        meal="breakfast",
+    )
+
+    assert "🍳 Завтрак • 🇯🇵 Японская кухня" in msg.text
+    assert "• Взбейте яйца — 2 мин." in msg.text
+    assert "Совет шефа:" in msg.text
+    assert "Не давай омлету подгореть снизу." in msg.text
+
+
+@pytest.mark.unit
+def test_food_card_falls_back_to_default_cuisine_emoji_when_missing():
+    msg = food.food_card(
+        {"name": "Паста", "cuisine": "italian", "ingredients": "паста"},
+        label="Обед",
+        meal="lunch",
+        cuisine_emoji_fallback={"italian": "🇮🇹"},
+    )
+
+    assert "🥗 Обед • 🇮🇹 Итальянская кухня" in msg.text
+
+
+@pytest.mark.unit
+def test_food_card_without_meal_or_cuisine_keeps_legacy_header():
+    msg = food.food_card({"name": "Суп", "ingredients": "вода"})
+
+    assert "🥣 Рецепт дня" in msg.text
+    assert "•" not in msg.text.split("\n", 1)[0]
+
+
+@pytest.mark.unit
+def test_fit_caption_returns_same_message_when_within_limit():
+    msg = food.food_card({"name": "Короткий рецепт", "ingredients": "соль"})
+    fitted = food.fit_caption(msg)
+
+    assert fitted.text == msg.text
+    assert fitted.entities == msg.entities
+
+
+@pytest.mark.unit
+def test_fit_caption_truncates_long_card_within_telegram_limit():
+    from ui.builder import u16_len
+
+    msg = food.food_card(
+        {
+            "name": "Рецепт с длинным описанием",
+            "ingredients": ", ".join(f"ингредиент {i}" for i in range(100)),
+            "chef_tip": "Совет " * 200,
+            "steps": [{"text": "Шаг приготовления", "minutes": 5}] * 5,
+        },
+        label="Ужин",
+        meal="dinner",
+    )
+    assert u16_len(msg.text) > food.TELEGRAM_CAPTION_LIMIT
+
+    fitted = food.fit_caption(msg)
+
+    assert u16_len(fitted.text) <= food.TELEGRAM_CAPTION_LIMIT
+    assert fitted.text.endswith("…")
+    assert all(e.offset + e.length <= u16_len(fitted.text) for e in fitted.entities)

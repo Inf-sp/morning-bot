@@ -1,17 +1,85 @@
 from .builder import MessageBuilder, MessageSpec
 
+# Эмодзи категории приёма пищи (§7 спеки) — используется в заголовке карточки.
+MEAL_EMOJI = {
+    "breakfast": "🍳",
+    "lunch": "🥗",
+    "dinner": "🍽️",
+    "fridge": "🧊",
+}
+MEAL_LABEL = {
+    "breakfast": "Завтрак",
+    "lunch": "Обед",
+    "dinner": "Ужин",
+    "fridge": "Из холодильника",
+}
 
-def food_card(data, label="Рецепт дня"):
+DEFAULT_CUISINE_EMOJI = "🍽️"
+
+# Русское название кухни по машиночитаемому коду (balance.RECIPE_CUISINE_CODES) —
+# модель возвращает код, а не готовую подпись, чтобы не плодить разнобой в языке/падежах.
+CUISINE_RU = {
+    "asian": "Азиатская кухня",
+    "russian": "Русская кухня",
+    "italian": "Итальянская кухня",
+    "mediterranean": "Средиземноморская кухня",
+    "mexican": "Мексиканская кухня",
+    "french": "Французская кухня",
+    "japanese": "Японская кухня",
+    "korean": "Корейская кухня",
+    "chinese": "Китайская кухня",
+    "thai": "Тайская кухня",
+    "vietnamese": "Вьетнамская кухня",
+    "indian": "Индийская кухня",
+    "turkish": "Турецкая кухня",
+    "greek": "Греческая кухня",
+    "spanish": "Испанская кухня",
+    "german": "Немецкая кухня",
+    "american": "Американская кухня",
+    "georgian": "Грузинская кухня",
+}
+
+
+def _step_line(step) -> str:
+    """Рендерит один шаг приготовления: строка или {"text":..., "minutes":...} (§7)."""
+    if isinstance(step, dict):
+        text = str(step.get("text", "")).strip()
+        minutes = step.get("minutes")
+        if text and minutes:
+            return f"{text} — {minutes} мин."
+        return text
+    return str(step).strip()
+
+
+def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallback=None):
     """Карточка рецепта. Не пишется в БД как HTML: живёт в store.last_recipe/last_answer
     только до рестарта, а в заметки (NOTES_KEY) попадает через save_fav, который берёт
-    entities напрямую из уже отправленного сообщения — MessageBuilder тут ничем не хуже HTML."""
+    entities напрямую из уже отправленного сообщения — MessageBuilder тут ничем не хуже HTML.
+
+    meal — код категории ("breakfast"/"lunch"/"dinner"/"fridge") для эмодзи в заголовке
+    (§7); если не передан, используется общий 🥣 + label, как раньше.
+    cuisine_emoji_fallback — словарь {cuisine_code: emoji} для случая, когда модель не
+    вернула cuisine_emoji (§7 — обязателен fallback на случай пустого/нераспознанного значения)."""
     name = str(data.get("name", "")).strip()
     ingredients = str(data.get("ingredients", "")).strip()
     steps = data.get("steps") or []
     if isinstance(steps, str):
         steps = [steps]
+    cuisine_code = str(data.get("cuisine") or "").strip().lower()
+    cuisine_label = str(data.get("cuisine_label") or CUISINE_RU.get(cuisine_code) or data.get("cuisine") or "").strip()
+    cuisine_emoji = str(data.get("cuisine_emoji") or "").strip()
+    if not cuisine_emoji and cuisine_emoji_fallback:
+        cuisine_emoji = cuisine_emoji_fallback.get(cuisine_code, "")
+    if not cuisine_emoji and cuisine_label:
+        cuisine_emoji = DEFAULT_CUISINE_EMOJI
+    chef_tip = str(data.get("chef_tip") or "").strip()
+
     b = MessageBuilder()
-    b.section(f"🥣 {label}")
+    meal_emoji = MEAL_EMOJI.get(meal, "🥣")
+    header = f"{meal_emoji} {label}"
+    if cuisine_label:
+        header += f" • {cuisine_emoji} {cuisine_label}".rstrip()
+    b.section(header)
     if name:
         b.spacer()
         b.bold(name)
@@ -25,10 +93,61 @@ def food_card(data, label="Рецепт дня"):
         b.bold("Приготовление:")
         b.newline()
         for step in steps:
-            b.bullet(str(step).strip())
+            line = _step_line(step)
+            if line:
+                b.bullet(line)
+    if chef_tip:
+        b.spacer()
+        b.bold("Совет шефа:")
+        b.newline()
+        b.line(chef_tip)
     b.spacer()
     b.bold("😋 Приятного аппетита!")
     return b.build_stripped()
+
+
+TELEGRAM_CAPTION_LIMIT = 1024
+
+
+def fit_caption(msg: MessageSpec) -> MessageSpec:
+    """Обрезает MessageSpec под лимит caption у send_photo (§7 спеки).
+
+    Telegram ограничивает caption 1024 символами (в UTF-16 code units — как и entities,
+    см. builder.u16_len). Если карточка не влезает, обрезаем текст по границе строки,
+    сохраняя структуру (не разрывая слово на середине), а не переходим на два сообщения.
+    entities, выходящие за обрезанную длину, отбрасываются/укорачиваются вместе с текстом."""
+    from .builder import u16_len, MessageEntity
+
+    text = msg.text
+    if u16_len(text) <= TELEGRAM_CAPTION_LIMIT:
+        return msg
+
+    # Обрезаем по UTF-16 длине, по границе последнего переноса строки в пределах лимита,
+    # чтобы не рвать структуру карточки. Но если это съедает больше ~15% лимита (длинная
+    # строка без переносов — например совет шефа), откатываемся к границе слова, чтобы
+    # не выбрасывать блок целиком.
+    encoded = text.encode("utf-16-le")
+    cut_units = TELEGRAM_CAPTION_LIMIT - 1  # запас на многоточие
+    truncated = encoded[: cut_units * 2].decode("utf-16-le", errors="ignore")
+    last_newline = truncated.rfind("\n")
+    if last_newline > 0 and (len(truncated) - last_newline) <= cut_units * 0.15:
+        truncated = truncated[:last_newline]
+    else:
+        last_space = truncated.rfind(" ")
+        if last_space > 0:
+            truncated = truncated[:last_space]
+    truncated = truncated.rstrip() + "…"
+
+    new_len = u16_len(truncated)
+    kept_entities = []
+    for e in (msg.entities or []):
+        if e.offset >= new_len:
+            continue
+        length = min(e.length, new_len - e.offset)
+        if length <= 0:
+            continue
+        kept_entities.append(MessageEntity(e.type, e.offset, length, url=getattr(e, "url", None)))
+    return MessageSpec(text=truncated, entities=kept_entities, reply_markup=msg.reply_markup, parse_mode=msg.parse_mode)
 
 
 def fridge_home_empty():

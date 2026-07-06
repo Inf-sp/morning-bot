@@ -32,6 +32,7 @@ SERPAPI_API_KEY = os.environ.get("SERPAPI_API_KEY", "")
 EVENTBRITE_API_KEY = os.environ.get("EVENTBRITE_API_KEY", "") or os.environ.get("EVENTBRITE_TOKEN", "")
 RESTCOUNTRIES_BASE_URL = os.environ.get("RESTCOUNTRIES_BASE_URL", "https://restcountries.com/v3.1").rstrip("/")
 RESTCOUNTRIES_API_KEY = os.environ.get("RESTCOUNTRIES_API_KEY", "")
+UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 
 TZ = ZoneInfo("Europe/Amsterdam")
 
@@ -71,6 +72,10 @@ LIFEHACK_KEY = "lifehacks_seen.json"
 FRIDGE_KEY = "fridge.json"
 MY_RECIPES_KEY = "my_recipes.json"
 LEFTOVER_RECIPES_SEEN_KEY = "leftover_recipes_seen.json"  # anti-repeat: {cid: [последние N названий]}
+ACTIVE_MEAL_KEY = "active_meal.json"          # {cid: "breakfast"|"lunch"|"dinner"|"fridge"}
+RECIPE_QUEUE_KEY = "recipe_queue.json"        # {cid: {"meal":..., "items":[...], "pos": int}}
+RECIPE_HISTORY_KEY = "recipe_history.json"    # {cid: [последние 100 названий]} — общая anti-repeat история
+CUISINE_WEIGHTS_KEY = "cuisine_weights.json"  # {cid: {"italian": 3, "japanese": -1, ...}} — обучение по действиям
 QUOTE_AUTHORS_KEY = "quote_authors_seen.json"
 FOOD_TIP_KEY = "food_tip_cache.json"
 MOTIV_LAGOM_SEEN_KEY = "motiv_lagom_seen.json"

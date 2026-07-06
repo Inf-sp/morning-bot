@@ -297,11 +297,11 @@ async def answer_callback(update, context):
             elif act == "listen_no":
                 await _ack(q); await leisure.listen_dislike(bot, cid)
             elif act in ("food_breakfast", "recipe_breakfast"):
-                await _ack(q); await balance.send_recipe(bot, cid, "завтрак")
+                await _ack(q); await balance.enter_meal(bot, cid, "breakfast")
             elif act in ("food_lunch", "recipe_lunch"):
-                await _ack(q); await balance.send_recipe(bot, cid, "обед")
+                await _ack(q); await balance.enter_meal(bot, cid, "lunch")
             elif act in ("food_dinner", "recipe_dinner"):
-                await _ack(q); await balance.send_recipe(bot, cid, "ужин")
+                await _ack(q); await balance.enter_meal(bot, cid, "dinner")
         except Exception as e:
             await verify.safe_error(bot, cid, e)
         return
