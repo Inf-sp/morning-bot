@@ -294,23 +294,22 @@ async def send_looks(bot, cid):
     profile_block = (f"\n{style_block}" if style_block else "")
     weather_block = (f"\n{weather_rules}" if weather_rules else "")
     prompt = f"""Ты — персональный стилист уровня Thread, Whering и GQ. Собери ОДИН образ из гардероба на сегодня.
-Никогда не ограничивайся перечислением одежды — каждая вещь и весь образ должны звучать как рекомендация профессионального стилиста, объясняющего свою идею клиенту.{profile_block}
+Пиши как стилист, который даёт быструю персональную рекомендацию, а не статью в журнале: коротко, по делу, без повторов одной и той же мысли разными словами.{profile_block}
 Погода: {wctx}
 ТЕМПЕРАТУРНОЕ ПРАВИЛО (строго, не нарушать): {temp_rule}{weather_block}{fb_line}{pref_line}
 Гардероб пользователя (ТОЛЬКО эти вещи, другие не добавлять):
 {wardrobe_text}
 Правила: 1 верх + 1 низ + обувь (+ опц. аксессуар). Сочетание по цвету, силуэту и стилю.
-Каждую вещь пиши ПОЛНЫМ названием из списка выше (напр. «Белая футболка Uniqlo», не «Верх: белая»).{avoid}
+Поле name — вещь ПОЛНЫМ названием из списка выше, точь-в-точь как там написано (для сверки со шкафом).
+Поле short_name — то же название без бренда (напр. «Белая футболка Uniqlo» → «Белая футболка»), в остальном не меняй формулировку.{avoid}
 Обращайся на «ты», без имени. Никакой воды и шаблонных фраз («вот образ», «хорошего дня»).
 
 Верни строго валидный JSON (без markdown):
-{{"weather_intro":"2-3 предложения: погода (температура, ощущаемая, дождь/ветер/солнце) и главная идея образа",
-"items":[{{"emoji":"👕","name":"вещь полным названием","why":"1 предложение — почему выбрана именно эта вещь"}}, "... 3-4 вещи: верх, низ, обувь, опц. аксессуар"],
-"why_works":"3-5 предложений: сочетание цветов, сочетание силуэтов, почему вещи подходят друг другу, почему комплект уместен именно под сегодняшнюю погоду",
-"palette":"нейтральная|контрастная|тёплая|холодная",
+{{"intro":"2-3 предложения: главная идея образа и почему он уместен именно сегодня (погода, комфорт) — без перечисления вещей",
+"items":[{{"emoji":"👕","name":"вещь полным названием из списка","short_name":"вещь без бренда"}}, "... 3-4 вещи: верх, низ, обувь, опц. аксессуар"],
 "style":"Scandinavian Minimalism|Smart Casual|Streetwear|Old Money|Classic Casual|Japanese Minimalism",
-"comfort":число 1-5,
-"practicality":число 1-5,
+"reasons":["2-3 коротких пункта почему этот образ подходит именно сегодня — каждый про РАЗНОЕ (напр. один про ткань/температуру, другой про силуэт/ветер, третий про цвета), без повторов одной мысли"],
+"occasion":"короткая фраза с эмодзи для чего образ хорошо подходит сегодня, в общем виде без привязки к конкретным планам (напр. '☕ Комфортно для прогулки по городу'), или пусто",
 "recommendation":"1 предложение с одной рекомендацией докупить, если в гардеробе не хватает вещи для идеального образа, иначе пустая строка"}}"""
     try:
         d = await ai.allm_json(prompt, 900, module="wardrobe")
@@ -326,18 +325,16 @@ async def send_looks(bot, cid):
     rl.append(", ".join(items)[:80])
     store.recent_looks[str(cid)] = rl[-3:]
     store.last_look[str(cid)] = ", ".join(str(it) for it in items)[:120]   # для фидбека
-    weather_intro = d.get("weather_intro", "")
+    intro = d.get("intro", "")
     if gap_note:
         # Честно сообщаем о пробеле под дождь прямо в образе.
-        weather_intro = (weather_intro + " " + gap_note).strip() if weather_intro else gap_note
+        intro = (intro + " " + gap_note).strip() if intro else gap_note
     look_data = {
-        "weather_intro": weather_intro,
+        "intro": intro,
         "items": raw_items,
-        "why_works": d.get("why_works", ""),
-        "palette": d.get("palette", ""),
         "style": d.get("style", ""),
-        "comfort": d.get("comfort"),
-        "practicality": d.get("practicality"),
+        "reasons": d.get("reasons") or [],
+        "occasion": d.get("occasion", ""),
         "recommendation": d.get("recommendation", ""),
     }
     text, entities = _build_look_message(look_data)

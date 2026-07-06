@@ -180,3 +180,210 @@ def test_send_movie_by_mood_reports_error_instead_of_hanging(monkeypatch):
 
     asyncio.run(leisure.send_movie_by_mood(DummyBot(), "cid", "think"))
     assert sent and "LLM" in sent[0]
+
+
+# ---------- клавиатура и память категории (жанр/настроение) на карточке ----------
+
+@pytest.mark.unit
+def test_movie_kb_inside_category_has_exactly_4_action_buttons_plus_back():
+    """Внутри жанра/настроения — ровно 4 кнопки действия + Назад, без строки
+    «По жанру/По настроению» (пользователь уже внутри категории)."""
+    category = {"kind": "genre", "value": 35, "reason": {"kind": "genre", "label": "Комедия"}}
+    kb = leisure._movie_kb(0, category=category)
+    labels = [btn.text for row in kb.inline_keyboard for btn in row]
+    assert labels == ["✨ Заменить", "⭐️ Сохранить", "❤️ В любимые", "✅ Уже видел", "◀️ Назад"]
+    assert not any("жанру" in l or "настроению" in l for l in labels)
+
+
+@pytest.mark.unit
+def test_movie_kb_without_category_keeps_genre_mood_row():
+    """Обычная (не категорийная) карточка — прежнее поведение не тронуто."""
+    kb = leisure._movie_kb(0)
+    labels = [btn.text for row in kb.inline_keyboard for btn in row]
+    assert "🎭 По жанру" in labels
+    assert "😊 По настроению" in labels
+
+
+@pytest.mark.unit
+def test_movie_kb_back_button_targets_genre_or_mood_menu():
+    genre_kb = leisure._movie_kb(0, category={"kind": "genre", "value": 35, "reason": {}})
+    mood_kb = leisure._movie_kb(0, category={"kind": "mood", "value": "scary", "reason": {}})
+    plain_kb = leisure._movie_kb(0)
+
+    def back_target(kb):
+        return next(btn.callback_data for row in kb.inline_keyboard for btn in row if btn.text == "◀️ Назад")
+
+    assert back_target(genre_kb) == "movie_genre_menu"
+    assert back_target(mood_kb) == "movie_mood_menu"
+    assert back_target(plain_kb) == "m_leisure"
+
+
+@pytest.mark.unit
+def test_show_discovered_stores_category_in_last_recos(monkeypatch):
+    import store
+
+    store.last_recos = {}
+    store.last_source = {}
+    monkeypatch.setattr(leisure.movie_engine, "mark_shown", lambda cid, name: None)
+
+    sent = {}
+
+    class DummyBot:
+        async def send_message(self, chat_id, text=None, reply_markup=None, **kw):
+            sent["kb"] = reply_markup
+
+    it = {"title": "Смешной фильм", "title_en": "", "hook": ""}
+    tm = {"name": "Смешной фильм", "kind": "movie", "genre_ids": [35]}
+    category = {"kind": "genre", "value": 35, "reason": {"kind": "genre", "label": "Комедия"}}
+
+    asyncio.run(leisure._show_discovered(DummyBot(), "cid1", it, tm, category=category))
+
+    rec = store.last_recos["cid1"]
+    assert rec["category"] == category
+    labels = [btn.text for row in sent["kb"].inline_keyboard for btn in row]
+    assert "🎭 По жанру" not in labels  # карточка внутри категории, строка не нужна
+
+
+@pytest.mark.unit
+def test_advance_movie_stays_in_genre_category(monkeypatch):
+    """«Заменить»/«В любимые»/«Уже видел»/«Сохранить» внутри жанра должны брать
+    следующего кандидата ИЗ ТОЙ ЖЕ категории через _advance_in_category, а не
+    сбрасываться на обычный _tmdb_engine_pick."""
+    import store
+
+    category = {"kind": "genre", "value": 35, "reason": {"kind": "genre", "label": "Комедия"}}
+    store.last_recos = {"cid1": {"kind": "movie", "items": ["Старый фильм"], "category": category}}
+    store.last_source = {}
+
+    calls = {"category": 0, "engine": 0}
+
+    async def fake_advance_in_category(cid, cat):
+        calls["category"] += 1
+        assert cat == category
+        return {"title": "Новая комедия", "title_en": "", "hook": ""}, {"name": "Новая комедия", "kind": "movie", "genre_ids": [35]}
+
+    async def fake_engine_pick(cid, prefs=None):
+        calls["engine"] += 1
+        return None, None
+
+    monkeypatch.setattr(leisure, "_advance_in_category", fake_advance_in_category)
+    monkeypatch.setattr(leisure, "_tmdb_engine_pick", fake_engine_pick)
+    monkeypatch.setattr(leisure.movie_engine, "mark_shown", lambda cid, name: None)
+
+    sent = []
+
+    class DummyBot:
+        async def send_message(self, chat_id, text=None, reply_markup=None, **kw):
+            sent.append(reply_markup)
+
+    asyncio.run(leisure._advance_movie(DummyBot(), "cid1"))
+
+    assert calls["category"] == 1
+    assert calls["engine"] == 0  # обычный алгоритм не должен вызываться внутри категории
+    labels = [btn.text for row in sent[-1].inline_keyboard for btn in row]
+    assert "◀️ Назад" in labels
+    back = next(btn.callback_data for row in sent[-1].inline_keyboard for btn in row if btn.text == "◀️ Назад")
+    assert back == "movie_genre_menu"
+
+
+@pytest.mark.unit
+def test_advance_movie_without_category_uses_normal_engine(monkeypatch):
+    """Без category (обычная сессия рекомендаций) поведение прежнее — обычный движок."""
+    import store
+
+    store.last_recos = {"cid1": {"kind": "movie", "items": ["Старый фильм"]}}
+    store.last_source = {}
+
+    calls = {"category": 0, "engine": 0}
+
+    async def fake_advance_in_category(cid, cat):
+        calls["category"] += 1
+        return None, None
+
+    async def fake_engine_pick(cid, prefs=None):
+        calls["engine"] += 1
+        return {"title": "Обычная рекомендация", "title_en": "", "hook": ""}, {"name": "Обычная рекомендация", "kind": "movie"}
+
+    monkeypatch.setattr(leisure, "_advance_in_category", fake_advance_in_category)
+    monkeypatch.setattr(leisure, "_tmdb_engine_pick", fake_engine_pick)
+    monkeypatch.setattr(leisure.movie_engine, "mark_shown", lambda cid, name: None)
+
+    sent = []
+
+    class DummyBot:
+        async def send_message(self, chat_id, text=None, reply_markup=None, **kw):
+            sent.append(reply_markup)
+
+    asyncio.run(leisure._advance_movie(DummyBot(), "cid1"))
+
+    assert calls["engine"] == 1
+    assert calls["category"] == 0
+    labels = [btn.text for row in sent[-1].inline_keyboard for btn in row]
+    assert "🎭 По жанру" in labels  # обычная карточка сохраняет прежний вид
+
+
+# ---------- приветственный экран раздела «Кино» (вместо мгновенной рекомендации) ----------
+
+@pytest.mark.unit
+def test_movie_home_screen_shows_loved_count_and_genres():
+    from ui import leisure as leisure_ui
+
+    msg = leisure_ui.movie_home_screen(3, ["🎭 Комедия", "😱 Ужасы"])
+    assert "🎬 Кино" in msg.text
+    assert "В любимых 3 фильма/сериала" in msg.text
+    assert "Жанры в предпочтениях" in msg.text
+    assert "🎭 Комедия" in msg.text
+    assert "😱 Ужасы" in msg.text
+
+
+@pytest.mark.unit
+def test_movie_home_screen_empty_state():
+    from ui import leisure as leisure_ui
+
+    msg = leisure_ui.movie_home_screen(0, [])
+    assert "пусто" in msg.text
+    assert "Жанры в предпочтениях" not in msg.text
+
+
+@pytest.mark.unit
+def test_movie_home_keyboard_has_exactly_3_buttons_plus_back():
+    kb = leisure._movie_home_kb()
+    labels = [btn.text for row in kb.inline_keyboard for btn in row]
+    assert labels == ["✨ Обычная рекомендация", "🎭 По жанру", "😊 По настроению", "◀️ Назад"]
+
+
+@pytest.mark.unit
+def test_send_movie_home_reads_loved_count_and_genre_prefs(monkeypatch):
+    import store
+    import settings
+
+    monkeypatch.setattr(store, "get_list", lambda k, cid: ["Элита", "Разделение"])
+    monkeypatch.setattr(settings, "get", lambda cid, key, default=None:
+                         ["35", "27"] if key == "movie_genres" else default)
+
+    sent = {}
+
+    class DummyBot:
+        async def send_message(self, chat_id, text=None, reply_markup=None, **kw):
+            sent["text"] = text
+            sent["kb"] = reply_markup
+
+    asyncio.run(leisure.send_movie_home(DummyBot(), "cid1"))
+
+    assert "В любимых 2 фильма/сериала" in sent["text"]
+    assert "Комедия" in sent["text"]
+    assert "Ужасы" in sent["text"]
+    labels = [btn.text for row in sent["kb"].inline_keyboard for btn in row]
+    assert labels == ["✨ Обычная рекомендация", "🎭 По жанру", "😊 По настроению", "◀️ Назад"]
+
+
+@pytest.mark.unit
+def test_watch_action_routes_to_home_screen_not_instant_reco():
+    """Регресс: вход в раздел «Кино» не должен больше сразу дёргать send_recos —
+    сначала приветственный экран (см. bot.py act == 'watch')."""
+    import inspect
+
+    src = inspect.getsource(__import__("bot"))
+    watch_block = src.split('elif act == "watch":')[1].split("elif act ==")[0]
+    assert "send_movie_home" in watch_block
+    assert "send_recos" not in watch_block

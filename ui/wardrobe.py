@@ -112,75 +112,50 @@ def _finish_dot(value):
     return value
 
 
-_STARS_5 = "★★★★★"
-_STARS_EMPTY_5 = "☆☆☆☆☆"
-
-
-def _stars5(score):
-    """Число 1-5 → строка звёзд (5 позиций)."""
-    try:
-        filled = max(0, min(5, round(float(score))))
-    except (TypeError, ValueError):
-        filled = 0
-    return _STARS_5[:filled] + _STARS_EMPTY_5[filled:]
-
-
 def look_message(look_data):
-    """Образ на сегодня как консультация персонального стилиста.
+    """Образ на сегодня — короткая карточка-рекомендация стилиста, а не статья:
+    идея образа одной репликой, вещи списком без описаний, причина — 2-3 коротких
+    пункта об образе целиком (не по вещи), без визуального шума.
 
-    look_data: {weather_intro, items[{emoji,name,why}], why_works, palette,
-                style, comfort, practicality, recommendation}
+    look_data: {intro, items[{emoji,name,short_name}], style, reasons[], occasion,
+                recommendation}
     """
     look_data = look_data or {}
     b = MessageBuilder()
     b.section("✨ Образ на сегодня")
 
-    weather_intro = _clean_text(look_data.get("weather_intro"))
-    if weather_intro:
+    intro = _clean_text(look_data.get("intro"))
+    if intro:
         b.spacer()
-        b.line(weather_intro)
+        b.line(intro)
 
-    items = [it for it in (look_data.get("items") or []) if _clean_text(_item_name(it))]
-    if items:
-        b.section("Что надеваем")
-        for it in items:
-            emoji = _clean_text(it.get("emoji")) if isinstance(it, dict) else ""
-            name = _clean_text(_item_name(it))
-            why = _finish_dot(it.get("why")) if isinstance(it, dict) else ""
-            b.spacer()
-            b.text_line(f"{emoji} " if emoji else "")
-            b.bold(name)
-            b.newline()
-            if why:
-                b.line(why)
-
-    why_works = _finish_dot(look_data.get("why_works"))
-    if why_works:
-        b.section("Почему этот образ работает")
-        b.line(why_works)
-
-    palette = _clean_text(look_data.get("palette"))
     style = _clean_text(look_data.get("style"))
-    comfort = look_data.get("comfort")
-    practicality = look_data.get("practicality")
-    if palette or style or comfort is not None or practicality is not None:
-        b.divider()
-        if palette:
-            b.text_line("🎨 Палитра: ")
-            b.bold(palette)
-            b.newline()
-        if style:
-            b.text_line("👔 Стиль: ")
-            b.bold(style)
-            b.newline()
-        if comfort is not None:
-            b.text_line("⭐ Комфорт: ")
-            b.bold(_stars5(comfort))
-            b.newline()
-        if practicality is not None:
-            b.text_line("🎯 Практичность: ")
-            b.bold(_stars5(practicality))
-            b.newline()
+    if style:
+        b.spacer()
+        b.text_line("Стиль: ")
+        b.bold(style)
+        b.newline()
+
+    items = [it for it in (look_data.get("items") or []) if _clean_text(_item_display(it))]
+    if items:
+        quote = "\n".join(
+            f"{_clean_text(it.get('emoji')) if isinstance(it, dict) else ''} {_clean_text(_item_display(it))}".strip()
+            for it in items
+        )
+        b.spacer()
+        b.quote(quote)
+        b.newline()
+
+    reasons = [_finish_dot(r) for r in (look_data.get("reasons") or []) if _clean_text(r)]
+    if reasons:
+        b.section("Почему именно сегодня")
+        for r in reasons[:3]:
+            b.bullet(r)
+
+    occasion = _finish_dot(look_data.get("occasion"))
+    if occasion:
+        b.spacer()
+        b.line(occasion)
 
     recommendation = _finish_dot(look_data.get("recommendation"))
     if recommendation:
@@ -190,8 +165,10 @@ def look_message(look_data):
     return b.build_stripped()
 
 
-def _item_name(it):
-    return it.get("name") if isinstance(it, dict) else it
+def _item_display(it):
+    if not isinstance(it, dict):
+        return it
+    return it.get("short_name") or it.get("name")
 
 
 def _wardrobe_verdict(total):

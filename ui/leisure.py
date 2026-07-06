@@ -17,6 +17,42 @@ def clip(text, limit=450):
     return (cut[:sp] if sp > 0 else cut).rstrip(" ,.;:—-") + "…"
 
 
+def _pluralize_titles(n):
+    n = abs(int(n))
+    if n % 10 == 1 and n % 100 != 11:
+        return "фильм/сериал"
+    if 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
+        return "фильма/сериала"
+    return "фильмов/сериалов"
+
+
+def movie_home_screen(loved_count, genre_labels):
+    """Главный экран раздела «Кино»: польза, сколько уже в любимых, какие жанры
+    выбраны в предпочтениях. Тот же визуальный паттерн, что у Гардероба (home_screen)."""
+    b = MessageBuilder()
+    b.text_line("🎬 ")
+    b.bold("Кино")
+    b.newline()
+    b.spacer()
+    b.line("Подбираю фильмы и сериалы под твой вкус — по любимым, по жанру или по настроению.")
+
+    b.spacer()
+    if loved_count <= 0:
+        b.line("В любимых пока пусто.")
+        b.spacer()
+        b.line("Добавь фильмы или сериалы, которые понравились, — и я подберу похожее.")
+    else:
+        b.line(f"❤️ В любимых {loved_count} {_pluralize_titles(loved_count)}")
+
+    if genre_labels:
+        b.spacer()
+        b.line("Жанры в предпочтениях:")
+        for label in genre_labels:
+            b.bullet(label)
+
+    return b.build_stripped()
+
+
 def movie_card(item, tm):
     """Карточка рекомендации кино, спроектированная под быстрое решение (3-5 сек).
 

@@ -63,40 +63,41 @@ def test_wardrobe_entity_card_title_only():
 @pytest.mark.unit
 def test_wardrobe_look_message_spec():
     msg = wardrobe.look_message({
-        "weather_intro": "Сегодня сухо и тепло.",
+        "intro": "Лёгкий городской образ для тёплой погоды.",
         "items": [
-            {"emoji": "👕", "name": "белая футболка", "why": "Лёгкая база под сегодняшнюю жару"},
-            {"emoji": "👖", "name": "синие джинсы", "why": "Держит силуэт и подходит к футболке"},
+            {"emoji": "👕", "name": "белая футболка Uniqlo", "short_name": "белая футболка"},
+            {"emoji": "👖", "name": "синие джинсы Levis", "short_name": "синие джинсы"},
         ],
-        "why_works": "Нейтральные цвета сочетаются друг с другом.",
-        "palette": "нейтральная",
         "style": "Smart Casual",
-        "comfort": 5,
-        "practicality": 4,
+        "reasons": ["Лёгкие ткани не дадут перегреться", "Цвета сочетаются между собой"],
+        "occasion": "☕ Комфортно для прогулки по городу",
         "recommendation": "Возьми куртку.",
     })
 
     assert msg.text.startswith("✨ Образ на сегодня")
-    assert "Сегодня сухо и тепло." in msg.text
-    assert "Что надеваем" in msg.text
-    assert "белая футболка" in msg.text
-    assert "Лёгкая база под сегодняшнюю жару." in msg.text
-    assert "синие джинсы" in msg.text
-    assert "Почему этот образ работает" in msg.text
-    assert "Нейтральные цвета сочетаются друг с другом." in msg.text
-    assert "🎨 Палитра: " in msg.text and "нейтральная" in msg.text
-    assert "👔 Стиль: " in msg.text and "Smart Casual" in msg.text
-    assert "⭐ Комфорт: " in msg.text and "★★★★★" in msg.text
-    assert "🎯 Практичность: " in msg.text and "★★★★☆" in msg.text
+    assert "Лёгкий городской образ для тёплой погоды." in msg.text
+    assert "Стиль: " in msg.text and "Smart Casual" in msg.text
+    # бренд не должен просачиваться в отображение вещи
+    assert "белая футболка" in msg.text and "Uniqlo" not in msg.text
+    assert "синие джинсы" in msg.text and "Levis" not in msg.text
+    # никаких описаний под каждой вещью и никакой разделительной линии
+    assert "why" not in msg.text.lower()
+    assert "—" * 8 not in msg.text
+    assert "Почему именно сегодня" in msg.text
+    assert "Лёгкие ткани не дадут перегреться." in msg.text
+    assert "Цвета сочетаются между собой." in msg.text
+    assert "☕ Комфортно для прогулки по городу." in msg.text
     assert "\n\n\n" not in msg.text
 
     bold = _entities_of_type(msg, MessageEntity.BOLD)
     assert bold[0].offset == 0
     assert _slice_u16(msg.text, bold[0].offset, bold[0].length) == "✨ Образ на сегодня"
 
-    item_bold_texts = _bold_texts(msg)
-    assert "белая футболка" in item_bold_texts
-    assert "синие джинсы" in item_bold_texts
+    quote_entities = _entities_of_type(msg, MessageEntity.BLOCKQUOTE)
+    assert len(quote_entities) == 1
+    quote_text = _slice_u16(msg.text, quote_entities[0].offset, quote_entities[0].length)
+    assert "👕 белая футболка" in quote_text
+    assert "👖 синие джинсы" in quote_text
 
     italic_entities = _entities_of_type(msg, MessageEntity.ITALIC)
     assert len(italic_entities) == 1

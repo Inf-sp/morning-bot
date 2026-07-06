@@ -271,7 +271,7 @@ async def answer_callback(update, context):
             elif act == "trav_save":
                 await _ack(q); await leisure.save_plan(bot, cid)
             elif act == "watch":
-                await _ack(q); await leisure.send_recos(bot, cid, "movie")
+                await _ack(q); await leisure.send_movie_home(bot, cid, q)
             elif act == "read":
                 await _ack(q); await leisure.send_recos(bot, cid, "book")
             elif act == "watchlist":
@@ -408,6 +408,15 @@ async def answer_callback(update, context):
         await _ack(q)
         await leisure.toggle_movie_pref(bot, cid, data, q)
         return
+    if data == "movie_reco":
+        await util.ack_loading(q)
+        try:
+            await leisure.send_recos(bot, cid, "movie")
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+        finally:
+            await util.clear_loading(q)
+        return
     if data == "movie_genre_menu":
         await _ack(q)
         await leisure.send_movie_genre_menu(bot, cid, q)
@@ -435,12 +444,22 @@ async def answer_callback(update, context):
             await util.clear_loading(q)
         return
     if data.startswith("movie_love_"):
-        await _ack(q)
-        await leisure.movie_love(bot, cid, int(data.split("_")[-1]))
+        await util.ack_loading(q)
+        try:
+            await leisure.movie_love(bot, cid, int(data.split("_")[-1]))
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+        finally:
+            await util.clear_loading(q)
         return
     if data.startswith("movie_seen_"):
-        await _ack(q)
-        await leisure.movie_seen(bot, cid, int(data.split("_")[-1]))
+        await util.ack_loading(q)
+        try:
+            await leisure.movie_seen(bot, cid, int(data.split("_")[-1]))
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+        finally:
+            await util.clear_loading(q)
         return
     if data.startswith("book_love_"):
         await _ack(q)
@@ -459,12 +478,22 @@ async def answer_callback(update, context):
         await leisure.listen_seen(bot, cid)
         return
     if data.startswith("reco_"):
-        await _ack(q)
-        await leisure.add_reco(bot, cid, int(data.split("_")[1]))
+        await util.ack_loading(q)
+        try:
+            await leisure.add_reco(bot, cid, int(data.split("_")[1]))
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+        finally:
+            await util.clear_loading(q)
         return
     if data.startswith("movie_no_"):
-        await _ack(q)
-        await leisure.movie_dislike(bot, cid, int(data.split("_")[-1]))
+        await util.ack_loading(q)
+        try:
+            await leisure.movie_dislike(bot, cid, int(data.split("_")[-1]))
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+        finally:
+            await util.clear_loading(q)
         return
     if data.startswith("book_no_"):
         await _ack(q)
