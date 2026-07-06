@@ -120,6 +120,24 @@ def _gen_cf(prompt, max_tokens):
         40, "cf")
     return _as_text(r.json().get("result", {}).get("response"))
 
+# ---------- circuit breaker для 429 ----------
+_COOLDOWN_SEC = 300  # 5 минут - на столько провайдер уходит в конец очереди после 429
+_cooldowns = {}  # provider -> ts до которого он считается недоступным
+
+def _mark_cooldown(name, err):
+    if "429" in str(err) or "Too Many Requests" in str(err):
+        _cooldowns[name] = time.time() + _COOLDOWN_SEC
+
+def _is_cooling(name):
+    return _cooldowns.get(name, 0) > time.time()
+
+def _reorder_for_cooldown(order):
+    """Провайдеров на cooldown (недавний 429) отодвигаем в конец, чтобы не терять
+    время на заведомо неудачный запрос перед рабочим fallback-ом."""
+    if not any(_is_cooling(n) for n in order):
+        return order
+    return tuple(sorted(order, key=lambda n: _is_cooling(n)))
+
 def _friendly(errs):
     joined = "; ".join(errs)
     _log.warning("LLM chain failed: %s", secure.redact(joined))
@@ -181,6 +199,7 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None,
     if not module:
         module = _caller_module()
     order, claude_model = _resolve(tier, order, claude_model, route=route)
+    order = _reorder_for_cooldown(order)
     calls = {
         "claude": lambda: _gen_claude(prompt, max_tokens, claude_model),
         "openai": lambda: _gen_openai(prompt, max_tokens, temperature),
@@ -199,6 +218,7 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None,
                 _log_cost(name, claude_model if name == "claude" else name, prompt, out, module, ms=ms, ok=True)
                 return out
         except Exception as e:
+            _mark_cooldown(name, e)
             errs.append(f"{name}:{e}")
     _friendly_msg = _friendly(errs)
     try:
@@ -363,13 +383,14 @@ def chat_chain(history, cid=None):
     system = _chat_system(cid)
     errs = []
     prompt_len = sum(len(m.get("content", "")) for m in history)
-    for p in CHAT_ORDER:
+    for p in _reorder_for_cooldown(CHAT_ORDER):
         try:
             out = _as_text(_chat(p, history, system))
             if out and out.strip():
                 _log_cost(p, p, "c" * prompt_len, out, "assistant")
                 return out
         except Exception as e:
+            _mark_cooldown(p, e)
             errs.append(f"{p}:{e}")
     raise Exception(_friendly(errs))
 
