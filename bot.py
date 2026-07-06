@@ -18,6 +18,7 @@ import learning
 import cleanup
 import settings
 import leisure
+import travel
 import weather
 import verify
 import secure
@@ -147,6 +148,8 @@ async def answer_callback(update, context):
         await firstvisit.show_prompt(bot, cid, _FV_SECTION[data]); return
     if data == "m_wardrobe":
         await wardrobe.send_home(bot, cid, q); return
+    if data == "m_travel":
+        await travel.send_home(bot, cid, q); return
     if data.startswith("m_"):
         text, entities, kb = menu.menu_screen(data)
         try:
@@ -246,15 +249,15 @@ async def answer_callback(update, context):
                 store.pending_input[cid] = "setcity"
                 await bot.send_message(chat_id=cid, text="🌍 Напиши название города - переключу на него!")
             elif act == "trav_go":
-                await _ack(q); await leisure.send_go(bot, cid)
+                await _ack(q); await travel.send_go(bot, cid)
             elif act == "trav_no":
-                await _ack(q); await leisure.travel_dislike(bot, cid)
+                await _ack(q); await travel.travel_dislike(bot, cid)
             elif act == "trav_plan":
-                await _ack(q); await leisure.send_plan(bot, cid)
+                await _ack(q); await travel.send_plan(bot, cid)
             elif act == "trav_fav":
-                await _ack(q); await leisure.travel_fav(bot, cid)
+                await _ack(q); await travel.travel_fav(bot, cid)
             elif act == "trav_save":
-                await _ack(q); await leisure.save_plan(bot, cid)
+                await _ack(q); await travel.save_plan(bot, cid)
             elif act == "watch":
                 await _ack(q); await leisure.send_movie_home(bot, cid, q)
             elif act == "read":
@@ -567,6 +570,9 @@ async def text_router(update, context):
             return
         if key == "m_wardrobe":
             await wardrobe.send_home(bot, cid)
+            return
+        if key == "m_travel":
+            await travel.send_home(bot, cid)
             return
         t, entities, kb = menu.menu_screen(key)
         await bot.send_message(chat_id=cid, text=t, reply_markup=kb, entities=entities)

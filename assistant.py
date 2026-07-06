@@ -64,7 +64,7 @@ def _looks_medical(text: str) -> bool:
 
 
 async def _run_intent(bot, cid, action):
-    import balance, leisure, learning, wardrobe, myday, settings
+    import balance, leisure, learning, wardrobe, myday, settings, travel
     import weather as wx
     if action == "meal_picker":
         kb = InlineKeyboardMarkup([[
@@ -85,7 +85,7 @@ async def _run_intent(bot, cid, action):
     elif action == "music":
         await leisure.send_listen(bot, cid)
     elif action == "travel":
-        await leisure.send_go(bot, cid)
+        await travel.send_go(bot, cid)
     elif action == "concerts":
         await leisure.find_concerts(bot, cid, "home")
     elif action == "motivation":
