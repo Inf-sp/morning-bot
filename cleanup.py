@@ -183,6 +183,10 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
             InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"clp_{ctx}_{(page + 1) % pages}"),
         ])
+    if len(chunk) >= 2:
+        page_ids = {i for i, _ in chunk}
+        page_label = "✅ Снять выбор на странице" if page_ids <= sel else "✅ Выбрать все на странице"
+        rows.append([InlineKeyboardButton(page_label, callback_data=f"cla_{ctx}_{page}")])
     if sel:
         rows.append([InlineKeyboardButton(f"{_action_label(ctx)} ({len(sel)})", callback_data=f"cld_{ctx}_{page}")])
     if ctx in _lv_add_label:

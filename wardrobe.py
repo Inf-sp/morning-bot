@@ -211,7 +211,7 @@ async def send_looks(bot, cid):
     wardrobe_text = store.wardrobe_to_text(w)
     if not wardrobe_text.strip():
         kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✏️ Добавить вещи в шкаф", callback_data="set_closet"),
+            InlineKeyboardButton("✏️ Добавить вещи в шкаф", callback_data="set_ward_add"),
         ], [
             InlineKeyboardButton("◀️ Назад", callback_data="m_wardrobe"),
         ]])
@@ -659,7 +659,7 @@ async def send_improve(bot, cid):
     wardrobe_text = store.wardrobe_to_text(w)
     if not wardrobe_text.strip():
         kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✏️ Добавить вещи в шкаф", callback_data="set_closet"),
+            InlineKeyboardButton("✏️ Добавить вещи в шкаф", callback_data="set_ward_add"),
         ], [
             InlineKeyboardButton("◀️ Назад", callback_data="m_wardrobe"),
         ]])
