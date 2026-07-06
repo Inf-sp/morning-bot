@@ -4,6 +4,9 @@
 Контексты: d_<lang>_<kind> (словарь), nb (закладки),
            wl/rl (watchlist/readlist), kast_<zone_slug>_<subcat_idx>_<origin>
            (шкаф — вещи одной подкатегории, адресация по id вещи), lv_<key> (любимые),
+           hid_<key> (скрытое/чёрный список — действие только убирает из чёрного
+           списка, не трогает fav_key, чтобы не превращать «вернуть в рекомендации»
+           в скрытый сигнал «мне нравится»),
            fridge (холодильник), recipes (рецепты).
 """
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -81,12 +84,20 @@ def _ctx_items(cid, ctx):
     if ctx.startswith("lv_") or ctx.startswith("lvls_"):
         is_leisure = ctx.startswith("lvls_")
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
-        store_key = {"movies": config.WATCHLIST_KEY, "countries": config.COUNTRIES_KEY,
+        store_key = {"movies": config.WATCHLIST_KEY, "countries": config.FAVCOUNTRIES_KEY,
                      "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
         title = {"movies": "🎬 Чистка: фильмы", "countries": "🧳 Чистка: страны",
                  "artists": "🎸 Чистка: музыканты", "books": "📖 Чистка: книги"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
         return title, items, "m_leisure_settings" if is_leisure else "as_notes"
+    if ctx.startswith("hid_"):
+        key = ctx[len("hid_"):]
+        store_key = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
+                     "artists": config.MUSIC_DISLIKE_KEY, "countries": config.TRAVEL_DISLIKE_KEY}.get(key)
+        title = {"movies": "🚫 Скрытое: фильмы", "books": "🚫 Скрытое: книги",
+                 "artists": "🚫 Скрытое: музыканты", "countries": "🚫 Скрытое: страны"}.get(key, "Скрытое")
+        items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
+        return title, items, f"as_love_{key}"
     if ctx.startswith("cfg_"):
         key = ctx[len("cfg_"):]
         store_key = {"countries": config.COUNTRIES_KEY,
@@ -115,6 +126,27 @@ def _ctx_items(cid, ctx):
     return "Чистка", [], "m_learn"
 
 
+def _action_label(ctx):
+    """Текст кнопки группового действия — называет последствие, а не факт удаления записи."""
+    if ctx.startswith("lv_") or ctx.startswith("lvls_"):
+        return "Убрать из любимого"
+    if ctx.startswith("hid_"):
+        return "Вернуть в рекомендации"
+    if ctx == "nb" or ctx.startswith("nb_"):
+        return "Удалить сохранённое"
+    if ctx.startswith("kast_"):
+        return "Удалить вещи"
+    if ctx == "recipes":
+        return "Удалить рецепты"
+    if ctx == "fridge":
+        return "Удалить продукты"
+    if ctx.startswith("d_"):
+        return "Удалить слова" if ctx.endswith("_word") else "Удалить фразы"
+    if ctx == "lagom":
+        return "Удалить принципы"
+    return "Удалить отмеченные"
+
+
 async def send_cleanup(bot, cid, ctx, page=0, q=None):
     title, items, back = _ctx_items(cid, ctx)
     items = _sort_items(items)
@@ -124,7 +156,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     pages = max(1, (total + CLEAN_PAGE - 1) // CLEAN_PAGE)
     page = max(0, min(page, pages - 1))
     chunk = items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]
-    hint = "Отметь лишнее ✅ и нажми «Удалить отмеченные»." if ctx == "nb" or ctx.startswith("nb_") else "Отметь выученное ✅ и нажми «Удалить отмеченные»."
+    hint = f"Отметь нужное ✅ и нажми «{_action_label(ctx)}»."
     lines = [f"🧹 <b>{esc(title)}</b>", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
     _lv_add_label = {
         "lv_movies": "✏️ Добавить фильм",
@@ -152,7 +184,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
             InlineKeyboardButton("▶️", callback_data=f"clp_{ctx}_{(page + 1) % pages}"),
         ])
     if sel:
-        rows.append([InlineKeyboardButton(f"❌ Удалить отмеченные ({len(sel)})", callback_data=f"cld_{ctx}_{page}")])
+        rows.append([InlineKeyboardButton(f"{_action_label(ctx)} ({len(sel)})", callback_data=f"cld_{ctx}_{page}")])
     if ctx in _lv_add_label:
         if ctx.startswith("lvls_"):
             rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"ls_loveadd_{ctx[5:]}")])
@@ -188,8 +220,14 @@ def _cleanup_delete(cid, ctx):
         store.remove_wardrobe_items(cid, sel)
     elif ctx.startswith("lv_") or ctx.startswith("lvls_"):
         key = ctx[len("lvls_"):] if ctx.startswith("lvls_") else ctx[len("lv_"):]
-        store_key = {"movies": config.WATCHLIST_KEY, "countries": config.COUNTRIES_KEY,
+        store_key = {"movies": config.WATCHLIST_KEY, "countries": config.FAVCOUNTRIES_KEY,
                      "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
+        if store_key:
+            store.set_list(store_key, cid, [it for i, it in enumerate(store.get_list(store_key, cid)) if i not in sel])
+    elif ctx.startswith("hid_"):
+        key = ctx[len("hid_"):]
+        store_key = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
+                     "artists": config.MUSIC_DISLIKE_KEY, "countries": config.TRAVEL_DISLIKE_KEY}.get(key)
         if store_key:
             store.set_list(store_key, cid, [it for i, it in enumerate(store.get_list(store_key, cid)) if i not in sel])
     elif ctx.startswith("cfg_"):

@@ -312,6 +312,8 @@ def _movie_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}"),
          InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("❤️ В любимые", callback_data=f"movie_love_{i}"),
+         InlineKeyboardButton("✅ Уже видел", callback_data=f"movie_seen_{i}")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("😊 По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
@@ -640,6 +642,8 @@ def _book_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data=f"book_no_{i}"),
          InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
+         InlineKeyboardButton("✅ Уже читал", callback_data=f"book_seen_{i}")],
         [InlineKeyboardButton("🎚️ Настройки книг", callback_data="set_books")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
@@ -1152,6 +1156,8 @@ def _listen_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data="a_listen_no"),
          InlineKeyboardButton("⭐️ Сохранить", callback_data="listen_0")],
+        [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love"),
+         InlineKeyboardButton("✅ Уже знаю", callback_data="listen_seen")],
         [InlineKeyboardButton("🎚️ Настройка музыкантов", callback_data="set_artists")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
@@ -1903,7 +1909,8 @@ def _country_card(d):
 def _travel_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🧳 Собрать план поездки", callback_data="a_trav_plan")],
-        [InlineKeyboardButton("❌ Пропустить", callback_data="a_trav_no")],
+        [InlineKeyboardButton("❤️ В любимые", callback_data="a_trav_fav"),
+         InlineKeyboardButton("❌ Пропустить", callback_data="a_trav_no")],
         [InlineKeyboardButton("🎚️ Настройки стран", callback_data="set_countries")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])

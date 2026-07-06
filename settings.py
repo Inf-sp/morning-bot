@@ -1156,7 +1156,7 @@ def _love_items(cid, key):
     if key == "movies":
         return list(store.get_list(config.WATCHLIST_KEY, cid))
     if key == "countries":
-        cur = store.get_list(config.COUNTRIES_KEY, cid)
+        cur = store.get_list(config.FAVCOUNTRIES_KEY, cid)
         return [c if isinstance(c, str) else c.get("name", "") for c in cur]
     if key == "artists":
         return list(store.get_list(config.ARTISTS_KEY, cid))
@@ -1167,6 +1167,8 @@ def _love_items(cid, key):
 def _love_title(key):
     return {"movies": "🎬 Мое кино", "countries": "🗺️ Мои страны",
             "artists": "🎸 Мои музыканты", "books": "📖 Мои книги"}.get(key, "Любимые")
+
+_HIDDEN_SUPPORTED = {"movies", "books", "artists", "countries"}
 
 async def send_love_section(bot, cid, key):
     if key == "recipes":
@@ -1180,16 +1182,18 @@ async def send_love_section(bot, cid, key):
     if items:
         rows.append([
             InlineKeyboardButton("✏️ Добавить", callback_data=f"as_loveadd_{key}"),
-            InlineKeyboardButton("❌ Удалить", callback_data=f"as_loveclean_{key}"),
+            InlineKeyboardButton("Убрать из любимого", callback_data=f"as_loveclean_{key}"),
         ])
     else:
         rows.append([InlineKeyboardButton("✏️ Добавить", callback_data=f"as_loveadd_{key}")])
+    if key in _HIDDEN_SUPPORTED:
+        rows.append([InlineKeyboardButton("🚫 Скрытое", callback_data=f"as_lovehidden_{key}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))
 
 def _love_key_of(key):
-    return {"movies": config.WATCHLIST_KEY, "countries": config.COUNTRIES_KEY,
+    return {"movies": config.WATCHLIST_KEY, "countries": config.FAVCOUNTRIES_KEY,
             "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
 
 async def love_delete(bot, cid, key, i):
@@ -1212,7 +1216,11 @@ async def love_add_start(bot, cid, key, origin="base"):
 
 async def love_add_done(bot, cid, key, text, origin="base"):
     store_key = _love_key_of(key)
-    if store_key:
+    if store_key and key == "countries":
+        from util import country_flag
+        name = text.strip()
+        store.add_to_list(store_key, cid, {"name": name, "flag": country_flag(name)})
+    elif store_key:
         store.add_to_list(store_key, cid, text.strip())
     import cleanup as _cl
     msg = settings_ui.favorite_added()
@@ -1280,6 +1288,9 @@ async def handle_notes_callback(bot, cid, q, data):
     if data.startswith("as_loveclean_"):
         import cleanup
         await cleanup.open_cleanup(bot, cid, f"lv_{data[len('as_loveclean_'):]}"); return
+    if data.startswith("as_lovehidden_"):
+        import cleanup
+        await cleanup.open_cleanup(bot, cid, f"hid_{data[len('as_lovehidden_'):]}"); return
     if data.startswith("as_lovedel_"):
         parts = data[len("as_lovedel_"):].rsplit("_", 1)
         await love_delete(bot, cid, parts[0], int(parts[1])); return
