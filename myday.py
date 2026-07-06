@@ -237,8 +237,11 @@ def _fill_translations(ru, word, lang):
     known = "нидерландском" if lang == "nl" else "английском"
     try:
         d = ai.llm_json(
-            f"Слово на русском: «{ru}». Уже известно на {known}: «{word}». "
-            "Дай недостающие переводы. СТРОГО: nl - только на нидерландском (с артиклем de/het), "
+            f"Русское слово «{ru}» переводится на {known} как «{word}». "
+            f"Сначала определи, в каком именно значении «{ru}» и «{word}» связаны здесь "
+            "(русское слово может быть многозначным - не переводи его дословно/в другом значении). "
+            "Дай перевод именно в этом значении на недостающий язык. "
+            "СТРОГО: nl - только на нидерландском (с артиклем de/het), "
             "en - только на английском. Одним словом/словосочетанием, без пояснений, без других языков.\n"
             'JSON: {"nl":"нидерландский перевод","en":"английский перевод"}',
             200, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
@@ -249,7 +252,7 @@ def _fill_translations(ru, word, lang):
     return nl, en
 
 def _word_of_day(cid):
-    """Слово дня: ОБЯЗАТЕЛЬНО и только из словаря СЛОВ (не фраз). Формат: Русский → 🇳🇱 → 🇬🇧."""
+    """Слово дня: ОБЯЗАТЕЛЬНО и только из словаря СЛОВ (не фраз). Формат: 🇳🇱 → 🇬🇧 → Русский."""
     words = learning._ensure_dict(cid)
     pool = [w for w in words if _is_word_entry(w)
             and (w.get("ru") or "").strip() and (w.get("word") or "").strip()]
@@ -272,11 +275,12 @@ def _word_of_day(cid):
             store.set_list(config.DICT_KEY, cid, words)
         except Exception:
             pass
-    parts = [_cap(ru)]
+    parts = []
     if nl:
         parts.append(f"🇳🇱 {_cap(nl)}")
     if en:
         parts.append(f"🇬🇧 {_cap(en)}")
+    parts.append(_cap(ru))
     return " → ".join(parts)
 
 _day_cache = {}  # cid -> {"date":..., "text":..., "entities":..., "has_fact": bool, "ts": float}
