@@ -270,8 +270,6 @@ async def answer_callback(update, context):
                 await cleanup.open_cleanup(bot, cid, "wl")
             elif act == "readclean":
                 await cleanup.open_cleanup(bot, cid, "rl")
-            elif act == "fav":
-                await leisure.send_fav(bot, cid)
             elif act == "concerts_find":
                 await _ack(q); await leisure.find_concerts(bot, cid, "home")
             elif act == "concerts_pick":
@@ -597,8 +595,6 @@ async def text_router(update, context):
         if kind == "worry":
             _log.info("worry: routed via pending_input for cid=%s", cid)
             await balance.save_worries(bot, cid, text); return
-        if kind == "favorite":
-            await leisure.add_fav(bot, cid, text); return
         if kind in ("role_doctor", "role_state"):
             await balance.handle_role(bot, cid, kind.split("_")[1], text); return
         if kind == "wardrobe_add":

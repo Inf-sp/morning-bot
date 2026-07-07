@@ -105,7 +105,7 @@ def _note_fav_exists(cid, text):
 def dedupe_lists():
     """Разовая чистка: убирает повторы (без учёта регистра) в списках любимого/закладок."""
     keys = [config.BOOKS_KEY, config.ARTISTS_KEY, config.WATCHLIST_KEY,
-            config.READLIST_KEY, config.FAVORITES_KEY, config.COUNTRIES_KEY]
+            config.READLIST_KEY, config.COUNTRIES_KEY]
     changed_any = False
     for key in keys:
         data = store._load(key)
@@ -683,7 +683,7 @@ def _book_kb(i):
          InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
          InlineKeyboardButton("✅ Уже читал", callback_data=f"book_seen_{i}")],
-        [InlineKeyboardButton("🎚️ Настройки книг", callback_data="set_books")],
+        [InlineKeyboardButton("🎚️ Настройки книг", callback_data="as_love_books")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 
@@ -1232,23 +1232,13 @@ async def send_readlist(bot, cid):
         text="📚 Почитать:\n" + ("\n".join(f"• {_list_text(x)}" for x in lst) if lst else "пусто"),
         reply_markup=InlineKeyboardMarkup(rows))
 
-async def send_fav(bot, cid):
-    favs = store.get_list(config.FAVORITES_KEY, cid)
-    store.pending_input[str(cid)] = "favorite"
-    await bot.send_message(chat_id=cid,
-        text="❤️ Любимое:\n" + ("\n".join(f"• {f}" for f in favs) if favs else "пусто") + "\n\nНапиши фильм/сериал/книгу - добавлю.")
-
-async def add_fav(bot, cid, text):
-    added = _add_unique(config.FAVORITES_KEY, cid, text)
-    await bot.send_message(chat_id=cid, text="Добавил в любимое." if added else "Уже в любимом.")
-
 def _listen_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data="a_listen_no"),
          InlineKeyboardButton("⭐️ Сохранить", callback_data="listen_0")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love"),
          InlineKeyboardButton("✅ Уже знаю", callback_data="listen_seen")],
-        [InlineKeyboardButton("🎚️ Настройка музыкантов", callback_data="set_artists")],
+        [InlineKeyboardButton("🎚️ Настройка музыкантов", callback_data="as_love_artists")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
 

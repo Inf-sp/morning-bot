@@ -24,7 +24,7 @@ _log = logging.getLogger(__name__)
 def _home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🌍 Подобрать страну", callback_data="a_trav_go")],
-        [InlineKeyboardButton("🎚️ Настройки стран", callback_data="set_countries")],
+        [InlineKeyboardButton("🎚️ Настройки стран", callback_data="as_love_countries")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_close")],
     ])
 
@@ -80,7 +80,7 @@ def _travel_kb():
         [InlineKeyboardButton("🧳 Собрать план поездки", callback_data="a_trav_plan")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="a_trav_fav"),
          InlineKeyboardButton("❌ Пропустить", callback_data="a_trav_no")],
-        [InlineKeyboardButton("🎚️ Настройки стран", callback_data="set_countries")],
+        [InlineKeyboardButton("🎚️ Настройки стран", callback_data="as_love_countries")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_travel")],
     ])
 

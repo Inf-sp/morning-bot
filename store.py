@@ -317,7 +317,7 @@ def set_list(key, chat_id, items):
 _PER_USER_KEYS = {
     config.SETTINGS_FILE, config.PROFILE_KEY, config.LEVELS_FILE,
     config.ARTISTS_KEY, config.WATCHLIST_KEY, config.READLIST_KEY,
-    config.COUNTRIES_KEY, config.BOOKS_KEY, config.FAVORITES_KEY,
+    config.COUNTRIES_KEY, config.BOOKS_KEY,
     config.FAVCOUNTRIES_KEY, config.MOVIE_BLACKLIST_KEY, config.BOOK_BLACKLIST_KEY,
     config.MUSIC_DISLIKE_KEY, config.TRAVEL_DISLIKE_KEY, config.WORRIES_KEY,
     config.NOTES_KEY, config.DICT_KEY, config.TOPICS_NL_KEY, config.TOPICS_EN_KEY,

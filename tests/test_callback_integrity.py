@@ -172,7 +172,6 @@ _ORPHAN_HANDLER_ALLOWLIST = {
     "md_refresh": "весь md_-роутинг в myday.py недостижим; удаляется в PR5 (P3-1)",
     "md_worrycheck": "весь md_-роутинг в myday.py недостижим; удаляется в PR5 (P3-1)",
     "ob_done": "заменено ob_prio_done; удаляется в PR5 (P3-1)",
-    "a_fav": "FAVORITES_KEY путь — ждёт аудита данных P1-3, не удаляется автоматически",
 }
 
 

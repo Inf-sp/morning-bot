@@ -585,11 +585,14 @@ async def handle_callback(bot, cid, data, q=None):
         from cleanup import open_cleanup
         await open_cleanup(bot, cid, "lagom")
     elif data == "set_countries":
-        await send_countries(bot, cid)
+        _log.info("legacy callback used: %s", data)
+        await send_love_section(bot, cid, "countries")
     elif data == "set_artists":
-        await send_artists(bot, cid)
+        _log.info("legacy callback used: %s", data)
+        await send_love_section(bot, cid, "artists")
     elif data == "set_books":
-        await send_books(bot, cid)
+        _log.info("legacy callback used: %s", data)
+        await send_love_section(bot, cid, "books")
     elif data == "setadd_country":
         store.pending_input[cid] = "setadd_country"
         msg = settings_ui.list_add_prompt("country")
