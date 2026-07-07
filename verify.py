@@ -125,7 +125,13 @@ async def safe_error(bot, cid, exc, *, skill=None):
     traceback.print_exc()
     try:
         import tracking
-        src = "llm" if getattr(skill, "name", "") else "app"
+        msg = str(exc)
+        src = "llm" if (
+            getattr(skill, "name", "")
+            or "JSON" in msg
+            or "ИИ" in msg
+            or "llm" in msg.lower()
+        ) else "app"
         tracking.log_error(src, str(exc), kind=type(exc).__name__)
     except Exception:
         pass

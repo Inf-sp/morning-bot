@@ -474,17 +474,9 @@ def _repair_inner_quotes(raw):
         i += 1
     return "".join(out)
 
-def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
-             fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
-             allow_personal_openrouter=False, fallback_policy=None):
-    if not module:
-        module = _caller_module()
-    raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
-                       "Внутри строковых значений НЕ используй двойные кавычки - "
-                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order, tier, module, route,
-              fallback_allowed=fallback_allowed, privacy_level=privacy_level, response_mode="json",
-              fallback_policy=fallback_policy, allow_personal_openrouter=allow_personal_openrouter)
-    raw = re.sub(r"```(json)?", "", raw).strip()
+
+def _parse_json_response(raw):
+    raw = re.sub(r"```(json)?", "", raw or "").strip()
     m = re.search(r"\{.*\}", raw, re.S)
     if m:
         raw = m.group(0)
@@ -506,7 +498,44 @@ def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=No
             return parsed
         if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
             return parsed[0]
-    # последний шанс - пустой dict, чтобы вызывающий показал понятную ошибку
+    raise ValueError("json_parse_failed")
+
+
+def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
+             fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
+             allow_personal_openrouter=False, fallback_policy=None):
+    if not module:
+        module = _caller_module()
+    raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
+                       "Внутри строковых значений НЕ используй двойные кавычки - "
+                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order, tier, module, route,
+              fallback_allowed=fallback_allowed, privacy_level=privacy_level, response_mode="json",
+              fallback_policy=fallback_policy, allow_personal_openrouter=allow_personal_openrouter)
+    try:
+        return _parse_json_response(raw)
+    except ValueError:
+        pass
+
+    repair_prompt = (
+        "Преобразуй ответ ИИ ниже в один валидный JSON-объект без markdown и пояснений. "
+        "Сохрани существующие данные, не добавляй новые факты. Если данных недостаточно, верни {}.\n\n"
+        "Ожидаемая задача:\n"
+        f"{secure.wrap_untrusted(prompt[:3000], 'исходный промпт')}\n\n"
+        "Ответ ИИ для исправления:\n"
+        f"{secure.wrap_untrusted(str(raw)[:6000], 'сырой ответ ИИ')}"
+    )
+    try:
+        repaired = llm(repair_prompt, max_tokens, 0.1, order, tier, module, route,
+                       fallback_allowed=fallback_allowed, privacy_level=privacy_level,
+                       response_mode="json", fallback_policy=fallback_policy,
+                       allow_personal_openrouter=allow_personal_openrouter)
+        return _parse_json_response(repaired)
+    except Exception:
+        try:
+            import tracking
+            tracking.log_error("llm", "Не удалось разобрать JSON", kind="json-parse")
+        except Exception:
+            pass
     raise Exception("Не удалось разобрать ответ ИИ (JSON). Попробуй ещё раз.")
 
 CHAT_SYSTEM = f"""Ты помощник.
