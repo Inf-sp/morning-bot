@@ -339,7 +339,7 @@ def _chat(provider, history, system):
             raise Exception("no claude")
         r = _post("https://api.anthropic.com/v1/messages",
             {"x-api-key": config.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            {"model": "claude-sonnet-4-6", "max_tokens": 700, "system": system, "messages": history}, 60, "claude")
+            {"model": config.ANTHROPIC_MODEL, "max_tokens": 700, "system": system, "messages": history}, 60, "claude")
         return r.json()["content"][0]["text"]
     if provider == "gemini":
         contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in history]

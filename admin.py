@@ -75,15 +75,15 @@ async def send_home(bot, cid):
         dot, txt = ui.WARN, "есть ошибки"
     else:
         dot, txt = ui.BAD, "много ошибок"
-    next_title, next_when, next_reach = _next_broadcast()
+    next_title, next_when = _next_broadcast()
     issues_label = ("⚠️ Проблемы" if issues else "🟢 Система")
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("👥 Пользователи", callback_data="set_admin_users"),
          InlineKeyboardButton("🤖 LLM", callback_data="set_admin_llm")],
-        [InlineKeyboardButton("📢 Рассылка", callback_data="set_admin_broadcast"),
+        [InlineKeyboardButton("🔔 Уведомления", callback_data="set_admin_broadcast"),
          InlineKeyboardButton(f"{issues_label} ({len(issues)})" if issues else issues_label,
                                callback_data="set_admin_issues")],
-        [InlineKeyboardButton("🔄 Проверить всё", callback_data="set_admin_check_all")],
+        [InlineKeyboardButton("🔄 Проверить доступное", callback_data="set_admin_check_all")],
     ])
     top_issue = f"{issues[0][1]} · {issues[0][2]}" if issues else None
     msg = ui.home(
@@ -91,7 +91,6 @@ async def send_home(bot, cid):
         total_users=stats["total"], active_7d=stats["active_7d"],
         llm_calls_today=usage["calls"], llm_tokens_today=usage["tokens"],
         next_broadcast_title=next_title, next_broadcast_when=next_when,
-        next_broadcast_reach=next_reach,
         issues_count=len(issues), top_issue=top_issue,
     )
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
@@ -245,56 +244,71 @@ async def send_llm_history(bot, cid):
 _ISSUES_CACHE = {}
 
 
+def _issue_key(ts, source, kind) -> str:
+    """Стабильный короткий ключ проблемы (не зависит от позиции в списке).
+    Хешируем: source/kind могут быть длинными, а callback_data ограничен 64 байтами."""
+    import hashlib
+    raw = f"{ts}:{source}:{kind}"
+    return hashlib.sha1(raw.encode()).hexdigest()[:16]
+
+
 def _collect_issues():
-    """Реальные проблемы из error-лога за сегодня (без внешних пингов) — дёшево, для дома/списка."""
+    """Реальные проблемы из error-лога за сегодня (без внешних пингов) — дёшево, для дома/списка.
+
+    rows: [(key, dot, name, detail)]."""
     errs = tracking.get_errors(limit=50)
     cutoff = time.time() - DAY
     rows = []
     for e in errs:
-        if e.get("ts", 0) < cutoff:
+        ts = e.get("ts", 0)
+        if ts < cutoff:
             continue
-        dot = ui.BAD if e.get("source") in ("llm", "service") else ui.WARN
-        rows.append((dot, e.get("source", "?"), f"{e.get('msg', '')[:50]} · {_when(e.get('ts', 0))}"))
+        source = e.get("source", "?")
+        kind = e.get("kind", "")
+        dot = ui.BAD if source in ("llm", "service") else ui.WARN
+        rows.append((_issue_key(ts, source, kind), dot, source, f"{e.get('msg', '')[:50]} · {_when(ts)}"))
     return rows
 
 
 async def _collect_issues_with_probes(cid):
-    """То же самое + активный health-check БД/Weather — для «Проверить всё»."""
+    """То же самое + активный health-check БД/Weather — для «Проверить доступное»."""
     rows = _collect_issues()
+    now = int(time.time())
     try:
         store._load("__health__")
     except Exception as e:
-        rows.append((ui.BAD, "База данных", str(e)[:40]))
+        rows.append((_issue_key(now, "service", "db"), ui.BAD, "База данных", str(e)[:40]))
     try:
         import asyncio
         import weather
         s = store.get_settings(cid)
         await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 1)
     except Exception:
-        rows.append((ui.BAD, "Weather", f"недоступна · {_when(time.time())}"))
+        rows.append((_issue_key(now, "service", "weather"), ui.BAD, "Weather", f"недоступна · {_when(now)}"))
     return rows
 
 
 async def send_issues(bot, cid, with_probes=False):
     rows = await _collect_issues_with_probes(cid) if with_probes else _collect_issues()
     kb_rows = []
-    for i, (dot, name, detail) in enumerate(rows):
-        kb_rows.append([InlineKeyboardButton(f"{dot} {name}", callback_data=f"set_admin_issue_{i}")])
-    kb_rows.append([InlineKeyboardButton("🔄 Проверить всё", callback_data="set_admin_check_all"),
+    for key, dot, name, detail in rows:
+        kb_rows.append([InlineKeyboardButton(f"{dot} {name}", callback_data=f"set_admin_issue_{key}")])
+    kb_rows.append([InlineKeyboardButton("🔄 Проверить доступное", callback_data="set_admin_check_all"),
                      InlineKeyboardButton("🧹 Очистить кэш", callback_data="set_admin_cache_clear")])
     kb_rows.append(_back())
-    _ISSUES_CACHE[cid] = rows
-    msg = ui.issues(rows, _when(time.time()))
+    _ISSUES_CACHE[cid] = {key: (dot, name, detail) for key, dot, name, detail in rows}
+    msg = ui.issues([(dot, name, detail) for _, dot, name, detail in rows], _when(time.time()))
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(kb_rows))
 
 
-async def send_issue_detail(bot, cid, idx):
-    rows = _ISSUES_CACHE.get(cid, [])
-    if idx >= len(rows):
+async def send_issue_detail(bot, cid, key):
+    entry = _ISSUES_CACHE.get(cid, {}).get(key)
+    if entry is None:
+        await bot.send_message(chat_id=cid, text="Проблема уже не доступна. Открываю актуальный список.")
         await send_issues(bot, cid)
         return
-    dot, name, detail = rows[idx]
+    dot, name, detail = entry
     kb = InlineKeyboardMarkup([_back("set_admin_issues")])
     msg = ui.issue_detail(_when(time.time()), name, dot, detail)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
@@ -313,33 +327,35 @@ async def clear_cache(bot, cid):
 
 
 async def check_all(bot, cid):
+    """Перепроверяет только реально доступные health-check'и (БД, Weather) —
+    не все LLM-провайдеры и внешние сервисы, поэтому кнопка называется
+    «Проверить доступное», а не «Проверить всё»."""
     await send_issues(bot, cid, with_probes=True)
 
 
-# ================= РАССЫЛКА =================
+# ================= УВЕДОМЛЕНИЯ =================
 
 def _next_broadcast():
-    """Ближайшая плановая рассылка: (title, when, reach). Сейчас — утренний бриф."""
-    reach = len(access.get_allowed_cids())
-    return "☀️ Утренний дайджест", "завтра, 08:00", reach
+    """Ближайшее автоматическое уведомление: (title, when). Сейчас — утренний бриф."""
+    return "☀️ Утренний дайджест", "завтра, 08:00"
 
 
 async def send_broadcast(bot, cid):
-    next_title, next_when, reach = _next_broadcast()
+    next_title, next_when = _next_broadcast()
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🧪 Тест себе", callback_data="set_admin_broadcast_test"),
-         InlineKeyboardButton("▶️ Отправить сейчас", callback_data="set_admin_broadcast_send")],
+        [InlineKeyboardButton("🧪 Тест уведомления", callback_data="set_admin_broadcast_test_pick")],
         _back(),
     ])
-    msg = ui.broadcast(next_title, next_when, reach)
+    msg = ui.broadcast(next_title, next_when)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-async def send_broadcast_confirm(bot, cid):
-    _, _, reach = _next_broadcast()
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Отправить", callback_data="set_admin_broadcast_confirm"),
-         InlineKeyboardButton("✖️ Отмена", callback_data="set_admin_broadcast_cancel")],
-    ])
-    msg = ui.broadcast_confirm(reach)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+async def send_broadcast_test_pick(bot, cid):
+    import settings as _s
+    options = _s.get_admin_notification_options()
+    kb_rows = [[InlineKeyboardButton(opt.title, callback_data=f"set_admin_broadcast_test_{opt.key}")]
+               for opt in options]
+    kb_rows.append(_back("set_admin_broadcast"))
+    msg = ui.notification_picker(options)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=InlineKeyboardMarkup(kb_rows))

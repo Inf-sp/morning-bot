@@ -221,13 +221,47 @@ async def send_scheduled_notification(bot, cid, kind):
         await _w.send_weather(_NoKbBot(bot), cid, "tomorrow_plain")
 
 
-async def _run_notif_test(bot, cid, kind):
-    """Предпросмотр уведомления: вызывает тот же код, что и плановая рассылка."""
-    import verify
+async def _run_notif_test(bot, cid, kind) -> bool:
+    """Предпросмотр уведомления: вызывает тот же код, что и плановая рассылка.
+    Возвращает True/False — вызывающий сам решает, что показать администратору."""
     try:
         await send_scheduled_notification(bot, cid, kind)
+        return True
     except Exception as e:
-        await verify.safe_error(bot, cid, e, skill="notif_test")
+        _log.error("notif test failed for kind=%s: %r", kind, e, exc_info=True)
+        import tracking
+        tracking.log_error("app", str(e), kind=f"notif_test:{kind}")
+        return False
+
+
+class NotificationOption:
+    """Одно тестируемое уведомление для админ-панели: ключ + заголовок + расписание."""
+    __slots__ = ("key", "title", "schedule_label")
+
+    def __init__(self, key: str, title: str, schedule_label: str):
+        self.key = key
+        self.title = title
+        self.schedule_label = schedule_label
+
+
+def get_admin_notification_options() -> list:
+    """Все реально существующие и тестируемые уведомления — источник для админ-панели.
+    Берём из NOTIF_TYPES (тот же список, что видит пользователь в своих настройках),
+    т.к. каждый kind оттуда обрабатывается в send_scheduled_notification."""
+    return [
+        NotificationOption(key=kind, title=label, schedule_label=_notif_schedule(kind))
+        for kind, label in NOTIF_TYPES
+    ]
+
+
+def _notif_schedule(kind: str) -> str:
+    """Короткое человекочитаемое расписание уведомления для пикера в админке."""
+    labelled = _notif_label(kind, "")
+    # _notif_label возвращает "<label> (<когда>)" или просто label, если расписания нет —
+    # достаём только скобочную часть с расписанием.
+    if "(" in labelled and labelled.endswith(")"):
+        return labelled[labelled.index("(") + 1:-1].capitalize()
+    return "По расписанию"
 
 
 async def send_notif(bot, cid, q=None):
@@ -632,25 +666,26 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_admin_broadcast":
         import admin as _adm
         await _admin_guard(bot, cid, _adm.send_broadcast)
-    elif data == "set_admin_broadcast_test":
-        async def _do_broadcast_test(b, c):
-            import admin as _adm
-            await _run_notif_test(b, c, "morning_brief")
-        await _admin_guard(bot, cid, _do_broadcast_test)
-    elif data == "set_admin_broadcast_send":
+    elif data == "set_admin_broadcast_test_pick":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_broadcast_confirm)
-    elif data == "set_admin_broadcast_confirm":
-        async def _do_broadcast_send(b, c):
-            import access as _acc
-            for target_cid in _acc.get_allowed_cids():
-                await send_scheduled_notification(b, target_cid, "morning_brief")
+        await _admin_guard(bot, cid, _adm.send_broadcast_test_pick)
+    elif data.startswith("set_admin_broadcast_test_"):
+        kind = data[len("set_admin_broadcast_test_"):]
+        async def _do_broadcast_test(b, c, kind=kind):
             import admin as _adm
+            label = dict(NOTIF_TYPES).get(kind, kind)
+            if kind not in dict(NOTIF_TYPES):
+                _log.warning("unknown notification test kind: %s", kind)
+                await b.send_message(chat_id=c, text="Панель обновлена. Открываю актуальное меню.")
+                await send_admin(b, c)
+                return
+            ok = await _run_notif_test(b, c, kind)
+            if ok:
+                await b.send_message(chat_id=c, text=f"✅ Тест «{label}» отправлен вам.")
+            else:
+                await b.send_message(chat_id=c, text=f"Не удалось собрать тест «{label}». Проверьте логи.")
             await _adm.send_broadcast(b, c)
-        await _admin_guard(bot, cid, _do_broadcast_send)
-    elif data == "set_admin_broadcast_cancel":
-        import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_broadcast)
+        await _admin_guard(bot, cid, _do_broadcast_test)
     elif data == "set_admin_issues":
         import admin as _adm
         await _admin_guard(bot, cid, _adm.send_issues)
@@ -661,9 +696,9 @@ async def handle_callback(bot, cid, data, q=None):
         import admin as _adm
         await _admin_guard(bot, cid, _adm.clear_cache)
     elif data.startswith("set_admin_issue_"):
-        idx = int(data[len("set_admin_issue_"):])
+        key = data[len("set_admin_issue_"):]
         import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_issue_detail(b, c, idx))
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_issue_detail(b, c, key))
     elif data == "set_admin_invite":
         async def _do_invite(b, c):
             import access as _acc
@@ -687,9 +722,11 @@ async def handle_callback(bot, cid, data, q=None):
             await _adm.send_users(b, c)
         await _admin_guard(bot, cid, _do_revoke)
     elif data.startswith("set_admin_"):
-        # устаревшие callback-и из уже отправленных сообщений (аналитика/расходы/сервисы/логи/настройки) —
-        # безопасный fallback вместо silent fail или traceback
+        # устаревшие или неизвестные callback-и из уже отправленных сообщений —
+        # безопасный fallback вместо silent fail или traceback; авторизация уже
+        # проверена _admin_guard-ом до захода в эту ветку.
         async def _do_fallback(b, c):
+            _log.warning("unknown/legacy admin callback: %s", data)
             await b.send_message(chat_id=c, text="Панель обновлена. Открываю актуальное меню.")
             await send_admin(b, c)
         await _admin_guard(bot, cid, _do_fallback)

@@ -32,7 +32,7 @@ def only():
 # ================= ДОМ =================
 
 def home(system_dot, system_text, total_users, active_7d, llm_calls_today, llm_tokens_today,
-         next_broadcast_title, next_broadcast_when, next_broadcast_reach,
+         next_broadcast_title, next_broadcast_when,
          issues_count, top_issue):
     b = MessageBuilder()
     b.bold("🛠 Администратор")
@@ -43,7 +43,7 @@ def home(system_dot, system_text, total_users, active_7d, llm_calls_today, llm_t
     b.spacer()
     b.line(f"🤖 {_num(llm_calls_today)} LLM-запросов сегодня · ~{_num(llm_tokens_today)} токенов")
     if next_broadcast_title:
-        b.line(f"📢 {next_broadcast_title} — {next_broadcast_when} · ~{next_broadcast_reach} чел")
+        b.line(f"🔔 {next_broadcast_title} — {next_broadcast_when}")
     b.spacer()
     if issues_count:
         b.line(f"⚠️ {issues_count} открытые проблемы")
@@ -151,24 +151,33 @@ def llm_history(rows):
     return b.build_stripped()
 
 
-# ================= РАССЫЛКА =================
+# ================= УВЕДОМЛЕНИЯ =================
 
-def broadcast(next_title, next_when, next_reach):
+def broadcast(next_title, next_when):
+    """Экран «Уведомления»: только ближайшее автоматическое уведомление, без охвата."""
     b = MessageBuilder()
-    b.bold("📢 Рассылка")
+    b.bold("🔔 Уведомления")
     b.newline()
     b.spacer()
+    b.bold("Следующее")
+    b.newline()
     b.line(next_title)
-    b.line(f"{next_when} · ~{next_reach} получателей")
+    b.line(next_when)
+    b.spacer()
+    b.line("Тест отправляется только вам.")
     return b.build_stripped()
 
 
-def broadcast_confirm(reach):
+def notification_picker(options):
+    """options: [NotificationOption]. Список для выбора уведомления перед тестом."""
     b = MessageBuilder()
-    b.bold("⚠️ Отправить рассылку сейчас?")
+    b.bold("🧪 Выберите уведомление")
     b.newline()
     b.spacer()
-    b.line(f"Получат: ~{reach} пользователей")
+    for opt in options:
+        b.line(opt.title)
+        b.line(opt.schedule_label)
+        b.spacer()
     return b.build_stripped()
 
 

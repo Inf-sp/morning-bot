@@ -10,9 +10,9 @@ TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 # Модель Claude по умолчанию (чат, общие задачи)
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
 # Грамматика - самый дешёвый Claude (Haiku), баланс качества и цены
-GRAMMAR_MODEL = os.environ.get("GRAMMAR_MODEL", "claude-haiku-4-5")
+GRAMMAR_MODEL = os.environ.get("GRAMMAR_MODEL", "claude-haiku-4-5-20251001")
 # Разбор гардероба - самый сильный Claude (Opus) для длинного анализа стиля
 WARDROBE_MODEL = os.environ.get("WARDROBE_MODEL", "claude-opus-4-8")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
