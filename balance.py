@@ -727,6 +727,17 @@ def queue_next(cid):
     return item
 
 
+def _persist_current_queue_recipe(cid, recipe):
+    """Сохраняет изменения показанного рецепта (например photo_* поля) в очередь."""
+    d = store._load(config.RECIPE_QUEUE_KEY)
+    q = d.get(str(cid)) or {}
+    items = q.get("items") or []
+    idx = int(q.get("pos", 0)) - 1
+    if 0 <= idx < len(items):
+        items[idx] = recipe
+        store._save(config.RECIPE_QUEUE_KEY, d)
+
+
 def get_recipe_history(cid):
     """Последние показанные названия рецептов (общая история, не по категориям)."""
     return store.get_list(config.RECIPE_HISTORY_KEY, cid)
@@ -822,11 +833,10 @@ _MEAL_CONSTRAINT = {
 async def _send_queue_card(bot, cid, meal, d):
     """Отправляет карточку ОДНОГО показываемого рецепта, с фото (если доступно).
 
-    Фото подбирает единый photo_provider (Pexels первым, Unsplash фолбэком, с
-    жёсткими лимитами на vision-вызовы и общим таймаутом) — см.
+    Фото подбирает единый photo_provider (только Pexels) — см.
     photo_provider.get_dish_photo. Это единственное место, где вызывается подбор
     фото — намеренно НЕ в _generate_and_store_queue, чтобы не тратить Pexels/
-    Unsplash/vision на 9 непоказанных рецептов очереди."""
+    API на 9 непоказанных рецептов очереди."""
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe_queue", meal)
     store.last_source[str(cid)] = "Питание · Рецепт"
@@ -837,6 +847,7 @@ async def _send_queue_card(bot, cid, meal, d):
     photo = None
     try:
         photo = await asyncio.to_thread(photo_provider.get_dish_photo, d, meal)
+        _persist_current_queue_recipe(cid, d)
     except Exception:
         photo = None
     if photo and photo.get("photo_url"):
@@ -853,8 +864,8 @@ async def _send_queue_card(bot, cid, meal, d):
 async def _generate_and_store_queue(cid, meal, ingredients=None):
     """Генерирует новую очередь ~10 рецептов для категории meal и сохраняет её (§4.2/§5).
 
-    ТОЛЬКО текстовые поля рецепта (включая photo_query_en/photo_fallback_queries/
-    visual_tags) — без единого сетевого вызова к Pexels/Unsplash/vision. Подбор
+    ТОЛЬКО текстовые поля рецепта (включая photo_query_en/photo_fallback_queries) —
+    без единого сетевого вызова к Pexels. Подбор
     фото откладывается до показа конкретного рецепта, см. _send_queue_card."""
     cuisine_weights = get_cuisine_weights(cid)
     recent_history = get_recipe_history(cid)
@@ -1081,29 +1092,22 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
         "«Омлет с луком», «Шакшука»).\n"
         f"{cuisine_codes_line}"
         "• cuisine_emoji — эмодзи флага страны происхождения блюда (например 🇯🇵, 🇮🇹, 🇰🇷, 🇹🇷).\n"
-        "• Поля для поиска и проверки фото ГОТОВОГО блюда (все на английском, только значения "
-        "без лишних слов, фото ищется и валидируется по ним через внешние API):\n"
+        "• Поля для поиска фото ГОТОВОГО блюда (все на английском, только короткие значения "
+        "без лишних слов):\n"
         "  - name_en — название блюда на английском (например \"Shakshuka with feta\").\n"
-        "  - photo_query_en — самый точный поисковый запрос: name_en + кухня/тип "
-        "(например \"shakshuka with feta food\").\n"
-        "  - photo_fallback_queries — массив из 2-4 более общих запросов на случай, если точный "
-        "не даст результата, от менее общего к более общему "
-        "(например [\"shakshuka food\", \"eggs tomato sauce skillet food\", \"middle eastern breakfast food\"]). "
-        "НЕ включай в этот список голое \"food\" или \"breakfast food\" без привязки к блюду/кухне/ингредиентам — "
-        "слишком общий запрос даёт красивое, но нерелевантное фото.\n"
-        "  - visual_tags — 3-6 английских тегов того, что ДОЛЖНО быть видно на фото готового блюда "
-        "(например [\"eggs\", \"tomato sauce\", \"feta\", \"skillet\", \"prepared dish\"]).\n"
-        "  - negative_visual_tags — английские теги того, чего на фото быть НЕ должно "
-        "(например [\"raw ingredients\", \"grocery\", \"restaurant interior\", \"chef\", \"kitchen\"]).\n"
+        "  - photo_query_en — короткий точный запрос: название блюда или название блюда + один главный ингредиент "
+        "(например \"spinach feta omelette\").\n"
+        "  - photo_fallback_queries — массив ровно из 2 более общих коротких запросов "
+        "(например [\"spinach omelette\", \"vegetable omelette\"]).\n"
+        "  - В photo_query_en/photo_fallback_queries НЕ добавляй слова food, dish, breakfast, healthy, delicious, "
+        "cuisine, recipe, homemade, restaurant, кроме случаев, когда слово является частью устойчивого названия блюда.\n"
         "• Разнообразие внутри списка: не более 2 рецептов одной кухни подряд, но общий перекос в сторону "
         "любимых кухонь пользователя (см. предпочтения выше) сохраняй.\n"
         f"• Верни ровно {n} рецептов в массиве, без повторов названий внутри самого списка.\n"
         'JSON (без markdown, объект с одним ключом "recipes"): {"recipes":[{'
         '"name":"Название блюда","name_en":"Dish name","cuisine":"код кухни","cuisine_emoji":"🇯🇵",'
-        '"photo_query_en":"exact dish name + cuisine food",'
+        '"photo_query_en":"short dish name",'
         '"photo_fallback_queries":["fallback query 1","fallback query 2"],'
-        '"visual_tags":["ingredient1","ingredient2","prepared dish"],'
-        '"negative_visual_tags":["raw ingredients","kitchen"],'
         '"time":"X мин","servings":"1 порц.",'
         '"ingredients":"список через запятую",'
         '"steps":[{"text":"Глагол + действие + конкретика","minutes":2},{"text":"шаг 2","minutes":4}],'

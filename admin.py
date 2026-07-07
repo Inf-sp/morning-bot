@@ -374,14 +374,6 @@ def _external_api_probe_results():
             params={"query": "breakfast", "per_page": 1},
         ),
         http_probe(
-            "Unsplash",
-            config.UNSPLASH_ACCESS_KEY,
-            "GET",
-            "https://api.unsplash.com/search/photos",
-            headers={"Authorization": f"Client-ID {config.UNSPLASH_ACCESS_KEY}"},
-            params={"query": "breakfast", "per_page": 1},
-        ),
-        http_probe(
             "ZeroEntropy",
             config.ZEROENTROPY_API_KEY,
             "POST",

@@ -24,7 +24,6 @@ OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openrouter/free")
 TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
-UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 
 TZ = ZoneInfo("Europe/Amsterdam")
@@ -64,7 +63,6 @@ ACTIVE_MEAL_KEY = "active_meal.json"          # {cid: "breakfast"|"lunch"|"dinne
 RECIPE_QUEUE_KEY = "recipe_queue.json"        # {cid: {"meal":..., "items":[...], "pos": int}}
 RECIPE_HISTORY_KEY = "recipe_history.json"    # {cid: [последние 100 названий]} — общая anti-repeat история
 CUISINE_WEIGHTS_KEY = "cuisine_weights.json"  # {cid: {"italian": 3, "japanese": -1, ...}} — обучение по действиям
-DISH_PHOTO_CACHE_KEY = "dish_photo_cache.json"  # {normalized_query: {photo_url, source, score, ...}} — общий кэш, не per-user
 QUOTE_AUTHORS_KEY = "quote_authors_seen.json"
 MOTIV_LAGOM_SEEN_KEY = "motiv_lagom_seen.json"
 CONCERTS_CACHE_KEY = "concerts_cache.json"  # {cid: {"ts": epoch, "cc": "NL", "events": [...]}}, обновляется по вс
