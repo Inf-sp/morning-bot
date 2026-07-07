@@ -302,5 +302,60 @@ def concerts_list(place_label, events, empty_hint=""):
     return b.build_stripped()
 
 
+def _event_item(
+    b: MessageBuilder,
+    *,
+    title: str,
+    date_text: str,
+    place: str | None = None,
+    genre: str | None = None,
+) -> None:
+    b.text_line("• ")
+    b.bold(title)
+    b.newline()
+
+    if place:
+        b.line(f"  📍 {place}")
+
+    meta = f"  🗓 {date_text}"
+    if genre:
+        meta += f" · {genre}"
+
+    b.line(meta)
+
+
+def weekly_events_card(concerts, movies) -> MessageSpec:
+    b = MessageBuilder()
+    b.text_line("🎵 ")
+    b.bold("События на ближайшие 7 дней")
+    b.newline()
+
+    if concerts:
+        b.section("🎤 Концерты твоих исполнителей")
+        for event in concerts:
+            _event_item(
+                b,
+                title=event.get("title", ""),
+                place=event.get("place"),
+                date_text=event.get("date_text", ""),
+            )
+
+    if movies:
+        b.section("🎬 Премьеры в кино")
+        for event in movies:
+            _event_item(
+                b,
+                title=event.get("title", ""),
+                date_text=event.get("date_text", ""),
+                genre=event.get("genre"),
+            )
+
+    if not concerts and not movies:
+        b.spacer()
+        b.line("На ближайшие 7 дней интересных событий пока не найдено.")
+
+    return b.build_stripped()
+
+
 def plain_from_html(text):
     return re.sub(r"<[^>]+>", "", text or "")

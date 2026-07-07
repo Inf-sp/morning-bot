@@ -1821,16 +1821,6 @@ async def send_weekly_events(bot, cid):
 
     s = store.get_settings(cid)
     cc = (s.get("cc") or "NL").upper()
-    flag = util.flag_from_cc(cc) or "🏳"
-    def _country_place():
-        country = (s.get("country") or "").strip()
-        low = country.lower()
-        if cc == "NL" or low in ("нидерланды", "netherlands", "the netherlands"):
-            return "Нидерландах"
-        return country or {"BE": "Бельгии", "DE": "Германии", "FR": "Франции",
-                           "GB": "Великобритании", "US": "США"}.get(cc, "твоей стране")
-
-    cname = _country_place()
     now = datetime.now(config.TZ)
     today_str = now.strftime("%Y-%m-%d")
     date_to_str = (now + timedelta(days=7)).strftime("%Y-%m-%d")
@@ -1838,7 +1828,9 @@ async def send_weekly_events(bot, cid):
     def _fmt_date(ds):
         try:
             y, m, dd = ds.split("-")
-            return f"{int(dd)} {_MONTHS[int(m)-1]} {y}"
+            year = int(y)
+            suffix = f" {year}" if year != now.year else ""
+            return f"{int(dd)} {_MONTHS[int(m)-1]}{suffix}"
         except Exception:
             return ds
 
@@ -1860,17 +1852,10 @@ async def send_weekly_events(bot, cid):
                 return name.capitalize()
         return "Премьера"
 
-    lines = [
-        "🎵 <b>События следующей недели</b>",
-        "",
-        f"Вот что я нашёл для тебя на ближайшие 7 дней в <b>{esc(cname)}</b>:",
-        "",
-    ]
-
     # --- Концерты ---
     # Читаем недельный кэш (обновлён job'ом refresh_concerts_cache перед этой рассылкой),
     # чтобы не делать живой запрос к Ticketmaster по всем артистам прямо в момент отправки.
-    concert_lines = []
+    concert_items = []
     if config.TICKETMASTER_API_KEY:
         artists = _ensure_artists(cid)
         if artists:
@@ -1887,21 +1872,14 @@ async def send_weekly_events(bot, cid):
                 vn = ven.get("name", "")
                 city = (ven.get("city") or {}).get("name", "")
                 venue_str = ", ".join(x for x in [vn, city] if x)
-                details = []
-                if venue_str:
-                    details.append(esc(venue_str))
-                if date_str:
-                    details.append(_fmt_date(date_str))
-                suffix = f" ({', '.join(details)})" if details else ""
-                concert_lines.append(f"• {esc(artist)}{suffix}")
-
-    if concert_lines:
-        lines += ["<b>Концерты твоих исполнителей:</b>"]
-        lines += concert_lines
-        lines.append("")
+                concert_items.append({
+                    "title": artist,
+                    "place": venue_str,
+                    "date_text": _fmt_date(date_str) if date_str else "",
+                })
 
     # --- Кинопремьеры ---
-    movie_lines = []
+    movie_items = []
     if config.TMDB_API_KEY:
         try:
             results = await asyncio.to_thread(_tmdb_upcoming, cc)
@@ -1913,23 +1891,16 @@ async def send_weekly_events(bot, cid):
                 title = m.get("title", "")
                 genre = _movie_genre(m)
                 date = _fmt_date(m.get("release_date", ""))
-                details = ", ".join(x for x in [genre, date] if x)
-                movie_lines.append(f"• {esc(title)} ({esc(details)})")
+                movie_items.append({
+                    "title": title,
+                    "date_text": date,
+                    "genre": genre,
+                })
         except Exception:
             pass
 
-    if movie_lines:
-        lines += ["<b>Новые премьеры в кино:</b>"]
-        lines += movie_lines
-        lines.append("")
-
-    lines.append("Хорошей недели 😉")
-
-    if not concert_lines and not movie_lines:
-        lines = ["🎵 <b>События следующей недели</b>", "",
-                 f"Для {esc(cname)} ничего не нашёл на ближайшие дни."]
-
-    await bot.send_message(chat_id=cid, text="\n".join(lines), parse_mode="HTML", disable_web_page_preview=True)
+    msg = leisure_ui.weekly_events_card(concert_items, movie_items)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, disable_web_page_preview=True)
 
 
 async def concert_pick_country(bot, cid):
