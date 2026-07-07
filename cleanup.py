@@ -1,21 +1,22 @@
 """Движок чистки списков: пагинация + мультивыбор.
 
-Используется из learning, notes, wardrobe, balance, bot.
+Используется из learning, notes, wardrobe, balance, bot. Пользовательское
+описание раздела — docs/cleanup.md; история миграции на текущую архитектуру —
+docs/archive/audit-cleanup-plan.md.
 
 "view"-режим (стабильный item_id + revision коллекции, короткий callback_data
-вида "clt:<view_id>:<short_id>") — введён в PR3a для nb/nb_* ("Сохранённое") и
-распространён в PR3b-d на остальные контексты, кроме гардероба (kast_*, уже
-мигрирован раньше через store.add_wardrobe_items/remove_wardrobe_items) и
-legacy compatibility-слоя cfg_* (см. docs/cleanup.md — не мигрирует,
-пока не решена его судьба в рамках P1-2):
-           d_<lang>_<kind> (словарь, PR3c), nb/nb_* (закладки, PR3a),
-           wl/rl (watchlist/readlist, PR3c), lv_<key>/lvls_<key> (любимые, PR3b),
+вида "clt:<view_id>:<short_id>") распространён на все контексты, кроме
+гардероба (kast_*, мигрирован раньше через
+store.add_wardrobe_items/remove_wardrobe_items) и legacy compatibility-слоя
+cfg_* (не мигрирует, пока не решена его судьба):
+           d_<lang>_<kind> (словарь), nb/nb_* (закладки),
+           wl/rl (watchlist/readlist), lv_<key>/lvls_<key> (любимые),
            hid_<key> (скрытое/чёрный список — действие только убирает из
            чёрного списка, не трогает fav_key, чтобы не превращать «вернуть в
-           рекомендации» в скрытый сигнал «мне нравится», PR3b),
-           fridge/recipes/lagom (холодильник/рецепты/Здоровье, PR3d — lagom
-           хранится не отдельным KV-ключом, а полем внутри профиля
-           пользователя, см. store.ensure_list_ids_via).
+           рекомендации» в скрытый сигнал «мне нравится»),
+           fridge/recipes/lagom/diary (холодильник/рецепты/Здоровье/История
+           самочувствия — lagom хранится не отдельным KV-ключом, а полем
+           внутри профиля пользователя, см. store.ensure_list_ids_via).
 """
 import secrets
 import time
@@ -258,7 +259,7 @@ def _ctx_items(cid, ctx):
 
 def _action_label(ctx):
     """Текст кнопки группового действия — называет последствие, а не факт
-    удаления записи. Таблица зафиксирована в docs/cleanup.md, P2-2."""
+    удаления записи. Таблица зафиксирована в docs/cleanup.md."""
     if ctx.startswith("lv_") or ctx.startswith("lvls_"):
         return "Убрать из любимого"
     if ctx.startswith("hid_"):
@@ -288,7 +289,7 @@ def _action_label(ctx):
 # (добавить обратно / нажать повторно) — не требуют экрана подтверждения перед
 # групповым удалением. Все остальные view-контексты физически стирают запись
 # без возможности программного восстановления — см. docs/cleanup.md,
-# P2-2 «Правило подтверждения».
+# «Групповое действие и подтверждение».
 def _is_reversible_ctx(ctx):
     return ctx.startswith("lv_") or ctx.startswith("lvls_") or ctx.startswith("hid_")
 
