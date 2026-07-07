@@ -117,8 +117,8 @@ def look_message(look_data):
     идея образа одной репликой, вещи списком без описаний, причина — 2-3 коротких
     пункта об образе целиком (не по вещи), без визуального шума.
 
-    look_data: {intro, items[{emoji,name,short_name}], style, reasons[], occasion,
-                recommendation}
+    look_data: {intro, items[{emoji,name,short_name}], style, reasons[], styling_tip,
+                occasion, recommendation}
     """
     look_data = look_data or {}
     b = MessageBuilder()
@@ -151,6 +151,11 @@ def look_message(look_data):
         b.section("Почему именно сегодня")
         for r in reasons[:3]:
             b.bullet(r)
+
+    styling_tip = _finish_dot(look_data.get("styling_tip"))
+    if styling_tip:
+        b.spacer()
+        b.line(styling_tip)
 
     occasion = _finish_dot(look_data.get("occasion"))
     if occasion:
