@@ -309,9 +309,18 @@ async def answer_callback(update, context):
         elif sub == "next":
             await _ack(q); await learning.train_next(bot, cid)
         return
-    # Тренажёр фраз: переход от этапа 1 (разбор конструкции) к этапу 2 (quiz)
-    if data == "phrase_intro_go":
+    # Тренажёр фраз: переход от учебной карточки к тесту
+    if data in ("phrase_intro_test", "phrase_intro_go"):
         await learning.phrase_intro_continue(bot, cid)
+        return
+    if data == "phrase_intro_mastered":
+        await _ack(q); await learning.phrase_intro_mastered(bot, cid)
+        return
+    if data == "phrase_new_example":
+        await _ack(q); await learning.phrase_new_example(bot, cid)
+        return
+    if data == "phrase_explain":
+        await learning.phrase_explain(bot, cid)
         return
     # Тренажёр фраз: этап 3 «найди ошибку»
     if data == "phrase_stage_broken":

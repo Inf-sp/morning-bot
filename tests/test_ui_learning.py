@@ -17,10 +17,11 @@ def _entities_of_type(msg, entity_type):
 def test_learning_phrase_poll_question_message_spec():
     msg = learning.phrase_poll_question("Ik maak me zorgen om ____", "Я переживаю за тебя")
 
-    assert msg.text.startswith("Фраза-тренажёр\n\nIk maak me zorgen om ____")
+    assert msg.text.startswith("🧩 Проверь себя\n\nIk maak me zorgen om ____")
     assert "Перевод:" not in msg.text
     assert "Я переживаю за тебя" not in msg.text
     assert "Выбери пропущенное слово" not in msg.text
+    assert "Выбери подходящее слово:" in msg.text
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in msg.entities)
     assert any(e.type == MessageEntity.BLOCKQUOTE for e in msg.entities)
 
@@ -80,7 +81,28 @@ def test_learning_phrase_intro_card_hides_forbidden_examples():
     assert "Нельзя говорить:" not in msg.text
     assert "Ik tegen Nederlands" not in msg.text
     assert "Ik van Nederlands" not in msg.text
-    assert "Дальше попробуем восстановить эту фразу по памяти." in msg.text
+    assert "Дальше проверим это правило на новом примере." in msg.text
+
+
+@pytest.mark.unit
+def test_learning_phrase_quiz_result_is_compact():
+    state = {
+        "meaning": "door",
+        "phrase_test_full": "Zij blijft thuis door de regen.",
+        "sentence_ru": "Она остаётся дома из-за дождя.",
+        "phrase_short_rule": "door = из-за, по причине чего-то",
+    }
+
+    correct = learning.phrase_quiz_result(state, True)
+    wrong = learning.phrase_quiz_result(state, False)
+
+    assert correct.text == (
+        "✅ Верно\n\n"
+        "Zij blijft thuis door de regen.\n"
+        "Она остаётся дома из-за дождя."
+    )
+    assert "❌ Правильный ответ: door" in wrong.text
+    assert "door = из-за, по причине чего-то" in wrong.text
 
 
 @pytest.mark.unit

@@ -29,18 +29,19 @@ def test_fallback_phrase_quiz_card_builds_valid_task():
 
     assert card["correct"] == "onderweg"
     assert card["blank_phrase"] == "Ik ben ____"
-    assert len(card["wrong"]) == 2
+    assert len(card["wrong"]) == 3
     assert "____" in card["blank_phrase"]
+    assert card["test_full_phrase"] == "Ik ben onderweg"
 
 
 @pytest.mark.unit
 def test_phrase_poll_question_is_formatted_with_entities():
     question, entities = learning._phrase_poll_question("Ik maak me zorgen om ____", "Я переживаю за тебя")
 
-    assert question.startswith("Фраза-тренажёр\n\nIk maak me zorgen om ____")
+    assert question.startswith("🧩 Проверь себя\n\nIk maak me zorgen om ____")
     assert "Перевод:" not in question
     assert "Я переживаю за тебя" not in question
-    assert "Выбери пропущенное слово" not in question
+    assert "Выбери подходящее слово:" in question
     assert "Какое слово пропущено?" not in question
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
     assert any(e.type == MessageEntity.BLOCKQUOTE for e in entities)

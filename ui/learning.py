@@ -15,9 +15,11 @@ def train_question(word):
 
 def phrase_poll_question(blank_phrase, sentence_ru):
     b = MessageBuilder()
-    b.section("Фраза-тренажёр")
+    b.section("🧩 Проверь себя")
     b.spacer()
     b.quote(str(blank_phrase or "").strip())
+    b.spacer()
+    b.text_line("Выбери подходящее слово:")
     msg = b.build()
     stripped = msg.text.strip()
     leading_trim = u16_len(msg.text[:len(msg.text) - len(msg.text.lstrip())])
@@ -175,8 +177,61 @@ def phrase_intro_card(phrase, sentence_ru, construction, construction_meaning, f
                 b.bullet(f"{pos} — {meaning}")
 
     b.spacer()
-    b.text_line("Дальше попробуем восстановить эту фразу по памяти.")
+    b.text_line("Дальше проверим это правило на новом примере.")
     return b.build()
+
+
+def phrase_quiz_result(state, is_correct, repeated_error=False):
+    correct = str(state.get("meaning") or "").strip()
+    full_phrase = str(state.get("phrase_test_full") or "").strip()
+    sentence_ru = str(state.get("sentence_ru") or "").strip()
+    short_rule = str(state.get("phrase_short_rule") or state.get("phrase_explanation") or "").strip()
+
+    b = MessageBuilder()
+    if is_correct:
+        b.section("✅ Верно")
+    elif repeated_error:
+        b.section("❌ Не закрепилось")
+        b.spacer()
+        b.text_line("Правильный ответ: ")
+        b.bold(correct)
+        b.newline()
+    else:
+        b.section(f"❌ Правильный ответ: {correct}")
+
+    if full_phrase:
+        b.spacer()
+        b.line(full_phrase)
+    if sentence_ru:
+        b.line(sentence_ru)
+    if not is_correct and short_rule:
+        b.spacer()
+        b.tip(short_rule)
+
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
+def phrase_rule_breakdown(state):
+    correct = str(state.get("meaning") or "").strip()
+    full_phrase = str(state.get("phrase_test_full") or "").strip()
+    sentence_ru = str(state.get("sentence_ru") or "").strip()
+    detail = str(state.get("phrase_detail") or state.get("phrase_explanation") or "").strip()
+
+    b = MessageBuilder()
+    b.section(f"💡 Почему `{correct}`?")
+    if detail:
+        b.spacer()
+        b.line(detail[:450].rstrip())
+    if full_phrase:
+        b.spacer()
+        b.line(full_phrase)
+    if sentence_ru:
+        b.line(sentence_ru)
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
 
 
 def phrase_broken_question(broken_phrase):

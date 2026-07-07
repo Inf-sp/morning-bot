@@ -237,58 +237,50 @@ async def _gen_train_quiz_card(word, ru, language):
     }
 
 
-async def _gen_phrase_quiz_card(phrase, ru, language):
-    """Карточка фразы на все 4 этапа: разбор конструкции, quiz на пропуск, найти ошибку, ситуация."""
+async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
+    """Учебная карточка фразы и отдельный тест на применение правила в новом контексте."""
+    avoid_tests = [str(x).strip() for x in (avoid_tests or []) if str(x).strip()]
+    avoid_note = ""
+    if avoid_tests:
+        avoid_note = "\nНе повторяй эти тестовые фразы:\n" + "\n".join(f"- {x}" for x in avoid_tests[-5:])
     prompt = f"""
 Ты методист тренажёра фраз для языка: {language}.
-Целевая фраза: «{phrase}».
+Учебная фраза: «{phrase}».
 Перевод на русский: «{ru}».
+{avoid_note}
 
-Сделай ЧЕТЫРЕ вещи для одной фразы — это последовательные этапы одного упражнения.
+Сделай учебную карточку и ОТДЕЛЬНЫЙ тест на применение того же правила.
 
-Часть А — разбор устойчивой конструкции (не про конкретное слово, а про то, почему во фразе используется
-именно эта комбинация слов). Объясни своими словами, как если бы предупреждал: "проблема не в одном слове,
-а в том, что вся конструкция целиком фиксированная".
+Учебная карточка показывает исходную фразу, перевод и короткое правило.
 
-Часть Б — quiz poll на восстановление: в исходной фразе пропусти ОДНО смысловое слово (то самое ключевое
-слово конструкции) и дай 3 варианта ответа.
+Тестовая фраза должна быть НОВОЙ, не копией учебной фразы. Она проверяет применение правила, а не память
+исходного предложения. Нельзя повторять одновременно тот же глагол, то же существительное, тот же перевод
+и ту же структуру предложения. Сохрани только целевое слово, грамматическую конструкцию и смысл правила.
 
-Часть В — «найди ошибку»: возьми фразу и намеренно испорти её той самой типичной ошибкой (например,
-неправильный предлог из forbidden). Пользователь должен выбрать, какое слово в испорченной фразе неверное,
-среди 3-4 слов фразы (один из вариантов — «Всё правильно», но она не должна быть правильным ответом).
-
-Часть Г — ситуация: короткий бытовой контекст на русском (1 фраза, "Друг спрашивает...", "Ты пишешь
-коллеге..." и т.п.), в котором уместно сказать именно эту фразу, плюс 3 варианта ответа на английском/
-нидерландском — один верный (сама фраза или её естественный вариант), два неверных (частые ошибки или не
-подходящие по смыслу/регистру фразы).
-
-Жёсткие правила quiz poll (часть Б):
-1. blank_phrase — та же фраза, но одно слово заменено на ____.
-2. correct — ровно пропущенное слово из фразы, без артиклей и лишних слов.
-3. wrong — два неправильных слова на {language}, той же части речи и похожей длины (частые ошибки, а не случайные слова).
-4. Не пропускай артикль, предлог общего назначения без смысловой нагрузки, местоимение, частицу или имя собственное.
-5. Если фраза короткая, выбирай самый полезный глагол/существительное/прилагательное/предлог, несущий смысл конструкции.
+Правила теста:
+1. test_blank_phrase — новая фраза с ____ вместо целевого слова.
+2. test_full_phrase — та же новая фраза полностью, с правильным словом.
+3. correct — ровно пропущенное слово, без артиклей и лишних слов.
+4. wrong — три правдоподобных неправильных варианта на {language}, той же части речи.
+5. test_sentence_ru — перевод test_full_phrase на русский.
+6. short_rule — короткая подсказка вида "door = из-за, по причине чего-то".
+7. detail — разбор 350-450 символов простыми словами, только про test_full_phrase.
 
 Верни JSON:
 {{
-  "blank_phrase": "фраза с ____",
+  "test_blank_phrase": "новая тестовая фраза с ____",
+  "test_full_phrase": "новая тестовая фраза полностью",
   "correct": "пропущенное слово",
-  "wrong": ["неверный вариант 1", "неверный вариант 2"],
-  "sentence_ru": "перевод всей фразы на русский",
-  "construction": "название конструкции, например 'live off somebody'",
+  "wrong": ["неверный вариант 1", "неверный вариант 2", "неверный вариант 3"],
+  "test_sentence_ru": "перевод test_full_phrase на русский",
+  "construction": "название конструкции, например 'ziek door iets'",
   "construction_meaning": "что значит конструкция целиком, коротко по-русски",
-  "forbidden": ["неверный вариант конструкции 1, например 'live of'", "неверный вариант 2"],
+  "short_rule": "короткая подсказка",
+  "detail": "короткий разбор по тестовой фразе",
+  "forbidden": [],
   "other_forms": [
     {{"pos": "часть речи, например Глагол", "meaning": "перевод в этой части речи"}}
-  ],
-  "explanation": "короткое объяснение, почему correct подходит именно в этой фразе",
-  "broken_phrase": "фраза с намеренной типичной ошибкой, например 'I live of my parents'",
-  "broken_word_options": ["слово1", "слово2", "слово3", "Всё правильно"],
-  "broken_wrong_word": "то самое неверное слово из broken_phrase (ровно как оно написано в broken_phrase)",
-  "broken_why": "короткое объяснение, почему это слово неверное и что нужно вместо него",
-  "situation": "короткое описание ситуации на русском, 1 предложение",
-  "situation_options": ["верный вариант фразы", "неверный вариант 1", "неверный вариант 2"],
-  "situation_correct": "тот самый верный вариант из situation_options слово в слово"
+  ]
 }}
 
 Поле other_forms заполняй, только если ключевое слово конструкции реально имеет другое значение в другой
@@ -299,7 +291,7 @@ async def _gen_phrase_quiz_card(phrase, ru, language):
         d = await ai.allm_json(prompt, 1400, tier="smart", route="gemini", module="learning")
     except Exception:
         return {}
-    wrong = [str(x).strip() for x in (d.get("wrong") or []) if str(x).strip()][:2]
+    wrong = [str(x).strip() for x in (d.get("wrong") or []) if str(x).strip()][:3]
     other_forms = []
     for item in (d.get("other_forms") or [])[:3]:
         if not isinstance(item, dict):
@@ -308,16 +300,24 @@ async def _gen_phrase_quiz_card(phrase, ru, language):
         meaning = str(item.get("meaning") or "").strip()
         if pos and meaning:
             other_forms.append({"pos": pos, "meaning": meaning})
+    blank_phrase = str(d.get("test_blank_phrase") or d.get("blank_phrase") or "").strip()
+    correct = str(d.get("correct") or "").strip()
+    full_phrase = str(d.get("test_full_phrase") or "").strip()
+    if not full_phrase and blank_phrase and correct:
+        full_phrase = blank_phrase.replace("____", correct, 1)
     return {
-        "blank_phrase": str(d.get("blank_phrase") or "").strip(),
-        "correct": str(d.get("correct") or "").strip(),
+        "blank_phrase": blank_phrase,
+        "correct": correct,
         "wrong": wrong,
-        "sentence_ru": str(d.get("sentence_ru") or ru).strip(),
+        "sentence_ru": str(d.get("test_sentence_ru") or d.get("sentence_ru") or "").strip(),
+        "test_full_phrase": full_phrase,
         "construction": str(d.get("construction") or "").strip(),
         "construction_meaning": str(d.get("construction_meaning") or "").strip(),
+        "short_rule": str(d.get("short_rule") or "").strip(),
+        "detail": str(d.get("detail") or "").strip(),
         "forbidden": [str(x).strip() for x in (d.get("forbidden") or []) if str(x).strip()][:3],
         "other_forms": other_forms,
-        "explanation": str(d.get("explanation") or "").strip(),
+        "explanation": str(d.get("short_rule") or d.get("explanation") or "").strip(),
         "broken_phrase": str(d.get("broken_phrase") or "").strip(),
         "broken_word_options": [str(x).strip() for x in (d.get("broken_word_options") or []) if str(x).strip()][:4],
         "broken_wrong_word": str(d.get("broken_wrong_word") or "").strip(),
@@ -364,17 +364,20 @@ def _fallback_phrase_quiz_card(phrase, ru, language):
         if item.lower() not in seen:
             wrong.append(item)
             seen.add(item.lower())
-        if len(wrong) == 2:
+        if len(wrong) == 3:
             break
-    if len(wrong) < 2:
+    if len(wrong) < 3:
         return {}
     return {
         "blank_phrase": blank_phrase,
         "correct": correct,
         "wrong": wrong,
         "sentence_ru": str(ru or "").strip(),
+        "test_full_phrase": blank_phrase.replace("____", correct, 1),
         "construction": "",
         "construction_meaning": "",
+        "short_rule": f"{correct} = смотри перевод фразы",
+        "detail": f"В этой фразе подходит «{correct}». Сравни полный пример с переводом и запомни конструкцию целиком.",
         "forbidden": [],
         "other_forms": [],
         "explanation": f"В этой фразе пропущено слово «{correct}».",
@@ -386,6 +389,27 @@ def _fallback_phrase_quiz_card(phrase, ru, language):
         "situation_options": [],
         "situation_correct": "",
     }
+
+
+def _phrase_full_from_blank(blank_phrase, correct):
+    blank_phrase = str(blank_phrase or "").strip()
+    correct = str(correct or "").strip()
+    if blank_phrase and correct and "____" in blank_phrase:
+        return blank_phrase.replace("____", correct, 1)
+    return blank_phrase
+
+
+def _clean_phrase_options(correct_answer, wrong, needed=3):
+    clean_wrong = []
+    seen = {str(correct_answer).lower()}
+    for item in wrong:
+        item = str(item).strip()
+        if item and item.lower() not in seen:
+            clean_wrong.append(item)
+            seen.add(item.lower())
+        if len(clean_wrong) >= needed:
+            break
+    return clean_wrong
 
 
 def train_data(language, level, word, ru, fmt):
@@ -604,31 +628,15 @@ async def _render_phrase_quiz(bot, cid):
     card = await _gen_phrase_quiz_card(phrase, ru, language)
     correct_answer = card.get("correct") or ""
     wrong = list(card.get("wrong") or [])
-    clean_wrong = []
-    seen = {str(correct_answer).lower()}
-    for item in wrong:
-        item = str(item).strip()
-        if item and item.lower() not in seen:
-            clean_wrong.append(item)
-            seen.add(item.lower())
-        if len(clean_wrong) >= 2:
-            break
+    clean_wrong = _clean_phrase_options(correct_answer, wrong, needed=3)
     blank_phrase = card.get("blank_phrase") or ""
-    if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 2:
+    if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 3:
         card = _fallback_phrase_quiz_card(phrase, ru, language)
         correct_answer = card.get("correct") or ""
         wrong = list(card.get("wrong") or [])
-        clean_wrong = []
-        seen = {str(correct_answer).lower()}
-        for item in wrong:
-            item = str(item).strip()
-            if item and item.lower() not in seen:
-                clean_wrong.append(item)
-                seen.add(item.lower())
-            if len(clean_wrong) >= 2:
-                break
+        clean_wrong = _clean_phrase_options(correct_answer, wrong, needed=3)
         blank_phrase = card.get("blank_phrase") or ""
-        if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 2:
+        if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 3:
             await bot.send_message(
                 chat_id=cid,
                 text="Не удалось собрать хорошее задание по фразе. Попробуй ещё раз.",
@@ -636,7 +644,7 @@ async def _render_phrase_quiz(bot, cid):
             )
             return
 
-    options = [correct_answer] + clean_wrong[:2]
+    options = [correct_answer] + clean_wrong[:3]
     _r.shuffle(options)
     correct_idx = options.index(correct_answer)
     locked = st.get("locked_mode")
@@ -650,10 +658,15 @@ async def _render_phrase_quiz(bot, cid):
         "sentence_ru": card.get("sentence_ru") or ru,
         "meaning": correct_answer,
         "phrase_explanation": card.get("explanation") or "",
+        "phrase_short_rule": card.get("short_rule") or card.get("explanation") or "",
+        "phrase_detail": card.get("detail") or "",
         "wrong_map": {},
         "options": options,
         "correct_idx": correct_idx,
         "phrase_full": phrase,
+        "phrase_test_full": card.get("test_full_phrase") or _phrase_full_from_blank(blank_phrase, correct_answer),
+        "phrase_seen_tests": [blank_phrase],
+        "phrase_error_count": 0,
         "phrase_pending_quiz": True,
         "phrase_stage": "intro",
         "phrase_broken": card.get("broken_phrase") or "",
@@ -674,15 +687,17 @@ async def _render_phrase_quiz(bot, cid):
         card.get("other_forms") or [],
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("👍 Понятно", callback_data="phrase_intro_go")],
-        [InlineKeyboardButton("✅ Уже знаю", callback_data="phrase_intro_go")],
+        [
+            InlineKeyboardButton("🧩 Тест", callback_data="phrase_intro_test"),
+            InlineKeyboardButton("✅ Выучил", callback_data="phrase_intro_mastered"),
+        ],
         [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(language))],
     ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 async def phrase_intro_continue(bot, cid):
-    """Реакция на «Понятно»/«Уже знаю» после этапа 1 — отправляет quiz poll (этап 2)."""
+    """Реакция на «Тест» после учебной карточки — отправляет quiz poll."""
     st = store.train_state.get(str(cid))
     if not st or not st.get("phrase_pending_quiz"):
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
@@ -699,9 +714,9 @@ async def phrase_intro_continue(bot, cid):
     explanation = _phrase_poll_explanation(
         blank_phrase,
         correct_answer,
-        phrase,
+        st.get("phrase_test_full", "") or phrase,
         st.get("sentence_ru", ""),
-        st.get("phrase_explanation", ""),
+        "",
     )
     msg = await bot.send_poll(
         chat_id=cid,
@@ -716,6 +731,71 @@ async def phrase_intro_continue(bot, cid):
     )
     if getattr(msg, "poll", None):
         store.train_polls[msg.poll.id] = str(cid)
+
+
+async def phrase_intro_mastered(bot, cid):
+    st = store.train_state.get(str(cid))
+    if not st:
+        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    await _render_next_train_quiz(bot, cid)
+
+
+async def phrase_new_example(bot, cid):
+    import random as _r
+    st = store.train_state.get(str(cid))
+    if not st:
+        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    phrase = st.get("phrase_full") or st.get("word", "")
+    ru = st.get("ru", "")
+    language = st.get("lang", "нидерландский")
+    seen_tests = list(st.get("phrase_seen_tests") or [])
+    card = await _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=seen_tests)
+    correct_answer = card.get("correct") or st.get("meaning", "")
+    clean_wrong = _clean_phrase_options(correct_answer, list(card.get("wrong") or []), needed=3)
+    blank_phrase = card.get("blank_phrase") or ""
+    if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 3 or blank_phrase in seen_tests:
+        card = _fallback_phrase_quiz_card(phrase, ru, language)
+        correct_answer = card.get("correct") or ""
+        clean_wrong = _clean_phrase_options(correct_answer, list(card.get("wrong") or []), needed=3)
+        blank_phrase = card.get("blank_phrase") or ""
+    if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 3 or blank_phrase in seen_tests:
+        await bot.send_message(
+            chat_id=cid,
+            text="Не удалось собрать новый пример. Попробуй дальше.",
+            reply_markup=_train_again_kb(language, mode="phrase"),
+        )
+        return
+
+    options = [correct_answer] + clean_wrong[:3]
+    _r.shuffle(options)
+    st.update({
+        "sentence": blank_phrase,
+        "sentence_ru": card.get("sentence_ru") or "",
+        "meaning": correct_answer,
+        "phrase_explanation": card.get("explanation") or "",
+        "phrase_short_rule": card.get("short_rule") or card.get("explanation") or "",
+        "phrase_detail": card.get("detail") or "",
+        "options": options,
+        "correct_idx": options.index(correct_answer),
+        "phrase_test_full": card.get("test_full_phrase") or _phrase_full_from_blank(blank_phrase, correct_answer),
+        "phrase_seen_tests": (seen_tests + [blank_phrase])[-8:],
+        "phrase_pending_quiz": True,
+        "phrase_stage": "intro",
+    })
+    await phrase_intro_continue(bot, cid)
+
+
+async def phrase_explain(bot, cid):
+    st = store.train_state.get(str(cid))
+    if not st:
+        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    msg = learning_ui.phrase_rule_breakdown(st)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Новый пример", callback_data="phrase_new_example"),
+         InlineKeyboardButton("Дальше", callback_data="train_next")],
+        [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(st.get("lang", "")))],
+    ])
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 async def train_quiz_answer(bot, cid, idx):
@@ -757,15 +837,38 @@ async def _send_train_feedback(bot, cid, idx, st):
     chosen_fl = wrong_map.get(chosen) or wrong_map.get(chosen.lower()) or ""
     mode = st.get("mode", "word")
 
-    msg = learning_ui.train_result(st, idx, correct_idx, options, chosen_fl=chosen_fl)
-
-    if mode == "phrase" and st.get("phrase_stage") == "quiz" and st.get("phrase_broken") and st.get("phrase_broken_wrong_word"):
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("➡️ Дальше: найди ошибку", callback_data="phrase_stage_broken")],
-            [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(lang))],
-        ])
+    if mode == "phrase" and st.get("phrase_stage") == "quiz":
+        is_correct = idx == correct_idx
+        if is_correct:
+            msg = learning_ui.phrase_quiz_result(st, True)
+            st["round"] = st.get("round", 0) + 1
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("Следующая фраза", callback_data="train_next")],
+                [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(lang))],
+            ])
+        else:
+            st["phrase_error_count"] = int(st.get("phrase_error_count", 0)) + 1
+            repeated_error = st["phrase_error_count"] >= 2
+            if repeated_error:
+                st["needs_review"] = True
+            msg = learning_ui.phrase_quiz_result(st, False, repeated_error=repeated_error)
+            if repeated_error:
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔎 Разобрать", callback_data="phrase_explain"),
+                     InlineKeyboardButton("Новый пример", callback_data="phrase_new_example")],
+                    [InlineKeyboardButton("Дальше", callback_data="train_next"),
+                     InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(lang))],
+                ])
+            else:
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Новый пример", callback_data="phrase_new_example"),
+                     InlineKeyboardButton("Дальше", callback_data="train_next")],
+                    [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(lang))],
+                ])
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
+
+    msg = learning_ui.train_result(st, idx, correct_idx, options, chosen_fl=chosen_fl)
 
     st["round"] = st.get("round", 0) + 1
     kb = InlineKeyboardMarkup([
