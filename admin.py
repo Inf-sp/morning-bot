@@ -5,6 +5,7 @@ MessageSpec из ui.admin. Роутинг (settings.dispatch) делегируе
 
 Все функции — async send_*(bot, cid); гард на владельца — в settings._admin_guard.
 """
+import logging
 import time
 from datetime import datetime
 
@@ -16,6 +17,7 @@ import store
 import tracking
 from ui import admin as ui
 
+_log = logging.getLogger(__name__)
 
 DAY = 86400
 
@@ -243,6 +245,43 @@ async def _api_probe_results():
     return llm_results + external_results
 
 
+_WEATHER_ONECALL_ENDPOINT = "https://api.openweathermap.org/data/4.0/onecall/current"
+
+
+def _weather_probe():
+    """Health-check One Call API 4.0. Не логирует ключ и query-параметры."""
+    import requests
+
+    if not config.WEATHER_API_KEY:
+        return ("Weather", False, "нет ключа")
+    try:
+        r = requests.get(
+            _WEATHER_ONECALL_ENDPOINT,
+            params={"lat": 52.37, "lon": 4.89, "appid": config.WEATHER_API_KEY, "units": "metric"},
+            timeout=12,
+        )
+    except Exception as e:
+        reason = _probe_exception(e)
+        _log.warning("weather probe failed: endpoint=%s reason=%s", _WEATHER_ONECALL_ENDPOINT, reason)
+        return ("Weather", False, reason)
+
+    if 200 <= r.status_code < 300:
+        return ("Weather", True, "")
+
+    body = ""
+    try:
+        body = (r.text or "")[:200]
+    except Exception:
+        pass
+    if r.status_code == 401 and "subscri" in body.lower():
+        reason = "Нужна активация One Call API 4.0 в OpenWeather"
+    else:
+        reason = _http_error(r)
+    _log.warning("weather probe failed: endpoint=%s status=%s reason=%s",
+                 _WEATHER_ONECALL_ENDPOINT, r.status_code, reason)
+    return ("Weather", False, reason)
+
+
 def _external_api_probe_results():
     import requests
 
@@ -297,19 +336,7 @@ def _external_api_probe_results():
                 "include_images": False,
             },
         ),
-        http_probe(
-            "Weather",
-            config.WEATHER_API_KEY,
-            "GET",
-            "https://api.openweathermap.org/data/3.0/onecall",
-            params={
-                "lat": 52.37,
-                "lon": 4.89,
-                "appid": config.WEATHER_API_KEY,
-                "units": "metric",
-                "exclude": "minutely,hourly,daily,alerts",
-            },
-        ),
+        _weather_probe(),
         http_probe(
             "Pexels",
             config.PEXELS_API_KEY,

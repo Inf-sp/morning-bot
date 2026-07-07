@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import requests
 
@@ -91,10 +92,22 @@ def _owm_precip_mm(item):
     return total
 
 
-def _adapt_openweather(data):
-    current = data.get("current") or {}
-    hourly = data.get("hourly") or []
-    daily = data.get("daily") or []
+def _first_data_item(payload):
+    """One Call 4.0 оборачивает точку в {"data": [{...}]} (current) или {"data": [...]} (timeline).
+    Безопасно достаём список записей независимо от формы ответа."""
+    if not isinstance(payload, dict):
+        return []
+    items = payload.get("data")
+    if isinstance(items, list):
+        return items
+    return []
+
+
+def _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts=None):
+    current_items = _first_data_item(current_payload)
+    current = current_items[0] if current_items else {}
+    hourly = _first_data_item(hourly_payload)
+    daily = _first_data_item(daily_payload)
 
     hourly_out = {
         "time": [],
@@ -143,6 +156,7 @@ def _adapt_openweather(data):
         daily_out["uv_index_max"].append(d.get("uvi"))
 
     current_weather_id = ((current.get("weather") or [{}])[0] or {}).get("id")
+    alert_ids = [a.get("id") for a in (current.get("alerts") or []) if isinstance(a, dict) and a.get("id")]
     return {
         "current": {
             "temperature_2m": current.get("temp"),
@@ -151,8 +165,52 @@ def _adapt_openweather(data):
         },
         "hourly": hourly_out,
         "daily": daily_out,
+        "alert_ids": alert_ids,
+        "alerts": alerts or [],
         "provider": "openweathermap",
     }
+
+
+_ONECALL_BASE = "https://api.openweathermap.org/data/4.0/onecall"
+
+
+def _onecall_get(path, lat, lon, timeout=20, extra_params=None):
+    params = {
+        "lat": lat, "lon": lon,
+        "appid": config.WEATHER_API_KEY,
+        "units": "metric",
+        "lang": "ru",
+    }
+    if extra_params:
+        params.update(extra_params)
+    r = requests.get(f"{_ONECALL_BASE}/{path}", params=params, timeout=timeout)
+    r.raise_for_status()
+    return r.json()
+
+
+def _fetch_alert_details(alert_ids, timeout=15):
+    """Доп. запрос за деталями алерта — только когда алерты действительно есть."""
+    details = []
+    if not alert_ids or not config.WEATHER_API_KEY:
+        return details
+    with ThreadPoolExecutor(max_workers=min(len(alert_ids), 4)) as pool:
+        futures = {
+            pool.submit(
+                requests.get,
+                f"{_ONECALL_BASE}/alert/{alert_id}",
+                params={"appid": config.WEATHER_API_KEY},
+                timeout=timeout,
+            ): alert_id
+            for alert_id in alert_ids
+        }
+        for fut in futures:
+            try:
+                r = fut.result()
+                r.raise_for_status()
+                details.append(r.json())
+            except Exception as e:
+                _log.warning("weather: alert detail fetch failed: %s", e)
+    return details
 
 
 def fetch_weather(lat, lon, days=2):
@@ -164,15 +222,23 @@ def fetch_weather(lat, lon, days=2):
         return hit[1]
     if not config.WEATHER_API_KEY:
         raise Exception("no weather api key")
-    r = requests.get("https://api.openweathermap.org/data/3.0/onecall", params={
-        "lat": lat, "lon": lon,
-        "appid": config.WEATHER_API_KEY,
-        "units": "metric",
-        "lang": "ru",
-        "exclude": "minutely,alerts",
-    }, timeout=20)
-    r.raise_for_status()
-    data = _adapt_openweather(r.json())
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        fut_current = pool.submit(_onecall_get, "current", lat, lon)
+        fut_hourly = pool.submit(_onecall_get, "timeline/1h", lat, lon)
+        fut_daily = pool.submit(_onecall_get, "timeline/1day", lat, lon)
+        current_payload = fut_current.result()
+        hourly_payload = fut_hourly.result()
+        daily_payload = fut_daily.result()
+
+    current_items = _first_data_item(current_payload)
+    alert_ids = []
+    if current_items:
+        alert_ids = [a.get("id") for a in (current_items[0].get("alerts") or [])
+                     if isinstance(a, dict) and a.get("id")]
+    alerts = _fetch_alert_details(alert_ids)
+
+    data = _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts)
     _WX_CACHE[key] = (time.time(), data)
     return data
 
@@ -180,13 +246,9 @@ def fetch_current_temp(lat, lon):
     try:
         if not config.WEATHER_API_KEY:
             return None
-        r = requests.get("https://api.openweathermap.org/data/3.0/onecall",
-                         params={
-                             "lat": lat, "lon": lon, "appid": config.WEATHER_API_KEY,
-                             "units": "metric", "exclude": "minutely,hourly,daily,alerts",
-                         }, timeout=15)
-        r.raise_for_status()
-        return r.json()["current"]["temp"]
+        payload = _onecall_get("current", lat, lon, timeout=15)
+        items = _first_data_item(payload)
+        return items[0].get("temp") if items else None
     except Exception:
         return None
 
