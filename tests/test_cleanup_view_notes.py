@@ -235,13 +235,14 @@ def test_open_cleanup_delegates_to_view_for_nb_context():
 
 @pytest.mark.unit
 def test_open_cleanup_still_uses_old_format_for_other_contexts():
-    """Регрессия: остальные 8 контекстов не мигрируют в PR3a — старый формат
-    (позиционный индекс, подчёркивание) должен продолжать работать как есть."""
-    store._mem.pop(config.FRIDGE_KEY, None)
-    store.set_list(config.FRIDGE_KEY, CID, ["молоко", "хлеб"])
+    """Регрессия: cfg_* (legacy compatibility-слой) не мигрирует ни в одном из
+    PR3a-d — старый формат (позиционный индекс, подчёркивание) должен
+    продолжать работать как есть."""
+    store._mem.pop(config.COUNTRIES_KEY, None)
+    store.set_list(config.COUNTRIES_KEY, CID, ["Испания", "Италия"])
     bot = _FakeBot()
-    asyncio.run(cleanup.open_cleanup(bot, CID, "fridge"))
+    asyncio.run(cleanup.open_cleanup(bot, CID, "cfg_countries"))
     assert len(cleanup._views) == 0
     cb = _callbacks(bot)
-    assert any(c.startswith("clt_fridge_") for c in cb if c)
-    store._mem.pop(config.FRIDGE_KEY, None)
+    assert any(c.startswith("clt_cfg_countries_") for c in cb if c)
+    store._mem.pop(config.COUNTRIES_KEY, None)

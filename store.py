@@ -392,12 +392,13 @@ def _bump_list_revision(key, chat_id):
     return _list_revisions[slot]
 
 
-def ensure_list_ids(key, chat_id):
-    """Возвращает список для (key, chat_id), лениво проставляя стабильный "id"
-    каждому элементу без него. Строковые элементы оборачиваются в
-    {"id":..., "value": строка}; dict-элементы получают поле "id" на месте.
-    Сохраняет список обратно и бампает revision, только если что-то изменилось."""
-    items = get_list(key, chat_id)
+def ensure_list_ids_via(getter, setter, key, chat_id):
+    """Как ensure_list_ids, но читает/пишет коллекцию через произвольные
+    getter(chat_id)/setter(chat_id, items) вместо get_list/set_list — нужно для
+    коллекций, хранящихся не отдельным KV-ключом, а полем внутри профиля
+    (например memory.get_lagom/set_lagom). `key` используется только как имя
+    слота revision, не как storage-ключ."""
+    items = getter(chat_id)
     changed = False
     out = []
     for it in items:
@@ -410,22 +411,44 @@ def ensure_list_ids(key, chat_id):
             out.append({"id": _uuid.uuid4().hex, "value": it})
             changed = True
     if changed:
-        set_list(key, chat_id, out)
+        setter(chat_id, out)
         _bump_list_revision(key, chat_id)
     return out
+
+
+def ensure_list_ids(key, chat_id):
+    """Возвращает список для (key, chat_id), лениво проставляя стабильный "id"
+    каждому элементу без него. Строковые элементы оборачиваются в
+    {"id":..., "value": строка}; dict-элементы получают поле "id" на месте.
+    Сохраняет список обратно и бампает revision, только если что-то изменилось."""
+    return ensure_list_ids_via(
+        lambda cid: get_list(key, cid),
+        lambda cid, items: set_list(key, cid, items),
+        key, chat_id,
+    )
+
+
+def remove_from_list_by_ids_via(getter, setter, key, chat_id, ids):
+    """Как remove_from_list_by_ids, но через произвольные getter/setter — см.
+    ensure_list_ids_via."""
+    if not ids:
+        return 0
+    items = ensure_list_ids_via(getter, setter, key, chat_id)
+    ids = set(ids)
+    kept = [it for it in items if it.get("id") not in ids]
+    removed = len(items) - len(kept)
+    if removed:
+        setter(chat_id, kept)
+        _bump_list_revision(key, chat_id)
+    return removed
 
 
 def remove_from_list_by_ids(key, chat_id, ids):
     """Удаляет записи с указанными id из коллекции (key, chat_id). Возвращает
     число реально удалённых записей. Бампает revision, только если что-то
     удалено — устаревший view с прежней revision будет корректно отклонён."""
-    if not ids:
-        return 0
-    items = ensure_list_ids(key, chat_id)
-    ids = set(ids)
-    kept = [it for it in items if it.get("id") not in ids]
-    removed = len(items) - len(kept)
-    if removed:
-        set_list(key, chat_id, kept)
-        _bump_list_revision(key, chat_id)
-    return removed
+    return remove_from_list_by_ids_via(
+        lambda cid: get_list(key, cid),
+        lambda cid, items: set_list(key, cid, items),
+        key, chat_id, ids,
+    )

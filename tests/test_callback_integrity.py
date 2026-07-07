@@ -83,18 +83,28 @@ def _collect_all_callbacks():
     # только store.get_list — прогоняем по паре контекстов с прогнозируемо
     # пустыми/минимальными данными.
     bot = _FakeBot()
-    # "nb" (Сохранённое) с PR3a переведён на view-режим (короткий callback_data
-    # через open_view) — это и есть реальный путь пользователя, send_cleanup для
-    # nb больше не вызывается из open_cleanup.
-    start = len(bot.messages)
-    asyncio.run(cleanup.open_view(bot, CID, "nb"))
-    for msg in bot.messages[start:]:
-        markup = msg.get("reply_markup")
-        if markup is not None:
-            for cb in _extract_callback_data(markup):
-                collected.append(("cleanup.open_view:nb", cb))
+    # "nb" (Сохранённое, PR3a), "lv_*"/"hid_*" (Любимое/Скрытое, PR3b),
+    # "d_nl_word"/"wl"/"rl" (Словарь/Просмотренное/Прочитанное, PR3c) и
+    # "fridge"/"recipes"/"lagom" (Холодильник/Рецепты/Здоровье, PR3d) переведены
+    # на view-режим (короткий callback_data через open_view) — это реальный путь
+    # пользователя, send_cleanup для них больше не вызывается из open_cleanup.
+    store.set_list(config.DICT_KEY, CID, [{"lang": "nl", "word": "huis", "ru": "дом", "kind": "word"}])
+    for ctx in ("nb", "lv_movies", "lv_countries", "lv_artists", "lv_books",
+                "hid_movies", "hid_countries", "hid_artists", "hid_books",
+                "d_nl_word", "wl", "rl", "fridge", "recipes", "lagom"):
+        start = len(bot.messages)
+        asyncio.run(cleanup.open_view(bot, CID, ctx))
+        for msg in bot.messages[start:]:
+            markup = msg.get("reply_markup")
+            if markup is not None:
+                for cb in _extract_callback_data(markup):
+                    collected.append((f"cleanup.open_view:{ctx}", cb))
+    store._mem.pop(config.DICT_KEY, None)
 
-    for ctx in ("fridge", "recipes", "lagom"):
+    # cfg_* (legacy compatibility-слой стран/артистов/книг) намеренно не
+    # мигрирует в PR3a-d — судьба ждёт отдельного решения P1-2, продолжает
+    # работать на старом позиционном send_cleanup-пути.
+    for ctx in ("cfg_countries", "cfg_artists", "cfg_books"):
         start = len(bot.messages)
         asyncio.run(cleanup.send_cleanup(bot, CID, ctx, 0))
         for msg in bot.messages[start:]:

@@ -1427,47 +1427,6 @@ async def send_dict_lang(bot, cid, lang, back="m_dict_settings"):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
 
-def _find_broken_dict_items(cid, lang):
-    """Записи словаря без нормального перевода (пустой/заглушка/перепутанные языки)."""
-    words = _ensure_dict(cid)
-    broken = []
-    for idx, w in enumerate(words):
-        if _dict_lang(w) != lang:
-            continue
-        word = _w_field(w, "word", "nl", "en")
-        ru = _w_field(w, "ru")
-        if _is_bad_dict_item(word, ru):
-            broken.append((idx, word or "(пусто)", ru))
-    return broken
-
-
-async def send_dict_broken(bot, cid, lang):
-    """Показывает записи словаря без перевода/с перепутанными языками — с кнопками удаления."""
-    broken = _find_broken_dict_items(cid, lang)
-    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-    if not broken:
-        await bot.send_message(chat_id=cid, text=f"{flag} В словаре нет битых записей без перевода.",
-            reply_markup=_dict_manage_kb(lang))
-        return
-    lines = [f"• {word} → {ru or '(нет перевода)'}" for _, word, ru in broken]
-    text = f"{flag} Найдено записей без перевода: {len(broken)}\n\n" + "\n".join(lines[:30])
-    rows = [[InlineKeyboardButton(f"❌ {word[:30]}", callback_data=f"worddel_{idx}")] for idx, word, _ in broken[:30]]
-    rows.append([InlineKeyboardButton("🗑 Удалить все", callback_data=f"a_dictcheckdelall_{lang}")])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data=f"a_dictlang_{lang}")])
-    await bot.send_message(chat_id=cid, text=text, reply_markup=InlineKeyboardMarkup(rows))
-
-
-async def dict_broken_delete_all(bot, cid, lang):
-    broken_idx = {idx for idx, _, _ in _find_broken_dict_items(cid, lang)}
-    if broken_idx:
-        words = _ensure_dict(cid)
-        words = [w for i, w in enumerate(words) if i not in broken_idx]
-        store.set_list(config.DICT_KEY, cid, words)
-    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-    await bot.send_message(chat_id=cid, text=f"{flag} Удалено записей без перевода: {len(broken_idx)}.",
-        reply_markup=_dict_manage_kb(lang))
-
-
 def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📖 Словарь", callback_data=f"a_dictlang_{lang}")],

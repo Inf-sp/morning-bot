@@ -1,21 +1,21 @@
 """Движок чистки списков: пагинация + мультивыбор.
 
 Используется из learning, notes, wardrobe, balance, bot.
-Контексты (старый формат, позиционная адресация по индексу в списке на момент
-рендера страницы — риск гонки при параллельном изменении списка):
-           d_<lang>_<kind> (словарь), nb (закладки),
-           wl/rl (watchlist/readlist), kast_<zone_slug>_<subcat_idx>_<origin>
-           (шкаф — вещи одной подкатегории, адресация по id вещи — уже мигрирован),
-           lv_<key> (любимые), hid_<key> (скрытое/чёрный список — действие
-           только убирает из чёрного списка, не трогает fav_key, чтобы не
-           превращать «вернуть в рекомендации» в скрытый сигнал «мне нравится»),
-           fridge (холодильник), recipes (рецепты).
 
-PR3a вводит параллельный "view"-режим (стабильный item_id + revision коллекции,
-короткий callback_data вида "clt:<view_id>:<short_id>") для контекста nb/nb_*
-("Сохранённое") — см. docs/audit-cleanup-plan.md, PR3. Остальные контексты
-мигрируют в PR3b-d по тому же паттерну; до тех пор они продолжают работать на
-старом формате без изменений.
+"view"-режим (стабильный item_id + revision коллекции, короткий callback_data
+вида "clt:<view_id>:<short_id>") — введён в PR3a для nb/nb_* ("Сохранённое") и
+распространён в PR3b-d на остальные контексты, кроме гардероба (kast_*, уже
+мигрирован раньше через store.add_wardrobe_items/remove_wardrobe_items) и
+legacy compatibility-слоя cfg_* (см. docs/audit-cleanup-plan.md — не мигрирует,
+пока не решена его судьба в рамках P1-2):
+           d_<lang>_<kind> (словарь, PR3c), nb/nb_* (закладки, PR3a),
+           wl/rl (watchlist/readlist, PR3c), lv_<key>/lvls_<key> (любимые, PR3b),
+           hid_<key> (скрытое/чёрный список — действие только убирает из
+           чёрного списка, не трогает fav_key, чтобы не превращать «вернуть в
+           рекомендации» в скрытый сигнал «мне нравится», PR3b),
+           fridge/recipes/lagom (холодильник/рецепты/Здоровье, PR3d — lagom
+           хранится не отдельным KV-ключом, а полем внутри профиля
+           пользователя, см. store.ensure_list_ids_via).
 """
 import secrets
 import time
@@ -27,21 +27,91 @@ from util import esc
 
 CLEAN_PAGE = 8
 
-# --- view-режим (PR3a): стабильный id + revision, короткий callback_data ---
+# --- view-режим (PR3a/PR3b): стабильный id + revision, короткий callback_data ---
 VIEW_TTL_SECONDS = 24 * 3600
-_VIEW_CONTEXTS = {"nb"}  # + "nb_<group>" через startswith, см. _is_view_ctx
 _views = {}  # view_id -> {"ctx", "revision", "selected_ids", "page", "back", "created_at"}
+
+# lv_<key>/lvls_<key> (Любимое) и hid_<key> (Скрытое) — один и тот же набор
+# storage-ключей по суффиксу key, см. также _ctx_items/_cleanup_delete (старый
+# путь) выше — держать в синхроне при изменении набора категорий.
+_LOVE_STORE_KEYS = {"movies": config.WATCHLIST_KEY, "countries": config.FAVCOUNTRIES_KEY,
+                    "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}
+_HIDDEN_STORE_KEYS = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
+                      "artists": config.MUSIC_DISLIKE_KEY, "countries": config.TRAVEL_DISLIKE_KEY}
+
+
+# lagom хранится не отдельным KV-ключом, а полем внутри профиля пользователя
+# (memory.get_lagom/set_lagom → store.get_profile()["lagom"]) — у него нет
+# storage-ключа для _view_store_key/store.ensure_list_ids. Используем
+# фиксированное имя слота revision и отдельные ветки в _view_items/_view_delete
+# через store.ensure_list_ids_via/remove_from_list_by_ids_via.
+_LAGOM_REVISION_SLOT = "profile.lagom"
 
 
 def _is_view_ctx(ctx):
-    return ctx == "nb" or ctx.startswith("nb_")
+    return (ctx == "nb" or ctx.startswith("nb_")
+            or ctx.startswith("lv_") or ctx.startswith("lvls_")
+            or ctx.startswith("hid_")
+            or ctx.startswith("d_") or ctx in ("wl", "rl")
+            or ctx in ("fridge", "recipes", "lagom"))
 
 
 def _view_store_key(ctx):
-    """Storage-ключ коллекции для view-контекста."""
-    if _is_view_ctx(ctx):
+    """Storage-ключ коллекции для view-контекста. lagom возвращает фиксированный
+    revision-слот вместо реального storage-ключа — см. _LAGOM_REVISION_SLOT."""
+    if ctx == "nb" or ctx.startswith("nb_"):
         return config.NOTES_KEY
+    if ctx.startswith("lvls_"):
+        return _LOVE_STORE_KEYS.get(ctx[len("lvls_"):])
+    if ctx.startswith("lv_"):
+        return _LOVE_STORE_KEYS.get(ctx[len("lv_"):])
+    if ctx.startswith("hid_"):
+        return _HIDDEN_STORE_KEYS.get(ctx[len("hid_"):])
+    if ctx.startswith("d_"):
+        return config.DICT_KEY
+    if ctx == "wl":
+        return config.WATCHLIST_KEY
+    if ctx == "rl":
+        return config.READLIST_KEY
+    if ctx == "fridge":
+        return config.FRIDGE_KEY
+    if ctx == "recipes":
+        return config.MY_RECIPES_KEY
+    if ctx == "lagom":
+        return _LAGOM_REVISION_SLOT
     return None
+
+
+_VIEW_ADD_LABEL = {
+    "movies": "✏️ Добавить фильм",
+    "countries": "✏️ Добавить страну",
+    "artists": "✏️ Добавить артиста",
+    "books": "✏️ Добавить книгу",
+}
+
+
+def _view_add_button(ctx):
+    """Кнопка «Добавить» для lv_<key>/lvls_<key> (Любимое) — нет у hid_*
+    (Скрытое, чёрный список — пополняется автоматически, не вручную) и у nb/nb_*
+    (Сохранённое пополняется кнопкой «Сохранить» под ответом бота, не отсюда)."""
+    if ctx.startswith("lvls_"):
+        key = ctx[len("lvls_"):]
+        label = _VIEW_ADD_LABEL.get(key)
+        return (label, f"ls_loveadd_{key}") if label else None
+    if ctx.startswith("lv_"):
+        key = ctx[len("lv_"):]
+        label = _VIEW_ADD_LABEL.get(key)
+        return (label, f"as_loveadd_{key}") if label else None
+    return None
+
+
+def _view_label(it):
+    """Текст для отображения элемента view-коллекции — ensure_list_ids
+    оборачивает строки в {"id","value"}, а dict-элементы (например страны
+    {"name","flag"}) получают только добавленное поле "id"."""
+    if "value" in it:
+        return str(it["value"])
+    return it.get("name", "")
 
 
 def _purge_expired_views():
@@ -185,7 +255,8 @@ def _ctx_items(cid, ctx):
 
 
 def _action_label(ctx):
-    """Текст кнопки группового действия — называет последствие, а не факт удаления записи."""
+    """Текст кнопки группового действия — называет последствие, а не факт
+    удаления записи. Таблица зафиксирована в docs/audit-cleanup-plan.md, P2-2."""
     if ctx.startswith("lv_") or ctx.startswith("lvls_"):
         return "Убрать из любимого"
     if ctx.startswith("hid_"):
@@ -198,11 +269,32 @@ def _action_label(ctx):
         return "Удалить рецепты"
     if ctx == "fridge":
         return "Удалить продукты"
+    if ctx in ("wl", "rl"):
+        return "Убрать из просмотренного"
+    if ctx.startswith("d_broken_"):
+        return "Удалить битые записи"
     if ctx.startswith("d_"):
         return "Удалить слова" if ctx.endswith("_word") else "Удалить фразы"
     if ctx == "lagom":
         return "Удалить принципы"
     return "Удалить отмеченные"
+
+
+# Контексты, для которых удаление обратимо штатными средствами интерфейса
+# (добавить обратно / нажать повторно) — не требуют экрана подтверждения перед
+# групповым удалением. Все остальные view-контексты физически стирают запись
+# без возможности программного восстановления — см. docs/audit-cleanup-plan.md,
+# P2-2 «Правило подтверждения».
+def _is_reversible_ctx(ctx):
+    return ctx.startswith("lv_") or ctx.startswith("lvls_") or ctx.startswith("hid_")
+
+
+# Контексты, где помимо «Выбрать все на странице» доступна кнопка «Удалить все
+# N» (выбор всей коллекции, не только видимой страницы) — см. P2-1: сохраняет
+# прежнее поведение кнопки «🗑 Удалить все» из самодельного чистильщика словаря
+# без чекбоксов, но проводит её через общее правило подтверждения P2-2.
+def _has_select_all_collection_button(ctx):
+    return ctx.startswith("d_broken_")
 
 
 async def send_cleanup(bot, cid, ctx, page=0, q=None):
@@ -326,13 +418,79 @@ def _view_items(ctx, cid):
             label, _desc = _s._fav_group_info(group)
             return f"{label} · удалить из Сохранить", items, f"as_bucket_favgrp_{group}"
         return "⭐ Чистка: сохранение", items, "as_bucket_fav"
+    if ctx.startswith("lv_") or ctx.startswith("lvls_"):
+        is_leisure = ctx.startswith("lvls_")
+        key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
+        store_key = _LOVE_STORE_KEYS.get(key)
+        title = {"movies": "🎬 Чистка: фильмы", "countries": "🧳 Чистка: страны",
+                 "artists": "🎸 Чистка: музыканты", "books": "📖 Чистка: книги"}.get(key, "Чистка")
+        records = store.ensure_list_ids(store_key, cid) if store_key else []
+        items = [(r["id"], _view_label(r)) for r in records]
+        return title, items, "m_leisure_settings" if is_leisure else "as_notes"
+    if ctx.startswith("hid_"):
+        key = ctx[len("hid_"):]
+        store_key = _HIDDEN_STORE_KEYS.get(key)
+        title = {"movies": "🚫 Скрытое: фильмы", "books": "🚫 Скрытое: книги",
+                 "artists": "🚫 Скрытое: музыканты", "countries": "🚫 Скрытое: страны"}.get(key, "Скрытое")
+        records = store.ensure_list_ids(store_key, cid) if store_key else []
+        items = [(r["id"], _view_label(r)) for r in records]
+        return title, items, f"as_love_{key}"
+    if ctx.startswith("d_broken_"):
+        import learning as _l
+        lang = ctx[len("d_broken_"):]
+        flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+        words = store.ensure_list_ids(config.DICT_KEY, cid)
+        items = [
+            (w["id"], f"{_l._w_field(w, 'word', 'nl', 'en') or '(пусто)'} — {_l._w_field(w, 'ru') or '(нет перевода)'}")
+            for w in words
+            if _l._dict_lang(w) == lang
+            and _l._is_bad_dict_item(_l._w_field(w, "word", "nl", "en"), _l._w_field(w, "ru"))
+        ]
+        return f"{flag} Чистка: битые записи", items, f"a_dictlang_{lang}"
+    if ctx.startswith("d_"):
+        import learning as _l
+        _, lang, kind = ctx.split("_")
+        flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+        label = "слов" if kind == "word" else "фраз"
+        words = store.ensure_list_ids(config.DICT_KEY, cid)
+        items = [
+            (w["id"], f"{_l._w_field(w, 'word', 'nl', 'en')} — {_l._w_field(w, 'ru')}".strip(" —"))
+            for w in words
+            if _l._dict_lang(w) == lang and _l._dict_kind(w) == kind
+        ]
+        return f"{flag} Чистка: {label}", items, f"a_dictlang_{lang}"
+    if ctx in ("wl", "rl"):
+        key = config.WATCHLIST_KEY if ctx == "wl" else config.READLIST_KEY
+        title = "🍿 Чистка: посмотреть" if ctx == "wl" else "📚 Чистка: почитать"
+        back = "a_watchlist" if ctx == "wl" else "a_readlist"
+        records = store.ensure_list_ids(key, cid)
+        items = [(r["id"], _view_label(r)) for r in records]
+        return title, items, back
+    if ctx == "fridge":
+        records = store.ensure_list_ids(config.FRIDGE_KEY, cid)
+        items = [(r["id"], _view_label(r)) for r in records]
+        return "Чистка: холодильник", items, "as_fridge"
+    if ctx == "recipes":
+        records = store.ensure_list_ids(config.MY_RECIPES_KEY, cid)
+        items = [(r["id"], r.get("name", "Рецепт")) for r in records]
+        return "🍳 Чистка: рецепты", items, "as_my_recipes"
+    if ctx == "lagom":
+        import memory
+        records = store.ensure_list_ids_via(memory.get_lagom, memory.set_lagom, _LAGOM_REVISION_SLOT, cid)
+        items = [(r["id"], _view_label(r)) for r in records]
+        return "Чистка: Здоровье", items, "set_lagom"
     return "Чистка", [], "m_learn"
 
 
 def _view_delete(ctx, cid, ids):
     """Удаляет выбранные записи из storage view-контекста по стабильным id."""
+    if not ids:
+        return 0
+    if ctx == "lagom":
+        import memory
+        return store.remove_from_list_by_ids_via(memory.get_lagom, memory.set_lagom, _LAGOM_REVISION_SLOT, cid, ids)
     store_key = _view_store_key(ctx)
-    if not store_key or not ids:
+    if not store_key:
         return 0
     return store.remove_from_list_by_ids(store_key, cid, ids)
 
@@ -352,6 +510,7 @@ async def open_view(bot, cid, ctx, back=None):
         "page": 0,
         "back": back or default_back,
         "created_at": time.time(),
+        "confirming": False,
     }
     await _render_view(bot, cid, view_id)
 
@@ -389,8 +548,14 @@ async def _render_view(bot, cid, view_id, q=None):
         page_ids = {i for i, _ in chunk}
         page_label = "✅ Снять выбор на странице" if page_ids <= sel else "✅ Выбрать все на странице"
         rows.append([InlineKeyboardButton(page_label, callback_data=f"cla:{view_id}:{page}")])
+    if _has_select_all_collection_button(ctx) and total > len(chunk) and all_ids != sel:
+        rows.append([InlineKeyboardButton(f"🗑 Удалить все {total}", callback_data=f"clx:{view_id}")])
     if sel:
         rows.append([InlineKeyboardButton(f"{_action_label(ctx)} ({len(sel)})", callback_data=f"cld:{view_id}")])
+    add_button = _view_add_button(ctx)
+    if add_button:
+        label, callback_data = add_button
+        rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=view["back"])])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
@@ -401,6 +566,26 @@ async def _render_view(bot, cid, view_id, q=None):
         except Exception:
             pass
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+
+
+async def _render_confirm(bot, cid, view_id, q=None):
+    """Промежуточный экран подтверждения перед необратимым групповым удалением
+    (P2-2) — реальное удаление происходит только после явного повторного
+    нажатия «Удалить N», не от одного нажатия финальной кнопки чистки."""
+    view = _views[view_id]
+    n = len(view["selected_ids"])
+    text = f"Удалить {n}? Это действие нельзя отменить."
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"🗑 Удалить {n}", callback_data=f"cldc:{view_id}")],
+        [InlineKeyboardButton("◀️ Отмена", callback_data=f"clcancel:{view_id}")],
+    ])
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
 async def _send_view_stale_message(bot, cid, q=None):
@@ -415,8 +600,15 @@ async def _send_view_stale_message(bot, cid, q=None):
 
 
 async def handle_view_callback(bot, cid, data, q=None):
-    """Обрабатывает clt:/clp:/cla:/cld: (двоеточие — маркер view-формата,
-    отличает его от старого формата clt_/clp_/cla_/cld_ на подчёркивании)."""
+    """Обрабатывает clt:/clp:/cla:/clx:/cld:/cldc:/clcancel: (двоеточие —
+    маркер view-формата, отличает его от старого формата clt_/clp_/cla_/cld_ на
+    подчёркивании).
+
+    cld:/cldc: — двухшаговое групповое удаление (P2-2): для необратимых
+    контекстов первое нажатие «cld» только показывает экран подтверждения, само
+    удаление происходит на «cldc» (после явного повторного нажатия). Для
+    обратимых контекстов (Любимое/Скрытое) «cld» удаляет сразу, как раньше —
+    без confirm-экрана, так как оба действия обратимы штатными средствами."""
     op, view_id, *rest = data.split(":")
     view = _views.get(view_id)
     if view is not None and time.time() - view["created_at"] > VIEW_TTL_SECONDS:
@@ -428,7 +620,7 @@ async def handle_view_callback(bot, cid, data, q=None):
     ctx = view["ctx"]
     store_key = _view_store_key(ctx)
     current_revision = store.get_list_revision(store_key, cid) if store_key else 0
-    if op == "cld" and view["revision"] != current_revision:
+    if op in ("cld", "cldc") and view["revision"] != current_revision:
         # Коллекция изменилась параллельно с момента открытия view — не
         # выполняем удаление вслепую, инвалидируем и просим переоткрыть.
         del _views[view_id]
@@ -458,10 +650,28 @@ async def handle_view_callback(bot, cid, data, q=None):
             view["selected_ids"] |= page_ids
         await _render_view(bot, cid, view_id, q=q)
         return
+    if op == "clx":
+        _, items, _ = _view_items(ctx, cid)
+        view["selected_ids"] = {i for i, _ in items}
+        await _render_view(bot, cid, view_id, q=q)
+        return
     if op == "cld":
+        if _is_reversible_ctx(ctx):
+            _view_delete(ctx, cid, view["selected_ids"])
+            del _views[view_id]
+            await open_view(bot, cid, ctx, back=view["back"])
+            return
+        view["confirming"] = True
+        await _render_confirm(bot, cid, view_id, q=q)
+        return
+    if op == "cldc":
         _view_delete(ctx, cid, view["selected_ids"])
         del _views[view_id]
         await open_view(bot, cid, ctx, back=view["back"])
+        return
+    if op == "clcancel":
+        view["confirming"] = False
+        await _render_view(bot, cid, view_id, q=q)
         return
 
 
