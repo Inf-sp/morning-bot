@@ -810,16 +810,18 @@ def _recipe_card(d):
     return _food_card(d, label="Рецепт дня")
 
 async def send_recipe(bot, cid, constraint="обычное блюдо"):
+    status = await util.StatusManager.start(bot, cid)
     try:
         d = await asyncio.to_thread(_gen_recipe, constraint, cid=cid)
     except Exception as e:
+        await status.stop(delete=True)
         await verify.safe_error(bot, cid, e); return
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe", constraint)
     card = _recipe_card(d)
     store.last_source[str(cid)] = "Питание · Рецепт"
     store.last_answer[str(cid)] = card.text
-    await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=_recipe_kb())
+    await status.replace(card.text, entities=card.entities, reply_markup=_recipe_kb())
 
 
 # ---------- Готовка: единая навигация по категориям (§6 спеки) ----------
@@ -830,7 +832,7 @@ _MEAL_CONSTRAINT = {
 }
 
 
-async def _send_queue_card(bot, cid, meal, d):
+async def _send_queue_card(bot, cid, meal, d, status=None):
     """Отправляет карточку ОДНОГО показываемого рецепта без фото."""
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe_queue", meal)
@@ -840,7 +842,10 @@ async def _send_queue_card(bot, cid, meal, d):
     store.last_answer[str(cid)] = card.text
     kb = _recipe_kb()
     _persist_current_queue_recipe(cid, d)
-    await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=kb)
+    if status is not None:
+        await status.replace(card.text, entities=card.entities, reply_markup=kb)
+    else:
+        await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=kb)
 
 
 async def _generate_and_store_queue(cid, meal, ingredients=None):
@@ -870,19 +875,25 @@ async def enter_meal(bot, cid, meal, ingredients=None):
     генерирует очередь при необходимости и показывает первый рецепт."""
     set_active_meal(cid, meal)
     q = get_recipe_queue(cid)
+    status = None
     if q.get("meal") != meal or not q.get("items"):
+        status = await util.StatusManager.start(bot, cid)
         try:
             items = await _generate_and_store_queue(cid, meal, ingredients)
         except Exception as e:
+            await status.stop(delete=True)
             await verify.safe_error(bot, cid, e); return
         if not items:
-            await bot.send_message(chat_id=cid, text="Не получилось придумать рецепты, попробуй ещё раз.")
+            await status.replace("Не получилось придумать рецепты, попробуй ещё раз.")
             return
     d = queue_next(cid)
     if d is None:
-        await bot.send_message(chat_id=cid, text="Не получилось придумать рецепты, попробуй ещё раз.")
+        if status is not None:
+            await status.replace("Не получилось придумать рецепты, попробуй ещё раз.")
+        else:
+            await bot.send_message(chat_id=cid, text="Не получилось придумать рецепты, попробуй ещё раз.")
         return
-    await _send_queue_card(bot, cid, meal, d)
+    await _send_queue_card(bot, cid, meal, d, status=status)
 
 
 async def show_next_recipe(bot, cid):
@@ -910,19 +921,22 @@ async def show_next_recipe(bot, cid):
     if prev_cuisine:
         bump_cuisine_weight(cid, prev_cuisine, -1)
     d = queue_next(cid)
+    status = None
     if d is None:
+        status = await util.StatusManager.start(bot, cid)
         try:
             items = await _generate_and_store_queue(cid, meal, ingredients)
         except Exception as e:
+            await status.stop(delete=True)
             await verify.safe_error(bot, cid, e); return
         if not items:
-            await bot.send_message(chat_id=cid, text="Не получилось придумать рецепты, попробуй ещё раз.")
+            await status.replace("Не получилось придумать рецепты, попробуй ещё раз.")
             return
         d = queue_next(cid)
         if d is None:
-            await bot.send_message(chat_id=cid, text="Не получилось придумать рецепты, попробуй ещё раз.")
+            await status.replace("Не получилось придумать рецепты, попробуй ещё раз.")
             return
-    await _send_queue_card(bot, cid, meal, d)
+    await _send_queue_card(bot, cid, meal, d, status=status)
 
 
 async def back_to_food_menu(bot, cid):
@@ -934,27 +948,31 @@ async def back_to_food_menu(bot, cid):
 
 async def send_recipe_featured(bot, cid):
     """Новый рецепт из меню — под результатом кнопки завтрак/обед/ужин."""
+    status = await util.StatusManager.start(bot, cid)
     try:
         d = await asyncio.to_thread(_gen_recipe, "любое блюдо под вкус пользователя", cid=cid)
     except Exception as e:
+        await status.stop(delete=True)
         await verify.safe_error(bot, cid, e); return
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe", "featured")
     card = _recipe_card(d)
     store.last_source[str(cid)] = "Питание · Рецепт"
     store.last_answer[str(cid)] = card.text
-    await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=_recipe_typed_kb())
+    await status.replace(card.text, entities=card.entities, reply_markup=_recipe_typed_kb())
 
 async def send_recipe_push(bot, cid):
     """Уведомление 12:30 — без кнопок."""
+    status = await util.StatusManager.start(bot, cid)
     try:
         d = await asyncio.to_thread(_gen_recipe, "любое блюдо под вкус пользователя", cid=cid)
     except Exception as e:
+        await status.stop(delete=True)
         await verify.safe_error(bot, cid, e); return
     card = _recipe_card(d)
     store.last_source[str(cid)] = "Питание · Рецепт"
     store.last_answer[str(cid)] = card.text
-    await bot.send_message(chat_id=cid, text=card.text, entities=card.entities)
+    await status.replace(card.text, entities=card.entities)
 
 
 def _gen_leftovers_recipe(ingredients, cid=None):
@@ -972,7 +990,7 @@ def _gen_leftovers_recipe(ingredients, cid=None):
 
 
 # ---------- Батч-генерация очереди рецептов (§5 спеки) ----------
-# Набор машиночитаемых кодов кухонь: 6 базовых из settings.CUISINE_OPTIONS
+# Набор машиночитаемых кодов кухонь совпадает с settings.CUISINE_OPTIONS
 # (кросс-региональные группы вроде "asian" совпадают с настройками пользователя,
 # чтобы cuisine_weights/приоритеты считались по тем же ключам) + расширение
 # конкретными странами для более точного флага в карточке (§7: "всегда показывать
@@ -1141,9 +1159,11 @@ def _gen_leftovers_recipe_batch(ingredients, cid=None, cuisine_weights=None, rec
 
 
 async def send_leftovers(bot, cid, ingredients):
+    status = await util.StatusManager.start(bot, cid)
     try:
         d = await asyncio.to_thread(_gen_leftovers_recipe, ingredients, cid)
     except Exception as e:
+        await status.stop(delete=True)
         await verify.safe_error(bot, cid, e); return
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("leftovers", ingredients)
@@ -1151,7 +1171,7 @@ async def send_leftovers(bot, cid, ingredients):
     card = _food_card(d, label="Рецепт из холодильника")
     store.last_source[str(cid)] = "Питание · Остатки"
     store.last_answer[str(cid)] = card.text
-    await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=_fridge_recipe_kb())
+    await status.replace(card.text, entities=card.entities, reply_markup=_fridge_recipe_kb())
 
 
 _FRIDGE_PAGE = 8  # продуктов на страницу в категории

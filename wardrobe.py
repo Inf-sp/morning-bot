@@ -234,6 +234,7 @@ async def send_looks(bot, cid):
         )
         return
     s = store.get_settings(cid)
+    status = await util.StatusManager.start(bot, cid)
     # Персональный профиль из настроек пользователя
     user_profile = _settings.get(cid, "wardrobe_profile", "")
     user_style = _settings.get(cid, "style", "")
@@ -324,12 +325,13 @@ async def send_looks(bot, cid):
     try:
         d = await ai.allm_json(prompt, 900, module="wardrobe")
     except Exception as e:
+        await status.stop(delete=True)
         await verify.safe_error(bot, cid, e); return
     raw_items = d.get("items", [])
     items = [it.get("name", "") if isinstance(it, dict) else str(it) for it in raw_items]
     items = [it for it in items if it.strip()]
     if not items:
-        await bot.send_message(chat_id=cid, text="Не удалось собрать образ. Попробуй ещё раз.", reply_markup=_look_result_kb())
+        await status.replace("Не удалось собрать образ. Попробуй ещё раз.", reply_markup=_look_result_kb())
         return
     rl = store.recent_looks.get(str(cid), [])
     rl.append(", ".join(items)[:80])
@@ -352,7 +354,7 @@ async def send_looks(bot, cid):
     _save_cached_look(cid, item_ids, look_data=look_data)
     store.last_source[str(cid)] = "Гардероб · Образ"
     store.last_answer[str(cid)] = text
-    await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=_look_result_kb())
+    await status.replace(text, entities=entities, reply_markup=_look_result_kb())
 
 
 # ---------- фидбек по образу ----------

@@ -128,26 +128,18 @@ async def chat_reply(bot, cid, text):
     hist = store.chat_history.get(str(cid), [])
     hist.append({"role": "user", "content": text})
     hist = hist[-10:]
-    pending = await bot.send_message(chat_id=cid, text=f"<b>{util.loading_phrase()}</b>", parse_mode="HTML")
+    status = await util.StatusManager.start(bot, cid)
     try:
         answer = await ai.achat_chain(hist, cid)
     except Exception as e:
-        try:
-            await pending.delete()
-        except Exception:
-            pass
+        await status.stop(delete=True)
         await verify.safe_error(bot, cid, e); return
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
     store.last_answer[str(cid)] = answer
     store.last_surface[str(cid)] = "chat"
     msg = assistant_ui.assistant_answer((answer or "").strip() or "Пусто, попробуй ещё раз.")
-    ok = False
-    try:
-        await pending.edit_text(msg.text, entities=msg.entities)
-        ok = True
-    except Exception:
-        ok = False
+    ok = await status.replace(msg.text, entities=msg.entities)
     if not ok:
         try:
             await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)

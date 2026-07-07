@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import random
 import re
 import time
@@ -19,6 +21,79 @@ LOADING_PHRASES = [
 
 def loading_phrase() -> str:
     return random.choice(LOADING_PHRASES)
+
+
+class StatusManager:
+    """Редактируемый индикатор ожидания для долгих операций."""
+
+    STAGES = (
+        (0, "⏳ Ищу ответ..."),
+        (3, "🔎 Проверяю данные..."),
+        (8, "🧠 Собираю лучший ответ..."),
+        (15, "✨ Почти готово..."),
+    )
+
+    def __init__(self, bot, cid=None, message=None, parse_mode=None):
+        self.bot = bot
+        self.cid = cid
+        self.message = message
+        self.parse_mode = parse_mode
+        self._task = None
+        self._stopped = asyncio.Event()
+
+    @classmethod
+    async def start(cls, bot, cid=None, message=None, text=None, parse_mode=None):
+        manager = cls(bot, cid=cid, message=message, parse_mode=parse_mode)
+        first_text = text or cls.STAGES[0][1]
+        if manager.message is None:
+            manager.message = await bot.send_message(chat_id=cid, text=first_text, parse_mode=parse_mode)
+        else:
+            await manager._edit(first_text)
+        manager._task = asyncio.create_task(manager._run())
+        return manager
+
+    async def _run(self):
+        started = time.monotonic()
+        for delay, text in self.STAGES[1:]:
+            timeout = max(0, delay - (time.monotonic() - started))
+            try:
+                await asyncio.wait_for(self._stopped.wait(), timeout=timeout)
+                return
+            except asyncio.TimeoutError:
+                pass
+            if self._stopped.is_set():
+                return
+            await self._edit(text)
+
+    async def _edit(self, text, **kwargs):
+        if self.message is None:
+            return False
+        try:
+            await self.message.edit_text(text, **kwargs)
+            return True
+        except Exception:
+            return False
+
+    async def stop(self, delete=True):
+        await self._cancel()
+        if delete and self.message is not None:
+            with contextlib.suppress(Exception):
+                await self.message.delete()
+
+    async def replace(self, text, **kwargs):
+        await self._cancel()
+        ok = await self._edit(text, **kwargs)
+        if not ok and self.cid is not None:
+            await self.bot.send_message(chat_id=self.cid, text=text, **kwargs)
+            return True
+        return ok
+
+    async def _cancel(self):
+        self._stopped.set()
+        if self._task is not None:
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
 
 def ttl_get(namespace: str, key: str, ttl: int):
     hit = _TTL_CACHE.get((namespace, key))
