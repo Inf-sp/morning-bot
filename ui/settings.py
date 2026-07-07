@@ -1,7 +1,5 @@
 from .builder import MessageBuilder, MessageSpec
 
-ADMIN_RUN_NOTIF_TITLE = "Превью рассылки"
-
 
 def notifications():
     b = MessageBuilder()
@@ -284,8 +282,3 @@ def admin_only():
     return MessageSpec(text="⛔ Только для администратора.")
 
 
-def admin_run_notifications():
-    b = MessageBuilder()
-    b.section(ADMIN_RUN_NOTIF_TITLE)
-    b.line("Выбери уведомление — оно придёт тебе прямо сейчас.\nВремя в кнопках показывает обычное расписание.")
-    return b.build_stripped()

@@ -31,13 +31,26 @@ def only():
 
 # ================= ДОМ =================
 
-def home(system_dot, system_text, active, llm_calls, errors):
+def home(system_dot, system_text, total_users, active_7d, llm_calls_today, llm_tokens_today,
+         next_broadcast_title, next_broadcast_when, next_broadcast_reach,
+         issues_count, top_issue):
     b = MessageBuilder()
     b.bold("🛠 Администратор")
     b.newline()
     b.spacer()
-    b.line(f"Система {system_dot} {system_text}")
-    b.line(f"Сегодня: {active} активны · {llm_calls} LLM · {errors} ошибок")
+    b.line(f"{system_dot} {system_text}")
+    b.line(f"{total_users} пользователей · {active_7d} активных за 7 дней")
+    b.spacer()
+    b.line(f"🤖 {_num(llm_calls_today)} LLM-запросов сегодня · ~{_num(llm_tokens_today)} токенов")
+    if next_broadcast_title:
+        b.line(f"📢 {next_broadcast_title} — {next_broadcast_when} · ~{next_broadcast_reach} чел")
+    b.spacer()
+    if issues_count:
+        b.line(f"⚠️ {issues_count} открытые проблемы")
+        if top_issue:
+            b.line(top_issue)
+    else:
+        b.line("🟢 Открытых проблем нет")
     return b.build_stripped()
 
 
@@ -93,45 +106,23 @@ def user_search_result(dot, name, city, last_seen):
     return b.build_stripped()
 
 
-# ================= АНАЛИТИКА =================
-
-def analytics(period_label, m, top_sections):
-    b = MessageBuilder()
-    b.bold(f"📊 Аналитика · {period_label}")
-    b.newline()
-    b.spacer()
-    b.metric("Активны", f"{m.get('active', 0)}  (7д: {m.get('active_7d', 0)})")
-    b.metric("Сообщений", m.get("messages", 0))
-    b.metric("Запросов к LLM", m.get("llm", 0))
-    b.metric("Ср. ответ", f"{m.get('avg_ms', 0)} мс")
-    b.metric("Ошибок", m.get("errors", 0))
-    b.metric("Рассылок", m.get("broadcasts", 0))
-    if top_sections:
-        b.spacer()
-        b.bold("Топ разделов")
-        b.newline()
-        for label, pct in top_sections:
-            b.metric(label, f"{pct}%")
-    return b.build_stripped()
-
-
 # ================= LLM =================
 
-def llm(status_dot, status_text, last_req, avg_ms, errors_today, last_provider, models):
+def llm(status_dot, status_text, last_req, avg_ms, errors_today, calls_today, tokens_today, providers):
+    """providers: [(label, pct)] доля токенов за сегодня."""
     b = MessageBuilder()
     b.bold("🤖 LLM")
     b.newline()
     b.spacer()
     b.metric("Статус", f"{status_dot} {status_text}")
     b.metric("Последний запрос", last_req)
-    b.metric("Ср. скорость", f"{avg_ms} мс")
+    b.metric("Запросов сегодня", calls_today)
+    b.metric("Токенов сегодня", f"~{_num(tokens_today)}")
+    b.metric("Ср. ответ", f"{avg_ms} мс")
     b.metric("Ошибок сегодня", errors_today)
-    b.metric("Провайдер", last_provider or "—")
-    if models:
+    if providers:
         b.spacer()
-        b.bold("Активные модели")
-        b.newline()
-        b.line(" · ".join(models))
+        b.line(" · ".join(f"{label} {pct}%" for label, pct in providers))
     return b.build_stripped()
 
 
@@ -160,94 +151,54 @@ def llm_history(rows):
     return b.build_stripped()
 
 
-# ================= РАСХОДЫ =================
+# ================= РАССЫЛКА =================
 
-def cost(period_label, call_count, total_tokens, avg_tokens, providers, modules):
+def broadcast(next_title, next_when, next_reach):
     b = MessageBuilder()
-    b.bold(f"💰 Расходы · {period_label}")
+    b.bold("📢 Рассылка")
     b.newline()
     b.spacer()
-    if not call_count:
-        b.line("Данных пока нет.")
+    b.line(next_title)
+    b.line(f"{next_when} · ~{next_reach} получателей")
+    return b.build_stripped()
+
+
+def broadcast_confirm(reach):
+    b = MessageBuilder()
+    b.bold("⚠️ Отправить рассылку сейчас?")
+    b.newline()
+    b.spacer()
+    b.line(f"Получат: ~{reach} пользователей")
+    return b.build_stripped()
+
+
+# ================= ПРОБЛЕМЫ =================
+
+def issues(rows, checked_when):
+    """rows: [(dot, name, detail)]. Пусто -> «проблем нет»."""
+    b = MessageBuilder()
+    b.bold("⚠️ Проблемы")
+    b.newline()
+    b.spacer()
+    if not rows:
+        b.line(f"{OK} Открытых проблем нет")
+        b.spacer()
+        b.line(f"Последняя проверка · {checked_when}")
         return b.build_stripped()
-    b.metric("Запросов", _num(call_count))
-    b.metric("Токенов (оценка)", _num(total_tokens))
-    b.metric("Ср. токенов / запрос", avg_tokens)
-    b.spacer()
-    b.bold("Провайдеры (доля токенов)")
-    b.newline()
-    for label, configured, pct in providers:
-        tag = f"{OK} ключ" if configured else f"{OFF} нет ключа"
-        b.metric(label, f"{pct}%  {tag}")
-    if modules:
-        b.spacer()
-        b.bold("По разделам (топ-5)")
-        b.newline()
-        for label, pct in modules:
-            b.metric(label, f"{pct}%")
-    return b.build_stripped()
-
-
-# ================= СЕРВИСЫ =================
-
-def services(rows, checked_when):
-    """rows: [(dot, name, detail)]. detail: '340 мс' | '502 · 12 мин назад' | 'не настроен'."""
-    b = MessageBuilder()
-    b.bold("📡 Сервисы")
-    b.newline()
-    b.spacer()
     for dot, name, detail in rows:
-        b.metric(f"{dot} {name}", detail)
-    b.spacer()
-    b.line(f"Проверено: {checked_when}")
-    return b.build_stripped()
-
-
-# ================= РАССЫЛКИ =================
-
-def broadcasts(sent, recipients, errors, blocked, next_title, next_when, next_reach):
-    b = MessageBuilder()
-    b.bold("📢 Рассылки")
-    b.newline()
-    b.spacer()
-    b.metric("Отправлено сегодня", sent)
-    b.metric("Получателей", recipients)
-    b.metric("Ошибок доставки", errors)
-    b.metric("Заблокировали бота", blocked)
-    if next_title:
+        b.line(f"{dot} {name}")
+        b.line(detail)
         b.spacer()
-        b.bold("Следующая")
-        b.newline()
-        b.line(next_title)
-        b.line(f"{next_when} · ~{next_reach} чел")
     return b.build_stripped()
 
 
-# ================= ЛОГИ =================
-
-def logs(errors, active_filter="Все"):
-    """errors: [(dot, when, source, msg)]."""
-    b = MessageBuilder()
-    b.bold("⚠️ Логи · последние ошибки")
-    b.newline()
-    b.spacer()
-    if not errors:
-        b.line(f"{OK} Ошибок нет.")
-    for dot, when, source, msg in errors:
-        b.line(f"{dot} {when} {source} · {msg}")
-    b.spacer()
-    b.line(f"Фильтр: {active_filter}")
-    return b.build_stripped()
-
-
-def log_detail(when, source, kind, msg):
+def issue_detail(when, source, dot, msg):
     b = MessageBuilder()
     b.bold("🔎 Подробнее")
     b.newline()
     b.spacer()
     b.metric("Время", when)
-    b.metric("Источник", source)
-    b.metric("Тип", kind or "—")
+    b.metric("Источник", f"{dot} {source}")
     b.spacer()
     b.code(msg or "—")
     return b.build_stripped()

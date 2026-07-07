@@ -620,43 +620,50 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_admin_users":
         import admin as _adm
         await _admin_guard(bot, cid, _adm.send_users)
-    elif data == "set_admin_analytics":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_analytics(b, c, 1))
-    elif data == "set_admin_analytics_7":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_analytics(b, c, 7))
-    elif data == "set_admin_analytics_30":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_analytics(b, c, 30))
     elif data == "set_admin_llm":
         import admin as _adm
         await _admin_guard(bot, cid, _adm.send_llm)
-    elif data == "set_admin_llm_hist":
+    elif data == "set_admin_llmcheck":
+        import admin as _adm
+        await _admin_guard(bot, cid, _adm.send_llm_check)
+    elif data == "set_admin_llmhistory":
         import admin as _adm
         await _admin_guard(bot, cid, _adm.send_llm_history)
-    elif data == "set_admin_services":
+    elif data == "set_admin_broadcast":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_services)
-    elif data == "set_admin_broadcasts":
+        await _admin_guard(bot, cid, _adm.send_broadcast)
+    elif data == "set_admin_broadcast_test":
+        async def _do_broadcast_test(b, c):
+            import admin as _adm
+            await _run_notif_test(b, c, "morning_brief")
+        await _admin_guard(bot, cid, _do_broadcast_test)
+    elif data == "set_admin_broadcast_send":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_broadcasts)
-    elif data == "set_admin_logs":
+        await _admin_guard(bot, cid, _adm.send_broadcast_confirm)
+    elif data == "set_admin_broadcast_confirm":
+        async def _do_broadcast_send(b, c):
+            import access as _acc
+            for target_cid in _acc.get_allowed_cids():
+                await send_scheduled_notification(b, target_cid, "morning_brief")
+            import admin as _adm
+            await _adm.send_broadcast(b, c)
+        await _admin_guard(bot, cid, _do_broadcast_send)
+    elif data == "set_admin_broadcast_cancel":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_logs)
-    elif data.startswith("set_admin_logs_"):
+        await _admin_guard(bot, cid, _adm.send_broadcast)
+    elif data == "set_admin_issues":
         import admin as _adm
-        sub = data[len("set_admin_logs_"):]
-        if sub == "clear":
-            await _admin_guard(bot, cid, _adm.clear_logs)
-        else:
-            await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, sub))
-    elif data == "set_admin_tools":
-        await _admin_guard(bot, cid, send_admin_run_notif)
-    elif data.startswith("set_admin_cost_"):
+        await _admin_guard(bot, cid, _adm.send_issues)
+    elif data == "set_admin_check_all":
         import admin as _adm
-        days = int(data[len("set_admin_cost_"):])
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_cost(b, c, days))
+        await _admin_guard(bot, cid, _adm.check_all)
+    elif data == "set_admin_cache_clear":
+        import admin as _adm
+        await _admin_guard(bot, cid, _adm.clear_cache)
+    elif data.startswith("set_admin_issue_"):
+        idx = int(data[len("set_admin_issue_"):])
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_issue_detail(b, c, idx))
     elif data == "set_admin_invite":
         async def _do_invite(b, c):
             import access as _acc
@@ -679,19 +686,13 @@ async def handle_callback(bot, cid, data, q=None):
             import admin as _adm
             await _adm.send_users(b, c)
         await _admin_guard(bot, cid, _do_revoke)
-    elif data == "set_admin_cost":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_cost(b, c, 7))
-    elif data == "set_admin_llmcheck":
-        import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_llm_check)
-    elif data == "set_admin_run_notif":
-        await _admin_guard(bot, cid, send_admin_run_notif)
-    elif data.startswith("set_admin_runjob_"):
-        kind = data[len("set_admin_runjob_"):]
-        async def _do_job(b, c):
-            await _run_notif_test(b, c, kind)
-        await _admin_guard(bot, cid, _do_job)
+    elif data.startswith("set_admin_"):
+        # устаревшие callback-и из уже отправленных сообщений (аналитика/расходы/сервисы/логи/настройки) —
+        # безопасный fallback вместо silent fail или traceback
+        async def _do_fallback(b, c):
+            await b.send_message(chat_id=c, text="Панель обновлена. Открываю актуальное меню.")
+            await send_admin(b, c)
+        await _admin_guard(bot, cid, _do_fallback)
 
 
 # ===== СОХРАНЕНИЯ / ЛЮБИМЫЕ (notes.py) =====
@@ -1246,18 +1247,3 @@ async def send_admin(bot, cid):
     await _admin.send_home(bot, cid)
 
 
-async def send_admin_run_notif(bot, cid):
-    """Подменю: запустить любое уведомление прямо сейчас."""
-    rows = [
-        [InlineKeyboardButton(_notif_label(kind, label), callback_data=f"set_admin_runjob_{kind}")]
-        for kind, label in NOTIF_TYPES
-    ]
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_admin")])
-    kb = InlineKeyboardMarkup(rows)
-    msg = settings_ui.admin_run_notifications()
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
-        reply_markup=kb,
-    )
