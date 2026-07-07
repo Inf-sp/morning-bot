@@ -112,6 +112,18 @@ def test_daily_and_monthly_budget_block_new_requests():
     assert pn._reserve_credits(1) is False
 
 
+def test_monthly_budget_is_700(monkeypatch):
+    day = {"n": 0}
+
+    def fake_today(now=None):
+        day["n"] += 1
+        return f"2026-07-{day['n']:02d}"
+
+    monkeypatch.setattr(pn, "_today_key", fake_today)
+    assert all(pn._reserve_credits(1) for _ in range(700))
+    assert pn._reserve_credits(1) is False
+
+
 def test_irrelevant_news_not_in_card(monkeypatch):
     monkeypatch.setattr(pn, "_score_items", lambda cid, items: [])
     entry, _ = pn.build_from_sources("1", "today", [_news("Random article", "https://example.com/a")])
@@ -122,6 +134,24 @@ def test_old_news_filtered_out(monkeypatch):
     monkeypatch.setattr(pn, "_score_items", lambda cid, items: pytest.fail("old item reached Gemini"))
     entry, _ = pn.build_from_sources("1", "today", [_news(days=8)])
     assert "ничего действительно важного" in entry["text"]
+
+
+def test_official_undated_sources_reach_gemini(monkeypatch):
+    seen = {}
+
+    def fake_score(cid, items):
+        seen["items"] = items
+        return []
+
+    monkeypatch.setattr(pn, "_score_items", fake_score)
+    source = {
+        "title": "API pricing update",
+        "url": "https://openai.com/api/pricing",
+        "content": "New API pricing update and limit changes.",
+    }
+    pn.build_from_sources("1", "today", [source])
+    assert len(seen["items"]) == 1
+    assert seen["items"][0]["_date_missing"] is True
 
 
 def test_duplicates_are_merged():
@@ -153,3 +183,9 @@ def test_stale_cache_can_be_rendered(monkeypatch, isolated_store):
 def test_primary_structured_sources_documented():
     assert "themoviedb.org" in pn._OFFICIAL_DOMAINS["screen"]
     assert "ticketmaster.com" in pn._OFFICIAL_DOMAINS["music"]
+
+
+def test_admin_stats_shows_total_tavily_monthly_limit():
+    pn._reserve_credits(1)
+    text = pn.admin_stats_text()
+    assert "Месяц: 1 / 1000 credits" in text

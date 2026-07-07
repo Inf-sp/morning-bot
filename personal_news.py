@@ -17,9 +17,10 @@ _log = logging.getLogger(__name__)
 
 NEWS_CACHE_KEY = "personal_news_cache.json"
 NEWS_STATS_KEY = "personal_news_stats.json"
-NEWS_MONTHLY_CREDIT_BUDGET = 300
+NEWS_MONTHLY_CREDIT_BUDGET = 700
+TAVILY_MONTHLY_CREDIT_LIMIT = 1000
 NEWS_DAILY_CREDIT_BUDGET = 15
-NEWS_HARD_MONTHLY_LIMIT = 500
+NEWS_HARD_MONTHLY_LIMIT = 700
 NEWS_MAX_ITEMS = 5
 NEWS_MIN_RELEVANCE_SCORE = 0.65
 REFRESH_COOLDOWN_SEC = 6 * 3600
@@ -134,18 +135,41 @@ def _title_key(title):
 def _parse_dt(value):
     if not value:
         return None
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value, config.TZ)
+        except Exception:
+            return None
     value = str(value).replace("Z", "+00:00")
-    try:
-        dt = datetime.fromisoformat(value)
-        return dt if dt.tzinfo else dt.replace(tzinfo=config.TZ)
-    except Exception:
-        return None
+    for fmt in (None, "%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y"):
+        try:
+            dt = datetime.fromisoformat(value) if fmt is None else datetime.strptime(value[:10], fmt)
+            return dt if dt.tzinfo else dt.replace(tzinfo=config.TZ)
+        except Exception:
+            continue
+    return None
+
+
+def _published_value(item):
+    for key in ("published_at", "published_date", "publishedDate", "date", "datetime"):
+        if item.get(key):
+            return item.get(key)
+    return None
+
+
+def _is_official_url(url):
+    host = _host(url)
+    return any(
+        host.endswith(domain)
+        for domains in _OFFICIAL_DOMAINS.values()
+        for domain in domains
+    )
 
 
 def _is_fresh(item, period, now=None):
-    dt = _parse_dt(item.get("published_at") or item.get("published_date") or item.get("date"))
+    dt = _parse_dt(_published_value(item))
     if not dt:
-        return False
+        return _is_official_url(item.get("url", ""))
     now = now or _now()
     return dt >= now - timedelta(days=_period_max_age_days(period))
 
@@ -156,6 +180,9 @@ def _has_concrete_change(item):
         "new", "nieuw", "nieuwe", "wijzig", "change", "changed", "update", "price", "pricing",
         "limit", "outage", "premiere", "trailer", "season", "cancelled", "release", "tour",
         "recall", "waarschuwing", "tekort", "opened", "opening", "datum", "api",
+        "verandering", "aangepast", "storing", "uitval", "seizoen", "prijs", "tarief",
+        "нов", "измен", "обнов", "цена", "тариф", "лимит", "сбой", "премьера", "сезон",
+        "отмен", "релиз", "тур", "открыл", "открыт", "предупрежд", "дефицит",
     )
     return any(m in text for m in markers)
 
@@ -176,6 +203,7 @@ def strict_filter(items, period="today", now=None):
         seen_urls.add(url)
         seen_titles.add(tkey)
         item["url"] = url
+        item["_date_missing"] = _parse_dt(_published_value(item)) is None
         out.append(item)
     return out
 
@@ -377,7 +405,8 @@ def _score_items(cid, candidates):
             "title": x.get("title"),
             "url": x.get("url"),
             "content": (x.get("content") or "")[:700],
-            "published_at": x.get("published_at") or x.get("published_date") or x.get("date"),
+            "published_at": _published_value(x),
+            "date_missing": bool(x.get("_date_missing")),
             "category_hint": x.get("_category_hint"),
         }
         for x in candidates[:24]
@@ -572,7 +601,7 @@ def admin_stats_text():
     return (
         "📰 Personal News · Tavily\n\n"
         f"Сегодня: {snap['today_credits']} / {NEWS_DAILY_CREDIT_BUDGET} credits\n"
-        f"Месяц: {snap['month_credits']} / {NEWS_MONTHLY_CREDIT_BUDGET} credits\n"
+        f"Месяц: {snap['month_credits']} / {TAVILY_MONTHLY_CREDIT_LIMIT} credits\n"
         f"Кэш-попадания: {snap['cache_hits']}\n"
         f"Последняя сборка: {last}\n\n"
         f"Tavily calls: {snap['tavily_calls']}\n"
