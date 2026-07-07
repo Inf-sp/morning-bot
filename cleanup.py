@@ -1,20 +1,78 @@
 """Движок чистки списков: пагинация + мультивыбор.
 
 Используется из learning, notes, wardrobe, balance, bot.
-Контексты: d_<lang>_<kind> (словарь), nb (закладки),
+Контексты (старый формат, позиционная адресация по индексу в списке на момент
+рендера страницы — риск гонки при параллельном изменении списка):
+           d_<lang>_<kind> (словарь), nb (закладки),
            wl/rl (watchlist/readlist), kast_<zone_slug>_<subcat_idx>_<origin>
-           (шкаф — вещи одной подкатегории, адресация по id вещи), lv_<key> (любимые),
-           hid_<key> (скрытое/чёрный список — действие только убирает из чёрного
-           списка, не трогает fav_key, чтобы не превращать «вернуть в рекомендации»
-           в скрытый сигнал «мне нравится»),
+           (шкаф — вещи одной подкатегории, адресация по id вещи — уже мигрирован),
+           lv_<key> (любимые), hid_<key> (скрытое/чёрный список — действие
+           только убирает из чёрного списка, не трогает fav_key, чтобы не
+           превращать «вернуть в рекомендации» в скрытый сигнал «мне нравится»),
            fridge (холодильник), recipes (рецепты).
+
+PR3a вводит параллельный "view"-режим (стабильный item_id + revision коллекции,
+короткий callback_data вида "clt:<view_id>:<short_id>") для контекста nb/nb_*
+("Сохранённое") — см. docs/audit-cleanup-plan.md, PR3. Остальные контексты
+мигрируют в PR3b-d по тому же паттерну; до тех пор они продолжают работать на
+старом формате без изменений.
 """
+import secrets
+import time
+
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 from util import esc
 
 CLEAN_PAGE = 8
+
+# --- view-режим (PR3a): стабильный id + revision, короткий callback_data ---
+VIEW_TTL_SECONDS = 24 * 3600
+_VIEW_CONTEXTS = {"nb"}  # + "nb_<group>" через startswith, см. _is_view_ctx
+_views = {}  # view_id -> {"ctx", "revision", "selected_ids", "page", "back", "created_at"}
+
+
+def _is_view_ctx(ctx):
+    return ctx == "nb" or ctx.startswith("nb_")
+
+
+def _view_store_key(ctx):
+    """Storage-ключ коллекции для view-контекста."""
+    if _is_view_ctx(ctx):
+        return config.NOTES_KEY
+    return None
+
+
+def _purge_expired_views():
+    now = time.time()
+    expired = [vid for vid, v in _views.items() if now - v["created_at"] > VIEW_TTL_SECONDS]
+    for vid in expired:
+        del _views[vid]
+
+
+def _new_view_id():
+    while True:
+        vid = secrets.token_hex(4)
+        if vid not in _views:
+            return vid
+
+
+def _short_ids(full_ids):
+    """Присваивает каждому полному id короткий уникальный суффикс (в рамках
+    переданного набора) — короче, чем полный uuid4 hex (32 симв.), но без
+    коллизий на практике (обычно единицы-десятки элементов на странице)."""
+    mapping = {}
+    used = set()
+    for fid in full_ids:
+        length = 4
+        short = fid[:length]
+        while short in used and length < len(fid):
+            length += 1
+            short = fid[:length]
+        used.add(short)
+        mapping[fid] = short
+    return mapping
 
 
 def _sel(cid, ctx):
@@ -251,8 +309,171 @@ def _cleanup_delete(cid, ctx):
     store.list_sel[f"{cid}:{ctx}"] = set()
 
 
+def _view_items(ctx, cid):
+    """(заголовок, items=[(full_id, label)], back_callback) для view-контекста —
+    id стабильны (store.ensure_list_ids), не позиционные индексы."""
+    if ctx == "nb" or ctx.startswith("nb_"):
+        import re as _re
+        import settings as _s
+        _strip = lambda s: _re.sub(r"<[^>]+>", "", s).strip()
+        notes = store.ensure_list_ids(config.NOTES_KEY, cid)
+        group = ctx[len("nb_"):] if ctx.startswith("nb_") else None
+        items = [(n["id"], _strip(n.get("text", "")))
+                 for n in notes
+                 if n.get("bucket", "fav") == "fav"
+                 and (group is None or _s._fav_group(n.get("source", "Прочее")) == group)]
+        if group:
+            label, _desc = _s._fav_group_info(group)
+            return f"{label} · удалить из Сохранить", items, f"as_bucket_favgrp_{group}"
+        return "⭐ Чистка: сохранение", items, "as_bucket_fav"
+    return "Чистка", [], "m_learn"
+
+
+def _view_delete(ctx, cid, ids):
+    """Удаляет выбранные записи из storage view-контекста по стабильным id."""
+    store_key = _view_store_key(ctx)
+    if not store_key or not ids:
+        return 0
+    return store.remove_from_list_by_ids(store_key, cid, ids)
+
+
+async def open_view(bot, cid, ctx, back=None):
+    """Открывает новый view (PR3a) — снимает свежий revision коллекции и
+    заводит короткоживущее серверное состояние просмотра."""
+    _purge_expired_views()
+    title, items, default_back = _view_items(ctx, cid)
+    store_key = _view_store_key(ctx)
+    revision = store.get_list_revision(store_key, cid) if store_key else 0
+    view_id = _new_view_id()
+    _views[view_id] = {
+        "ctx": ctx,
+        "revision": revision,
+        "selected_ids": set(),
+        "page": 0,
+        "back": back or default_back,
+        "created_at": time.time(),
+    }
+    await _render_view(bot, cid, view_id)
+
+
+async def _render_view(bot, cid, view_id, q=None):
+    view = _views.get(view_id)
+    if view is None:
+        await _send_view_stale_message(bot, cid, q)
+        return
+    ctx = view["ctx"]
+    title, items, _back = _view_items(ctx, cid)
+    items = _sort_items(items)
+    all_ids = {i for i, _ in items}
+    view["selected_ids"] &= all_ids
+    sel = view["selected_ids"]
+    total = len(items)
+    pages = max(1, (total + CLEAN_PAGE - 1) // CLEAN_PAGE)
+    page = max(0, min(view["page"], pages - 1))
+    view["page"] = page
+    chunk = items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]
+    short_of = _short_ids([i for i, _ in chunk])
+    hint = f"Отметь нужное ✅ и нажми «{_action_label(ctx)}»."
+    lines = [f"🧹 <b>{esc(title)}</b>", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
+    rows = []
+    for full_id, lbl in chunk:
+        mark = "✅" if full_id in sel else "▫️"
+        rows.append([InlineKeyboardButton(f"{mark} {lbl[:36]}", callback_data=f"clt:{view_id}:{short_of[full_id]}")])
+    if pages > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"clp:{view_id}:{(page - 1) % pages}"),
+            InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"clp:{view_id}:{(page + 1) % pages}"),
+        ])
+    if len(chunk) >= 2:
+        page_ids = {i for i, _ in chunk}
+        page_label = "✅ Снять выбор на странице" if page_ids <= sel else "✅ Выбрать все на странице"
+        rows.append([InlineKeyboardButton(page_label, callback_data=f"cla:{view_id}:{page}")])
+    if sel:
+        rows.append([InlineKeyboardButton(f"{_action_label(ctx)} ({len(sel)})", callback_data=f"cld:{view_id}")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data=view["back"])])
+    kb = InlineKeyboardMarkup(rows)
+    text = "\n".join(lines)
+    if q is not None:
+        try:
+            await q.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
+
+
+async def _send_view_stale_message(bot, cid, q=None):
+    text = "Список уже изменился. Откройте его заново."
+    if q is not None:
+        try:
+            await q.message.edit_text(text)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text)
+
+
+async def handle_view_callback(bot, cid, data, q=None):
+    """Обрабатывает clt:/clp:/cla:/cld: (двоеточие — маркер view-формата,
+    отличает его от старого формата clt_/clp_/cla_/cld_ на подчёркивании)."""
+    op, view_id, *rest = data.split(":")
+    view = _views.get(view_id)
+    if view is not None and time.time() - view["created_at"] > VIEW_TTL_SECONDS:
+        del _views[view_id]
+        view = None
+    if view is None:
+        await _send_view_stale_message(bot, cid, q)
+        return
+    ctx = view["ctx"]
+    store_key = _view_store_key(ctx)
+    current_revision = store.get_list_revision(store_key, cid) if store_key else 0
+    if op == "cld" and view["revision"] != current_revision:
+        # Коллекция изменилась параллельно с момента открытия view — не
+        # выполняем удаление вслепую, инвалидируем и просим переоткрыть.
+        del _views[view_id]
+        await _send_view_stale_message(bot, cid, q)
+        return
+    if op == "clt":
+        short_id = rest[0]
+        _, items, _ = _view_items(ctx, cid)
+        matches = [i for i, _ in items if i.startswith(short_id)]
+        if matches:
+            full_id = matches[0]
+            view["selected_ids"].symmetric_difference_update({full_id})
+        await _render_view(bot, cid, view_id, q=q)
+        return
+    if op == "clp":
+        view["page"] = int(rest[0])
+        await _render_view(bot, cid, view_id, q=q)
+        return
+    if op == "cla":
+        page = int(rest[0])
+        _, items, _ = _view_items(ctx, cid)
+        items = _sort_items(items)
+        page_ids = {i for i, _ in items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]}
+        if page_ids <= view["selected_ids"]:
+            view["selected_ids"] -= page_ids
+        else:
+            view["selected_ids"] |= page_ids
+        await _render_view(bot, cid, view_id, q=q)
+        return
+    if op == "cld":
+        _view_delete(ctx, cid, view["selected_ids"])
+        del _views[view_id]
+        await open_view(bot, cid, ctx, back=view["back"])
+        return
+
+
 async def open_cleanup(bot, cid, ctx):
-    """Свежий вход в режим чистки — сбрасываем выбор."""
+    """Свежий вход в режим чистки — сбрасываем выбор.
+
+    Для view-контекстов (nb/nb_*, PR3a) делегирует на новую инфраструктуру
+    (стабильный id + revision + короткий callback_data); для остальных —
+    прежний позиционный формат без изменений."""
+    if _is_view_ctx(ctx):
+        await open_view(bot, cid, ctx)
+        return
     store.list_sel[f"{cid}:{ctx}"] = set()
     await send_cleanup(bot, cid, ctx, 0)
 

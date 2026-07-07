@@ -79,10 +79,22 @@ def _collect_all_callbacks():
         for cb in _extract_callback_data(markup):
             collected.append((label, cb))
 
-    # cleanup.py: send_cleanup не делает сетевых вызовов, только store.get_list —
-    # прогоняем по паре контекстов с прогнозируемо пустыми/минимальными данными.
+    # cleanup.py: ни send_cleanup, ни open_view не делают сетевых вызовов,
+    # только store.get_list — прогоняем по паре контекстов с прогнозируемо
+    # пустыми/минимальными данными.
     bot = _FakeBot()
-    for ctx in ("nb", "fridge", "recipes", "lagom"):
+    # "nb" (Сохранённое) с PR3a переведён на view-режим (короткий callback_data
+    # через open_view) — это и есть реальный путь пользователя, send_cleanup для
+    # nb больше не вызывается из open_cleanup.
+    start = len(bot.messages)
+    asyncio.run(cleanup.open_view(bot, CID, "nb"))
+    for msg in bot.messages[start:]:
+        markup = msg.get("reply_markup")
+        if markup is not None:
+            for cb in _extract_callback_data(markup):
+                collected.append(("cleanup.open_view:nb", cb))
+
+    for ctx in ("fridge", "recipes", "lagom"):
         start = len(bot.messages)
         asyncio.run(cleanup.send_cleanup(bot, CID, ctx, 0))
         for msg in bot.messages[start:]:

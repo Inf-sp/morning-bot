@@ -366,6 +366,11 @@ async def answer_callback(update, context):
         return
     if data == "noop":
         return
+    if data.startswith(("clt:", "clp:", "cla:", "cld:")):
+        # PR3a view-режим (стабильный id + revision) — двоеточие как разделитель
+        # отличает его от старого позиционного формата ниже (символ подчёркивания).
+        await cleanup.handle_view_callback(bot, cid, data, q)
+        return
     if data.startswith(("clt_", "clp_", "cla_", "cld_")):
         await cleanup.handle_cleanup(bot, cid, data, q)
         return

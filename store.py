@@ -2,6 +2,7 @@ import os
 import json
 import copy
 import logging
+import uuid as _uuid
 from pathlib import Path
 import config
 
@@ -369,3 +370,62 @@ list_sel = {}           # "chat_id:ctx" -> set(индексов) для чист
 last_source = {}        # chat_id -> откуда последний ответ (для категорий избранного)
 last_surface = {}       # chat_id -> surface последнего ответа (для «Короче/Глубже»)
 last_look = {}          # chat_id -> последний показанный образ (для фидбека гардероба)
+
+# --- ListRecord: стабильный id + revision для списков вне гардероба (PR3a) ---
+# Формат элемента: строка -> {"id": uuid4_hex, "value": строка} (обёртка);
+# dict -> тот же dict с добавленным полем "id" (без вложенности — существующий
+# код, читающий поля записи напрямую, продолжает работать без изменений).
+_list_revisions = {}    # "key:chat_id" -> int, версия коллекции (PR3a)
+
+
+def _revision_slot(key, chat_id):
+    return f"{key}:{chat_id}"
+
+
+def get_list_revision(key, chat_id):
+    return _list_revisions.get(_revision_slot(key, chat_id), 0)
+
+
+def _bump_list_revision(key, chat_id):
+    slot = _revision_slot(key, chat_id)
+    _list_revisions[slot] = _list_revisions.get(slot, 0) + 1
+    return _list_revisions[slot]
+
+
+def ensure_list_ids(key, chat_id):
+    """Возвращает список для (key, chat_id), лениво проставляя стабильный "id"
+    каждому элементу без него. Строковые элементы оборачиваются в
+    {"id":..., "value": строка}; dict-элементы получают поле "id" на месте.
+    Сохраняет список обратно и бампает revision, только если что-то изменилось."""
+    items = get_list(key, chat_id)
+    changed = False
+    out = []
+    for it in items:
+        if isinstance(it, dict):
+            if "id" not in it:
+                it = {**it, "id": _uuid.uuid4().hex}
+                changed = True
+            out.append(it)
+        else:
+            out.append({"id": _uuid.uuid4().hex, "value": it})
+            changed = True
+    if changed:
+        set_list(key, chat_id, out)
+        _bump_list_revision(key, chat_id)
+    return out
+
+
+def remove_from_list_by_ids(key, chat_id, ids):
+    """Удаляет записи с указанными id из коллекции (key, chat_id). Возвращает
+    число реально удалённых записей. Бампает revision, только если что-то
+    удалено — устаревший view с прежней revision будет корректно отклонён."""
+    if not ids:
+        return 0
+    items = ensure_list_ids(key, chat_id)
+    ids = set(ids)
+    kept = [it for it in items if it.get("id") not in ids]
+    removed = len(items) - len(kept)
+    if removed:
+        set_list(key, chat_id, kept)
+        _bump_list_revision(key, chat_id)
+    return removed

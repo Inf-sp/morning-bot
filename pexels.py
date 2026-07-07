@@ -17,16 +17,17 @@ _log = logging.getLogger(__name__)
 
 _SEARCH_URL = "https://api.pexels.com/v1/search"
 _TIMEOUT = 6  # секунд — не подвешивать бота, если Pexels тормозит
-_PER_PAGE = 10
+_PER_PAGE = 15
 
 
-def search_photos(query: str, per_page: int = _PER_PAGE) -> list:
-    """Ищет фото по `query` через Pexels, orientation=square (карточки Telegram).
+def search_photos(query: str, per_page: int = _PER_PAGE, page: int = 1) -> list:
+    """Ищет фото по `query` через Pexels: orientation=square, size=large,
+    locale=en-US, per_page=15 (карточки Telegram, top-N кандидатов для scoring).
 
     Возвращает список «сырых» объектов photo из ответа Pexels (для scoring в
     photo_provider.py) — [] при отсутствии ключа/сетевой ошибке/пустой выдаче.
-    Каждый элемент содержит как минимум: id, alt, photographer, photographer_url,
-    src (словарь размеров), url (страница фото на pexels.com).
+    Каждый элемент содержит как минимум: id, alt, width, height, photographer,
+    photographer_url, src (словарь размеров), url (страница фото на pexels.com).
     """
     if not config.PEXELS_API_KEY or not (query or "").strip():
         return []
@@ -34,7 +35,14 @@ def search_photos(query: str, per_page: int = _PER_PAGE) -> list:
         r = requests.get(
             _SEARCH_URL,
             headers={"Authorization": config.PEXELS_API_KEY},
-            params={"query": query.strip(), "orientation": "square", "per_page": per_page},
+            params={
+                "query": query.strip(),
+                "orientation": "square",
+                "size": "large",
+                "locale": "en-US",
+                "per_page": per_page,
+                "page": page,
+            },
             timeout=_TIMEOUT,
         )
         if r.status_code != 200:

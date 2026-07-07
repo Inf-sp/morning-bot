@@ -9,12 +9,14 @@ def _fake_recipes(n=10, cuisine="italian", prefix="Рецепт"):
     return [
         {
             "name": f"{prefix} {i}",
+            "name_en": f"{prefix} {i}",
             "cuisine": cuisine,
             "cuisine_emoji": "🇮🇹",
-            "photo_query": "pasta italian food",
+            "photo_query_en": "pasta italian food",
+            "photo_fallback_queries": ["pasta food", "italian pasta dish"],
             "main_ingredients_en": "pasta, cheese",
-            "dish_type_en": "pasta",
-            "meal_type_en": "dinner",
+            "visual_tags": ["pasta", "cheese", "prepared dish"],
+            "negative_visual_tags": ["raw ingredients", "kitchen"],
             "ingredients": "паста, сыр",
             "chef_tip": "совет",
             "steps": [{"text": "Шаг", "minutes": 5}],

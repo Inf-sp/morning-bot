@@ -26,18 +26,21 @@ def test_pexels_search_returns_empty_for_blank_query(monkeypatch):
 
 
 @pytest.mark.unit
-def test_pexels_search_uses_square_orientation_and_auth_header(monkeypatch):
+def test_pexels_search_uses_square_large_locale_and_auth_header(monkeypatch):
     monkeypatch.setattr(config, "PEXELS_API_KEY", "test-key")
     response = MagicMock(status_code=200)
     response.json.return_value = {"photos": [{"id": 1}]}
     with patch("requests.get", return_value=response) as mock_get:
-        result = pexels.search_photos("shakshuka", per_page=10)
+        result = pexels.search_photos("shakshuka")
 
     assert result == [{"id": 1}]
     _, kwargs = mock_get.call_args
     assert kwargs["headers"]["Authorization"] == "test-key"
     assert kwargs["params"]["orientation"] == "square"
-    assert kwargs["params"]["per_page"] == 10
+    assert kwargs["params"]["size"] == "large"
+    assert kwargs["params"]["locale"] == "en-US"
+    assert kwargs["params"]["per_page"] == 15
+    assert kwargs["params"]["page"] == 1
     assert kwargs["params"]["query"] == "shakshuka"
 
 
