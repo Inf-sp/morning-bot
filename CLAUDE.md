@@ -44,9 +44,9 @@ Telegram-бот на Python (`python-telegram-bot`), персональный а
 
 | UI | Docs |
 | --- | --- |
+| Главное меню | `docs/menu.md` |
 | Мой день | `docs/day.md` |
 | Погода | `docs/weather.md` |
-| Погодное предупреждение | `docs/weather-alert.md` |
 | Гардероб | `docs/wardrobe.md` |
 | Здоровье | `docs/health.md` |
 | Обучение → Тренажёр слов | `docs/word-trainer.md` |
@@ -59,11 +59,9 @@ Telegram-бот на Python (`python-telegram-bot`), персональный а
 | Досуг → Музыка и концерты | `docs/music.md` |
 | Путешествия | `docs/travel.md` |
 | Готовка | `docs/food.md` |
-| Готовка: редизайн | `docs/food-redesign.md` |
 | Настройки | `docs/settings.md` |
 | Сохранённое | `docs/saved.md` |
 | Ассистент | `docs/assistant.md` |
-| Сообщения | `docs/messages.md` |
 | Админ | `docs/admin.md` |
 | Чистка | `docs/cleanup.md` |
 
