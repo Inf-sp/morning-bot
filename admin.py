@@ -213,19 +213,45 @@ async def send_llm(bot, cid):
 
 
 async def send_llm_check(bot, cid):
+    results = await _llm_probe_results()
+    kb = InlineKeyboardMarkup([_back("set_admin_llm")])
+    msg = ui.llm_check(results)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def _llm_probe_results():
     import ai
     probes = [("Claude", "claude"), ("OpenAI", "openai"), ("OpenRouter", "openrouter"),
               ("Cloudflare", "cf"), ("Gemini", "gemini"), ("Groq", "groq")]
     results = []
     for label, route in probes:
+        configured, missing = _provider_configured(route)
+        if not configured:
+            results.append((label, False, f"нет ключа: {missing}"))
+            continue
         try:
-            await ai.allm("Ответь одним словом: ok", 10, 0.0, route=route, module="admin")
+            await ai.allm("Ответь одним словом: ok", 10, 0.0, order=(route,), module="admin")
             results.append((label, True, ""))
         except Exception as e:
-            results.append((label, False, str(e).split(": ", 1)[-1][:60]))
-    kb = InlineKeyboardMarkup([_back("set_admin_llm")])
-    msg = ui.llm_check(results)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+            results.append((label, False, _issue_summary("llm", f"{route}:{e}")[:60]))
+    return results
+
+
+def _provider_configured(route):
+    if route == "claude":
+        return bool(config.ANTHROPIC_API_KEY), "ANTHROPIC_API_KEY"
+    if route == "openai":
+        return bool(config.OPENAI_API_KEY), "OPENAI_API_KEY"
+    if route == "openrouter":
+        return bool(config.OPENROUTER_API_KEY), "OPENROUTER_API_KEY"
+    if route == "gemini":
+        return bool(config.GEMINI_API_KEY), "GEMINI_API_KEY"
+    if route == "groq":
+        return bool(config.GROQ_API_KEY), "GROQ_API_KEY"
+    if route == "cf":
+        ok = bool(config.CF_API_TOKEN and config.CF_ACCOUNT_ID)
+        return ok, "CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID"
+    return False, route
 
 
 async def send_llm_history(bot, cid):
@@ -252,6 +278,33 @@ def _issue_key(ts, source, kind) -> str:
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
+def _issue_summary(source, msg):
+    msg = str(msg or "")
+    low = msg.lower()
+    if source == "llm":
+        providers = []
+        for provider in ("claude", "openai", "openrouter", "gemini", "groq", "cf"):
+            if f"{provider}:" in low or f"{provider} " in low:
+                providers.append(provider)
+        prefix = ", ".join(dict.fromkeys(providers)) if providers else "LLM"
+        if "429" in msg or "too many requests" in low or "rate limit" in low:
+            return f"{prefix}: лимит запросов"
+        if "400" in msg or "bad request" in low or "invalid" in low:
+            return f"{prefix}: ошибка запроса"
+        if "json" in low:
+            return f"{prefix}: невалидный JSON"
+        if "no " in low:
+            return f"{prefix}: нет ключа или провайдер выключен"
+        return f"{prefix}: сбой генерации"
+    if source == "service":
+        return "Сервис недоступен"
+    if "перегружен" in low:
+        return "ИИ временно перегружен"
+    if "json" in low:
+        return "Не удалось разобрать JSON"
+    return msg[:50]
+
+
 def _collect_issues():
     """Реальные проблемы из error-лога за сегодня (без внешних пингов) — дёшево, для дома/списка.
 
@@ -266,12 +319,12 @@ def _collect_issues():
         source = e.get("source", "?")
         kind = e.get("kind", "")
         dot = ui.BAD if source in ("llm", "service") else ui.WARN
-        rows.append((_issue_key(ts, source, kind), dot, source, f"{e.get('msg', '')[:50]} · {_when(ts)}"))
+        rows.append((_issue_key(ts, source, kind), dot, source, f"{_issue_summary(source, e.get('msg', ''))} · {_when(ts)}"))
     return rows
 
 
 async def _collect_issues_with_probes(cid):
-    """То же самое + активный health-check БД/Weather — для «Проверить доступное»."""
+    """То же самое + активный health-check БД/Weather/LLM API."""
     rows = _collect_issues()
     now = int(time.time())
     try:
@@ -285,6 +338,12 @@ async def _collect_issues_with_probes(cid):
         await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 1)
     except Exception:
         rows.append((_issue_key(now, "service", "weather"), ui.BAD, "Weather", f"недоступна · {_when(now)}"))
+    try:
+        for label, ok, detail in await _llm_probe_results():
+            if not ok:
+                rows.append((_issue_key(now, "llm", label), ui.BAD, label, f"{detail} · {_when(now)}"))
+    except Exception as e:
+        rows.append((_issue_key(now, "llm", "probe"), ui.BAD, "LLM", f"{_issue_summary('llm', str(e))} · {_when(now)}"))
     return rows
 
 
@@ -293,8 +352,8 @@ async def send_issues(bot, cid, with_probes=False):
     kb_rows = []
     for key, dot, name, detail in rows:
         kb_rows.append([InlineKeyboardButton(f"{dot} {name}", callback_data=f"set_admin_issue_{key}")])
-    kb_rows.append([InlineKeyboardButton("🔄 Проверить доступное", callback_data="set_admin_check_all"),
-                     InlineKeyboardButton("🧹 Очистить кэш", callback_data="set_admin_cache_clear")])
+    kb_rows.append([InlineKeyboardButton("🔄 Проверить API", callback_data="set_admin_check_all"),
+                     InlineKeyboardButton("🧹 Очистить ошибки", callback_data="set_admin_cache_clear")])
     kb_rows.append(_back())
     _ISSUES_CACHE[cid] = {key: (dot, name, detail) for key, dot, name, detail in rows}
     msg = ui.issues([(dot, name, detail) for _, dot, name, detail in rows], _when(time.time()))
@@ -316,6 +375,7 @@ async def send_issue_detail(bot, cid, key):
 
 async def clear_cache(bot, cid):
     import research
+    import tracking
     import util
     import weather
     util._TTL_CACHE.clear()
@@ -323,13 +383,12 @@ async def clear_cache(bot, cid):
     research._CF_CACHE.clear()
     research._WDF_CACHE.clear()
     research._GSR_CACHE.clear()
+    tracking.clear_errors()
     await send_issues(bot, cid)
 
 
 async def check_all(bot, cid):
-    """Перепроверяет только реально доступные health-check'и (БД, Weather) —
-    не все LLM-провайдеры и внешние сервисы, поэтому кнопка называется
-    «Проверить доступное», а не «Проверить всё»."""
+    """Перепроверяет доступные health-check'и: БД, Weather и LLM API."""
     await send_issues(bot, cid, with_probes=True)
 
 
