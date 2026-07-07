@@ -35,6 +35,19 @@ def test_fallback_phrase_quiz_card_builds_valid_task():
 
 
 @pytest.mark.unit
+def test_fallback_phrase_quiz_card_prefers_last_content_token():
+    card = learning._fallback_phrase_quiz_card(
+        "Geld dat op je rekening staat",
+        "Деньги, которые лежат на твоём счёте",
+        "нидерландский",
+    )
+
+    assert card["correct"] == "staat"
+    assert card["blank_phrase"] == "Geld dat op je rekening ____"
+    assert card["construction"] == "staat"
+
+
+@pytest.mark.unit
 def test_phrase_poll_question_is_formatted_with_entities():
     question, entities = learning._phrase_poll_question("Ik maak me zorgen om ____", "Я переживаю за тебя")
 
@@ -82,6 +95,55 @@ def test_phrase_card_consistency_rejects_pattern_not_present():
     }
 
     assert not learning._phrase_card_is_consistent("Dat is bijzonder.", "Это необычно.", card)
+
+
+@pytest.mark.unit
+def test_phrase_start_card_or_fallback_uses_local_card_when_generation_failed():
+    card = learning._phrase_start_card_or_fallback({}, "Ik ben onderweg", "Я в пути", "нидерландский")
+
+    assert card["correct"] == "onderweg"
+    assert card["blank_phrase"] == "Ik ben ____"
+    assert len(card["wrong"]) == 3
+
+
+@pytest.mark.unit
+@pytest.mark.anyio
+async def test_render_phrase_intro_shows_learning_translation_not_test_translation(monkeypatch):
+    sent = []
+    cid = "cid"
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def gen_card(*args, **kwargs):
+        return {
+            "blank_phrase": "Het boek dat op de plank ____",
+            "test_full_phrase": "Het boek dat op de plank staat",
+            "correct": "staat",
+            "target_token": "staat",
+            "wrong": ["ligt", "hangt", "zit"],
+            "sentence_ru": "Книга, которая стоит на полке",
+            "construction": "dat op ... staat",
+            "construction_meaning": "что-то, что находится/стоит на чем-то",
+            "short_rule": "dat op ... staat = что-то находится на чем-то",
+            "other_forms": [],
+        }
+
+    monkeypatch.setattr(learning, "_train_phrases", lambda chat_id, language: [
+        ("Geld dat op je rekening staat", "Деньги, которые лежат на твоём счёте"),
+    ])
+    monkeypatch.setattr(learning, "_train_words", lambda chat_id, language: [])
+    monkeypatch.setattr(learning, "_gen_consistent_phrase_card", gen_card)
+    monkeypatch.setitem(learning.store.train_state, cid, {"lang": "нидерландский", "used_phrases": []})
+
+    await learning._render_phrase_quiz(Bot(), cid)
+
+    assert sent
+    assert "Geld dat op je rekening staat" in sent[0]["text"]
+    assert "Перевод: Деньги, которые лежат на твоём счёте" in sent[0]["text"]
+    assert "Книга, которая стоит на полке" not in sent[0]["text"]
+    assert learning.store.train_state[cid]["sentence_ru"] == "Книга, которая стоит на полке"
 
 
 @pytest.mark.unit

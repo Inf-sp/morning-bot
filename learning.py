@@ -486,7 +486,7 @@ def _fallback_phrase_quiz_card(phrase, ru, language):
     if not candidates:
         return {}
 
-    match = max(candidates, key=lambda m: len(m.group(0)))
+    match = candidates[-1]
     correct = match.group(0).strip("'’")
     blank_phrase = phrase[:match.start()] + "____" + phrase[match.end():]
     seen = {correct.lower()}
@@ -505,8 +505,8 @@ def _fallback_phrase_quiz_card(phrase, ru, language):
         "wrong": wrong,
         "sentence_ru": str(ru or "").strip(),
         "test_full_phrase": blank_phrase.replace("____", correct, 1),
-        "construction": "",
-        "construction_meaning": "",
+        "construction": correct,
+        "construction_meaning": "смотри значение в переводе фразы",
         "short_rule": f"{correct} = смотри перевод фразы",
         "detail": f"В этой фразе подходит «{correct}». Сравни полный пример с переводом и запомни конструкцию целиком.",
         "other_forms": [],
@@ -551,6 +551,17 @@ async def _gen_consistent_phrase_card(phrase, ru, language, avoid_tests=None, at
             card["wrong"] = clean_wrong[:3]
             return card
     return {}
+
+
+def _phrase_start_card_or_fallback(card, phrase, ru, language):
+    """Use a generated phrase card, or a local cloze fallback for the first training card."""
+    correct_answer = card.get("correct") or ""
+    clean_wrong = _clean_phrase_options(correct_answer, list(card.get("wrong") or []), needed=3)
+    blank_phrase = card.get("blank_phrase") or ""
+    if correct_answer and "____" in blank_phrase and len(clean_wrong) >= 3:
+        card["wrong"] = clean_wrong[:3]
+        return card
+    return _fallback_phrase_quiz_card(phrase, ru, language)
 
 
 def train_data(language, level, word, ru, fmt):
@@ -766,7 +777,12 @@ async def _render_phrase_quiz(bot, cid):
     used.append(idx)
     st["used_phrases"] = used
 
-    card = await _gen_consistent_phrase_card(phrase, ru, language)
+    card = _phrase_start_card_or_fallback(
+        await _gen_consistent_phrase_card(phrase, ru, language),
+        phrase,
+        ru,
+        language,
+    )
     correct_answer = card.get("correct") or ""
     wrong = list(card.get("wrong") or [])
     clean_wrong = _clean_phrase_options(correct_answer, wrong, needed=3)
@@ -808,7 +824,7 @@ async def _render_phrase_quiz(bot, cid):
 
     msg = learning_ui.phrase_intro_card(
         phrase,
-        card.get("sentence_ru") or ru,
+        ru,
         card.get("construction") or "",
         card.get("construction_meaning") or "",
         card.get("other_forms") or [],
