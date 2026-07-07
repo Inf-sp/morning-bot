@@ -170,13 +170,6 @@ def phrase_intro_card(phrase, sentence_ru, construction, construction_meaning, f
             b.text_line(f" = {str(construction_meaning).strip()}")
             b.newline()
 
-    forbidden = [str(x).strip() for x in (forbidden or []) if str(x).strip()]
-    if forbidden:
-        b.spacer()
-        b.text_line("Нельзя говорить: ")
-        b.text_line(", ".join(f"✗ {x}" for x in forbidden[:3]))
-        b.newline()
-
     if other_forms:
         b.spacer()
         b.bold("Другие значения этого слова:")

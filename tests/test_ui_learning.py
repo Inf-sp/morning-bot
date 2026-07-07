@@ -66,6 +66,23 @@ def test_learning_proverb_card_message_spec():
 
 
 @pytest.mark.unit
+def test_learning_phrase_intro_card_hides_forbidden_examples():
+    msg = learning.phrase_intro_card(
+        "Ik leer Nederlands",
+        "Я учу нидерландский",
+        "Nederlands leren",
+        "учить нидерландский",
+        ["Ik tegen Nederlands", "Ik van Nederlands"],
+        [],
+    )
+
+    assert "Нельзя говорить:" not in msg.text
+    assert "Ik tegen Nederlands" not in msg.text
+    assert "Ik van Nederlands" not in msg.text
+    assert "Дальше попробуем восстановить эту фразу по памяти." in msg.text
+
+
+@pytest.mark.unit
 def test_learning_translate_and_levels_messages():
     prompt = learning.translate_prompt("🇳🇱", "Как дела?", "нидерландский")
     result = learning.translate_result("🇳🇱", "нидерландский", "Как дела?", "Hoe gaat het?", {
