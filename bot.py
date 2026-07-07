@@ -253,6 +253,8 @@ async def answer_callback(update, context):
                 await _ack(q); await travel.save_plan(bot, cid)
             elif act == "watch":
                 await _ack(q); await leisure.send_movie_home(bot, cid, q)
+            elif act == "now_playing":
+                await _ack(q); await leisure.send_now_playing(bot, cid, q)
             elif act == "read":
                 await _ack(q); await leisure.send_recos(bot, cid, "book")
             elif act == "watchlist":

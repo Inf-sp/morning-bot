@@ -1,4 +1,5 @@
 import re
+from datetime import date, datetime
 
 from telegram import MessageEntity
 
@@ -30,11 +31,11 @@ def movie_home_screen(loved_count, genre_labels):
     """Главный экран раздела «Кино»: польза, сколько уже в любимых, какие жанры
     выбраны в предпочтениях. Тот же визуальный паттерн, что у Гардероба (home_screen)."""
     b = MessageBuilder()
-    b.text_line("🎬 ")
-    b.bold("Кино")
+    b.text_line("🍿 ")
+    b.bold("Что посмотреть")
     b.newline()
     b.spacer()
-    b.line("Подбираю фильмы и сериалы под твой вкус — по любимым, по жанру или по настроению.")
+    b.line("Подберу фильм или сериал под твой вечер.")
 
     b.spacer()
     if loved_count <= 0:
@@ -50,6 +51,31 @@ def movie_home_screen(loved_count, genre_labels):
         for label in genre_labels:
             b.bullet(label)
 
+    return b.build_stripped()
+
+
+def now_playing_screen(country_label: str, items) -> MessageSpec:
+    b = MessageBuilder()
+    b.text_line("🎬 ")
+    b.bold("В кино сейчас")
+    b.newline()
+    if country_label:
+        b.spacer()
+        b.line(f"Прокат в {country_label}.")
+    if not items:
+        b.spacer()
+        b.line("Сейчас в прокате ничего не нашёл.")
+        return b.build_stripped()
+    b.spacer()
+    for item in items:
+        b.text_line("• ")
+        b.bold(item.get("title", ""))
+        genre = _movie_genre_text(item.get("genre"))
+        if genre:
+            b.text_line(f" · {genre}")
+        if item.get("date_text"):
+            b.text_line(f" · с {item['date_text']}")
+        b.newline()
     return b.build_stripped()
 
 
@@ -302,57 +328,183 @@ def concerts_list(place_label, events, empty_hint=""):
     return b.build_stripped()
 
 
-def _event_item(
-    b: MessageBuilder,
-    *,
-    title: str,
-    date_text: str,
-    place: str | None = None,
-    genre: str | None = None,
-) -> None:
+def _parse_event_date(value) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _format_date_label(day: date, *, include_year: bool = False) -> str:
+    text = f"{day.day} {_MONTHS_RU[day.month]}"
+    if include_year:
+        text += f" {day.year}"
+    return text
+
+
+def _join_with_and(parts) -> str:
+    parts = [str(p) for p in parts if str(p).strip()]
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return parts[0]
+    if len(parts) == 2:
+        return f"{parts[0]} и {parts[1]}"
+    return f"{', '.join(parts[:-1])} и {parts[-1]}"
+
+
+def _format_event_period(start_date: date, end_date: date) -> str:
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+    if start_date == end_date:
+        return _format_date_label(start_date, include_year=True)
+    if start_date.year != end_date.year:
+        return (
+            f"{_format_date_label(start_date, include_year=True)}"
+            f" – {_format_date_label(end_date, include_year=True)}"
+        )
+    if start_date.month == end_date.month:
+        return f"{start_date.day}–{end_date.day} {_MONTHS_RU[start_date.month]}"
+    return f"{_format_date_label(start_date)} – {_format_date_label(end_date)}"
+
+
+def _format_dates(dates: list[date]) -> str:
+    unique_dates = sorted(set(dates))
+    if not unique_dates:
+        return ""
+
+    current_year = date.today().year
+    same_month = all(d.year == unique_dates[0].year and d.month == unique_dates[0].month for d in unique_dates)
+    if same_month:
+        days = [str(d.day) for d in unique_dates]
+        include_year = unique_dates[0].year != current_year
+        if len(unique_dates) >= 3 and all(
+            (unique_dates[idx] - unique_dates[idx - 1]).days == 1 for idx in range(1, len(unique_dates))
+        ):
+            text = f"{unique_dates[0].day}–{unique_dates[-1].day} {_MONTHS_RU[unique_dates[0].month]}"
+        else:
+            text = f"{_join_with_and(days)} {_MONTHS_RU[unique_dates[0].month]}"
+        if include_year:
+            text += f" {unique_dates[0].year}"
+        return text
+
+    if len(unique_dates) >= 3 and all(
+        (unique_dates[idx] - unique_dates[idx - 1]).days == 1 for idx in range(1, len(unique_dates))
+    ):
+        return (
+            f"{_format_date_label(unique_dates[0], include_year=unique_dates[0].year != current_year)}"
+            f" – {_format_date_label(unique_dates[-1], include_year=unique_dates[-1].year != current_year)}"
+        )
+
+    return _join_with_and(
+        _format_date_label(day, include_year=day.year != current_year) for day in unique_dates
+    )
+
+
+def _group_concerts(events) -> list[dict]:
+    groups = {}
+    order = []
+    for event in events or []:
+        title = str(event.get("title", "")).strip()
+        place = str(event.get("place", "")).strip()
+        day = _parse_event_date(event.get("date"))
+        key = (title, place)
+        if key not in groups:
+            groups[key] = {"title": title, "place": place, "dates": []}
+            order.append(key)
+        if day:
+            groups[key]["dates"].append(day)
+    return [groups[key] for key in order if groups[key].get("title")]
+
+
+def _group_movies_by_date(events) -> list[tuple[date, list[dict]]]:
+    groups = {}
+    order = []
+    for event in events or []:
+        day = _parse_event_date(event.get("date"))
+        if not day:
+            continue
+        if day not in groups:
+            groups[day] = []
+            order.append(day)
+        groups[day].append(event)
+    return [(day, groups[day]) for day in order]
+
+
+def _movie_genre_text(genre: str | None) -> str:
+    raw = str(genre or "").strip()
+    mapping = {
+        "Семейный": "семейный фильм",
+        "семейный": "семейный фильм",
+        "История": "исторический фильм",
+        "история": "исторический фильм",
+        "Документальный": "документальный фильм",
+        "документальный": "документальный фильм",
+        "Мультфильм": "мультфильм",
+        "мультфильм": "мультфильм",
+        "Премьера": "премьера",
+        "премьера": "премьера",
+    }
+    if raw in mapping:
+        return mapping[raw]
+    return raw.lower()
+
+
+def _concert_card(b: MessageBuilder, event: dict) -> None:
+    b.bold(event.get("title", ""))
+    b.newline()
+    if event.get("place"):
+        b.line(f"📍 {event['place']}")
+    date_text = _format_dates([d for d in event.get("dates", []) if isinstance(d, date)])
+    if date_text:
+        b.line(f"🗓 {date_text}")
+
+
+def _movie_item(b: MessageBuilder, event: dict) -> None:
     b.text_line("• ")
-    b.bold(title)
+    b.bold(event.get("title", ""))
+    genre = _movie_genre_text(event.get("genre"))
+    if genre:
+        b.text_line(f" · {genre}")
     b.newline()
 
-    if place:
-        b.line(f"  📍 {place}")
 
-    meta = f"  🗓 {date_text}"
-    if genre:
-        meta += f" · {genre}"
+def weekly_events_card(period_start: date, period_end: date, concerts, movies) -> MessageSpec:
+    concert_groups = _group_concerts(concerts)
+    movie_groups = _group_movies_by_date(movies)
 
-    b.line(meta)
-
-
-def weekly_events_card(concerts, movies) -> MessageSpec:
     b = MessageBuilder()
     b.text_line("🎵 ")
-    b.bold("События на ближайшие 7 дней")
+    b.bold(f"Ближайшие события · {_format_event_period(period_start, period_end)}")
     b.newline()
 
-    if concerts:
-        b.section("🎤 Концерты твоих исполнителей")
-        for event in concerts:
-            _event_item(
-                b,
-                title=event.get("title", ""),
-                place=event.get("place"),
-                date_text=event.get("date_text", ""),
-            )
+    if concert_groups:
+        b.section("🎤 Концерты")
+        for idx, event in enumerate(concert_groups):
+            if idx:
+                b.spacer()
+            _concert_card(b, event)
 
-    if movies:
-        b.section("🎬 Премьеры в кино")
-        for event in movies:
-            _event_item(
-                b,
-                title=event.get("title", ""),
-                date_text=event.get("date_text", ""),
-                genre=event.get("genre"),
-            )
+    if movie_groups:
+        b.section("🎬 Кино")
+        b.newline()
+        for idx, (day, items) in enumerate(movie_groups):
+            if idx:
+                b.newline()
+            b.line(_format_date_label(day, include_year=day.year != date.today().year))
+            for event in items:
+                _movie_item(b, event)
 
-    if not concerts and not movies:
+    if not concert_groups and not movie_groups:
         b.spacer()
-        b.line("На ближайшие 7 дней интересных событий пока не найдено.")
+        b.line("Пока ничего интересного не нашлось.")
 
     return b.build_stripped()
 

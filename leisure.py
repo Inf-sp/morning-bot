@@ -292,6 +292,44 @@ def _tmdb_upcoming(cc):
     except Exception:
         return util.ttl_set("tmdb_upcoming", key, [])
 
+
+def _tmdb_now_playing(cc):
+    if not config.TMDB_API_KEY:
+        return []
+    key = (cc or "").upper()
+    cached = util.ttl_get("tmdb_now_playing", key, 21600)
+    if cached is not None:
+        return cached
+    import requests
+    try:
+        r = requests.get("https://api.themoviedb.org/3/movie/now_playing",
+            params={"api_key": config.TMDB_API_KEY, "language": "ru-RU",
+                    "region": key, "page": 1}, timeout=15)
+        return util.ttl_set("tmdb_now_playing", key, r.json().get("results", []))
+    except Exception:
+        return util.ttl_set("tmdb_now_playing", key, [])
+
+
+def _fmt_short_date(ds, current_year=None):
+    try:
+        y, m, dd = ds.split("-")
+        year = int(y)
+        suffix = f" {year}" if current_year is not None and year != current_year else ""
+        return f"{int(dd)} {util._MONTHS[int(m)-1]}{suffix}"
+    except Exception:
+        return ds
+
+
+def _movie_genre_name(m):
+    gids = m.get("genre_ids") or []
+    if 16 in gids:
+        return "Мультфильм"
+    for gid in gids:
+        name = _TMDB_GENRES.get(gid)
+        if name:
+            return name.capitalize()
+    return ""
+
 def _display_title(it, tm):
     """Название, которое реально показано пользователю (TMDb если есть, иначе от LLM)."""
     name = (tm.get("name") if tm else "") or it.get("title", "")
@@ -313,10 +351,8 @@ def _movie_kb(i, category=None):
     «По жанру/По настроению» (выбор происходит на приветственном экране раздела,
     см. send_movie_home).
 
-    category=None       — обычная рекомендация (Recommendations/Similar по любимым):
-                           «Назад» ведёт в общее меню Досуга.
-    category={"kind"..} — карточка внутри жанра/настроения: «Назад» возвращает
-                           в меню жанров/настроений, а не в общее меню Досуга.
+    category используется только для сохранения контекста подбора; кнопка возврата
+    на карточке всегда ведёт в общее меню Досуга.
     """
     rows = [
         [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}"),
@@ -324,11 +360,7 @@ def _movie_kb(i, category=None):
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"movie_love_{i}"),
          InlineKeyboardButton("✅ Уже видел", callback_data=f"movie_seen_{i}")],
     ]
-    if category is None:
-        rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
-    else:
-        back_to = "movie_genre_menu" if category.get("kind") == "genre" else "movie_mood_menu"
-        rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back_to)])
+    rows.append([InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -388,7 +420,7 @@ def _movie_genre_menu_kb():
                for label, gid in _GENRE_MENU]
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i:i + 2])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="a_watch")])
+    rows.append([InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -398,7 +430,7 @@ def _movie_mood_menu_kb():
                for key, label in _MOOD_MENU]
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i:i + 2])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="movie_genre_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")])
     return InlineKeyboardMarkup(rows)
 
 MIN_TMDB_RATING = 7.0
@@ -521,7 +553,7 @@ def _movie_home_kb():
         [InlineKeyboardButton("✨ Обычная рекомендация", callback_data="movie_reco")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("😊 По настроению", callback_data="movie_mood_menu")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
+        [InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")],
     ])
 
 
@@ -534,6 +566,41 @@ async def send_movie_home(bot, cid, q=None):
     genre_labels = [label for label, gid in _GENRE_ALL if gid in selected]
     msg = leisure_ui.movie_home_screen(loved_count, genre_labels)
     kb = _movie_home_kb()
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def send_now_playing(bot, cid, q=None):
+    from datetime import datetime
+
+    s = store.get_settings(cid)
+    cc = (s.get("cc") or "NL").upper()
+    country_label = _concert_place_name(s.get("country"), cc)
+    current_year = datetime.now(config.TZ).year
+    items = []
+    if config.TMDB_API_KEY:
+        try:
+            results = await asyncio.to_thread(_tmdb_now_playing, cc)
+            for m in results:
+                title = m.get("title", "")
+                if not title or not re.search(r"[A-Za-zА-Яа-яЁё]", title):
+                    continue
+                items.append({
+                    "title": title,
+                    "genre": _movie_genre_name(m),
+                    "date_text": _fmt_short_date(m.get("release_date", ""), current_year=current_year),
+                })
+                if len(items) >= 8:
+                    break
+        except Exception:
+            items = []
+    msg = leisure_ui.now_playing_screen(country_label, items)
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")]])
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
@@ -684,7 +751,7 @@ def _book_kb(i):
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
          InlineKeyboardButton("✅ Уже читал", callback_data=f"book_seen_{i}")],
         [InlineKeyboardButton("🎚️ Настройки книг", callback_data="as_love_books")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
+        [InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")],
     ])
 
 async def _send_book_card(bot, cid, it, i):
@@ -1217,7 +1284,7 @@ async def send_watchlist(bot, cid):
     rows = []
     if lst:
         rows.append([InlineKeyboardButton("❌ Очистить список", callback_data="a_watchclean")])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid,
         text="🍿 Посмотреть:\n" + ("\n".join(f"• {_list_text(x)}" for x in lst) if lst else "пусто"),
         reply_markup=InlineKeyboardMarkup(rows))
@@ -1227,7 +1294,7 @@ async def send_readlist(bot, cid):
     rows = []
     if lst:
         rows.append([InlineKeyboardButton("❌ Очистить список", callback_data="a_readclean")])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid,
         text="📚 Почитать:\n" + ("\n".join(f"• {_list_text(x)}" for x in lst) if lst else "пусто"),
         reply_markup=InlineKeyboardMarkup(rows))
@@ -1239,7 +1306,7 @@ def _listen_kb():
         [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love"),
          InlineKeyboardButton("✅ Уже знаю", callback_data="listen_seen")],
         [InlineKeyboardButton("🎚️ Настройка музыкантов", callback_data="as_love_artists")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
+        [InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")],
     ])
 
 async def listen_dislike(bot, cid):
@@ -1745,7 +1812,10 @@ async def find_concerts(bot, cid, mode="home"):
         events = await _fetch_concerts(artists, cc, cname)
         _concerts_cache_set(cid, cc, events)
 
-    rows = [[InlineKeyboardButton("🌍 Сменить страну", callback_data="a_concerts_pick")]]
+    rows = [
+        [InlineKeyboardButton("🌍 Сменить страну", callback_data="a_concerts_pick")],
+        [InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")],
+    ]
     kb = InlineKeyboardMarkup(rows)
 
     def _fmt_date(ds):
@@ -1817,22 +1887,15 @@ async def send_weekly_events(bot, cid):
     """Вс 10:00 — концерты артистов пользователя + кинопремьеры ближайших дней."""
     import requests
     from datetime import datetime, timedelta
-    from util import _MONTHS
 
     s = store.get_settings(cid)
     cc = (s.get("cc") or "NL").upper()
+    cname = _concert_place_name(s.get("country"), cc)
     now = datetime.now(config.TZ)
-    today_str = now.strftime("%Y-%m-%d")
-    date_to_str = (now + timedelta(days=7)).strftime("%Y-%m-%d")
-
-    def _fmt_date(ds):
-        try:
-            y, m, dd = ds.split("-")
-            year = int(y)
-            suffix = f" {year}" if year != now.year else ""
-            return f"{int(dd)} {_MONTHS[int(m)-1]}{suffix}"
-        except Exception:
-            return ds
+    period_start = now.date()
+    period_end = (now + timedelta(days=7)).date()
+    today_str = period_start.isoformat()
+    date_to_str = period_end.isoformat()
 
     def _movie_title_ok(title):
         if not title:
@@ -1875,7 +1938,7 @@ async def send_weekly_events(bot, cid):
                 concert_items.append({
                     "title": artist,
                     "place": venue_str,
-                    "date_text": _fmt_date(date_str) if date_str else "",
+                    "date": date_str,
                 })
 
     # --- Кинопремьеры ---
@@ -1890,16 +1953,15 @@ async def send_weekly_events(bot, cid):
             for m in upcoming[:5]:
                 title = m.get("title", "")
                 genre = _movie_genre(m)
-                date = _fmt_date(m.get("release_date", ""))
                 movie_items.append({
                     "title": title,
-                    "date_text": date,
+                    "date": m.get("release_date", ""),
                     "genre": genre,
                 })
         except Exception:
             pass
 
-    msg = leisure_ui.weekly_events_card(concert_items, movie_items)
+    msg = leisure_ui.weekly_events_card(period_start, period_end, concert_items, movie_items)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, disable_web_page_preview=True)
 
 
@@ -1924,6 +1986,6 @@ async def concert_pick_country(bot, cid):
         for cc, _name, label in sorted(countries, key=lambda x: x[1])
     ]
     rows = [buttons[i:i + 3] for i in range(0, len(buttons), 3)]
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
                            reply_markup=InlineKeyboardMarkup(rows))

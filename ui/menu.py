@@ -12,16 +12,21 @@ def _add_footer(b: MessageBuilder):
     return b
 
 
-def _screen_message(emoji: str, title: str, description: str, rows) -> MessageSpec:
+def _screen_message(emoji: str, title: str, description, rows, show_footer: bool = True) -> MessageSpec:
     """Строит экран меню: 'emoji жирный_заголовок' + описание + общий футер настроек."""
     b = MessageBuilder()
     b.text_line(f"{emoji} ")
     b.bold(title)
     b.newline()
     b.spacer()
-    b.line(description)
-    _add_footer(b)
-    return b.build(reply_markup=ikb(rows))
+    if isinstance(description, (list, tuple)):
+        for line in description:
+            b.line(line)
+    else:
+        b.line(description)
+    if show_footer:
+        _add_footer(b)
+    return b.build_stripped(reply_markup=ikb(rows))
 
 
 def ikb(rows):
@@ -123,23 +128,28 @@ _SCREENS = {
     "m_leisure": (
         "🍿",
         "Досуг",
-        "Фильмы, музыка и книги — под твой вкус.",
         [
-            [("🎫 Концерты", "a_concerts_find")],
-            [("🎸 Подбор музыкантов", "a_listen")],
-            [("🎬 Подбор кино", "a_watch")],
-            [("📖 Подбор книг", "a_read")],
-            [("🎚️ Настройки досуга", "m_leisure_settings")],
+            "Фильмы, музыка и книги - под твой вкус.",
+            "Предпочтения и сохранённое - в настройках.",
         ],
+        [
+            [("🎤 Концерты", "a_concerts_find"), ("🎬 В кино сейчас", "a_now_playing")],
+            [("🍿 Что посмотреть", "a_watch")],
+            [("🎧 Музыка для тебя", "a_listen")],
+            [("📚 Книги для тебя", "a_read")],
+            [("⚙️ Настройки досуга", "m_leisure_settings")],
+            [("⬅️ Назад", "m_close")],
+        ],
+        False,
     ),
     "m_leisure_settings": (
-        "🎚️",
+        "⚙️",
         "Настройки досуга",
-        "Списки, которые бот использует для рекомендаций фильмов, поездок, музыки и книг.",
+        "Любимые фильмы, страны, исполнители и книги для рекомендаций.",
         [
             [("🎚️ Кино", "ls_love_movies"), ("🎚️ Страны", "ls_love_countries")],
             [("🎚️ Музыканты", "ls_love_artists"), ("🎚️ Книги", "ls_love_books")],
-            [("◀️ Назад", "m_leisure")],
+            [("⬅️ Досуг", "m_leisure")],
         ],
     ),
 }
@@ -148,8 +158,13 @@ _SCREENS = {
 def menu_screen(key):
     if key not in _SCREENS:
         return MessageSpec(text="Выбери раздел в нижнем меню.")
-    emoji, title, description, rows = _SCREENS[key]
-    return _screen_message(emoji, title, description, rows)
+    screen = _SCREENS[key]
+    if len(screen) == 4:
+        emoji, title, description, rows = screen
+        show_footer = True
+    else:
+        emoji, title, description, rows, show_footer = screen
+    return _screen_message(emoji, title, description, rows, show_footer=show_footer)
 
 
 def food_menu():
