@@ -68,20 +68,34 @@ def test_learning_proverb_card_message_spec():
 
 
 @pytest.mark.unit
-def test_learning_phrase_intro_card_hides_forbidden_examples():
+def test_learning_phrase_intro_card_has_current_cta():
     msg = learning.phrase_intro_card(
         "Ik leer Nederlands",
         "Я учу нидерландский",
         "Nederlands leren",
         "учить нидерландский",
-        ["Ik tegen Nederlands", "Ik van Nederlands"],
         [],
     )
 
-    assert "Нельзя говорить:" not in msg.text
-    assert "Ik tegen Nederlands" not in msg.text
-    assert "Ik van Nederlands" not in msg.text
     assert "Дальше проверим это правило на новом примере." in msg.text
+
+
+@pytest.mark.unit
+def test_learning_phrase_intro_card_other_forms_are_short():
+    msg = learning.phrase_intro_card(
+        "Deze auto is bijzonder duur.",
+        "Эта машина необычно дорогая.",
+        "bijzonder + прилагательное",
+        "особенно, необычно + прилагательное",
+        [
+            {"pos": "bijzonder", "meaning": "особенный, необычный"},
+            {"pos": "bijzonderheid", "meaning": "особенность"},
+        ],
+    )
+
+    assert "Другие значения:" in msg.text
+    assert "• bijzonder = особенный, необычный" in msg.text
+    assert "bijzonderheid" not in msg.text
 
 
 @pytest.mark.unit

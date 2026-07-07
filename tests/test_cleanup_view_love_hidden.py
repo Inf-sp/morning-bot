@@ -4,7 +4,7 @@ cleanup._views/open_view/handle_view_callback), не пишет её занов�
 
 Область: WATCHLIST_KEY/FAVCOUNTRIES_KEY/ARTISTS_KEY/BOOKS_KEY (Любимое) и
 MOVIE_BLACKLIST_KEY/BOOK_BLACKLIST_KEY/MUSIC_DISLIKE_KEY/TRAVEL_DISLIKE_KEY
-(Скрытое). См. docs/audit-cleanup-plan.md, PR3b.
+(Скрытое). См. docs/cleanup.md, PR3b.
 """
 import asyncio
 

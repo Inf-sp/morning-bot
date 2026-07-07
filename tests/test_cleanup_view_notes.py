@@ -1,7 +1,7 @@
 """PR3a: view-режим cleanup.py для «Сохранённое» (nb/nb_*) — стабильный id +
 revision коллекции, короткий callback_data (clt:/clp:/cla:/cld:, двоеточие).
 
-Область: config.NOTES_KEY, bucket="fav". См. docs/audit-cleanup-plan.md, PR3a.
+Область: config.NOTES_KEY, bucket="fav". См. docs/cleanup.md, PR3a.
 """
 import asyncio
 

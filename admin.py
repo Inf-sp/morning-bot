@@ -1,4 +1,4 @@
-"""Логика админ-панели (§ DOCS/admin-panel-redesign.md).
+"""Логика админ-панели (§ docs/admin.md).
 
 Собирает данные для каждого экрана из access/store/tracking/ai и отдаёт готовый
 MessageSpec из ui.admin. Роутинг (settings.dispatch) делегирует сюда через send_*.

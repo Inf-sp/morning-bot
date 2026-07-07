@@ -1,5 +1,5 @@
 """Обёртка Unsplash Search Photos API для фото рецептов — fallback-источник,
-используется photo_provider.py вторым, после Pexels (§8 spec-gotovka-redesign.md).
+используется photo_provider.py вторым, после Pexels (§8 docs/food-redesign.md).
 
 Синхронный вызов (requests), по аналогии с ai.llm_json / tmdb._get — вызывающая
 сторона оборачивает в asyncio.to_thread сама, этот модуль asyncio не трогает.

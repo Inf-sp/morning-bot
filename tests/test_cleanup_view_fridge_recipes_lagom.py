@@ -5,7 +5,7 @@
 
 Область: config.FRIDGE_KEY, config.MY_RECIPES_KEY, memory.get_lagom/set_lagom
 (поле внутри профиля, не отдельный KV-ключ — см. store.ensure_list_ids_via).
-См. docs/audit-cleanup-plan.md, PR3d.
+См. docs/cleanup.md, PR3d.
 """
 import asyncio
 

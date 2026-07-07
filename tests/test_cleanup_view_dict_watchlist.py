@@ -3,7 +3,7 @@
 короткий callback_data (clt:/clp:/cla:/cld:).
 
 Область: config.DICT_KEY (фильтр по lang+kind внутри общей коллекции),
-config.WATCHLIST_KEY, config.READLIST_KEY. См. docs/audit-cleanup-plan.md, PR3c.
+config.WATCHLIST_KEY, config.READLIST_KEY. См. docs/cleanup.md, PR3c.
 """
 import asyncio
 

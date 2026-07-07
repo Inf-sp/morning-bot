@@ -56,8 +56,32 @@ def test_phrase_poll_explanation_shows_correct_answer():
         "Я переживаю за тебя",
     )
 
-    assert "Ответ: jou" in explanation
-    assert "Ik maak me zorgen om jou" in explanation
+    assert explanation == "Ik maak me zorgen om jou → Я переживаю за тебя"
+    assert "Ответ:" not in explanation
+
+
+@pytest.mark.unit
+def test_phrase_card_consistency_rejects_pattern_not_present():
+    card = {
+        "blank_phrase": "Deze auto is ____ duur.",
+        "test_full_phrase": "Deze auto is bijzonder duur.",
+        "correct": "bijzonder",
+        "target_token": "bijzonder",
+        "sentence_ru": "Эта машина необычно дорогая.",
+        "construction": "bijzonder + прилагательное",
+        "construction_meaning": "особенно, необычно + прилагательное",
+        "self_check": {
+            "translation_matches_learning_phrase": True,
+            "pattern_present_in_learning_phrase": True,
+            "target_token_role_ok": True,
+            "learning_phrase_natural": True,
+            "test_checks_same_rule": True,
+            "test_is_new_not_copy": True,
+            "no_mixed_meanings": True,
+        },
+    }
+
+    assert not learning._phrase_card_is_consistent("Dat is bijzonder.", "Это необычно.", card)
 
 
 @pytest.mark.unit

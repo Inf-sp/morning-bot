@@ -6,7 +6,7 @@
 вида "clt:<view_id>:<short_id>") — введён в PR3a для nb/nb_* ("Сохранённое") и
 распространён в PR3b-d на остальные контексты, кроме гардероба (kast_*, уже
 мигрирован раньше через store.add_wardrobe_items/remove_wardrobe_items) и
-legacy compatibility-слоя cfg_* (см. docs/audit-cleanup-plan.md — не мигрирует,
+legacy compatibility-слоя cfg_* (см. docs/cleanup.md — не мигрирует,
 пока не решена его судьба в рамках P1-2):
            d_<lang>_<kind> (словарь, PR3c), nb/nb_* (закладки, PR3a),
            wl/rl (watchlist/readlist, PR3c), lv_<key>/lvls_<key> (любимые, PR3b),
@@ -256,7 +256,7 @@ def _ctx_items(cid, ctx):
 
 def _action_label(ctx):
     """Текст кнопки группового действия — называет последствие, а не факт
-    удаления записи. Таблица зафиксирована в docs/audit-cleanup-plan.md, P2-2."""
+    удаления записи. Таблица зафиксирована в docs/cleanup.md, P2-2."""
     if ctx.startswith("lv_") or ctx.startswith("lvls_"):
         return "Убрать из любимого"
     if ctx.startswith("hid_"):
@@ -283,7 +283,7 @@ def _action_label(ctx):
 # Контексты, для которых удаление обратимо штатными средствами интерфейса
 # (добавить обратно / нажать повторно) — не требуют экрана подтверждения перед
 # групповым удалением. Все остальные view-контексты физически стирают запись
-# без возможности программного восстановления — см. docs/audit-cleanup-plan.md,
+# без возможности программного восстановления — см. docs/cleanup.md,
 # P2-2 «Правило подтверждения».
 def _is_reversible_ctx(ctx):
     return ctx.startswith("lv_") or ctx.startswith("lvls_") or ctx.startswith("hid_")

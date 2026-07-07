@@ -1,6 +1,6 @@
 """Callback integrity: реальные keyboard factories → dry-run роутера bot.py.
 
-Два уровня проверки (см. docs/audit-cleanup-plan.md, PR1):
+Два уровня проверки (см. docs/cleanup.md, PR1):
   A) собрать реальные callback_data из публичных keyboard factories проекта;
   B) прогнать каждый через routing.resolve_callback_handler — структурный
      (AST-based) резолвер, который проходит дерево if/elif в bot.py и
@@ -211,7 +211,7 @@ def test_known_orphan_handlers_are_allowlisted_with_reason():
         # из allowlist руками, с проверкой, что он не всплыл заново как P0-баг).
         assert result["handled"] is True, (
             f"{cb}: ожидался известный orphan-handler ({reason}), "
-            f"но резолвер говорит {result} — actualize docs/audit-cleanup-plan.md"
+            f"но резолвер говорит {result} — actualize docs/cleanup.md"
         )
 
 
@@ -225,7 +225,7 @@ def test_as_worryreview_handler_unreachable_by_routing():
     "as_motiv", "as_doctor"), поэтому уходит в settings.handle_notes_callback,
     где ветки для него нет. Зафиксировано отдельно от allowlist orphan-handler'ов
     (там handler физически достижим, просто без кнопки — здесь недостижим сам
-    маршрут). См. docs/audit-cleanup-plan.md, PR1 orphan-таблица."""
+    маршрут). См. docs/cleanup.md, PR1 orphan-таблица."""
     result = routing.resolve_callback_handler("as_worryreview")
     assert result == {
         "handled": False,

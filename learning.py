@@ -163,16 +163,11 @@ def _phrase_poll_question(blank_phrase, sentence_ru):
 
 
 def _phrase_poll_explanation(blank_phrase, correct, full_phrase, sentence_ru, extra=""):
-    parts = []
-    if correct:
-        parts.append(f"Ответ: {correct}")
-    if full_phrase:
-        parts.append(str(full_phrase).strip())
-    if sentence_ru:
-        parts.append(str(sentence_ru).strip())
-    if extra:
-        parts.append(str(extra).strip())
-    return _clip_poll_explanation("\n".join(parts), limit=200)
+    full_phrase = str(full_phrase or "").strip()
+    sentence_ru = str(sentence_ru or "").strip()
+    if full_phrase and sentence_ru:
+        return _clip_poll_explanation(f"{full_phrase} → {sentence_ru}", limit=160)
+    return _clip_poll_explanation(sentence_ru or full_phrase, limit=160)
 
 
 async def _gen_train_quiz_card(word, ru, language):
@@ -253,6 +248,15 @@ async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
 
 Учебная карточка показывает исходную фразу, перевод и короткое правило.
 
+Перед ответом проверь согласованность:
+- перевод относится именно к учебной фразе;
+- construction реально присутствует в учебной фразе;
+- target_token используется в учебной фразе именно в роли из правила;
+- нельзя смешивать разные значения одного слова в одной карточке.
+
+Пример: для "Dat is bijzonder." нельзя давать перевод "Эта машина необычно дорогая" и правило
+"bijzonder + прилагательное". Это другая карточка: "Deze auto is bijzonder duur."
+
 Тестовая фраза должна быть НОВОЙ, не копией учебной фразы. Она проверяет применение правила, а не память
 исходного предложения. Нельзя повторять одновременно тот же глагол, то же существительное, тот же перевод
 и ту же структуру предложения. Сохрани только целевое слово, грамматическую конструкцию и смысл правила.
@@ -265,27 +269,37 @@ async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
 5. test_sentence_ru — перевод test_full_phrase на русский.
 6. short_rule — короткая подсказка вида "door = из-за, по причине чего-то".
 7. detail — разбор 350-450 символов простыми словами, только про test_full_phrase.
+8. target_token — слово, правило которого проверяем; обычно совпадает с correct.
+9. self_check — все поля true только если карточка полностью согласована.
 
 Верни JSON:
 {{
   "test_blank_phrase": "новая тестовая фраза с ____",
   "test_full_phrase": "новая тестовая фраза полностью",
   "correct": "пропущенное слово",
+  "target_token": "целевое слово правила",
   "wrong": ["неверный вариант 1", "неверный вариант 2", "неверный вариант 3"],
   "test_sentence_ru": "перевод test_full_phrase на русский",
   "construction": "название конструкции, например 'ziek door iets'",
   "construction_meaning": "что значит конструкция целиком, коротко по-русски",
   "short_rule": "короткая подсказка",
   "detail": "короткий разбор по тестовой фразе",
-  "forbidden": [],
   "other_forms": [
-    {{"pos": "часть речи, например Глагол", "meaning": "перевод в этой части речи"}}
-  ]
+    {{"word": "слово", "meaning": "другое значение, только если оно не конфликтует с правилом"}}
+  ],
+  "self_check": {{
+    "translation_matches_learning_phrase": true,
+    "pattern_present_in_learning_phrase": true,
+    "target_token_role_ok": true,
+    "learning_phrase_natural": true,
+    "test_checks_same_rule": true,
+    "test_is_new_not_copy": true,
+    "no_mixed_meanings": true
+  }}
 }}
 
-Поле other_forms заполняй, только если ключевое слово конструкции реально имеет другое значение в другой
-части речи (например book — сущ. книга / гл. бронировать). Если значений немного и слово однозначное — верни
-пустой список.
+Поле other_forms заполняй максимум одним пунктом и только если оно не повторяет главное правило, не создаёт
+конфликтующее значение и реально помогает. Если сомневаешься — верни пустой список.
 """
     try:
         d = await ai.allm_json(prompt, 1400, tier="smart", route="gemini", module="learning")
@@ -296,7 +310,7 @@ async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
     for item in (d.get("other_forms") or [])[:3]:
         if not isinstance(item, dict):
             continue
-        pos = str(item.get("pos") or "").strip()
+        pos = str(item.get("word") or item.get("pos") or "").strip()
         meaning = str(item.get("meaning") or "").strip()
         if pos and meaning:
             other_forms.append({"pos": pos, "meaning": meaning})
@@ -308,6 +322,7 @@ async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
     return {
         "blank_phrase": blank_phrase,
         "correct": correct,
+        "target_token": str(d.get("target_token") or correct).strip(),
         "wrong": wrong,
         "sentence_ru": str(d.get("test_sentence_ru") or d.get("sentence_ru") or "").strip(),
         "test_full_phrase": full_phrase,
@@ -315,16 +330,9 @@ async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
         "construction_meaning": str(d.get("construction_meaning") or "").strip(),
         "short_rule": str(d.get("short_rule") or "").strip(),
         "detail": str(d.get("detail") or "").strip(),
-        "forbidden": [str(x).strip() for x in (d.get("forbidden") or []) if str(x).strip()][:3],
-        "other_forms": other_forms,
+        "other_forms": _filter_phrase_other_forms(other_forms, d),
         "explanation": str(d.get("short_rule") or d.get("explanation") or "").strip(),
-        "broken_phrase": str(d.get("broken_phrase") or "").strip(),
-        "broken_word_options": [str(x).strip() for x in (d.get("broken_word_options") or []) if str(x).strip()][:4],
-        "broken_wrong_word": str(d.get("broken_wrong_word") or "").strip(),
-        "broken_why": str(d.get("broken_why") or "").strip(),
-        "situation": str(d.get("situation") or "").strip(),
-        "situation_options": [str(x).strip() for x in (d.get("situation_options") or []) if str(x).strip()][:3],
-        "situation_correct": str(d.get("situation_correct") or "").strip(),
+        "self_check": d.get("self_check") if isinstance(d.get("self_check"), dict) else {},
     }
 
 
@@ -339,6 +347,129 @@ _PHRASE_DISTRACTORS = {
     "нидерландский": ["maken", "denken", "werken", "vragen", "kijken", "nodig", "samen", "later"],
     "английский": ["make", "think", "work", "ask", "look", "need", "together", "later"],
 }
+
+_PATTERN_PLACEHOLDERS = {
+    "iets", "iemand", "someone", "something", "somebody", "sth", "sb",
+    "adjective", "adjectief", "прилагательное", "сущ", "существительное",
+    "verb", "глагол", "noun", "prep", "предлог",
+}
+
+
+def _phrase_tokens(text):
+    return [m.group(0).lower() for m in re.finditer(r"[\wÀ-ÖØ-öø-ÿ'-]+", str(text or ""), flags=re.UNICODE)]
+
+
+def _normalize_phrase_for_compare(text):
+    return " ".join(_phrase_tokens(text))
+
+
+def _filter_phrase_other_forms(other_forms, card):
+    if not other_forms:
+        return []
+    main = " ".join(str(card.get(k) or "").lower() for k in ("construction", "construction_meaning", "short_rule"))
+    filtered = []
+    for item in other_forms:
+        pos = str(item.get("pos") or "").strip()
+        meaning = str(item.get("meaning") or "").strip()
+        if not pos or not meaning:
+            continue
+        combined = f"{pos} {meaning}".lower()
+        if combined in main or meaning.lower() in main:
+            continue
+        filtered.append({"pos": pos, "meaning": meaning})
+        break
+    return filtered
+
+
+def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
+    learn_phrase = str(learn_phrase or "").strip()
+    learn_ru = str(learn_ru or "").strip()
+    blank = str(card.get("blank_phrase") or "").strip()
+    full = str(card.get("test_full_phrase") or "").strip()
+    correct = str(card.get("correct") or "").strip()
+    target = str(card.get("target_token") or correct).strip()
+    construction = str(card.get("construction") or "").strip()
+    construction_meaning = str(card.get("construction_meaning") or "").strip()
+    test_ru = str(card.get("sentence_ru") or "").strip()
+    self_check = card.get("self_check") if isinstance(card.get("self_check"), dict) else {}
+    required_checks = (
+        "translation_matches_learning_phrase",
+        "pattern_present_in_learning_phrase",
+        "target_token_role_ok",
+        "learning_phrase_natural",
+        "test_checks_same_rule",
+        "test_is_new_not_copy",
+        "no_mixed_meanings",
+    )
+    if any(self_check.get(k) is not True for k in required_checks):
+        return False
+    if not all([learn_phrase, learn_ru, blank, full, correct, target, construction, construction_meaning, test_ru]):
+        return False
+    if "____" not in blank:
+        return False
+    if _normalize_phrase_for_compare(learn_phrase) == _normalize_phrase_for_compare(full):
+        return False
+    if _normalize_phrase_for_compare(learn_phrase) == _normalize_phrase_for_compare(blank):
+        return False
+
+    learn_tokens = set(_phrase_tokens(learn_phrase))
+    learn_token_list = _phrase_tokens(learn_phrase)
+    full_tokens = set(_phrase_tokens(full))
+    target_low = target.lower()
+    correct_low = correct.lower()
+    if target_low not in learn_tokens or correct_low not in full_tokens:
+        return False
+
+    pattern_tokens = [
+        t for t in _phrase_tokens(construction)
+        if t not in _PATTERN_PLACEHOLDERS and len(t) > 1
+    ]
+    if pattern_tokens and not all(t in learn_tokens for t in pattern_tokens):
+        return False
+    if pattern_tokens and correct_low not in pattern_tokens and target_low not in pattern_tokens:
+        return False
+    construction_low = construction.lower()
+    if any(marker in construction_low for marker in ("+ прилагательное", "+ adjective", "+ adjectief")):
+        positions = [i for i, t in enumerate(learn_token_list) if t == target_low]
+        if not positions or all(i >= len(learn_token_list) - 1 for i in positions):
+            return False
+    return True
+
+
+async def _validate_phrase_card_semantics(phrase, ru, language, card):
+    prompt = f"""
+Проверь карточку фразового тренажёра для языка: {language}.
+
+Учебная фраза: {phrase}
+Русский перевод учебной фразы: {ru}
+Паттерн: {card.get("construction") or ""}
+Значение паттерна: {card.get("construction_meaning") or ""}
+Целевой токен: {card.get("target_token") or card.get("correct") or ""}
+
+Тестовая фраза с пропуском: {card.get("blank_phrase") or ""}
+Полная тестовая фраза: {card.get("test_full_phrase") or ""}
+Перевод тестовой фразы: {card.get("sentence_ru") or ""}
+Правильный ответ: {card.get("correct") or ""}
+
+Ответь строго JSON:
+{{
+  "ok": true,
+  "reason": ""
+}}
+
+Поставь ok=false, если:
+- русский перевод не относится именно к учебной фразе;
+- паттерн не присутствует в учебной фразе;
+- target_token используется не в той роли;
+- смешаны разные значения одного слова;
+- тестовая фраза проверяет другое правило;
+- тестовая фраза копирует учебную.
+"""
+    try:
+        d = await ai.allm_json(prompt, 350, tier="cheap", route="gemini", module="learning")
+    except Exception:
+        return False
+    return bool(isinstance(d, dict) and d.get("ok") is True)
 
 
 def _fallback_phrase_quiz_card(phrase, ru, language):
@@ -378,16 +509,8 @@ def _fallback_phrase_quiz_card(phrase, ru, language):
         "construction_meaning": "",
         "short_rule": f"{correct} = смотри перевод фразы",
         "detail": f"В этой фразе подходит «{correct}». Сравни полный пример с переводом и запомни конструкцию целиком.",
-        "forbidden": [],
         "other_forms": [],
         "explanation": f"В этой фразе пропущено слово «{correct}».",
-        "broken_phrase": "",
-        "broken_word_options": [],
-        "broken_wrong_word": "",
-        "broken_why": "",
-        "situation": "",
-        "situation_options": [],
-        "situation_correct": "",
     }
 
 
@@ -410,6 +533,24 @@ def _clean_phrase_options(correct_answer, wrong, needed=3):
         if len(clean_wrong) >= needed:
             break
     return clean_wrong
+
+
+async def _gen_consistent_phrase_card(phrase, ru, language, avoid_tests=None, attempts=2):
+    for _ in range(max(1, attempts)):
+        card = await _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=avoid_tests)
+        correct_answer = card.get("correct") or ""
+        clean_wrong = _clean_phrase_options(correct_answer, list(card.get("wrong") or []), needed=3)
+        blank_phrase = card.get("blank_phrase") or ""
+        if (
+            correct_answer
+            and "____" in blank_phrase
+            and len(clean_wrong) >= 3
+            and _phrase_card_is_consistent(phrase, ru, card)
+            and await _validate_phrase_card_semantics(phrase, ru, language, card)
+        ):
+            card["wrong"] = clean_wrong[:3]
+            return card
+    return {}
 
 
 def train_data(language, level, word, ru, fmt):
@@ -625,24 +766,18 @@ async def _render_phrase_quiz(bot, cid):
     used.append(idx)
     st["used_phrases"] = used
 
-    card = await _gen_phrase_quiz_card(phrase, ru, language)
+    card = await _gen_consistent_phrase_card(phrase, ru, language)
     correct_answer = card.get("correct") or ""
     wrong = list(card.get("wrong") or [])
     clean_wrong = _clean_phrase_options(correct_answer, wrong, needed=3)
     blank_phrase = card.get("blank_phrase") or ""
     if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 3:
-        card = _fallback_phrase_quiz_card(phrase, ru, language)
-        correct_answer = card.get("correct") or ""
-        wrong = list(card.get("wrong") or [])
-        clean_wrong = _clean_phrase_options(correct_answer, wrong, needed=3)
-        blank_phrase = card.get("blank_phrase") or ""
-        if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 3:
-            await bot.send_message(
-                chat_id=cid,
-                text="Не удалось собрать хорошее задание по фразе. Попробуй ещё раз.",
-                reply_markup=_train_again_kb(language, mode="phrase"),
-            )
-            return
+        await bot.send_message(
+            chat_id=cid,
+            text="Не удалось собрать согласованную карточку по фразе. Попробуй ещё раз.",
+            reply_markup=_train_again_kb(language, mode="phrase"),
+        )
+        return
 
     options = [correct_answer] + clean_wrong[:3]
     _r.shuffle(options)
@@ -669,13 +804,6 @@ async def _render_phrase_quiz(bot, cid):
         "phrase_error_count": 0,
         "phrase_pending_quiz": True,
         "phrase_stage": "intro",
-        "phrase_broken": card.get("broken_phrase") or "",
-        "phrase_broken_options": card.get("broken_word_options") or [],
-        "phrase_broken_wrong_word": card.get("broken_wrong_word") or "",
-        "phrase_broken_why": card.get("broken_why") or "",
-        "phrase_situation": card.get("situation") or "",
-        "phrase_situation_options": card.get("situation_options") or [],
-        "phrase_situation_correct": card.get("situation_correct") or "",
     })
 
     msg = learning_ui.phrase_intro_card(
@@ -683,7 +811,6 @@ async def _render_phrase_quiz(bot, cid):
         card.get("sentence_ru") or ru,
         card.get("construction") or "",
         card.get("construction_meaning") or "",
-        card.get("forbidden") or [],
         card.get("other_forms") or [],
     )
     kb = InlineKeyboardMarkup([
@@ -749,15 +876,10 @@ async def phrase_new_example(bot, cid):
     ru = st.get("ru", "")
     language = st.get("lang", "нидерландский")
     seen_tests = list(st.get("phrase_seen_tests") or [])
-    card = await _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=seen_tests)
+    card = await _gen_consistent_phrase_card(phrase, ru, language, avoid_tests=seen_tests)
     correct_answer = card.get("correct") or st.get("meaning", "")
     clean_wrong = _clean_phrase_options(correct_answer, list(card.get("wrong") or []), needed=3)
     blank_phrase = card.get("blank_phrase") or ""
-    if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 3 or blank_phrase in seen_tests:
-        card = _fallback_phrase_quiz_card(phrase, ru, language)
-        correct_answer = card.get("correct") or ""
-        clean_wrong = _clean_phrase_options(correct_answer, list(card.get("wrong") or []), needed=3)
-        blank_phrase = card.get("blank_phrase") or ""
     if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 3 or blank_phrase in seen_tests:
         await bot.send_message(
             chat_id=cid,
@@ -874,93 +996,6 @@ async def _send_train_feedback(bot, cid, idx, st):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё", callback_data="train_next")],
         [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(lang))],
-    ])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def phrase_stage_broken(bot, cid):
-    """Этап 3: показать фразу с намеренной ошибкой, пользователь выбирает неверное слово."""
-    st = store.train_state.get(str(cid))
-    if not st:
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
-    broken = st.get("phrase_broken", "")
-    raw_options = list(st.get("phrase_broken_options", []))
-    wrong_word = st.get("phrase_broken_wrong_word", "")
-    if not broken or not wrong_word or wrong_word not in raw_options:
-        await phrase_stage_situation(bot, cid)
-        return
-    st["phrase_stage"] = "broken"
-    st["phrase_broken_correct_idx"] = raw_options.index(wrong_word)
-
-    msg = learning_ui.phrase_broken_question(broken)
-    kb = InlineKeyboardMarkup(
-        [[InlineKeyboardButton(opt, callback_data=f"phrase_broken_ans_{i}")] for i, opt in enumerate(raw_options)]
-        + [[InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(st.get("lang", "")))]]
-    )
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def phrase_broken_answer(bot, cid, idx):
-    st = store.train_state.get(str(cid))
-    if not st or st.get("phrase_stage") != "broken":
-        return
-    options = list(st.get("phrase_broken_options", []))
-    if idx >= len(options):
-        return
-    correct_idx = int(st.get("phrase_broken_correct_idx", 0))
-    msg = learning_ui.phrase_broken_result(
-        idx == correct_idx,
-        st.get("phrase_broken", ""),
-        st.get("phrase_full", ""),
-        options[correct_idx] if correct_idx < len(options) else "",
-        st.get("phrase_broken_why", ""),
-    )
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("➡️ Дальше: ситуация", callback_data="phrase_stage_situation")],
-        [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(st.get("lang", "")))],
-    ])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def phrase_stage_situation(bot, cid):
-    """Этап 4: короткая ситуация-контекст, пользователь выбирает подходящий вариант фразы."""
-    st = store.train_state.get(str(cid))
-    if not st:
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
-    situation = st.get("phrase_situation", "")
-    options = list(st.get("phrase_situation_options", []))
-    correct = st.get("phrase_situation_correct", "")
-    if not situation or not options or correct not in options:
-        await train_next(bot, cid)
-        return
-    st["phrase_stage"] = "situation"
-    st["phrase_situation_correct_idx"] = options.index(correct)
-
-    msg = learning_ui.phrase_situation_question(situation)
-    kb = InlineKeyboardMarkup(
-        [[InlineKeyboardButton(opt, callback_data=f"phrase_situation_ans_{i}")] for i, opt in enumerate(options)]
-        + [[InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(st.get("lang", "")))]]
-    )
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def phrase_situation_answer(bot, cid, idx):
-    st = store.train_state.get(str(cid))
-    if not st or st.get("phrase_stage") != "situation":
-        return
-    options = list(st.get("phrase_situation_options", []))
-    if idx >= len(options):
-        return
-    correct_idx = int(st.get("phrase_situation_correct_idx", 0))
-    msg = learning_ui.phrase_situation_result(
-        idx == correct_idx,
-        options[idx],
-        options[correct_idx] if correct_idx < len(options) else "",
-    )
-    st["round"] = st.get("round", 0) + 1
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Ещё", callback_data="train_next")],
-        [InlineKeyboardButton("◀️ Назад", callback_data=_train_back_target(st.get("lang", "")))],
     ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
