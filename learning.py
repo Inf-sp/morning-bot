@@ -1859,6 +1859,413 @@ def _ensure_dict(cid):
     """Возвращает словарь пользователя (без авто-сида)."""
     return store.get_list(config.DICT_KEY, cid)
 
+
+_DICT_SEED_PROFILE_KEY = "_dict_seed"
+_DICT_SEED_PAGE_SIZE = 12
+_DICT_SEED_SOURCE_NOTE = (
+    "Списки собраны как частотный CEFR-старт: Oxford 3000/5000, Cambridge/English "
+    "Vocabulary Profile и частотные разговорные списки; редкие книжные слова исключены."
+)
+
+_EN_SEED_WORDS = {
+    "A1": [
+        ("about", "о, про", ""), ("always", "всегда", ""), ("because", "потому что", ""),
+        ("before", "до, перед", ""), ("between", "между", ""), ("bring", "приносить", ""),
+        ("city", "город", ""), ("clean", "чистый; убирать", ""), ("different", "разный", ""),
+        ("enough", "достаточно", ""), ("family", "семья", ""), ("friend", "друг", ""),
+        ("important", "важный", ""), ("learn", "учить", ""), ("listen", "слушать", ""),
+        ("maybe", "может быть", ""), ("morning", "утро", ""), ("often", "часто", ""),
+        ("place", "место", ""), ("question", "вопрос", ""), ("remember", "помнить", ""),
+        ("something", "что-то", ""), ("sometimes", "иногда", ""), ("together", "вместе", ""),
+        ("understand", "понимать", ""), ("usually", "обычно", ""), ("want", "хотеть", ""),
+        ("water", "вода", ""), ("week", "неделя", ""), ("work", "работать; работа", ""),
+    ],
+    "A2": [
+        ("almost", "почти", ""), ("already", "уже", ""), ("arrive", "прибывать", ""),
+        ("believe", "верить", ""), ("borrow", "занимать", ""), ("change", "менять; изменение", ""),
+        ("comfortable", "удобный", ""), ("continue", "продолжать", ""), ("decide", "решать", ""),
+        ("during", "во время", ""), ("explain", "объяснять", ""), ("finally", "наконец", ""),
+        ("follow", "следовать", ""), ("happen", "случаться", ""), ("include", "включать", ""),
+        ("instead", "вместо этого", ""), ("invite", "приглашать", ""), ("journey", "поездка", ""),
+        ("later", "позже", ""), ("necessary", "необходимый", ""), ("opinion", "мнение", ""),
+        ("perhaps", "возможно", ""), ("prepare", "готовить; подготавливать", ""), ("quite", "довольно", ""),
+        ("receive", "получать", ""), ("reason", "причина", ""), ("return", "возвращаться", ""),
+        ("several", "несколько", ""), ("spend", "тратить; проводить время", ""), ("without", "без", ""),
+    ],
+    "B1": [
+        ("achieve", "достигать", ""), ("although", "хотя", ""), ("avoid", "избегать", ""),
+        ("challenge", "вызов; трудная задача", ""), ("compare", "сравнивать", ""), ("consider", "считать; рассматривать", ""),
+        ("create", "создавать", ""), ("depend", "зависеть", ""), ("develop", "развивать", ""),
+        ("effort", "усилие", ""), ("especially", "особенно", ""), ("experience", "опыт; переживать", ""),
+        ("focus", "фокусироваться", ""), ("improve", "улучшать", ""), ("increase", "увеличивать", ""),
+        ("involve", "включать; вовлекать", ""), ("knowledge", "знание", ""), ("likely", "вероятный", ""),
+        ("manage", "справляться; управлять", ""), ("notice", "замечать", ""), ("opportunity", "возможность", ""),
+        ("provide", "предоставлять", ""), ("purpose", "цель", ""), ("reduce", "снижать", ""),
+        ("require", "требовать", ""), ("result", "результат", ""), ("similar", "похожий", ""),
+        ("support", "поддерживать; поддержка", ""), ("therefore", "поэтому", ""), ("whether", "ли", ""),
+    ],
+    "B2": [
+        ("accurate", "точный", ""), ("approach", "подход", ""), ("assume", "предполагать", ""),
+        ("benefit", "польза; приносить пользу", ""), ("complex", "сложный", ""), ("concern", "беспокойство; касаться", ""),
+        ("consistent", "последовательный", ""), ("define", "определять", ""), ("demand", "требование; требовать", ""),
+        ("encourage", "поощрять", ""), ("evidence", "доказательство", ""), ("expand", "расширять", ""),
+        ("feature", "особенность", ""), ("impact", "влияние", ""), ("indicate", "указывать", ""),
+        ("maintain", "поддерживать", ""), ("method", "метод", ""), ("obvious", "очевидный", ""),
+        ("participate", "участвовать", ""), ("perspective", "точка зрения", ""), ("predict", "предсказывать", ""),
+        ("previous", "предыдущий", ""), ("principle", "принцип", ""), ("range", "диапазон", ""),
+        ("reliable", "надёжный", ""), ("respond", "отвечать; реагировать", ""), ("significant", "значительный", ""),
+        ("specific", "конкретный", ""), ("strategy", "стратегия", ""), ("task", "задача", ""),
+    ],
+    "C1": [
+        ("acknowledge", "признавать", ""), ("adapt", "адаптироваться; адаптировать", ""),
+        ("adequate", "достаточный", ""), ("advocate", "выступать за", ""), ("allocate", "распределять", ""),
+        ("anticipate", "предвидеть", ""), ("apparent", "очевидный; кажущийся", ""), ("attribute", "приписывать", ""),
+        ("clarify", "прояснять", ""), ("constraint", "ограничение", ""), ("contribute", "вносить вклад", ""),
+        ("derive", "получать; происходить", ""), ("emphasis", "акцент", ""), ("enhance", "улучшать", ""),
+        ("evaluate", "оценивать", ""), ("framework", "структура; рамка", ""), ("imply", "подразумевать", ""),
+        ("incentive", "стимул", ""), ("inevitable", "неизбежный", ""), ("insight", "понимание; инсайт", ""),
+        ("justify", "обосновывать", ""), ("prioritize", "расставлять приоритеты", ""), ("prohibit", "запрещать", ""),
+        ("resolve", "решать; разрешать", ""), ("retain", "сохранять", ""), ("shift", "сдвиг; менять", ""),
+        ("subtle", "тонкий; едва заметный", ""), ("sustain", "поддерживать длительно", ""), ("undergo", "претерпевать", ""),
+        ("whereas", "тогда как", ""),
+    ],
+}
+
+_NL_SEED_WORDS = {
+    "A1": [
+        ("altijd", "всегда", ""), ("begrijpen", "понимать", ""), ("betalen", "платить", ""),
+        ("blijven", "оставаться", ""), ("boodschap", "покупка; сообщение", ""), ("buiten", "снаружи", ""),
+        ("denken", "думать", ""), ("dichtbij", "рядом", ""), ("familie", "семья", ""),
+        ("genoeg", "достаточно", ""), ("graag", "охотно; с удовольствием", ""), ("helpen", "помогать", ""),
+        ("kiezen", "выбирать", ""), ("kijken", "смотреть", ""), ("kopen", "покупать", ""),
+        ("leren", "учить", ""), ("luisteren", "слушать", ""), ("misschien", "может быть", ""),
+        ("nodig", "нужный", ""), ("plaats", "место", ""), ("praten", "говорить", ""),
+        ("samen", "вместе", ""), ("schoon", "чистый", ""), ("soms", "иногда", ""),
+        ("vragen", "спрашивать", ""), ("vriend", "друг", ""), ("wachten", "ждать", ""),
+        ("werken", "работать", ""), ("weten", "знать", ""), ("zoeken", "искать", ""),
+    ],
+    "A2": [
+        ("aanbieden", "предлагать", ""), ("afspraak", "встреча; запись", ""), ("beginnen", "начинать", ""),
+        ("beslissen", "решать", ""), ("bereiken", "достигать", ""), ("beschrijven", "описывать", ""),
+        ("betekenen", "значить", ""), ("bijna", "почти", ""), ("daarom", "поэтому", ""),
+        ("duidelijk", "понятный", ""), ("eigenlijk", "вообще-то", ""), ("ervaring", "опыт", ""),
+        ("gebruiken", "использовать", ""), ("gebeuren", "случаться", ""), ("gezellig", "уютный; приятный", ""),
+        ("halen", "забирать; доставать", ""), ("herhalen", "повторять", ""), ("hoeven", "быть должным", "часто с niet/geen"),
+        ("kloppen", "быть верным; стучать", ""), ("makkelijk", "лёгкий", ""), ("mening", "мнение", ""),
+        ("mogelijk", "возможный", ""), ("ontmoeten", "встречать", ""), ("proberen", "пробовать", ""),
+        ("reizen", "путешествовать", ""), ("rustig", "спокойный", ""), ("terug", "назад", ""),
+        ("uitleggen", "объяснять", ""), ("vergeten", "забывать", ""), ("veranderen", "менять", ""),
+    ],
+    "B1": [
+        ("aanpassen", "адаптировать; подстраивать", ""), ("aanraden", "советовать", ""),
+        ("afhankelijk", "зависимый", ""), ("behalen", "достигать", ""), ("beïnvloeden", "влиять", ""),
+        ("belangrijk", "важный", ""), ("bespreken", "обсуждать", ""), ("betrouwbaar", "надёжный", ""),
+        ("bewijzen", "доказывать", ""), ("bijdragen", "вносить вклад", ""), ("doel", "цель", ""),
+        ("gevolg", "последствие", ""), ("herkennen", "узнавать; распознавать", ""), ("inmiddels", "тем временем; уже", ""),
+        ("kans", "шанс; возможность", ""), ("kennis", "знание", ""), ("namelijk", "а именно; ведь", ""),
+        ("onderzoeken", "исследовать", ""), ("ontwikkelen", "развивать", ""), ("opletten", "внимательно следить", ""),
+        ("oplossen", "решать проблему", ""), ("overwegen", "обдумывать", ""), ("rekening houden met", "учитывать", ""),
+        ("resultaat", "результат", ""), ("samenwerken", "сотрудничать", ""), ("toestaan", "разрешать", ""),
+        ("uitdaging", "вызов; трудность", ""), ("vermijden", "избегать", ""), ("verbeteren", "улучшать", ""),
+        ("waarschijnlijk", "вероятно", ""),
+    ],
+    "B2": [
+        ("aantonen", "показывать; доказывать", ""), ("benadering", "подход", ""), ("beperken", "ограничивать", ""),
+        ("bevorderen", "способствовать", ""), ("complex", "сложный", ""), ("consequent", "последовательный", ""),
+        ("daadwerkelijk", "действительно", ""), ("desondanks", "несмотря на это", ""), ("doeltreffend", "эффективный", ""),
+        ("eisen", "требовать", ""), ("ernstig", "серьёзный", ""), ("gedrag", "поведение", ""),
+        ("geschikt", "подходящий", ""), ("inschatten", "оценивать", ""), ("maatregel", "мера", ""),
+        ("nadruk", "акцент", ""), ("ondersteunen", "поддерживать", ""), ("ontbreken", "отсутствовать", ""),
+        ("overtuigen", "убеждать", ""), ("perspectief", "перспектива", ""), ("principe", "принцип", ""),
+        ("reageren", "реагировать", ""), ("relevant", "релевантный", ""), ("schatten", "оценивать", ""),
+        ("specifiek", "конкретный", ""), ("strategie", "стратегия", ""), ("toepassen", "применять", ""),
+        ("uitbreiden", "расширять", ""), ("voorkomen", "предотвращать; случаться", ""), ("zorgvuldig", "тщательный", ""),
+    ],
+    "C1": [
+        ("aanscherpen", "уточнять; усиливать", ""), ("aanzienlijk", "значительный", ""), ("benadrukken", "подчёркивать", ""),
+        ("beoordelen", "оценивать", ""), ("belemmeren", "препятствовать", ""), ("beschouwen", "рассматривать", ""),
+        ("bewustwording", "осознание", ""), ("daarentegen", "напротив", ""), ("doorslaggevend", "решающий", ""),
+        ("duurzaam", "устойчивый", ""), ("genuanceerd", "нюансированный", ""), ("grondig", "основательный", ""),
+        ("handhaven", "поддерживать; обеспечивать соблюдение", ""), ("in aanmerking komen", "подходить; иметь право", ""),
+        ("inzicht", "понимание", ""), ("kenmerk", "характерная черта", ""), ("noodzakelijk", "необходимый", ""),
+        ("onderbouwen", "обосновывать", ""), ("onderscheiden", "различать", ""), ("onvermijdelijk", "неизбежный", ""),
+        ("overeenkomen", "соответствовать; договариваться", ""), ("prioriteit", "приоритет", ""), ("rechtvaardigen", "оправдывать", ""),
+        ("streven naar", "стремиться к", ""), ("subtiel", "тонкий; едва заметный", ""), ("toereikend", "достаточный", ""),
+        ("uitgangspunt", "исходная точка", ""), ("veronderstellen", "предполагать", ""), ("voortvloeien uit", "следовать из", ""),
+        ("wezenlijk", "существенный", ""),
+    ],
+}
+
+_EN_SEED_PHRASES = {
+    "A1": [("How are you?", "Как дела?", ""), ("I don't understand.", "Я не понимаю.", ""), ("Can you help me?", "Можете помочь?", ""), ("How much is it?", "Сколько это стоит?", ""), ("See you later.", "Увидимся позже.", ""), ("I would like...", "Я бы хотел...", ""), ("Where is the station?", "Где вокзал?", ""), ("I am sorry.", "Извините.", ""), ("No problem.", "Без проблем.", ""), ("What does it mean?", "Что это значит?", "")],
+    "A2": [("Could you repeat that?", "Не могли бы повторить?", ""), ("I am looking for...", "Я ищу...", ""), ("It depends on...", "Это зависит от...", ""), ("I have already done it.", "Я уже это сделал.", ""), ("What do you think?", "Что ты думаешь?", ""), ("I need to change it.", "Мне нужно это изменить.", ""), ("Can I borrow this?", "Можно это одолжить?", ""), ("Let me know.", "Дай знать.", ""), ("I am on my way.", "Я уже в пути.", ""), ("That sounds good.", "Звучит хорошо.", "")],
+    "B1": [("I see your point.", "Я понимаю твою мысль.", ""), ("It is worth trying.", "Это стоит попробовать.", ""), ("I need to improve this.", "Мне нужно это улучшить.", ""), ("Although it is difficult, it is useful.", "Хотя это сложно, это полезно.", ""), ("What is the main challenge?", "В чём главная сложность?", ""), ("I would rather avoid it.", "Я бы предпочёл этого избежать.", ""), ("It depends on the situation.", "Это зависит от ситуации.", ""), ("That is a good opportunity.", "Это хорошая возможность.", ""), ("Could you explain it briefly?", "Можешь кратко объяснить?", ""), ("I have noticed that...", "Я заметил, что...", "")],
+    "B2": [("From my perspective...", "С моей точки зрения...", ""), ("The evidence suggests that...", "Данные указывают на то, что...", ""), ("We need a reliable method.", "Нам нужен надёжный метод.", ""), ("It has a significant impact.", "Это оказывает значительное влияние.", ""), ("Let me clarify one point.", "Позволь уточнить один момент.", ""), ("The previous approach did not work.", "Предыдущий подход не сработал.", ""), ("This strategy is more consistent.", "Эта стратегия более последовательна.", ""), ("What are the main concerns?", "Какие главные опасения?", ""), ("It is not that obvious.", "Это не так очевидно.", ""), ("We should define the task first.", "Сначала нужно определить задачу.", "")],
+    "C1": [("I acknowledge the concern.", "Я признаю эту обеспокоенность.", ""), ("That implies a different approach.", "Это подразумевает другой подход.", ""), ("We need to prioritize the issue.", "Нужно расставить приоритеты в вопросе.", ""), ("The outcome was inevitable.", "Исход был неизбежен.", ""), ("Let me justify this decision.", "Позволь обосновать это решение.", ""), ("This framework is too narrow.", "Эта рамка слишком узкая.", ""), ("It requires a subtle shift.", "Это требует тонкого сдвига.", ""), ("The incentive is not clear.", "Стимул неясен.", ""), ("We should evaluate the impact.", "Нужно оценить влияние.", ""), ("Whereas the first option is faster...", "Тогда как первый вариант быстрее...", "")],
+}
+
+_NL_SEED_PHRASES = {
+    "A1": [("Hoe gaat het?", "Как дела?", ""), ("Ik begrijp het niet.", "Я не понимаю.", ""), ("Kunt u mij helpen?", "Можете мне помочь?", ""), ("Hoeveel kost het?", "Сколько это стоит?", ""), ("Tot later.", "До встречи.", ""), ("Ik wil graag...", "Я хотел бы...", ""), ("Waar is het station?", "Где вокзал?", ""), ("Het spijt me.", "Мне жаль.", ""), ("Geen probleem.", "Без проблем.", ""), ("Wat betekent dat?", "Что это значит?", "")],
+    "A2": [("Kunt u dat herhalen?", "Можете это повторить?", ""), ("Ik ben op zoek naar...", "Я ищу...", ""), ("Het hangt af van...", "Это зависит от...", ""), ("Ik heb het al gedaan.", "Я уже это сделал.", ""), ("Wat vind je ervan?", "Что ты об этом думаешь?", ""), ("Ik moet het veranderen.", "Мне нужно это изменить.", ""), ("Mag ik dit lenen?", "Можно это одолжить?", ""), ("Laat het me weten.", "Дай мне знать.", ""), ("Ik ben onderweg.", "Я в пути.", ""), ("Dat klinkt goed.", "Звучит хорошо.", "")],
+    "B1": [("Ik begrijp je punt.", "Я понимаю твою мысль.", ""), ("Het is de moeite waard.", "Это того стоит.", ""), ("Ik wil dit verbeteren.", "Я хочу это улучшить.", ""), ("Hoewel het moeilijk is, is het nuttig.", "Хотя это сложно, это полезно.", ""), ("Wat is de grootste uitdaging?", "В чём главная трудность?", ""), ("Ik wil dat liever vermijden.", "Я предпочёл бы этого избежать.", ""), ("Het hangt van de situatie af.", "Это зависит от ситуации.", ""), ("Dat is een goede kans.", "Это хорошая возможность.", ""), ("Kun je het kort uitleggen?", "Можешь кратко объяснить?", ""), ("Ik heb gemerkt dat...", "Я заметил, что...", "")],
+    "B2": [("Vanuit mijn perspectief...", "С моей точки зрения...", ""), ("Dat toont aan dat...", "Это показывает, что...", ""), ("We hebben een betrouwbare methode nodig.", "Нам нужен надёжный метод.", ""), ("Het heeft een grote invloed.", "Это оказывает большое влияние.", ""), ("Laat me één punt verduidelijken.", "Позволь уточнить один момент.", ""), ("De vorige aanpak werkte niet.", "Предыдущий подход не сработал.", ""), ("Deze strategie is consequenter.", "Эта стратегия более последовательна.", ""), ("Wat zijn de belangrijkste zorgen?", "Какие основные опасения?", ""), ("Dat is niet zo vanzelfsprekend.", "Это не так очевидно.", ""), ("We moeten eerst de taak bepalen.", "Сначала нужно определить задачу.", "")],
+    "C1": [("Ik erken die zorg.", "Я признаю это опасение.", ""), ("Dat veronderstelt een andere aanpak.", "Это предполагает другой подход.", ""), ("We moeten dit prioriteit geven.", "Нужно дать этому приоритет.", ""), ("De uitkomst was onvermijdelijk.", "Исход был неизбежен.", ""), ("Laat me deze beslissing onderbouwen.", "Позволь обосновать это решение.", ""), ("Dit uitgangspunt is te beperkt.", "Эта исходная рамка слишком ограничена.", ""), ("Dat vraagt om een subtiele verschuiving.", "Это требует тонкого сдвига.", ""), ("De prikkel is niet duidelijk.", "Стимул неясен.", ""), ("We moeten de impact beoordelen.", "Нужно оценить влияние.", ""), ("Daarentegen is de eerste optie sneller.", "Напротив, первый вариант быстрее.", "")],
+}
+
+
+def _seed_dataset(lang, kind):
+    if kind == "phrase":
+        return _NL_SEED_PHRASES if lang == "nl" else _EN_SEED_PHRASES
+    return _NL_SEED_WORDS if lang == "nl" else _EN_SEED_WORDS
+
+
+def _seed_language(cid, lang=None):
+    if lang in ("nl", "en"):
+        code = lang
+    else:
+        import settings as _s
+        code = _code(_s.study_lang(cid))
+    language = "нидерландский" if code == "nl" else "английский"
+    level = store.get_level(cid, language)
+    if level not in ("A1", "A2", "B1", "B2", "C1"):
+        level = "B1"
+    return code, language, level
+
+
+def _seed_existing_keys(cid):
+    return {
+        _dict_item_key(_dict_lang(w), _dict_kind(w), _w_field(w, "word", "nl", "en"))
+        for w in _ensure_dict(cid)
+    }
+
+
+def _seed_candidates(cid, lang, level, kind="word"):
+    existing = _seed_existing_keys(cid)
+    out = []
+    for word, ru, note in _seed_dataset(lang, kind).get(level, []):
+        item = {"lang": lang, "word": _cap(word), "ru": ru, "kind": kind, "note": note}
+        key = _dict_item_key(lang, kind, item["word"])
+        if key not in existing:
+            out.append(item)
+    return out
+
+
+def _seed_state_get(cid):
+    prof = store.get_profile(cid)
+    st = prof.get(_DICT_SEED_PROFILE_KEY)
+    return st if isinstance(st, dict) else {}
+
+
+def _seed_state_set(cid, st):
+    prof = store.get_profile(cid)
+    prof[_DICT_SEED_PROFILE_KEY] = st
+    store.set_profile(cid, prof)
+
+
+def _seed_state_clear(cid):
+    prof = store.get_profile(cid)
+    prof.pop(_DICT_SEED_PROFILE_KEY, None)
+    store.set_profile(cid, prof)
+
+
+def _seed_item_line(item):
+    text = f"{item.get('word')} — {item.get('ru')}"
+    if item.get("note"):
+        text += f" ({item['note']})"
+    return text
+
+
+def _seed_render_text(st):
+    lang = st.get("lang", "en")
+    level = st.get("level", "B1")
+    kind = st.get("kind", "word")
+    items = st.get("items") or []
+    known = set(st.get("known") or [])
+    page = int(st.get("page") or 0)
+    total_pages = max(1, (len(items) + _DICT_SEED_PAGE_SIZE - 1) // _DICT_SEED_PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    title = "фразы" if kind == "phrase" else "слова"
+    lang_label = "нидерландского" if lang == "nl" else "английского"
+    start = page * _DICT_SEED_PAGE_SIZE
+    chunk = items[start:start + _DICT_SEED_PAGE_SIZE]
+    lines = [
+        f"📚 Стартовые {title}: {lang_label}, уровень {level}",
+        "",
+        "Отметьте только то, что уже хорошо знаете. Остальное добавится в словарь.",
+        "",
+    ]
+    for offset, item in enumerate(chunk):
+        idx = start + offset
+        mark = "☑" if idx in known else "☐"
+        lines.append(f"{mark} {_seed_item_line(item)}")
+    lines.extend(["", f"Страница {page + 1}/{total_pages}", _DICT_SEED_SOURCE_NOTE])
+    return "\n".join(lines)
+
+
+def _seed_render_kb(st):
+    items = st.get("items") or []
+    known = set(st.get("known") or [])
+    page = int(st.get("page") or 0)
+    total_pages = max(1, (len(items) + _DICT_SEED_PAGE_SIZE - 1) // _DICT_SEED_PAGE_SIZE)
+    start = page * _DICT_SEED_PAGE_SIZE
+    chunk = items[start:start + _DICT_SEED_PAGE_SIZE]
+    rows = []
+    for offset, item in enumerate(chunk):
+        idx = start + offset
+        mark = "☑" if idx in known else "☐"
+        rows.append([InlineKeyboardButton(f"{mark} {item.get('word')[:38]}", callback_data=f"a_dictseed_toggle_{idx}")])
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("◀ Назад", callback_data=f"a_dictseed_page_{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(InlineKeyboardButton("▶ Далее", callback_data=f"a_dictseed_page_{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton("✅ Добавить выбранные", callback_data="a_dictseed_add")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def send_seed_intro(bot, cid, lang=None):
+    code, language, level = _seed_language(cid, lang)
+    items = _seed_candidates(cid, code, level, "word")
+    if not items:
+        await send_seed_phrase_offer(bot, cid, code, level)
+        return
+    text = (
+        "Для эффективного обучения сначала наполним ваш словарь.\n\n"
+        f"Я подобрал слова уровня {level}. Просмотрите список и отметьте слова, "
+        "которые вы уже хорошо знаете, чтобы не изучать их повторно."
+    )
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Наполнить словарь", callback_data=f"a_dictseed_start_{code}")],
+        [InlineKeyboardButton("✏️ Добавить свои слова", callback_data=f"a_dictadd_smart_{code}")],
+    ])
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+async def offer_seed_for_level_change(bot, cid, language, level):
+    code = _code(language)
+    items = _seed_candidates(cid, code, level, "word")
+    if not items:
+        return
+    text = (
+        f"Уровень {language} изменён на {level}.\n\n"
+        "Хотите добавить частотные слова этого уровня без дублей?"
+    )
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Добавить слова уровня", callback_data=f"a_dictseed_start_{code}")],
+        [InlineKeyboardButton("Позже", callback_data="a_dictseed_later")],
+    ])
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+async def seed_start(bot, cid, lang=None, kind="word", q=None):
+    code, _language, level = _seed_language(cid, lang)
+    items = _seed_candidates(cid, code, level, kind)
+    if not items:
+        text = "В словаре уже есть все стартовые элементы этого уровня."
+        if q is not None:
+            try:
+                await q.message.edit_text(text)
+                return
+            except Exception:
+                pass
+        await bot.send_message(chat_id=cid, text=text)
+        return
+    st = {"lang": code, "level": level, "kind": kind, "items": items, "known": [], "page": 0}
+    _seed_state_set(cid, st)
+    text = _seed_render_text(st)
+    kb = _seed_render_kb(st)
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+async def seed_toggle(bot, cid, idx, q=None):
+    st = _seed_state_get(cid)
+    items = st.get("items") or []
+    if not (0 <= idx < len(items)):
+        return
+    known = set(st.get("known") or [])
+    if idx in known:
+        known.remove(idx)
+    else:
+        known.add(idx)
+    st["known"] = sorted(known)
+    _seed_state_set(cid, st)
+    if q is not None:
+        await q.message.edit_text(_seed_render_text(st), reply_markup=_seed_render_kb(st))
+
+
+async def seed_page(bot, cid, page, q=None):
+    st = _seed_state_get(cid)
+    if not st:
+        return
+    st["page"] = max(0, int(page))
+    _seed_state_set(cid, st)
+    if q is not None:
+        await q.message.edit_text(_seed_render_text(st), reply_markup=_seed_render_kb(st))
+
+
+async def seed_add_selected(bot, cid, q=None):
+    st = _seed_state_get(cid)
+    if not st:
+        await bot.send_message(chat_id=cid, text="Подборка устарела. Открой словарь заново.")
+        return
+    known = set(st.get("known") or [])
+    existing = _seed_existing_keys(cid)
+    added = []
+    for idx, item in enumerate(st.get("items") or []):
+        if idx in known:
+            continue
+        key = _dict_item_key(item["lang"], item["kind"], item["word"])
+        if key in existing:
+            continue
+        saved = {k: item[k] for k in ("lang", "word", "ru", "kind") if item.get(k)}
+        store.add_to_list(config.DICT_KEY, cid, saved)
+        existing.add(key)
+        added.append(saved)
+    kind = st.get("kind", "word")
+    lang = st.get("lang", "en")
+    level = st.get("level", "B1")
+    _seed_state_clear(cid)
+    noun = "фраз" if kind == "phrase" else "слов"
+    text = f"В словарь добавлено {len(added)} новых {noun}."
+    if q is not None:
+        try:
+            await q.message.edit_text(text)
+        except Exception:
+            await bot.send_message(chat_id=cid, text=text)
+    else:
+        await bot.send_message(chat_id=cid, text=text)
+    if kind == "word":
+        await send_seed_phrase_offer(bot, cid, lang, level)
+    else:
+        await send_dict_lang(bot, cid, lang)
+
+
+async def send_seed_phrase_offer(bot, cid, lang=None, level=None):
+    code, _language, cur_level = _seed_language(cid, lang)
+    level = level or cur_level
+    if not _seed_candidates(cid, code, level, "phrase"):
+        await send_dict_lang(bot, cid, code)
+        return
+    text = "Хотите также добавить самые полезные разговорные фразы вашего уровня?"
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Добавить фразы", callback_data=f"a_dictseed_phrases_{code}")],
+        [InlineKeyboardButton("Позже", callback_data="a_dictseed_later")],
+    ])
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+async def seed_later(bot, cid):
+    _seed_state_clear(cid)
+    await send_dict(bot, cid)
+
 def _dict_kind(w):
     if isinstance(w, dict) and w.get("kind"):
         return w["kind"]

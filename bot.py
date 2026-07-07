@@ -197,6 +197,18 @@ async def answer_callback(update, context):
             elif act == "dictconfirm_fix":
                 await _ack(q)
                 await learning.fix_pending_dict_add(bot, cid)
+            elif act.startswith("dictseed_start_"):
+                await learning.seed_start(bot, cid, act.split("_")[-1], q=q)
+            elif act.startswith("dictseed_phrases_"):
+                await learning.seed_start(bot, cid, act.split("_")[-1], kind="phrase", q=q)
+            elif act.startswith("dictseed_toggle_"):
+                await learning.seed_toggle(bot, cid, int(act.split("_")[-1]), q=q)
+            elif act.startswith("dictseed_page_"):
+                await learning.seed_page(bot, cid, int(act.split("_")[-1]), q=q)
+            elif act == "dictseed_add":
+                await learning.seed_add_selected(bot, cid, q=q)
+            elif act == "dictseed_later":
+                await learning.seed_later(bot, cid)
             elif act == "dictlang_nl":
                 await learning.send_dict_lang(bot, cid, "nl")
             elif act == "dictlang_en":
@@ -313,8 +325,11 @@ async def answer_callback(update, context):
         parts = data.split("_")
         code, level = parts[1], parts[2]
         language = "нидерландский" if code == "nl" else "английский"
+        old_level = store.get_level(cid, language)
         store.set_level(cid, language, level)
         await learning.send_levels(bot, cid, q)
+        if old_level != level:
+            await learning.offer_seed_for_level_change(bot, cid, language, level)
         return
     # Тренажёр слов
     if data.startswith("train_"):

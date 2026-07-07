@@ -189,13 +189,8 @@ async def _ask_priorities(bot, cid, q=None):
 
 
 async def _finish(bot, cid):
-    import menu
+    import learning
     _ob.pop(str(cid), None)
     _save_step(cid, None)
     store.pending_input.pop(str(cid), None)
-    await bot.send_message(
-        chat_id=cid,
-        text=menu.WELCOME,
-        entities=menu.WELCOME_ENTITIES,
-        reply_markup=menu.main_kb(cid),
-    )
+    await learning.send_seed_intro(bot, cid)
