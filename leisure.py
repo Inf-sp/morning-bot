@@ -5,6 +5,7 @@ import re
 import random
 import time
 import config
+import api_usage
 
 _log = logging.getLogger(__name__)
 import store
@@ -1429,8 +1430,16 @@ def _ticketmaster_get(url, params, timeout=15):
     for i, delay in enumerate(delays):
         if delay:
             time.sleep(delay)
-        r = requests.get(url, params=params, timeout=timeout)
+        try:
+            r = requests.get(url, params=params, timeout=timeout)
+        except Exception as e:
+            api_usage.record_request("ticketmaster", ok=False, error=type(e).__name__)
+            raise
         status = getattr(r, "status_code", None)
+        api_usage.record_request("ticketmaster", ok=200 <= int(status or 0) < 300,
+                                 status_code=status,
+                                 error="" if 200 <= int(status or 0) < 300 else f"HTTP {status}",
+                                 headers=r.headers)
         if status == 429 or (isinstance(status, int) and status >= 500):
             if i == len(delays) - 1:
                 r.raise_for_status()

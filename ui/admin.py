@@ -196,42 +196,149 @@ def weather_usage_block(usage):
     return b.build_stripped().text
 
 
-def api_check(results, weather_usage=None, weather_history=None):
+def _hm(ts):
+    if not ts:
+        return "—"
+    try:
+        from datetime import datetime
+        import config
+        return datetime.fromtimestamp(int(ts), config.TZ).strftime("%H:%M")
+    except Exception:
+        return "—"
+
+
+def _dot(status):
+    return {"ok": OK, "warn": WARN, "bad": BAD, "off": OFF}.get(status, OFF)
+
+
+def _unit_word(unit):
+    return {
+        "requests": "запросов",
+        "credits": "кредитов",
+        "tokens": "токенов",
+        "messages": "отправок",
+    }.get(unit, unit)
+
+
+def _period_word(period):
+    return {
+        "minute": "мин",
+        "hour": "час",
+        "day": "сегодня",
+        "month": "месяц",
+    }.get(period, period)
+
+
+def _quota_line(row):
+    unit = row.get("unit")
+    period = row.get("period")
+    used = int(row.get("used") or 0)
+    limit = row.get("limit")
+    def fmt(n):
+        return f"{int(n):,}".replace(",", " ")
+    if limit:
+        limit = int(limit)
+        if period == "day":
+            return f"{fmt(used)} / {fmt(limit)} сегодня · осталось {fmt(max(0, limit - used))}"
+        if period == "minute":
+            return f"{fmt(used)} / {fmt(limit)} за мин"
+        if unit == "credits" and period == "month":
+            return f"{fmt(used)} / {fmt(limit)} кредитов в этом месяце"
+        return f"{fmt(used)} / {fmt(limit)} за {_period_word(period)}"
+    return f"{fmt(used)} {_unit_word(unit)} {_period_word(period)}"
+
+
+def _main_quota_services(services):
+    return [s for s in services if s.get("service") in {"openweather", "gemini", "pexels", "tavily"}]
+
+
+def _local_services(services):
+    return [s for s in services if s.get("service") not in {"openweather", "gemini", "pexels", "tavily"}]
+
+
+def api_check(snapshot):
     b = MessageBuilder()
     b.bold("🔍 Проверка API")
     b.newline()
-    if weather_usage:
+    b.line(f"Обновлено: {_hm((snapshot or {}).get('updated_at'))}")
+    services = (snapshot or {}).get("services") or []
+    if not services:
         b.spacer()
-        b.line(weather_usage_block(weather_usage))
-    for result in results:
-        label, ok, detail = result[:3]
-        dot = result[3] if len(result) > 3 else BAD
+        b.line("Пока нет сохранённых реальных API-вызовов.")
+        return b.build_stripped()
+
+    main = _main_quota_services(services)
+    local = _local_services(services)
+    if main:
         b.spacer()
-        if ok:
-            b.line(f"{OK} {label}")
-        elif detail:
-            b.line(f"{dot} {label}: {detail}")
-        else:
-            b.line(f"{dot} {label}")
+        b.bold("📊 Использование")
+        b.newline()
+        for svc in main:
+            b.spacer()
+            b.bold(f"{svc.get('icon')} {svc.get('label')}")
+            b.newline()
+            if svc.get("service") == "gemini":
+                b.line(f"{_num(svc.get('day_requests', 0))} запроса сегодня · лимит 5/мин")
+            elif svc.get("service") == "tavily":
+                quota = next((q for q in svc.get("quotas", []) if q.get("unit") == "credits"), None)
+                b.line(_quota_line(quota) if quota else f"{_num(svc.get('month_credits', 0))} кредитов за месяц")
+            elif svc.get("service") == "pexels":
+                quotas = svc.get("quotas") or []
+                if len(quotas) >= 2:
+                    b.line(f"{_quota_line(quotas[0])} · {_quota_line(quotas[1])}")
+                elif quotas:
+                    b.line(_quota_line(quotas[0]))
+            else:
+                quota = (svc.get("quotas") or [{}])[0]
+                b.line(_quota_line(quota))
+            b.line(f"{_dot(svc.get('status'))} {svc.get('status_text')}")
+
+    if local:
+        b.spacer()
+        b.bold("⚙️ Без общей квоты")
+        b.newline()
+        for svc in local:
+            label = svc.get("label")
+            status = _dot(svc.get("status"))
+            if svc.get("day_tokens"):
+                b.line(f"{status} {label} · {_num(svc.get('day_tokens'))} токенов сегодня")
+            elif svc.get("day_messages"):
+                b.line(f"{status} {label} · {_num(svc.get('day_messages'))} отправок сегодня")
+            elif svc.get("day_requests"):
+                b.line(f"{status} {label} · {_num(svc.get('day_requests'))} запросов сегодня")
+            else:
+                b.line(f"{status} {label}")
     return b.build_stripped()
 
 
-def weather_usage_history(rows):
-    import config
+def api_diagnostics(snapshot):
     b = MessageBuilder()
-    b.bold("☁️ OpenWeather · 7 дней")
+    b.bold("📋 Диагностика API")
     b.newline()
-    b.spacer()
-    for row in rows:
-        total = int(row.get("requests_total") or 0)
-        success = int(row.get("requests_success") or 0)
-        failed = int(row.get("requests_failed") or 0)
-        retry = int(row.get("requests_retry") or 0)
-        cache_hits = int(row.get("cache_hits") or 0)
-        date = row.get("date") or "—"
-        b.line(f"{date}: {total}/{config.WEATHER_FREE_DAILY_LIMIT} · ok {success} · err {failed} · retry {retry} · cache {cache_hits}")
+    for svc in (snapshot or {}).get("services") or []:
+        b.spacer()
+        b.bold(f"{_dot(svc.get('status'))} {svc.get('label')}")
+        b.newline()
+        b.line(f"Успешные запросы сегодня: {_num(svc.get('day_requests', 0))}")
+        if svc.get("cache_hits"):
+            b.line(f"Кэш: {_num(svc.get('cache_hits'))}")
+        if svc.get("avg_latency_ms"):
+            b.line(f"Средний ответ: {svc.get('avg_latency_ms')} мс")
+        b.line(f"Последний API-вызов: {_hm(svc.get('last_request_at'))}")
+        if svc.get("last_error_reason"):
+            b.line(f"Последняя ошибка: {svc.get('last_error_reason')}")
+        if svc.get("rate_limit_errors"):
+            b.line(f"Rate-limit ошибок: {svc.get('rate_limit_errors')}")
+        errors = svc.get("errors") or []
+        if errors:
+            b.line("Последние сбои:")
+            for err in errors[-3:]:
+                code = err.get("status_code") or "n/a"
+                b.line(f"{_hm(err.get('ts'))} · HTTP {code} · {err.get('reason') or 'error'}")
+    if not ((snapshot or {}).get("services") or []):
+        b.spacer()
+        b.line("Пока нет сохранённых реальных API-вызовов.")
     return b.build_stripped()
-
 
 def llm_history(rows):
     """rows: [(when, provider, module, ok)]."""

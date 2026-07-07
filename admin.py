@@ -12,6 +12,7 @@ from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import access
+import api_usage
 import config
 import store
 import tracking
@@ -554,23 +555,22 @@ async def clear_cache(bot, cid):
 
 
 async def check_all(bot, cid):
-    """Перепроверяет доступные health-check'и: БД, Weather и LLM API."""
-    rows = await _api_probe_results()
-    import weather
-    usage = weather.get_weather_usage()
-    history = weather.get_weather_usage_last_days(7)
+    """Показывает сохранённую статистику API без новых внешних probe-запросов."""
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🕘 OpenWeather 7 дней", callback_data="set_admin_weather_usage")],
-        _back("set_admin_issues"),
+        [InlineKeyboardButton("🔄 Обновить", callback_data="set_admin_check_all"),
+         InlineKeyboardButton("📋 Диагностика", callback_data="set_admin_api_diagnostics")],
+        _back("set_admin"),
     ])
-    msg = ui.api_check(rows, weather_usage=usage, weather_history=history)
+    msg = ui.api_check(api_usage.snapshot())
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-async def send_weather_usage(bot, cid):
-    import weather
-    kb = InlineKeyboardMarkup([_back("set_admin_check_all")])
-    msg = ui.weather_usage_history(weather.get_weather_usage_last_days(7))
+async def send_api_diagnostics(bot, cid):
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Обновить", callback_data="set_admin_api_diagnostics")],
+        _back("set_admin_check_all"),
+    ])
+    msg = ui.api_diagnostics(api_usage.snapshot())
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 

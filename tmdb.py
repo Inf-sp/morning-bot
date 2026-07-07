@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 
 import config
+import api_usage
 import util
 
 _BASE = "https://api.themoviedb.org/3"
@@ -67,8 +68,12 @@ def _get(path, params, timeout=12, language=None):
     p.update(params or {})
     try:
         r = requests.get(f"{_BASE}{path}", params=p, timeout=timeout)
+        api_usage.record_request("tmdb", ok=200 <= r.status_code < 300, status_code=r.status_code,
+                                 error="" if 200 <= r.status_code < 300 else f"HTTP {r.status_code}",
+                                 headers=r.headers)
         return r.json()
-    except Exception:
+    except Exception as e:
+        api_usage.record_request("tmdb", ok=False, error=type(e).__name__)
         return None
 
 

@@ -1,4 +1,5 @@
 import requests
+import api_usage
 import config
 
 API_URL = "https://api.zeroentropy.dev/v1/models/rerank"
@@ -13,12 +14,18 @@ def rerank(query, documents, top_n=5, model="zerank-2"):
     # лимит 5 000 000 байт: sum(150 + len(query) + len(doc)). Личных данных мало,
     # но на всякий случай режем длинные и ограничиваем количество.
     docs = [d[:600] for d in docs][:800]
-    r = requests.post(API_URL,
-        headers={"Authorization": f"Bearer {config.ZEROENTROPY_API_KEY}", "Content-Type": "application/json"},
-        json={"model": model, "query": query[:2000], "documents": docs,
-              "top_n": min(top_n, len(docs)), "latency": "fast"},
-        timeout=40)
-    r.raise_for_status()
+    try:
+        r = requests.post(API_URL,
+            headers={"Authorization": f"Bearer {config.ZEROENTROPY_API_KEY}", "Content-Type": "application/json"},
+            json={"model": model, "query": query[:2000], "documents": docs,
+                  "top_n": min(top_n, len(docs)), "latency": "fast"},
+            timeout=40)
+        r.raise_for_status()
+        api_usage.record_request("zeroentropy", ok=True, units={"tokens": sum(len(d) for d in docs) // 4})
+    except Exception as e:
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        api_usage.record_request("zeroentropy", ok=False, status_code=status, error=type(e).__name__)
+        raise
     results = r.json().get("results", [])
     out = []
     for it in results:

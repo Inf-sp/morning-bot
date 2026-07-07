@@ -26,6 +26,43 @@ TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 
+API_USAGE_KEY = "api_usage.json"
+API_QUOTAS = {
+    "openweather": [
+        {"mode": "fixed", "unit": "requests", "period": "day", "limit": WEATHER_FREE_DAILY_LIMIT},
+    ],
+    "pexels": [
+        {"mode": "fixed", "unit": "requests", "period": "hour", "limit": 200},
+        {"mode": "fixed", "unit": "requests", "period": "month", "limit": 20_000},
+    ],
+    "gemini": [
+        {"mode": "fixed", "unit": "requests", "period": "minute", "limit": 5},
+        {"mode": "fixed", "unit": "tokens", "period": "minute", "limit": 250_000},
+    ],
+    "tavily": [
+        {"mode": "fixed", "unit": "credits", "period": "month", "limit": 1000},
+    ],
+    "telegram": [
+        {"mode": "local", "unit": "messages", "period": "day"},
+    ],
+    "cloudflare": [
+        {"mode": "local", "unit": "requests", "period": "day"},
+    ],
+    "groq": [
+        {"mode": "local", "unit": "requests", "period": "day"},
+    ],
+    "tmdb": [
+        {"mode": "local", "unit": "requests", "period": "day"},
+    ],
+    "ticketmaster": [
+        {"mode": "headers", "unit": "requests", "period": "day", "enabled": False},
+        {"mode": "local", "unit": "requests", "period": "day"},
+    ],
+    "zeroentropy": [
+        {"mode": "local", "unit": "tokens", "period": "day"},
+    ],
+}
+
 TZ = ZoneInfo("Europe/Amsterdam")
 
 # --- Storage keys ---

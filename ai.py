@@ -4,14 +4,17 @@ import logging
 import re
 import json
 import time
+import threading
 import requests
 from dataclasses import dataclass
 from typing import Literal
+import api_usage
 import config
 import store
 import secure
 
 _log = logging.getLogger(__name__)
+_GEMINI_RATE_LOCK = threading.Lock()
 
 # ---------- Cost logger ----------
 _COST_MAX = 500  # максимум записей в rolling-буфере
@@ -39,12 +42,14 @@ class FallbackPolicy:
 
 class LLMProviderError(Exception):
     def __init__(self, provider: str, message: str, status_code: int | None = None,
-                 temporary: bool = False, error_type: str = "provider_error"):
+                 temporary: bool = False, error_type: str = "provider_error",
+                 retry_after: int | None = None):
         super().__init__(message)
         self.provider = provider
         self.status_code = status_code
         self.temporary = temporary
         self.error_type = error_type
+        self.retry_after = retry_after
 
 
 def _is_temporary_status(status_code):
@@ -132,19 +137,35 @@ def get_cost_log() -> list:
         return []
 
 def _post(url, headers, payload, timeout, name):
+    service = {"cf": "cloudflare"}.get(name, name)
+    t0 = time.time()
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=timeout)
     except requests.exceptions.Timeout as e:
+        api_usage.record_request(service, ok=False, error="timeout")
         raise LLMProviderError(name, f"{name} timeout", temporary=True, error_type=type(e).__name__) from e
     except requests.exceptions.ConnectionError as e:
+        api_usage.record_request(service, ok=False, error="network_error")
         raise LLMProviderError(name, f"{name} network error", temporary=True, error_type=type(e).__name__) from e
     if r.status_code != 200:
         # тело ошибки в логи (видно причину), но без секретов
         body = secure.redact((r.text or "")[:300])
         temporary = _is_temporary_status(r.status_code)
+        api_usage.record_request(service, ok=False, status_code=r.status_code,
+                                 error=f"HTTP {r.status_code}",
+                                 latency_ms=int((time.time() - t0) * 1000),
+                                 headers=r.headers)
+        retry_after = None
+        try:
+            retry_after = int(r.headers.get("Retry-After") or 0) or None
+        except Exception:
+            retry_after = None
         raise LLMProviderError(name, f"{name} {r.status_code}: {body}",
                                status_code=r.status_code, temporary=temporary,
-                               error_type="http_error")
+                               error_type="http_error", retry_after=retry_after)
+    if service != "gemini":
+        api_usage.record_request(service, ok=True, latency_ms=int((time.time() - t0) * 1000),
+                                 headers=r.headers)
     return r
 
 def _as_text(x):
@@ -159,11 +180,43 @@ def _as_text(x):
 
 # ---------- одиночная генерация ----------
 def _gen_gemini(prompt, max_tokens, temperature):
-    r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={config.GEMINI_API_KEY}",
-        {}, {"contents": [{"parts": [{"text": prompt}]}],
-             "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature, "thinkingConfig": {"thinkingBudget": 0}}},
-        30, "gemini")
-    return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+    payload = {"contents": [{"parts": [{"text": prompt}]}],
+               "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature,
+                                    "thinkingConfig": {"thinkingBudget": 0}}}
+    last_err = None
+    for attempt in range(2):
+        try:
+            with _GEMINI_RATE_LOCK:
+                wait = api_usage.seconds_until_gemini_slot(limit=4, window=60)
+                if wait > 0:
+                    time.sleep(wait)
+                t0 = time.time()
+                r = _post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={config.GEMINI_API_KEY}",
+                    {}, payload, 30, "gemini")
+            data = r.json()
+            usage = data.get("usageMetadata") or data.get("usage_metadata") or {}
+            input_tokens = int(usage.get("promptTokenCount") or usage.get("prompt_token_count") or 0)
+            output_tokens = int(usage.get("candidatesTokenCount") or usage.get("candidates_token_count") or 0)
+            api_usage.record_request(
+                "gemini",
+                ok=True,
+                units={
+                    "tokens": input_tokens + output_tokens,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                },
+                latency_ms=int((time.time() - t0) * 1000),
+                headers=r.headers,
+            )
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+        except LLMProviderError as e:
+            last_err = e
+            if e.status_code == 429 and attempt == 0:
+                time.sleep(min(max(int(e.retry_after or 5), 1), 60))
+                continue
+            raise
+    raise last_err
 
 def _looks_bad_fallback_text(text: str) -> bool:
     s = (text or "").strip()

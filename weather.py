@@ -8,6 +8,7 @@ import requests
 
 _log = logging.getLogger(__name__)
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+import api_usage
 import config
 import store
 import ai
@@ -262,6 +263,7 @@ def _mark_weather_success():
         data["requests_success"] = int(data.get("requests_success") or 0) + 1
         return data, True
     _usage_mutate(_mut)
+    api_usage.record_request("openweather", ok=True)
 
 
 def _mark_weather_failed(reason):
@@ -273,6 +275,7 @@ def _mark_weather_failed(reason):
         data["last_error_reason"] = str(reason or "request failed")[:80]
         return data, True
     _usage_mutate(_mut, now)
+    api_usage.record_request("openweather", ok=False, error=reason)
 
 
 def _mark_weather_cache_hit():
@@ -280,6 +283,7 @@ def _mark_weather_cache_hit():
         data["cache_hits"] = int(data.get("cache_hits") or 0) + 1
         return data, True
     _usage_mutate(_mut)
+    api_usage.record_cache_hit("openweather")
 
 
 def weather_usage_status(usage=None):

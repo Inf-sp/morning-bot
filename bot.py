@@ -26,6 +26,7 @@ import secure
 import onboard
 import firstvisit
 import tracking
+import api_usage
 import util
 from util import ack_loading as _ack
 
@@ -862,6 +863,7 @@ async def job_evening_weather(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def post_init(app):
+    _wrap_telegram_usage(app.bot)
     try:
         if learning.migrate_dict_caps():
             logging.info("Dict caps migration: applied")
@@ -904,6 +906,27 @@ async def post_init(app):
         BotCommand("setup", "настройки"),
         BotCommand("admin", "администратор"),
     ])
+
+
+def _wrap_telegram_usage(bot):
+    methods = ("send_message", "send_photo", "send_document", "send_poll", "send_location")
+    for name in methods:
+        original = getattr(bot, name, None)
+        if not original or getattr(original, "_api_usage_wrapped", False):
+            continue
+
+        async def wrapped(*args, __original=original, **kwargs):
+            try:
+                result = await __original(*args, **kwargs)
+                api_usage.record_request("telegram", ok=True, units={"messages": 1, "requests": 0})
+                return result
+            except Exception as e:
+                api_usage.record_request("telegram", ok=False, units={"messages": 1, "requests": 0},
+                                         error=type(e).__name__)
+                raise
+
+        wrapped._api_usage_wrapped = True
+        setattr(bot, name, wrapped)
 
 
 def main():

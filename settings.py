@@ -700,9 +700,9 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_admin_check_all":
         import admin as _adm
         await _admin_guard(bot, cid, _adm.check_all)
-    elif data == "set_admin_weather_usage":
+    elif data == "set_admin_api_diagnostics":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_weather_usage)
+        await _admin_guard(bot, cid, _adm.send_api_diagnostics)
     elif data == "set_admin_cache_clear":
         import admin as _adm
         await _admin_guard(bot, cid, _adm.clear_cache)

@@ -7,6 +7,7 @@ import logging
 
 import requests
 
+import api_usage
 import config
 
 _log = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ def search_photos(query: str, orientation: str = "square", size: str = "large",
     if not config.PEXELS_API_KEY or not (query or "").strip():
         raise PexelsApiError("missing_api_key_or_query")
     try:
+        t0 = __import__("time").time()
         r = requests.get(
             _SEARCH_URL,
             headers={"Authorization": config.PEXELS_API_KEY},
@@ -67,15 +69,29 @@ def search_photos(query: str, orientation: str = "square", size: str = "large",
         )
         if r.status_code != 200:
             _log.warning("pexels search failed: HTTP %s", r.status_code)
+            api_usage.record_request("pexels", ok=False, status_code=r.status_code,
+                                     error=f"HTTP {r.status_code}",
+                                     latency_ms=int((__import__("time").time() - t0) * 1000),
+                                     headers=r.headers)
             raise PexelsApiError(f"http_{r.status_code}")
         data = r.json()
         photos = data.get("photos") or []
         if not isinstance(photos, list):
+            api_usage.record_request("pexels", ok=False, status_code=r.status_code,
+                                     error="invalid_response",
+                                     latency_ms=int((__import__("time").time() - t0) * 1000),
+                                     headers=r.headers)
             raise PexelsInvalidResponseError("photos_not_list")
+        api_usage.record_request("pexels", ok=True,
+                                 latency_ms=int((__import__("time").time() - t0) * 1000),
+                                 headers=r.headers)
         return photos
     except requests.Timeout as e:
+        api_usage.record_request("pexels", ok=False, error="timeout")
         raise PexelsTimeoutError("timeout") from e
     except requests.RequestException as e:
+        api_usage.record_request("pexels", ok=False, error="network_error")
         raise PexelsNetworkError("network_error") from e
     except ValueError as e:
+        api_usage.record_request("pexels", ok=False, error="invalid_json")
         raise PexelsInvalidResponseError("invalid_json") from e

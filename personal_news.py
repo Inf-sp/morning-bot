@@ -9,6 +9,7 @@ from urllib.parse import urlparse, urlunparse
 import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+import api_usage
 import ai
 import config
 import store
@@ -361,9 +362,16 @@ def _tavily_search(query, max_results=5, domains=None):
     }
     if domains:
         payload["include_domains"] = list(domains)
-    r = requests.post("https://api.tavily.com/search", json=payload, timeout=18)
-    r.raise_for_status()
-    return r.json().get("results", [])
+    try:
+        r = requests.post("https://api.tavily.com/search", json=payload, timeout=18)
+        r.raise_for_status()
+        api_usage.record_request("tavily", ok=True, units={"credits": 1}, headers=r.headers)
+        return r.json().get("results", [])
+    except Exception as e:
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        api_usage.record_request("tavily", ok=False, units={"credits": 1},
+                                 status_code=status, error=type(e).__name__)
+        raise
 
 
 def _search_all(cid):
