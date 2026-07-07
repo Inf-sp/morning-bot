@@ -692,6 +692,9 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_admin_check_all":
         import admin as _adm
         await _admin_guard(bot, cid, _adm.check_all)
+    elif data == "set_admin_weather_usage":
+        import admin as _adm
+        await _admin_guard(bot, cid, _adm.send_weather_usage)
     elif data == "set_admin_cache_clear":
         import admin as _adm
         await _admin_guard(bot, cid, _adm.clear_cache)
@@ -1282,4 +1285,3 @@ async def send_admin(bot, cid):
         return
     import admin as _admin
     await _admin.send_home(bot, cid)
-

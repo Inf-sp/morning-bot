@@ -3,6 +3,7 @@ import logging
 import random
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
+from copy import deepcopy
 import requests
 
 _log = logging.getLogger(__name__)
@@ -172,20 +173,192 @@ def _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts=No
 
 
 _ONECALL_BASE = "https://api.openweathermap.org/data/4.0/onecall"
+WEATHER_LIMIT_FALLBACK = "Погодный лимит на сегодня исчерпан. Попробую снова после полуночи."
+
+
+class WeatherDailyLimitExceeded(Exception):
+    pass
+
+
+def _usage_key(dt=None):
+    return f"weather_usage:{(dt or datetime.now(TZ)).strftime('%Y-%m-%d')}"
+
+
+def _usage_template(date_str=None):
+    return {
+        "date": date_str or datetime.now(TZ).strftime("%Y-%m-%d"),
+        "requests_total": 0,
+        "requests_success": 0,
+        "requests_failed": 0,
+        "requests_retry": 0,
+        "cache_hits": 0,
+        "last_request_at": None,
+        "last_error_at": None,
+        "last_error_reason": "",
+    }
+
+
+def _safe_error_reason(exc=None, response=None):
+    if response is not None:
+        return f"HTTP {getattr(response, 'status_code', '?')}"
+    text = str(exc or "")
+    low = text.lower()
+    if "timeout" in low:
+        return "timeout"
+    if text:
+        return text[:80]
+    return "request failed"
+
+
+def _usage_mutate(mutator, dt=None):
+    key = _usage_key(dt)
+    date_str = key.split(":", 1)[1]
+
+    def _mut(current):
+        data = _usage_template(date_str)
+        data.update(current or {})
+        return mutator(data)
+
+    return store.mutate_kv(key, _mut)
+
+
+def get_weather_usage(dt=None):
+    key = _usage_key(dt)
+    data = store._load(key)
+    out = _usage_template(key.split(":", 1)[1])
+    if isinstance(data, dict):
+        out.update(data)
+    return out
+
+
+def get_weather_usage_last_days(days=7):
+    today = datetime.now(TZ).date()
+    rows = []
+    for i in range(max(1, days)):
+        day = today - timedelta(days=i)
+        rows.append(get_weather_usage(datetime(day.year, day.month, day.day, tzinfo=TZ)))
+    return rows
+
+
+def _reserve_weather_request(is_retry=False):
+    now = datetime.now(TZ)
+
+    def _mut(data):
+        if int(data.get("requests_total") or 0) >= config.WEATHER_HARD_DAILY_LIMIT:
+            return data, False
+        data["requests_total"] = int(data.get("requests_total") or 0) + 1
+        if is_retry:
+            data["requests_retry"] = int(data.get("requests_retry") or 0) + 1
+        data["last_request_at"] = now.isoformat()
+        return data, True
+
+    ok = _usage_mutate(_mut, now)
+    if not ok:
+        raise WeatherDailyLimitExceeded(WEATHER_LIMIT_FALLBACK)
+
+
+def _mark_weather_success():
+    def _mut(data):
+        data["requests_success"] = int(data.get("requests_success") or 0) + 1
+        return data, True
+    _usage_mutate(_mut)
+
+
+def _mark_weather_failed(reason):
+    now = datetime.now(TZ)
+
+    def _mut(data):
+        data["requests_failed"] = int(data.get("requests_failed") or 0) + 1
+        data["last_error_at"] = now.isoformat()
+        data["last_error_reason"] = str(reason or "request failed")[:80]
+        return data, True
+    _usage_mutate(_mut, now)
+
+
+def _mark_weather_cache_hit():
+    def _mut(data):
+        data["cache_hits"] = int(data.get("cache_hits") or 0) + 1
+        return data, True
+    _usage_mutate(_mut)
+
+
+def weather_usage_status(usage=None):
+    usage = usage or get_weather_usage()
+    total = int(usage.get("requests_total") or 0)
+    if total >= config.WEATHER_HARD_DAILY_LIMIT:
+        return "blocked"
+    if total >= config.WEATHER_CRITICAL_LIMIT:
+        return "critical"
+    if total >= config.WEATHER_WARNING_LIMIT:
+        return "warning"
+    return "ok"
+
+
+def weather_usage_status_text(usage=None):
+    status = weather_usage_status(usage)
+    return {
+        "ok": "🟢 Лимит в норме",
+        "warning": "🟡 Использование растёт",
+        "critical": "🟠 Почти достигнут бесплатный лимит",
+        "blocked": "🔴 Новые запросы заблокированы до следующего дня",
+    }[status]
+
+
+def _http_get_counted(url, *, params=None, timeout=20, is_retry=False):
+    _reserve_weather_request(is_retry=is_retry)
+    try:
+        r = requests.get(url, params=params, timeout=timeout)
+    except Exception as e:
+        _mark_weather_failed(_safe_error_reason(e))
+        raise
+    try:
+        r.raise_for_status()
+        payload = r.json()
+    except Exception as e:
+        _mark_weather_failed(_safe_error_reason(e, r))
+        raise
+    _mark_weather_success()
+    return payload
+
+
+def _should_retry(exc):
+    if isinstance(exc, WeatherDailyLimitExceeded):
+        return False
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
+    if status in (401, 403, 404):
+        return False
+    if status == 429:
+        return True
+    if isinstance(exc, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+        return True
+    return status is not None and 500 <= int(status) < 600
+
+
+def _retry_allowed_by_limit():
+    usage = get_weather_usage()
+    return int(usage.get("requests_total") or 0) <= config.WEATHER_HARD_DAILY_LIMIT - 2
 
 
 def _onecall_get(path, lat, lon, timeout=20, extra_params=None):
     params = {
-        "lat": lat, "lon": lon,
         "appid": config.WEATHER_API_KEY,
         "units": "metric",
         "lang": "ru",
     }
+    if lat is not None:
+        params["lat"] = lat
+    if lon is not None:
+        params["lon"] = lon
     if extra_params:
         params.update(extra_params)
-    r = requests.get(f"{_ONECALL_BASE}/{path}", params=params, timeout=timeout)
-    r.raise_for_status()
-    return r.json()
+    url = f"{_ONECALL_BASE}/{path}"
+    try:
+        return _http_get_counted(url, params=params, timeout=timeout)
+    except Exception as e:
+        if _should_retry(e) and _retry_allowed_by_limit():
+            return _http_get_counted(url, params=params, timeout=timeout, is_retry=True)
+        raise
 
 
 def _fetch_alert_details(alert_ids, timeout=15):
@@ -196,18 +369,18 @@ def _fetch_alert_details(alert_ids, timeout=15):
     with ThreadPoolExecutor(max_workers=min(len(alert_ids), 4)) as pool:
         futures = {
             pool.submit(
-                requests.get,
-                f"{_ONECALL_BASE}/alert/{alert_id}",
-                params={"appid": config.WEATHER_API_KEY},
-                timeout=timeout,
+                _onecall_get,
+                f"alert/{alert_id}",
+                None,
+                None,
+                timeout,
+                {},
             ): alert_id
             for alert_id in alert_ids
         }
         for fut in futures:
             try:
-                r = fut.result()
-                r.raise_for_status()
-                details.append(r.json())
+                details.append(fut.result())
             except Exception as e:
                 _log.warning("weather: alert detail fetch failed: %s", e)
     return details
@@ -219,6 +392,7 @@ def fetch_weather(lat, lon, days=2):
     key = (round(lat, 2), round(lon, 2), days)
     hit = _WX_CACHE.get(key)
     if hit and (time.time() - hit[0]) < _WX_TTL:
+        _mark_weather_cache_hit()
         return hit[1]
     if not config.WEATHER_API_KEY:
         raise Exception("no weather api key")
@@ -239,7 +413,7 @@ def fetch_weather(lat, lon, days=2):
     alerts = _fetch_alert_details(alert_ids)
 
     data = _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts)
-    _WX_CACHE[key] = (time.time(), data)
+    _WX_CACHE[key] = (time.time(), deepcopy(data))
     return data
 
 def fetch_current_temp(lat, lon):
@@ -522,7 +696,11 @@ async def send_weather(bot, cid, mode="today"):
     s = store.get_settings(cid)
     country = s.get("country", "")
     place = f"{s['city']}, {country}" if country else s["city"]
-    data = fetch_weather(s["lat"], s["lon"], 9)
+    try:
+        data = fetch_weather(s["lat"], s["lon"], 9)
+    except WeatherDailyLimitExceeded:
+        await bot.send_message(chat_id=cid, text=WEATHER_LIMIT_FALLBACK)
+        return
     d = data["daily"]
     now = datetime.now(TZ)
 

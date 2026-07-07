@@ -3,6 +3,7 @@ import json
 import copy
 import logging
 import uuid as _uuid
+import threading
 from pathlib import Path
 import config
 
@@ -13,6 +14,8 @@ _log = logging.getLogger(__name__)
 # --- Postgres (с откатом в память) ---
 _conn = None
 _mem = {}
+_mem_locks = {}
+_conn_lock = threading.RLock()
 
 def _db():
     global _conn
@@ -66,6 +69,42 @@ def _save(key, data):
     except Exception as e:
         _log.warning("store: _save(%s) DB error, falling back to memory: %s", key, e)
         _mem[key] = data
+
+def mutate_kv(key, mutator_fn):
+    """Atomically load/mutate/save one JSON KV record.
+
+    With Postgres, uses transaction-scoped advisory lock per key, so concurrent
+    worker processes cannot race on limit counters. In memory fallback is only
+    process-local and intended for local/dev operation.
+    """
+    conn = _db()
+    if conn is None:
+        lock = _mem_locks.setdefault(key, threading.Lock())
+        with lock:
+            current = copy.deepcopy(_mem.get(key, {}))
+            new_value, result = mutator_fn(current if isinstance(current, dict) else {})
+            _mem[key] = new_value
+            return result
+    with _conn_lock:
+        old_autocommit = conn.autocommit
+        conn.autocommit = False
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (key,))
+                cur.execute("SELECT value FROM kv WHERE key = %s FOR UPDATE", (key,))
+                row = cur.fetchone()
+                current = row[0] if row else {}
+                new_value, result = mutator_fn(current if isinstance(current, dict) else {})
+                cur.execute("INSERT INTO kv (key, value) VALUES (%s, %s) "
+                            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                            (key, json.dumps(new_value, ensure_ascii=False)))
+            conn.commit()
+            return result
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.autocommit = old_autocommit
 
 # --- helpers ---
 def get_settings(chat_id):

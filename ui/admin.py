@@ -32,6 +32,7 @@ def only():
 # ================= ДОМ =================
 
 def home(system_dot, system_text, total_users, active_7d, llm_calls_today, llm_tokens_today,
+         weather_usage,
          next_broadcast_title, next_broadcast_when,
          issues_count, top_issue):
     b = MessageBuilder()
@@ -42,6 +43,12 @@ def home(system_dot, system_text, total_users, active_7d, llm_calls_today, llm_t
     b.line(f"{total_users} пользователей · {active_7d} активных за 7 дней")
     b.spacer()
     b.line(f"🤖 {_num(llm_calls_today)} LLM-запросов сегодня · ~{_num(llm_tokens_today)} токенов")
+    if weather_usage:
+        total = int(weather_usage.get("requests_total") or 0)
+        left = max(0, __import__("config").WEATHER_FREE_DAILY_LIMIT - total)
+        b.line(f"☁️ OpenWeather {total}/1 000 · осталось {left}")
+        if total >= __import__("config").WEATHER_HARD_DAILY_LIMIT:
+            b.line("🔴 Новые запросы заблокированы до следующего дня")
     if next_broadcast_title:
         b.line(f"🔔 {next_broadcast_title} — {next_broadcast_when}")
     b.spacer()
@@ -136,18 +143,85 @@ def llm_check(results):
     return b.build_stripped()
 
 
-def api_check(results):
+def _weather_ts_hhmm(value):
+    if not value:
+        return "—"
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(value).strftime("%H:%M")
+    except Exception:
+        return "—"
+
+
+def _weather_usage_status(total):
+    import config
+    if total >= config.WEATHER_HARD_DAILY_LIMIT:
+        return "🔴 Новые запросы заблокированы до следующего дня"
+    if total >= config.WEATHER_CRITICAL_LIMIT:
+        return "🟠 Почти достигнут бесплатный лимит"
+    if total >= config.WEATHER_WARNING_LIMIT:
+        return "🟡 Использование растёт"
+    return "🟢 Лимит в норме"
+
+
+def weather_usage_block(usage):
+    import config
+    total = int(usage.get("requests_total") or 0)
+    success = int(usage.get("requests_success") or 0)
+    failed = int(usage.get("requests_failed") or 0)
+    retry = int(usage.get("requests_retry") or 0)
+    cache_hits = int(usage.get("cache_hits") or 0)
+    left = max(0, config.WEATHER_FREE_DAILY_LIMIT - total)
+    b = MessageBuilder()
+    b.bold("☁️ OpenWeather · сегодня")
+    b.newline()
+    b.spacer()
+    b.line(f"Запросы: {total} / {config.WEATHER_FREE_DAILY_LIMIT:,}".replace(",", " "))
+    b.line(f"Успешно: {success} · Ошибки: {failed} · Повторы: {retry}")
+    b.line(f"Из кэша: {cache_hits}")
+    b.line(f"Осталось бесплатно: {left}")
+    b.line(f"Последний запрос: {_weather_ts_hhmm(usage.get('last_request_at'))}")
+    if usage.get("last_error_reason"):
+        b.line(f"Последняя ошибка: {usage.get('last_error_reason')}")
+    b.spacer()
+    b.line(_weather_usage_status(total))
+    return b.build_stripped().text
+
+
+def api_check(results, weather_usage=None, weather_history=None):
     b = MessageBuilder()
     b.bold("🔍 Проверка API")
     b.newline()
-    for label, ok, detail in results:
+    if weather_usage:
+        b.spacer()
+        b.line(weather_usage_block(weather_usage))
+    for result in results:
+        label, ok, detail = result[:3]
+        dot = result[3] if len(result) > 3 else BAD
         b.spacer()
         if ok:
             b.line(f"{OK} {label}")
         elif detail:
-            b.line(f"{BAD} {label}: {detail}")
+            b.line(f"{dot} {label}: {detail}")
         else:
-            b.line(f"{BAD} {label}")
+            b.line(f"{dot} {label}")
+    return b.build_stripped()
+
+
+def weather_usage_history(rows):
+    import config
+    b = MessageBuilder()
+    b.bold("☁️ OpenWeather · 7 дней")
+    b.newline()
+    b.spacer()
+    for row in rows:
+        total = int(row.get("requests_total") or 0)
+        success = int(row.get("requests_success") or 0)
+        failed = int(row.get("requests_failed") or 0)
+        retry = int(row.get("requests_retry") or 0)
+        cache_hits = int(row.get("cache_hits") or 0)
+        date = row.get("date") or "—"
+        b.line(f"{date}: {total}/{config.WEATHER_FREE_DAILY_LIMIT} · ok {success} · err {failed} · retry {retry} · cache {cache_hits}")
     return b.build_stripped()
 
 

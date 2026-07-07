@@ -68,6 +68,8 @@ def _hhmm(ts) -> str:
 async def send_home(bot, cid):
     stats = _user_stats()
     usage = get_llm_usage_summary(1)
+    import weather
+    weather_usage = weather.get_weather_usage()
     issues = _collect_issues()
     errors = tracking.errors_today()
     if errors == 0:
@@ -91,6 +93,7 @@ async def send_home(bot, cid):
         system_dot=dot, system_text=txt,
         total_users=stats["total"], active_7d=stats["active_7d"],
         llm_calls_today=usage["calls"], llm_tokens_today=usage["tokens"],
+        weather_usage=weather_usage,
         next_broadcast_title=next_title, next_broadcast_when=next_when,
         issues_count=len(issues), top_issue=top_issue,
     )
@@ -246,40 +249,37 @@ async def _api_probe_results():
 
 
 _WEATHER_ONECALL_ENDPOINT = "https://api.openweathermap.org/data/4.0/onecall/current"
+_TAVILY_SEARCH_ENDPOINT = "https://api.tavily.com/search"
 
 
 def _weather_probe():
     """Health-check One Call API 4.0. Не логирует ключ и query-параметры."""
-    import requests
-
     if not config.WEATHER_API_KEY:
         return ("Weather", False, "нет ключа")
     try:
-        r = requests.get(
-            _WEATHER_ONECALL_ENDPOINT,
-            params={"lat": 52.37, "lon": 4.89, "appid": config.WEATHER_API_KEY, "units": "metric"},
-            timeout=12,
-        )
+        import weather
+        weather._onecall_get("current", 52.37, 4.89, timeout=12)
     except Exception as e:
-        reason = _probe_exception(e)
+        response = getattr(e, "response", None)
+        if response is not None and getattr(response, "status_code", None) == 401:
+            body = ""
+            try:
+                body = (response.text or "")[:200]
+            except Exception:
+                pass
+            if "subscri" in body.lower():
+                reason = "Нужна активация One Call API 4.0 в OpenWeather"
+            else:
+                reason = _http_error(response)
+        elif response is not None:
+            reason = _http_error(response)
+            if reason.startswith("HTTP 429: LLM:"):
+                reason = reason.replace("HTTP 429: LLM:", "HTTP 429:", 1)
+        else:
+            reason = _probe_exception(e)
         _log.warning("weather probe failed: endpoint=%s reason=%s", _WEATHER_ONECALL_ENDPOINT, reason)
         return ("Weather", False, reason)
-
-    if 200 <= r.status_code < 300:
-        return ("Weather", True, "")
-
-    body = ""
-    try:
-        body = (r.text or "")[:200]
-    except Exception:
-        pass
-    if r.status_code == 401 and "subscri" in body.lower():
-        reason = "Нужна активация One Call API 4.0 в OpenWeather"
-    else:
-        reason = _http_error(r)
-    _log.warning("weather probe failed: endpoint=%s status=%s reason=%s",
-                 _WEATHER_ONECALL_ENDPOINT, r.status_code, reason)
-    return ("Weather", False, reason)
+    return ("Weather", True, "")
 
 
 def _external_api_probe_results():
@@ -299,6 +299,43 @@ def _external_api_probe_results():
             return (label, False, _http_error(r))
         except Exception as e:
             return (label, False, _probe_exception(e))
+
+    def tavily_probe():
+        configured = bool(config.TAVILY_API_KEY)
+        if not configured:
+            return ("Tavily", False, "ключ отсутствует, неверный или отозван")
+        try:
+            r = requests.post(
+                _TAVILY_SEARCH_ENDPOINT,
+                json={
+                    "api_key": config.TAVILY_API_KEY,
+                    "query": "Amsterdam",
+                    "max_results": 1,
+                    "search_depth": "basic",
+                    "include_answer": False,
+                    "include_raw_content": False,
+                    "include_images": False,
+                },
+                timeout=12,
+            )
+            if 200 <= r.status_code < 300:
+                return ("Tavily", True, "")
+            if r.status_code == 401:
+                return ("Tavily", False, "ключ отсутствует, неверный или отозван")
+            if r.status_code == 429:
+                return ("Tavily", False, "лимит запросов исчерпан", "🟠")
+            reason = (getattr(r, "reason", "") or "HTTP error")[:80]
+            return ("Tavily", False,
+                    f"HTTP {r.status_code}; HTTPError: {reason}; "
+                    f"endpoint: {_TAVILY_SEARCH_ENDPOINT}; configured: yes")
+        except requests.exceptions.Timeout:
+            return ("Tavily", False, "сервис временно не ответил", "🟠")
+        except Exception as e:
+            exc_type = type(e).__name__
+            msg = str(e).replace(config.TAVILY_API_KEY, "[redacted]")[:80]
+            return ("Tavily", False,
+                    f"HTTP n/a; {exc_type}: {msg}; "
+                    f"endpoint: {_TAVILY_SEARCH_ENDPOINT}; configured: {'yes' if configured else 'no'}")
 
     results = [
         http_probe(
@@ -321,21 +358,7 @@ def _external_api_probe_results():
             "https://app.ticketmaster.com/discovery/v2/events.json",
             params={"apikey": config.TICKETMASTER_API_KEY, "countryCode": "NL", "size": 1},
         ),
-        http_probe(
-            "Tavily",
-            config.TAVILY_API_KEY,
-            "POST",
-            "https://api.tavily.com/search",
-            json={
-                "api_key": config.TAVILY_API_KEY,
-                "query": "Amsterdam",
-                "max_results": 1,
-                "search_depth": "basic",
-                "include_answer": False,
-                "include_raw_content": False,
-                "include_images": False,
-            },
-        ),
+        tavily_probe(),
         _weather_probe(),
         http_probe(
             "Pexels",
@@ -485,7 +508,8 @@ async def _collect_issues_with_probes(cid):
     except Exception:
         rows.append((_issue_key(now, "service", "weather"), ui.BAD, "Weather", f"недоступна · {_when(now)}"))
     try:
-        for label, ok, detail in await _api_probe_results():
+        for result in await _api_probe_results():
+            label, ok, detail = result[:3]
             if not ok:
                 source = "llm" if label in {"OpenAI", "OpenRouter", "Cloudflare", "Gemini", "Groq"} else "service"
                 rows.append((_issue_key(now, source, label), ui.BAD, label, f"{detail} · {_when(now)}"))
@@ -537,8 +561,21 @@ async def clear_cache(bot, cid):
 async def check_all(bot, cid):
     """Перепроверяет доступные health-check'и: БД, Weather и LLM API."""
     rows = await _api_probe_results()
-    kb = InlineKeyboardMarkup([_back("set_admin_issues")])
-    msg = ui.api_check(rows)
+    import weather
+    usage = weather.get_weather_usage()
+    history = weather.get_weather_usage_last_days(7)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🕘 OpenWeather 7 дней", callback_data="set_admin_weather_usage")],
+        _back("set_admin_issues"),
+    ])
+    msg = ui.api_check(rows, weather_usage=usage, weather_history=history)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def send_weather_usage(bot, cid):
+    import weather
+    kb = InlineKeyboardMarkup([_back("set_admin_check_all")])
+    msg = ui.weather_usage_history(weather.get_weather_usage_last_days(7))
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
