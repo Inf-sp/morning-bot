@@ -1,4 +1,4 @@
-"""Research-first: слой доверенных данных (Wikipedia, Wikidata, REST Countries, Perplexity).
+"""Research-first: слой доверенных данных (Wikipedia, Wikidata, локальные факты о странах).
 
 Принцип: сначала получить факты из источника, затем дать их LLM как источник истины -
 вместо «уверенной фантазии». Источники бесплатные, без ключей. TTL-кеш по образцу
@@ -10,7 +10,6 @@ import re
 import time
 import random
 import requests
-from urllib.parse import quote
 
 _log = logging.getLogger(__name__)
 import util
@@ -237,110 +236,25 @@ def wikidata_city_sentence(name: str) -> str:
     return random.choice(list(facts.values())) if facts else ""
 
 
-# ================= WEATHER ARCHIVE =================
-_WR_CACHE: dict = {}   # (lat, lon) -> (ts, dict)
-_WR_TTL = 86400
-
-
-def weather_records(lat: float, lon: float, tz: str = "UTC", years: int = 10) -> dict:
-    """Реальные погодные рекорды за N лет из Open-Meteo Archive API.
-
-    Возвращает {тип: строка} — heat/cold/rain. Без LLM, реальные данные.
-    """
-    from datetime import date
-    key = (round(lat, 2), round(lon, 2))
-    hit = _WR_CACHE.get(key)
-    if hit and time.time() - hit[0] < _WR_TTL:
-        return hit[1]
-
-    end = date.today()
-    start = date(end.year - years, 1, 1)
-    months = util._MONTHS
-    facts: dict = {}
-    try:
-        r = requests.get("https://archive-api.open-meteo.com/v1/archive", params={
-            "latitude": lat, "longitude": lon,
-            "start_date": str(start), "end_date": str(end),
-            "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
-            "timezone": tz,
-        }, timeout=30)
-        if r.status_code != 200:
-            _log.warning("research: weather_records → HTTP %s", r.status_code)
-            return {}
-        d = r.json().get("daily", {})
-        times = d.get("time", [])
-        tmaxs = d.get("temperature_2m_max", [])
-        tmins = d.get("temperature_2m_min", [])
-        rains = d.get("precipitation_sum", [])
-
-        def _fmt(date_str: str) -> str:
-            from datetime import datetime as _dt
-            dt = _dt.strptime(date_str, "%Y-%m-%d")
-            return f"{dt.day} {months[dt.month - 1]} {dt.year}"
-
-        heat = [(t, v) for t, v in zip(times, tmaxs) if v is not None]
-        if heat:
-            ds, val = max(heat, key=lambda x: x[1])
-            facts["heat"] = f"Рекорд жары за {years} лет: {val:+.0f}°C · {_fmt(ds)}"
-
-        cold = [(t, v) for t, v in zip(times, tmins) if v is not None]
-        if cold:
-            ds, val = min(cold, key=lambda x: x[1])
-            facts["cold"] = f"Рекорд холода за {years} лет: {val:+.0f}°C · {_fmt(ds)}"
-
-        rain = [(t, v) for t, v in zip(times, rains) if v is not None and v > 5]
-        if rain:
-            ds, val = max(rain, key=lambda x: x[1])
-            facts["rain"] = f"Рекордный ливень за {years} лет: {val:.0f} мм · {_fmt(ds)}"
-
-    except Exception as e:
-        _log.warning("research: weather_records(%.2f, %.2f) failed: %s", lat, lon, e)
-        return {}
-
-    _WR_CACHE[key] = (time.time(), facts)
-    return facts
-
-
-# ================= REST COUNTRIES =================
-_RESTCOUNTRIES_FIELDS = "cca2,capital,languages,region,currencies"
-
-def _restcountries_base_url():
-    return (getattr(config, "RESTCOUNTRIES_BASE_URL", "") or "https://restcountries.com/v3.1").rstrip("/")
-
-def _restcountries_headers():
-    key = getattr(config, "RESTCOUNTRIES_API_KEY", "") or ""
-    return {"Authorization": f"Bearer {key}", "X-API-Key": key} if key else None
-
-def _country_query_steps(name, cc):
-    seen = set()
-    steps = []
-    if cc:
-        steps.append(("alpha", cc.upper()))
-    elif re.fullmatch(r"[A-Za-z]{2}", name):
-        steps.append(("alpha", name.upper()))
-    steps.extend([("translation", name), ("name", name)])
-    out = []
-    for kind, value in steps:
-        key = (kind, value.lower())
-        if value and key not in seen:
-            seen.add(key)
-            out.append((kind, value))
-    return out
-
-def _parse_country_payload(payload, fallback_cc=""):
-    c = payload[0] if isinstance(payload, list) and payload else (payload if isinstance(payload, dict) else None)
-    if not c:
-        return {}
-    langs = list((c.get("languages") or {}).values())
-    cur = list((c.get("currencies") or {}).keys())
-    cap = c.get("capital") or []
-    return {
-        "cc": c.get("cca2", "") or fallback_cc,
-        "capital": cap[0] if cap else "",
-        "languages": langs,
-        "region": c.get("region", ""),
-        "currency": cur[0] if cur else "",
-    }
+# ================= COUNTRY FACTS =================
+_COUNTRY_FACTS = {
+    "NL": {"capital": "Amsterdam", "languages": ["Dutch"], "region": "Europe", "currency": "EUR"},
+    "BE": {"capital": "Brussels", "languages": ["Dutch", "French", "German"], "region": "Europe", "currency": "EUR"},
+    "DE": {"capital": "Berlin", "languages": ["German"], "region": "Europe", "currency": "EUR"},
+    "FR": {"capital": "Paris", "languages": ["French"], "region": "Europe", "currency": "EUR"},
+    "GB": {"capital": "London", "languages": ["English"], "region": "Europe", "currency": "GBP"},
+    "ES": {"capital": "Madrid", "languages": ["Spanish"], "region": "Europe", "currency": "EUR"},
+    "IT": {"capital": "Rome", "languages": ["Italian"], "region": "Europe", "currency": "EUR"},
+    "AT": {"capital": "Vienna", "languages": ["German"], "region": "Europe", "currency": "EUR"},
+    "CH": {"capital": "Bern", "languages": ["German", "French", "Italian", "Romansh"], "region": "Europe", "currency": "CHF"},
+    "PL": {"capital": "Warsaw", "languages": ["Polish"], "region": "Europe", "currency": "PLN"},
+    "SE": {"capital": "Stockholm", "languages": ["Swedish"], "region": "Europe", "currency": "SEK"},
+    "DK": {"capital": "Copenhagen", "languages": ["Danish"], "region": "Europe", "currency": "DKK"},
+    "PT": {"capital": "Lisbon", "languages": ["Portuguese"], "region": "Europe", "currency": "EUR"},
+    "US": {"capital": "Washington, D.C.", "languages": ["English"], "region": "Americas", "currency": "USD"},
+    "CA": {"capital": "Ottawa", "languages": ["English", "French"], "region": "Americas", "currency": "CAD"},
+    "JP": {"capital": "Tokyo", "languages": ["Japanese"], "region": "Asia", "currency": "JPY"},
+}
 
 def country_facts(name):
     """Проверенные факты о стране -> {cc, capital, languages, region, currency} или {}."""
@@ -351,23 +265,9 @@ def country_facts(name):
     hit = _CF_CACHE.get(key)
     if hit and (time.time() - hit[0]) < _CF_TTL:
         return hit[1]
-    cc = util.cc_of(name)   # офлайн ru/en -> ISO; для известных стран запрос точнее
-    base_url = _restcountries_base_url()
-    headers = _restcountries_headers()
-    try:
-        for kind, value in _country_query_steps(name, cc):
-            url = f"{base_url}/{kind}/{quote(value)}"
-            r = requests.get(url, params={"fields": _RESTCOUNTRIES_FIELDS}, headers=headers, timeout=12)
-            if r.status_code != 200:
-                continue
-            out = _parse_country_payload(r.json(), cc)
-            if out:
-                _CF_CACHE[key] = (time.time(), out)
-                return out
-    except Exception as e:
-        _log.warning("research: country_facts(%s) failed, not caching: %s", name, e)
-        return {}
-    out = {}
+    cc = util.cc_of(name)
+    facts = dict(_COUNTRY_FACTS.get((cc or "").upper(), {}))
+    out = {"cc": (cc or "").upper(), **facts} if cc or facts else {}
     _CF_CACHE[key] = (time.time(), out)
     return out
 
@@ -584,9 +484,6 @@ def gemini_search_facts_multi(city: str, country: str, cc: str = "",
 
 _TV_CACHE: dict = {}    # query -> (ts, results)
 _TV_TTL = 86400         # 24h — запросы дорогие, кешируем на сутки
-_SERP_CACHE: dict = {}
-
-
 def tavily_search(query: str, max_results: int = 5) -> list:
     """Поиск через Tavily. Возвращает list[{title, url, content}] или [] при ошибке/нет ключа."""
     if not config.TAVILY_API_KEY:
@@ -630,51 +527,15 @@ def tavily_snippet(query: str, max_chars: int = 1200) -> str:
     return "\n---\n".join(parts)
 
 
-def serpapi_search(query: str, max_results: int = 5) -> list:
-    """Google Search через SerpAPI. Возвращает list[{title, url, content}] или [] при ошибке/нет ключа."""
-    if not config.SERPAPI_API_KEY:
-        return []
-    key = f"{query}:{max_results}"
-    cached = _SERP_CACHE.get(key)
-    if cached and time.time() - cached[0] < _TV_TTL:
-        return cached[1]
-    try:
-        r = requests.get(
-            "https://serpapi.com/search.json",
-            params={
-                "engine": "google",
-                "q": query,
-                "api_key": config.SERPAPI_API_KEY,
-                "num": max_results,
-                "hl": "en",
-            },
-            timeout=15,
-        )
-        organic = r.json().get("organic_results") or []
-        results = []
-        for item in organic[:max_results]:
-            url = (item.get("link") or "").strip()
-            title = (item.get("title") or "").strip()
-            content = (item.get("snippet") or "").strip()
-            if url:
-                results.append({"title": title, "url": url, "content": content})
-        _SERP_CACHE[key] = (time.time(), results)
-        return results
-    except Exception as e:
-        _log.warning("serpapi_search failed: %s", str(e)[:120])
-        return []
-
-
 def web_search(query: str, max_results: int = 5) -> list:
-    """Общий web fallback: Tavily + SerpAPI, один формат результата, дедуп по URL."""
+    """Web search через Tavily, один формат результата."""
     out, seen = [], set()
-    for provider in (tavily_search, serpapi_search):
-        for item in provider(query, max_results=max_results):
-            url = (item.get("url") or "").strip()
-            if not url or url in seen:
-                continue
-            seen.add(url)
-            out.append(item)
-            if len(out) >= max_results:
-                return out
+    for item in tavily_search(query, max_results=max_results):
+        url = (item.get("url") or "").strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        out.append(item)
+        if len(out) >= max_results:
+            return out
     return out

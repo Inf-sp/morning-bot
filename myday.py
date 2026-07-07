@@ -244,7 +244,7 @@ def _fill_translations(ru, word, lang):
             "СТРОГО: nl - только на нидерландском (с артиклем de/het), "
             "en - только на английском. Одним словом/словосочетанием, без пояснений, без других языков.\n"
             'JSON: {"nl":"нидерландский перевод","en":"английский перевод"}',
-            200, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
+            200, ai.GRAMMAR_ORDER)
         nl = nl or (d.get("nl") or "").strip()
         en = en or (d.get("en") or "").strip()
     except Exception:

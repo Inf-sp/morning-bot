@@ -1569,7 +1569,7 @@ async def doctor_answer(bot, cid, symptoms):
     if _is_med_question(symptoms):
         prompt = f"{_med_system()}\n\nВопрос про лекарство: {safe_symptoms}"
         try:
-            d = await ai.allm_json(prompt, 900, route="claude", module="health")
+            d = await ai.allm_json(prompt, 900, route="gemini", module="health")
         except Exception as e:
             _log.warning("doctor medicine AI failed, using fallback: %r", e, exc_info=True)
             d = _fallback_health_card("Разбор лекарства", symptoms)
@@ -1591,7 +1591,7 @@ async def doctor_answer(bot, cid, symptoms):
     else:
         prompt = f"{base}\n\nСимптомы: {safe_symptoms}"
     try:
-        d = await ai.allm_json(prompt, 900, route="claude", module="health")
+        d = await ai.allm_json(prompt, 900, route="gemini", module="health")
     except Exception as e:
         _log.warning("doctor symptoms AI failed, using fallback: %r", e, exc_info=True)
         d = _fallback_health_card("Разбор симптомов", symptoms)
@@ -1606,7 +1606,7 @@ async def handle_role(bot, cid, role, text):
         await verify.safe_send(bot, cid, secure.CRISIS_MSG, surface="health"); return
     await bot.send_chat_action(chat_id=cid, action="typing")
     try:
-        route = "claude" if role == "state" else "openrouter"
+        route = "gemini" if role == "state" else "openrouter"
         out = await ai.allm(_role_system(role) + "\n\nЗапрос пользователя:\n" + text, 1500, 0.7, route=route)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return

@@ -1478,75 +1478,6 @@ def _ticketmaster_events_for_artist(artist, cc, start_dt="", end_dt="", size=3):
     return util.ttl_set("ticketmaster", cache_key, events)
 
 
-def _concert_country_search_name(name, cc=""):
-    by_cc = {
-        "NL": "Netherlands", "BE": "Belgium", "DE": "Germany", "FR": "France",
-        "GB": "United Kingdom", "ES": "Spain", "IT": "Italy", "AT": "Austria",
-        "CH": "Switzerland", "PL": "Poland", "SE": "Sweden", "DK": "Denmark",
-        "PT": "Portugal",
-    }
-    return by_cc.get((cc or "").upper(), str(name or "").strip() or "Netherlands")
-
-def _eventbrite_events(query, country_name, size=10, category_id="103"):
-    if not config.EVENTBRITE_API_KEY:
-        return []
-    cache_key = f"eventbrite|{query}|{country_name}|{size}|{category_id}".lower()
-    cached = util.ttl_get("eventbrite", cache_key, 21600)
-    if cached is not None:
-        return cached
-    import requests
-    try:
-        r = requests.get(
-            "https://www.eventbriteapi.com/v3/events/search/",
-            headers={"Authorization": f"Bearer {config.EVENTBRITE_API_KEY}"},
-            params={
-                "q": query,
-                "location.address": country_name,
-                "categories": category_id,
-                "sort_by": "date",
-                "expand": "venue",
-                "page_size": size,
-            },
-            timeout=15,
-        )
-        r.raise_for_status()
-    except Exception:
-        return []
-    events = []
-    for e in r.json().get("events", []):
-        name = (e.get("name") or {}).get("text") or ""
-        url = e.get("url") or ""
-        start = (e.get("start") or {}).get("local") or ""
-        venue = e.get("venue") or {}
-        city = ((venue.get("address") or {}).get("city") or "").strip()
-        venue_name = (venue.get("name") or "").strip()
-        if not name or any(k in name.lower() for k in _TRIBUTE_MARKERS):
-            continue
-        events.append({
-            "id": e.get("id") or url or name,
-            "name": name,
-            "url": url,
-            "_artist": query,
-            "_source": "Eventbrite",
-            "dates": {"start": {"localDate": start[:10]}},
-            "_embedded": {"venues": [{"name": venue_name, "city": {"name": city}}]},
-        })
-    return util.ttl_set("eventbrite", cache_key, events)
-
-async def _eventbrite_events_many(artists, country_name, size=3, limit=40):
-    tasks = [
-        asyncio.to_thread(_eventbrite_events, artist, country_name, size)
-        for artist in artists[:limit]
-    ]
-    batches = await asyncio.gather(*tasks, return_exceptions=True)
-    found = {}
-    for batch in batches:
-        if isinstance(batch, Exception):
-            continue
-        for e in batch:
-            found[e.get("id") or e.get("url") or e.get("name", "")] = e
-    return sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate") or "9999-99-99")
-
 async def _ticketmaster_fetch_throttled(fn, *args):
     """Ограничивает параллелизм запросов к Ticketmaster (_TICKETMASTER_CONCURRENCY),
     чтобы большие списки артистов не заваливали бесплатный тариф API 429-ми."""
@@ -1577,7 +1508,7 @@ async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3,
 def _web_concert_links_for_artists(artists, country_name, limit_artists=8, per_artist=2):
     """Fallback через веб-поиск: Songkick/Bandsintown/официальные страницы, если Ticketmaster пуст."""
     rows, seen = [], set()
-    domains = ("songkick.com", "bandsintown.com", "eventbrite.", "ticketmaster.", "eventim.", "livenation.")
+    domains = ("songkick.com", "bandsintown.com", "ticketmaster.", "eventim.", "livenation.")
     for artist in artists[:limit_artists]:
         query = f'{artist} concerts {country_name} Songkick Bandsintown official tour'
         for result in research.web_search(query, max_results=6):
@@ -1671,18 +1602,14 @@ def _concerts_cache_set(cid, cc, events):
 
 
 async def _fetch_concerts(artists, cc, cname):
-    """Живой запрос к Ticketmaster (+ Eventbrite фолбэк) без кэша — общая часть для
+    """Живой запрос к Ticketmaster без кэша — общая часть для
     find_concerts/send_weekly_events и для job'а прогрева кэша по воскресеньям."""
     from datetime import datetime, timedelta
     now = datetime.now(config.TZ)
     date_from = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     date_to = (now + timedelta(days=182)).strftime("%Y-%m-%dT%H:%M:%SZ")  # ~6 месяцев
 
-    events = await _ticketmaster_events_many(artists, cc, start_dt=date_from, end_dt=date_to, size=10, limit=40)
-    if not events:
-        eventbrite_country = _concert_country_search_name(cname, cc)
-        events = await _eventbrite_events_many(artists, eventbrite_country, size=10, limit=40)
-    return events
+    return await _ticketmaster_events_many(artists, cc, start_dt=date_from, end_dt=date_to, size=10, limit=40)
 
 
 async def refresh_concerts_cache(cid):
@@ -1703,7 +1630,7 @@ _SEEN_CONCERTS_LIMIT = 300  # ограничение размера истори
 
 def _concert_event_id(e):
     """Стабильный ID концерта для сравнения «уже видел / новый»: нативный id источника,
-    иначе (артист, дата, город) — тот же ключ, которым события дедуплицируются в _ticketmaster_events_many/_eventbrite_events_many."""
+    иначе (артист, дата, город) — тот же ключ, которым события дедуплицируются в _ticketmaster_events_many."""
     if e.get("id"):
         return str(e["id"])
     artist = e.get("_artist", "")

@@ -8,13 +8,7 @@ _HERE = Path(__file__).parent
 # --- Keys ---
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-# Модель Claude по умолчанию (чат, общие задачи)
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
-# Грамматика - самый дешёвый Claude (Haiku), баланс качества и цены
-GRAMMAR_MODEL = os.environ.get("GRAMMAR_MODEL", "claude-haiku-4-5-20251001")
-# Разбор гардероба - самый сильный Claude (Opus) для длинного анализа стиля
-WARDROBE_MODEL = os.environ.get("WARDROBE_MODEL", "claude-opus-4-8")
+WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 CF_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
 CF_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
@@ -28,10 +22,6 @@ OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
-SERPAPI_API_KEY = os.environ.get("SERPAPI_API_KEY", "")
-EVENTBRITE_API_KEY = os.environ.get("EVENTBRITE_API_KEY", "") or os.environ.get("EVENTBRITE_TOKEN", "")
-RESTCOUNTRIES_BASE_URL = os.environ.get("RESTCOUNTRIES_BASE_URL", "https://restcountries.com/v3.1").rstrip("/")
-RESTCOUNTRIES_API_KEY = os.environ.get("RESTCOUNTRIES_API_KEY", "")
 UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 

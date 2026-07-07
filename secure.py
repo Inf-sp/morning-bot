@@ -55,10 +55,10 @@ def _env_secret_values():
     """Реальные значения секретов из config — чтобы не утекли в логи дословно."""
     try:
         import config
-        names = ("TELEGRAM_TOKEN", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY",
+        names = ("TELEGRAM_TOKEN", "GEMINI_API_KEY", "GROQ_API_KEY",
                  "OPENAI_API_KEY", "OPENROUTER_API_KEY", "CF_API_TOKEN", "TICKETMASTER_API_KEY",
                  "TMDB_API_KEY", "ZEROENTROPY_API_KEY", "DATABASE_URL", "UNSPLASH_ACCESS_KEY",
-                 "PEXELS_API_KEY")
+                 "PEXELS_API_KEY", "CF_ACCOUNT_ID", "TAVILY_API_KEY", "WEATHER_API_KEY")
         return [getattr(config, n, "") for n in names]
     except Exception:
         return []

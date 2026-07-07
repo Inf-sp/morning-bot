@@ -104,7 +104,7 @@ The existing text and logo placement within the template must not be moved or al
 
 Внутри три подраздела:
 
-- **🔍 Проверить** — честная проверка провайдеров по очереди (Gemini, Claude, OpenAI, OpenRouter, Groq, Cloudflare). Бот делает короткий запрос к каждому и показывает, кто ответил, а кто вернул ошибку. Используй, если провайдер перестал использоваться, есть подозрение на битый API-ключ или нужно понять, кто реально доступен прямо сейчас.
+- **🔍 Проверить** — честная проверка провайдеров по очереди (Gemini, OpenAI, OpenRouter, Groq, Cloudflare). Бот делает короткий запрос к каждому и показывает, кто ответил, а кто вернул ошибку. Используй, если провайдер перестал использоваться, есть подозрение на битый API-ключ или нужно понять, кто реально доступен прямо сейчас.
 - **🕘 История** — история последних LLM-запросов.
 - **💰 Расходы** — статистика по вызовам, объёму токенов, распределению по провайдерам и модулям бота за выбранный период. Важно: нулевое значение у провайдера не всегда означает ошибку — у бота есть приоритеты маршрутизации, поэтому часть провайдеров может просто не использоваться в конкретный период.
 
@@ -113,8 +113,8 @@ The existing text and logo placement within the template must not be moved or al
 Первый экран, который стоит проверять, если бот ведёт себя нестабильно. Показывает:
 
 - состояние Telegram и базы данных;
-- доступность Weather API;
-- наличие ключей внешних сервисов: Gemini, Claude, Groq, OpenAI, OpenRouter, Cloudflare, TMDB, Ticketmaster, Tavily.
+- доступность OpenWeatherMap (`WEATHER_API_KEY`);
+- наличие ключей внешних сервисов: Gemini, Groq, OpenAI, OpenRouter, Cloudflare, TMDB, Ticketmaster, Tavily, OpenWeatherMap.
 
 ### 5. Рассылки
 
@@ -184,7 +184,6 @@ The existing text and logo placement within the template must not be moved or al
 Бот умеет работать с несколькими провайдерами:
 
 - Gemini
-- Claude
 - OpenAI
 - OpenRouter
 - Groq
@@ -249,11 +248,11 @@ The existing text and logo placement within the template must not be moved or al
 
 - `CHAT_ID` — без него не определён владелец бота;
 - `DATABASE_URL` — без него хранилище работает в памяти (данные не переживают перезапуск);
-- `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` — дополнительные LLM-провайдеры;
-- `TMDB_API_KEY`, `TICKETMASTER_API_KEY`, `TAVILY_API_KEY`, `SERPAPI_API_KEY`, `EVENTBRITE_API_KEY`/`EVENTBRITE_TOKEN` — фильмы, концерты, веб-поиск;
+- `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` — дополнительные LLM-провайдеры;
+- `TMDB_API_KEY`, `TICKETMASTER_API_KEY`, `TAVILY_API_KEY` — фильмы, концерты, веб-поиск;
 - `UNSPLASH_ACCESS_KEY`, `PEXELS_API_KEY` — фотографии для карточек;
-- `ZEROENTROPY_API_KEY`, `RESTCOUNTRIES_API_KEY`, `RESTCOUNTRIES_BASE_URL` — вспомогательные сервисы;
-- `ANTHROPIC_MODEL`, `GRAMMAR_MODEL`, `WARDROBE_MODEL`, `OPENROUTER_MODEL`, `OPENAI_MODEL` — переопределение конкретных моделей.
+- `ZEROENTROPY_API_KEY` — вспомогательный rerank-сервис;
+- `OPENROUTER_MODEL`, `OPENAI_MODEL` — переопределение конкретных моделей.
 
 Актуальное состояние ключей всегда можно свериться в `🎚️ Настройки` → админский раздел → `📡 Сервисы`.
 

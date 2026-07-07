@@ -64,16 +64,6 @@ def _as_text(x):
     return None
 
 # ---------- одиночная генерация ----------
-def _gen_claude(prompt, max_tokens, model=None):
-    if not config.ANTHROPIC_API_KEY:
-        raise Exception("no claude")
-    r = _post("https://api.anthropic.com/v1/messages",
-        {"x-api-key": config.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-        {"model": model or config.ANTHROPIC_MODEL, "max_tokens": max_tokens,
-         "messages": [{"role": "user", "content": prompt}]},
-        60, "claude")
-    return r.json()["content"][0]["text"]
-
 def _gen_gemini(prompt, max_tokens, temperature):
     r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={config.GEMINI_API_KEY}",
         {}, {"contents": [{"parts": [{"text": prompt}]}],
@@ -145,43 +135,42 @@ def _friendly(errs):
         return "⏳ ИИ временно перегружен — подожди минуту и попробуй снова."
     return "⚠️ ИИ временно недоступен — попробуй снова через пару минут."
 
-DEFAULT_ORDER  = ("claude", "openai", "gemini", "openrouter", "groq", "cf")
+DEFAULT_ORDER  = ("gemini", "openrouter", "openai", "groq", "cf")
 # Чат: Gemini первым — лучше поддерживает диалог, свободный и живой стиль
-CHAT_ORDER     = ("gemini", "claude", "openrouter", "groq", "openai", "cf")
+CHAT_ORDER     = ("gemini", "openrouter", "groq", "openai", "cf")
 # Грамматика/быстрые задачи: Groq (Llama-70b) первым — скорость, structured output
-GRAMMAR_ORDER  = ("groq", "gemini", "claude", "openrouter", "openai", "cf")
+GRAMMAR_ORDER  = ("groq", "gemini", "openrouter", "openai", "cf")
 # Досуг/рекомендации: Gemini первым — богатое знание культуры, кино, музыки, путешествий
-LEISURE_ORDER  = ("gemini", "openrouter", "claude", "openai", "groq", "cf")
+LEISURE_ORDER  = ("gemini", "openrouter", "openai", "groq", "cf")
 
 # Явные пресеты: позволяют приоритизировать конкретный провайдер, не меняя код вызова по всему проекту.
 PROVIDER_ORDER = {
-    "claude": DEFAULT_ORDER,
-    "openai": ("openai", "claude", "gemini", "openrouter", "groq", "cf"),
-    "openrouter": ("openrouter", "claude", "openai", "gemini", "groq", "cf"),
-    "cf": ("cf", "claude", "openai", "gemini", "openrouter", "groq"),
-    "groq": ("groq", "gemini", "claude", "openrouter", "openai", "cf"),
-    "gemini": ("gemini", "claude", "openrouter", "groq", "openai", "cf"),
+    "openai": ("openai", "gemini", "openrouter", "groq", "cf"),
+    "openrouter": ("openrouter", "openai", "gemini", "groq", "cf"),
+    "cf": ("cf", "openai", "gemini", "openrouter", "groq"),
+    "groq": ("groq", "gemini", "openrouter", "openai", "cf"),
+    "gemini": ("gemini", "openrouter", "groq", "openai", "cf"),
 }
 
 # --- тиры: маршрутизация по задаче ---
-# cheap  → Groq первым (грамматика, переводы, простые lookup-и; Claude Haiku если дойдёт)
-# smart  → Claude первым (чат, рецепты, гардероб, мотивация — требуют рассуждений)
+# cheap  → Groq первым (грамматика, переводы, простые lookup-и)
+# smart  → Gemini первым (чат, рецепты, гардероб, мотивация — требуют рассуждений)
 # leisure → Gemini первым (досуг, путешествия, рекомендации — требуют знания мира)
 TIERS = {
-    "cheap":   (GRAMMAR_ORDER, config.GRAMMAR_MODEL),
+    "cheap":   (GRAMMAR_ORDER, None),
     "smart":   (DEFAULT_ORDER, None),
     "leisure": (LEISURE_ORDER, None),
 }
 
-def _resolve(tier, order, claude_model, route=None):
-    """Явные order/claude_model имеют приоритет; иначе берём орден/модель из тира.
+def _resolve(tier, order, route=None):
+    """Явный order имеет приоритет; иначе берём порядок из тира.
     route позволяет принудительно поставить конкретного провайдера первым."""
-    if order is not None or claude_model is not None:
-        return order or DEFAULT_ORDER, claude_model
+    if order is not None:
+        return tuple(n for n in order if n in PROVIDER_ORDER or n in DEFAULT_ORDER)
     if route:
-        return PROVIDER_ORDER.get(route, DEFAULT_ORDER), None
-    o, m = TIERS.get(tier or "smart", (DEFAULT_ORDER, None))
-    return o, m
+        return PROVIDER_ORDER.get(route, DEFAULT_ORDER)
+    o, _ = TIERS.get(tier or "smart", (DEFAULT_ORDER, None))
+    return o
 
 _SKIP_MODULES = frozenset({"ai", "bot", "asyncio", "threading", "concurrent", "<string>", "run_code"})
 
@@ -195,13 +184,12 @@ def _caller_module() -> str:
                 return m
     return ""
 
-def llm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None, tier=None, module="", route=None):
+def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module="", route=None):
     if not module:
         module = _caller_module()
-    order, claude_model = _resolve(tier, order, claude_model, route=route)
+    order = _resolve(tier, order, route=route)
     order = _reorder_for_cooldown(order)
     calls = {
-        "claude": lambda: _gen_claude(prompt, max_tokens, claude_model),
         "openai": lambda: _gen_openai(prompt, max_tokens, temperature),
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature),
         "openrouter": lambda: _gen_openrouter(prompt, max_tokens, temperature),
@@ -215,7 +203,7 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None,
             out = _as_text(calls[name]())
             if out and out.strip():
                 ms = int((time.time() - t0) * 1000)
-                _log_cost(name, claude_model if name == "claude" else name, prompt, out, module, ms=ms, ok=True)
+                _log_cost(name, name, prompt, out, module, ms=ms, ok=True)
                 return out
         except Exception as e:
             _mark_cooldown(name, e)
@@ -272,12 +260,12 @@ def _repair_inner_quotes(raw):
         i += 1
     return "".join(out)
 
-def llm_json(prompt, max_tokens=1200, order=None, claude_model=None, tier=None, module="", route=None):
+def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=None):
     if not module:
         module = _caller_module()
     raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
                        "Внутри строковых значений НЕ используй двойные кавычки - "
-                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order, claude_model, tier, module, route)
+                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order, tier, module, route)
     raw = re.sub(r"```(json)?", "", raw).strip()
     m = re.search(r"\{.*\}", raw, re.S)
     if m:
@@ -334,13 +322,6 @@ def _chat_system(cid=None):
     return CHAT_SYSTEM + "\n\n" + block
 
 def _chat(provider, history, system):
-    if provider == "claude":
-        if not config.ANTHROPIC_API_KEY:
-            raise Exception("no claude")
-        r = _post("https://api.anthropic.com/v1/messages",
-            {"x-api-key": config.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            {"model": config.ANTHROPIC_MODEL, "max_tokens": 700, "system": system, "messages": history}, 60, "claude")
-        return r.json()["content"][0]["text"]
     if provider == "gemini":
         contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in history]
         r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={config.GEMINI_API_KEY}",
@@ -396,11 +377,11 @@ def chat_chain(history, cid=None):
 
 
 # --- async-обёртки для вызова из async-обработчиков без блокировки event loop ---
-async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, claude_model=None, tier=None, route=None, module=""):
-    return await asyncio.to_thread(llm, prompt, max_tokens, temperature, order, claude_model, tier, module, route)
+async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, route=None, module=""):
+    return await asyncio.to_thread(llm, prompt, max_tokens, temperature, order, tier, module, route)
 
-async def allm_json(prompt, max_tokens=1200, order=None, claude_model=None, tier=None, route=None, module=""):
-    return await asyncio.to_thread(llm_json, prompt, max_tokens, order, claude_model, tier, module, route)
+async def allm_json(prompt, max_tokens=1200, order=None, tier=None, route=None, module=""):
+    return await asyncio.to_thread(llm_json, prompt, max_tokens, order, tier, module, route)
 
 async def achat_chain(history, cid=None):
     return await asyncio.to_thread(chat_chain, history, cid)

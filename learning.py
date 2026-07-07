@@ -650,7 +650,7 @@ JSON (без переносов строк внутри значений):
 Затем дай утверждение на русском о значении/роли выделенного существительного - иногда ВЕРНОЕ, иногда ЛОЖНОЕ (выбирай случайно).
 JSON (без переносов строк внутри значений):
 {{"sentence":"предложение со словом в <b></b>","claim":"утверждение о выделенном слове на русском","correct":true или false,"explain":"короткое пояснение на русском, 1 строка","ru":"перевод предложения"}}"""
-    return ai.llm_json(prompt, 700, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL)
+    return ai.llm_json(prompt, 700, ai.GRAMMAR_ORDER)
 
 def _word_meanings(word: str, language: str) -> list:
     """Все значения слова (tier=cheap). Пустой список если значение одно."""
@@ -660,7 +660,7 @@ def _word_meanings(word: str, language: str) -> list:
             "Перечисли ВСЕ его значения на русском. "
             "Если значение одно — верни пустой массив. "
             'JSON: {"meanings": ["значение 1", "значение 2"]}',
-            200, ai.GRAMMAR_ORDER, claude_model=config.GRAMMAR_MODEL, route="openai"
+            200, ai.GRAMMAR_ORDER, route="openai"
         )
         meanings = d.get("meanings", []) if isinstance(d, dict) else []
         return [str(m).strip() for m in meanings if str(m).strip()]

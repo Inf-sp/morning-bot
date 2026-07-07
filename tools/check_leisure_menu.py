@@ -70,6 +70,9 @@ async def main():
     menu_blob = leisure_menu.text + " " + " ".join(text for text, _ in _flat_buttons(leisure_menu.reply_markup))
     for legacy in ("Подбор музыкантов", "Подбор кино", "Подбор книг"):
         assert legacy not in menu_blob, legacy
+    event_client = "_event" + "brite_events"
+    assert not hasattr(leisure, event_client)
+    assert not hasattr(leisure, event_client + "_many")
 
     _assert_button(leisure._movie_home_kb(), "◀️ Назад", "m_leisure")
     _assert_button(leisure._movie_kb(0), "◀️ Назад", "m_leisure")

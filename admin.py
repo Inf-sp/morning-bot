@@ -28,7 +28,6 @@ _MOD_NAMES = {
 }
 
 _PROV_ORDER = [
-    ("claude", "Claude", lambda: bool(config.ANTHROPIC_API_KEY)),
     ("openai", "OpenAI", lambda: bool(config.OPENAI_API_KEY)),
     ("gemini", "Gemini", lambda: True),
     ("openrouter", "OpenRouter", lambda: bool(config.OPENROUTER_API_KEY)),
@@ -221,7 +220,7 @@ async def send_llm_check(bot, cid):
 
 async def _llm_probe_results():
     import ai
-    probes = [("Claude", "claude"), ("OpenAI", "openai"), ("OpenRouter", "openrouter"),
+    probes = [("OpenAI", "openai"), ("OpenRouter", "openrouter"),
               ("Cloudflare", "cf"), ("Gemini", "gemini"), ("Groq", "groq")]
     results = []
     for label, route in probes:
@@ -237,9 +236,129 @@ async def _llm_probe_results():
     return results
 
 
+async def _api_probe_results():
+    import asyncio
+    llm_results = await _llm_probe_results()
+    external_results = await asyncio.to_thread(_external_api_probe_results)
+    return llm_results + external_results
+
+
+def _external_api_probe_results():
+    import requests
+
+    def missing(name):
+        return (name, False, "нет ключа")
+
+    def http_probe(label, key, method, url, **kwargs):
+        if not key:
+            return missing(label)
+        try:
+            timeout = kwargs.pop("timeout", 12)
+            r = requests.request(method, url, timeout=timeout, **kwargs)
+            if 200 <= r.status_code < 300:
+                return (label, True, "")
+            return (label, False, _http_error(r))
+        except Exception as e:
+            return (label, False, _probe_exception(e))
+
+    results = [
+        http_probe(
+            "Telegram",
+            config.TELEGRAM_TOKEN,
+            "GET",
+            f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/getMe",
+        ),
+        http_probe(
+            "TMDB",
+            config.TMDB_API_KEY,
+            "GET",
+            "https://api.themoviedb.org/3/configuration",
+            params={"api_key": config.TMDB_API_KEY},
+        ),
+        http_probe(
+            "Ticketmaster",
+            config.TICKETMASTER_API_KEY,
+            "GET",
+            "https://app.ticketmaster.com/discovery/v2/events.json",
+            params={"apikey": config.TICKETMASTER_API_KEY, "countryCode": "NL", "size": 1},
+        ),
+        http_probe(
+            "Tavily",
+            config.TAVILY_API_KEY,
+            "POST",
+            "https://api.tavily.com/search",
+            json={
+                "api_key": config.TAVILY_API_KEY,
+                "query": "Amsterdam",
+                "max_results": 1,
+                "search_depth": "basic",
+                "include_answer": False,
+                "include_raw_content": False,
+                "include_images": False,
+            },
+        ),
+        http_probe(
+            "Weather",
+            config.WEATHER_API_KEY,
+            "GET",
+            "https://api.openweathermap.org/data/3.0/onecall",
+            params={
+                "lat": 52.37,
+                "lon": 4.89,
+                "appid": config.WEATHER_API_KEY,
+                "units": "metric",
+                "exclude": "minutely,hourly,daily,alerts",
+            },
+        ),
+        http_probe(
+            "Pexels",
+            config.PEXELS_API_KEY,
+            "GET",
+            "https://api.pexels.com/v1/search",
+            headers={"Authorization": config.PEXELS_API_KEY},
+            params={"query": "breakfast", "per_page": 1},
+        ),
+        http_probe(
+            "Unsplash",
+            config.UNSPLASH_ACCESS_KEY,
+            "GET",
+            "https://api.unsplash.com/search/photos",
+            headers={"Authorization": f"Client-ID {config.UNSPLASH_ACCESS_KEY}"},
+            params={"query": "breakfast", "per_page": 1},
+        ),
+        http_probe(
+            "ZeroEntropy",
+            config.ZEROENTROPY_API_KEY,
+            "POST",
+            "https://api.zeroentropy.dev/v1/models/rerank",
+            headers={"Authorization": f"Bearer {config.ZEROENTROPY_API_KEY}", "Content-Type": "application/json"},
+            json={"model": "zerank-2", "query": "test", "documents": ["test document"], "top_n": 1, "latency": "fast"},
+        ),
+    ]
+    return results
+
+
+def _http_error(response):
+    try:
+        body = response.text or ""
+    except Exception:
+        body = ""
+    summary = _issue_summary("llm", body)
+    if summary.endswith("сбой генерации"):
+        summary = body[:80] or response.reason or "ошибка"
+    return f"HTTP {response.status_code}: {summary[:80]}"
+
+
+def _probe_exception(exc):
+    text = str(exc)
+    if "NameResolutionError" in text or "Failed to resolve" in text:
+        return "нет сетевого доступа/DNS"
+    if "timeout" in text.lower():
+        return "timeout"
+    return text[:80]
+
+
 def _provider_configured(route):
-    if route == "claude":
-        return bool(config.ANTHROPIC_API_KEY), "ANTHROPIC_API_KEY"
     if route == "openai":
         return bool(config.OPENAI_API_KEY), "OPENAI_API_KEY"
     if route == "openrouter":
@@ -283,7 +402,7 @@ def _issue_summary(source, msg):
     low = msg.lower()
     if source == "llm":
         providers = []
-        for provider in ("claude", "openai", "openrouter", "gemini", "groq", "cf"):
+        for provider in ("openai", "openrouter", "gemini", "groq", "cf"):
             if f"{provider}:" in low or f"{provider} " in low:
                 providers.append(provider)
         prefix = ", ".join(dict.fromkeys(providers)) if providers else "LLM"
@@ -339,9 +458,10 @@ async def _collect_issues_with_probes(cid):
     except Exception:
         rows.append((_issue_key(now, "service", "weather"), ui.BAD, "Weather", f"недоступна · {_when(now)}"))
     try:
-        for label, ok, detail in await _llm_probe_results():
+        for label, ok, detail in await _api_probe_results():
             if not ok:
-                rows.append((_issue_key(now, "llm", label), ui.BAD, label, f"{detail} · {_when(now)}"))
+                source = "llm" if label in {"OpenAI", "OpenRouter", "Cloudflare", "Gemini", "Groq"} else "service"
+                rows.append((_issue_key(now, source, label), ui.BAD, label, f"{detail} · {_when(now)}"))
     except Exception as e:
         rows.append((_issue_key(now, "llm", "probe"), ui.BAD, "LLM", f"{_issue_summary('llm', str(e))} · {_when(now)}"))
     return rows
@@ -389,7 +509,10 @@ async def clear_cache(bot, cid):
 
 async def check_all(bot, cid):
     """Перепроверяет доступные health-check'и: БД, Weather и LLM API."""
-    await send_issues(bot, cid, with_probes=True)
+    rows = await _api_probe_results()
+    kb = InlineKeyboardMarkup([_back("set_admin_issues")])
+    msg = ui.api_check(rows)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 # ================= УВЕДОМЛЕНИЯ =================

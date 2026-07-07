@@ -136,6 +136,21 @@ def llm_check(results):
     return b.build_stripped()
 
 
+def api_check(results):
+    b = MessageBuilder()
+    b.bold("🔍 Проверка API")
+    b.newline()
+    for label, ok, detail in results:
+        b.spacer()
+        if ok:
+            b.line(f"{OK} {label}")
+        elif detail:
+            b.line(f"{BAD} {label}: {detail}")
+        else:
+            b.line(f"{BAD} {label}")
+    return b.build_stripped()
+
+
 def llm_history(rows):
     """rows: [(when, provider, module, ok)]."""
     b = MessageBuilder()

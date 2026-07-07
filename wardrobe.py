@@ -655,8 +655,7 @@ async def send_improve(bot, cid):
         return
     prompt = _improve_prompt(cid, wardrobe_text)
     try:
-        d = await ai.allm_json(prompt, 2000, module="wardrobe",
-                               route="claude", claude_model=config.WARDROBE_MODEL)
+        d = await ai.allm_json(prompt, 2000, module="wardrobe", route="gemini")
     except Exception as e:
         _log.warning("wardrobe improve AI failed, using fallback: %r", e, exc_info=True)
         d = _fallback_improve_data(w)
