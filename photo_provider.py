@@ -1,8 +1,8 @@
 """Fast recipe photo lookup through Pexels only.
 
-The provider is intentionally small: at most three sequential Pexels searches
-per recipe, `per_page=1`, and the first returned photo wins. There is no
-extra validation or secondary photo sources.
+The provider is intentionally small: one precise Pexels search first, then a
+short concrete fallback chain only for empty results. Pexels result order is
+preserved: the first technically valid photo wins.
 """
 import logging
 import re
@@ -46,16 +46,31 @@ def _selected_photo_url(photo: dict) -> str | None:
     src = photo.get("src") if isinstance(photo, dict) else None
     if not isinstance(src, dict):
         return None
-    return src.get("large")
+    return src.get("large") or src.get("landscape")
 
 
-def _mark_found(recipe: dict, photo: dict, query: str, fallback_index: int) -> dict:
+def _is_valid_photo(photo: dict) -> bool:
+    if not isinstance(photo, dict):
+        return False
+    return bool(photo.get("id") and _selected_photo_url(photo))
+
+
+def _first_valid_photo(photos: list) -> tuple[dict | None, int]:
+    for index, photo in enumerate(photos or []):
+        if _is_valid_photo(photo):
+            return photo, index
+    return None, -1
+
+
+def _mark_found(recipe: dict, photo: dict, query: str, fallback_index: int,
+                selected_index: int) -> dict:
     result = {
         "photo_source": "pexels",
         "photo_id": photo.get("id"),
         "photo_url": _selected_photo_url(photo),
         "photo_query_used": query,
         "photo_fallback_index": fallback_index,
+        "photo_selected_index": selected_index,
         "photo_lookup_status": "found",
     }
     recipe.update(result)
@@ -98,6 +113,7 @@ def get_dish_photo(recipe: dict, meal_type: str = "") -> dict | None:
             "photo_url": recipe.get("photo_url"),
             "photo_query_used": recipe.get("photo_query_used"),
             "photo_fallback_index": recipe.get("photo_fallback_index", 0),
+            "photo_selected_index": recipe.get("photo_selected_index", 0),
             "photo_lookup_status": "found",
         }
     if status == "not_found":
@@ -123,7 +139,7 @@ def get_dish_photo(recipe: dict, meal_type: str = "") -> dict | None:
                 orientation="square",
                 size="large",
                 locale="en-US",
-                per_page=1,
+                per_page=10,
                 timeout=3,
             )
         except pexels.PexelsTimeoutError:
@@ -152,19 +168,23 @@ def get_dish_photo(recipe: dict, meal_type: str = "") -> dict | None:
             return None
 
         if photos:
-            selected_photo = photos[0]
-            photo_url = _selected_photo_url(selected_photo)
-            if not photo_url:
+            selected_photo, selected_index = _first_valid_photo(photos)
+            if not selected_photo:
                 elapsed_ms = int((time.monotonic() - start) * 1000)
                 _mark_error(recipe, query, fallback_index, "invalid_response")
                 _log_event("recipe_photo_error", recipe_id=recipe_id, query=query,
                            fallback_index=fallback_index, reason="invalid_response", elapsed_ms=elapsed_ms)
                 return None
-            result = _mark_found(recipe, selected_photo, query, fallback_index)
-            elapsed_ms = int((time.monotonic() - start) * 1000)
-            _log_event("recipe_photo_found", recipe_id=recipe_id, query=query,
-                       fallback_index=fallback_index, photo_id=result.get("photo_id"),
-                       elapsed_ms=elapsed_ms)
+            result = _mark_found(recipe, selected_photo, query, fallback_index, selected_index)
+            _log.info(
+                "recipe=%s query=%s used_query=%s pexels_photo_id=%s selected_index=%s fallback_used=%s",
+                recipe.get("name") or recipe_id,
+                recipe.get("photo_query_en") or "",
+                query,
+                result.get("photo_id"),
+                selected_index,
+                str(fallback_index > 0).lower(),
+            )
             return result
 
     elapsed_ms = int((time.monotonic() - start) * 1000)

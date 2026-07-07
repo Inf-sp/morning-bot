@@ -14,7 +14,7 @@ _log = logging.getLogger(__name__)
 
 _SEARCH_URL = "https://api.pexels.com/v1/search"
 _TIMEOUT = 3
-_PER_PAGE = 1
+_PER_PAGE = 10
 
 
 class PexelsError(Exception):
@@ -41,7 +41,7 @@ def search_photos(query: str, orientation: str = "square", size: str = "large",
                   locale: str = "en-US", per_page: int = _PER_PAGE,
                   page: int = 1, timeout: int | float = _TIMEOUT) -> list:
     """Ищет фото по `query` через Pexels: orientation=square, size=large,
-    locale=en-US, per_page=1.
+    locale=en-US, per_page=10.
 
     Возвращает список «сырых» объектов photo из ответа Pexels.
     Каждый элемент содержит как минимум: id, alt, width, height, photographer,

@@ -8,6 +8,13 @@ def _photo(photo_id=123):
     return {"id": photo_id, "src": {"large": "https://images.pexels.com/photos/123/large.jpg"}}
 
 
+def _invalid_photo(photo_id=None):
+    photo = {"src": {}}
+    if photo_id is not None:
+        photo["id"] = photo_id
+    return photo
+
+
 def test_first_pexels_result_wins_without_fallback(monkeypatch):
     calls = []
 
@@ -36,9 +43,37 @@ def test_first_pexels_result_wins_without_fallback(monkeypatch):
         "orientation": "square",
         "size": "large",
         "locale": "en-US",
-        "per_page": 1,
+        "per_page": 10,
         "timeout": 3,
     }
+
+
+def test_first_valid_pexels_result_wins_in_original_order(monkeypatch):
+    calls = []
+
+    def fake_search(**kwargs):
+        calls.append(kwargs)
+        return [
+            _invalid_photo(111),
+            {"id": 222, "src": {"landscape": "https://images.pexels.com/photos/222/landscape.jpg"}},
+            _photo(333),
+        ]
+
+    monkeypatch.setattr(photo_provider.pexels, "search_photos", fake_search)
+
+    recipe = {
+        "name": "Паста с грибами",
+        "photo_query_en": "creamy mushroom pasta",
+        "photo_fallback_queries": ["mushroom pasta", "creamy pasta"],
+    }
+
+    result = photo_provider.get_dish_photo(recipe)
+
+    assert result["photo_id"] == 222
+    assert result["photo_url"].endswith("/landscape.jpg")
+    assert result["photo_selected_index"] == 1
+    assert result["photo_fallback_index"] == 0
+    assert len(calls) == 1
 
 
 def test_fallbacks_are_sequential_and_stop_on_first_photo(monkeypatch):
@@ -63,6 +98,30 @@ def test_fallbacks_are_sequential_and_stop_on_first_photo(monkeypatch):
     assert result["photo_query_used"] == "vegetable omelette"
     assert result["photo_fallback_index"] == 2
     assert calls == ["spinach feta omelette", "spinach omelette", "vegetable omelette"]
+
+
+def test_non_empty_technically_invalid_results_do_not_trigger_fallback(monkeypatch):
+    calls = []
+
+    def fake_search(**kwargs):
+        calls.append(kwargs["query"])
+        if kwargs["query"] == "spinach feta omelette":
+            return [_invalid_photo(), _invalid_photo(111)]
+        return [_photo(789)]
+
+    monkeypatch.setattr(photo_provider.pexels, "search_photos", fake_search)
+
+    recipe = {
+        "photo_query_en": "spinach feta omelette",
+        "photo_fallback_queries": ["spinach omelette", "omelette"],
+    }
+
+    result = photo_provider.get_dish_photo(recipe)
+
+    assert result is None
+    assert recipe["photo_lookup_status"] == "error"
+    assert recipe["photo_lookup_error"] == "invalid_response"
+    assert calls == ["spinach feta omelette"]
 
 
 def test_not_found_is_saved_and_not_retried(monkeypatch):
