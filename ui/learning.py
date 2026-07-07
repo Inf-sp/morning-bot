@@ -18,8 +18,6 @@ def phrase_poll_question(blank_phrase, sentence_ru):
     b.section("🧩 Проверь себя")
     b.spacer()
     b.quote(str(blank_phrase or "").strip())
-    b.spacer()
-    b.text_line("Выбери подходящее слово:")
     msg = b.build()
     stripped = msg.text.strip()
     leading_trim = u16_len(msg.text[:len(msg.text) - len(msg.text.lstrip())])

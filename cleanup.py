@@ -586,7 +586,7 @@ async def _render_confirm(bot, cid, view_id, q=None):
     text = f"Удалить {n}? Это действие нельзя отменить."
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"🗑 Удалить {n}", callback_data=f"cldc:{view_id}")],
-        [InlineKeyboardButton("◀️ Отмена", callback_data=f"clcancel:{view_id}")],
+        [InlineKeyboardButton("◀️ Назад", callback_data=f"clcancel:{view_id}")],
     ])
     if q is not None:
         try:

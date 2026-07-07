@@ -260,6 +260,8 @@ async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
 Тестовая фраза должна быть НОВОЙ, не копией учебной фразы. Она проверяет применение правила, а не память
 исходного предложения. Нельзя повторять одновременно тот же глагол, то же существительное, тот же перевод
 и ту же структуру предложения. Сохрани только целевое слово, грамматическую конструкцию и смысл правила.
+Новый пример обязан отличаться контекстом: другой субъект, другой объект и другое обстоятельство времени,
+места или ситуации. Не повторяй целевое слово в видимом тексте test_blank_phrase вне пропуска.
 
 Правила теста:
 1. test_blank_phrase — новая фраза с ____ вместо целевого слова.
@@ -363,6 +365,41 @@ def _normalize_phrase_for_compare(text):
     return " ".join(_phrase_tokens(text))
 
 
+def _phrase_without_target_tokens(text, target):
+    target_tokens = set(_phrase_tokens(target))
+    return [t for t in _phrase_tokens(text) if t not in target_tokens]
+
+
+def _phrase_repeats_source(learn_phrase, blank_phrase, correct):
+    """Reject source-sentence clozes and near copies."""
+    learn_norm = _normalize_phrase_for_compare(learn_phrase)
+    full_norm = _normalize_phrase_for_compare(_phrase_full_from_blank(blank_phrase, correct))
+    if not learn_norm or not full_norm:
+        return True
+    if learn_norm == full_norm:
+        return True
+
+    learn_tokens = _phrase_without_target_tokens(learn_phrase, correct)
+    test_tokens = _phrase_without_target_tokens(full_norm, correct)
+    if not learn_tokens or not test_tokens:
+        return True
+    test_counts = {}
+    for token in test_tokens:
+        test_counts[token] = test_counts.get(token, 0) + 1
+    overlap = 0
+    for token in learn_tokens:
+        if test_counts.get(token, 0) > 0:
+            overlap += 1
+            test_counts[token] -= 1
+    return (overlap / max(1, len(learn_tokens))) > 0.60
+
+
+def _phrase_blank_repeats_target(blank_phrase, correct):
+    visible_tokens = _phrase_tokens(str(blank_phrase or "").replace("____", " "))
+    target_tokens = set(_phrase_tokens(correct))
+    return bool(target_tokens and any(t in target_tokens for t in visible_tokens))
+
+
 def _filter_phrase_other_forms(other_forms, card):
     if not other_forms:
         return []
@@ -410,6 +447,10 @@ def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
     if _normalize_phrase_for_compare(learn_phrase) == _normalize_phrase_for_compare(full):
         return False
     if _normalize_phrase_for_compare(learn_phrase) == _normalize_phrase_for_compare(blank):
+        return False
+    if _phrase_repeats_source(learn_phrase, blank, correct):
+        return False
+    if _phrase_blank_repeats_target(blank, correct):
         return False
 
     learn_tokens = set(_phrase_tokens(learn_phrase))
@@ -488,10 +529,36 @@ def _fallback_phrase_quiz_card(phrase, ru, language):
 
     match = candidates[-1]
     correct = match.group(0).strip("'’")
-    blank_phrase = phrase[:match.start()] + "____" + phrase[match.end():]
+    if language == "нидерландский":
+        phrase_low = phrase.lower()
+        if correct.lower() == "innemen" or any(t in phrase_low for t in ("tablet", "medicijn", "pil", "capsule", "vitamine")):
+            blank_phrase = "Ik moet dit medicijn na het eten ____."
+            sentence_ru = "Я должен принять это лекарство после еды."
+            distractors = ["vergeten", "betalen", "wachten"]
+        elif correct.lower().endswith("en"):
+            blank_phrase = "Ik moet dat morgen ____."
+            sentence_ru = f"Я должен завтра это сделать/выполнить: {correct}."
+            distractors = _PHRASE_DISTRACTORS["нидерландский"]
+        else:
+            blank_phrase = "Dat klinkt vandaag ____."
+            sentence_ru = f"Сегодня это звучит так: {correct}."
+            distractors = _PHRASE_DISTRACTORS["нидерландский"]
+        construction_meaning = "значение из учебной фразы в новом контексте"
+    else:
+        if correct.lower().startswith("to "):
+            blank_phrase = "I need ____ it tomorrow."
+        elif correct.lower().endswith(("e", "k", "y", "t", "n")):
+            blank_phrase = "I need to ____ it tomorrow."
+        else:
+            blank_phrase = "That sounds ____ today."
+        sentence_ru = f"Новый пример с тем же словом: {correct}."
+        construction_meaning = "значение из учебной фразы в новом контексте"
+        distractors = _PHRASE_DISTRACTORS["английский"]
+    if _phrase_repeats_source(phrase, blank_phrase, correct) or _phrase_blank_repeats_target(blank_phrase, correct):
+        return {}
     seen = {correct.lower()}
     wrong = []
-    for item in _PHRASE_DISTRACTORS.get(language, _PHRASE_DISTRACTORS["английский"]):
+    for item in distractors:
         if item.lower() not in seen:
             wrong.append(item)
             seen.add(item.lower())
@@ -503,14 +570,14 @@ def _fallback_phrase_quiz_card(phrase, ru, language):
         "blank_phrase": blank_phrase,
         "correct": correct,
         "wrong": wrong,
-        "sentence_ru": str(ru or "").strip(),
-        "test_full_phrase": blank_phrase.replace("____", correct, 1),
+        "sentence_ru": sentence_ru,
+        "test_full_phrase": _phrase_full_from_blank(blank_phrase, correct),
         "construction": correct,
-        "construction_meaning": "смотри значение в переводе фразы",
+        "construction_meaning": construction_meaning,
         "short_rule": f"{correct} = смотри перевод фразы",
-        "detail": f"В этой фразе подходит «{correct}». Сравни полный пример с переводом и запомни конструкцию целиком.",
+        "detail": f"В новом примере проверяется то же слово: «{correct}». Ориентируйся на смысл из учебной фразы и выбирай вариант, который естественно завершает предложение.",
         "other_forms": [],
-        "explanation": f"В этой фразе пропущено слово «{correct}».",
+        "explanation": f"{correct} = смотри перевод фразы",
     }
 
 
@@ -545,16 +612,18 @@ async def _gen_consistent_phrase_card(phrase, ru, language, avoid_tests=None, at
             correct_answer
             and "____" in blank_phrase
             and len(clean_wrong) >= 3
+            and not _phrase_repeats_source(phrase, blank_phrase, correct_answer)
+            and not _phrase_blank_repeats_target(blank_phrase, correct_answer)
             and _phrase_card_is_consistent(phrase, ru, card)
             and await _validate_phrase_card_semantics(phrase, ru, language, card)
         ):
             card["wrong"] = clean_wrong[:3]
             return card
-    return {}
+    return _fallback_phrase_quiz_card(phrase, ru, language)
 
 
 def _phrase_start_card_or_fallback(card, phrase, ru, language):
-    """Use a generated phrase card, or a local cloze fallback for the first training card."""
+    """Use a generated phrase card, or a local new-context fallback."""
     correct_answer = card.get("correct") or ""
     clean_wrong = _clean_phrase_options(correct_answer, list(card.get("wrong") or []), needed=3)
     blank_phrase = card.get("blank_phrase") or ""

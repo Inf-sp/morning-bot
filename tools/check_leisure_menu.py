@@ -66,19 +66,18 @@ async def main():
         [("🎧 Музыка для тебя", "a_listen")],
         [("📚 Книги для тебя", "a_read")],
         [("⚙️ Настройки досуга", "m_leisure_settings")],
-        [("⬅️ Назад", "m_close")],
     ]
     menu_blob = leisure_menu.text + " " + " ".join(text for text, _ in _flat_buttons(leisure_menu.reply_markup))
     for legacy in ("Подбор музыкантов", "Подбор кино", "Подбор книг"):
         assert legacy not in menu_blob, legacy
 
-    _assert_button(leisure._movie_home_kb(), "⬅️ Досуг", "m_leisure")
-    _assert_button(leisure._movie_kb(0), "⬅️ Досуг", "m_leisure")
-    _assert_button(leisure._movie_genre_menu_kb(), "⬅️ Досуг", "m_leisure")
-    _assert_button(leisure._movie_mood_menu_kb(), "⬅️ Досуг", "m_leisure")
-    _assert_button(leisure._book_kb(0), "⬅️ Досуг", "m_leisure")
-    _assert_button(leisure._listen_kb(), "⬅️ Досуг", "m_leisure")
-    _assert_button(menu_ui.menu_screen("m_leisure_settings").reply_markup, "⬅️ Досуг", "m_leisure")
+    _assert_button(leisure._movie_home_kb(), "◀️ Назад", "m_leisure")
+    _assert_button(leisure._movie_kb(0), "◀️ Назад", "m_leisure")
+    _assert_button(leisure._movie_genre_menu_kb(), "◀️ Назад", "m_leisure")
+    _assert_button(leisure._movie_mood_menu_kb(), "◀️ Назад", "m_leisure")
+    _assert_button(leisure._book_kb(0), "◀️ Назад", "m_leisure")
+    _assert_button(leisure._listen_kb(), "◀️ Назад", "m_leisure")
+    _assert_button(menu_ui.menu_screen("m_leisure_settings").reply_markup, "◀️ Назад", "m_leisure")
 
     concerts_mock = AsyncMock()
     update, context = await _dispatch("a_concerts_find", find_concerts=concerts_mock)
@@ -145,7 +144,7 @@ async def main():
     now_playing_markup = fake_bot.send_message.await_args.kwargs["reply_markup"]
     assert "🎬 В кино сейчас · Нидерланды" in now_playing_text
     assert "• Фильм номер 1 · ужасы · ⭐ 7.1" in now_playing_text
-    _assert_button(now_playing_markup, "⬅️ Досуг", "m_leisure")
+    _assert_button(now_playing_markup, "◀️ Назад", "m_leisure")
     assert _buttons(now_playing_markup)[-2] == [("←", "noop"), ("1 / 2", "noop"), ("→", "a_cinema_page_1")]
     assert _buttons(now_playing_markup)[0] == [("Фильм номер 1", "a_cinema_open_1")]
 
@@ -165,12 +164,12 @@ async def main():
          patch.object(leisure, "_concerts_cache_get", return_value=[]):
         await leisure.find_concerts(concert_bot, "123", "home")
     concerts_markup = concert_bot.send_message.await_args.kwargs["reply_markup"]
-    _assert_button(concerts_markup, "⬅️ Досуг", "m_leisure")
+    _assert_button(concerts_markup, "◀️ Назад", "m_leisure")
 
     country_bot = SimpleNamespace(send_message=AsyncMock())
     await leisure.concert_pick_country(country_bot, "123")
     country_markup = country_bot.send_message.await_args.kwargs["reply_markup"]
-    _assert_button(country_markup, "⬅️ Досуг", "m_leisure")
+    _assert_button(country_markup, "◀️ Назад", "m_leisure")
 
     weekly_bot = SimpleNamespace(send_message=AsyncMock())
     upcoming_mock = Mock(return_value=fake_movies[:2])

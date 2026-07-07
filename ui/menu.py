@@ -138,7 +138,6 @@ _SCREENS = {
             [("🎧 Музыка для тебя", "a_listen")],
             [("📚 Книги для тебя", "a_read")],
             [("⚙️ Настройки досуга", "m_leisure_settings")],
-            [("⬅️ Назад", "m_close")],
         ],
         False,
     ),
@@ -149,7 +148,7 @@ _SCREENS = {
         [
             [("🎚️ Кино", "ls_love_movies"), ("🎚️ Страны", "ls_love_countries")],
             [("🎚️ Музыканты", "ls_love_artists"), ("🎚️ Книги", "ls_love_books")],
-            [("⬅️ Досуг", "m_leisure")],
+            [("◀️ Назад", "m_leisure")],
         ],
     ),
 }

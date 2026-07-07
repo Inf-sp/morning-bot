@@ -1417,7 +1417,7 @@ async def send_my_recipe_full(bot, cid, idx):
     card = _food_card(d, label="Рецепт")
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить из базы", callback_data=f"as_my_recipe_del_{idx}")],
-        [InlineKeyboardButton("◀️  к списку", callback_data="as_my_recipes")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="as_my_recipes")],
     ])
     await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=kb)
 

@@ -710,7 +710,7 @@ async def handle_callback(bot, cid, data, q=None):
             await b.send_message(chat_id=c,
                 text=msg.text,
                 entities=msg.entities, disable_web_page_preview=True,
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Пользователи", callback_data="set_admin_users")]]))
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin_users")]]))
         await _admin_guard(bot, cid, _do_invite)
     elif data.startswith("set_admin_revoke_"):
         target = data[len("set_admin_revoke_"):]
@@ -1282,5 +1282,4 @@ async def send_admin(bot, cid):
         return
     import admin as _admin
     await _admin.send_home(bot, cid)
-
 
