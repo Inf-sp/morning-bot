@@ -18,7 +18,6 @@ from ui import food as food_ui
 import memory
 import settings
 import menu
-import photo_provider
 
 TZ = config.TZ
 
@@ -831,12 +830,7 @@ _MEAL_CONSTRAINT = {
 
 
 async def _send_queue_card(bot, cid, meal, d):
-    """Отправляет карточку ОДНОГО показываемого рецепта, с фото (если доступно).
-
-    Фото подбирает единый photo_provider (только Pexels) — см.
-    photo_provider.get_dish_photo. Это единственное место, где вызывается подбор
-    фото — намеренно НЕ в _generate_and_store_queue, чтобы не тратить Pexels/
-    API на 9 непоказанных рецептов очереди."""
+    """Отправляет карточку ОДНОГО показываемого рецепта без фото."""
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe_queue", meal)
     store.last_source[str(cid)] = "Питание · Рецепт"
@@ -844,29 +838,14 @@ async def _send_queue_card(bot, cid, meal, d):
     card = food_ui.food_card(d, label=label, meal=meal, cuisine_emoji_fallback=RECIPE_CUISINE_EMOJI_FALLBACK)
     store.last_answer[str(cid)] = card.text
     kb = _recipe_kb()
-    photo = None
-    try:
-        photo = await asyncio.to_thread(photo_provider.get_dish_photo, d, meal)
-        _persist_current_queue_recipe(cid, d)
-    except Exception:
-        photo = None
-    if photo and photo.get("photo_url"):
-        caption_msg = food_ui.fit_caption(card)
-        try:
-            await bot.send_photo(chat_id=cid, photo=photo["photo_url"], caption=caption_msg.text,
-                                  caption_entities=caption_msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
+    _persist_current_queue_recipe(cid, d)
     await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=kb)
 
 
 async def _generate_and_store_queue(cid, meal, ingredients=None):
     """Генерирует новую очередь ~10 рецептов для категории meal и сохраняет её (§4.2/§5).
 
-    ТОЛЬКО текстовые поля рецепта (включая photo_query_en/photo_fallback_queries) —
-    без единого сетевого вызова к Pexels. Подбор
-    фото откладывается до показа конкретного рецепта, см. _send_queue_card."""
+    ТОЛЬКО текстовые поля рецепта, без единого сетевого вызова к Pexels."""
     cuisine_weights = get_cuisine_weights(cid)
     recent_history = get_recipe_history(cid)
     season_hint = _season_hint()
@@ -1092,23 +1071,12 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
         "«Омлет с луком», «Шакшука»).\n"
         f"{cuisine_codes_line}"
         "• cuisine_emoji — эмодзи флага страны происхождения блюда (например 🇯🇵, 🇮🇹, 🇰🇷, 🇹🇷).\n"
-        "• Поля для поиска фото ГОТОВОГО блюда (все на английском, только короткие значения "
-        "без лишних слов):\n"
-        "  - name_en — название блюда на английском (например \"Shakshuka with feta\").\n"
-        "  - photo_query_en — короткий точный запрос: название блюда или название блюда + один главный ингредиент "
-        "(например \"spinach feta omelette\").\n"
-        "  - photo_fallback_queries — массив ровно из 2 более общих коротких запросов "
-        "(например [\"spinach omelette\", \"vegetable omelette\"]).\n"
-        "  - В photo_query_en/photo_fallback_queries НЕ добавляй слова food, dish, recipe, healthy, delicious, "
-        "breakfast, lunch, dinner, cuisine, homemade, restaurant, кроме случаев, когда слово является частью "
-        "настоящего названия блюда.\n"
+        "• Фото в готовке не используются. Не добавляй name_en, photo_query_en и photo_fallback_queries.\n"
         "• Разнообразие внутри списка: не более 2 рецептов одной кухни подряд, но общий перекос в сторону "
         "любимых кухонь пользователя (см. предпочтения выше) сохраняй.\n"
         f"• Верни ровно {n} рецептов в массиве, без повторов названий внутри самого списка.\n"
         'JSON (без markdown, объект с одним ключом "recipes"): {"recipes":[{'
-        '"name":"Название блюда","name_en":"Dish name","cuisine":"код кухни","cuisine_emoji":"🇯🇵",'
-        '"photo_query_en":"short dish name",'
-        '"photo_fallback_queries":["fallback query 1","fallback query 2"],'
+        '"name":"Название блюда","cuisine":"код кухни","cuisine_emoji":"🇯🇵",'
         '"time":"X мин","servings":"1 порц.",'
         '"ingredients":"список через запятую",'
         '"steps":[{"text":"Глагол + действие + конкретика","minutes":2},{"text":"шаг 2","minutes":4}],'

@@ -117,6 +117,26 @@ def test_non_temporary_error_does_not_use_openrouter(monkeypatch):
     assert calls["fallback"] == 0
 
 
+def test_non_temporary_provider_error_continues_to_cloudflare(monkeypatch):
+    calls = []
+
+    def fail_groq(prompt, max_tokens, temperature):
+        calls.append("groq")
+        raise ai.LLMProviderError("groq", "groq 401", status_code=401, temporary=False)
+
+    def ok_cf(prompt, max_tokens):
+        calls.append("cf")
+        return "cloudflare answer"
+
+    monkeypatch.setattr(ai, "_gen_groq", fail_groq)
+    monkeypatch.setattr(ai, "_gen_cf", ok_cf)
+
+    out = ai.llm("test", order=("groq", "cf"))
+
+    assert out == "cloudflare answer"
+    assert calls == ["groq", "cf"]
+
+
 def test_openrouter_failure_returns_local_fallback(monkeypatch):
     def fail_gemini(prompt, max_tokens, temperature):
         raise ai.LLMProviderError("gemini", "gemini 503", status_code=503, temporary=True)

@@ -401,8 +401,6 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
             errs.append(f"{name}:{e}")
             if _is_temporary_exception(e):
                 temporary_errs.append((name, e))
-            else:
-                break
     if policy.openrouter_allowed and temporary_errs:
         origin, err = temporary_errs[0]
         reason = getattr(err, "error_type", type(err).__name__)
