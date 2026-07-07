@@ -54,28 +54,59 @@ def movie_home_screen(loved_count, genre_labels):
     return b.build_stripped()
 
 
+def _item_value(item, key, default=None):
+    if isinstance(item, dict):
+        return item.get(key, default)
+    return getattr(item, key, default)
+
+
+def _primary_genre(movie) -> str | None:
+    genres = _item_value(movie, "genres")
+    if isinstance(genres, list):
+        if not genres:
+            return None
+        return _movie_genre_text(genres[0])
+    genre = _item_value(movie, "genre")
+    return _movie_genre_text(genre) if genre else None
+
+
+def _format_rating(rating: float | None) -> str | None:
+    try:
+        value = float(rating)
+    except (TypeError, ValueError):
+        return None
+    if value <= 0:
+        return None
+    return f"⭐ {value:.1f}"
+
+
+def _format_movie_row(b: MessageBuilder, movie) -> None:
+    title = str(_item_value(movie, "title", "") or "").strip()
+    if not title:
+        return
+    b.text_line("• ")
+    b.bold(title)
+    genre = _primary_genre(movie)
+    if genre:
+        b.text_line(f" · {genre}")
+    rating = _format_rating(_item_value(movie, "rating"))
+    if rating:
+        b.text_line(f" · {rating}")
+    b.newline()
+
+
 def now_playing_screen(country_label: str, items) -> MessageSpec:
     b = MessageBuilder()
     b.text_line("🎬 ")
-    b.bold("В кино сейчас")
+    b.bold(f"В кино сейчас · {country_label}")
     b.newline()
-    if country_label:
-        b.spacer()
-        b.line(f"Прокат в {country_label}.")
     if not items:
         b.spacer()
-        b.line("Сейчас в прокате ничего не нашёл.")
+        b.line("Пока не удалось найти фильмы в прокате.")
         return b.build_stripped()
     b.spacer()
     for item in items:
-        b.text_line("• ")
-        b.bold(item.get("title", ""))
-        genre = _movie_genre_text(item.get("genre"))
-        if genre:
-            b.text_line(f" · {genre}")
-        if item.get("date_text"):
-            b.text_line(f" · с {item['date_text']}")
-        b.newline()
+        _format_movie_row(b, item)
     return b.build_stripped()
 
 
@@ -428,7 +459,7 @@ def _group_movies_by_date(events) -> list[tuple[date, list[dict]]]:
     groups = {}
     order = []
     for event in events or []:
-        day = _parse_event_date(event.get("date"))
+        day = _parse_event_date(_item_value(event, "release_date") or _item_value(event, "date"))
         if not day:
             continue
         if day not in groups:
@@ -468,9 +499,12 @@ def _concert_card(b: MessageBuilder, event: dict) -> None:
 
 
 def _movie_item(b: MessageBuilder, event: dict) -> None:
+    title = str(_item_value(event, "title", "") or "").strip()
+    if not title:
+        return
     b.text_line("• ")
-    b.bold(event.get("title", ""))
-    genre = _movie_genre_text(event.get("genre"))
+    b.bold(title)
+    genre = _primary_genre(event)
     if genre:
         b.text_line(f" · {genre}")
     b.newline()

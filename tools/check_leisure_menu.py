@@ -1,9 +1,10 @@
 import asyncio
 import os
 import sys
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
@@ -12,6 +13,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import bot as bot_module
 import leisure
 import menu
+import tmdb
 from ui import menu as menu_ui
 
 
@@ -59,7 +61,7 @@ async def main():
         "Предпочтения и сохранённое - в настройках."
     )
     assert _buttons(leisure_menu.reply_markup) == [
-        [("🎤 Концерты", "a_concerts_find"), ("🎬 В кино сейчас", "a_now_playing")],
+        [("🎤 Концерты", "a_concerts_find"), ("🎬 Что в кино", "a_now_playing")],
         [("🍿 Что посмотреть", "a_watch")],
         [("🎧 Музыка для тебя", "a_listen")],
         [("📚 Книги для тебя", "a_read")],
@@ -86,6 +88,14 @@ async def main():
     update, context = await _dispatch("a_now_playing", send_now_playing=now_playing_mock)
     now_playing_mock.assert_awaited_once_with(context.bot, "123", update.callback_query)
 
+    cinema_page_mock = AsyncMock()
+    update, context = await _dispatch("a_cinema_page_1", send_now_playing=cinema_page_mock)
+    cinema_page_mock.assert_awaited_once_with(context.bot, "123", update.callback_query, 1)
+
+    cinema_open_mock = AsyncMock()
+    update, context = await _dispatch("a_cinema_open_42", open_cinema_movie=cinema_open_mock)
+    cinema_open_mock.assert_awaited_once_with(context.bot, "123", "42")
+
     movie_home_mock = AsyncMock()
     update, context = await _dispatch("a_watch", send_movie_home=movie_home_mock)
     movie_home_mock.assert_awaited_once_with(context.bot, "123", update.callback_query)
@@ -110,12 +120,43 @@ async def main():
         entities=entities,
     )
 
+    fake_movies = [
+        tmdb.CinemaMovie(
+            id=idx,
+            title=f"Фильм номер {idx}",
+            original_title=None,
+            overview=None,
+            poster_url=None,
+            release_date=date(2026, 7, 10),
+            genres=["ужасы" if idx == 1 else "драма"],
+            rating=7.1 if idx == 1 else 6.5,
+            popularity=100 - idx,
+            country_code="NL",
+            is_theatrical=True,
+        )
+        for idx in range(1, 13)
+    ]
     fake_bot = SimpleNamespace(send_message=AsyncMock())
     with patch("store.get_settings", return_value={"cc": "NL", "country": "Нидерланды"}), \
-         patch.object(leisure.config, "TMDB_API_KEY", None):
+         patch.object(leisure.tmdb, "get_now_playing", return_value=fake_movies), \
+         patch.object(leisure.config, "TMDB_API_KEY", "tmdb-key"):
         await leisure.send_now_playing(fake_bot, "123")
+    now_playing_text = fake_bot.send_message.await_args.kwargs["text"]
     now_playing_markup = fake_bot.send_message.await_args.kwargs["reply_markup"]
+    assert "🎬 В кино сейчас · Нидерланды" in now_playing_text
+    assert "• Фильм номер 1 · ужасы · ⭐ 7.1" in now_playing_text
     _assert_button(now_playing_markup, "⬅️ Досуг", "m_leisure")
+    assert _buttons(now_playing_markup)[-2] == [("←", "noop"), ("1 / 2", "noop"), ("→", "a_cinema_page_1")]
+    assert _buttons(now_playing_markup)[0] == [("Фильм номер 1", "a_cinema_open_1")]
+
+    empty_bot = SimpleNamespace(send_message=AsyncMock())
+    with patch("store.get_settings", return_value={"cc": "NL", "country": "Нидерланды"}), \
+         patch.object(leisure.tmdb, "get_now_playing", return_value=[]), \
+         patch.object(leisure.config, "TMDB_API_KEY", "tmdb-key"):
+        await leisure.send_now_playing(empty_bot, "123")
+    assert empty_bot.send_message.await_args.kwargs["text"] == (
+        "🎬 В кино сейчас · Нидерланды\n\nПока не удалось найти фильмы в прокате."
+    )
 
     concert_bot = SimpleNamespace(send_message=AsyncMock())
     with patch.object(leisure.config, "TICKETMASTER_API_KEY", "token"), \
@@ -130,6 +171,18 @@ async def main():
     await leisure.concert_pick_country(country_bot, "123")
     country_markup = country_bot.send_message.await_args.kwargs["reply_markup"]
     _assert_button(country_markup, "⬅️ Досуг", "m_leisure")
+
+    weekly_bot = SimpleNamespace(send_message=AsyncMock())
+    upcoming_mock = Mock(return_value=fake_movies[:2])
+    with patch("store.get_settings", return_value={"cc": "NL", "country": "Нидерланды"}), \
+         patch.object(leisure.config, "TICKETMASTER_API_KEY", ""), \
+         patch.object(leisure.config, "TMDB_API_KEY", "tmdb-key"), \
+         patch.object(leisure.tmdb, "get_upcoming_theatrical_releases", upcoming_mock):
+        await leisure.send_weekly_events(weekly_bot, "123")
+    upcoming_mock.assert_called_once()
+    weekly_text = weekly_bot.send_message.await_args.kwargs["text"]
+    assert "🎬 Кино" in weekly_text
+    assert "• Фильм номер 1 · ужасы" in weekly_text
 
     print("ok")
 

@@ -276,60 +276,6 @@ def _tmdb_lookup(title, title_en=""):
             continue
     return util.ttl_set("tmdb_lookup", cache_key, None)
 
-def _tmdb_upcoming(cc):
-    if not config.TMDB_API_KEY:
-        return []
-    key = (cc or "").upper()
-    cached = util.ttl_get("tmdb_upcoming", key, 86400)
-    if cached is not None:
-        return cached
-    import requests
-    try:
-        r = requests.get("https://api.themoviedb.org/3/movie/upcoming",
-            params={"api_key": config.TMDB_API_KEY, "language": "ru-RU",
-                    "region": key, "page": 1}, timeout=15)
-        return util.ttl_set("tmdb_upcoming", key, r.json().get("results", []))
-    except Exception:
-        return util.ttl_set("tmdb_upcoming", key, [])
-
-
-def _tmdb_now_playing(cc):
-    if not config.TMDB_API_KEY:
-        return []
-    key = (cc or "").upper()
-    cached = util.ttl_get("tmdb_now_playing", key, 21600)
-    if cached is not None:
-        return cached
-    import requests
-    try:
-        r = requests.get("https://api.themoviedb.org/3/movie/now_playing",
-            params={"api_key": config.TMDB_API_KEY, "language": "ru-RU",
-                    "region": key, "page": 1}, timeout=15)
-        return util.ttl_set("tmdb_now_playing", key, r.json().get("results", []))
-    except Exception:
-        return util.ttl_set("tmdb_now_playing", key, [])
-
-
-def _fmt_short_date(ds, current_year=None):
-    try:
-        y, m, dd = ds.split("-")
-        year = int(y)
-        suffix = f" {year}" if current_year is not None and year != current_year else ""
-        return f"{int(dd)} {util._MONTHS[int(m)-1]}{suffix}"
-    except Exception:
-        return ds
-
-
-def _movie_genre_name(m):
-    gids = m.get("genre_ids") or []
-    if 16 in gids:
-        return "Мультфильм"
-    for gid in gids:
-        name = _TMDB_GENRES.get(gid)
-        if name:
-            return name.capitalize()
-    return ""
-
 def _display_title(it, tm):
     """Название, которое реально показано пользователю (TMDb если есть, иначе от LLM)."""
     name = (tm.get("name") if tm else "") or it.get("title", "")
@@ -557,6 +503,62 @@ def _movie_home_kb():
     ])
 
 
+def _movie_country_label(name, cc=""):
+    name = str(name or "").strip()
+    if name:
+        return name
+    cc = (cc or "").upper()
+    by_cc = {
+        "NL": "Нидерланды",
+        "BE": "Бельгия",
+        "DE": "Германия",
+        "FR": "Франция",
+        "GB": "Великобритания",
+        "ES": "Испания",
+        "IT": "Италия",
+        "AT": "Австрия",
+        "CH": "Швейцария",
+        "PL": "Польша",
+        "SE": "Швеция",
+        "DK": "Дания",
+        "PT": "Португалия",
+        "US": "США",
+    }
+    return by_cc.get(cc, config.DEFAULT_CITY.get("country", "Нидерланды"))
+
+
+def _movie_service_language(_cid=None):
+    return "ru-RU"
+
+
+def _clip_button_text(text, limit=36):
+    text = str(text or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit - 1].rstrip() + "…"
+
+
+def _cinema_back_kb():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")]])
+
+
+def _build_cinema_keyboard(movies, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    start = page * 10
+    rows = [
+        [InlineKeyboardButton(_clip_button_text(movie.title), callback_data=f"a_cinema_open_{movie.id}")]
+        for movie in movies[start:start + 10]
+    ]
+    prev_cb = f"a_cinema_page_{page - 1}" if page > 0 else "noop"
+    next_cb = f"a_cinema_page_{page + 1}" if page + 1 < total_pages else "noop"
+    rows.append([
+        InlineKeyboardButton("←", callback_data=prev_cb),
+        InlineKeyboardButton(f"{page + 1} / {total_pages}", callback_data="noop"),
+        InlineKeyboardButton("→", callback_data=next_cb),
+    ])
+    rows.append([InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")])
+    return InlineKeyboardMarkup(rows)
+
+
 async def send_movie_home(bot, cid, q=None):
     """Приветственный экран раздела «Кино» (тот же паттерн, что у Гардероба):
     сколько уже в любимых + какие жанры выбраны в предпочтениях, снизу — вход
@@ -575,35 +577,52 @@ async def send_movie_home(bot, cid, q=None):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-async def send_now_playing(bot, cid, q=None):
-    from datetime import datetime
-
+async def send_now_playing(bot, cid, q=None, page=0):
     s = store.get_settings(cid)
-    cc = (s.get("cc") or "NL").upper()
-    country_label = _concert_place_name(s.get("country"), cc)
-    current_year = datetime.now(config.TZ).year
-    items = []
+    cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
+    country_label = _movie_country_label(s.get("country"), cc)
+    movies = []
     if config.TMDB_API_KEY:
         try:
-            results = await asyncio.to_thread(_tmdb_now_playing, cc)
-            for m in results:
-                title = m.get("title", "")
-                if not title or not re.search(r"[A-Za-zА-Яа-яЁё]", title):
-                    continue
-                items.append({
-                    "title": title,
-                    "genre": _movie_genre_name(m),
-                    "date_text": _fmt_short_date(m.get("release_date", ""), current_year=current_year),
-                })
-                if len(items) >= 8:
-                    break
+            movies = await asyncio.to_thread(tmdb.get_now_playing, cc, _movie_service_language(cid))
         except Exception:
-            items = []
-    msg = leisure_ui.now_playing_screen(country_label, items)
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Досуг", callback_data="m_leisure")]])
+            movies = []
+    if not movies:
+        msg = leisure_ui.now_playing_screen(country_label, [])
+        kb = _cinema_back_kb()
+    else:
+        total_pages = max(1, (len(movies) + 9) // 10)
+        page = max(0, min(page, total_pages - 1))
+        start = page * 10
+        msg = leisure_ui.now_playing_screen(country_label, movies[start:start + 10])
+        kb = _build_cinema_keyboard(movies, page, total_pages)
+    store.last_source[str(cid)] = "Досуг · Что в кино"
+    store.last_answer[str(cid)] = msg.text
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def open_cinema_movie(bot, cid, movie_id):
+    try:
+        tm = await asyncio.to_thread(tmdb.detail, int(movie_id), "movie")
+    except Exception:
+        tm = None
+    if not tm:
+        await send_now_playing(bot, cid)
+        return
+    title, msg = _movie_card({"title": tm.get("name", ""), "title_en": tm.get("name_en", "")}, tm)
+    kb = _cinema_back_kb()
+    store.last_source[str(cid)] = "Досуг · Что в кино"
+    store.last_answer[str(cid)] = msg.text
+    if tm.get("poster"):
+        try:
+            await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=msg.text,
+                                 caption_entities=msg.entities, reply_markup=kb)
             return
         except Exception:
             pass
@@ -1885,35 +1904,16 @@ async def _rank_concerts_by_taste(events, artists):
 
 async def send_weekly_events(bot, cid):
     """Вс 10:00 — концерты артистов пользователя + кинопремьеры ближайших дней."""
-    import requests
     from datetime import datetime, timedelta
 
     s = store.get_settings(cid)
-    cc = (s.get("cc") or "NL").upper()
+    cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
     cname = _concert_place_name(s.get("country"), cc)
     now = datetime.now(config.TZ)
     period_start = now.date()
     period_end = (now + timedelta(days=7)).date()
     today_str = period_start.isoformat()
     date_to_str = period_end.isoformat()
-
-    def _movie_title_ok(title):
-        if not title:
-            return False
-        # TMDB can return local titles in non-RU/EN scripts for region premieres.
-        if not re.search(r"[A-Za-zА-Яа-яЁё]", title):
-            return False
-        return not re.search(r"[^A-Za-zА-Яа-яЁё0-9\s.,:;!?()«»\"'–—-]", title)
-
-    def _movie_genre(m):
-        gids = m.get("genre_ids") or []
-        if 16 in gids:
-            return "Мультфильм"
-        for gid in gids:
-            name = _TMDB_GENRES.get(gid)
-            if name:
-                return name.capitalize()
-        return "Премьера"
 
     # --- Концерты ---
     # Читаем недельный кэш (обновлён job'ом refresh_concerts_cache перед этой рассылкой),
@@ -1945,23 +1945,17 @@ async def send_weekly_events(bot, cid):
     movie_items = []
     if config.TMDB_API_KEY:
         try:
-            results = await asyncio.to_thread(_tmdb_upcoming, cc)
-            upcoming = [m for m in results
-                        if today_str <= m.get("release_date", "") <= date_to_str
-                        and _movie_title_ok(m.get("title", ""))]
-            upcoming.sort(key=lambda m: m.get("release_date", ""))
-            for m in upcoming[:5]:
-                title = m.get("title", "")
-                genre = _movie_genre(m)
-                movie_items.append({
-                    "title": title,
-                    "date": m.get("release_date", ""),
-                    "genre": genre,
-                })
+            movie_items = await asyncio.to_thread(
+                tmdb.get_upcoming_theatrical_releases,
+                cc,
+                period_start,
+                period_end,
+                _movie_service_language(cid),
+            )
         except Exception:
-            pass
+            movie_items = []
 
-    msg = leisure_ui.weekly_events_card(period_start, period_end, concert_items, movie_items)
+    msg = leisure_ui.weekly_events_card(period_start, period_end, concert_items, movie_items[:5])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, disable_web_page_preview=True)
 
 

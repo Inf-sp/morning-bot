@@ -255,6 +255,10 @@ async def answer_callback(update, context):
                 await _ack(q); await leisure.send_movie_home(bot, cid, q)
             elif act == "now_playing":
                 await _ack(q); await leisure.send_now_playing(bot, cid, q)
+            elif act.startswith("cinema_page_"):
+                await _ack(q); await leisure.send_now_playing(bot, cid, q, int(act.split("_")[-1]))
+            elif act.startswith("cinema_open_"):
+                await _ack(q); await leisure.open_cinema_movie(bot, cid, act.split("_")[-1])
             elif act == "read":
                 await _ack(q); await leisure.send_recos(bot, cid, "book")
             elif act == "watchlist":
