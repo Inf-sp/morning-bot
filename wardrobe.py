@@ -497,23 +497,6 @@ def add_wardrobe_gap(cid, item, reason, priority=True):
     return True
 
 
-async def send_show(bot, cid):
-    w = store.load_wardrobe(cid)
-    total, _ = wardrobe_stats(w)
-    if not total:
-        await bot.send_message(chat_id=cid, text="Шкаф пуст. Добавь вещи через «🏷 Добавить вещь».", reply_markup=closet_kb())
-        return
-    grouped = {}
-    for zone, subcat, item in _flat_wardrobe_items(w):
-        grouped.setdefault(zone, []).append(item["name"])
-    lines = ["🗄 <b>Мой шкаф</b>", ""]
-    for z in ZONE_ORDER:
-        if grouped.get(z):
-            lines.append(f"{ZONE_EMOJI.get(z,'•')} <b>{z}</b>")
-            lines += [f"   - {esc(it)}" for it in grouped[z]]
-            lines.append("")
-    await bot.send_message(chat_id=cid, text="\n".join(lines).strip(), parse_mode="HTML", reply_markup=closet_kb())
-
 _ZONES_DESC = "; ".join(f"{z}: {', '.join(subs)}" for z, subs in store.ZONE_SUBCATS.items())
 
 async def _parse_and_add(bot, cid, text):
@@ -825,11 +808,6 @@ async def handle_callback(bot, cid, q, data):
         await look_feedback(bot, cid, "nostyle"); await util.clear_loading(q); return
     if data == "w_fb_worn":
         await look_feedback(bot, cid, "worn"); return
-    if data == "w_closet":
-        await send_del_zones(bot, cid, q=q, origin="m")
-        return
-    if data == "w_show":
-        await send_show(bot, cid); return
     if data == "w_add":
         store.pending_input[str(cid)] = "wardrobe_add"
         await bot.send_message(chat_id=cid, text="🏷 Напиши вещь в формате: тип + цвет + детали/бренд.\n"

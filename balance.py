@@ -1687,8 +1687,6 @@ async def save_worries(bot, cid, text):
 
 _MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("◀️ Назад", "m_balance")]])
 
-_ONESHOT = {}
-
 
 # ---------- роутер кнопок Баланса ----------
 async def handle_callback(bot, cid, q, data):
@@ -1701,8 +1699,9 @@ async def handle_callback(bot, cid, q, data):
 # дневник тревоги
     if data == "as_daycheck":
         await send_daycheck(bot, cid); return
-    if data == "as_worryreview":
-        await send_evening_review(bot, cid); return
+    if data == "as_diary":
+        import cleanup
+        await cleanup.open_cleanup(bot, cid, "diary"); return
     # мотивация
     if data == "as_motiv":
         await util.ack_loading(q)
@@ -1715,20 +1714,6 @@ async def handle_callback(bot, cid, q, data):
         store.last_answer[str(cid)] = out
         store.last_surface[str(cid)] = "card"
         await bot.send_message(chat_id=cid, text=out, entities=entities, reply_markup=_MOTIV_KB)
-        await util.clear_loading(q)
-        return
-    # одноразовая генерация (прочее)
-    if data in _ONESHOT:
-        gen, lbl, cb = _ONESHOT[data]
-        await util.ack_loading(q)
-        try:
-            out = gen(cid)
-        except Exception as e:
-            await util.clear_loading(q)
-            await verify.safe_error(bot, cid, e); return
-        store.last_action[str(cid)] = ("oneshot", data)
-        store.last_source[str(cid)] = {"as_motiv": "Здоровье · Мотивация"}.get(data, "Ассистент")
-        await _send(bot, cid, out, kb=_ans_kb(lbl, cb))
         await util.clear_loading(q)
         return
     # врач
@@ -1815,13 +1800,6 @@ async def handle_callback(bot, cid, q, data):
 # ---------- «Продолжить» / «Ещё раз» ----------
 async def retry(bot, cid):
     la = store.last_action.get(str(cid))
-    if la and la[0] == "oneshot":
-        gen, lbl, cb = _ONESHOT[la[1]]
-        try:
-            out = gen(cid)
-        except Exception as e:
-            await verify.safe_error(bot, cid, e); return
-        await _send(bot, cid, out, kb=_ans_kb(lbl, cb)); return
     if la and la[0] == "recipe":
         await send_recipe(bot, cid, la[1]); return
     if la and la[0] == "leftovers":

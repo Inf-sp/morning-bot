@@ -414,12 +414,6 @@ def _list_kb(items, del_prefix, add_cb, back="set_home", clean_cb=None):
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
     return InlineKeyboardMarkup(rows)
 
-async def _send_list(bot, cid, title, items, del_prefix, add_cb, back="set_home"):
-    """Лагом и аналогичные экраны с intro-текстом: элементы только в кнопках."""
-    msg = settings_ui.list_section(title, items)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=_list_kb(items, del_prefix, add_cb, back))
-
 # --- Шкаф ---
 async def send_wardrobe(bot, cid, back="m_notes"):
     if store.pending_input.get(str(cid)) == "wardrobe_profile_input":
@@ -516,8 +510,6 @@ async def list_add_done(bot, cid, kind, text):
 async def handle_callback(bot, cid, data, q=None):
     if data == "set_home":
         await send_home(bot, cid)
-    elif data == "set_love":
-        await send_love_home(bot, cid, back="m_notes")
     elif data == "set_dict":
         await learning.send_dict(bot, cid, back="m_notes")
     elif data == "set_dict_g":
@@ -544,11 +536,6 @@ async def handle_callback(bot, cid, data, q=None):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
     elif data.startswith("set_pflag_"):
         await toggle_personal_flag(bot, cid, data[len("set_pflag_"):], q)
-    elif data.startswith("set_notiftest_"):
-        kind = data[len("set_notiftest_"):]
-        async def _do_test(b, c):
-            await _run_notif_test(b, c, kind)
-        await _admin_guard(bot, cid, _do_test)
     elif data == "set_notif_off_all":
         await notif_off_all(bot, cid, q)
     elif data == "set_levels":
@@ -577,10 +564,6 @@ async def handle_callback(bot, cid, data, q=None):
         store.pending_input[cid] = "setadd_lagom"
         msg = settings_ui.lagom_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
-    elif data.startswith("setdel_lagom_"):
-        import memory
-        memory.del_lagom(cid, int(data.split("_")[-1]))
-        await send_lagom(bot, cid)
     elif data == "set_lagom_clean":
         from cleanup import open_cleanup
         await open_cleanup(bot, cid, "lagom")
@@ -735,9 +718,6 @@ async def save_fav(bot, cid, q=None):
     msg = settings_ui.saved_to_later()
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
 
-def _top_cat(source):
-    return (source or "Прочее").split(" · ")[0]
-
 def _note_type(source):
     s = (source or "").lower()
     if "фильм" in s or "сериал" in s or "кино" in s:
@@ -788,23 +768,6 @@ def _fav_group_info(key: str):
         if group_key == key:
             return label, desc
     return "🗂 Прочее", "всё, что не попало в отдельную категорию"
-
-async def note_delete_menu(bot, cid, i):
-    notes_list = store.get_list(config.NOTES_KEY, cid)
-    if i >= len(notes_list):
-        await send_notes(bot, cid); return
-    n = notes_list[i]
-    t = (n.get("text", "") if isinstance(n, dict) else str(n)).strip()
-    typ, _, _, _ = _note_type(n.get("source", "") if isinstance(n, dict) else "")
-    rows = []
-    if typ:
-        rows.append([InlineKeyboardButton("🚫 В чёрный список", callback_data=f"as_noteblack_{i}")])
-        rows.append([InlineKeyboardButton("❤️ В любимые", callback_data=f"as_notelove_{i}")])
-    rows.append([InlineKeyboardButton("❌ Просто удалить", callback_data=f"as_notedrop_{i}")])
-    rows.append([InlineKeyboardButton("◀️ Отмена", callback_data="as_notes")])
-    msg = settings_ui.note_action_prompt(t)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=InlineKeyboardMarkup(rows))
 
 def _pop_note(cid, i):
     notes_list = store.get_list(config.NOTES_KEY, cid)
@@ -1167,16 +1130,6 @@ def _love_key_of(key):
     return {"movies": config.WATCHLIST_KEY, "countries": config.FAVCOUNTRIES_KEY,
             "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
 
-async def love_delete(bot, cid, key, i):
-    store_key = _love_key_of(key)
-    if not store_key:
-        await send_love_section(bot, cid, key); return
-    items = store.get_list(store_key, cid)
-    if i < len(items):
-        items.pop(i)
-        store.set_list(store_key, cid, items)
-    await send_love_section(bot, cid, key)
-
 async def love_add_start(bot, cid, key, origin="base"):
     prefix = "loveaddls" if origin == "leisure" else "loveadd"
     store.pending_input[str(cid)] = f"{prefix}_{key}"
@@ -1224,8 +1177,6 @@ async def handle_notes_callback(bot, cid, q, data):
         await note_drop(bot, cid, int(data.split("_")[-1])); return
     if data == "as_export":
         await export_notes(bot, cid); return
-    if data.startswith("as_notedel_"):
-        await note_delete_menu(bot, cid, int(data.split("_")[-1])); return
     if data.startswith("as_noteblack_"):
         await note_to_blacklist(bot, cid, int(data.split("_")[-1])); return
     if data.startswith("as_notelove_"):
@@ -1262,9 +1213,6 @@ async def handle_notes_callback(bot, cid, q, data):
     if data.startswith("as_lovehidden_"):
         import cleanup
         await cleanup.open_cleanup(bot, cid, f"hid_{data[len('as_lovehidden_'):]}"); return
-    if data.startswith("as_lovedel_"):
-        parts = data[len("as_lovedel_"):].rsplit("_", 1)
-        await love_delete(bot, cid, parts[0], int(parts[1])); return
     if data.startswith("as_loveadd_"):
         await love_add_start(bot, cid, data[len("as_loveadd_"):]); return
     if data.startswith("as_love_"):

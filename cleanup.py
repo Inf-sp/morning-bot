@@ -53,7 +53,7 @@ def _is_view_ctx(ctx):
             or ctx.startswith("lv_") or ctx.startswith("lvls_")
             or ctx.startswith("hid_")
             or ctx.startswith("d_") or ctx in ("wl", "rl")
-            or ctx in ("fridge", "recipes", "lagom"))
+            or ctx in ("fridge", "recipes", "lagom", "diary"))
 
 
 def _view_store_key(ctx):
@@ -79,6 +79,8 @@ def _view_store_key(ctx):
         return config.MY_RECIPES_KEY
     if ctx == "lagom":
         return _LAGOM_REVISION_SLOT
+    if ctx == "diary":
+        return config.DIARY_KEY
     return None
 
 
@@ -277,6 +279,8 @@ def _action_label(ctx):
         return "Удалить слова" if ctx.endswith("_word") else "Удалить фразы"
     if ctx == "lagom":
         return "Удалить принципы"
+    if ctx == "diary":
+        return "Удалить записи"
     return "Удалить отмеченные"
 
 
@@ -479,6 +483,10 @@ def _view_items(ctx, cid):
         records = store.ensure_list_ids_via(memory.get_lagom, memory.set_lagom, _LAGOM_REVISION_SLOT, cid)
         items = [(r["id"], _view_label(r)) for r in records]
         return "Чистка: Здоровье", items, "set_lagom"
+    if ctx == "diary":
+        records = store.ensure_list_ids(config.DIARY_KEY, cid)
+        items = [(r["id"], f"{r.get('date', '')} — {r.get('text', '')}".strip(" —")) for r in records]
+        return "📝 История самочувствия", items, "m_balance"
     return "Чистка", [], "m_learn"
 
 

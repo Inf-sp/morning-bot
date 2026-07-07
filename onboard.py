@@ -152,9 +152,6 @@ async def handle_callback(bot, cid, q, data: str):
         await _ask_priorities(bot, cid, q)
         return
 
-    if data == "ob_done":
-        await _ask_priorities(bot, cid, q)
-
 
 async def _ask_next_level(bot, cid, q):
     st = _ob.get(str(cid), {})

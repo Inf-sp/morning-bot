@@ -103,13 +103,6 @@ def add_lagom(cid, item: str):
     set_lagom(cid, items)
 
 
-def del_lagom(cid, i: int):
-    items = get_lagom(cid)
-    if 0 <= i < len(items):
-        items.pop(i)
-        set_lagom(cid, items)
-
-
 def _split_items(text: str) -> list:
     """Разбивает ввод на отдельные принципы: сначала по строкам, затем по предложениям."""
     lines = [re.sub(r'^[\s*\-•·→\d]+[\.\)\:]?\s*', '', l).strip() for l in text.splitlines()]

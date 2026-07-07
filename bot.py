@@ -87,7 +87,7 @@ async def answer_callback(update, context):
         return
     if data.startswith("as_"):
         if data.startswith(("as_food", "as_fridge", "as_recipe", "as_my_recipe",
-                             "as_daycheck", "as_motiv", "as_doctor")):
+                             "as_daycheck", "as_motiv", "as_doctor", "as_diary")):
             await balance.handle_callback(bot, cid, q, data)
         else:
             await settings.handle_notes_callback(bot, cid, q, data)
@@ -95,10 +95,6 @@ async def answer_callback(update, context):
     # Гардероб: инлайн-кабинет
     if data.startswith("w_"):
         await wardrobe.handle_callback(bot, cid, q, data)
-        return
-    # Мой день: инлайн-кабинет
-    if data.startswith("md_"):
-        await myday.handle_callback(bot, cid, q, data)
         return
     # Настройки
     if data.startswith(("set_", "setadd_", "setdel_")):

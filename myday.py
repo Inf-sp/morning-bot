@@ -409,11 +409,3 @@ async def send_plany(bot, cid, force=False):
     await bot.send_message(
         chat_id=cid, text=cached["text"], entities=cached.get("entities"), reply_markup=_day_menu_kb()
     )
-
-async def handle_callback(bot, cid, q, data):
-    if data == "md_refresh":
-        reset_day_cache(cid)
-        _build_attempted.discard(_city_slug(store.get_settings(cid).get("city", "")))
-        await send_plany(bot, cid, force=True); return
-    if data == "md_worrycheck":
-        await balance.send_evening_review(bot, cid); return

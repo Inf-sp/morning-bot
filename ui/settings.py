@@ -172,10 +172,6 @@ def saved_to_later():
     return MessageSpec(text="⏳ Сохранено во временные закладки.")
 
 
-def note_action_prompt(preview):
-    return MessageSpec(text=f"Что сделать с «{preview[:60]}»?")
-
-
 def note_blacklisted(preview, category):
     return MessageSpec(text=f"🚫 «{preview[:50]}» - в чёрный список «{category}». Больше не порекомендую.")
 
