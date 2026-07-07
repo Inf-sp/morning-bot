@@ -68,6 +68,7 @@ _CACHE_TTL_NEGATIVE_SECONDS = 24 * 60 * 60        # «не найдено» — 
 
 _PER_QUERY_CANDIDATES = 15
 _VISION_MATCH_SCORE_MIN = 78
+_LOCAL_SCORE_FALLBACK_MIN = 7
 
 _POSITIVE_WORDS = (
     "dish", "food", "meal", "plate", "plated", "served", "serving", "cuisine",
@@ -298,6 +299,16 @@ def _find_via_source(search_fn, queries: list, recipe: dict, source: str, meal_t
     calls_made = 0
     remaining_total = MAX_VISION_CALLS_PER_RECIPE - vision_calls_used
     budget = min(max_vision_calls, remaining_total)
+
+    # OpenAI vision отключён: сохраняем фото-карточки через строгий локальный score.
+    # Берём только лучший кандидат с явными food-сигналами, без сильных negative-сигналов.
+    if candidates and not vision.is_enabled():
+        photo, query, score = candidates[0]
+        image_url = _photo_url_for_vision(photo, source)
+        if image_url and score >= _LOCAL_SCORE_FALLBACK_MIN:
+            _log_event("recipe_photo_selected_local", source=source, name_en=name_en,
+                       query=query, score=score)
+            return _to_result(photo, source, query, score, {"match_score": None}), calls_made
 
     for photo, query, score in candidates:
         if calls_made >= budget:

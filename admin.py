@@ -30,9 +30,7 @@ _MOD_NAMES = {
 }
 
 _PROV_ORDER = [
-    ("openai", "OpenAI", lambda: bool(config.OPENAI_API_KEY)),
     ("gemini", "Gemini", lambda: True),
-    ("openrouter", "OpenRouter", lambda: bool(config.OPENROUTER_API_KEY)),
     ("groq", "Groq", lambda: bool(config.GROQ_API_KEY)),
     ("cf", "Cloudflare", lambda: bool(config.CF_API_TOKEN and config.CF_ACCOUNT_ID)),
 ]
@@ -204,6 +202,7 @@ async def send_llm(bot, cid):
     log = ai.get_cost_log()
     last = log[-1] if log else {}
     usage = get_llm_usage_summary(1)
+    fallback_stats = ai.get_openrouter_fallback_stats(1)
     errs = tracking.get_errors(source="llm", limit=200)
     errs_today = sum(1 for e in errs if e.get("ts", 0) >= time.time() - DAY)
     status_dot, status_txt = (ui.OK, "работает") if not errs_today else (ui.WARN, "есть ошибки")
@@ -213,7 +212,7 @@ async def send_llm(bot, cid):
         _back(),
     ])
     msg = ui.llm(status_dot, status_txt, _when(last.get("ts", 0)), _avg_ms(_cost_recent(1)),
-                 errs_today, usage["calls"], usage["tokens"], usage["providers"])
+                 errs_today, usage["calls"], usage["tokens"], usage["providers"], fallback_stats)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
@@ -232,8 +231,7 @@ async def send_llm_check(bot, cid):
 
 async def _llm_probe_results():
     import ai
-    probes = [("OpenAI", "openai"), ("OpenRouter", "openrouter"),
-              ("Cloudflare", "cf"), ("Gemini", "gemini"), ("Groq", "groq")]
+    probes = [("Cloudflare", "cf"), ("Gemini", "gemini"), ("Groq", "groq")]
     results = []
     for label, route in probes:
         configured, missing = _provider_configured(route)
@@ -416,8 +414,6 @@ def _probe_exception(exc):
 
 
 def _provider_configured(route):
-    if route == "openai":
-        return bool(config.OPENAI_API_KEY), "OPENAI_API_KEY"
     if route == "openrouter":
         return bool(config.OPENROUTER_API_KEY), "OPENROUTER_API_KEY"
     if route == "gemini":
@@ -459,7 +455,7 @@ def _issue_summary(source, msg):
     low = msg.lower()
     if source == "llm":
         providers = []
-        for provider in ("openai", "openrouter", "gemini", "groq", "cf"):
+        for provider in ("openrouter", "gemini", "groq", "cf"):
             if f"{provider}:" in low or f"{provider} " in low:
                 providers.append(provider)
         prefix = ", ".join(dict.fromkeys(providers)) if providers else "LLM"
@@ -518,7 +514,7 @@ async def _collect_issues_with_probes(cid):
         for result in await _api_probe_results():
             label, ok, detail = result[:3]
             if not ok:
-                source = "llm" if label in {"OpenAI", "OpenRouter", "Cloudflare", "Gemini", "Groq"} else "service"
+                source = "llm" if label in {"OpenRouter", "Cloudflare", "Gemini", "Groq"} else "service"
                 rows.append((_issue_key(now, source, label), ui.BAD, label, f"{detail} · {_when(now)}"))
     except Exception as e:
         rows.append((_issue_key(now, "llm", "probe"), ui.BAD, "LLM", f"{_issue_summary('llm', str(e))} · {_when(now)}"))

@@ -651,7 +651,8 @@ def _world_fact():
         line = ai.llm(
             f"Сейчас в {name} {t:+.0f}°C (реальные данные). Напиши ОДНУ фразу, начни СТРОГО со слов "
             f"«Кстати, сегодня в {name} ...», с лёгким юмором, на русском, 1 предложение, без markdown.",
-            120, 1.05, tier="cheap").strip().splitlines()[0]
+            120, 1.05, tier="cheap", fallback_allowed=True,
+            privacy_level="public", response_mode="plain_text").strip().splitlines()[0]
     except Exception:
         line = f"Кстати, сегодня в {name} около {t:+.0f}°C."
     return f"{flag} {line}"
@@ -661,7 +662,8 @@ def _joke_outfit(city, tmax, rain, wind_ms, desc, when="сегодня"):
         return ai.llm(
             f"Город {city}, {when}: {desc}, до {tmax:+.0f}°C, дождь {rain:.0f}%, ветер {wind_ms:.0f} м/с. "
             f"Напиши ОДНУ дерзкую дружелюбную фразу + короткий совет по одежде (нужна ли куртка/зонт). "
-            f"1 предложение, на русском, без markdown.", 120, 1.05, tier="cheap").strip().splitlines()[0]
+            f"1 предложение, на русском, без markdown.", 120, 1.05, tier="cheap",
+            fallback_allowed=True, privacy_level="public", response_mode="plain_text").strip().splitlines()[0]
     except Exception:
         return f"Сегодня {city} явно выиграл погодную лотерею."
 
@@ -816,7 +818,8 @@ async def send_weather(bot, cid, mode="today"):
                     f"ветер {wind_ms:.0f} м/с.\n\n"
                     "Напиши короткий метео-итог: 2-3 предложения — общая картина, что ждать. "
                     "Без слова 'зонт'. Без markdown. На русском.",
-                    150, 0.6, tier="cheap", module="weather"
+                    150, 0.6, tier="cheap", module="weather",
+                    fallback_allowed=True, privacy_level="public", response_mode="plain_text"
                 ).strip()
                 if summary:
                     fact = _finish_sentence(cap_sentence(summary))

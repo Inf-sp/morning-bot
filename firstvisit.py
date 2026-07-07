@@ -360,7 +360,7 @@ async def _save_leisure_titles(cid, raw: str, mode: str) -> list:
             f"Пользователь описал предпочтения в досуге: {secure.wrap_untrusted(raw, 'досуг')}\n"
             "Извлеки списки:\n"
             '{"movies":["название","..."],"artists":["имя","..."],"books":["книга","..."]}',
-            500, tier="cheap", route="openai", module="firstvisit",
+            500, tier="cheap", route="gemini", module="firstvisit",
         )
     except Exception:
         d = {}

@@ -115,7 +115,8 @@ def user_search_result(dot, name, city, last_seen):
 
 # ================= LLM =================
 
-def llm(status_dot, status_text, last_req, avg_ms, errors_today, calls_today, tokens_today, providers):
+def llm(status_dot, status_text, last_req, avg_ms, errors_today, calls_today, tokens_today, providers,
+        openrouter_fallback=None):
     """providers: [(label, pct)] доля токенов за сегодня."""
     b = MessageBuilder()
     b.bold("🤖 LLM")
@@ -127,6 +128,13 @@ def llm(status_dot, status_text, last_req, avg_ms, errors_today, calls_today, to
     b.metric("Токенов сегодня", f"~{_num(tokens_today)}")
     b.metric("Ср. ответ", f"{avg_ms} мс")
     b.metric("Ошибок сегодня", errors_today)
+    if openrouter_fallback is not None:
+        b.spacer()
+        b.bold("OpenRouter fallback")
+        b.newline()
+        b.line(f"• попыток: {openrouter_fallback.get('attempts', 0)}")
+        b.line(f"• успешно: {openrouter_fallback.get('success', 0)}")
+        b.line(f"• ошибок: {openrouter_fallback.get('errors', 0)}")
     if providers:
         b.spacer()
         b.line(" · ".join(f"{label} {pct}%" for label, pct in providers))

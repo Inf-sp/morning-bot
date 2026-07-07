@@ -5,6 +5,8 @@ import re
 import json
 import time
 import requests
+from dataclasses import dataclass
+from typing import Literal
 import config
 import store
 import secure
@@ -13,6 +15,51 @@ _log = logging.getLogger(__name__)
 
 # ---------- Cost logger ----------
 _COST_MAX = 500  # максимум записей в rolling-буфере
+OPENROUTER_FALLBACK_STATS_KEY = "openrouter_fallback_stats.json"
+LOCAL_FALLBACK_TEXT = "Сейчас не удалось подготовить ответ. Попробуй ещё раз чуть позже."
+
+PrivacyLevel = Literal["public", "personal", "sensitive"]
+ResponseMode = Literal["plain_text", "json", "structured", "tool_call"]
+
+
+@dataclass(frozen=True)
+class FallbackPolicy:
+    fallback_allowed: bool = False
+    privacy_level: PrivacyLevel = "personal"
+    response_mode: ResponseMode = "plain_text"
+
+    @property
+    def openrouter_allowed(self) -> bool:
+        return (
+            self.fallback_allowed is True
+            and self.privacy_level == "public"
+            and self.response_mode == "plain_text"
+        )
+
+
+class LLMProviderError(Exception):
+    def __init__(self, provider: str, message: str, status_code: int | None = None,
+                 temporary: bool = False, error_type: str = "provider_error"):
+        super().__init__(message)
+        self.provider = provider
+        self.status_code = status_code
+        self.temporary = temporary
+        self.error_type = error_type
+
+
+def _is_temporary_status(status_code):
+    return status_code in (429, 502, 503, 504)
+
+
+def _is_temporary_exception(exc):
+    if isinstance(exc, LLMProviderError):
+        return exc.temporary
+    return isinstance(exc, (
+        requests.exceptions.Timeout,
+        requests.exceptions.ConnectTimeout,
+        requests.exceptions.ReadTimeout,
+        requests.exceptions.ConnectionError,
+    ))
 
 
 def _log_cost(provider: str, model: str, prompt: str, result: str, module: str = "", ms: int = 0, ok: bool = True):
@@ -38,6 +85,45 @@ def _log_cost(provider: str, model: str, prompt: str, result: str, module: str =
         pass  # логирование не должно ломать основной поток
 
 
+def _log_openrouter_fallback(origin_provider: str, reason: str, ok: bool,
+                             status_code: int | None = None, latency_ms: int = 0,
+                             fallback_used: bool = True):
+    """Telemetry без prompt/response/API key."""
+    try:
+        entry = {
+            "ts": int(time.time()),
+            "provider": "openrouter",
+            "model": config.OPENROUTER_MODEL,
+            "origin_provider": origin_provider or "",
+            "reason": reason or "",
+            "status_code": status_code,
+            "latency_ms": int(latency_ms or 0),
+            "fallback_used": bool(fallback_used),
+            "ok": bool(ok),
+        }
+        data = store._load(OPENROUTER_FALLBACK_STATS_KEY)
+        log = data.get("log", [])
+        log.append(entry)
+        data["log"] = log[-_COST_MAX:]
+        store._save(OPENROUTER_FALLBACK_STATS_KEY, data)
+    except Exception:
+        pass
+
+
+def get_openrouter_fallback_stats(period_days=1) -> dict:
+    try:
+        cutoff = time.time() - period_days * 86400
+        rows = [e for e in store._load(OPENROUTER_FALLBACK_STATS_KEY).get("log", [])
+                if e.get("ts", 0) >= cutoff]
+    except Exception:
+        rows = []
+    return {
+        "attempts": len(rows),
+        "success": sum(1 for e in rows if e.get("ok")),
+        "errors": sum(1 for e in rows if not e.get("ok")),
+    }
+
+
 def get_cost_log() -> list:
     """Вернуть список всех сохранённых записей расходов."""
     try:
@@ -46,11 +132,19 @@ def get_cost_log() -> list:
         return []
 
 def _post(url, headers, payload, timeout, name):
-    r = requests.post(url, headers=headers, json=payload, timeout=timeout)
+    try:
+        r = requests.post(url, headers=headers, json=payload, timeout=timeout)
+    except requests.exceptions.Timeout as e:
+        raise LLMProviderError(name, f"{name} timeout", temporary=True, error_type=type(e).__name__) from e
+    except requests.exceptions.ConnectionError as e:
+        raise LLMProviderError(name, f"{name} network error", temporary=True, error_type=type(e).__name__) from e
     if r.status_code != 200:
         # тело ошибки в логи (видно причину), но без секретов
         body = secure.redact((r.text or "")[:300])
-        raise Exception(f"{name} {r.status_code}: {body}")
+        temporary = _is_temporary_status(r.status_code)
+        raise LLMProviderError(name, f"{name} {r.status_code}: {body}",
+                               status_code=r.status_code, temporary=temporary,
+                               error_type="http_error")
     return r
 
 def _as_text(x):
@@ -71,25 +165,56 @@ def _gen_gemini(prompt, max_tokens, temperature):
         30, "gemini")
     return r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
-def _gen_openai(prompt, max_tokens, temperature):
-    if not config.OPENAI_API_KEY:
-        raise Exception("no openai")
-    r = _post("https://api.openai.com/v1/chat/completions",
-        {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"},
-        {"model": config.OPENAI_MODEL, "messages": [{"role": "user", "content": prompt}],
-         "max_tokens": max_tokens, "temperature": temperature},
-        40, "openai")
-    return r.json()["choices"][0]["message"]["content"]
+def _looks_bad_fallback_text(text: str) -> bool:
+    s = (text or "").strip()
+    if len(s) < 20:
+        return True
+    low = s.lower()
+    if low.startswith(("{", "[", "```")):
+        return True
+    if "|---" in s or re.search(r"^\s*\|.+\|\s*$", s, re.M):
+        return True
+    if any(x in low for x in ("as an ai language model", "system prompt", "developer message", "api key")):
+        return True
+    return False
 
-def _gen_openrouter(prompt, max_tokens, temperature):
+
+def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_provider, reason):
     if not config.OPENROUTER_API_KEY:
-        raise Exception("no openrouter")
-    r = _post("https://openrouter.ai/api/v1/chat/completions",
-        {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}", "Content-Type": "application/json"},
-        {"model": config.OPENROUTER_MODEL, "messages": [{"role": "user", "content": prompt}],
-         "max_tokens": max_tokens, "temperature": temperature},
-        40, "openrouter")
-    return r.json()["choices"][0]["message"]["content"]
+        return None
+    t0 = time.time()
+    status_code = None
+    try:
+        r = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={"Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
+                     "Content-Type": "application/json"},
+            json={
+                "model": config.OPENROUTER_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": min(int(max_tokens or 400), 500),
+                "temperature": min(float(temperature or 0.7), 0.8),
+            },
+            timeout=12,
+        )
+        status_code = r.status_code
+        if r.status_code != 200:
+            _log_openrouter_fallback(origin_provider, reason, False, status_code,
+                                     int((time.time() - t0) * 1000))
+            return None
+        text = _as_text(r.json()["choices"][0]["message"]["content"])
+        if not text or _looks_bad_fallback_text(text):
+            _log_openrouter_fallback(origin_provider, "bad_output", False, status_code,
+                                     int((time.time() - t0) * 1000))
+            return None
+        _log_openrouter_fallback(origin_provider, reason, True, status_code,
+                                 int((time.time() - t0) * 1000))
+        return text.strip()
+    except Exception as e:
+        err_type = type(e).__name__
+        _log_openrouter_fallback(origin_provider, err_type, False, status_code,
+                                 int((time.time() - t0) * 1000))
+        return None
 
 def _gen_groq(prompt, max_tokens, temperature):
     if not config.GROQ_API_KEY:
@@ -135,21 +260,19 @@ def _friendly(errs):
         return "⏳ ИИ временно перегружен — подожди минуту и попробуй снова."
     return "⚠️ ИИ временно недоступен — попробуй снова через пару минут."
 
-DEFAULT_ORDER  = ("gemini", "openrouter", "openai", "groq", "cf")
+DEFAULT_ORDER  = ("gemini", "groq", "cf")
 # Чат: Gemini первым — лучше поддерживает диалог, свободный и живой стиль
-CHAT_ORDER     = ("gemini", "openrouter", "groq", "openai", "cf")
+CHAT_ORDER     = ("gemini", "groq", "cf")
 # Грамматика/быстрые задачи: Groq (Llama-70b) первым — скорость, structured output
-GRAMMAR_ORDER  = ("groq", "gemini", "openrouter", "openai", "cf")
+GRAMMAR_ORDER  = ("groq", "gemini", "cf")
 # Досуг/рекомендации: Gemini первым — богатое знание культуры, кино, музыки, путешествий
-LEISURE_ORDER  = ("gemini", "openrouter", "openai", "groq", "cf")
+LEISURE_ORDER  = ("gemini", "groq", "cf")
 
 # Явные пресеты: позволяют приоритизировать конкретный провайдер, не меняя код вызова по всему проекту.
 PROVIDER_ORDER = {
-    "openai": ("openai", "gemini", "openrouter", "groq", "cf"),
-    "openrouter": ("openrouter", "openai", "gemini", "groq", "cf"),
-    "cf": ("cf", "openai", "gemini", "openrouter", "groq"),
-    "groq": ("groq", "gemini", "openrouter", "openai", "cf"),
-    "gemini": ("gemini", "openrouter", "groq", "openai", "cf"),
+    "cf": ("cf", "gemini", "groq"),
+    "groq": ("groq", "gemini", "cf"),
+    "gemini": ("gemini", "groq", "cf"),
 }
 
 # --- тиры: маршрутизация по задаче ---
@@ -172,6 +295,17 @@ def _resolve(tier, order, route=None):
     o, _ = TIERS.get(tier or "smart", (DEFAULT_ORDER, None))
     return o
 
+
+def _coerce_policy(fallback_allowed=False, privacy_level="personal", response_mode="plain_text",
+                   fallback_policy=None):
+    if isinstance(fallback_policy, FallbackPolicy):
+        return fallback_policy
+    return FallbackPolicy(
+        fallback_allowed=bool(fallback_allowed),
+        privacy_level=privacy_level,
+        response_mode=response_mode,
+    )
+
 _SKIP_MODULES = frozenset({"ai", "bot", "asyncio", "threading", "concurrent", "<string>", "run_code"})
 
 def _caller_module() -> str:
@@ -184,20 +318,24 @@ def _caller_module() -> str:
                 return m
     return ""
 
-def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module="", route=None):
+def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module="", route=None,
+        fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
+        response_mode: ResponseMode = "plain_text", fallback_policy=None):
     if not module:
         module = _caller_module()
+    policy = _coerce_policy(fallback_allowed, privacy_level, response_mode, fallback_policy)
     order = _resolve(tier, order, route=route)
     order = _reorder_for_cooldown(order)
     calls = {
-        "openai": lambda: _gen_openai(prompt, max_tokens, temperature),
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature),
-        "openrouter": lambda: _gen_openrouter(prompt, max_tokens, temperature),
         "groq": lambda: _gen_groq(prompt, max_tokens, temperature),
         "cf": lambda: _gen_cf(prompt, max_tokens),
     }
     errs = []
+    temporary_errs = []
     for name in order:
+        if name == "openrouter":
+            continue
         t0 = time.time()
         try:
             out = _as_text(calls[name]())
@@ -208,6 +346,19 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
         except Exception as e:
             _mark_cooldown(name, e)
             errs.append(f"{name}:{e}")
+            if _is_temporary_exception(e):
+                temporary_errs.append((name, e))
+            else:
+                break
+    if policy.openrouter_allowed and temporary_errs:
+        origin, err = temporary_errs[0]
+        reason = getattr(err, "error_type", type(err).__name__)
+        _log.warning("LLM temporary failure; trying OpenRouter fallback: provider=%s reason=%s", origin, reason)
+        out = _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin, reason)
+        if out:
+            _log_cost("openrouter_fallback", config.OPENROUTER_MODEL, "", out, module, ok=True)
+            return out
+        raise Exception(LOCAL_FALLBACK_TEXT)
     _friendly_msg = _friendly(errs)
     try:
         import tracking
@@ -265,7 +416,8 @@ def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=No
         module = _caller_module()
     raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
                        "Внутри строковых значений НЕ используй двойные кавычки - "
-                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order, tier, module, route)
+                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order, tier, module, route,
+              fallback_allowed=False, privacy_level="personal", response_mode="json")
     raw = re.sub(r"```(json)?", "", raw).strip()
     m = re.search(r"\{.*\}", raw, re.S)
     if m:
@@ -328,22 +480,6 @@ def _chat(provider, history, system):
             {}, {"system_instruction": {"parts": [{"text": system}]}, "contents": contents,
                  "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, "gemini")
         return r.json()["candidates"][0]["content"]["parts"][0]["text"]
-    if provider == "openai":
-        if not config.OPENAI_API_KEY:
-            raise Exception("no openai")
-        r = _post("https://api.openai.com/v1/chat/completions",
-            {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"},
-            {"model": config.OPENAI_MODEL, "messages": [{"role": "system", "content": system}] + history,
-             "max_tokens": 700, "temperature": 0.8}, 40, "openai")
-        return r.json()["choices"][0]["message"]["content"]
-    if provider == "openrouter":
-        if not config.OPENROUTER_API_KEY:
-            raise Exception("no openrouter")
-        r = _post("https://openrouter.ai/api/v1/chat/completions",
-            {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}", "Content-Type": "application/json"},
-            {"model": config.OPENROUTER_MODEL, "messages": [{"role": "system", "content": system}] + history,
-             "max_tokens": 700, "temperature": 0.8}, 40, "openrouter")
-        return r.json()["choices"][0]["message"]["content"]
     if provider == "groq":
         if not config.GROQ_API_KEY:
             raise Exception("no groq")
@@ -377,8 +513,13 @@ def chat_chain(history, cid=None):
 
 
 # --- async-обёртки для вызова из async-обработчиков без блокировки event loop ---
-async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, route=None, module=""):
-    return await asyncio.to_thread(llm, prompt, max_tokens, temperature, order, tier, module, route)
+async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, route=None, module="",
+               fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
+               response_mode: ResponseMode = "plain_text", fallback_policy=None):
+    return await asyncio.to_thread(
+        llm, prompt, max_tokens, temperature, order, tier, module, route,
+        fallback_allowed, privacy_level, response_mode, fallback_policy,
+    )
 
 async def allm_json(prompt, max_tokens=1200, order=None, tier=None, route=None, module=""):
     return await asyncio.to_thread(llm_json, prompt, max_tokens, order, tier, module, route)

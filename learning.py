@@ -660,7 +660,7 @@ def _word_meanings(word: str, language: str) -> list:
             "Перечисли ВСЕ его значения на русском. "
             "Если значение одно — верни пустой массив. "
             'JSON: {"meanings": ["значение 1", "значение 2"]}',
-            200, ai.GRAMMAR_ORDER, route="openai"
+            200, ai.GRAMMAR_ORDER, route="gemini"
         )
         meanings = d.get("meanings", []) if isinstance(d, dict) else []
         return [str(m).strip() for m in meanings if str(m).strip()]

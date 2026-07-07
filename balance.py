@@ -1606,7 +1606,7 @@ async def handle_role(bot, cid, role, text):
         await verify.safe_send(bot, cid, secure.CRISIS_MSG, surface="health"); return
     await bot.send_chat_action(chat_id=cid, action="typing")
     try:
-        route = "gemini" if role == "state" else "openrouter"
+        route = "gemini"
         out = await ai.allm(_role_system(role) + "\n\nЗапрос пользователя:\n" + text, 1500, 0.7, route=route)
     except Exception as e:
         await verify.safe_error(bot, cid, e); return

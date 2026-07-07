@@ -104,7 +104,7 @@ The existing text and logo placement within the template must not be moved or al
 
 Внутри три подраздела:
 
-- **🔍 Проверить** — честная проверка провайдеров по очереди (Gemini, OpenAI, OpenRouter, Groq, Cloudflare). Бот делает короткий запрос к каждому и показывает, кто ответил, а кто вернул ошибку. Используй, если провайдер перестал использоваться, есть подозрение на битый API-ключ или нужно понять, кто реально доступен прямо сейчас.
+- **🔍 Проверить** — честная проверка основных провайдеров по очереди (Gemini, Groq, Cloudflare). Бот делает короткий запрос к каждому и показывает, кто ответил, а кто вернул ошибку. OpenRouter используется только как аварийный plain-text fallback и не проверяется как основной провайдер.
 - **🕘 История** — история последних LLM-запросов.
 - **💰 Расходы** — статистика по вызовам, объёму токенов, распределению по провайдерам и модулям бота за выбранный период. Важно: нулевое значение у провайдера не всегда означает ошибку — у бота есть приоритеты маршрутизации, поэтому часть провайдеров может просто не использоваться в конкретный период.
 
@@ -114,7 +114,7 @@ The existing text and logo placement within the template must not be moved or al
 
 - состояние Telegram и базы данных;
 - доступность OpenWeatherMap (`WEATHER_API_KEY`);
-- наличие ключей внешних сервисов: Gemini, Groq, OpenAI, OpenRouter, Cloudflare, TMDB, Ticketmaster, Tavily, OpenWeatherMap.
+- наличие ключей внешних сервисов: Gemini, Groq, OpenRouter, Cloudflare, TMDB, Ticketmaster, Tavily, OpenWeatherMap.
 
 ### 5. Рассылки
 
@@ -184,10 +184,9 @@ The existing text and logo placement within the template must not be moved or al
 Бот умеет работать с несколькими провайдерами:
 
 - Gemini
-- OpenAI
-- OpenRouter
 - Groq
 - Cloudflare
+- OpenRouter — только аварийный plain-text fallback
 
 Они используются не одинаково:
 
@@ -248,11 +247,11 @@ The existing text and logo placement within the template must not be moved or al
 
 - `CHAT_ID` — без него не определён владелец бота;
 - `DATABASE_URL` — без него хранилище работает в памяти (данные не переживают перезапуск);
-- `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` — дополнительные LLM-провайдеры;
+- `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` — дополнительные LLM-провайдеры;
 - `TMDB_API_KEY`, `TICKETMASTER_API_KEY`, `TAVILY_API_KEY` — фильмы, концерты, веб-поиск;
 - `UNSPLASH_ACCESS_KEY`, `PEXELS_API_KEY` — фотографии для карточек;
 - `ZEROENTROPY_API_KEY` — вспомогательный rerank-сервис;
-- `OPENROUTER_MODEL`, `OPENAI_MODEL` — переопределение конкретных моделей.
+- `OPENROUTER_MODEL` — модель OpenRouter fallback.
 
 Актуальное состояние ключей всегда можно свериться в `🎚️ Настройки` → админский раздел → `📡 Сервисы`.
 
