@@ -18,6 +18,7 @@ import learning
 import cleanup
 import settings
 import leisure
+import personal_news
 import travel
 import weather
 import verify
@@ -281,6 +282,16 @@ async def answer_callback(update, context):
                 await _ack(q); await leisure.send_listen(bot, cid)
             elif act == "listen_no":
                 await _ack(q); await leisure.listen_dislike(bot, cid)
+            elif act == "news_home":
+                await personal_news.send_home(bot, cid)
+            elif act == "news_today":
+                await _ack(q); await personal_news.send_period(bot, cid, "today")
+            elif act == "news_week":
+                await _ack(q); await personal_news.send_period(bot, cid, "week")
+            elif act == "news_topics":
+                await personal_news.send_topics(bot, cid)
+            elif act.startswith("news_refresh_"):
+                await _ack(q); await personal_news.refresh(bot, cid, act.split("_")[-1])
             elif act in ("food_breakfast", "recipe_breakfast"):
                 await _ack(q); await balance.enter_meal(bot, cid, "breakfast")
             elif act in ("food_lunch", "recipe_lunch"):
@@ -811,6 +822,16 @@ async def job_favorite_artists(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logging.exception("job_favorite_artists failed for cid=%s", cid)
 
+async def job_personal_news(context: ContextTypes.DEFAULT_TYPE):
+    """Отдельная рассылка новостей; не часть утреннего брифа и работает только по настройке."""
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "personal_news"):
+            continue
+        try:
+            await settings.send_scheduled_notification(context.bot, cid, "personal_news")
+        except Exception:
+            logging.exception("job_personal_news failed for cid=%s", cid)
+
 async def job_live_lang(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "live_lang"):
@@ -904,6 +925,7 @@ def main():
     jq.run_daily(job_morning_brief,   time=_t("08:30"), days=tuple(range(7)))   # Мой день без кнопок
     jq.run_daily(job_weather_warn,    time=_t("08:45"), days=tuple(range(7)))
     jq.run_daily(job_lagom,           time=_t("09:00"), days=tuple(range(7)))
+    jq.run_daily(job_personal_news,   time=_t("09:00"), days=tuple(range(7)))
     jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(6,))      # вс, прогрев кэша концертов
     jq.run_daily(job_weekly_events,   time=_t("10:00"), days=(6,))             # вс
     jq.run_daily(job_favorite_artists, time=_t("10:05"), days=(6,))            # вс, только если есть новое

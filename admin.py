@@ -83,6 +83,7 @@ async def send_home(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("👥 Пользователи", callback_data="set_admin_users"),
          InlineKeyboardButton("🤖 LLM", callback_data="set_admin_llm")],
+        [InlineKeyboardButton("📰 Personal News", callback_data="set_admin_news")],
         [InlineKeyboardButton("🔔 Уведомления", callback_data="set_admin_broadcast"),
          InlineKeyboardButton(f"{issues_label} ({len(issues)})" if issues else issues_label,
                                callback_data="set_admin_issues")],
@@ -214,6 +215,12 @@ async def send_llm(bot, cid):
     msg = ui.llm(status_dot, status_txt, _when(last.get("ts", 0)), _avg_ms(_cost_recent(1)),
                  errs_today, usage["calls"], usage["tokens"], usage["providers"])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def send_personal_news(bot, cid):
+    import personal_news
+    kb = InlineKeyboardMarkup([_back()])
+    await bot.send_message(chat_id=cid, text=personal_news.admin_stats_text(), reply_markup=kb)
 
 
 async def send_llm_check(bot, cid):

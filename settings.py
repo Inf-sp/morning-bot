@@ -22,6 +22,7 @@ NOTIF_TYPES = [
     ("evening_weather","Вечерняя погода"),
     ("weekly_events",  "Афиша недели"),
     ("favorite_artists","Новые концерты любимых артистов"),
+    ("personal_news", "Новости для тебя"),
     ("weekly_forecast","Недельный прогноз"),
     ("daily_words_nl", "Нидерландский"),
     ("daily_words_en", "Английский"),
@@ -136,7 +137,7 @@ def _notif_label(kind: str, label: str) -> str:
         return f"{label} (ежедневно в 16:30)"
     if kind in ("daily_words_nl", "daily_words_en", "morning_brief", "weather_warn",
                 "lagom_daily", "recipe_daily", "checkin_day", "evening_weather",
-                "checkin_eve"):
+                "checkin_eve", "personal_news"):
         times = {
             "morning_brief": "08:30",
             "weather_warn": "08:45",
@@ -147,6 +148,7 @@ def _notif_label(kind: str, label: str) -> str:
             "daily_words_nl": "11:00",
             "daily_words_en": "11:00",
             "checkin_eve": "22:00",
+            "personal_news": "09:00",
         }
         return f"{label} (ежедневно в {times[kind]})"
     return label
@@ -216,6 +218,9 @@ async def send_scheduled_notification(bot, cid, kind):
     elif kind == "favorite_artists":
         import leisure as _l
         await _l.send_new_concerts_notif(_NoKbBot(bot), cid)
+    elif kind == "personal_news":
+        import personal_news as _pn
+        await _pn.send_scheduled(bot, cid)
     elif kind == "evening_weather":
         import weather as _w
         await _w.send_weather(_NoKbBot(bot), cid, "tomorrow_plain")
@@ -657,6 +662,9 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_admin_llm":
         import admin as _adm
         await _admin_guard(bot, cid, _adm.send_llm)
+    elif data == "set_admin_news":
+        import admin as _adm
+        await _admin_guard(bot, cid, _adm.send_personal_news)
     elif data == "set_admin_llmcheck":
         import admin as _adm
         await _admin_guard(bot, cid, _adm.send_llm_check)
