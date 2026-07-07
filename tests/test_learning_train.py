@@ -38,8 +38,9 @@ def test_phrase_poll_question_is_formatted_with_entities():
     question, entities = learning._phrase_poll_question("Ik maak me zorgen om ____", "Я переживаю за тебя")
 
     assert question.startswith("Фраза-тренажёр\n\nIk maak me zorgen om ____")
-    assert "Перевод: Я переживаю за тебя" in question
-    assert "Выбери пропущенное слово" in question
+    assert "Перевод:" not in question
+    assert "Я переживаю за тебя" not in question
+    assert "Выбери пропущенное слово" not in question
     assert "Какое слово пропущено?" not in question
     assert any(e.type == MessageEntity.BOLD and e.offset == 0 for e in entities)
     assert any(e.type == MessageEntity.BLOCKQUOTE for e in entities)

@@ -18,12 +18,6 @@ def phrase_poll_question(blank_phrase, sentence_ru):
     b.section("Фраза-тренажёр")
     b.spacer()
     b.quote(str(blank_phrase or "").strip())
-    if sentence_ru:
-        b.spacer()
-        b.bold("Перевод:")
-        b.text_line(f" {str(sentence_ru).strip()}")
-    b.spacer()
-    b.text_line("Выбери пропущенное слово из вариантов ниже.")
     msg = b.build()
     stripped = msg.text.strip()
     leading_trim = u16_len(msg.text[:len(msg.text) - len(msg.text.lstrip())])
