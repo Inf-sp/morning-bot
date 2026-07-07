@@ -803,7 +803,8 @@ def _gen_recipe(constraint, cid=None):
         '"steps":["Глагол + действие + конкретика","шаг 2","шаг 3"],'
         '"full":"тот же рецепт в том же стиле: сначала заголовок, затем <b>Ингредиенты</b>, затем <b>Приготовление</b>, затем <b>😋 Приятного аппетита!</b>. '
         'Без времени и порции, без лишнего текста."}',
-        900, tier="cheap")
+        900, tier="cheap", module="food",
+        fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True)
 
 def _recipe_card(d):
     return _food_card(d, label="Рецепт дня")
@@ -966,7 +967,8 @@ def _gen_leftovers_recipe(ingredients, cid=None):
         'JSON: {"name":"название","time":"X мин","servings":"1 порц.",'
         '"ingredients":"список использованных продуктов через запятую",'
         '"steps":["шаг 1 (до 15 слов)","шаг 2","шаг 3"]}',
-        500, tier="cheap")
+        500, tier="cheap", module="food",
+        fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True)
 
 
 # ---------- Батч-генерация очереди рецептов (§5 спеки) ----------
@@ -1108,7 +1110,10 @@ def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history
     if season_hint is None:
         season_hint = _season_hint()
     prompt = _recipe_batch_prompt(constraint, cid, cuisine_weights or {}, recent_history or [], season_hint, n)
-    result = ai.llm_json(prompt, RECIPE_BATCH_MAX_TOKENS, tier="cheap")
+    result = ai.llm_json(
+        prompt, RECIPE_BATCH_MAX_TOKENS, tier="cheap", module="food",
+        fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
+    )
     items = result.get("recipes") if isinstance(result, dict) else None
     if not isinstance(items, list):
         # модель могла вернуть один рецепт плоским объектом вместо {"recipes":[...]}"

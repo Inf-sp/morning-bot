@@ -30,14 +30,19 @@ class FallbackPolicy:
     fallback_allowed: bool = False
     privacy_level: PrivacyLevel = "personal"
     response_mode: ResponseMode = "plain_text"
+    allow_personal_openrouter: bool = False
 
     @property
     def openrouter_allowed(self) -> bool:
-        return (
-            self.fallback_allowed is True
-            and self.privacy_level == "public"
-            and self.response_mode == "plain_text"
-        )
+        if self.fallback_allowed is not True:
+            return False
+        if self.response_mode not in ("plain_text", "json"):
+            return False
+        if self.privacy_level == "public":
+            return True
+        if self.privacy_level == "personal" and self.allow_personal_openrouter:
+            return True
+        return False
 
 
 class LLMProviderError(Exception):
@@ -218,12 +223,12 @@ def _gen_gemini(prompt, max_tokens, temperature):
             raise
     raise last_err
 
-def _looks_bad_fallback_text(text: str) -> bool:
+def _looks_bad_fallback_text(text: str, response_mode: ResponseMode = "plain_text") -> bool:
     s = (text or "").strip()
-    if len(s) < 20:
+    if len(s) < (2 if response_mode == "json" else 20):
         return True
     low = s.lower()
-    if low.startswith(("{", "[", "```")):
+    if response_mode != "json" and low.startswith(("{", "[", "```")):
         return True
     if "|---" in s or re.search(r"^\s*\|.+\|\s*$", s, re.M):
         return True
@@ -232,9 +237,12 @@ def _looks_bad_fallback_text(text: str) -> bool:
     return False
 
 
-def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_provider, reason):
+def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_provider, reason,
+                                    response_mode: ResponseMode = "plain_text"):
     if not config.OPENROUTER_API_KEY:
         return None
+    token_cap = 5000 if response_mode == "json" else 700
+    timeout = 30 if response_mode == "json" else 12
     t0 = time.time()
     status_code = None
     try:
@@ -245,10 +253,10 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
             json={
                 "model": config.OPENROUTER_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": min(int(max_tokens or 400), 500),
+                "max_tokens": min(int(max_tokens or 400), token_cap),
                 "temperature": min(float(temperature or 0.7), 0.8),
             },
-            timeout=12,
+            timeout=timeout,
         )
         status_code = r.status_code
         if r.status_code != 200:
@@ -256,7 +264,7 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
                                      int((time.time() - t0) * 1000))
             return None
         text = _as_text(r.json()["choices"][0]["message"]["content"])
-        if not text or _looks_bad_fallback_text(text):
+        if not text or _looks_bad_fallback_text(text, response_mode=response_mode):
             _log_openrouter_fallback(origin_provider, "bad_output", False, status_code,
                                      int((time.time() - t0) * 1000))
             return None
@@ -350,13 +358,14 @@ def _resolve(tier, order, route=None):
 
 
 def _coerce_policy(fallback_allowed=False, privacy_level="personal", response_mode="plain_text",
-                   fallback_policy=None):
+                   fallback_policy=None, allow_personal_openrouter=False):
     if isinstance(fallback_policy, FallbackPolicy):
         return fallback_policy
     return FallbackPolicy(
         fallback_allowed=bool(fallback_allowed),
         privacy_level=privacy_level,
         response_mode=response_mode,
+        allow_personal_openrouter=bool(allow_personal_openrouter),
     )
 
 _SKIP_MODULES = frozenset({"ai", "bot", "asyncio", "threading", "concurrent", "<string>", "run_code"})
@@ -373,10 +382,12 @@ def _caller_module() -> str:
 
 def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module="", route=None,
         fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
-        response_mode: ResponseMode = "plain_text", fallback_policy=None):
+        response_mode: ResponseMode = "plain_text", fallback_policy=None,
+        allow_personal_openrouter=False):
     if not module:
         module = _caller_module()
-    policy = _coerce_policy(fallback_allowed, privacy_level, response_mode, fallback_policy)
+    policy = _coerce_policy(fallback_allowed, privacy_level, response_mode, fallback_policy,
+                            allow_personal_openrouter)
     order = _resolve(tier, order, route=route)
     order = _reorder_for_cooldown(order)
     calls = {
@@ -405,7 +416,8 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
         origin, err = temporary_errs[0]
         reason = getattr(err, "error_type", type(err).__name__)
         _log.warning("LLM temporary failure; trying OpenRouter fallback: provider=%s reason=%s", origin, reason)
-        out = _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin, reason)
+        out = _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin, reason,
+                                              response_mode=policy.response_mode)
         if out:
             _log_cost("openrouter_fallback", config.OPENROUTER_MODEL, "", out, module, ok=True)
             return out
@@ -462,13 +474,16 @@ def _repair_inner_quotes(raw):
         i += 1
     return "".join(out)
 
-def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=None):
+def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
+             fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
+             allow_personal_openrouter=False, fallback_policy=None):
     if not module:
         module = _caller_module()
     raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
                        "Внутри строковых значений НЕ используй двойные кавычки - "
                        "вместо них используй « » или одинарные.", max_tokens, 0.7, order, tier, module, route,
-              fallback_allowed=False, privacy_level="personal", response_mode="json")
+              fallback_allowed=fallback_allowed, privacy_level=privacy_level, response_mode="json",
+              fallback_policy=fallback_policy, allow_personal_openrouter=allow_personal_openrouter)
     raw = re.sub(r"```(json)?", "", raw).strip()
     m = re.search(r"\{.*\}", raw, re.S)
     if m:
@@ -572,8 +587,13 @@ async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, 
         fallback_allowed, privacy_level, response_mode, fallback_policy,
     )
 
-async def allm_json(prompt, max_tokens=1200, order=None, tier=None, route=None, module=""):
-    return await asyncio.to_thread(llm_json, prompt, max_tokens, order, tier, module, route)
+async def allm_json(prompt, max_tokens=1200, order=None, tier=None, route=None, module="",
+                    fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
+                    allow_personal_openrouter=False, fallback_policy=None):
+    return await asyncio.to_thread(
+        llm_json, prompt, max_tokens, order, tier, module, route,
+        fallback_allowed, privacy_level, allow_personal_openrouter, fallback_policy,
+    )
 
 async def achat_chain(history, cid=None):
     return await asyncio.to_thread(chat_chain, history, cid)

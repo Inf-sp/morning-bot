@@ -38,7 +38,7 @@ def test_public_plain_text_temporary_error_uses_openrouter(monkeypatch):
     def fail_gemini(prompt, max_tokens, temperature):
         raise ai.LLMProviderError("gemini", "gemini 503", status_code=503, temporary=True)
 
-    def fallback(prompt, max_tokens, temperature, origin_provider, reason):
+    def fallback(prompt, max_tokens, temperature, origin_provider, reason, response_mode="plain_text"):
         calls["fallback"] += 1
         return "Короткий нейтральный публичный ответ."
 
@@ -95,6 +95,42 @@ def test_json_mode_does_not_use_openrouter(monkeypatch):
     assert calls["fallback"] == 0
 
 
+def test_personal_json_uses_openrouter_only_when_explicitly_allowed(monkeypatch):
+    calls = {"fallback": 0}
+
+    def fail_gemini(prompt, max_tokens, temperature):
+        raise ai.LLMProviderError("gemini", "gemini 503", status_code=503, temporary=True)
+
+    def fallback(prompt, max_tokens, temperature, origin_provider, reason, response_mode="plain_text"):
+        calls["fallback"] += 1
+        assert response_mode == "json"
+        return '{"ok": true, "name": "Тестовый рецепт"}'
+
+    monkeypatch.setattr(ai, "_gen_gemini", fail_gemini)
+    monkeypatch.setattr(ai, "_openrouter_plain_text_fallback", fallback)
+
+    with pytest.raises(Exception):
+        ai.llm_json(
+            "JSON: {\"ok\": true}",
+            order=("gemini",),
+            fallback_allowed=True,
+            privacy_level="personal",
+        )
+
+    assert calls["fallback"] == 0
+
+    out = ai.llm_json(
+        "JSON: {\"ok\": true}",
+        order=("gemini",),
+        fallback_allowed=True,
+        privacy_level="personal",
+        allow_personal_openrouter=True,
+    )
+
+    assert out == {"ok": True, "name": "Тестовый рецепт"}
+    assert calls["fallback"] == 1
+
+
 def test_non_temporary_error_does_not_use_openrouter(monkeypatch):
     calls = {"fallback": 0}
 
@@ -142,7 +178,7 @@ def test_openrouter_failure_returns_local_fallback(monkeypatch):
         raise ai.LLMProviderError("gemini", "gemini 503", status_code=503, temporary=True)
 
     monkeypatch.setattr(ai, "_gen_gemini", fail_gemini)
-    monkeypatch.setattr(ai, "_openrouter_plain_text_fallback", lambda *args: None)
+    monkeypatch.setattr(ai, "_openrouter_plain_text_fallback", lambda *args, **kwargs: None)
 
     with pytest.raises(Exception) as exc:
         ai.llm(

@@ -1,5 +1,6 @@
 import asyncio
 import re
+from datetime import datetime
 from pathlib import Path
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
@@ -1313,8 +1314,8 @@ def _kind_of(term):
     t = re.sub(r"^(de|het|een|the|a|an)\s+", "", (term or "").strip().lower())
     return "word" if len(t.split()) <= 1 else "phrase"
 
-_DICT_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|внеси)\b", re.I)
-_DICT_WORD_RE = re.compile(r"\b(?:в\s+)?(?:мой\s+)?словар[ьяьею]*\b", re.I)
+_DICT_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|сохранить|запомни|запомнить|внеси|закинь)\b", re.I)
+_DICT_WORD_RE = re.compile(r"\b(?:в\s+)?(?:мой\s+)?(?:словар[ьяьею]*|обучени[еяю]|тренировк[ауиах]*)\b", re.I)
 _DICT_LEADING_RE = re.compile(r"^\s*в\s+(?:мой\s+)?словар[ьяьею]*\b", re.I)
 _DICT_LANG_RE = re.compile(
     r"\b(?:на\s+)?("
@@ -1323,12 +1324,13 @@ _DICT_LANG_RE = re.compile(
     r")\b",
     re.I,
 )
-_DICT_KIND_RE = re.compile(r"\b(слово|слова|фразу|выражение|термин)\b", re.I)
+_DICT_KIND_RE = re.compile(r"\b(слово|слова|фразу|фраза|выражение|выражения|термин)\b", re.I)
 _DICT_QUESTION_PAYLOAD_RE = re.compile(r"^(?:како(?:е|й|ую)|что|что-то)\b", re.I)
 _DICT_PAYLOAD_PREFIX_RE = re.compile(
-    r"^(?:(?:ну|пожалуйста|плиз|нужно|надо|можешь|можно|мне|нам|хочу|давай|нов(?:ое|ый|ую|ая|ые))\s+)+",
+    r"^(?:(?:ну|пожалуйста|плиз|нужно|надо|можешь|можно|мне|нам|хочу|давай|нов(?:ое|ый|ую|ая|ые)|эту|это|его|её|ее)\s+)+",
     re.I,
 )
+_DICT_EMPTY_PAYLOAD = {"", "в", "на", "для", "туда", "это", "эту", "его", "её", "ее"}
 
 def _dict_lang_hint(text):
     t = (text or "").lower()
@@ -1338,42 +1340,294 @@ def _dict_lang_hint(text):
         return "nl"
     return "nl"
 
+
+def _clean_chat_dict_payload(text):
+    payload = _DICT_ADD_VERB_RE.sub(" ", text or "", count=1)
+    payload = _DICT_WORD_RE.sub(" ", payload)
+    payload = _DICT_KIND_RE.sub(" ", payload)
+    payload = _DICT_LANG_RE.sub(" ", payload)
+    payload = re.sub(r"\b(?:эту|это|его|её|ее)\b", " ", payload, flags=re.I)
+    payload = re.sub(r"\s+", " ", payload).strip(" \t\n\r:;,.-–—")
+    payload = _DICT_PAYLOAD_PREFIX_RE.sub("", payload).strip(" \t\n\r:;,.-–—")
+    return payload
+
+
 def _extract_chat_dict_add(text):
     """Команда из свободного чата: «добавь в словарь слово ...» -> полезная часть."""
     text = text or ""
     if _DICT_LEADING_RE.search(text):
         lang = _dict_lang_hint(f" {text} ")
-        payload = _DICT_LEADING_RE.sub(" ", text, count=1)
-        payload = _DICT_KIND_RE.sub(" ", payload)
-        payload = _DICT_LANG_RE.sub(" ", payload)
-        payload = re.sub(r"\s+", " ", payload).strip(" \t\n\r:;,.-–—")
-        payload = _DICT_PAYLOAD_PREFIX_RE.sub("", payload).strip(" \t\n\r:;,.-–—")
-        if len(payload) < 2:
-            return None, None
+        payload = _clean_chat_dict_payload(_DICT_LEADING_RE.sub(" ", text, count=1))
+        if payload.casefold() in _DICT_EMPTY_PAYLOAD:
+            return "", lang
         return payload, lang
     has_add_verb = bool(_DICT_ADD_VERB_RE.search(text))
     has_dict_word = bool(_DICT_WORD_RE.search(text))
     has_kind_word = bool(_DICT_KIND_RE.search(text))
-    if not has_add_verb or not (has_dict_word or has_kind_word):
+    if not has_add_verb:
         return None, None
     lang = _dict_lang_hint(f" {text} ")
-    payload = _DICT_ADD_VERB_RE.sub(" ", text, count=1)
-    payload = _DICT_WORD_RE.sub(" ", payload)
-    payload = _DICT_KIND_RE.sub(" ", payload)
-    payload = _DICT_LANG_RE.sub(" ", payload)
-    payload = re.sub(r"\s+", " ", payload).strip(" \t\n\r:;,.-–—")
-    payload = _DICT_PAYLOAD_PREFIX_RE.sub("", payload).strip(" \t\n\r:;,.-–—")
-    if len(payload) < 2 or _DICT_QUESTION_PAYLOAD_RE.search(payload):
+    payload = _clean_chat_dict_payload(text)
+    has_foreign_payload = bool(re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ]", payload)) and not _CYRILLIC_RE.search(payload)
+    if not (has_dict_word or has_kind_word or has_foreign_payload):
         return None, None
+    if _DICT_QUESTION_PAYLOAD_RE.search(payload):
+        return None, None
+    if payload.casefold() in _DICT_EMPTY_PAYLOAD:
+        return "", lang
     return payload, lang
 
 async def try_add_dict_from_chat(bot, cid, text):
     """Перехватывает явную просьбу добавить слово/фразу в словарь из обычного чата."""
     payload, lang = _extract_chat_dict_add(text)
-    if not payload:
+    if payload is None:
         return False
-    await add_words_batch(bot, cid, payload, lang, detailed_confirmation=True)
+    if not payload:
+        await bot.send_message(
+            chat_id=cid,
+            text="Пришли само слово или фразу: например «добавь в словарь de kater».",
+        )
+        return True
+    await add_dict_entry_from_chat(bot, cid, payload, lang, source_text=text)
     return True
+
+
+def _lang_title(lang):
+    return "нидерландский" if lang == "nl" else "английский"
+
+
+def _lang_in_title(lang):
+    return "нидерландские" if lang == "nl" else "английские"
+
+
+def _lang_loc_title(lang):
+    return "нидерландском" if lang == "nl" else "английском"
+
+
+def _lang_dat_title(lang):
+    return "нидерландскому" if lang == "nl" else "английскому"
+
+
+def _entry_kind(entry_type):
+    return "phrase" if entry_type in ("expression", "phrase") else "word"
+
+
+def _training_line(entry):
+    if entry.get("entry_type") in ("expression", "phrase"):
+        return "Появится в фразовом тренажёре."
+    return f"Появится в тренировках по {_lang_dat_title(entry.get('lang'))}."
+
+
+def _entry_bucket_title(entry):
+    lang = entry.get("lang")
+    entry_type = entry.get("entry_type") or "word"
+    if entry_type == "expression":
+        return f"{_lang_in_title(lang)} выражения"
+    if entry_type == "phrase":
+        return f"{_lang_in_title(lang)} фразы"
+    return f"{_lang_title(lang)} словарь"
+
+
+def _entry_bucket_loc_title(entry):
+    lang = entry.get("lang")
+    entry_type = entry.get("entry_type") or "word"
+    if entry_type == "expression":
+        return f"{_lang_in_title(lang)} выражениях"
+    if entry_type == "phrase":
+        return f"{_lang_in_title(lang)} фразах"
+    return f"{_lang_loc_title(lang)} словаре"
+
+
+def _entry_already_line(entry):
+    if entry.get("entry_type") in ("expression", "phrase"):
+        return "Эта фраза уже используется в фразовом тренажёре."
+    return "Это слово уже используется в тренировках."
+
+
+def _dict_entry_message(entry, status="added"):
+    from ui.builder import MessageBuilder
+
+    b = MessageBuilder()
+    if status == "duplicate":
+        b.section(f"📚 Уже есть в {_lang_loc_title(entry.get('lang'))} словаре")
+    elif status == "updated":
+        b.section(f"📚 Обновлено в {_entry_bucket_loc_title(entry)}")
+    else:
+        b.section(f"📚 Добавлено в {_entry_bucket_title(entry)}")
+    b.spacer()
+    b.line(f"{entry.get('word') or entry.get('base_form')} — {entry.get('ru')}")
+    b.spacer()
+    b.line(_entry_already_line(entry) if status == "duplicate" else _training_line(entry))
+    return b.build_stripped()
+
+
+def _dict_confirm_message(entry):
+    from ui.builder import MessageBuilder
+
+    b = MessageBuilder()
+    b.line(f"Ты имеешь в виду {entry.get('word') or entry.get('base_form')} — {entry.get('ru')}?")
+    return b.build_stripped()
+
+
+def _dict_loose_key(lang, entry_type, word):
+    base = re.sub(r"\s+", " ", (word or "").strip()).casefold()
+    if lang == "nl":
+        base = re.sub(r"^(de|het|een)\s+", "", base)
+    if lang == "en":
+        base = re.sub(r"^(to|the|a|an)\s+", "", base)
+    return lang, entry_type or "word", base
+
+
+def _dict_loose_text(lang, word):
+    return _dict_loose_key(lang, "word", word)[2]
+
+
+async def _normalize_chat_dict_entry(payload, lang_hint="nl", source_text=""):
+    language_hint = _lang_title(lang_hint)
+    prompt = f"""
+Ты лексикограф для учебного словаря Telegram-бота.
+
+Пользователь хочет добавить в обучение: {secure.wrap_untrusted(payload, 'запись')}
+Полное сообщение пользователя: {secure.wrap_untrusted(source_text or payload, 'сообщение')}
+Подсказка языка из сообщения: {language_hint} ({lang_hint}).
+
+Определи и нормализуй РОВНО ОДНУ учебную запись.
+
+Правила:
+- lang: nl или en.
+- entry_type:
+  - word: отдельное слово или английский phrasal verb, который нужно тренировать как словарную единицу (например to figure out).
+  - expression: устойчивое выражение/конструкция, которую нужно тренировать во фразовом тренажёре (например zin hebben in).
+  - phrase: полноценная фраза/предложение (например Ik heb er zin in).
+- Нидерландские существительные сохраняй с правильным артиклем de/het.
+- Глаголы сохраняй в инфинитиве; английские глаголы — с to, если это словарная форма.
+- Прилагательные сохраняй в базовой форме.
+- Устойчивые выражения сохраняй целиком в базовой форме.
+- Фразы сохраняй естественно, без сокращений и без изменения смысла.
+- ru должен переводить именно base_form, с учётом части речи и значения.
+- Не выдумывай значение. Если слово многозначное, редкое, написано с ошибкой, не хватает артикля для нидерландского существительного или есть риск неверного перевода, поставь needs_confirmation=true и дай наиболее вероятную трактовку.
+
+Верни JSON:
+{{
+  "ok": true,
+  "lang": "nl|en",
+  "entry_type": "word|expression|phrase",
+  "base_form": "учебная базовая форма",
+  "ru": "точный русский перевод",
+  "needs_confirmation": false,
+  "reason": "короткая причина уточнения или пусто"
+}}
+Если это не похоже на нидерландскую или английскую учебную запись, верни {{"ok": false, "reason": "коротко почему"}}.
+"""
+    try:
+        d = await ai.allm_json(prompt, 900, tier="smart", module="learning")
+    except Exception:
+        d = {}
+    if not isinstance(d, dict) or not d.get("ok"):
+        return None
+    lang = "en" if d.get("lang") == "en" else "nl"
+    entry_type = d.get("entry_type") if d.get("entry_type") in ("word", "expression", "phrase") else "word"
+    base_form = re.sub(r"\s+", " ", str(d.get("base_form") or "").strip())
+    ru = re.sub(r"\s+", " ", str(d.get("ru") or "").strip())
+    if not base_form or not ru or _is_bad_dict_item(base_form, ru):
+        return None
+    return {
+        "lang": lang,
+        "entry_type": entry_type,
+        "kind": _entry_kind(entry_type),
+        "word": base_form[:120],
+        "base_form": base_form[:120],
+        "ru": ru[:180],
+        "source_text": source_text or payload,
+        "added_at": datetime.now(config.TZ).isoformat(),
+        "needs_confirmation": bool(d.get("needs_confirmation")),
+        "reason": str(d.get("reason") or "").strip(),
+    }
+
+
+def _save_normalized_dict_entry(cid, entry):
+    words = store.get_list(config.DICT_KEY, cid)
+    exact_key = _dict_item_key(entry["lang"], entry["kind"], entry["word"])
+    loose_key = _dict_loose_key(entry["lang"], entry["entry_type"], entry["word"])
+    loose_text = _dict_loose_text(entry["lang"], entry["word"])
+    for idx, item in enumerate(words):
+        existing_entry_type = item.get("entry_type") or ("phrase" if _dict_kind(item) == "phrase" else "word")
+        existing_word = _w_field(item, "word", "base_form", "nl", "en")
+        if _dict_item_key(_dict_lang(item), _dict_kind(item), existing_word) == exact_key:
+            duplicate = dict(entry)
+            duplicate["ru"] = _w_field(item, "ru") or entry["ru"]
+            duplicate["word"] = existing_word or entry["word"]
+            duplicate["base_form"] = item.get("base_form") or duplicate["word"]
+            duplicate["entry_type"] = existing_entry_type
+            return "duplicate", duplicate
+        same_loose_entry = _dict_loose_key(_dict_lang(item), existing_entry_type, existing_word) == loose_key
+        same_loose_text = _dict_lang(item) == entry["lang"] and _dict_loose_text(entry["lang"], existing_word) == loose_text
+        if same_loose_entry or same_loose_text:
+            updated = dict(item)
+            updated.update({
+                "lang": entry["lang"],
+                "kind": entry["kind"],
+                "entry_type": entry["entry_type"],
+                "word": entry["word"],
+                "base_form": entry["base_form"],
+                "ru": entry["ru"],
+                "source_text": entry["source_text"],
+                "added_at": item.get("added_at") or entry["added_at"],
+                "updated_at": datetime.now(config.TZ).isoformat(),
+            })
+            words[idx] = updated
+            store.set_list(config.DICT_KEY, cid, words)
+            return "updated", updated
+    store.add_to_list(config.DICT_KEY, cid, {
+        "lang": entry["lang"],
+        "kind": entry["kind"],
+        "entry_type": entry["entry_type"],
+        "word": entry["word"],
+        "base_form": entry["base_form"],
+        "ru": entry["ru"],
+        "source_text": entry["source_text"],
+        "added_at": entry["added_at"],
+    })
+    return "added", entry
+
+
+async def add_dict_entry_from_chat(bot, cid, payload, lang="nl", source_text=""):
+    entry = await _normalize_chat_dict_entry(payload, lang, source_text=source_text)
+    if not entry:
+        await bot.send_message(
+            chat_id=cid,
+            text="Не уверена в форме или переводе. Пришли так: de kater → похмелье.",
+        )
+        return
+    if entry.get("needs_confirmation"):
+        store.dict_pending_add[str(cid)] = entry
+        msg = _dict_confirm_message(entry)
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Да, добавить", callback_data="a_dictconfirm_add"),
+            InlineKeyboardButton("✏️ Исправить", callback_data="a_dictconfirm_fix"),
+        ]])
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+        return
+    status, saved = _save_normalized_dict_entry(cid, entry)
+    msg = _dict_entry_message(saved, status=status)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+
+
+async def confirm_pending_dict_add(bot, cid):
+    entry = store.dict_pending_add.pop(str(cid), None)
+    if not entry:
+        await bot.send_message(chat_id=cid, text="Уточнение устарело. Пришли слово ещё раз.")
+        return
+    status, saved = _save_normalized_dict_entry(cid, entry)
+    msg = _dict_entry_message(saved, status=status)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+
+
+async def fix_pending_dict_add(bot, cid):
+    entry = store.dict_pending_add.pop(str(cid), None)
+    lang = (entry or {}).get("lang", "nl")
+    store.pending_input[str(cid)] = f"dictadd_smart_{lang}"
+    await bot.send_message(chat_id=cid, text="Пришли правильную форму и перевод: de kater → похмелье.")
 
 def _parse_simple_pairs(text, lang_hint):
     """Быстрый путь без LLM для строк вида «de aandacht → внимание»."""

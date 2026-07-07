@@ -395,6 +395,7 @@ game_state = {}
 game_config = {}
 train_state = {}        # chat_id -> состояние тренажёра слов (формат/ответ/слово)
 train_polls = {}        # poll_id -> chat_id для native quiz poll
+dict_pending_add = {}   # chat_id -> нормализованная запись словаря, ожидающая подтверждения
 pending_input = {}
 last_recos = {}
 suggested_countries = {}

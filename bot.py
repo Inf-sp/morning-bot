@@ -191,6 +191,12 @@ async def answer_callback(update, context):
                 await learning.send_proverb(bot, cid, "английский")
             elif act == "dict":
                 await learning.send_dict(bot, cid)
+            elif act == "dictconfirm_add":
+                await _ack(q)
+                await learning.confirm_pending_dict_add(bot, cid)
+            elif act == "dictconfirm_fix":
+                await _ack(q)
+                await learning.fix_pending_dict_add(bot, cid)
             elif act == "dictlang_nl":
                 await learning.send_dict_lang(bot, cid, "nl")
             elif act == "dictlang_en":
