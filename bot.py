@@ -50,7 +50,7 @@ def _normalize_app_version(version: str) -> str:
 
 
 def get_app_version() -> str:
-    return _normalize_app_version(config.APP_VERSION)
+    return _normalize_app_version(config.APP_VERSION or config._read_text_file("VERSION"))
 
 
 def get_current_deploy_key() -> str:

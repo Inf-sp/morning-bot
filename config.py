@@ -37,7 +37,16 @@ PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID") or CHAT_ID
 RAILWAY_GIT_COMMIT_SHA = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "").strip()
 RAILWAY_GIT_COMMIT_MESSAGE = os.environ.get("RAILWAY_GIT_COMMIT_MESSAGE", "").strip()
-APP_VERSION = os.environ.get("APP_VERSION", "").strip()
+
+
+def _read_text_file(path, default=""):
+    try:
+        return (_HERE / path).read_text(encoding="utf-8").strip()
+    except Exception:
+        return default
+
+
+APP_VERSION = os.environ.get("APP_VERSION", "").strip() or _read_text_file("VERSION")
 RAILWAY_DEPLOYMENT_ID = os.environ.get("RAILWAY_DEPLOYMENT_ID", "").strip()
 RAILWAY_ENVIRONMENT = os.environ.get("RAILWAY_ENVIRONMENT", "").strip()
 RAILWAY_SERVICE_NAME = os.environ.get("RAILWAY_SERVICE_NAME", "").strip()

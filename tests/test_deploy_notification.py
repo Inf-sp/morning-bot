@@ -97,10 +97,28 @@ def test_missing_release_note_uses_fallback(monkeypatch, tmp_path):
     assert "Обновление системы без пользовательских изменений." in fake.messages[0]["text"]
 
 
-def test_empty_app_version_skips_notification(monkeypatch, tmp_path):
+def test_version_file_is_used_when_env_app_version_is_empty(monkeypatch, tmp_path):
+    _isolate_deploy_store(monkeypatch)
+    _write_release_notes(tmp_path)
+    (tmp_path / "VERSION").write_text("1.8.3\n", encoding="utf-8")
+    monkeypatch.setattr(bot, "_ROOT", tmp_path)
+    monkeypatch.setattr(config, "_HERE", tmp_path)
+    monkeypatch.setattr(config, "ADMIN_CHAT_ID", "42")
+    monkeypatch.setattr(config, "APP_VERSION", "")
+
+    fake = FakeBot()
+    asyncio.run(bot.maybe_send_admin_deploy_notification(fake))
+
+    assert len(fake.messages) == 1
+    assert "Версия: v1.8.3" in fake.messages[0]["text"]
+    assert "Новости стали аккуратнее" in fake.messages[0]["text"]
+
+
+def test_missing_app_version_and_version_file_skips_notification(monkeypatch, tmp_path):
     mem = _isolate_deploy_store(monkeypatch)
     _write_release_notes(tmp_path)
     monkeypatch.setattr(bot, "_ROOT", tmp_path)
+    monkeypatch.setattr(config, "_HERE", tmp_path)
     monkeypatch.setattr(config, "ADMIN_CHAT_ID", "42")
     monkeypatch.setattr(config, "APP_VERSION", "")
 
