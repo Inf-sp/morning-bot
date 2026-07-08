@@ -179,43 +179,36 @@ def _item_display(it):
 def _wardrobe_verdict(total):
     """Живая оценка наполненности шкафа, без канцелярита."""
     if total <= 0:
-        return "Пусто — самое время начать."
-    if total < 6:
-        return "Вещей пока мало для разнообразных образов."
-    if total < 15:
-        return "База есть, можно уже собирать образы."
-    return "Шкаф заполнен хорошо — есть, из чего выбирать."
+        return "В шкафу пока пусто."
+    if total < 10:
+        return "База уже есть, но для точных образов нужно добавить ещё верх, низ и обувь."
+    if total < 30:
+        return "Шкаф уже рабочий - можно собирать базовые образы."
+    return "Шкаф заполнен хорошо - есть, из чего собирать образы."
 
 
-def home_screen(total, zone_counts, zone_order, zone_emoji, params_filled, missing):
+def home_screen(total, zone_counts, zone_order):
     """Главный экран раздела «Гардероб»: польза, состояние шкафа, действия."""
     b = MessageBuilder()
     b.text_line("👟 ")
     b.bold("Гардероб")
     b.newline()
     b.spacer()
-    b.line("Каждое утро — точный образ по погоде, без лишних раздумий у шкафа.")
+    b.line("Образ на сегодня, разбор шкафа и проверка покупки перед тем, как тратить деньги.")
 
     b.spacer()
     if total <= 0:
-        b.line("В шкафу пока нет вещей.")
+        b.line(_wardrobe_verdict(total))
         b.spacer()
-        b.line("Добавь первые вещи — и я подберу образ, разберу гардероб и подскажу, что докупить.")
+        b.line("Добавь несколько вещей, и бот сможет собирать образы под погоду.")
     else:
-        b.text_line(f"👕 В шкафу {total} " + _pluralize_items(total))
-        b.newline()
+        b.line(f"В шкафу: {total} " + _pluralize_items(total))
         b.line(_wardrobe_verdict(total))
         b.spacer()
         for z in zone_order:
             n = zone_counts.get(z, 0)
             if n > 0:
-                b.bullet(f"{zone_emoji.get(z, '•')} {z} — {n}")
-
-    if missing:
-        b.spacer()
-        b.line("Чуть точнее образы будут, если добавить:")
-        for label in missing:
-            b.bullet(label)
+                b.line(f"{z} - {n}")
 
     return b.build_stripped()
 

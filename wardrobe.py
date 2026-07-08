@@ -96,10 +96,10 @@ def _save_cached_look(cid, item_ids, look_data):
 # ---------- главный экран раздела (панель состояния) ----------
 def _wardrobe_home_kb():
     return _kb([
-        [("✨ Образ на сегодня", "w_look")],
-        [("🧥 Разбор гардероба", "w_improve")],
-        [("🔎 Проверка покупки", "w_check")],
-        [("🎚️ Настройки гардероба", "set_wardrobe_g")],
+        [("Образ на сегодня", "w_look")],
+        [("Разбор гардероба", "w_improve")],
+        [("Проверка покупки", "w_check")],
+        [("Настройки гардероба", "set_wardrobe_g")],
     ])
 
 
@@ -111,11 +111,7 @@ async def send_home(bot, cid, q=None):
     """
     w = store.load_wardrobe(cid)
     total, counts = wardrobe_stats(w)
-    params_filled = _params_filled(cid)
-    missing = []
-    if total > 0 and not params_filled:
-        missing.append("👤 Мои параметры")
-    msg = wardrobe_ui.home_screen(total, counts, ZONE_ORDER, ZONE_EMOJI, params_filled, missing)
+    msg = wardrobe_ui.home_screen(total, counts, ZONE_ORDER)
     kb = _wardrobe_home_kb()
     if q is not None:
         try:
@@ -394,8 +390,7 @@ ZONES = [
 # Порядок зон для отображения статистики и шкафа (владелец — store.py, здесь алиас
 # для обратной совместимости импортов ui/тестов).
 ZONE_ORDER = store.ZONE_ORDER
-ZONE_EMOJI = {"Верх": "👕", "Низ": "👖", "Верхняя одежда": "🧥",
-              "Обувь": "👟", "Аксессуары": "⌚", "Другое": "🎒"}
+ZONE_EMOJI = {}
 
 def _zone_of(category):
     c = category.lower()
@@ -558,7 +553,7 @@ async def send_del_zones(bot, cid, q=None, origin="m"):
     total, counts = wardrobe_stats(w)
     if not total:
         await bot.send_message(chat_id=cid, text="Шкаф пуст.", reply_markup=closet_kb()); return
-    rows = [[InlineKeyboardButton(f"{ZONE_EMOJI.get(z,'•')} {z} ({counts.get(z,0)})",
+    rows = [[InlineKeyboardButton(f"{z} ({counts.get(z,0)})",
                                   callback_data=f"w_delz_{ZONE_SLUG[z]}_{origin}")]
             for z in ZONE_ORDER if counts.get(z, 0) > 0]
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data=_ORIGIN_BACK.get(origin, "m_wardrobe"))])
@@ -634,9 +629,9 @@ def _fallback_improve_data(w):
                            "text": "Точные слабые места видно после примерки сочетаний."})
 
     look_items = []
-    for zone, emoji in (("Верх", "👔"), ("Низ", "👖"), ("Обувь", "👟"), ("Аксессуары", "🧢")):
+    for zone in ("Верх", "Низ", "Обувь", "Аксессуары"):
         if zones.get(zone):
-            look_items.append(f"{emoji} {zones[zone][0]}")
+            look_items.append(f"{zone}: {zones[zone][0]}")
 
     total = len(items)
     score = max(40, min(90, 40 + total * 4))
@@ -722,7 +717,7 @@ def _improve_prompt(cid, wardrobe_text):
 "weaknesses": [{{"title":"кратко проблема","text":"последствие для образов"}}, "... максимум 5, по важности"],
 "buy": [{{"item":"конкретная вещь","why":"зачем, сколько новых сочетаний, с чем работает"}}, "... максимум 5, по влиянию"],
 "avoid": ["лишняя покупка или дубль с объяснением", "... если есть"],
-"best_look": {{"items":["👔 вещь","👖 вещь","👟 вещь","🧢 акцент"], "why":"почему образ работает"}},
+"best_look": {{"items":["Верх: вещь","Низ: вещь","Обувь: вещь","Аксессуары: акцент"], "why":"почему образ работает"}},
 "potential": "1 абзац: универсальность, лёгкость сборки, какой стиль просматривается, следующий логичный шаг"}}"""
 
 
