@@ -17,6 +17,7 @@ import secure
 
 _log = logging.getLogger(__name__)
 _GEMINI_RATE_LOCK = threading.Lock()
+_GEMINI_LIMIT_LOG_DEDUP = {}
 
 # ---------- Cost logger ----------
 _COST_MAX = 500  # максимум записей в rolling-буфере
@@ -300,6 +301,12 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
         state = api_usage.gemini_state(1)
         scope = (getattr(err, "limit_scope", "") or state.get("cooldown_scope") or "").upper()
         seconds = getattr(err, "retry_after", None) or state.get("cooldown_seconds") or 0
+        cooldown_until = int(getattr(err, "cooldown_until", None) or state.get("cooldown_until") or 0)
+        dedup_key = (kind or "gemini_rate_limit", scope or "limit", cooldown_until, bool(fallback))
+        now = time.time()
+        if _GEMINI_LIMIT_LOG_DEDUP.get(dedup_key, 0) > now - 15 * 60:
+            return
+        _GEMINI_LIMIT_LOG_DEDUP[dedup_key] = now
         first = f"Gemini · лимит {scope}".strip()
         second = "Fallback включён" if fallback else "Fallback будет использован"
         if seconds:
@@ -368,13 +375,19 @@ def _as_text(x):
     return None
 
 # ---------- одиночная генерация ----------
-def _gen_gemini(prompt, max_tokens, temperature):
+def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text"):
     cooling = _gemini_cooldown_error()
     if cooling is not None:
         raise cooling
+    generation_config = {
+        "maxOutputTokens": max_tokens,
+        "temperature": temperature,
+        "thinkingConfig": {"thinkingBudget": 0},
+    }
+    if response_mode == "json":
+        generation_config["responseMimeType"] = "application/json"
     payload = {"contents": [{"parts": [{"text": prompt}]}],
-               "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature,
-                                    "thinkingConfig": {"thinkingBudget": 0}}}
+               "generationConfig": generation_config}
     last_err = None
     for attempt in range(2):
         try:
@@ -440,16 +453,19 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
     t0 = time.time()
     status_code = None
     try:
+        payload = {
+            "model": config.OPENROUTER_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": min(int(max_tokens or 400), token_cap),
+            "temperature": min(float(temperature or 0.7), 0.8),
+        }
+        if response_mode == "json":
+            payload["response_format"] = {"type": "json_object"}
         r = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={"Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
                      "Content-Type": "application/json"},
-            json={
-                "model": config.OPENROUTER_MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": min(int(max_tokens or 400), token_cap),
-                "temperature": min(float(temperature or 0.7), 0.8),
-            },
+            json=payload,
             timeout=timeout,
         )
         status_code = r.status_code
@@ -471,13 +487,20 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
                                  int((time.time() - t0) * 1000))
         return None
 
-def _gen_groq(prompt, max_tokens, temperature):
+def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text"):
     if not config.GROQ_API_KEY:
         raise Exception("no groq")
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if response_mode == "json":
+        payload["response_format"] = {"type": "json_object"}
     r = _post("https://api.groq.com/openai/v1/chat/completions",
         {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"},
-        {"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}],
-         "max_tokens": max_tokens, "temperature": temperature},
+        payload,
         40, "groq")
     return r.json()["choices"][0]["message"]["content"]
 
@@ -599,8 +622,8 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
     if cached:
         return cached
     calls = {
-        "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature),
-        "groq": lambda: _gen_groq(prompt, max_tokens, temperature),
+        "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature, response_mode),
+        "groq": lambda: _gen_groq(prompt, max_tokens, temperature, response_mode),
         "cf": lambda: _gen_cf(prompt, max_tokens),
     }
     errs = []
