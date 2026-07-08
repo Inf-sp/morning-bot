@@ -299,9 +299,11 @@ def _build_day_text(cid):
     s = store.get_settings(cid)
     try:
         data = weather.fetch_weather(s["lat"], s["lon"], 2)
+        weather_error = None
     except Exception as e:
         _log.warning("myday: fetch_weather failed: %s", e)
         data = None
+        weather_error = e
 
     if data:
         d = data["daily"]
@@ -327,8 +329,14 @@ def _build_day_text(cid):
         rain = 0
         rain_mm = None
         tmax = None
-        weather_title = "☁️ Погода сейчас недоступна"
-        weather_line = "Не удалось получить прогноз — остальная сводка всё равно готова."
+        response = getattr(weather_error, "response", None)
+        status = getattr(response, "status_code", None)
+        if isinstance(weather_error, weather.WeatherDailyLimitExceeded) or status == 429:
+            weather_title = "☁️ Погодный лимит исчерпан"
+            weather_line = weather.WEATHER_LIMIT_FALLBACK
+        else:
+            weather_title = "☁️ Погода сейчас недоступна"
+            weather_line = "Не удалось получить прогноз — остальная сводка всё равно готова."
         hum_title, hum_line = "", ""
 
     now = datetime.now(TZ)

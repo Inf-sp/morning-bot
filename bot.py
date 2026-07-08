@@ -64,23 +64,30 @@ def build_deploy_report_message(version, release_notes, check_list):
     return "\n".join(lines)
 
 
+def _current_deploy_report_key():
+    return config.RAILWAY_DEPLOYMENT_ID or f"version:{config.APP_VERSION}"
+
+
 async def send_deploy_report_to_admin(bot):
     version = str(config.APP_VERSION or "").strip()
+    deploy_key = _current_deploy_report_key()
     started_at = datetime.now(TZ).isoformat()
 
     if not config.ADMIN_CHAT_ID:
         logging.warning(
-            "Deploy report skipped: ADMIN_CHAT_ID is not set, version=%s, started_at=%s",
+            "Deploy report skipped: ADMIN_CHAT_ID is not set, version=%s, deploy_key=%s, started_at=%s",
             version or "dev",
+            deploy_key,
             started_at,
         )
         return
 
-    last_sent_version = store.get_last_deploy_report_version()
-    if version and last_sent_version == version:
+    last_sent_deploy_key = store.get_last_deploy_report_key()
+    if deploy_key and last_sent_deploy_key == deploy_key:
         logging.info(
-            "Deploy report skipped: version already sent, version=%s, started_at=%s",
+            "Deploy report skipped: deploy already sent, version=%s, deploy_key=%s, started_at=%s",
             version,
+            deploy_key,
             started_at,
         )
         return
@@ -92,17 +99,21 @@ async def send_deploy_report_to_admin(bot):
     )
     try:
         await bot.send_message(chat_id=config.ADMIN_CHAT_ID, text=message)
-        store.set_last_deploy_report_version(version)
+        store.set_last_deploy_report(version, deploy_key)
         logging.info(
-            "Deploy report sent: version=%s, admin_chat_id=%s, started_at=%s",
+            "Deploy report sent: version=%s, deploy_key=%s, railway_environment=%s, railway_service=%s, admin_chat_id=%s, started_at=%s",
             version or "dev",
+            deploy_key,
+            config.RAILWAY_ENVIRONMENT,
+            config.RAILWAY_SERVICE_NAME,
             config.ADMIN_CHAT_ID,
             started_at,
         )
     except Exception:
         logging.exception(
-            "Deploy report failed: version=%s, admin_chat_id=%s, started_at=%s",
+            "Deploy report failed: version=%s, deploy_key=%s, admin_chat_id=%s, started_at=%s",
             version or "dev",
+            deploy_key,
             config.ADMIN_CHAT_ID,
             started_at,
         )
@@ -195,8 +206,7 @@ async def answer_callback(update, context):
     if data == "m_notes":
         await settings.send_notes(bot, cid); return
     if data == "m_food_gen":
-        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
-        await balance.send_recipe_featured(bot, cid, status=status); return
+        await _inline_status(lambda status: balance.send_recipe_featured(bot, cid, status=status)); return
     # Пропустить первичный опрос раздела
     if data.startswith("fv_skip_"):
         section = data[len("fv_skip_"):]
@@ -389,14 +399,11 @@ async def answer_callback(update, context):
             elif act.startswith("news_refresh_"):
                 await _inline_status(lambda _s: personal_news.refresh(bot, cid, act.split("_")[-1]))
             elif act in ("food_breakfast", "recipe_breakfast"):
-                status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
-                await balance.enter_meal(bot, cid, "breakfast", status=status)
+                await _inline_status(lambda status: balance.enter_meal(bot, cid, "breakfast", status=status))
             elif act in ("food_lunch", "recipe_lunch"):
-                status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
-                await balance.enter_meal(bot, cid, "lunch", status=status)
+                await _inline_status(lambda status: balance.enter_meal(bot, cid, "lunch", status=status))
             elif act in ("food_dinner", "recipe_dinner"):
-                status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
-                await balance.enter_meal(bot, cid, "dinner", status=status)
+                await _inline_status(lambda status: balance.enter_meal(bot, cid, "dinner", status=status))
         except Exception as e:
             await verify.safe_error(bot, cid, e)
         return

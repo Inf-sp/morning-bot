@@ -39,6 +39,7 @@ class StatusManager:
         self.message = message
         self.parse_mode = parse_mode
         self.mode = mode
+        self._inline_cleared = False
         self._task = None
         self._stopped = asyncio.Event()
 
@@ -76,6 +77,8 @@ class StatusManager:
     async def _edit(self, text, **kwargs):
         if self.message is None:
             return False
+        if self.mode == "inline" and self._inline_cleared:
+            return False
         try:
             if self.mode == "inline":
                 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
@@ -90,11 +93,31 @@ class StatusManager:
     async def stop(self, delete=True):
         await self._cancel()
         if self.mode == "inline" and self.message is not None:
-            with contextlib.suppress(Exception):
-                await self.message.edit_reply_markup(reply_markup=None)
+            await self._clear_inline_markup()
         elif delete and self.message is not None:
             with contextlib.suppress(Exception):
                 await self.message.delete()
+
+    async def _clear_inline_markup(self):
+        self._inline_cleared = True
+        ok = False
+        with contextlib.suppress(Exception):
+            await self.message.edit_reply_markup(reply_markup=None)
+            ok = True
+        if ok or self.bot is None:
+            return
+        chat_id = self.cid
+        if chat_id is None:
+            chat = getattr(self.message, "chat", None)
+            chat_id = getattr(chat, "id", None) or getattr(self.message, "chat_id", None)
+        message_id = getattr(self.message, "message_id", None)
+        if chat_id is not None and message_id is not None:
+            with contextlib.suppress(Exception):
+                await self.bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    reply_markup=None,
+                )
 
     async def replace(self, text, **kwargs):
         await self._cancel()

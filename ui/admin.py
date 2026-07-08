@@ -46,7 +46,8 @@ def home(system_dot, system_text, total_users, active_7d, llm_calls_today, llm_t
     if weather_usage:
         total = int(weather_usage.get("requests_total") or 0)
         left = max(0, __import__("config").WEATHER_FREE_DAILY_LIMIT - total)
-        b.line(f"☁️ OpenWeather {total}/1 000 · осталось {left}")
+        limit = __import__("config").WEATHER_FREE_DAILY_LIMIT
+        b.line(f"☁️ OpenWeather {total}/{limit:,} · осталось {left}".replace(",", " "))
         if total >= __import__("config").WEATHER_HARD_DAILY_LIMIT:
             b.line("🔴 Новые запросы заблокированы до следующего дня")
     if next_broadcast_title:

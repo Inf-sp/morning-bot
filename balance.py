@@ -1691,7 +1691,12 @@ async def handle_callback(bot, cid, q, data):
     # Готовка: «Ещё рецепт» / «Назад» — строго в рамках активной категории (§6 спеки)
     if data == "as_food":
         status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
-        await show_next_recipe(bot, cid, status=status); return
+        try:
+            await show_next_recipe(bot, cid, status=status)
+        except Exception as e:
+            await status.stop(delete=False)
+            await verify.safe_error(bot, cid, e)
+        return
     if data == "as_food_back":
         await back_to_food_menu(bot, cid); return
 
@@ -1746,14 +1751,18 @@ async def handle_callback(bot, cid, q, data):
             reply_markup=_back_kb()); return
     if data == "as_fridge_cook":
         status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
-        raw = store.get_list(config.FRIDGE_KEY, str(cid))
-        available = _fridge_available(raw)
-        if not available:
-            msg = food_ui.fridge_empty_for_recipe()
-            await bot.send_message(chat_id=cid, text=msg.text)
+        try:
+            raw = store.get_list(config.FRIDGE_KEY, str(cid))
+            available = _fridge_available(raw)
+            if not available:
+                msg = food_ui.fridge_empty_for_recipe()
+                await bot.send_message(chat_id=cid, text=msg.text)
+                await status.stop(delete=False)
+            else:
+                await enter_meal(bot, cid, "fridge", ", ".join(available), status=status)
+        except Exception as e:
             await status.stop(delete=False)
-        else:
-            await enter_meal(bot, cid, "fridge", ", ".join(available), status=status)
+            await verify.safe_error(bot, cid, e)
         return
     if data == "as_fridge_clean":
         import cleanup

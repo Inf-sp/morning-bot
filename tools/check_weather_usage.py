@@ -159,20 +159,20 @@ def test_429_no_infinite_retry():
     print("ok: 429 retries at most once")
 
 
-def test_999_last_call_allowed():
+def test_last_free_call_allowed():
     _reset()
-    _seed_total(999)
+    _seed_total(config.WEATHER_HARD_DAILY_LIMIT - 1)
     weather.requests.get = lambda url, params=None, timeout=None: _Resp(200)
     weather._onecall_get("current", 52.37, 4.89)
     u = _usage()
-    assert u["requests_total"] == 1000
+    assert u["requests_total"] == config.WEATHER_HARD_DAILY_LIMIT
     assert u["requests_success"] == 1
-    print("ok: request at 999 is allowed")
+    print("ok: last free request is allowed")
 
 
-def test_1000_blocks_new_http():
+def test_hard_limit_blocks_new_http():
     _reset()
-    _seed_total(1000)
+    _seed_total(config.WEATHER_HARD_DAILY_LIMIT)
     calls = {"n": 0}
 
     def fake_get(url, params=None, timeout=None):
@@ -185,14 +185,14 @@ def test_1000_blocks_new_http():
     except weather.WeatherDailyLimitExceeded:
         pass
     assert calls["n"] == 0
-    assert _usage()["requests_total"] == 1000
-    print("ok: request at 1000 is blocked before HTTP")
+    assert _usage()["requests_total"] == config.WEATHER_HARD_DAILY_LIMIT
+    print("ok: request at hard limit is blocked before HTTP")
 
 
 def test_cache_available_when_blocked():
     _reset()
     weather._WX_CACHE[(52.37, 4.89, 2)] = (__import__("time").time(), {"provider": "cached"})
-    _seed_total(1000)
+    _seed_total(config.WEATHER_HARD_DAILY_LIMIT)
     data = weather.fetch_weather(52.37, 4.89, 2)
     assert data["provider"] == "cached"
     assert _usage()["cache_hits"] == 1
@@ -215,8 +215,8 @@ if __name__ == "__main__":
     test_401_no_retry()
     test_timeout_one_retry_then_success()
     test_429_no_infinite_retry()
-    test_999_last_call_allowed()
-    test_1000_blocks_new_http()
+    test_last_free_call_allowed()
+    test_hard_limit_blocks_new_http()
     test_cache_available_when_blocked()
     test_amsterdam_date_key()
     print("ok: weather usage accounting")
