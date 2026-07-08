@@ -132,10 +132,11 @@ def get_last_deploy_report_key():
     return str(state.get("last_sent_deploy_key", "") or state.get("last_sent_version", "") or "")
 
 
-def set_last_deploy_report(version, deploy_key):
+def set_last_deploy_report(version, deploy_key, sent_at):
     state = _load(config.DEPLOY_REPORT_KEY)
     state["last_sent_version"] = str(version or "")
     state["last_sent_deploy_key"] = str(deploy_key or "")
+    state["sent_at"] = str(sent_at or "")
     _save(config.DEPLOY_REPORT_KEY, state)
 
 def get_profile(chat_id):

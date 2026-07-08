@@ -4,7 +4,8 @@ from telegram import Update
 _log = logging.getLogger(__name__)
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
                           ContextTypes, CallbackQueryHandler, PollAnswerHandler)
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 
 import config
 import store
@@ -36,6 +37,67 @@ CHAT_ID = config.CHAT_ID
 
 
 _WELCOME = menu.WELCOME
+_ROOT = Path(__file__).parent
+_MAX_RELEASE_NOTES = 7
+_DEFAULT_CHECK_AFTER_DEPLOY = [
+    "Проверка API",
+    "Рецепты",
+    "Досуг",
+    "Словарь",
+    "Уведомления",
+]
+
+
+def parse_env_list(value: str) -> list[str]:
+    return [item.strip() for item in str(value or "").split("|") if item.strip()]
+
+
+def get_app_version() -> str:
+    return str(config.APP_VERSION or "").strip() or "dev"
+
+
+def get_current_deploy_key() -> str:
+    return config.RAILWAY_DEPLOYMENT_ID or get_app_version()
+
+
+def _parse_release_notes_file(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    notes = []
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("- "):
+            line = line[2:].strip()
+        elif line.startswith("* "):
+            line = line[2:].strip()
+        if line:
+            notes.append(line)
+    return notes
+
+
+def load_release_notes() -> tuple[list[str], str]:
+    file_notes = _parse_release_notes_file(_ROOT / "RELEASE_NOTES.md")
+    if file_notes:
+        return file_notes, "file"
+
+    env_notes = parse_env_list(config.RELEASE_NOTES)
+    if env_notes:
+        return env_notes, "env"
+
+    commit_message = str(config.RAILWAY_GIT_COMMIT_MESSAGE or "").strip()
+    if commit_message:
+        return [commit_message], "git_commit"
+
+    return [], "empty"
+
+
+def load_check_after_deploy() -> tuple[list[str], str]:
+    env_items = parse_env_list(config.CHECK_AFTER_DEPLOY)
+    if env_items:
+        return env_items, "env"
+    return list(_DEFAULT_CHECK_AFTER_DEPLOY), "default"
 
 
 def build_deploy_report_message(version, release_notes, check_list):
@@ -50,7 +112,12 @@ def build_deploy_report_message(version, release_notes, check_list):
 
     if release_notes:
         lines.append("Что изменилось:")
-        lines.extend(f"• {str(item).strip()}" for item in release_notes if str(item).strip())
+        clean_notes = [str(item).strip() for item in release_notes if str(item).strip()]
+        shown_notes = clean_notes[:_MAX_RELEASE_NOTES]
+        lines.extend(f"• {item}" for item in shown_notes)
+        hidden_count = len(clean_notes) - len(shown_notes)
+        if hidden_count > 0:
+            lines.append(f"• И ещё {hidden_count} изменений")
     else:
         lines.append("Список изменений не указан.")
         return "\n".join(lines)
@@ -60,24 +127,27 @@ def build_deploy_report_message(version, release_notes, check_list):
         lines.extend(["", "Что проверить:"])
         lines.extend(f"• {item}" for item in clean_check_list)
 
-    lines.extend(["", "Если всё работает — деплой прошёл успешно ✅"])
+    lines.extend(["", "Если всё работает - деплой прошёл успешно ✅"])
     return "\n".join(lines)
 
 
-def _current_deploy_report_key():
-    return config.RAILWAY_DEPLOYMENT_ID or f"version:{config.APP_VERSION}"
-
-
 async def send_deploy_report_to_admin(bot):
-    version = str(config.APP_VERSION or "").strip()
-    deploy_key = _current_deploy_report_key()
+    version = get_app_version()
+    deploy_key = get_current_deploy_key()
     started_at = datetime.now(TZ).isoformat()
+    sent_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    release_notes, release_notes_source = load_release_notes()
+    check_list, check_list_source = load_check_after_deploy()
 
     if not config.ADMIN_CHAT_ID:
         logging.warning(
-            "Deploy report skipped: ADMIN_CHAT_ID is not set, version=%s, deploy_key=%s, started_at=%s",
-            version or "dev",
+            "Deploy report skipped: admin chat id is not configured app_version=%s deploy_key=%s release_notes_source=%s check_list_source=%s railway_environment=%s railway_service=%s started_at=%s result=skipped",
+            version,
             deploy_key,
+            release_notes_source,
+            check_list_source,
+            config.RAILWAY_ENVIRONMENT,
+            config.RAILWAY_SERVICE_NAME,
             started_at,
         )
         return
@@ -85,35 +155,41 @@ async def send_deploy_report_to_admin(bot):
     last_sent_deploy_key = store.get_last_deploy_report_key()
     if deploy_key and last_sent_deploy_key == deploy_key:
         logging.info(
-            "Deploy report skipped: deploy already sent, version=%s, deploy_key=%s, started_at=%s",
-            version,
+            "Deploy report skipped: already sent for deploy_key=%s app_version=%s release_notes_source=%s check_list_source=%s railway_environment=%s railway_service=%s started_at=%s result=skipped",
             deploy_key,
+            version,
+            release_notes_source,
+            check_list_source,
+            config.RAILWAY_ENVIRONMENT,
+            config.RAILWAY_SERVICE_NAME,
             started_at,
         )
         return
 
-    message = build_deploy_report_message(
-        version,
-        config.RELEASE_NOTES,
-        config.CHECK_AFTER_DEPLOY,
-    )
+    message = build_deploy_report_message(version, release_notes, check_list)
     try:
         await bot.send_message(chat_id=config.ADMIN_CHAT_ID, text=message)
-        store.set_last_deploy_report(version, deploy_key)
+        store.set_last_deploy_report(version, deploy_key, sent_at)
         logging.info(
-            "Deploy report sent: version=%s, deploy_key=%s, railway_environment=%s, railway_service=%s, admin_chat_id=%s, started_at=%s",
-            version or "dev",
+            "Deploy report sent: version=%s deploy_key=%s release_notes_source=%s check_list_source=%s railway_environment=%s railway_service=%s admin_chat_id=%s sent_at=%s result=sent",
+            version,
             deploy_key,
+            release_notes_source,
+            check_list_source,
             config.RAILWAY_ENVIRONMENT,
             config.RAILWAY_SERVICE_NAME,
             config.ADMIN_CHAT_ID,
-            started_at,
+            sent_at,
         )
     except Exception:
         logging.exception(
-            "Deploy report failed: version=%s, deploy_key=%s, admin_chat_id=%s, started_at=%s",
-            version or "dev",
+            "Deploy report failed: version=%s deploy_key=%s release_notes_source=%s check_list_source=%s railway_environment=%s railway_service=%s admin_chat_id=%s started_at=%s result=failed",
+            version,
             deploy_key,
+            release_notes_source,
+            check_list_source,
+            config.RAILWAY_ENVIRONMENT,
+            config.RAILWAY_SERVICE_NAME,
             config.ADMIN_CHAT_ID,
             started_at,
         )
