@@ -7,6 +7,8 @@ import time
 import threading
 import requests
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+import hashlib
 from typing import Literal
 import api_usage
 import config
@@ -48,13 +50,16 @@ class FallbackPolicy:
 class LLMProviderError(Exception):
     def __init__(self, provider: str, message: str, status_code: int | None = None,
                  temporary: bool = False, error_type: str = "provider_error",
-                 retry_after: int | None = None):
+                 retry_after: int | None = None, limit_scope: str = "",
+                 cooldown_until: int | None = None):
         super().__init__(message)
         self.provider = provider
         self.status_code = status_code
         self.temporary = temporary
         self.error_type = error_type
         self.retry_after = retry_after
+        self.limit_scope = limit_scope
+        self.cooldown_until = cooldown_until
 
 
 def _is_temporary_status(status_code):
@@ -141,6 +146,170 @@ def get_cost_log() -> list:
     except Exception:
         return []
 
+
+_AI_CACHE_MAX = 300
+_AI_CACHE_TTLS = {
+    "personal_news": 12 * 3600,
+    "news": 12 * 3600,
+    "food": 24 * 3600,
+    "leisure": 18 * 3600,
+    "travel": 18 * 3600,
+    "learning_explain": 14 * 86400,
+    "deploy": 10 * 365 * 86400,
+}
+
+
+def _cache_ttl(module: str, response_mode: ResponseMode) -> int:
+    module = module or ""
+    if module == "learning":
+        return 0
+    if module in _AI_CACHE_TTLS:
+        return _AI_CACHE_TTLS[module]
+    return 0
+
+
+def _cache_key(provider_order, prompt, max_tokens, temperature, module, response_mode):
+    raw = json.dumps({
+        "order": list(provider_order or []),
+        "prompt": prompt,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "module": module or "",
+        "mode": response_mode,
+    }, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _cache_get(key: str, ttl: int):
+    if ttl <= 0:
+        return None
+    try:
+        data = store._load(config.AI_RESPONSE_CACHE_KEY)
+        entry = (data.get("items") or {}).get(key)
+        if not entry:
+            return None
+        if time.time() - int(entry.get("ts") or 0) > ttl:
+            return None
+        api_usage.record_cache_hit("gemini")
+        return entry.get("value")
+    except Exception:
+        return None
+
+
+def _cache_set(key: str, value):
+    if value is None:
+        return
+    try:
+        data = store._load(config.AI_RESPONSE_CACHE_KEY)
+        items = data.setdefault("items", {})
+        items[key] = {"ts": int(time.time()), "value": value}
+        if len(items) > _AI_CACHE_MAX:
+            oldest = sorted(items.items(), key=lambda kv: int((kv[1] or {}).get("ts") or 0))
+            for k, _v in oldest[:len(items) - _AI_CACHE_MAX]:
+                items.pop(k, None)
+        store._save(config.AI_RESPONSE_CACHE_KEY, data)
+    except Exception:
+        pass
+
+
+def _parse_retry_seconds(headers=None, body="") -> int | None:
+    try:
+        val = int((headers or {}).get("Retry-After") or 0)
+        if val > 0:
+            return val
+    except Exception:
+        pass
+    text = body or ""
+    try:
+        data = json.loads(text)
+        for detail in ((data.get("error") or {}).get("details") or []):
+            delay = detail.get("retryDelay") or detail.get("retry_delay")
+            if isinstance(delay, str):
+                m = re.match(r"(\d+)s$", delay.strip())
+                if m:
+                    return int(m.group(1))
+    except Exception:
+        pass
+    m = re.search(r"retry(?: after|Delay)?[^\d]{0,20}(\d+)\s*s", text, re.I)
+    return int(m.group(1)) if m else None
+
+
+def _next_local_day_seconds() -> int:
+    now = datetime.now(config.TZ)
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=5, second=0, microsecond=0)
+    return max(3600, int((tomorrow - now).total_seconds()))
+
+
+def _classify_gemini_limit(body="", headers=None) -> tuple[str, int | None, int]:
+    text = (body or "")
+    low = text.lower()
+    retry_after = _parse_retry_seconds(headers, text)
+    compact = re.sub(r"[^a-z0-9]+", "", low)
+    if any(x in compact for x in ("requestsperday", "perday", "rpd", "daily")):
+        return "RPD", retry_after, _next_local_day_seconds()
+    if any(x in compact for x in ("tokensperminute", "tpm")):
+        return "TPM", retry_after, max(60, min(int(retry_after or 60), 300))
+    if any(x in compact for x in ("requestsperminute", "perminute", "rpm")):
+        return "RPM", retry_after, max(60, min(int(retry_after or 60), 300))
+    if "resource_exhausted" in low or "too many requests" in low or "quota" in low:
+        return "limit", retry_after, max(60, min(int(retry_after or 60), 300))
+    return "", retry_after, max(60, min(int(retry_after or 60), 300))
+
+
+def _gemini_cooldown_error():
+    state = api_usage.gemini_state(1)
+    if not state.get("cooldown_active"):
+        return None
+    retry_after = int(state.get("cooldown_seconds") or 0)
+    scope = state.get("cooldown_scope") or "limit"
+    return LLMProviderError(
+        "gemini",
+        f"gemini cooldown {scope}: retry after {retry_after}s",
+        status_code=429,
+        temporary=True,
+        error_type="rate_limit",
+        retry_after=retry_after,
+        limit_scope=scope,
+        cooldown_until=int(state.get("cooldown_until") or 0),
+    )
+
+
+def gemini_status() -> dict:
+    return api_usage.gemini_state(1)
+
+
+def get_gemini_rate_limit_stats(period_days=1) -> dict:
+    return api_usage.gemini_state(period_days)
+
+
+def is_gemini_rate_limited() -> bool:
+    return bool(api_usage.gemini_state(1).get("cooldown_active"))
+
+
+def _cooldown_phrase(seconds: int) -> str:
+    seconds = max(0, int(seconds or 0))
+    if seconds < 90:
+        return f"{max(1, seconds)} сек"
+    minutes = max(1, round(seconds / 60))
+    return f"{minutes} мин"
+
+
+def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = False):
+    try:
+        import tracking
+        state = api_usage.gemini_state(1)
+        scope = (getattr(err, "limit_scope", "") or state.get("cooldown_scope") or "").upper()
+        seconds = getattr(err, "retry_after", None) or state.get("cooldown_seconds") or 0
+        first = f"Gemini · лимит {scope}".strip()
+        second = "Fallback включён" if fallback else "Fallback будет использован"
+        if seconds:
+            second += f" · повтор после {_cooldown_phrase(int(seconds))}"
+        else:
+            second += " · повтор после cooldown"
+        tracking.log_error("llm", f"{first}\n{second}", kind=kind or "gemini_rate_limit")
+    except Exception:
+        pass
+
 def _post(url, headers, payload, timeout, name):
     service = {"cf": "cloudflare"}.get(name, name)
     t0 = time.time()
@@ -156,6 +325,8 @@ def _post(url, headers, payload, timeout, name):
         # тело ошибки в логи (видно причину), но без секретов
         body = secure.redact((r.text or "")[:300])
         temporary = _is_temporary_status(r.status_code)
+        limit_scope = ""
+        cooldown_until = None
         api_usage.record_request(service, ok=False, status_code=r.status_code,
                                  error=f"HTTP {r.status_code}",
                                  latency_ms=int((time.time() - t0) * 1000),
@@ -165,9 +336,22 @@ def _post(url, headers, payload, timeout, name):
             retry_after = int(r.headers.get("Retry-After") or 0) or None
         except Exception:
             retry_after = None
+        if service == "gemini" and (r.status_code == 429 or "RESOURCE_EXHAUSTED" in (r.text or "")):
+            limit_scope, parsed_retry, cooldown_seconds = _classify_gemini_limit(r.text or "", r.headers)
+            limit_scope = limit_scope or "limit"
+            retry_after = retry_after or parsed_retry
+            cooldown_until = int(time.time()) + int(cooldown_seconds)
+            api_usage.set_gemini_rate_limit(
+                limit_scope=limit_scope,
+                retry_after=retry_after,
+                cooldown_until=cooldown_until,
+                message=body,
+            )
         raise LLMProviderError(name, f"{name} {r.status_code}: {body}",
                                status_code=r.status_code, temporary=temporary,
-                               error_type="http_error", retry_after=retry_after)
+                               error_type="rate_limit" if limit_scope else "http_error",
+                               retry_after=retry_after, limit_scope=limit_scope,
+                               cooldown_until=cooldown_until)
     if service != "gemini":
         api_usage.record_request(service, ok=True, latency_ms=int((time.time() - t0) * 1000),
                                  headers=r.headers)
@@ -185,6 +369,9 @@ def _as_text(x):
 
 # ---------- одиночная генерация ----------
 def _gen_gemini(prompt, max_tokens, temperature):
+    cooling = _gemini_cooldown_error()
+    if cooling is not None:
+        raise cooling
     payload = {"contents": [{"parts": [{"text": prompt}]}],
                "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature,
                                     "thinkingConfig": {"thinkingBudget": 0}}}
@@ -217,7 +404,14 @@ def _gen_gemini(prompt, max_tokens, temperature):
             return data["candidates"][0]["content"]["parts"][0]["text"]
         except LLMProviderError as e:
             last_err = e
-            if e.status_code == 429 and attempt == 0:
+            short_retry = (
+                e.status_code == 429
+                and attempt == 0
+                and (e.limit_scope or "").upper() != "RPD"
+                and e.retry_after is not None
+                and int(e.retry_after or 0) <= 10
+            )
+            if short_retry:
                 time.sleep(min(max(int(e.retry_after or 5), 1), 60))
                 continue
             raise
@@ -314,6 +508,14 @@ def _reorder_for_cooldown(order):
         return order
     return tuple(sorted(order, key=lambda n: _is_cooling(n)))
 
+
+def _provider_is_unavailable(name):
+    if name == "gemini":
+        return _gemini_cooldown_error()
+    if _is_cooling(name):
+        return LLMProviderError(name, f"{name} cooldown", temporary=True, error_type="cooldown")
+    return None
+
 def _friendly(errs):
     joined = "; ".join(errs)
     _log.warning("LLM chain failed: %s", secure.redact(joined))
@@ -389,7 +591,13 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
     policy = _coerce_policy(fallback_allowed, privacy_level, response_mode, fallback_policy,
                             allow_personal_openrouter)
     order = _resolve(tier, order, route=route)
+    pre_gemini_unavailable = _gemini_cooldown_error() if "gemini" in order else None
     order = _reorder_for_cooldown(order)
+    cache_ttl = _cache_ttl(module, response_mode)
+    cache_key = _cache_key(order, prompt, max_tokens, temperature, module, response_mode)
+    cached = _cache_get(cache_key, cache_ttl)
+    if cached:
+        return cached
     calls = {
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature),
         "groq": lambda: _gen_groq(prompt, max_tokens, temperature),
@@ -397,21 +605,38 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
     }
     errs = []
     temporary_errs = []
+    gemini_rate_limit_err = pre_gemini_unavailable
+    rate_limit_logged = False
     for name in order:
         if name == "openrouter":
+            continue
+        unavailable = _provider_is_unavailable(name)
+        if unavailable is not None:
+            errs.append(f"{name}:{unavailable}")
+            if _is_temporary_exception(unavailable):
+                temporary_errs.append((name, unavailable))
+            if name == "gemini" and getattr(unavailable, "error_type", "") == "rate_limit":
+                gemini_rate_limit_err = unavailable
             continue
         t0 = time.time()
         try:
             out = _as_text(calls[name]())
             if out and out.strip():
                 ms = int((time.time() - t0) * 1000)
+                if name != "gemini" and gemini_rate_limit_err is not None:
+                    api_usage.record_gemini_fallback(target=name, reason="cooldown")
+                    _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
+                    rate_limit_logged = True
                 _log_cost(name, name, prompt, out, module, ms=ms, ok=True)
+                _cache_set(cache_key, out)
                 return out
         except Exception as e:
             _mark_cooldown(name, e)
             errs.append(f"{name}:{e}")
             if _is_temporary_exception(e):
                 temporary_errs.append((name, e))
+            if name == "gemini" and getattr(e, "error_type", "") == "rate_limit":
+                gemini_rate_limit_err = e
     if policy.openrouter_allowed and temporary_errs:
         origin, err = temporary_errs[0]
         reason = getattr(err, "error_type", type(err).__name__)
@@ -419,13 +644,26 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
         out = _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin, reason,
                                               response_mode=policy.response_mode)
         if out:
+            if origin == "gemini" and getattr(err, "error_type", "") == "rate_limit":
+                api_usage.record_gemini_fallback(target="openrouter", reason=reason)
+                _log_gemini_limit("gemini_rate_limit", err, fallback=True)
+                rate_limit_logged = True
             _log_cost("openrouter_fallback", config.OPENROUTER_MODEL, "", out, module, ok=True)
+            _cache_set(cache_key, out)
             return out
+        if origin == "gemini" and getattr(err, "error_type", "") == "rate_limit":
+            api_usage.record_gemini_fallback(target="local", reason="openrouter_failed")
+            _log_gemini_limit("gemini_rate_limit", err, fallback=True)
+            rate_limit_logged = True
         raise Exception(LOCAL_FALLBACK_TEXT)
+    if gemini_rate_limit_err is not None and not rate_limit_logged:
+        api_usage.record_gemini_fallback(target="local", reason="all_providers_failed")
+        _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
     _friendly_msg = _friendly(errs)
     try:
         import tracking
-        tracking.log_error("llm", "; ".join(errs)[:200] or _friendly_msg, kind="all-providers-failed")
+        if gemini_rate_limit_err is None:
+            tracking.log_error("llm", "; ".join(errs)[:200] or _friendly_msg, kind="all-providers-failed")
     except Exception:
         pass
     raise Exception(_friendly_msg)
@@ -570,6 +808,9 @@ def _chat_system(cid=None):
 
 def _chat(provider, history, system):
     if provider == "gemini":
+        cooling = _gemini_cooldown_error()
+        if cooling is not None:
+            raise cooling
         contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in history]
         r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={config.GEMINI_API_KEY}",
             {}, {"system_instruction": {"parts": [{"text": system}]}, "contents": contents,
@@ -595,25 +836,42 @@ def chat_chain(history, cid=None):
     system = _chat_system(cid)
     errs = []
     prompt_len = sum(len(m.get("content", "")) for m in history)
+    gemini_rate_limit_err = _gemini_cooldown_error() if "gemini" in CHAT_ORDER else None
     for p in _reorder_for_cooldown(CHAT_ORDER):
+        unavailable = _provider_is_unavailable(p)
+        if unavailable is not None:
+            errs.append(f"{p}:{unavailable}")
+            if p == "gemini" and getattr(unavailable, "error_type", "") == "rate_limit":
+                gemini_rate_limit_err = unavailable
+            continue
         try:
             out = _as_text(_chat(p, history, system))
             if out and out.strip():
+                if p != "gemini" and gemini_rate_limit_err is not None:
+                    api_usage.record_gemini_fallback(target=p, reason="cooldown")
+                    _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
                 _log_cost(p, p, "c" * prompt_len, out, "assistant")
                 return out
         except Exception as e:
             _mark_cooldown(p, e)
             errs.append(f"{p}:{e}")
+            if p == "gemini" and getattr(e, "error_type", "") == "rate_limit":
+                gemini_rate_limit_err = e
+    if gemini_rate_limit_err is not None:
+        api_usage.record_gemini_fallback(target="local", reason="chat_failed")
+        _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
     raise Exception(_friendly(errs))
 
 
 # --- async-обёртки для вызова из async-обработчиков без блокировки event loop ---
 async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, route=None, module="",
                fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
-               response_mode: ResponseMode = "plain_text", fallback_policy=None):
+               response_mode: ResponseMode = "plain_text", fallback_policy=None,
+               allow_personal_openrouter=False):
     return await asyncio.to_thread(
         llm, prompt, max_tokens, temperature, order, tier, module, route,
         fallback_allowed, privacy_level, response_mode, fallback_policy,
+        allow_personal_openrouter,
     )
 
 async def allm_json(prompt, max_tokens=1200, order=None, tier=None, route=None, module="",

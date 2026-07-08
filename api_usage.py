@@ -99,6 +99,13 @@ def _count(svc: dict, period: str, unit: str, dt=None) -> int:
 def _prune(svc: dict, now_ts: int) -> None:
     cutoff = now_ts - 40 * 86400
     svc["errors"] = [e for e in (svc.get("errors") or [])[-20:] if int(e.get("ts") or 0) >= cutoff]
+    svc["events"] = [e for e in (svc.get("events") or [])[-100:] if int(e.get("ts") or 0) >= cutoff]
+
+
+def _append_event(svc: dict, event: dict, now_ts: int) -> None:
+    events = svc.setdefault("events", [])
+    events.append({"ts": now_ts, **event})
+    svc["events"] = events[-100:]
 
 
 def record_request(service: str, ok: bool = True, *, units: dict | None = None,
@@ -146,6 +153,85 @@ def record_request(service: str, ok: bool = True, *, units: dict | None = None,
         store.mutate_kv(config.API_USAGE_KEY, mut)
     except Exception:
         pass
+
+
+def set_gemini_rate_limit(*, limit_scope: str = "", retry_after: int | None = None,
+                          cooldown_until: int | None = None, message: str = "") -> None:
+    now_ts = int(_now().timestamp())
+    scope = (limit_scope or "limit").upper()
+    until = int(cooldown_until or (now_ts + max(60, int(retry_after or 0))))
+
+    def mut(data):
+        data = data or _template()
+        svc = _service(data, "gemini")
+        svc["last_ok"] = False
+        svc["last_error_at"] = now_ts
+        svc["last_error_reason"] = f"лимит {scope}".strip()
+        svc["last_rate_limit_at"] = now_ts
+        svc["last_429_at"] = now_ts
+        svc["cooldown_until"] = until
+        svc["cooldown_scope"] = scope
+        svc["last_retry_after"] = int(retry_after or 0)
+        _append_event(svc, {
+            "type": "rate_limit",
+            "limit_scope": scope,
+            "retry_after": int(retry_after or 0),
+            "cooldown_until": until,
+            "message": str(message or "")[:120],
+        }, now_ts)
+        _prune(svc, now_ts)
+        return data, True
+
+    try:
+        store.mutate_kv(config.API_USAGE_KEY, mut)
+    except Exception:
+        pass
+
+
+def record_gemini_fallback(*, target: str = "local", reason: str = "") -> None:
+    now_ts = int(_now().timestamp())
+
+    def mut(data):
+        data = data or _template()
+        svc = _service(data, "gemini")
+        svc["last_fallback_at"] = now_ts
+        svc["fallback_count"] = int(svc.get("fallback_count") or 0) + 1
+        _append_event(svc, {
+            "type": "fallback",
+            "target": str(target or "local")[:40],
+            "reason": str(reason or "")[:80],
+        }, now_ts)
+        _prune(svc, now_ts)
+        return data, True
+
+    try:
+        store.mutate_kv(config.API_USAGE_KEY, mut)
+    except Exception:
+        pass
+
+
+def gemini_state(period_days: int = 1) -> dict:
+    try:
+        data = store._load(config.API_USAGE_KEY)
+        svc = ((data.get("services") or {}).get("gemini") or {}) if isinstance(data, dict) else {}
+    except Exception:
+        svc = {}
+    cutoff = int(time.time() - period_days * 86400)
+    events = [e for e in (svc.get("events") or []) if int(e.get("ts") or 0) >= cutoff]
+    cooldown_until = int(svc.get("cooldown_until") or 0)
+    now_ts = int(time.time())
+    return {
+        "last_429_at": int(svc.get("last_429_at") or svc.get("last_rate_limit_at") or 0),
+        "cooldown_until": cooldown_until,
+        "cooldown_active": cooldown_until > now_ts,
+        "cooldown_seconds": max(0, cooldown_until - now_ts),
+        "cooldown_scope": str(svc.get("cooldown_scope") or "").upper(),
+        "last_retry_after": int(svc.get("last_retry_after") or 0),
+        "rate_limits": sum(1 for e in events if e.get("type") == "rate_limit"),
+        "fallbacks": sum(1 for e in events if e.get("type") == "fallback"),
+        "events": events,
+        "last_error_reason": svc.get("last_error_reason") or "",
+    }
 
 
 def record_cache_hit(service: str) -> None:
@@ -212,6 +298,8 @@ def _quota_rows(service: str, svc: dict, dt=None):
 
 
 def _status(svc: dict, quotas: list[dict]):
+    if int(svc.get("cooldown_until") or 0) > int(time.time()):
+        return "warn", "cooldown активен"
     if svc.get("last_ok") is False:
         return "bad", "Последний запрос завершился ошибкой"
     for q in quotas:
@@ -260,6 +348,7 @@ def snapshot():
             "icon": SERVICE_ICONS[service],
             "status": status,
             "status_text": status_text,
+            "last_ok": svc.get("last_ok"),
             "quotas": quotas,
             "day_requests": _count(svc, "day", "requests"),
             "day_messages": _count(svc, "day", "messages"),
@@ -271,6 +360,12 @@ def snapshot():
             "last_error_at": svc.get("last_error_at"),
             "last_error_reason": svc.get("last_error_reason") or "",
             "rate_limit_errors": int(svc.get("rate_limit_errors") or 0),
+            "last_429_at": svc.get("last_429_at") or svc.get("last_rate_limit_at"),
+            "cooldown_until": svc.get("cooldown_until"),
+            "cooldown_scope": svc.get("cooldown_scope") or "",
+            "last_fallback_at": svc.get("last_fallback_at"),
+            "fallback_count": int(svc.get("fallback_count") or 0),
+            "events": list(svc.get("events") or [])[-10:],
             "avg_latency_ms": int(svc.get("avg_latency_ms") or 0),
             "errors": list(svc.get("errors") or [])[-10:],
         })

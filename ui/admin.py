@@ -268,7 +268,8 @@ def test_result(ok, when, label, detail):
     return b.build_stripped()
 
 
-def logs(rows, errors_24h, updated_at):
+def logs(rows, errors_24h, updated_at, summary=None):
+    summary = summary or {"errors": errors_24h}
     b = MessageBuilder()
     b.bold("📜 Логи")
     b.newline()
@@ -282,7 +283,15 @@ def logs(rows, errors_24h, updated_at):
             b.line(row)
         b.spacer()
         b.line("За 24 часа:")
-        b.line(f"ошибок {errors_24h}")
+        b.line(
+            f"ошибок {summary.get('errors', errors_24h)}"
+            f" · лимитов {summary.get('rate_limits', 0)}"
+            f" · fallback {summary.get('fallbacks', 0)}"
+        )
+        if summary.get("last_429_at"):
+            cd = "активен" if summary.get("cooldown_active") else "нет"
+            until = f" до {_hm(summary.get('cooldown_until'))}" if summary.get("cooldown_active") else ""
+            b.line(f"последний 429 {_hm(summary.get('last_429_at'))} · cooldown {cd}{until}")
     b.spacer()
     b.line(f"Обновлено: {updated_at}")
     return b.build_stripped()
@@ -343,9 +352,11 @@ def llm_check(results):
     b = MessageBuilder()
     b.bold("🔍 Проверка провайдеров")
     b.newline()
-    for label, ok, detail in results:
+    for result in results:
+        label, ok, detail = result[:3]
+        dot = result[3] if len(result) > 3 else (OK if ok else BAD)
         b.spacer()
-        b.line(f"{OK} {label}" if ok else f"{BAD} {label}: {detail}")
+        b.line(f"{dot} {label}" if ok else f"{dot} {label}: {detail}")
     return b.build_stripped()
 
 
@@ -477,6 +488,15 @@ def api_check(snapshot):
             b.newline()
             if svc.get("service") == "gemini":
                 b.line(f"{_num(svc.get('day_requests', 0))} запроса сегодня · лимит 5/мин")
+                if int(svc.get("cooldown_until") or 0) > 0 and int(svc.get("cooldown_until") or 0) > __import__("time").time():
+                    b.line(f"🟡 cooldown до {_hm(svc.get('cooldown_until'))}")
+                elif svc.get("last_ok") is False and svc.get("last_429_at"):
+                    b.line("🔴 лимит запросов")
+                elif svc.get("last_error_reason") and any(x in str(svc.get("last_error_reason")).lower() for x in ("401", "403", "key", "access")):
+                    b.line("🔴 ошибка ключа / доступа")
+                else:
+                    b.line("🟢 работает")
+                continue
             elif svc.get("service") == "tavily":
                 quota = next((q for q in svc.get("quotas", []) if q.get("unit") == "credits"), None)
                 b.line(_quota_line(quota) if quota else f"{_num(svc.get('month_credits', 0))} кредитов за месяц")

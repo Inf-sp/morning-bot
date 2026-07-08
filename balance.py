@@ -809,6 +809,28 @@ def _gen_recipe(constraint, cid=None):
 def _recipe_card(d):
     return _food_card(d, label="Рецепт дня")
 
+
+def _fallback_recipe():
+    return {
+        "name": "Быстрый омлет с овощами",
+        "time": "12 мин",
+        "servings": "1 порц.",
+        "ingredients": "2 яйца, горсть овощей, масло, соль, перец",
+        "steps": [
+            "Разогрей сковороду с маслом 1 минуту",
+            "Обжарь овощи 3-4 минуты",
+            "Влей взбитые яйца и готовь под крышкой 5-6 минут",
+        ],
+        "full": (
+            "Быстрый омлет с овощами\n\n"
+            "<b>Ингредиенты</b>\n"
+            "2 яйца, горсть овощей, масло, соль, перец\n\n"
+            "<b>Приготовление</b>\n"
+            "Разогрей сковороду, обжарь овощи, влей яйца и доведи под крышкой.\n\n"
+            "<b>😋 Приятного аппетита!</b>"
+        ),
+    }
+
 async def send_recipe(bot, cid, constraint="обычное блюдо", status=None):
     status = status or await util.StatusManager.start(bot, cid)
     try:
@@ -967,8 +989,8 @@ async def send_recipe_push(bot, cid):
     try:
         d = await asyncio.to_thread(_gen_recipe, "любое блюдо под вкус пользователя", cid=cid)
     except Exception as e:
-        await status.stop(delete=True)
-        await verify.safe_error(bot, cid, e); return
+        _log.warning("recipe push AI failed, using fallback: %r", e)
+        d = _fallback_recipe()
     card = _recipe_card(d)
     store.last_source[str(cid)] = "Питание · Рецепт"
     store.last_answer[str(cid)] = card.text

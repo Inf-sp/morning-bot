@@ -119,6 +119,13 @@ def _short_status(service: str, label: str, snapshot=None):
     svc = _snapshot_service(snapshot or api_usage.snapshot(), service)
     if not _configured_service(service):
         return f"{ui.WARN} {label} · нет ключа"
+    if service == "gemini":
+        state = api_usage.gemini_state(1)
+        if state.get("cooldown_active"):
+            return f"{ui.WARN} {label} · cooldown до {_hhmm(state.get('cooldown_until'))}"
+        if state.get("last_429_at") and state.get("last_429_at") >= time.time() - DAY and svc.get("last_ok") is False:
+            scope = f" {state.get('cooldown_scope')}" if state.get("cooldown_scope") else ""
+            return f"{ui.BAD} {label} · лимит{scope}".strip()
     if svc:
         status = svc.get("status")
         if status == "bad":
@@ -609,13 +616,31 @@ async def _llm_probe_results():
     for label, route in probes:
         configured, missing = _provider_configured(route)
         if not configured:
-            results.append((label, False, f"нет ключа: {missing}"))
+            detail = "ошибка ключа / доступа" if route == "gemini" else f"нет ключа: {missing}"
+            results.append((label, False, detail))
             continue
+        if route == "gemini":
+            state = ai.gemini_status()
+            if state.get("cooldown_active"):
+                results.append((label, False, f"cooldown до {_hhmm(state.get('cooldown_until'))}", ui.WARN))
+                continue
+            if state.get("last_429_at") and state.get("last_429_at") >= time.time() - DAY and state.get("last_error_reason"):
+                results.append((label, False, "лимит запросов", ui.BAD))
+                continue
         try:
             await ai.allm("Ответь одним словом: ok", 10, 0.0, order=(route,), module="admin")
             results.append((label, True, ""))
         except Exception as e:
-            results.append((label, False, _issue_summary("llm", f"{route}:{e}")[:60]))
+            if route == "gemini":
+                text = str(e).lower()
+                if "429" in text or "rate" in text or "лимит" in text:
+                    results.append((label, False, "лимит запросов", ui.BAD))
+                elif "401" in text or "403" in text or "key" in text or "access" in text:
+                    results.append((label, False, "ошибка ключа / доступа", ui.BAD))
+                else:
+                    results.append((label, False, "ошибка проверки", ui.BAD))
+            else:
+                results.append((label, False, _issue_summary("llm", f"{route}:{e}")[:60]))
     return results
 
 
@@ -819,6 +844,13 @@ def _issue_summary(source, msg):
     msg = str(msg or "")
     low = msg.lower()
     if source == "llm":
+        if "gemini · лимит" in low or "gemini cooldown" in low or "resource_exhausted" in low:
+            scope = ""
+            for candidate in ("RPM", "RPD", "TPM"):
+                if candidate.lower() in low:
+                    scope = f" {candidate}"
+                    break
+            return f"Gemini: лимит{scope}"
         providers = []
         for provider in ("openrouter", "gemini", "groq", "cf"):
             if f"{provider}:" in low or f"{provider} " in low:
@@ -1076,15 +1108,34 @@ async def send_broadcast_test_pick(bot, cid, q=None):
 
 
 async def send_logs(bot, cid, q=None):
+    import ai
     cutoff = time.time() - DAY
     errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
     rows = []
     for e in errors[:5]:
         source = str(e.get("source") or "app")
-        rows.append(f"{_hhmm(e.get('ts', 0))} · {source} · {_issue_summary(source, e.get('msg', ''))}")
+        msg = str(e.get("msg") or "")
+        if source == "llm" and str(e.get("kind") or "").startswith("gemini_rate_limit"):
+            lines = [line.strip() for line in msg.splitlines() if line.strip()]
+            title = (
+                lines[0].replace("Gemini ·", f"{_hhmm(e.get('ts', 0))} · Gemini ·", 1)
+                if lines else f"{_hhmm(e.get('ts', 0))} · Gemini · лимит"
+            )
+            rows.append("\n".join([title] + lines[1:2]))
+        else:
+            rows.append(f"{_hhmm(e.get('ts', 0))} · {source} · {_issue_summary(source, msg)}")
+    gemini = ai.get_gemini_rate_limit_stats(1)
+    summary = {
+        "errors": len(errors),
+        "rate_limits": int(gemini.get("rate_limits") or 0),
+        "fallbacks": int(gemini.get("fallbacks") or 0),
+        "last_429_at": int(gemini.get("last_429_at") or 0),
+        "cooldown_active": bool(gemini.get("cooldown_active")),
+        "cooldown_until": int(gemini.get("cooldown_until") or 0),
+    }
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Обновить", callback_data="adm_logs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_system")],
     ])
-    msg = ui.logs(rows, len(errors), _updated_at())
+    msg = ui.logs(rows, len(errors), _updated_at(), summary)
     await _show(bot, cid, msg, kb, q)
