@@ -10,6 +10,7 @@ import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import api_usage
+import access
 import ai
 import config
 import store
@@ -18,10 +19,10 @@ _log = logging.getLogger(__name__)
 
 NEWS_CACHE_KEY = "personal_news_cache.json"
 NEWS_STATS_KEY = "personal_news_stats.json"
-NEWS_MONTHLY_CREDIT_BUDGET = 700
+NEWS_MONTHLY_CREDIT_BUDGET = 1000
 TAVILY_MONTHLY_CREDIT_LIMIT = 1000
-NEWS_DAILY_CREDIT_BUDGET = 15
-NEWS_HARD_MONTHLY_LIMIT = 700
+NEWS_DAILY_CREDIT_BUDGET = 30
+NEWS_HARD_MONTHLY_LIMIT = 1000
 NEWS_MAX_ITEMS = 5
 NEWS_MIN_RELEVANCE_SCORE = 0.65
 REFRESH_COOLDOWN_SEC = 6 * 3600
@@ -89,6 +90,12 @@ _QUERY_TEMPLATES = {
         "{city} nieuw restaurant bakkerij markt ontbijt",
     ],
 }
+
+_COUNTRY_FALLBACK_QUERIES = [
+    "{country} Netherlands breaking news today practical changes services",
+    "{country} Netherlands local news today wonen reizen zorg geld",
+    "Nederland nieuws vandaag wonen reizen zorg prijzen diensten",
+]
 
 
 def _now():
@@ -337,14 +344,24 @@ def _set_last_refresh(cid):
 def _queries_for(cid):
     s = store.get_settings(cid)
     city = s.get("city") or "Алкмар"
+    country = s.get("country") or "Нидерланды"
     movies = ", ".join(map(str, store.get_list(config.WATCHLIST_KEY, cid)[:8])) or "favorite movies series"
     artists = ", ".join(map(str, store.get_list(config.ARTISTS_KEY, cid)[:8])) or "favorite artists"
     result = []
     for category, templates in _QUERY_TEMPLATES.items():
         for tpl in templates:
-            q = tpl.format(city=city, movies=movies[:180], artists=artists[:180])
+            q = tpl.format(city=city, country=country, movies=movies[:180], artists=artists[:180])
             result.append((category, q))
     return result
+
+
+def _country_fallback_queries(cid):
+    s = store.get_settings(cid)
+    country = s.get("country") or "Нидерланды"
+    return [
+        ("netherlands", tpl.format(country=country))
+        for tpl in _COUNTRY_FALLBACK_QUERIES
+    ]
 
 
 def _tavily_search(query, max_results=5, domains=None):
@@ -376,12 +393,13 @@ def _tavily_search(query, max_results=5, domains=None):
 
 def _search_all(cid):
     rows = []
-    for category, query in _queries_for(cid):
+    for category, query in _queries_for(cid) + _country_fallback_queries(cid):
         if not _reserve_credits(1):
             break
         try:
             domains = _OFFICIAL_DOMAINS.get(category)
-            for item in _tavily_search(query, max_results=5, domains=domains):
+            max_results = 8 if category == "netherlands" else 5
+            for item in _tavily_search(query, max_results=max_results, domains=domains):
                 item = dict(item)
                 item["_category_hint"] = category
                 rows.append(item)
@@ -450,14 +468,46 @@ def _score_items(cid, candidates):
     return good[:NEWS_MAX_ITEMS]
 
 
+def _source_name(url):
+    host = _host(url)
+    parts = host.split(".")
+    if len(parts) >= 2:
+        return parts[-2].title()
+    return host.title() or "Источник"
+
+
+def _fallback_items(candidates):
+    items = []
+    for raw in candidates[:NEWS_MAX_ITEMS]:
+        title = (raw.get("title") or "").strip()
+        if not title:
+            continue
+        content = re.sub(r"\s+", " ", (raw.get("content") or "")).strip()
+        summary = content[:180].rstrip()
+        if len(content) > 180:
+            summary = summary.rstrip(".,;:") + "..."
+        items.append({
+            "is_relevant": True,
+            "importance": 3,
+            "category": raw.get("_category_hint") or "netherlands",
+            "title_ru": title,
+            "summary_ru": summary,
+            "why_it_matters_ru": "",
+            "source_name": _source_name(raw.get("url")),
+            "source_url": raw.get("url"),
+            "published_at": _published_value(raw) or "",
+            "action_type": "read",
+        })
+    return items
+
+
 def _build_card(items, updated_ts=None, stale=False):
     updated_ts = updated_ts or int(time.time())
     dt = datetime.fromtimestamp(updated_ts, config.TZ)
     if not items:
         text = (
-            "📰 Важное для тебя\n\n"
-            "Сегодня ничего действительно важного не нашлось.\n\n"
-            "Проверил твои темы, город и сервисы."
+            "📰 Новости для тебя\n\n"
+            "Новости пока не загрузились. Попробуй обновить раздел позже."
         )
         return text, []
     day_word = "вчера" if stale else "сегодня"
@@ -489,6 +539,8 @@ def build_from_sources(cid, period, sources, now=None):
     _inc_stat("filtered", max(0, len(sources or []) - len(filtered)), now)
     filtered = _dedupe_semantic(filtered)
     items = _score_items(cid, filtered) if filtered else []
+    if not items and filtered:
+        items = _fallback_items(filtered)
     text, url_buttons = _build_card(items)
     entry = {"ts": int(time.time()), "period": period, "items": items, "sources": filtered, "text": text}
     _cache_set(cid, period, entry, now)
@@ -511,9 +563,14 @@ def _update_avg_card_size(size, now=None):
     return _stat_mutate(mut)
 
 
-def _default_keyboard(period, url_buttons=None):
+def _is_admin(cid):
+    return bool(cid) and (access.is_owner(cid) or str(cid) == str(config.ADMIN_CHAT_ID or ""))
+
+
+def _default_keyboard(period, url_buttons=None, cid=None):
     rows = list(url_buttons or [])
-    rows.append([InlineKeyboardButton("↻ Проверить обновления", callback_data=f"a_news_refresh_{period}")])
+    refresh_label = "↻ Проверить свежие источники" if _is_admin(cid) else "↻ Проверить обновления"
+    rows.append([InlineKeyboardButton(refresh_label, callback_data=f"a_news_refresh_{period}")])
     if period == "today":
         rows.append([InlineKeyboardButton("📅 За неделю", callback_data="a_news_week")])
     else:
@@ -524,7 +581,7 @@ def _default_keyboard(period, url_buttons=None):
 
 
 def _loading_text():
-    return "Проверяю свежие источники. Это ручной запрос, Tavily не запускается по расписанию."
+    return ""
 
 
 async def send_home(bot, cid):
@@ -534,7 +591,15 @@ async def send_home(bot, cid):
         [InlineKeyboardButton("⚙️ Настроить темы", callback_data="a_news_topics")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
     ])
-    await bot.send_message(chat_id=cid, text="📰 Новости для тебя", reply_markup=kb)
+    s = store.get_settings(cid)
+    city = s.get("city") or "твой город"
+    country = s.get("country") or "Нидерланды"
+    text = (
+        "📰 Новости для тебя\n\n"
+        f"Здесь собраны свежие новости по твоему городу, стране и личным темам: сервисы, поездки, здоровье, еда, кино и музыка.\n\n"
+        f"Если по {city} нет достаточно свежего, покажу важное по стране: {country}."
+    )
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
 async def send_period(bot, cid, period="today", force=False):
@@ -542,10 +607,9 @@ async def send_period(bot, cid, period="today", force=False):
     if cached:
         _inc_stat("cache_hits")
         text, buttons = _build_card(cached.get("items", []), cached.get("ts"))
-        await bot.send_message(chat_id=cid, text=text, reply_markup=_default_keyboard(period, buttons),
+        await bot.send_message(chat_id=cid, text=text, reply_markup=_default_keyboard(period, buttons, cid),
                                disable_web_page_preview=True)
         return
-    await bot.send_message(chat_id=cid, text=_loading_text())
     sources = await __import__("asyncio").to_thread(_search_all, cid)
     try:
         entry, buttons = await __import__("asyncio").to_thread(build_from_sources, cid, period, sources)
@@ -553,11 +617,11 @@ async def send_period(bot, cid, period="today", force=False):
         stale = _cache_get(cid, period, allow_stale=True)
         if stale:
             text, buttons = _build_card(stale.get("items", []), stale.get("ts"), stale=True)
-            await bot.send_message(chat_id=cid, text=text, reply_markup=_default_keyboard(period, buttons),
+            await bot.send_message(chat_id=cid, text=text, reply_markup=_default_keyboard(period, buttons, cid),
                                    disable_web_page_preview=True)
             return
         raise
-    await bot.send_message(chat_id=cid, text=entry["text"], reply_markup=_default_keyboard(period, buttons),
+    await bot.send_message(chat_id=cid, text=entry["text"], reply_markup=_default_keyboard(period, buttons, cid),
                            disable_web_page_preview=True)
 
 
@@ -570,7 +634,7 @@ async def refresh(bot, cid, period="today"):
             chat_id=cid,
             text=f"Последняя проверка была в {last_dt.strftime('%H:%M')}.\n"
                  f"Новые источники проверю после {next_dt.strftime('%H:%M')}, чтобы не тратить лимит зря.",
-            reply_markup=_default_keyboard(period),
+            reply_markup=_default_keyboard(period, cid=cid),
         )
         return
     _set_last_refresh(cid)

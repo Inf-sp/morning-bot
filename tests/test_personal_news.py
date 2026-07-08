@@ -112,7 +112,7 @@ def test_daily_and_monthly_budget_block_new_requests():
     assert pn._reserve_credits(1) is False
 
 
-def test_monthly_budget_is_700(monkeypatch):
+def test_monthly_budget_is_1000(monkeypatch):
     day = {"n": 0}
 
     def fake_today(now=None):
@@ -120,20 +120,21 @@ def test_monthly_budget_is_700(monkeypatch):
         return f"2026-07-{day['n']:02d}"
 
     monkeypatch.setattr(pn, "_today_key", fake_today)
-    assert all(pn._reserve_credits(1) for _ in range(700))
+    assert all(pn._reserve_credits(1) for _ in range(1000))
     assert pn._reserve_credits(1) is False
 
 
-def test_irrelevant_news_not_in_card(monkeypatch):
+def test_irrelevant_news_falls_back_to_source_card(monkeypatch):
     monkeypatch.setattr(pn, "_score_items", lambda cid, items: [])
     entry, _ = pn.build_from_sources("1", "today", [_news("Random article", "https://example.com/a")])
-    assert "ничего действительно важного" in entry["text"]
+    assert "Random article" in entry["text"]
+    assert "ничего действительно важного" not in entry["text"]
 
 
 def test_old_news_filtered_out(monkeypatch):
     monkeypatch.setattr(pn, "_score_items", lambda cid, items: pytest.fail("old item reached Gemini"))
     entry, _ = pn.build_from_sources("1", "today", [_news(days=8)])
-    assert "ничего действительно важного" in entry["text"]
+    assert "Новости пока не загрузились" in entry["text"]
 
 
 def test_official_undated_sources_reach_gemini(monkeypatch):
@@ -164,7 +165,7 @@ def test_duplicates_are_merged():
 
 def test_empty_result_card():
     text, buttons = pn._build_card([])
-    assert "Сегодня ничего действительно важного" in text
+    assert "Новости пока не загрузились" in text
     assert buttons == []
 
 
