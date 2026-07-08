@@ -1861,7 +1861,9 @@ def _ensure_dict(cid):
 
 
 _DICT_SEED_PROFILE_KEY = "_dict_seed"
-_DICT_SEED_PAGE_SIZE = 12
+_DICT_SEED_SEEN_PROFILE_KEY = "_dict_seed_seen"
+_DICT_SEED_PAGE_SIZE = 10
+_DICT_SEED_LIMIT = 30
 _DICT_SEED_SOURCE_NOTE = (
     "Списки собраны как частотный CEFR-старт: Oxford 3000/5000, Cambridge/English "
     "Vocabulary Profile и частотные разговорные списки; редкие книжные слова исключены."
@@ -2039,14 +2041,33 @@ def _seed_existing_keys(cid):
     }
 
 
+def _seed_seen_keys(cid):
+    prof = store.get_profile(cid)
+    raw = prof.get(_DICT_SEED_SEEN_PROFILE_KEY) or []
+    return {tuple(x) for x in raw if isinstance(x, (list, tuple)) and len(x) == 3}
+
+
+def _seed_mark_seen(cid, items):
+    if not items:
+        return
+    prof = store.get_profile(cid)
+    seen = _seed_seen_keys(cid)
+    for item in items:
+        seen.add(_dict_item_key(item.get("lang"), item.get("kind"), item.get("word")))
+    prof[_DICT_SEED_SEEN_PROFILE_KEY] = [list(x) for x in sorted(seen)]
+    store.set_profile(cid, prof)
+
+
 def _seed_candidates(cid, lang, level, kind="word"):
-    existing = _seed_existing_keys(cid)
+    blocked = _seed_existing_keys(cid) | _seed_seen_keys(cid)
     out = []
     for word, ru, note in _seed_dataset(lang, kind).get(level, []):
         item = {"lang": lang, "word": _cap(word), "ru": ru, "kind": kind, "note": note}
         key = _dict_item_key(lang, kind, item["word"])
-        if key not in existing:
+        if key not in blocked:
             out.append(item)
+        if len(out) >= _DICT_SEED_LIMIT:
+            break
     return out
 
 
@@ -2084,21 +2105,21 @@ def _seed_render_text(st):
     page = int(st.get("page") or 0)
     total_pages = max(1, (len(items) + _DICT_SEED_PAGE_SIZE - 1) // _DICT_SEED_PAGE_SIZE)
     page = max(0, min(page, total_pages - 1))
-    title = "фразы" if kind == "phrase" else "слова"
-    lang_label = "нидерландского" if lang == "nl" else "английского"
     start = page * _DICT_SEED_PAGE_SIZE
     chunk = items[start:start + _DICT_SEED_PAGE_SIZE]
+    header = f"🧩 Стартовые фразы · {level}" if kind == "phrase" else f"📚 Стартовый словарь · {level}"
     lines = [
-        f"📚 Стартовые {title}: {lang_label}, уровень {level}",
+        header,
+        f"Страница {page + 1} из {total_pages}",
         "",
-        "Отметьте только то, что уже хорошо знаете. Остальное добавится в словарь.",
+        "Отметьте слова, которые вы уже знаете:" if kind == "word" else "Отметьте фразы, которые вы уже знаете:",
         "",
     ]
     for offset, item in enumerate(chunk):
         idx = start + offset
         mark = "☑" if idx in known else "☐"
         lines.append(f"{mark} {_seed_item_line(item)}")
-    lines.extend(["", f"Страница {page + 1}/{total_pages}", _DICT_SEED_SOURCE_NOTE])
+    lines.extend(["", _DICT_SEED_SOURCE_NOTE])
     return "\n".join(lines)
 
 
@@ -2121,7 +2142,7 @@ def _seed_render_kb(st):
         nav.append(InlineKeyboardButton("▶ Далее", callback_data=f"a_dictseed_page_{page + 1}"))
     if nav:
         rows.append(nav)
-    rows.append([InlineKeyboardButton("✅ Добавить выбранные", callback_data="a_dictseed_add")])
+    rows.append([InlineKeyboardButton("✅ Добавить остальные в словарь", callback_data="a_dictseed_add")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -2132,9 +2153,10 @@ async def send_seed_intro(bot, cid, lang=None):
         await send_seed_phrase_offer(bot, cid, code, level)
         return
     text = (
-        "Для эффективного обучения сначала наполним ваш словарь.\n\n"
-        f"Я подобрал слова уровня {level}. Просмотрите список и отметьте слова, "
-        "которые вы уже хорошо знаете, чтобы не изучать их повторно."
+        "📚 Наполним словарь\n\n"
+        f"Я подобрал стартовые слова уровня {level}.\n\n"
+        "Отметьте только те слова, которые вы уже хорошо знаете.\n"
+        "Остальные я добавлю в ваш словарь для тренировок."
     )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Наполнить словарь", callback_data=f"a_dictseed_start_{code}")],
@@ -2149,11 +2171,12 @@ async def offer_seed_for_level_change(bot, cid, language, level):
     if not items:
         return
     text = (
-        f"Уровень {language} изменён на {level}.\n\n"
-        "Хотите добавить частотные слова этого уровня без дублей?"
+        f"📚 Уровень обновлён до {level}\n\n"
+        f"Хотите добавить стартовые слова уровня {level}?\n"
+        "Я покажу список, а вы отметите только те слова, которые уже знаете."
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Добавить слова уровня", callback_data=f"a_dictseed_start_{code}")],
+        [InlineKeyboardButton(f"✨ Добавить слова {level}", callback_data=f"a_dictseed_start_{code}")],
         [InlineKeyboardButton("Позже", callback_data="a_dictseed_later")],
     ])
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
@@ -2163,7 +2186,11 @@ async def seed_start(bot, cid, lang=None, kind="word", q=None):
     code, _language, level = _seed_language(cid, lang)
     items = _seed_candidates(cid, code, level, kind)
     if not items:
-        text = "В словаре уже есть все стартовые элементы этого уровня."
+        text = (
+            "📚 Словарь уже заполнен\n\n"
+            "Для вашего уровня пока нет новых стартовых слов.\n"
+            "Можно добавить свои слова вручную или перейти к фразам."
+        )
         if q is not None:
             try:
                 await q.message.edit_text(text)
@@ -2172,7 +2199,16 @@ async def seed_start(bot, cid, lang=None, kind="word", q=None):
                 pass
         await bot.send_message(chat_id=cid, text=text)
         return
-    st = {"lang": code, "level": level, "kind": kind, "items": items, "known": [], "page": 0}
+    st = {
+        "lang": code,
+        "level": level,
+        "kind": kind,
+        "items": items,
+        "known": [],
+        "page": 0,
+        "created_at": datetime.now(config.TZ).isoformat(),
+        "confirmed": False,
+    }
     _seed_state_set(cid, st)
     text = _seed_render_text(st)
     kb = _seed_render_kb(st)
@@ -2222,11 +2258,18 @@ async def seed_add_selected(bot, cid, q=None):
     if not st:
         await bot.send_message(chat_id=cid, text="Подборка устарела. Открой словарь заново.")
         return
+    if st.get("confirmed"):
+        await bot.send_message(chat_id=cid, text="Эта подборка уже обработана.")
+        return
+    st["confirmed"] = True
+    _seed_state_set(cid, st)
     known = set(st.get("known") or [])
     existing = _seed_existing_keys(cid)
     added = []
+    skipped_known = []
     for idx, item in enumerate(st.get("items") or []):
         if idx in known:
+            skipped_known.append(item)
             continue
         key = _dict_item_key(item["lang"], item["kind"], item["word"])
         if key in existing:
@@ -2238,9 +2281,23 @@ async def seed_add_selected(bot, cid, q=None):
     kind = st.get("kind", "word")
     lang = st.get("lang", "en")
     level = st.get("level", "B1")
+    _seed_mark_seen(cid, st.get("items") or [])
     _seed_state_clear(cid)
     noun = "фраз" if kind == "phrase" else "слов"
-    text = f"В словарь добавлено {len(added)} новых {noun}."
+    if added:
+        text = (
+            "✅ Готово\n\n"
+            f"В словарь добавлено {len(added)} новых {noun}.\n"
+            f"{len(skipped_known)} пропущено, потому что вы отметили их как знакомые."
+        )
+    elif skipped_known:
+        known_noun = "фразы" if kind == "phrase" else "слова"
+        text = f"✅ Отлично\n\nВы отметили все {known_noun} как знакомые.\nЯ не стал добавлять их в словарь."
+    else:
+        text = (
+            "📚 Словарь уже заполнен\n\n"
+            "Для вашего уровня пока нет новых стартовых слов."
+        )
     if q is not None:
         try:
             await q.message.edit_text(text)
@@ -2260,9 +2317,13 @@ async def send_seed_phrase_offer(bot, cid, lang=None, level=None):
     if not _seed_candidates(cid, code, level, "phrase"):
         await send_dict_lang(bot, cid, code)
         return
-    text = "Хотите также добавить самые полезные разговорные фразы вашего уровня?"
+    text = (
+        "🧩 Добавить фразы?\n\n"
+        f"Я могу также добавить полезные разговорные фразы уровня {level}.\n"
+        "Они будут попадаться в тренировках вместе со словами."
+    )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Добавить фразы", callback_data=f"a_dictseed_phrases_{code}")],
+        [InlineKeyboardButton("🧩 Добавить фразы", callback_data=f"a_dictseed_phrases_{code}")],
         [InlineKeyboardButton("Позже", callback_data="a_dictseed_later")],
     ])
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
