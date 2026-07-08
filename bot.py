@@ -446,7 +446,7 @@ async def answer_callback(update, context):
             elif act == "listen_no":
                 await _inline_status(lambda _s: leisure.listen_dislike(bot, cid))
             elif act == "news_home":
-                await personal_news.send_home(bot, cid)
+                await _inline_status(lambda _s: personal_news.send_period(bot, cid, "today"))
             elif act == "news_today":
                 await _inline_status(lambda _s: personal_news.send_period(bot, cid, "today"))
             elif act == "news_week":

@@ -585,13 +585,6 @@ def _is_admin(cid):
 
 def _default_keyboard(period, url_buttons=None, cid=None):
     rows = list(url_buttons or [])
-    refresh_label = "↻ Проверить свежие источники" if _is_admin(cid) else "↻ Проверить обновления"
-    rows.append([InlineKeyboardButton(refresh_label, callback_data=f"a_news_refresh_{period}")])
-    if period == "today":
-        rows.append([InlineKeyboardButton("📅 За неделю", callback_data="a_news_week")])
-    else:
-        rows.append([InlineKeyboardButton("📰 Сегодня", callback_data="a_news_today")])
-    rows.append([InlineKeyboardButton("⚙️ Темы", callback_data="a_news_topics")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
     return InlineKeyboardMarkup(rows)
 

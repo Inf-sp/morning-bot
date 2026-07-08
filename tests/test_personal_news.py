@@ -265,3 +265,18 @@ def test_search_uses_broad_queries_without_domain_lock(monkeypatch):
     assert any(not query.startswith("site:") and domains is None for query, _, domains in calls)
     assert any(query.startswith("site:") and domains for query, _, domains in calls)
     assert all(max_results == 10 for _, max_results, _ in calls)
+
+
+def test_news_keyboard_has_no_period_or_topic_buttons():
+    kb = pn._default_keyboard("today", cid="1")
+    labels = [
+        button.text
+        for row in kb.inline_keyboard
+        for button in row
+    ]
+
+    assert "📰 Сегодня" not in labels
+    assert "📅 За неделю" not in labels
+    assert "⚙️ Темы" not in labels
+    assert not any("Проверить" in label for label in labels)
+    assert "◀️ Назад" in labels
