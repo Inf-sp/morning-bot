@@ -38,7 +38,7 @@ _PROV_ORDER = [
 
 
 def _back(target="set_admin"):
-    return [InlineKeyboardButton("◀️ Назад", callback_data=target)]
+    return [InlineKeyboardButton("⬅️ Назад", callback_data=target)]
 
 
 async def _show(bot, cid, msg, reply_markup=None, q=None):
@@ -253,12 +253,9 @@ async def send_home(bot, cid, q=None):
     notif_bad = notif["errors_today"] > 0
     dot, txt = (ui.BAD, "Есть проблема") if (system_bad or notif_bad) else (ui.OK, "Всё работает")
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Проверить всё" if not system_bad else "🔄 Проверить снова",
-                              callback_data="adm_check_all")],
         [InlineKeyboardButton("📊 Система", callback_data="adm_system"),
-         InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
-        [InlineKeyboardButton("🔔 Уведомления", callback_data="adm_notif"),
-         InlineKeyboardButton("🧪 Тесты", callback_data="adm_tests")],
+         InlineKeyboardButton("🔔 Уведомления", callback_data="adm_notif")],
+        [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
     ])
     msg = ui.home(
         system_dot=dot,
@@ -330,13 +327,62 @@ def _last_active_user():
 async def send_users(bot, cid, q=None):
     stats = _user_stats()
     rows = [
-        [InlineKeyboardButton("➕ Инвайт", callback_data="adm_invite_create")],
+        [InlineKeyboardButton("➕ Инвайт", callback_data="adm_invite")],
         [InlineKeyboardButton("✉️ Приветствие", callback_data="adm_welcome")],
         [InlineKeyboardButton("🔄 Обновить", callback_data="adm_users")],
-        [InlineKeyboardButton("⬅️ Админ", callback_data="adm_home")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
     ]
     msg = ui.users(stats, _updated_at())
     await _show(bot, cid, msg, InlineKeyboardMarkup(rows), q)
+
+
+async def send_invite(bot, cid, q=None):
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Создать", callback_data="adm_invite_create")],
+        [InlineKeyboardButton("✉️ Приветствие", callback_data="adm_welcome")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users")],
+    ])
+    msg = ui.invite_prompt()
+    await _show(bot, cid, msg, kb, q)
+
+
+async def create_invite(bot, cid, q=None):
+    code = access.create_invite()
+    me = await bot.get_me()
+    link = f"https://t.me/{me.username}?start={code}"
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✉️ Приветствие", callback_data="adm_welcome")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users")],
+    ])
+    msg = ui.invite_created(link)
+    if q is not None and getattr(q, "message", None) is not None:
+        try:
+            await q.message.edit_text(
+                text=msg.text,
+                entities=msg.entities,
+                disable_web_page_preview=True,
+                reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid,
+        text=msg.text,
+        entities=msg.entities,
+        disable_web_page_preview=True,
+        reply_markup=kb,
+    )
+
+
+async def send_welcome(bot, cid, q=None):
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✏️ Изменить", callback_data="adm_welcome_edit"),
+         InlineKeyboardButton("👁 Предпросмотр", callback_data="adm_welcome_preview")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users")],
+    ])
+    msg = ui.welcome_admin()
+    await _show(bot, cid, msg, kb, q)
 
 
 def _notification_stats(cid):
@@ -361,9 +407,8 @@ def _notification_stats(cid):
 async def send_system(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Проверить систему", callback_data="adm_system_check")],
-        [InlineKeyboardButton("🔧 Диагностика", callback_data="adm_diag"),
-         InlineKeyboardButton("📜 Логи", callback_data="adm_logs")],
-        [InlineKeyboardButton("⬅️ Админ", callback_data="adm_home")],
+        [InlineKeyboardButton("📜 Логи", callback_data="adm_logs")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
     ])
     msg = ui.system(_system_rows(), _updated_at())
     await _show(bot, cid, msg, kb, q)
@@ -378,24 +423,15 @@ async def check_system(bot, cid, q=None):
         tracking.log_error("service", str(e), kind="system_probe")
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Проверить систему", callback_data="adm_system_check")],
-        [InlineKeyboardButton("🔧 Диагностика", callback_data="adm_diag"),
-         InlineKeyboardButton("📜 Логи", callback_data="adm_logs")],
-        [InlineKeyboardButton("⬅️ Админ", callback_data="adm_home")],
+        [InlineKeyboardButton("📜 Логи", callback_data="adm_logs")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
     ])
     msg = ui.system(_system_rows(results), _updated_at())
     await _show(bot, cid, msg, kb, q)
 
 
 async def send_diagnostics(bot, cid, q=None):
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("☁️ API", callback_data="adm_diag_api"),
-         InlineKeyboardButton("🤖 LLM", callback_data="adm_diag_llm")],
-        [InlineKeyboardButton("🧠 Новости", callback_data="adm_diag_news"),
-         InlineKeyboardButton("📜 Логи", callback_data="adm_logs")],
-        [InlineKeyboardButton("⬅️ Система", callback_data="adm_system")],
-    ])
-    msg = ui.diagnostics()
-    await _show(bot, cid, msg, kb, q)
+    await send_system(bot, cid, q)
 
 
 def _api_diagnostic_rows(snapshot):
@@ -432,8 +468,7 @@ def _api_diagnostic_rows(snapshot):
 
 async def send_diag_api(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Обновить", callback_data="adm_diag_api")],
-        [InlineKeyboardButton("⬅️ Диагностика", callback_data="adm_diag")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_system")],
     ])
     snapshot = api_usage.snapshot()
     msg = ui.api_diagnostics_compact(_api_diagnostic_rows(snapshot), _updated_at())
@@ -453,8 +488,7 @@ async def send_diag_llm(bot, cid, q=None):
         last = errors[0]
         problem = _issue_summary("llm", last.get("msg", ""))
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Обновить", callback_data="adm_diag_llm")],
-        [InlineKeyboardButton("⬅️ Диагностика", callback_data="adm_diag")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_system")],
     ])
     msg = ui.llm_diagnostics(
         usage["calls"], usage["tokens"], len(errors), providers, fallback_text, problem, _updated_at()
@@ -467,8 +501,7 @@ async def send_diag_news(bot, cid, q=None):
     snap = personal_news.budget_snapshot()
     last = datetime.fromtimestamp(snap["last_build_ts"], config.TZ).strftime("%H:%M") if snap["last_build_ts"] else "—"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Обновить", callback_data="adm_diag_news")],
-        [InlineKeyboardButton("⬅️ Диагностика", callback_data="adm_diag")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_system")],
     ])
     msg = ui.news_diagnostics(
         snap["today_credits"], personal_news.NEWS_DAILY_CREDIT_BUDGET,
@@ -481,11 +514,10 @@ async def send_diag_news(bot, cid, q=None):
 async def send_notifications(bot, cid, q=None):
     stats = _notification_stats(cid)
     ok = stats["errors_today"] == 0
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🧪 Тесты", callback_data="adm_tests")],
+    rows = _notification_test_rows() + [
         [InlineKeyboardButton("🔄 Проверить", callback_data="adm_notif_check")],
-        [InlineKeyboardButton("⬅️ Админ", callback_data="adm_home")],
-    ])
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
+    ]
     msg = ui.notifications(
         ui.OK if ok else ui.BAD,
         "Работают" if ok else "Есть ошибки",
@@ -494,7 +526,7 @@ async def send_notifications(bot, cid, q=None):
         stats["active_types"],
         _updated_at(),
     )
-    await _show(bot, cid, msg, kb, q)
+    await _show(bot, cid, msg, InlineKeyboardMarkup(rows), q)
 
 
 async def check_notifications(bot, cid, q=None):
@@ -925,13 +957,23 @@ _TEST_HISTORY = []
 _LAST_TEST_KIND = {}
 
 _TEST_LABELS = {
-    "morning": "☀️ Утро",
-    "weather": "🌦 Погода",
-    "word_nl": "📚 NL",
-    "word_en": "🇬🇧 EN",
-    "recipe": "🍽 Еда",
-    "leisure": "🎬 Досуг",
-    "news": "🧠 News",
+    "morning": "Утро",
+    "weather": "Погода",
+    "word_nl": "NL",
+    "word_en": "EN",
+    "recipe": "Еда",
+    "leisure": "Досуг",
+    "news": "News",
+}
+
+_TEST_TIMES = {
+    "morning": "08:30",
+    "weather": "08:45",
+    "news": "09:00",
+    "leisure": "10:00",
+    "word_nl": "11:00",
+    "word_en": "11:00",
+    "recipe": "12:30",
 }
 
 _TEST_KIND_ALIASES = {
@@ -954,11 +996,11 @@ _TEST_KIND_ALIASES = {
 _TEST_ORDER = [
     "morning",
     "weather",
+    "news",
+    "leisure",
     "word_nl",
     "word_en",
     "recipe",
-    "leisure",
-    "news",
 ]
 
 
@@ -968,27 +1010,30 @@ def _test_label(kind):
     return _TEST_LABELS.get(key, dict(__import__("settings").NOTIF_TYPES).get(kind, kind))
 
 
-def _remember_test(kind, ok, detail):
+def _test_button_text(kind):
     label = _test_label(kind)
-    row = f"{_updated_at()} · {label.replace('☀️ ', '').replace('🌦 ', '').replace('📚 ', '').replace('🇬🇧 ', '').replace('🍽 ', '').replace('🎬 ', '').replace('🧠 ', '')} · {detail}"
+    when = _TEST_TIMES.get(kind)
+    return f"{when} {label}" if when else label
+
+
+def _notification_test_rows():
+    buttons = [
+        InlineKeyboardButton(_test_button_text(kind), callback_data=f"adm_test_{kind}")
+        for kind in _TEST_ORDER
+    ]
+    buttons.append(InlineKeyboardButton("Все", callback_data="adm_test_all"))
+    return [buttons[i:i + 3] for i in range(0, len(buttons), 3)]
+
+
+def _remember_test(kind, ok, detail):
+    label = "Все" if kind == "all" else _test_button_text(kind)
+    row = f"{_updated_at()} · {label} · {detail}"
     _TEST_HISTORY.insert(0, row)
     del _TEST_HISTORY[5:]
 
 
 async def send_tests(bot, cid, q=None):
-    rows = [
-        [InlineKeyboardButton(_test_label("morning"), callback_data="adm_test_morning"),
-         InlineKeyboardButton(_test_label("weather"), callback_data="adm_test_weather")],
-        [InlineKeyboardButton(_test_label("word_nl"), callback_data="adm_test_word_nl"),
-         InlineKeyboardButton(_test_label("word_en"), callback_data="adm_test_word_en")],
-        [InlineKeyboardButton(_test_label("recipe"), callback_data="adm_test_recipe"),
-         InlineKeyboardButton(_test_label("leisure"), callback_data="adm_test_leisure")],
-        [InlineKeyboardButton(_test_label("news"), callback_data="adm_test_news"),
-         InlineKeyboardButton("✅ Все", callback_data="adm_test_all")],
-        [InlineKeyboardButton("⬅️ Админ", callback_data="adm_home")],
-    ]
-    msg = ui.tests(_TEST_HISTORY)
-    await _show(bot, cid, msg, InlineKeyboardMarkup(rows), q)
+    await send_notifications(bot, cid, q)
 
 
 async def run_test(bot, cid, kind):
@@ -1008,15 +1053,15 @@ async def run_test(bot, cid, kind):
             ok = False
             failed_detail = _issue_summary("app", notif_kind) or "ошибка"
             break
-    label = "✅ Все" if kind == "all" else _test_label(kind)
+    label = "Все" if kind == "all" else _test_button_text(kind)
     detail = "OK" if ok else failed_detail
     _LAST_TEST_KIND[str(cid)] = kind
     _remember_test(kind, ok, detail)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔁 Повторить", callback_data=f"adm_test_{kind}") if kind != "all"
          else InlineKeyboardButton("🔁 Повторить", callback_data="adm_test_repeat"),
-         InlineKeyboardButton("🧪 Тесты", callback_data="adm_tests")],
-        [InlineKeyboardButton("⬅️ Админ", callback_data="adm_home")],
+         InlineKeyboardButton("⬅️ Назад", callback_data="adm_notif")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
     ])
     msg = ui.test_result(ok, _updated_at(), label, detail)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
@@ -1039,7 +1084,7 @@ async def send_logs(bot, cid, q=None):
         rows.append(f"{_hhmm(e.get('ts', 0))} · {source} · {_issue_summary(source, e.get('msg', ''))}")
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Обновить", callback_data="adm_logs")],
-        [InlineKeyboardButton("⬅️ Система", callback_data="adm_system")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_system")],
     ])
     msg = ui.logs(rows, len(errors), _updated_at())
     await _show(bot, cid, msg, kb, q)

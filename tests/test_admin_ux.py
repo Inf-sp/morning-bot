@@ -55,45 +55,73 @@ def test_home_is_short_and_not_debuggy():
     assert len([line for line in text.splitlines() if line.strip()]) <= 8
 
     flat = [text for row in buttons for text in row]
-    assert "🔄 Проверить всё" in flat or "🔄 Проверить снова" in flat
     assert "📊 Система" in flat
     assert "👥 Пользователи" in flat
     assert "🔔 Уведомления" in flat
-    assert "🧪 Тесты" in flat
+    assert "🔄 Проверить всё" not in flat
+    assert "🔄 Проверить снова" not in flat
+    assert "🧪 Тесты" not in flat
+    assert "🔧 Диагностика" not in flat
     assert "☁️ API" not in flat
     assert "🤖 LLM" not in flat
+    assert "🧠 Новости" not in flat
 
 
 def test_system_rows_are_one_service_per_status_line():
     rows = admin._system_rows()
-    assert any("LLM" in row for row in rows)
+    for label in (
+        "LLM",
+        "OpenWeather",
+        "Telegram",
+        "TMDB",
+        "Pexels",
+        "Cloudflare",
+        "Groq",
+        "Gemini",
+        "Tavily",
+        "Новости",
+        "Данные",
+        "Планировщик",
+    ):
+        assert any(label in row for row in rows)
     assert any("OpenWeather" in row and "/500 сегодня" in row for row in rows)
-    assert any("Tavily" in row for row in rows)
     assert all(row.startswith((admin_ui.OK, admin_ui.WARN, admin_ui.BAD)) for row in rows)
     assert all("осталось" not in row.lower() for row in rows)
 
 
-def test_diagnostics_buttons_are_inline():
+def test_system_has_no_diagnostics_tab():
     bot = Bot()
-    asyncio.run(admin.send_diagnostics(bot, "1"))
+    asyncio.run(admin.send_system(bot, "1"))
     buttons = _button_texts(bot.sent[-1]["reply_markup"])
-    assert buttons[0] == ["☁️ API", "🤖 LLM"]
-    assert buttons[1] == ["🧠 Новости", "📜 Логи"]
+    flat = [text for row in buttons for text in row]
+    assert "🔄 Проверить систему" in flat
+    assert "📜 Логи" in flat
+    assert "🔧 Диагностика" not in flat
+    assert "☁️ API" not in flat
+    assert "🤖 LLM" not in flat
+    assert "🧠 Новости" not in flat
 
 
-def test_tests_screen_short_two_column_buttons_and_history_time_first():
-    admin._TEST_HISTORY[:] = ["13:15 · Утро · OK"]
+def test_notifications_contain_time_sorted_three_column_tests():
+    bot = Bot()
+    asyncio.run(admin.send_notifications(bot, "1"))
+    payload = bot.sent[-1]
+    assert "Тесты отправляются только вам." in payload["text"]
+    buttons = _button_texts(payload["reply_markup"])
+    assert buttons[:3] == [
+        ["08:30 Утро", "08:45 Погода", "09:00 News"],
+        ["10:00 Досуг", "11:00 NL", "11:00 EN"],
+        ["12:30 Еда", "Все"],
+    ]
+    assert "следующее уведомление" not in payload["text"].lower()
+    assert all(len(row) <= 3 for row in buttons)
+
+
+def test_adm_tests_redirects_to_notifications():
     bot = Bot()
     asyncio.run(admin.send_tests(bot, "1"))
     payload = bot.sent[-1]
-    assert "13:15 · Утро · OK" in payload["text"]
-    buttons = _button_texts(payload["reply_markup"])
-    assert buttons[:4] == [
-        ["☀️ Утро", "🌦 Погода"],
-        ["📚 NL", "🇬🇧 EN"],
-        ["🍽 Еда", "🎬 Досуг"],
-        ["🧠 News", "✅ Все"],
-    ]
+    assert payload["text"].startswith("🔔 Уведомления")
 
 
 def test_users_invite_first_and_no_last_activity():
@@ -121,3 +149,15 @@ def test_admin_screen_callback_edits_existing_message():
     asyncio.run(admin.send_system(bot, "1", q=query))
     assert query.message.edited
     assert not bot.sent
+
+
+def test_admin_back_buttons_use_single_label():
+    bot = Bot()
+    for sender in (admin.send_system, admin.send_notifications, admin.send_users, admin.send_logs):
+        asyncio.run(sender(bot, "1"))
+    for payload in bot.sent:
+        for row in _button_texts(payload["reply_markup"]):
+            for text in row:
+                assert text not in {"⬅️ Админ", "⬅️ Система", "⬅️ Пользователи", "⬅️ Уведомления"}
+                if text.startswith("⬅️"):
+                    assert text == "⬅️ Назад"

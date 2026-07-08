@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import asyncio
 import os
 
 import pytest
@@ -105,6 +106,45 @@ def test_refresh_cooldown_blocks_tavily(monkeypatch, isolated_store):
     last = pn._last_refresh("1")
     assert last > 0
     assert calls["n"] == 0
+
+
+def test_refresh_cooldown_message_for_regular_user(monkeypatch):
+    sent = []
+    calls = {"n": 0}
+
+    class FakeBot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def fake_send_period(bot, cid, period="today", force=False):
+        calls["n"] += 1
+
+    monkeypatch.setattr(pn, "send_period", fake_send_period)
+    pn._set_last_refresh("1")
+
+    asyncio.run(pn.refresh(FakeBot(), "1"))
+
+    assert calls["n"] == 0
+    assert "Последняя проверка была" in sent[0]["text"]
+
+
+def test_admin_refresh_bypasses_cooldown(monkeypatch):
+    calls = []
+
+    class FakeBot:
+        async def send_message(self, **kwargs):
+            raise AssertionError("admin refresh should not send cooldown message")
+
+    async def fake_send_period(bot, cid, period="today", force=False):
+        calls.append((cid, period, force))
+
+    monkeypatch.setattr(pn.config, "ADMIN_CHAT_ID", "1")
+    monkeypatch.setattr(pn, "send_period", fake_send_period)
+    pn._set_last_refresh("1")
+
+    asyncio.run(pn.refresh(FakeBot(), "1", "today"))
+
+    assert calls == [("1", "today", True)]
 
 
 def test_daily_and_monthly_budget_block_new_requests():

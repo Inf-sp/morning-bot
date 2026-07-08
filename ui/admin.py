@@ -84,6 +84,50 @@ def users(stats, updated_at):
     return b.build_stripped()
 
 
+def invite_prompt():
+    b = MessageBuilder()
+    b.bold("➕ Инвайт")
+    b.newline()
+    b.spacer()
+    b.line("Создать ссылку для нового пользователя.")
+    b.spacer()
+    b.line("Срок: 7 дней")
+    b.line("Лимит: 1 пользователь")
+    b.spacer()
+    b.line("После входа пользователь получит приветствие.")
+    return b.build_stripped()
+
+
+def invite_created(link):
+    b = MessageBuilder()
+    b.bold("✅ Инвайт создан")
+    b.newline()
+    b.spacer()
+    b.line("Срок: 7 дней")
+    b.line("Лимит: 1 пользователь")
+    b.spacer()
+    b.line("Ссылка:")
+    b.line(link)
+    b.spacer()
+    b.line("Новый пользователь получит приветствие после входа.")
+    return b.build_stripped()
+
+
+def welcome_admin():
+    b = MessageBuilder()
+    b.bold("✉️ Приветствие")
+    b.newline()
+    b.spacer()
+    b.line("Текст, который увидит новый пользователь после входа:")
+    b.spacer()
+    b.line("Привет! Я персональный помощник Дмитрия.")
+    b.line("Я помогаю с погодой, одеждой, обучением, рецептами, досугом и важными напоминаниями.")
+    b.spacer()
+    b.line("Бот работает в тестовом режиме.")
+    b.line("Если что-то сломалось или ответ выглядит странно - напишите администратору.")
+    return b.build_stripped()
+
+
 def system(rows, updated_at):
     b = MessageBuilder()
     b.bold("📊 Система")
@@ -184,6 +228,10 @@ def notifications(status_dot, status_text, sent_today, errors_today, active_type
     b.line(f"Сегодня отправлено: {sent_today}")
     b.line(f"Ошибок сегодня: {errors_today}")
     b.line(f"Активных типов: {active_types}")
+    b.spacer()
+    b.line("Тесты отправляются только вам.")
+    b.spacer()
+    b.line("Выберите тест:")
     b.spacer()
     b.line(f"Обновлено: {updated_at}")
     return b.build_stripped()

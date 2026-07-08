@@ -627,7 +627,7 @@ async def send_period(bot, cid, period="today", force=False):
 
 async def refresh(bot, cid, period="today"):
     last = _last_refresh(cid)
-    if last and time.time() - last < REFRESH_COOLDOWN_SEC:
+    if last and time.time() - last < REFRESH_COOLDOWN_SEC and not _is_admin(cid):
         last_dt = datetime.fromtimestamp(last, config.TZ)
         next_dt = datetime.fromtimestamp(last + REFRESH_COOLDOWN_SEC, config.TZ)
         await bot.send_message(
