@@ -250,7 +250,7 @@ async def answer_callback(update, context):
         await wardrobe.handle_callback(bot, cid, q, data)
         return
     # Настройки
-    if data.startswith(("set_", "setadd_", "setdel_")):
+    if data.startswith(("set_", "setadd_", "setdel_", "adm_")):
         try:
             await settings.handle_callback(bot, cid, data, q)
         except Exception as e:
@@ -844,6 +844,30 @@ async def admin_command(update, context):
     await settings.send_admin(context.bot, update.effective_chat.id)
 
 
+async def admin_debug_api_command(update, context):
+    store.pending_input.pop(str(update.effective_chat.id), None)
+    import admin as _admin
+    await settings._admin_guard(context.bot, update.effective_chat.id, _admin.send_diag_api)
+
+
+async def admin_debug_llm_command(update, context):
+    store.pending_input.pop(str(update.effective_chat.id), None)
+    import admin as _admin
+    await settings._admin_guard(context.bot, update.effective_chat.id, _admin.send_diag_llm)
+
+
+async def admin_debug_news_command(update, context):
+    store.pending_input.pop(str(update.effective_chat.id), None)
+    import admin as _admin
+    await settings._admin_guard(context.bot, update.effective_chat.id, _admin.send_diag_news)
+
+
+async def admin_logs_command(update, context):
+    store.pending_input.pop(str(update.effective_chat.id), None)
+    import admin as _admin
+    await settings._admin_guard(context.bot, update.effective_chat.id, _admin.send_logs)
+
+
 # ---------- Расписание ----------
 async def job_morning_brief(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
@@ -1031,6 +1055,10 @@ def main():
     app.add_handler(CommandHandler("notes", notes_command))
     app.add_handler(CommandHandler("setup", setup_command))
     app.add_handler(CommandHandler("admin", admin_command))
+    app.add_handler(CommandHandler("admin_debug_api", admin_debug_api_command))
+    app.add_handler(CommandHandler("admin_debug_llm", admin_debug_llm_command))
+    app.add_handler(CommandHandler("admin_debug_news", admin_debug_news_command))
+    app.add_handler(CommandHandler("admin_logs", admin_logs_command))
     app.add_handler(CallbackQueryHandler(answer_callback))
     app.add_handler(PollAnswerHandler(poll_answer_handler))
     app.add_handler(MessageHandler(filters.LOCATION, weather.location_handler))

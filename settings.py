@@ -666,62 +666,125 @@ async def handle_callback(bot, cid, data, q=None):
         store.pending_input[cid] = "bodyinput"
         msg = settings_ui.body_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+    elif data == "adm_home":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
+    elif data == "adm_check_all":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.check_system(b, c, q))
+    elif data == "adm_system":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
+    elif data == "adm_system_check":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.check_system(b, c, q))
+    elif data == "adm_diag":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_diagnostics(b, c, q))
+    elif data == "adm_diag_api":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_diag_api(b, c, q))
+    elif data == "adm_diag_llm":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_diag_llm(b, c, q))
+    elif data == "adm_diag_news":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_diag_news(b, c, q))
+    elif data == "adm_logs":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))
+    elif data == "adm_notif":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_notifications(b, c, q))
+    elif data == "adm_notif_check":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.check_notifications(b, c, q))
+    elif data == "adm_users":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_users(b, c, q))
+    elif data in ("adm_invite", "adm_invite_create"):
+        async def _do_invite(b, c):
+            import access as _acc
+            code = _acc.create_invite()
+            me = await b.get_me()
+            link = f"https://t.me/{me.username}?start={code}"
+            from ui import admin as _admin_ui
+            msg = _admin_ui.invite(link)
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Пользователи", callback_data="adm_users")]])
+            if q is not None and getattr(q, "message", None) is not None:
+                try:
+                    await q.message.edit_text(text=msg.text, entities=msg.entities,
+                                              disable_web_page_preview=True, reply_markup=kb)
+                    return
+                except Exception:
+                    pass
+            await b.send_message(chat_id=c, text=msg.text, entities=msg.entities,
+                                 disable_web_page_preview=True, reply_markup=kb)
+        await _admin_guard(bot, cid, _do_invite)
+    elif data in ("adm_welcome", "adm_welcome_preview", "adm_welcome_edit"):
+        async def _do_welcome(b, c):
+            import menu as _menu
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Пользователи", callback_data="adm_users")]])
+            if q is not None and getattr(q, "message", None) is not None:
+                try:
+                    await q.message.edit_text(text=_menu.WELCOME, entities=_menu.WELCOME_ENTITIES,
+                                              reply_markup=kb)
+                    return
+                except Exception:
+                    pass
+            await b.send_message(chat_id=c, text=_menu.WELCOME, entities=_menu.WELCOME_ENTITIES, reply_markup=kb)
+        await _admin_guard(bot, cid, _do_welcome)
+    elif data == "adm_tests":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_tests(b, c, q))
+    elif data.startswith("adm_test_"):
+        kind = data[len("adm_test_"):]
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c, kind=kind: _adm.run_test(b, c, kind))
     elif data == "set_admin":
-        await _admin_guard(bot, cid, send_admin)
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
     elif data == "set_admin_users":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_users)
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_users(b, c, q))
     elif data == "set_admin_llm":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_llm)
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
     elif data == "set_admin_news":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_personal_news)
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_diag_news(b, c, q))
     elif data == "set_admin_llmcheck":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_llm_check)
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_diag_llm(b, c, q))
     elif data == "set_admin_llmhistory":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_llm_history)
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_diag_llm(b, c, q))
     elif data == "set_admin_broadcast":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_broadcast)
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_notifications(b, c, q))
     elif data == "set_admin_broadcast_test_pick":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_broadcast_test_pick)
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_tests(b, c, q))
     elif data.startswith("set_admin_broadcast_test_"):
         kind = data[len("set_admin_broadcast_test_"):]
-        async def _do_broadcast_test(b, c, kind=kind):
-            import admin as _adm
-            label = dict(NOTIF_TYPES).get(kind, kind)
-            if kind not in dict(NOTIF_TYPES):
-                _log.warning("unknown notification test kind: %s", kind)
-                await b.send_message(chat_id=c, text="Панель обновлена. Открываю актуальное меню.")
-                await send_admin(b, c)
-                return
-            ok = await _run_notif_test(b, c, kind)
-            if ok:
-                await b.send_message(chat_id=c, text=f"✅ Тест «{label}» отправлен вам.")
-            else:
-                await b.send_message(chat_id=c, text=f"Не удалось собрать тест «{label}». Проверьте логи.")
-            await _adm.send_broadcast(b, c)
-        await _admin_guard(bot, cid, _do_broadcast_test)
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c, kind=kind: _adm.run_test(b, c, kind))
     elif data == "set_admin_issues":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_issues)
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))
     elif data == "set_admin_check_all":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.check_all)
+        await _admin_guard(bot, cid, lambda b, c: _adm.check_system(b, c, q))
     elif data == "set_admin_api_diagnostics":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.send_api_diagnostics)
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_diag_api(b, c, q))
     elif data == "set_admin_cache_clear":
         import admin as _adm
-        await _admin_guard(bot, cid, _adm.clear_cache)
+        await _admin_guard(bot, cid, lambda b, c: _adm.clear_cache(b, c, q))
     elif data.startswith("set_admin_issue_"):
         key = data[len("set_admin_issue_"):]
         import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_issue_detail(b, c, key))
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))
     elif data == "set_admin_invite":
         async def _do_invite(b, c):
             import access as _acc
@@ -730,10 +793,16 @@ async def handle_callback(bot, cid, data, q=None):
             link = f"https://t.me/{me.username}?start={code}"
             from ui import admin as _admin_ui
             msg = _admin_ui.invite(link)
-            await b.send_message(chat_id=c,
-                text=msg.text,
-                entities=msg.entities, disable_web_page_preview=True,
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="set_admin_users")]]))
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Пользователи", callback_data="adm_users")]])
+            if q is not None and getattr(q, "message", None) is not None:
+                try:
+                    await q.message.edit_text(text=msg.text, entities=msg.entities,
+                                              disable_web_page_preview=True, reply_markup=kb)
+                    return
+                except Exception:
+                    pass
+            await b.send_message(chat_id=c, text=msg.text, entities=msg.entities,
+                                 disable_web_page_preview=True, reply_markup=kb)
         await _admin_guard(bot, cid, _do_invite)
     elif data.startswith("set_admin_revoke_"):
         target = data[len("set_admin_revoke_"):]
@@ -742,7 +811,7 @@ async def handle_callback(bot, cid, data, q=None):
             _acc.revoke_user(target)
             store.purge_user(target)
             import admin as _adm
-            await _adm.send_users(b, c)
+            await _adm.send_users(b, c, q)
         await _admin_guard(bot, cid, _do_revoke)
     elif data.startswith("set_admin_"):
         # устаревшие или неизвестные callback-и из уже отправленных сообщений —

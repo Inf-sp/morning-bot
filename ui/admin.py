@@ -47,63 +47,193 @@ def deploy_report(version, release_note):
 
 # ================= ДОМ =================
 
-def home(system_dot, system_text, total_users, active_7d, llm_calls_today, llm_tokens_today,
-         weather_usage,
-         next_broadcast_title, next_broadcast_when,
-         issues_count, top_issue):
+def home(system_dot, system_text, system_line, notif_line, users_line, data_line, updated_at):
     b = MessageBuilder()
-    b.bold("🛠 Администратор")
+    b.bold("🛠 Админ")
     b.newline()
     b.spacer()
     b.line(f"{system_dot} {system_text}")
-    b.line(f"{total_users} пользователей · {active_7d} активных за 7 дней")
     b.spacer()
-    b.line(f"🤖 {_num(llm_calls_today)} LLM-запросов сегодня · ~{_num(llm_tokens_today)} токенов")
-    if weather_usage:
-        total = int(weather_usage.get("requests_total") or 0)
-        left = max(0, __import__("config").WEATHER_FREE_DAILY_LIMIT - total)
-        limit = __import__("config").WEATHER_FREE_DAILY_LIMIT
-        b.line(f"☁️ OpenWeather {total}/{limit:,} · осталось {left}".replace(",", " "))
-        if total >= __import__("config").WEATHER_HARD_DAILY_LIMIT:
-            b.line("🔴 Новые запросы заблокированы до следующего дня")
-    if next_broadcast_title:
-        b.line(f"🔔 {next_broadcast_title} — {next_broadcast_when}")
+    b.line(f"📊 Система: {system_line}")
+    b.line(f"🔔 Уведомления: {notif_line}")
+    b.line(f"👥 Пользователи: {users_line}")
+    b.line(f"💾 Данные: {data_line}")
     b.spacer()
-    if issues_count:
-        b.line(f"⚠️ {issues_count} открытые проблемы")
-        if top_issue:
-            b.line(top_issue)
-    else:
-        b.line("🟢 Открытых проблем нет")
+    b.line(f"Обновлено: {updated_at}")
     return b.build_stripped()
 
 
 # ================= ПОЛЬЗОВАТЕЛИ =================
 
-def users(stats, last_user):
-    """stats: dict метрик. last_user: (dot, name, city, action, when) | None."""
+def users(stats, updated_at):
     b = MessageBuilder()
     b.bold("👥 Пользователи")
     b.newline()
     b.spacer()
-    b.metric("Всего", stats.get("total", 0))
-    b.metric("Новых сегодня", f"+{stats.get('new_today', 0)}")
-    b.metric("Активны сегодня", stats.get("active_1d", 0))
-    b.metric("Активны 7 дней", stats.get("active_7d", 0))
-    b.metric("Онбординг пройден", stats.get("onboarded", 0))
-    b.metric("Не завершили", stats.get("not_onboarded", 0))
-    b.metric("Все рассылки off", stats.get("all_off", 0))
-    b.metric("Сообщений / юзер", stats.get("avg_msgs", 0))
-    if last_user:
-        dot, name, city, action, when = last_user
+    b.line(f"Всего: {stats.get('total', 0)}")
+    b.line(f"Активны за 7 дней: {stats.get('active_7d', 0)}")
+    b.line(f"Новых за 7 дней: {stats.get('new_7d', 0)}")
+    b.line(f"С уведомлениями: {stats.get('with_notifications', 0)}")
+    b.line(f"Админов: {stats.get('admins', 0)}")
+    b.spacer()
+    b.line("Инвайты:")
+    b.line(f"Активных: {stats.get('active_invites', 0)}")
+    b.line(f"Использовано: {stats.get('used_invites', 0)}")
+    b.spacer()
+    b.line(f"Обновлено: {updated_at}")
+    return b.build_stripped()
+
+
+def system(rows, updated_at):
+    b = MessageBuilder()
+    b.bold("📊 Система")
+    b.newline()
+    b.spacer()
+    for line in rows:
+        b.line(line)
+    b.spacer()
+    b.line(f"Обновлено: {updated_at}")
+    return b.build_stripped()
+
+
+def diagnostics():
+    b = MessageBuilder()
+    b.bold("🔧 Диагностика")
+    b.newline()
+    b.spacer()
+    b.line("Выберите раздел:")
+    b.spacer()
+    b.line("API - лимиты, ошибки, последние ответы")
+    b.line("LLM - провайдеры, fallback, токены")
+    b.line("Новости - Tavily, фильтрация, кэш")
+    b.line("Логи - последние события и ошибки")
+    return b.build_stripped()
+
+
+def api_diagnostics_compact(rows, updated_at):
+    b = MessageBuilder()
+    b.bold("☁️ API · Диагностика")
+    b.newline()
+    if not rows:
         b.spacer()
-        b.bold("Последняя активность")
-        b.newline()
-        city_part = f" · {city}" if city else ""
-        b.line(f"{dot} {name}{city_part}")
-        if action:
-            b.line(f"   {action}")
-        b.line(f"   {when}")
+        b.line("Пока нет сохранённых реальных API-вызовов.")
+    for label, lines in rows:
+        b.spacer()
+        b.line(f"{label}:")
+        for line in lines:
+            b.line(line)
+    b.spacer()
+    b.line(f"Обновлено: {updated_at}")
+    return b.build_stripped()
+
+
+def llm_diagnostics(calls_today, tokens_today, errors_today, providers, fallback_text, problem, updated_at):
+    b = MessageBuilder()
+    b.bold("🤖 LLM · Диагностика")
+    b.newline()
+    b.spacer()
+    b.line("Сегодня:")
+    b.line(f"{calls_today} запросов")
+    b.line(f"~{_num(tokens_today)} токенов")
+    b.line(f"{errors_today} ошибок")
+    if problem:
+        b.spacer()
+        b.line("Проблема:")
+        b.line(problem)
+    b.spacer()
+    b.line("Провайдеры:")
+    b.line(providers or "—")
+    b.spacer()
+    b.line("Fallback:")
+    b.line(fallback_text)
+    b.spacer()
+    b.line(f"Обновлено: {updated_at}")
+    return b.build_stripped()
+
+
+def news_diagnostics(today_credits, daily_limit, month_credits, month_limit,
+                     cache_hits, last_build, errors, updated_at):
+    b = MessageBuilder()
+    b.bold("🧠 Новости · Диагностика")
+    b.newline()
+    b.spacer()
+    b.line("Tavily:")
+    b.line(f"{today_credits}/{daily_limit} сегодня")
+    b.line(f"{month_credits}/{month_limit} месяц")
+    b.spacer()
+    b.line("Кэш:")
+    b.line(f"{cache_hits} попадания")
+    b.spacer()
+    b.line("Сборка:")
+    b.line(f"последняя {last_build}")
+    b.spacer()
+    b.line("Ошибки:")
+    b.line(str(errors))
+    b.spacer()
+    b.line(f"Обновлено: {updated_at}")
+    return b.build_stripped()
+
+
+def notifications(status_dot, status_text, sent_today, errors_today, active_types, updated_at):
+    b = MessageBuilder()
+    b.bold("🔔 Уведомления")
+    b.newline()
+    b.spacer()
+    b.line(f"{status_dot} {status_text}")
+    b.spacer()
+    b.line(f"Сегодня отправлено: {sent_today}")
+    b.line(f"Ошибок сегодня: {errors_today}")
+    b.line(f"Активных типов: {active_types}")
+    b.spacer()
+    b.line(f"Обновлено: {updated_at}")
+    return b.build_stripped()
+
+
+def tests(history):
+    b = MessageBuilder()
+    b.bold("🧪 Тесты")
+    b.newline()
+    b.spacer()
+    b.line("Тесты отправляются только вам.")
+    b.spacer()
+    b.line("Последние:")
+    if history:
+        for row in history[:3]:
+            b.line(row)
+    else:
+        b.line("—")
+    b.spacer()
+    b.line("Выберите тест:")
+    return b.build_stripped()
+
+
+def test_result(ok, when, label, detail):
+    b = MessageBuilder()
+    b.bold("✅ Тест отправлен" if ok else "🔴 Тест не прошёл")
+    b.newline()
+    b.spacer()
+    b.line(f"{when} · {label} · {detail}")
+    b.line("Получатель: только админ")
+    return b.build_stripped()
+
+
+def logs(rows, errors_24h, updated_at):
+    b = MessageBuilder()
+    b.bold("📜 Логи")
+    b.newline()
+    b.spacer()
+    if not rows:
+        b.line(f"{OK} Ошибок за 24 часа нет")
+    else:
+        b.line("Последние ошибки:")
+        b.spacer()
+        for row in rows:
+            b.line(row)
+        b.spacer()
+        b.line("За 24 часа:")
+        b.line(f"ошибок {errors_24h}")
+    b.spacer()
+    b.line(f"Обновлено: {updated_at}")
     return b.build_stripped()
 
 
