@@ -97,7 +97,13 @@ def notif_on(cid, kind):
     return bool(value)
 
 def study_lang(cid):
-    return get(cid, "study_lang", "нидерландский")
+    code = store.get_learning_language(cid)
+    if code in ("nl", "en"):
+        return "нидерландский" if code == "nl" else "английский"
+    legacy = get(cid, "study_lang", "нидерландский")
+    code = "en" if legacy == "английский" else "nl"
+    store.set_learning_language(cid, code)
+    return "нидерландский" if code == "nl" else "английский"
 
 
 def priorities(cid):
@@ -202,10 +208,8 @@ async def send_scheduled_notification(bot, cid, kind):
     elif kind == "lagom_daily":
         import balance as _b
         await _b.send_motiv_push(_NoKbBot(bot), cid)
-    elif kind == "daily_words_nl":
-        await learning.send_morning_word(bot, cid, language="нидерландский", with_kb=False)
-    elif kind == "daily_words_en":
-        await learning.send_morning_word(bot, cid, language="английский", with_kb=False)
+    elif kind in ("daily_words_nl", "daily_words_en"):
+        await learning.send_morning_word(bot, cid, language=study_lang(cid), with_kb=False)
     elif kind == "live_lang":
         await learning.send_proverb_both(bot, cid, with_kb=False)
     elif kind == "recipe_daily":
@@ -590,7 +594,9 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_notif_off_all":
         await notif_off_all(bot, cid, q)
     elif data == "set_levels":
-        await learning.send_levels(bot, cid, back="set_home")
+        await learning.send_learning_settings(bot, cid, q=q, back="set_home")
+    elif data == "set_learning" or data == "toggle_learning_language" or data.startswith("set_learning_level_"):
+        await learning.handle_learning_settings_callback(bot, cid, q, data)
     elif data == "set_city":
         store.pending_input[cid] = "setcity"
         msg = settings_ui.city_input()

@@ -348,16 +348,17 @@ def game_hint(ui, hint):
     return b.build()
 
 
-def levels(nl_label, en_label):
+def learning_settings(active_language, active_level):
     b = MessageBuilder()
-    b.section("🎚 Уровень языков")
+    b.section("🎚 Настройки обучения")
     b.spacer()
-    b.text_line("🇳🇱 Нидерландский: ")
-    b.bold(nl_label)
-    b.newline()
-    b.text_line("🇬🇧 Английский: ")
-    b.bold(en_label)
+    b.line("Активный язык:")
+    b.bold(active_language)
     b.newline()
     b.spacer()
-    b.text_line("Нажми уровень чтобы изменить:")
+    b.line("Уровень:")
+    b.bold(active_level)
+    b.newline()
+    b.spacer()
+    b.text_line("Эти настройки влияют на тренажёры, «Живой язык» и обучающие рассылки.")
     return b.build()

@@ -9,7 +9,6 @@ _ob: dict = {}
 _LANG_KB = InlineKeyboardMarkup([
     [InlineKeyboardButton("🇳🇱 Нидерландский", callback_data="ob_lang_nl"),
      InlineKeyboardButton("🇬🇧 Английский",    callback_data="ob_lang_en")],
-    [InlineKeyboardButton("Оба языка",          callback_data="ob_lang_both")],
     [InlineKeyboardButton("⏭ Пропустить",       callback_data="ob_lang_skip")],
 ])
 
@@ -105,11 +104,12 @@ async def handle_callback(bot, cid, q, data: str):
             return
         import settings as _s
         if choice == "both":
-            st["langs"] = ["nl", "en"]
-            _s.set_(cid, "study_lang", "нидерландский")
-        else:
-            st["langs"] = [choice]
-            _s.set_(cid, "study_lang", "нидерландский" if choice == "nl" else "английский")
+            choice = "nl"
+        st["langs"] = [choice]
+        store.set_learning_language(cid, choice)
+        _s.set_(cid, "study_lang", "нидерландский" if choice == "nl" else "английский")
+        other = "английский" if choice == "nl" else "нидерландский"
+        store.ensure_level(cid, other, "A2")
         st["step"] = "lvl"
         st["lvl_queue"] = list(st["langs"])
         _ob[str(cid)] = st

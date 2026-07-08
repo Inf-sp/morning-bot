@@ -249,6 +249,13 @@ async def answer_callback(update, context):
     if data.startswith("w_"):
         await wardrobe.handle_callback(bot, cid, q, data)
         return
+    # Настройки обучения
+    if data in ("set_learning", "toggle_learning_language") or data.startswith("set_learning_level_"):
+        try:
+            await learning.handle_learning_settings_callback(bot, cid, q, data)
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+        return
     # Настройки
     if data.startswith(("set_", "setadd_", "setdel_", "adm_")):
         try:
@@ -300,7 +307,7 @@ async def answer_callback(update, context):
     if data == "m_travel":
         await travel.send_home(bot, cid, q); return
     if data.startswith("m_"):
-        text, entities, kb = menu.menu_screen(data)
+        text, entities, kb = menu.menu_screen(data, cid)
         try:
             await q.message.edit_text(text, reply_markup=kb, entities=entities)
         except Exception:
@@ -315,28 +322,18 @@ async def answer_callback(update, context):
                 await _inline_status(lambda _s: myday.send_plany(bot, cid))
             elif act == "train":
                 await learning.send_train_lang_select(bot, cid)
-            elif act == "train_nl":
-                await _inline_status(lambda _s: learning.train_start(bot, cid, "нидерландский"))
-            elif act == "train_en":
-                await _inline_status(lambda _s: learning.train_start(bot, cid, "английский"))
-            elif act == "train_words_nl":
-                await _inline_status(lambda _s: learning.train_start(bot, cid, "нидерландский", mode="word"))
-            elif act == "train_words_en":
-                await _inline_status(lambda _s: learning.train_start(bot, cid, "английский", mode="word"))
-            elif act == "train_phrases_nl":
-                await _inline_status(lambda _s: learning.train_start(bot, cid, "нидерландский", mode="phrase"))
-            elif act == "train_phrases_en":
-                await _inline_status(lambda _s: learning.train_start(bot, cid, "английский", mode="phrase"))
+            elif act in ("train_nl", "train_en"):
+                await _inline_status(lambda _s: learning.train_start(bot, cid, learning.active_language(cid)))
+            elif act in ("train_words_nl", "train_words_en"):
+                await _inline_status(lambda _s: learning.train_start(bot, cid, learning.active_language(cid), mode="word"))
+            elif act in ("train_phrases_nl", "train_phrases_en"):
+                await _inline_status(lambda _s: learning.train_start(bot, cid, learning.active_language(cid), mode="phrase"))
             elif act == "tr_nl":
                 await _inline_status(lambda _s: learning.do_translate(bot, cid, "нидерландский"))
             elif act == "tr_en":
                 await _inline_status(lambda _s: learning.do_translate(bot, cid, "английский"))
-            elif act == "proverb":
-                await _inline_status(lambda _s: learning.send_proverb_both(bot, cid))
-            elif act == "proverb_nl":
-                await _inline_status(lambda _s: learning.send_proverb(bot, cid, "нидерландский"))
-            elif act == "proverb_en":
-                await _inline_status(lambda _s: learning.send_proverb(bot, cid, "английский"))
+            elif act in ("proverb", "proverb_nl", "proverb_en"):
+                await _inline_status(lambda _s: learning.send_proverb(bot, cid, learning.active_language(cid)))
             elif act == "dict":
                 await learning.send_dict(bot, cid)
             elif act == "dictconfirm_add":
@@ -471,11 +468,11 @@ async def answer_callback(update, context):
     # Уровни языка
     if data.startswith("lvl_"):
         parts = data.split("_")
-        code, level = parts[1], parts[2]
-        language = "нидерландский" if code == "nl" else "английский"
+        level = parts[2]
+        language = learning.active_language(cid)
         old_level = store.get_level(cid, language)
         store.set_level(cid, language, level)
-        await learning.send_levels(bot, cid, q)
+        await learning.send_learning_settings(bot, cid, q)
         if old_level != level:
             await learning.offer_seed_for_level_change(bot, cid, language, level)
         return
@@ -692,7 +689,7 @@ async def text_router(update, context):
         if key == "m_travel":
             await travel.send_home(bot, cid)
             return
-        t, entities, kb = menu.menu_screen(key)
+        t, entities, kb = menu.menu_screen(key, cid)
         await bot.send_message(chat_id=cid, text=t, reply_markup=kb, entities=entities)
         return
 
@@ -899,10 +896,8 @@ async def job_lagom(context: ContextTypes.DEFAULT_TYPE):
 async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         try:
-            if settings.notif_on(cid, "daily_words_nl"):
+            if settings.notif_on(cid, "daily_words_nl") or settings.notif_on(cid, "daily_words_en"):
                 await settings.send_scheduled_notification(context.bot, cid, "daily_words_nl")
-            if settings.notif_on(cid, "daily_words_en"):
-                await settings.send_scheduled_notification(context.bot, cid, "daily_words_en")
         except Exception:
             logging.exception("job_daily_words failed for cid=%s", cid)
 

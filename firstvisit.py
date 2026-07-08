@@ -98,8 +98,8 @@ def _has_data(cid, section: str) -> bool:
         return has_wardrobe or has_style
     if section == "learning":
         import settings as _s
-        has_lang = bool(_s.get(cid, "study_lang"))
-        has_level = bool(store.get_level(cid, "нидерландский") or store.get_level(cid, "английский"))
+        has_lang = bool(store.get_learning_language(cid) or _s.get(cid, "study_lang"))
+        has_level = store.has_level(cid, "нидерландский") or store.has_level(cid, "английский")
         return has_lang or has_level
     if section == "leisure":
         prof = store.get_profile(cid)
@@ -306,12 +306,14 @@ async def _save_learn(cid, raw: str, mode: str) -> list:
     level_found = next((lv.upper() for lv in levels if lv in text_low), None)
     if detected_lang:
         _s.set_(cid, "study_lang", detected_lang)
+        store.set_learning_language(cid, "en" if detected_lang == "английский" else "nl")
         saved.append(f"Язык: {detected_lang}")
     if detected_lang and level_found:
         store.set_level(cid, detected_lang, level_found)
         saved.append(f"Уровень: {level_found}")
     if not saved:
         _s.set_(cid, "study_lang", "нидерландский")
+        store.set_learning_language(cid, "nl")
         saved.append("Язык обучения: нидерландский (по умолчанию)")
     return saved
 
@@ -428,5 +430,5 @@ async def _show_section(bot, cid, section: str):
     if key == "m_food":
         await menu.send_food_menu(bot, cid)
         return
-    text, entities, kb = menu.menu_screen(key)
+    text, entities, kb = menu.menu_screen(key, cid)
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb, entities=entities)

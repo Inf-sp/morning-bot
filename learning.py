@@ -28,10 +28,31 @@ def _is_b1plus(level):
         return False
 
 def _code(language):
+    if language in ("nl", "en"):
+        return language
     return "nl" if language == "нидерландский" else "en"
 
+def _language_for_code(code):
+    return "английский" if code == "en" else "нидерландский"
+
+def _active_language_code(cid):
+    code = store.get_learning_language(cid)
+    if code in ("nl", "en"):
+        return code
+    import settings as _s
+    return _code(_s.study_lang(cid))
+
+def active_language(cid):
+    return _language_for_code(_active_language_code(cid))
+
+def _language_display(language):
+    return f"{_flag(language)} {'Нидерландский' if _code(language) == 'nl' else 'Английский'}"
+
 def _flag(language):
-    return "🇳🇱" if language == "нидерландский" else "🇬🇧"
+    return "🇳🇱" if _code(language) == "nl" else "🇬🇧"
+
+def _level_label(level):
+    return "Сложный (B1+)" if _is_b1plus(level) else "Лёгкий (A1–A2)"
 
 # ================= ТРЕНАЖЁР СЛОВ =================
 TRAIN_FORMATS = ["gap", "tf", "card"]  # legacy — не используется в новом квизе
@@ -1110,9 +1131,9 @@ async def send_train_kind_select(bot, cid, language):
 
 
 async def send_train_lang_select(bot, cid):
+    language = active_language(cid)
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🇳🇱 Нидерландский", callback_data="a_train_nl")],
-        [InlineKeyboardButton("🇬🇧 Английский", callback_data="a_train_en")],
+        [InlineKeyboardButton(f"▶️ {_language_display(language)}", callback_data=f"a_train_{_code(language)}")],
         [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
     ])
     msg = learning_ui.train_lang_select()
@@ -1236,37 +1257,38 @@ async def send_proverb(bot, cid, language):
 
 
 async def send_proverb_both(bot, cid, with_kb=True):
-    """Живой язык NL + EN: фразовый глагол, идиома или разговорная фраза."""
+    """Compatibility wrapper: live language uses the single active learning language."""
+    language = active_language(cid)
+    if with_kb:
+        await send_proverb(bot, cid, language)
+        return
+    flag = _flag(language)
     try:
         d = await ai.allm_json(
             "Ты эксперт по живому разговорному языку. "
-            "Пиши только проверенные, естественные выражения. "
+            f"Пиши только проверенные, естественные выражения на языке: {language}. "
             "Перевод на русский должен передавать реальный смысл, не буквальную кальку. "
-            "Выдай одно выражение — фразовый глагол, идиому или частую разговорную фразу.\n"
-            'JSON: {"nl":"выражение на нидерландском",'
-            '"en":"живой английский эквивалент (не перевод, а аналог)",'
+            f"Выдай одно полезное выражение на {language}: фразовый глагол, идиому или частую разговорную фразу.\n"
+            'JSON: {"original":"выражение",'
             '"analogs":["русский аналог 1","русский аналог 2","русский аналог 3","русский аналог 4"],'
-            '"type":"фразовый глагол / идиома / разговорная фраза",'
             '"meaning":"контекст употребления на русском, коротко; пустая строка если не нужен",'
-            '"examples":["один пример на нидерландском или английском → перевод на русский"]}',
-            500, tier="cheap", route="gemini", module="learning")
-        def _cap(s):
-            s = (s or "").strip()
-            return s[0].upper() + s[1:] if s else s
-
-        original = _cap(d.get("nl", "")) or _cap(d.get("en", ""))
+            '"examples":["один пример на изучаемом языке → перевод на русский"]}',
+            400, tier="cheap", route="gemini", module="learning")
+        original = _cap(d.get("original", ""))
         if not original:
-            d = _proverb_fallback("английский")
+            d = _proverb_fallback(language)
             original = d["original"]
-        txt, entities = _proverb_entities_card(" ", original, d.get("analogs") or d.get("ru") or [], _cap(d.get("meaning", "")), d.get("examples") or [])
+        txt, entities = _proverb_entities_card(
+            flag,
+            original,
+            d.get("analogs") or d.get("ru") or [],
+            _cap(d.get("meaning", "")),
+            d.get("examples") or [],
+        )
     except Exception:
-        d = _proverb_fallback("английский")
-        txt, entities = _proverb_entities_card(" ", d["original"], d["analogs"], d["meaning"], d["examples"])
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Ещё вариант", callback_data="a_proverb")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_learn")],
-    ]) if with_kb else None
-    await bot.send_message(chat_id=cid, text=txt, entities=entities, reply_markup=kb)
+        d = _proverb_fallback(language)
+        txt, entities = _proverb_entities_card(flag, d["original"], d["analogs"], d["meaning"], d["examples"])
+    await bot.send_message(chat_id=cid, text=txt, entities=entities)
 
 
 # ================= СЛОВАРЬ (раздельно NL / EN) =================
@@ -2756,28 +2778,25 @@ async def game_reveal(bot, cid, q):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-# ================= УРОВЕНЬ ЯЗЫКА =================
-def _levels_kb(nl_lvl, en_lvl, back="set_home"):
-    def _row(code, cur):
-        hard = _is_b1plus(cur)
-        flag = "🇳🇱" if code == "nl" else "🇬🇧"
-        return [
-            InlineKeyboardButton(("✅ " if not hard else "") + f"{flag} Лёгкий", callback_data=f"lvl_{code}_A2"),
-            InlineKeyboardButton(("✅ " if hard else "") + f"{flag} Сложный", callback_data=f"lvl_{code}_B1"),
-        ]
+# ================= НАСТРОЙКИ ОБУЧЕНИЯ =================
+def learning_settings_kb(active_lang, active_level, back="set_home"):
+    hard = _is_b1plus(active_level)
+    flag = _flag(active_lang)
     return InlineKeyboardMarkup([
-        _row("nl", nl_lvl),
-        _row("en", en_lvl),
+        [InlineKeyboardButton(f"📚 Язык: {_language_display(active_lang)}", callback_data="toggle_learning_language")],
+        [
+            InlineKeyboardButton(("✅ " if not hard else "") + f"{flag} Лёгкий", callback_data="set_learning_level_A2"),
+            InlineKeyboardButton(("✅ " if hard else "") + f"{flag} Сложный", callback_data="set_learning_level_B1"),
+        ],
         [InlineKeyboardButton("◀️ Назад", callback_data=back)],
     ])
 
-async def send_levels(bot, cid, q=None, back="set_home"):
-    nl_lvl = store.get_level(cid, "нидерландский")
-    en_lvl = store.get_level(cid, "английский")
-    nl_label = "Сложный (B1+)" if _is_b1plus(nl_lvl) else "Лёгкий (A1–A2)"
-    en_label = "Сложный (B1+)" if _is_b1plus(en_lvl) else "Лёгкий (A1–A2)"
-    msg = learning_ui.levels(nl_label, en_label)
-    kb = _levels_kb(nl_lvl, en_lvl, back)
+
+async def send_learning_settings(bot, cid, q=None, back="set_home"):
+    active_lang = active_language(cid)
+    active_level = store.get_level(cid, active_lang)
+    msg = learning_ui.learning_settings(_language_display(active_lang), _level_label(active_level))
+    kb = learning_settings_kb(active_lang, active_level, back)
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
@@ -2785,6 +2804,29 @@ async def send_levels(bot, cid, q=None, back="set_home"):
         except Exception:
             pass
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def send_levels(bot, cid, q=None, back="set_home"):
+    await send_learning_settings(bot, cid, q=q, back=back)
+
+
+async def handle_learning_settings_callback(bot, cid, q, data):
+    if data == "set_learning":
+        await send_learning_settings(bot, cid, q=q)
+        return
+    if data == "toggle_learning_language":
+        old_code = _active_language_code(cid)
+        new_code = "en" if old_code == "nl" else "nl"
+        store.set_learning_language(cid, new_code)
+        store.ensure_level(cid, _language_for_code(old_code), "A2")
+        store.ensure_level(cid, _language_for_code(new_code), "A2")
+        await send_learning_settings(bot, cid, q=q)
+        return
+    if data.startswith("set_learning_level_"):
+        level = data.rsplit("_", 1)[-1]
+        if level in ("A2", "B1"):
+            store.set_level(cid, active_language(cid), level)
+        await send_learning_settings(bot, cid, q=q)
 
 
 SYSTEM_TOPICS = {

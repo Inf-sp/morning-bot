@@ -120,6 +120,7 @@ def test_refresh_cooldown_message_for_regular_user(monkeypatch):
         calls["n"] += 1
 
     monkeypatch.setattr(pn, "send_period", fake_send_period)
+    monkeypatch.setattr(pn, "_is_admin", lambda cid: False)
     pn._set_last_refresh("1")
 
     asyncio.run(pn.refresh(FakeBot(), "1"))

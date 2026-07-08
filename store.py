@@ -190,6 +190,28 @@ def set_level(chat_id, language, level):
     d.setdefault(str(chat_id), {})[language] = level
     _save(config.LEVELS_FILE, d)
 
+def has_level(chat_id, language):
+    return language in _load(config.LEVELS_FILE).get(str(chat_id), {})
+
+def ensure_level(chat_id, language, level="A2"):
+    d = _load(config.LEVELS_FILE)
+    user = d.setdefault(str(chat_id), {})
+    if language not in user:
+        user[language] = level
+        _save(config.LEVELS_FILE, d)
+
+def get_learning_language(chat_id):
+    code = str(get_profile(chat_id).get("learning_language") or "").strip().lower()
+    return code if code in ("nl", "en") else ""
+
+def set_learning_language(chat_id, language):
+    code = str(language or "").strip().lower()
+    if code not in ("nl", "en"):
+        return
+    prof = get_profile(chat_id)
+    prof["learning_language"] = code
+    set_profile(chat_id, prof)
+
 ZONE_SUBCATS = {
     "Верх": ["Футболки", "Поло", "Рубашки", "Лонгсливы", "Свитеры", "Кардиганы",
              "Худи", "Пиджаки", "Другое"],

@@ -49,8 +49,27 @@ def _back(parent="m_close"):
     return [("◀️ Назад", parent)]
 
 
-def menu_screen(key):
-    msg = menu_ui.menu_screen(key)
+def _learning_code(cid):
+    if cid is None:
+        return "nl"
+    try:
+        import store
+        code = store.get_learning_language(cid)
+        if code in ("nl", "en"):
+            return code
+        import settings
+        return "en" if settings.study_lang(cid) == "английский" else "nl"
+    except Exception:
+        return "nl"
+
+
+def menu_screen(key, cid=None):
+    if key == "m_learn":
+        msg = menu_ui.learning_menu(_learning_code(cid))
+    elif key == "m_dict_settings":
+        msg = menu_ui.learning_settings_menu(_learning_code(cid))
+    else:
+        msg = menu_ui.menu_screen(key)
     return msg.text, msg.entities, msg.reply_markup
 
 
