@@ -47,10 +47,23 @@ def _cap_first(text):
     return text[:1].upper() + text[1:] if text else text
 
 
-def proverb_card(flag, original, analogs=None, meaning="", examples=None):
+def _split_example(value):
+    if isinstance(value, list):
+        value = value[0] if value else ""
+    value = str(value or "").strip()
+    if "→" in value:
+        left, right = value.split("→", 1)
+        return left.strip(), right.strip()
+    return value, ""
+
+
+def _strip_final_punctuation(text):
+    return (text or "").strip().rstrip(".!?。！？").strip()
+
+
+def proverb_card(flag, original, analogs=None, meaning="", examples=None, example_ru=""):
     b = MessageBuilder()
-    header = f"💭{flag} Живой язык" if flag else "💭 Живой язык"
-    b.section(header)
+    b.section("💭 Живой язык")
     b.spacer()
 
     if original:
@@ -63,22 +76,26 @@ def proverb_card(flag, original, analogs=None, meaning="", examples=None):
     analogs = _as_list(analogs)
     if analogs:
         b.section("Как это переводится?")
-        visible_analogs = analogs[:4]
-        for i, analog in enumerate(visible_analogs):
-            if i:
-                b.text_line(" или " if i == len(visible_analogs) - 1 else ", ")
-            b.text_line(f"«{_cap_first(analog) if i == 0 else analog}»")
-        if meaning:
-            b.text_line(f" ({meaning})")
-        b.text_line(".")
+        main_analog = _strip_final_punctuation(_cap_first(analogs[0]))
+        b.line(f"«{main_analog}».")
 
-    examples = _as_list(examples)
-    if examples:
-        b.section("Как говорить ПРАВИЛЬНО")
-        b.text_line(examples[0])
+    meaning = str(meaning or "").strip()
+    if meaning:
+        b.section("Когда это говорят?")
+        b.line(meaning)
+
+    example, parsed_example_ru = _split_example(examples)
+    example_ru = str(example_ru or parsed_example_ru or "").strip()
+    if example:
+        b.section("Пример из жизни:")
+        if example_ru:
+            b.line(f"{example} →")
+            b.line(example_ru)
+        else:
+            b.line(example)
 
     b.spacer()
-    b.add("Прочитай вслух. Покрути в голове. Всё.", MessageEntity.ITALIC)
+    b.add("Прочитай вслух один раз. Этого достаточно.", MessageEntity.ITALIC)
     msg = b.build()
     msg.text = msg.text.rstrip()
     return msg

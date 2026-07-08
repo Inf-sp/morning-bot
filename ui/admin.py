@@ -29,19 +29,22 @@ def only():
     return MessageSpec(text="⛔ Только для администратора.")
 
 
-def deploy_report(version, release_note):
+def deploy_report(version, title, release_notes):
+    notes = [str(note).strip() for note in (release_notes or []) if str(note).strip()]
+    if not notes:
+        notes = ["Бот получил небольшие внутренние улучшения."]
+    if len(notes) == 1:
+        quote_text = notes[0]
+    else:
+        quote_text = "\n".join(f"• {note}" for note in notes[:2])
+
     b = MessageBuilder()
-    b.bold("🚀 Бот обновлён")
+    b.bold(f"🚀 v{version} · {title or 'Обновление'}")
     b.newline()
     b.spacer()
-    b.line(f"Версия: v{version}")
-    b.line("Статус: успешно запущен")
+    b.quote(quote_text)
     b.spacer()
-    b.line("Что изменилось:")
-    b.newline()
-    b.quote(release_note)
-    b.spacer()
-    b.line("Деплой прошёл успешно ✅")
+    b.line("Бот развёрнут и работает ✅")
     return b.build_stripped()
 
 

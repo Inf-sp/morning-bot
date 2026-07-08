@@ -151,16 +151,63 @@ def test_live_language_uses_learning_language(monkeypatch):
 
     async def fake_allm_json(prompt, *_args, **_kwargs):
         calls.append(prompt)
-        return {"original": "No worries", "analogs": ["не переживай"], "meaning": "", "examples": []}
+        return {
+            "nl": "",
+            "en": "No worries.",
+            "analogs": ["не переживай"],
+            "meaning": "",
+            "example": "Sorry, I forgot to reply yesterday. No worries.",
+            "example_ru": "Прости, я вчера забыл ответить. Не переживай.",
+        }
 
     monkeypatch.setattr(learning.ai, "allm_json", fake_allm_json)
     cid = "learn-live-lang"
     store.set_learning_language(cid, "en")
+    bot = Bot()
 
-    asyncio.run(learning.send_proverb_both(Bot(), cid, with_kb=False))
+    asyncio.run(learning.send_proverb_both(bot, cid, with_kb=False))
 
     assert "английский" in calls[0]
     assert "нидерландском" not in calls[0]
+    assert bot.messages[0]["reply_markup"] is None
+    assert "No worries." in bot.messages[0]["text"]
+    assert "Как говорить ПРАВИЛЬНО" not in bot.messages[0]["text"]
+    assert "Покрути в голове" not in bot.messages[0]["text"]
+
+
+def test_live_language_manual_uses_menu_language(monkeypatch):
+    async def fake_allm_json(_prompt, *_args, **_kwargs):
+        return {
+            "nl": "Dat is de druppel!",
+            "en": "That's the last straw!",
+            "analogs": ["это последняя капля", "моё терпение лопнуло"],
+            "meaning": "Когда очередная мелочь окончательно добивает.",
+            "example": "En nu dit?! Dat is de druppel!",
+            "example_ru": "А теперь еще и это?! Это последняя капля!",
+        }
+
+    monkeypatch.setattr(learning.ai, "allm_json", fake_allm_json)
+    bot = Bot()
+
+    asyncio.run(learning.send_proverb(bot, "learn-live-menu", "nl"))
+
+    payload = bot.messages[0]
+    text = payload["text"]
+    buttons = _button_texts(payload["reply_markup"])
+    data = _button_data(payload["reply_markup"])
+    assert text.startswith("💭 Живой язык")
+    assert "Dat is de druppel!" in text
+    assert "That's the last straw" not in text
+    assert "«Это последняя капля»." in text
+    assert "моё терпение" not in text
+    assert buttons == [["✨ Ещё вариант"], ["◀️ Назад"]]
+    assert data == [["a_proverb_nl"], ["m_nl"]]
+    assert "Назад" in buttons[-1][0]
+
+
+def test_live_language_fallbacks_are_diverse():
+    assert len(learning._PROVERB_FALLBACKS["nl"]) >= 10
+    assert len(learning._PROVERB_FALLBACKS["en"]) >= 10
 
 
 def test_no_old_two_language_level_ui():

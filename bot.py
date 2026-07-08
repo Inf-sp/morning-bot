@@ -39,7 +39,8 @@ CHAT_ID = config.CHAT_ID
 
 _WELCOME = menu.WELCOME
 _ROOT = Path(__file__).parent
-_DEFAULT_DEPLOY_NOTE = "Обновление системы без пользовательских изменений."
+_DEFAULT_DEPLOY_NOTE = "Бот получил небольшие внутренние улучшения."
+_DEFAULT_DEPLOY_TITLE = "Обновление"
 
 
 def _normalize_app_version(version: str) -> str:
@@ -57,13 +58,18 @@ def get_current_deploy_key() -> str:
     return get_app_version()
 
 
-def _release_heading_version(line: str) -> str | None:
+def _release_heading(line: str) -> tuple[str, str] | None:
     line = line.strip()
     if not line.startswith("## "):
         return None
     title = line[3:].strip()
     version = title.split()[0] if title else ""
-    return _normalize_app_version(version)
+    release_title = ""
+    for separator in (" · ", " - ", " — "):
+        if separator in title:
+            release_title = title.split(separator, 1)[1].strip()
+            break
+    return _normalize_app_version(version), release_title
 
 
 def _clean_release_note_line(line: str) -> str:
@@ -85,10 +91,11 @@ def load_release_notes() -> tuple[list[str], str]:
     current_lines = []
     in_current_section = False
     for raw_line in path.read_text(encoding="utf-8").splitlines():
-        heading_version = _release_heading_version(raw_line)
-        if heading_version is not None:
+        heading = _release_heading(raw_line)
+        if heading is not None:
             if in_current_section:
                 break
+            heading_version, _ = heading
             in_current_section = heading_version == version
             continue
         if in_current_section:
@@ -98,12 +105,45 @@ def load_release_notes() -> tuple[list[str], str]:
 
     if not current_lines:
         return [], "fallback"
-    return [" ".join(current_lines)], "file"
+    return current_lines, "file"
+
+
+def load_release_title(version, release_notes) -> str:
+    version = _normalize_app_version(version)
+    path = _ROOT / "RELEASE_NOTES.md"
+    if path.exists() and version:
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            heading = _release_heading(raw_line)
+            if not heading:
+                continue
+            heading_version, heading_title = heading
+            if heading_version == version and heading_title:
+                return heading_title
+
+    text = " ".join(str(note) for note in (release_notes or [])).lower()
+    if not text:
+        return _DEFAULT_DEPLOY_TITLE
+    if any(word in text for word in ("история", "релиз", "релизов", "обновлен", "обновлений")):
+        return "Чистые обновления"
+    if "новост" in text:
+        return "Умнее новости"
+    if "рецепт" in text:
+        return "Быстрее рецепты"
+    if "гардероб" in text:
+        return "Аккуратнее гардероб"
+    if "уведом" in text:
+        return "Тише уведомления"
+    if "обуч" in text or "словар" in text:
+        return "Лучше обучение"
+    return _DEFAULT_DEPLOY_TITLE
 
 
 def build_deploy_report_message(version, release_notes, check_list=None):
-    note = release_notes[0] if release_notes else _DEFAULT_DEPLOY_NOTE
-    return admin_ui.deploy_report(_normalize_app_version(version), note)
+    clean_notes = [str(note).strip() for note in (release_notes or []) if str(note).strip()]
+    if not clean_notes:
+        clean_notes = [_DEFAULT_DEPLOY_NOTE]
+    title = load_release_title(version, clean_notes)
+    return admin_ui.deploy_report(_normalize_app_version(version), title, clean_notes)
 
 
 async def maybe_send_admin_deploy_notification(bot):
@@ -333,7 +373,8 @@ async def answer_callback(update, context):
             elif act == "tr_en":
                 await _inline_status(lambda _s: learning.do_translate(bot, cid, "английский"))
             elif act in ("proverb", "proverb_nl", "proverb_en"):
-                await _inline_status(lambda _s: learning.send_proverb(bot, cid, learning.active_language(cid)))
+                language = act.rsplit("_", 1)[-1] if act in ("proverb_nl", "proverb_en") else None
+                await _inline_status(lambda _s: learning.send_proverb(bot, cid, language))
             elif act == "dict":
                 await learning.send_dict(bot, cid)
             elif act == "dictconfirm_add":
