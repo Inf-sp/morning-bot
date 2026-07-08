@@ -1703,17 +1703,17 @@ async def handle_callback(bot, cid, q, data):
         await cleanup.open_cleanup(bot, cid, "diary"); return
     # мотивация
     if data == "as_motiv":
-        await util.ack_loading(q)
+        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
         try:
             out, entities = _gen_motiv(cid)
         except Exception as e:
-            await util.clear_loading(q)
+            await status.stop(delete=False)
             await verify.safe_error(bot, cid, e); return
         store.last_source[str(cid)] = "Баланс · Мотивация"
         store.last_answer[str(cid)] = out
         store.last_surface[str(cid)] = "card"
         await bot.send_message(chat_id=cid, text=out, entities=entities, reply_markup=_MOTIV_KB)
-        await util.clear_loading(q)
+        await status.stop(delete=False)
         return
     # врач
     if data == "as_doctor":

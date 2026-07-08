@@ -139,6 +139,16 @@ async def answer_callback(update, context):
     data = q.data
     bot = context.bot
 
+    async def _inline_status(call):
+        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+        try:
+            return await call(status)
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+            return None
+        finally:
+            await status.stop(delete=False)
+
     if not access.is_allowed(cid):
         await bot.send_message(chat_id=cid, text="⛔ Бот приватный. Попроси владельца прислать инвайт.")
         return
@@ -232,35 +242,31 @@ async def answer_callback(update, context):
         act = data[2:]
         try:
             if act == "plany":
-                await _ack(q)
-                await myday.send_plany(bot, cid)
+                await _inline_status(lambda _s: myday.send_plany(bot, cid))
             elif act == "train":
                 await learning.send_train_lang_select(bot, cid)
             elif act == "train_nl":
-                await _ack(q); await learning.train_start(bot, cid, "нидерландский")
+                await _inline_status(lambda _s: learning.train_start(bot, cid, "нидерландский"))
             elif act == "train_en":
-                await _ack(q); await learning.train_start(bot, cid, "английский")
+                await _inline_status(lambda _s: learning.train_start(bot, cid, "английский"))
             elif act == "train_words_nl":
-                await _ack(q); await learning.train_start(bot, cid, "нидерландский", mode="word")
+                await _inline_status(lambda _s: learning.train_start(bot, cid, "нидерландский", mode="word"))
             elif act == "train_words_en":
-                await _ack(q); await learning.train_start(bot, cid, "английский", mode="word")
+                await _inline_status(lambda _s: learning.train_start(bot, cid, "английский", mode="word"))
             elif act == "train_phrases_nl":
-                await _ack(q); await learning.train_start(bot, cid, "нидерландский", mode="phrase")
+                await _inline_status(lambda _s: learning.train_start(bot, cid, "нидерландский", mode="phrase"))
             elif act == "train_phrases_en":
-                await _ack(q); await learning.train_start(bot, cid, "английский", mode="phrase")
+                await _inline_status(lambda _s: learning.train_start(bot, cid, "английский", mode="phrase"))
             elif act == "tr_nl":
-                await _ack(q); await learning.do_translate(bot, cid, "нидерландский")
+                await _inline_status(lambda _s: learning.do_translate(bot, cid, "нидерландский"))
             elif act == "tr_en":
-                await _ack(q); await learning.do_translate(bot, cid, "английский")
+                await _inline_status(lambda _s: learning.do_translate(bot, cid, "английский"))
             elif act == "proverb":
-                await _ack(q)
-                await learning.send_proverb_both(bot, cid)
+                await _inline_status(lambda _s: learning.send_proverb_both(bot, cid))
             elif act == "proverb_nl":
-                await _ack(q)
-                await learning.send_proverb(bot, cid, "нидерландский")
+                await _inline_status(lambda _s: learning.send_proverb(bot, cid, "нидерландский"))
             elif act == "proverb_en":
-                await _ack(q)
-                await learning.send_proverb(bot, cid, "английский")
+                await _inline_status(lambda _s: learning.send_proverb(bot, cid, "английский"))
             elif act == "dict":
                 await learning.send_dict(bot, cid)
             elif act == "dictconfirm_add":
@@ -324,24 +330,24 @@ async def answer_callback(update, context):
             elif act == "levels":
                 await learning.send_levels(bot, cid, back="m_learn")
             elif act == "w_today":
-                await weather.send_weather(bot, cid, "today")
+                await _inline_status(lambda _s: weather.send_weather(bot, cid, "today"))
             elif act == "w_tomorrow":
-                await weather.send_weather(bot, cid, "tomorrow")
+                await _inline_status(lambda _s: weather.send_weather(bot, cid, "tomorrow"))
             elif act == "w_week":
-                await weather.send_weather(bot, cid, "week")
+                await _inline_status(lambda _s: weather.send_weather(bot, cid, "week"))
             elif act == "setcity":
                 store.pending_input[cid] = "setcity"
                 await bot.send_message(chat_id=cid, text="🌍 Напиши название города - переключу на него!")
             elif act == "trav_go":
-                await _ack(q); await travel.send_go(bot, cid)
+                await _inline_status(lambda _s: travel.send_go(bot, cid))
             elif act == "trav_no":
-                await _ack(q); await travel.travel_dislike(bot, cid)
+                await _inline_status(lambda _s: travel.travel_dislike(bot, cid))
             elif act == "trav_plan":
-                await _ack(q); await travel.send_plan(bot, cid)
+                await _inline_status(lambda _s: travel.send_plan(bot, cid))
             elif act == "trav_fav":
-                await _ack(q); await travel.travel_fav(bot, cid)
+                await _inline_status(lambda _s: travel.travel_fav(bot, cid))
             elif act == "trav_save":
-                await _ack(q); await travel.save_plan(bot, cid)
+                await _inline_status(lambda _s: travel.save_plan(bot, cid))
             elif act == "watch":
                 await _ack(q); await leisure.send_movie_home(bot, cid, q)
             elif act == "now_playing":
@@ -349,9 +355,9 @@ async def answer_callback(update, context):
             elif act.startswith("cinema_page_"):
                 await _ack(q); await leisure.send_now_playing(bot, cid, q, int(act.split("_")[-1]))
             elif act.startswith("cinema_open_"):
-                await _ack(q); await leisure.open_cinema_movie(bot, cid, act.split("_")[-1])
+                await _inline_status(lambda _s: leisure.open_cinema_movie(bot, cid, act.split("_")[-1]))
             elif act == "read":
-                await _ack(q); await leisure.send_recos(bot, cid, "book")
+                await _inline_status(lambda _s: leisure.send_recos(bot, cid, "book"))
             elif act == "watchlist":
                 await leisure.send_watchlist(bot, cid)
             elif act == "readlist":
@@ -361,27 +367,27 @@ async def answer_callback(update, context):
             elif act == "readclean":
                 await cleanup.open_cleanup(bot, cid, "rl")
             elif act == "concerts_find":
-                await _ack(q); await leisure.find_concerts(bot, cid, "home")
+                await _inline_status(lambda _s: leisure.find_concerts(bot, cid, "home"))
             elif act == "concerts_pick":
                 await leisure.concert_pick_country(bot, cid)
             elif act in ("concerts_nl", "concerts_be", "concerts_de", "concerts_fr", "concerts_gb",
                          "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
                          "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
-                await _ack(q); await leisure.find_concerts(bot, cid, act.split("_")[1])
+                await _inline_status(lambda _s: leisure.find_concerts(bot, cid, act.split("_")[1]))
             elif act == "listen":
-                await _ack(q); await leisure.send_listen(bot, cid)
+                await _inline_status(lambda _s: leisure.send_listen(bot, cid))
             elif act == "listen_no":
-                await _ack(q); await leisure.listen_dislike(bot, cid)
+                await _inline_status(lambda _s: leisure.listen_dislike(bot, cid))
             elif act == "news_home":
                 await personal_news.send_home(bot, cid)
             elif act == "news_today":
-                await _ack(q); await personal_news.send_period(bot, cid, "today")
+                await _inline_status(lambda _s: personal_news.send_period(bot, cid, "today"))
             elif act == "news_week":
-                await _ack(q); await personal_news.send_period(bot, cid, "week")
+                await _inline_status(lambda _s: personal_news.send_period(bot, cid, "week"))
             elif act == "news_topics":
                 await personal_news.send_topics(bot, cid)
             elif act.startswith("news_refresh_"):
-                await _ack(q); await personal_news.refresh(bot, cid, act.split("_")[-1])
+                await _inline_status(lambda _s: personal_news.refresh(bot, cid, act.split("_")[-1]))
             elif act in ("food_breakfast", "recipe_breakfast"):
                 status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
                 await balance.enter_meal(bot, cid, "breakfast", status=status)
@@ -416,17 +422,17 @@ async def answer_callback(update, context):
                 return
             await learning.train_quiz_answer(bot, cid, ans_idx)
         elif sub == "next":
-            await _ack(q); await learning.train_next(bot, cid)
+            await _inline_status(lambda _s: learning.train_next(bot, cid))
         return
     # Тренажёр фраз: переход от учебной карточки к тесту
     if data in ("phrase_intro_test", "phrase_intro_go"):
         await learning.phrase_intro_continue(bot, cid)
         return
     if data == "phrase_intro_mastered":
-        await _ack(q); await learning.phrase_intro_mastered(bot, cid)
+        await _inline_status(lambda _s: learning.phrase_intro_mastered(bot, cid))
         return
     if data == "phrase_new_example":
-        await _ack(q); await learning.phrase_new_example(bot, cid)
+        await _inline_status(lambda _s: learning.phrase_new_example(bot, cid))
         return
     if data == "phrase_explain":
         await learning.phrase_explain(bot, cid)
@@ -435,9 +441,9 @@ async def answer_callback(update, context):
     if data.startswith("again_"):
         what = data[len("again_"):]
         if what == "tr_nl":
-            await _ack(q); await learning.do_translate(bot, cid, "нидерландский")
+            await _inline_status(lambda _s: learning.do_translate(bot, cid, "нидерландский"))
         elif what == "tr_en":
-            await _ack(q); await learning.do_translate(bot, cid, "английский")
+            await _inline_status(lambda _s: learning.do_translate(bot, cid, "английский"))
         return
     # Игра
     if data.startswith("gamelang_"):
@@ -450,8 +456,7 @@ async def answer_callback(update, context):
         cfg = store.game_config.get(cid, {"lang": "русский"})
         cfg["difficulty"] = diff
         store.game_config[cid] = cfg
-        await _ack(q)
-        await learning.send_game(bot, cid)
+        await _inline_status(lambda _s: learning.send_game(bot, cid))
         return
     if data == "game_change_diff":
         cfg = store.game_config.get(cid, {"lang": "русский"})
@@ -472,8 +477,7 @@ async def answer_callback(update, context):
         await learning.del_word(bot, cid, int(data.split("_")[1]))
         return
     if data == "game_again":
-        await _ack(q)
-        await learning.send_game(bot, cid)
+        await _inline_status(lambda _s: learning.send_game(bot, cid))
         return
     if data == "game_hint":
         await learning.game_hint(bot, cid, q)
@@ -494,13 +498,7 @@ async def answer_callback(update, context):
         await leisure.toggle_movie_pref(bot, cid, data, q)
         return
     if data == "movie_reco":
-        await util.ack_loading(q)
-        try:
-            await leisure.send_recos(bot, cid, "movie")
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        finally:
-            await util.clear_loading(q)
+        await _inline_status(lambda _s: leisure.send_recos(bot, cid, "movie"))
         return
     if data == "movie_genre_menu":
         await _ack(q)
@@ -511,82 +509,40 @@ async def answer_callback(update, context):
         await leisure.send_movie_mood_menu(bot, cid, q)
         return
     if data.startswith("movie_g_"):
-        await util.ack_loading(q)
-        try:
-            await leisure.send_movie_by_genre(bot, cid, data[len("movie_g_"):])
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        finally:
-            await util.clear_loading(q)
+        await _inline_status(lambda _s: leisure.send_movie_by_genre(bot, cid, data[len("movie_g_"):]))
         return
     if data.startswith("movie_mood_"):
-        await util.ack_loading(q)
-        try:
-            await leisure.send_movie_by_mood(bot, cid, data[len("movie_mood_"):])
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        finally:
-            await util.clear_loading(q)
+        await _inline_status(lambda _s: leisure.send_movie_by_mood(bot, cid, data[len("movie_mood_"):]))
         return
     if data.startswith("movie_love_"):
-        await util.ack_loading(q)
-        try:
-            await leisure.movie_love(bot, cid, int(data.split("_")[-1]))
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        finally:
-            await util.clear_loading(q)
+        await _inline_status(lambda _s: leisure.movie_love(bot, cid, int(data.split("_")[-1])))
         return
     if data.startswith("movie_seen_"):
-        await util.ack_loading(q)
-        try:
-            await leisure.movie_seen(bot, cid, int(data.split("_")[-1]))
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        finally:
-            await util.clear_loading(q)
+        await _inline_status(lambda _s: leisure.movie_seen(bot, cid, int(data.split("_")[-1])))
         return
     if data.startswith("book_love_"):
-        await _ack(q)
-        await leisure.book_love(bot, cid, int(data.split("_")[-1]))
+        await _inline_status(lambda _s: leisure.book_love(bot, cid, int(data.split("_")[-1])))
         return
     if data.startswith("book_seen_"):
-        await _ack(q)
-        await leisure.book_seen(bot, cid, int(data.split("_")[-1]))
+        await _inline_status(lambda _s: leisure.book_seen(bot, cid, int(data.split("_")[-1])))
         return
     if data == "listen_love":
-        await _ack(q)
-        await leisure.listen_love(bot, cid)
+        await _inline_status(lambda _s: leisure.listen_love(bot, cid))
         return
     if data == "listen_seen":
-        await _ack(q)
-        await leisure.listen_seen(bot, cid)
+        await _inline_status(lambda _s: leisure.listen_seen(bot, cid))
         return
     if data.startswith("reco_"):
-        await util.ack_loading(q)
-        try:
-            await leisure.add_reco(bot, cid, int(data.split("_")[1]))
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        finally:
-            await util.clear_loading(q)
+        await _inline_status(lambda _s: leisure.add_reco(bot, cid, int(data.split("_")[1])))
         return
     if data.startswith("movie_no_"):
-        await util.ack_loading(q)
-        try:
-            await leisure.movie_dislike(bot, cid, int(data.split("_")[-1]))
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        finally:
-            await util.clear_loading(q)
+        await _inline_status(lambda _s: leisure.movie_dislike(bot, cid, int(data.split("_")[-1])))
         return
     if data.startswith("book_no_"):
-        await _ack(q)
-        await leisure.book_dislike(bot, cid, int(data.split("_")[-1]))
+        await _inline_status(lambda _s: leisure.book_dislike(bot, cid, int(data.split("_")[-1])))
         return
     if data.startswith("listen_"):
-        await _ack(q)
-        await leisure.add_listen(bot, cid, int(data.split("_")[1]))
+        await _inline_status(lambda _s: leisure.add_listen(bot, cid, int(data.split("_")[1])))
         return
     # Проверка дня (тревоги)
     if data == "worry_clearall":
@@ -594,13 +550,11 @@ async def answer_callback(update, context):
         return
     # «Продолжить / ещё раз»
     if data == "chat_retry":
-        await _ack(q)
-        await balance.retry(bot, cid)
+        await _inline_status(lambda _s: balance.retry(bot, cid))
         return
     # «Короче / Глубже» - переписать последний ответ
     if data in ("ans_short", "ans_deep"):
-        await _ack(q)
-        await balance.reword(bot, cid, "short" if data == "ans_short" else "deep")
+        await _inline_status(lambda _s: balance.reword(bot, cid, "short" if data == "ans_short" else "deep"))
         return
 
 

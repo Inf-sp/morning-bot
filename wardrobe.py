@@ -818,10 +818,21 @@ async def ingest(bot, cid, text):
 async def handle_callback(bot, cid, q, data):
     if data == "w_look":
         status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
-        await send_looks(bot, cid, status=status); return
+        try:
+            await send_looks(bot, cid, status=status)
+        except Exception as e:
+            await status.stop(delete=False)
+            await verify.safe_error(bot, cid, e)
+        return
     if data == "w_fb_nostyle":
-        await util.ack_loading(q)
-        await look_feedback(bot, cid, "nostyle"); await util.clear_loading(q); return
+        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+        try:
+            await look_feedback(bot, cid, "nostyle")
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+        finally:
+            await status.stop(delete=False)
+        return
     if data == "w_fb_worn":
         await look_feedback(bot, cid, "worn"); return
     if data == "w_add":
@@ -841,7 +852,14 @@ async def handle_callback(bot, cid, q, data):
         import cleanup
         await cleanup.open_cleanup(bot, cid, f"kast_{zone_slug}_{idx}_{origin}"); return
     if data == "w_improve":
-        await util.ack_loading(q); await send_improve(bot, cid); await util.clear_loading(q); return
+        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+        try:
+            await send_improve(bot, cid)
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+        finally:
+            await status.stop(delete=False)
+        return
     if data == "w_check":
         store.pending_input[str(cid)] = "wardrobe_check"
         await bot.send_message(chat_id=cid, text="Пришли ссылку или название вещи - оценю, брать или нет.",
