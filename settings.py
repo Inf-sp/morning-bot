@@ -30,12 +30,6 @@ NOTIF_TYPES = [
     ("checkin_eve",    "Вечерний разбор"),
 ]
 
-# Персональные факторы, влияющие на содержимое «Погодного предупреждения».
-PERSONAL_FLAGS = [
-    ("bike", "🚲 Езжу на велосипеде"),
-    ("pollen_allergy", "🌿 Аллергия на пыльцу"),
-]
-
 PRIORITY_OPTIONS = [
     ("health", "Здоровье"),
     ("learning", "Учёба"),
@@ -257,22 +251,66 @@ async def _run_notif_test(bot, cid, kind) -> bool:
 
 class NotificationOption:
     """Одно тестируемое уведомление для админ-панели: ключ + заголовок + расписание."""
-    __slots__ = ("key", "title", "schedule_label")
+    __slots__ = ("key", "title", "schedule_label", "time_label", "button_title", "button_label", "sort_key")
 
-    def __init__(self, key: str, title: str, schedule_label: str):
+    def __init__(self, key: str, title: str, schedule_label: str, time_label: str = "",
+                 button_title: str = "", sort_key: int = 9999):
         self.key = key
         self.title = title
         self.schedule_label = schedule_label
+        self.time_label = time_label
+        self.button_title = button_title or title
+        self.button_label = f"{time_label} {self.button_title}".strip()
+        self.sort_key = sort_key
+
+
+_ADMIN_NOTIFICATION_META = {
+    "morning_brief": ("08:30", "Мой день"),
+    "weather_warn": ("08:45", "Погода"),
+    "lagom_daily": ("09:00", "Мотивация"),
+    "personal_news": ("09:00", "Новости"),
+    "weekly_events": ("10:00", "Афиша"),
+    "favorite_artists": ("10:05", "Концерты"),
+    "daily_words_nl": ("11:00", "Слова NL"),
+    "daily_words_en": ("11:00", "Слова EN"),
+    "recipe_daily": ("12:30", "Еда"),
+    "checkin_day": ("14:00", "Разгрузка"),
+    "live_lang": ("16:30", "Живой язык"),
+    "weekly_forecast": ("19:00", "Неделя"),
+    "evening_weather": ("21:30", "Вечер"),
+    "checkin_eve": ("22:00", "Разбор"),
+}
+
+
+def _time_sort_key(value: str) -> int:
+    try:
+        hh, mm = str(value).split(":", 1)
+        return int(hh) * 60 + int(mm)
+    except Exception:
+        return 9999
+
+
+def get_notification_options() -> list:
+    """Все реально существующие уведомления с короткими универсальными названиями.
+    Берём из NOTIF_TYPES (тот же список, что видит пользователь в своих настройках),
+    т.к. каждый kind оттуда обрабатывается в send_scheduled_notification."""
+    options = []
+    for order, (kind, label) in enumerate(NOTIF_TYPES):
+        time_label, button_title = _ADMIN_NOTIFICATION_META.get(kind, ("", label))
+        options.append(NotificationOption(
+            key=kind,
+            title=label,
+            schedule_label=_notif_schedule(kind),
+            time_label=time_label,
+            button_title=button_title,
+            sort_key=_time_sort_key(time_label) * 100 + order,
+        ))
+    return sorted(options, key=lambda opt: opt.sort_key)
 
 
 def get_admin_notification_options() -> list:
-    """Все реально существующие и тестируемые уведомления — источник для админ-панели.
-    Берём из NOTIF_TYPES (тот же список, что видит пользователь в своих настройках),
-    т.к. каждый kind оттуда обрабатывается в send_scheduled_notification."""
-    return [
-        NotificationOption(key=kind, title=label, schedule_label=_notif_schedule(kind))
-        for kind, label in NOTIF_TYPES
-    ]
+    """Compatibility wrapper: админка использует тот же список, что и пользовательское меню."""
+    return get_notification_options()
 
 
 def _notif_schedule(kind: str) -> str:
@@ -286,19 +324,13 @@ def _notif_schedule(kind: str) -> str:
 
 
 async def send_notif(bot, cid, q=None):
-    kind_to_label = dict(NOTIF_TYPES)
     rows = []
-    for kind, label in NOTIF_TYPES:
-        on = notif_on(cid, kind)
+    for opt in get_notification_options():
+        on = notif_on(cid, opt.key)
         mark = "🟢" if on else "⚪"
-        rows.append([InlineKeyboardButton(f"{mark} {_notif_label(kind, label)}", callback_data=f"set_notiftgl_{kind}")])
-    any_on = any(notif_on(cid, k) for k, _ in NOTIF_TYPES)
-    if any_on:
+        rows.append([InlineKeyboardButton(f"{mark} {opt.button_label}", callback_data=f"set_notiftgl_{opt.key}")])
+    if any(notif_on(cid, kind) for kind, _ in NOTIF_TYPES):
         rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
-    # Персональные факторы для «Погодного предупреждения»
-    for flag, label in PERSONAL_FLAGS:
-        mark = "🟢" if get(cid, flag, False) else "⚪"
-        rows.append([InlineKeyboardButton(f"{mark} {label}", callback_data=f"set_pflag_{flag}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
     msg = settings_ui.notifications()
     text = msg.text
@@ -312,18 +344,16 @@ async def send_notif(bot, cid, q=None):
     await bot.send_message(chat_id=cid, text=text, entities=msg.entities, reply_markup=kb)
 
 async def toggle_notif(bot, cid, kind, q=None):
+    if kind not in dict(NOTIF_TYPES):
+        await send_notif(bot, cid, q)
+        return
     set_(cid, f"notif_{kind}", not notif_on(cid, kind))
     await send_notif(bot, cid, q)
+
 
 async def notif_off_all(bot, cid, q=None):
     for kind, _ in NOTIF_TYPES:
         set_(cid, f"notif_{kind}", False)
-    await send_notif(bot, cid, q)
-
-async def toggle_personal_flag(bot, cid, flag, q=None):
-    valid = {f for f, _ in PERSONAL_FLAGS}
-    if flag in valid:
-        set_(cid, flag, not get(cid, flag, False))
     await send_notif(bot, cid, q)
 
 
@@ -589,8 +619,6 @@ async def handle_callback(bot, cid, data, q=None):
         await toggle_cuisine(bot, cid, data[len("set_cuisine_"):], q)
     elif data.startswith("set_notiftgl_"):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
-    elif data.startswith("set_pflag_"):
-        await toggle_personal_flag(bot, cid, data[len("set_pflag_"):], q)
     elif data == "set_notif_off_all":
         await notif_off_all(bot, cid, q)
     elif data == "set_levels":

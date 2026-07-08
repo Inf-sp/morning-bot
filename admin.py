@@ -520,14 +520,9 @@ async def send_diag_news(bot, cid, q=None):
 
 async def send_notifications(bot, cid, q=None):
     stats = _notification_stats(cid)
-    ok = stats["errors_today"] == 0
-    rows = _notification_test_rows() + [
-        [InlineKeyboardButton("🔄 Проверить", callback_data="adm_notif_check")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
-    ]
+    rows = _notification_test_rows()
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")])
     msg = ui.notifications(
-        ui.OK if ok else ui.BAD,
-        "Работают" if ok else "Есть ошибки",
         stats["sent_today"],
         stats["errors_today"],
         stats["active_types"],
@@ -988,77 +983,31 @@ def _next_broadcast():
 _TEST_HISTORY = []
 _LAST_TEST_KIND = {}
 
-_TEST_LABELS = {
-    "morning": "Утро",
-    "weather": "Погода",
-    "word_nl": "NL",
-    "word_en": "EN",
-    "recipe": "Еда",
-    "leisure": "Досуг",
-    "news": "News",
-}
-
-_TEST_TIMES = {
-    "morning": "08:30",
-    "weather": "08:45",
-    "news": "09:00",
-    "leisure": "10:00",
-    "word_nl": "11:00",
-    "word_en": "11:00",
-    "recipe": "12:30",
-}
-
-_TEST_KIND_ALIASES = {
-    "morning": "morning_brief",
-    "weather": "weather_warn",
-    "word_nl": "daily_words_nl",
-    "word_en": "daily_words_en",
-    "recipe": "recipe_daily",
-    "leisure": "weekly_events",
-    "news": "personal_news",
-    "morning_brief": "morning_brief",
-    "weather_warn": "weather_warn",
-    "daily_words_nl": "daily_words_nl",
-    "daily_words_en": "daily_words_en",
-    "recipe_daily": "recipe_daily",
-    "weekly_events": "weekly_events",
-    "personal_news": "personal_news",
-}
-
-_TEST_ORDER = [
-    "morning",
-    "weather",
-    "news",
-    "leisure",
-    "word_nl",
-    "word_en",
-    "recipe",
-]
-
 
 def _test_label(kind):
-    reverse = {v: k for k, v in _TEST_KIND_ALIASES.items() if k in _TEST_LABELS}
-    key = reverse.get(kind, kind)
-    return _TEST_LABELS.get(key, dict(__import__("settings").NOTIF_TYPES).get(kind, kind))
+    return _notification_options_by_kind().get(kind, kind)
 
 
 def _test_button_text(kind):
-    label = _test_label(kind)
-    when = _TEST_TIMES.get(kind)
-    return f"{when} {label}" if when else label
+    return _test_label(kind)
+
+
+def _notification_options_by_kind():
+    import settings as _s
+    return {opt.key: opt.button_label for opt in _s.get_notification_options()}
 
 
 def _notification_test_rows():
+    import settings as _s
     buttons = [
-        InlineKeyboardButton(_test_button_text(kind), callback_data=f"adm_test_{kind}")
-        for kind in _TEST_ORDER
+        InlineKeyboardButton(opt.button_label, callback_data=f"set_admin_broadcast_test_{opt.key}")
+        for opt in _s.get_notification_options()
     ]
-    buttons.append(InlineKeyboardButton("Все", callback_data="adm_test_all"))
-    return [buttons[i:i + 3] for i in range(0, len(buttons), 3)]
+    return [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
 
 
 def _remember_test(kind, ok, detail):
-    label = "Все" if kind == "all" else _test_button_text(kind)
+    label = _test_button_text(kind)
     row = f"{_updated_at()} · {label} · {detail}"
     _TEST_HISTORY.insert(0, row)
     del _TEST_HISTORY[5:]
@@ -1070,30 +1019,19 @@ async def send_tests(bot, cid, q=None):
 
 async def run_test(bot, cid, kind):
     import settings as _s
-    if kind == "repeat":
-        kind = _LAST_TEST_KIND.get(str(cid), "all")
-    kinds = list(_TEST_ORDER) if kind == "all" else [kind]
-    ok = True
-    failed_detail = ""
-    for item in kinds:
-        notif_kind = _TEST_KIND_ALIASES.get(item, item)
-        if notif_kind not in dict(_s.NOTIF_TYPES):
-            ok = False
-            failed_detail = "неизвестный тест"
-            break
-        if not await _s._run_notif_test(bot, cid, notif_kind):
-            ok = False
-            failed_detail = _issue_summary("app", notif_kind) or "ошибка"
-            break
-    label = "Все" if kind == "all" else _test_button_text(kind)
-    detail = "OK" if ok else failed_detail
+    options = _notification_options_by_kind()
+    if kind not in options:
+        ok = False
+        detail = "неизвестный тест"
+        label = kind
+    else:
+        ok = await _s._run_notif_test(bot, cid, kind)
+        detail = "OK" if ok else (_issue_summary("app", kind) or "ошибка")
+        label = options[kind]
     _LAST_TEST_KIND[str(cid)] = kind
     _remember_test(kind, ok, detail)
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔁 Повторить", callback_data=f"adm_test_{kind}") if kind != "all"
-         else InlineKeyboardButton("🔁 Повторить", callback_data="adm_test_repeat"),
-         InlineKeyboardButton("⬅️ Назад", callback_data="adm_notif")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_notif")],
     ])
     msg = ui.test_result(ok, _updated_at(), label, detail)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)

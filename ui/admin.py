@@ -242,20 +242,17 @@ def news_diagnostics(today_credits, daily_limit, month_credits, month_limit,
     return b.build_stripped()
 
 
-def notifications(status_dot, status_text, sent_today, errors_today, active_types, updated_at):
+def notifications(sent_today, errors_today, active_types, updated_at):
     b = MessageBuilder()
     b.bold("🔔 Уведомления")
     b.newline()
     b.spacer()
-    b.line(f"{status_dot} {status_text}")
-    b.spacer()
-    b.line(f"Сегодня отправлено: {sent_today}")
-    b.line(f"Ошибок сегодня: {errors_today}")
+    b.line(f"Сегодня: {sent_today} отправлено · {errors_today} ошибок")
     b.line(f"Активных типов: {active_types}")
     b.spacer()
     b.line("Тесты отправляются только вам.")
     b.spacer()
-    b.line("Выберите тест:")
+    b.line("Выберите уведомление для теста:")
     b.spacer()
     b.line(f"Обновлено: {updated_at}")
     return b.build_stripped()
