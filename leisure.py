@@ -303,7 +303,7 @@ def _movie_kb(i, category=None):
     """
     rows = [
         [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}"),
-         InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}")],
+         InlineKeyboardButton("💾 Сохранить", callback_data=f"reco_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"movie_love_{i}"),
          InlineKeyboardButton("✅ Уже видел", callback_data=f"movie_seen_{i}")],
     ]
@@ -497,9 +497,15 @@ async def send_recos(bot, cid, kind):
 
 def _movie_home_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Обычная рекомендация", callback_data="movie_reco")],
+        [InlineKeyboardButton("✨ Подобрать кино", callback_data="movie_reco"),
+         InlineKeyboardButton("🎬 Что в кино", callback_data="a_now_playing")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("😊 По настроению", callback_data="movie_mood_menu")],
+        [InlineKeyboardButton("⭐ Любимое", callback_data="col_cinema_favorites"),
+         InlineKeyboardButton("💾 Сохранённое", callback_data="col_cinema_saved")],
+        [InlineKeyboardButton("✅ Смотрел", callback_data="col_cinema_watched"),
+         InlineKeyboardButton("🙈 Скрытое", callback_data="col_cinema_hidden")],
+        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
@@ -744,7 +750,7 @@ async def movie_dislike(bot, cid, i):
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
-        store.add_to_list(config.MOVIE_BLACKLIST_KEY, cid, title)
+        _add_unique(config.MOVIE_BLACKLIST_KEY, cid, title)
         await bot.send_message(chat_id=cid, text=f"Понял, больше не буду рекомендовать «{title}». Вот другой вариант 👇")
     await _advance_movie(bot, cid)
 
@@ -767,7 +773,7 @@ def _book_text(it):
 def _book_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data=f"book_no_{i}"),
-         InlineKeyboardButton("⭐️ Сохранить", callback_data=f"reco_{i}")],
+         InlineKeyboardButton("💾 Сохранить", callback_data=f"reco_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
          InlineKeyboardButton("✅ Уже читал", callback_data=f"book_seen_{i}")],
         [InlineKeyboardButton("🎚️ Настройки книг", callback_data="as_love_books")],
@@ -874,7 +880,7 @@ async def book_dislike(bot, cid, i):
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
-        store.add_to_list(config.BOOK_BLACKLIST_KEY, cid, title)
+        _add_unique(config.BOOK_BLACKLIST_KEY, cid, title)
         await bot.send_message(chat_id=cid, text=f"Понял, «{title}» исключил. Вот другая книга 👇")
     try:
         data = await asyncio.to_thread(content_recommend, "book", str(cid))
@@ -1269,16 +1275,12 @@ async def add_reco(bot, cid, i):
     title = rec["items"][i]
     kind = rec["kind"]
     folder = "Кино" if kind == "movie" else "Книги"
-    # Книги — в список «прочту». Кино — сохранение усиливает вкус (умное обучение по ТЗ):
-    # добавляем в watchlist (anchor), поэтому TMDb-движок учтёт похожее в след. подборах.
     if kind != "movie":
         _add_unique(config.READLIST_KEY, cid, title)
-    else:
-        _add_unique(config.WATCHLIST_KEY, cid, title)
     if not _note_fav_exists(cid, title):
         store.add_to_list(config.NOTES_KEY, cid,
                           {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": folder, "bucket": "fav"})
-    await bot.send_message(chat_id=cid, text=f"⭐️ Сохранено «{folder}»: {title}. Вот ещё вариант 👇")
+    await bot.send_message(chat_id=cid, text=f"💾 Сохранено «{folder}»: {title}. Вот ещё вариант 👇")
     if kind == "movie":
         # Следующая карточка — через TMDb-движок (LLM-фолбэк внутри).
         await _advance_movie(bot, cid)
@@ -1322,7 +1324,7 @@ async def send_readlist(bot, cid):
 def _listen_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data="a_listen_no"),
-         InlineKeyboardButton("⭐️ Сохранить", callback_data="listen_0")],
+         InlineKeyboardButton("💾 Сохранить", callback_data="listen_0")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love"),
          InlineKeyboardButton("✅ Уже знаю", callback_data="listen_seen")],
         [InlineKeyboardButton("🎚️ Настройка музыкантов", callback_data="as_love_artists")],
@@ -1332,7 +1334,7 @@ def _listen_kb():
 async def listen_dislike(bot, cid):
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
-        store.add_to_list(config.MUSIC_DISLIKE_KEY, cid, rec["items"][0])
+        _add_unique(config.MUSIC_DISLIKE_KEY, cid, rec["items"][0])
     await send_listen(bot, cid)
 
 async def send_listen(bot, cid):

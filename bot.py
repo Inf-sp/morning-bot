@@ -289,6 +289,13 @@ async def answer_callback(update, context):
     if data.startswith("w_"):
         await wardrobe.handle_callback(bot, cid, q, data)
         return
+    if data.startswith("col_"):
+        await cleanup.open_collection(bot, cid, data[len("col_"):])
+        return
+    if data.startswith("colr:"):
+        _, collection_id, back = data.split(":", 2)
+        await cleanup.open_collection(bot, cid, collection_id, back=back)
+        return
     # Настройки обучения
     if data in ("set_learning", "toggle_learning_language") or data.startswith("set_learning_level_"):
         try:
@@ -467,13 +474,13 @@ async def answer_callback(update, context):
             elif act == "read":
                 await _inline_status(lambda _s: leisure.send_recos(bot, cid, "book"))
             elif act == "watchlist":
-                await leisure.send_watchlist(bot, cid)
+                await cleanup.open_collection(bot, cid, "cinema_favorites", back="a_watch")
             elif act == "readlist":
-                await leisure.send_readlist(bot, cid)
+                await cleanup.open_collection(bot, cid, "books_saved", back="a_read")
             elif act == "watchclean":
-                await cleanup.open_cleanup(bot, cid, "wl")
+                await cleanup.open_collection(bot, cid, "cinema_favorites", back="a_watch")
             elif act == "readclean":
-                await cleanup.open_cleanup(bot, cid, "rl")
+                await cleanup.open_collection(bot, cid, "books_saved", back="a_read")
             elif act == "concerts_find":
                 await _inline_status(lambda _s: leisure.find_concerts(bot, cid, "home"))
             elif act == "concerts_pick":
@@ -569,7 +576,7 @@ async def answer_callback(update, context):
         return
     if data == "noop":
         return
-    if data.startswith(("clt:", "clp:", "cla:", "clx:", "cld:", "cldc:", "clcancel:")):
+    if data.startswith(("clt:", "clp:", "cla:", "clx:", "cld:", "cldc:", "clact:", "clactc:", "clcancel:")):
         # PR3a view-режим (стабильный id + revision) — двоеточие как разделитель
         # отличает его от старого позиционного формата ниже (символ подчёркивания).
         # clx:/cldc:/clcancel: — «Удалить все N» и confirm-экран (PR4, P2-2).

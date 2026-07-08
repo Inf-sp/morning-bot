@@ -78,7 +78,7 @@ def _travel_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🧳 Собрать план поездки", callback_data="a_trav_plan")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="a_trav_fav"),
-         InlineKeyboardButton("❌ Пропустить", callback_data="a_trav_no")],
+         InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
         [InlineKeyboardButton("🎚️ Настройки стран", callback_data="as_love_countries")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel")],
     ])
@@ -123,7 +123,8 @@ async def send_go(bot, cid):
 
 async def travel_dislike(bot, cid):
     c = store.suggested_countries.get(str(cid))
-    if c:
+    existing = {str(x).strip().lower() for x in store.get_list(config.TRAVEL_DISLIKE_KEY, cid)}
+    if c and c.strip().lower() not in existing:
         store.add_to_list(config.TRAVEL_DISLIKE_KEY, cid, c)
     await send_go(bot, cid)
 
@@ -195,7 +196,7 @@ async def send_plan(bot, cid):
         "plan_text": msg.text, "plan_entities": util.entities_to_json(msg.entities),
     }
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Пропустить", callback_data="a_trav_no")],
+        [InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
         [InlineKeyboardButton("💾 Сохранить план поездки", callback_data="a_trav_save")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel")],
     ])

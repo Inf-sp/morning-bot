@@ -1,4 +1,4 @@
-"""Движок чистки списков: пагинация + мультивыбор.
+"""Движок коллекций: пагинация + мультивыбор + контекстные действия.
 
 Используется из learning, notes, wardrobe, balance, bot. Пользовательское
 описание раздела — docs/cleanup.md; история миграции на текущую архитектуру —
@@ -39,27 +39,167 @@ _LOVE_STORE_KEYS = {"movies": config.WATCHLIST_KEY, "countries": config.FAVCOUNT
                     "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}
 _HIDDEN_STORE_KEYS = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
                       "artists": config.MUSIC_DISLIKE_KEY, "countries": config.TRAVEL_DISLIKE_KEY}
+_SEEN_STORE_KEYS = {"movies": config.MOVIE_SEEN_KEY, "books": config.BOOK_SEEN_KEY,
+                    "artists": config.MUSIC_SEEN_KEY}
 
-
-# lagom хранится не отдельным KV-ключом, а полем внутри профиля пользователя
-# (memory.get_lagom/set_lagom → store.get_profile()["lagom"]) — у него нет
-# storage-ключа для _view_store_key/store.ensure_list_ids. Используем
-# фиксированное имя слота revision и отдельные ветки в _view_items/_view_delete
-# через store.ensure_list_ids_via/remove_from_list_by_ids_via.
+# lagom хранится не отдельным KV-ключом, а полем внутри профиля пользователя.
 _LAGOM_REVISION_SLOT = "profile.lagom"
 
 
+def _collection(id, owner, title, storage_key, item_type, back, actions,
+                note_group=None, add_button=None):
+    return {
+        "id": id,
+        "owner": owner,
+        "title": title,
+        "storage_key": storage_key,
+        "item_type": item_type,
+        "back": back,
+        "actions": actions,
+        "note_group": note_group,
+        "add_button": add_button,
+    }
+
+
+COLLECTIONS = {
+    "cinema_favorites": _collection(
+        "cinema_favorites", "cinema", "⭐ Любимое · Кино", config.WATCHLIST_KEY, "movie",
+        "a_watch", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
+                    {"id": "hide", "label": "Скрыть", "confirm": False}],
+        add_button=("Добавить / Найти фильм", "as_loveadd_movies")),
+    "cinema_saved": _collection(
+        "cinema_saved", "cinema", "💾 Сохранённое · Кино", config.NOTES_KEY, "note",
+        "a_watch", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
+        note_group="movies"),
+    "cinema_watched": _collection(
+        "cinema_watched", "cinema", "✅ Смотрел · Кино", config.MOVIE_SEEN_KEY, "movie",
+        "a_watch", [{"id": "remove", "label": "Убрать из просмотренного", "confirm": False}]),
+    "cinema_hidden": _collection(
+        "cinema_hidden", "cinema", "🙈 Скрытое · Кино", config.MOVIE_BLACKLIST_KEY, "movie",
+        "a_watch", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
+
+    "books_favorites": _collection(
+        "books_favorites", "books", "⭐ Любимое · Книги", config.BOOKS_KEY, "book",
+        "a_read", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
+                   {"id": "hide", "label": "Скрыть", "confirm": False}],
+        add_button=("Добавить / Найти книгу", "as_loveadd_books")),
+    "books_saved": _collection(
+        "books_saved", "books", "💾 Сохранённое · Книги", config.READLIST_KEY, "book",
+        "a_read", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": False}]),
+    "books_read": _collection(
+        "books_read", "books", "✅ Прочитано · Книги", config.BOOK_SEEN_KEY, "book",
+        "a_read", [{"id": "remove", "label": "Убрать из прочитанного", "confirm": False}]),
+    "books_hidden": _collection(
+        "books_hidden", "books", "🙈 Скрытое · Книги", config.BOOK_BLACKLIST_KEY, "book",
+        "a_read", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
+
+    "music_favorite_artists": _collection(
+        "music_favorite_artists", "music", "⭐ Любимые артисты", config.ARTISTS_KEY, "artist",
+        "a_listen", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
+                     {"id": "hide", "label": "Скрыть", "confirm": False}],
+        add_button=("Добавить / Найти артиста", "as_loveadd_artists")),
+    "music_hidden_artists": _collection(
+        "music_hidden_artists", "music", "🙈 Скрытые артисты", config.MUSIC_DISLIKE_KEY, "artist",
+        "a_listen", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
+    "music_saved": _collection(
+        "music_saved", "music", "💾 Сохранённое · Музыка", config.NOTES_KEY, "note",
+        "a_listen", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
+        note_group="music"),
+    "music_seen_artists": _collection(
+        "music_seen_artists", "music", "✅ Уже знаю · Музыка", config.MUSIC_SEEN_KEY, "artist",
+        "a_listen", [{"id": "remove", "label": "Убрать из знакомого", "confirm": False}]),
+
+    "travel_favorite_countries": _collection(
+        "travel_favorite_countries", "travel", "⭐ Любимые страны", config.FAVCOUNTRIES_KEY, "country",
+        "m_travel", [{"id": "remove", "label": "Убрать страны", "confirm": False},
+                     {"id": "hide", "label": "Скрыть", "confirm": False}],
+        add_button=("Добавить / Найти страну", "as_loveadd_countries")),
+    "travel_hidden_countries": _collection(
+        "travel_hidden_countries", "travel", "🙈 Скрытые страны", config.TRAVEL_DISLIKE_KEY, "country",
+        "m_travel", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
+    "travel_saved_places": _collection(
+        "travel_saved_places", "travel", "💾 Сохранённое · Путешествия", config.NOTES_KEY, "note",
+        "m_travel", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
+        note_group="travel"),
+
+    "recipes_saved": _collection(
+        "recipes_saved", "food", "🍳 Рецепты", config.MY_RECIPES_KEY, "recipe",
+        "as_my_recipes", [{"id": "remove", "label": "Удалить рецепты", "confirm": True}]),
+    "fridge_items": _collection(
+        "fridge_items", "food", "🥕 Продукты", config.FRIDGE_KEY, "product",
+        "as_fridge", [{"id": "remove", "label": "Удалить продукты", "confirm": True}]),
+    "dictionary_words": _collection(
+        "dictionary_words", "learning", "📖 Словарь", config.DICT_KEY, "word",
+        "a_dict", [{"id": "remove", "label": "Удалить слова", "confirm": True}]),
+    "health_lagom": _collection(
+        "health_lagom", "health", "🚑 Принципы здоровья", _LAGOM_REVISION_SLOT, "principle",
+        "set_lagom", [{"id": "remove", "label": "Удалить принципы", "confirm": True}]),
+    "health_diary": _collection(
+        "health_diary", "health", "📝 История самочувствия", config.DIARY_KEY, "diary",
+        "m_balance", [{"id": "remove", "label": "Удалить записи", "confirm": True}]),
+}
+
+_COLLECTION_ALIASES = {
+    "lv_movies": "cinema_favorites",
+    "lvls_movies": "cinema_favorites",
+    "lv_books": "books_favorites",
+    "lvls_books": "books_favorites",
+    "lv_artists": "music_favorite_artists",
+    "lvls_artists": "music_favorite_artists",
+    "lv_countries": "travel_favorite_countries",
+    "lvls_countries": "travel_favorite_countries",
+    "hid_movies": "cinema_hidden",
+    "hid_books": "books_hidden",
+    "hid_artists": "music_hidden_artists",
+    "hid_countries": "travel_hidden_countries",
+    "wl": "cinema_favorites",
+    "rl": "books_saved",
+    "recipes": "recipes_saved",
+    "fridge": "fridge_items",
+    "lagom": "health_lagom",
+    "diary": "health_diary",
+}
+
+
 def _is_view_ctx(ctx):
-    return (ctx == "nb" or ctx.startswith("nb_")
+    return (ctx in COLLECTIONS or ctx in _COLLECTION_ALIASES
+            or ctx == "nb" or ctx.startswith("nb_")
             or ctx.startswith("lv_") or ctx.startswith("lvls_")
             or ctx.startswith("hid_")
             or ctx.startswith("d_") or ctx in ("wl", "rl")
             or ctx in ("fridge", "recipes", "lagom", "diary"))
 
 
+def _canonical_ctx(ctx):
+    return _COLLECTION_ALIASES.get(ctx, ctx)
+
+
+def _collection_cfg(ctx):
+    return COLLECTIONS.get(_canonical_ctx(ctx))
+
+
+def _primary_action(ctx):
+    cfg = _collection_cfg(ctx)
+    if cfg and cfg.get("actions"):
+        return cfg["actions"][0]
+    return None
+
+
+def _action_by_id(ctx, action_id):
+    cfg = _collection_cfg(ctx)
+    if cfg:
+        for action in cfg.get("actions") or []:
+            if action.get("id") == action_id:
+                return action
+    return _primary_action(ctx)
+
+
 def _view_store_key(ctx):
     """Storage-ключ коллекции для view-контекста. lagom возвращает фиксированный
     revision-слот вместо реального storage-ключа — см. _LAGOM_REVISION_SLOT."""
+    cfg = _collection_cfg(ctx)
+    if cfg:
+        return cfg["storage_key"]
     if ctx == "nb" or ctx.startswith("nb_"):
         return config.NOTES_KEY
     if ctx.startswith("lvls_"):
@@ -114,7 +254,41 @@ def _view_label(it):
     {"name","flag"}) получают только добавленное поле "id"."""
     if "value" in it:
         return str(it["value"])
+    if it.get("text"):
+        return str(it.get("text") or "")
     return it.get("name", "")
+
+
+def _note_in_group(note, group):
+    if not group:
+        return True
+    try:
+        import settings as _s
+        source = note.get("source", "Прочее") if isinstance(note, dict) else "Прочее"
+        return _s._fav_group(source) == group
+    except Exception:
+        return False
+
+
+def _collection_records(cfg, cid):
+    if cfg["id"] == "health_lagom":
+        import memory
+        return store.ensure_list_ids_via(memory.get_lagom, memory.set_lagom, _LAGOM_REVISION_SLOT, cid)
+    records = store.ensure_list_ids(cfg["storage_key"], cid)
+    if cfg.get("note_group"):
+        records = [
+            r for r in records
+            if r.get("bucket", "fav") == "fav" and _note_in_group(r, cfg["note_group"])
+        ]
+    return records
+
+
+def _collection_item_label(cfg, item):
+    if cfg["id"] == "health_diary":
+        return f"{item.get('date', '')} — {item.get('text', '')}".strip(" —")
+    if cfg["item_type"] == "recipe":
+        return item.get("name", "Рецепт")
+    return _view_label(item)
 
 
 def _purge_expired_views():
@@ -196,8 +370,8 @@ def _ctx_items(cid, ctx):
                  and (group is None or _s._fav_group(n.get("source", "Прочее") if isinstance(n, dict) else "Прочее") == group)]
         if group:
             label, _desc = _s._fav_group_info(group)
-            return f"{label} · удалить из Сохранить", items, f"as_bucket_favgrp_{group}"
-        return "⭐ Чистка: сохранение", items, "as_bucket_fav"
+            return f"{label} · Сохранённое", items, f"as_bucket_favgrp_{group}"
+        return "💾 Сохранённое", items, "as_bucket_fav"
     if ctx in ("wl", "rl"):
         key = config.WATCHLIST_KEY if ctx == "wl" else config.READLIST_KEY
         title = "🍿 Чистка: посмотреть" if ctx == "wl" else "📚 Чистка: почитать"
@@ -260,12 +434,15 @@ def _ctx_items(cid, ctx):
 def _action_label(ctx):
     """Текст кнопки группового действия — называет последствие, а не факт
     удаления записи. Таблица зафиксирована в docs/cleanup.md."""
+    action = _primary_action(ctx)
+    if action:
+        return action["label"]
     if ctx.startswith("lv_") or ctx.startswith("lvls_"):
         return "Убрать из любимого"
     if ctx.startswith("hid_"):
         return "Вернуть в рекомендации"
     if ctx == "nb" or ctx.startswith("nb_"):
-        return "Удалить сохранённое"
+        return "Убрать из сохранённого"
     if ctx.startswith("kast_"):
         return "Удалить вещи"
     if ctx == "recipes":
@@ -282,7 +459,7 @@ def _action_label(ctx):
         return "Удалить принципы"
     if ctx == "diary":
         return "Удалить записи"
-    return "Удалить отмеченные"
+    return "Применить действие"
 
 
 # Контексты, для которых удаление обратимо штатными средствами интерфейса
@@ -291,6 +468,9 @@ def _action_label(ctx):
 # без возможности программного восстановления — см. docs/cleanup.md,
 # «Групповое действие и подтверждение».
 def _is_reversible_ctx(ctx):
+    action = _primary_action(ctx)
+    if action:
+        return not bool(action.get("confirm"))
     return ctx.startswith("lv_") or ctx.startswith("lvls_") or ctx.startswith("hid_")
 
 
@@ -409,6 +589,11 @@ def _cleanup_delete(cid, ctx):
 def _view_items(ctx, cid):
     """(заголовок, items=[(full_id, label)], back_callback) для view-контекста —
     id стабильны (store.ensure_list_ids), не позиционные индексы."""
+    cfg = _collection_cfg(ctx)
+    if cfg:
+        records = _collection_records(cfg, cid)
+        items = [(r["id"], _collection_item_label(cfg, r)) for r in records]
+        return cfg["title"], items, cfg["back"]
     if ctx == "nb" or ctx.startswith("nb_"):
         import re as _re
         import settings as _s
@@ -421,8 +606,8 @@ def _view_items(ctx, cid):
                  and (group is None or _s._fav_group(n.get("source", "Прочее")) == group)]
         if group:
             label, _desc = _s._fav_group_info(group)
-            return f"{label} · удалить из Сохранить", items, f"as_bucket_favgrp_{group}"
-        return "⭐ Чистка: сохранение", items, "as_bucket_fav"
+            return f"{label} · Сохранённое", items, f"as_bucket_favgrp_{group}"
+        return "💾 Сохранённое", items, "as_bucket_fav"
     if ctx.startswith("lv_") or ctx.startswith("lvls_"):
         is_leisure = ctx.startswith("lvls_")
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
@@ -495,6 +680,10 @@ def _view_delete(ctx, cid, ids):
     """Удаляет выбранные записи из storage view-контекста по стабильным id."""
     if not ids:
         return 0
+    cfg = _collection_cfg(ctx)
+    if cfg and cfg["id"] == "health_lagom":
+        import memory
+        return store.remove_from_list_by_ids_via(memory.get_lagom, memory.set_lagom, _LAGOM_REVISION_SLOT, cid, ids)
     if ctx == "lagom":
         import memory
         return store.remove_from_list_by_ids_via(memory.get_lagom, memory.set_lagom, _LAGOM_REVISION_SLOT, cid, ids)
@@ -504,9 +693,65 @@ def _view_delete(ctx, cid, ids):
     return store.remove_from_list_by_ids(store_key, cid, ids)
 
 
+def _hidden_key_for_collection(ctx):
+    canonical = _canonical_ctx(ctx)
+    return {
+        "cinema_favorites": config.MOVIE_BLACKLIST_KEY,
+        "books_favorites": config.BOOK_BLACKLIST_KEY,
+        "music_favorite_artists": config.MUSIC_DISLIKE_KEY,
+        "travel_favorite_countries": config.TRAVEL_DISLIKE_KEY,
+    }.get(canonical)
+
+
+def _add_unique_raw(key, cid, value):
+    target = str(value.get("name", value.get("value", value)) if isinstance(value, dict) else value).strip().lower()
+    if not target:
+        return False
+    for item in store.get_list(key, cid):
+        cur = str(item.get("name", item.get("value", item)) if isinstance(item, dict) else item).strip().lower()
+        if cur == target:
+            return False
+    store.add_to_list(key, cid, value)
+    return True
+
+
+def _selected_values(ctx, cid, ids):
+    cfg = _collection_cfg(ctx)
+    if not cfg:
+        return []
+    ids = set(ids)
+    out = []
+    for item in _collection_records(cfg, cid):
+        if item.get("id") not in ids:
+            continue
+        if "value" in item:
+            out.append(item["value"])
+        else:
+            out.append({k: v for k, v in item.items() if k != "id"})
+    return out
+
+
+def _apply_collection_action(ctx, cid, action_id, ids):
+    if not ids:
+        return 0
+    if action_id == "hide":
+        hidden_key = _hidden_key_for_collection(ctx)
+        if hidden_key:
+            for value in _selected_values(ctx, cid, ids):
+                if hidden_key == config.TRAVEL_DISLIKE_KEY and isinstance(value, dict):
+                    value = value.get("name", "")
+                _add_unique_raw(hidden_key, cid, value)
+        return _view_delete(ctx, cid, ids)
+    # remove and restore both mean: remove from the current collection only.
+    # For hidden collections this is "Вернуть в рекомендации" and does not add
+    # the item to favorites/saved lists.
+    return _view_delete(ctx, cid, ids)
+
+
 async def open_view(bot, cid, ctx, back=None):
     """Открывает новый view (PR3a) — снимает свежий revision коллекции и
     заводит короткоживущее серверное состояние просмотра."""
+    ctx = _canonical_ctx(ctx)
     _purge_expired_views()
     title, items, default_back = _view_items(ctx, cid)
     store_key = _view_store_key(ctx)
@@ -522,6 +767,11 @@ async def open_view(bot, cid, ctx, back=None):
         "confirming": False,
     }
     await _render_view(bot, cid, view_id)
+
+
+async def open_collection(bot, cid, collection_id, back=None):
+    """Публичный вход в каноническую коллекцию."""
+    await open_view(bot, cid, collection_id, back=back)
 
 
 async def _render_view(bot, cid, view_id, q=None):
@@ -541,8 +791,13 @@ async def _render_view(bot, cid, view_id, q=None):
     view["page"] = page
     chunk = items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]
     short_of = _short_ids([i for i, _ in chunk])
-    hint = f"Отметь нужное ✅ и нажми «{_action_label(ctx)}»."
-    lines = [f"🧹 <b>{esc(title)}</b>", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
+    if sel:
+        count_line = f"Отмечено: {len(sel)} из {total}"
+    else:
+        count_line = f"Всего: {total}"
+    lines = [f"<b>{esc(title)}</b>", "", count_line]
+    if total:
+        lines.append("")
     rows = []
     for full_id, lbl in chunk:
         mark = "✅" if full_id in sel else "▫️"
@@ -560,8 +815,12 @@ async def _render_view(bot, cid, view_id, q=None):
     if _has_select_all_collection_button(ctx) and total > len(chunk) and all_ids != sel:
         rows.append([InlineKeyboardButton(f"🗑 Удалить все {total}", callback_data=f"clx:{view_id}")])
     if sel:
-        rows.append([InlineKeyboardButton(f"{_action_label(ctx)} ({len(sel)})", callback_data=f"cld:{view_id}")])
-    add_button = _view_add_button(ctx)
+        actions = (_collection_cfg(ctx) or {}).get("actions") or [{"id": "remove", "label": _action_label(ctx)}]
+        for action in actions:
+            rows.append([InlineKeyboardButton(f"{action['label']} ({len(sel)})",
+                                              callback_data=f"clact:{view_id}:{action['id']}")])
+    cfg = _collection_cfg(ctx)
+    add_button = cfg.get("add_button") if cfg else _view_add_button(ctx)
     if add_button:
         label, callback_data = add_button
         rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
@@ -577,15 +836,17 @@ async def _render_view(bot, cid, view_id, q=None):
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
 
 
-async def _render_confirm(bot, cid, view_id, q=None):
+async def _render_confirm(bot, cid, view_id, action_id="remove", q=None):
     """Промежуточный экран подтверждения перед необратимым групповым удалением
     (P2-2) — реальное удаление происходит только после явного повторного
     нажатия «Удалить N», не от одного нажатия финальной кнопки чистки."""
     view = _views[view_id]
     n = len(view["selected_ids"])
-    text = f"Удалить {n}? Это действие нельзя отменить."
+    action = _action_by_id(view["ctx"], action_id) or {"label": "Удалить"}
+    label = action.get("label") or "Удалить"
+    text = f"{label} ({n})? Это действие нельзя отменить."
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"🗑 Удалить {n}", callback_data=f"cldc:{view_id}")],
+        [InlineKeyboardButton(f"{label} ({n})", callback_data=f"clactc:{view_id}:{action_id}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"clcancel:{view_id}")],
     ])
     if q is not None:
@@ -629,7 +890,7 @@ async def handle_view_callback(bot, cid, data, q=None):
     ctx = view["ctx"]
     store_key = _view_store_key(ctx)
     current_revision = store.get_list_revision(store_key, cid) if store_key else 0
-    if op in ("cld", "cldc") and view["revision"] != current_revision:
+    if op in ("cld", "cldc", "clact", "clactc") and view["revision"] != current_revision:
         # Коллекция изменилась параллельно с момента открытия view — не
         # выполняем удаление вслепую, инвалидируем и просим переоткрыть.
         del _views[view_id]
@@ -665,16 +926,34 @@ async def handle_view_callback(bot, cid, data, q=None):
         await _render_view(bot, cid, view_id, q=q)
         return
     if op == "cld":
-        if _is_reversible_ctx(ctx):
-            _view_delete(ctx, cid, view["selected_ids"])
+        action = _primary_action(ctx) or {"id": "remove", "confirm": not _is_reversible_ctx(ctx)}
+        if not action.get("confirm"):
+            _apply_collection_action(ctx, cid, action["id"], view["selected_ids"])
             del _views[view_id]
             await open_view(bot, cid, ctx, back=view["back"])
             return
         view["confirming"] = True
-        await _render_confirm(bot, cid, view_id, q=q)
+        await _render_confirm(bot, cid, view_id, action["id"], q=q)
+        return
+    if op == "clact":
+        action_id = rest[0] if rest else "remove"
+        action = _action_by_id(ctx, action_id) or {"id": action_id, "confirm": True}
+        if not action.get("confirm"):
+            _apply_collection_action(ctx, cid, action_id, view["selected_ids"])
+            del _views[view_id]
+            await open_view(bot, cid, ctx, back=view["back"])
+            return
+        view["confirming"] = True
+        await _render_confirm(bot, cid, view_id, action_id, q=q)
         return
     if op == "cldc":
-        _view_delete(ctx, cid, view["selected_ids"])
+        _apply_collection_action(ctx, cid, "remove", view["selected_ids"])
+        del _views[view_id]
+        await open_view(bot, cid, ctx, back=view["back"])
+        return
+    if op == "clactc":
+        action_id = rest[0] if rest else "remove"
+        _apply_collection_action(ctx, cid, action_id, view["selected_ids"])
         del _views[view_id]
         await open_view(bot, cid, ctx, back=view["back"])
         return
@@ -684,14 +963,14 @@ async def handle_view_callback(bot, cid, data, q=None):
         return
 
 
-async def open_cleanup(bot, cid, ctx):
+async def open_cleanup(bot, cid, ctx, back=None):
     """Свежий вход в режим чистки — сбрасываем выбор.
 
     Для view-контекстов (nb/nb_*, PR3a) делегирует на новую инфраструктуру
     (стабильный id + revision + короткий callback_data); для остальных —
     прежний позиционный формат без изменений."""
     if _is_view_ctx(ctx):
-        await open_view(bot, cid, ctx)
+        await open_view(bot, cid, ctx, back=back)
         return
     store.list_sel[f"{cid}:{ctx}"] = set()
     await send_cleanup(bot, cid, ctx, 0)

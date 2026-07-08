@@ -882,7 +882,7 @@ def _fallback_items(candidates):
 def _build_card(items, updated_ts=None, stale=False):
     if not items:
         text = (
-            "📰 Новости для тебя\n\n"
+            "📰 Новости\n\n"
             "Сегодня нет достаточно важных новостей для тебя.\n\n"
             "Проверил:\n"
             "• Алкмар\n"
@@ -892,7 +892,7 @@ def _build_card(items, updated_ts=None, stale=False):
             "• досуг"
         )
         return text, []
-    lines = ["📰 Новости для тебя"]
+    lines = ["📰 Новости"]
     buttons = []
     now = _now()
     for item in items[:NEWS_MAX_ITEMS]:
