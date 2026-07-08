@@ -43,13 +43,22 @@ def isolated_store(monkeypatch):
     return mem
 
 
-def _news(title="New API limit", url="https://openai.com/news/x", days=0):
+def _news(
+    title="OpenAI API pricing update",
+    url="https://openai.com/news/x",
+    days=0,
+    content="OpenAI announced a new API pricing and limit update for developers.",
+    category="tech",
+    language="en",
+):
     dt = datetime.now(config.TZ) - timedelta(days=days)
     return {
         "title": title,
         "url": url,
-        "content": "New pricing and API limit change confirmed.",
+        "content": content,
         "published_at": dt.isoformat(),
+        "_category_hint": category,
+        "_query_language": language,
     }
 
 
@@ -89,7 +98,7 @@ def test_expired_cache_requires_one_search(monkeypatch, isolated_store):
 
     def fake_search(cid):
         calls["n"] += 1
-        return [_news("New outage", "https://cloudflare.com/news/outage")]
+        return [_news("Cloudflare API outage update", "https://cloudflare.com/news/outage")]
 
     monkeypatch.setattr(pn, "_search_all", fake_search)
     entry, _ = pn.build_from_sources("1", "today", fake_search("1"))
@@ -165,45 +174,33 @@ def test_monthly_budget_is_1000(monkeypatch):
     assert pn._reserve_credits(1) is False
 
 
-def test_irrelevant_news_falls_back_to_source_card(monkeypatch):
-    monkeypatch.setattr(pn, "_score_items", lambda cid, items: [])
-    entry, _ = pn.build_from_sources("1", "today", [_news("Random article", "https://example.com/a")])
-    assert "Random article" in entry["text"]
-    assert "ничего действительно важного" not in entry["text"]
+def test_irrelevant_news_shows_honest_empty_state(monkeypatch):
+    source = _news(
+        "Random lifestyle article",
+        "https://example.com/a",
+        content="A generic story without a concrete useful change.",
+        category="netherlands",
+    )
+    entry, _ = pn.build_from_sources("1", "today", [source])
+    assert "Сегодня нет достаточно важных новостей" in entry["text"]
+    assert "Random lifestyle article" not in entry["text"]
 
 
-def test_news_within_last_month_is_allowed(monkeypatch):
-    monkeypatch.setattr(pn, "_score_items", lambda cid, items: [{
-        "is_relevant": True,
-        "importance": 4,
-        "category": "tech",
-        "title_ru": items[0]["title"],
-        "summary_ru": "Свежая новость за последний месяц.",
-        "why_it_matters_ru": "",
-        "source_name": "OpenAI",
-        "source_url": items[0]["url"],
-        "published_at": items[0]["published_at"],
-        "action_type": "read",
-    }])
+def test_news_older_than_7_days_filtered_out(monkeypatch):
     entry, _ = pn.build_from_sources("1", "today", [_news(days=8)])
-    assert "New API limit" in entry["text"]
+    assert "Сегодня нет достаточно важных новостей" in entry["text"]
 
 
-def test_news_older_than_month_filtered_out(monkeypatch):
-    monkeypatch.setattr(pn, "_score_items", lambda cid, items: pytest.fail("old item reached Gemini"))
-    entry, _ = pn.build_from_sources("1", "today", [_news(days=31)])
-    assert "Новости пока не загрузились" in entry["text"]
-
-
-def test_official_undated_sources_are_filtered_out(monkeypatch):
-    monkeypatch.setattr(pn, "_score_items", lambda cid, items: pytest.fail("undated item reached Gemini"))
+def test_news_without_date_filtered_out(monkeypatch):
     source = {
         "title": "API pricing update",
         "url": "https://openai.com/api/pricing",
         "content": "New API pricing update and limit changes.",
+        "_category_hint": "tech",
+        "_query_language": "en",
     }
     entry, _ = pn.build_from_sources("1", "today", [source])
-    assert "Новости пока не загрузились" in entry["text"]
+    assert "Сегодня нет достаточно важных новостей" in entry["text"]
 
 
 def test_duplicates_are_merged():
@@ -216,25 +213,75 @@ def test_duplicates_are_merged():
 
 def test_empty_result_card():
     text, buttons = pn._build_card([])
-    assert "Новости пока не загрузились" in text
+    assert "Сегодня нет достаточно важных новостей" in text
+    assert "Проверил:" in text
     assert buttons == []
 
 
-def test_stale_cache_can_be_rendered(monkeypatch, isolated_store):
-    _score_one(monkeypatch)
-    pn.build_from_sources("1", "today", [_news()])
-    key = pn.cache_key("1", "today")
-    isolated_store[pn.NEWS_CACHE_KEY][key]["ts"] = 1
+def test_repeated_url_is_not_shown(monkeypatch):
+    first, _ = pn.build_from_sources("1", "today", [_news()])
+    second, _ = pn.build_from_sources("1", "today", [_news()])
 
-    stale = pn._cache_get("1", "today", allow_stale=True)
-    text, _ = pn._build_card(stale["items"], stale["ts"], stale=True)
-
-    assert "Обновлено вчера" in text
+    assert "OpenAI API pricing update" in first["text"]
+    assert "OpenAI API pricing update" not in second["text"]
 
 
-def test_primary_structured_sources_documented():
-    assert "themoviedb.org" in pn._OFFICIAL_DOMAINS["screen"]
-    assert "ticketmaster.com" in pn._OFFICIAL_DOMAINS["music"]
+def test_similar_title_from_history_is_not_shown(monkeypatch):
+    pn.build_from_sources("1", "today", [_news(
+        "OpenAI API pricing update",
+        "https://openai.com/news/x",
+    )])
+    entry, _ = pn.build_from_sources("1", "today", [_news(
+        "OpenAI API pricing update announced",
+        "https://theverge.com/openai-api-pricing",
+    )])
+    assert "OpenAI API pricing update announced" not in entry["text"]
+
+
+def test_one_item_per_category_in_release(monkeypatch):
+    sources = [
+        _news("OpenAI API pricing update", "https://openai.com/news/x"),
+        _news("Telegram API limit update", "https://telegram.org/blog/api-limit"),
+    ]
+    entry, _ = pn.build_from_sources("1", "today", sources)
+    assert entry["text"].count("🤖 AI / технологии") == 1
+    assert len(entry["items"]) == 1
+
+
+def test_alkmaar_local_news_has_high_priority(monkeypatch):
+    sources = [
+        _news(
+            "Nederland algemene regels wijziging",
+            "https://nos.nl/artikel/1",
+            content="Nederland krijgt een algemene wijziging voor inwoners.",
+            category="netherlands",
+            language="nl",
+        ),
+        _news(
+            "Gemeente Alkmaar meldt wegwerkzaamheden vandaag",
+            "https://gemeentealkmaar.nl/nieuws/wegwerkzaamheden",
+            content="Gemeente Alkmaar meldt vandaag nieuwe wegwerkzaamheden en afsluiting.",
+            category="city",
+            language="nl",
+        ),
+    ]
+    entry, _ = pn.build_from_sources("1", "today", sources)
+    assert entry["items"][0]["category"] == "city"
+    assert entry["items"][0]["relevance_score"] >= 70
+
+
+def test_dutch_query_used_for_alkmaar_and_netherlands():
+    queries = pn._queries_for("1")
+    assert any(q["language"] == "nl" and "Alkmaar" in q["query"] for q in queries)
+    assert any(q["language"] == "nl" and "Nederland" in q["query"] for q in queries)
+
+
+def test_english_query_used_for_openai_apple_telegram():
+    queries = pn._queries_for("1")
+    tech = [q for q in queries if q["category"] == "tech"]
+    assert tech
+    assert all(q["language"] == "en" for q in tech)
+    assert any("OpenAI" in q["query"] and "Apple" in q["query"] and "Telegram" in q["query"] for q in tech)
 
 
 def test_admin_stats_shows_total_tavily_monthly_limit():
@@ -244,17 +291,18 @@ def test_admin_stats_shows_total_tavily_monthly_limit():
 
 
 def test_news_limit_can_cover_all_categories():
-    assert pn.NEWS_MAX_ITEMS >= len(pn._CATEGORY_LABELS)
+    assert pn.NEWS_MAX_ITEMS == 5
+    assert len(pn._CATEGORY_LABELS) >= 12
 
 
-def test_search_uses_broad_queries_without_domain_lock(monkeypatch):
+def test_search_uses_category_queries_with_domains_and_freshness(monkeypatch):
     calls = []
 
     def fake_reserve(credits):
         return len(calls) < 8
 
-    def fake_tavily(query, max_results=5, domains=None):
-        calls.append((query, max_results, domains))
+    def fake_tavily(query, max_results=5, domains=None, time_range=None):
+        calls.append((query, max_results, domains, time_range))
         return []
 
     monkeypatch.setattr(pn, "_reserve_credits", fake_reserve)
@@ -262,9 +310,32 @@ def test_search_uses_broad_queries_without_domain_lock(monkeypatch):
 
     pn._search_all("1")
 
-    assert any(not query.startswith("site:") and domains is None for query, _, domains in calls)
-    assert any(query.startswith("site:") and domains for query, _, domains in calls)
-    assert all(max_results == 10 for _, max_results, _ in calls)
+    assert any("Alkmaar" in query and domains for query, _, domains, _ in calls)
+    assert any(time_range == "week" for _, _, _, time_range in calls)
+    assert all(max_results == 5 for _, max_results, _, _ in calls)
+
+
+def test_compact_format_has_no_debug_info():
+    item = pn.NewsItem(
+        title="OpenAI API pricing update",
+        summary="OpenAI changed API pricing.",
+        url="https://openai.com/news/x",
+        source="OpenAI",
+        published_at=datetime.now(config.TZ).isoformat(),
+        category="tech",
+        language="en",
+        relevance_score=90,
+        why_important="это полезно для работы бота.",
+        action_hint="Подробнее",
+        hash="x",
+    )
+    text, _ = pn._build_card([pn.asdict(item)])
+    assert "Коротко:" in text
+    assert "💡 Почему важно:" in text
+    assert "relevance" not in text.lower()
+    assert "raw query" not in text.lower()
+    assert "search provider" not in text.lower()
+    assert "Почему тебе" not in text
 
 
 def test_news_keyboard_has_no_period_or_topic_buttons():

@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import time
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from urllib.parse import urlparse, urlunparse
 
@@ -23,18 +24,26 @@ NEWS_MONTHLY_CREDIT_BUDGET = 1000
 TAVILY_MONTHLY_CREDIT_LIMIT = 1000
 NEWS_DAILY_CREDIT_BUDGET = 50
 NEWS_HARD_MONTHLY_LIMIT = 1000
-NEWS_MAX_ITEMS = 10
-NEWS_MIN_RELEVANCE_SCORE = 0.65
+NEWS_HISTORY_KEY = "personal_news_history.json"
+NEWS_MAX_ITEMS = 5
+NEWS_MIN_RELEVANCE_SCORE = 70
+NEWS_HISTORY_DAYS = 14
 REFRESH_COOLDOWN_SEC = 6 * 3600
 
 _CATEGORY_LABELS = {
-    "city": "🏙 Алкмар",
+    "city": "📍 Алкмар",
+    "north_holland": "📍 Noord-Holland",
     "netherlands": "🇳🇱 Нидерланды",
-    "screen": "🎬 Смотреть",
-    "music": "🎵 Музыка",
-    "tech": "💻 Тех",
-    "health": "🩺 Здоровье",
+    "transport": "🚆 Транспорт",
+    "housing_money": "🏠 Жильё и деньги",
+    "documents_study": "🧾 Документы и учёба",
+    "health": "🩺 Медицина",
+    "tech": "🤖 AI / технологии",
+    "leisure": "🎬 Досуг",
     "food": "🍽 Еда",
+    "wardrobe_weather": "👕 Гардероб и погода",
+    "travel": "✈️ Путешествия",
+    "language": "🇳🇱 Язык",
 }
 
 _ACTION_LABELS = {
@@ -47,71 +56,106 @@ _ACTION_LABELS = {
 }
 
 _OFFICIAL_DOMAINS = {
-    "city": ("gemeentealkmaar.nl", "ns.nl", "rijksoverheid.nl", "government.nl", "alkmaar.nl"),
-    "netherlands": ("rijksoverheid.nl", "government.nl", "duo.nl", "ns.nl", "belastingdienst.nl"),
-    "screen": ("themoviedb.org", "netflix.com", "disneyplus.com", "primevideo.com", "max.com", "hbo.com"),
-    "music": ("ticketmaster.nl", "ticketmaster.com", "songkick.com", "bandsintown.com", "spotify.com"),
-    "tech": ("openai.com", "ai.google.dev", "cloud.google.com", "groq.com", "cloudflare.com",
-             "railway.com", "telegram.org", "openweathermap.org", "pexels.com", "unsplash.com",
-             "apple.com", "code.visualstudio.com"),
+    "city": ("gemeentealkmaar.nl", "alkmaarsdagblad.nl", "nhnieuws.nl", "streekstadcentraal.nl",
+             "noordhollandsdagblad.nl", "indebuurt.nl", "alkmaarcentraal.nl"),
+    "north_holland": ("nhnieuws.nl", "noordhollandsdagblad.nl", "streekstadcentraal.nl"),
+    "netherlands": ("nos.nl", "nu.nl", "rtlnieuws.nl", "ad.nl", "telegraaf.nl",
+                    "rijksoverheid.nl", "government.nl"),
+    "transport": ("ns.nl", "9292.nl", "rijksoverheid.nl", "nos.nl"),
+    "housing_money": ("rijksoverheid.nl", "belastingdienst.nl", "independer.nl", "nos.nl", "nu.nl"),
+    "documents_study": ("duo.nl", "rijksoverheid.nl", "government.nl", "gemeentealkmaar.nl"),
     "health": ("rijksoverheid.nl", "rivm.nl", "ggd.nl", "thuisarts.nl", "apotheek.nl",
-               "zorginstituutnederland.nl"),
-    "food": ("ah.nl", "jumbo.com", "nvwa.nl", "gemeentealkmaar.nl"),
+               "zorgwijzer.nl", "independer.nl"),
+    "tech": ("openai.com", "apple.com", "telegram.org", "cloudflare.com", "ai.googleblog.com",
+             "theverge.com", "techcrunch.com", "arstechnica.com", "railway.com"),
+    "leisure": ("pathe.nl", "filmvandaag.nl", "ticketmaster.nl", "songkick.com",
+                "bandsintown.com", "indebuurt.nl", "alkmaarcentraal.nl"),
+    "food": ("ah.nl", "jumbo.com", "nvwa.nl", "indebuurt.nl", "alkmaarcentraal.nl"),
+    "wardrobe_weather": ("knmi.nl", "weeronline.nl", "nos.nl", "nhnieuws.nl"),
+    "travel": ("schiphol.nl", "nsinternational.com", "ns.nl", "rijksoverheid.nl"),
+    "language": ("duo.nl", "inburgeren.nl", "rijksoverheid.nl", "gemeentealkmaar.nl"),
 }
 
-_QUERY_TEMPLATES = {
-    "city": [
-        "{city} new restaurant cafe exhibition cultural place",
-        "{city} nieuws vandaag nieuwe opening evenement verkeer wonen",
-        "{city} local news this month restaurant museum event service",
-        "site:gemeentealkmaar.nl Alkmaar wijzigingen gemeente service",
-        "site:ns.nl NS dienstregeling wijziging Nederland",
-    ],
-    "netherlands": [
-        "Nederland nieuws vandaag wonen reizen zorg geld prijzen regels",
-        "Netherlands news this month housing travel healthcare money services",
-        "site:rijksoverheid.nl Nederland regels wijziging wonen service",
-        "site:duo.nl wijziging zorg ondersteuning Nederland",
-        "site:belastingdienst.nl Nederland wijziging toeslagen belasting",
-    ],
-    "screen": [
-        "{movies} official trailer premiere season cancelled streaming",
-        "Netflix Disney Prime Video HBO Max Netherlands new releases this month",
-        "nieuwe films series streaming Nederland deze maand release trailer",
-    ],
-    "music": [
-        "{artists} new album single tour Netherlands official",
-        "concerten Nederland deze maand nieuwe tour album single",
-        "Ticketmaster Songkick Bandsintown Netherlands concerts this month",
-    ],
-    "tech": [
-        "OpenAI Gemini Groq Cloudflare Railway Telegram API pricing limits outage",
-        "Apple Mac VS Code OpenWeather Pexels Unsplash API pricing limits changes",
-        "AI developer tools API update outage pricing this month OpenAI Google Cloudflare",
-        "Telegram Railway GitHub Apple developer news this month API service changes",
-    ],
-    "health": [
-        "Nederland gezondheid zorgverzekering huisarts apotheek nieuws deze maand",
-        "Netherlands healthcare pharmacy GP insurance changes this month",
-        "site:rivm.nl Nederland vaccinatie advies wijziging",
-        "site:rijksoverheid.nl huisarts apotheek zorgverzekering wijziging",
-        "site:apotheek.nl medicijn tekort Nederland",
-    ],
-    "food": [
-        "Nederland eten supermarkt product recall nieuw restaurant deze maand",
-        "Netherlands food supermarket recall new restaurant this month",
-        "site:nvwa.nl product recall waarschuwing Nederland",
-        "site:ah.nl nieuwe producten Albert Heijn Nederland",
-        "{city} nieuw restaurant bakkerij markt ontbijt",
-    ],
-}
-
-_COUNTRY_FALLBACK_QUERIES = [
-    "{country} Netherlands breaking news today practical changes services",
-    "{country} Netherlands local news today wonen reizen zorg geld",
-    "Nederland nieuws vandaag wonen reizen zorg prijzen diensten",
-    "Netherlands news this month practical changes housing travel healthcare food tech",
+_QUERY_DEFINITIONS = [
+    ("city", "nl", "Alkmaar nieuws vandaag", "local"),
+    ("city", "nl", "gemeente Alkmaar nieuws wijziging", "local"),
+    ("city", "nl", "Alkmaar evenementen dit weekend nieuw restaurant", "local_event"),
+    ("north_holland", "nl", "Noord-Holland nieuws vandaag Alkmaar", "local"),
+    ("netherlands", "nl", "Nederland nieuws vandaag regels wijziging inwoners", "country"),
+    ("transport", "nl", "NS wijziging Nederland storing staking dienstregeling", "country"),
+    ("housing_money", "nl", "huurwet Nederland wijziging huurtoeslag belasting", "country"),
+    ("documents_study", "nl", "DUO wijziging Nederland inburgering gemeente", "country"),
+    ("health", "nl", "zorgverzekering Nederland wijziging huisarts apotheek", "country"),
+    ("tech", "en", "OpenAI Telegram Apple Cloudflare Railway API update outage pricing", "tech"),
+    ("leisure", "nl", "bioscoop releases Nederland concerten Noord-Holland Alkmaar", "local_event"),
+    ("food", "nl", "nieuw restaurant Alkmaar AH Jumbo product recall Nederland", "local_event"),
+    ("wardrobe_weather", "nl", "KNMI Alkmaar Noord-Holland code geel regen wind UV", "urgent"),
+    ("travel", "nl", "Schiphol NS International staking vertraging wijziging", "country"),
+    ("language", "nl", "inburgering examen Nederlands cursus Alkmaar wijziging", "local_event"),
 ]
+
+_CATEGORY_GROUPS = {
+    "city": "local",
+    "north_holland": "local",
+    "netherlands": "netherlands",
+    "transport": "netherlands",
+    "housing_money": "netherlands",
+    "documents_study": "netherlands",
+    "health": "netherlands",
+    "tech": "tech",
+    "leisure": "leisure",
+    "food": "leisure",
+    "wardrobe_weather": "weather",
+    "travel": "travel",
+    "language": "language",
+}
+
+_CATEGORY_PRIORITY = [
+    "city", "north_holland", "netherlands", "transport", "documents_study", "health",
+    "housing_money", "tech", "leisure", "food", "wardrobe_weather", "travel", "language",
+]
+
+_SOURCE_NAMES = {
+    "openai.com": "OpenAI",
+    "telegram.org": "Telegram",
+    "apple.com": "Apple",
+    "cloudflare.com": "Cloudflare",
+    "railway.com": "Railway",
+    "gemeentealkmaar.nl": "Gemeente Alkmaar",
+    "alkmaarsdagblad.nl": "Alkmaars Dagblad",
+    "nhnieuws.nl": "NH Nieuws",
+    "streekstadcentraal.nl": "Streekstad Centraal",
+    "noordhollandsdagblad.nl": "Noordhollands Dagblad",
+    "alkmaarcentraal.nl": "Alkmaar Centraal",
+    "rijksoverheid.nl": "Rijksoverheid",
+    "belastingdienst.nl": "Belastingdienst",
+    "duo.nl": "DUO",
+    "ns.nl": "NS",
+    "nos.nl": "NOS",
+    "nu.nl": "NU.nl",
+    "rtlnieuws.nl": "RTL Nieuws",
+    "ad.nl": "AD",
+    "telegraaf.nl": "De Telegraaf",
+    "zorgwijzer.nl": "Zorgwijzer",
+    "independer.nl": "Independer",
+    "knmi.nl": "KNMI",
+    "schiphol.nl": "Schiphol",
+}
+
+
+@dataclass
+class NewsItem:
+    title: str
+    summary: str
+    url: str
+    source: str
+    published_at: str
+    category: str
+    language: str
+    relevance_score: int
+    why_important: str
+    action_hint: str
+    hash: str
 
 
 def _now():
@@ -130,7 +174,7 @@ def cache_key(cid, period, now=None):
 
 
 def _period_max_age_days(period):
-    return 30
+    return 7
 
 
 def _period_cache_ttl(period):
@@ -153,7 +197,16 @@ def _host(url):
 
 def _title_key(title):
     text = re.sub(r"[^\w\s]", " ", (title or "").lower(), flags=re.U)
-    return " ".join(w for w in text.split() if len(w) > 2)[:120]
+    stop = {"het", "een", "the", "and", "voor", "van", "met", "naar", "news", "nieuws"}
+    return " ".join(w for w in text.split() if len(w) > 2 and w not in stop)[:140]
+
+
+def _title_similarity(a, b):
+    ta = set(_title_key(a).split())
+    tb = set(_title_key(b).split())
+    if not ta or not tb:
+        return 0.0
+    return len(ta & tb) / max(len(ta | tb), 1)
 
 
 def _parse_dt(value):
@@ -181,6 +234,22 @@ def _published_value(item):
     return None
 
 
+def _category_max_age_days(category, urgency=None):
+    if urgency == "urgent" or category == "wardrobe_weather":
+        return 1
+    if urgency == "local_event" or category in {"city", "north_holland", "leisure", "food", "language"}:
+        return 7
+    return 3
+
+
+def _item_age_days(item, now=None):
+    dt = _parse_dt(_published_value(item))
+    if not dt:
+        return None
+    now = now or _now()
+    return max(0, (now - dt).total_seconds() / 86400)
+
+
 def _is_official_url(url):
     host = _host(url)
     return any(
@@ -195,7 +264,9 @@ def _is_fresh(item, period, now=None):
     if not dt:
         return False
     now = now or _now()
-    return dt >= now - timedelta(days=_period_max_age_days(period))
+    category = item.get("_category_hint") or item.get("category")
+    urgency = item.get("_urgency")
+    return dt >= now - timedelta(days=_category_max_age_days(category, urgency))
 
 
 def _has_concrete_change(item):
@@ -205,6 +276,10 @@ def _has_concrete_change(item):
         "limit", "outage", "premiere", "trailer", "season", "cancelled", "release", "tour",
         "recall", "waarschuwing", "tekort", "opened", "opening", "datum", "api",
         "verandering", "aangepast", "storing", "uitval", "seizoen", "prijs", "tarief",
+        "vandaag", "weekend", "evenement", "concert", "staking", "vertraging", "dienstregeling",
+        "werkzaamheden", "wegwerkzaamheden", "afsluiting", "gemeente", "subsidie", "toeslag",
+        "verzekering", "premie", "huur", "belasting", "schiphol", "code geel", "wind", "regen",
+        "hitte", "uv", "inburgering", "examen", "cursus", "restaurant", "cafe", "terugroepactie",
         "нов", "измен", "обнов", "цена", "тариф", "лимит", "сбой", "премьера", "сезон",
         "отмен", "релиз", "тур", "открыл", "открыт", "предупрежд", "дефицит",
     )
@@ -358,29 +433,45 @@ def _set_last_refresh(cid):
 
 
 def _queries_for(cid):
-    s = store.get_settings(cid)
-    city = s.get("city") or "Алкмар"
-    country = s.get("country") or "Нидерланды"
-    movies = ", ".join(map(str, store.get_list(config.WATCHLIST_KEY, cid)[:8])) or "favorite movies series"
-    artists = ", ".join(map(str, store.get_list(config.ARTISTS_KEY, cid)[:8])) or "favorite artists"
-    result = []
-    for category, templates in _QUERY_TEMPLATES.items():
-        for tpl in templates:
-            q = tpl.format(city=city, country=country, movies=movies[:180], artists=artists[:180])
-            result.append((category, q))
-    return result
+    return _queries_for_profile(_profile_context(cid))
 
 
-def _country_fallback_queries(cid):
-    s = store.get_settings(cid)
-    country = s.get("country") or "Нидерланды"
-    return [
-        ("netherlands", tpl.format(country=country))
-        for tpl in _COUNTRY_FALLBACK_QUERIES
-    ]
+def _queries_for_profile(profile):
+    city = profile.get("city") or "Alkmaar"
+    if str(city).lower() in {"алкмар", "alkmar"}:
+        city = "Alkmaar"
+    queries = []
+    for category, language, query, urgency in _QUERY_DEFINITIONS:
+        q = query.replace("Alkmaar", city)
+        queries.append({
+            "category": category,
+            "query": q,
+            "language": language,
+            "domains": _OFFICIAL_DOMAINS.get(category),
+            "urgency": urgency,
+        })
+    movies = " ".join(map(str, (profile.get("movies") or [])[:3])).strip()
+    if movies:
+        queries.append({
+            "category": "leisure",
+            "query": f"{movies[:120]} release Nederland streaming bioscoop",
+            "language": "nl",
+            "domains": _OFFICIAL_DOMAINS.get("leisure"),
+            "urgency": "local_event",
+        })
+    artists = " ".join(map(str, (profile.get("artists") or [])[:3])).strip()
+    if artists:
+        queries.append({
+            "category": "leisure",
+            "query": f"{artists[:120]} concert Nederland Noord-Holland",
+            "language": "nl",
+            "domains": _OFFICIAL_DOMAINS.get("leisure"),
+            "urgency": "local_event",
+        })
+    return queries
 
 
-def _tavily_search(query, max_results=5, domains=None):
+def _tavily_search(query, max_results=5, domains=None, time_range="week"):
     if not config.TAVILY_API_KEY:
         return []
     payload = {
@@ -395,6 +486,8 @@ def _tavily_search(query, max_results=5, domains=None):
     }
     if domains:
         payload["include_domains"] = list(domains)
+    if time_range:
+        payload["time_range"] = time_range
     try:
         r = requests.post("https://api.tavily.com/search", json=payload, timeout=18)
         r.raise_for_status()
@@ -408,21 +501,39 @@ def _tavily_search(query, max_results=5, domains=None):
 
 
 def _search_all(cid):
+    return _search_all_for_profile(_profile_context(cid))
+
+
+def _search_all_for_profile(profile):
     rows = []
-    for category, query in _queries_for(cid) + _country_fallback_queries(cid):
+    for spec in _queries_for_profile(profile):
         if not _reserve_credits(1):
             break
         try:
-            domains = _OFFICIAL_DOMAINS.get(category) if query.startswith("site:") else None
-            max_results = 10
-            for item in _tavily_search(query, max_results=max_results, domains=domains):
+            max_results = 5
+            time_range = "day" if spec["urgency"] == "urgent" else "week"
+            for item in _call_tavily(
+                spec["query"],
+                max_results=max_results,
+                domains=spec.get("domains"),
+                time_range=time_range,
+            ):
                 item = dict(item)
-                item["_category_hint"] = category
+                item["_category_hint"] = spec["category"]
+                item["_query_language"] = spec["language"]
+                item["_urgency"] = spec["urgency"]
                 rows.append(item)
         except Exception as e:
             _inc_stat("errors")
             _log.warning("personal_news Tavily failed: %s", str(e)[:120])
     return rows
+
+
+def _call_tavily(query, max_results=5, domains=None, time_range="week"):
+    try:
+        return _tavily_search(query, max_results=max_results, domains=domains, time_range=time_range)
+    except TypeError:
+        return _tavily_search(query, max_results=max_results, domains=domains)
 
 
 def _profile_context(cid):
@@ -436,6 +547,254 @@ def _profile_context(cid):
         "services": ["OpenAI", "Gemini", "Groq", "Cloudflare", "Railway", "Telegram",
                      "OpenWeather", "Pexels", "Unsplash", "Apple", "Mac", "VS Code"],
     }
+
+
+def _history_for(cid, now=None):
+    now = now or _now()
+    cutoff = now - timedelta(days=NEWS_HISTORY_DAYS)
+    data = store._load(NEWS_HISTORY_KEY)
+    rows = []
+    changed = False
+    for row in data.get(str(cid), []) or []:
+        sent_at = _parse_dt(row.get("date_sent"))
+        if sent_at and sent_at >= cutoff:
+            rows.append(row)
+        else:
+            changed = True
+    if changed:
+        data[str(cid)] = rows
+        store._save(NEWS_HISTORY_KEY, data)
+    return rows
+
+
+def _history_has_match(history, item):
+    url = _canonical_url(item.get("url", ""))
+    title = item.get("title") or item.get("title_ru") or ""
+    h = stable_hash({"url": url, "title": title})
+    for row in history or []:
+        if url and url == row.get("url"):
+            return True
+        if h and h == row.get("hash"):
+            return True
+        old_title = row.get("title") or row.get("normalized_title") or ""
+        if _title_similarity(title, old_title) >= 0.62:
+            return True
+    return False
+
+
+def _save_history(cid, items, now=None):
+    now = now or _now()
+    if not items:
+        return
+
+    def mut(data):
+        rows = []
+        cutoff = now - timedelta(days=NEWS_HISTORY_DAYS)
+        for row in data.get(str(cid), []) or []:
+            sent_at = _parse_dt(row.get("date_sent"))
+            if sent_at and sent_at >= cutoff:
+                rows.append(row)
+        for item in items:
+            title = item.get("title") or item.get("title_ru") or ""
+            url = _canonical_url(item.get("url") or item.get("source_url") or "")
+            rows.append({
+                "url": url,
+                "title": title,
+                "normalized_title": _title_key(title),
+                "hash": item.get("hash") or stable_hash({"url": url, "title": title}),
+                "source": item.get("source") or item.get("source_name") or _source_name(url),
+                "category": item.get("category") or "netherlands",
+                "date_sent": now.isoformat(),
+            })
+        data[str(cid)] = rows[-200:]
+        return data, True
+
+    store.mutate_kv(NEWS_HISTORY_KEY, mut)
+
+
+def _plain_text(item):
+    return f"{item.get('title', '')} {item.get('content', '')}".lower()
+
+
+def _category_from_item(item):
+    cat = item.get("_category_hint") or item.get("category")
+    if cat:
+        return cat
+    text = _plain_text(item)
+    host = _host(item.get("url"))
+    if "alkmaar" in text or any(host.endswith(d) for d in _OFFICIAL_DOMAINS["city"]):
+        return "city"
+    if any(w in text for w in ("ns ", "dienstregeling", "staking", "vertraging")):
+        return "transport"
+    if any(w in text for w in ("duo", "inburgering", "examen")):
+        return "documents_study"
+    if any(w in text for w in ("zorg", "huisarts", "apotheek", "verzekering")):
+        return "health"
+    if any(w in text for w in ("huur", "belasting", "toeslag", "hypotheek")):
+        return "housing_money"
+    if any(w in text for w in ("openai", "telegram", "apple", "cloudflare", "railway", "api")):
+        return "tech"
+    return "netherlands"
+
+
+def _score_candidate(item, profile, now=None):
+    now = now or _now()
+    text = _plain_text(item)
+    host = _host(item.get("url"))
+    category = _category_from_item(item)
+    age = _item_age_days(item, now)
+    score = 0
+    reasons = []
+
+    local_hit = "alkmaar" in text or "noord-holland" in text or any(
+        host.endswith(d) for d in _OFFICIAL_DOMAINS.get("city", ())
+    )
+    practical = category in {
+        "city", "transport", "housing_money", "documents_study", "health",
+        "food", "wardrobe_weather", "travel", "language",
+    } or any(w in text for w in (
+        "geld", "belasting", "huur", "zorg", "huisarts", "apotheek", "duo",
+        "ns", "ov", "schiphol", "storing", "staking", "wijzig", "verzekering",
+        "gemeente", "toeslag", "api", "pricing", "outage", "recall",
+    ))
+    interests = [str(x).lower() for x in (profile.get("movies") or []) + (profile.get("artists") or [])
+                 + (profile.get("services") or [])]
+    interest_hit = any(x and x in text for x in interests)
+    if category == "tech" and any(w in text for w in ("openai", "telegram", "apple", "cloudflare", "railway", "api")):
+        interest_hit = True
+    action_hit = any(w in text for w in (
+        "vanaf", "per ", "deadline", "aanvragen", "check", "wijzig", "storing",
+        "staking", "afsluiting", "waarschuwing", "terugroepactie", "pricing",
+        "limit", "outage", "release", "ticket", "premiere",
+    ))
+
+    if local_hit:
+        score += 30
+        reasons.append("это рядом с Алкмаром")
+    if practical:
+        score += 25
+        reasons.append("может повлиять на планы, деньги или документы")
+    if interest_hit:
+        score += 20
+        reasons.append("связано с твоими интересами")
+    if age is not None and age <= 3:
+        score += 15
+    if action_hit:
+        score += 10
+
+    if age is None:
+        score -= 50
+    elif age > _category_max_age_days(category, item.get("_urgency")):
+        score -= 30
+    if not _has_concrete_change(item):
+        score -= 25
+    if not (local_hit or practical or interest_hit):
+        score -= 20
+
+    return max(0, min(100, score)), category, reasons
+
+
+def _short_summary(item):
+    content = re.sub(r"\s+", " ", (item.get("content") or "")).strip()
+    title = re.sub(r"\s+", " ", (item.get("title") or "")).strip()
+    base = content or title
+    if not base:
+        return "Есть свежее изменение по этой теме."
+    sentence = re.split(r"(?<=[.!?])\s+", base)[0].strip()
+    if len(sentence) > 150:
+        sentence = sentence[:147].rstrip(" ,.;:") + "..."
+    return sentence
+
+
+def _why_important(category, reasons):
+    if reasons:
+        return reasons[0] + "."
+    defaults = {
+        "city": "это может повлиять на планы рядом с домом.",
+        "transport": "это может изменить поездки и время в пути.",
+        "housing_money": "это может повлиять на расходы или правила.",
+        "documents_study": "это важно для документов или обучения.",
+        "health": "это может повлиять на zorg и доступ к услугам.",
+        "tech": "это полезно для работы бота и сервисов.",
+        "leisure": "это помогает выбрать планы на ближайшие дни.",
+        "food": "это может быть полезно для покупок или еды рядом.",
+        "wardrobe_weather": "это влияет на одежду и поездки на велосипеде.",
+        "travel": "это может повлиять на дорогу и вылеты.",
+        "language": "это полезно для изучения нидерландского.",
+    }
+    return defaults.get(category, "это практичное изменение для ближайших дней.")
+
+
+def _action_hint(category):
+    return "Проверь детали" if category in {"transport", "travel", "documents_study"} else "Подробнее"
+
+
+def _to_news_item(item, profile, now=None):
+    score, category, reasons = _score_candidate(item, profile, now)
+    url = _canonical_url(item.get("url", ""))
+    title = (item.get("title") or "").strip()
+    published = _parse_dt(_published_value(item))
+    source = item.get("source") or item.get("source_name") or _source_name(url)
+    return NewsItem(
+        title=title,
+        summary=_short_summary(item),
+        url=url,
+        source=source,
+        published_at=published.isoformat() if published else "",
+        category=category,
+        language=item.get("_query_language") or ("en" if category == "tech" else "nl"),
+        relevance_score=score,
+        why_important=_why_important(category, reasons),
+        action_hint=_action_hint(category),
+        hash=stable_hash({"url": url, "title": title}),
+    )
+
+
+def _select_diverse(items):
+    selected = []
+    used_categories = set()
+    group_counts = {}
+    priority = {cat: idx for idx, cat in enumerate(_CATEGORY_PRIORITY)}
+    ordered = sorted(
+        items,
+        key=lambda x: (-x.relevance_score, priority.get(x.category, 99), x.published_at),
+    )
+    for item in ordered:
+        if item.category in used_categories:
+            continue
+        group = _CATEGORY_GROUPS.get(item.category, item.category)
+        if group_counts.get(group, 0) >= 2:
+            continue
+        selected.append(item)
+        used_categories.add(item.category)
+        group_counts[group] = group_counts.get(group, 0) + 1
+        if len(selected) >= NEWS_MAX_ITEMS:
+            break
+    return selected
+
+
+def collect_personal_news(user_profile, sources=None, now=None, search_fn=None):
+    now = now or _now()
+    profile = dict(user_profile or {})
+    cid = profile.get("cid") or profile.get("chat_id") or "default"
+    raw_sources = sources if sources is not None else (search_fn or _search_all_for_profile)(profile)
+    filtered = strict_filter(raw_sources, "today", now)
+    filtered = _dedupe_semantic(filtered)
+    history = _history_for(cid, now)
+
+    candidates = []
+    seen_titles = []
+    for item in filtered:
+        if _history_has_match(history, item):
+            continue
+        if any(_title_similarity(item.get("title"), title) >= 0.62 for title in seen_titles):
+            continue
+        news = _to_news_item(item, profile, now)
+        if news.relevance_score >= NEWS_MIN_RELEVANCE_SCORE:
+            candidates.append(news)
+            seen_titles.append(news.title)
+
+    return _select_diverse(candidates)
 
 
 def _score_items(cid, candidates):
@@ -486,6 +845,9 @@ def _score_items(cid, candidates):
 
 def _source_name(url):
     host = _host(url)
+    for domain, name in _SOURCE_NAMES.items():
+        if host.endswith(domain):
+            return name
     parts = host.split(".")
     if len(parts) >= 2:
         return parts[-2].title()
@@ -518,45 +880,63 @@ def _fallback_items(candidates):
 
 
 def _build_card(items, updated_ts=None, stale=False):
-    updated_ts = updated_ts or int(time.time())
-    dt = datetime.fromtimestamp(updated_ts, config.TZ)
     if not items:
         text = (
             "📰 Новости для тебя\n\n"
-            "Новости пока не загрузились. Попробуй обновить раздел позже."
+            "Сегодня нет достаточно важных новостей для тебя.\n\n"
+            "Проверил:\n"
+            "• Алкмар\n"
+            "• Нидерланды\n"
+            "• NS / DUO\n"
+            "• AI / технологии\n"
+            "• досуг"
         )
         return text, []
-    day_word = "вчера" if stale else "сегодня"
-    lines = ["📰 Новости для тебя", "", f"Обновлено {day_word} в {dt.strftime('%H:%M')}"]
+    lines = ["📰 Новости для тебя"]
     buttons = []
-    by_cat = {}
+    now = _now()
     for item in items[:NEWS_MAX_ITEMS]:
-        by_cat.setdefault(item.get("category") or "city", []).append(item)
-    for cat, label in _CATEGORY_LABELS.items():
-        rows = by_cat.get(cat) or []
-        if not rows:
-            continue
-        lines.extend(["", label])
-        for item in rows:
-            lines.append(f"• {item.get('title_ru', '').strip()}")
-            if item.get("summary_ru"):
-                lines.append(f"  {item['summary_ru'].strip()}")
-            if item.get("why_it_matters_ru"):
-                lines.append(f"  Почему тебе: {item['why_it_matters_ru'].strip()}")
-            url = item.get("source_url") or ""
-            if url:
-                label_btn = _ACTION_LABELS.get(item.get("action_type") or "read", "Подробнее")
-                buttons.append([InlineKeyboardButton(label_btn, url=url)])
+        cat = item.get("category") or "city"
+        label = _CATEGORY_LABELS.get(cat, "🇳🇱 Нидерланды")
+        title = (item.get("title") or item.get("title_ru") or "").strip()
+        summary = (item.get("summary") or item.get("summary_ru") or "").strip()
+        why = (item.get("why_important") or item.get("why_it_matters_ru") or "").strip()
+        url = item.get("url") or item.get("source_url") or ""
+        source = item.get("source") or item.get("source_name") or _source_name(url)
+        published = _parse_dt(item.get("published_at"))
+        day_word = _relative_day(published, now)
+        lines.extend(["", label, title])
+        if summary:
+            lines.append(f"Коротко: {summary}")
+        if why:
+            lines.append(f"💡 Почему важно: {why}")
+        lines.append(f"Источник: {source} · {day_word}")
+        if url:
+            label_btn = item.get("action_hint") or _ACTION_LABELS.get(item.get("action_type") or "read", "Подробнее")
+            buttons.append([InlineKeyboardButton(label_btn, url=url)])
     return "\n".join(lines).strip(), buttons[:NEWS_MAX_ITEMS]
 
 
+def _relative_day(published, now=None):
+    if not published:
+        return "сегодня"
+    now = now or _now()
+    days = (now.date() - published.astimezone(config.TZ).date()).days
+    if days <= 0:
+        return "сегодня"
+    if days == 1:
+        return "вчера"
+    return f"{days} дн. назад"
+
+
 def build_from_sources(cid, period, sources, now=None):
+    profile = _profile_context(cid)
+    profile["cid"] = str(cid)
     filtered = strict_filter(sources, period, now)
     _inc_stat("filtered", max(0, len(sources or []) - len(filtered)), now)
-    filtered = _dedupe_semantic(filtered)
-    items = _score_items(cid, filtered) if filtered else []
-    if not items and filtered:
-        items = _fallback_items(filtered)
+    news_items = collect_personal_news(profile, sources=filtered, now=now)
+    items = [asdict(item) for item in news_items]
+    _save_history(cid, items, now)
     text, url_buttons = _build_card(items)
     entry = {"ts": int(time.time()), "period": period, "items": items, "sources": filtered, "text": text}
     _cache_set(cid, period, entry, now)
