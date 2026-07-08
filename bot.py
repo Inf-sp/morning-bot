@@ -29,6 +29,7 @@ import onboard
 import firstvisit
 import tracking
 import util
+from ui import admin as admin_ui
 from util import ack_loading as _ack
 
 TZ = config.TZ
@@ -38,144 +39,124 @@ CHAT_ID = config.CHAT_ID
 
 _WELCOME = menu.WELCOME
 _ROOT = Path(__file__).parent
-_MAX_RELEASE_NOTES = 7
-_DEFAULT_CHECK_AFTER_DEPLOY = [
-    "Проверка API",
-    "Рецепты",
-    "Досуг",
-    "Словарь",
-    "Уведомления",
-]
+_DEFAULT_DEPLOY_NOTE = "Обновление системы без пользовательских изменений."
 
 
-def parse_env_list(value: str) -> list[str]:
-    return [item.strip() for item in str(value or "").split("|") if item.strip()]
+def _normalize_app_version(version: str) -> str:
+    version = str(version or "").strip()
+    if version.lower().startswith("v") and len(version) > 1:
+        return version[1:].strip()
+    return version
 
 
 def get_app_version() -> str:
-    return str(config.APP_VERSION or "").strip() or "dev"
+    return _normalize_app_version(config.APP_VERSION)
 
 
 def get_current_deploy_key() -> str:
-    return config.RAILWAY_DEPLOYMENT_ID or get_app_version()
+    return get_app_version()
 
 
-def _parse_release_notes_file(path: Path) -> list[str]:
-    if not path.exists():
-        return []
-    notes = []
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        if line.startswith("- "):
-            line = line[2:].strip()
-        elif line.startswith("* "):
-            line = line[2:].strip()
-        if line:
-            notes.append(line)
-    return notes
+def _release_heading_version(line: str) -> str | None:
+    line = line.strip()
+    if not line.startswith("## "):
+        return None
+    title = line[3:].strip()
+    version = title.split()[0] if title else ""
+    return _normalize_app_version(version)
+
+
+def _clean_release_note_line(line: str) -> str:
+    line = line.strip()
+    if line.startswith("- ") or line.startswith("* "):
+        return line[2:].strip()
+    return line
 
 
 def load_release_notes() -> tuple[list[str], str]:
-    file_notes = _parse_release_notes_file(_ROOT / "RELEASE_NOTES.md")
-    if file_notes:
-        return file_notes, "file"
-
-    env_notes = parse_env_list(config.RELEASE_NOTES)
-    if env_notes:
-        return env_notes, "env"
-
-    commit_message = str(config.RAILWAY_GIT_COMMIT_MESSAGE or "").strip()
-    if commit_message:
-        return [commit_message], "git_commit"
-
-    return [], "empty"
-
-
-def load_check_after_deploy() -> tuple[list[str], str]:
-    env_items = parse_env_list(config.CHECK_AFTER_DEPLOY)
-    if env_items:
-        return env_items, "env"
-    return list(_DEFAULT_CHECK_AFTER_DEPLOY), "default"
-
-
-def build_deploy_report_message(version, release_notes, check_list):
-    version = str(version or "").strip() or "dev"
-    lines = [
-        "🚀 Бот обновлён",
-        "",
-        f"Версия: v{version}",
-        "Статус: успешно запущен",
-        "",
-    ]
-
-    if release_notes:
-        lines.append("Что изменилось:")
-        clean_notes = [str(item).strip() for item in release_notes if str(item).strip()]
-        shown_notes = clean_notes[:_MAX_RELEASE_NOTES]
-        lines.extend(f"• {item}" for item in shown_notes)
-        hidden_count = len(clean_notes) - len(shown_notes)
-        if hidden_count > 0:
-            lines.append(f"• И ещё {hidden_count} изменений")
-    else:
-        lines.append("Список изменений не указан.")
-        return "\n".join(lines)
-
-    clean_check_list = [str(item).strip() for item in check_list if str(item).strip()]
-    if clean_check_list:
-        lines.extend(["", "Что проверить:"])
-        lines.extend(f"• {item}" for item in clean_check_list)
-
-    lines.extend(["", "Если всё работает - деплой прошёл успешно ✅"])
-    return "\n".join(lines)
-
-
-async def send_deploy_report_to_admin(bot):
     version = get_app_version()
-    deploy_key = get_current_deploy_key()
-    started_at = datetime.now(TZ).isoformat()
+    if not version:
+        return [], "empty"
+
+    path = _ROOT / "RELEASE_NOTES.md"
+    if not path.exists():
+        return [], "missing"
+
+    current_lines = []
+    in_current_section = False
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        heading_version = _release_heading_version(raw_line)
+        if heading_version is not None:
+            if in_current_section:
+                break
+            in_current_section = heading_version == version
+            continue
+        if in_current_section:
+            line = _clean_release_note_line(raw_line)
+            if line:
+                current_lines.append(line)
+
+    if not current_lines:
+        return [], "fallback"
+    return [" ".join(current_lines)], "file"
+
+
+def build_deploy_report_message(version, release_notes, check_list=None):
+    note = release_notes[0] if release_notes else _DEFAULT_DEPLOY_NOTE
+    return admin_ui.deploy_report(_normalize_app_version(version), note)
+
+
+async def maybe_send_admin_deploy_notification(bot):
+    version = get_app_version()
+    deploy_key = version
+    started_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     sent_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     release_notes, release_notes_source = load_release_notes()
-    check_list, check_list_source = load_check_after_deploy()
 
     if not config.ADMIN_CHAT_ID:
         logging.warning(
-            "Deploy report skipped: admin chat id is not configured app_version=%s deploy_key=%s release_notes_source=%s check_list_source=%s railway_environment=%s railway_service=%s started_at=%s result=skipped",
+            "Deploy report skipped: admin chat id is not configured app_version=%s deploy_key=%s release_notes_source=%s railway_environment=%s railway_service=%s started_at=%s result=skipped",
             version,
             deploy_key,
             release_notes_source,
-            check_list_source,
             config.RAILWAY_ENVIRONMENT,
             config.RAILWAY_SERVICE_NAME,
             started_at,
         )
         return
 
-    last_sent_deploy_key = store.get_last_deploy_report_key()
-    if deploy_key and last_sent_deploy_key == deploy_key:
+    if not version:
+        logging.warning(
+            "Deploy report skipped: APP_VERSION is not configured release_notes_source=%s railway_environment=%s railway_service=%s started_at=%s result=skipped",
+            release_notes_source,
+            config.RAILWAY_ENVIRONMENT,
+            config.RAILWAY_SERVICE_NAME,
+            started_at,
+        )
+        return
+
+    last_notified_version = store.get_last_admin_deploy_notified_version()
+    if last_notified_version == version:
         logging.info(
-            "Deploy report skipped: already sent for deploy_key=%s app_version=%s release_notes_source=%s check_list_source=%s railway_environment=%s railway_service=%s started_at=%s result=skipped",
-            deploy_key,
+            "Deploy report skipped: already sent for app_version=%s deploy_key=%s release_notes_source=%s railway_environment=%s railway_service=%s started_at=%s result=skipped",
             version,
+            deploy_key,
             release_notes_source,
-            check_list_source,
             config.RAILWAY_ENVIRONMENT,
             config.RAILWAY_SERVICE_NAME,
             started_at,
         )
         return
 
-    message = build_deploy_report_message(version, release_notes, check_list)
+    msg = build_deploy_report_message(version, release_notes)
     try:
-        await bot.send_message(chat_id=config.ADMIN_CHAT_ID, text=message)
-        store.set_last_deploy_report(version, deploy_key, sent_at)
+        await bot.send_message(chat_id=config.ADMIN_CHAT_ID, text=msg.text, entities=msg.entities)
+        store.set_last_admin_deploy_notified_version(version, sent_at)
         logging.info(
-            "Deploy report sent: version=%s deploy_key=%s release_notes_source=%s check_list_source=%s railway_environment=%s railway_service=%s admin_chat_id=%s sent_at=%s result=sent",
+            "Deploy report sent: version=%s deploy_key=%s release_notes_source=%s railway_environment=%s railway_service=%s admin_chat_id=%s sent_at=%s result=sent",
             version,
             deploy_key,
             release_notes_source,
-            check_list_source,
             config.RAILWAY_ENVIRONMENT,
             config.RAILWAY_SERVICE_NAME,
             config.ADMIN_CHAT_ID,
@@ -183,16 +164,19 @@ async def send_deploy_report_to_admin(bot):
         )
     except Exception:
         logging.exception(
-            "Deploy report failed: version=%s deploy_key=%s release_notes_source=%s check_list_source=%s railway_environment=%s railway_service=%s admin_chat_id=%s started_at=%s result=failed",
+            "Deploy report failed: version=%s deploy_key=%s release_notes_source=%s railway_environment=%s railway_service=%s admin_chat_id=%s started_at=%s result=failed",
             version,
             deploy_key,
             release_notes_source,
-            check_list_source,
             config.RAILWAY_ENVIRONMENT,
             config.RAILWAY_SERVICE_NAME,
             config.ADMIN_CHAT_ID,
             started_at,
         )
+
+
+async def send_deploy_report_to_admin(bot):
+    await maybe_send_admin_deploy_notification(bot)
 
 
 async def start(update, context):
@@ -1037,7 +1021,7 @@ async def post_init(app):
         BotCommand("setup", "настройки"),
         BotCommand("admin", "администратор"),
     ])
-    await send_deploy_report_to_admin(app.bot)
+    await maybe_send_admin_deploy_notification(app.bot)
 
 
 def main():

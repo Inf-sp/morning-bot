@@ -37,12 +37,10 @@ PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID") or CHAT_ID
 RAILWAY_GIT_COMMIT_SHA = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "").strip()
 RAILWAY_GIT_COMMIT_MESSAGE = os.environ.get("RAILWAY_GIT_COMMIT_MESSAGE", "").strip()
-APP_VERSION = os.environ.get("APP_VERSION", "").strip() or (RAILWAY_GIT_COMMIT_SHA[:8] if RAILWAY_GIT_COMMIT_SHA else "dev")
+APP_VERSION = os.environ.get("APP_VERSION", "").strip()
 RAILWAY_DEPLOYMENT_ID = os.environ.get("RAILWAY_DEPLOYMENT_ID", "").strip()
 RAILWAY_ENVIRONMENT = os.environ.get("RAILWAY_ENVIRONMENT", "").strip()
 RAILWAY_SERVICE_NAME = os.environ.get("RAILWAY_SERVICE_NAME", "").strip()
-RELEASE_NOTES = os.environ.get("RELEASE_NOTES", "")
-CHECK_AFTER_DEPLOY = os.environ.get("CHECK_AFTER_DEPLOY", "")
 
 API_USAGE_KEY = "api_usage.json"
 API_QUOTAS = {

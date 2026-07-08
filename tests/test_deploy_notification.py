@@ -1,0 +1,111 @@
+import asyncio
+import os
+
+os.environ.setdefault("TELEGRAM_TOKEN", "test")
+os.environ.setdefault("GEMINI_API_KEY", "test")
+
+import bot
+import config
+import store
+from telegram import MessageEntity
+
+
+class FakeBot:
+    def __init__(self):
+        self.messages = []
+
+    async def send_message(self, chat_id, text, entities=None, **kwargs):
+        self.messages.append({"chat_id": chat_id, "text": text, "entities": entities})
+
+
+def _isolate_deploy_store(monkeypatch):
+    mem = {}
+
+    def load(key):
+        return mem.get(key, {})
+
+    def save(key, data):
+        mem[key] = dict(data)
+
+    monkeypatch.setattr(store, "_load", load)
+    monkeypatch.setattr(store, "_save", save)
+    return mem
+
+
+def _write_release_notes(tmp_path):
+    (tmp_path / "RELEASE_NOTES.md").write_text(
+        "## v1.8.2\n\n"
+        "Новости для тебя: убраны служебные сообщения, добавлен поиск по стране "
+        "и fallback на найденные источники, чтобы раздел не показывал пустую карточку.\n\n"
+        "## v1.8.3\n\n"
+        "Новости стали аккуратнее: бот показывает только полезный итог обновления.\n",
+        encoding="utf-8",
+    )
+
+
+def test_new_version_sends_once_and_repeat_is_skipped(monkeypatch, tmp_path):
+    _isolate_deploy_store(monkeypatch)
+    _write_release_notes(tmp_path)
+    monkeypatch.setattr(bot, "_ROOT", tmp_path)
+    monkeypatch.setattr(config, "ADMIN_CHAT_ID", "42")
+    monkeypatch.setattr(config, "APP_VERSION", "1.8.2")
+
+    fake = FakeBot()
+    asyncio.run(bot.maybe_send_admin_deploy_notification(fake))
+    asyncio.run(bot.maybe_send_admin_deploy_notification(fake))
+
+    assert len(fake.messages) == 1
+    text = fake.messages[0]["text"]
+    assert "Версия: v1.8.2" in text
+    assert "Что изменилось:" in text
+    assert "Новости для тебя: убраны служебные сообщения" in text
+    assert "Что проверить" not in text
+    assert "Проверка API" not in text
+    assert "Deploy-уведомление стало надёжнее" not in text
+    assert any(entity.type == MessageEntity.BLOCKQUOTE for entity in fake.messages[0]["entities"])
+
+
+def test_version_change_sends_again_once(monkeypatch, tmp_path):
+    mem = _isolate_deploy_store(monkeypatch)
+    _write_release_notes(tmp_path)
+    monkeypatch.setattr(bot, "_ROOT", tmp_path)
+    monkeypatch.setattr(config, "ADMIN_CHAT_ID", "42")
+
+    fake = FakeBot()
+    monkeypatch.setattr(config, "APP_VERSION", "1.8.2")
+    asyncio.run(bot.maybe_send_admin_deploy_notification(fake))
+    monkeypatch.setattr(config, "APP_VERSION", "1.8.3")
+    asyncio.run(bot.maybe_send_admin_deploy_notification(fake))
+    asyncio.run(bot.maybe_send_admin_deploy_notification(fake))
+
+    assert len(fake.messages) == 2
+    assert "Версия: v1.8.3" in fake.messages[1]["text"]
+    assert mem[config.DEPLOY_REPORT_KEY]["last_admin_deploy_notified_version"] == "1.8.3"
+
+
+def test_missing_release_note_uses_fallback(monkeypatch, tmp_path):
+    _isolate_deploy_store(monkeypatch)
+    _write_release_notes(tmp_path)
+    monkeypatch.setattr(bot, "_ROOT", tmp_path)
+    monkeypatch.setattr(config, "ADMIN_CHAT_ID", "42")
+    monkeypatch.setattr(config, "APP_VERSION", "1.9.0")
+
+    fake = FakeBot()
+    asyncio.run(bot.maybe_send_admin_deploy_notification(fake))
+
+    assert len(fake.messages) == 1
+    assert "Обновление системы без пользовательских изменений." in fake.messages[0]["text"]
+
+
+def test_empty_app_version_skips_notification(monkeypatch, tmp_path):
+    mem = _isolate_deploy_store(monkeypatch)
+    _write_release_notes(tmp_path)
+    monkeypatch.setattr(bot, "_ROOT", tmp_path)
+    monkeypatch.setattr(config, "ADMIN_CHAT_ID", "42")
+    monkeypatch.setattr(config, "APP_VERSION", "")
+
+    fake = FakeBot()
+    asyncio.run(bot.maybe_send_admin_deploy_notification(fake))
+
+    assert fake.messages == []
+    assert mem == {}

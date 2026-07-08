@@ -29,6 +29,22 @@ def only():
     return MessageSpec(text="⛔ Только для администратора.")
 
 
+def deploy_report(version, release_note):
+    b = MessageBuilder()
+    b.bold("🚀 Бот обновлён")
+    b.newline()
+    b.spacer()
+    b.line(f"Версия: v{version}")
+    b.line("Статус: успешно запущен")
+    b.spacer()
+    b.line("Что изменилось:")
+    b.newline()
+    b.quote(release_note)
+    b.spacer()
+    b.line("Деплой прошёл успешно ✅")
+    return b.build_stripped()
+
+
 # ================= ДОМ =================
 
 def home(system_dot, system_text, total_users, active_7d, llm_calls_today, llm_tokens_today,
