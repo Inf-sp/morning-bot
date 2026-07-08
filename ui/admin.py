@@ -33,16 +33,37 @@ def deploy_report(version, title, release_notes):
     notes = [str(note).strip() for note in (release_notes or []) if str(note).strip()]
     if not notes:
         notes = ["Бот получил небольшие внутренние улучшения."]
-    if len(notes) == 1:
-        quote_text = notes[0]
-    else:
-        quote_text = "\n".join(f"• {note}" for note in notes[:2])
+    main = ""
+    change_notes = []
+    take_next_as_main = False
+    for note in notes:
+        if take_next_as_main:
+            main = note
+            take_next_as_main = False
+            continue
+        if note.lower().startswith("главное:"):
+            rest = note.split(":", 1)[1].strip()
+            if rest:
+                main = rest
+            else:
+                take_next_as_main = True
+            continue
+        change_notes.append(note)
+    if not change_notes:
+        change_notes = notes[:1]
+    if not main:
+        main = change_notes[0]
 
     b = MessageBuilder()
     b.bold(f"🚀 v{version} · {title or 'Обновление'}")
     b.newline()
     b.spacer()
-    b.quote(quote_text)
+    b.line("Что изменено:")
+    for note in change_notes[:4]:
+        b.line(f"• {note}")
+    b.spacer()
+    b.line("Главное:")
+    b.line(main)
     b.spacer()
     b.line("Бот развёрнут и работает ✅")
     return b.build_stripped()

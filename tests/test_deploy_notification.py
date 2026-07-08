@@ -7,7 +7,6 @@ os.environ.setdefault("GEMINI_API_KEY", "test")
 import bot
 import config
 import store
-from telegram import MessageEntity
 
 
 class FakeBot:
@@ -61,12 +60,13 @@ def test_new_version_sends_once_and_repeat_is_skipped(monkeypatch, tmp_path):
     assert "Версия:" not in text
     assert "Статус:" not in text
     assert "Что изменилось:" not in text
+    assert "Что изменено:" in text
+    assert "Главное:" in text
     assert "Деплой прошёл успешно" not in text
     assert "Что проверить" not in text
     assert "Проверка API" not in text
     assert "Deploy-уведомление стало надёжнее" not in text
     assert text.splitlines()[-1] == "Бот развёрнут и работает ✅"
-    assert any(entity.type == MessageEntity.BLOCKQUOTE for entity in fake.messages[0]["entities"])
 
 
 def test_version_change_sends_again_once(monkeypatch, tmp_path):
@@ -114,8 +114,8 @@ def test_multiple_release_notes_use_two_quote_bullets():
 
     assert "• Уведомления стали короче и чище." in msg.text
     assert "• История обновлений больше не показывает повторы." in msg.text
-    assert "Лишние технические детали скрыты." not in msg.text
-    assert any(entity.type == MessageEntity.BLOCKQUOTE for entity in msg.entities)
+    assert "• Лишние технические детали скрыты." in msg.text
+    assert "Главное:" in msg.text
 
 
 def test_version_file_is_used_when_env_app_version_is_empty(monkeypatch, tmp_path):

@@ -350,4 +350,4 @@ def test_news_keyboard_has_no_period_or_topic_buttons():
     assert "📅 За неделю" not in labels
     assert "⚙️ Темы" not in labels
     assert not any("Проверить" in label for label in labels)
-    assert "◀️ Назад" in labels
+    assert "⬅️ Назад" in labels
