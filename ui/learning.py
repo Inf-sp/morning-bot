@@ -163,36 +163,29 @@ def train_result(state, idx, correct_idx, options, chosen_fl=""):
     return msg
 
 
-def phrase_intro_card(phrase, sentence_ru, construction, construction_meaning, other_forms):
+def phrase_intro_card(phrase, sentence_ru, construction, construction_meaning, rule_ru="", other_forms=None):
     """Этап 1 тренажёра фраз: фраза целиком + разбор устойчивой конструкции, без пропусков."""
     b = MessageBuilder()
     b.section("🧩 Фраза-тренажёр")
     b.spacer()
     b.quote(str(phrase or "").strip())
     if sentence_ru:
-        b.spacer()
-        b.bold("Перевод:")
-        b.text_line(f" {str(sentence_ru).strip()}")
-        b.newline()
+        b.line(f"Перевод: {str(sentence_ru).strip()}")
 
     if construction:
+        b.spacer()
         b.tip(construction)
         if construction_meaning:
             b.text_line(f" = {str(construction_meaning).strip()}")
             b.newline()
 
-    if other_forms:
+    rule_ru = str(rule_ru or "").strip()
+    if rule_ru:
         b.spacer()
-        b.bold("Другие значения:")
-        b.newline()
-        for item in other_forms[:1]:
-            pos = str(item.get("pos") or "").strip()
-            meaning = str(item.get("meaning") or "").strip()
-            if pos and meaning:
-                b.bullet(f"{pos} = {meaning}")
+        b.line(rule_ru)
 
     b.spacer()
-    b.text_line("Дальше проверим это правило на новом примере.")
+    b.text_line("Дальше проверим это выражение на новом примере.")
     return b.build()
 
 

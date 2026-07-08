@@ -323,6 +323,13 @@ async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
   }}
 }}
 
+Для устойчивых выражений, фразовых конструкций и идиом focus_unit/construction должен быть смысловым блоком,
+а не отдельным словом. Например:
+- "Het is niet te doen" -> focus_unit/construction: "niet te doen", не "doen";
+- "geen zin hebben in", "het maakt niet uit", "dat is de druppel", "ik heb er genoeg van",
+  "zin hebben om", "bezig zijn met" — это цельные смысловые блоки.
+
+Не возвращай placeholders, технические заглушки и фразы из промта в любых пользовательских полях.
 Поле other_forms заполняй максимум одним пунктом и только если оно не повторяет главное правило, не создаёт
 конфликтующее значение и реально помогает. Если сомневаешься — верни пустой список.
 """
@@ -351,12 +358,12 @@ async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
         "wrong": wrong,
         "sentence_ru": str(d.get("test_sentence_ru") or d.get("sentence_ru") or "").strip(),
         "test_full_phrase": full_phrase,
-        "construction": str(d.get("construction") or "").strip(),
-        "construction_meaning": str(d.get("construction_meaning") or "").strip(),
-        "short_rule": str(d.get("short_rule") or "").strip(),
+        "construction": str(d.get("focus_unit") or d.get("construction") or "").strip(),
+        "construction_meaning": str(d.get("focus_explanation_ru") or d.get("construction_meaning") or "").strip(),
+        "short_rule": str(d.get("rule_ru") or d.get("usage_note_ru") or d.get("short_rule") or "").strip(),
         "detail": str(d.get("detail") or "").strip(),
         "other_forms": _filter_phrase_other_forms(other_forms, d),
-        "explanation": str(d.get("short_rule") or d.get("explanation") or "").strip(),
+        "explanation": str(d.get("rule_ru") or d.get("usage_note_ru") or d.get("short_rule") or d.get("explanation") or "").strip(),
         "self_check": d.get("self_check") if isinstance(d.get("self_check"), dict) else {},
     }
 
@@ -376,7 +383,87 @@ _PHRASE_DISTRACTORS = {
 _PATTERN_PLACEHOLDERS = {
     "iets", "iemand", "someone", "something", "somebody", "sth", "sb",
     "adjective", "adjectief", "прилагательное", "сущ", "существительное",
-    "verb", "глагол", "noun", "prep", "предлог",
+    "verb", "глагол", "noun", "prep", "предлог", "infinitief", "infinitive",
+}
+
+_UI_PLACEHOLDER_PATTERNS = (
+    "значение из учебной фразы в новом контексте",
+    "смотри значение в переводе фразы",
+    "смотри перевод фразы",
+    "перевод зависит от контекста",
+    "объяснение будет добавлено позже",
+    "значение слова из фразы",
+    "учебное значение",
+    "новый контекст",
+    "placeholder",
+)
+
+_UI_PLACEHOLDER_TOKENS = {"todo", "n/a", "none", "null"}
+
+_PHRASE_FOCUS_FALLBACKS = {
+    "niet te doen": {
+        "focus": "niet te doen",
+        "meaning": "устойчивое выражение: \"невозможно\", \"нереально\", \"слишком трудно\"",
+        "rule": "Конструкция \"niet te + infinitief\" часто означает, что действие невозможно или почти невозможно выполнить.",
+        "blank": "Deze opdracht is niet te ____.",
+        "correct": "doen",
+        "wrong": ["maken", "gaan", "zijn"],
+        "ru": "Это задание невозможно выполнить.",
+    },
+    "geen zin": {
+        "focus": "geen zin hebben in",
+        "meaning": "не хотеть чего-то, не иметь желания что-то делать",
+        "rule": "Конструкция \"geen zin hebben in\" значит, что у человека нет желания или настроения для действия или ситуации.",
+        "blank": "Ik heb geen zin ____ koffie.",
+        "correct": "in",
+        "wrong": ["om", "met", "van"],
+        "ru": "Мне не хочется кофе.",
+    },
+    "maakt niet uit": {
+        "focus": "het maakt niet uit",
+        "meaning": "это не важно, без разницы",
+        "rule": "Выражение \"het maakt niet uit\" используют, когда выбор или деталь не имеет значения.",
+        "blank": "Het maakt niet ____ welke trein we nemen.",
+        "correct": "uit",
+        "wrong": ["op", "mee", "af"],
+        "ru": "Не важно, на какой поезд мы сядем.",
+    },
+    "dat is de druppel": {
+        "focus": "dat is de druppel",
+        "meaning": "это последняя капля",
+        "rule": "Выражение \"dat is de druppel\" означает последнюю неприятность, после которой терпение заканчивается.",
+        "blank": "Nu is dat echt de ____.",
+        "correct": "druppel",
+        "wrong": ["regen", "dag", "vraag"],
+        "ru": "Теперь это правда последняя капля.",
+    },
+    "genoeg van": {
+        "focus": "ik heb er genoeg van",
+        "meaning": "мне надоело, с меня хватит",
+        "rule": "Выражение \"ergens genoeg van hebben\" значит, что человеку что-то надоело или он больше не хочет это терпеть.",
+        "blank": "Ik heb er genoeg ____.",
+        "correct": "van",
+        "wrong": ["in", "op", "mee"],
+        "ru": "С меня хватит.",
+    },
+    "zin om": {
+        "focus": "zin hebben om",
+        "meaning": "хотеть что-то сделать, иметь желание",
+        "rule": "Конструкция \"zin hebben om te + infinitief\" говорит о желании сделать действие.",
+        "blank": "Wij hebben zin ____ te wandelen.",
+        "correct": "om",
+        "wrong": ["in", "van", "met"],
+        "ru": "Нам хочется погулять.",
+    },
+    "bezig met": {
+        "focus": "bezig zijn met",
+        "meaning": "быть занятым чем-то, заниматься чем-то",
+        "rule": "Конструкция \"bezig zijn met\" показывает, чем человек сейчас занят.",
+        "blank": "Zij is bezig ____ haar huiswerk.",
+        "correct": "met",
+        "wrong": ["om", "in", "van"],
+        "ru": "Она занимается домашним заданием.",
+    },
 }
 
 
@@ -386,6 +473,82 @@ def _phrase_tokens(text):
 
 def _normalize_phrase_for_compare(text):
     return " ".join(_phrase_tokens(text))
+
+
+def _has_cyrillic(text):
+    return bool(re.search(r"[А-Яа-яЁё]", str(text or "")))
+
+
+def _looks_like_ui_placeholder(text):
+    value = str(text or "").strip()
+    if not value:
+        return False
+    low = value.lower()
+    if any(pattern in low for pattern in _UI_PLACEHOLDER_PATTERNS):
+        return True
+    tokens = set(_phrase_tokens(low))
+    if tokens & _UI_PLACEHOLDER_TOKENS:
+        return True
+    if re.search(r"\bN\s*/\s*A\b", value, flags=re.IGNORECASE):
+        return True
+    return False
+
+
+def _phrase_card_has_placeholder(card):
+    keys = (
+        "phrase", "translation_ru", "focus_unit", "focus_explanation_ru", "rule_ru", "usage_note_ru",
+        "blank_phrase", "test_blank_phrase", "test_sentence", "test_full_phrase", "correct",
+        "correct_answer", "target_token", "sentence_ru", "test_sentence_ru", "construction",
+        "construction_meaning", "short_rule", "detail", "explanation",
+    )
+    for key in keys:
+        if _looks_like_ui_placeholder(card.get(key)):
+            return True
+    for item in list(card.get("wrong") or []) + list(card.get("options") or []):
+        if _looks_like_ui_placeholder(item):
+            return True
+    for item in card.get("other_forms") or []:
+        if isinstance(item, dict) and any(_looks_like_ui_placeholder(v) for v in item.values()):
+            return True
+    return False
+
+
+def _known_phrase_focus_unit(phrase):
+    phrase_norm = _normalize_phrase_for_compare(phrase)
+    if not phrase_norm:
+        return ""
+    for marker, spec in _PHRASE_FOCUS_FALLBACKS.items():
+        marker_norm = _normalize_phrase_for_compare(marker)
+        focus_norm = _normalize_phrase_for_compare(spec["focus"])
+        if marker_norm in phrase_norm or focus_norm in phrase_norm:
+            return spec["focus"]
+    if "niet te" in phrase_norm:
+        tokens = phrase_norm.split()
+        for idx in range(len(tokens) - 2):
+            if tokens[idx] == "niet" and tokens[idx + 1] == "te":
+                return " ".join(tokens[idx:idx + 3])
+    return ""
+
+
+def _phrase_option_is_junk(option):
+    option = str(option or "").strip()
+    if not option:
+        return True
+    if _looks_like_ui_placeholder(option):
+        return True
+    if "____" in option or len(option) > 40:
+        return True
+    return False
+
+
+def _phrase_pattern_token_present(token, learn_tokens):
+    if token in learn_tokens:
+        return True
+    variants = {
+        "hebben": {"heb", "hebt", "heeft", "hebben", "had", "hadden"},
+        "zijn": {"ben", "bent", "is", "zijn", "was", "waren"},
+    }
+    return bool(variants.get(token, set()) & set(learn_tokens))
 
 
 def _phrase_without_target_tokens(text, target):
@@ -414,6 +577,10 @@ def _phrase_repeats_source(learn_phrase, blank_phrase, correct):
         if test_counts.get(token, 0) > 0:
             overlap += 1
             test_counts[token] -= 1
+    if len(learn_tokens) <= 4:
+        learn_set = set(learn_tokens)
+        new_tokens = [token for token in test_tokens if token not in learn_set]
+        return len(new_tokens) < 2
     return (overlap / max(1, len(learn_tokens))) > 0.60
 
 
@@ -444,13 +611,17 @@ def _filter_phrase_other_forms(other_forms, card):
 def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
     learn_phrase = str(learn_phrase or "").strip()
     learn_ru = str(learn_ru or "").strip()
-    blank = str(card.get("blank_phrase") or "").strip()
+    if _phrase_card_has_placeholder(card):
+        return False
+    blank = str(card.get("test_sentence") or card.get("test_blank_phrase") or card.get("blank_phrase") or "").strip()
     full = str(card.get("test_full_phrase") or "").strip()
-    correct = str(card.get("correct") or "").strip()
+    correct = str(card.get("correct_answer") or card.get("correct") or "").strip()
     target = str(card.get("target_token") or correct).strip()
-    construction = str(card.get("construction") or "").strip()
-    construction_meaning = str(card.get("construction_meaning") or "").strip()
-    test_ru = str(card.get("sentence_ru") or "").strip()
+    construction = str(card.get("focus_unit") or card.get("construction") or "").strip()
+    construction_meaning = str(card.get("focus_explanation_ru") or card.get("construction_meaning") or "").strip()
+    short_rule = str(card.get("rule_ru") or card.get("usage_note_ru") or card.get("short_rule") or "").strip()
+    test_ru = str(card.get("test_sentence_ru") or card.get("sentence_ru") or "").strip()
+    wrong = _clean_phrase_options(correct, list(card.get("wrong") or []), needed=3)
     self_check = card.get("self_check") if isinstance(card.get("self_check"), dict) else {}
     required_checks = (
         "translation_matches_learning_phrase",
@@ -463,9 +634,13 @@ def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
     )
     if any(self_check.get(k) is not True for k in required_checks):
         return False
-    if not all([learn_phrase, learn_ru, blank, full, correct, target, construction, construction_meaning, test_ru]):
+    if not all([learn_phrase, learn_ru, blank, full, correct, target, construction, construction_meaning, short_rule, test_ru]):
+        return False
+    if not _has_cyrillic(learn_ru) or not _has_cyrillic(construction_meaning) or not _has_cyrillic(short_rule):
         return False
     if "____" not in blank:
+        return False
+    if len(wrong) < 3:
         return False
     if _normalize_phrase_for_compare(learn_phrase) == _normalize_phrase_for_compare(full):
         return False
@@ -474,6 +649,10 @@ def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
     if _phrase_repeats_source(learn_phrase, blank, correct):
         return False
     if _phrase_blank_repeats_target(blank, correct):
+        return False
+
+    known_focus = _known_phrase_focus_unit(learn_phrase)
+    if known_focus and _normalize_phrase_for_compare(construction) != _normalize_phrase_for_compare(known_focus):
         return False
 
     learn_tokens = set(_phrase_tokens(learn_phrase))
@@ -488,7 +667,7 @@ def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
         t for t in _phrase_tokens(construction)
         if t not in _PATTERN_PLACEHOLDERS and len(t) > 1
     ]
-    if pattern_tokens and not all(t in learn_tokens for t in pattern_tokens):
+    if pattern_tokens and not all(_phrase_pattern_token_present(t, learn_tokens) for t in pattern_tokens):
         return False
     if pattern_tokens and correct_low not in pattern_tokens and target_low not in pattern_tokens:
         return False
@@ -538,69 +717,46 @@ async def _validate_phrase_card_semantics(phrase, ru, language, card):
 
 def _fallback_phrase_quiz_card(phrase, ru, language):
     phrase = str(phrase or "").strip()
-    tokens = list(re.finditer(r"[\wÀ-ÖØ-öø-ÿ'-]+", phrase, flags=re.UNICODE))
-    candidates = []
-    for match in tokens:
-        word = match.group(0).strip("'’")
-        low = word.lower()
-        if len(word) >= 3 and low not in _PHRASE_SKIP and not word[:1].isupper():
-            candidates.append(match)
-    if not candidates:
-        candidates = [m for m in tokens if len(m.group(0).strip("'’")) >= 2]
-    if not candidates:
+    focus = _known_phrase_focus_unit(phrase)
+    if not focus:
         return {}
-
-    match = candidates[-1]
-    correct = match.group(0).strip("'’")
-    if language == "нидерландский":
-        phrase_low = phrase.lower()
-        if correct.lower() == "innemen" or any(t in phrase_low for t in ("tablet", "medicijn", "pil", "capsule", "vitamine")):
-            blank_phrase = "Ik moet dit medicijn na het eten ____."
-            sentence_ru = "Я должен принять это лекарство после еды."
-            distractors = ["vergeten", "betalen", "wachten"]
-        elif correct.lower().endswith("en"):
-            blank_phrase = "Ik moet dat morgen ____."
-            sentence_ru = f"Я должен завтра это сделать/выполнить: {correct}."
-            distractors = _PHRASE_DISTRACTORS["нидерландский"]
-        else:
-            blank_phrase = "Dat klinkt vandaag ____."
-            sentence_ru = f"Сегодня это звучит так: {correct}."
-            distractors = _PHRASE_DISTRACTORS["нидерландский"]
-        construction_meaning = "значение из учебной фразы в новом контексте"
-    else:
-        if correct.lower().startswith("to "):
-            blank_phrase = "I need ____ it tomorrow."
-        elif correct.lower().endswith(("e", "k", "y", "t", "n")):
-            blank_phrase = "I need to ____ it tomorrow."
-        else:
-            blank_phrase = "That sounds ____ today."
-        sentence_ru = f"Новый пример с тем же словом: {correct}."
-        construction_meaning = "значение из учебной фразы в новом контексте"
-        distractors = _PHRASE_DISTRACTORS["английский"]
+    spec = None
+    focus_norm = _normalize_phrase_for_compare(focus)
+    for item in _PHRASE_FOCUS_FALLBACKS.values():
+        if _normalize_phrase_for_compare(item["focus"]) == focus_norm:
+            spec = item
+            break
+    if not spec:
+        return {}
+    correct = spec["correct"]
+    blank_phrase = spec["blank"]
     if _phrase_repeats_source(phrase, blank_phrase, correct) or _phrase_blank_repeats_target(blank_phrase, correct):
         return {}
-    seen = {correct.lower()}
-    wrong = []
-    for item in distractors:
-        if item.lower() not in seen:
-            wrong.append(item)
-            seen.add(item.lower())
-        if len(wrong) == 3:
-            break
+    wrong = _clean_phrase_options(correct, spec["wrong"], needed=3)
     if len(wrong) < 3:
         return {}
+    self_check = {
+        "translation_matches_learning_phrase": True,
+        "pattern_present_in_learning_phrase": True,
+        "target_token_role_ok": True,
+        "learning_phrase_natural": True,
+        "test_checks_same_rule": True,
+        "test_is_new_not_copy": True,
+        "no_mixed_meanings": True,
+    }
     return {
         "blank_phrase": blank_phrase,
         "correct": correct,
         "wrong": wrong,
-        "sentence_ru": sentence_ru,
+        "sentence_ru": spec["ru"],
         "test_full_phrase": _phrase_full_from_blank(blank_phrase, correct),
-        "construction": correct,
-        "construction_meaning": construction_meaning,
-        "short_rule": f"{correct} = смотри перевод фразы",
-        "detail": f"В новом примере проверяется то же слово: «{correct}». Ориентируйся на смысл из учебной фразы и выбирай вариант, который естественно завершает предложение.",
+        "construction": spec["focus"],
+        "construction_meaning": spec["meaning"],
+        "short_rule": spec["rule"],
+        "detail": spec["rule"],
         "other_forms": [],
-        "explanation": f"{correct} = смотри перевод фразы",
+        "explanation": spec["rule"],
+        "self_check": self_check,
     }
 
 
@@ -617,7 +773,7 @@ def _clean_phrase_options(correct_answer, wrong, needed=3):
     seen = {str(correct_answer).lower()}
     for item in wrong:
         item = str(item).strip()
-        if item and item.lower() not in seen:
+        if item and item.lower() not in seen and not _phrase_option_is_junk(item):
             clean_wrong.append(item)
             seen.add(item.lower())
         if len(clean_wrong) >= needed:
@@ -642,7 +798,10 @@ async def _gen_consistent_phrase_card(phrase, ru, language, avoid_tests=None, at
         ):
             card["wrong"] = clean_wrong[:3]
             return card
-    return _fallback_phrase_quiz_card(phrase, ru, language)
+    fallback = _fallback_phrase_quiz_card(phrase, ru, language)
+    if fallback and _phrase_card_is_consistent(phrase, ru, fallback):
+        return fallback
+    return {}
 
 
 def _phrase_start_card_or_fallback(card, phrase, ru, language):
@@ -650,10 +809,18 @@ def _phrase_start_card_or_fallback(card, phrase, ru, language):
     correct_answer = card.get("correct") or ""
     clean_wrong = _clean_phrase_options(correct_answer, list(card.get("wrong") or []), needed=3)
     blank_phrase = card.get("blank_phrase") or ""
-    if correct_answer and "____" in blank_phrase and len(clean_wrong) >= 3:
+    if (
+        correct_answer
+        and "____" in blank_phrase
+        and len(clean_wrong) >= 3
+        and _phrase_card_is_consistent(phrase, ru, card)
+    ):
         card["wrong"] = clean_wrong[:3]
         return card
-    return _fallback_phrase_quiz_card(phrase, ru, language)
+    fallback = _fallback_phrase_quiz_card(phrase, ru, language)
+    if fallback and _phrase_card_is_consistent(phrase, ru, fallback):
+        return fallback
+    return {}
 
 
 def train_data(language, level, word, ru, fmt):
@@ -699,6 +866,15 @@ def _train_again_kb(language=None, mode="word"):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё", callback_data="train_next")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(language))],
+    ])
+
+
+def _phrase_unavailable_kb(language=None):
+    back = _train_back_target(language)
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Следующая фраза", callback_data="train_next")],
+        [InlineKeyboardButton("Повторить позже", callback_data=back)],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ])
 
 def _train_available_modes(cid, language):
@@ -869,21 +1045,21 @@ async def _render_phrase_quiz(bot, cid):
     used.append(idx)
     st["used_phrases"] = used
 
-    card = _phrase_start_card_or_fallback(
-        await _gen_consistent_phrase_card(phrase, ru, language),
-        phrase,
-        ru,
-        language,
-    )
+    card = await _gen_consistent_phrase_card(phrase, ru, language)
     correct_answer = card.get("correct") or ""
     wrong = list(card.get("wrong") or [])
     clean_wrong = _clean_phrase_options(correct_answer, wrong, needed=3)
     blank_phrase = card.get("blank_phrase") or ""
-    if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 3:
+    if (
+        not correct_answer
+        or "____" not in blank_phrase
+        or len(clean_wrong) < 3
+        or not _phrase_card_is_consistent(phrase, ru, card)
+    ):
         await bot.send_message(
             chat_id=cid,
-            text="Не удалось собрать согласованную карточку по фразе. Попробуй ещё раз.",
-            reply_markup=_train_again_kb(language, mode="phrase"),
+            text="Не получилось собрать хорошую карточку.\nПопробуй следующую фразу.",
+            reply_markup=_phrase_unavailable_kb(language),
         )
         return
 
@@ -919,13 +1095,12 @@ async def _render_phrase_quiz(bot, cid):
         ru,
         card.get("construction") or "",
         card.get("construction_meaning") or "",
+        card.get("short_rule") or "",
         card.get("other_forms") or [],
     )
     kb = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🧩 Тест", callback_data="phrase_intro_test"),
-            InlineKeyboardButton("✅ Выучил", callback_data="phrase_intro_mastered"),
-        ],
+        [InlineKeyboardButton("🧩 Тест", callback_data="phrase_intro_test")],
+        [InlineKeyboardButton("✅ Выучил", callback_data="phrase_intro_mastered")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(language))],
     ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
