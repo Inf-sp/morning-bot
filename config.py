@@ -25,6 +25,25 @@ TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
+ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID") or CHAT_ID
+APP_VERSION = os.environ.get("APP_VERSION", "dev").strip() or "dev"
+
+
+def _env_list(name):
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+    except Exception:
+        pass
+    return [item.strip() for item in raw.replace(";", "\n").splitlines() if item.strip()]
+
+
+RELEASE_NOTES = _env_list("RELEASE_NOTES")
+CHECK_AFTER_DEPLOY = _env_list("CHECK_AFTER_DEPLOY")
 
 API_USAGE_KEY = "api_usage.json"
 API_QUOTAS = {
@@ -109,6 +128,7 @@ ALLOWED_CIDS_KEY = "allowed_cids.json"    # список разрешённых 
 PENDING_INVITES_KEY = "pending_invites.json"  # одноразовые инвайт-коды {code: ts}
 ERROR_LOG_KEY = "error_log.json"   # rolling-лог ошибок для админ-экрана «Логи» {log: [{ts, source, kind, msg}]}
 ACTIVITY_KEY = "activity.json"     # last_seen + счётчики активности: {cid: {last_ts, count, days:[YYYY-MM-DD]}}
+DEPLOY_REPORT_KEY = "deploy_report.json"  # служебное состояние деплой-уведомлений
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}
 

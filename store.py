@@ -115,6 +115,17 @@ def set_settings(chat_id, lat, lon, city, country="", cc=""):
     d[str(chat_id)] = {"lat": lat, "lon": lon, "city": city, "country": country, "cc": cc}
     _save(config.SETTINGS_FILE, d)
 
+
+def get_last_deploy_report_version():
+    state = _load(config.DEPLOY_REPORT_KEY)
+    return str(state.get("last_sent_version", "") or "")
+
+
+def set_last_deploy_report_version(version):
+    state = _load(config.DEPLOY_REPORT_KEY)
+    state["last_sent_version"] = str(version or "")
+    _save(config.DEPLOY_REPORT_KEY, state)
+
 def get_profile(chat_id):
     """Память пользователя (dict). Пусто -> {}."""
     return _load(config.PROFILE_KEY).get(str(chat_id), {})

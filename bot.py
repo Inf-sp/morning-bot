@@ -23,6 +23,7 @@ import travel
 import weather
 import verify
 import secure
+import memory
 import onboard
 import firstvisit
 import tracking
@@ -35,6 +36,76 @@ CHAT_ID = config.CHAT_ID
 
 
 _WELCOME = menu.WELCOME
+
+
+def build_deploy_report_message(version, release_notes, check_list):
+    version = str(version or "").strip() or "dev"
+    lines = [
+        "🚀 Бот обновлён",
+        "",
+        f"Версия: v{version}",
+        "Статус: успешно запущен",
+        "",
+    ]
+
+    if release_notes:
+        lines.append("Что изменилось:")
+        lines.extend(f"• {str(item).strip()}" for item in release_notes if str(item).strip())
+    else:
+        lines.append("Список изменений не указан.")
+        return "\n".join(lines)
+
+    clean_check_list = [str(item).strip() for item in check_list if str(item).strip()]
+    if clean_check_list:
+        lines.extend(["", "Что проверить:"])
+        lines.extend(f"• {item}" for item in clean_check_list)
+
+    lines.extend(["", "Если всё работает — деплой прошёл успешно ✅"])
+    return "\n".join(lines)
+
+
+async def send_deploy_report_to_admin(bot):
+    version = str(config.APP_VERSION or "").strip()
+    started_at = datetime.now(TZ).isoformat()
+
+    if not config.ADMIN_CHAT_ID:
+        logging.warning(
+            "Deploy report skipped: ADMIN_CHAT_ID is not set, version=%s, started_at=%s",
+            version or "dev",
+            started_at,
+        )
+        return
+
+    last_sent_version = store.get_last_deploy_report_version()
+    if version and last_sent_version == version:
+        logging.info(
+            "Deploy report skipped: version already sent, version=%s, started_at=%s",
+            version,
+            started_at,
+        )
+        return
+
+    message = build_deploy_report_message(
+        version,
+        config.RELEASE_NOTES,
+        config.CHECK_AFTER_DEPLOY,
+    )
+    try:
+        await bot.send_message(chat_id=config.ADMIN_CHAT_ID, text=message)
+        store.set_last_deploy_report_version(version)
+        logging.info(
+            "Deploy report sent: version=%s, admin_chat_id=%s, started_at=%s",
+            version or "dev",
+            config.ADMIN_CHAT_ID,
+            started_at,
+        )
+    except Exception:
+        logging.exception(
+            "Deploy report failed: version=%s, admin_chat_id=%s, started_at=%s",
+            version or "dev",
+            config.ADMIN_CHAT_ID,
+            started_at,
+        )
 
 
 async def start(update, context):
@@ -929,6 +1000,7 @@ async def post_init(app):
         BotCommand("setup", "настройки"),
         BotCommand("admin", "администратор"),
     ])
+    await send_deploy_report_to_admin(app.bot)
 
 
 def main():
