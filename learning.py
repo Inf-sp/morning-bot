@@ -2198,7 +2198,10 @@ async def seed_toggle(bot, cid, idx, q=None):
     st["known"] = sorted(known)
     _seed_state_set(cid, st)
     if q is not None:
-        await q.message.edit_text(_seed_render_text(st), reply_markup=_seed_render_kb(st))
+        try:
+            await q.message.edit_text(_seed_render_text(st), reply_markup=_seed_render_kb(st))
+        except Exception:
+            await bot.send_message(chat_id=cid, text=_seed_render_text(st), reply_markup=_seed_render_kb(st))
 
 
 async def seed_page(bot, cid, page, q=None):
@@ -2208,7 +2211,10 @@ async def seed_page(bot, cid, page, q=None):
     st["page"] = max(0, int(page))
     _seed_state_set(cid, st)
     if q is not None:
-        await q.message.edit_text(_seed_render_text(st), reply_markup=_seed_render_kb(st))
+        try:
+            await q.message.edit_text(_seed_render_text(st), reply_markup=_seed_render_kb(st))
+        except Exception:
+            await bot.send_message(chat_id=cid, text=_seed_render_text(st), reply_markup=_seed_render_kb(st))
 
 
 async def seed_add_selected(bot, cid, q=None):
