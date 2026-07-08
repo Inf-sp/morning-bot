@@ -172,28 +172,38 @@ def test_irrelevant_news_falls_back_to_source_card(monkeypatch):
     assert "ничего действительно важного" not in entry["text"]
 
 
-def test_old_news_filtered_out(monkeypatch):
-    monkeypatch.setattr(pn, "_score_items", lambda cid, items: pytest.fail("old item reached Gemini"))
+def test_news_within_last_month_is_allowed(monkeypatch):
+    monkeypatch.setattr(pn, "_score_items", lambda cid, items: [{
+        "is_relevant": True,
+        "importance": 4,
+        "category": "tech",
+        "title_ru": items[0]["title"],
+        "summary_ru": "Свежая новость за последний месяц.",
+        "why_it_matters_ru": "",
+        "source_name": "OpenAI",
+        "source_url": items[0]["url"],
+        "published_at": items[0]["published_at"],
+        "action_type": "read",
+    }])
     entry, _ = pn.build_from_sources("1", "today", [_news(days=8)])
+    assert "New API limit" in entry["text"]
+
+
+def test_news_older_than_month_filtered_out(monkeypatch):
+    monkeypatch.setattr(pn, "_score_items", lambda cid, items: pytest.fail("old item reached Gemini"))
+    entry, _ = pn.build_from_sources("1", "today", [_news(days=31)])
     assert "Новости пока не загрузились" in entry["text"]
 
 
-def test_official_undated_sources_reach_gemini(monkeypatch):
-    seen = {}
-
-    def fake_score(cid, items):
-        seen["items"] = items
-        return []
-
-    monkeypatch.setattr(pn, "_score_items", fake_score)
+def test_official_undated_sources_are_filtered_out(monkeypatch):
+    monkeypatch.setattr(pn, "_score_items", lambda cid, items: pytest.fail("undated item reached Gemini"))
     source = {
         "title": "API pricing update",
         "url": "https://openai.com/api/pricing",
         "content": "New API pricing update and limit changes.",
     }
-    pn.build_from_sources("1", "today", [source])
-    assert len(seen["items"]) == 1
-    assert seen["items"][0]["_date_missing"] is True
+    entry, _ = pn.build_from_sources("1", "today", [source])
+    assert "Новости пока не загрузились" in entry["text"]
 
 
 def test_duplicates_are_merged():
@@ -231,3 +241,27 @@ def test_admin_stats_shows_total_tavily_monthly_limit():
     pn._reserve_credits(1)
     text = pn.admin_stats_text()
     assert "Месяц: 1 / 1000 credits" in text
+
+
+def test_news_limit_can_cover_all_categories():
+    assert pn.NEWS_MAX_ITEMS >= len(pn._CATEGORY_LABELS)
+
+
+def test_search_uses_broad_queries_without_domain_lock(monkeypatch):
+    calls = []
+
+    def fake_reserve(credits):
+        return len(calls) < 8
+
+    def fake_tavily(query, max_results=5, domains=None):
+        calls.append((query, max_results, domains))
+        return []
+
+    monkeypatch.setattr(pn, "_reserve_credits", fake_reserve)
+    monkeypatch.setattr(pn, "_tavily_search", fake_tavily)
+
+    pn._search_all("1")
+
+    assert any(not query.startswith("site:") and domains is None for query, _, domains in calls)
+    assert any(query.startswith("site:") and domains for query, _, domains in calls)
+    assert all(max_results == 10 for _, max_results, _ in calls)

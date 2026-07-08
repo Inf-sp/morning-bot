@@ -21,9 +21,9 @@ NEWS_CACHE_KEY = "personal_news_cache.json"
 NEWS_STATS_KEY = "personal_news_stats.json"
 NEWS_MONTHLY_CREDIT_BUDGET = 1000
 TAVILY_MONTHLY_CREDIT_LIMIT = 1000
-NEWS_DAILY_CREDIT_BUDGET = 30
+NEWS_DAILY_CREDIT_BUDGET = 50
 NEWS_HARD_MONTHLY_LIMIT = 1000
-NEWS_MAX_ITEMS = 5
+NEWS_MAX_ITEMS = 10
 NEWS_MIN_RELEVANCE_SCORE = 0.65
 REFRESH_COOLDOWN_SEC = 6 * 3600
 
@@ -62,29 +62,44 @@ _OFFICIAL_DOMAINS = {
 _QUERY_TEMPLATES = {
     "city": [
         "{city} new restaurant cafe exhibition cultural place",
+        "{city} nieuws vandaag nieuwe opening evenement verkeer wonen",
+        "{city} local news this month restaurant museum event service",
         "site:gemeentealkmaar.nl Alkmaar wijzigingen gemeente service",
         "site:ns.nl NS dienstregeling wijziging Nederland",
     ],
     "netherlands": [
+        "Nederland nieuws vandaag wonen reizen zorg geld prijzen regels",
+        "Netherlands news this month housing travel healthcare money services",
         "site:rijksoverheid.nl Nederland regels wijziging wonen service",
         "site:duo.nl wijziging zorg ondersteuning Nederland",
+        "site:belastingdienst.nl Nederland wijziging toeslagen belasting",
     ],
     "screen": [
         "{movies} official trailer premiere season cancelled streaming",
+        "Netflix Disney Prime Video HBO Max Netherlands new releases this month",
+        "nieuwe films series streaming Nederland deze maand release trailer",
     ],
     "music": [
         "{artists} new album single tour Netherlands official",
+        "concerten Nederland deze maand nieuwe tour album single",
+        "Ticketmaster Songkick Bandsintown Netherlands concerts this month",
     ],
     "tech": [
         "OpenAI Gemini Groq Cloudflare Railway Telegram API pricing limits outage",
         "Apple Mac VS Code OpenWeather Pexels Unsplash API pricing limits changes",
+        "AI developer tools API update outage pricing this month OpenAI Google Cloudflare",
+        "Telegram Railway GitHub Apple developer news this month API service changes",
     ],
     "health": [
+        "Nederland gezondheid zorgverzekering huisarts apotheek nieuws deze maand",
+        "Netherlands healthcare pharmacy GP insurance changes this month",
         "site:rivm.nl Nederland vaccinatie advies wijziging",
         "site:rijksoverheid.nl huisarts apotheek zorgverzekering wijziging",
         "site:apotheek.nl medicijn tekort Nederland",
     ],
     "food": [
+        "Nederland eten supermarkt product recall nieuw restaurant deze maand",
+        "Netherlands food supermarket recall new restaurant this month",
         "site:nvwa.nl product recall waarschuwing Nederland",
         "site:ah.nl nieuwe producten Albert Heijn Nederland",
         "{city} nieuw restaurant bakkerij markt ontbijt",
@@ -95,6 +110,7 @@ _COUNTRY_FALLBACK_QUERIES = [
     "{country} Netherlands breaking news today practical changes services",
     "{country} Netherlands local news today wonen reizen zorg geld",
     "Nederland nieuws vandaag wonen reizen zorg prijzen diensten",
+    "Netherlands news this month practical changes housing travel healthcare food tech",
 ]
 
 
@@ -114,7 +130,7 @@ def cache_key(cid, period, now=None):
 
 
 def _period_max_age_days(period):
-    return 7 if period == "today" else 14
+    return 30
 
 
 def _period_cache_ttl(period):
@@ -177,7 +193,7 @@ def _is_official_url(url):
 def _is_fresh(item, period, now=None):
     dt = _parse_dt(_published_value(item))
     if not dt:
-        return _is_official_url(item.get("url", ""))
+        return False
     now = now or _now()
     return dt >= now - timedelta(days=_period_max_age_days(period))
 
@@ -371,7 +387,7 @@ def _tavily_search(query, max_results=5, domains=None):
         "api_key": config.TAVILY_API_KEY,
         "query": query,
         "max_results": max_results,
-        "search_depth": "basic",
+        "search_depth": "advanced",
         "include_answer": False,
         "include_raw_content": False,
         "include_images": False,
@@ -397,8 +413,8 @@ def _search_all(cid):
         if not _reserve_credits(1):
             break
         try:
-            domains = _OFFICIAL_DOMAINS.get(category)
-            max_results = 8 if category == "netherlands" else 5
+            domains = _OFFICIAL_DOMAINS.get(category) if query.startswith("site:") else None
+            max_results = 10
             for item in _tavily_search(query, max_results=max_results, domains=domains):
                 item = dict(item)
                 item["_category_hint"] = category
