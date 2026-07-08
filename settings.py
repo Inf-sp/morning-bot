@@ -153,7 +153,7 @@ def _notif_label(kind: str, label: str) -> str:
         times = {
             "morning_brief": "08:30",
             "weather_warn": "08:45",
-            "lagom_daily": "09:00",
+            "lagom_daily": "09:30",
             "recipe_daily": "12:30",
             "checkin_day": "14:00",
             "evening_weather": "21:30",
@@ -267,7 +267,7 @@ class NotificationOption:
 _ADMIN_NOTIFICATION_META = {
     "morning_brief": ("08:30", "Мой день"),
     "weather_warn": ("08:45", "Погода"),
-    "lagom_daily": ("09:00", "Мотивация"),
+    "lagom_daily": ("09:30", "Мотивация"),
     "personal_news": ("09:00", "Новости"),
     "weekly_events": ("10:00", "Афиша"),
     "favorite_artists": ("10:05", "Концерты"),
@@ -324,11 +324,12 @@ def _notif_schedule(kind: str) -> str:
 
 
 async def send_notif(bot, cid, q=None):
-    rows = []
+    buttons = []
     for opt in get_notification_options():
         on = notif_on(cid, opt.key)
         mark = "🟢" if on else "⚪"
-        rows.append([InlineKeyboardButton(f"{mark} {opt.button_label}", callback_data=f"set_notiftgl_{opt.key}")])
+        buttons.append(InlineKeyboardButton(f"{mark} {opt.button_label}", callback_data=f"set_notiftgl_{opt.key}"))
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     if any(notif_on(cid, kind) for kind, _ in NOTIF_TYPES):
         rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])

@@ -1106,7 +1106,7 @@ def main():
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
     jq.run_daily(job_morning_brief,   time=_t("08:30"), days=tuple(range(7)))   # Мой день без кнопок
     jq.run_daily(job_weather_warn,    time=_t("08:45"), days=tuple(range(7)))
-    jq.run_daily(job_lagom,           time=_t("09:00"), days=tuple(range(7)))
+    jq.run_daily(job_lagom,           time=_t("09:30"), days=tuple(range(7)))
     jq.run_daily(job_personal_news,   time=_t("09:00"), days=tuple(range(7)))
     jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(6,))      # вс, прогрев кэша концертов
     jq.run_daily(job_weekly_events,   time=_t("10:00"), days=(6,))             # вс
