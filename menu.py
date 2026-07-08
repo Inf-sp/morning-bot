@@ -46,7 +46,7 @@ def _ikb(rows):
 
 
 def _back(parent="m_close"):
-    return [("◀️ Назад", parent)]
+    return [("⬅️ Назад", parent)]
 
 
 def _learning_code(cid):

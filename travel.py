@@ -80,7 +80,7 @@ def _travel_kb():
         [InlineKeyboardButton("❤️ В любимые", callback_data="a_trav_fav"),
          InlineKeyboardButton("❌ Пропустить", callback_data="a_trav_no")],
         [InlineKeyboardButton("🎚️ Настройки стран", callback_data="as_love_countries")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_travel")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel")],
     ])
 
 
@@ -197,7 +197,7 @@ async def send_plan(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Пропустить", callback_data="a_trav_no")],
         [InlineKeyboardButton("💾 Сохранить план поездки", callback_data="a_trav_save")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_travel")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel")],
     ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 

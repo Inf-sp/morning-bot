@@ -965,7 +965,7 @@ def _is_admin(cid):
 
 def _default_keyboard(period, url_buttons=None, cid=None):
     rows = list(url_buttons or [])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -978,7 +978,7 @@ async def send_home(bot, cid):
         [InlineKeyboardButton("📰 Сегодня", callback_data="a_news_today")],
         [InlineKeyboardButton("📅 За неделю", callback_data="a_news_week")],
         [InlineKeyboardButton("⚙️ Настроить темы", callback_data="a_news_topics")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
     s = store.get_settings(cid)
     city = s.get("city") or "твой город"
@@ -1037,7 +1037,7 @@ async def send_topics(bot, cid):
         [InlineKeyboardButton("Изменить любимые фильмы", callback_data="as_love_movies")],
         [InlineKeyboardButton("Изменить любимых артистов", callback_data="as_love_artists")],
         [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="a_news_home")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="a_news_home")],
     ]
     text = (
         "📰 Мои темы\n\n"

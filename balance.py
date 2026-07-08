@@ -588,7 +588,7 @@ def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry", depth=
         rows.append([(cont_label, cont_cb)])
     if depth:
         rows.append([("✂️ Короче", "ans_short"), ("🔬 Глубже", "ans_deep")])
-    rows.append([("⭐️ Сохранить", "as_fav"), ("◀️ Назад", "m_close")])
+    rows.append([("⭐️ Сохранить", "as_fav"), ("⬅️ Назад", "m_close")])
     return _kb(rows)
 
 def _recipe_kb():
@@ -601,7 +601,7 @@ def _recipe_kb():
     return _kb([
         [("✨ Ещё рецепт", "as_food")],
         [("❤️ Сохранить", "as_recipe_save")],
-        [("◀️ Назад", "as_food_back")],
+        [("⬅️ Назад", "as_food_back")],
     ])
 
 def _recipe_typed_kb():
@@ -609,7 +609,7 @@ def _recipe_typed_kb():
     выбор типа приёма пищи; нажатие уводит в новую систему очередей через enter_meal."""
     return _kb([
         [("🥐 Завтрак", "a_recipe_breakfast"), ("🥗 Обед", "a_recipe_lunch"), ("🍲 Ужин", "a_recipe_dinner")],
-        [("◀️ Назад", "m_food")],
+        [("⬅️ Назад", "m_food")],
     ])
 
 def _fridge_recipe_kb():
@@ -619,11 +619,11 @@ def _fridge_recipe_kb():
     который теперь тоже заводит активную категорию fridge и общую очередь."""
     return _kb([
         [("✨ Заменить", "as_fridge_cook")],
-        [("◀️ Назад", "m_food")],
+        [("⬅️ Назад", "m_food")],
     ])
 
 def _back_kb():
-    return _kb([[("◀️ Назад", "m_close")]])
+    return _kb([[("⬅️ Назад", "m_close")]])
 
 
 async def _send(bot, cid, text, kb=None, surface="card"):
@@ -1198,7 +1198,7 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
         msg = food_ui.fridge_home_empty()
         rows = [
             [InlineKeyboardButton("✏️ Добавить продукты", callback_data="as_fridge_add")],
-            [InlineKeyboardButton("◀️ Назад", callback_data=back)],
+            [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
         ]
     else:
         available = sum(1 for it in items if it.get("on", True))
@@ -1220,7 +1220,7 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
             InlineKeyboardButton("❌ Удалить", callback_data="as_fridge_clean"),
         ]]
         rows.extend([[btn] for btn in cat_btns])
-        rows.append([InlineKeyboardButton("◀️ Назад", callback_data=back)])
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back)])
 
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -1272,7 +1272,7 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
             InlineKeyboardButton(f"{page+1}/{pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"as_fridge_cat_{cat_idx}_{(page+1) % pages}"),
         ])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_fridge_home")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_fridge_home")])
 
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -1392,7 +1392,7 @@ async def send_my_recipes(bot, cid):
     recipes = store.get_list(config.MY_RECIPES_KEY, cid_s)
     if not recipes:
         msg = food_ui.my_recipes_empty()
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="as_notes")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")]])
     else:
         msg = food_ui.my_recipes_list(recipes)
         rows = []
@@ -1400,7 +1400,7 @@ async def send_my_recipes(bot, cid):
             name = r.get("name", f"Рецепт {i+1}")[:30]
             rows.append([InlineKeyboardButton(f"📖 {name}", callback_data=f"as_my_recipe_{i}")])
         rows.insert(0, [InlineKeyboardButton("❌ Удалить", callback_data="as_recipe_clean")])
-        rows.append([InlineKeyboardButton("◀️ Назад", callback_data="as_notes")])
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
         kb = InlineKeyboardMarkup(rows)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
@@ -1415,7 +1415,7 @@ async def send_my_recipe_full(bot, cid, idx):
     card = _food_card(d, label="Рецепт")
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить из базы", callback_data=f"as_my_recipe_del_{idx}")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="as_my_recipes")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="as_my_recipes")],
     ])
     await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=kb)
 
@@ -1625,7 +1625,7 @@ async def send_daycheck(bot, cid):
     rows = []
     if worries:
         rows.append([InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_close")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_close")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -1683,7 +1683,7 @@ async def save_worries(bot, cid, text):
     await bot.send_message(chat_id=cid, text=msg.text)
 
 
-_MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("◀️ Назад", "m_balance")]])
+_MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("⬅️ Назад", "m_balance")]])
 
 
 # ---------- роутер кнопок Баланса ----------

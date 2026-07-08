@@ -99,7 +99,7 @@ _SCREENS = {
         [
             [("🎚️ Нидерландский словарь", "a_dictlang_nl")],
             [("🎚️ Настройки обучения", "set_learning")],
-            [("◀️ Назад", "m_learn")],
+            [("⬅️ Назад", "m_learn")],
         ],
     ),
     "m_nl": (
@@ -111,7 +111,7 @@ _SCREENS = {
             [("🧩 Тренажёр фраз", "a_train_phrases_nl")],
             [("💭 Живой язык", "a_proverb_nl")],
             [("🕵️ Игра-детектив", "gamelang_nl")],
-            [("◀️ Назад", "m_learn")],
+            [("⬅️ Назад", "m_learn")],
         ],
     ),
     "m_en": (
@@ -123,7 +123,7 @@ _SCREENS = {
             [("🧩 Тренажёр фраз", "a_train_phrases_en")],
             [("💭 Живой язык", "a_proverb_en")],
             [("🕵️ Игра-детектив", "gamelang_en")],
-            [("◀️ Назад", "m_learn")],
+            [("⬅️ Назад", "m_learn")],
         ],
     ),
     "m_leisure": (
@@ -150,7 +150,7 @@ _SCREENS = {
         [
             [("🎚️ Кино", "ls_love_movies"), ("🎚️ Страны", "ls_love_countries")],
             [("🎚️ Музыканты", "ls_love_artists"), ("🎚️ Книги", "ls_love_books")],
-            [("◀️ Назад", "m_leisure")],
+            [("⬅️ Назад", "m_leisure")],
         ],
     ),
 }
@@ -187,7 +187,7 @@ def learning_settings_menu(active_code="nl"):
         [
             [(f"🎚️ {title} словарь", f"a_dictlang_{code}")],
             [("🎚️ Настройки обучения", "set_learning")],
-            [("◀️ Назад", "m_learn")],
+            [("⬅️ Назад", "m_learn")],
         ],
     )
 

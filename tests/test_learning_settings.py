@@ -200,7 +200,7 @@ def test_live_language_manual_uses_menu_language(monkeypatch):
     assert "That's the last straw" not in text
     assert "«Это последняя капля»." in text
     assert "моё терпение" not in text
-    assert buttons == [["✨ Ещё вариант"], ["◀️ Назад"]]
+    assert buttons == [["✨ Ещё вариант"], ["⬅️ Назад"]]
     assert data == [["a_proverb_nl"], ["m_nl"]]
     assert "Назад" in buttons[-1][0]
 

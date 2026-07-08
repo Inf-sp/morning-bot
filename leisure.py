@@ -307,7 +307,7 @@ def _movie_kb(i, category=None):
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"movie_love_{i}"),
          InlineKeyboardButton("✅ Уже видел", callback_data=f"movie_seen_{i}")],
     ]
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -367,7 +367,7 @@ def _movie_genre_menu_kb():
                for label, gid in _GENRE_MENU]
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i:i + 2])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -377,7 +377,7 @@ def _movie_mood_menu_kb():
                for key, label in _MOOD_MENU]
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i:i + 2])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     return InlineKeyboardMarkup(rows)
 
 MIN_TMDB_RATING = 7.0
@@ -500,7 +500,7 @@ def _movie_home_kb():
         [InlineKeyboardButton("✨ Обычная рекомендация", callback_data="movie_reco")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("😊 По настроению", callback_data="movie_mood_menu")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
 
@@ -540,7 +540,7 @@ def _clip_button_text(text, limit=36):
 
 
 def _cinema_back_kb():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")]])
 
 
 def _build_cinema_keyboard(movies, page: int, total_pages: int) -> InlineKeyboardMarkup:
@@ -556,7 +556,7 @@ def _build_cinema_keyboard(movies, page: int, total_pages: int) -> InlineKeyboar
         InlineKeyboardButton(f"{page + 1} / {total_pages}", callback_data="noop"),
         InlineKeyboardButton("→", callback_data=next_cb),
     ])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -771,7 +771,7 @@ def _book_kb(i):
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
          InlineKeyboardButton("✅ Уже читал", callback_data=f"book_seen_{i}")],
         [InlineKeyboardButton("🎚️ Настройки книг", callback_data="as_love_books")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
 async def _send_book_card(bot, cid, it, i):
@@ -1023,7 +1023,7 @@ def _movie_prefs_kb(cid):
                                   callback_data=f"mpref_c_{v}") for label, v in _PREF_COUNTRIES]
     for i in range(0, len(cbtns), 2):
         rows.append(cbtns[i:i + 2])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="set_leisure_settings")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_leisure_settings")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -1304,7 +1304,7 @@ async def send_watchlist(bot, cid):
     rows = []
     if lst:
         rows.append([InlineKeyboardButton("❌ Очистить список", callback_data="a_watchclean")])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid,
         text="🍿 Посмотреть:\n" + ("\n".join(f"• {_list_text(x)}" for x in lst) if lst else "пусто"),
         reply_markup=InlineKeyboardMarkup(rows))
@@ -1314,7 +1314,7 @@ async def send_readlist(bot, cid):
     rows = []
     if lst:
         rows.append([InlineKeyboardButton("❌ Очистить список", callback_data="a_readclean")])
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid,
         text="📚 Почитать:\n" + ("\n".join(f"• {_list_text(x)}" for x in lst) if lst else "пусто"),
         reply_markup=InlineKeyboardMarkup(rows))
@@ -1326,7 +1326,7 @@ def _listen_kb():
         [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love"),
          InlineKeyboardButton("✅ Уже знаю", callback_data="listen_seen")],
         [InlineKeyboardButton("🎚️ Настройка музыкантов", callback_data="as_love_artists")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
 
 async def listen_dislike(bot, cid):
@@ -1769,7 +1769,7 @@ async def find_concerts(bot, cid, mode="home"):
 
     rows = [
         [InlineKeyboardButton("🌍 Сменить страну", callback_data="a_concerts_pick")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ]
     kb = InlineKeyboardMarkup(rows)
 
@@ -1916,6 +1916,6 @@ async def concert_pick_country(bot, cid):
         for cc, _name, label in sorted(countries, key=lambda x: x[1])
     ]
     rows = [buttons[i:i + 3] for i in range(0, len(buttons), 3)]
-    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="m_leisure")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
                            reply_markup=InlineKeyboardMarkup(rows))
