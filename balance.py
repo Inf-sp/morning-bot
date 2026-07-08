@@ -809,8 +809,8 @@ def _gen_recipe(constraint, cid=None):
 def _recipe_card(d):
     return _food_card(d, label="Рецепт дня")
 
-async def send_recipe(bot, cid, constraint="обычное блюдо"):
-    status = await util.StatusManager.start(bot, cid)
+async def send_recipe(bot, cid, constraint="обычное блюдо", status=None):
+    status = status or await util.StatusManager.start(bot, cid)
     try:
         d = await asyncio.to_thread(_gen_recipe, constraint, cid=cid)
     except Exception as e:
@@ -870,14 +870,14 @@ async def _generate_and_store_queue(cid, meal, ingredients=None):
     return items
 
 
-async def enter_meal(bot, cid, meal, ingredients=None):
+async def enter_meal(bot, cid, meal, ingredients=None, status=None):
     """Явный вход в категорию из меню «Готовка» (§6.1): фиксирует active_meal,
     генерирует очередь при необходимости и показывает первый рецепт."""
     set_active_meal(cid, meal)
     q = get_recipe_queue(cid)
-    status = None
     if q.get("meal") != meal or not q.get("items"):
-        status = await util.StatusManager.start(bot, cid)
+        if status is None:
+            status = await util.StatusManager.start(bot, cid)
         try:
             items = await _generate_and_store_queue(cid, meal, ingredients)
         except Exception as e:
@@ -896,7 +896,7 @@ async def enter_meal(bot, cid, meal, ingredients=None):
     await _send_queue_card(bot, cid, meal, d, status=status)
 
 
-async def show_next_recipe(bot, cid):
+async def show_next_recipe(bot, cid, status=None):
     """«Ещё рецепт» (as_food): показывает следующий рецепт активной категории (§6.1).
 
     Категория берётся из active_meal — не из текста кнопки, поэтому «Ещё рецепт»
@@ -921,9 +921,9 @@ async def show_next_recipe(bot, cid):
     if prev_cuisine:
         bump_cuisine_weight(cid, prev_cuisine, -1)
     d = queue_next(cid)
-    status = None
     if d is None:
-        status = await util.StatusManager.start(bot, cid)
+        if status is None:
+            status = await util.StatusManager.start(bot, cid)
         try:
             items = await _generate_and_store_queue(cid, meal, ingredients)
         except Exception as e:
@@ -946,9 +946,9 @@ async def back_to_food_menu(bot, cid):
     clear_recipe_queue(cid)
     await menu.send_food_menu(bot, cid)
 
-async def send_recipe_featured(bot, cid):
+async def send_recipe_featured(bot, cid, status=None):
     """Новый рецепт из меню — под результатом кнопки завтрак/обед/ужин."""
-    status = await util.StatusManager.start(bot, cid)
+    status = status or await util.StatusManager.start(bot, cid)
     try:
         d = await asyncio.to_thread(_gen_recipe, "любое блюдо под вкус пользователя", cid=cid)
     except Exception as e:
@@ -1158,8 +1158,8 @@ def _gen_leftovers_recipe_batch(ingredients, cid=None, cuisine_weights=None, rec
                               recent_history=recent_history, season_hint=season_hint, n=n)
 
 
-async def send_leftovers(bot, cid, ingredients):
-    status = await util.StatusManager.start(bot, cid)
+async def send_leftovers(bot, cid, ingredients, status=None):
+    status = status or await util.StatusManager.start(bot, cid)
     try:
         d = await asyncio.to_thread(_gen_leftovers_recipe, ingredients, cid)
     except Exception as e:
@@ -1690,7 +1690,8 @@ _MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("◀️ На
 async def handle_callback(bot, cid, q, data):
     # Готовка: «Ещё рецепт» / «Назад» — строго в рамках активной категории (§6 спеки)
     if data == "as_food":
-        await util.ack_loading(q); await show_next_recipe(bot, cid); await util.clear_loading(q); return
+        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+        await show_next_recipe(bot, cid, status=status); return
     if data == "as_food_back":
         await back_to_food_menu(bot, cid); return
 
@@ -1744,15 +1745,15 @@ async def handle_callback(bot, cid, q, data):
             text="✏️ Напиши продукты через запятую или с новой строки — добавлю в список.",
             reply_markup=_back_kb()); return
     if data == "as_fridge_cook":
-        await util.ack_loading(q)
+        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
         raw = store.get_list(config.FRIDGE_KEY, str(cid))
         available = _fridge_available(raw)
         if not available:
             msg = food_ui.fridge_empty_for_recipe()
             await bot.send_message(chat_id=cid, text=msg.text)
+            await status.stop(delete=False)
         else:
-            await enter_meal(bot, cid, "fridge", ", ".join(available))
-        await util.clear_loading(q)
+            await enter_meal(bot, cid, "fridge", ", ".join(available), status=status)
         return
     if data == "as_fridge_clean":
         import cleanup

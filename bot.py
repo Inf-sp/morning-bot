@@ -114,7 +114,8 @@ async def answer_callback(update, context):
     if data == "m_notes":
         await settings.send_notes(bot, cid); return
     if data == "m_food_gen":
-        await _ack(q); await balance.send_recipe_featured(bot, cid); return
+        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+        await balance.send_recipe_featured(bot, cid, status=status); return
     # Пропустить первичный опрос раздела
     if data.startswith("fv_skip_"):
         section = data[len("fv_skip_"):]
@@ -311,11 +312,14 @@ async def answer_callback(update, context):
             elif act.startswith("news_refresh_"):
                 await _ack(q); await personal_news.refresh(bot, cid, act.split("_")[-1])
             elif act in ("food_breakfast", "recipe_breakfast"):
-                await _ack(q); await balance.enter_meal(bot, cid, "breakfast")
+                status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+                await balance.enter_meal(bot, cid, "breakfast", status=status)
             elif act in ("food_lunch", "recipe_lunch"):
-                await _ack(q); await balance.enter_meal(bot, cid, "lunch")
+                status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+                await balance.enter_meal(bot, cid, "lunch", status=status)
             elif act in ("food_dinner", "recipe_dinner"):
-                await _ack(q); await balance.enter_meal(bot, cid, "dinner")
+                status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+                await balance.enter_meal(bot, cid, "dinner", status=status)
         except Exception as e:
             await verify.safe_error(bot, cid, e)
         return

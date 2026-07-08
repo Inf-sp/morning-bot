@@ -205,7 +205,7 @@ def _build_weather_rules(cid, w, flags):
 
 
 # ---------- генерация лука по погоде ----------
-async def send_looks(bot, cid):
+async def send_looks(bot, cid, status=None):
     cached = _get_cached_look(cid)
     if cached:
         cached_names = [_item_name(it) for it in (cached.get("look_data") or {}).get("items", [])]
@@ -214,6 +214,8 @@ async def send_looks(bot, cid):
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
         text, entities = _build_look_message(cached.get("look_data", {}))
         await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=_look_result_kb())
+        if status is not None:
+            await status.stop(delete=False)
         return
     w = store.load_wardrobe(cid)
     wardrobe_text = store.wardrobe_to_text(w)
@@ -232,9 +234,11 @@ async def send_looks(bot, cid):
             parse_mode="HTML",
             reply_markup=kb,
         )
+        if status is not None:
+            await status.stop(delete=False)
         return
     s = store.get_settings(cid)
-    status = await util.StatusManager.start(bot, cid)
+    status = status or await util.StatusManager.start(bot, cid)
     # Персональный профиль из настроек пользователя
     user_profile = _settings.get(cid, "wardrobe_profile", "")
     user_style = _settings.get(cid, "style", "")
@@ -813,7 +817,8 @@ async def ingest(bot, cid, text):
 # ---------- роутер кнопок ----------
 async def handle_callback(bot, cid, q, data):
     if data == "w_look":
-        await util.ack_loading(q); await send_looks(bot, cid); await util.clear_loading(q); return
+        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+        await send_looks(bot, cid, status=status); return
     if data == "w_fb_nostyle":
         await util.ack_loading(q)
         await look_feedback(bot, cid, "nostyle"); await util.clear_loading(q); return

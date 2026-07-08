@@ -33,11 +33,12 @@ class StatusManager:
         (15, "✨ Почти готово..."),
     )
 
-    def __init__(self, bot, cid=None, message=None, parse_mode=None):
+    def __init__(self, bot, cid=None, message=None, parse_mode=None, mode="message"):
         self.bot = bot
         self.cid = cid
         self.message = message
         self.parse_mode = parse_mode
+        self.mode = mode
         self._task = None
         self._stopped = asyncio.Event()
 
@@ -49,6 +50,13 @@ class StatusManager:
             manager.message = await bot.send_message(chat_id=cid, text=first_text, parse_mode=parse_mode)
         else:
             await manager._edit(first_text)
+        manager._task = asyncio.create_task(manager._run())
+        return manager
+
+    @classmethod
+    async def start_inline(cls, q, bot=None, cid=None, text=None):
+        manager = cls(bot, cid=cid, message=q.message, mode="inline")
+        await manager._edit(text or cls.STAGES[0][1])
         manager._task = asyncio.create_task(manager._run())
         return manager
 
@@ -69,19 +77,33 @@ class StatusManager:
         if self.message is None:
             return False
         try:
-            await self.message.edit_text(text, **kwargs)
+            if self.mode == "inline":
+                from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+                kb = InlineKeyboardMarkup([[InlineKeyboardButton(text, callback_data="noop")]])
+                await self.message.edit_reply_markup(reply_markup=kb)
+            else:
+                await self.message.edit_text(text, **kwargs)
             return True
         except Exception:
             return False
 
     async def stop(self, delete=True):
         await self._cancel()
-        if delete and self.message is not None:
+        if self.mode == "inline" and self.message is not None:
+            with contextlib.suppress(Exception):
+                await self.message.edit_reply_markup(reply_markup=None)
+        elif delete and self.message is not None:
             with contextlib.suppress(Exception):
                 await self.message.delete()
 
     async def replace(self, text, **kwargs):
         await self._cancel()
+        if self.mode == "inline":
+            await self.stop(delete=False)
+            if self.cid is not None and self.bot is not None:
+                await self.bot.send_message(chat_id=self.cid, text=text, **kwargs)
+                return True
+            return False
         ok = await self._edit(text, **kwargs)
         if not ok and self.cid is not None:
             await self.bot.send_message(chat_id=self.cid, text=text, **kwargs)
