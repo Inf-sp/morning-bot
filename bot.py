@@ -297,7 +297,7 @@ async def answer_callback(update, context):
         await cleanup.open_collection(bot, cid, collection_id, back=back)
         return
     # Настройки обучения
-    if data in ("set_learning", "toggle_learning_language") or data.startswith("set_learning_level_"):
+    if data in ("set_learning", "set_learning_mydata") or data.startswith("toggle_learning_language") or data.startswith("set_learning_level_"):
         try:
             await learning.handle_learning_settings_callback(bot, cid, q, data)
         except Exception as e:
@@ -384,6 +384,8 @@ async def answer_callback(update, context):
                 await _inline_status(lambda _s: learning.send_proverb(bot, cid, language))
             elif act == "dict":
                 await learning.send_dict(bot, cid)
+            elif act == "dict_mydata":
+                await learning.send_dict(bot, cid, back="set_mydata_learning")
             elif act == "dictconfirm_add":
                 await _ack(q)
                 await learning.confirm_pending_dict_add(bot, cid)
@@ -422,6 +424,10 @@ async def answer_callback(update, context):
                 await learning.send_dict_lang(bot, cid, "nl", back="m_dict_settings")
             elif act == "dictlang_en_from_settings":
                 await learning.send_dict_lang(bot, cid, "en", back="m_dict_settings")
+            elif act == "dictlang_nl_from_mydata":
+                await learning.send_dict_lang(bot, cid, "nl", back="a_dict_mydata")
+            elif act == "dictlang_en_from_mydata":
+                await learning.send_dict_lang(bot, cid, "en", back="a_dict_mydata")
             elif act.startswith("dictcheck_"):
                 lang = act.split("_")[1]
                 await cleanup.open_cleanup(bot, cid, f"d_broken_{lang}")

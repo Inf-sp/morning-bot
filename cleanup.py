@@ -25,6 +25,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 from util import esc
+from ui.constants import ui_label
 
 CLEAN_PAGE = 8
 
@@ -63,79 +64,79 @@ def _collection(id, owner, title, storage_key, item_type, back, actions,
 
 COLLECTIONS = {
     "cinema_favorites": _collection(
-        "cinema_favorites", "cinema", "⭐ Любимое · Кино", config.WATCHLIST_KEY, "movie",
+        "cinema_favorites", "cinema", f"Любимое · {ui_label('cinema', 'Кино')}", config.WATCHLIST_KEY, "movie",
         "a_watch", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("Добавить / Найти фильм", "as_loveadd_movies")),
     "cinema_saved": _collection(
-        "cinema_saved", "cinema", "💾 Сохранённое · Кино", config.NOTES_KEY, "note",
+        "cinema_saved", "cinema", f"Сохранённое · {ui_label('cinema', 'Кино')}", config.NOTES_KEY, "note",
         "a_watch", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
         note_group="movies"),
     "cinema_watched": _collection(
-        "cinema_watched", "cinema", "✅ Смотрел · Кино", config.MOVIE_SEEN_KEY, "movie",
+        "cinema_watched", "cinema", f"{ui_label('seen', 'Смотрел')} · {ui_label('cinema', 'Кино')}", config.MOVIE_SEEN_KEY, "movie",
         "a_watch", [{"id": "remove", "label": "Убрать из просмотренного", "confirm": False}]),
     "cinema_hidden": _collection(
-        "cinema_hidden", "cinema", "🙈 Скрытое · Кино", config.MOVIE_BLACKLIST_KEY, "movie",
+        "cinema_hidden", "cinema", f"Скрытое · {ui_label('cinema', 'Кино')}", config.MOVIE_BLACKLIST_KEY, "movie",
         "a_watch", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
 
     "books_favorites": _collection(
-        "books_favorites", "books", "⭐ Любимое · Книги", config.BOOKS_KEY, "book",
+        "books_favorites", "books", f"Любимое · {ui_label('books', 'Книги')}", config.BOOKS_KEY, "book",
         "a_read", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("Добавить / Найти книгу", "as_loveadd_books")),
     "books_saved": _collection(
-        "books_saved", "books", "💾 Сохранённое · Книги", config.READLIST_KEY, "book",
+        "books_saved", "books", f"Сохранённое · {ui_label('books', 'Книги')}", config.READLIST_KEY, "book",
         "a_read", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": False}]),
     "books_read": _collection(
-        "books_read", "books", "✅ Прочитано · Книги", config.BOOK_SEEN_KEY, "book",
+        "books_read", "books", f"{ui_label('seen', 'Прочитано')} · {ui_label('books', 'Книги')}", config.BOOK_SEEN_KEY, "book",
         "a_read", [{"id": "remove", "label": "Убрать из прочитанного", "confirm": False}]),
     "books_hidden": _collection(
-        "books_hidden", "books", "🙈 Скрытое · Книги", config.BOOK_BLACKLIST_KEY, "book",
+        "books_hidden", "books", f"Скрытое · {ui_label('books', 'Книги')}", config.BOOK_BLACKLIST_KEY, "book",
         "a_read", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
 
     "music_favorite_artists": _collection(
-        "music_favorite_artists", "music", "⭐ Любимые артисты", config.ARTISTS_KEY, "artist",
+        "music_favorite_artists", "music", "Любимые артисты", config.ARTISTS_KEY, "artist",
         "a_listen", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("Добавить / Найти артиста", "as_loveadd_artists")),
     "music_hidden_artists": _collection(
-        "music_hidden_artists", "music", "🙈 Скрытые артисты", config.MUSIC_DISLIKE_KEY, "artist",
+        "music_hidden_artists", "music", "Скрытые артисты", config.MUSIC_DISLIKE_KEY, "artist",
         "a_listen", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
     "music_saved": _collection(
-        "music_saved", "music", "💾 Сохранённое · Музыка", config.NOTES_KEY, "note",
+        "music_saved", "music", f"Сохранённое · {ui_label('music', 'Музыка')}", config.NOTES_KEY, "note",
         "a_listen", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
         note_group="music"),
     "music_seen_artists": _collection(
-        "music_seen_artists", "music", "✅ Уже знаю · Музыка", config.MUSIC_SEEN_KEY, "artist",
+        "music_seen_artists", "music", f"{ui_label('seen', 'Уже знаю')} · {ui_label('music', 'Музыка')}", config.MUSIC_SEEN_KEY, "artist",
         "a_listen", [{"id": "remove", "label": "Убрать из знакомого", "confirm": False}]),
 
     "travel_favorite_countries": _collection(
-        "travel_favorite_countries", "travel", "⭐ Любимые страны", config.FAVCOUNTRIES_KEY, "country",
+        "travel_favorite_countries", "travel", "Любимые страны", config.FAVCOUNTRIES_KEY, "country",
         "m_travel", [{"id": "remove", "label": "Убрать страны", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("Добавить / Найти страну", "as_loveadd_countries")),
     "travel_hidden_countries": _collection(
-        "travel_hidden_countries", "travel", "🙈 Скрытые страны", config.TRAVEL_DISLIKE_KEY, "country",
+        "travel_hidden_countries", "travel", "Скрытые страны", config.TRAVEL_DISLIKE_KEY, "country",
         "m_travel", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
     "travel_saved_places": _collection(
-        "travel_saved_places", "travel", "💾 Сохранённое · Путешествия", config.NOTES_KEY, "note",
+        "travel_saved_places", "travel", f"Сохранённое · {ui_label('travel', 'Путешествия')}", config.NOTES_KEY, "note",
         "m_travel", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
         note_group="travel"),
 
     "recipes_saved": _collection(
-        "recipes_saved", "food", "🍳 Рецепты", config.MY_RECIPES_KEY, "recipe",
+        "recipes_saved", "food", ui_label("recipes", "Рецепты"), config.MY_RECIPES_KEY, "recipe",
         "as_my_recipes", [{"id": "remove", "label": "Удалить рецепты", "confirm": True}]),
     "fridge_items": _collection(
-        "fridge_items", "food", "🥕 Продукты", config.FRIDGE_KEY, "product",
+        "fridge_items", "food", ui_label("products", "Продукты"), config.FRIDGE_KEY, "product",
         "as_fridge", [{"id": "remove", "label": "Удалить продукты", "confirm": True}]),
     "dictionary_words": _collection(
-        "dictionary_words", "learning", "📖 Словарь", config.DICT_KEY, "word",
+        "dictionary_words", "learning", ui_label("dictionary", "Словарь"), config.DICT_KEY, "word",
         "a_dict", [{"id": "remove", "label": "Удалить слова", "confirm": True}]),
     "health_lagom": _collection(
-        "health_lagom", "health", "🚑 Принципы здоровья", _LAGOM_REVISION_SLOT, "principle",
+        "health_lagom", "health", ui_label("health", "Принципы здоровья"), _LAGOM_REVISION_SLOT, "principle",
         "set_lagom", [{"id": "remove", "label": "Удалить принципы", "confirm": True}]),
     "health_diary": _collection(
-        "health_diary", "health", "📝 История самочувствия", config.DIARY_KEY, "diary",
+        "health_diary", "health", "История самочувствия", config.DIARY_KEY, "diary",
         "m_balance", [{"id": "remove", "label": "Удалить записи", "confirm": True}]),
 }
 
@@ -371,7 +372,7 @@ def _ctx_items(cid, ctx):
         if group:
             label, _desc = _s._fav_group_info(group)
             return f"{label} · Сохранённое", items, f"as_bucket_favgrp_{group}"
-        return "💾 Сохранённое", items, "as_bucket_fav"
+        return "Сохранённое", items, "as_bucket_fav"
     if ctx in ("wl", "rl"):
         key = config.WATCHLIST_KEY if ctx == "wl" else config.READLIST_KEY
         title = "🍿 Чистка: посмотреть" if ctx == "wl" else "📚 Чистка: почитать"
@@ -607,7 +608,7 @@ def _view_items(ctx, cid):
         if group:
             label, _desc = _s._fav_group_info(group)
             return f"{label} · Сохранённое", items, f"as_bucket_favgrp_{group}"
-        return "💾 Сохранённое", items, "as_bucket_fav"
+        return "Сохранённое", items, "as_bucket_fav"
     if ctx.startswith("lv_") or ctx.startswith("lvls_"):
         is_leisure = ctx.startswith("lvls_")
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]

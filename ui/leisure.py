@@ -520,7 +520,7 @@ def weekly_events_card(period_start: date, period_end: date, concerts, movies) -
     b.newline()
 
     if concert_groups:
-        b.section("🎤 Концерты")
+        b.section("🎸 Концерты")
         for idx, event in enumerate(concert_groups):
             if idx:
                 b.spacer()

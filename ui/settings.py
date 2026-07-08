@@ -1,6 +1,13 @@
 from .builder import MessageBuilder, MessageSpec
 
 
+def profile():
+    b = MessageBuilder()
+    b.section("Профиль")
+    b.line("Личные параметры, которые помогают боту давать более точные советы.")
+    return b.build_stripped()
+
+
 def notifications():
     b = MessageBuilder()
     b.section("Рассылки")
@@ -106,9 +113,20 @@ def style_pick():
 
 def settings_home():
     b = MessageBuilder()
-    b.section("🎚️ Настройки")
-    b.line("Настройте бота под себя и управляйте личными данными.")
+    b.section("⚙️ Настройки")
+    b.line("Настройте бота под себя.")
     return b.build_stripped()
+
+
+def mydata_home():
+    b = MessageBuilder()
+    b.section("Мои данные")
+    b.line("Здесь хранятся ваши списки, сохранённые элементы и личные данные бота.")
+    return b.build_stripped()
+
+
+def mydata_section(title):
+    return MessageBuilder().section(title).build_stripped()
 
 
 def leisure_settings():
@@ -134,11 +152,11 @@ def wardrobe_home():
 
 
 def countries_home():
-    return MessageBuilder().section("🗺️ Мои страны").build_stripped()
+    return MessageBuilder().section("🌍 Мои страны").build_stripped()
 
 
 def artists_home(items):
-    return list_section("🎤 Мои музыканты", items)
+    return list_section("🎧 Мои музыканты", items)
 
 
 def books_home(items):
@@ -203,14 +221,14 @@ def favorite_card(source, date, text, entities=None):
 
 def trips_empty():
     b = MessageBuilder()
-    b.section("🧳 Поездки")
+    b.section("✈️ Поездки")
     b.line("Пока пусто.")
     return b.build_stripped()
 
 
 def trips_home():
     b = MessageBuilder()
-    b.section("🧳 Мои поездки")
+    b.section("✈️ Мои поездки")
     b.line("Сохранённые планы поездок.")
     b.spacer()
     b.line("Выбери план 👇")
@@ -280,5 +298,3 @@ def favorite_added():
 
 def admin_only():
     return MessageSpec(text="⛔ Только для администратора.")
-
-

@@ -501,10 +501,10 @@ def _movie_home_kb():
          InlineKeyboardButton("🎬 Что в кино", callback_data="a_now_playing")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("😊 По настроению", callback_data="movie_mood_menu")],
-        [InlineKeyboardButton("⭐ Любимое", callback_data="col_cinema_favorites"),
-         InlineKeyboardButton("💾 Сохранённое", callback_data="col_cinema_saved")],
+        [InlineKeyboardButton("Любимое", callback_data="col_cinema_favorites"),
+         InlineKeyboardButton("Сохранённое", callback_data="col_cinema_saved")],
         [InlineKeyboardButton("✅ Смотрел", callback_data="col_cinema_watched"),
-         InlineKeyboardButton("🙈 Скрытое", callback_data="col_cinema_hidden")],
+         InlineKeyboardButton("Скрытое", callback_data="col_cinema_hidden")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
