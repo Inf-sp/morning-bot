@@ -56,13 +56,13 @@ def deploy_report(version, title, release_notes):
 
 def home(system_dot, system_text, system_line, notif_line, users_line, data_line, updated_at):
     b = MessageBuilder()
-    b.bold("Админ")
+    b.bold(ui_label("admin", "Админ"))
     b.newline()
     b.spacer()
     b.line(f"{system_dot} {system_text}")
     b.spacer()
     b.line(f"{ui_label('system', 'Система')}: {system_line}")
-    b.line(f"Уведомления: {notif_line}")
+    b.line(f"{ui_label('notifications', 'Уведомления')}: {notif_line}")
     b.line(f"{ui_label('users', 'Пользователи')}: {users_line}")
     b.line(f"Данные: {data_line}")
     b.spacer()
@@ -122,7 +122,7 @@ def invite_created(link):
 
 def welcome_admin():
     b = MessageBuilder()
-    b.bold("Приветствие")
+    b.bold(ui_label("welcome", "Приветствие"))
     b.newline()
     b.spacer()
     b.line("Текст, который увидит новый пользователь после входа:")
@@ -149,7 +149,7 @@ def system(rows, updated_at):
 
 def diagnostics():
     b = MessageBuilder()
-    b.bold("Диагностика")
+    b.bold(ui_label("diagnostics", "Диагностика"))
     b.newline()
     b.spacer()
     b.line("Выберите раздел:")
@@ -163,7 +163,7 @@ def diagnostics():
 
 def api_diagnostics_compact(rows, updated_at):
     b = MessageBuilder()
-    b.bold("API · Диагностика")
+    b.bold(ui_label("api", "API · Диагностика"))
     b.newline()
     if not rows:
         b.spacer()
@@ -180,7 +180,7 @@ def api_diagnostics_compact(rows, updated_at):
 
 def llm_diagnostics(calls_today, tokens_today, errors_today, providers, fallback_text, problem, updated_at):
     b = MessageBuilder()
-    b.bold("LLM · Диагностика")
+    b.bold(ui_label("llm", "LLM · Диагностика"))
     b.newline()
     b.spacer()
     b.line("Сегодня:")
@@ -205,7 +205,7 @@ def llm_diagnostics(calls_today, tokens_today, errors_today, providers, fallback
 def news_diagnostics(today_credits, daily_limit, month_credits, month_limit,
                      cache_hits, last_build, errors, updated_at):
     b = MessageBuilder()
-    b.bold("Новости · Диагностика")
+    b.bold(ui_label("news", "Новости · Диагностика"))
     b.newline()
     b.spacer()
     b.line("Tavily:")
@@ -227,7 +227,7 @@ def news_diagnostics(today_credits, daily_limit, month_credits, month_limit,
 
 def notifications(sent_today, errors_today, active_types, updated_at):
     b = MessageBuilder()
-    b.bold("Уведомления")
+    b.bold(ui_label("notifications", "Уведомления"))
     b.newline()
     b.spacer()
     b.line(f"Сегодня: {sent_today} отправлено · {errors_today} ошибок")
@@ -243,7 +243,7 @@ def notifications(sent_today, errors_today, active_types, updated_at):
 
 def tests(history):
     b = MessageBuilder()
-    b.bold("Тесты")
+    b.bold(ui_label("tests", "Тесты"))
     b.newline()
     b.spacer()
     b.line("Тесты отправляются только вам.")
@@ -333,7 +333,7 @@ def llm(status_dot, status_text, last_req, avg_ms, errors_today, calls_today, to
         openrouter_fallback=None):
     """providers: [(label, pct)] доля токенов за сегодня."""
     b = MessageBuilder()
-    b.bold("LLM")
+    b.bold(ui_label("llm", "LLM"))
     b.newline()
     b.spacer()
     b.metric("Статус", f"{status_dot} {status_text}")
@@ -538,7 +538,7 @@ def api_check(snapshot):
 
 def api_diagnostics(snapshot):
     b = MessageBuilder()
-    b.bold("Диагностика API")
+    b.bold(ui_label("api", "Диагностика API"))
     b.newline()
     for svc in (snapshot or {}).get("services") or []:
         b.spacer()
@@ -568,7 +568,7 @@ def api_diagnostics(snapshot):
 def llm_history(rows):
     """rows: [(when, provider, module, ok)]."""
     b = MessageBuilder()
-    b.bold("История запросов")
+    b.bold(ui_label("history", "История запросов"))
     b.newline()
     b.spacer()
     if not rows:
@@ -585,7 +585,7 @@ def llm_history(rows):
 def broadcast(next_title, next_when):
     """Экран «Уведомления»: только ближайшее автоматическое уведомление, без охвата."""
     b = MessageBuilder()
-    b.bold("Уведомления")
+    b.bold(ui_label("notifications", "Уведомления"))
     b.newline()
     b.spacer()
     b.bold("Следующее")
@@ -600,7 +600,7 @@ def broadcast(next_title, next_when):
 def notification_picker(options):
     """options: [NotificationOption]. Список для выбора уведомления перед тестом."""
     b = MessageBuilder()
-    b.bold("Выберите уведомление")
+    b.bold(ui_label("notifications", "Выберите уведомление"))
     b.newline()
     b.spacer()
     for opt in options:

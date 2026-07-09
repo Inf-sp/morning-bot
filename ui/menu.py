@@ -49,7 +49,7 @@ def welcome():
     b.newline()
     b.spacer()
     b.line("Помогаю с погодой, одеждой, языками, рецептами, досугом и полезными привычками.")
-    b.section("Разделы")
+    b.section(ui_label("sections", "Разделы"))
     b.line(f"{ui_label('myday', 'Мой день')} — погода, сводка и советы.")
     b.line(f"{ui_label('wardrobe', 'Гардероб')} — что надеть и покупки.")
     b.line(f"{ui_label('health', 'Здоровье')} — мотивация, тревоги и здоровье.")

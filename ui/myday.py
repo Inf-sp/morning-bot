@@ -1,4 +1,5 @@
 from .builder import MessageBuilder
+from .constants import ui_label
 
 
 def day_summary(
@@ -17,7 +18,7 @@ def day_summary(
 ):
     title_flag = f" {flag}" if flag else ""
     b = MessageBuilder()
-    b.section(f"Мой день • {header} • {city}{title_flag}")
+    b.section(f"{ui_label('myday', 'Мой день')} • {header} • {city}{title_flag}")
 
     b.section(weather_title)
     b.line(weather_line)
@@ -30,15 +31,15 @@ def day_summary(
         b.line(word_line)
 
     if fact:
-        b.section("Интересный факт")
+        b.section(ui_label("interesting", "Интересный факт"))
         b.line(str(fact).strip())
 
     if lifehack:
-        b.section("База знаний")
+        b.section(ui_label("knowledge", "База знаний"))
         b.line(lifehack)
 
     if quote_line:
-        b.section("Цитата")
+        b.section(ui_label("quote", "Цитата"))
         b.line(quote_line)
 
     return b.build_stripped()

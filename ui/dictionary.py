@@ -1,6 +1,7 @@
 from telegram import MessageEntity
 
 from .builder import MessageBuilder, MessageSpec
+from .constants import ui_label
 
 
 def _lang_adj(code):
@@ -52,7 +53,7 @@ def dict_add_confirmation(added_items):
     first = added_items[0]
     single = len(added_items) == 1
 
-    b.section("Словарь")
+    b.section(ui_label("dictionary", "Словарь"))
     b.spacer()
 
     if single:
@@ -91,7 +92,7 @@ def dict_duplicate_confirmation(duplicate_items):
     first = duplicate_items[0]
     single = len(duplicate_items) == 1
 
-    b.section("Словарь")
+    b.section(ui_label("dictionary", "Словарь"))
     b.spacer()
 
     if single:

@@ -4,21 +4,21 @@ from .constants import ui_label
 
 def profile():
     b = MessageBuilder()
-    b.section("Профиль")
+    b.section(ui_label("profile", "Профиль"))
     b.line("Личные параметры, которые помогают боту давать более точные советы.")
     return b.build_stripped()
 
 
 def notifications():
     b = MessageBuilder()
-    b.section("Рассылки")
+    b.section(ui_label("broadcasts", "Рассылки"))
     b.line("Нажми для включения/выключения. ✅ — включено.")
     return b.build_stripped()
 
 
 def priorities(current):
     b = MessageBuilder()
-    b.section("Приоритеты")
+    b.section(ui_label("priorities", "Приоритеты"))
     b.line("Выбери, на что боту обращать больше внимания в брифе, советах и рекомендациях.")
     b.spacer()
     b.bold("Сейчас:")
@@ -28,7 +28,7 @@ def priorities(current):
 
 def cuisines(current):
     b = MessageBuilder()
-    b.section("Кухни")
+    b.section(ui_label("cuisines", "Кухни"))
     b.line("Выбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника с их учётом.")
     b.spacer()
     b.bold("Сейчас:")
@@ -111,7 +111,7 @@ def body_input():
 
 def style_pick():
     b = MessageBuilder()
-    b.section("Стиль одежды")
+    b.section(ui_label("clothing_style", "Стиль одежды"))
     b.line("Выбери из предложенных или опиши своими словами — бот учтёт при подборе образа:")
     return b.build_stripped()
 
@@ -125,7 +125,7 @@ def settings_home():
 
 def mydata_home():
     b = MessageBuilder()
-    b.section("Мои данные")
+    b.section(ui_label("personal_data", "Мои данные"))
     b.line("Здесь хранятся ваши списки, сохранённые элементы и личные данные бота.")
     return b.build_stripped()
 
@@ -170,7 +170,7 @@ def books_home(items):
 
 def lagom_home(items):
     b = MessageBuilder()
-    b.section("Лагом")
+    b.section(ui_label("lagom", "Лагом"))
     b.text_line("Лагом (швед. ")
     b.italic("lagom")
     b.line(
@@ -178,7 +178,7 @@ def lagom_home(items):
         "что важно, как хочешь жить, что даёт энергию, а что забирает."
     )
     b.line("Бот использует их в мотивации — чтобы советы звучали именно про тебя, а не общими словами.")
-    b.section("Примеры:")
+    b.section(ui_label("examples", "Примеры:"))
     b.line(" «Меньше, но лучше» · «Физическая активность каждый день» · «Не сравниваю себя с другими»")
     if not items:
         b.line("Пока пусто — добавь первый принцип.")

@@ -46,11 +46,11 @@ def country_card(data):
         b.line(data["about"])
     if data.get("for_what"):
         b.spacer()
-        b.bold("Ради чего ехать:")
+        b.bold(ui_label("reason", "Ради чего ехать:"))
         b.line(f" {data['for_what']}")
     if data.get("langs"):
         b.spacer()
-        b.bold("Язык:")
+        b.bold(ui_label("spoken_language", "Язык:"))
         b.line(f" {data['langs']}")
     if data.get("note"):
         b.spacer()
@@ -60,7 +60,7 @@ def country_card(data):
     if data.get("fact"):
         b.spacer()
         b.text_line("🔍 ")
-        b.bold("Факт:")
+        b.bold(ui_label("interesting", "Факт:"))
         b.line(f" {data['fact']}")
     return b.build_stripped()
 
@@ -79,35 +79,35 @@ def travel_plan(plan, fallback_country):
         b.line(plan["about"])
     if plan.get("why"):
         b.spacer()
-        b.bold("Почему тебе подойдёт")
+        b.bold(ui_label("recommendation", "Почему тебе подойдёт"))
         b.newline()
         for w in plan["why"]:
             b.bullet(str(w))
     if plan.get("best_time"):
         b.spacer()
-        b.bold("Лучшее время")
+        b.bold(ui_label("best_time", "Лучшее время"))
         b.newline()
         b.line(plan["best_time"])
     if plan.get("budget"):
         b.spacer()
-        b.bold("Бюджет")
+        b.bold(ui_label("budget", "Бюджет"))
         b.newline()
         for item in plan["budget"]:
             b.bullet(str(item))
     if plan.get("spots"):
         b.spacer()
-        b.bold("Не пропусти")
+        b.bold(ui_label("dont_miss", "Не пропусти"))
         b.newline()
         for spot in plan["spots"]:
             b.bullet(str(spot))
     if plan.get("lgbt"):
         b.spacer()
-        b.bold("LGBTQ+")
+        b.bold(ui_label("lgbtq", "LGBTQ+"))
         b.newline()
         b.line(plan["lgbt"])
     if plan.get("fact"):
         b.spacer()
-        b.bold("Интересный факт")
+        b.bold(ui_label("interesting", "Интересный факт"))
         b.newline()
         b.line(plan["fact"])
     return b.build_stripped()

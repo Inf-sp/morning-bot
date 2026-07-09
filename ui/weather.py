@@ -25,6 +25,7 @@ MessageBuilder (section/line/warning/embed) — единый визуальны�
 """
 
 from .builder import MessageBuilder, MessageSpec, from_html
+from .constants import ui_label
 from util import cap_sentence
 
 
@@ -40,10 +41,10 @@ def weather_warning(events, when="", advice=None):
     for ev in events:
         b.line(ev)
     if when:
-        b.section("Когда:")
+        b.section(ui_label("when", "Когда:"))
         b.line(when)
     if advice:
-        b.section("Что сделать:")
+        b.section(ui_label("action", "Что сделать:"))
         for a in advice:
             b.bullet(a)
     return b.build_stripped()
@@ -82,7 +83,7 @@ def day_forecast(header, main_lines, alert="", fact_title="", fact=""):
 
 def week_forecast(rng, city, flag, groups, summary=""):
     b = MessageBuilder()
-    b.section(f"Ближайшая неделя • {rng} • {city} {flag}")
+    b.section(f"{ui_label('week', 'Ближайшая неделя')} • {rng} • {city} {flag}")
     b.newline()
     for group in groups:
         b.line(f"{group['icon']} {group['label']} — {group['desc']}, {group['temp']}")

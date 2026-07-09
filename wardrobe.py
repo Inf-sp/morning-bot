@@ -15,6 +15,7 @@ import memory
 import research
 import settings as _settings
 from ui import wardrobe as wardrobe_ui
+from ui.constants import ui_label
 
 _log = logging.getLogger(__name__)
 
@@ -233,7 +234,7 @@ async def send_looks(bot, cid, status=None):
         await bot.send_message(
             chat_id=cid,
             text=(
-                "<b>Шкаф пуст</b>\n\n"
+                f"<b>{ui_label('empty_wardrobe', 'Шкаф пуст')}</b>\n\n"
                 "Чтобы собрать образ из твоих вещей, сначала добавь их в шкаф."
             ),
             parse_mode="HTML",
@@ -668,7 +669,8 @@ async def send_improve(bot, cid):
         ]])
         await bot.send_message(
             chat_id=cid,
-            text="<b>Шкаф пуст</b>\n\nДобавь вещи в шкаф — тогда разберу гардероб и дам советы.",
+            text=f"<b>{ui_label('empty_wardrobe', 'Шкаф пуст')}</b>\n\n"
+                 "Добавь вещи в шкаф — тогда разберу гардероб и дам советы.",
             parse_mode="HTML",
             reply_markup=kb,
         )

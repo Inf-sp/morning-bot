@@ -1,6 +1,7 @@
 from telegram import MessageEntity
 
 from .builder import MessageBuilder
+from .constants import ui_label
 
 
 def _stars(score):
@@ -23,7 +24,7 @@ def improve_card(data):
 
     # Общая оценка
     score = data.get("score")
-    b.section("Общая оценка")
+    b.section(ui_label("assessment", "Общая оценка"))
     if score is not None:
         b.line(_stars(score))
         b.bold(f"{score} / 100")
@@ -61,7 +62,7 @@ def improve_card(data):
     # Что купить
     buy = data.get("buy") or []
     if buy:
-        b.section("Что купить в первую очередь")
+        b.section(ui_label("shopping", "Что купить в первую очередь"))
         for i, it in enumerate(buy[:5]):
             item = _clean_text(it.get("item")) if isinstance(it, dict) else _clean_text(it)
             why = _finish_dot(it.get("why")) if isinstance(it, dict) else ""
@@ -75,7 +76,7 @@ def improve_card(data):
     # Чего не покупать
     avoid = [a for a in (data.get("avoid") or []) if _clean_text(a)]
     if avoid:
-        b.section("Что покупать не стоит")
+        b.section(ui_label("avoid", "Что покупать не стоит"))
         for a in avoid[:3]:
             b.bullet(_finish_dot(a))
 
@@ -94,7 +95,7 @@ def improve_card(data):
     # Потенциал
     potential = _finish_dot(data.get("potential"))
     if potential:
-        b.section("Потенциал гардероба")
+        b.section(ui_label("potential", "Потенциал гардероба"))
         b.line(potential)
 
     return b.build_stripped()
@@ -147,7 +148,7 @@ def look_message(look_data):
 
     reasons = [_finish_dot(r) for r in (look_data.get("reasons") or []) if _clean_text(r)]
     if reasons:
-        b.section("Почему именно сегодня")
+        b.section(ui_label("why_today", "Почему именно сегодня"))
         for r in reasons[:3]:
             b.bullet(r)
 
@@ -251,7 +252,7 @@ def entity_card(title, summary="", quote="", bullets=None, final="", bullet_labe
 
 def zone_picker_screen():
     b = MessageBuilder()
-    b.section("Что удалить")
+    b.section(ui_label("delete", "Что удалить"))
     b.line("Выбери категорию.")
     return b.build_stripped()
 

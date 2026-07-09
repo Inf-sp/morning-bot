@@ -289,7 +289,7 @@ def book_text(item):
     if item.get("quote"):
         quote = str(item["quote"]).strip().strip("«»\"")
         b.spacer()
-        b.bold("Цитата")
+        b.bold(ui_label("quote", "Цитата"))
         b.newline()
         b.line(f"«{quote}»")
     return b.build_stripped()
@@ -321,7 +321,7 @@ def artist_card(data):
             b.bullet(str(t))
     if data.get("fact"):
         b.spacer()
-        b.bold("Факт:")
+        b.bold(ui_label("interesting", "Факт:"))
         b.newline()
         b.line(data["fact"])
     return b.build_stripped()

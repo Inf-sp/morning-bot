@@ -57,7 +57,7 @@ def worries_diary(worries):
     b.line("Каждую тревогу с новой строки. Вечером проверим, что было фактами, а что шумом.")
     b.spacer()
     if worries:
-        b.section("Тревоги за сегодня:")
+        b.section(ui_label("worries", "Тревоги за сегодня:"))
         for worry in worries:
             b.bullet(worry["text"])
         b.spacer()
@@ -69,7 +69,7 @@ def worries_diary(worries):
 
 def evening_review_empty():
     b = MessageBuilder()
-    b.section("Вечерний разбор")
+    b.section(ui_label("evening", "Вечерний разбор"))
     b.spacer()
     b.line("Сегодня тревог не записано. Если что-то крутится - выгрузи сейчас, каждую с новой строки.")
     return b.build_stripped()
@@ -77,9 +77,9 @@ def evening_review_empty():
 
 def evening_review(worries, items=None, summary=""):
     b = MessageBuilder()
-    b.section("Вечерний разбор")
+    b.section(ui_label("evening", "Вечерний разбор"))
     b.spacer()
-    b.section("Сегодня тебя беспокоили:")
+    b.section(ui_label("worries", "Сегодня тебя беспокоили:"))
     items = items or []
     for idx, worry in enumerate(worries):
         b.bullet(worry["text"])
@@ -91,7 +91,7 @@ def evening_review(worries, items=None, summary=""):
             b.newline()
     if summary:
         b.spacer()
-        b.section("Итог дня:")
+        b.section(ui_label("summary", "Итог дня:"))
         b.line(cap_sentence(summary))
     return b.build_stripped()
 

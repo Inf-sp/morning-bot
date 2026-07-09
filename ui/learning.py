@@ -76,19 +76,19 @@ def proverb_card(flag, original, analogs=None, meaning="", examples=None, exampl
 
     analogs = _as_list(analogs)
     if analogs:
-        b.section("Как это переводится?")
+        b.section(ui_label("translation", "Как это переводится?"))
         main_analog = _strip_final_punctuation(_cap_first(analogs[0]))
         b.line(f"«{main_analog}».")
 
     meaning = str(meaning or "").strip()
     if meaning:
-        b.section("Когда это говорят?")
+        b.section(ui_label("usage", "Когда это говорят?"))
         b.line(meaning)
 
     example, parsed_example_ru = _split_example(examples)
     example_ru = str(example_ru or parsed_example_ru or "").strip()
     if example:
-        b.section("Пример из жизни:")
+        b.section(ui_label("example", "Пример из жизни:"))
         if example_ru:
             b.line(f"{example} →")
             b.line(example_ru)
@@ -248,7 +248,7 @@ def train_lang_select():
     b.section(ui_label("word_trainer", "Тренажёр"))
     b.spacer()
     b.text_line("Слова и фразы для тренировки добавляются в разделе ")
-    b.bold("Словарь")
+    b.bold(ui_label("dictionary", "Словарь"))
     b.text_line(".")
     b.spacer()
     b.bold("Выбери язык для тренировки.")
@@ -307,7 +307,7 @@ def morning_words(flag, method, is_read_aloud=False, phrases=None, words=None, e
         msg.text = msg.text.rstrip("\n")
         return msg
     if phrases:
-        b.section("Фразы")
+        b.section(ui_label("phrases", "Фразы"))
         for word, ru in phrases:
             b.bullet(f"{word} → {ru}")
     if words:

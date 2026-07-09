@@ -1,4 +1,5 @@
 from .builder import MessageBuilder, MessageSpec
+from .constants import ui_label
 
 
 def _firstvisit_wardrobe():
@@ -113,7 +114,7 @@ def firstvisit_saved(saved_items):
 
 def onboard_start():
     b = MessageBuilder()
-    b.section("Добро пожаловать!")
+    b.section(ui_label("welcome", "Добро пожаловать!"))
     b.line("Давай познакомимся — это займёт меньше минуты, и бот сразу будет знать тебя.")
     b.spacer()
     b.line("Как тебя зовут?")
