@@ -436,9 +436,6 @@ async def answer_callback(update, context):
                 await bot.send_message(chat_id=cid, text=(
                     "✏️ Пришли слова или фразы - можно сразу много, каждую с новой строки.\n"
                     "Я сам приведу в правильную форму, переведу и разберу."))
-            elif act.startswith("dictbrowse_"):
-                lang = act.split("_")[1]
-                await learning.send_dict_browse(bot, cid, lang, q=q)
             elif act.startswith("dictsearch_"):
                 lang = act.split("_")[1]
                 await learning.send_dict_search_prompt(bot, cid, lang, q=q)
