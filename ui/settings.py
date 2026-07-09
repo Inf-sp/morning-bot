@@ -120,8 +120,11 @@ def settings_home():
     return b.build_stripped()
 
 
-def mydata_section(title):
-    return MessageBuilder().section(title).build_stripped()
+def mydata_section(title, hint=""):
+    b = MessageBuilder().section(title)
+    if hint:
+        b.line(hint)
+    return b.build_stripped()
 
 
 def leisure_settings():

@@ -525,7 +525,10 @@ async def send_wardrobe_hub(bot, cid, back="set_home"):
         [InlineKeyboardButton("Особенности телосложения", callback_data="set_body")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ]
-    msg = settings_ui.mydata_section(f"{ui_label('wardrobe', 'Гардероб')}")
+    msg = settings_ui.mydata_section(
+        f"{ui_label('wardrobe', 'Гардероб')}",
+        "Влияет на подбор образа и разбор шкафа.",
+    )
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
 
@@ -1062,7 +1065,10 @@ async def send_mydata_leisure(bot, cid):
         [InlineKeyboardButton(ui_label("concerts", "Концерты"), callback_data="a_concerts_find")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
     ]
-    msg = settings_ui.mydata_section(f"{ui_label('leisure', 'Досуг')}")
+    msg = settings_ui.mydata_section(
+        f"{ui_label('leisure', 'Досуг')}",
+        "Наполни любимое — рекомендации станут точнее.",
+    )
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
 
@@ -1074,7 +1080,10 @@ async def send_learning_hub(bot, cid):
         [InlineKeyboardButton("Язык и уровень", callback_data="set_learning_mydata")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
     ]
-    msg = settings_ui.mydata_section(f"{ui_label('learning', 'Обучение')}")
+    msg = settings_ui.mydata_section(
+        f"{ui_label('learning', 'Обучение')}",
+        "Слова из словаря сами попадают в тренажёры.",
+    )
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
 
@@ -1121,7 +1130,10 @@ async def send_food(bot, cid, q=None, back="set_home"):
         [InlineKeyboardButton(f"{ui_label('cuisines', 'Кухни')}{cuisine_mark}", callback_data="set_cuisines")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ]
-    msg = settings_ui.mydata_section(f"{ui_label('food', 'Готовка')}")
+    msg = settings_ui.mydata_section(
+        f"{ui_label('food', 'Готовка')}",
+        "Кухни влияют на рецепт дня и подбор из холодильника.",
+    )
     text, entities = msg.text, msg.entities
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -1139,7 +1151,10 @@ async def send_travel(bot, cid):
         [InlineKeyboardButton(ui_label("routes", "Сохранённые места"), callback_data="colr:travel_saved_places:set_travel")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
     ]
-    msg = settings_ui.mydata_section(f"{ui_label('travel', 'Путешествия')}")
+    msg = settings_ui.mydata_section(
+        f"{ui_label('travel', 'Путешествия')}",
+        "Страны — для идей поездок. Места — то, что уже сохранил.",
+    )
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
 
