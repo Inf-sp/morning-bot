@@ -498,14 +498,9 @@ async def send_recos(bot, cid, kind):
 
 def _movie_home_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать кино", callback_data="movie_reco"),
-         InlineKeyboardButton("🎬 Что в кино", callback_data="a_now_playing")],
-        [InlineKeyboardButton("По жанру", callback_data="movie_genre_menu"),
-         InlineKeyboardButton("По настроению", callback_data="movie_mood_menu")],
-        [InlineKeyboardButton("Любимое", callback_data="col_cinema_favorites"),
-         InlineKeyboardButton("Сохранённое", callback_data="col_cinema_saved")],
-        [InlineKeyboardButton("✅ Смотрел", callback_data="col_cinema_watched"),
-         InlineKeyboardButton("Скрытое", callback_data="col_cinema_hidden")],
+        [InlineKeyboardButton("✨ Подобрать кино", callback_data="movie_reco")],
+        [InlineKeyboardButton("По жанру", callback_data="movie_genre_menu")],
+        [InlineKeyboardButton("По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
@@ -539,98 +534,29 @@ def _movie_service_language(_cid=None):
     return "ru-RU"
 
 
-def _clip_button_text(text, limit=36):
-    text = str(text or "").strip()
-    if len(text) <= limit:
-        return text
-    return text[:limit - 1].rstrip() + "…"
-
-
-def _cinema_back_kb():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")]])
-
-
-def _build_cinema_keyboard(movies, page: int, total_pages: int) -> InlineKeyboardMarkup:
-    start = page * 10
-    rows = [
-        [InlineKeyboardButton(_clip_button_text(movie.title), callback_data=f"a_cinema_open_{movie.id}")]
-        for movie in movies[start:start + 10]
-    ]
-    prev_cb = f"a_cinema_page_{page - 1}" if page > 0 else "noop"
-    next_cb = f"a_cinema_page_{page + 1}" if page + 1 < total_pages else "noop"
-    rows.append([
-        InlineKeyboardButton("◀️", callback_data=prev_cb),
-        InlineKeyboardButton(f"{page + 1} / {total_pages}", callback_data="noop"),
-        InlineKeyboardButton("▶️", callback_data=next_cb),
-    ])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
-    return InlineKeyboardMarkup(rows)
-
-
 async def send_movie_home(bot, cid, q=None):
     """Приветственный экран раздела «Кино» (тот же паттерн, что у Гардероба):
-    сколько уже в любимых + какие жанры выбраны в предпочтениях, снизу — вход
-    в обычную рекомендацию по любимым, по жанру или по настроению."""
+    сколько уже в любимых + какие жанры выбраны в предпочтениях + что сейчас в прокате,
+    снизу — вход в обычную рекомендацию по любимым, по жанру или по настроению."""
     loved_count = len(store.get_list(config.WATCHLIST_KEY, cid))
     selected = {int(x) for x in (settings.get(cid, "movie_genres", []) or []) if str(x).isdigit()}
     genre_labels = [label for label, gid in _GENRE_ALL if gid in selected]
-    msg = leisure_ui.movie_home_screen(loved_count, genre_labels)
+
+    s = store.get_settings(cid)
+    cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
+    country_label = _movie_country_label(s.get("country"), cc)
+    now_playing = []
+    if config.TMDB_API_KEY:
+        try:
+            now_playing = await asyncio.to_thread(tmdb.get_now_playing, cc, _movie_service_language(cid))
+        except Exception:
+            now_playing = []
+
+    msg = leisure_ui.movie_home_screen(loved_count, genre_labels, country_label, now_playing[:10])
     kb = _movie_home_kb()
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def send_now_playing(bot, cid, q=None, page=0):
-    s = store.get_settings(cid)
-    cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
-    country_label = _movie_country_label(s.get("country"), cc)
-    movies = []
-    if config.TMDB_API_KEY:
-        try:
-            movies = await asyncio.to_thread(tmdb.get_now_playing, cc, _movie_service_language(cid))
-        except Exception:
-            movies = []
-    if not movies:
-        msg = leisure_ui.now_playing_screen(country_label, [])
-        kb = _cinema_back_kb()
-    else:
-        total_pages = max(1, (len(movies) + 9) // 10)
-        page = max(0, min(page, total_pages - 1))
-        start = page * 10
-        msg = leisure_ui.now_playing_screen(country_label, movies[start:start + 10])
-        kb = _build_cinema_keyboard(movies, page, total_pages)
-    store.last_source[str(cid)] = "Досуг · Что в кино"
-    store.last_answer[str(cid)] = msg.text
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def open_cinema_movie(bot, cid, movie_id):
-    try:
-        tm = await asyncio.to_thread(tmdb.detail, int(movie_id), "movie")
-    except Exception:
-        tm = None
-    if not tm:
-        await send_now_playing(bot, cid)
-        return
-    title, msg = _movie_card({"title": tm.get("name", ""), "title_en": tm.get("name_en", "")}, tm)
-    kb = _cinema_back_kb()
-    store.last_source[str(cid)] = "Досуг · Что в кино"
-    store.last_answer[str(cid)] = msg.text
-    if tm.get("poster"):
-        try:
-            await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=msg.text,
-                                 caption_entities=msg.entities, reply_markup=kb)
             return
         except Exception:
             pass

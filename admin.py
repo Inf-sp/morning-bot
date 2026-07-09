@@ -324,14 +324,30 @@ def _last_active_user():
     return (tracking.churn_dot(best_cid), name, city, action, tracking.human_last_seen(best_cid))
 
 
+_USERS_LIST_LIMIT = 15
+
+
+def _users_list():
+    """Все пользователи, отсортированные по свежести активности -> [(dot, name, last_seen)]."""
+    cids = access.get_allowed_cids()
+    rows = []
+    for c in cids:
+        ts = tracking.get_activity(c).get("last_ts", 0)
+        prof = store.get_profile(c)
+        name = prof.get("name") or f"ID {str(c)[:4]}…"
+        rows.append((ts, tracking.churn_dot(c), name, tracking.human_last_seen(c)))
+    rows.sort(key=lambda r: r[0], reverse=True)
+    return [(dot, name, last_seen) for _ts, dot, name, last_seen in rows]
+
+
 async def send_users(bot, cid, q=None):
     stats = _user_stats()
+    users_list = _users_list()
     rows = [
         [InlineKeyboardButton(ui_label("invite", "Инвайт"), callback_data="adm_invite")],
-        [InlineKeyboardButton(ui_label("refresh", "Обновить"), callback_data="adm_users")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
     ]
-    msg = ui.users(stats, _updated_at())
+    msg = ui.users(stats, users_list[:_USERS_LIST_LIMIT], len(users_list), _updated_at())
     await _show(bot, cid, msg, InlineKeyboardMarkup(rows), q)
 
 
@@ -404,28 +420,10 @@ def _notification_stats(cid):
 async def send_system(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔌 API и AI", callback_data="adm_api_ai")],
-        [InlineKeyboardButton(ui_label("refresh", "Проверить систему"), callback_data="adm_system_check")],
         [InlineKeyboardButton(ui_label("logs", "Логи"), callback_data="adm_logs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
     ])
     msg = ui.system(_system_rows(), _updated_at())
-    await _show(bot, cid, msg, kb, q)
-
-
-async def check_system(bot, cid, q=None):
-    """Активная проверка использует существующие probe-функции и возвращает экран системы."""
-    results = None
-    try:
-        results = await _api_probe_results()
-    except Exception as e:
-        tracking.log_error("service", str(e), kind="system_probe")
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔌 API и AI", callback_data="adm_api_ai")],
-        [InlineKeyboardButton(ui_label("refresh", "Проверить систему"), callback_data="adm_system_check")],
-        [InlineKeyboardButton(ui_label("logs", "Логи"), callback_data="adm_logs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
-    ])
-    msg = ui.system(_system_rows(results), _updated_at())
     await _show(bot, cid, msg, kb, q)
 
 
@@ -448,23 +446,23 @@ _FEATURE_ROWS = [
 def _gemini_ai_line(snapshot):
     label = "Gemini"
     if not _configured_service("gemini"):
-        return f"{label} · нет ключа"
+        return f"{ui.OFF} {label} · нет ключа"
     state = api_usage.gemini_state(1)
     quota = next((q for q in config.API_QUOTAS.get("gemini", []) if q.get("unit") == "requests"), None)
     limit_txt = f"{quota.get('limit')} / мин" if quota else "лимит OK"
     if state.get("cooldown_active"):
-        return f"{label} · пауза до {_hhmm(state.get('cooldown_until'))} · {limit_txt}"
-    return f"{label} · работает · {limit_txt}"
+        return f"{ui.WARN} {label} · пауза до {_hhmm(state.get('cooldown_until'))} · {limit_txt}"
+    return f"{ui.OK} {label} · работает · {limit_txt}"
 
 
 def _simple_ai_line(service, label, snapshot):
     if not _configured_service(service):
-        return f"{label} · резерв · нет ключа"
+        return f"{ui.OFF} {label} · резерв · нет ключа"
     svc = _snapshot_service(snapshot, service)
     if svc.get("status") == "bad":
         reason = svc.get("last_error_reason") or "ошибка"
-        return f"{label} · резерв · {str(reason)[:40]}"
-    return f"{label} · резерв · лимит OK"
+        return f"{ui.BAD} {label} · резерв · {str(reason)[:40]}"
+    return f"{ui.OK} {label} · резерв · лимит OK"
 
 
 def _api_line(service, label, snapshot):
@@ -474,31 +472,33 @@ def _api_line(service, label, snapshot):
         total = int(usage.get("requests_total") or 0)
         limit = int(config.WEATHER_FREE_DAILY_LIMIT)
         if usage.get("last_error_reason") and usage.get("last_error_at"):
-            return f"{label} · ошибка · {str(usage.get('last_error_reason'))[:40]}"
-        return f"{label} · работает · осталось {max(0, limit - total)} / {limit}"
+            return f"{ui.BAD} {label} · ошибка · {str(usage.get('last_error_reason'))[:40]}"
+        return f"{ui.OK} {label} · работает · осталось {max(0, limit - total)} / {limit}"
     if not _configured_service(service):
-        return f"{label} · нет ключа"
+        return f"{ui.OFF} {label} · нет ключа"
     svc = _snapshot_service(snapshot, service)
     if service == "tavily":
         quota = next((q for q in svc.get("quotas", []) if q.get("unit") == "credits"), None)
         if quota:
             limit = int(quota.get("limit") or 1000)
             used = int(quota.get("used") or 0)
-            return f"{label} · работает · осталось {max(0, limit - used)} / {limit}"
-        return f"{label} · работает · лимит OK"
+            return f"{ui.OK} {label} · работает · осталось {max(0, limit - used)} / {limit}"
+        return f"{ui.OK} {label} · работает · лимит OK"
     if service == "ticketmaster":
-        return f"{label} · работает · кэш 7 дней"
+        return f"{ui.OK} {label} · работает · кэш 7 дней"
     if svc.get("status") == "bad":
         reason = svc.get("last_error_reason") or "ошибка"
-        return f"{label} · ошибка · {str(reason)[:40]}"
-    return f"{label} · работает · лимит OK"
+        return f"{ui.BAD} {label} · ошибка · {str(reason)[:40]}"
+    return f"{ui.OK} {label} · работает · лимит OK"
 
 
 def _feature_status(snapshot, gemini_cooldown):
     rows = []
     for name, providers, deps in _FEATURE_ROWS:
-        status = "fallback" if gemini_cooldown and "gemini" in deps else "работает"
-        rows.append(f"{name} · {providers} · {status}")
+        is_fallback = gemini_cooldown and "gemini" in deps
+        dot = ui.WARN if is_fallback else ui.OK
+        status = "fallback" if is_fallback else "работает"
+        rows.append(f"{dot} {name} · {providers} · {status}")
     return rows
 
 
@@ -549,23 +549,12 @@ async def send_api_ai(bot, cid, q=None):
         last_error_line = f"{_hhmm(last.get('ts', 0))} · {_issue_summary(last.get('source', 'app'), last.get('msg', ''))}"
 
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Обновить", callback_data="adm_api_ai"),
-         InlineKeyboardButton("Проверить API", callback_data="adm_api_ai_check")],
         [InlineKeyboardButton(ui_label("logs", "Логи"), callback_data="adm_logs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_system")],
     ])
     msg = ui.api_ai(status_ok, gemini_cooldown, problem_line, ai_rows, api_rows, feature_rows,
                      last_error_line, _updated_at())
     await _show(bot, cid, msg, kb, q)
-
-
-async def check_api_ai(bot, cid, q=None):
-    """Ручной probe по кнопке 'Проверить API' - переиспользует существующие лёгкие probe-запросы."""
-    try:
-        await _api_probe_results()
-    except Exception as e:
-        tracking.log_error("service", str(e), kind="api_ai_probe")
-    await send_api_ai(bot, cid, q)
 
 
 async def send_notifications(bot, cid, q=None):
@@ -984,11 +973,10 @@ def _notification_options_by_kind():
 
 def _notification_test_rows():
     import settings as _s
-    buttons = [
-        InlineKeyboardButton(opt.button_label, callback_data=f"set_admin_broadcast_test_{opt.key}")
+    return [
+        [InlineKeyboardButton(opt.button_label, callback_data=f"set_admin_broadcast_test_{opt.key}")]
         for opt in _s.get_notification_options()
     ]
-    return [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
 
 
 def _remember_test(kind, ok, detail):

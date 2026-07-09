@@ -28,9 +28,10 @@ def _pluralize_titles(n):
     return "фильмов/сериалов"
 
 
-def movie_home_screen(loved_count, genre_labels):
+def movie_home_screen(loved_count, genre_labels, country_label=None, now_playing=None):
     """Главный экран раздела «Кино»: польза, сколько уже в любимых, какие жанры
-    выбраны в предпочтениях. Тот же визуальный паттерн, что у Гардероба (home_screen)."""
+    выбраны в предпочтениях, что сейчас в прокате. Тот же визуальный паттерн,
+    что у Гардероба (home_screen)."""
     b = MessageBuilder()
     b.text_line("🍿 ")
     b.bold("Что посмотреть")
@@ -51,6 +52,14 @@ def movie_home_screen(loved_count, genre_labels):
         b.line("Жанры в предпочтениях:")
         for label in genre_labels:
             b.bullet(label)
+
+    if now_playing:
+        b.spacer()
+        b.text_line("🎬 ")
+        b.bold(f"В кино сейчас · {country_label}")
+        b.newline()
+        for item in now_playing:
+            _format_movie_row(b, item)
 
     return b.build_stripped()
 
@@ -94,21 +103,6 @@ def _format_movie_row(b: MessageBuilder, movie) -> None:
     if rating:
         b.text_line(f" · {rating}")
     b.newline()
-
-
-def now_playing_screen(country_label: str, items) -> MessageSpec:
-    b = MessageBuilder()
-    b.text_line("🎬 ")
-    b.bold(f"В кино сейчас · {country_label}")
-    b.newline()
-    if not items:
-        b.spacer()
-        b.line("Пока не удалось найти фильмы в прокате.")
-        return b.build_stripped()
-    b.spacer()
-    for item in items:
-        _format_movie_row(b, item)
-    return b.build_stripped()
 
 
 def movie_card(item, tm):

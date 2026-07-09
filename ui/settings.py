@@ -2,13 +2,6 @@ from .builder import MessageBuilder, MessageSpec
 from .constants import ui_label
 
 
-def profile():
-    b = MessageBuilder()
-    b.section(ui_label("profile", "Профиль"))
-    b.line("Личные параметры, которые помогают боту давать более точные советы.")
-    return b.build_stripped()
-
-
 def notifications():
     b = MessageBuilder()
     b.section(ui_label("broadcasts", "Уведомления"))
@@ -116,7 +109,7 @@ def style_pick():
 def settings_home():
     b = MessageBuilder()
     b.section(ui_label("settings", "Настройки"))
-    b.line("Настройте бота под себя.")
+    b.line("Город, приоритеты, уведомления и данные по разделам — всё здесь.")
     return b.build_stripped()
 
 

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import random
 import re
 from datetime import datetime
@@ -14,6 +15,8 @@ import verify
 import secure
 from ui import dictionary as dict_ui
 from ui import learning as learning_ui
+
+_log = logging.getLogger(__name__)
 
 LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 
@@ -534,11 +537,13 @@ def _filter_phrase_other_forms(other_forms, card):
     return filtered
 
 
-def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
+def _phrase_card_consistency_check(learn_phrase, learn_ru, card):
+    """Проверяет карточку и возвращает (ok, reason). reason — короткий код первой
+    провалившейся проверки, для диагностики частых отказов тренажёра в логах."""
     learn_phrase = str(learn_phrase or "").strip()
     learn_ru = str(learn_ru or "").strip()
     if _phrase_card_has_placeholder(card):
-        return False
+        return False, "placeholder"
     blank = str(card.get("test_sentence") or card.get("test_blank_phrase") or card.get("blank_phrase") or "").strip()
     full = str(card.get("test_full_phrase") or "").strip()
     correct = str(card.get("correct_answer") or card.get("correct") or "").strip()
@@ -562,43 +567,52 @@ def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
         "test_is_new_not_copy",
         "no_mixed_meanings",
     )
-    if any(self_check.get(k) is not True for k in required_checks):
-        return False
-    if not all([
-        learn_phrase, learn_ru, blank, full, correct, target, construction, construction_meaning,
-        intro_pattern, intro_explanation, card_example, card_example_ru, short_rule, test_ru,
-    ]):
-        return False
-    if (
-        not _has_cyrillic(learn_ru)
-        or not _has_cyrillic(construction_meaning)
-        or not _has_cyrillic(intro_explanation)
-        or not _has_cyrillic(card_example_ru)
-        or not _has_cyrillic(short_rule)
-    ):
-        return False
+    failed_self_check = [k for k in required_checks if self_check.get(k) is not True]
+    if failed_self_check:
+        return False, f"self_check:{failed_self_check[0]}"
+    missing = [
+        name for name, value in [
+            ("learn_phrase", learn_phrase), ("learn_ru", learn_ru), ("blank", blank), ("full", full),
+            ("correct", correct), ("target", target), ("construction", construction),
+            ("construction_meaning", construction_meaning), ("intro_pattern", intro_pattern),
+            ("intro_explanation", intro_explanation), ("card_example", card_example),
+            ("card_example_ru", card_example_ru), ("short_rule", short_rule), ("test_ru", test_ru),
+        ] if not value
+    ]
+    if missing:
+        return False, f"missing:{missing[0]}"
+    if not _has_cyrillic(learn_ru):
+        return False, "no_cyrillic:learn_ru"
+    if not _has_cyrillic(construction_meaning):
+        return False, "no_cyrillic:construction_meaning"
+    if not _has_cyrillic(intro_explanation):
+        return False, "no_cyrillic:intro_explanation"
+    if not _has_cyrillic(card_example_ru):
+        return False, "no_cyrillic:card_example_ru"
+    if not _has_cyrillic(short_rule):
+        return False, "no_cyrillic:short_rule"
     if _normalize_phrase_for_compare(intro_pattern) == _normalize_phrase_for_compare(intro_explanation):
-        return False
+        return False, "intro_pattern_equals_explanation"
     if "____" not in blank:
-        return False
+        return False, "no_blank_marker"
     if len(wrong) < 3:
-        return False
+        return False, "not_enough_wrong_options"
     if _normalize_phrase_for_compare(learn_phrase) == _normalize_phrase_for_compare(full):
-        return False
+        return False, "full_equals_learn_phrase"
     if _normalize_phrase_for_compare(learn_phrase) == _normalize_phrase_for_compare(blank):
-        return False
+        return False, "blank_equals_learn_phrase"
     if _phrase_repeats_source(learn_phrase, blank, correct):
-        return False
+        return False, "blank_repeats_source"
     if _phrase_blank_repeats_target(blank, correct):
-        return False
+        return False, "blank_repeats_target"
     if _phrase_text_repeats_source(learn_phrase, card_example):
-        return False
+        return False, "example_repeats_source"
     if _normalize_phrase_for_compare(card_example) == _normalize_phrase_for_compare(full):
-        return False
+        return False, "example_equals_full"
 
     known_focus = _known_phrase_focus_unit(learn_phrase)
     if known_focus and _normalize_phrase_for_compare(construction) != _normalize_phrase_for_compare(known_focus):
-        return False
+        return False, "construction_mismatch_known_focus"
 
     learn_tokens = set(_phrase_tokens(learn_phrase))
     learn_token_list = _phrase_tokens(learn_phrase)
@@ -606,22 +620,27 @@ def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
     target_low = target.lower()
     correct_low = correct.lower()
     if target_low not in learn_tokens or correct_low not in full_tokens:
-        return False
+        return False, "target_or_correct_not_in_tokens"
 
     pattern_tokens = [
         t for t in _phrase_tokens(construction)
         if t not in _PATTERN_PLACEHOLDERS and len(t) > 1
     ]
     if pattern_tokens and not all(_phrase_pattern_token_present(t, learn_tokens) for t in pattern_tokens):
-        return False
+        return False, "pattern_token_missing"
     if pattern_tokens and correct_low not in pattern_tokens and target_low not in pattern_tokens:
-        return False
+        return False, "correct_not_in_pattern"
     construction_low = construction.lower()
     if any(marker in construction_low for marker in ("+ прилагательное", "+ adjective", "+ adjectief")):
         positions = [i for i, t in enumerate(learn_token_list) if t == target_low]
         if not positions or all(i >= len(learn_token_list) - 1 for i in positions):
-            return False
-    return True
+            return False, "adjective_position_invalid"
+    return True, ""
+
+
+def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
+    ok, _reason = _phrase_card_consistency_check(learn_phrase, learn_ru, card)
+    return ok
 
 
 async def _validate_phrase_card_semantics(phrase, ru, language, card):
@@ -738,26 +757,36 @@ def _clean_phrase_options(correct_answer, wrong, needed=3):
     return clean_wrong
 
 
-async def _gen_consistent_phrase_card(phrase, ru, language, avoid_tests=None, attempts=2):
-    for _ in range(max(1, attempts)):
+async def _gen_consistent_phrase_card(phrase, ru, language, avoid_tests=None, attempts=3):
+    for attempt in range(max(1, attempts)):
         card = await _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=avoid_tests)
         correct_answer = card.get("correct") or ""
         clean_wrong = _clean_phrase_options(correct_answer, list(card.get("wrong") or []), needed=3)
         blank_phrase = card.get("blank_phrase") or ""
+        ok, reason = _phrase_card_consistency_check(phrase, ru, card)
         if (
             correct_answer
             and "____" in blank_phrase
             and len(clean_wrong) >= 3
             and not _phrase_repeats_source(phrase, blank_phrase, correct_answer)
             and not _phrase_blank_repeats_target(blank_phrase, correct_answer)
-            and _phrase_card_is_consistent(phrase, ru, card)
+            and ok
             and await _validate_phrase_card_semantics(phrase, ru, language, card)
         ):
             card["wrong"] = clean_wrong[:3]
             return card
+        if not ok:
+            reason = reason or "unknown"
+        elif not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 3:
+            reason = "malformed_card"
+        else:
+            reason = "semantic_validation_failed"
+        _log.info("phrase_card_rejected phrase=%r language=%s attempt=%d reason=%s",
+                   phrase, language, attempt + 1, reason)
     fallback = _fallback_phrase_quiz_card(phrase, ru, language)
     if fallback and _phrase_card_is_consistent(phrase, ru, fallback):
         return fallback
+    _log.info("phrase_card_fallback_unavailable phrase=%r language=%s", phrase, language)
     return {}
 
 
@@ -922,11 +951,14 @@ async def _render_train_quiz(bot, cid):
         "phrase_stage": "intro",
     })
 
+    st["intro_pattern"] = card.get("intro_pattern") or card.get("construction") or ""
+    st["intro_explanation"] = card.get("intro_explanation") or card.get("construction_meaning") or card.get("short_rule") or ""
+
     msg = learning_ui.phrase_intro_card(
         phrase,
         ru,
-        card.get("intro_pattern") or card.get("construction") or "",
-        card.get("intro_explanation") or card.get("construction_meaning") or card.get("short_rule") or "",
+        st["intro_pattern"],
+        st["intro_explanation"],
         card.get("card_example") or "",
         card.get("card_example_ru") or "",
     )
@@ -939,18 +971,25 @@ async def _render_train_quiz(bot, cid):
 
 
 async def phrase_intro_continue(bot, cid):
-    """Реакция на «Тест» после учебной карточки — отправляет quiz poll."""
+    """Реакция на «Тест» после учебной карточки — случайно выбирает формат теста
+    (quiz poll с 4 вариантами или короткое утверждение да/нет), чтобы форматы
+    чередовались и тренажёр не приедался."""
     st = store.train_state.get(str(cid))
     if not st or not st.get("phrase_pending_quiz"):
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    st["phrase_pending_quiz"] = False
+    st["phrase_stage"] = "quiz"
+
+    if random.random() < 0.5:
+        await _send_phrase_truefalse(bot, cid, st)
+        return
+
     language = st["lang"]
     phrase = st.get("phrase_full", "")
     blank_phrase = st.get("sentence", "")
     correct_answer = st.get("meaning", "")
     options = st.get("options", [])
     correct_idx = st.get("correct_idx", 0)
-    st["phrase_pending_quiz"] = False
-    st["phrase_stage"] = "quiz"
 
     question, question_entities = _phrase_poll_question(blank_phrase, st.get("sentence_ru", ""))
     explanation = _phrase_poll_explanation(
@@ -973,6 +1012,42 @@ async def phrase_intro_continue(bot, cid):
     )
     if getattr(msg, "poll", None):
         store.train_polls[msg.poll.id] = str(cid)
+
+
+def _truefalse_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Да", callback_data="phrase_tf_yes"),
+         InlineKeyboardButton("❌ Нет", callback_data="phrase_tf_no")],
+    ])
+
+
+async def _send_phrase_truefalse(bot, cid, st):
+    """Второй формат теста: утверждение «в этой фразе пропущено слово X» — да или нет.
+    Строится из уже провалидированной карточки, без нового LLM-запроса."""
+    blank_phrase = st.get("sentence", "")
+    correct_answer = st.get("meaning", "")
+    options = [o for o in st.get("options", []) if o]
+    wrong_options = [o for o in options if o.lower() != str(correct_answer).lower()]
+
+    is_true = random.random() < 0.5 or not wrong_options
+    shown_word = correct_answer if is_true else random.choice(wrong_options)
+    st["truefalse_is_true"] = is_true
+
+    statement = blank_phrase.replace("____", f"«{shown_word}»") if "____" in blank_phrase else blank_phrase
+    msg = learning_ui.phrase_truefalse_question(statement)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_truefalse_kb())
+
+
+async def phrase_truefalse_answer(bot, cid, answered_yes):
+    st = store.train_state.get(str(cid))
+    if not st or "truefalse_is_true" not in st:
+        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    is_true = st.pop("truefalse_is_true")
+    correct_idx = int(st.get("correct_idx", 0))
+    options = st.get("options") or []
+    is_correct = answered_yes == is_true
+    idx = correct_idx if is_correct else next((i for i in range(len(options)) if i != correct_idx), correct_idx)
+    await _send_train_feedback(bot, cid, idx, st)
 
 
 async def phrase_intro_mastered(bot, cid):

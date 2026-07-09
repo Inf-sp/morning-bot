@@ -327,12 +327,11 @@ def _notif_schedule(kind: str) -> str:
 
 
 async def send_notif(bot, cid, q=None):
-    buttons = []
+    rows = []
     for opt in get_notification_options():
         on = notif_on(cid, opt.key)
         mark = "✅" if on else "□"
-        buttons.append(InlineKeyboardButton(f"{mark} {opt.button_label}", callback_data=f"set_notiftgl_{opt.key}"))
-    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+        rows.append([InlineKeyboardButton(f"{mark} {opt.button_label}", callback_data=f"set_notiftgl_{opt.key}")])
     if any(notif_on(cid, kind) for kind, _ in NOTIF_TYPES):
         rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
@@ -371,7 +370,7 @@ def _priorities_kb(cid):
         for key, label in PRIORITY_OPTIONS
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_profile")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -452,21 +451,6 @@ async def toggle_cuisine(bot, cid, key, q=None):
 
 
 _BODY_PLACEHOLDER = "не указано"
-
-async def send_profile(bot, cid):
-    rows = [
-        [InlineKeyboardButton("🌍 Город", callback_data="set_city")],
-        [InlineKeyboardButton(ui_label("priorities", "Приоритеты"), callback_data="set_priorities")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
-    ]
-    msg = settings_ui.profile()
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
-        reply_markup=InlineKeyboardMarkup(rows),
-    )
-
 
 async def send_body(bot, cid, back="set_wardrobe_mydata"):
     """Особенности телосложения (используется в подборе образа в wardrobe.py)."""
@@ -627,8 +611,6 @@ async def list_add_done(bot, cid, kind, text):
 async def handle_callback(bot, cid, data, q=None):
     if data == "set_home":
         await send_home(bot, cid)
-    elif data == "set_profile":
-        await send_profile(bot, cid)
     elif data == "set_mydata_leisure":
         await send_mydata_leisure(bot, cid)
     elif data == "set_mydata_cinema":
@@ -1041,8 +1023,8 @@ async def export_notes(bot, cid):
 
 async def send_notes(bot, cid):
     rows = [
-        [InlineKeyboardButton(ui_label("profile", "Профиль"), callback_data="set_profile"),
-         InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
+        [InlineKeyboardButton("🌍 Город", callback_data="set_city"),
+         InlineKeyboardButton(ui_label("priorities", "Приоритеты"), callback_data="set_priorities")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton(ui_label("wardrobe", "Гардероб"), callback_data="set_wardrobe_mydata"),
          InlineKeyboardButton(ui_label("food", "Готовка"), callback_data="set_food")],
@@ -1050,6 +1032,7 @@ async def send_notes(bot, cid):
          InlineKeyboardButton(ui_label("health", "Здоровье"), callback_data="set_health")],
         [InlineKeyboardButton(ui_label("travel", "Путешествия"), callback_data="set_travel"),
          InlineKeyboardButton(ui_label("leisure", "Досуг"), callback_data="set_mydata_leisure")],
+        [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
     ]
     msg = settings_ui.settings_home()
     await bot.send_message(chat_id=cid, entities=msg.entities,

@@ -215,6 +215,15 @@ def phrase_intro_card(phrase, sentence_ru, pattern, explanation, example="", exa
     return b.build()
 
 
+def phrase_truefalse_question(statement):
+    """Этап теста в формате да/нет: короткое утверждение о разобранной фразе."""
+    b = MessageBuilder()
+    b.section("🤔 Верно или нет?")
+    b.spacer()
+    b.quote(str(statement or "").strip())
+    return b.build()
+
+
 def phrase_quiz_result(state, is_correct, repeated_error=False):
     correct = str(state.get("meaning") or "").strip()
     full_phrase = str(state.get("phrase_test_full") or "").strip()

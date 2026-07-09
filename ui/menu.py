@@ -49,14 +49,14 @@ def welcome():
     b.newline()
     b.spacer()
     b.line("Помогаю с погодой, одеждой, языками, рецептами, досугом и полезными привычками.")
-    b.section(ui_label("sections", "Разделы"))
+    b.section("Разделы:")
     b.line(f"{ui_label('myday', 'Мой день')} — погода, сводка и советы.")
     b.line(f"{ui_label('wardrobe', 'Гардероб')} — что надеть и покупки.")
-    b.line(f"{ui_label('health', 'Здоровье')} — мотивация, тревоги и здоровье.")
+    b.line(f"{ui_label('food', 'Готовка')} — рецепты и идеи из продуктов.")
     b.line(f"{ui_label('learning', 'Обучение')} — языки, игра и практика.")
+    b.line(f"{ui_label('health', 'Здоровье')} — мотивация, тревоги и здоровье.")
     b.line(f"{ui_label('travel', 'Путешествия')} — новые страны и планы поездок.")
     b.line(f"{ui_label('leisure', 'Досуг')} — фильмы, книги и музыка.")
-    b.line(f"{ui_label('food', 'Готовка')} — рецепты и идеи из продуктов.")
     b.spacer()
     b.line("Просто напиши вопрос в чат, и я помогу.")
     b.spacer()
@@ -98,8 +98,7 @@ _SCREENS = {
         ],
         [
             [(ui_label("concerts", "Концерты"), "a_concerts_find")],
-            [(ui_label("cinema", "Сейчас в кино"), "a_now_playing")],
-            [(ui_label("leisure", "Посмотреть дома"), "a_watch")],
+            [(ui_label("leisure", "Кино"), "a_watch")],
             [(ui_label("music", "Музыка"), "a_listen")],
             [(ui_label("books", "Книги"), "a_read")],
             [(ui_label("news", "Новости"), "a_news_home")],
@@ -127,28 +126,30 @@ def learning_menu(active_code="nl"):
     flag = LANGUAGE_EMOJI["en"] if is_en else LANGUAGE_EMOJI["nl"]
     title = "Английский" if is_en else "Нидерландский"
     code = "en" if is_en else "nl"
-    return _screen_message(
-        UI_LEARNING,
-        "Обучение",
-        [
-            f"Активный язык: {flag} {title}.",
-            "Здесь всё для этого языка: тренажёр, живые фразы, игра и твой личный словарь.",
-            "",
-            "Просто напиши в чат «добавь слово ...» или «добавь фразу ...» — бот сам сохранит "
-            "в правильной форме, переведёт и разберёт, без захода в меню.",
-            "",
-            "Тренажёр повторяет слова и фразы из словаря карточками с примером и коротким тестом. "
-            "Живой язык — разговорные выражения, которые реально говорят носители. "
-            "Игра-детектив — угадываешь слово по подсказкам, чтобы запоминалось через интерес.",
-        ],
-        [
-            [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
-            [(ui_label("live_language", "Живой язык"), f"a_proverb_{code}")],
-            [(ui_label("game", "Игра-детектив"), f"gamelang_{code}")],
-            [(ui_label("dictionary", "Мой словарь"), f"a_dictlang_{code}_from_menu")],
-            [(ui_label("settings", "Настройки обучения"), "set_learning")],
-        ],
-    )
+
+    b = MessageBuilder()
+    b.text_line(f"{UI_LEARNING} ")
+    b.bold("Обучение")
+    b.newline()
+    b.spacer()
+    b.text_line("Сейчас учим: ")
+    b.text_line(f"{flag} ")
+    b.bold(title)
+    b.newline()
+    b.spacer()
+    b.line("Тренажёр, живой язык, игра и личный словарь — для этого языка.")
+    b.spacer()
+    b.quote("добавь слово ... / добавь фразу ...")
+    b.spacer()
+    b.line("Напиши так в чат — бот сам сохранит, переведёт и разберёт.")
+
+    return b.build_stripped(reply_markup=ikb([
+        [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
+        [(ui_label("live_language", "Живой язык"), f"a_proverb_{code}")],
+        [(ui_label("game", "Игра-детектив"), f"gamelang_{code}")],
+        [(ui_label("dictionary", "Мой словарь"), f"a_dictlang_{code}_from_menu")],
+        [(ui_label("settings", "Настройки обучения"), "set_learning")],
+    ]))
 
 
 def menu_screen(key):

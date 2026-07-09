@@ -473,12 +473,6 @@ async def answer_callback(update, context):
                 await _inline_status(lambda _s: travel.save_plan(bot, cid))
             elif act == "watch":
                 await _ack(q); await leisure.send_movie_home(bot, cid, q)
-            elif act == "now_playing":
-                await _ack(q); await leisure.send_now_playing(bot, cid, q)
-            elif act.startswith("cinema_page_"):
-                await _ack(q); await leisure.send_now_playing(bot, cid, q, int(act.split("_")[-1]))
-            elif act.startswith("cinema_open_"):
-                await _inline_status(lambda _s: leisure.open_cinema_movie(bot, cid, act.split("_")[-1]))
             elif act == "read":
                 await _inline_status(lambda _s: leisure.send_recos(bot, cid, "book"))
             elif act == "watchlist":
@@ -556,6 +550,9 @@ async def answer_callback(update, context):
         return
     if data == "phrase_explain":
         await learning.phrase_explain(bot, cid)
+        return
+    if data in ("phrase_tf_yes", "phrase_tf_no"):
+        await _inline_status(lambda _s: learning.phrase_truefalse_answer(bot, cid, data == "phrase_tf_yes"))
         return
     # «Ещё»
     if data.startswith("again_"):

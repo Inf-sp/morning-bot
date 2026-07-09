@@ -73,7 +73,7 @@ def home(system_dot, system_text, system_line, notif_line, users_line, data_line
 
 # ================= ПОЛЬЗОВАТЕЛИ =================
 
-def users(stats, updated_at):
+def users(stats, users_list, users_total, updated_at):
     b = MessageBuilder()
     b.bold(ui_label("users", "Пользователи"))
     b.newline()
@@ -87,6 +87,19 @@ def users(stats, updated_at):
     b.line("Инвайты:")
     b.line(f"Активных: {stats.get('active_invites', 0)}")
     b.line(f"Использовано: {stats.get('used_invites', 0)}")
+
+    if users_list:
+        b.spacer()
+        b.section("Список")
+        for dot, name, last_seen in users_list:
+            b.text_line(f"{dot} ")
+            b.bold(name)
+            b.text_line(f" · {last_seen}")
+            b.newline()
+        if users_total > len(users_list):
+            b.spacer()
+            b.line(f"…и ещё {users_total - len(users_list)}")
+
     b.spacer()
     b.line(f"Обновлено: {updated_at}")
     return b.build_stripped()

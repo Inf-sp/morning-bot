@@ -51,6 +51,23 @@ def _today_label():
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
 
+def _short_weather_line(tmax, cond, has_rain, flags):
+    """Короткая погодная строка для карточки образа, без LLM: 'Солнечно, тепло, около +25°C.'"""
+    if tmax is None:
+        return ""
+    if has_rain:
+        temp_word = "прохладно" if tmax < 17 else "тепло"
+        return f"Дождь, {temp_word}, около {tmax:+d}°C."
+    parts = []
+    cond_low = str(cond or "").lower()
+    if flags and flags.get("sunny"):
+        parts.append("солнечно")
+    elif cond_low:
+        parts.append(cond_low)
+    parts.append("жарко" if tmax >= 24 else "тепло" if tmax >= 17 else "прохладно")
+    return f"{', '.join(parts).capitalize()}, около {tmax:+d}°C."
+
+
 def _build_look_message(look_data):
     msg = wardrobe_ui.look_message(look_data)
     return msg.text, msg.entities
@@ -257,6 +274,7 @@ async def send_looks(bot, cid, status=None):
     tmax = None
     flags = None
     has_rain = False
+    cond = ""
     try:
         wdata = await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 2)
         wd = wdata["daily"]
@@ -312,8 +330,8 @@ async def send_looks(bot, cid, status=None):
     pref_line = ("\n" + secure.wrap_untrusted(pref_hints, "предпочтения")) if pref_hints else ""
     profile_block = (f"\n{style_block}" if style_block else "")
     weather_block = (f"\n{weather_rules}" if weather_rules else "")
-    prompt = f"""Ты — персональный стилист уровня Thread, Whering и GQ. Собери ОДИН образ из гардероба на сегодня.
-Пиши как стилист, который даёт быструю персональную рекомендацию, а не статью в журнале: коротко, по делу, без повторов одной и той же мысли разными словами.{profile_block}
+    prompt = f"""Ты — персональный стилист. Собери ОДИН образ из гардероба на сегодня.
+Пиши коротко, по делу, без воды.{profile_block}
 Погода: {wctx}
 ТЕМПЕРАТУРНОЕ ПРАВИЛО (строго, не нарушать): {temp_rule}{weather_block}{fb_line}{pref_line}
 Гардероб пользователя (ТОЛЬКО эти вещи, другие не добавлять):
@@ -325,15 +343,11 @@ async def send_looks(bot, cid, status=None):
 Обращайся на «ты», без имени. Никакой воды и шаблонных фраз («вот образ», «хорошего дня»).
 
 Верни строго валидный JSON (без markdown):
-{{"intro":"2-3 предложения: главная идея образа и почему он уместен именно сегодня (погода, комфорт) — без перечисления вещей",
-"items":[{{"emoji":"👕","name":"вещь полным названием из списка","short_name":"вещь без бренда"}}, "... 3-4 вещи: верх, низ, обувь, опц. аксессуар"],
-"style":"Scandinavian Minimalism|Smart Casual|Streetwear|Old Money|Classic Casual|Japanese Minimalism",
-"reasons":["2-3 коротких пункта почему этот образ подходит именно сегодня — каждый про РАЗНОЕ (напр. один про ткань/температуру, другой про силуэт/ветер, третий про цвета), без повторов одной мысли"],
-"styling_tip":"0-1 короткое предложение с советом как носить выбранные вещи; можно советовать закатать рукава рубашки или оставить рубашку навыпуск; никогда не советуй заправлять рубашку",
-"occasion":"короткая текстовая фраза без эмодзи, для чего образ хорошо подходит сегодня, в общем виде без привязки к конкретным планам (напр. 'Комфортно для прогулки по городу'), или пусто",
+{{"items":[{{"name":"вещь полным названием из списка","short_name":"вещь без бренда"}}, "... 3-4 вещи: верх, низ, обувь, опц. аксессуар"],
+"summary":"2-4 слова итогом образа, например 'легко, не жарко, аккуратно' — самая суть, без предложений",
 "recommendation":"1 предложение с одной рекомендацией докупить, если в гардеробе не хватает вещи для идеального образа, иначе пустая строка"}}"""
     try:
-        d = await ai.allm_json(prompt, 900, module="wardrobe")
+        d = await ai.allm_json(prompt, 500, module="wardrobe")
     except Exception as e:
         await status.stop(delete=True)
         await verify.safe_error(bot, cid, e); return
@@ -347,17 +361,15 @@ async def send_looks(bot, cid, status=None):
     rl.append(", ".join(items)[:80])
     store.recent_looks[str(cid)] = rl[-3:]
     store.last_look[str(cid)] = ", ".join(str(it) for it in items)[:120]   # для фидбека
-    intro = d.get("intro", "")
+    recommendation = d.get("recommendation", "")
     if gap_note:
         # Честно сообщаем о пробеле под дождь прямо в образе.
-        intro = (intro + " " + gap_note).strip() if intro else gap_note
+        recommendation = (recommendation + " " + gap_note).strip() if recommendation else gap_note
     look_data = {
-        "intro": intro,
+        "weather_line": _short_weather_line(tmax, cond, has_rain, flags),
         "items": raw_items,
-        "style": d.get("style", ""),
-        "reasons": d.get("reasons") or [],
-        "occasion": d.get("occasion", ""),
-        "recommendation": d.get("recommendation", ""),
+        "summary": d.get("summary", ""),
+        "recommendation": recommendation,
     }
     text, entities = _build_look_message(look_data)
     item_ids = _resolve_item_ids(w, items)

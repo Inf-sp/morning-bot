@@ -113,54 +113,34 @@ def _finish_dot(value):
 
 
 def look_message(look_data):
-    """Образ на сегодня — короткая карточка-рекомендация стилиста, а не статья:
-    идея образа одной репликой, вещи списком без описаний, причина — 2-3 коротких
-    пункта об образе целиком (не по вещи), без визуального шума.
+    """Образ на сегодня — максимально короткая карточка для быстрого решения:
+    одна строка погоды, простой список вещей без эмодзи, одна итоговая фраза.
 
-    look_data: {intro, items[{emoji,name,short_name}], style, reasons[], styling_tip,
-                occasion, recommendation}
+    look_data: {weather_line, items[{name,short_name}], summary, recommendation}
     """
     look_data = look_data or {}
     b = MessageBuilder()
     b.section("✨ Образ на сегодня")
 
-    intro = _clean_text(look_data.get("intro"))
-    if intro:
+    weather_line = _clean_text(look_data.get("weather_line"))
+    if weather_line:
         b.spacer()
-        b.line(intro)
+        b.line(_finish_dot(weather_line))
 
-    style = _clean_text(look_data.get("style"))
-    if style:
-        b.spacer()
-        b.text_line("Стиль: ")
-        b.bold(style)
-        b.newline()
-
-    items = [it for it in (look_data.get("items") or []) if _clean_text(_item_display(it))]
+    items = [_clean_text(_item_display(it)) for it in (look_data.get("items") or [])]
+    items = [it for it in items if it]
     if items:
-        quote = "\n".join(
-            f"{_clean_text(it.get('emoji')) if isinstance(it, dict) else ''} {_clean_text(_item_display(it))}".strip()
-            for it in items
-        )
         b.spacer()
-        b.quote(quote)
+        b.line("Надеть:")
+        for it in items:
+            b.bullet(it[:1].lower() + it[1:] if it else it)
+
+    summary = _clean_text(look_data.get("summary"))
+    if summary:
+        b.spacer()
+        b.text_line("Коротко: ")
+        b.text_line(_finish_dot(summary))
         b.newline()
-
-    reasons = [_finish_dot(r) for r in (look_data.get("reasons") or []) if _clean_text(r)]
-    if reasons:
-        b.section(ui_label("why_today", "Почему именно сегодня"))
-        for r in reasons[:3]:
-            b.bullet(r)
-
-    styling_tip = _finish_dot(look_data.get("styling_tip"))
-    if styling_tip:
-        b.spacer()
-        b.line(styling_tip)
-
-    occasion = _finish_dot(look_data.get("occasion"))
-    if occasion:
-        b.spacer()
-        b.line(occasion)
 
     recommendation = _finish_dot(look_data.get("recommendation"))
     if recommendation:
@@ -194,21 +174,22 @@ def home_screen(total, zone_counts, zone_order):
     b.bold("Гардероб")
     b.newline()
     b.spacer()
-    b.line("Образ на сегодня, разбор шкафа и проверка покупки перед тем, как тратить деньги.")
+    b.line("Образ на сегодня, разбор шкафа и проверка покупки.")
 
     b.spacer()
     if total <= 0:
-        b.line(_wardrobe_verdict(total))
+        b.quote(_wardrobe_verdict(total))
         b.spacer()
         b.line("Добавь несколько вещей, и бот сможет собирать образы под погоду.")
     else:
-        b.line(f"В шкафу: {total} " + _pluralize_items(total))
-        b.line(_wardrobe_verdict(total))
+        b.text_line(f"В шкафу {total} " + _pluralize_items(total) + " · ")
+        b.text_line(_wardrobe_verdict(total).rstrip("."))
+        b.newline()
         b.spacer()
         for z in zone_order:
             n = zone_counts.get(z, 0)
             if n > 0:
-                b.line(f"{z} - {n}")
+                b.metric(z, n, width=24)
 
     return b.build_stripped()
 

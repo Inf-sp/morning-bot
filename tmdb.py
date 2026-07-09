@@ -150,6 +150,8 @@ def _genre_names(x):
 def _cinema_movie(x, country_code):
     localized = x.get("title") or x.get("name") or ""
     original = (x.get("original_title") or x.get("original_name") or "").strip() or None
+    if not _is_readable(localized) and not _is_readable(original or ""):
+        return None
     rating = _float_or_none(x.get("vote_average"))
     if rating is not None and rating <= 0:
         rating = None
@@ -323,7 +325,7 @@ def _regional_movie_page(endpoint, country_code, language, page, *, success_ttl,
         return []
 
     results = data.get("results", [])
-    items = [_cinema_movie(x, cc) for x in results if x.get("id")]
+    items = [m for x in results if x.get("id") and (m := _cinema_movie(x, cc)) is not None]
     if items:
         util.ttl_set("tmdb_cinema_success", key, items)
     else:
