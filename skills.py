@@ -38,7 +38,7 @@ SKILLS = {s.name: s for s in (
           fallback="⚠️ Не удалось подготовить задание. Попробуй ещё раз."),
     Skill("evening_review", "Вечерний разбор тревог", "card",
           entrypoints=("плановый запуск",),
-          memory=("WORRIES_KEY", "DIARY_KEY", "PROFILE_KEY"),
+          memory=("WORRIES_KEY", "PROFILE_KEY"),
           fallback="⚠️ Не удалось собрать вечерний разбор. Попробуй ещё раз."),
     Skill("health_triage_safe", "Вопрос врачу", "health",
           entrypoints=("as_doctor", "role_doctor"),

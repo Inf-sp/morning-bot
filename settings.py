@@ -1165,7 +1165,6 @@ async def send_mydata_travel(bot, cid):
 async def send_mydata_health(bot, cid):
     rows = [
         [InlineKeyboardButton("Принципы", callback_data="colr:health_lagom:set_mydata_health")],
-        [InlineKeyboardButton("История самочувствия", callback_data="colr:health_diary:set_mydata_health")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata")],
     ]
     msg = settings_ui.mydata_section(f"{ui_label('health', 'Мои данные · Здоровье')}")

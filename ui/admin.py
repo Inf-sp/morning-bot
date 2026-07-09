@@ -45,6 +45,7 @@ def deploy_report(version, title, release_notes):
     b.newline()
     b.spacer()
     b.bold("Что изменено:")
+    b.newline()
     for note in change_notes[:4]:
         b.line(f"• {note}")
     b.spacer()

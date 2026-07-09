@@ -284,7 +284,7 @@ async def answer_callback(update, context):
         return
     if data.startswith("as_"):
         if data.startswith(("as_food", "as_fridge", "as_recipe", "as_my_recipe",
-                             "as_daycheck", "as_motiv", "as_doctor", "as_diary")):
+                             "as_daycheck", "as_motiv", "as_doctor")):
             await balance.handle_callback(bot, cid, q, data)
         else:
             await settings.handle_notes_callback(bot, cid, q, data)

@@ -135,9 +135,6 @@ COLLECTIONS = {
     "health_lagom": _collection(
         "health_lagom", "health", ui_label("health", "Принципы здоровья"), _LAGOM_REVISION_SLOT, "principle",
         "set_lagom", [{"id": "remove", "label": "Удалить принципы", "confirm": True}]),
-    "health_diary": _collection(
-        "health_diary", "health", "История самочувствия", config.DIARY_KEY, "diary",
-        "m_balance", [{"id": "remove", "label": "Удалить записи", "confirm": True}]),
 }
 
 _COLLECTION_ALIASES = {
@@ -158,7 +155,6 @@ _COLLECTION_ALIASES = {
     "recipes": "recipes_saved",
     "fridge": "fridge_items",
     "lagom": "health_lagom",
-    "diary": "health_diary",
 }
 
 
@@ -221,8 +217,6 @@ def _view_store_key(ctx):
         return config.MY_RECIPES_KEY
     if ctx == "lagom":
         return _LAGOM_REVISION_SLOT
-    if ctx == "diary":
-        return config.DIARY_KEY
     return None
 
 
@@ -285,8 +279,6 @@ def _collection_records(cfg, cid):
 
 
 def _collection_item_label(cfg, item):
-    if cfg["id"] == "health_diary":
-        return f"{item.get('date', '')} — {item.get('text', '')}".strip(" —")
     if cfg["item_type"] == "recipe":
         return item.get("name", "Рецепт")
     return _view_label(item)
@@ -670,10 +662,6 @@ def _view_items(ctx, cid):
         records = store.ensure_list_ids_via(memory.get_lagom, memory.set_lagom, _LAGOM_REVISION_SLOT, cid)
         items = [(r["id"], _view_label(r)) for r in records]
         return "Чистка: Здоровье", items, "set_lagom"
-    if ctx == "diary":
-        records = store.ensure_list_ids(config.DIARY_KEY, cid)
-        items = [(r["id"], f"{r.get('date', '')} — {r.get('text', '')}".strip(" —")) for r in records]
-        return "История самочувствия", items, "m_balance"
     return "Чистка", [], "m_learn"
 
 

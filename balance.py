@@ -1639,21 +1639,34 @@ async def send_evening_review(bot, cid):
         settings.set_(cid, "_worry_prompt_ts", datetime.now(TZ).timestamp())
         return
     wlist = "\n".join(f"- {w['text']}" for w in worries)
-    try:
-        d = await ai.allm_json(
-            "Ты спокойный психолог. Разбери тревоги человека с СДВГ по-доброму, на русском.\n"
-            "Нужно коротко, без медицинских назначений и без длинной поддержки.\n"
-            "Для каждой тревоги дай одну короткую интерпретацию: что может быть фактом, а что предположением.\n"
-            "Итог дня - 1 короткое предложение.\n"
-            'Верни JSON: {"items":[{"worry":"тревога как есть","note":"коротко, до 20 слов"}],'
-            '"summary":"короткий итог, до 22 слов"}\n\n'
-            f"Тревоги:\n{wlist}", 700, 0.5)
-    except Exception as e:
-        _log.warning("send_evening_review: LLM failed, analysis empty: %s", e)
-        d = {}
+    analysis_failed = False
+    cache = store.get_profile(cid).get("evening_review_cache") or {}
+    if cache.get("date") == today and cache.get("worries") == wlist:
+        d = {"items": cache.get("items") or [], "summary": cache.get("summary") or ""}
+    else:
+        try:
+            d = await ai.allm_json(
+                "Ты спокойный психолог. Разбери тревоги человека с СДВГ по-доброму, на русском.\n"
+                "Нужно коротко, без медицинских назначений и без длинной поддержки.\n"
+                "Для каждой тревоги дай одну короткую интерпретацию: что может быть фактом, а что предположением.\n"
+                "Итог дня - 1 короткое предложение.\n"
+                'Верни JSON: {"items":[{"worry":"тревога как есть","note":"коротко, до 20 слов"}],'
+                '"summary":"короткий итог, до 22 слов"}\n\n'
+                f"Тревоги:\n{wlist}", 700, 0.5, module="balance")
+        except Exception as e:
+            _log.warning("send_evening_review: LLM failed, analysis empty: %s", e)
+            d = {}
+            analysis_failed = True
+        if not analysis_failed:
+            prof = store.get_profile(cid)
+            prof["evening_review_cache"] = {
+                "date": today, "worries": wlist,
+                "items": d.get("items") or [], "summary": (d.get("summary") or "").strip(),
+            }
+            store.set_profile(cid, prof)
     items = d.get("items") or []
     summary = (d.get("summary") or "").strip()
-    msg = balance_ui.evening_review(worries, items, summary)
+    msg = balance_ui.evening_review(worries, items, summary, analysis_failed=analysis_failed)
     rows = [
         [InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")],
     ]
@@ -1661,10 +1674,6 @@ async def send_evening_review(bot, cid):
 
 async def worry_clear_all(bot, cid):
     cid = str(cid)
-    worries = store.get_list(config.WORRIES_KEY, cid)
-    if worries:
-        summary = f"Разобрано тревог: {len(worries)}"
-        store.add_to_list(config.DIARY_KEY, cid, {"date": datetime.now(TZ).strftime("%d.%m"), "text": summary})
     store.set_list(config.WORRIES_KEY, cid, [])
     msg = balance_ui.worries_cleared()
     await bot.send_message(chat_id=cid, text=msg.text)
@@ -1699,9 +1708,6 @@ async def handle_callback(bot, cid, q, data):
 # дневник тревоги
     if data == "as_daycheck":
         await send_daycheck(bot, cid); return
-    if data == "as_diary":
-        import cleanup
-        await cleanup.open_cleanup(bot, cid, "diary"); return
     # мотивация
     if data == "as_motiv":
         status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)

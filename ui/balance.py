@@ -75,7 +75,7 @@ def evening_review_empty():
     return b.build_stripped()
 
 
-def evening_review(worries, items=None, summary=""):
+def evening_review(worries, items=None, summary="", analysis_failed=False):
     b = MessageBuilder()
     b.section(ui_label("evening", "Вечерний разбор"))
     b.spacer()
@@ -93,6 +93,9 @@ def evening_review(worries, items=None, summary=""):
         b.spacer()
         b.section(ui_label("summary", "Итог дня:"))
         b.line(cap_sentence(summary))
+    elif analysis_failed:
+        b.spacer()
+        b.line("⚠️ Не удалось собрать разбор. Попробуй ещё раз чуть позже.")
     return b.build_stripped()
 
 

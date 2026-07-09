@@ -86,7 +86,6 @@ _SCREENS = {
             [(ui_label("doctor", "Спросить врача"), "as_doctor")],
             [(ui_label("recommendation", "Заряд мотивации"), "as_motiv")],
             [(ui_label("worry_diary", "Дневник тревог"), "as_daycheck")],
-            [(ui_label("health_history", "История самочувствия"), "as_diary")],
             [(ui_label("settings", "Настройки здоровья"), "set_lagom")],
         ],
     ),
