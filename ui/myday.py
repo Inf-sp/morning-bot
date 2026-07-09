@@ -15,7 +15,8 @@ def day_summary(
     word_lang="nl",
     fact="",
     lifehack="",
-    quote_line="",
+    quote_text="",
+    quote_author="",
 ):
     title_flag = f" {flag}" if flag else ""
     b = MessageBuilder()
@@ -40,8 +41,12 @@ def day_summary(
         b.section(ui_label("knowledge", "База знаний"))
         b.line(lifehack)
 
-    if quote_line:
+    if quote_text:
         b.section(ui_label("quote", "Цитата"))
-        b.line(quote_line)
+        b.italic(f"«{quote_text}»")
+        b.newline()
+        if quote_author:
+            b.text_line(f"— {quote_author}")
+            b.newline()
 
     return b.build_stripped()

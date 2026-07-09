@@ -45,7 +45,93 @@ def _strip_quotes(s):
             changed = True
     return s
 
-# --- Факты о городе (curated JSON + research fallback) ---
+# --- Недельные AI-пулы (факты о городе, база знаний) ---
+# Общий движок: раз в неделю AI генерирует пачку 14-21 элемент, каждый день выдаётся
+# следующий непоказанный (shown_at), без повтора, пока пул не исчерпан - тогда генерируем
+# новый пул досрочно. Экономит AI-вызовы (§14 CLAUDE.md: 0-1 в день для "Мой день").
+
+_POOL_MIN_ITEMS = 7
+_POOL_TARGET_ITEMS = 18
+
+_CONTENT_BLACKLIST = (
+    "футбол", "спорт", "voetbal", "match", "wedstrijd", "club", "клуб", "score", "счёт",
+    "гол", "матч", "чемпионат", "лига", "politics", "политик", "выбор", "партия",
+    "crime", "преступ", "убий", "moord", "oorlog", "война", "теракт", "суд",
+)
+
+
+def _content_blocked(text: str) -> bool:
+    low = (text or "").lower()
+    return any(word in low for word in _CONTENT_BLACKLIST)
+
+
+def _iso_week_key(dt=None) -> str:
+    dt = dt or datetime.now(TZ)
+    year, week, _ = dt.isocalendar()
+    return f"{year}-{week:02d}"
+
+
+def _pool_get(store_key: str, cid: str, pool_id: str) -> dict:
+    data = store._load(store_key) or {}
+    return (data.get(str(cid)) or {}).get(pool_id) or {}
+
+
+def _pool_next_unshown(store_key: str, cid: str, pool_id: str) -> dict | None:
+    """Помечает первый непоказанный item как shown и возвращает его (атомарно)."""
+    cid = str(cid)
+    result = {"item": None}
+
+    def mut(data):
+        bucket = data.setdefault(cid, {}).setdefault(pool_id, {})
+        items = bucket.get("items") or []
+        for item in items:
+            if not item.get("shown_at"):
+                item["shown_at"] = int(datetime.now(TZ).timestamp())
+                result["item"] = dict(item)
+                break
+        return data, True
+
+    store.mutate_kv(store_key, mut)
+    return result["item"]
+
+
+def _pool_save(store_key: str, cid: str, pool_id: str, items: list) -> None:
+    cid = str(cid)
+
+    def mut(data):
+        data.setdefault(cid, {})[pool_id] = {
+            "week": _iso_week_key(),
+            "generated_at": int(datetime.now(TZ).timestamp()),
+            "items": items,
+        }
+        return data, True
+
+    store.mutate_kv(store_key, mut)
+
+
+def _pool_ensure_fresh(store_key: str, cid: str, pool_id: str, generate_fn) -> None:
+    """Если пула нет, он не за эту неделю, или все элементы показаны - генерирует новый."""
+    bucket = _pool_get(store_key, cid, pool_id)
+    items = bucket.get("items") or []
+    stale_week = bucket.get("week") != _iso_week_key()
+    exhausted = bool(items) and all(i.get("shown_at") for i in items)
+    if items and not stale_week and not exhausted:
+        return
+    raw_items = generate_fn()
+    filtered = [
+        {"id": idx, "text": text, **extra, "shown_at": None}
+        for idx, (text, extra) in enumerate(raw_items)
+        if text and not _content_blocked(text)
+    ]
+    if len(filtered) < _POOL_MIN_ITEMS and items and not exhausted:
+        # генерация дала слишком мало валидных элементов - лучше донашивать старый пул,
+        # чем показывать пользователю пустоту или урезанный набор
+        return
+    if filtered:
+        _pool_save(store_key, cid, pool_id, filtered)
+
+
+# --- Факты о городе (недельный AI-пул + curated JSON только как fallback) ---
 
 _CURATED_FACTS: dict = {}   # кеш city_facts.json на время сессии
 
@@ -66,21 +152,12 @@ def _load_curated_facts(city: str) -> list:
     return []
 
 
-def city_fact(city, country, cid, cc=""):
-    """Grounded факт о городе: curated JSON с anti-repeat → research.wiki_fact → ''."""
-    if not city:
-        return ""
+def _curated_fact_fallback(city, cid):
+    """Аварийный путь, если AI недоступен при генерации недельного пула:
+    curated JSON с anti-repeat → research.wiki_fact → ''."""
     cid = str(cid)
-    today_mmdd = datetime.now(config.TZ).strftime("%m-%d")
     facts = _load_curated_facts(city)
-
     if facts:
-        # Приоритет: факт с датой = сегодня
-        dated = [f for f in facts if f.get("date") == today_mmdd]
-        if dated:
-            return dated[0]["text"]
-
-        # Anti-repeat по индексам (как Лагом)
         all_idx = list(range(len(facts)))
         seen_data = store._load(config.CITY_FACT_IDX_KEY) or {}
         city_key = city.strip().lower()
@@ -93,25 +170,69 @@ def city_fact(city, country, cid, cc=""):
         seen_set.add(chosen_idx)
         seen_data.setdefault(cid, {})[city_key] = list(seen_set)
         store._save(config.CITY_FACT_IDX_KEY, seen_data)
-        return facts[chosen_idx]["text"]
-
-    # Fallback: Wikipedia — только если текст конкретный (>60 символов)
+        text = facts[chosen_idx]["text"]
+        if not _content_blocked(text):
+            return text
     try:
         wiki = research.wiki_fact(city)
-        if wiki and len(wiki.strip()) > 60:
+        if wiki and len(wiki.strip()) > 60 and not _content_blocked(wiki):
             return wiki.strip()
     except Exception as e:
         _log.warning("myday: wiki_fact(%s) failed: %s", city, e)
     return ""
 
 
+def _generate_fact_pool(city, country):
+    prompt = (
+        f"Составь {_POOL_TARGET_ITEMS} коротких интересных фактов о городе {city}"
+        f"{f', {country}' if country else ''} для утренней рассылки Telegram-бота.\n"
+        "Каждый факт - 1 предложение, конкретный и запоминающийся: архитектура, история, "
+        "культура, природа, местные традиции, наука, знаменитости-нежители спорта.\n"
+        "СТРОГО ЗАПРЕЩЕНО: футбол, спорт любого вида, результаты матчей, клубы, спортивные "
+        "даты, политика, выборы, партии, криминал, преступления, войны, теракты, суды.\n"
+        'Верни JSON: {"facts": ["факт 1", "факт 2", ...]}'
+    )
+    try:
+        d = ai.llm_json(prompt, 1800, tier="cheap", module="myday")
+    except Exception as e:
+        _log.warning("myday: fact pool generation failed: %s", e)
+        return []
+    facts = d.get("facts") if isinstance(d, dict) else []
+    return [(str(f).strip(), {}) for f in (facts or []) if str(f).strip()]
+
+
+def city_fact(city, country, cid, cc=""):
+    """Факт о городе из недельного AI-пула (§46 CLAUDE.md: без спорта/политики/криминала).
+    Если AI недоступен при первой генерации пула за неделю - curated JSON/Wikipedia."""
+    if not city:
+        return ""
+    cid = str(cid)
+    pool_id = city.strip().lower()
+    _pool_ensure_fresh(config.FACT_POOL_KEY, cid, pool_id, lambda: _generate_fact_pool(city, country))
+    item = _pool_next_unshown(config.FACT_POOL_KEY, cid, pool_id)
+    if item:
+        return item["text"]
+    return _curated_fact_fallback(city, cid)
+
+
 # --- Сводка дня (Мой день) ---
 
 
-def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
-    """Случайный совет из lifehacks.json с anti-repeat и контекстной фильтрацией."""
+_LIFEHACK_CATEGORIES = (
+    "дом", "кухня", "гардероб", "продуктивность", "технологии",
+    "фотография", "жизнь в Нидерландах", "растения", "домашние животные",
+)
+
+_LIFEHACK_CATEGORY_EMOJI = {
+    "дом": "🏠", "кухня": "🍳", "гардероб": "👕", "продуктивность": "⚡",
+    "технологии": "💻", "фотография": "📷", "жизнь в нидерландах": "🇳🇱",
+    "растения": "🌿", "домашние животные": "🐾",
+}
+
+
+def _lifehack_fallback(cid, rain=False, hot=False, is_weekend=False):
+    """Аварийный путь, если AI недоступен при генерации недельного пула: lifehacks.json."""
     try:
-        import json
         with open(_HERE / "lifehacks.json", encoding="utf-8") as f:
             cats = json.load(f)
     except Exception:
@@ -120,6 +241,7 @@ def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
         (cat["emoji"], cat["cat"], f"{ci}:{ti}", tip["text"], tip.get("tags", []))
         for ci, cat in enumerate(cats)
         for ti, tip in enumerate(cat["tips"])
+        if not _content_blocked(tip["text"])
     ]
     if not all_tips:
         return "", ""
@@ -136,6 +258,75 @@ def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
     new_seen = list(seen | {tip[2]})
     store.set_list(config.LIFEHACK_KEY, cid, new_seen)
     return f"{tip[0]} {tip[1]}", tip[3]
+
+
+def _generate_lifehack_pool(cid):
+    interests = []
+    movies = store.get_list(config.WATCHLIST_KEY, cid)[:4]
+    books = store.get_list(config.BOOKS_KEY, cid)[:4]
+    if movies:
+        interests.append(f"любит фильмы/сериалы: {', '.join(str(m) for m in movies if m)}")
+    if books:
+        interests.append(f"любит книги: {', '.join(str(b) for b in books if b)}")
+    interest_block = ("Интересы пользователя: " + "; ".join(interests) + ".\n") if interests else ""
+    cats_str = ", ".join(_LIFEHACK_CATEGORIES)
+    prompt = (
+        f"Составь {_POOL_TARGET_ITEMS} практичных, не банальных советов для персональной "
+        f"'Базы знаний' в утренней рассылке Telegram-бота.\n"
+        f"Категории (используй только их): {cats_str}.\n"
+        f"{interest_block}"
+        "Каждый совет должен быть конкретным и применимым сразу, без общих фраз вроде "
+        "'пейте больше воды' или 'высыпайтесь'.\n"
+        'Верни JSON: {"tips": [{"category": "одна из категорий выше", "text": "совет"}]}'
+    )
+    try:
+        d = ai.llm_json(prompt, 1800, tier="cheap", module="myday")
+    except Exception as e:
+        _log.warning("myday: lifehack pool generation failed: %s", e)
+        return []
+    tips = d.get("tips") if isinstance(d, dict) else []
+    out = []
+    for t in tips or []:
+        text = str((t or {}).get("text") or "").strip()
+        cat = str((t or {}).get("category") or "").strip().lower()
+        if cat not in [c.lower() for c in _LIFEHACK_CATEGORIES]:
+            cat = ""
+        if text:
+            out.append((text, {"category": cat}))
+    return out
+
+
+def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
+    """Совет из недельного AI-пула по 9 персональным категориям (§ CLAUDE.md).
+    Если AI недоступен при первой генерации пула за неделю - lifehacks.json."""
+    cid = str(cid)
+    _pool_ensure_fresh(config.LIFEHACK_POOL_KEY, cid, "default", lambda: _generate_lifehack_pool(cid))
+    bucket = _pool_get(config.LIFEHACK_POOL_KEY, cid, "default")
+    items = bucket.get("items") or []
+    if items:
+        # контекстный приоритет среди непоказанных: дождь/жара -> гардероб, иначе любой
+        ctx_cat = "гардероб" if (rain or hot) else ""
+        unshown = [i for i in items if not i.get("shown_at")]
+        preferred = [i for i in unshown if ctx_cat and i.get("category") == ctx_cat]
+        candidates = preferred or unshown
+        if candidates:
+            target_id = candidates[0]["id"]
+
+            def mut(data):
+                b = data.setdefault(cid, {}).setdefault("default", {})
+                for it in b.get("items") or []:
+                    if it.get("id") == target_id:
+                        it["shown_at"] = int(datetime.now(TZ).timestamp())
+                        break
+                return data, True
+
+            store.mutate_kv(config.LIFEHACK_POOL_KEY, mut)
+            chosen = next(i for i in items if i["id"] == target_id)
+            cat = chosen.get("category") or ""
+            emoji = _LIFEHACK_CATEGORY_EMOJI.get(cat, "💡")
+            label = cat.capitalize() if cat else "Совет"
+            return f"{emoji} {label}", chosen["text"]
+    return _lifehack_fallback(cid, rain=rain, hot=hot, is_weekend=is_weekend)
 
 
 
@@ -219,6 +410,16 @@ def _cap(s):
 def _quote_valid(q):
     """Пропускает цитату если LLM вставил латинское слово в кириллический текст."""
     return not re.search(r'[а-яА-ЯЁё][a-zA-Z]|[a-zA-Z][а-яА-ЯЁё]', q or "")
+
+
+_QUOTE_MAX_CHARS = 220  # ограничивает цитату 2-3 строками в Telegram-карточке
+
+
+def _clip_quote(text):
+    text = re.sub(r"\s+", " ", (text or "")).strip()
+    if len(text) <= _QUOTE_MAX_CHARS:
+        return text
+    return text[:_QUOTE_MAX_CHARS - 1].rstrip(" ,.;:") + "…"
 
 def _is_word_entry(w):
     """Запись словаря - именно СЛОВО, а не фраза."""
@@ -360,11 +561,11 @@ def _build_day_text(cid):
     except Exception as e:
         _log.warning("myday: _fetch_quote failed: %s", e)
         q_data = {}
-    raw_quote = _strip_quotes(q_data.get("quote", ""))
-    quote_line = ""
+    raw_quote = _clip_quote(_strip_quotes(q_data.get("quote", "")))
+    quote_text, quote_author = "", ""
     if raw_quote and _quote_valid(raw_quote):
-        src = esc(q_data.get("src", "")).strip()
-        quote_line = f"«{esc(raw_quote)}»" + (f" — {src}" if src else "")
+        quote_text = esc(raw_quote)
+        quote_author = esc(q_data.get("src", "")).strip()
     msg = myday_ui.day_summary(
         header,
         s.get("city", ""),
@@ -378,7 +579,8 @@ def _build_day_text(cid):
         word_lang=word_lang,
         fact=fact,
         lifehack=hack_text,
-        quote_line=quote_line,
+        quote_text=quote_text,
+        quote_author=quote_author,
     )
     text = msg.text
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя
