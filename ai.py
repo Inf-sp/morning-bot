@@ -568,11 +568,31 @@ TIERS = {
     "leisure": (LEISURE_ORDER, None),
 }
 
-def _resolve(tier, order, route=None):
-    """Явный order имеет приоритет; иначе берём порядок из тира.
-    route позволяет принудительно поставить конкретного провайдера первым."""
+# --- единый AI-router: политика провайдеров по разделу бота (module) ---
+# Переопределяет tier/route для известных разделов, чтобы порядок провайдеров и
+# запрет конкретного provider не зависели от того, что явно передал вызов внутри
+# раздела. Единственный способ обойти policy — явный order=(...) в вызове.
+MODULE_POLICY = {
+    "news": ("groq", "cf"),                 # Gemini запрещён для новостей даже как fallback (§46 CLAUDE.md)
+    "personal_news": ("groq", "cf"),
+    "learning": ("gemini", "groq", "cf"),
+    "food": ("gemini", "groq", "cf"),
+    "wardrobe": ("gemini", "groq", "cf"),
+    "health": ("gemini", "groq", "cf"),
+    "balance": ("gemini", "groq", "cf"),
+    "assistant": ("gemini", "groq", "cf"),
+    "travel": ("gemini", "groq", "cf"),
+    "leisure": ("gemini", "groq", "cf"),
+}
+
+
+def _resolve(tier, order, route=None, module=""):
+    """Явный order имеет наивысший приоритет (единственный способ обойти module-policy).
+    Иначе — policy известного раздела; иначе route/tier, как раньше."""
     if order is not None:
         return tuple(n for n in order if n in PROVIDER_ORDER or n in DEFAULT_ORDER)
+    if module and module in MODULE_POLICY:
+        return MODULE_POLICY[module]
     if route:
         return PROVIDER_ORDER.get(route, DEFAULT_ORDER)
     o, _ = TIERS.get(tier or "smart", (DEFAULT_ORDER, None))
@@ -610,7 +630,7 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
         module = _caller_module()
     policy = _coerce_policy(fallback_allowed, privacy_level, response_mode, fallback_policy,
                             allow_personal_openrouter)
-    order = _resolve(tier, order, route=route)
+    order = _resolve(tier, order, route=route, module=module)
     pre_gemini_unavailable = _gemini_cooldown_error() if "gemini" in order else None
     order = _reorder_for_cooldown(order)
     cache_ttl = _cache_ttl(module, response_mode)

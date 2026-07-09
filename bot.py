@@ -902,19 +902,19 @@ async def admin_command(update, context):
 async def admin_debug_api_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
     import admin as _admin
-    await settings._admin_guard(context.bot, update.effective_chat.id, _admin.send_diag_api)
+    await settings._admin_guard(context.bot, update.effective_chat.id, _admin.send_api_ai)
 
 
 async def admin_debug_llm_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
     import admin as _admin
-    await settings._admin_guard(context.bot, update.effective_chat.id, _admin.send_diag_llm)
+    await settings._admin_guard(context.bot, update.effective_chat.id, _admin.send_api_ai)
 
 
 async def admin_debug_news_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
     import admin as _admin
-    await settings._admin_guard(context.bot, update.effective_chat.id, _admin.send_diag_news)
+    await settings._admin_guard(context.bot, update.effective_chat.id, _admin.send_api_ai)
 
 
 async def admin_logs_command(update, context):

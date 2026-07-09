@@ -3,7 +3,7 @@ import json
 import logging
 import re
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 from urllib.parse import urlparse, urlunparse
 
@@ -793,6 +793,49 @@ def _to_news_item(item, profile, now=None):
     )
 
 
+def _rewrite_with_groq(items):
+    """Живой пересказ summary/why_important для уже отобранных правилами новостей.
+
+    Gemini запрещён для новостей даже как fallback (§46 CLAUDE.md) - явный
+    order без "gemini" исключает его из цепочки полностью, в отличие от
+    route="groq", который всё равно оставляет Gemini вторым в PROVIDER_ORDER.
+    Если Groq/Cloudflare недоступны - остаются текущие правило-based тексты.
+    """
+    if not items:
+        return items
+    compact = [
+        {"i": idx, "title": it.title, "content": it.summary, "category": it.category}
+        for idx, it in enumerate(items)
+    ]
+    prompt = (
+        "Перепиши для карточки Telegram-новостей: короткий человечный пересказ (summary) "
+        "и одну фразу, почему это важно (why_important). Не добавляй факты, которых нет в исходном тексте. "
+        "Пиши по-русски, без канцелярита.\n\n"
+        f"Новости: {json.dumps(compact, ensure_ascii=False)}\n\n"
+        "Верни JSON: {\"items\": [{\"i\": 0, \"summary\": \"...\", \"why_important\": \"...\"}]}"
+    )
+    try:
+        data = ai.llm_json(prompt, 900, order=("groq", "cf"), module="personal_news")
+    except Exception as e:
+        _log.warning("personal_news Groq rewrite failed: %s", str(e)[:120])
+        return items
+    rewritten = {}
+    for row in (data.get("items") if isinstance(data, dict) else []) or []:
+        try:
+            rewritten[int(row.get("i"))] = row
+        except Exception:
+            continue
+    out = []
+    for idx, it in enumerate(items):
+        row = rewritten.get(idx)
+        if row and row.get("summary"):
+            it = replace(it, summary=_clip(str(row["summary"]).strip(), 140))
+        if row and row.get("why_important"):
+            it = replace(it, why_important=_clip(str(row["why_important"]).strip(), 130))
+        out.append(it)
+    return out
+
+
 def _select_diverse(items):
     selected = []
     used_categories = set()
@@ -837,53 +880,8 @@ def collect_personal_news(user_profile, sources=None, now=None, search_fn=None):
             candidates.append(news)
             seen_titles.append(news.title)
 
-    return _select_diverse(candidates)
-
-
-def _score_items(cid, candidates):
-    if not candidates:
-        return []
-    profile = _profile_context(cid)
-    compact = [
-        {
-            "title": x.get("title"),
-            "url": x.get("url"),
-            "content": (x.get("content") or "")[:700],
-            "published_at": _published_value(x),
-            "date_missing": bool(x.get("_date_missing")),
-            "category_hint": x.get("_category_hint"),
-        }
-        for x in candidates[:24]
-    ]
-    prompt = (
-        "Оцени новости для персонального раздела Telegram-бота. "
-        "Показывай только практичные свежие изменения для конкретного пользователя. "
-        "Запрещены криминал, общая политика, кликбейт, слухи, SEO-статьи, Reddit, реклама, медицинские страшилки. "
-        "Для здоровья используй спокойный тон и только официальные источники. "
-        "Не добавляй факты, которых нет в источниках.\n\n"
-        f"Профиль пользователя: {json.dumps(profile, ensure_ascii=False)}\n"
-        f"Кандидаты: {json.dumps(compact, ensure_ascii=False)}\n\n"
-        "Верни JSON: {\"items\": [{\"is_relevant\": true, \"importance\": 1, "
-        "\"category\": \"city|netherlands|screen|music|tech|health|food\", "
-        "\"title_ru\": \"...\", \"summary_ru\": \"...\", \"why_it_matters_ru\": \"...\", "
-        "\"source_name\": \"...\", \"source_url\": \"https://...\", "
-        "\"published_at\": \"ISO datetime\", \"action_type\": \"read|watch|listen|visit|prepare|none\"}]}"
-    )
-    try:
-        data = ai.llm_json(prompt, 2200, tier="leisure", route="gemini", module="personal_news")
-    except Exception as e:
-        _inc_stat("errors")
-        _log.warning("personal_news Gemini scoring failed: %s", str(e)[:120])
-        return []
-    items = data.get("items") if isinstance(data, dict) else []
-    good = []
-    for item in items or []:
-        try:
-            if item.get("is_relevant") is True and int(item.get("importance", 0)) >= 3:
-                good.append(item)
-        except Exception:
-            continue
-    return good[:NEWS_MAX_ITEMS]
+    selected = _select_diverse(candidates)
+    return _rewrite_with_groq(selected)
 
 
 def _source_name(url):
@@ -895,31 +893,6 @@ def _source_name(url):
     if len(parts) >= 2:
         return parts[-2].title()
     return host.title() or "Источник"
-
-
-def _fallback_items(candidates):
-    items = []
-    for raw in candidates[:NEWS_MAX_ITEMS]:
-        title = (raw.get("title") or "").strip()
-        if not title:
-            continue
-        content = re.sub(r"\s+", " ", (raw.get("content") or "")).strip()
-        summary = content[:180].rstrip()
-        if len(content) > 180:
-            summary = summary.rstrip(".,;:") + "..."
-        items.append({
-            "is_relevant": True,
-            "importance": 3,
-            "category": raw.get("_category_hint") or "netherlands",
-            "title_ru": title,
-            "summary_ru": summary,
-            "why_it_matters_ru": "",
-            "source_name": _source_name(raw.get("url")),
-            "source_url": raw.get("url"),
-            "published_at": _published_value(raw) or "",
-            "action_type": "read",
-        })
-    return items
 
 
 def _clip(text, limit):

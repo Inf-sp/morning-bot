@@ -36,7 +36,7 @@ UI_EMOJI = {
     "seen": "✅",
     "warning": "⚠️",
     "hot": "🔥",
-    "interesting": "👀",
+    "interesting": "👨🏻‍💻",
     "news": "📰",
     "system": "📊",
     "users": "👥",
@@ -66,7 +66,7 @@ UI_EMOJI = {
     "translation": "🔤",
     "usage": "💭",
     "example": "💬",
-    "knowledge": "📚",
+    "knowledge": "🦉",
     "quote": "💬",
     "worries": "📓",
     "evening": "🌙",
@@ -84,7 +84,7 @@ UI_EMOJI = {
     "spoken_language": "🗣️",
     "best_time": "🕒",
     "budget": "💶",
-    "dont_miss": "👀",
+    "dont_miss": "❗️",
     "lgbtq": "🌈",
 }
 

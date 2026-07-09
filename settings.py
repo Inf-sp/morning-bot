@@ -758,18 +758,12 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "adm_system_check":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.check_system(b, c, q))
-    elif data == "adm_diag":
+    elif data in ("adm_diag", "adm_diag_api", "adm_diag_llm", "adm_diag_news", "adm_api_ai"):
         import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
-    elif data == "adm_diag_api":
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))
+    elif data == "adm_api_ai_check":
         import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
-    elif data == "adm_diag_llm":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
-    elif data == "adm_diag_news":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
+        await _admin_guard(bot, cid, lambda b, c: _adm.check_api_ai(b, c, q))
     elif data == "adm_logs":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))
@@ -804,18 +798,9 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_admin_users":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_users(b, c, q))
-    elif data == "set_admin_llm":
+    elif data in ("set_admin_llm", "set_admin_news", "set_admin_llmcheck", "set_admin_llmhistory"):
         import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
-    elif data == "set_admin_news":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
-    elif data == "set_admin_llmcheck":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
-    elif data == "set_admin_llmhistory":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))
     elif data == "set_admin_broadcast":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_notifications(b, c, q))
@@ -834,7 +819,7 @@ async def handle_callback(bot, cid, data, q=None):
         await _admin_guard(bot, cid, lambda b, c: _adm.check_system(b, c, q))
     elif data == "set_admin_api_diagnostics":
         import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))
     elif data == "set_admin_cache_clear":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.clear_cache(b, c, q))

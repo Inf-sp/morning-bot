@@ -147,79 +147,41 @@ def system(rows, updated_at):
     return b.build_stripped()
 
 
-def diagnostics():
+def api_ai(status_ok, fallback_on, problem_line, ai_rows, api_rows, feature_rows,
+           last_error_line, updated_at):
+    """Единый экран диагностики: § docs/admin.md «API и AI».
+
+    status_ok: bool - общий статус (работает / есть проблемы).
+    fallback_on: bool - хоть один provider сейчас работает через fallback.
+    problem_line: str|None - короткое описание главной проблемы, если есть.
+    ai_rows / api_rows: list[str] - готовые строки "Сервис · статус · деталь".
+    feature_rows: list[str] - готовые строки "Раздел · провайдеры · статус".
+    last_error_line: str|None.
+    """
     b = MessageBuilder()
-    b.bold(ui_label("diagnostics", "Диагностика"))
+    b.bold("🔌 API и AI")
     b.newline()
     b.spacer()
-    b.line("Выберите раздел:")
+    b.line(f"Статус: {'работает' if status_ok else 'есть проблемы'}")
+    b.line(f"Fallback: {'включён' if fallback_on else 'выключен'}")
+    if problem_line:
+        b.line(f"Проблема: {problem_line}")
     b.spacer()
-    b.line("API - лимиты, ошибки, последние ответы")
-    b.line("LLM - провайдеры, fallback, токены")
-    b.line("Новости - Tavily, фильтрация, кэш")
-    b.line("Логи - последние события и ошибки")
-    return b.build_stripped()
-
-
-def api_diagnostics_compact(rows, updated_at):
-    b = MessageBuilder()
-    b.bold(ui_label("api", "API · Диагностика"))
-    b.newline()
-    if not rows:
+    b.line("AI:")
+    for line in ai_rows:
+        b.line(line)
+    b.spacer()
+    b.line("API:")
+    for line in api_rows:
+        b.line(line)
+    b.spacer()
+    b.line("Функции:")
+    for line in feature_rows:
+        b.line(line)
+    if last_error_line:
         b.spacer()
-        b.line("Пока нет сохранённых реальных API-вызовов.")
-    for label, lines in rows:
-        b.spacer()
-        b.line(f"{label}:")
-        for line in lines:
-            b.line(line)
-    b.spacer()
-    b.line(f"Обновлено: {updated_at}")
-    return b.build_stripped()
-
-
-def llm_diagnostics(calls_today, tokens_today, errors_today, providers, fallback_text, problem, updated_at):
-    b = MessageBuilder()
-    b.bold(ui_label("llm", "LLM · Диагностика"))
-    b.newline()
-    b.spacer()
-    b.line("Сегодня:")
-    b.line(f"{calls_today} запросов")
-    b.line(f"~{_num(tokens_today)} токенов")
-    b.line(f"{errors_today} ошибок")
-    if problem:
-        b.spacer()
-        b.line("Проблема:")
-        b.line(problem)
-    b.spacer()
-    b.line("Провайдеры:")
-    b.line(providers or "—")
-    b.spacer()
-    b.line("Fallback:")
-    b.line(fallback_text)
-    b.spacer()
-    b.line(f"Обновлено: {updated_at}")
-    return b.build_stripped()
-
-
-def news_diagnostics(today_credits, daily_limit, month_credits, month_limit,
-                     cache_hits, last_build, errors, updated_at):
-    b = MessageBuilder()
-    b.bold(ui_label("news", "Новости · Диагностика"))
-    b.newline()
-    b.spacer()
-    b.line("Tavily:")
-    b.line(f"{today_credits}/{daily_limit} сегодня")
-    b.line(f"{month_credits}/{month_limit} месяц")
-    b.spacer()
-    b.line("Кэш:")
-    b.line(f"{cache_hits} попадания")
-    b.spacer()
-    b.line("Сборка:")
-    b.line(f"последняя {last_build}")
-    b.spacer()
-    b.line("Ошибки:")
-    b.line(str(errors))
+        b.line("Последняя ошибка:")
+        b.line(last_error_line)
     b.spacer()
     b.line(f"Обновлено: {updated_at}")
     return b.build_stripped()
@@ -327,46 +289,6 @@ def user_search_result(dot, name, city, last_seen):
     return b.build_stripped()
 
 
-# ================= LLM =================
-
-def llm(status_dot, status_text, last_req, avg_ms, errors_today, calls_today, tokens_today, providers,
-        openrouter_fallback=None):
-    """providers: [(label, pct)] доля токенов за сегодня."""
-    b = MessageBuilder()
-    b.bold(ui_label("llm", "LLM"))
-    b.newline()
-    b.spacer()
-    b.metric("Статус", f"{status_dot} {status_text}")
-    b.metric("Последний запрос", last_req)
-    b.metric("Запросов сегодня", calls_today)
-    b.metric("Токенов сегодня", f"~{_num(tokens_today)}")
-    b.metric("Ср. ответ", f"{avg_ms} мс")
-    b.metric("Ошибок сегодня", errors_today)
-    if openrouter_fallback is not None:
-        b.spacer()
-        b.bold("OpenRouter fallback")
-        b.newline()
-        b.line(f"• попыток: {openrouter_fallback.get('attempts', 0)}")
-        b.line(f"• успешно: {openrouter_fallback.get('success', 0)}")
-        b.line(f"• ошибок: {openrouter_fallback.get('errors', 0)}")
-    if providers:
-        b.spacer()
-        b.line(" · ".join(f"{label} {pct}%" for label, pct in providers))
-    return b.build_stripped()
-
-
-def llm_check(results):
-    b = MessageBuilder()
-    b.bold("🔍 Проверка провайдеров")
-    b.newline()
-    for result in results:
-        label, ok, detail = result[:3]
-        dot = result[3] if len(result) > 3 else (OK if ok else BAD)
-        b.spacer()
-        b.line(f"{dot} {label}" if ok else f"{dot} {label}: {detail}")
-    return b.build_stripped()
-
-
 def _weather_ts_hhmm(value):
     if not value:
         return "—"
@@ -421,163 +343,6 @@ def _hm(ts):
         return datetime.fromtimestamp(int(ts), config.TZ).strftime("%H:%M")
     except Exception:
         return "—"
-
-
-def _dot(status):
-    return {"ok": OK, "warn": WARN, "bad": BAD, "off": OFF}.get(status, OFF)
-
-
-def _unit_word(unit):
-    return {
-        "requests": "запросов",
-        "credits": "кредитов",
-        "tokens": "токенов",
-        "messages": "отправок",
-    }.get(unit, unit)
-
-
-def _period_word(period):
-    return {
-        "minute": "мин",
-        "hour": "час",
-        "day": "сегодня",
-        "month": "месяц",
-    }.get(period, period)
-
-
-def _quota_line(row):
-    unit = row.get("unit")
-    period = row.get("period")
-    used = int(row.get("used") or 0)
-    limit = row.get("limit")
-    def fmt(n):
-        return f"{int(n):,}".replace(",", " ")
-    if limit:
-        limit = int(limit)
-        if period == "day":
-            return f"{fmt(used)} / {fmt(limit)} сегодня · осталось {fmt(max(0, limit - used))}"
-        if period == "minute":
-            return f"{fmt(used)} / {fmt(limit)} за мин"
-        if unit == "credits" and period == "month":
-            return f"{fmt(used)} / {fmt(limit)} кредитов в этом месяце"
-        return f"{fmt(used)} / {fmt(limit)} за {_period_word(period)}"
-    return f"{fmt(used)} {_unit_word(unit)} {_period_word(period)}"
-
-
-def _main_quota_services(services):
-    return [s for s in services if s.get("service") in {"openweather", "gemini", "pexels", "tavily"}]
-
-
-def _local_services(services):
-    return [s for s in services if s.get("service") not in {"openweather", "gemini", "pexels", "tavily"}]
-
-
-def api_check(snapshot):
-    b = MessageBuilder()
-    b.bold("🔍 Проверка API")
-    b.newline()
-    b.line(f"Обновлено: {_hm((snapshot or {}).get('updated_at'))}")
-    services = (snapshot or {}).get("services") or []
-    if not services:
-        b.spacer()
-        b.line("Пока нет сохранённых реальных API-вызовов.")
-        return b.build_stripped()
-
-    main = _main_quota_services(services)
-    local = _local_services(services)
-    if main:
-        b.spacer()
-        b.bold(ui_label("system", "Использование"))
-        b.newline()
-        for svc in main:
-            b.spacer()
-            b.bold(f"{svc.get('icon')} {svc.get('label')}")
-            b.newline()
-            if svc.get("service") == "gemini":
-                b.line(f"{_num(svc.get('day_requests', 0))} запроса сегодня · лимит 5/мин")
-                if int(svc.get("cooldown_until") or 0) > 0 and int(svc.get("cooldown_until") or 0) > __import__("time").time():
-                    b.line(f"🟡 cooldown до {_hm(svc.get('cooldown_until'))}")
-                elif svc.get("last_ok") is False and svc.get("last_429_at"):
-                    b.line("🔴 лимит запросов")
-                elif svc.get("last_error_reason") and any(x in str(svc.get("last_error_reason")).lower() for x in ("401", "403", "key", "access")):
-                    b.line("🔴 ошибка ключа / доступа")
-                else:
-                    b.line("🟢 работает")
-                continue
-            elif svc.get("service") == "tavily":
-                quota = next((q for q in svc.get("quotas", []) if q.get("unit") == "credits"), None)
-                b.line(_quota_line(quota) if quota else f"{_num(svc.get('month_credits', 0))} кредитов за месяц")
-            elif svc.get("service") == "pexels":
-                quotas = svc.get("quotas") or []
-                if len(quotas) >= 2:
-                    b.line(f"{_quota_line(quotas[0])} · {_quota_line(quotas[1])}")
-                elif quotas:
-                    b.line(_quota_line(quotas[0]))
-            else:
-                quota = (svc.get("quotas") or [{}])[0]
-                b.line(_quota_line(quota))
-            b.line(f"{_dot(svc.get('status'))} {svc.get('status_text')}")
-
-    if local:
-        b.spacer()
-        b.bold("Без общей квоты")
-        b.newline()
-        for svc in local:
-            label = svc.get("label")
-            status = _dot(svc.get("status"))
-            if svc.get("day_tokens"):
-                b.line(f"{status} {label} · {_num(svc.get('day_tokens'))} токенов сегодня")
-            elif svc.get("day_messages"):
-                b.line(f"{status} {label} · {_num(svc.get('day_messages'))} отправок сегодня")
-            elif svc.get("day_requests"):
-                b.line(f"{status} {label} · {_num(svc.get('day_requests'))} запросов сегодня")
-            else:
-                b.line(f"{status} {label}")
-    return b.build_stripped()
-
-
-def api_diagnostics(snapshot):
-    b = MessageBuilder()
-    b.bold(ui_label("api", "Диагностика API"))
-    b.newline()
-    for svc in (snapshot or {}).get("services") or []:
-        b.spacer()
-        b.bold(f"{_dot(svc.get('status'))} {svc.get('label')}")
-        b.newline()
-        b.line(f"Успешные запросы сегодня: {_num(svc.get('day_requests', 0))}")
-        if svc.get("cache_hits"):
-            b.line(f"Кэш: {_num(svc.get('cache_hits'))}")
-        if svc.get("avg_latency_ms"):
-            b.line(f"Средний ответ: {svc.get('avg_latency_ms')} мс")
-        b.line(f"Последний API-вызов: {_hm(svc.get('last_request_at'))}")
-        if svc.get("last_error_reason"):
-            b.line(f"Последняя ошибка: {svc.get('last_error_reason')}")
-        if svc.get("rate_limit_errors"):
-            b.line(f"Rate-limit ошибок: {svc.get('rate_limit_errors')}")
-        errors = svc.get("errors") or []
-        if errors:
-            b.line("Последние сбои:")
-            for err in errors[-3:]:
-                code = err.get("status_code") or "n/a"
-                b.line(f"{_hm(err.get('ts'))} · HTTP {code} · {err.get('reason') or 'error'}")
-    if not ((snapshot or {}).get("services") or []):
-        b.spacer()
-        b.line("Пока нет сохранённых реальных API-вызовов.")
-    return b.build_stripped()
-
-def llm_history(rows):
-    """rows: [(when, provider, module, ok)]."""
-    b = MessageBuilder()
-    b.bold(ui_label("history", "История запросов"))
-    b.newline()
-    b.spacer()
-    if not rows:
-        b.line("Пока пусто.")
-    for when, provider, module, ok in rows:
-        dot = OK if ok else BAD
-        mod = f" · {module}" if module else ""
-        b.line(f"{dot} {when} · {provider}{mod}")
-    return b.build_stripped()
 
 
 # ================= УВЕДОМЛЕНИЯ =================

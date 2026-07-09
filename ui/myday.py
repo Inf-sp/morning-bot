@@ -18,8 +18,8 @@ def day_summary(
 ):
     title_flag = f" {flag}" if flag else ""
     b = MessageBuilder()
-    b.section(f"{ui_label('myday', 'Мой день')} • {header} • {city}{title_flag}")
-
+    b.section(f"Мой день • {header} • {city}{title_flag}")
+    
     b.section(weather_title)
     b.line(weather_line)
     if humidity_title:
@@ -27,7 +27,7 @@ def day_summary(
         b.line(humidity_line)
 
     if word_line:
-        b.section("📚 Слово дня")
+        b.section("Слово дня")
         b.line(word_line)
 
     if fact:
