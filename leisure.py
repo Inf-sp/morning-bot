@@ -1676,9 +1676,12 @@ async def _fetch_favorite_events(cid):
     cc = (s.get("cc") or "NL").upper()
     cname = s.get("country") or "твоя страна"
     cached = _concerts_cache_get(cid, cc)
-    if cached is not None:
-        return cached
-    return await _fetch_concerts(artists, cc, cname)
+    events = cached if cached is not None else await _fetch_concerts(artists, cc, cname)
+
+    from datetime import datetime
+    today_str = datetime.now(config.TZ).date().isoformat()
+    return [e for e in events
+            if e.get("dates", {}).get("start", {}).get("localDate", "9999") >= today_str]
 
 
 async def find_new_favorite_concerts(cid):
@@ -1772,6 +1775,7 @@ async def find_concerts(bot, cid, mode="home"):
     cname_place = _concert_place_name(cname, cc)
 
     from util import _MONTHS
+    from datetime import datetime
 
     events = _concerts_cache_get(cid, cc)
     if events is None:
@@ -1792,11 +1796,14 @@ async def find_concerts(bot, cid, mode="home"):
             return ds
 
     place_label = f"Концерты в {cname_place} — ближайшие 6 месяцев"
+    today_str = datetime.now(config.TZ).date().isoformat()
     seen_artist_events = set()
     rows_data = []
     for e in events:
         artist = e.get("_artist", "")
         date = e.get("dates", {}).get("start", {}).get("localDate", "")
+        if date and date < today_str:
+            continue
         city = ((e.get("_embedded", {}).get("venues") or [{}])[0].get("city") or {}).get("name", "")
         dedup_key = (artist.lower(), date, city.lower())
         if dedup_key in seen_artist_events:

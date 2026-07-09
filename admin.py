@@ -253,8 +253,8 @@ async def send_home(bot, cid, q=None):
     notif_bad = notif["errors_today"] > 0
     dot, txt = (ui.BAD, "Есть проблема") if (system_bad or notif_bad) else (ui.OK, "Всё работает")
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(ui_label("system", "Система"), callback_data="adm_system"),
-         InlineKeyboardButton("Уведомления", callback_data="adm_notif")],
+        [InlineKeyboardButton(ui_label("system", "Система"), callback_data="adm_system")],
+        [InlineKeyboardButton(ui_label("notifications", "Уведомления"), callback_data="adm_notif")],
         [InlineKeyboardButton(ui_label("users", "Пользователи"), callback_data="adm_users")],
     ])
     msg = ui.home(
