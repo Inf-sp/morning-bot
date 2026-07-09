@@ -399,8 +399,31 @@ async def _replace_or_send(bot, cid, loading_message, text, entities, reply_mark
     await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=reply_markup)
 
 
+async def _maybe_prompt_dict_seed(bot, cid):
+    """Если словарь на активном языке пуст, а seed ещё не предлагали - предложить
+    один раз наполнить словарь (§28 CLAUDE.md: стартовые слова по language/level)."""
+    try:
+        lang = learning._active_language_code(cid)
+        words = learning._ensure_dict(cid)
+        has_words = any(
+            _is_word_entry(w) and (w.get("lang") or "nl") == lang
+            for w in words
+        )
+        if has_words:
+            return
+        prof = store.get_profile(cid)
+        if prof.get("_myday_seed_prompted"):
+            return
+        prof["_myday_seed_prompted"] = True
+        store.set_profile(cid, prof)
+        await learning.send_seed_intro(bot, cid, lang)
+    except Exception as e:
+        _log.warning("myday: _maybe_prompt_dict_seed failed: %s", e)
+
+
 async def send_plany(bot, cid, force=False, show_loading=True):
     import time as _time
+    await _maybe_prompt_dict_seed(bot, cid)
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     cache = _day_cache.get(str(cid))
     # Кеш устарел если: другой день, принудительное обновление,

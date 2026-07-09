@@ -17,6 +17,7 @@ UI_EMOJI = {
     "phrases": "🧩",
     "live_language": "💭",
     "word_trainer": "🧠",
+    "game": "🕵️",
     "travel": "✈️",
     "countries": "🌍",
     "routes": "🗺",

@@ -2583,10 +2583,9 @@ async def send_seed_intro(bot, cid, lang=None):
         await send_seed_phrase_offer(bot, cid, code, level)
         return
     text = (
-        "📚 Наполним словарь\n\n"
-        f"Я подобрал стартовые слова уровня {level}.\n\n"
-        "Отметьте только те слова, которые вы уже хорошо знаете.\n"
-        "Остальные я добавлю в ваш словарь для тренировок."
+        "Для эффективного обучения сначала наполним ваш словарь.\n\n"
+        f"Я подобрал слова уровня {level}. Просмотрите список и отметьте слова, "
+        "которые вы уже знаете, чтобы не изучать их повторно."
     )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Наполнить словарь", callback_data=f"a_dictseed_start_{code}")],
@@ -3235,6 +3234,9 @@ async def handle_learning_settings_callback(bot, cid, q, data):
         store.set_learning_language(cid, new_code)
         store.ensure_level(cid, _language_for_code(old_code), "A2")
         store.ensure_level(cid, _language_for_code(new_code), "A2")
+        prof = store.get_profile(cid)
+        prof.pop("_myday_seed_prompted", None)
+        store.set_profile(cid, prof)
         await send_learning_settings(bot, cid, q=q, back=back)
         return
     if data.startswith("set_learning_level_"):
