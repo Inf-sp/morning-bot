@@ -392,16 +392,16 @@ def _ctx_items(cid, ctx):
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
         store_key = {"movies": config.WATCHLIST_KEY, "countries": config.FAVCOUNTRIES_KEY,
                      "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
-        title = {"movies": "🎬 Чистка: фильмы", "countries": "🧳 Чистка: страны",
-                 "artists": "🎸 Чистка: музыканты", "books": "📖 Чистка: книги"}.get(key, "Чистка")
+        title = {"movies": f"{ui_label('cinema', 'Чистка: фильмы')}", "countries": f"{ui_label('countries', 'Чистка: страны')}",
+                 "artists": f"{ui_label('music', 'Чистка: музыканты')}", "books": f"{ui_label('books', 'Чистка: книги')}"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
         return title, items, "m_leisure_settings" if is_leisure else "as_notes"
     if ctx.startswith("hid_"):
         key = ctx[len("hid_"):]
         store_key = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
                      "artists": config.MUSIC_DISLIKE_KEY, "countries": config.TRAVEL_DISLIKE_KEY}.get(key)
-        title = {"movies": "🚫 Скрытое: фильмы", "books": "🚫 Скрытое: книги",
-                 "artists": "🚫 Скрытое: музыканты", "countries": "🚫 Скрытое: страны"}.get(key, "Скрытое")
+        title = {"movies": "Скрытое: фильмы", "books": "Скрытое: книги",
+                 "artists": "Скрытое: музыканты", "countries": "Скрытое: страны"}.get(key, "Скрытое")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
         return title, items, f"as_love_{key}"
     if ctx.startswith("cfg_"):
@@ -409,9 +409,9 @@ def _ctx_items(cid, ctx):
         store_key = {"countries": config.COUNTRIES_KEY,
                      "artists": config.ARTISTS_KEY,
                      "books": config.BOOKS_KEY}.get(key)
-        title = {"countries": "🧳 Чистка: страны",
-                 "artists": "🎸 Чистка: музыканты",
-                 "books": "📖 Чистка: книги"}.get(key, "Чистка")
+        title = {"countries": ui_label("countries", "Чистка: страны"),
+                 "artists": ui_label("music", "Чистка: музыканты"),
+                 "books": ui_label("books", "Чистка: книги")}.get(key, "Чистка")
         back = {"countries": "set_countries",
                 "artists": "set_artists",
                 "books": "set_books"}.get(key, "set_home")
@@ -424,7 +424,7 @@ def _ctx_items(cid, ctx):
     if ctx == "recipes":
         recipes = store.get_list(config.MY_RECIPES_KEY, cid)
         items = [(i, r.get("name", f"Рецепт {i+1}")) for i, r in enumerate(recipes)]
-        return "🍳 Чистка: рецепты", items, "as_my_recipes"
+        return ui_label("recipes", "Чистка: рецепты"), items, "as_my_recipes"
     if ctx == "lagom":
         import memory
         items = [(i, it) for i, it in enumerate(memory.get_lagom(cid))]
@@ -477,7 +477,7 @@ def _is_reversible_ctx(ctx):
 
 # Контексты, где помимо «Выбрать все на странице» доступна кнопка «Удалить все
 # N» (выбор всей коллекции, не только видимой страницы) — см. P2-1: сохраняет
-# прежнее поведение кнопки «🗑 Удалить все» из самодельного чистильщика словаря
+# прежнее поведение кнопки «Удалить все» из самодельного чистильщика словаря
 # без чекбоксов, но проводит её через общее правило подтверждения P2-2.
 def _has_select_all_collection_button(ctx):
     return ctx.startswith("d_broken_")
@@ -613,16 +613,16 @@ def _view_items(ctx, cid):
         is_leisure = ctx.startswith("lvls_")
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
         store_key = _LOVE_STORE_KEYS.get(key)
-        title = {"movies": "🎬 Чистка: фильмы", "countries": "🧳 Чистка: страны",
-                 "artists": "🎸 Чистка: музыканты", "books": "📖 Чистка: книги"}.get(key, "Чистка")
+        title = {"movies": ui_label("cinema", "Чистка: фильмы"), "countries": ui_label("countries", "Чистка: страны"),
+                 "artists": ui_label("music", "Чистка: музыканты"), "books": ui_label("books", "Чистка: книги")}.get(key, "Чистка")
         records = store.ensure_list_ids(store_key, cid) if store_key else []
         items = [(r["id"], _view_label(r)) for r in records]
         return title, items, "m_leisure_settings" if is_leisure else "as_notes"
     if ctx.startswith("hid_"):
         key = ctx[len("hid_"):]
         store_key = _HIDDEN_STORE_KEYS.get(key)
-        title = {"movies": "🚫 Скрытое: фильмы", "books": "🚫 Скрытое: книги",
-                 "artists": "🚫 Скрытое: музыканты", "countries": "🚫 Скрытое: страны"}.get(key, "Скрытое")
+        title = {"movies": "Скрытое: фильмы", "books": "Скрытое: книги",
+                 "artists": "Скрытое: музыканты", "countries": "Скрытое: страны"}.get(key, "Скрытое")
         records = store.ensure_list_ids(store_key, cid) if store_key else []
         items = [(r["id"], _view_label(r)) for r in records]
         return title, items, f"as_love_{key}"
@@ -664,7 +664,7 @@ def _view_items(ctx, cid):
     if ctx == "recipes":
         records = store.ensure_list_ids(config.MY_RECIPES_KEY, cid)
         items = [(r["id"], r.get("name", "Рецепт")) for r in records]
-        return "🍳 Чистка: рецепты", items, "as_my_recipes"
+        return ui_label("recipes", "Чистка: рецепты"), items, "as_my_recipes"
     if ctx == "lagom":
         import memory
         records = store.ensure_list_ids_via(memory.get_lagom, memory.set_lagom, _LAGOM_REVISION_SLOT, cid)
@@ -814,7 +814,7 @@ async def _render_view(bot, cid, view_id, q=None):
         page_label = "✅ Снять выбор на странице" if page_ids <= sel else "✅ Выбрать все на странице"
         rows.append([InlineKeyboardButton(page_label, callback_data=f"cla:{view_id}:{page}")])
     if _has_select_all_collection_button(ctx) and total > len(chunk) and all_ids != sel:
-        rows.append([InlineKeyboardButton(f"🗑 Удалить все {total}", callback_data=f"clx:{view_id}")])
+        rows.append([InlineKeyboardButton(ui_label("delete", f"Удалить все {total}"), callback_data=f"clx:{view_id}")])
     if sel:
         actions = (_collection_cfg(ctx) or {}).get("actions") or [{"id": "remove", "label": _action_label(ctx)}]
         for action in actions:

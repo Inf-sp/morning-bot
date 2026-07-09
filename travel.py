@@ -8,6 +8,7 @@ import logging
 import re
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from ui.constants import ui_label
 
 import ai
 import config
@@ -76,7 +77,7 @@ def _country_card(d):
 
 def _travel_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🧳 Собрать план поездки", callback_data="a_trav_plan")],
+        [InlineKeyboardButton(ui_label("routes", "Собрать маршрут"), callback_data="a_trav_plan")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="a_trav_fav"),
          InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
         [InlineKeyboardButton("🎚️ Настройки стран", callback_data="as_love_countries")],
@@ -197,7 +198,7 @@ async def send_plan(bot, cid):
     }
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
-        [InlineKeyboardButton("💾 Сохранить план поездки", callback_data="a_trav_save")],
+        [InlineKeyboardButton(ui_label("save", "Сохранить маршрут"), callback_data="a_trav_save")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel")],
     ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
@@ -215,5 +216,5 @@ async def save_plan(bot, cid):
         "text": plan, "entities": d.get("plan_entities", []),
         "source": "План поездки", "bucket": "plan", "country": country,
     })
-    await bot.send_message(chat_id=cid, text=f"💾 План поездки ({country}) сохранён в «Мои сохранения» → «Планы».")
+    await bot.send_message(chat_id=cid, text=f"{ui_label('save', 'Маршрут')} ({country}) сохранён в «Мои данные» → «Путешествия».")
     await send_go(bot, cid)

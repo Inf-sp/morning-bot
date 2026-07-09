@@ -67,7 +67,7 @@ async def main():
         [("🎧 Музыка", "a_listen")],
         [("📖 Книги", "a_read")],
         [("📰 Новости", "a_news_home")],
-        [("⚙️ Настройки досуга", "m_leisure_settings")],
+        [("🎚️ Настройки досуга", "m_leisure_settings")],
     ]
     menu_blob = leisure_menu.text + " " + " ".join(text for text, _ in _flat_buttons(leisure_menu.reply_markup))
     for legacy in ("Подбор музыкантов", "Подбор кино", "Подбор книг"):

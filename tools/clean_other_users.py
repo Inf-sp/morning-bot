@@ -92,7 +92,7 @@ for key, value in rows:
         cid = key[len("wardrobe_user_"):]
         if cid != str(CHAT_ID):
             cur.execute("DELETE FROM kv WHERE key = %s", (key,))
-            print(f"  🗑  {key} — удалён (чужой шкаф)")
+            print(f"  {key} — удалён (чужой шкаф)")
             deleted += 1
         else:
             print(f"  ✅ {key} — оставлен (ваш шкаф)")

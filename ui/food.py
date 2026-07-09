@@ -1,11 +1,12 @@
 from .builder import MessageBuilder, MessageSpec
+from .constants import CUISINE_EMOJI, ui_label
 
 # Эмодзи категории приёма пищи (§7 спеки) — используется в заголовке карточки.
 MEAL_EMOJI = {
-    "breakfast": "🥐",
-    "lunch": "🥗",
-    "dinner": "🍲",
-    "fridge": "🥕",
+    "breakfast": ui_label("breakfast", "").strip(),
+    "lunch": ui_label("lunch", "").strip(),
+    "dinner": ui_label("dinner", "").strip(),
+    "fridge": ui_label("cook_from", "").strip(),
 }
 MEAL_LABEL = {
     "breakfast": "Завтрак",
@@ -14,7 +15,7 @@ MEAL_LABEL = {
     "fridge": "Из холодильника",
 }
 
-DEFAULT_CUISINE_EMOJI = "🍽️"
+DEFAULT_CUISINE_EMOJI = ui_label("recipes", "").strip()
 
 # Русское название кухни по машиночитаемому коду (balance.RECIPE_CUISINE_CODES) —
 # модель возвращает код, а не готовую подпись, чтобы не плодить разнобой в языке/падежах.
@@ -43,7 +44,7 @@ CUISINE_RU = {
 # Национальные прилагательные по коду кухни — используются для подстраховки:
 # если модель всё же вставила прилагательное кухни в name (например «Итальянские
 # тосты»), срезаем его перед показом, чтобы не дублировать кухню с заголовком
-# карточки («🍳 Завтрак • 🇮🇹 Итальянская кухня\nИтальянские тосты» выглядит как
+# карточки («Завтрак • 🇮🇹 Итальянская кухня\nИтальянские тосты» выглядит как
 # повтор). Формы во всех родах/числах, т.к. согласование с существительным заранее
 # неизвестно.
 _CUISINE_ADJECTIVES = {
@@ -123,7 +124,7 @@ def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallba
         chef_tip += "."
 
     b = MessageBuilder()
-    meal_emoji = MEAL_EMOJI.get(meal, "🥣")
+    meal_emoji = MEAL_EMOJI.get(meal, ui_label("food", "").strip())
     header = f"{meal_emoji} {label}"
     if cuisine_label:
         header += f" • {cuisine_emoji} {cuisine_label}".rstrip()
@@ -200,7 +201,7 @@ def fit_caption(msg: MessageSpec) -> MessageSpec:
 
 def fridge_home_empty():
     b = MessageBuilder()
-    b.section("🧊 Мой холодильник")
+    b.section(ui_label("products", "Мой холодильник"))
     b.spacer()
     b.line("Пусто — добавь продукты, которые обычно есть дома.")
     return b.build_stripped()
@@ -208,7 +209,7 @@ def fridge_home_empty():
 
 def fridge_home(count, available):
     b = MessageBuilder()
-    b.bold("🧊 Мой холодильник")
+    b.bold(ui_label("products", "Мой холодильник"))
     b.text_line(f" · {count} продуктов · {available} в наличии")
     b.spacer()
     b.line("Выбери категорию:")
@@ -268,7 +269,7 @@ def fridge_empty_for_recipe():
 
 def my_recipes_empty():
     b = MessageBuilder()
-    b.section("🍳 Мои рецепты")
+    b.section(ui_label("recipes", "Мои рецепты"))
     b.spacer()
     b.line("Пусто. Сохраняй рецепты кнопкой «❤️ Сохранить рецепт» под любым рецептом.")
     return b.build_stripped()
@@ -276,7 +277,7 @@ def my_recipes_empty():
 
 def my_recipes_list(recipes):
     b = MessageBuilder()
-    b.bold("🍳 Мои рецепты")
+    b.bold(ui_label("recipes", "Мои рецепты"))
     b.text_line(f" — {len(recipes)}")
     b.spacer()
     for recipe in recipes:

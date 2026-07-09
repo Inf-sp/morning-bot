@@ -30,6 +30,7 @@ import firstvisit
 import tracking
 import util
 from ui import admin as admin_ui
+from ui.constants import ui_label
 from util import ack_loading as _ack
 
 TZ = config.TZ
@@ -692,10 +693,10 @@ async def text_router(update, context):
         _log.warning("[secure] injection flags: %s", flags)
 
     # Нажата любая кнопка нижнего меню -> сбрасываем незавершённый ввод (чтобы чат не «съел» сообщение настроек)
-    if text in ("☀️ Мой день", "/setup", "/admin") or text in menu.LABEL_TO_KEY or text == "🗂️ Моя база":
+    if text in (ui_label("myday", "Мой день"), "/setup", "/admin") or text in menu.LABEL_TO_KEY or text == "🗂️ Моя база":
         store.pending_input.pop(cid, None)
 
-    if text == "☀️ Мой день":
+    if text == ui_label("myday", "Мой день"):
         try:
             await myday.send_plany(bot, cid)
         except Exception as e:
@@ -713,13 +714,13 @@ async def text_router(update, context):
         except Exception as e:
             await verify.safe_error(bot, cid, e)
         return
-    if text in ("🎚️ Настройки", "🗂️ Моя база"):
+    if text in (ui_label("settings", "Настройки"), "🗂️ Моя база"):
         try:
             await settings.send_notes(bot, cid)
         except Exception as e:
             await verify.safe_error(bot, cid, e)
         return
-    if text == "🥣 Готовка":
+    if text == ui_label("food", "Готовка"):
         try:
             if firstvisit.needs_setup(cid, "cooking"):
                 await firstvisit.show_prompt(bot, cid, "cooking")

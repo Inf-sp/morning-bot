@@ -1,4 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from ui.constants import ui_label
 import asyncio
 import logging
 import re
@@ -24,7 +25,7 @@ from ui import leisure as leisure_ui
 # --- Инлайн-сбор предпочтений при пустом профиле ---
 _COLLECT_HINTS = {
     "artists": (
-        "🎵 <b>Ещё нет любимых исполнителей</b>\n\n"
+        f"{ui_label('music', '')} <b>Ещё нет любимых исполнителей</b>\n\n"
         "Чтобы подбирать музыку под твой вкус, мне нужно знать, кого ты слушаешь.\n\n"
         "Пришли список прямо сюда — по одному или через запятую:\n"
         "<i>Например: The xx, Massive Attack, Portishead</i>"
@@ -303,7 +304,7 @@ def _movie_kb(i, category=None):
     """
     rows = [
         [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}"),
-         InlineKeyboardButton("💾 Сохранить", callback_data=f"reco_{i}")],
+         InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data=f"reco_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"movie_love_{i}"),
          InlineKeyboardButton("✅ Уже видел", callback_data=f"movie_seen_{i}")],
     ]
@@ -313,30 +314,30 @@ def _movie_kb(i, category=None):
 
 # Полный набор жанров — для экрана предпочтений (чекбоксы).
 _GENRE_ALL = [
-    ("🎭 Комедия", 35), ("😱 Ужасы", 27),
-    ("🚀 Фантастика", 878), ("🔪 Триллер", 53),
-    ("❤️ Романтика", 10749), ("🎬 Драма", 18),
-    ("⚔️ Боевик", 28), ("🔍 Детектив", 9648),
-    ("🕵️ Криминал", 80), ("🧙 Фэнтези", 14),
-    ("🗺️ Приключения", 12), ("🤠 Вестерн", 37),
-    ("🎞️ Документальный", 99), ("👨‍👩‍👧 Семейный", 10751),
+    ("Комедия", 35), ("Ужасы", 27),
+    ("Фантастика", 878), ("Триллер", 53),
+    ("Романтика", 10749), ("Драма", 18),
+    ("Боевик", 28), ("Детектив", 9648),
+    ("Криминал", 80), ("Фэнтези", 14),
+    ("Приключения", 12), ("Вестерн", 37),
+    ("Документальный", 99), ("Семейный", 10751),
 ]
 
 # Шесть популярных жанров для быстрого меню «По жанру» (2 столбца, помещается на экран).
 # Остальные жанры остаются в предпочтениях и в алгоритме ранжирования.
 _GENRE_MENU = [
-    ("😂 Комедия", 35), ("😱 Ужасы", 27),
-    ("🚀 Фантастика", 878), ("🔪 Триллер", 53),
-    ("❤️ Романтика", 10749), ("🎭 Драма", 18),
+    ("Комедия", 35), ("Ужасы", 27),
+    ("Фантастика", 878), ("Триллер", 53),
+    ("Романтика", 10749), ("Драма", 18),
 ]
 
 # Настроения (8 вариантов, 2 столбца): ключ → подпись.
 # Удалённые настроения свёрнуты внутрь оставшихся — см. _MOOD_GENRES/_mood_to_genres.
 _MOOD_MENU = [
-    ("light", "😄 Что-нибудь лёгкое"), ("scary", "😱 Страшное"),
-    ("think", "🧠 Хочу подумать"), ("thrill", "🔥 Захватывающее"),
-    ("romance", "❤️ Романтика"), ("atmo", "🌌 Атмосферное"),
-    ("puzzle", "🧩 Запутанное"), ("action", "💥 Экшен"),
+    ("light", "Лёгкое"), ("scary", "Страшное"),
+    ("think", "Подумать"), ("thrill", "Захватывающее"),
+    ("romance", "Романтика"), ("atmo", "Атмосферное"),
+    ("puzzle", "Запутанное"), ("action", "Экшен"),
 ]
 
 # Настроение → жанры-подсказки (детерминированный фолбэк, если LLM недоступен).
@@ -773,7 +774,7 @@ def _book_text(it):
 def _book_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data=f"book_no_{i}"),
-         InlineKeyboardButton("💾 Сохранить", callback_data=f"reco_{i}")],
+         InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data=f"reco_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
          InlineKeyboardButton("✅ Уже читал", callback_data=f"book_seen_{i}")],
         [InlineKeyboardButton("🎚️ Настройки книг", callback_data="as_love_books")],
@@ -1280,7 +1281,7 @@ async def add_reco(bot, cid, i):
     if not _note_fav_exists(cid, title):
         store.add_to_list(config.NOTES_KEY, cid,
                           {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": folder, "bucket": "fav"})
-    await bot.send_message(chat_id=cid, text=f"💾 Сохранено «{folder}»: {title}. Вот ещё вариант 👇")
+    await bot.send_message(chat_id=cid, text=f"{ui_label('save', 'Сохранено')} «{folder}»: {title}. Вот ещё вариант")
     if kind == "movie":
         # Следующая карточка — через TMDb-движок (LLM-фолбэк внутри).
         await _advance_movie(bot, cid)
@@ -1324,7 +1325,7 @@ async def send_readlist(bot, cid):
 def _listen_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data="a_listen_no"),
-         InlineKeyboardButton("💾 Сохранить", callback_data="listen_0")],
+         InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data="listen_0")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love"),
          InlineKeyboardButton("✅ Уже знаю", callback_data="listen_seen")],
         [InlineKeyboardButton("🎚️ Настройка музыкантов", callback_data="as_love_artists")],

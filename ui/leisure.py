@@ -4,6 +4,7 @@ from datetime import date, datetime
 from telegram import MessageEntity
 
 from .builder import MessageBuilder, MessageSpec, u16_len
+from .constants import ui_label
 
 
 def clip(text, limit=450):
@@ -336,7 +337,7 @@ def concerts_list(place_label, events, empty_hint=""):
     """Список концертов твоих артистов -> MessageBuilder. Каждое событие - мини-блок:
     имя артиста, место, цена от, дата, скрытая ссылка "Подробнее…"."""
     b = MessageBuilder()
-    b.text_line("🎤 ")
+    b.text_line(f"{ui_label('music', '')} ")
     b.bold(place_label)
     b.newline()
     if not events:
@@ -515,7 +516,7 @@ def weekly_events_card(period_start: date, period_end: date, concerts, movies) -
     movie_groups = _group_movies_by_date(movies)
 
     b = MessageBuilder()
-    b.text_line("🎵 ")
+    b.text_line(f"{ui_label('music', '')} ")
     b.bold(f"Ближайшие события · {_format_event_period(period_start, period_end)}")
     b.newline()
 

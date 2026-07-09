@@ -1,4 +1,5 @@
 from .builder import MessageBuilder
+from .constants import ui_label
 
 
 def _pluralize_countries(n):
@@ -29,7 +30,7 @@ def home_screen(visited_count, fav_count, plan_count):
         if fav_count > 0:
             b.line(f"❤️ В любимых {fav_count} {_pluralize_countries(fav_count)}")
         if plan_count > 0:
-            b.line(f"🧳 Планов поездок {plan_count}")
+            b.line(f"{ui_label('routes', 'Маршрутов')} {plan_count}")
 
     return b.build_stripped()
 

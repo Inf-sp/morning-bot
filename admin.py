@@ -14,6 +14,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import access
 import api_usage
 import config
+from ui.constants import ui_label
 import store
 import tracking
 from ui import admin as ui
@@ -24,10 +25,10 @@ DAY = 86400
 
 # человекочитаемые имена модулей LLM в терминах пользовательских разделов
 _MOD_NAMES = {
-    "wardrobe": "👕 Гардероб", "balance": "🚑 Здоровье", "food": "🥣 Готовка",
-    "weather": "☀️ Мой день", "learning": "📚 Обучение", "leisure": "🍿 Досуг",
-    "myday": "☀️ Мой день", "travel": "🧳 Поездки", "assistant": "💬 Чат",
-    "content": "🍿 Досуг", "notes": "🎚️ Настройки",
+    "wardrobe": ui_label("wardrobe", "Гардероб"), "balance": ui_label("health", "Здоровье"), "food": ui_label("food", "Готовка"),
+    "weather": ui_label("myday", "Мой день"), "learning": ui_label("learning", "Обучение"), "leisure": ui_label("leisure", "Досуг"),
+    "myday": ui_label("myday", "Мой день"), "travel": ui_label("travel", "Путешествия"), "assistant": "Чат",
+    "content": ui_label("leisure", "Досуг"), "notes": ui_label("settings", "Настройки"),
 }
 
 _PROV_ORDER = [
@@ -260,9 +261,9 @@ async def send_home(bot, cid, q=None):
     notif_bad = notif["errors_today"] > 0
     dot, txt = (ui.BAD, "Есть проблема") if (system_bad or notif_bad) else (ui.OK, "Всё работает")
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 Система", callback_data="adm_system"),
-         InlineKeyboardButton("🔔 Уведомления", callback_data="adm_notif")],
-        [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
+        [InlineKeyboardButton(ui_label("system", "Система"), callback_data="adm_system"),
+         InlineKeyboardButton("Уведомления", callback_data="adm_notif")],
+        [InlineKeyboardButton(ui_label("users", "Пользователи"), callback_data="adm_users")],
     ])
     msg = ui.home(
         system_dot=dot,
@@ -334,9 +335,8 @@ def _last_active_user():
 async def send_users(bot, cid, q=None):
     stats = _user_stats()
     rows = [
-        [InlineKeyboardButton("➕ Инвайт", callback_data="adm_invite")],
-        [InlineKeyboardButton("✉️ Приветствие", callback_data="adm_welcome")],
-        [InlineKeyboardButton("🔄 Обновить", callback_data="adm_users")],
+        [InlineKeyboardButton(ui_label("invite", "Инвайт"), callback_data="adm_invite")],
+        [InlineKeyboardButton(ui_label("refresh", "Обновить"), callback_data="adm_users")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
     ]
     msg = ui.users(stats, _updated_at())
@@ -346,7 +346,6 @@ async def send_users(bot, cid, q=None):
 async def send_invite(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Создать", callback_data="adm_invite_create")],
-        [InlineKeyboardButton("✉️ Приветствие", callback_data="adm_welcome")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users")],
     ])
     msg = ui.invite_prompt()
@@ -358,7 +357,6 @@ async def create_invite(bot, cid, q=None):
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={code}"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✉️ Приветствие", callback_data="adm_welcome")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users")],
     ])
     msg = ui.invite_created(link)
@@ -413,8 +411,8 @@ def _notification_stats(cid):
 
 async def send_system(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Проверить систему", callback_data="adm_system_check")],
-        [InlineKeyboardButton("📜 Логи", callback_data="adm_logs")],
+        [InlineKeyboardButton(ui_label("refresh", "Проверить систему"), callback_data="adm_system_check")],
+        [InlineKeyboardButton(ui_label("logs", "Логи"), callback_data="adm_logs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
     ])
     msg = ui.system(_system_rows(), _updated_at())
@@ -429,8 +427,8 @@ async def check_system(bot, cid, q=None):
     except Exception as e:
         tracking.log_error("service", str(e), kind="system_probe")
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Проверить систему", callback_data="adm_system_check")],
-        [InlineKeyboardButton("📜 Логи", callback_data="adm_logs")],
+        [InlineKeyboardButton(ui_label("refresh", "Проверить систему"), callback_data="adm_system_check")],
+        [InlineKeyboardButton(ui_label("logs", "Логи"), callback_data="adm_logs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
     ])
     msg = ui.system(_system_rows(results), _updated_at())
@@ -582,7 +580,7 @@ async def send_llm(bot, cid):
     errs_today = sum(1 for e in errs if e.get("ts", 0) >= time.time() - DAY)
     status_dot, status_txt = (ui.OK, "работает") if not errs_today else (ui.WARN, "есть ошибки")
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔍 Проверить", callback_data="set_admin_llmcheck"),
+        [InlineKeyboardButton(ui_label("find", "Проверить"), callback_data="set_admin_llmcheck"),
          InlineKeyboardButton("🕘 История", callback_data="set_admin_llmhistory")],
         _back(),
     ])

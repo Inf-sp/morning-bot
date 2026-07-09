@@ -7,9 +7,10 @@
 Здесь только сборка текста. Логика/данные — в settings.py (send_admin_*).
 """
 from .builder import MessageBuilder, MessageSpec
+from .constants import STATUS_EMOJI, ui_label
 
 # --- статус-точки (единственные допустимые «светофоры») ---
-OK, WARN, BAD, OFF = "🟢", "🟡", "🔴", "⚪"
+OK, WARN, BAD, OFF = STATUS_EMOJI["ok"], STATUS_EMOJI["warn"], STATUS_EMOJI["bad"], "⚪"
 
 
 def _num(n) -> str:
@@ -78,10 +79,10 @@ def home(system_dot, system_text, system_line, notif_line, users_line, data_line
     b.spacer()
     b.line(f"{system_dot} {system_text}")
     b.spacer()
-    b.line(f"📊 Система: {system_line}")
-    b.line(f"🔔 Уведомления: {notif_line}")
-    b.line(f"👥 Пользователи: {users_line}")
-    b.line(f"💾 Данные: {data_line}")
+    b.line(f"{ui_label('system', 'Система')}: {system_line}")
+    b.line(f"Уведомления: {notif_line}")
+    b.line(f"{ui_label('users', 'Пользователи')}: {users_line}")
+    b.line(f"Данные: {data_line}")
     b.spacer()
     b.line(f"Обновлено: {updated_at}")
     return b.build_stripped()
@@ -110,7 +111,7 @@ def users(stats, updated_at):
 
 def invite_prompt():
     b = MessageBuilder()
-    b.bold("➕ Инвайт")
+    b.bold(ui_label("invite", "Инвайт"))
     b.newline()
     b.spacer()
     b.line("Создать ссылку для нового пользователя.")
@@ -139,7 +140,7 @@ def invite_created(link):
 
 def welcome_admin():
     b = MessageBuilder()
-    b.bold("✉️ Приветствие")
+    b.bold("Приветствие")
     b.newline()
     b.spacer()
     b.line("Текст, который увидит новый пользователь после входа:")
@@ -244,7 +245,7 @@ def news_diagnostics(today_credits, daily_limit, month_credits, month_limit,
 
 def notifications(sent_today, errors_today, active_types, updated_at):
     b = MessageBuilder()
-    b.bold("🔔 Уведомления")
+    b.bold("Уведомления")
     b.newline()
     b.spacer()
     b.line(f"Сегодня: {sent_today} отправлено · {errors_today} ошибок")
@@ -289,7 +290,7 @@ def test_result(ok, when, label, detail):
 def logs(rows, errors_24h, updated_at, summary=None):
     summary = summary or {"errors": errors_24h}
     b = MessageBuilder()
-    b.bold("📜 Логи")
+    b.bold(ui_label("logs", "Логи"))
     b.newline()
     b.spacer()
     if not rows:
@@ -531,7 +532,7 @@ def api_check(snapshot):
 
     if local:
         b.spacer()
-        b.bold("⚙️ Без общей квоты")
+        b.bold("Без общей квоты")
         b.newline()
         for svc in local:
             label = svc.get("label")
@@ -596,7 +597,7 @@ def llm_history(rows):
 def broadcast(next_title, next_when):
     """Экран «Уведомления»: только ближайшее автоматическое уведомление, без охвата."""
     b = MessageBuilder()
-    b.bold("🔔 Уведомления")
+    b.bold("Уведомления")
     b.newline()
     b.spacer()
     b.bold("Следующее")

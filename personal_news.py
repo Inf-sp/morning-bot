@@ -15,6 +15,7 @@ import access
 import ai
 import config
 import store
+from ui.constants import ui_label
 
 _log = logging.getLogger(__name__)
 
@@ -31,19 +32,19 @@ NEWS_HISTORY_DAYS = 14
 REFRESH_COOLDOWN_SEC = 6 * 3600
 
 _CATEGORY_LABELS = {
-    "city": "📍 Алкмар",
-    "north_holland": "📍 Noord-Holland",
-    "netherlands": "🇳🇱 Нидерланды",
-    "transport": "🚆 Транспорт",
-    "housing_money": "🏠 Жильё и деньги",
-    "documents_study": "🧾 Документы и учёба",
-    "health": "🩺 Медицина",
-    "tech": "🤖 AI / технологии",
-    "leisure": "🎬 Досуг",
-    "food": "🍽 Еда",
-    "wardrobe_weather": "👕 Гардероб и погода",
-    "travel": "✈️ Путешествия",
-    "language": "🇳🇱 Язык",
+    "city": "Алкмар",
+    "north_holland": "Северная Голландия",
+    "netherlands": "Нидерланды",
+    "transport": "Транспорт",
+    "housing_money": "Деньги и жильё",
+    "documents_study": "Документы и учёба",
+    "health": "Здоровье",
+    "tech": "Технологии",
+    "leisure": "Досуг",
+    "food": "Еда",
+    "wardrobe_weather": "Погода",
+    "travel": "Поездки",
+    "language": "Язык",
 }
 
 _ACTION_LABELS = {
@@ -286,6 +287,48 @@ def _has_concrete_change(item):
     return any(m in text for m in markers)
 
 
+def _looks_like_old_evergreen(item, now=None):
+    text = f"{item.get('title', '')} {item.get('content', '')}".lower()
+
+    old_markers = (
+        "2024",
+        "2025",
+        "1 januari 2024",
+        "1 januari 2025",
+        "vanaf 2024",
+        "vanaf 2025",
+        "per 2024",
+        "per 2025",
+        "с 1 января 2024",
+        "с 1 января 2025",
+    )
+
+    fresh_markers = (
+        "vandaag",
+        "gisteren",
+        "nieuw",
+        "nieuwe",
+        "update",
+        "wijziging",
+        "aangekondigd",
+        "besloten",
+        "gepubliceerd",
+        "vanaf 2026",
+        "per 2026",
+        "сегодня",
+        "вчера",
+        "новое",
+        "обновление",
+        "изменение",
+        "с 2026",
+    )
+
+    has_old = any(x in text for x in old_markers)
+    has_fresh = any(x in text for x in fresh_markers)
+
+    return has_old and not has_fresh
+
+
 def strict_filter(items, period="today", now=None):
     out, seen_urls, seen_titles = [], set(), set()
     for raw in items or []:
@@ -293,6 +336,8 @@ def strict_filter(items, period="today", now=None):
         url = _canonical_url(item.get("url", ""))
         title = (item.get("title") or "").strip()
         if not url or not title or not _is_fresh(item, period, now):
+            continue
+        if _looks_like_old_evergreen(item, now):
             continue
         if not _has_concrete_change(item):
             continue
@@ -701,9 +746,7 @@ def _short_summary(item):
     if not base:
         return "Есть свежее изменение по этой теме."
     sentence = re.split(r"(?<=[.!?])\s+", base)[0].strip()
-    if len(sentence) > 150:
-        sentence = sentence[:147].rstrip(" ,.;:") + "..."
-    return sentence
+    return _clip(sentence, 140)
 
 
 def _why_important(category, reasons):
@@ -879,54 +922,130 @@ def _fallback_items(candidates):
     return items
 
 
+def _clip(text, limit):
+    text = re.sub(r"\s+", " ", (text or "")).strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip(" ,.;:") + "…"
+
+
+def _priority_label(item):
+    category = item.get("category") or "netherlands"
+    score = int(item.get("relevance_score") or 0)
+
+    main_categories = {
+        "city",
+        "transport",
+        "health",
+        "documents_study",
+        "housing_money",
+        "wardrobe_weather",
+        "travel",
+    }
+
+    if score >= 85 or category in main_categories:
+        return "🔥 Главное"
+
+    if score >= 75:
+        return "⚠️ Может повлиять"
+
+    return "👀 Интересное"
+
+
+def _action_text(item):
+    category = item.get("category") or "netherlands"
+    action = (item.get("action_hint") or "").strip()
+
+    if action and action not in {"Подробнее", "Проверь детали"}:
+        return _clip(action, 120)
+
+    defaults = {
+        "city": "проверить маршрут или планы рядом.",
+        "transport": "открыть NS перед поездкой.",
+        "housing_money": "проверить условия, если это касается тебя.",
+        "documents_study": "проверить дату, правило или личный кабинет.",
+        "health": "просто знать, без паники.",
+        "tech": "проверить логи и fallback-модели.",
+        "leisure": "сохранить, если интересно.",
+        "food": "проверить продукт или место.",
+        "wardrobe_weather": "учесть одежду и велосипед.",
+        "travel": "проверить маршрут или рейс.",
+        "language": "сохранить для обучения.",
+    }
+
+    return defaults.get(category, "ничего, просто знать.")
+
+
 def _build_card(items, updated_ts=None, stale=False):
     if not items:
         text = (
             "📰 Новости\n\n"
-            "Сегодня нет достаточно важных новостей для тебя.\n\n"
-            "Проверил:\n"
-            "• Алкмар\n"
-            "• Нидерланды\n"
-            "• NS / DUO\n"
-            "• AI / технологии\n"
-            "• досуг"
+            "Сегодня ничего срочного.\n\n"
+            "Проверено:\n"
+            "Алкмар\n"
+            "Нидерланды\n"
+            "NS / DUO\n"
+            "AI / технологии\n"
+            "Досуг"
         )
         return text, []
-    lines = ["📰 Новости"]
+    shown = items[:NEWS_MAX_ITEMS]
+    lines = [
+        "📰 Новости",
+        "",
+        f"Сегодня важного: {len(shown)}",
+    ]
     buttons = []
     now = _now()
-    for item in items[:NEWS_MAX_ITEMS]:
-        cat = item.get("category") or "city"
-        label = _CATEGORY_LABELS.get(cat, "🇳🇱 Нидерланды")
-        title = (item.get("title") or item.get("title_ru") or "").strip()
-        summary = (item.get("summary") or item.get("summary_ru") or "").strip()
-        why = (item.get("why_important") or item.get("why_it_matters_ru") or "").strip()
+
+    for idx, item in enumerate(shown, start=1):
+        cat = item.get("category") or "netherlands"
+        label = _CATEGORY_LABELS.get(cat, "Нидерланды")
+
+        title = _clip(item.get("title") or item.get("title_ru") or "", 80)
+        what = _clip(item.get("summary") or item.get("summary_ru") or "", 140)
+        why = _clip(item.get("why_important") or item.get("why_it_matters_ru") or "", 130)
+        action = _clip(_action_text(item), 120)
+
         url = item.get("url") or item.get("source_url") or ""
         source = item.get("source") or item.get("source_name") or _source_name(url)
         published = _parse_dt(item.get("published_at"))
         day_word = _relative_day(published, now)
-        lines.extend(["", label, title])
-        if summary:
-            lines.append(f"Коротко: {summary}")
+
+        lines.extend([
+            "",
+            _priority_label(item),
+            f"[{label}]",
+            title,
+        ])
+
+        if what:
+            lines.append(f"Что: {what}")
         if why:
-            lines.append(f"💡 Почему важно: {why}")
+            lines.append(f"Почему: {why}")
+        if action:
+            lines.append(f"Сделать: {action}")
+
         lines.append(f"Источник: {source} · {day_word}")
+
         if url:
-            label_btn = item.get("action_hint") or _ACTION_LABELS.get(item.get("action_type") or "read", "Подробнее")
-            buttons.append([InlineKeyboardButton(label_btn, url=url)])
+            btn_text = "Открыть источник" if len(shown) == 1 else f"{idx} источник"
+            buttons.append([InlineKeyboardButton(btn_text, url=url)])
+
     return "\n".join(lines).strip(), buttons[:NEWS_MAX_ITEMS]
 
 
 def _relative_day(published, now=None):
     if not published:
-        return "сегодня"
+        return "дата неизвестна"
     now = now or _now()
-    days = (now.date() - published.astimezone(config.TZ).date()).days
-    if days <= 0:
+    local_date = published.astimezone(config.TZ).date()
+    days = (now.date() - local_date).days
+    if days == 0:
         return "сегодня"
     if days == 1:
         return "вчера"
-    return f"{days} дн. назад"
+    return local_date.strftime("%d.%m.%Y")
 
 
 def build_from_sources(cid, period, sources, now=None):
@@ -976,8 +1095,8 @@ def _loading_text():
 async def send_home(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("📰 Сегодня", callback_data="a_news_today")],
-        [InlineKeyboardButton("📅 За неделю", callback_data="a_news_week")],
-        [InlineKeyboardButton("⚙️ Настроить темы", callback_data="a_news_topics")],
+        [InlineKeyboardButton("За неделю", callback_data="a_news_week")],
+        [InlineKeyboardButton(ui_label("settings", "Настроить темы"), callback_data="a_news_topics")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
     s = store.get_settings(cid)
@@ -1036,7 +1155,7 @@ async def send_topics(bot, cid):
     rows = [
         [InlineKeyboardButton("Изменить любимые фильмы", callback_data="as_love_movies")],
         [InlineKeyboardButton("Изменить любимых артистов", callback_data="as_love_artists")],
-        [InlineKeyboardButton("🔔 Уведомления", callback_data="set_notif")],
+        [InlineKeyboardButton("Уведомления", callback_data="set_notif")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="a_news_home")],
     ]
     text = (
@@ -1044,7 +1163,7 @@ async def send_topics(bot, cid):
         f"🏙 {city} и Нидерланды      ✅\n"
         "🚆 NS, DUO и gemeente         ✅\n"
         "🎬 Фильмы и сериалы          ✅\n"
-        "🎵 Музыка и концерты         ✅\n"
+        f"{ui_label('music', 'Музыка')} и концерты         ✅\n"
         "💻 Apple, AI и сервисы       ✅\n"
         "🩺 Здоровье и медицина       ✅\n"
         "🍽 Новые места и еда         ✅"

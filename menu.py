@@ -1,6 +1,7 @@
 from telegram import ReplyKeyboardMarkup
 
 from ui import menu as menu_ui
+from ui.constants import ui_label
 
 
 _WELCOME = menu_ui.welcome()
@@ -9,35 +10,35 @@ WELCOME, WELCOME_ENTITIES = _WELCOME.text, _WELCOME.entities
 
 def main_kb(cid=None):
     rows = [
-        ["☀️ Мой день"],
-        ["👕 Гардероб", "🥣 Готовка"],
-        ["📚 Обучение", "🚑 Здоровье"],
-        ["✈️ Путешествия", "🍿 Досуг"],
-        ["🎚️ Настройки"],
+        [ui_label("myday", "Мой день")],
+        [ui_label("wardrobe", "Гардероб"), ui_label("food", "Готовка")],
+        [ui_label("learning", "Обучение"), ui_label("health", "Здоровье")],
+        [ui_label("travel", "Путешествия"), ui_label("leisure", "Досуг")],
+        [ui_label("settings", "Настройки")],
     ]
     return ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
 
 
 MAIN_LABELS = [
-    "☀️ Мой день",
-    "👕 Гардероб",
-    "🥣 Готовка",
-    "📚 Обучение",
-    "🚑 Здоровье",
-    "✈️ Путешествия",
-    "🍿 Досуг",
-    "🎚️ Настройки",
+    ui_label("myday", "Мой день"),
+    ui_label("wardrobe", "Гардероб"),
+    ui_label("food", "Готовка"),
+    ui_label("learning", "Обучение"),
+    ui_label("health", "Здоровье"),
+    ui_label("travel", "Путешествия"),
+    ui_label("leisure", "Досуг"),
+    ui_label("settings", "Настройки"),
 ]
 
 
 LABEL_TO_KEY = {
-    "👕 Гардероб": "m_wardrobe",
-    "🥣 Готовка": "m_food",
-    "📚 Обучение": "m_learn",
-    "🚑 Здоровье": "m_balance",
-    "✈️ Путешествия": "m_travel",
-    "🍿 Досуг": "m_leisure",
-    "🎚️ Настройки": "m_notes",
+    ui_label("wardrobe", "Гардероб"): "m_wardrobe",
+    ui_label("food", "Готовка"): "m_food",
+    ui_label("learning", "Обучение"): "m_learn",
+    ui_label("health", "Здоровье"): "m_balance",
+    ui_label("travel", "Путешествия"): "m_travel",
+    ui_label("leisure", "Досуг"): "m_leisure",
+    ui_label("settings", "Настройки"): "m_notes",
 }
 
 

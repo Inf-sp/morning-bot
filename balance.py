@@ -15,6 +15,7 @@ import verify
 import secure
 from ui import balance as balance_ui
 from ui import food as food_ui
+from ui.constants import CUISINE_EMOJI
 import memory
 import settings
 import menu
@@ -1029,26 +1030,7 @@ RECIPE_CUISINE_CODES = (
 # Фолбэк-эмодзи флага по коду кухни — на случай пустого/нераспознанного
 # cuisine_emoji от модели. Кросс-региональные коды (asian/mediterranean) не имеют
 # одного флага — используем нейтральную эмблему блюда.
-RECIPE_CUISINE_EMOJI_FALLBACK = {
-    "asian": "🥢",
-    "russian": "🇷🇺",
-    "italian": "🇮🇹",
-    "mediterranean": "🫒",
-    "mexican": "🇲🇽",
-    "french": "🇫🇷",
-    "japanese": "🇯🇵",
-    "korean": "🇰🇷",
-    "chinese": "🇨🇳",
-    "thai": "🇹🇭",
-    "vietnamese": "🇻🇳",
-    "indian": "🇮🇳",
-    "turkish": "🇹🇷",
-    "greek": "🇬🇷",
-    "spanish": "🇪🇸",
-    "german": "🇩🇪",
-    "american": "🇺🇸",
-    "georgian": "🇬🇪",
-}
+RECIPE_CUISINE_EMOJI_FALLBACK = CUISINE_EMOJI
 
 RECIPE_BATCH_SIZE = 10
 RECIPE_BATCH_MAX_TOKENS = 5000  # ~10 рецептов * (поля + шаги с длительностью) с запасом на JSON-обвязку

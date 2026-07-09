@@ -1,4 +1,5 @@
 from .builder import MessageBuilder, MessageSpec
+from .constants import ui_label
 
 
 def profile():
@@ -75,15 +76,19 @@ def lagom_input():
 
 def list_add_prompt(kind):
     prompts = {
-        "country": "🧳 Напиши страну - добавлю в список.",
-        "artist": "🎤 Напиши имя артиста - добавлю в список.",
-        "book": "📚 Напиши название книги - добавлю в список.",
+        "country": f"{ui_label('countries', '')} Напиши страну - добавлю в список.",
+        "artist": f"{ui_label('music', '')} Напиши имя артиста - добавлю в список.",
+        "book": f"{ui_label('books', '')} Напиши название книги - добавлю в список.",
     }
     return MessageSpec(text=prompts.get(kind, "Напиши элемент - добавлю в список."))
 
 
 def list_added(kind, item):
-    icons = {"country": "🧳", "artist": "🎤", "book": "📚"}
+    icons = {
+        "country": ui_label("countries", "").strip(),
+        "artist": ui_label("music", "").strip(),
+        "book": ui_label("books", "").strip(),
+    }
     return MessageSpec(text=f"✅ {icons.get(kind, '')} «{item}» добавлено.")
 
 
@@ -113,7 +118,7 @@ def style_pick():
 
 def settings_home():
     b = MessageBuilder()
-    b.section("⚙️ Настройки")
+    b.section(ui_label("settings", "Настройки"))
     b.line("Настройте бота под себя.")
     return b.build_stripped()
 

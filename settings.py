@@ -1013,7 +1013,7 @@ async def export_notes(bot, cid):
     lines.append("")
 
     plans = [n for n in notes_list if _note_bucket(n) == "plan"]
-    lines.append("🧳 ПЛАНЫ ПОЕЗДОК")
+    lines.append(f"{ui_label('travel', '')} ПЛАНЫ ПОЕЗДОК")
     if plans:
         for n in plans:
             d = n.get("date", "") if isinstance(n, dict) else ""
@@ -1211,7 +1211,7 @@ async def send_plans(bot, cid):
     for i, n in items:
         country = (n.get("country") or "Поездка") if isinstance(n, dict) else "Поездка"
         d = n.get("date", "") if isinstance(n, dict) else ""
-        rows.append([InlineKeyboardButton(f"🧳 {d} · {country}"[:40], callback_data=f"as_planview_{i}")])
+        rows.append([InlineKeyboardButton(f"{ui_label('travel', '').strip()} {d} · {country}"[:40], callback_data=f"as_planview_{i}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_fav")])
     msg = settings_ui.trips_home()
     await bot.send_message(chat_id=cid, entities=msg.entities,
@@ -1400,7 +1400,7 @@ async def send_love_section(bot, cid, key):
     else:
         rows.append([InlineKeyboardButton("✏️ Добавить", callback_data=f"as_loveadd_{key}")])
     if key in _HIDDEN_SUPPORTED:
-        rows.append([InlineKeyboardButton("🚫 Скрытое", callback_data=f"as_lovehidden_{key}")])
+        rows.append([InlineKeyboardButton("Скрытое", callback_data=f"as_lovehidden_{key}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))
