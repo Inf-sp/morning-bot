@@ -116,8 +116,7 @@ _SCREENS = {
         "Нидерландский",
         "Практика языка: слова, живые выражения и игры.",
         [
-            [(ui_label("word_trainer", "Тренажёр слов"), "a_train_words_nl")],
-            [(ui_label("phrases", "Тренажёр фраз"), "a_train_phrases_nl")],
+            [(ui_label("word_trainer", "Тренажёр"), "a_train_nl")],
             [(ui_label("live_language", "Живой язык"), "a_proverb_nl")],
             [(ui_label("game", "Игра-детектив"), "gamelang_nl")],
             [(ui_label("dictionary", "Словарь"), "a_dictlang_nl_from_lang")],
@@ -129,8 +128,7 @@ _SCREENS = {
         "Английский",
         "Практика языка: слова, живые выражения и игры.",
         [
-            [(ui_label("word_trainer", "Тренажёр слов"), "a_train_words_en")],
-            [(ui_label("phrases", "Тренажёр фраз"), "a_train_phrases_en")],
+            [(ui_label("word_trainer", "Тренажёр"), "a_train_en")],
             [(ui_label("live_language", "Живой язык"), "a_proverb_en")],
             [(ui_label("game", "Игра-детектив"), "gamelang_en")],
             [(ui_label("dictionary", "Словарь"), "a_dictlang_en_from_lang")],

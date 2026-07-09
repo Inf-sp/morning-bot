@@ -340,17 +340,16 @@ def _ctx_items(cid, ctx):
     """(заголовок, items=[(global_id, label)], back_callback) для контекста чистки."""
     if ctx.startswith("d_"):
         import learning as _l
-        _, lang, kind = ctx.split("_")
+        lang = ctx[len("d_"):]
         flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-        label = "слов" if kind == "word" else "фраз"
         words = _l._ensure_dict(cid)
         items = []
         for i, w in enumerate(words):
-            if _l._dict_lang(w) == lang and _l._dict_kind(w) == kind:
-                term = _l._w_field(w, "word", "nl", "en")
-                ru = _l._w_field(w, "ru")
+            if _l._dict_lang(w) == lang:
+                term = _l._entry_term(w)
+                ru = _l._entry_translation(w)
                 items.append((i, f"{term} — {ru}".strip(" —")))
-        return f"{flag} Чистка: {label}", items, f"a_dictlang_{lang}"
+        return f"{flag} Чистка словаря", items, f"a_dictlang_{lang}"
     if ctx == "nb" or ctx.startswith("nb_"):
         import re as _re
         import settings as _s
@@ -447,7 +446,7 @@ def _action_label(ctx):
     if ctx.startswith("d_broken_"):
         return "Удалить битые записи"
     if ctx.startswith("d_"):
-        return "Удалить слова" if ctx.endswith("_word") else "Удалить фразы"
+        return "Удалить из словаря"
     if ctx == "lagom":
         return "Удалить принципы"
     if ctx == "diary":
@@ -632,16 +631,15 @@ def _view_items(ctx, cid):
         return f"{flag} Чистка: битые записи", items, f"a_dictlang_{lang}"
     if ctx.startswith("d_"):
         import learning as _l
-        _, lang, kind = ctx.split("_")
+        lang = ctx[len("d_"):]
         flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-        label = "слов" if kind == "word" else "фраз"
         words = store.ensure_list_ids(config.DICT_KEY, cid)
         items = [
-            (w["id"], f"{_l._w_field(w, 'word', 'nl', 'en')} — {_l._w_field(w, 'ru')}".strip(" —"))
+            (w["id"], f"{_l._entry_term(w)} — {_l._entry_translation(w)}".strip(" —"))
             for w in words
-            if _l._dict_lang(w) == lang and _l._dict_kind(w) == kind
+            if _l._dict_lang(w) == lang
         ]
-        return f"{flag} Чистка: {label}", items, f"a_dictlang_{lang}"
+        return f"{flag} Чистка словаря", items, f"a_dictlang_{lang}"
     if ctx in ("wl", "rl"):
         key = config.WATCHLIST_KEY if ctx == "wl" else config.READLIST_KEY
         title = "🍿 Чистка: посмотреть" if ctx == "wl" else "📚 Чистка: почитать"

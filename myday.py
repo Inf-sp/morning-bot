@@ -421,66 +421,39 @@ def _clip_quote(text):
         return text
     return text[:_QUOTE_MAX_CHARS - 1].rstrip(" ,.;:") + "…"
 
-def _is_word_entry(w):
-    """Запись словаря - именно СЛОВО, а не фраза."""
-    if not isinstance(w, dict):
-        return False
-    if w.get("kind"):
-        return w["kind"] == "word"
-    return " " not in (w.get("word") or "").strip()
-
-def _make_phrase(word, lang):
-    """Частое словосочетание на изучаемом языке с этим словом + перевод на русский."""
-    known = "нидерландском" if lang == "nl" else "английском"
-    try:
-        d = ai.llm_json(
-            f"Слово: «{word}» ({known} язык). "
-            f"Составь одно короткое частоупотребимое словосочетание (2-3 слова) на {known} языке "
-            "с этим словом в естественной бытовой форме, и переведи это словосочетание на русский. "
-            'JSON: {"phrase":"словосочетание","phrase_ru":"перевод на русский"}',
-            150, ai.GRAMMAR_ORDER)
-        phrase = (d.get("phrase") or "").strip()
-        phrase_ru = (d.get("phrase_ru") or "").strip()
-        if phrase and phrase_ru:
-            return phrase, phrase_ru
-    except Exception:
-        pass
-    return "", ""
-
-
 def _word_of_day(cid):
-    """Слово дня: случайное слово из словаря на активном изучаемом языке,
-    превращённое в частое словосочетание. Кэш на день в самой записи слова."""
+    """Запись дня: из единого словаря на активном изучаемом языке, с приоритетом
+    давно не показанных/невыученных записей (last_shown_at, status). Обновляет
+    last_shown_at при показе."""
     lang = learning._active_language_code(cid)
     words = learning._ensure_dict(cid)
-    pool = [w for w in words if _is_word_entry(w)
-            and (w.get("ru") or "").strip() and (w.get("word") or "").strip()
-            and (w.get("lang") or "nl") == lang]
+    pool = [w for w in words
+            if learning._entry_term(w) and learning._entry_translation(w)
+            and learning._dict_lang(w) == lang]
     if not pool:
         return "", lang
-    w = random.choice(pool)
-    word = (w.get("word") or "").strip()
-    ru = (w.get("ru") or "").strip()
-    today = datetime.now(TZ).strftime("%Y-%m-%d")
 
-    phrase, phrase_ru = "", ""
-    if w.get("phrase_date") == today and w.get("phrase") and w.get("phrase_ru"):
-        phrase, phrase_ru = w["phrase"], w["phrase_ru"]
-    else:
-        phrase, phrase_ru = _make_phrase(word, lang)
-        if phrase and phrase_ru:
-            w["phrase"] = phrase
-            w["phrase_ru"] = phrase_ru
-            w["phrase_date"] = today
-            try:
-                store.set_list(config.DICT_KEY, cid, words)
-            except Exception:
-                pass
+    def _priority_key(w):
+        shown = w.get("last_shown_at")
+        never_shown = 0 if not shown else 1
+        not_known = 0 if w.get("status") != "known" else 1
+        return (never_shown, not_known, shown or "")
 
-    if phrase and phrase_ru:
-        return f"{_cap(phrase)} → {_cap(phrase_ru)}", lang
-    # fallback: AI недоступен - показываем само слово с переводом, без словосочетания
-    return f"{_cap(word)} → {_cap(ru)}", lang
+    pool.sort(key=_priority_key)
+    top_n = pool[:max(1, len(pool) // 3)] or pool
+    w = random.choice(top_n)
+    term = learning._entry_term(w)
+    ru = learning._entry_translation(w)
+
+    w["last_shown_at"] = datetime.now(TZ).isoformat()
+    try:
+        idx = words.index(w)
+        words[idx] = w
+        store.set_list(config.DICT_KEY, cid, words)
+    except Exception:
+        pass
+
+    return f"{_cap(term)} → {_cap(ru)}", lang
 
 _day_cache = {}  # cid -> {"date":..., "text":..., "entities":..., "has_fact": bool, "ts": float}
 

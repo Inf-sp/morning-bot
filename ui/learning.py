@@ -336,7 +336,8 @@ def morning_words(flag, method, is_read_aloud=False, phrases=None, words=None, e
         for word, ru in phrases:
             b.bullet(f"{word} → {ru}")
     if words:
-        b.section("📖 Слова")
+        if not phrases:
+            b.section("📖 Повтори")
         for word, ru in words:
             b.bullet(f"{word} → {ru}")
     if phrases or words:

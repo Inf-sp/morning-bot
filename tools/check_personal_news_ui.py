@@ -30,9 +30,14 @@ def test_relative_day_unknown_date():
     assert news._relative_day(None, NOW) == "дата неизвестна"
 
 
-def test_strict_filter_rejects_missing_date():
-    item = _source(published_at="")
+def test_strict_filter_rejects_missing_date_unofficial():
+    item = _source(published_at="", url="https://example.com/reisinfo/werkzaamheden-alkmaar")
     assert news.strict_filter([item], now=NOW) == []
+
+
+def test_strict_filter_accepts_missing_date_official():
+    item = _source(published_at="")
+    assert news.strict_filter([item], now=NOW)
 
 
 def test_strict_filter_rejects_old_evergreen():
@@ -109,7 +114,8 @@ def test_build_card_empty_state():
 
 def main():
     test_relative_day_unknown_date()
-    test_strict_filter_rejects_missing_date()
+    test_strict_filter_rejects_missing_date_unofficial()
+    test_strict_filter_accepts_missing_date_official()
     test_strict_filter_rejects_old_evergreen()
     test_strict_filter_accepts_today()
     test_build_card_adhd_format()

@@ -263,7 +263,7 @@ def _is_official_url(url):
 def _is_fresh(item, period, now=None):
     dt = _parse_dt(_published_value(item))
     if not dt:
-        return False
+        return _is_official_url(item.get("url"))
     now = now or _now()
     category = item.get("_category_hint") or item.get("category")
     urgency = item.get("_urgency")
@@ -283,6 +283,14 @@ def _has_concrete_change(item):
         "hitte", "uv", "inburgering", "examen", "cursus", "restaurant", "cafe", "terugroepactie",
         "нов", "измен", "обнов", "цена", "тариф", "лимит", "сбой", "премьера", "сезон",
         "отмен", "релиз", "тур", "открыл", "открыт", "предупрежд", "дефицит",
+        "aankondig", "besluit", "besloten", "plan", "start", "gestart", "begin", "begint",
+        "verhoog", "verlaag", "stijg", "daal", "regel", "wet", "beleid", "onderzoek",
+        "rapport", "waarschuw", "risico", "gevaar", "actie", "campagne", "bijeenkomst",
+        "raad", "college", "vergunning", "bouw", "renovatie", "verbouwing", "sluiting",
+        "record", "toename", "afname", "groei", "daling", "tekort", "overschot",
+        "объявил", "объявили", "решил", "решили", "план", "начал", "начали", "начнёт",
+        "повыс", "пониз", "закон", "правило", "отчёт", "риск", "собрани", "закрыт",
+        "запуст", "запуск",
     )
     return any(m in text for m in markers)
 
@@ -291,8 +299,6 @@ def _looks_like_old_evergreen(item, now=None):
     text = f"{item.get('title', '')} {item.get('content', '')}".lower()
 
     old_markers = (
-        "2024",
-        "2025",
         "1 januari 2024",
         "1 januari 2025",
         "vanaf 2024",
@@ -740,7 +746,7 @@ def _score_candidate(item, profile, now=None):
         score += 10
 
     if age is None:
-        score -= 50
+        score -= 15
     elif age > _category_max_age_days(category, item.get("_urgency")):
         score -= 30
     if not _has_concrete_change(item):

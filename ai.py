@@ -155,6 +155,7 @@ _AI_CACHE_TTLS = {
     "leisure": 18 * 3600,
     "travel": 18 * 3600,
     "learning_explain": 14 * 86400,
+    "learning_dict_add": 30 * 86400,
     "deploy": 10 * 365 * 86400,
 }
 

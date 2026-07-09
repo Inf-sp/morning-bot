@@ -375,10 +375,6 @@ async def answer_callback(update, context):
                 await learning.send_train_lang_select(bot, cid)
             elif act in ("train_nl", "train_en"):
                 await _inline_status(lambda _s: learning.train_start(bot, cid, learning.active_language(cid)))
-            elif act in ("train_words_nl", "train_words_en"):
-                await _inline_status(lambda _s: learning.train_start(bot, cid, learning.active_language(cid), mode="word"))
-            elif act in ("train_phrases_nl", "train_phrases_en"):
-                await _inline_status(lambda _s: learning.train_start(bot, cid, learning.active_language(cid), mode="phrase"))
             elif act == "tr_nl":
                 await _inline_status(lambda _s: learning.do_translate(bot, cid, "нидерландский"))
             elif act == "tr_en":
@@ -436,17 +432,29 @@ async def answer_callback(update, context):
                 lang = act.split("_")[2]
                 store.pending_input[cid] = f"dictadd_smart_{lang}"
                 await bot.send_message(chat_id=cid, text=(
-                    "✏️ Пришли слово или фразу для изучения — можно сразу несколько.\n"
-                    "Я сам пойму что это: слово или фраза."))
+                    "✏️ Пришли слово или фразу для изучения — можно сразу несколько, каждую с новой строки.\n"
+                    "Я сам приведу в правильную форму, переведу и разберу."))
             elif act.startswith("dictadd_"):
                 lang = act.split("_")[1]
                 store.pending_input[cid] = f"dictadd_{lang}"
                 await bot.send_message(chat_id=cid, text=(
-                    "✏️ Пришли слова или фразы - можно сразу много, в столбик или через запятую.\n"
-                    "Я разберу каждое отдельно, сам пойму слово это или фраза, язык и перевод."))
+                    "✏️ Пришли слова или фразы - можно сразу много, каждую с новой строки.\n"
+                    "Я сам приведу в правильную форму, переведу и разберу."))
+            elif act.startswith("dictbrowse_"):
+                lang = act.split("_")[1]
+                await learning.send_dict_browse(bot, cid, lang)
+            elif act.startswith("dictsearch_"):
+                lang = act.split("_")[1]
+                await learning.send_dict_search_prompt(bot, cid, lang)
+            elif act.startswith("dictdelok_"):
+                _, lang, term_key = act.split("_", 2)
+                await learning.del_dict_entry_by_term(bot, cid, lang, term_key)
+            elif act.startswith("dictdel_"):
+                _, lang, term_key = act.split("_", 2)
+                await learning.confirm_delete_dict_entry(bot, cid, lang, term_key)
             elif act.startswith("dictedit_"):
-                _, lang, dkind = act.split("_")
-                await learning.send_dict_edit(bot, cid, lang, dkind)
+                lang = act.split("_")[1]
+                await learning.send_dict_edit(bot, cid, lang)
             elif act == "game":
                 await learning.game_start(bot, cid)
             elif act == "levels":
@@ -786,6 +794,8 @@ async def text_router(update, context):
             await learning.add_smart_batch(bot, cid, text, kind.split("_")[2]); return
         if kind.startswith("dictadd_"):
             await learning.add_words_batch(bot, cid, text, kind.split("_")[1]); return
+        if kind.startswith("dictsearch_"):
+            await learning.handle_dict_search(bot, cid, kind.split("_")[1], text); return
         if kind == "wardrobe_profile_input":
             settings.set_(cid, "wardrobe_profile", text.strip())
             await bot.send_message(chat_id=cid, text="🎚️ <b>Параметры сохранены</b>", parse_mode="HTML")
