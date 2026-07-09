@@ -7,7 +7,7 @@
 Здесь только сборка текста. Логика/данные — в settings.py (send_admin_*).
 """
 from .builder import MessageBuilder, MessageSpec
-from .constants import STATUS_EMOJI, ui_label
+from .constants import STATUS_EMOJI, UI_EMOJI, ui_label
 
 # --- статус-точки (единственные допустимые «светофоры») ---
 OK, WARN, BAD, OFF = STATUS_EMOJI["ok"], STATUS_EMOJI["warn"], STATUS_EMOJI["bad"], "□"
@@ -41,7 +41,7 @@ def deploy_report(version, title, release_notes):
         change_notes = notes[:1]
 
     b = MessageBuilder()
-    b.bold(f"{ui_label('version')} v{version} · {title or 'Обновление'}")
+    b.bold(f"{UI_EMOJI['version']} v{version} · {title or 'Обновление'}")
     b.newline()
     b.spacer()
     b.bold("Что изменено:")
