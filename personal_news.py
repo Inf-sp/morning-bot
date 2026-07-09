@@ -582,6 +582,7 @@ def _call_tavily(query, max_results=5, domains=None, time_range="week"):
 
 
 def _profile_context(cid):
+    import settings as _s
     s = store.get_settings(cid)
     return {
         "city": s.get("city") or "Алкмар",
@@ -591,6 +592,8 @@ def _profile_context(cid):
         "artists": store.get_list(config.ARTISTS_KEY, cid)[:20],
         "services": ["OpenAI", "Gemini", "Groq", "Cloudflare", "Railway", "Telegram",
                      "OpenWeather", "Pexels", "Unsplash", "Apple", "Mac", "VS Code"],
+        "priorities": _s.priorities(cid),
+        "cuisines": _s.cuisines(cid),
     }
 
 
@@ -706,6 +709,15 @@ def _score_candidate(item, profile, now=None):
                  + (profile.get("services") or [])]
     interest_hit = any(x and x in text for x in interests)
     if category == "tech" and any(w in text for w in ("openai", "telegram", "apple", "cloudflare", "railway", "api")):
+        interest_hit = True
+    priority_category = {
+        "health": "health", "food": "food", "wardrobe": "wardrobe_weather", "learning": "language",
+    }
+    if any(priority_category.get(p) == category for p in (profile.get("priorities") or [])):
+        interest_hit = True
+    if category == "food" and profile.get("cuisines") and any(
+        c in text for c in (profile.get("cuisines") or [])
+    ):
         interest_hit = True
     action_hit = any(w in text for w in (
         "vanaf", "per ", "deadline", "aanvragen", "check", "wijzig", "storing",

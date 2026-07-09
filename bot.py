@@ -389,7 +389,7 @@ async def answer_callback(update, context):
             elif act == "dict":
                 await learning.send_dict(bot, cid)
             elif act == "dict_mydata":
-                await learning.send_dict(bot, cid, back="set_mydata_learning")
+                await learning.send_dict(bot, cid, back="set_home")
             elif act == "dictconfirm_add":
                 await _ack(q)
                 await learning.confirm_pending_dict_add(bot, cid)
