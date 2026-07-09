@@ -199,6 +199,31 @@ def record_gemini_fallback(*, target: str = "local", reason: str = "") -> None:
         pass
 
 
+def should_log_gemini_limit(dedup_token: str) -> bool:
+    """Персистентная дедупликация лог-записей о лимите Gemini.
+
+    Переживает рестарт процесса: без этого каждый деплой/рестарт Railway
+    сбрасывал бы in-memory дедуп и плодил дубли записей об одном и том же
+    ещё не истёкшем cooldown.
+    """
+    result = {"log": False}
+
+    def mut(data):
+        data = data or _template()
+        svc = _service(data, "gemini")
+        if svc.get("last_logged_dedup_token") == dedup_token:
+            return data, False
+        svc["last_logged_dedup_token"] = dedup_token
+        result["log"] = True
+        return data, True
+
+    try:
+        store.mutate_kv(config.API_USAGE_KEY, mut)
+    except Exception:
+        return True
+    return result["log"]
+
+
 def gemini_state(period_days: int = 1) -> dict:
     try:
         data = store._load(config.API_USAGE_KEY)

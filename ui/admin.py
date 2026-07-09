@@ -275,8 +275,16 @@ def logs(rows, errors_24h, updated_at, summary=None):
     b.bold(ui_label("logs", "Логи"))
     b.newline()
     b.spacer()
+    cooldown_active = bool(summary.get("cooldown_active"))
+    if cooldown_active:
+        until = _hm(summary.get("cooldown_until"))
+        b.line(f"🔴 Gemini на паузе до {until}")
+        b.line("Бот работает через fallback, лимит не превышается повторно.")
+    else:
+        b.line(f"{OK} Gemini работает")
+    b.spacer()
     if not rows:
-        b.line(f"{OK} Ошибок за 24 часа нет")
+        b.line("Ошибок за 24 часа нет")
     else:
         b.line("Последние ошибки:")
         b.spacer()
@@ -285,14 +293,12 @@ def logs(rows, errors_24h, updated_at, summary=None):
         b.spacer()
         b.line("За 24 часа:")
         b.line(
-            f"ошибок {summary.get('errors', errors_24h)}"
-            f" · лимитов {summary.get('rate_limits', 0)}"
+            f"лимитов {summary.get('rate_limits', 0)}"
             f" · fallback {summary.get('fallbacks', 0)}"
+            f" · записей {summary.get('errors', errors_24h)}"
         )
         if summary.get("last_429_at"):
-            cd = "активен" if summary.get("cooldown_active") else "нет"
-            until = f" до {_hm(summary.get('cooldown_until'))}" if summary.get("cooldown_active") else ""
-            b.line(f"последний 429 {_hm(summary.get('last_429_at'))} · cooldown {cd}{until}")
+            b.line(f"последний лимит {_hm(summary.get('last_429_at'))}")
     b.spacer()
     b.line(f"Обновлено: {updated_at}")
     return b.build_stripped()

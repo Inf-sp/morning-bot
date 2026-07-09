@@ -17,7 +17,6 @@ import secure
 
 _log = logging.getLogger(__name__)
 _GEMINI_RATE_LOCK = threading.Lock()
-_GEMINI_LIMIT_LOG_DEDUP = {}
 
 # ---------- Cost logger ----------
 _COST_MAX = 500  # максимум записей в rolling-буфере
@@ -302,11 +301,9 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
         scope = (getattr(err, "limit_scope", "") or state.get("cooldown_scope") or "").upper()
         seconds = getattr(err, "retry_after", None) or state.get("cooldown_seconds") or 0
         cooldown_until = int(getattr(err, "cooldown_until", None) or state.get("cooldown_until") or 0)
-        dedup_key = (kind or "gemini_rate_limit", scope or "limit", cooldown_until, bool(fallback))
-        now = time.time()
-        if _GEMINI_LIMIT_LOG_DEDUP.get(dedup_key, 0) > now - 15 * 60:
+        dedup_token = f"{kind or 'gemini_rate_limit'}:{scope or 'limit'}:{cooldown_until}:{bool(fallback)}"
+        if not api_usage.should_log_gemini_limit(dedup_token):
             return
-        _GEMINI_LIMIT_LOG_DEDUP[dedup_key] = now
         first = f"Gemini · лимит {scope}".strip()
         second = "Fallback включён" if fallback else "Fallback будет использован"
         if seconds:
