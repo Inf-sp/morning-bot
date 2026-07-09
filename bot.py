@@ -383,9 +383,9 @@ async def answer_callback(update, context):
                 language = act.rsplit("_", 1)[-1] if act in ("proverb_nl", "proverb_en") else None
                 await _inline_status(lambda _s: learning.send_proverb(bot, cid, language))
             elif act == "dict":
-                await learning.send_dict(bot, cid)
+                await learning.send_dict(bot, cid, q=q)
             elif act == "dict_mydata":
-                await learning.send_dict(bot, cid, back="set_home")
+                await learning.send_dict(bot, cid, back="set_home", q=q)
             elif act == "dictconfirm_add":
                 await _ack(q)
                 await learning.confirm_pending_dict_add(bot, cid)
@@ -405,29 +405,25 @@ async def answer_callback(update, context):
             elif act == "dictseed_later":
                 await learning.seed_later(bot, cid)
             elif act == "dictlang_nl":
-                await learning.send_dict_lang(bot, cid, "nl")
+                await learning.send_dict_lang(bot, cid, "nl", q=q)
             elif act == "dictlang_en":
-                await learning.send_dict_lang(bot, cid, "en")
-            elif act == "dictlang_nl_from_lang":
-                await learning.send_dict_lang(bot, cid, "nl", back="m_nl")
-            elif act == "dictlang_en_from_lang":
-                await learning.send_dict_lang(bot, cid, "en", back="m_en")
+                await learning.send_dict_lang(bot, cid, "en", q=q)
+            elif act == "dictlang_nl_from_menu":
+                await learning.send_dict_lang(bot, cid, "nl", back="m_learn", q=q)
+            elif act == "dictlang_en_from_menu":
+                await learning.send_dict_lang(bot, cid, "en", back="m_learn", q=q)
             elif act == "dictlang_nl_from_notes":
-                await learning.send_dict_lang(bot, cid, "nl", back="a_dict")
+                await learning.send_dict_lang(bot, cid, "nl", back="a_dict", q=q)
             elif act == "dictlang_en_from_notes":
-                await learning.send_dict_lang(bot, cid, "en", back="a_dict")
+                await learning.send_dict_lang(bot, cid, "en", back="a_dict", q=q)
             elif act == "dictlang_nl_from_learn":
-                await learning.send_dict_lang(bot, cid, "nl", back="set_dict_g")
+                await learning.send_dict_lang(bot, cid, "nl", back="set_dict_g", q=q)
             elif act == "dictlang_en_from_learn":
-                await learning.send_dict_lang(bot, cid, "en", back="set_dict_g")
-            elif act == "dictlang_nl_from_settings":
-                await learning.send_dict_lang(bot, cid, "nl", back="m_dict_settings")
-            elif act == "dictlang_en_from_settings":
-                await learning.send_dict_lang(bot, cid, "en", back="m_dict_settings")
+                await learning.send_dict_lang(bot, cid, "en", back="set_dict_g", q=q)
             elif act == "dictlang_nl_from_mydata":
-                await learning.send_dict_lang(bot, cid, "nl", back="a_dict_mydata")
+                await learning.send_dict_lang(bot, cid, "nl", back="a_dict_mydata", q=q)
             elif act == "dictlang_en_from_mydata":
-                await learning.send_dict_lang(bot, cid, "en", back="a_dict_mydata")
+                await learning.send_dict_lang(bot, cid, "en", back="a_dict_mydata", q=q)
             elif act.startswith("dictadd_smart_"):
                 lang = act.split("_")[2]
                 store.pending_input[cid] = f"dictadd_smart_{lang}"
@@ -442,16 +438,16 @@ async def answer_callback(update, context):
                     "Я сам приведу в правильную форму, переведу и разберу."))
             elif act.startswith("dictbrowse_"):
                 lang = act.split("_")[1]
-                await learning.send_dict_browse(bot, cid, lang)
+                await learning.send_dict_browse(bot, cid, lang, q=q)
             elif act.startswith("dictsearch_"):
                 lang = act.split("_")[1]
-                await learning.send_dict_search_prompt(bot, cid, lang)
+                await learning.send_dict_search_prompt(bot, cid, lang, q=q)
             elif act.startswith("dictdelok_"):
                 _, lang, term_key = act.split("_", 2)
-                await learning.del_dict_entry_by_term(bot, cid, lang, term_key)
+                await learning.del_dict_entry_by_term(bot, cid, lang, term_key, q=q)
             elif act.startswith("dictdel_"):
                 _, lang, term_key = act.split("_", 2)
-                await learning.confirm_delete_dict_entry(bot, cid, lang, term_key)
+                await learning.confirm_delete_dict_entry(bot, cid, lang, term_key, q=q)
             elif act.startswith("dictedit_"):
                 lang = act.split("_")[1]
                 await learning.send_dict_edit(bot, cid, lang)

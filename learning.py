@@ -816,7 +816,7 @@ def _word_meanings(word: str, language: str) -> list:
 
 
 def _train_back_target(language=None):
-    return "m_nl" if _code(language or "нидерландский") == "nl" else "m_en"
+    return "m_learn"
 
 
 def _train_again_kb(language=None):
@@ -844,7 +844,7 @@ async def train_start(bot, cid, language, mode=None):
     if not _train_entries(cid, language):
         code = _code(language)
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(
-            "📖 Открыть словарь", callback_data=f"a_dictlang_{code}_from_lang")]])
+            "📖 Открыть словарь", callback_data=f"a_dictlang_{code}_from_menu")]])
         await bot.send_message(chat_id=cid,
             text=f"{_flag(language)} В словаре нет слов или фраз с переводом. Добавь записи через словарь.",
             reply_markup=kb)
@@ -2599,22 +2599,35 @@ def _dict_learning_kind(w):
     return kind
 
 def _dict_counts(cid):
+    """Количество записей словаря по языку — единый счётчик, без деления
+    на слова и фразы."""
     words = _ensure_dict(cid)
-    out = {"nl": {"word": 0, "phrase": 0}, "en": {"word": 0, "phrase": 0}}
+    out = {"nl": 0, "en": 0}
     for w in words:
         lang = "en" if _dict_lang(w) == "en" else "nl"
-        out[lang][_dict_learning_kind(w)] += 1
+        out[lang] += 1
     return out
 
-async def send_dict(bot, cid, back="m_notes"):
+async def _show_screen(bot, cid, text, entities=None, reply_markup=None, q=None):
+    """Навигация внутри словаря: редактирует текущее сообщение, если есть callback
+    query, иначе (первый вход, текстовая команда) шлёт новое."""
+    if q is not None:
+        try:
+            await q.message.edit_text(text, entities=entities, reply_markup=reply_markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=reply_markup)
+
+
+async def send_dict(bot, cid, back="m_notes", q=None):
     c = _dict_counts(cid)
-    nl_total = c["nl"]["word"] + c["nl"]["phrase"]
-    en_total = c["en"]["word"] + c["en"]["phrase"]
+    nl_total = c["nl"]
+    en_total = c["en"]
     msg = dict_ui.dict_overview(nl_total, en_total)
     origin = {
         "m_notes": "notes",
-        "m_learn": "learn",
-        "m_dict_settings": "settings",
+        "m_learn": "menu",
         "set_home": "mydata",
     }.get(back, "notes")
     rows = [
@@ -2622,40 +2635,40 @@ async def send_dict(bot, cid, back="m_notes"):
         [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data=f"a_dictlang_en_from_{origin}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ]
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
+    await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
 
-async def send_dict_lang(bot, cid, lang, back="m_dict_settings"):
+async def send_dict_lang(bot, cid, lang, back="m_learn", q=None):
     """Главный экран словаря: две кнопки — Добавить и Мой словарь."""
-    c = _dict_counts(cid)[lang]
-    msg = dict_ui.dict_language(lang, c)
+    count = _dict_counts(cid)[lang]
+    msg = dict_ui.dict_language(lang, count)
     rows = [
         [InlineKeyboardButton("✏️ Добавить", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("📚 Мой словарь", callback_data=f"a_dictbrowse_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ]
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
+    await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
 
 
 def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🗂️ Словарь", callback_data=f"a_dictlang_{lang}")],
+        [InlineKeyboardButton("📚 Мой словарь", callback_data=f"a_dictlang_{lang}")],
         [InlineKeyboardButton("✏️ Добавить", callback_data=f"a_dictadd_smart_{lang}")],
     ])
 
 
-async def send_dict_browse(bot, cid, lang):
+async def send_dict_browse(bot, cid, lang, q=None):
     """Подэкран «Мой словарь»: найти конкретную запись или посмотреть весь список."""
     rows = [
         [InlineKeyboardButton("🔍 Найти", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("📋 Весь список", callback_data=f"a_dictedit_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")],
     ]
-    await bot.send_message(chat_id=cid, text="📚 Мой словарь", reply_markup=InlineKeyboardMarkup(rows))
+    await _show_screen(bot, cid, "📚 Мой словарь", None, InlineKeyboardMarkup(rows), q=q)
 
 
-async def send_dict_search_prompt(bot, cid, lang):
+async def send_dict_search_prompt(bot, cid, lang, q=None):
     store.pending_input[str(cid)] = f"dictsearch_{lang}"
-    await bot.send_message(chat_id=cid, text="🔍 Введи слово или фразу для поиска.")
+    await _show_screen(bot, cid, "🔍 Введи слово или фразу для поиска.", None, None, q=q)
 
 
 def _dict_search_kb(lang, term_key):
@@ -2701,18 +2714,18 @@ async def handle_dict_search(bot, cid, lang, query):
                             reply_markup=_dict_search_kb(lang, term_key))
 
 
-async def confirm_delete_dict_entry(bot, cid, lang, term_key):
-    await bot.send_message(
-        chat_id=cid,
-        text="Точно удалить это из словаря?",
-        reply_markup=InlineKeyboardMarkup([[
+async def confirm_delete_dict_entry(bot, cid, lang, term_key, q=None):
+    await _show_screen(
+        bot, cid, "Точно удалить это из словаря?", None,
+        InlineKeyboardMarkup([[
             InlineKeyboardButton("✅ Да, удалить", callback_data=f"a_dictdelok_{lang}_{term_key}"),
             InlineKeyboardButton("Отмена", callback_data=f"a_dictbrowse_{lang}"),
         ]]),
+        q=q,
     )
 
 
-async def del_dict_entry_by_term(bot, cid, lang, term_key):
+async def del_dict_entry_by_term(bot, cid, lang, term_key, q=None):
     words = store.get_list(config.DICT_KEY, cid)
     removed = ""
     kept = []
@@ -2724,16 +2737,13 @@ async def del_dict_entry_by_term(bot, cid, lang, term_key):
     if removed:
         store.set_list(config.DICT_KEY, cid, kept)
     msg = dict_ui.dict_deleted(removed or "")
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
-        reply_markup=_dict_manage_kb(lang),
-    )
+    await _show_screen(bot, cid, msg.text, msg.entities, _dict_manage_kb(lang), q=q)
 
 
-async def send_dict_edit(bot, cid, lang, kind=None):
-    """Просмотр всего словаря списком = режим чистки (пагинация + мультивыбор)."""
+async def send_dict_edit(bot, cid, lang, kind=None, q=None):
+    """Просмотр всего словаря списком = режим чистки (пагинация + мультивыбор).
+    open_cleanup всегда шлёт новое сообщение — отдельный список слишком велик,
+    чтобы аккуратно встраивать его в редактирование текущего экрана."""
     await open_cleanup(bot, cid, f"d_{lang}")
 
 

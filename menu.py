@@ -67,8 +67,6 @@ def _learning_code(cid):
 def menu_screen(key, cid=None):
     if key == "m_learn":
         msg = menu_ui.learning_menu(_learning_code(cid))
-    elif key == "m_dict_settings":
-        msg = menu_ui.learning_settings_menu(_learning_code(cid))
     else:
         msg = menu_ui.menu_screen(key)
     return msg.text, msg.entities, msg.reply_markup

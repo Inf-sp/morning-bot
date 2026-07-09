@@ -6,7 +6,7 @@ UI_EMOJI = {
     "music": "🎧",
     "concerts": "🎸",
     "wardrobe": "👟",
-    "clothes": "👕",
+    "clothes": "🧢",
     "food": "🥣",
     "recipes": "🍽",
     "version": "🚀",

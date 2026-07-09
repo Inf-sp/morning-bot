@@ -89,52 +89,6 @@ _SCREENS = {
             [(ui_label("settings", "Настройки здоровья"), "set_lagom")],
         ],
     ),
-    "m_learn": (
-        UI_LEARNING,
-        "Обучение",
-        [
-            f"Активный язык: {language_label('nl', 'Нидерландский')}.",
-            "Слова и фразы из словаря автоматически попадают в тренировки.",
-        ],
-        [
-            [(language_label("nl", "Нидерландский"), "m_nl")],
-            [(ui_label("settings", "Настройки обучения"), "set_learning")],
-        ],
-    ),
-    "m_dict_settings": (
-        UI_SETTINGS,
-        "Словарь и обучение",
-        f"Активный язык: {language_label('nl', 'Нидерландский')}.",
-        [
-            [(ui_label("dictionary", "Нидерландский словарь"), "a_dictlang_nl")],
-            [(ui_label("settings", "Настройки обучения"), "set_learning")],
-            [("⬅️ Назад", "m_learn")],
-        ],
-    ),
-    "m_nl": (
-        LANGUAGE_EMOJI["nl"],
-        "Нидерландский",
-        "Практика языка: слова, живые выражения и игры.",
-        [
-            [(ui_label("word_trainer", "Тренажёр"), "a_train_nl")],
-            [(ui_label("live_language", "Живой язык"), "a_proverb_nl")],
-            [(ui_label("game", "Игра-детектив"), "gamelang_nl")],
-            [(ui_label("dictionary", "Словарь"), "a_dictlang_nl_from_lang")],
-            [("⬅️ Назад", "m_learn")],
-        ],
-    ),
-    "m_en": (
-        LANGUAGE_EMOJI["en"],
-        "Английский",
-        "Практика языка: слова, живые выражения и игры.",
-        [
-            [(ui_label("word_trainer", "Тренажёр"), "a_train_en")],
-            [(ui_label("live_language", "Живой язык"), "a_proverb_en")],
-            [(ui_label("game", "Игра-детектив"), "gamelang_en")],
-            [(ui_label("dictionary", "Словарь"), "a_dictlang_en_from_lang")],
-            [("⬅️ Назад", "m_learn")],
-        ],
-    ),
     "m_leisure": (
         UI_LEISURE,
         "Досуг",
@@ -167,6 +121,8 @@ _SCREENS = {
 
 
 def learning_menu(active_code="nl"):
+    """Единое меню обучения — без промежуточного экрана выбора языка. Показывает
+    сразу тренажёр/живой язык/игру/словарь для текущего активного языка."""
     is_en = active_code == "en"
     flag = LANGUAGE_EMOJI["en"] if is_en else LANGUAGE_EMOJI["nl"]
     title = "Английский" if is_en else "Нидерландский"
@@ -176,28 +132,21 @@ def learning_menu(active_code="nl"):
         "Обучение",
         [
             f"Активный язык: {flag} {title}.",
-            "Слова и фразы из словаря автоматически попадают в тренировки.",
+            "Здесь всё для этого языка: тренажёр, живые фразы, игра и твой личный словарь.",
+            "",
+            "Просто напиши в чат «добавь слово ...» или «добавь фразу ...» — бот сам сохранит "
+            "в правильной форме, переведёт и разберёт, без захода в меню.",
+            "",
+            "Тренажёр повторяет слова и фразы из словаря карточками с примером и коротким тестом. "
+            "Живой язык — разговорные выражения, которые реально говорят носители. "
+            "Игра-детектив — угадываешь слово по подсказкам, чтобы запоминалось через интерес.",
         ],
         [
-            [(f"{flag} {title}", f"m_{code}")],
+            [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
+            [(ui_label("live_language", "Живой язык"), f"a_proverb_{code}")],
+            [(ui_label("game", "Игра-детектив"), f"gamelang_{code}")],
+            [(ui_label("dictionary", "Мой словарь"), f"a_dictlang_{code}_from_menu")],
             [(ui_label("settings", "Настройки обучения"), "set_learning")],
-        ],
-    )
-
-
-def learning_settings_menu(active_code="nl"):
-    is_en = active_code == "en"
-    flag = LANGUAGE_EMOJI["en"] if is_en else LANGUAGE_EMOJI["nl"]
-    title = "Английский" if is_en else "Нидерландский"
-    code = "en" if is_en else "nl"
-    return _screen_message(
-        UI_SETTINGS,
-        "Словарь и обучение",
-        f"Активный язык: {flag} {title}.",
-        [
-            [(ui_label("dictionary", f"{title} словарь"), f"a_dictlang_{code}")],
-            [(ui_label("settings", "Настройки обучения"), "set_learning")],
-            [("⬅️ Назад", "m_learn")],
         ],
     )
 
