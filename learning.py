@@ -63,7 +63,7 @@ def _train_words(cid, language):
     code = _code(language)
     out = []
     for w in _ensure_dict(cid):
-        if _dict_lang(w) == code and _dict_kind(w) == "word":
+        if _dict_lang(w) == code and _dict_learning_kind(w) == "word":
             term = _cap(_w_field(w, "word", "nl", "en"))
             ru = _w_field(w, "ru")
             if term and ru:
@@ -76,9 +76,10 @@ def _train_phrases(cid, language):
     code = _code(language)
     out = []
     for w in _ensure_dict(cid):
-        if _dict_lang(w) == code and _dict_kind(w) == "phrase":
+        if _dict_lang(w) == code and _dict_learning_kind(w) == "phrase":
             phrase = _w_field(w, "word", "nl", "en")
             ru = _w_field(w, "ru")
+            phrase, _grammar_note = _normalize_dict_term(code, "phrase", phrase)
             if phrase and ru:
                 out.append((str(phrase).strip(), str(ru).strip()))
     return out
@@ -277,7 +278,23 @@ async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
 
 Сделай учебную карточку и ОТДЕЛЬНЫЙ тест на применение того же правила.
 
-Учебная карточка показывает исходную фразу, перевод и короткое правило.
+Учебная карточка должна быстро объяснить выражение без повторов:
+- исходная фраза;
+- естественный русский перевод;
+- одна строка разбора: intro_pattern — intro_explanation;
+- один новый короткий пример с переводом.
+
+Правила учебной карточки:
+- intro_pattern — ключевое слово или всё устойчивое выражение. Если нужна грамматика, добавь её прямо в паттерн:
+  "zin hebben om te + инфинитив", "beginnen met + существительное", "stoppen met + инфинитив",
+  "kijken naar + существительное".
+- intro_explanation — новая информация после заголовка "Разбор": значение конструкции, правило,
+  особенность употребления или отличие от похожего выражения.
+- Не делай intro_explanation простым повтором intro_pattern или перевода.
+- Если выражение устойчивое, объясняй всё выражение, а не отдельные слова.
+- card_example — новый короткий пример на {language}, не копия учебной фразы и не тестовая фраза.
+- card_example_ru — естественный перевод card_example на русский.
+- Не используй лингвистические термины без необходимости.
 
 Перед ответом проверь согласованность:
 - перевод относится именно к учебной фразе;
@@ -300,7 +317,7 @@ async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
 3. correct — ровно пропущенное слово, без артиклей и лишних слов.
 4. wrong — три правдоподобных неправильных варианта на {language}, той же части речи.
 5. test_sentence_ru — перевод test_full_phrase на русский.
-6. short_rule — короткая подсказка вида "door = из-за, по причине чего-то".
+6. short_rule — короткая подсказка для результата теста, не дубль intro_pattern.
 7. detail — разбор 350-450 символов простыми словами, только про test_full_phrase.
 8. target_token — слово, правило которого проверяем; обычно совпадает с correct.
 9. self_check — все поля true только если карточка полностью согласована.
@@ -315,6 +332,10 @@ async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
   "test_sentence_ru": "перевод test_full_phrase на русский",
   "construction": "название конструкции, например 'ziek door iets'",
   "construction_meaning": "что значит конструкция целиком, коротко по-русски",
+  "intro_pattern": "строка для разбора, например 'zin hebben om te + инфинитив'",
+  "intro_explanation": "краткое объяснение значения/правила без повтора intro_pattern",
+  "card_example": "новый короткий пример с той же конструкцией",
+  "card_example_ru": "естественный перевод card_example на русский",
   "short_rule": "короткая подсказка",
   "detail": "короткий разбор по тестовой фразе",
   "other_forms": [
@@ -359,6 +380,9 @@ async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
     full_phrase = str(d.get("test_full_phrase") or "").strip()
     if not full_phrase and blank_phrase and correct:
         full_phrase = blank_phrase.replace("____", correct, 1)
+    construction = str(d.get("focus_unit") or d.get("construction") or "").strip()
+    construction_meaning = str(d.get("focus_explanation_ru") or d.get("construction_meaning") or "").strip()
+    short_rule = str(d.get("rule_ru") or d.get("usage_note_ru") or d.get("short_rule") or "").strip()
     return {
         "blank_phrase": blank_phrase,
         "correct": correct,
@@ -366,9 +390,13 @@ async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
         "wrong": wrong,
         "sentence_ru": str(d.get("test_sentence_ru") or d.get("sentence_ru") or "").strip(),
         "test_full_phrase": full_phrase,
-        "construction": str(d.get("focus_unit") or d.get("construction") or "").strip(),
-        "construction_meaning": str(d.get("focus_explanation_ru") or d.get("construction_meaning") or "").strip(),
-        "short_rule": str(d.get("rule_ru") or d.get("usage_note_ru") or d.get("short_rule") or "").strip(),
+        "construction": construction,
+        "construction_meaning": construction_meaning,
+        "intro_pattern": str(d.get("intro_pattern") or construction).strip(),
+        "intro_explanation": str(d.get("intro_explanation") or construction_meaning or short_rule).strip(),
+        "card_example": str(d.get("card_example") or d.get("example") or "").strip(),
+        "card_example_ru": str(d.get("card_example_ru") or d.get("example_ru") or "").strip(),
+        "short_rule": short_rule,
         "detail": str(d.get("detail") or "").strip(),
         "other_forms": _filter_phrase_other_forms(other_forms, d),
         "explanation": str(d.get("rule_ru") or d.get("usage_note_ru") or d.get("short_rule") or d.get("explanation") or "").strip(),
@@ -392,6 +420,7 @@ _PATTERN_PLACEHOLDERS = {
     "iets", "iemand", "someone", "something", "somebody", "sth", "sb",
     "adjective", "adjectief", "прилагательное", "сущ", "существительное",
     "verb", "глагол", "noun", "prep", "предлог", "infinitief", "infinitive",
+    "инфинитив", "zelfstandig", "naamwoord",
 }
 
 _UI_PLACEHOLDER_PATTERNS = (
@@ -413,6 +442,10 @@ _PHRASE_FOCUS_FALLBACKS = {
         "focus": "niet te doen",
         "meaning": "устойчивое выражение: \"невозможно\", \"нереально\", \"слишком трудно\"",
         "rule": "Конструкция \"niet te + infinitief\" часто означает, что действие невозможно или почти невозможно выполнить.",
+        "intro_pattern": "niet te + инфинитив",
+        "intro_explanation": "действие невозможно или почти нереально выполнить.",
+        "card_example": "Die drukte is niet te doen.",
+        "card_example_ru": "Эта толпа невыносима.",
         "blank": "Deze opdracht is niet te ____.",
         "correct": "doen",
         "wrong": ["maken", "gaan", "zijn"],
@@ -422,15 +455,23 @@ _PHRASE_FOCUS_FALLBACKS = {
         "focus": "geen zin hebben in",
         "meaning": "не хотеть чего-то, не иметь желания что-то делать",
         "rule": "Конструкция \"geen zin hebben in\" значит, что у человека нет желания или настроения для действия или ситуации.",
-        "blank": "Ik heb geen zin ____ koffie.",
+        "intro_pattern": "geen zin hebben in + существительное",
+        "intro_explanation": "не хотеть чего-то, не иметь настроения для ситуации.",
+        "card_example": "We hebben geen zin in regen.",
+        "card_example_ru": "Нам не хочется дождя.",
+        "blank": "Zij heeft geen zin ____ die vergadering.",
         "correct": "in",
         "wrong": ["om", "met", "van"],
-        "ru": "Мне не хочется кофе.",
+        "ru": "Ей не хочется на это собрание.",
     },
     "maakt niet uit": {
         "focus": "het maakt niet uit",
         "meaning": "это не важно, без разницы",
         "rule": "Выражение \"het maakt niet uit\" используют, когда выбор или деталь не имеет значения.",
+        "intro_pattern": "het maakt niet uit",
+        "intro_explanation": "используют, когда выбор или деталь не имеет значения.",
+        "card_example": "Het maakt niet uit waar we zitten.",
+        "card_example_ru": "Не важно, где мы сядем.",
         "blank": "Het maakt niet ____ welke trein we nemen.",
         "correct": "uit",
         "wrong": ["op", "mee", "af"],
@@ -440,6 +481,10 @@ _PHRASE_FOCUS_FALLBACKS = {
         "focus": "dat is de druppel",
         "meaning": "это последняя капля",
         "rule": "Выражение \"dat is de druppel\" означает последнюю неприятность, после которой терпение заканчивается.",
+        "intro_pattern": "dat is de druppel",
+        "intro_explanation": "последняя неприятность, после которой терпение заканчивается.",
+        "card_example": "Nog een boete, dat is de druppel.",
+        "card_example_ru": "Ещё один штраф — это последняя капля.",
         "blank": "Nu is dat echt de ____.",
         "correct": "druppel",
         "wrong": ["regen", "dag", "vraag"],
@@ -449,28 +494,40 @@ _PHRASE_FOCUS_FALLBACKS = {
         "focus": "ik heb er genoeg van",
         "meaning": "мне надоело, с меня хватит",
         "rule": "Выражение \"ergens genoeg van hebben\" значит, что человеку что-то надоело или он больше не хочет это терпеть.",
-        "blank": "Ik heb er genoeg ____.",
+        "intro_pattern": "ergens genoeg van hebben",
+        "intro_explanation": "говорят, когда что-то надоело и человек больше не хочет это терпеть.",
+        "card_example": "Wij hebben genoeg van deze discussie.",
+        "card_example_ru": "Нам надоела эта дискуссия.",
+        "blank": "Zij heeft genoeg ____ het lawaai.",
         "correct": "van",
         "wrong": ["in", "op", "mee"],
-        "ru": "С меня хватит.",
+        "ru": "Ей надоел шум.",
     },
     "zin om": {
         "focus": "zin hebben om",
         "meaning": "хотеть что-то сделать, иметь желание",
         "rule": "Конструкция \"zin hebben om te + infinitief\" говорит о желании сделать действие.",
-        "blank": "Wij hebben zin ____ te wandelen.",
+        "intro_pattern": "zin hebben om te + инфинитив",
+        "intro_explanation": "хотеть что-то сделать, иметь настроение или желание для действия.",
+        "card_example": "Ik heb zin om te wandelen.",
+        "card_example_ru": "Мне хочется пойти гулять.",
+        "blank": "Wij hebben zin ____ te koken.",
         "correct": "om",
         "wrong": ["in", "van", "met"],
-        "ru": "Нам хочется погулять.",
+        "ru": "Нам хочется готовить.",
     },
     "bezig met": {
         "focus": "bezig zijn met",
         "meaning": "быть занятым чем-то, заниматься чем-то",
         "rule": "Конструкция \"bezig zijn met\" показывает, чем человек сейчас занят.",
-        "blank": "Zij is bezig ____ haar huiswerk.",
+        "intro_pattern": "bezig zijn met + существительное",
+        "intro_explanation": "показывает, чем человек сейчас занят.",
+        "card_example": "Ik ben bezig met mijn presentatie.",
+        "card_example_ru": "Я занимаюсь своей презентацией.",
+        "blank": "We zijn bezig ____ de planning.",
         "correct": "met",
         "wrong": ["om", "in", "van"],
-        "ru": "Она занимается домашним заданием.",
+        "ru": "Мы занимаемся планированием.",
     },
 }
 
@@ -507,7 +564,8 @@ def _phrase_card_has_placeholder(card):
         "phrase", "translation_ru", "focus_unit", "focus_explanation_ru", "rule_ru", "usage_note_ru",
         "blank_phrase", "test_blank_phrase", "test_sentence", "test_full_phrase", "correct",
         "correct_answer", "target_token", "sentence_ru", "test_sentence_ru", "construction",
-        "construction_meaning", "short_rule", "detail", "explanation",
+        "construction_meaning", "intro_pattern", "intro_explanation", "card_example", "card_example_ru",
+        "short_rule", "detail", "explanation",
     )
     for key in keys:
         if _looks_like_ui_placeholder(card.get(key)):
@@ -592,6 +650,34 @@ def _phrase_repeats_source(learn_phrase, blank_phrase, correct):
     return (overlap / max(1, len(learn_tokens))) > 0.60
 
 
+def _phrase_text_repeats_source(source, candidate):
+    source_norm = _normalize_phrase_for_compare(source)
+    candidate_norm = _normalize_phrase_for_compare(candidate)
+    if not source_norm or not candidate_norm:
+        return True
+    if source_norm == candidate_norm:
+        return True
+    source_tokens = source_norm.split()
+    candidate_tokens = candidate_norm.split()
+    if not source_tokens or not candidate_tokens:
+        return True
+    candidate_counts = {}
+    for token in candidate_tokens:
+        candidate_counts[token] = candidate_counts.get(token, 0) + 1
+    overlap = 0
+    for token in source_tokens:
+        if candidate_counts.get(token, 0) > 0:
+            overlap += 1
+            candidate_counts[token] -= 1
+    if len(source_tokens) <= 4:
+        source_set = set(source_tokens)
+        new_tokens = [token for token in candidate_tokens if token not in source_set]
+        return len(new_tokens) < 2
+    source_set = set(source_tokens)
+    new_tokens = [token for token in candidate_tokens if token not in source_set]
+    return (overlap / max(1, len(source_tokens))) > 0.60 and len(new_tokens) < 2
+
+
 def _phrase_blank_repeats_target(blank_phrase, correct):
     visible_tokens = _phrase_tokens(str(blank_phrase or "").replace("____", " "))
     target_tokens = set(_phrase_tokens(correct))
@@ -601,7 +687,9 @@ def _phrase_blank_repeats_target(blank_phrase, correct):
 def _filter_phrase_other_forms(other_forms, card):
     if not other_forms:
         return []
-    main = " ".join(str(card.get(k) or "").lower() for k in ("construction", "construction_meaning", "short_rule"))
+    main = " ".join(str(card.get(k) or "").lower() for k in (
+        "construction", "construction_meaning", "intro_pattern", "intro_explanation", "short_rule",
+    ))
     filtered = []
     for item in other_forms:
         pos = str(item.get("pos") or "").strip()
@@ -627,6 +715,10 @@ def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
     target = str(card.get("target_token") or correct).strip()
     construction = str(card.get("focus_unit") or card.get("construction") or "").strip()
     construction_meaning = str(card.get("focus_explanation_ru") or card.get("construction_meaning") or "").strip()
+    intro_pattern = str(card.get("intro_pattern") or construction).strip()
+    intro_explanation = str(card.get("intro_explanation") or construction_meaning or card.get("short_rule") or "").strip()
+    card_example = str(card.get("card_example") or "").strip()
+    card_example_ru = str(card.get("card_example_ru") or "").strip()
     short_rule = str(card.get("rule_ru") or card.get("usage_note_ru") or card.get("short_rule") or "").strip()
     test_ru = str(card.get("test_sentence_ru") or card.get("sentence_ru") or "").strip()
     wrong = _clean_phrase_options(correct, list(card.get("wrong") or []), needed=3)
@@ -642,9 +734,20 @@ def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
     )
     if any(self_check.get(k) is not True for k in required_checks):
         return False
-    if not all([learn_phrase, learn_ru, blank, full, correct, target, construction, construction_meaning, short_rule, test_ru]):
+    if not all([
+        learn_phrase, learn_ru, blank, full, correct, target, construction, construction_meaning,
+        intro_pattern, intro_explanation, card_example, card_example_ru, short_rule, test_ru,
+    ]):
         return False
-    if not _has_cyrillic(learn_ru) or not _has_cyrillic(construction_meaning) or not _has_cyrillic(short_rule):
+    if (
+        not _has_cyrillic(learn_ru)
+        or not _has_cyrillic(construction_meaning)
+        or not _has_cyrillic(intro_explanation)
+        or not _has_cyrillic(card_example_ru)
+        or not _has_cyrillic(short_rule)
+    ):
+        return False
+    if _normalize_phrase_for_compare(intro_pattern) == _normalize_phrase_for_compare(intro_explanation):
         return False
     if "____" not in blank:
         return False
@@ -657,6 +760,10 @@ def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
     if _phrase_repeats_source(learn_phrase, blank, correct):
         return False
     if _phrase_blank_repeats_target(blank, correct):
+        return False
+    if _phrase_text_repeats_source(learn_phrase, card_example):
+        return False
+    if _normalize_phrase_for_compare(card_example) == _normalize_phrase_for_compare(full):
         return False
 
     known_focus = _known_phrase_focus_unit(learn_phrase)
@@ -695,7 +802,12 @@ async def _validate_phrase_card_semantics(phrase, ru, language, card):
 Русский перевод учебной фразы: {ru}
 Паттерн: {card.get("construction") or ""}
 Значение паттерна: {card.get("construction_meaning") or ""}
+Строка разбора для пользователя: {card.get("intro_pattern") or ""}
+Объяснение в разборе: {card.get("intro_explanation") or ""}
 Целевой токен: {card.get("target_token") or card.get("correct") or ""}
+
+Пример в учебной карточке: {card.get("card_example") or ""}
+Перевод примера: {card.get("card_example_ru") or ""}
 
 Тестовая фраза с пропуском: {card.get("blank_phrase") or ""}
 Полная тестовая фраза: {card.get("test_full_phrase") or ""}
@@ -713,6 +825,9 @@ async def _validate_phrase_card_semantics(phrase, ru, language, card):
 - паттерн не присутствует в учебной фразе;
 - target_token используется не в той роли;
 - смешаны разные значения одного слова;
+- разбор после заголовка повторяет паттерн или перевод и не добавляет новой информации;
+- пример в учебной карточке не использует тот же паттерн;
+- пример в учебной карточке копирует учебную фразу или тестовую фразу;
 - тестовая фраза проверяет другое правило;
 - тестовая фраза копирует учебную.
 """
@@ -760,6 +875,10 @@ def _fallback_phrase_quiz_card(phrase, ru, language):
         "test_full_phrase": _phrase_full_from_blank(blank_phrase, correct),
         "construction": spec["focus"],
         "construction_meaning": spec["meaning"],
+        "intro_pattern": spec.get("intro_pattern") or spec["focus"],
+        "intro_explanation": spec.get("intro_explanation") or spec["meaning"],
+        "card_example": spec.get("card_example") or "",
+        "card_example_ru": spec.get("card_example_ru") or "",
         "short_rule": spec["rule"],
         "detail": spec["rule"],
         "other_forms": [],
@@ -1103,10 +1222,10 @@ async def _render_phrase_quiz(bot, cid):
     msg = learning_ui.phrase_intro_card(
         phrase,
         ru,
-        card.get("construction") or "",
-        card.get("construction_meaning") or "",
-        card.get("short_rule") or "",
-        card.get("other_forms") or [],
+        card.get("intro_pattern") or card.get("construction") or "",
+        card.get("intro_explanation") or card.get("construction_meaning") or card.get("short_rule") or "",
+        card.get("card_example") or "",
+        card.get("card_example_ru") or "",
     )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🧩 Тест", callback_data="phrase_intro_test")],
@@ -1744,6 +1863,110 @@ def _kind_of(term):
     t = re.sub(r"^(de|het|een|the|a|an)\s+", "", (term or "").strip().lower())
     return "word" if len(t.split()) <= 1 else "phrase"
 
+_NL_IK_INFINITIVE_FIXES = {
+    "begrijpen": "begrijp",
+    "beginnen": "begin",
+    "behalen": "behaal",
+    "beïnvloeden": "beïnvloed",
+    "bekijken": "bekijk",
+    "benadrukken": "benadruk",
+    "beoordelen": "beoordeel",
+    "beperken": "beperk",
+    "bereiken": "bereik",
+    "beschouwen": "beschouw",
+    "beschrijven": "beschrijf",
+    "beslissen": "beslis",
+    "bespreken": "bespreek",
+    "betalen": "betaal",
+    "betekenen": "beteken",
+    "bevorderen": "bevorder",
+    "bewijzen": "bewijs",
+    "blijven": "blijf",
+    "denken": "denk",
+    "doen": "doe",
+    "eisen": "eis",
+    "gaan": "ga",
+    "gebruiken": "gebruik",
+    "geven": "geef",
+    "halen": "haal",
+    "handhaven": "handhaaf",
+    "hebben": "heb",
+    "helpen": "help",
+    "herhalen": "herhaal",
+    "herkennen": "herken",
+    "hoeven": "hoef",
+    "houden": "houd",
+    "kiezen": "kies",
+    "kijken": "kijk",
+    "kloppen": "klop",
+    "komen": "kom",
+    "kopen": "koop",
+    "kunnen": "kan",
+    "leren": "leer",
+    "lezen": "lees",
+    "liggen": "lig",
+    "lopen": "loop",
+    "luisteren": "luister",
+    "maken": "maak",
+    "mogen": "mag",
+    "moeten": "moet",
+    "nemen": "neem",
+    "onderbouwen": "onderbouw",
+    "onderzoeken": "onderzoek",
+    "onderscheiden": "onderscheid",
+    "ontmoeten": "ontmoet",
+    "ontwikkelen": "ontwikkel",
+    "overtuigen": "overtuig",
+    "overwegen": "overweeg",
+    "praten": "praat",
+    "proberen": "probeer",
+    "reageren": "reageer",
+    "rechtvaardigen": "rechtvaardig",
+    "reizen": "reis",
+    "schatten": "schat",
+    "slapen": "slaap",
+    "spreken": "spreek",
+    "staan": "sta",
+    "streven": "streef",
+    "veranderen": "verander",
+    "verbeteren": "verbeter",
+    "vergeten": "vergeet",
+    "vermijden": "vermijd",
+    "veronderstellen": "veronderstel",
+    "voorkomen": "voorkom",
+    "vragen": "vraag",
+    "wachten": "wacht",
+    "werken": "werk",
+    "weten": "weet",
+    "willen": "wil",
+    "zeggen": "zeg",
+    "zien": "zie",
+    "zijn": "ben",
+    "zitten": "zit",
+    "zoeken": "zoek",
+    "zullen": "zal",
+}
+
+_NL_IK_INFINITIVE_RE = re.compile(r"^(\s*ik\s+)([A-Za-zÀ-ÖØ-öø-ÿ]+)(\b.*)$", re.I)
+
+def _normalize_dutch_phrase(term):
+    """Correct the high-confidence learner error "Ik + infinitive"."""
+    phrase = re.sub(r"\s+", " ", (term or "").strip())
+    m = _NL_IK_INFINITIVE_RE.match(phrase)
+    if not m:
+        return phrase, ""
+    fixed_verb = _NL_IK_INFINITIVE_FIXES.get(m.group(2).casefold())
+    if not fixed_verb:
+        return phrase, ""
+    fixed = f"{m.group(1)}{fixed_verb}{m.group(3)}"
+    return _cap(fixed.strip()), "После ik нужен личный глагол, а не инфинитив."
+
+def _normalize_dict_term(lang, kind, term):
+    term = re.sub(r"\s+", " ", (term or "").strip())
+    if lang == "nl" and kind == "phrase":
+        return _normalize_dutch_phrase(term)
+    return term, ""
+
 _DICT_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|сохранить|запомни|запомнить|внеси|закинь)\b", re.I)
 _DICT_WORD_RE = re.compile(r"\b(?:в\s+)?(?:мой\s+)?(?:словар[ьяьею]*|обучени[еяю]|тренировк[ауиах]*)\b", re.I)
 _DICT_LEADING_RE = re.compile(r"^\s*в\s+(?:мой\s+)?словар[ьяьею]*\b", re.I)
@@ -1933,7 +2156,9 @@ async def _normalize_chat_dict_entry(payload, lang_hint="nl", source_text=""):
 - Глаголы сохраняй в инфинитиве; английские глаголы — с to, если это словарная форма.
 - Прилагательные сохраняй в базовой форме.
 - Устойчивые выражения сохраняй целиком в базовой форме.
-- Фразы сохраняй естественно, без сокращений и без изменения смысла.
+- Фразы сохраняй естественно, грамматически правильно, без сокращений и без изменения смысла.
+- Для нидерландских фраз проверяй согласование подлежащего и сказуемого:
+  "Ik bereiken mijn doel" нельзя; правильно "Ik bereik mijn doel".
 - ru должен переводить именно base_form, с учётом части речи и значения.
 - Не выдумывай значение. Если слово многозначное, редкое, написано с ошибкой, не хватает артикля для нидерландского существительного или есть риск неверного перевода, поставь needs_confirmation=true и дай наиболее вероятную трактовку.
 
@@ -1959,12 +2184,17 @@ async def _normalize_chat_dict_entry(payload, lang_hint="nl", source_text=""):
     entry_type = d.get("entry_type") if d.get("entry_type") in ("word", "expression", "phrase") else "word"
     base_form = re.sub(r"\s+", " ", str(d.get("base_form") or "").strip())
     ru = re.sub(r"\s+", " ", str(d.get("ru") or "").strip())
+    kind = _entry_kind(entry_type)
+    if lang == "nl" and kind == "word" and _kind_of(base_form) == "phrase":
+        entry_type = "phrase"
+        kind = "phrase"
+    base_form, _grammar_note = _normalize_dict_term(lang, kind, base_form)
     if not base_form or not ru or _is_bad_dict_item(base_form, ru):
         return None
     return {
         "lang": lang,
         "entry_type": entry_type,
-        "kind": _entry_kind(entry_type),
+        "kind": kind,
         "word": base_form[:120],
         "base_form": base_form[:120],
         "ru": ru[:180],
@@ -1976,6 +2206,19 @@ async def _normalize_chat_dict_entry(payload, lang_hint="nl", source_text=""):
 
 
 def _save_normalized_dict_entry(cid, entry):
+    entry = dict(entry)
+    kind = entry.get("kind") or _entry_kind(entry.get("entry_type"))
+    raw_word = entry.get("word") or entry.get("base_form")
+    if entry.get("lang") == "nl" and kind == "word" and _kind_of(raw_word) == "phrase":
+        kind = "phrase"
+    word, _grammar_note = _normalize_dict_term(entry.get("lang"), kind, raw_word)
+    entry["kind"] = kind
+    if kind == "phrase" and entry.get("entry_type") not in ("expression", "phrase"):
+        entry["entry_type"] = "phrase"
+    else:
+        entry["entry_type"] = entry.get("entry_type") or ("phrase" if kind == "phrase" else "word")
+    entry["word"] = word
+    entry["base_form"] = word
     words = store.get_list(config.DICT_KEY, cid)
     exact_key = _dict_item_key(entry["lang"], entry["kind"], entry["word"])
     loose_key = _dict_loose_key(entry["lang"], entry["entry_type"], entry["word"])
@@ -2079,6 +2322,8 @@ def _parse_batch(text, lang_hint):
             "перевод клади в ru. Для КАЖДОГО элемента определи: lang (nl - нидерландский или en - английский), "
             "kind (word - одно слово, в т.ч. существительное с артиклем de/het/the; phrase - выражение из нескольких слов), "
             "и перевод ru на русский. Нидерландские существительные - с артиклем de/het. "
+            "Нидерландские фразы должны быть грамматически правильными: после ik нужна личная форма "
+            "глагола, например Ik bereik mijn doel, а не Ik bereiken mijn doel. "
             f"Если язык элемента неочевиден, ставь \"{lang_hint}\". "
             'Верни ТОЛЬКО JSON: {"items":[{"word":"иностранный термин без перевода","ru":"перевод","lang":"nl|en","kind":"word|phrase"}]}')
     d = ai.llm_json(f"{spec}\n\n{secure.wrap_untrusted(text, 'текст для разбора')}", 1500, tier="cheap")
@@ -2165,6 +2410,7 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
                 ru = translated
         knd = _kind_of(term)   # тип по самому термину (одно слово = слово)
         word = _cap(term)[:80]
+        word, _grammar_note = _normalize_dict_term(lng, knd, word)
         if _is_bad_dict_item(word, ru):
             unrecognized_items.append(word)
             continue
@@ -2216,6 +2462,8 @@ async def add_smart_batch(bot, cid, text, lang="nl"):
         "Разбей текст на отдельные элементы. Для каждого определи тип:\n"
         "- 'word': одно иностранное слово (нидерландское существительное — с артиклем de/het)\n"
         "- 'phrase': выражение из нескольких слов на иностранном языке\n"
+        "Нидерландские фразы возвращай только в грамматически правильной форме: "
+        "Ik bereik mijn doel, не Ik bereiken mijn doel.\n"
         f"Если язык элемента неочевиден, используй '{lang}'.\n"
         'Верни ТОЛЬКО JSON: {"items":[{"word":"иностранный термин или фраза","ru":"перевод","lang":"nl|en","kind":"word|phrase"}]}'
     )
@@ -2248,6 +2496,7 @@ async def add_smart_batch(bot, cid, text, lang="nl"):
                 ru = translated
         knd = "phrase" if kind == "phrase" else _kind_of(term)
         word = _cap(term)[:80]
+        word, _grammar_note = _normalize_dict_term(lng, knd, word)
         if _is_bad_dict_item(word, ru):
             unrecognized_items.append(word)
             continue
@@ -2771,12 +3020,19 @@ def _dict_kind(w):
 def _dict_lang(w):
     return w.get("lang", "nl") if isinstance(w, dict) else "nl"
 
+def _dict_learning_kind(w):
+    kind = _dict_kind(w)
+    term = _w_field(w, "word", "nl", "en") if isinstance(w, dict) else str(w)
+    if _dict_lang(w) == "nl" and _kind_of(term) == "phrase":
+        return "phrase"
+    return kind
+
 def _dict_counts(cid):
     words = _ensure_dict(cid)
     out = {"nl": {"word": 0, "phrase": 0}, "en": {"word": 0, "phrase": 0}}
     for w in words:
         lang = "en" if _dict_lang(w) == "en" else "nl"
-        out[lang][_dict_kind(w)] += 1
+        out[lang][_dict_learning_kind(w)] += 1
     return out
 
 async def send_dict(bot, cid, back="m_notes"):
@@ -2806,7 +3062,6 @@ async def send_dict_lang(bot, cid, lang, back="m_dict_settings"):
             InlineKeyboardButton("❌ Фраза", callback_data=f"a_dictedit_{lang}_phrase"),
         ],
         [InlineKeyboardButton("✏️ Добавить слово или фразу", callback_data=f"a_dictadd_smart_{lang}")],
-        [InlineKeyboardButton("🩹 Проверить словарь", callback_data=f"a_dictcheck_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ]
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
@@ -2884,8 +3139,8 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
         msg = learning_ui.morning_words(flag, method, is_read_aloud=method.startswith("Прочитай вслух"), empty_hint=True)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
         return
-    word_items = [w for w in pool if _dict_kind(w) == "word"]
-    phrase_items = [w for w in pool if _dict_kind(w) == "phrase"]
+    word_items = [w for w in pool if _dict_learning_kind(w) == "word"]
+    phrase_items = [w for w in pool if _dict_learning_kind(w) == "phrase"]
     method = _morning_method_line(method, word_items, phrase_items)
     chosen_phrases = _r.sample(phrase_items, min(2, len(phrase_items)))
     chosen_words = _r.sample(word_items, min(3, len(word_items)))
@@ -2899,6 +3154,7 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
     if chosen_phrases:
         for w in chosen_phrases:
             word = _cap(_w_field(w, "word", "nl", "en"))
+            word, _grammar_note = _normalize_dict_term(lang_code, "phrase", word)
             ru = _w_field(w, "ru")
             phrase_lines.append((word, ru))
             try:

@@ -1592,7 +1592,7 @@ def _concert_place_name(name, cc=""):
         return "Нидерландах"
     return str(name or "твоей стране").strip()
 
-_CONCERTS_CACHE_TTL = 7 * 86400  # неделя — кэш обновляется job'ом по воскресеньям перед рассылкой
+_CONCERTS_CACHE_TTL = 7 * 86400  # неделя — кэш обновляется job'ом по воскресеньям перед уведомлением
 
 
 def _concerts_cache_get(cid, cc):
@@ -1626,7 +1626,7 @@ async def _fetch_concerts(artists, cc, cname):
 
 async def refresh_concerts_cache(cid):
     """Прогревает недельный кэш концертов пользователя — вызывается job'ом по воскресеньям
-    перед рассылкой «Афиша недели», чтобы сама рассылка и последующие «Концерты» не ждали API."""
+    перед уведомлением «Афиша недели», чтобы само уведомление и последующие «Концерты» не ждали API."""
     artists = _ensure_artists(cid)
     if not artists or not config.TICKETMASTER_API_KEY:
         return
@@ -1863,7 +1863,7 @@ async def send_weekly_events(bot, cid):
     date_to_str = period_end.isoformat()
 
     # --- Концерты ---
-    # Читаем недельный кэш (обновлён job'ом refresh_concerts_cache перед этой рассылкой),
+    # Читаем недельный кэш (обновлён job'ом refresh_concerts_cache перед этим уведомлением),
     # чтобы не делать живой запрос к Ticketmaster по всем артистам прямо в момент отправки.
     concert_items = []
     if config.TICKETMASTER_API_KEY:

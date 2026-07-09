@@ -11,7 +11,7 @@ def profile():
 
 def notifications():
     b = MessageBuilder()
-    b.section(ui_label("broadcasts", "Рассылки"))
+    b.section(ui_label("broadcasts", "Уведомления"))
     b.line("Нажми для включения/выключения. ✅ — включено.")
     return b.build_stripped()
 

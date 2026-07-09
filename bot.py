@@ -432,9 +432,6 @@ async def answer_callback(update, context):
                 await learning.send_dict_lang(bot, cid, "nl", back="a_dict_mydata")
             elif act == "dictlang_en_from_mydata":
                 await learning.send_dict_lang(bot, cid, "en", back="a_dict_mydata")
-            elif act.startswith("dictcheck_"):
-                lang = act.split("_")[1]
-                await cleanup.open_cleanup(bot, cid, f"d_broken_{lang}")
             elif act.startswith("dictadd_smart_"):
                 lang = act.split("_")[2]
                 store.pending_input[cid] = f"dictadd_smart_{lang}"
@@ -1003,8 +1000,8 @@ async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_checkin_evening failed for cid=%s", cid)
 
 async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
-    """Прогревает недельный кэш концертов перед рассылкой «Афиша недели» (10:00 вс),
-    чтобы сама рассылка и последующие интерактивные «Концерты» читали кэш, а не ждали Ticketmaster."""
+    """Прогревает недельный кэш концертов перед уведомлением «Афиша недели» (10:00 вс),
+    чтобы само уведомление и последующие интерактивные «Концерты» читали кэш, а не ждали Ticketmaster."""
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "weekly_events"):
             continue
@@ -1033,7 +1030,7 @@ async def job_favorite_artists(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_favorite_artists failed for cid=%s", cid)
 
 async def job_personal_news(context: ContextTypes.DEFAULT_TYPE):
-    """Отдельная рассылка новостей; не часть утреннего брифа и работает только по настройке."""
+    """Отдельное уведомление новостей; не часть утреннего брифа и работает только по настройке."""
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "personal_news"):
             continue

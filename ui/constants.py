@@ -56,7 +56,7 @@ UI_EMOJI = {
     "tests": "🧪",
     "history": "📜",
     "profile": "👤",
-    "broadcasts": "📬",
+    "broadcasts": "🔔",
     "priorities": "🎯",
     "cuisines": "🍽",
     "clothing_style": "👟",

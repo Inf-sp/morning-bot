@@ -164,26 +164,51 @@ def train_result(state, idx, correct_idx, options, chosen_fl=""):
     return msg
 
 
-def phrase_intro_card(phrase, sentence_ru, construction, construction_meaning, rule_ru="", other_forms=None):
+def _strip_repeated_pattern(pattern, explanation):
+    pattern = str(pattern or "").strip()
+    explanation = str(explanation or "").strip()
+    if not pattern or not explanation:
+        return explanation
+    low_pattern = pattern.casefold()
+    low_explanation = explanation.casefold()
+    if low_explanation == low_pattern:
+        return ""
+    for sep in (" — ", " - ", " = ", ": "):
+        prefix = f"{low_pattern}{sep.casefold()}"
+        if low_explanation.startswith(prefix):
+            return explanation[len(pattern) + len(sep):].strip()
+    return explanation
+
+
+def phrase_intro_card(phrase, sentence_ru, pattern, explanation, example="", example_ru=""):
     """Этап 1 тренажёра фраз: фраза целиком + разбор устойчивой конструкции, без пропусков."""
+    pattern = str(pattern or "").strip()
+    explanation = _strip_repeated_pattern(pattern, explanation)
+    example = str(example or "").strip()
+    example_ru = str(example_ru or "").strip()
+
     b = MessageBuilder()
     b.section("🧩 Фраза-тренажёр")
     b.spacer()
-    b.quote(str(phrase or "").strip())
+    b.line(str(phrase or "").strip())
     if sentence_ru:
         b.line(f"Перевод: {str(sentence_ru).strip()}")
 
-    if construction:
+    if pattern or explanation:
         b.spacer()
-        b.tip(construction)
-        if construction_meaning:
-            b.text_line(f" = {str(construction_meaning).strip()}")
-            b.newline()
+        b.section("💡 Разбор")
+        b.spacer()
+        if pattern and explanation:
+            b.line(f"{pattern} — {explanation}")
+        else:
+            b.line(pattern or explanation)
 
-    rule_ru = str(rule_ru or "").strip()
-    if rule_ru:
+    if example:
         b.spacer()
-        b.line(rule_ru)
+        b.line("Пример:")
+        b.line(example)
+        if example_ru:
+            b.line(f"→ {example_ru}")
 
     b.spacer()
     b.text_line("Дальше проверим это выражение на новом примере.")
@@ -371,5 +396,5 @@ def learning_settings(active_language, active_level):
     b.bold(active_level)
     b.newline()
     b.spacer()
-    b.text_line("Эти настройки влияют на тренажёры, «Живой язык» и обучающие рассылки.")
+    b.text_line("Эти настройки влияют на тренажёры, «Живой язык» и обучающие уведомления.")
     return b.build()

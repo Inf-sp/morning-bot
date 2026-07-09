@@ -278,7 +278,7 @@ def user_card(name, city, cid, onboarded, last_seen, active_days, total_msgs, no
     b.metric("Последний вход", last_seen.split(": ", 1)[-1] if ": " in last_seen else last_seen)
     b.metric("Активных дней", f"{active_days} / 30")
     b.metric("Сообщений всего", total_msgs)
-    b.metric("Рассылки", f"{notif_on} из {notif_total} вкл")
+    b.metric("Уведомления", f"{notif_on} из {notif_total} вкл")
     return b.build_stripped()
 
 

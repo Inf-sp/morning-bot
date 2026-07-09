@@ -171,7 +171,7 @@ async def send_home(bot, cid):
 
 
 class _NoKbBot:
-    """Обёртка для push-уведомлений: убирает кнопки, как в плановых рассылках."""
+    """Обёртка для push-уведомлений: убирает кнопки, как в плановых уведомлениях."""
     def __init__(self, bot):
         self._bot = bot
 
@@ -186,10 +186,10 @@ class _NoKbBot:
 
 
 async def send_scheduled_notification(bot, cid, kind):
-    """Отправить ровно то уведомление, которое уходит из плановой рассылки."""
+    """Отправить ровно то уведомление, которое уходит из планового уведомления."""
     if kind == "morning_brief":
         import myday as _m
-        # force=False: если пользователь уже открывал «Мой день» сегодня, рассылка
+        # force=False: если пользователь уже открывал «Мой день» сегодня, уведомление
         # переиспользует готовый дневной кэш вместо повторной сборки (экономит AI/API).
         await _m.send_plany(_NoKbBot(bot), cid, force=False, show_loading=False)
     elif kind == "weather_warn":
@@ -240,7 +240,7 @@ async def send_scheduled_notification(bot, cid, kind):
 
 
 async def _run_notif_test(bot, cid, kind) -> bool:
-    """Предпросмотр уведомления: вызывает тот же код, что и плановая рассылка.
+    """Предпросмотр уведомления: вызывает тот же код, что и плановое уведомление.
     Возвращает True/False — вызывающий сам решает, что показать администратору."""
     try:
         await send_scheduled_notification(bot, cid, kind)
@@ -1042,14 +1042,14 @@ async def export_notes(bot, cid):
 async def send_notes(bot, cid):
     rows = [
         [InlineKeyboardButton(ui_label("profile", "Профиль"), callback_data="set_profile"),
-         InlineKeyboardButton(ui_label("broadcasts", "Рассылки"), callback_data="set_notif")],
+         InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
+        [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton(ui_label("wardrobe", "Гардероб"), callback_data="set_wardrobe_mydata"),
          InlineKeyboardButton(ui_label("food", "Готовка"), callback_data="set_food")],
         [InlineKeyboardButton(ui_label("learning", "Обучение"), callback_data="set_learning_hub"),
          InlineKeyboardButton(ui_label("health", "Здоровье"), callback_data="set_health")],
         [InlineKeyboardButton(ui_label("travel", "Путешествия"), callback_data="set_travel"),
          InlineKeyboardButton(ui_label("leisure", "Досуг"), callback_data="set_mydata_leisure")],
-        [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
     ]
     msg = settings_ui.settings_home()
     await bot.send_message(chat_id=cid, entities=msg.entities,
