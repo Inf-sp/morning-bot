@@ -15,11 +15,13 @@ import config
 import store
 import weather
 
+NOW_TS = int(weather.datetime.now(weather.TZ).replace(hour=8, minute=0, second=0, microsecond=0).timestamp())
+
 
 class _Resp:
     def __init__(self, status_code=200, json_data=None, text=""):
         self.status_code = status_code
-        self._json = json_data or {"data": [{"dt": 1_704_067_200, "temp": 8.0, "weather": [{"id": 800}]}]}
+        self._json = json_data or {"data": [{"dt": NOW_TS, "temp": 8.0, "weather": [{"id": 800}]}]}
         self.text = text
         self.reason = "error"
 
@@ -31,16 +33,16 @@ class _Resp:
         return self._json
 
 
-CURRENT_OK = {"data": [{"dt": 1_704_067_200, "temp": 8.4, "feels_like": 6.8, "weather": [{"id": 500}], "alerts": []}]}
-HOURLY_OK = {"data": [{"dt": 1_704_067_200, "temp": 8.4, "humidity": 81, "pop": 0.7, "rain": {"1h": 0.4}, "wind_speed": 6.1, "weather": [{"id": 500}]}]}
-DAILY_OK = {"data": [{"dt": 1_704_067_200, "temp": {"max": 9.1, "min": 4.2}, "pop": 0.6, "rain": 1.2, "wind_speed": 7.0, "weather": [{"id": 500}]}]}
+CURRENT_OK = {"data": [{"dt": NOW_TS, "temp": 8.4, "feels_like": 6.8, "weather": [{"id": 500}], "alerts": []}]}
+HOURLY_OK = {"data": [{"dt": NOW_TS, "temp": 8.4, "humidity": 81, "pop": 0.7, "rain": {"1h": 0.4}, "wind_speed": 6.1, "weather": [{"id": 500}]}]}
+DAILY_OK = {"data": [{"dt": NOW_TS, "temp": {"max": 9.1, "min": 4.2}, "pop": 0.6, "rain": 1.2, "wind_speed": 7.0, "weather": [{"id": 500}]}]}
 
 
 def _reset():
     config.DATABASE_URL = ""
     weather._WX_CACHE.clear()
     for key in list(store._mem.keys()):
-        if str(key).startswith("weather_usage:"):
+        if str(key).startswith("weather_usage:") or key == config.WEATHER_CACHE_KEY:
             del store._mem[key]
 
 
@@ -191,12 +193,87 @@ def test_hard_limit_blocks_new_http():
 
 def test_cache_available_when_blocked():
     _reset()
-    weather._WX_CACHE[(52.37, 4.89, 2)] = (__import__("time").time(), {"provider": "cached"})
+    weather._WX_CACHE[(52.37, 4.89, 2)] = (__import__("time").time(), {
+        "provider": "cached",
+        "daily": {"time": [weather.datetime.now(weather.TZ).strftime("%Y-%m-%d")]},
+    })
     _seed_total(config.WEATHER_HARD_DAILY_LIMIT)
     data = weather.fetch_weather(52.37, 4.89, 2)
     assert data["provider"] == "cached"
     assert _usage()["cache_hits"] == 1
     print("ok: cache remains available when blocked")
+
+
+def test_persistent_cache_survives_memory_reset():
+    _reset()
+
+    def fake_get(url, params=None, timeout=None):
+        if url.endswith("/current"):
+            return _Resp(200, CURRENT_OK)
+        if url.endswith("/timeline/1h"):
+            return _Resp(200, HOURLY_OK)
+        if url.endswith("/timeline/1day"):
+            return _Resp(200, DAILY_OK)
+        raise AssertionError(url)
+
+    weather.requests.get = fake_get
+    weather.fetch_weather(52.37, 4.89, 2)
+    before = _usage()["requests_total"]
+    weather._WX_CACHE.clear()
+
+    def fail_get(url, params=None, timeout=None):
+        raise AssertionError("persistent cache was not used")
+
+    weather.requests.get = fail_get
+    data = weather.fetch_weather(52.37, 4.89, 2)
+    after = _usage()
+    assert data["provider"] == "openweathermap"
+    assert after["requests_total"] == before
+    assert after["cache_hits"] == 1
+    print("ok: persistent weather cache survives memory reset")
+
+
+def test_stale_same_day_cache_used_after_failure():
+    _reset()
+    today = weather.datetime.now(weather.TZ).strftime("%Y-%m-%d")
+    cached = {
+        "provider": "cached",
+        "daily": {"time": [today]},
+    }
+    old_ts = __import__("time").time() - weather._WX_TTL - 5
+    store._mem[config.WEATHER_CACHE_KEY] = {
+        weather._weather_cache_key(52.37, 4.89, 2): {"ts": old_ts, "data": cached}
+    }
+
+    def fail_get(url, params=None, timeout=None):
+        raise requests.exceptions.Timeout("timeout")
+
+    weather.requests.get = fail_get
+    data = weather.fetch_weather(52.37, 4.89, 2)
+    assert data["provider"] == "cached"
+    assert _usage()["requests_failed"] > 0
+    assert _usage()["cache_hits"] >= 1
+    print("ok: stale same-day cache is used after provider failure")
+
+
+def test_previous_day_cache_not_used_as_today():
+    _reset()
+    yesterday = (weather.datetime.now(weather.TZ) - weather.timedelta(days=1)).strftime("%Y-%m-%d")
+    cached = {
+        "provider": "old",
+        "daily": {"time": [yesterday]},
+    }
+    store._mem[config.WEATHER_CACHE_KEY] = {
+        weather._weather_cache_key(52.37, 4.89, 2): {"ts": __import__("time").time(), "data": cached}
+    }
+    _seed_total(config.WEATHER_HARD_DAILY_LIMIT)
+    try:
+        weather.fetch_weather(52.37, 4.89, 2)
+    except weather.WeatherDailyLimitExceeded:
+        pass
+    else:
+        raise AssertionError("previous-day weather cache was used as today's forecast")
+    print("ok: previous-day cache is not used as today's forecast")
 
 
 def test_amsterdam_date_key():
@@ -218,5 +295,8 @@ if __name__ == "__main__":
     test_last_free_call_allowed()
     test_hard_limit_blocks_new_http()
     test_cache_available_when_blocked()
+    test_persistent_cache_survives_memory_reset()
+    test_stale_same_day_cache_used_after_failure()
+    test_previous_day_cache_not_used_as_today()
     test_amsterdam_date_key()
     print("ok: weather usage accounting")

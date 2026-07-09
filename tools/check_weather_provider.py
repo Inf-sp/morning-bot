@@ -14,6 +14,8 @@ import config
 import weather
 import requests
 
+NOW_TS = int(weather.datetime.now(weather.TZ).replace(hour=8, minute=0, second=0, microsecond=0).timestamp())
+
 
 class _Resp:
     def __init__(self, status_code=200, json_data=None, text=""):
@@ -32,7 +34,7 @@ class _Resp:
 
 CURRENT_OK = {
     "data": [{
-        "dt": 1_704_067_200,
+        "dt": NOW_TS,
         "temp": 8.4,
         "feels_like": 6.8,
         "weather": [{"id": 500}],
@@ -41,7 +43,7 @@ CURRENT_OK = {
 }
 HOURLY_OK = {
     "data": [{
-        "dt": 1_704_067_200,
+        "dt": NOW_TS,
         "temp": 8.4,
         "humidity": 81,
         "pop": 0.7,
@@ -54,7 +56,7 @@ HOURLY_OK = {
 }
 DAILY_OK = {
     "data": [{
-        "dt": 1_704_067_200,
+        "dt": NOW_TS,
         "temp": {"max": 9.1, "min": 4.2},
         "pop": 0.6,
         "rain": 1.2,
@@ -77,6 +79,8 @@ def _install_fake_get(responder):
 
 def _reset_cache():
     weather._WX_CACHE.clear()
+    if config.WEATHER_CACHE_KEY in weather.store._mem:
+        del weather.store._mem[config.WEATHER_CACHE_KEY]
 
 
 # 1) успешный ответ One Call 4.0: current + hourly + daily
@@ -186,13 +190,13 @@ def test_missing_precipitation():
     _reset_cache()
     hourly_no_precip = {
         "data": [{
-            "dt": 1_704_067_200, "temp": 8.4, "humidity": 81, "pop": 0.1,
+            "dt": NOW_TS, "temp": 8.4, "humidity": 81, "pop": 0.1,
             "wind_speed": 6.1, "uvi": 1.1, "weather": [{"id": 800}],
         }]
     }
     daily_no_precip = {
         "data": [{
-            "dt": 1_704_067_200, "temp": {"max": 9.1, "min": 4.2}, "pop": 0.1,
+            "dt": NOW_TS, "temp": {"max": 9.1, "min": 4.2}, "pop": 0.1,
             "wind_speed": 7.0, "wind_deg": 240, "uvi": 1.4, "weather": [{"id": 800}],
         }]
     }

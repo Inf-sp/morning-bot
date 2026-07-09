@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from telegram import Update
 
@@ -941,6 +942,22 @@ async def job_weather_warn(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logging.exception("job_weather_warn failed for cid=%s", cid)
 
+
+async def job_warm_weather_cache(context: ContextTypes.DEFAULT_TYPE):
+    seen = set()
+    for cid in access.get_allowed_cids():
+        if not (settings.notif_on(cid, "morning_brief") or settings.notif_on(cid, "weather_warn")):
+            continue
+        try:
+            s = store.get_settings(cid)
+            key = (round(s["lat"], 2), round(s["lon"], 2))
+            if key in seen:
+                continue
+            seen.add(key)
+            await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 2)
+        except Exception:
+            logging.exception("job_warm_weather_cache failed for cid=%s", cid)
+
 async def job_lagom(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "lagom_daily"):
@@ -1120,6 +1137,7 @@ def main():
     jq = app.job_queue
     def _t(hm):
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
+    jq.run_daily(job_warm_weather_cache, time=_t("08:10"), days=tuple(range(7)))   # прогрев погоды перед брифом
     jq.run_daily(job_morning_brief,   time=_t("08:30"), days=tuple(range(7)))   # Мой день без кнопок
     jq.run_daily(job_weather_warn,    time=_t("08:45"), days=tuple(range(7)))
     jq.run_daily(job_lagom,           time=_t("09:30"), days=tuple(range(7)))

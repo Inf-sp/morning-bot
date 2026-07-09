@@ -4,6 +4,7 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from copy import deepcopy
+import time
 import requests
 
 _log = logging.getLogger(__name__)
@@ -38,7 +39,8 @@ DESC = {0: "ясно", 1: "малооблачно", 2: "переменно об�
 
 # Кеш прогноза: один общий ответ OpenWeatherMap на myday/wardrobe/weather в пределах TTL
 _WX_CACHE = {}          # (lat2, lon2, days) -> (ts, json)
-_WX_TTL = 600           # сек
+_WX_TTL = 12 * 3600     # сек: утренний прогноз должен жить хотя бы полдня
+_WX_STALE_TTL = 24 * 3600
 
 
 def _owm_weathercode(weather_id):
@@ -209,6 +211,75 @@ def _safe_error_reason(exc=None, response=None):
     if text:
         return text[:80]
     return "request failed"
+
+
+def _weather_cache_key(lat, lon, days):
+    return f"{round(float(lat), 2):.2f}:{round(float(lon), 2):.2f}:{int(days)}"
+
+
+def _cache_date_ok(data, now=None):
+    """Не используем вчерашний кэш как сегодняшний: myday читает daily[0]."""
+    if not isinstance(data, dict):
+        return False
+    today = (now or datetime.now(TZ)).strftime("%Y-%m-%d")
+    daily = data.get("daily") or {}
+    dates = daily.get("time") or []
+    return bool(dates) and dates[0] == today
+
+
+def _persistent_cache_load(cache_key):
+    cache = store._load(config.WEATHER_CACHE_KEY)
+    if not isinstance(cache, dict):
+        return None
+    entry = cache.get(cache_key)
+    if not isinstance(entry, dict):
+        return None
+    data = entry.get("data")
+    try:
+        ts = float(entry.get("ts") or 0)
+    except (TypeError, ValueError):
+        ts = 0
+    if not ts or not isinstance(data, dict):
+        return None
+    return ts, data
+
+
+def _persistent_cache_save(cache_key, data):
+    cache = store._load(config.WEATHER_CACHE_KEY)
+    if not isinstance(cache, dict):
+        cache = {}
+    now = time.time()
+    # Держим только свежую историю, чтобы KV не разрастался без пользы.
+    clean = {}
+    for k, v in cache.items():
+        if not isinstance(v, dict):
+            continue
+        try:
+            ts = float(v.get("ts") or 0)
+        except (TypeError, ValueError):
+            continue
+        if now - ts <= (_WX_STALE_TTL * 2):
+            clean[k] = v
+    cache = clean
+    cache[cache_key] = {"ts": now, "data": deepcopy(data)}
+    store._save(config.WEATHER_CACHE_KEY, cache)
+
+
+def _weather_cache_get(mem_key, cache_key, *, max_age):
+    now = time.time()
+    hit = _WX_CACHE.get(mem_key)
+    if hit and (now - hit[0]) <= max_age and _cache_date_ok(hit[1]):
+        _mark_weather_cache_hit()
+        return deepcopy(hit[1])
+
+    hit = _persistent_cache_load(cache_key)
+    if hit:
+        ts, data = hit
+        if (now - ts) <= max_age and _cache_date_ok(data):
+            _WX_CACHE[mem_key] = (ts, deepcopy(data))
+            _mark_weather_cache_hit()
+            return deepcopy(data)
+    return None
 
 
 def _usage_mutate(mutator, dt=None):
@@ -391,34 +462,45 @@ def _fetch_alert_details(alert_ids, timeout=15):
 
 
 def fetch_weather(lat, lon, days=2):
-    import time
     days = max(days, 2)
     key = (round(lat, 2), round(lon, 2), days)
-    hit = _WX_CACHE.get(key)
-    if hit and (time.time() - hit[0]) < _WX_TTL:
-        _mark_weather_cache_hit()
-        return hit[1]
+    cache_key = _weather_cache_key(lat, lon, days)
+    cached = _weather_cache_get(key, cache_key, max_age=_WX_TTL)
+    if cached is not None:
+        return cached
     if not config.WEATHER_API_KEY:
+        stale = _weather_cache_get(key, cache_key, max_age=_WX_STALE_TTL)
+        if stale is not None:
+            return stale
         raise Exception("no weather api key")
 
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        fut_current = pool.submit(_onecall_get, "current", lat, lon)
-        fut_hourly = pool.submit(_onecall_get, "timeline/1h", lat, lon)
-        fut_daily = pool.submit(_onecall_get, "timeline/1day", lat, lon)
-        current_payload = fut_current.result()
-        hourly_payload = fut_hourly.result()
-        daily_payload = fut_daily.result()
+    try:
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            fut_current = pool.submit(_onecall_get, "current", lat, lon)
+            fut_hourly = pool.submit(_onecall_get, "timeline/1h", lat, lon)
+            fut_daily = pool.submit(_onecall_get, "timeline/1day", lat, lon)
+            current_payload = fut_current.result()
+            hourly_payload = fut_hourly.result()
+            daily_payload = fut_daily.result()
 
-    current_items = _first_data_item(current_payload)
-    alert_ids = []
-    if current_items:
-        alert_ids = [a.get("id") for a in (current_items[0].get("alerts") or [])
-                     if isinstance(a, dict) and a.get("id")]
-    alerts = _fetch_alert_details(alert_ids)
+        current_items = _first_data_item(current_payload)
+        alert_ids = []
+        if current_items:
+            alert_ids = [a.get("id") for a in (current_items[0].get("alerts") or [])
+                         if isinstance(a, dict) and a.get("id")]
+        alerts = _fetch_alert_details(alert_ids)
 
-    data = _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts)
-    _WX_CACHE[key] = (time.time(), deepcopy(data))
-    return data
+        data = _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts)
+        now = time.time()
+        _WX_CACHE[key] = (now, deepcopy(data))
+        _persistent_cache_save(cache_key, data)
+        return data
+    except Exception:
+        stale = _weather_cache_get(key, cache_key, max_age=_WX_STALE_TTL)
+        if stale is not None:
+            _log.warning("weather: using stale same-day forecast cache after fetch failure")
+            return stale
+        raise
 
 def fetch_current_temp(lat, lon):
     try:
