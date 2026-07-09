@@ -9,6 +9,7 @@ UI_EMOJI = {
     "clothes": "👕",
     "food": "🥣",
     "recipes": "🍽",
+    "version": "🚀",
     "products": "🧊",
     "cook_from": "🥕",
     "learning": "📚",
