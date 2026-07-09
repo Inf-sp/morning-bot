@@ -9,7 +9,7 @@ def _stars(score):
         filled = max(0, min(5, round(int(score) / 20)))
     except (TypeError, ValueError):
         filled = 0
-    return "⭐" * filled + "☆" * (5 - filled)
+    return "⭐️" * filled
 
 
 def improve_card(data):
@@ -61,13 +61,12 @@ def improve_card(data):
     # Что купить
     buy = data.get("buy") or []
     if buy:
-        b.section("🛍 Что купить в первую очередь")
-        medals = ["🥇", "🥈", "🥉", "•", "•"]
+        b.section("Что купить в первую очередь")
         for i, it in enumerate(buy[:5]):
             item = _clean_text(it.get("item")) if isinstance(it, dict) else _clean_text(it)
             why = _finish_dot(it.get("why")) if isinstance(it, dict) else ""
             b.spacer()
-            b.text_line(f"{medals[i]} ")
+            b.text_line(f"{i + 1}. ")
             b.bold(item)
             b.newline()
             if why:
@@ -76,7 +75,7 @@ def improve_card(data):
     # Чего не покупать
     avoid = [a for a in (data.get("avoid") or []) if _clean_text(a)]
     if avoid:
-        b.section("🚫 Что покупать не стоит")
+        b.section("Что покупать не стоит")
         for a in avoid[:3]:
             b.bullet(_finish_dot(a))
 
@@ -95,7 +94,7 @@ def improve_card(data):
     # Потенциал
     potential = _finish_dot(data.get("potential"))
     if potential:
-        b.section("🔮 Потенциал гардероба")
+        b.section("Потенциал гардероба")
         b.line(potential)
 
     return b.build_stripped()
@@ -252,13 +251,13 @@ def entity_card(title, summary="", quote="", bullets=None, final="", bullet_labe
 
 def zone_picker_screen():
     b = MessageBuilder()
-    b.section("🧹 Что удалить")
+    b.section("Что удалить")
     b.line("Выбери категорию.")
     return b.build_stripped()
 
 
 def subcat_picker_screen(zone):
     b = MessageBuilder()
-    b.section(f"🧹 {_clean_text(zone)}")
+    b.section(_clean_text(zone))
     b.line("Выбери подкатегорию.")
     return b.build_stripped()

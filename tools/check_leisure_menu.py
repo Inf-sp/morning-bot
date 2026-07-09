@@ -150,7 +150,7 @@ async def main():
     assert "🎬 В кино сейчас · Нидерланды" in now_playing_text
     assert "• Фильм номер 1 · ужасы · ⭐ 7.1" in now_playing_text
     _assert_button(now_playing_markup, "⬅️ Назад", "m_leisure")
-    assert _buttons(now_playing_markup)[-2] == [("←", "noop"), ("1 / 2", "noop"), ("→", "a_cinema_page_1")]
+    assert _buttons(now_playing_markup)[-2] == [("◀️", "noop"), ("1 / 2", "noop"), ("▶️", "a_cinema_page_1")]
     assert _buttons(now_playing_markup)[0] == [("Фильм номер 1", "a_cinema_open_1")]
 
     empty_bot = SimpleNamespace(send_message=AsyncMock())

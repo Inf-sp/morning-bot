@@ -30,15 +30,15 @@ def day_summary(
         b.line(word_line)
 
     if fact:
-        b.section("🔬 Интересный факт")
+        b.section("Интересный факт")
         b.line(str(fact).strip())
 
     if lifehack:
-        b.section("💡 База знаний")
+        b.section("База знаний")
         b.line(lifehack)
 
     if quote_line:
-        b.section("💭 Цитата")
+        b.section("Цитата")
         b.line(quote_line)
 
     return b.build_stripped()

@@ -18,8 +18,10 @@ _log = logging.getLogger(__name__)
 SURFACES = ("chat", "health", "card", "weather")
 
 # --- детектор эмодзи: соседние эмодзи-символы (с ZWJ/VS16/тоном кожи) = один кластер ---
-_EMOJI_CHAR = (r"[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF"
-               r"←-⇿⌀-⏿⬀-⯿️‍\U0001F3FB-\U0001F3FF]")
+_EMOJI_CHAR = (
+    r"[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF"
+    r"\u2190-\u21FF\u2300-\u23FF\u2B00-\u2BFF\ufe0f\u200d\U0001F3FB-\U0001F3FF]"
+)
 _EMOJI_CLUSTER = re.compile(_EMOJI_CHAR + r"+")
 
 _DISCLAIMER = ("ℹ️ Это общая справочная информация, не диагноз и не назначение - "

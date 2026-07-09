@@ -493,7 +493,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     page = max(0, min(page, pages - 1))
     chunk = items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]
     hint = f"Отметь нужное ✅ и нажми «{_action_label(ctx)}»."
-    lines = [f"🧹 <b>{esc(title)}</b>", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
+    lines = [f"<b>{esc(title)}</b>", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
     _lv_add_label = {
         "lv_movies": "✏️ Добавить фильм",
         "lv_countries": "✏️ Добавить страну",
@@ -507,11 +507,11 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     rows = []
     if ctx == "fridge":
         for idx, lbl in chunk:
-            mark = "✅" if idx in sel else "▫️"
+            mark = "✅" if idx in sel else "□"
             rows.append([InlineKeyboardButton(f"{mark} {lbl[:40]}", callback_data=f"clt_{ctx}_{idx}_{page}")])
     else:
         for idx, lbl in chunk:
-            mark = "✅" if idx in sel else "▫️"
+            mark = "✅" if idx in sel else "□"
             rows.append([InlineKeyboardButton(f"{mark} {lbl[:36]}", callback_data=f"clt_{ctx}_{idx}_{page}")])
     if pages > 1:
         rows.append([
@@ -673,7 +673,7 @@ def _view_items(ctx, cid):
     if ctx == "diary":
         records = store.ensure_list_ids(config.DIARY_KEY, cid)
         items = [(r["id"], f"{r.get('date', '')} — {r.get('text', '')}".strip(" —")) for r in records]
-        return "📝 История самочувствия", items, "m_balance"
+        return "История самочувствия", items, "m_balance"
     return "Чистка", [], "m_learn"
 
 
@@ -801,7 +801,7 @@ async def _render_view(bot, cid, view_id, q=None):
         lines.append("")
     rows = []
     for full_id, lbl in chunk:
-        mark = "✅" if full_id in sel else "▫️"
+        mark = "✅" if full_id in sel else "□"
         rows.append([InlineKeyboardButton(f"{mark} {lbl[:36]}", callback_data=f"clt:{view_id}:{short_of[full_id]}")])
     if pages > 1:
         rows.append([

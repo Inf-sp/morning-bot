@@ -1,5 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from ui.constants import ui_label
+from ui.constants import COUNTRY_EMOJI, ui_label
 import asyncio
 import logging
 import re
@@ -31,13 +31,13 @@ _COLLECT_HINTS = {
         "<i>Например: The xx, Massive Attack, Portishead</i>"
     ),
     "movies": (
-        "🎬 <b>Ещё нет любимых фильмов</b>\n\n"
+        f"{ui_label('cinema', '')} <b>Ещё нет любимых фильмов</b>\n\n"
         "Пришли список фильмов или сериалов, которые тебе понравились, — "
         "подберу похожее.\n\n"
         "<i>Например: Паразиты, Эйфория, Настоящий детектив</i>"
     ),
     "books": (
-        "📚 <b>Ещё нет любимых книг</b>\n\n"
+        f"{ui_label('books', '')} <b>Ещё нет любимых книг</b>\n\n"
         "Пришли список книг, которые ты читал и которые тебе понравились, — "
         "подберу похожее.\n\n"
         "<i>Например: Дюна, Атлант расправил плечи, Идиот</i>"
@@ -48,7 +48,7 @@ async def _ask_collect(bot, cid, kind: str):
     """Показывает экран сбора предпочтений и ставит pending_input."""
     import secure as _sec
     store.pending_input[str(cid)] = f"collect_{kind}"
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить", callback_data="m_leisure")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("Пропустить", callback_data="m_leisure")]])
     await bot.send_message(chat_id=cid, text=_COLLECT_HINTS[kind], parse_mode="HTML", reply_markup=kb)
 
 async def collect_done(bot, cid, kind: str, text: str):
@@ -500,8 +500,8 @@ def _movie_home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать кино", callback_data="movie_reco"),
          InlineKeyboardButton("🎬 Что в кино", callback_data="a_now_playing")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
-         InlineKeyboardButton("😊 По настроению", callback_data="movie_mood_menu")],
+        [InlineKeyboardButton("По жанру", callback_data="movie_genre_menu"),
+         InlineKeyboardButton("По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("Любимое", callback_data="col_cinema_favorites"),
          InlineKeyboardButton("Сохранённое", callback_data="col_cinema_saved")],
         [InlineKeyboardButton("✅ Смотрел", callback_data="col_cinema_watched"),
@@ -559,9 +559,9 @@ def _build_cinema_keyboard(movies, page: int, total_pages: int) -> InlineKeyboar
     prev_cb = f"a_cinema_page_{page - 1}" if page > 0 else "noop"
     next_cb = f"a_cinema_page_{page + 1}" if page + 1 < total_pages else "noop"
     rows.append([
-        InlineKeyboardButton("←", callback_data=prev_cb),
+        InlineKeyboardButton("◀️", callback_data=prev_cb),
         InlineKeyboardButton(f"{page + 1} / {total_pages}", callback_data="noop"),
-        InlineKeyboardButton("→", callback_data=next_cb),
+        InlineKeyboardButton("▶️", callback_data=next_cb),
     ])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     return InlineKeyboardMarkup(rows)
@@ -752,7 +752,7 @@ async def movie_dislike(bot, cid, i):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         _add_unique(config.MOVIE_BLACKLIST_KEY, cid, title)
-        await bot.send_message(chat_id=cid, text=f"Понял, больше не буду рекомендовать «{title}». Вот другой вариант 👇")
+        await bot.send_message(chat_id=cid, text=f"Понял, больше не буду рекомендовать «{title}». Вот другой вариант.")
     await _advance_movie(bot, cid)
 
 def _book_cover(title, title_en=""):
@@ -882,7 +882,7 @@ async def book_dislike(bot, cid, i):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         _add_unique(config.BOOK_BLACKLIST_KEY, cid, title)
-        await bot.send_message(chat_id=cid, text=f"Понял, «{title}» исключил. Вот другая книга 👇")
+        await bot.send_message(chat_id=cid, text=f"Понял, «{title}» исключил. Вот другая книга.")
     try:
         data = await asyncio.to_thread(content_recommend, "book", str(cid))
         items = data.get("items", [])
@@ -910,9 +910,9 @@ async def _advance_movie(bot, cid):
         if not it:
             label = category["reason"]["label"]
             what = "жанре" if category["kind"] == "genre" else "настроение"
-            text = (f"В этом жанре «{label}» пока не нашёл нового. Попробуй другой 👇"
+            text = (f"В этом жанре «{label}» пока не нашёл нового. Попробуй другой."
                     if category["kind"] == "genre" else
-                    f"Под настроение «{label}» пока не нашёл нового. Попробуй другое 👇")
+                    f"Под настроение «{label}» пока не нашёл нового. Попробуй другое.")
             kb = _movie_genre_menu_kb() if category["kind"] == "genre" else _movie_mood_menu_kb()
             await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
             return
@@ -962,12 +962,12 @@ async def _advance_book(bot, cid):
     await _send_book_card(bot, cid, it, ni)
 
 async def send_movie_genre_menu(bot, cid, q=None):
-    text = "🎭 Выбери жанр — подберу фильм или сериал под твой вкус внутри него."
+    text = "Выбери жанр — подберу фильм или сериал под твой вкус внутри него."
     await _show_menu_over_card(bot, cid, text, _movie_genre_menu_kb(), q)
 
 
 async def send_movie_mood_menu(bot, cid, q=None):
-    text = "😊 Какое настроение? Подберу фильм или сериал специально под него."
+    text = "Какое настроение? Подберу фильм или сериал специально под него."
     await _show_menu_over_card(bot, cid, text, _movie_mood_menu_kb(), q)
 
 
@@ -992,11 +992,11 @@ async def _show_menu_over_card(bot, cid, text, kb, q):
 
 # ---------- экран «Предпочтения кино» ----------
 _PREF_GENRES = [(label, gid) for label, gid in _GENRE_ALL]
-_PREF_COUNTRIES = [("🇺🇸 США", "US"), ("🇬🇧 Британия", "GB"), ("🇰🇷 Корея", "KR"),
-                   ("🇯🇵 Япония", "JP"), ("🇫🇷 Франция", "FR"), ("🇩🇪 Германия", "DE")]
-_PREF_TYPE = [("🎬 Фильмы", "movie"), ("📺 Сериалы", "tv"), ("🎲 Без разницы", "")]
-_PREF_STATUS = [("✅ Завершённые", "completed"), ("🔄 Любые", "")]
-_PREF_RECENCY = [("🆕 Новинки", "new"), ("📚 Любые годы", "")]
+_PREF_COUNTRIES = [("США", "US"), ("Британия", "GB"), ("Корея", "KR"),
+                   ("Япония", "JP"), ("Франция", "FR"), ("Германия", "DE")]
+_PREF_TYPE = [(ui_label("cinema", "Фильмы"), "movie"), ("Сериалы", "tv"), ("Без разницы", "")]
+_PREF_STATUS = [("✅ Завершённые", "completed"), ("Любые", "")]
+_PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("6.5", "6.5"), ("7.0", "7.0"), ("7.5", "7.5"), ("8.0", "8.0")]
 
 
@@ -1014,16 +1014,16 @@ def _movie_prefs_kb(cid):
     for i in range(0, len(gbtns), 2):
         rows.append(gbtns[i:i + 2])
     rows.append([InlineKeyboardButton("— Тип —", callback_data="noop")])
-    rows.append([InlineKeyboardButton(("● " if tpref == v else "○ ") + label,
+    rows.append([InlineKeyboardButton(("✅ " if tpref == v else "") + label,
                                       callback_data=f"mpref_type_{v or 'any'}") for label, v in _PREF_TYPE])
     rows.append([InlineKeyboardButton("— Сериалы —", callback_data="noop")])
-    rows.append([InlineKeyboardButton(("● " if spref == v else "○ ") + label,
+    rows.append([InlineKeyboardButton(("✅ " if spref == v else "") + label,
                                       callback_data=f"mpref_status_{v or 'any'}") for label, v in _PREF_STATUS])
     rows.append([InlineKeyboardButton("— Новинки —", callback_data="noop")])
-    rows.append([InlineKeyboardButton(("● " if rpref == v else "○ ") + label,
+    rows.append([InlineKeyboardButton(("✅ " if rpref == v else "") + label,
                                       callback_data=f"mpref_recency_{v or 'any'}") for label, v in _PREF_RECENCY])
     rows.append([InlineKeyboardButton("— Мин. рейтинг —", callback_data="noop")])
-    rows.append([InlineKeyboardButton(("● " if rating == v else "○ ") + f"⭐ {label}",
+    rows.append([InlineKeyboardButton(("✅ " if rating == v else "") + f"⭐️ {label}",
                                       callback_data=f"mpref_rating_{v}") for label, v in _PREF_RATING])
     rows.append([InlineKeyboardButton("— Страны —", callback_data="noop")])
     cbtns = [InlineKeyboardButton(("✅ " if v in csel else "⬜ ") + label,
@@ -1101,7 +1101,7 @@ async def send_movie_by_genre(bot, cid, genre_id):
         await verify.safe_error(bot, cid, e)
         return
     if not it:
-        await bot.send_message(chat_id=cid, text="В этом жанре пока не нашёл нового. Попробуй другой 👇",
+        await bot.send_message(chat_id=cid, text="В этом жанре пока не нашёл нового. Попробуй другой.",
                                reply_markup=_movie_genre_menu_kb())
         return
     await _show_discovered(bot, cid, it, tm, category=category)
@@ -1126,7 +1126,7 @@ async def send_movie_by_mood(bot, cid, mood_key):
         await verify.safe_error(bot, cid, e)
         return
     if not it:
-        await bot.send_message(chat_id=cid, text="Под это настроение пока не нашёл нового. Попробуй другое 👇",
+        await bot.send_message(chat_id=cid, text="Под это настроение пока не нашёл нового. Попробуй другое.",
                                reply_markup=_movie_mood_menu_kb())
         return
     await _show_discovered(bot, cid, it, tm, category=category)
@@ -1220,7 +1220,7 @@ async def movie_love(bot, cid, i):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         _add_unique(config.WATCHLIST_KEY, cid, title)
-        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — в любимые (Кино). Вот ещё вариант 👇")
+        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — в любимые (Кино). Вот ещё вариант.")
     await _advance_movie(bot, cid)
 
 async def movie_seen(bot, cid, i):
@@ -1229,7 +1229,7 @@ async def movie_seen(bot, cid, i):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         _add_unique(config.MOVIE_SEEN_KEY, cid, title)
-        await bot.send_message(chat_id=cid, text=f"✅ «{title}» — уже знакомо, не буду повторять. Вот ещё вариант 👇")
+        await bot.send_message(chat_id=cid, text=f"✅ «{title}» — уже знакомо, не буду повторять. Вот ещё вариант.")
     await _advance_movie(bot, cid)
 
 async def book_love(bot, cid, i):
@@ -1238,7 +1238,7 @@ async def book_love(bot, cid, i):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         _add_unique(config.BOOKS_KEY, cid, title)
-        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — в любимые (Мои книги). Вот ещё вариант 👇")
+        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — в любимые (Мои книги). Вот ещё вариант.")
     await _advance_book(bot, cid)
 
 async def book_seen(bot, cid, i):
@@ -1247,7 +1247,7 @@ async def book_seen(bot, cid, i):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         _add_unique(config.BOOK_SEEN_KEY, cid, title)
-        await bot.send_message(chat_id=cid, text=f"✅ «{title}» — уже знакомо, не буду повторять. Вот ещё вариант 👇")
+        await bot.send_message(chat_id=cid, text=f"✅ «{title}» — уже знакомо, не буду повторять. Вот ещё вариант.")
     await _advance_book(bot, cid)
 
 async def listen_love(bot, cid):
@@ -1256,7 +1256,7 @@ async def listen_love(bot, cid):
     if rec and rec.get("kind") == "listen" and rec["items"]:
         artist = rec["items"][0]
         _add_unique(config.ARTISTS_KEY, cid, artist)
-        await bot.send_message(chat_id=cid, text=f"❤️ «{artist}» — в любимые (Мои музыканты). Вот ещё вариант 👇")
+        await bot.send_message(chat_id=cid, text=f"❤️ «{artist}» — в любимые (Мои музыканты). Вот ещё вариант.")
     await send_listen(bot, cid)
 
 async def listen_seen(bot, cid):
@@ -1265,7 +1265,7 @@ async def listen_seen(bot, cid):
     if rec and rec.get("kind") == "listen" and rec["items"]:
         artist = rec["items"][0]
         _add_unique(config.MUSIC_SEEN_KEY, cid, artist)
-        await bot.send_message(chat_id=cid, text=f"✅ «{artist}» — уже знакомо, не буду повторять. Вот ещё вариант 👇")
+        await bot.send_message(chat_id=cid, text=f"✅ «{artist}» — уже знакомо, не буду повторять. Вот ещё вариант.")
     await send_listen(bot, cid)
 
 async def add_reco(bot, cid, i):
@@ -1409,7 +1409,7 @@ async def add_listen(bot, cid, i):
         if not _note_fav_exists(cid, title):
             store.add_to_list(config.NOTES_KEY, cid,
                               {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": "Музыка", "bucket": "fav"})
-        await bot.send_message(chat_id=cid, text=f"⭐ В закладках «Музыка»: {title}. Вот ещё вариант 👇")
+        await bot.send_message(chat_id=cid, text=f"⭐️ В закладках «Музыка»: {title}. Вот ещё вариант.")
     await send_listen(bot, cid)
 
 def _ensure_artists(cid):
@@ -1704,7 +1704,7 @@ async def send_new_concerts_notif(bot, cid):
         return
     s = store.get_settings(cid)
     cc = (s.get("cc") or "NL").upper()
-    flag = util.flag_from_cc(cc) or "🏳"
+    flag = util.flag_from_cc(cc)
 
     from util import _MONTHS
 
@@ -1739,7 +1739,7 @@ async def send_new_concerts_notif(bot, cid):
 async def find_concerts(bot, cid, mode="home"):
     if not config.TICKETMASTER_API_KEY:
         await bot.send_message(chat_id=cid,
-            text="🎫 Поиск мероприятий требует бесплатный ключ Ticketmaster.\n"
+            text="Поиск мероприятий требует бесплатный ключ Ticketmaster.\n"
                  "Заведи его на developer.ticketmaster.com и добавь на Railway переменную TICKETMASTER_API_KEY.")
         return
     artists = _ensure_artists(cid)
@@ -1748,15 +1748,23 @@ async def find_concerts(bot, cid, mode="home"):
         return
     s = store.get_settings(cid)
     home_cc = (s.get("cc") or "NL").upper()
-    home_flag = util.flag_from_cc(home_cc) or "🏳"
+    home_flag = util.flag_from_cc(home_cc)
     home_name = s.get("country") or "твоя страна"
-    CC_MAP = {"nl": ("NL", "🇳🇱", "Нидерланды"),
-              "be": ("BE", "🇧🇪", "Бельгия"), "de": ("DE", "🇩🇪", "Германия"),
-              "fr": ("FR", "🇫🇷", "Франция"), "gb": ("GB", "🇬🇧", "Великобритания"),
-              "es": ("ES", "🇪🇸", "Испания"), "it": ("IT", "🇮🇹", "Италия"),
-              "at": ("AT", "🇦🇹", "Австрия"), "ch": ("CH", "🇨🇭", "Швейцария"),
-              "pl": ("PL", "🇵🇱", "Польша"), "se": ("SE", "🇸🇪", "Швеция"),
-              "dk": ("DK", "🇩🇰", "Дания"), "pt": ("PT", "🇵🇹", "Португалия")}
+    CC_MAP = {
+        "nl": ("NL", COUNTRY_EMOJI["nl"], "Нидерланды"),
+        "be": ("BE", COUNTRY_EMOJI["be"], "Бельгия"),
+        "de": ("DE", COUNTRY_EMOJI["de"], "Германия"),
+        "fr": ("FR", COUNTRY_EMOJI["fr"], "Франция"),
+        "gb": ("GB", COUNTRY_EMOJI["gb"], "Великобритания"),
+        "es": ("ES", COUNTRY_EMOJI["es"], "Испания"),
+        "it": ("IT", COUNTRY_EMOJI["it"], "Италия"),
+        "at": ("AT", COUNTRY_EMOJI["at"], "Австрия"),
+        "ch": ("CH", COUNTRY_EMOJI["ch"], "Швейцария"),
+        "pl": ("PL", COUNTRY_EMOJI["pl"], "Польша"),
+        "se": ("SE", COUNTRY_EMOJI["se"], "Швеция"),
+        "dk": ("DK", COUNTRY_EMOJI["dk"], "Дания"),
+        "pt": ("PT", COUNTRY_EMOJI["pt"], "Португалия"),
+    }
     if mode in CC_MAP:
         cc, flag, cname = CC_MAP[mode]
     else:
@@ -1900,19 +1908,19 @@ async def send_weekly_events(bot, cid):
 
 async def concert_pick_country(bot, cid):
     countries = [
-        ("at", "Австрия", "🇦🇹 Австрия"),
-        ("be", "Бельгия", "🇧🇪 Бельгия"),
-        ("gb", "Великобритания", "🇬🇧 Великобр."),
-        ("de", "Германия", "🇩🇪 Германия"),
-        ("dk", "Дания", "🇩🇰 Дания"),
-        ("es", "Испания", "🇪🇸 Испания"),
-        ("it", "Италия", "🇮🇹 Италия"),
-        ("nl", "Нидерланды", "🇳🇱 Нидерланды"),
-        ("pl", "Польша", "🇵🇱 Польша"),
-        ("pt", "Португалия", "🇵🇹 Португалия"),
-        ("fr", "Франция", "🇫🇷 Франция"),
-        ("ch", "Швейцария", "🇨🇭 Швейцария"),
-        ("se", "Швеция", "🇸🇪 Швеция"),
+        ("at", "Австрия", f"{COUNTRY_EMOJI['at']} Австрия"),
+        ("be", "Бельгия", f"{COUNTRY_EMOJI['be']} Бельгия"),
+        ("gb", "Великобритания", f"{COUNTRY_EMOJI['gb']} Великобр."),
+        ("de", "Германия", f"{COUNTRY_EMOJI['de']} Германия"),
+        ("dk", "Дания", f"{COUNTRY_EMOJI['dk']} Дания"),
+        ("es", "Испания", f"{COUNTRY_EMOJI['es']} Испания"),
+        ("it", "Италия", f"{COUNTRY_EMOJI['it']} Италия"),
+        ("nl", "Нидерланды", f"{COUNTRY_EMOJI['nl']} Нидерланды"),
+        ("pl", "Польша", f"{COUNTRY_EMOJI['pl']} Польша"),
+        ("pt", "Португалия", f"{COUNTRY_EMOJI['pt']} Португалия"),
+        ("fr", "Франция", f"{COUNTRY_EMOJI['fr']} Франция"),
+        ("ch", "Швейцария", f"{COUNTRY_EMOJI['ch']} Швейцария"),
+        ("se", "Швеция", f"{COUNTRY_EMOJI['se']} Швеция"),
     ]
     buttons = [
         InlineKeyboardButton(label, callback_data=f"a_concerts_{cc}")

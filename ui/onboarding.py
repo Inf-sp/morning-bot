@@ -113,7 +113,7 @@ def firstvisit_saved(saved_items):
 
 def onboard_start():
     b = MessageBuilder()
-    b.section("👋 Добро пожаловать!")
+    b.section("Добро пожаловать!")
     b.line("Давай познакомимся — это займёт меньше минуты, и бот сразу будет знать тебя.")
     b.spacer()
     b.line("Как тебя зовут?")
@@ -124,14 +124,14 @@ def onboard_name_saved(name):
     b = MessageBuilder()
     b.text_line("Приятно познакомиться, ")
     b.bold(str(name))
-    b.text_line("! 🙌")
+    b.text_line("!")
     b.blank()
     b.text_line("🌍 Из какого ты города? Напиши текстом — настрою погоду и контекст для советов.")
     return b.build()
 
 
 def onboard_language_question():
-    return MessageSpec(text="🌐 Какие языки изучаешь? Настрою тренажёр и словарь.")
+    return MessageSpec(text="Какие языки изучаешь? Настрою тренажёр и словарь.")
 
 
 def onboard_level_question(code):
@@ -143,7 +143,7 @@ def onboard_level_question(code):
 def onboard_priorities_question():
     return MessageSpec(
         text=(
-            "🎯 Что для тебя сейчас важнее?\n\n"
+            "Что для тебя сейчас важнее?\n\n"
             "Можно выбрать несколько пунктов. Я буду учитывать это в брифе, советах и рекомендациях."
         )
     )

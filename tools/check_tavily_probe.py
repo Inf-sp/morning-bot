@@ -29,21 +29,25 @@ def _tavily_row():
 
 
 def _render_tavily(row):
-    return admin_ui.api_check([row]).text
+    label, ok, detail, *rest = row
+    dot = rest[0] if rest else (admin_ui.OK if ok else admin_ui.BAD)
+    return admin_ui.issues([(dot, label, detail)], "сейчас").text
 
 
 def test_401():
     requests.post = lambda *a, **kw: _Resp(401, "Unauthorized")
     text = _render_tavily(_tavily_row())
-    assert "🔴 Tavily: ключ отсутствует, неверный или отозван" in text
+    assert "🔴 Tavily" in text
+    assert "ключ отсутствует, неверный или отозван" in text
     print("ok: Tavily 401 is friendly and non-LLM")
 
 
 def test_429():
     requests.post = lambda *a, **kw: _Resp(429, "Too Many Requests")
     text = _render_tavily(_tavily_row())
-    assert "🟠 Tavily: лимит запросов исчерпан" in text
-    print("ok: Tavily 429 is orange rate limit")
+    assert "🟡 Tavily" in text
+    assert "лимит запросов исчерпан" in text
+    print("ok: Tavily 429 is warning rate limit")
 
 
 def test_timeout():
@@ -52,8 +56,9 @@ def test_timeout():
 
     requests.post = _timeout
     text = _render_tavily(_tavily_row())
-    assert "🟠 Tavily: сервис временно не ответил" in text
-    print("ok: Tavily timeout is orange temporary failure")
+    assert "🟡 Tavily" in text
+    assert "сервис временно не ответил" in text
+    print("ok: Tavily timeout is warning temporary failure")
 
 
 def test_generic_safe():

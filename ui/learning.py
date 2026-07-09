@@ -1,6 +1,7 @@
 from telegram import MessageEntity
 
 from .builder import MessageBuilder, MessageSpec, u16_len
+from .constants import ui_label
 
 
 def train_question(word):
@@ -244,19 +245,19 @@ def phrase_rule_breakdown(state):
 
 def train_lang_select():
     b = MessageBuilder()
-    b.section("🧠 Тренажёр")
+    b.section(ui_label("word_trainer", "Тренажёр"))
     b.spacer()
     b.text_line("Слова и фразы для тренировки добавляются в разделе ")
     b.bold("Словарь")
     b.text_line(".")
     b.spacer()
-    b.bold("Выбери язык для тренировки 👇")
+    b.bold("Выбери язык для тренировки.")
     return b.build()
 
 
 def translate_prompt(flag, ru, lang):
     b = MessageBuilder()
-    b.section(f"📝 {flag} Обратный перевод")
+    b.section(f"{flag} Обратный перевод")
     b.spacer()
     b.line(f"Фраза: «{ru}»")
     b.spacer()
@@ -266,7 +267,7 @@ def translate_prompt(flag, ru, lang):
 
 def translate_result(flag, lang, ru, answer, result):
     b = MessageBuilder()
-    b.section(f"📝 {flag} Обратный перевод")
+    b.section(f"{flag} Обратный перевод")
     b.spacer()
     b.line(f"Твой ответ: {answer}")
     b.spacer()
@@ -306,7 +307,7 @@ def morning_words(flag, method, is_read_aloud=False, phrases=None, words=None, e
         msg.text = msg.text.rstrip("\n")
         return msg
     if phrases:
-        b.section("💬 Фразы")
+        b.section("Фразы")
         for word, ru in phrases:
             b.bullet(f"{word} → {ru}")
     if words:
@@ -322,7 +323,7 @@ def morning_words(flag, method, is_read_aloud=False, phrases=None, words=None, e
 
 
 def game_start():
-    return MessageSpec(text="🕵️ Игра-детектив. На каком языке играем?")
+    return MessageSpec(text="Игра-детектив. На каком языке играем?")
 
 
 def game_card(ui, clues):
@@ -330,7 +331,7 @@ def game_card(ui, clues):
     b.section(ui["title"])
     b.section(ui["suspect"])
     b.line(clues)
-    b.section(f"{ui['who']} 🤔")
+    b.section(ui["who"])
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
@@ -360,7 +361,7 @@ def game_hint(ui, hint):
 
 def learning_settings(active_language, active_level):
     b = MessageBuilder()
-    b.section("🎚 Настройки обучения")
+    b.section("🎚️ Настройки обучения")
     b.spacer()
     b.line("Активный язык:")
     b.bold(active_language)

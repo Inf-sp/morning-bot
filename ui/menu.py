@@ -45,7 +45,7 @@ def ikb(rows):
 
 def welcome():
     b = MessageBuilder()
-    b.bold("👋 Привет! Я DM — твой помощник на каждый день.")
+    b.bold("Привет! Я DM — твой помощник на каждый день.")
     b.newline()
     b.spacer()
     b.line("Помогаю с погодой, одеждой, языками, рецептами, досугом и полезными привычками.")
@@ -58,7 +58,7 @@ def welcome():
     b.line(f"{ui_label('leisure', 'Досуг')} — фильмы, книги и музыка.")
     b.line(f"{ui_label('food', 'Готовка')} — рецепты и идеи из продуктов.")
     b.spacer()
-    b.line("Просто напиши вопрос в чат и я помогу 💬")
+    b.line("Просто напиши вопрос в чат, и я помогу.")
     b.spacer()
     b.text_line(f"Изменить параметры или посмотреть сохранённую информацию можно в {UI_SETTINGS} ")
     b.bold("Настройках")
@@ -83,10 +83,10 @@ _SCREENS = {
         "Здоровье",
         "Здоровье и эмоции. Разберу симптом, поддержу и помогу разгрузить голову.",
         [
-            [("Спросить врача", "as_doctor")],
+            [(ui_label("doctor", "Спросить врача"), "as_doctor")],
             [(ui_label("recommendation", "Заряд мотивации"), "as_motiv")],
-            [("Дневник тревог", "as_daycheck")],
-            [("История самочувствия", "as_diary")],
+            [(ui_label("worry_diary", "Дневник тревог"), "as_daycheck")],
+            [(ui_label("health_history", "История самочувствия"), "as_diary")],
             [(ui_label("settings", "Настройки здоровья"), "set_lagom")],
         ],
     ),
@@ -117,7 +117,7 @@ _SCREENS = {
         "Нидерландский",
         "Практика языка: слова, живые выражения и игры.",
         [
-            [("Тренажёр слов", "a_train_words_nl")],
+            [(ui_label("word_trainer", "Тренажёр слов"), "a_train_words_nl")],
             [(ui_label("phrases", "Тренажёр фраз"), "a_train_phrases_nl")],
             [(ui_label("live_language", "Живой язык"), "a_proverb_nl")],
             [("Игра-детектив", "gamelang_nl")],
@@ -129,7 +129,7 @@ _SCREENS = {
         "Английский",
         "Практика языка: слова, живые выражения и игры.",
         [
-            [("Тренажёр слов", "a_train_words_en")],
+            [(ui_label("word_trainer", "Тренажёр слов"), "a_train_words_en")],
             [(ui_label("phrases", "Тренажёр фраз"), "a_train_phrases_en")],
             [(ui_label("live_language", "Живой язык"), "a_proverb_en")],
             [("Игра-детектив", "gamelang_en")],

@@ -128,6 +128,8 @@ def load_release_title(version, release_notes) -> str:
         return "Чистые обновления"
     if "новост" in text:
         return "Умнее новости"
+    if "эмодз" in text or "ui-словар" in text or "централизованные значки" in text:
+        return "Единый UI-стиль"
     if "рецепт" in text:
         return "Быстрее рецепты"
     if "гардероб" in text:
@@ -237,7 +239,7 @@ async def start(update, context):
         return
 
     if not access.is_allowed(cid):
-        await update.message.reply_text("⛔ Бот приватный. Попроси владельца прислать инвайт.")
+        await update.message.reply_text("❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
 
     await update.message.reply_text(_WELCOME, entities=menu.WELCOME_ENTITIES, reply_markup=menu.main_kb(cid))
@@ -262,7 +264,7 @@ async def answer_callback(update, context):
             await status.stop(delete=False)
 
     if not access.is_allowed(cid):
-        await bot.send_message(chat_id=cid, text="⛔ Бот приватный. Попроси владельца прислать инвайт.")
+        await bot.send_message(chat_id=cid, text="❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
     tracking.touch(cid)
 
@@ -436,13 +438,13 @@ async def answer_callback(update, context):
                 lang = act.split("_")[2]
                 store.pending_input[cid] = f"dictadd_smart_{lang}"
                 await bot.send_message(chat_id=cid, text=(
-                    "✍🏻 Пришли слово или фразу для изучения — можно сразу несколько.\n"
+                    "✏️ Пришли слово или фразу для изучения — можно сразу несколько.\n"
                     "Я сам пойму что это: слово или фраза."))
             elif act.startswith("dictadd_"):
                 lang = act.split("_")[1]
                 store.pending_input[cid] = f"dictadd_{lang}"
                 await bot.send_message(chat_id=cid, text=(
-                    "✍🏻 Пришли слова или фразы - можно сразу много, в столбик или через запятую.\n"
+                    "✏️ Пришли слова или фразы - можно сразу много, в столбик или через запятую.\n"
                     "Я разберу каждое отдельно, сам пойму слово это или фраза, язык и перевод."))
             elif act.startswith("dictedit_"):
                 _, lang, dkind = act.split("_")
@@ -684,7 +686,7 @@ async def text_router(update, context):
     bot = context.bot
 
     if not access.is_allowed(cid):
-        await bot.send_message(chat_id=cid, text="⛔ Бот приватный. Попроси владельца прислать инвайт.")
+        await bot.send_message(chat_id=cid, text="❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
     tracking.touch(cid)
 

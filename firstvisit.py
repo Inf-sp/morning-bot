@@ -31,7 +31,7 @@ MENU_KEY_TO_SECTION = {v: k for k, v in _SECTION_KEY.items()}
 
 def _skip_kb(section: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("⏭ Пропустить", callback_data=f"fv_skip_{section}")]]
+        [[InlineKeyboardButton("Пропустить", callback_data=f"fv_skip_{section}")]]
     )
 
 
@@ -39,24 +39,24 @@ def _skip_kb(section: str) -> InlineKeyboardMarkup:
 # По образцу кухонь: заранее заданный список популярных вариантов + мультивыбор.
 _TAG_OPTIONS = {
     "health": [
-        ("sleep", "😴 Сон"),
-        ("energy", "⚡ Энергия"),
-        ("anxiety", "🌊 Тревожность"),
-        ("habits", "🔁 Привычки"),
-        ("sport", "🏃 Спорт"),
-        ("nutrition", "🥗 Питание"),
+        ("sleep", "Сон"),
+        ("energy", "Энергия"),
+        ("anxiety", "Тревожность"),
+        ("habits", "Привычки"),
+        ("sport", "Спорт"),
+        ("nutrition", "Питание"),
     ],
     "leisure": [
-        ("drama", "🎭 Драма"),
-        ("comedy", "😂 Комедия"),
-        ("scifi", "🚀 Фантастика"),
-        ("thriller", "🔪 Триллер"),
-        ("documentary", "🎬 Док"),
-        ("rock", "🎸 Рок"),
-        ("electronic", "🎧 Электроника"),
-        ("classic", "🎻 Классика"),
-        ("fiction", "📖 Худ. лит-ра"),
-        ("nonfiction", "📚 Нон-фикшн"),
+        ("drama", "Драма"),
+        ("comedy", "Комедия"),
+        ("scifi", "Фантастика"),
+        ("thriller", "Триллер"),
+        ("documentary", "Док"),
+        ("rock", "Рок"),
+        ("electronic", "Электроника"),
+        ("classic", "Классика"),
+        ("fiction", "Худ. лит-ра"),
+        ("nonfiction", "Нон-фикшн"),
     ],
 }
 
@@ -72,7 +72,7 @@ def _tags_kb(cid, section: str) -> InlineKeyboardMarkup:
     selected = _tag_selection.get(str(cid), {}).get(section, set())
     buttons = [
         InlineKeyboardButton(
-            ("✅ " if key in selected else "⬜ ") + label,
+            ("✅ " if key in selected else "") + label,
             callback_data=f"fv_tag_{section}_{key}",
         )
         for key, label in _TAG_OPTIONS[section]
@@ -81,8 +81,8 @@ def _tags_kb(cid, section: str) -> InlineKeyboardMarkup:
     rows.append([InlineKeyboardButton("✅ Готово", callback_data=f"fv_tagdone_{section}")])
     if section == "leisure":
         # Помимо жанров-тегов можно ввести конкретные названия текстом.
-        rows.append([InlineKeyboardButton("✍️ Ввести названия", callback_data="fv_leisure_text")])
-    rows.append([InlineKeyboardButton("⏭ Пропустить", callback_data=f"fv_skip_{section}")])
+        rows.append([InlineKeyboardButton("✏️ Ввести названия", callback_data="fv_leisure_text")])
+    rows.append([InlineKeyboardButton("Пропустить", callback_data=f"fv_skip_{section}")])
     return InlineKeyboardMarkup(rows)
 
 

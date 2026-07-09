@@ -15,7 +15,7 @@ import verify
 import secure
 from ui import balance as balance_ui
 from ui import food as food_ui
-from ui.constants import CUISINE_EMOJI
+from ui.constants import CUISINE_EMOJI, ui_label
 import memory
 import settings
 import menu
@@ -114,12 +114,7 @@ _FRIDGE_KEYWORDS: dict = {
         "peper", "zout",
     ],
 }
-_CAT_EMOJI: dict = {
-    "мясо и рыба": "🥩", "овощи": "🥦", "фрукты": "🍎", "молочное и яйца": "🥛",
-    "крупы и макароны": "🍝", "хлеб и выпечка": "🍞", "специи и соусы": "🧂",
-    "напитки": "🥤", "снеки и сладости": "🍪", "заморозка": "❄️",
-    "прочее": "📦",
-}
+_CAT_EMOJI: dict = {}
 # Короткие названия для кнопок (чтобы помещались в 2 столбца)
 _CAT_BTN_LABEL: dict = {
     "мясо и рыба": "Мясо/рыба", "молочное и яйца": "Молочное",
@@ -563,10 +558,10 @@ def _food_card(d, label="Рецепт дня"):
     return food_ui.food_card(d, label=label)
 
 DOCTOR_INTRO = (
-    "👩🏻‍⚕️ Врач\n\n"
+    f"{ui_label('doctor', 'Врач')}\n\n"
     "Дам общую справочную информацию о здоровье и лекарствах. Это не диагноз и не назначение - "
     "при тревожных симптомах обратись к специалисту.\n\n"
-    "Опиши, что беспокоит, или спроси про лекарство 👇"
+    "Опиши, что беспокоит, или спроси про лекарство."
 )
 
 def _kb(rows):
@@ -583,12 +578,12 @@ def _build_entity_card(title, summary="", quote="", bullets=None, final="", bull
     return msg.text, msg.entities
 
 # универсальная клавиатура под ответом: [Продолжить][Короче|Глубже][⭐][В меню]
-def _ans_kb(cont_label="🔄 Продолжить", cont_cb="chat_retry", depth=True):
+def _ans_kb(cont_label="Продолжить", cont_cb="chat_retry", depth=True):
     rows = []
     if cont_label and cont_cb:
         rows.append([(cont_label, cont_cb)])
     if depth:
-        rows.append([("✂️ Короче", "ans_short"), ("🔬 Глубже", "ans_deep")])
+        rows.append([("Короче", "ans_short"), ("Глубже", "ans_deep")])
     rows.append([("⭐️ Сохранить", "as_fav"), ("⬅️ Назад", "m_close")])
     return _kb(rows)
 
@@ -1018,7 +1013,7 @@ def _gen_leftovers_recipe(ingredients, cid=None):
 # чтобы cuisine_weights/приоритеты считались по тем же ключам) + расширение
 # конкретными странами для более точного флага в карточке (§7: "всегда показывать
 # происхождение блюда"). Модель может вернуть код вне списка (в т.ч. новую страну) —
-# это нормально, UI-агент обязан иметь fallback на 🍽️, если cuisine_emoji пустой/
+# это нормально, UI-агент обязан иметь fallback на 🍽, если cuisine_emoji пустой/
 # нераспознанный, поэтому список ниже не является жёстким enum для валидации,
 # а служит только подсказкой модели в промпте.
 RECIPE_CUISINE_CODES = (
@@ -1213,10 +1208,9 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
         for ci, cat in enumerate(present_cats):
             cat_items = by_cat[cat]
             on_cnt = sum(1 for _, it in cat_items if it.get("on", True))
-            emoji = _CAT_EMOJI.get(cat, "📦")
             label = _CAT_BTN_LABEL.get(cat, cat.capitalize())
             cat_btns.append(InlineKeyboardButton(
-                f"{emoji} {label} {on_cnt}/{len(cat_items)}",
+                f"{label} {on_cnt}/{len(cat_items)}",
                 callback_data=f"as_fridge_cat_{ci}_0"
             ))
         rows = [[
@@ -1254,9 +1248,8 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
     page = max(0, min(page, pages - 1))
     chunk = cat_items[page * _FRIDGE_PAGE:(page + 1) * _FRIDGE_PAGE]
 
-    emoji = _CAT_EMOJI.get(cat, "📦")
     on_cnt = sum(1 for _, it in cat_items if it.get("on", True))
-    msg = food_ui.fridge_category(emoji, cat.capitalize(), total, on_cnt)
+    msg = food_ui.fridge_category("", cat.capitalize(), total, on_cnt)
 
     # Один продукт в строку: названия должны читаться полностью.
     rows = [[
@@ -1264,7 +1257,7 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
         InlineKeyboardButton("❌ Удалить", callback_data="as_fridge_clean"),
     ]]
     for gi, it in chunk:
-        mark = "🟢" if it.get("on", True) else "⚪"
+        mark = "✅" if it.get("on", True) else "□"
         name_short = it["name"][:40]
         rows.append([
             InlineKeyboardButton(f"{mark} {name_short}", callback_data=f"as_fridge_tgl_{gi}_{cat_idx}_{page}")
@@ -1328,7 +1321,6 @@ def _fridge_payload_from_chat(text: str) -> str:
         r"(?:это\s+)?(?:в\s+)?(?:список\s+)?(?:моих\s+)?"
         r"(?:продуктов|продукты|холодильник)\s*[:\-—]?\s*(.+)",
         r"(?:в\s+)?(?:продукты|холодильник)\s*[:\-—]\s*(.+)",
-        r"🛒\s*продукты\s*[:\-—]?\s*(.+)",
     ]
     for pattern in patterns:
         m = re.search(pattern, raw, flags=re.IGNORECASE | re.DOTALL)
@@ -1613,7 +1605,7 @@ async def handle_role(bot, cid, role, text):
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
     store.last_action[str(cid)] = ("role", role, text)
-    cont = ("✨ Ещё совет", "chat_retry") if role == "state" else ("🔄 Продолжить", "chat_retry")
+    cont = ("✨ Ещё совет", "chat_retry") if role == "state" else ("Продолжить", "chat_retry")
     await _send(bot, cid, out, kb=_ans_kb(*cont), surface="chat" if role == "state" else "card")
 
 

@@ -383,7 +383,7 @@ async def create_invite(bot, cid, q=None):
 async def send_welcome(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✏️ Изменить", callback_data="adm_welcome_edit"),
-         InlineKeyboardButton("👁 Предпросмотр", callback_data="adm_welcome_preview")],
+         InlineKeyboardButton("Предпросмотр", callback_data="adm_welcome_preview")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users")],
     ])
     msg = ui.welcome_admin()
@@ -581,7 +581,7 @@ async def send_llm(bot, cid):
     status_dot, status_txt = (ui.OK, "работает") if not errs_today else (ui.WARN, "есть ошибки")
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui_label("find", "Проверить"), callback_data="set_admin_llmcheck"),
-         InlineKeyboardButton("🕘 История", callback_data="set_admin_llmhistory")],
+         InlineKeyboardButton("История", callback_data="set_admin_llmhistory")],
         _back(),
     ])
     msg = ui.llm(status_dot, status_txt, _when(last.get("ts", 0)), _avg_ms(_cost_recent(1)),
@@ -719,13 +719,13 @@ def _external_api_probe_results():
             if r.status_code == 401:
                 return ("Tavily", False, "ключ отсутствует, неверный или отозван")
             if r.status_code == 429:
-                return ("Tavily", False, "лимит запросов исчерпан", "🟠")
+                return ("Tavily", False, "лимит запросов исчерпан", ui.WARN)
             reason = (getattr(r, "reason", "") or "HTTP error")[:80]
             return ("Tavily", False,
                     f"HTTP {r.status_code}; HTTPError: {reason}; "
                     f"endpoint: {_TAVILY_SEARCH_ENDPOINT}; configured: yes")
         except requests.exceptions.Timeout:
-            return ("Tavily", False, "сервис временно не ответил", "🟠")
+            return ("Tavily", False, "сервис временно не ответил", ui.WARN)
         except Exception as e:
             exc_type = type(e).__name__
             msg = str(e).replace(config.TAVILY_API_KEY, "[redacted]")[:80]
@@ -916,8 +916,8 @@ async def send_issues(bot, cid, with_probes=False):
     kb_rows = []
     for key, dot, name, detail in rows:
         kb_rows.append([InlineKeyboardButton(f"{dot} {name}", callback_data=f"set_admin_issue_{key}")])
-    kb_rows.append([InlineKeyboardButton("🔄 Проверить API", callback_data="set_admin_check_all"),
-                     InlineKeyboardButton("🧹 Очистить ошибки", callback_data="set_admin_cache_clear")])
+    kb_rows.append([InlineKeyboardButton("Проверить API", callback_data="set_admin_check_all"),
+                     InlineKeyboardButton("Очистить ошибки", callback_data="set_admin_cache_clear")])
     kb_rows.append(_back())
     _ISSUES_CACHE[cid] = {key: (dot, name, detail) for key, dot, name, detail in rows}
     msg = ui.issues([(dot, name, detail) for _, dot, name, detail in rows], _when(time.time()))
@@ -954,8 +954,8 @@ async def clear_cache(bot, cid, q=None):
 async def check_all(bot, cid):
     """Показывает сохранённую статистику API без новых внешних probe-запросов."""
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Обновить", callback_data="set_admin_check_all"),
-         InlineKeyboardButton("📋 Диагностика", callback_data="set_admin_api_diagnostics")],
+        [InlineKeyboardButton("Обновить", callback_data="set_admin_check_all"),
+         InlineKeyboardButton("Диагностика", callback_data="set_admin_api_diagnostics")],
         _back("set_admin"),
     ])
     msg = ui.api_check(api_usage.snapshot())
@@ -964,7 +964,7 @@ async def check_all(bot, cid):
 
 async def send_api_diagnostics(bot, cid):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Обновить", callback_data="set_admin_api_diagnostics")],
+        [InlineKeyboardButton("Обновить", callback_data="set_admin_api_diagnostics")],
         _back("set_admin_check_all"),
     ])
     msg = ui.api_diagnostics(api_usage.snapshot())
@@ -1070,7 +1070,7 @@ async def send_logs(bot, cid, q=None):
         "cooldown_until": int(gemini.get("cooldown_until") or 0),
     }
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Обновить", callback_data="adm_logs")],
+        [InlineKeyboardButton("Обновить", callback_data="adm_logs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_system")],
     ])
     msg = ui.logs(rows, len(errors), _updated_at(), summary)

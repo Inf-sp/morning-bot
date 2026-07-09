@@ -13,8 +13,8 @@ _TTL_CACHE = {}
 
 LOADING_PHRASES = [
     "⏳ Готовлю ответ…",
-    "🔎 Ищу нужную информацию…",
-    "🔎 Собираю данные…",
+    "🔍 Ищу нужную информацию…",
+    "🔍 Собираю данные…",
     "⏳ Анализирую запрос…",
     "⏳ Формулирую ответ…",
 ]
@@ -28,8 +28,8 @@ class StatusManager:
 
     STAGES = (
         (0, "⏳ Ищу ответ..."),
-        (3, "🔎 Проверяю данные..."),
-        (8, "🧠 Собираю лучший ответ..."),
+        (3, "🔍 Проверяю данные..."),
+        (8, "Собираю лучший ответ..."),
         (15, "✨ Почти готово..."),
     )
 
@@ -243,9 +243,11 @@ def cc_of(name):
     return _COUNTRY_CC.get((name or "").strip().lower(), "")
 
 def country_flag(name):
-    """Эмодзи флага по названию страны - офлайн, без LLM. Неизвестное -> 🏳."""
+    """Эмодзи флага по названию страны - офлайн, без LLM. Неизвестное -> ''."""
+    from ui.constants import COUNTRY_EMOJI
+
     cc = cc_of(name)
-    return flag_from_cc(cc) if cc else "🏳"
+    return COUNTRY_EMOJI.get(cc.lower(), "") if cc else ""
 
 def flag_from_cc(cc: str) -> str:
     cc = (cc or "").upper()

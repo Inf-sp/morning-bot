@@ -1,8 +1,8 @@
 """UI админ-панели — единый визуальный язык (§1 docs/admin.md).
 
-Каждый экран: заголовок (эмодзи + раздел) → ключевой статус → блок метрик (b.metric)
+Каждый экран: заголовок → ключевой статус → блок метрик (b.metric)
 → inline-кнопки. Метрики, которые пока держатся на новом трекинге, честно помечаем
-маркером ⚠, если данных ещё нет (значение 0/пусто) — но не скрываем строку.
+маркером ⚠️, если данных ещё нет (значение 0/пусто) — но не скрываем строку.
 
 Здесь только сборка текста. Логика/данные — в settings.py (send_admin_*).
 """
@@ -10,7 +10,7 @@ from .builder import MessageBuilder, MessageSpec
 from .constants import STATUS_EMOJI, ui_label
 
 # --- статус-точки (единственные допустимые «светофоры») ---
-OK, WARN, BAD, OFF = STATUS_EMOJI["ok"], STATUS_EMOJI["warn"], STATUS_EMOJI["bad"], "⚪"
+OK, WARN, BAD, OFF = STATUS_EMOJI["ok"], STATUS_EMOJI["warn"], STATUS_EMOJI["bad"], "□"
 
 
 def _num(n) -> str:
@@ -27,44 +27,26 @@ def _num(n) -> str:
 
 
 def only():
-    return MessageSpec(text="⛔ Только для администратора.")
+    return MessageSpec(text="❌ Только для администратора.")
 
 
 def deploy_report(version, title, release_notes):
     notes = [str(note).strip() for note in (release_notes or []) if str(note).strip()]
     if not notes:
         notes = ["Бот получил небольшие внутренние улучшения."]
-    main = ""
     change_notes = []
-    take_next_as_main = False
     for note in notes:
-        if take_next_as_main:
-            main = note
-            take_next_as_main = False
-            continue
-        if note.lower().startswith("главное:"):
-            rest = note.split(":", 1)[1].strip()
-            if rest:
-                main = rest
-            else:
-                take_next_as_main = True
-            continue
         change_notes.append(note)
     if not change_notes:
         change_notes = notes[:1]
-    if not main:
-        main = change_notes[0]
 
     b = MessageBuilder()
-    b.bold(f"🚀 v{version} · {title or 'Обновление'}")
+    b.bold(f"v{version} · {title or 'Обновление'}")
     b.newline()
     b.spacer()
     b.line("Что изменено:")
     for note in change_notes[:4]:
         b.line(f"• {note}")
-    b.spacer()
-    b.line("Главное:")
-    b.line(main)
     b.spacer()
     b.line("Бот развёрнут и работает ✅")
     return b.build_stripped()
@@ -74,7 +56,7 @@ def deploy_report(version, title, release_notes):
 
 def home(system_dot, system_text, system_line, notif_line, users_line, data_line, updated_at):
     b = MessageBuilder()
-    b.bold("🛠 Админ")
+    b.bold("Админ")
     b.newline()
     b.spacer()
     b.line(f"{system_dot} {system_text}")
@@ -92,7 +74,7 @@ def home(system_dot, system_text, system_line, notif_line, users_line, data_line
 
 def users(stats, updated_at):
     b = MessageBuilder()
-    b.bold("👥 Пользователи")
+    b.bold(ui_label("users", "Пользователи"))
     b.newline()
     b.spacer()
     b.line(f"Всего: {stats.get('total', 0)}")
@@ -155,7 +137,7 @@ def welcome_admin():
 
 def system(rows, updated_at):
     b = MessageBuilder()
-    b.bold("📊 Система")
+    b.bold(ui_label("system", "Система"))
     b.newline()
     b.spacer()
     for line in rows:
@@ -167,7 +149,7 @@ def system(rows, updated_at):
 
 def diagnostics():
     b = MessageBuilder()
-    b.bold("🔧 Диагностика")
+    b.bold("Диагностика")
     b.newline()
     b.spacer()
     b.line("Выберите раздел:")
@@ -181,7 +163,7 @@ def diagnostics():
 
 def api_diagnostics_compact(rows, updated_at):
     b = MessageBuilder()
-    b.bold("☁️ API · Диагностика")
+    b.bold("API · Диагностика")
     b.newline()
     if not rows:
         b.spacer()
@@ -198,7 +180,7 @@ def api_diagnostics_compact(rows, updated_at):
 
 def llm_diagnostics(calls_today, tokens_today, errors_today, providers, fallback_text, problem, updated_at):
     b = MessageBuilder()
-    b.bold("🤖 LLM · Диагностика")
+    b.bold("LLM · Диагностика")
     b.newline()
     b.spacer()
     b.line("Сегодня:")
@@ -223,7 +205,7 @@ def llm_diagnostics(calls_today, tokens_today, errors_today, providers, fallback
 def news_diagnostics(today_credits, daily_limit, month_credits, month_limit,
                      cache_hits, last_build, errors, updated_at):
     b = MessageBuilder()
-    b.bold("🧠 Новости · Диагностика")
+    b.bold("Новости · Диагностика")
     b.newline()
     b.spacer()
     b.line("Tavily:")
@@ -261,7 +243,7 @@ def notifications(sent_today, errors_today, active_types, updated_at):
 
 def tests(history):
     b = MessageBuilder()
-    b.bold("🧪 Тесты")
+    b.bold("Тесты")
     b.newline()
     b.spacer()
     b.line("Тесты отправляются только вам.")
@@ -319,7 +301,7 @@ def logs(rows, errors_24h, updated_at, summary=None):
 def user_card(name, city, cid, onboarded, last_seen, active_days, total_msgs, notif_on, notif_total):
     b = MessageBuilder()
     city_part = f" · {city}" if city else ""
-    b.bold(f"👤 {name}{city_part}")
+    b.bold(f"{name}{city_part}")
     b.newline()
     ob = "✅" if onboarded else "❌"
     b.line(f"ID {str(cid)[:4]}… · онбординг {ob}")
@@ -345,7 +327,7 @@ def llm(status_dot, status_text, last_req, avg_ms, errors_today, calls_today, to
         openrouter_fallback=None):
     """providers: [(label, pct)] доля токенов за сегодня."""
     b = MessageBuilder()
-    b.bold("🤖 LLM")
+    b.bold("LLM")
     b.newline()
     b.spacer()
     b.metric("Статус", f"{status_dot} {status_text}")
@@ -394,7 +376,7 @@ def _weather_usage_status(total):
     if total >= config.WEATHER_HARD_DAILY_LIMIT:
         return "🔴 Новые запросы заблокированы до следующего дня"
     if total >= config.WEATHER_CRITICAL_LIMIT:
-        return "🟠 Почти достигнут бесплатный лимит"
+        return f"{WARN} Почти достигнут бесплатный лимит"
     if total >= config.WEATHER_WARNING_LIMIT:
         return "🟡 Использование растёт"
     return "🟢 Лимит в норме"
@@ -409,7 +391,7 @@ def weather_usage_block(usage):
     cache_hits = int(usage.get("cache_hits") or 0)
     left = max(0, config.WEATHER_FREE_DAILY_LIMIT - total)
     b = MessageBuilder()
-    b.bold("☁️ OpenWeather · сегодня")
+    b.bold("OpenWeather · сегодня")
     b.newline()
     b.spacer()
     b.line(f"Запросы: {total} / {config.WEATHER_FREE_DAILY_LIMIT:,}".replace(",", " "))
@@ -499,7 +481,7 @@ def api_check(snapshot):
     local = _local_services(services)
     if main:
         b.spacer()
-        b.bold("📊 Использование")
+        b.bold(ui_label("system", "Использование"))
         b.newline()
         for svc in main:
             b.spacer()
@@ -550,7 +532,7 @@ def api_check(snapshot):
 
 def api_diagnostics(snapshot):
     b = MessageBuilder()
-    b.bold("📋 Диагностика API")
+    b.bold("Диагностика API")
     b.newline()
     for svc in (snapshot or {}).get("services") or []:
         b.spacer()
@@ -580,7 +562,7 @@ def api_diagnostics(snapshot):
 def llm_history(rows):
     """rows: [(when, provider, module, ok)]."""
     b = MessageBuilder()
-    b.bold("🕘 История запросов")
+    b.bold("История запросов")
     b.newline()
     b.spacer()
     if not rows:
@@ -612,7 +594,7 @@ def broadcast(next_title, next_when):
 def notification_picker(options):
     """options: [NotificationOption]. Список для выбора уведомления перед тестом."""
     b = MessageBuilder()
-    b.bold("🧪 Выберите уведомление")
+    b.bold("Выберите уведомление")
     b.newline()
     b.spacer()
     for opt in options:
@@ -644,7 +626,7 @@ def issues(rows, checked_when):
 
 def issue_detail(when, source, dot, msg):
     b = MessageBuilder()
-    b.bold("🔎 Подробнее")
+    b.bold("🔍 Подробнее")
     b.newline()
     b.spacer()
     b.metric("Время", when)
@@ -658,8 +640,7 @@ def issue_detail(when, source, dot, msg):
 
 def invite(link):
     b = MessageBuilder()
-    b.text_line("🔗 ")
-    b.bold("Подарочный инвайт:")
+    b.bold(ui_label("invite", "Подарочный инвайт:"))
     b.newline()
     b.link(link, link)
     return b.build()

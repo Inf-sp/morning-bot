@@ -1259,7 +1259,7 @@ async def _send_train_feedback(bot, cid, idx, st):
             msg = learning_ui.phrase_quiz_result(st, False, repeated_error=repeated_error)
             if repeated_error:
                 kb = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔎 Разобрать", callback_data="phrase_explain"),
+                    [InlineKeyboardButton("🔍 Разобрать", callback_data="phrase_explain"),
                      InlineKeyboardButton("Новый пример", callback_data="phrase_new_example")],
                     [InlineKeyboardButton("Дальше", callback_data="train_next"),
                      InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(lang))],
@@ -2537,7 +2537,7 @@ def _seed_render_text(st):
     ]
     for offset, item in enumerate(chunk):
         idx = start + offset
-        mark = "☑" if idx in known else "☐"
+        mark = "✅" if idx in known else "□"
         lines.append(f"{mark} {_seed_item_line(item)}")
     lines.extend(["", _DICT_SEED_SOURCE_NOTE])
     return "\n".join(lines)
@@ -2553,13 +2553,13 @@ def _seed_render_kb(st):
     rows = []
     for offset, item in enumerate(chunk):
         idx = start + offset
-        mark = "☑" if idx in known else "☐"
+        mark = "✅" if idx in known else "□"
         rows.append([InlineKeyboardButton(f"{mark} {item.get('word')[:38]}", callback_data=f"a_dictseed_toggle_{idx}")])
     nav = []
     if page > 0:
         nav.append(InlineKeyboardButton("◀️", callback_data=f"a_dictseed_page_{page - 1}"))
     if page < total_pages - 1:
-        nav.append(InlineKeyboardButton("▶ Далее", callback_data=f"a_dictseed_page_{page + 1}"))
+        nav.append(InlineKeyboardButton("▶️ Далее", callback_data=f"a_dictseed_page_{page + 1}"))
     if nav:
         rows.append(nav)
     rows.append([InlineKeyboardButton("✅ Добавить остальные в словарь", callback_data="a_dictseed_add")])
@@ -2932,14 +2932,14 @@ GAME_UI = {
         "diff_q": "Выбери сложность:",
         "easy": "Лёгкая",
         "hard": "Тяжёлая",
-        "title": "🕵️ Игра-детектив",
+        "title": "Игра-детектив",
         "who": "Кто это?",
         "hint": "💡 Подсказка",
         "reveal": "😞 Сдаюсь",
         "suspect": "Подозреваемый:",
         "found": "✅ Дело раскрыто!",
         "answer": "Ответ",
-        "again": "🕵️ Загадать ещё",
+        "again": "✨ Ещё",
         "back": "⬅️ Назад",
         "nohint": "Подсказок больше нет.",
         "wrong": "❌ Не то",

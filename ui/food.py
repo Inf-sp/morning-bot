@@ -222,7 +222,7 @@ def fridge_category(emoji, label, total, available):
     b.bold(label)
     b.text_line(
         f" · {total} продуктов · {available} в наличии\n\n"
-        "🟢 — есть в наличии  ⚪ — закончилось\n"
+        "✅ — есть в наличии  □ — закончилось\n"
         "Нажми продукт, чтобы изменить статус."
     )
     return b.build()
@@ -237,10 +237,11 @@ def fridge_updated(added_by_cat, added, duplicates, rejected, cat_order, cat_emo
         for cat in cat_order:
             names = sorted(set(added_by_cat.get(cat, [])))
             if names:
-                emoji = cat_emoji.get(cat, "📦")
+                emoji = cat_emoji.get(cat, "")
                 label = cat_labels.get(cat, cat.capitalize())
                 b.newline()
-                b.text_line(f"{emoji} ")
+                if emoji:
+                    b.text_line(f"{emoji} ")
                 b.bold(f"{label}:")
                 b.text_line(f" {', '.join(names)}")
     else:
@@ -263,7 +264,7 @@ def fridge_updated(added_by_cat, added, duplicates, rejected, cat_order, cat_emo
 def fridge_empty_for_recipe():
     return MessageBuilder().text_line(
         "🧊 Холодильник пуст или все продукты отмечены как отсутствующие.\n\n"
-        "Отметь 🟢, что есть сейчас, и попробуй снова."
+        "Отметь продукты, которые есть сейчас, и попробуй снова."
     ).build()
 
 

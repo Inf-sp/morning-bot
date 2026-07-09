@@ -79,11 +79,11 @@ deleted = 0
 skipped = 0
 
 print(f"\n🔍 Найдено строк в БД: {len(rows)}")
-print(f"👤 Оставляем только CHAT_ID: {CHAT_ID}\n")
+print(f"Оставляем только CHAT_ID: {CHAT_ID}\n")
 
 for key, value in rows:
     if key in SKIP_KEYS:
-        print(f"  ⏭  {key} — пропущен (системный)")
+        print(f"  skipped {key} — пропущен (системный)")
         skipped += 1
         continue
 
@@ -113,7 +113,7 @@ for key, value in rows:
             del value[cid]
         cur.execute("UPDATE kv SET value = %s WHERE key = %s",
                     (json.dumps(value, ensure_ascii=False), key))
-        print(f"  🧹 {key} — удалены cid: {other_cids}")
+        print(f"  cleaned {key} — удалены cid: {other_cids}")
         cleaned += 1
         continue
 
@@ -125,13 +125,13 @@ for key, value in rows:
                 del value[cid]
             cur.execute("UPDATE kv SET value = %s WHERE key = %s",
                         (json.dumps(value, ensure_ascii=False), key))
-            print(f"  🧹 {key} (unknown) — удалены cid: {other_cids}")
+            print(f"  cleaned {key} (unknown) — удалены cid: {other_cids}")
             cleaned += 1
         else:
-            print(f"  ⏭  {key} — не per-user, пропущен")
+            print(f"  skipped {key} — не per-user, пропущен")
             skipped += 1
     else:
-        print(f"  ⏭  {key} — не dict, пропущен")
+        print(f"  skipped {key} — не dict, пропущен")
         skipped += 1
 
 cur.close()

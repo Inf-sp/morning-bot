@@ -7,7 +7,7 @@ import learning
 import util
 from util import esc
 from ui import settings as settings_ui
-from ui.constants import ui_label
+from ui.constants import cuisine_label, ui_label
 import onboarding_status as obs
 
 _log = logging.getLogger(__name__)
@@ -41,24 +41,24 @@ PRIORITY_OPTIONS = [
 ]
 
 CUISINE_OPTIONS = [
-    ("asian", "🥢 Азиатская"),
-    ("russian", "🇷🇺 Русская"),
-    ("italian", "🍝 Итальянская"),
-    ("mediterranean", "🫒 Средиземноморская"),
-    ("mexican", "🌮 Мексиканская"),
-    ("french", "🥐 Французская"),
-    ("japanese", "🇯🇵 Японская"),
-    ("korean", "🇰🇷 Корейская"),
-    ("chinese", "🇨🇳 Китайская"),
-    ("thai", "🇹🇭 Тайская"),
-    ("vietnamese", "🇻🇳 Вьетнамская"),
-    ("indian", "🇮🇳 Индийская"),
-    ("turkish", "🇹🇷 Турецкая"),
-    ("greek", "🇬🇷 Греческая"),
-    ("spanish", "🇪🇸 Испанская"),
-    ("german", "🇩🇪 Немецкая"),
-    ("american", "🇺🇸 Американская"),
-    ("georgian", "🇬🇪 Грузинская"),
+    ("asian", cuisine_label("asian", "Азиатская")),
+    ("russian", cuisine_label("russian", "Русская")),
+    ("italian", cuisine_label("italian", "Итальянская")),
+    ("mediterranean", cuisine_label("mediterranean", "Средиземноморская")),
+    ("mexican", cuisine_label("mexican", "Мексиканская")),
+    ("french", cuisine_label("french", "Французская")),
+    ("japanese", cuisine_label("japanese", "Японская")),
+    ("korean", cuisine_label("korean", "Корейская")),
+    ("chinese", cuisine_label("chinese", "Китайская")),
+    ("thai", cuisine_label("thai", "Тайская")),
+    ("vietnamese", cuisine_label("vietnamese", "Вьетнамская")),
+    ("indian", cuisine_label("indian", "Индийская")),
+    ("turkish", cuisine_label("turkish", "Турецкая")),
+    ("greek", cuisine_label("greek", "Греческая")),
+    ("spanish", cuisine_label("spanish", "Испанская")),
+    ("german", cuisine_label("german", "Немецкая")),
+    ("american", cuisine_label("american", "Американская")),
+    ("georgian", cuisine_label("georgian", "Грузинская")),
 ]
 
 STYLES = [
@@ -328,7 +328,7 @@ async def send_notif(bot, cid, q=None):
     buttons = []
     for opt in get_notification_options():
         on = notif_on(cid, opt.key)
-        mark = "🟢" if on else "⚪"
+        mark = "✅" if on else "□"
         buttons.append(InlineKeyboardButton(f"{mark} {opt.button_label}", callback_data=f"set_notiftgl_{opt.key}"))
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     if any(notif_on(cid, kind) for kind, _ in NOTIF_TYPES):
@@ -363,14 +363,14 @@ def _priorities_kb(cid):
     selected = set(priorities(cid))
     buttons = [
         InlineKeyboardButton(
-            ("✅ " if key in selected else "⬜ ") + label,
+            ("✅ " if key in selected else "") + label,
             callback_data=f"set_prio_{key}",
         )
         for key, label in PRIORITY_OPTIONS
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    cuisine_mark = " ✓" if cuisines(cid) else ""
-    rows.append([InlineKeyboardButton(f"🍽️ Кухни{cuisine_mark}", callback_data="set_cuisines")])
+    cuisine_mark = " ✅" if cuisines(cid) else ""
+    rows.append([InlineKeyboardButton(f"{ui_label('recipes', 'Кухни')}{cuisine_mark}", callback_data="set_cuisines")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
     return InlineKeyboardMarkup(rows)
 
@@ -379,7 +379,7 @@ def _cuisines_kb(cid):
     selected = set(cuisines(cid))
     buttons = [
         InlineKeyboardButton(
-            ("✅ " if key in selected else "⬜ ") + label,
+            ("✅ " if key in selected else "") + label,
             callback_data=f"set_cuisine_{key}",
         )
         for key, label in CUISINE_OPTIONS
@@ -1189,7 +1189,7 @@ async def send_mydata_health(bot, cid):
 
 async def send_leisure_settings(bot, cid):
     rows = [[InlineKeyboardButton(title, callback_data=f"as_love_{key}")] for title, key in LOVE_SECTIONS]
-    rows.append([InlineKeyboardButton("🎬 Предпочтения кино", callback_data="movie_prefs")])
+    rows.append([InlineKeyboardButton(ui_label("cinema", "Предпочтения кино"), callback_data="movie_prefs")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
     msg = settings_ui.leisure_settings()
     await bot.send_message(
@@ -1251,7 +1251,7 @@ async def fav_view(bot, cid, i, back="as_bucket_fav", delete_cb=None):
     if typ:
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("❤️ В любимые", callback_data=f"as_notelove_{i}"),
-             InlineKeyboardButton("🚫 Скрыть", callback_data=f"as_noteblack_{i}")],
+             InlineKeyboardButton("Скрыть", callback_data=f"as_noteblack_{i}")],
             [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
         ])
     else:

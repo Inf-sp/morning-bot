@@ -122,13 +122,12 @@ def movie_card(item, tm):
     title = (tm.get("name") if tm else "") or item.get("title", "")
     year = f" ({tm.get('year')})" if tm and tm.get("year") else ""
     kind = (tm.get("kind") if tm else "") or ""
-    icon = "📺" if kind == "tv" else "🎬"
     type_label = "Сериал" if kind == "tv" else ("Фильм" if kind == "movie" else "")
 
     b = MessageBuilder()
 
     # 1. Что это — заголовок.
-    b.text_line(f"{icon} ")
+    b.text_line(f"{ui_label('cinema', '')} ")
     b.bold(f"{title}{year}")
     b.newline()
 
@@ -190,17 +189,17 @@ def _reason_line(item, tm):
         kind = reason.get("kind")
         label = _clip_title(reason.get("label", ""))
         if kind == "genre":
-            return f"🎭 Подборка в жанре «{label}»"
+            return f"Подборка в жанре «{label}»"
         if kind == "mood":
-            return f"😊 Подборка для настроения «{label}»"
+            return f"Подборка для настроения «{label}»"
     because = tm.get("because")
     if because:
         title = _clip_title(because)
         if tm.get("via") == "similar":
-            return f"💡 Похоже на «{title}»"
-        return f"💡 Потому что вам понравился «{title}»"
+            return f"Похоже на «{title}»"
+        return f"Потому что вам понравился «{title}»"
     hook = (item.get("hook") or "").strip()
-    return f"💡 {hook}" if hook else ""
+    return hook if hook else ""
 
 
 def _detail_line(tm):
@@ -277,21 +276,19 @@ def book_text(item):
     why = item.get("why") or []
     if isinstance(why, list) and why:
         b.spacer()
-        b.text_line("🎯 ")
         b.bold("Почему стоит читать")
         b.newline()
         for w in why:
             b.bullet(str(w).lstrip("-–— "))
     if item.get("plot"):
         b.spacer()
-        b.text_line("✍🏻 ")
+        b.text_line("✏️ ")
         b.bold("Коротко о сюжете")
         b.newline()
         b.line(item["plot"])
     if item.get("quote"):
         quote = str(item["quote"]).strip().strip("«»\"")
         b.spacer()
-        b.text_line("💬 ")
         b.bold("Цитата")
         b.newline()
         b.line(f"«{quote}»")
@@ -311,7 +308,6 @@ def artist_card(data):
     why = data.get("why") or []
     if isinstance(why, list) and why:
         b.spacer()
-        b.text_line("🎯 ")
         b.bold("Почему тебе зайдёт:")
         b.newline()
         for w in why:
@@ -319,14 +315,12 @@ def artist_card(data):
     tracks = data.get("tracks") or []
     if isinstance(tracks, list) and tracks:
         b.spacer()
-        b.text_line("🎧 ")
         b.bold("С чего начать:")
         b.newline()
         for t in tracks:
             b.bullet(str(t))
     if data.get("fact"):
         b.spacer()
-        b.text_line("💡 ")
         b.bold("Факт:")
         b.newline()
         b.line(data["fact"])
@@ -342,18 +336,19 @@ def concerts_list(place_label, events, empty_hint=""):
     b.newline()
     if not events:
         b.spacer()
-        b.line(empty_hint or "Сейчас ничего не нашёл. Попробуй другую страну 🌍")
+        b.line(empty_hint or "Сейчас ничего не нашёл. Попробуй другую страну.")
         return b.build_stripped()
     for ev in events:
         b.spacer()
         b.bold(ev.get("artist", ""))
         b.newline()
         if ev.get("place"):
-            b.line(f"📍 {ev.get('flag', '')} {ev['place']}")
+            place = f"{ev.get('flag', '')} {ev['place']}".strip()
+            b.line(f"Место: {place}")
         if ev.get("price"):
-            b.line(f"💶 {ev['price']}")
+            b.line(f"Цена: {ev['price']}")
         if ev.get("date"):
-            b.line(f"🗓️ {ev['date']}")
+            b.line(f"Дата: {ev['date']}")
         if ev.get("url"):
             b.link("Подробнее…", ev["url"])
             b.newline()
@@ -493,10 +488,10 @@ def _concert_card(b: MessageBuilder, event: dict) -> None:
     b.bold(event.get("title", ""))
     b.newline()
     if event.get("place"):
-        b.line(f"📍 {event['place']}")
+        b.line(f"Место: {event['place']}")
     date_text = _format_dates([d for d in event.get("dates", []) if isinstance(d, date)])
     if date_text:
-        b.line(f"🗓 {date_text}")
+        b.line(f"Дата: {date_text}")
 
 
 def _movie_item(b: MessageBuilder, event: dict) -> None:

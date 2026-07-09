@@ -124,7 +124,7 @@ def dict_overview(nl_total, en_total):
     b.line("Добавляй слова прямо в чате: «Добавь в словарь de kater».")
     b.line("Бот сам сохранит слово и добавит его в тренировки.")
     b.spacer()
-    b.line("Выбери язык 👇")
+    b.line("Выбери язык.")
     return b.build_stripped()
 
 

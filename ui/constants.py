@@ -15,10 +15,14 @@ UI_EMOJI = {
     "dictionary": "🗂️",
     "phrases": "🧩",
     "live_language": "💭",
+    "word_trainer": "🧠",
     "travel": "✈️",
     "countries": "🌍",
     "routes": "🗺",
     "health": "🚑",
+    "doctor": "👩🏻‍⚕️",
+    "worry_diary": "📓",
+    "health_history": "📋",
     "recommendation": "✨",
     "save": "⭐️",
     "favorite": "❤️",
@@ -68,6 +72,40 @@ CUISINE_EMOJI = {
 LANGUAGE_EMOJI = {
     "nl": "🇳🇱",
     "en": "🇬🇧",
+}
+
+COUNTRY_EMOJI = {
+    "nl": "🇳🇱",
+    "be": "🇧🇪",
+    "de": "🇩🇪",
+    "fr": "🇫🇷",
+    "gb": "🇬🇧",
+    "es": "🇪🇸",
+    "it": "🇮🇹",
+    "at": "🇦🇹",
+    "ch": "🇨🇭",
+    "pl": "🇵🇱",
+    "se": "🇸🇪",
+    "dk": "🇩🇰",
+    "pt": "🇵🇹",
+}
+
+WEATHER_EMOJI = {
+    "sun": "☀️",
+    "cloud": "☁️",
+    "rain": "🌧️",
+    "storm": "⛈️",
+    "thunderstorm": "🌩️",
+    "snow": "❄️",
+    "fog": "🌫️",
+    "wind": "💨",
+    "temperature": "🌡️",
+    "humidity": "💧",
+    "wind_direction": "🌬️",
+    "heat": "🥵",
+    "cold": "🥶",
+    "tornado": "🌪️",
+    "waves": "🌊",
 }
 
 STATUS_EMOJI = {

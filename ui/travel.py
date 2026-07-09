@@ -46,12 +46,10 @@ def country_card(data):
         b.line(data["about"])
     if data.get("for_what"):
         b.spacer()
-        b.text_line("🎯 ")
         b.bold("Ради чего ехать:")
         b.line(f" {data['for_what']}")
     if data.get("langs"):
         b.spacer()
-        b.text_line("🗣️ ")
         b.bold("Язык:")
         b.line(f" {data['langs']}")
     if data.get("note"):
@@ -61,7 +59,7 @@ def country_card(data):
         b.line(f" {data['note']}")
     if data.get("fact"):
         b.spacer()
-        b.text_line("🔎 ")
+        b.text_line("🔍 ")
         b.bold("Факт:")
         b.line(f" {data['fact']}")
     return b.build_stripped()
@@ -81,40 +79,34 @@ def travel_plan(plan, fallback_country):
         b.line(plan["about"])
     if plan.get("why"):
         b.spacer()
-        b.text_line("🎯 ")
         b.bold("Почему тебе подойдёт")
         b.newline()
         for w in plan["why"]:
             b.bullet(str(w))
     if plan.get("best_time"):
         b.spacer()
-        b.text_line("📅 ")
         b.bold("Лучшее время")
         b.newline()
         b.line(plan["best_time"])
     if plan.get("budget"):
         b.spacer()
-        b.text_line("💰 ")
         b.bold("Бюджет")
         b.newline()
         for item in plan["budget"]:
             b.bullet(str(item))
     if plan.get("spots"):
         b.spacer()
-        b.text_line("📸 ")
         b.bold("Не пропусти")
         b.newline()
         for spot in plan["spots"]:
             b.bullet(str(spot))
     if plan.get("lgbt"):
         b.spacer()
-        b.text_line("🏳️‍🌈 ")
         b.bold("LGBTQ+")
         b.newline()
         b.line(plan["lgbt"])
     if plan.get("fact"):
         b.spacer()
-        b.text_line("🍲 ")
         b.bold("Интересный факт")
         b.newline()
         b.line(plan["fact"])

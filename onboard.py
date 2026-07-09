@@ -9,7 +9,7 @@ _ob: dict = {}
 _LANG_KB = InlineKeyboardMarkup([
     [InlineKeyboardButton("🇳🇱 Нидерландский", callback_data="ob_lang_nl"),
      InlineKeyboardButton("🇬🇧 Английский",    callback_data="ob_lang_en")],
-    [InlineKeyboardButton("⏭ Пропустить",       callback_data="ob_lang_skip")],
+    [InlineKeyboardButton("Пропустить",       callback_data="ob_lang_skip")],
 ])
 
 def _lvl_kb(code: str) -> InlineKeyboardMarkup:
@@ -24,7 +24,7 @@ def _prio_kb(cid) -> InlineKeyboardMarkup:
     selected = set(_s.priorities(cid))
     buttons = [
         InlineKeyboardButton(
-            ("✅ " if key in selected else "⬜ ") + label,
+            ("✅ " if key in selected else "") + label,
             callback_data=f"ob_prio_{key}",
         )
         for key, label in _s.PRIORITY_OPTIONS

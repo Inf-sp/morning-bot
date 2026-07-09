@@ -31,7 +31,7 @@ def closet_kb():
 
 def _look_result_kb():
     return _kb([
-        [("😍 Надел", "w_fb_worn"), ("🫪 Не моё", "w_fb_nostyle")],
+        [("Надел", "w_fb_worn"), ("Не моё", "w_fb_nostyle")],
         [("⬅️ Назад", "m_wardrobe")],
     ])
 
@@ -96,11 +96,20 @@ def _save_cached_look(cid, item_ids, look_data):
 # ---------- главный экран раздела (панель состояния) ----------
 def _wardrobe_home_kb():
     return _kb([
-        [("Образ на сегодня", "w_look")],
-        [("Разбор гардероба", "w_improve")],
-        [("Проверка покупки", "w_check")],
-        [("Настройки гардероба", "set_wardrobe_g")],
+        [("✨ Образ на сегодня", "w_look")],
+        [("👕 Разбор гардероба", "w_improve")],
+        [("🔍 Проверка покупки", "w_check")],
+        [("🎚️ Настройки гардероба", "set_wardrobe_g")],
     ])
+
+
+async def _restore_home_kb(q):
+    if q is None or getattr(q, "message", None) is None:
+        return
+    try:
+        await q.message.edit_reply_markup(reply_markup=_wardrobe_home_kb())
+    except Exception:
+        pass
 
 
 async def send_home(bot, cid, q=None):
@@ -224,7 +233,7 @@ async def send_looks(bot, cid, status=None):
         await bot.send_message(
             chat_id=cid,
             text=(
-                "👔 <b>Шкаф пуст</b>\n\n"
+                "<b>Шкаф пуст</b>\n\n"
                 "Чтобы собрать образ из твоих вещей, сначала добавь их в шкаф."
             ),
             parse_mode="HTML",
@@ -320,7 +329,7 @@ async def send_looks(bot, cid, status=None):
 "style":"Scandinavian Minimalism|Smart Casual|Streetwear|Old Money|Classic Casual|Japanese Minimalism",
 "reasons":["2-3 коротких пункта почему этот образ подходит именно сегодня — каждый про РАЗНОЕ (напр. один про ткань/температуру, другой про силуэт/ветер, третий про цвета), без повторов одной мысли"],
 "styling_tip":"0-1 короткое предложение с советом как носить выбранные вещи; можно советовать закатать рукава рубашки или оставить рубашку навыпуск; никогда не советуй заправлять рубашку",
-"occasion":"короткая фраза с эмодзи для чего образ хорошо подходит сегодня, в общем виде без привязки к конкретным планам (напр. '☕ Комфортно для прогулки по городу'), или пусто",
+"occasion":"короткая текстовая фраза без эмодзи, для чего образ хорошо подходит сегодня, в общем виде без привязки к конкретным планам (напр. 'Комфортно для прогулки по городу'), или пусто",
 "recommendation":"1 предложение с одной рекомендацией докупить, если в гардеробе не хватает вещи для идеального образа, иначе пустая строка"}}"""
     try:
         d = await ai.allm_json(prompt, 900, module="wardrobe")
@@ -359,7 +368,7 @@ async def send_looks(bot, cid, status=None):
 
 # ---------- фидбек по образу ----------
 _FB_ACK = {
-    "worn": "😍 Отметил: надел. Буду чаще предлагать похожее.",
+    "worn": "Отметил: надел. Буду чаще предлагать похожее.",
 }
 
 async def look_feedback(bot, cid, verdict):
@@ -659,7 +668,7 @@ async def send_improve(bot, cid):
         ]])
         await bot.send_message(
             chat_id=cid,
-            text="🧥 <b>Шкаф пуст</b>\n\nДобавь вещи в шкаф — тогда разберу гардероб и дам советы.",
+            text="<b>Шкаф пуст</b>\n\nДобавь вещи в шкаф — тогда разберу гардероб и дам советы.",
             parse_mode="HTML",
             reply_markup=kb,
         )
@@ -818,6 +827,8 @@ async def handle_callback(bot, cid, q, data):
         except Exception as e:
             await status.stop(delete=False)
             await verify.safe_error(bot, cid, e)
+        finally:
+            await _restore_home_kb(q)
         return
     if data == "w_fb_nostyle":
         status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
@@ -832,7 +843,7 @@ async def handle_callback(bot, cid, q, data):
         await look_feedback(bot, cid, "worn"); return
     if data == "w_add":
         store.pending_input[str(cid)] = "wardrobe_add"
-        await bot.send_message(chat_id=cid, text="🏷 Напиши вещь в формате: тип + цвет + детали/бренд.\n"
+        await bot.send_message(chat_id=cid, text="Напиши вещь в формате: тип + цвет + детали/бренд.\n"
                                "Напр.: «Футболка белая Uniqlo плотная» или «Шорты серые тонкие». Можно списком.",
                                reply_markup=_back_kb()); return
     if data.startswith("w_del_"):
@@ -854,6 +865,7 @@ async def handle_callback(bot, cid, q, data):
             await verify.safe_error(bot, cid, e)
         finally:
             await status.stop(delete=False)
+            await _restore_home_kb(q)
         return
     if data == "w_check":
         store.pending_input[str(cid)] = "wardrobe_check"

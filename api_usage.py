@@ -24,18 +24,7 @@ SERVICE_LABELS = {
     "zeroentropy": "ZeroEntropy",
 }
 
-SERVICE_ICONS = {
-    "openweather": "☁️",
-    "gemini": "🤖",
-    "pexels": "🖼",
-    "tavily": "🔎",
-    "cloudflare": "Cloudflare",
-    "groq": "Groq",
-    "telegram": "Telegram",
-    "tmdb": "TMDB",
-    "ticketmaster": "Ticketmaster",
-    "zeroentropy": "ZeroEntropy",
-}
+SERVICE_ICONS = SERVICE_LABELS
 
 
 def _now():

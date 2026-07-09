@@ -40,10 +40,10 @@ def weather_warning(events, when="", advice=None):
     for ev in events:
         b.line(ev)
     if when:
-        b.section("🕒 Когда:")
+        b.section("Когда:")
         b.line(when)
     if advice:
-        b.section("🎒 Что сделать:")
+        b.section("Что сделать:")
         for a in advice:
             b.bullet(a)
     return b.build_stripped()
@@ -127,7 +127,7 @@ def storm_alert_html(reasons, wind_ms, is_nl=False):
 
 
 def city_not_found(raw):
-    return MessageSpec(text=f"😕 Не нашёл город: {raw}.\n\n🌍 Проверь написание и пришли название ещё раз.")
+    return MessageSpec(text=f"Не нашёл город: {raw}.\n\nПроверь написание и пришли название ещё раз.")
 
 
 def city_changed(city, country=""):

@@ -12,7 +12,7 @@ def profile():
 def notifications():
     b = MessageBuilder()
     b.section("Рассылки")
-    b.line("Нажми для включения/выключения. 🟢 — включено.")
+    b.line("Нажми для включения/выключения. ✅ — включено.")
     return b.build_stripped()
 
 
@@ -61,14 +61,14 @@ def city_input():
 
 def wardrobe_item_input():
     b = MessageBuilder()
-    b.text_line("🏷 Напиши вещь: тип + цвет + детали/бренд.\n")
+    b.text_line("Напиши вещь: тип + цвет + детали/бренд.\n")
     b.italic("Напр.: «Футболка белая Uniqlo» или «Шорты серые тонкие». Можно списком.")
     return b.build()
 
 
 def lagom_input():
     b = MessageBuilder()
-    b.text_line("☕️ Напиши установку или принцип — добавлю в здоровье.")
+    b.text_line("Напиши установку или принцип — добавлю в здоровье.")
     b.blank()
     b.italic("Например: «Меньше экрана, больше природы»")
     return b.build()
@@ -94,7 +94,7 @@ def list_added(kind, item):
 
 def style_custom_input():
     b = MessageBuilder()
-    b.text_line("🎨 Опиши свой стиль — как хочешь выглядеть, что нравится, что нет.")
+    b.text_line("Опиши свой стиль — как хочешь выглядеть, что нравится, что нет.")
     b.blank()
     b.italic("Например: «Люблю тёмные оттенки, оверсайз-силуэты, минимум принтов. Стараюсь избегать костюмов.»")
     return b.build()
@@ -111,7 +111,7 @@ def body_input():
 
 def style_pick():
     b = MessageBuilder()
-    b.section("🎨 Стиль одежды")
+    b.section("Стиль одежды")
     b.line("Выбери из предложенных или опиши своими словами — бот учтёт при подборе образа:")
     return b.build_stripped()
 
@@ -141,7 +141,7 @@ def leisure_settings():
     return b.build_stripped()
 
 
-def list_section(title, items, empty_hint="Пока пусто — добавь первый элемент 👇"):
+def list_section(title, items, empty_hint="Пока пусто — добавь первый элемент."):
     b = MessageBuilder()
     b.section(title)
     if not items:
@@ -170,18 +170,18 @@ def books_home(items):
 
 def lagom_home(items):
     b = MessageBuilder()
-    b.section("☕️ Лагом")
+    b.section("Лагом")
     b.text_line("Лагом (швед. ")
     b.italic("lagom")
     b.line(
         " — «в самый раз») — твой личный свод принципов: "
         "что важно, как хочешь жить, что даёт энергию, а что забирает."
     )
-    b.line("Бот использует их в ☕️ Мотивация — чтобы советы звучали именно про тебя, а не общими словами.")
+    b.line("Бот использует их в мотивации — чтобы советы звучали именно про тебя, а не общими словами.")
     b.section("Примеры:")
     b.line(" «Меньше, но лучше» · «Физическая активность каждый день» · «Не сравниваю себя с другими»")
     if not items:
-        b.line("Пока пусто — добавь первый принцип 👇")
+        b.line("Пока пусто — добавь первый принцип.")
     return b.build_stripped()
 
 
@@ -194,7 +194,7 @@ def saved_to_later():
 
 
 def note_blacklisted(preview, category):
-    return MessageSpec(text=f"🚫 «{preview[:50]}» - в чёрный список «{category}». Больше не порекомендую.")
+    return MessageSpec(text=f"«{preview[:50]}» - в чёрный список «{category}». Больше не порекомендую.")
 
 
 def note_removed_from_later():
@@ -236,7 +236,7 @@ def trips_home():
     b.section("✈️ Мои поездки")
     b.line("Сохранённые планы поездок.")
     b.spacer()
-    b.line("Выбери план 👇")
+    b.line("Выбери план.")
     return b.build_stripped()
 
 
@@ -277,7 +277,7 @@ def favorites_home():
     b.section("❤️ Любимые")
     b.line("Твои топ-категории.")
     b.spacer()
-    b.line("Выбери раздел 👇")
+    b.line("Выбери раздел.")
     return b.build_stripped()
 
 
@@ -302,4 +302,4 @@ def favorite_added():
 
 
 def admin_only():
-    return MessageSpec(text="⛔ Только для администратора.")
+    return MessageSpec(text="❌ Только для администратора.")

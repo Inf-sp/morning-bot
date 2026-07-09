@@ -1160,12 +1160,12 @@ async def send_topics(bot, cid):
     ]
     text = (
         "📰 Мои темы\n\n"
-        f"🏙 {city} и Нидерланды      ✅\n"
-        "🚆 NS, DUO и gemeente         ✅\n"
+        f"{city} и Нидерланды      ✅\n"
+        "NS, DUO и gemeente         ✅\n"
         "🎬 Фильмы и сериалы          ✅\n"
         f"{ui_label('music', 'Музыка')} и концерты         ✅\n"
-        "💻 Apple, AI и сервисы       ✅\n"
-        "🩺 Здоровье и медицина       ✅\n"
+        "Apple, AI и сервисы       ✅\n"
+        "Здоровье и медицина       ✅\n"
         "🍽 Новые места и еда         ✅"
     )
     await bot.send_message(chat_id=cid, text=text, reply_markup=InlineKeyboardMarkup(rows))
