@@ -390,7 +390,17 @@ def _build_day_text(cid):
     _build_day_text._has_fact = bool(fact)
     return text, msg.entities
 
-async def send_plany(bot, cid, force=False):
+async def _replace_or_send(bot, cid, loading_message, text, entities, reply_markup):
+    if loading_message is not None:
+        try:
+            await loading_message.edit_text(text=text, entities=entities, reply_markup=reply_markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=reply_markup)
+
+
+async def send_plany(bot, cid, force=False, show_loading=True):
     import time as _time
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     cache = _day_cache.get(str(cid))
@@ -402,11 +412,22 @@ async def send_plany(bot, cid, force=False):
         or force
         or (not cache.get("has_fact") and _time.time() - cache.get("ts", 0) > 1800)
     )
+    loading_message = None
     if stale:
+        if show_loading:
+            try:
+                loading_message = await bot.send_message(chat_id=cid, text="⏳ Собираю «Мой день»...")
+            except Exception:
+                loading_message = None
         _build_day_text._has_fact = False
         try:
             text, entities = await asyncio.to_thread(_build_day_text, cid)
         except Exception as e:
+            if loading_message is not None:
+                try:
+                    await loading_message.delete()
+                except Exception:
+                    pass
             await verify.safe_error(bot, cid, e); return
         _day_cache[str(cid)] = {
             "date": today, "text": text, "entities": entities,
@@ -414,6 +435,7 @@ async def send_plany(bot, cid, force=False):
             "ts": _time.time(),
         }
     cached = _day_cache[str(cid)]
-    await bot.send_message(
-        chat_id=cid, text=cached["text"], entities=cached.get("entities"), reply_markup=_day_menu_kb()
+    await _replace_or_send(
+        bot, cid, loading_message,
+        cached["text"], cached.get("entities"), _day_menu_kb()
     )

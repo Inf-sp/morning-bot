@@ -189,7 +189,7 @@ async def send_scheduled_notification(bot, cid, kind):
     """Отправить ровно то уведомление, которое уходит из плановой рассылки."""
     if kind == "morning_brief":
         import myday as _m
-        await _m.send_plany(_NoKbBot(bot), cid, force=True)
+        await _m.send_plany(_NoKbBot(bot), cid, force=True, show_loading=False)
     elif kind == "weather_warn":
         import asyncio
         import weather as _w
