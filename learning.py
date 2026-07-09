@@ -194,27 +194,33 @@ def _phrase_poll_explanation(blank_phrase, correct, full_phrase, sentence_ru, ex
 
 
 async def _gen_train_quiz_card(word, ru, language):
-    """Smart LLM: context sentence + pedagogically useful distractors."""
+    """Smart LLM: словосочетание с целевым словом + pedagogically useful distractors.
+
+    Задание тренируется на словосочетании (например "verstandige mensen"), а не на
+    голом слове - так лучше закрепляется естественное употребление."""
     prompt = f"""
 Ты методист тренажёра слов для языка: {language}.
 Целевое слово: «{word}».
 Базовый перевод: «{ru}».
 
-Сделай quiz poll на перевод целевого слова. Контекстное предложение нужно только для последующего объяснения.
+Составь короткое частоупотребимое словосочетание (2-3 слова) на {language} с этим словом
+в естественной бытовой форме. Сделай quiz poll на перевод ИМЕННО ЭТОГО СЛОВОСОЧЕТАНИЯ
+(не отдельного слова). Контекстное предложение нужно только для последующего объяснения.
 
 Жёсткие правила вариантов ответа:
-1. Ровно 3 варианта на русском: один правильный и два неправильных.
-2. Все варианты — одна часть речи.
+1. Ровно 3 варианта на русском: один правильный (перевод словосочетания) и два неправильных.
+2. Все варианты — словосочетания той же структуры (не одно слово вместо словосочетания).
 3. Все варианты примерно одинаковой длины, без очевидно самого длинного ответа.
-4. Неправильный вариант — похожая ловушка: частая ошибка, созвучие, близкое значение или ложный друг. Не случайное слово.
+4. Неправильный вариант — похожая ловушка: частая ошибка, созвучие, близкое значение или ложный друг. Не случайный набор слов.
 5. Контекстное предложение должно быть очень коротким, бытовым и понятным для человека с СДВГ: одна простая сцена, без лишних деталей.
 6. Если пользователь выбрал неверный вариант, объяснение должно назвать, как этот неверный смысл выражается на {language}.
 
 Верни JSON:
 {{
+  "phrase": "словосочетание на {language} с целевым словом",
   "sentence": "короткое предложение на {language} с целевым словом",
   "sentence_ru": "перевод предложения на русский",
-  "correct": "правильный вариант на русском",
+  "correct": "правильный перевод словосочетания на русский",
   "wrong": ["неверный вариант 1", "неверный вариант 2"],
   "wrong_map": {{"неверный вариант": "как это будет на {language}"}},
   "meaning": "краткое значение целевого слова на русском, до 4 слов"
@@ -226,6 +232,7 @@ async def _gen_train_quiz_card(word, ru, language):
         sentence, sentence_ru = await asyncio.to_thread(_gen_context, word, language)
         wrong = await asyncio.to_thread(_gen_distractors, word, ru, language, "fl_to_ru")
         return {
+            "phrase": word,
             "sentence": sentence or word,
             "sentence_ru": sentence_ru or ru,
             "correct": ru,
@@ -246,6 +253,7 @@ async def _gen_train_quiz_card(word, ru, language):
             if len(wrong) >= 2:
                 break
     return {
+        "phrase": str(d.get("phrase") or word).strip(),
         "sentence": str(d.get("sentence") or word).strip(),
         "sentence_ru": str(d.get("sentence_ru") or "").strip(),
         "correct": correct,
@@ -951,6 +959,7 @@ async def _render_quiz(bot, cid):
         st["used_words"] = used
 
     card = await _gen_train_quiz_card(word, ru, language)
+    phrase = card.get("phrase") or word
     correct_answer = card.get("correct") or ru
     wrong = list(card.get("wrong") or [])
 
@@ -987,6 +996,7 @@ async def _render_quiz(bot, cid):
         "mode": "word",
         "next_mode": next_mode,
         "word": word,
+        "phrase": phrase,
         "ru": ru,
         "sentence": card.get("sentence") or word,
         "sentence_ru": card.get("sentence_ru") or "",
@@ -997,7 +1007,7 @@ async def _render_quiz(bot, cid):
         "word_source": word_source,
     })
 
-    question, question_entities = _train_question(word)
+    question, question_entities = _train_question(phrase)
     explanation = _train_explanation(
         st.get("sentence", ""),
         st.get("sentence_ru", ""),

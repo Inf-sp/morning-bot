@@ -4,13 +4,13 @@ from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
 
 
-def train_question(word):
-    prefix = "Переведи слово «"
+def train_question(phrase):
+    prefix = "Переведи «"
     suffix = "»"
-    text = f"{prefix}{word}{suffix}"
+    text = f"{prefix}{phrase}{suffix}"
     return MessageSpec(
         text=text,
-        entities=[MessageEntity(MessageEntity.BOLD, u16_len(prefix), u16_len(str(word)))],
+        entities=[MessageEntity(MessageEntity.BOLD, u16_len(prefix), u16_len(str(phrase)))],
     )
 
 
@@ -103,7 +103,7 @@ def proverb_card(flag, original, analogs=None, meaning="", examples=None, exampl
 
 
 def train_result(state, idx, correct_idx, options, chosen_fl=""):
-    word = state.get("word", "")
+    word = state.get("phrase") or state.get("word", "")
     correct = str(options[correct_idx])
     chosen = str(options[idx])
     sentence = state.get("sentence", "")

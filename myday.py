@@ -228,60 +228,58 @@ def _is_word_entry(w):
         return w["kind"] == "word"
     return " " not in (w.get("word") or "").strip()
 
-def _fill_translations(ru, word, lang):
-    """Возвращает (nl, en): известный язык как есть, недостающий - переводим (и кэшируем у вызывающего)."""
-    nl = word if lang == "nl" else ""
-    en = word if lang == "en" else ""
-    if nl and en:
-        return nl, en
+def _make_phrase(word, lang):
+    """Частое словосочетание на изучаемом языке с этим словом + перевод на русский."""
     known = "нидерландском" if lang == "nl" else "английском"
     try:
         d = ai.llm_json(
-            f"Русское слово «{ru}» переводится на {known} как «{word}». "
-            f"Сначала определи, в каком именно значении «{ru}» и «{word}» связаны здесь "
-            "(русское слово может быть многозначным - не переводи его дословно/в другом значении). "
-            "Дай перевод именно в этом значении на недостающий язык. "
-            "СТРОГО: nl - только на нидерландском (с артиклем de/het), "
-            "en - только на английском. Одним словом/словосочетанием, без пояснений, без других языков.\n"
-            'JSON: {"nl":"нидерландский перевод","en":"английский перевод"}',
-            200, ai.GRAMMAR_ORDER)
-        nl = nl or (d.get("nl") or "").strip()
-        en = en or (d.get("en") or "").strip()
+            f"Слово: «{word}» ({known} язык). "
+            f"Составь одно короткое частоупотребимое словосочетание (2-3 слова) на {known} языке "
+            "с этим словом в естественной бытовой форме, и переведи это словосочетание на русский. "
+            'JSON: {"phrase":"словосочетание","phrase_ru":"перевод на русский"}',
+            150, ai.GRAMMAR_ORDER)
+        phrase = (d.get("phrase") or "").strip()
+        phrase_ru = (d.get("phrase_ru") or "").strip()
+        if phrase and phrase_ru:
+            return phrase, phrase_ru
     except Exception:
         pass
-    return nl, en
+    return "", ""
+
 
 def _word_of_day(cid):
-    """Слово дня: ОБЯЗАТЕЛЬНО и только из словаря СЛОВ (не фраз). Формат: 🇳🇱 → 🇬🇧 → Русский."""
+    """Слово дня: случайное слово из словаря на активном изучаемом языке,
+    превращённое в частое словосочетание. Кэш на день в самой записи слова."""
+    lang = learning._active_language_code(cid)
     words = learning._ensure_dict(cid)
     pool = [w for w in words if _is_word_entry(w)
-            and (w.get("ru") or "").strip() and (w.get("word") or "").strip()]
+            and (w.get("ru") or "").strip() and (w.get("word") or "").strip()
+            and (w.get("lang") or "nl") == lang]
     if not pool:
-        return ""
+        return "", lang
     w = random.choice(pool)
+    word = (w.get("word") or "").strip()
     ru = (w.get("ru") or "").strip()
-    lang = "en" if w.get("lang") == "en" else "nl"
-    nl = (w.get("nl") or (w.get("word") if lang == "nl" else "") or "").strip()
-    en = (w.get("en") or (w.get("word") if lang == "en" else "") or "").strip()
-    if not nl or not en:
-        nl2, en2 = _fill_translations(ru, w.get("word", ""), lang)
-        nl, en = nl or nl2, en or en2
-        # кэшируем перевод в записи, чтобы не переводить повторно
-        if nl:
-            w["nl"] = nl
-        if en:
-            w["en"] = en
-        try:
-            store.set_list(config.DICT_KEY, cid, words)
-        except Exception:
-            pass
-    parts = []
-    if nl:
-        parts.append(f"{_cap(nl)} 🇳🇱")
-    if en:
-        parts.append(f"{_cap(en)} 🇬🇧")
-    parts.append(_cap(ru))
-    return " → ".join(parts)
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+
+    phrase, phrase_ru = "", ""
+    if w.get("phrase_date") == today and w.get("phrase") and w.get("phrase_ru"):
+        phrase, phrase_ru = w["phrase"], w["phrase_ru"]
+    else:
+        phrase, phrase_ru = _make_phrase(word, lang)
+        if phrase and phrase_ru:
+            w["phrase"] = phrase
+            w["phrase_ru"] = phrase_ru
+            w["phrase_date"] = today
+            try:
+                store.set_list(config.DICT_KEY, cid, words)
+            except Exception:
+                pass
+
+    if phrase and phrase_ru:
+        return f"{_cap(phrase)} → {_cap(phrase_ru)}", lang
+    # fallback: AI недоступен - показываем само слово с переводом, без словосочетания
+    return f"{_cap(word)} → {_cap(ru)}", lang
 
 _day_cache = {}  # cid -> {"date":..., "text":..., "entities":..., "has_fact": bool, "ts": float}
 
@@ -291,7 +289,7 @@ def reset_day_cache(cid):
 def _day_menu_kb():
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Погода на неделю", callback_data="a_w_week")],
+        [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
         [InlineKeyboardButton("🌍 Сменить город", callback_data="a_setcity")],
     ])
 
@@ -342,7 +340,7 @@ def _build_day_text(cid):
     now = datetime.now(TZ)
     weekday_name = _WEEKDAYS[now.weekday()]
     is_weekend = now.weekday() >= 5
-    word_line = _word_of_day(cid)
+    word_line, word_lang = _word_of_day(cid)
     pr_labels = settings.priority_labels(cid)
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
@@ -377,6 +375,7 @@ def _build_day_text(cid):
         humidity_title=hum_title,
         humidity_line=hum_line,
         word_line=word_line,
+        word_lang=word_lang,
         fact=fact,
         lifehack=hack_text,
         quote_line=quote_line,
