@@ -1,0 +1,9 @@
+#!/bin/sh
+# Синхронизирует VERSION с последней версией в RELEASE_NOTES.md перед коммитом,
+# если RELEASE_NOTES.md входит в этот коммит.
+if git diff --cached --name-only | grep -q '^RELEASE_NOTES.md$'; then
+    python3 scripts/sync_version.py
+    if [ -f VERSION ]; then
+        git add VERSION
+    fi
+fi
