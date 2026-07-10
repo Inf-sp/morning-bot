@@ -34,14 +34,17 @@ def improve_card(data):
         b.line(summary)
 
     # Сильные стороны
-    strengths = [s for s in (data.get("strengths") or []) if _clean_text(s)]
+    raw_strengths = data.get("strengths")
+    raw_strengths = raw_strengths if isinstance(raw_strengths, list) else []
+    strengths = [s for s in raw_strengths if _clean_text(s)]
     if strengths:
         b.section("✅ Сильные стороны")
         for s in strengths[:4]:
             b.bullet(_finish_dot(s))
 
     # Слабые места
-    weaknesses = data.get("weaknesses") or []
+    weaknesses = data.get("weaknesses")
+    weaknesses = weaknesses if isinstance(weaknesses, list) else []
     if weaknesses:
         b.section("⚠️ Что ограничивает гардероб")
         for i, wk in enumerate(weaknesses[:5], 1):
@@ -60,7 +63,8 @@ def improve_card(data):
                 b.bullet(text)
 
     # Что купить
-    buy = data.get("buy") or []
+    buy = data.get("buy")
+    buy = buy if isinstance(buy, list) else []
     if buy:
         b.section(ui_label("shopping", "Что купить в первую очередь"))
         for i, it in enumerate(buy[:5]):
@@ -74,15 +78,20 @@ def improve_card(data):
                 b.line(why)
 
     # Чего не покупать
-    avoid = [a for a in (data.get("avoid") or []) if _clean_text(a)]
+    raw_avoid = data.get("avoid")
+    raw_avoid = raw_avoid if isinstance(raw_avoid, list) else []
+    avoid = [a for a in raw_avoid if _clean_text(a)]
     if avoid:
         b.section(ui_label("avoid", "Что покупать не стоит"))
         for a in avoid[:3]:
             b.bullet(_finish_dot(a))
 
     # Лучший образ
-    best = data.get("best_look") or {}
-    look_items = [x for x in (best.get("items") or []) if _clean_text(x)]
+    best = data.get("best_look")
+    best = best if isinstance(best, dict) else {}
+    raw_look_items = best.get("items")
+    raw_look_items = raw_look_items if isinstance(raw_look_items, list) else []
+    look_items = [x for x in raw_look_items if _clean_text(x)]
     if look_items:
         b.section("✨ Лучший образ")
         for x in look_items:
