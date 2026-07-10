@@ -152,6 +152,34 @@ def _load_curated_facts(city: str) -> list:
     return []
 
 
+_FACT_HISTORY_DAYS = 365
+
+
+def _fact_history_get(cid, city_key):
+    """Тексты фактов, показанных за последние 12 месяцев, для anti-repeat в промпте."""
+    cid = str(cid)
+    data = store._load(config.CITY_FACT_HISTORY_KEY) or {}
+    entries = (data.get(cid) or {}).get(city_key) or []
+    cutoff = int(datetime.now(TZ).timestamp()) - _FACT_HISTORY_DAYS * 86400
+    return [e["text"] for e in entries if isinstance(e, dict) and e.get("shown_at", 0) >= cutoff and e.get("text")]
+
+
+def _fact_history_add(cid, city_key, text):
+    """Записывает показанный факт в историю и вычищает записи старше 12 месяцев."""
+    if not text:
+        return
+    cid = str(cid)
+    cutoff = int(datetime.now(TZ).timestamp()) - _FACT_HISTORY_DAYS * 86400
+
+    def mut(data):
+        entries = data.setdefault(cid, {}).setdefault(city_key, [])
+        entries[:] = [e for e in entries if isinstance(e, dict) and e.get("shown_at", 0) >= cutoff]
+        entries.append({"text": text, "shown_at": int(datetime.now(TZ).timestamp())})
+        return data, True
+
+    store.mutate_kv(config.CITY_FACT_HISTORY_KEY, mut)
+
+
 def _curated_fact_fallback(city, cid):
     """Аварийный путь, если AI недоступен при генерации недельного пула:
     curated JSON с anti-repeat → research.tavily_fact → ''."""
@@ -182,12 +210,30 @@ def _curated_fact_fallback(city, cid):
     return ""
 
 
-def _generate_fact_pool(city, country):
+def _generate_fact_pool(city, country, recent_facts=None):
+    recent_facts = [str(f).strip() for f in (recent_facts or []) if str(f).strip()]
+    avoid_block = ""
+    if recent_facts:
+        avoid_block = (
+            "Не повторяй эти факты и не пересказывай их другими словами "
+            "(за последние 12 месяцев уже использовались):\n"
+            + "\n".join(f"- {f}" for f in recent_facts[-60:]) + "\n"
+        )
     prompt = (
         f"Составь {_POOL_TARGET_ITEMS} коротких интересных фактов о городе {city}"
         f"{f', {country}' if country else ''} для утреннего уведомления Telegram-бота.\n"
-        "Каждый факт - 1 предложение, конкретный и запоминающийся: архитектура, история, "
-        "культура, природа, местные традиции, наука, знаменитости-нежители спорта.\n"
+        "Тема каждого факта — город, регион, Нидерланды, наука, технологии, культура, "
+        "архитектура или повседневная жизнь.\n"
+        "Факт должен удивлять, а не просто сообщать справочную информацию: ищи "
+        "неожиданный масштаб, контраст, неочевидную связь или малоизвестную деталь, и "
+        "объясняй прямо в тексте, почему это интересно.\n"
+        "Пиши в стиле короткой журнальной заметки, максимум 3 коротких предложения на факт.\n"
+        "Без списков внутри факта, без голых дат без контекста, без канцелярского языка.\n"
+        "Не начинай факт с фраз «Знаете ли вы», «Мало кто знает», «Интересный факт» или "
+        "похожих вводных клише.\n"
+        "Не преувеличивай и не придумывай эффект неожиданности — только то, что "
+        "подтверждается надёжными источниками.\n"
+        f"{avoid_block}"
         "СТРОГО ЗАПРЕЩЕНО: футбол, спорт любого вида, результаты матчей, клубы, спортивные "
         "даты, политика, выборы, партии, криминал, преступления, войны, теракты, суды.\n"
         'Верни JSON: {"facts": ["факт 1", "факт 2", ...]}'
@@ -203,16 +249,20 @@ def _generate_fact_pool(city, country):
 
 def city_fact(city, country, cid, cc=""):
     """Факт о городе из недельного AI-пула (§46 CLAUDE.md: без спорта/политики/криминала).
-    Если AI недоступен при первой генерации пула за неделю - curated JSON/Tavily."""
+    Если AI недоступен при первой генерации пула за неделю - curated JSON/Tavily.
+    Факты, показанные за последние 12 месяцев, не повторяются (передаются в промпт при
+    генерации нового пула) и записываются в историю при каждом реальном показе."""
     if not city:
         return ""
     cid = str(cid)
     pool_id = city.strip().lower()
-    _pool_ensure_fresh(config.FACT_POOL_KEY, cid, pool_id, lambda: _generate_fact_pool(city, country))
+    recent = _fact_history_get(cid, pool_id)
+    _pool_ensure_fresh(config.FACT_POOL_KEY, cid, pool_id, lambda: _generate_fact_pool(city, country, recent))
     item = _pool_next_unshown(config.FACT_POOL_KEY, cid, pool_id)
-    if item:
-        return item["text"]
-    return _curated_fact_fallback(city, cid)
+    text = item["text"] if item else _curated_fact_fallback(city, cid)
+    if text:
+        _fact_history_add(cid, pool_id, text)
+    return text
 
 
 # --- Сводка дня (Мой день) ---

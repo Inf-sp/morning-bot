@@ -119,6 +119,7 @@ CITY_FACTS_FILE = "city_facts.json"        # аварийный fallback, есл
 CITY_FACT_IDX_KEY = "city_fact_idx.json"   # anti-repeat индексы curated-фактов (только для fallback-пути)
 LIFEHACK_KEY = "lifehacks_seen.json"       # anti-repeat для fallback lifehacks.json
 FACT_POOL_KEY = "myday_fact_pool.json"     # недельный AI-пул интересных фактов {cid: {...}}
+CITY_FACT_HISTORY_KEY = "city_fact_history.json"  # показанные факты за 12 мес, anti-repeat для промпта
 LIFEHACK_POOL_KEY = "myday_lifehack_pool.json"  # недельный AI-пул базы знаний {cid: {...}}
 FRIDGE_KEY = "fridge.json"
 MY_RECIPES_KEY = "my_recipes.json"
