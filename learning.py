@@ -77,6 +77,21 @@ def _train_entries(cid, language):
     return out
 
 
+def _train_full_entries(cid, language):
+    """Полные записи словаря (term/translation/breakdown/examples), нужные для
+    программной сборки карточки тренажёра без LLM."""
+    code = _code(language)
+    out = []
+    for w in _ensure_dict(cid):
+        if _dict_lang(w) != code:
+            continue
+        term = _entry_term(w)
+        ru = _entry_translation(w)
+        if term and ru:
+            out.append(w)
+    return out
+
+
 def _clip_poll_explanation(text, limit=200):
     text = re.sub(r"\s+\n", "\n", (text or "").strip())
     if len(text) <= limit:
@@ -757,6 +772,116 @@ def _clean_phrase_options(correct_answer, wrong, needed=3):
     return clean_wrong
 
 
+def _strip_article(lang, term):
+    term = (term or "").strip()
+    if lang == "nl":
+        return re.sub(r"^(de|het|een)\s+", "", term, flags=re.I)
+    if lang == "en":
+        return re.sub(r"^(to|the|a|an)\s+", "", term, flags=re.I)
+    return term
+
+
+def _blank_from_example(term, example_text):
+    """Вставляет пропуск на месте term в сохранённом примере — регистронезависимо.
+    Сначала пробует полный term (с артиклем), затем term без артикля — чтобы
+    сохранить в blank_phrase ровно то, что реально стоит в примере. Возвращает
+    (blank_phrase, correct) или ("", "") если term не найден в тексте буквально."""
+    if not example_text:
+        return "", ""
+    term = (term or "").strip()
+    term_bare = _strip_article("nl", _strip_article("en", term)).strip()
+    for candidate in (term, term_bare):
+        if not candidate:
+            continue
+        pattern = re.compile(re.escape(candidate), re.I)
+        m = pattern.search(example_text)
+        if m:
+            return pattern.sub("____", example_text, count=1), m.group(0)
+    return "", ""
+
+
+def _dict_distractors(entry, correct, other_entries, needed=3):
+    """Дистракторы для wrong-варианта — термины других слов того же словаря,
+    без LLM."""
+    term_self = _entry_term(entry)
+    pool = [
+        _cap(_entry_term(w)) for w in other_entries
+        if _entry_term(w) != term_self and _entry_term(w)
+    ]
+    random.shuffle(pool)
+    return _clean_phrase_options(correct, pool, needed=needed)
+
+
+def _build_programmatic_card(entry, other_entries, lang):
+    """Собирает тест-карточку тренажёра из уже сохранённых term/translation/
+    breakdown/examples записи словаря — без единого LLM-вызова. Формат
+    результата совпадает с _gen_consistent_phrase_card, чтобы вся остальная
+    логика тренажёра (интро/quiz/true-false/feedback) работала без изменений."""
+    term = _cap(_entry_term(entry))
+    translation = _entry_translation(entry)
+    breakdown = entry.get("breakdown") or ""
+    examples = entry.get("examples") or []
+    example_text = examples[0].get("text") if examples else ""
+    example_ru = examples[0].get("translation") if examples else ""
+
+    blank_phrase, correct = _blank_from_example(term, example_text) if example_text else ("", "")
+    sentence_ru = example_ru or translation
+    if not blank_phrase:
+        blank_phrase = f"____ — {translation}"
+        correct = term
+        sentence_ru = translation
+
+    wrong = _dict_distractors(entry, correct, other_entries, needed=3)
+    if len(wrong) < 3:
+        return {}
+
+    return {
+        "blank_phrase": blank_phrase,
+        "correct": correct,
+        "wrong": wrong,
+        "sentence_ru": sentence_ru,
+        "test_full_phrase": _phrase_full_from_blank(blank_phrase, correct),
+        "intro_pattern": term,
+        "intro_explanation": breakdown or translation,
+        "card_example": example_text or "",
+        "card_example_ru": example_ru or "",
+        "short_rule": breakdown or f"{term} — {translation}",
+        "detail": breakdown or f"{term} — {translation}",
+        "explanation": breakdown or f"{term} — {translation}",
+        "programmatic": True,
+    }
+
+
+def _bump_train_shown_count(cid, entry):
+    """Считает показы слова в тренажёре — определяет, когда изредка подмешать
+    LLM-карточку для разнообразия (см. _TRAIN_LLM_REFRESH_EVERY). Не влияет на
+    last_shown_at (используется в других местах для приоритизации утренней подборки)."""
+    words = store.get_list(config.DICT_KEY, cid)
+    term_self = _entry_term(entry)
+    lang_self = _dict_lang(entry)
+    for idx, w in enumerate(words):
+        if _dict_lang(w) == lang_self and _entry_term(w) == term_self:
+            words[idx]["train_shown_count"] = int(w.get("train_shown_count") or 0) + 1
+            store.set_list(config.DICT_KEY, cid, words)
+            return
+
+
+_TRAIN_LLM_REFRESH_EVERY = 5  # раз в столько показов одного слова — новая LLM-карточка для разнообразия
+
+
+async def _gen_train_card(cid, entry, other_entries, language, lang_code, show_count=0):
+    """Основной путь тренажёра: программная карточка без LLM. Изредка (не каждый
+    показ) подмешивает LLM-карточку для разнообразия — результат не сохраняется
+    обратно в словарь, это одноразовое разнообразие."""
+    if show_count and show_count % _TRAIN_LLM_REFRESH_EVERY == 0:
+        term = _cap(_entry_term(entry))
+        ru = _entry_translation(entry)
+        card = await _gen_consistent_phrase_card(term, ru, language)
+        if card:
+            return card
+    return _build_programmatic_card(entry, other_entries, lang_code)
+
+
 async def _gen_consistent_phrase_card(phrase, ru, language, avoid_tests=None, attempts=3):
     for attempt in range(max(1, attempts)):
         card = await _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=avoid_tests)
@@ -896,30 +1021,36 @@ async def _render_train_quiz(bot, cid):
     if not st:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
     language = st["lang"]
-    entries = _train_entries(cid, language)
-    if not entries:
+    lang_code = _code(language)
+    full_entries = _train_full_entries(cid, language)
+    if not full_entries:
         await bot.send_message(chat_id=cid, text="В словаре нет записей с переводом."); return
 
     used = st.get("used_entries", [])
-    available = [(i, p) for i, p in enumerate(entries) if i not in used]
+    available = [(i, e) for i, e in enumerate(full_entries) if i not in used]
     if not available:
         used = []
-        available = list(enumerate(entries))
+        available = list(enumerate(full_entries))
         st["used_entries"] = used
-    idx, (phrase, ru) = _r.choice(available)
+    idx, entry = _r.choice(available)
     used.append(idx)
     st["used_entries"] = used
 
-    card = await _gen_consistent_phrase_card(phrase, ru, language)
+    phrase, _note = _normalize_dict_term(lang_code, _kind_of(_entry_term(entry)), _entry_term(entry))
+    ru = _entry_translation(entry)
+    show_count = int(entry.get("train_shown_count") or 0)
+    card = await _gen_train_card(cid, entry, full_entries, language, lang_code, show_count=show_count)
+    _bump_train_shown_count(cid, entry)
     correct_answer = card.get("correct") or ""
     wrong = list(card.get("wrong") or [])
     clean_wrong = _clean_phrase_options(correct_answer, wrong, needed=3)
     blank_phrase = card.get("blank_phrase") or ""
+    is_programmatic = bool(card.get("programmatic"))
     if (
         not correct_answer
         or "____" not in blank_phrase
         or len(clean_wrong) < 3
-        or not _phrase_card_is_consistent(phrase, ru, card)
+        or (not is_programmatic and not _phrase_card_is_consistent(phrase, ru, card))
     ):
         await bot.send_message(
             chat_id=cid,
@@ -1781,7 +1912,9 @@ def _extract_chat_dict_add(text):
     return payload, lang
 
 async def try_add_dict_from_chat(bot, cid, text):
-    """Перехватывает явную просьбу добавить слово/фразу в словарь из обычного чата."""
+    """Перехватывает явную просьбу добавить слово/фразу в словарь из обычного чата.
+    Если payload похож на связный текст (несколько предложений), а не короткую
+    команду на одно слово/фразу — не добавляем сразу, а предлагаем превью."""
     payload, lang = _extract_chat_dict_add(text)
     if payload is None:
         return False
@@ -1790,6 +1923,9 @@ async def try_add_dict_from_chat(bot, cid, text):
             chat_id=cid,
             text="Пришли само слово или фразу: например «добавь в словарь de kater».",
         )
+        return True
+    if _looks_like_free_text([payload]):
+        await offer_dict_topics_from_text(bot, cid, text, lang)
         return True
     await add_dict_entry_from_chat(bot, cid, payload, lang, source_text=text)
     return True
@@ -2110,6 +2246,97 @@ def _is_bad_dict_item(word, ru):
     return False
 
 _BATCH_CARD_LIMIT = 5  # больше строк — не спамим карточками, шлём короткую сводку
+_DICT_TOPIC_LIMIT = 5  # сколько кандидатов максимум предлагать из свободного текста
+
+_SENTENCE_LINE_RE = re.compile(r"[.!?…]\s*$")
+
+
+def _looks_like_free_text(lines):
+    """True, если ввод похож на связный текст (предложения), а не на список
+    отдельных слов/фраз — тогда нельзя добавлять построчно без разбора темы."""
+    if len(lines) == 1:
+        words = lines[0].split()
+        return len(words) > 6 or bool(_SENTENCE_LINE_RE.search(lines[0]))
+    sentence_like = sum(
+        1 for ln in lines
+        if len(ln.split()) > 6 or _SENTENCE_LINE_RE.search(ln)
+    )
+    return sentence_like >= max(2, len(lines) // 2)
+
+
+async def _extract_dict_topics(text, lang="nl"):
+    """LLM выбирает до _DICT_TOPIC_LIMIT ключевых слов/фраз из свободного текста
+    вместо добавления всего подряд построчно — см. правило превью+подтверждение."""
+    language_hint = _lang_title(lang)
+    prompt = f"""
+Пользователь прислал текст в Telegram-бот с изучением языков. Подсказка языка
+изучения: {language_hint} ({lang}).
+Текст: {secure.wrap_untrusted(text, 'текст')}
+
+Найди основную тему текста и выбери не больше {_DICT_TOPIC_LIMIT} самых полезных
+для учебного словаря слов или коротких фраз на языке {language_hint}, которые
+встречаются в тексте по смыслу (переведи на {language_hint}, если текст на русском).
+Не включай случайные малополезные слова — только те, что реально стоит выучить.
+Если в тексте нет ничего подходящего для словаря, верни пустой список.
+
+Верни JSON:
+{{"items": [{{"term": "...", "translation": "..."}}]}}
+"""
+    try:
+        d = await ai.allm_json(prompt, 500, module="learning")
+    except Exception:
+        d = {}
+    items = (d or {}).get("items") or []
+    out = []
+    for item in items[:_DICT_TOPIC_LIMIT]:
+        if not isinstance(item, dict):
+            continue
+        term = re.sub(r"\s+", " ", str(item.get("term") or "").strip())
+        translation = re.sub(r"\s+", " ", str(item.get("translation") or "").strip())
+        if term and translation:
+            out.append({"term": term, "translation": translation})
+    return out
+
+
+def _dict_batch_preview_kb():
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Добавить всё", callback_data="a_dictbatch_add"),
+        InlineKeyboardButton("❌ Не добавлять", callback_data="a_dictbatch_cancel"),
+    ]])
+
+
+async def offer_dict_topics_from_text(bot, cid, text, lang="nl"):
+    """Свободный текст (несколько предложений) — не добавляем слепо: LLM находит
+    тему, показываем превью до 5 кандидатов и добавляем только по подтверждению."""
+    topics = await _extract_dict_topics(text, lang)
+    if not topics:
+        await bot.send_message(
+            chat_id=cid,
+            text="Не нашла в тексте ничего подходящего для словаря.",
+        )
+        return
+    store.dict_pending_batch[str(cid)] = {"lang": lang, "items": topics, "source_text": text}
+    lines = "\n".join(f"• {it['term']} — {it['translation']}" for it in topics)
+    await bot.send_message(
+        chat_id=cid,
+        text=f"📚 Добавить в словарь?\n\n{lines}",
+        reply_markup=_dict_batch_preview_kb(),
+    )
+
+
+async def confirm_dict_batch(bot, cid):
+    pending = store.dict_pending_batch.pop(str(cid), None)
+    if not pending:
+        await bot.send_message(chat_id=cid, text="Подборка устарела. Пришли текст ещё раз.")
+        return
+    lang = pending.get("lang", "nl")
+    text = "\n".join(it["term"] for it in pending.get("items") or [])
+    await add_words_batch(bot, cid, text, lang)
+
+
+async def cancel_dict_batch(bot, cid):
+    store.dict_pending_batch.pop(str(cid), None)
+    await bot.send_message(chat_id=cid, text="Хорошо, не добавляю.")
 
 
 async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False):
@@ -2119,6 +2346,9 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
     lines = [x.strip() for x in re.split(r"[\n;]+", text or "") if x.strip()]
     if not lines:
         await bot.send_message(chat_id=cid, text="Не удалось распознать слова. Попробуй ещё раз.")
+        return
+    if not detailed_confirmation and _looks_like_free_text(lines):
+        await offer_dict_topics_from_text(bot, cid, text, lang)
         return
 
     added_entries = []
@@ -2719,6 +2949,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None):
     msg = dict_ui.dict_language(lang, count)
     rows = [
         [InlineKeyboardButton("✏️ Добавить", callback_data=f"a_dictadd_smart_{lang}")],
+        [InlineKeyboardButton("✨ Популярные слова", callback_data=f"a_dictseed_start_{lang}")],
         [InlineKeyboardButton("🔍 Найти", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("📋 Весь список", callback_data=f"a_dictedit_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
@@ -2792,7 +3023,7 @@ async def confirm_delete_dict_entry(bot, cid, lang, term_key, q=None):
     )
 
 
-async def del_dict_entry_by_term(bot, cid, lang, term_key, q=None):
+async def del_dict_entry_by_term(bot, cid, lang, term_key, page=None, q=None):
     words = store.get_list(config.DICT_KEY, cid)
     removed = ""
     kept = []
@@ -2804,14 +3035,81 @@ async def del_dict_entry_by_term(bot, cid, lang, term_key, q=None):
     if removed:
         store.set_list(config.DICT_KEY, cid, kept)
     msg = dict_ui.dict_deleted(removed or "")
+    if page is not None:
+        await _show_screen(
+            bot, cid, msg.text, msg.entities,
+            InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к списку", callback_data=f"a_dictedit_{lang}_{page}")]]),
+            q=q,
+        )
+        return
     await _show_screen(bot, cid, msg.text, msg.entities, _dict_manage_kb(lang), q=q)
 
 
-async def send_dict_edit(bot, cid, lang, kind=None, q=None):
-    """Просмотр всего словаря списком = режим чистки (пагинация + мультивыбор).
-    open_cleanup всегда шлёт новое сообщение — отдельный список слишком велик,
-    чтобы аккуратно встраивать его в редактирование текущего экрана."""
-    await open_cleanup(bot, cid, f"d_{lang}")
+_DICT_LIST_PAGE_SIZE = 5
+
+
+def _dict_lang_entries(cid, lang):
+    return [w for w in _ensure_dict(cid) if _dict_lang(w) == lang]
+
+
+def _dict_list_kb(lang, entries, page):
+    total_pages = max(1, (len(entries) + _DICT_LIST_PAGE_SIZE - 1) // _DICT_LIST_PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * _DICT_LIST_PAGE_SIZE
+    chunk = entries[start:start + _DICT_LIST_PAGE_SIZE]
+    rows = []
+    for item in chunk:
+        term_key = _dict_item_key(lang, "", _entry_term(item))[2]
+        rows.append([InlineKeyboardButton(
+            _cap(_entry_term(item))[:40],
+            callback_data=f"a_dictview_{lang}_{page}_{term_key}",
+        )])
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("◀️", callback_data=f"a_dictedit_{lang}_{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(InlineKeyboardButton("▶️", callback_data=f"a_dictedit_{lang}_{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")])
+    return InlineKeyboardMarkup(rows), page, total_pages
+
+
+async def send_dict_edit(bot, cid, lang, page=0, q=None):
+    """Список словаря: только термины, без перевода — тап открывает карточку
+    слова с удалением. Постранично, без чекбокс-мультивыбора."""
+    entries = _dict_lang_entries(cid, lang)
+    if not entries:
+        await _show_screen(
+            bot, cid, "В словаре пока пусто.", None,
+            InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")]]),
+            q=q,
+        )
+        return
+    kb, page, total_pages = _dict_list_kb(lang, entries, page)
+    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+    text = f"{flag} Мой словарь\nСтраница {page + 1} из {total_pages}"
+    await _show_screen(bot, cid, text, None, kb, q=q)
+
+
+def _dict_entry_view_kb(lang, page, term_key):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Удалить", callback_data=f"a_dictviewdel_{lang}_{page}_{term_key}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}_{page}")],
+    ])
+
+
+async def send_dict_entry_view(bot, cid, lang, page, term_key, q=None):
+    """Карточка слова из списка — тот же вид, что при добавлении, плюс удаление."""
+    entries = _dict_lang_entries(cid, lang)
+    match = next((w for w in entries if _dict_item_key(lang, "", _entry_term(w))[2] == term_key), None)
+    if not match:
+        await send_dict_edit(bot, cid, lang, page=page, q=q)
+        return
+    if _entry_needs_ai_refresh(match):
+        match = await _refresh_dict_entry(cid, match)
+    msg = _dict_entry_message(match, status="found")
+    await _show_screen(bot, cid, msg.text, msg.entities, _dict_entry_view_kb(lang, page, term_key), q=q)
 
 
 async def del_word(bot, cid, i):

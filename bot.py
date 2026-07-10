@@ -392,6 +392,12 @@ async def answer_callback(update, context):
             elif act == "dictconfirm_fix":
                 await _ack(q)
                 await learning.fix_pending_dict_add(bot, cid)
+            elif act == "dictbatch_add":
+                await _ack(q)
+                await learning.confirm_dict_batch(bot, cid)
+            elif act == "dictbatch_cancel":
+                await _ack(q)
+                await learning.cancel_dict_batch(bot, cid)
             elif act.startswith("dictseed_start_"):
                 await learning.seed_start(bot, cid, act.split("_")[-1], q=q)
             elif act.startswith("dictseed_phrases_"):
@@ -439,6 +445,12 @@ async def answer_callback(update, context):
             elif act.startswith("dictsearch_"):
                 lang = act.split("_")[1]
                 await learning.send_dict_search_prompt(bot, cid, lang, q=q)
+            elif act.startswith("dictviewdel_"):
+                _, lang, page, term_key = act.split("_", 3)
+                await learning.del_dict_entry_by_term(bot, cid, lang, term_key, page=int(page), q=q)
+            elif act.startswith("dictview_"):
+                _, lang, page, term_key = act.split("_", 3)
+                await learning.send_dict_entry_view(bot, cid, lang, int(page), term_key, q=q)
             elif act.startswith("dictdelok_"):
                 _, lang, term_key = act.split("_", 2)
                 await learning.del_dict_entry_by_term(bot, cid, lang, term_key, q=q)
@@ -446,8 +458,12 @@ async def answer_callback(update, context):
                 _, lang, term_key = act.split("_", 2)
                 await learning.confirm_delete_dict_entry(bot, cid, lang, term_key, q=q)
             elif act.startswith("dictedit_"):
-                lang = act.split("_")[1]
-                await learning.send_dict_edit(bot, cid, lang)
+                rest = act[len("dictedit_"):]
+                if "_" in rest:
+                    lang, page = rest.rsplit("_", 1)
+                    await learning.send_dict_edit(bot, cid, lang, page=int(page), q=q)
+                else:
+                    await learning.send_dict_edit(bot, cid, rest, q=q)
             elif act == "game":
                 await learning.game_start(bot, cid)
             elif act == "levels":

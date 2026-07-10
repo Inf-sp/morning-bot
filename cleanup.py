@@ -129,9 +129,6 @@ COLLECTIONS = {
     "fridge_items": _collection(
         "fridge_items", "food", ui_label("products", "Продукты"), config.FRIDGE_KEY, "product",
         "as_fridge", [{"id": "remove", "label": "Удалить продукты", "confirm": True}]),
-    "dictionary_words": _collection(
-        "dictionary_words", "learning", ui_label("dictionary", "Словарь"), config.DICT_KEY, "word",
-        "a_dict", [{"id": "remove", "label": "Удалить слова", "confirm": True}]),
     "health_lagom": _collection(
         "health_lagom", "health", ui_label("health", "Принципы здоровья"), _LAGOM_REVISION_SLOT, "principle",
         "set_lagom", [{"id": "remove", "label": "Удалить принципы", "confirm": True}]),
