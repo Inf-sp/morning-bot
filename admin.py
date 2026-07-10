@@ -99,6 +99,7 @@ def _configured_service(service: str) -> bool:
         "gemini": bool(config.GEMINI_API_KEY),
         "pexels": bool(config.PEXELS_API_KEY),
         "tavily": bool(config.TAVILY_API_KEY),
+        "firecrawl": bool(config.FIRECRAWL_API_KEY),
         "cloudflare": bool(config.CF_API_TOKEN and config.CF_ACCOUNT_ID),
         "groq": bool(config.GROQ_API_KEY),
         "telegram": bool(config.TELEGRAM_TOKEN),
@@ -221,6 +222,7 @@ def _system_rows(probe_results=None):
         _short_status("groq", "Groq", snapshot),
         _short_status("gemini", "Gemini", snapshot),
         _short_status("tavily", "Tavily", snapshot),
+        _short_status("firecrawl", "Firecrawl", snapshot),
         _news_line(snapshot),
         _short_status("pexels", "Фото рецептов", snapshot),
         _data_line(),
@@ -523,6 +525,7 @@ async def send_api_ai(bot, cid, q=None):
     api_rows = [
         _api_line("openweather", "OpenWeather", snapshot),
         _api_line("tavily", "Tavily", snapshot),
+        _api_line("firecrawl", "Firecrawl", snapshot),
         _api_line("tmdb", "TMDB", snapshot),
         _api_line("ticketmaster", "Ticketmaster", snapshot),
         _api_line("zeroentropy", "ZeroEntropy", snapshot),

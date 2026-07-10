@@ -2961,19 +2961,24 @@ async def send_dict(bot, cid, back="m_notes", q=None):
 
 async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     """Главный экран словаря — сразу список слов «Мои слова и фразы», без
-    промежуточного меню: широкие кнопки Найти/Добавить/Сгенерировать сверху,
-    слова в 3 столбца по алфавиту, листание страниц по кругу, «⬅️ Назад» внизу
-    ведёт туда, откуда открыли словарь (раздел «Обучение»)."""
+    промежуточного меню: широкие кнопки Найти/Добавить-удалить/Сгенерировать
+    сверху, слова в 2 столбца по алфавиту, одна кнопка листания по кругу,
+    «⬅️ Назад» внизу ведёт туда, откуда открыли словарь (раздел «Обучение»)."""
     entries = _dict_lang_entries(cid, lang)
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+    lang_title = "нидерландского" if lang == "nl" else "английского"
     top_rows = [
         [InlineKeyboardButton("🔍 Найти в словаре", callback_data=f"a_dictsearch_{lang}")],
-        [InlineKeyboardButton("✏️ Добавить своё слово", callback_data=f"a_dictadd_smart_{lang}")],
+        [InlineKeyboardButton("✏️ Добавить или удалить слово", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("✨ Сгенерировать набор слов", callback_data=f"a_dictseed_start_{lang}")],
     ]
     if not entries:
         rows = top_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=back)]]
-        text = f"{flag} Мой словарь\n\nПока пусто — добавь первое слово."
+        text = (
+            f"{flag} Словарь {lang_title} языка пока пуст.\n\n"
+            "Добавь своё слово или фразу вручную, попроси сгенерировать набор "
+            "слов по уровню — или просто напиши в чат «добавь в словарь ...»."
+        )
         await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
         return
     total_pages = max(1, (len(entries) + _DICT_LIST_PAGE_SIZE - 1) // _DICT_LIST_PAGE_SIZE)
@@ -2984,27 +2989,27 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     for item in chunk:
         term_key = _dict_item_key(lang, "", _entry_term(item))[2]
         word_buttons.append(InlineKeyboardButton(
-            _cap(_entry_term(item))[:16],
+            _cap(_entry_term(item))[:20],
             callback_data=f"a_dictview_{lang}_{page}_{term_key}",
         ))
-    word_rows = [word_buttons[i:i + 3] for i in range(0, len(word_buttons), 3)]
+    word_rows = [word_buttons[i:i + 2] for i in range(0, len(word_buttons), 2)]
     nav_rows = []
     if total_pages > 1:
-        prev_page = page - 1 if page > 0 else total_pages - 1
         next_page = page + 1 if page < total_pages - 1 else 0
-        nav_rows.append([
-            InlineKeyboardButton("◀️ Назад", callback_data=f"a_dictedit_{lang}_{prev_page}"),
-            InlineKeyboardButton("Дальше ▶️", callback_data=f"a_dictedit_{lang}_{next_page}"),
-        ])
+        nav_rows.append([InlineKeyboardButton("▶️ Следующие слова", callback_data=f"a_dictedit_{lang}_{next_page}")])
     rows = top_rows + word_rows + nav_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=back)]]
-    text = f"{flag} Мой словарь · Страница {page + 1} из {total_pages}"
+    text = (
+        f"{flag} Мой словарь · {len(entries)} слов и фраз\n\n"
+        f"Показаны {start + 1}–{start + len(chunk)}. Нажми на слово, чтобы "
+        "посмотреть перевод, пример и удалить его."
+    )
     await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
 
 
 def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📚 Мой словарь", callback_data=f"a_dictlang_{lang}")],
-        [InlineKeyboardButton("✏️ Добавить своё слово", callback_data=f"a_dictadd_smart_{lang}")],
+        [InlineKeyboardButton("✏️ Добавить или удалить слово", callback_data=f"a_dictadd_smart_{lang}")],
     ])
 
 

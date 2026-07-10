@@ -26,7 +26,7 @@ TAVILY_MONTHLY_CREDIT_LIMIT = 1000
 NEWS_DAILY_CREDIT_BUDGET = 50
 NEWS_HARD_MONTHLY_LIMIT = 1000
 NEWS_HISTORY_KEY = "personal_news_history.json"
-NEWS_MAX_ITEMS = 5
+NEWS_MAX_ITEMS = 8
 NEWS_MIN_RELEVANCE_SCORE = 45
 NEWS_HISTORY_DAYS = 14
 REFRESH_COOLDOWN_SEC = 6 * 3600
@@ -46,6 +46,7 @@ _CATEGORY_LABELS = {
     "travel": "Поездки",
     "language": "Язык",
     "migration": "Миграция",
+    "curious": "Любопытное",
 }
 
 _ACTION_LABELS = {
@@ -97,6 +98,8 @@ _QUERY_DEFINITIONS = [
     ("travel", "nl", "Schiphol NS International staking vertraging wijziging", "country"),
     ("language", "nl", "inburgering examen Nederlands cursus Alkmaar wijziging", "local_event"),
     ("migration", "nl", "IND verblijfsvergunning wijziging Nederland migratie asiel", "country"),
+    ("curious", "nl", "opmerkelijk bijzonder verhaal Nederland Alkmaar Noord-Holland", "local_event"),
+    ("curious", "en", "unusual charming quirky story Netherlands local", "local_event"),
 ]
 
 _CATEGORY_GROUPS = {
@@ -114,12 +117,13 @@ _CATEGORY_GROUPS = {
     "travel": "travel",
     "language": "language",
     "migration": "netherlands",
+    "curious": "curious",
 }
 
 _CATEGORY_PRIORITY = [
     "city", "north_holland", "netherlands", "transport", "documents_study", "health",
     "housing_money", "tech", "leisure", "food", "wardrobe_weather", "travel", "language",
-    "migration",
+    "migration", "curious",
 ]
 
 _SOURCE_NAMES = {
@@ -163,6 +167,7 @@ class NewsItem:
     why_important: str
     action_hint: str
     hash: str
+    paragraph: str = ""  # живой связный абзац от LLM; "" -> fallback на summary/why_important
 
 
 def _now():
@@ -547,6 +552,42 @@ def _tavily_search(query, max_results=5, domains=None, time_range="week"):
         raise
 
 
+def _firecrawl_search(query, max_results=5):
+    """Второй поисковый источник рядом с Tavily — тот же запрос, независимый
+    провайдер. Возвращает результаты в общем формате (url/title/content), чтобы
+    дальше по пайплайну (_to_news_item и т.д.) источники были неотличимы."""
+    if not config.FIRECRAWL_API_KEY:
+        return []
+    payload = {"query": query, "limit": max_results, "sources": ["news", "web"]}
+    try:
+        r = requests.post(
+            "https://api.firecrawl.dev/v1/search",
+            json=payload,
+            headers={"Authorization": f"Bearer {config.FIRECRAWL_API_KEY}"},
+            timeout=18,
+        )
+        r.raise_for_status()
+        api_usage.record_request("firecrawl", ok=True, units={"credits": 1}, headers=r.headers)
+        data = r.json().get("data") or []
+        out = []
+        for row in data:
+            if not isinstance(row, dict):
+                continue
+            out.append({
+                "url": row.get("url", ""),
+                "title": row.get("title", ""),
+                "content": row.get("description") or row.get("markdown") or "",
+                "published_at": row.get("publishedDate") or row.get("published_at") or "",
+            })
+        return out
+    except Exception as e:
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        api_usage.record_request("firecrawl", ok=False, units={"credits": 1},
+                                 status_code=status, error=type(e).__name__)
+        _log.warning("personal_news Firecrawl failed: %s", str(e)[:120])
+        return []
+
+
 def _search_all(cid):
     return _search_all_for_profile(_profile_context(cid))
 
@@ -579,6 +620,16 @@ def _search_all_for_profile(profile):
         except Exception as e:
             _inc_stat("errors")
             _log.warning("personal_news Tavily failed: %s", str(e)[:120])
+
+        # Firecrawl — второй независимый поисковый источник по тому же запросу,
+        # рядом с Tavily (не вместо). Ошибки Firecrawl не роняют сбор новостей.
+        if config.FIRECRAWL_API_KEY and _reserve_credits(1):
+            for item in _firecrawl_search(spec["query"], max_results=5):
+                item = dict(item)
+                item["_category_hint"] = spec["category"]
+                item["_query_language"] = spec["language"]
+                item["_urgency"] = spec["urgency"]
+                rows.append(item)
     return rows
 
 
@@ -735,6 +786,8 @@ def _score_candidate(item, profile, now=None):
         "limit", "outage", "release", "ticket", "premiere",
     ))
 
+    curious = category == "curious"
+
     if local_hit:
         score += 30
         reasons.append("это рядом с Алкмаром")
@@ -744,6 +797,9 @@ def _score_candidate(item, profile, now=None):
     if interest_hit:
         score += 20
         reasons.append("связано с твоими интересами")
+    if curious:
+        score += 40
+        reasons.append("просто любопытная история")
     if age is not None and age <= 3:
         score += 15
     if action_hit:
@@ -755,7 +811,7 @@ def _score_candidate(item, profile, now=None):
         score -= 10
     elif age > _category_max_age_days(category, item.get("_urgency")):
         score -= 30
-    if not (local_hit or practical or interest_hit or action_hit):
+    if not (local_hit or practical or interest_hit or action_hit or curious):
         score -= 10
 
     return max(0, min(100, score)), category, reasons
@@ -787,6 +843,7 @@ def _why_important(category, reasons):
         "travel": "это может повлиять на дорогу и вылеты.",
         "language": "это полезно для изучения нидерландского.",
         "migration": "это важно для вида на жительство и документов.",
+        "curious": "просто симпатичная история для настроения.",
     }
     return defaults.get(category, "это практичное изменение для ближайших дней.")
 
@@ -816,29 +873,44 @@ def _to_news_item(item, profile, now=None):
     )
 
 
-def _rewrite_with_groq(items):
-    """Живой пересказ summary/why_important для уже отобранных правилами новостей.
+def _rewrite_with_groq(items, raw_contents):
+    """Живой связный абзац для карточки вместо шаблона «Что/Почему/Сделать» —
+    и заодно последний фильтр: LLM видит исходный текст источника целиком (не
+    уже обрезанный summary) и может отбросить служебные/нерабочие страницы
+    (например "график недоступен"), которые правило-based скоринг не ловит.
 
     Gemini запрещён для новостей даже как fallback (§46 CLAUDE.md) - явный
     order без "gemini" исключает его из цепочки полностью, в отличие от
     route="groq", который всё равно оставляет Gemini вторым в PROVIDER_ORDER.
-    Если Groq/Cloudflare недоступны - остаются текущие правило-based тексты.
-    """
+    Если Groq/Cloudflare недоступны - используется fallback без LLM (see caller)."""
     if not items:
         return items
     compact = [
-        {"i": idx, "title": it.title, "content": it.summary, "category": it.category}
+        {
+            "i": idx,
+            "title": it.title,
+            "content": _clip(raw_contents[idx] or it.summary, 500),
+            "category": it.category,
+        }
         for idx, it in enumerate(items)
     ]
     prompt = (
-        "Перепиши для карточки Telegram-новостей: короткий человечный пересказ (summary) "
-        "и одну фразу, почему это важно (why_important). Не добавляй факты, которых нет в исходном тексте. "
-        "Пиши по-русски, без канцелярита.\n\n"
+        "Ты пишешь короткие персональные новости для утренней Telegram-сводки читателю, "
+        "живущему в Нидерландах. Стиль — живой, тёплый, конкретный, без канцелярита и "
+        "штампов вроде «важно знать» или «стоит отметить».\n\n"
+        "Для каждой новости из списка ниже напиши ОДИН связный абзац (2-3 коротких "
+        "предложения): что произошло по существу и почему это может быть интересно или "
+        "полезно читателю — без разделения на отдельные пункты «что/почему/сделать», всё "
+        "цельным текстом. Не добавляй факты, которых нет в исходном content. Пиши по-русски.\n\n"
+        "Если content — это техническая страница, ошибка загрузки, заглушка или вообще не "
+        "содержит новостного события (например «график недоступен», «страница не найдена», "
+        "пустой список продуктов) — пометь is_real_news=false для этого элемента, ничего не "
+        "выдумывая взамен.\n\n"
         f"Новости: {json.dumps(compact, ensure_ascii=False)}\n\n"
-        "Верни JSON: {\"items\": [{\"i\": 0, \"summary\": \"...\", \"why_important\": \"...\"}]}"
+        "Верни JSON: {\"items\": [{\"i\": 0, \"paragraph\": \"...\", \"is_real_news\": true}]}"
     )
     try:
-        data = ai.llm_json(prompt, 900, order=("groq", "cf"), module="personal_news")
+        data = ai.llm_json(prompt, 1400, order=("groq", "cf"), module="personal_news")
     except Exception as e:
         _log.warning("personal_news Groq rewrite failed: %s", str(e)[:120])
         return items
@@ -851,10 +923,14 @@ def _rewrite_with_groq(items):
     out = []
     for idx, it in enumerate(items):
         row = rewritten.get(idx)
-        if row and row.get("summary"):
-            it = replace(it, summary=_clip(str(row["summary"]).strip(), 140))
-        if row and row.get("why_important"):
-            it = replace(it, why_important=_clip(str(row["why_important"]).strip(), 130))
+        if row is None:
+            out.append(it)
+            continue
+        if row.get("is_real_news") is False:
+            continue
+        paragraph = str(row.get("paragraph") or "").strip()
+        if paragraph:
+            it = replace(it, paragraph=_clip(paragraph, 420))
         out.append(it)
     return out
 
@@ -892,6 +968,7 @@ def collect_personal_news(user_profile, sources=None, now=None, search_fn=None):
     history = _history_for(cid, now)
 
     candidates = []
+    raw_content_by_hash = {}
     seen_titles = []
     for item in filtered:
         if _history_has_match(history, item):
@@ -901,10 +978,12 @@ def collect_personal_news(user_profile, sources=None, now=None, search_fn=None):
         news = _to_news_item(item, profile, now)
         if news.relevance_score >= NEWS_MIN_RELEVANCE_SCORE:
             candidates.append(news)
+            raw_content_by_hash[news.hash] = item.get("content") or ""
             seen_titles.append(news.title)
 
     selected = _select_diverse(candidates)
-    return _rewrite_with_groq(selected)
+    raw_contents = [raw_content_by_hash.get(it.hash, "") for it in selected]
+    return _rewrite_with_groq(selected, raw_contents)
 
 
 def _source_name(url):
@@ -925,115 +1004,52 @@ def _clip(text, limit):
     return text[: limit - 1].rstrip(" ,.;:") + "…"
 
 
-def _priority_label(item):
-    category = item.get("category") or "netherlands"
-    score = int(item.get("relevance_score") or 0)
-
-    main_categories = {
-        "city",
-        "transport",
-        "health",
-        "documents_study",
-        "housing_money",
-        "wardrobe_weather",
-        "travel",
-    }
-
-    if score >= 85 or category in main_categories:
-        return "🔥 Главное"
-
-    if score >= 75:
-        return "⚠️ Может повлиять"
-
-    return "👀 Интересное"
-
-
-def _action_text(item):
-    category = item.get("category") or "netherlands"
-    action = (item.get("action_hint") or "").strip()
-
-    if action and action not in {"Подробнее", "Проверь детали"}:
-        return _clip(action, 120)
-
-    defaults = {
-        "city": "проверить маршрут или планы рядом.",
-        "transport": "открыть NS перед поездкой.",
-        "housing_money": "проверить условия, если это касается тебя.",
-        "documents_study": "проверить дату, правило или личный кабинет.",
-        "health": "просто знать, без паники.",
-        "tech": "проверить логи и fallback-модели.",
-        "leisure": "сохранить, если интересно.",
-        "food": "проверить продукт или место.",
-        "wardrobe_weather": "учесть одежду и велосипед.",
-        "travel": "проверить маршрут или рейс.",
-        "language": "сохранить для обучения.",
-    }
-
-    return defaults.get(category, "ничего, просто знать.")
-
-
 def _build_card(items, updated_ts=None, stale=False):
+    from util import esc
+
     if not items:
         text = (
-            "📰 Новости\n\n"
-            "Сегодня ничего срочного.\n\n"
-            "Проверено:\n"
-            "Алкмар\n"
-            "Нидерланды\n"
-            "NS / DUO\n"
-            "AI / технологии\n"
-            "Досуг"
+            "<b>Новости</b>\n\n"
+            "Сегодня ничего срочного — проверила Алкмар, Нидерланды, NS/DUO, "
+            "технологии и досуг."
         )
         return text, []
     shown = items[:NEWS_MAX_ITEMS]
-    lines = [
-        "📰 Новости",
-        "",
-        f"Сегодня важного: {len(shown)}",
-    ]
-    buttons = []
+    lines = ["<b>Новости на сегодня</b>"]
     now = _now()
 
-    for idx, item in enumerate(shown, start=1):
+    for item in shown:
         cat = item.get("category") or "netherlands"
         label = _CATEGORY_LABELS.get(cat, "Нидерланды")
-
         title = _clip(item.get("title") or item.get("title_ru") or "", 80)
-        what = _clip(item.get("summary") or item.get("summary_ru") or "", 140)
-        why = _clip(item.get("why_important") or item.get("why_it_matters_ru") or "", 130)
-        action = _clip(_action_text(item), 120)
+
+        paragraph = (item.get("paragraph") or "").strip()
+        if not paragraph:
+            what = (item.get("summary") or item.get("summary_ru") or "").strip()
+            why = (item.get("why_important") or item.get("why_it_matters_ru") or "").strip()
+            paragraph = " ".join(p for p in (what, why) if p)
+        paragraph = _clip(paragraph, 420)
 
         url = item.get("url") or item.get("source_url") or ""
         source = item.get("source") or item.get("source_name") or _source_name(url)
         published = _parse_dt(item.get("published_at"))
         day_word = _relative_day(published, now)
+        source_bit = f"{source} · {day_word}" if day_word else source
+        source_link = f'<a href="{esc(url)}">{esc(source_bit)}</a>' if url else esc(source_bit)
 
-        lines.extend([
-            "",
-            _priority_label(item),
-            f"[{label}]",
-            title,
-        ])
+        heading = f"{label} · {title}" if title else label
+        lines.append("")
+        lines.append(f"<b>{esc(heading)}</b>")
+        if paragraph:
+            lines.append(esc(paragraph))
+        lines.append(f"→ {source_link}")
 
-        if what:
-            lines.append(f"Что: {what}")
-        if why:
-            lines.append(f"Почему: {why}")
-        if action:
-            lines.append(f"Сделать: {action}")
-
-        lines.append(f"Источник: {source} · {day_word}")
-
-        if url:
-            btn_text = "Открыть источник" if len(shown) == 1 else f"{idx} источник"
-            buttons.append([InlineKeyboardButton(btn_text, url=url)])
-
-    return "\n".join(lines).strip(), buttons[:NEWS_MAX_ITEMS]
+    return "\n".join(lines).strip(), []
 
 
 def _relative_day(published, now=None):
     if not published:
-        return "дата неизвестна"
+        return ""
     now = now or _now()
     local_date = published.astimezone(config.TZ).date()
     days = (now.date() - local_date).days
@@ -1112,7 +1128,7 @@ async def send_period(bot, cid, period="today", force=False):
         _inc_stat("cache_hits")
         text, buttons = _build_card(cached.get("items", []), cached.get("ts"))
         await bot.send_message(chat_id=cid, text=text, reply_markup=_default_keyboard(period, buttons, cid),
-                               disable_web_page_preview=True)
+                               parse_mode="HTML", disable_web_page_preview=True)
         return
     sources = await __import__("asyncio").to_thread(_search_all, cid)
     try:
@@ -1122,11 +1138,11 @@ async def send_period(bot, cid, period="today", force=False):
         if stale:
             text, buttons = _build_card(stale.get("items", []), stale.get("ts"), stale=True)
             await bot.send_message(chat_id=cid, text=text, reply_markup=_default_keyboard(period, buttons, cid),
-                                   disable_web_page_preview=True)
+                                   parse_mode="HTML", disable_web_page_preview=True)
             return
         raise
     await bot.send_message(chat_id=cid, text=entry["text"], reply_markup=_default_keyboard(period, buttons, cid),
-                           disable_web_page_preview=True)
+                           parse_mode="HTML", disable_web_page_preview=True)
 
 
 async def send_topics(bot, cid, q=None):

@@ -433,7 +433,8 @@ async def answer_callback(update, context):
                 store.pending_input[cid] = f"dictadd_smart_{lang}"
                 await bot.send_message(chat_id=cid, text=(
                     "✏️ Пришли слово или фразу для изучения — можно сразу несколько, каждую с новой строки.\n"
-                    "Я сам приведу в правильную форму, переведу и разберу."))
+                    "Я сам приведу в правильную форму, переведу и разберу.\n\n"
+                    "Чтобы удалить слово — вернись в список и тапни по нему."))
             elif act.startswith("dictadd_"):
                 lang = act.split("_")[1]
                 store.pending_input[cid] = f"dictadd_{lang}"

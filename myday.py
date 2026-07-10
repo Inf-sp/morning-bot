@@ -614,16 +614,6 @@ def _build_day_text(cid):
     _build_day_text._has_fact = bool(fact)
     return text, msg.entities
 
-async def _replace_or_send(bot, cid, loading_message, text, entities, reply_markup):
-    if loading_message is not None:
-        try:
-            await loading_message.edit_text(text=text, entities=entities, reply_markup=reply_markup)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=reply_markup)
-
-
 async def _maybe_prompt_dict_seed(bot, cid):
     """Если словарь на активном языке пуст, а seed ещё не предлагали - предложить
     один раз наполнить словарь (§28 CLAUDE.md: стартовые слова по language/level)."""
@@ -647,6 +637,10 @@ async def _maybe_prompt_dict_seed(bot, cid):
 
 
 async def send_plany(bot, cid, force=False, show_loading=True):
+    """Собирает и отправляет сводку «Мой день» без промежуточного «Собираю...» —
+    пользователь сразу получает готовый результат одним сообщением. show_loading
+    сохранён в сигнатуре для обратной совместимости вызовов, но больше не шлёт
+    отдельное сообщение — при холодном кэше показывается только typing-индикатор."""
     import time as _time
     await _maybe_prompt_dict_seed(bot, cid)
     today = datetime.now(TZ).strftime("%Y-%m-%d")
@@ -659,22 +653,15 @@ async def send_plany(bot, cid, force=False, show_loading=True):
         or force
         or (not cache.get("has_fact") and _time.time() - cache.get("ts", 0) > 1800)
     )
-    loading_message = None
     if stale:
-        if show_loading:
-            try:
-                loading_message = await bot.send_message(chat_id=cid, text="⏳ Собираю «Мой день»...")
-            except Exception:
-                loading_message = None
+        try:
+            await bot.send_chat_action(chat_id=cid, action="typing")
+        except Exception:
+            pass
         _build_day_text._has_fact = False
         try:
             text, entities = await asyncio.to_thread(_build_day_text, cid)
         except Exception as e:
-            if loading_message is not None:
-                try:
-                    await loading_message.delete()
-                except Exception:
-                    pass
             await verify.safe_error(bot, cid, e); return
         _day_cache[str(cid)] = {
             "date": today, "text": text, "entities": entities,
@@ -682,7 +669,7 @@ async def send_plany(bot, cid, force=False, show_loading=True):
             "ts": _time.time(),
         }
     cached = _day_cache[str(cid)]
-    await _replace_or_send(
-        bot, cid, loading_message,
-        cached["text"], cached.get("entities"), _day_menu_kb()
+    await bot.send_message(
+        chat_id=cid, text=cached["text"], entities=cached.get("entities"),
+        reply_markup=_day_menu_kb(),
     )
