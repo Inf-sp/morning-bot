@@ -551,6 +551,7 @@ async def send_movie_home(bot, cid, q=None):
             now_playing = await asyncio.to_thread(tmdb.get_now_playing, cc, _movie_service_language(cid))
         except Exception:
             now_playing = []
+    now_playing = [m for m in now_playing if (m.rating or 0) > 7]
 
     msg = leisure_ui.movie_home_screen(loved_count, genre_labels, country_label, now_playing[:10])
     kb = _movie_home_kb()
