@@ -527,6 +527,21 @@ def tavily_snippet(query: str, max_chars: int = 1200) -> str:
     return "\n---\n".join(parts)
 
 
+def tavily_fact(name):
+    """Реальный факт о месте/стране через Tavily — без LLM (тот же принцип, что wiki_fact,
+    для аварийного пути, когда сам LLM недоступен). Пустая строка если ключа нет/нет кандидатов."""
+    results = tavily_search(f"{name} интересный факт", max_results=3)
+    sents = []
+    seen = set()
+    for r in results:
+        for s in _extract_sents(r.get("content") or ""):
+            if s not in seen:
+                sents.append(s); seen.add(s)
+    if not sents:
+        return ""
+    return random.choice(sents)
+
+
 def web_search(query: str, max_results: int = 5) -> list:
     """Web search через Tavily, один формат результата."""
     out, seen = [], set()

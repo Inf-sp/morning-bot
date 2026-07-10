@@ -154,7 +154,7 @@ def _load_curated_facts(city: str) -> list:
 
 def _curated_fact_fallback(city, cid):
     """Аварийный путь, если AI недоступен при генерации недельного пула:
-    curated JSON с anti-repeat → research.wiki_fact → ''."""
+    curated JSON с anti-repeat → research.tavily_fact → ''."""
     cid = str(cid)
     facts = _load_curated_facts(city)
     if facts:
@@ -174,11 +174,11 @@ def _curated_fact_fallback(city, cid):
         if not _content_blocked(text):
             return text
     try:
-        wiki = research.wiki_fact(city)
-        if wiki and len(wiki.strip()) > 60 and not _content_blocked(wiki):
-            return wiki.strip()
+        fact = research.tavily_fact(city)
+        if fact and len(fact.strip()) > 60 and not _content_blocked(fact):
+            return fact.strip()
     except Exception as e:
-        _log.warning("myday: wiki_fact(%s) failed: %s", city, e)
+        _log.warning("myday: tavily_fact(%s) failed: %s", city, e)
     return ""
 
 
@@ -203,7 +203,7 @@ def _generate_fact_pool(city, country):
 
 def city_fact(city, country, cid, cc=""):
     """Факт о городе из недельного AI-пула (§46 CLAUDE.md: без спорта/политики/криминала).
-    Если AI недоступен при первой генерации пула за неделю - curated JSON/Wikipedia."""
+    Если AI недоступен при первой генерации пула за неделю - curated JSON/Tavily."""
     if not city:
         return ""
     cid = str(cid)
