@@ -296,21 +296,26 @@ async def _save_learn(cid, raw: str, mode: str) -> list:
     saved = []
     lang_map = {"нидерландский": "нидерландский", "nl": "нидерландский", "dutch": "нидерландский",
                 "английский": "английский", "en": "английский", "english": "английский"}
-    levels = {"a1", "a2", "b1", "b2", "c1", "c2"}
+    cefr_to_level = {
+        "a1": "simple", "a2": "simple",
+        "b1": "medium",
+        "b2": "hard", "c1": "hard", "c2": "hard",
+    }
+    level_word = {"simple": "простой", "medium": "средний", "hard": "сложный"}
     text_low = raw.lower()
     detected_lang = None
     for alias, canonical in lang_map.items():
         if alias in text_low:
             detected_lang = canonical
             break
-    level_found = next((lv.upper() for lv in levels if lv in text_low), None)
+    level_found = next((level for cefr, level in cefr_to_level.items() if cefr in text_low), None)
     if detected_lang:
         _s.set_(cid, "study_lang", detected_lang)
         store.set_learning_language(cid, "en" if detected_lang == "английский" else "nl")
         saved.append(f"Язык: {detected_lang}")
     if detected_lang and level_found:
         store.set_level(cid, detected_lang, level_found)
-        saved.append(f"Уровень: {level_found}")
+        saved.append(f"Уровень: {level_word[level_found]}")
     if not saved:
         _s.set_(cid, "study_lang", "нидерландский")
         store.set_learning_language(cid, "nl")

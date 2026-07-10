@@ -18,7 +18,8 @@ from ui import learning as learning_ui
 
 _log = logging.getLogger(__name__)
 
-LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
+LEVELS = ["simple", "medium", "hard"]
+LEVEL_LABELS = {"simple": "Простой", "medium": "Средний", "hard": "Сложный"}
 
 _URL_RE = re.compile(r'\(?https?://\S+\)?')
 
@@ -26,10 +27,8 @@ def _strip_urls(s):
     return re.sub(r'\s{2,}', ' ', _URL_RE.sub('', s or '')).strip()
 
 def _is_b1plus(level):
-    try:
-        return LEVELS.index(level) >= LEVELS.index("B1")
-    except Exception:
-        return False
+    """Оставлено для совместимости с местами, где важно только «средний и выше»."""
+    return level in ("medium", "hard")
 
 def _code(language):
     if language in ("nl", "en"):
@@ -56,7 +55,7 @@ def _flag(language):
     return "🇳🇱" if _code(language) == "nl" else "🇬🇧"
 
 def _level_label(level):
-    return "Сложный (B1+)" if _is_b1plus(level) else "Лёгкий (A1–A2)"
+    return LEVEL_LABELS.get(level, "Средний")
 
 # ================= ЕДИНЫЙ ТРЕНАЖЁР =================
 TRAIN_FORMATS = ["gap", "tf", "card"]  # legacy — не используется в новом квизе
@@ -1330,8 +1329,9 @@ async def send_train_lang_select(bot, cid):
 
 # ================= ОБРАТНЫЙ ПЕРЕВОД =================
 def generate_challenge(language, level):
-    return ai.llm(f"Дай ОДНУ фразу на русском для перевода на {language}. Уровень {level}, бытовая/рабочая ситуация. "
-                  f"Только русская фраза, без кавычек.", 200, 1.0, tier="cheap").strip()
+    level_label = LEVEL_LABELS.get(level, "средний")
+    return ai.llm(f"Дай ОДНУ фразу на русском для перевода на {language}. Уровень сложности: {level_label.lower()}, "
+                  f"бытовая/рабочая ситуация. Только русская фраза, без кавычек.", 200, 1.0, tier="cheap").strip()
 
 def check_translation(language, ru, answer):
     return ai.llm_json(f"""Ученик переводит с русского на {language}.
@@ -2417,15 +2417,16 @@ def _ensure_dict(cid):
 
 _DICT_SEED_PROFILE_KEY = "_dict_seed"
 _DICT_SEED_SEEN_PROFILE_KEY = "_dict_seed_seen"
-_DICT_SEED_PAGE_SIZE = 10
+_DICT_SEED_PAGE_SIZE = 5
 _DICT_SEED_LIMIT = 30
+_SEED_LEVELS = ["simple", "medium", "hard"]
 _DICT_SEED_SOURCE_NOTE = (
-    "Списки собраны как частотный CEFR-старт: Oxford 3000/5000, Cambridge/English "
+    "Списки собраны как частотный старт: Oxford 3000/5000, Cambridge/English "
     "Vocabulary Profile и частотные разговорные списки; редкие книжные слова исключены."
 )
 
 _EN_SEED_WORDS = {
-    "A1": [
+    "simple": [
         ("about", "о, про", ""), ("always", "всегда", ""), ("because", "потому что", ""),
         ("before", "до, перед", ""), ("between", "между", ""), ("bring", "приносить", ""),
         ("city", "город", ""), ("clean", "чистый; убирать", ""), ("different", "разный", ""),
@@ -2436,8 +2437,6 @@ _EN_SEED_WORDS = {
         ("something", "что-то", ""), ("sometimes", "иногда", ""), ("together", "вместе", ""),
         ("understand", "понимать", ""), ("usually", "обычно", ""), ("want", "хотеть", ""),
         ("water", "вода", ""), ("week", "неделя", ""), ("work", "работать; работа", ""),
-    ],
-    "A2": [
         ("almost", "почти", ""), ("already", "уже", ""), ("arrive", "прибывать", ""),
         ("believe", "верить", ""), ("borrow", "занимать", ""), ("change", "менять; изменение", ""),
         ("comfortable", "удобный", ""), ("continue", "продолжать", ""), ("decide", "решать", ""),
@@ -2449,7 +2448,7 @@ _EN_SEED_WORDS = {
         ("receive", "получать", ""), ("reason", "причина", ""), ("return", "возвращаться", ""),
         ("several", "несколько", ""), ("spend", "тратить; проводить время", ""), ("without", "без", ""),
     ],
-    "B1": [
+    "medium": [
         ("achieve", "достигать", ""), ("although", "хотя", ""), ("avoid", "избегать", ""),
         ("challenge", "вызов; трудная задача", ""), ("compare", "сравнивать", ""), ("consider", "считать; рассматривать", ""),
         ("create", "создавать", ""), ("depend", "зависеть", ""), ("develop", "развивать", ""),
@@ -2461,7 +2460,7 @@ _EN_SEED_WORDS = {
         ("require", "требовать", ""), ("result", "результат", ""), ("similar", "похожий", ""),
         ("support", "поддерживать; поддержка", ""), ("therefore", "поэтому", ""), ("whether", "ли", ""),
     ],
-    "B2": [
+    "hard": [
         ("accurate", "точный", ""), ("approach", "подход", ""), ("assume", "предполагать", ""),
         ("benefit", "польза; приносить пользу", ""), ("complex", "сложный", ""), ("concern", "беспокойство; касаться", ""),
         ("consistent", "последовательный", ""), ("define", "определять", ""), ("demand", "требование; требовать", ""),
@@ -2472,8 +2471,6 @@ _EN_SEED_WORDS = {
         ("previous", "предыдущий", ""), ("principle", "принцип", ""), ("range", "диапазон", ""),
         ("reliable", "надёжный", ""), ("respond", "отвечать; реагировать", ""), ("significant", "значительный", ""),
         ("specific", "конкретный", ""), ("strategy", "стратегия", ""), ("task", "задача", ""),
-    ],
-    "C1": [
         ("acknowledge", "признавать", ""), ("adapt", "адаптироваться; адаптировать", ""),
         ("adequate", "достаточный", ""), ("advocate", "выступать за", ""), ("allocate", "распределять", ""),
         ("anticipate", "предвидеть", ""), ("apparent", "очевидный; кажущийся", ""), ("attribute", "приписывать", ""),
@@ -2489,7 +2486,7 @@ _EN_SEED_WORDS = {
 }
 
 _NL_SEED_WORDS = {
-    "A1": [
+    "simple": [
         ("altijd", "всегда", ""), ("begrijpen", "понимать", ""), ("betalen", "платить", ""),
         ("blijven", "оставаться", ""), ("boodschap", "покупка; сообщение", ""), ("buiten", "снаружи", ""),
         ("denken", "думать", ""), ("dichtbij", "рядом", ""), ("familie", "семья", ""),
@@ -2500,8 +2497,6 @@ _NL_SEED_WORDS = {
         ("samen", "вместе", ""), ("schoon", "чистый", ""), ("soms", "иногда", ""),
         ("vragen", "спрашивать", ""), ("vriend", "друг", ""), ("wachten", "ждать", ""),
         ("werken", "работать", ""), ("weten", "знать", ""), ("zoeken", "искать", ""),
-    ],
-    "A2": [
         ("aanbieden", "предлагать", ""), ("afspraak", "встреча; запись", ""), ("beginnen", "начинать", ""),
         ("beslissen", "решать", ""), ("bereiken", "достигать", ""), ("beschrijven", "описывать", ""),
         ("betekenen", "значить", ""), ("bijna", "почти", ""), ("daarom", "поэтому", ""),
@@ -2513,7 +2508,7 @@ _NL_SEED_WORDS = {
         ("reizen", "путешествовать", ""), ("rustig", "спокойный", ""), ("terug", "назад", ""),
         ("uitleggen", "объяснять", ""), ("vergeten", "забывать", ""), ("veranderen", "менять", ""),
     ],
-    "B1": [
+    "medium": [
         ("aanpassen", "адаптировать; подстраивать", ""), ("aanraden", "советовать", ""),
         ("afhankelijk", "зависимый", ""), ("behalen", "достигать", ""), ("beïnvloeden", "влиять", ""),
         ("belangrijk", "важный", ""), ("bespreken", "обсуждать", ""), ("betrouwbaar", "надёжный", ""),
@@ -2526,7 +2521,7 @@ _NL_SEED_WORDS = {
         ("uitdaging", "вызов; трудность", ""), ("vermijden", "избегать", ""), ("verbeteren", "улучшать", ""),
         ("waarschijnlijk", "вероятно", ""),
     ],
-    "B2": [
+    "hard": [
         ("aantonen", "показывать; доказывать", ""), ("benadering", "подход", ""), ("beperken", "ограничивать", ""),
         ("bevorderen", "способствовать", ""), ("complex", "сложный", ""), ("consequent", "последовательный", ""),
         ("daadwerkelijk", "действительно", ""), ("desondanks", "несмотря на это", ""), ("doeltreffend", "эффективный", ""),
@@ -2537,8 +2532,6 @@ _NL_SEED_WORDS = {
         ("reageren", "реагировать", ""), ("relevant", "релевантный", ""), ("schatten", "оценивать", ""),
         ("specifiek", "конкретный", ""), ("strategie", "стратегия", ""), ("toepassen", "применять", ""),
         ("uitbreiden", "расширять", ""), ("voorkomen", "предотвращать; случаться", ""), ("zorgvuldig", "тщательный", ""),
-    ],
-    "C1": [
         ("aanscherpen", "уточнять; усиливать", ""), ("aanzienlijk", "значительный", ""), ("benadrukken", "подчёркивать", ""),
         ("beoordelen", "оценивать", ""), ("belemmeren", "препятствовать", ""), ("beschouwen", "рассматривать", ""),
         ("bewustwording", "осознание", ""), ("daarentegen", "напротив", ""), ("doorslaggevend", "решающий", ""),
@@ -2554,19 +2547,19 @@ _NL_SEED_WORDS = {
 }
 
 _EN_SEED_PHRASES = {
-    "A1": [("How are you?", "Как дела?", ""), ("I don't understand.", "Я не понимаю.", ""), ("Can you help me?", "Можете помочь?", ""), ("How much is it?", "Сколько это стоит?", ""), ("See you later.", "Увидимся позже.", ""), ("I would like...", "Я бы хотел...", ""), ("Where is the station?", "Где вокзал?", ""), ("I am sorry.", "Извините.", ""), ("No problem.", "Без проблем.", ""), ("What does it mean?", "Что это значит?", "")],
-    "A2": [("Could you repeat that?", "Не могли бы повторить?", ""), ("I am looking for...", "Я ищу...", ""), ("It depends on...", "Это зависит от...", ""), ("I have already done it.", "Я уже это сделал.", ""), ("What do you think?", "Что ты думаешь?", ""), ("I need to change it.", "Мне нужно это изменить.", ""), ("Can I borrow this?", "Можно это одолжить?", ""), ("Let me know.", "Дай знать.", ""), ("I am on my way.", "Я уже в пути.", ""), ("That sounds good.", "Звучит хорошо.", "")],
-    "B1": [("I see your point.", "Я понимаю твою мысль.", ""), ("It is worth trying.", "Это стоит попробовать.", ""), ("I need to improve this.", "Мне нужно это улучшить.", ""), ("Although it is difficult, it is useful.", "Хотя это сложно, это полезно.", ""), ("What is the main challenge?", "В чём главная сложность?", ""), ("I would rather avoid it.", "Я бы предпочёл этого избежать.", ""), ("It depends on the situation.", "Это зависит от ситуации.", ""), ("That is a good opportunity.", "Это хорошая возможность.", ""), ("Could you explain it briefly?", "Можешь кратко объяснить?", ""), ("I have noticed that...", "Я заметил, что...", "")],
-    "B2": [("From my perspective...", "С моей точки зрения...", ""), ("The evidence suggests that...", "Данные указывают на то, что...", ""), ("We need a reliable method.", "Нам нужен надёжный метод.", ""), ("It has a significant impact.", "Это оказывает значительное влияние.", ""), ("Let me clarify one point.", "Позволь уточнить один момент.", ""), ("The previous approach did not work.", "Предыдущий подход не сработал.", ""), ("This strategy is more consistent.", "Эта стратегия более последовательна.", ""), ("What are the main concerns?", "Какие главные опасения?", ""), ("It is not that obvious.", "Это не так очевидно.", ""), ("We should define the task first.", "Сначала нужно определить задачу.", "")],
-    "C1": [("I acknowledge the concern.", "Я признаю эту обеспокоенность.", ""), ("That implies a different approach.", "Это подразумевает другой подход.", ""), ("We need to prioritize the issue.", "Нужно расставить приоритеты в вопросе.", ""), ("The outcome was inevitable.", "Исход был неизбежен.", ""), ("Let me justify this decision.", "Позволь обосновать это решение.", ""), ("This framework is too narrow.", "Эта рамка слишком узкая.", ""), ("It requires a subtle shift.", "Это требует тонкого сдвига.", ""), ("The incentive is not clear.", "Стимул неясен.", ""), ("We should evaluate the impact.", "Нужно оценить влияние.", ""), ("Whereas the first option is faster...", "Тогда как первый вариант быстрее...", "")],
+    "simple": [("How are you?", "Как дела?", ""), ("I don't understand.", "Я не понимаю.", ""), ("Can you help me?", "Можете помочь?", ""), ("How much is it?", "Сколько это стоит?", ""), ("See you later.", "Увидимся позже.", ""), ("I would like...", "Я бы хотел...", ""), ("Where is the station?", "Где вокзал?", ""), ("I am sorry.", "Извините.", ""), ("No problem.", "Без проблем.", ""), ("What does it mean?", "Что это значит?", ""),
+        ("Could you repeat that?", "Не могли бы повторить?", ""), ("I am looking for...", "Я ищу...", ""), ("It depends on...", "Это зависит от...", ""), ("I have already done it.", "Я уже это сделал.", ""), ("What do you think?", "Что ты думаешь?", ""), ("I need to change it.", "Мне нужно это изменить.", ""), ("Can I borrow this?", "Можно это одолжить?", ""), ("Let me know.", "Дай знать.", ""), ("I am on my way.", "Я уже в пути.", ""), ("That sounds good.", "Звучит хорошо.", "")],
+    "medium": [("I see your point.", "Я понимаю твою мысль.", ""), ("It is worth trying.", "Это стоит попробовать.", ""), ("I need to improve this.", "Мне нужно это улучшить.", ""), ("Although it is difficult, it is useful.", "Хотя это сложно, это полезно.", ""), ("What is the main challenge?", "В чём главная сложность?", ""), ("I would rather avoid it.", "Я бы предпочёл этого избежать.", ""), ("It depends on the situation.", "Это зависит от ситуации.", ""), ("That is a good opportunity.", "Это хорошая возможность.", ""), ("Could you explain it briefly?", "Можешь кратко объяснить?", ""), ("I have noticed that...", "Я заметил, что...", "")],
+    "hard": [("From my perspective...", "С моей точки зрения...", ""), ("The evidence suggests that...", "Данные указывают на то, что...", ""), ("We need a reliable method.", "Нам нужен надёжный метод.", ""), ("It has a significant impact.", "Это оказывает значительное влияние.", ""), ("Let me clarify one point.", "Позволь уточнить один момент.", ""), ("The previous approach did not work.", "Предыдущий подход не сработал.", ""), ("This strategy is more consistent.", "Эта стратегия более последовательна.", ""), ("What are the main concerns?", "Какие главные опасения?", ""), ("It is not that obvious.", "Это не так очевидно.", ""), ("We should define the task first.", "Сначала нужно определить задачу.", ""),
+        ("I acknowledge the concern.", "Я признаю эту обеспокоенность.", ""), ("That implies a different approach.", "Это подразумевает другой подход.", ""), ("We need to prioritize the issue.", "Нужно расставить приоритеты в вопросе.", ""), ("The outcome was inevitable.", "Исход был неизбежен.", ""), ("Let me justify this decision.", "Позволь обосновать это решение.", ""), ("This framework is too narrow.", "Эта рамка слишком узкая.", ""), ("It requires a subtle shift.", "Это требует тонкого сдвига.", ""), ("The incentive is not clear.", "Стимул неясен.", ""), ("We should evaluate the impact.", "Нужно оценить влияние.", ""), ("Whereas the first option is faster...", "Тогда как первый вариант быстрее...", "")],
 }
 
 _NL_SEED_PHRASES = {
-    "A1": [("Hoe gaat het?", "Как дела?", ""), ("Ik begrijp het niet.", "Я не понимаю.", ""), ("Kunt u mij helpen?", "Можете мне помочь?", ""), ("Hoeveel kost het?", "Сколько это стоит?", ""), ("Tot later.", "До встречи.", ""), ("Ik wil graag...", "Я хотел бы...", ""), ("Waar is het station?", "Где вокзал?", ""), ("Het spijt me.", "Мне жаль.", ""), ("Geen probleem.", "Без проблем.", ""), ("Wat betekent dat?", "Что это значит?", "")],
-    "A2": [("Kunt u dat herhalen?", "Можете это повторить?", ""), ("Ik ben op zoek naar...", "Я ищу...", ""), ("Het hangt af van...", "Это зависит от...", ""), ("Ik heb het al gedaan.", "Я уже это сделал.", ""), ("Wat vind je ervan?", "Что ты об этом думаешь?", ""), ("Ik moet het veranderen.", "Мне нужно это изменить.", ""), ("Mag ik dit lenen?", "Можно это одолжить?", ""), ("Laat het me weten.", "Дай мне знать.", ""), ("Ik ben onderweg.", "Я в пути.", ""), ("Dat klinkt goed.", "Звучит хорошо.", "")],
-    "B1": [("Ik begrijp je punt.", "Я понимаю твою мысль.", ""), ("Het is de moeite waard.", "Это того стоит.", ""), ("Ik wil dit verbeteren.", "Я хочу это улучшить.", ""), ("Hoewel het moeilijk is, is het nuttig.", "Хотя это сложно, это полезно.", ""), ("Wat is de grootste uitdaging?", "В чём главная трудность?", ""), ("Ik wil dat liever vermijden.", "Я предпочёл бы этого избежать.", ""), ("Het hangt van de situatie af.", "Это зависит от ситуации.", ""), ("Dat is een goede kans.", "Это хорошая возможность.", ""), ("Kun je het kort uitleggen?", "Можешь кратко объяснить?", ""), ("Ik heb gemerkt dat...", "Я заметил, что...", "")],
-    "B2": [("Vanuit mijn perspectief...", "С моей точки зрения...", ""), ("Dat toont aan dat...", "Это показывает, что...", ""), ("We hebben een betrouwbare methode nodig.", "Нам нужен надёжный метод.", ""), ("Het heeft een grote invloed.", "Это оказывает большое влияние.", ""), ("Laat me één punt verduidelijken.", "Позволь уточнить один момент.", ""), ("De vorige aanpak werkte niet.", "Предыдущий подход не сработал.", ""), ("Deze strategie is consequenter.", "Эта стратегия более последовательна.", ""), ("Wat zijn de belangrijkste zorgen?", "Какие основные опасения?", ""), ("Dat is niet zo vanzelfsprekend.", "Это не так очевидно.", ""), ("We moeten eerst de taak bepalen.", "Сначала нужно определить задачу.", "")],
-    "C1": [("Ik erken die zorg.", "Я признаю это опасение.", ""), ("Dat veronderstelt een andere aanpak.", "Это предполагает другой подход.", ""), ("We moeten dit prioriteit geven.", "Нужно дать этому приоритет.", ""), ("De uitkomst was onvermijdelijk.", "Исход был неизбежен.", ""), ("Laat me deze beslissing onderbouwen.", "Позволь обосновать это решение.", ""), ("Dit uitgangspunt is te beperkt.", "Эта исходная рамка слишком ограничена.", ""), ("Dat vraagt om een subtiele verschuiving.", "Это требует тонкого сдвига.", ""), ("De prikkel is niet duidelijk.", "Стимул неясен.", ""), ("We moeten de impact beoordelen.", "Нужно оценить влияние.", ""), ("Daarentegen is de eerste optie sneller.", "Напротив, первый вариант быстрее.", "")],
+    "simple": [("Hoe gaat het?", "Как дела?", ""), ("Ik begrijp het niet.", "Я не понимаю.", ""), ("Kunt u mij helpen?", "Можете мне помочь?", ""), ("Hoeveel kost het?", "Сколько это стоит?", ""), ("Tot later.", "До встречи.", ""), ("Ik wil graag...", "Я хотел бы...", ""), ("Waar is het station?", "Где вокзал?", ""), ("Het spijt me.", "Мне жаль.", ""), ("Geen probleem.", "Без проблем.", ""), ("Wat betekent dat?", "Что это значит?", ""),
+        ("Kunt u dat herhalen?", "Можете это повторить?", ""), ("Ik ben op zoek naar...", "Я ищу...", ""), ("Het hangt af van...", "Это зависит от...", ""), ("Ik heb het al gedaan.", "Я уже это сделал.", ""), ("Wat vind je ervan?", "Что ты об этом думаешь?", ""), ("Ik moet het veranderen.", "Мне нужно это изменить.", ""), ("Mag ik dit lenen?", "Можно это одолжить?", ""), ("Laat het me weten.", "Дай мне знать.", ""), ("Ik ben onderweg.", "Я в пути.", ""), ("Dat klinkt goed.", "Звучит хорошо.", "")],
+    "medium": [("Ik begrijp je punt.", "Я понимаю твою мысль.", ""), ("Het is de moeite waard.", "Это того стоит.", ""), ("Ik wil dit verbeteren.", "Я хочу это улучшить.", ""), ("Hoewel het moeilijk is, is het nuttig.", "Хотя это сложно, это полезно.", ""), ("Wat is de grootste uitdaging?", "В чём главная трудность?", ""), ("Ik wil dat liever vermijden.", "Я предпочёл бы этого избежать.", ""), ("Het hangt van de situatie af.", "Это зависит от ситуации.", ""), ("Dat is een goede kans.", "Это хорошая возможность.", ""), ("Kun je het kort uitleggen?", "Можешь кратко объяснить?", ""), ("Ik heb gemerkt dat...", "Я заметил, что...", "")],
+    "hard": [("Vanuit mijn perspectief...", "С моей точки зрения...", ""), ("Dat toont aan dat...", "Это показывает, что...", ""), ("We hebben een betrouwbare methode nodig.", "Нам нужен надёжный метод.", ""), ("Het heeft een grote invloed.", "Это оказывает большое влияние.", ""), ("Laat me één punt verduidelijken.", "Позволь уточнить один момент.", ""), ("De vorige aanpak werkte niet.", "Предыдущий подход не сработал.", ""), ("Deze strategie is consequenter.", "Эта стратегия более последовательна.", ""), ("Wat zijn de belangrijkste zorgen?", "Какие основные опасения?", ""), ("Dat is niet zo vanzelfsprekend.", "Это не так очевидно.", ""), ("We moeten eerst de taak bepalen.", "Сначала нужно определить задачу.", ""),
+        ("Ik erken die zorg.", "Я признаю это опасение.", ""), ("Dat veronderstelt een andere aanpak.", "Это предполагает другой подход.", ""), ("We moeten dit prioriteit geven.", "Нужно дать этому приоритет.", ""), ("De uitkomst was onvermijdelijk.", "Исход был неизбежен.", ""), ("Laat me deze beslissing onderbouwen.", "Позволь обосновать это решение.", ""), ("Dit uitgangspunt is te beperkt.", "Эта исходная рамка слишком ограничена.", ""), ("Dat vraagt om een subtiele verschuiving.", "Это требует тонкого сдвига.", ""), ("De prikkel is niet duidelijk.", "Стимул неясен.", ""), ("We moeten de impact beoordelen.", "Нужно оценить влияние.", ""), ("Daarentegen is de eerste optie sneller.", "Напротив, первый вариант быстрее.", "")],
 }
 
 
@@ -2584,8 +2577,8 @@ def _seed_language(cid, lang=None):
         code = _code(_s.study_lang(cid))
     language = "нидерландский" if code == "nl" else "английский"
     level = store.get_level(cid, language)
-    if level not in ("A1", "A2", "B1", "B2", "C1"):
-        level = "B1"
+    if level not in LEVELS:
+        level = "medium"
     return code, language, level
 
 
@@ -2652,27 +2645,27 @@ def _seed_item_line(item):
 
 
 def _seed_render_text(st):
-    lang = st.get("lang", "en")
-    level = st.get("level", "B1")
+    level = st.get("level", "medium")
     kind = st.get("kind", "word")
     items = st.get("items") or []
-    known = set(st.get("known") or [])
+    selected = set(st.get("selected") or [])
     page = int(st.get("page") or 0)
     total_pages = max(1, (len(items) + _DICT_SEED_PAGE_SIZE - 1) // _DICT_SEED_PAGE_SIZE)
     page = max(0, min(page, total_pages - 1))
     start = page * _DICT_SEED_PAGE_SIZE
     chunk = items[start:start + _DICT_SEED_PAGE_SIZE]
-    header = f"🧩 Стартовые фразы · {level}" if kind == "phrase" else f"📚 Стартовый словарь · {level}"
+    level_label = LEVEL_LABELS.get(level, level)
+    header = f"🧩 Стартовые фразы · {level_label}" if kind == "phrase" else f"📚 Популярные слова · {level_label}"
     lines = [
         header,
         f"Страница {page + 1} из {total_pages}",
         "",
-        "Отметьте слова, которые вы уже знаете:" if kind == "word" else "Отметьте фразы, которые вы уже знаете:",
+        "Отметьте слова, которые хотите добавить в словарь:" if kind == "word" else "Отметьте фразы, которые хотите добавить в словарь:",
         "",
     ]
     for offset, item in enumerate(chunk):
         idx = start + offset
-        mark = "✅" if idx in known else "□"
+        mark = "✅" if idx in selected else "□"
         lines.append(f"{mark} {_seed_item_line(item)}")
     lines.extend(["", _DICT_SEED_SOURCE_NOTE])
     return "\n".join(lines)
@@ -2680,7 +2673,7 @@ def _seed_render_text(st):
 
 def _seed_render_kb(st):
     items = st.get("items") or []
-    known = set(st.get("known") or [])
+    selected = set(st.get("selected") or [])
     page = int(st.get("page") or 0)
     total_pages = max(1, (len(items) + _DICT_SEED_PAGE_SIZE - 1) // _DICT_SEED_PAGE_SIZE)
     start = page * _DICT_SEED_PAGE_SIZE
@@ -2688,7 +2681,7 @@ def _seed_render_kb(st):
     rows = []
     for offset, item in enumerate(chunk):
         idx = start + offset
-        mark = "✅" if idx in known else "□"
+        mark = "✅" if idx in selected else "□"
         rows.append([InlineKeyboardButton(f"{mark} {item.get('word')[:38]}", callback_data=f"a_dictseed_toggle_{idx}")])
     nav = []
     if page > 0:
@@ -2697,7 +2690,10 @@ def _seed_render_kb(st):
         nav.append(InlineKeyboardButton("▶️ Далее", callback_data=f"a_dictseed_page_{page + 1}"))
     if nav:
         rows.append(nav)
-    rows.append([InlineKeyboardButton("✅ Добавить остальные в словарь", callback_data="a_dictseed_add")])
+    level_label = LEVEL_LABELS.get(st.get("level"), "Средний")
+    rows.append([InlineKeyboardButton(f"📶 Другой уровень ({level_label})", callback_data="a_dictseed_level")])
+    add_label = f"✅ Добавить отмеченные ({len(selected)})" if selected else "✅ Добавить отмеченные"
+    rows.append([InlineKeyboardButton(add_label, callback_data="a_dictseed_add")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -2709,8 +2705,8 @@ async def send_seed_intro(bot, cid, lang=None):
         return
     text = (
         "Для эффективного обучения сначала наполним ваш словарь.\n\n"
-        f"Я подобрал слова уровня {level}. Просмотрите список и отметьте слова, "
-        "которые вы уже знаете, чтобы не изучать их повторно."
+        f"Я подобрал слова уровня «{LEVEL_LABELS.get(level, level)}». Просмотрите список и отметьте те, "
+        "которые хотите добавить."
     )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Наполнить словарь", callback_data=f"a_dictseed_start_{code}")],
@@ -2724,13 +2720,14 @@ async def offer_seed_for_level_change(bot, cid, language, level):
     items = _seed_candidates(cid, code, level, "word")
     if not items:
         return
+    level_label = LEVEL_LABELS.get(level, level)
     text = (
-        f"📚 Уровень обновлён до {level}\n\n"
-        f"Хотите добавить стартовые слова уровня {level}?\n"
-        "Я покажу список, а вы отметите только те слова, которые уже знаете."
+        f"📚 Уровень обновлён до «{level_label}»\n\n"
+        f"Хотите добавить стартовые слова уровня «{level_label}»?\n"
+        "Я покажу список, а вы отметите те, которые хотите добавить."
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"✨ Добавить слова {level}", callback_data=f"a_dictseed_start_{code}")],
+        [InlineKeyboardButton(f"✨ Добавить слова ({level_label})", callback_data=f"a_dictseed_start_{code}")],
         [InlineKeyboardButton("Позже", callback_data="a_dictseed_later")],
     ])
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
@@ -2758,7 +2755,7 @@ async def seed_start(bot, cid, lang=None, kind="word", q=None):
         "level": level,
         "kind": kind,
         "items": items,
-        "known": [],
+        "selected": [],
         "page": 0,
         "created_at": datetime.now(config.TZ).isoformat(),
         "confirmed": False,
@@ -2780,12 +2777,12 @@ async def seed_toggle(bot, cid, idx, q=None):
     items = st.get("items") or []
     if not (0 <= idx < len(items)):
         return
-    known = set(st.get("known") or [])
-    if idx in known:
-        known.remove(idx)
+    selected = set(st.get("selected") or [])
+    if idx in selected:
+        selected.remove(idx)
     else:
-        known.add(idx)
-    st["known"] = sorted(known)
+        selected.add(idx)
+    st["selected"] = sorted(selected)
     _seed_state_set(cid, st)
     if q is not None:
         try:
@@ -2807,6 +2804,41 @@ async def seed_page(bot, cid, page, q=None):
             await bot.send_message(chat_id=cid, text=_seed_render_text(st), reply_markup=_seed_render_kb(st))
 
 
+def _seed_level_kb(cid, code):
+    _l, _language, current = _seed_language(cid, code)
+    row = []
+    for level in _SEED_LEVELS:
+        mark = "✅ " if level == current else ""
+        row.append(InlineKeyboardButton(f"{mark}{LEVEL_LABELS[level]}", callback_data=f"a_dictseedlvl_{code}_{level}"))
+    rows = [row, [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictseed_start_{code}")]]
+    return InlineKeyboardMarkup(rows)
+
+
+async def seed_choose_level(bot, cid, q=None):
+    st = _seed_state_get(cid)
+    code = st.get("lang") if st else None
+    code = code or _seed_language(cid)[0]
+    text = "📶 Выбери уровень слов для добавления."
+    kb = _seed_level_kb(cid, code)
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+async def seed_set_level(bot, cid, lang, level, q=None):
+    if level not in _SEED_LEVELS:
+        return
+    st = _seed_state_get(cid)
+    kind = st.get("kind", "word") if st else "word"
+    language = "нидерландский" if lang == "nl" else "английский"
+    store.set_level(cid, language, level)
+    await seed_start(bot, cid, lang, kind=kind, q=q)
+
+
 async def seed_add_selected(bot, cid, q=None):
     st = _seed_state_get(cid)
     if not st:
@@ -2817,13 +2849,11 @@ async def seed_add_selected(bot, cid, q=None):
         return
     st["confirmed"] = True
     _seed_state_set(cid, st)
-    known = set(st.get("known") or [])
+    selected = set(st.get("selected") or [])
     existing = _seed_existing_keys(cid)
     added = []
-    skipped_known = []
     for idx, item in enumerate(st.get("items") or []):
-        if idx in known:
-            skipped_known.append(item)
+        if idx not in selected:
             continue
         key = _dict_item_key(item["lang"], item["kind"], item["word"])
         if key in existing:
@@ -2834,24 +2864,16 @@ async def seed_add_selected(bot, cid, q=None):
         added.append(saved)
     kind = st.get("kind", "word")
     lang = st.get("lang", "en")
-    level = st.get("level", "B1")
-    _seed_mark_seen(cid, st.get("items") or [])
+    level = st.get("level", "medium")
+    _seed_mark_seen(cid, added)
     _seed_state_clear(cid)
     noun = "фраз" if kind == "phrase" else "слов"
     if added:
-        text = (
-            "✅ Готово\n\n"
-            f"В словарь добавлено {len(added)} новых {noun}.\n"
-            f"{len(skipped_known)} пропущено, потому что вы отметили их как знакомые."
-        )
-    elif skipped_known:
-        known_noun = "фразы" if kind == "phrase" else "слова"
-        text = f"✅ Отлично\n\nВы отметили все {known_noun} как знакомые.\nЯ не стал добавлять их в словарь."
+        terms = ", ".join(a.get("word", "") for a in added[:10])
+        more = f" и ещё {len(added) - 10}" if len(added) > 10 else ""
+        text = f"✅ Добавлено {len(added)} {noun}: {terms}{more}"
     else:
-        text = (
-            "📚 Словарь уже заполнен\n\n"
-            "Для вашего уровня пока нет новых стартовых слов."
-        )
+        text = "Ничего не отмечено — словарь не изменился."
     if q is not None:
         try:
             await q.message.edit_text(text)
@@ -2873,7 +2895,7 @@ async def send_seed_phrase_offer(bot, cid, lang=None, level=None):
         return
     text = (
         "🧩 Добавить фразы?\n\n"
-        f"Я могу также добавить полезные разговорные фразы уровня {level}.\n"
+        f"Я могу также добавить полезные разговорные фразы уровня «{LEVEL_LABELS.get(level, level)}».\n"
         "Они будут попадаться в тренировках вместе со словами."
     )
     kb = InlineKeyboardMarkup([
@@ -3480,14 +3502,13 @@ async def game_reveal(bot, cid, q):
 
 # ================= НАСТРОЙКИ ОБУЧЕНИЯ =================
 def learning_settings_kb(active_lang, active_level, back="set_home"):
-    hard = _is_b1plus(active_level)
-    flag = _flag(active_lang)
+    row = []
+    for level in LEVELS:
+        mark = "✅ " if level == active_level else ""
+        row.append(InlineKeyboardButton(f"{mark}{LEVEL_LABELS[level]}", callback_data=f"set_learning_level_{level}"))
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(f"📚 Язык: {_language_display(active_lang)}", callback_data="toggle_learning_language")],
-        [
-            InlineKeyboardButton(("✅ " if not hard else "") + f"{flag} Лёгкий", callback_data="set_learning_level_A2"),
-            InlineKeyboardButton(("✅ " if hard else "") + f"{flag} Сложный", callback_data="set_learning_level_B1"),
-        ],
+        row,
         [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ])
 
@@ -3519,16 +3540,16 @@ async def handle_learning_settings_callback(bot, cid, q, data):
         old_code = _active_language_code(cid)
         new_code = "en" if old_code == "nl" else "nl"
         store.set_learning_language(cid, new_code)
-        store.ensure_level(cid, _language_for_code(old_code), "A2")
-        store.ensure_level(cid, _language_for_code(new_code), "A2")
+        store.ensure_level(cid, _language_for_code(old_code), "medium")
+        store.ensure_level(cid, _language_for_code(new_code), "medium")
         prof = store.get_profile(cid)
         prof.pop("_myday_seed_prompted", None)
         store.set_profile(cid, prof)
         await send_learning_settings(bot, cid, q=q, back=back)
         return
     if data.startswith("set_learning_level_"):
-        level = data.rsplit("_", 1)[-1]
-        if level in ("A2", "B1"):
+        level = data[len("set_learning_level_"):]
+        if level in LEVELS:
             store.set_level(cid, active_language(cid), level)
         await send_learning_settings(bot, cid, q=q, back=back)
 

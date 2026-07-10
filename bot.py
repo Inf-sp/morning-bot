@@ -410,6 +410,11 @@ async def answer_callback(update, context):
                 await learning.seed_add_selected(bot, cid, q=q)
             elif act == "dictseed_later":
                 await learning.seed_later(bot, cid)
+            elif act == "dictseed_level":
+                await learning.seed_choose_level(bot, cid, q=q)
+            elif act.startswith("dictseedlvl_"):
+                _, lang, level = act.split("_", 2)
+                await learning.seed_set_level(bot, cid, lang, level, q=q)
             elif act == "dictlang_nl":
                 await learning.send_dict_lang(bot, cid, "nl", q=q)
             elif act == "dictlang_en":
@@ -550,13 +555,13 @@ async def answer_callback(update, context):
                 ans_idx = int(sub[4:])
             except ValueError:
                 return
-            await learning.train_quiz_answer(bot, cid, ans_idx)
+            await _inline_status(lambda _s: learning.train_quiz_answer(bot, cid, ans_idx))
         elif sub == "next":
             await _inline_status(lambda _s: learning.train_next(bot, cid))
         return
     # Тренажёр фраз: переход от учебной карточки к тесту
     if data in ("phrase_intro_test", "phrase_intro_go"):
-        await learning.phrase_intro_continue(bot, cid)
+        await _inline_status(lambda _s: learning.phrase_intro_continue(bot, cid))
         return
     if data == "phrase_intro_mastered":
         await _inline_status(lambda _s: learning.phrase_intro_mastered(bot, cid))
@@ -565,7 +570,7 @@ async def answer_callback(update, context):
         await _inline_status(lambda _s: learning.phrase_new_example(bot, cid))
         return
     if data == "phrase_explain":
-        await learning.phrase_explain(bot, cid)
+        await _inline_status(lambda _s: learning.phrase_explain(bot, cid))
         return
     if data in ("phrase_tf_yes", "phrase_tf_no"):
         await _inline_status(lambda _s: learning.phrase_truefalse_answer(bot, cid, data == "phrase_tf_yes"))

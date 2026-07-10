@@ -182,8 +182,28 @@ def clear_wardrobe_daylook(chat_id):
         prof.pop("wardrobe_daylook", None)
         set_profile(chat_id, prof)
 
+_LEVEL_MIGRATION = {
+    "A1": "simple", "A2": "simple",
+    "B1": "medium",
+    "B2": "hard", "C1": "hard", "C2": "hard",
+}
+
+
+def _migrate_level_value(chat_id, language, raw):
+    """Одноразовая ленивая миграция старых CEFR-значений (A1-C2) на новую
+    3-уровневую шкалу (simple/medium/hard) — конвертирует и сразу перезаписывает."""
+    new_value = _LEVEL_MIGRATION.get(raw)
+    if not new_value:
+        return raw
+    set_level(chat_id, language, new_value)
+    return new_value
+
+
 def get_level(chat_id, language):
-    return _load(config.LEVELS_FILE).get(str(chat_id), {}).get(language, "B1")
+    raw = _load(config.LEVELS_FILE).get(str(chat_id), {}).get(language, "medium")
+    if raw in ("simple", "medium", "hard"):
+        return raw
+    return _migrate_level_value(chat_id, language, raw)
 
 def set_level(chat_id, language, level):
     d = _load(config.LEVELS_FILE)
@@ -193,7 +213,7 @@ def set_level(chat_id, language, level):
 def has_level(chat_id, language):
     return language in _load(config.LEVELS_FILE).get(str(chat_id), {})
 
-def ensure_level(chat_id, language, level="A2"):
+def ensure_level(chat_id, language, level="medium"):
     d = _load(config.LEVELS_FILE)
     user = d.setdefault(str(chat_id), {})
     if language not in user:

@@ -13,9 +13,9 @@ _LANG_KB = InlineKeyboardMarkup([
 ])
 
 def _lvl_kb(code: str) -> InlineKeyboardMarkup:
-    levels = ["A1", "A2", "B1", "B2", "C1"]
+    levels = [("simple", "Простой"), ("medium", "Средний"), ("hard", "Сложный")]
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(l, callback_data=f"ob_lvl_{code}_{l}") for l in levels]
+        [InlineKeyboardButton(label, callback_data=f"ob_lvl_{code}_{level}") for level, label in levels]
     ])
 
 
@@ -109,7 +109,7 @@ async def handle_callback(bot, cid, q, data: str):
         store.set_learning_language(cid, choice)
         _s.set_(cid, "study_lang", "нидерландский" if choice == "nl" else "английский")
         other = "английский" if choice == "nl" else "нидерландский"
-        store.ensure_level(cid, other, "A2")
+        store.ensure_level(cid, other, "medium")
         st["step"] = "lvl"
         st["lvl_queue"] = list(st["langs"])
         _ob[str(cid)] = st
