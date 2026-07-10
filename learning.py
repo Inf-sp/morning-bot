@@ -3067,7 +3067,7 @@ async def del_dict_entry_by_term(bot, cid, lang, term_key, page=None, q=None):
     await _show_screen(bot, cid, msg.text, msg.entities, _dict_manage_kb(lang), q=q)
 
 
-_DICT_LIST_PAGE_SIZE = 5
+_DICT_LIST_PAGE_SIZE = 10
 
 
 def _dict_lang_entries(cid, lang):
@@ -3092,13 +3092,12 @@ def _dict_list_kb(lang, entries, page):
         ))
     for i in range(0, len(word_buttons), 2):
         rows.append(word_buttons[i:i + 2])
-    nav = []
-    if page > 0:
-        nav.append(InlineKeyboardButton("◀️ Назад", callback_data=f"a_dictedit_{lang}_{page - 1}"))
-    if page < total_pages - 1:
-        nav.append(InlineKeyboardButton("Дальше ▶️", callback_data=f"a_dictedit_{lang}_{page + 1}"))
-    if nav:
-        rows.append(nav)
+    if total_pages > 1:
+        prev_btn = (InlineKeyboardButton("◀️ Назад", callback_data=f"a_dictedit_{lang}_{page - 1}")
+                    if page > 0 else InlineKeyboardButton(" ", callback_data="noop"))
+        next_btn = (InlineKeyboardButton("Дальше ▶️", callback_data=f"a_dictedit_{lang}_{page + 1}")
+                    if page < total_pages - 1 else InlineKeyboardButton(" ", callback_data="noop"))
+        rows.append([prev_btn, next_btn])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")])
     return InlineKeyboardMarkup(rows), page, total_pages
 
