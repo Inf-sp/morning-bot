@@ -2701,7 +2701,7 @@ async def send_seed_intro(bot, cid, lang=None):
     code, language, level = _seed_language(cid, lang)
     items = _seed_candidates(cid, code, level, "word")
     if not items:
-        await send_seed_phrase_offer(bot, cid, code, level)
+        await send_dict_lang(bot, cid, code)
         return
     text = (
         "Для эффективного обучения сначала наполним ваш словарь.\n\n"
@@ -2731,6 +2731,11 @@ async def offer_seed_for_level_change(bot, cid, language, level):
         [InlineKeyboardButton("Позже", callback_data="a_dictseed_later")],
     ])
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+async def seed_later(bot, cid):
+    _seed_state_clear(cid)
+    await send_dict(bot, cid)
 
 
 async def seed_start(bot, cid, lang=None, kind="word", q=None):
@@ -2858,56 +2863,39 @@ async def seed_add_selected(bot, cid, q=None):
         key = _dict_item_key(item["lang"], item["kind"], item["word"])
         if key in existing:
             continue
-        saved = {k: item[k] for k in ("lang", "word", "ru", "kind") if item.get(k)}
-        store.add_to_list(config.DICT_KEY, cid, saved)
+        legacy = {k: item[k] for k in ("lang", "word", "ru", "kind") if item.get(k)}
+        store.add_to_list(config.DICT_KEY, cid, legacy)
         existing.add(key)
-        added.append(saved)
+        added.append(legacy)
     kind = st.get("kind", "word")
     lang = st.get("lang", "en")
-    level = st.get("level", "medium")
     _seed_mark_seen(cid, added)
     _seed_state_clear(cid)
+    # Сразу генерируем пример/разбор для тренажёра — та же ленивая миграция,
+    # что при первом обращении к старой записи, но выполненная сейчас, а не
+    # отложенная до первого показа в тренажёре.
+    for legacy in added:
+        await _refresh_dict_entry(cid, legacy)
     noun = "фраз" if kind == "phrase" else "слов"
     if added:
         terms = ", ".join(a.get("word", "") for a in added[:10])
         more = f" и ещё {len(added) - 10}" if len(added) > 10 else ""
         text = f"✅ Добавлено {len(added)} {noun}: {terms}{more}"
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎯 Начать обучение", callback_data=f"a_train_{lang}")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")],
+        ])
     else:
         text = "Ничего не отмечено — словарь не изменился."
+        kb = None
     if q is not None:
         try:
-            await q.message.edit_text(text)
+            await q.message.edit_text(text, reply_markup=kb)
         except Exception:
-            await bot.send_message(chat_id=cid, text=text)
+            await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
     else:
-        await bot.send_message(chat_id=cid, text=text)
-    if kind == "word":
-        await send_seed_phrase_offer(bot, cid, lang, level)
-    else:
-        await send_dict_lang(bot, cid, lang)
+        await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
-
-async def send_seed_phrase_offer(bot, cid, lang=None, level=None):
-    code, _language, cur_level = _seed_language(cid, lang)
-    level = level or cur_level
-    if not _seed_candidates(cid, code, level, "phrase"):
-        await send_dict_lang(bot, cid, code)
-        return
-    text = (
-        "🧩 Добавить фразы?\n\n"
-        f"Я могу также добавить полезные разговорные фразы уровня «{LEVEL_LABELS.get(level, level)}».\n"
-        "Они будут попадаться в тренировках вместе со словами."
-    )
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🧩 Добавить фразы", callback_data=f"a_dictseed_phrases_{code}")],
-        [InlineKeyboardButton("Позже", callback_data="a_dictseed_later")],
-    ])
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
-
-
-async def seed_later(bot, cid):
-    _seed_state_clear(cid)
-    await send_dict(bot, cid)
 
 def _dict_kind(w):
     if isinstance(w, dict) and w.get("kind"):
@@ -2970,10 +2958,10 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None):
     count = _dict_counts(cid)[lang]
     msg = dict_ui.dict_language(lang, count)
     rows = [
-        [InlineKeyboardButton("✏️ Добавить", callback_data=f"a_dictadd_smart_{lang}")],
-        [InlineKeyboardButton("✨ Популярные слова", callback_data=f"a_dictseed_start_{lang}")],
-        [InlineKeyboardButton("🔍 Найти", callback_data=f"a_dictsearch_{lang}")],
-        [InlineKeyboardButton("📋 Весь список", callback_data=f"a_dictedit_{lang}")],
+        [InlineKeyboardButton("✏️ Добавить своё слово", callback_data=f"a_dictadd_smart_{lang}")],
+        [InlineKeyboardButton("✨ Сгенерировать набор слов", callback_data=f"a_dictseed_start_{lang}")],
+        [InlineKeyboardButton("🔍 Найти в словаре", callback_data=f"a_dictsearch_{lang}")],
+        [InlineKeyboardButton("📋 Мои слова", callback_data=f"a_dictedit_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ]
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
@@ -2982,7 +2970,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None):
 def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📚 Мой словарь", callback_data=f"a_dictlang_{lang}")],
-        [InlineKeyboardButton("✏️ Добавить", callback_data=f"a_dictadd_smart_{lang}")],
+        [InlineKeyboardButton("✏️ Добавить своё слово", callback_data=f"a_dictadd_smart_{lang}")],
     ])
 
 
@@ -3021,7 +3009,7 @@ async def handle_dict_search(bot, cid, lang, query):
             chat_id=cid,
             text="Не нашла в словаре. Попробуй другое слово или посмотри весь список.",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📋 Весь список", callback_data=f"a_dictedit_{lang}")],
+                [InlineKeyboardButton("📋 Мои слова", callback_data=f"a_dictedit_{lang}")],
                 [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")],
             ]),
         )
