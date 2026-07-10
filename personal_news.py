@@ -27,7 +27,7 @@ NEWS_DAILY_CREDIT_BUDGET = 50
 NEWS_HARD_MONTHLY_LIMIT = 1000
 NEWS_HISTORY_KEY = "personal_news_history.json"
 NEWS_MAX_ITEMS = 5
-NEWS_MIN_RELEVANCE_SCORE = 70
+NEWS_MIN_RELEVANCE_SCORE = 45
 NEWS_HISTORY_DAYS = 14
 REFRESH_COOLDOWN_SEC = 6 * 3600
 
@@ -45,6 +45,7 @@ _CATEGORY_LABELS = {
     "wardrobe_weather": "Погода",
     "travel": "Поездки",
     "language": "Язык",
+    "migration": "Миграция",
 }
 
 _ACTION_LABELS = {
@@ -75,12 +76,14 @@ _OFFICIAL_DOMAINS = {
     "wardrobe_weather": ("knmi.nl", "weeronline.nl", "nos.nl", "nhnieuws.nl"),
     "travel": ("schiphol.nl", "nsinternational.com", "ns.nl", "rijksoverheid.nl"),
     "language": ("duo.nl", "inburgeren.nl", "rijksoverheid.nl", "gemeentealkmaar.nl"),
+    "migration": ("ind.nl", "rijksoverheid.nl", "government.nl", "gemeentealkmaar.nl"),
 }
 
 _QUERY_DEFINITIONS = [
     ("city", "nl", "Alkmaar nieuws vandaag", "local"),
     ("city", "nl", "gemeente Alkmaar nieuws wijziging", "local"),
     ("city", "nl", "Alkmaar evenementen dit weekend nieuw restaurant", "local_event"),
+    ("city", "nl", "Alkmaar wegwerkzaamheden verkeer bouwproject", "local"),
     ("north_holland", "nl", "Noord-Holland nieuws vandaag Alkmaar", "local"),
     ("netherlands", "nl", "Nederland nieuws vandaag regels wijziging inwoners", "country"),
     ("transport", "nl", "NS wijziging Nederland storing staking dienstregeling", "country"),
@@ -93,6 +96,7 @@ _QUERY_DEFINITIONS = [
     ("wardrobe_weather", "nl", "KNMI Alkmaar Noord-Holland code geel regen wind UV", "urgent"),
     ("travel", "nl", "Schiphol NS International staking vertraging wijziging", "country"),
     ("language", "nl", "inburgering examen Nederlands cursus Alkmaar wijziging", "local_event"),
+    ("migration", "nl", "IND verblijfsvergunning wijziging Nederland migratie asiel", "country"),
 ]
 
 _CATEGORY_GROUPS = {
@@ -109,11 +113,13 @@ _CATEGORY_GROUPS = {
     "wardrobe_weather": "weather",
     "travel": "travel",
     "language": "language",
+    "migration": "netherlands",
 }
 
 _CATEGORY_PRIORITY = [
     "city", "north_holland", "netherlands", "transport", "documents_study", "health",
     "housing_money", "tech", "leisure", "food", "wardrobe_weather", "travel", "language",
+    "migration",
 ]
 
 _SOURCE_NAMES = {
@@ -182,6 +188,9 @@ def _period_cache_ttl(period):
     return 24 * 3600
 
 
+_EMPTY_CACHE_TTL = 30 * 60  # пустой результат не должен залипать на весь день - пробуем снова через полчаса
+
+
 def _canonical_url(url):
     try:
         p = urlparse(url)
@@ -240,7 +249,7 @@ def _category_max_age_days(category, urgency=None):
         return 1
     if urgency == "local_event" or category in {"city", "north_holland", "leisure", "food", "language"}:
         return 7
-    return 3
+    return 5
 
 
 def _item_age_days(item, now=None):
@@ -344,8 +353,6 @@ def strict_filter(items, period="today", now=None):
         if not url or not title or not _is_fresh(item, period, now):
             continue
         if _looks_like_old_evergreen(item, now):
-            continue
-        if not _has_concrete_change(item):
             continue
         tkey = _title_key(title)
         if url in seen_urls or tkey in seen_titles:
@@ -459,7 +466,8 @@ def _cache_get(cid, period, allow_stale=False, now=None):
     if not entry:
         return None
     age = time.time() - int(entry.get("ts", 0))
-    if allow_stale or age <= _period_cache_ttl(period):
+    ttl = _EMPTY_CACHE_TTL if not entry.get("items") else _period_cache_ttl(period)
+    if allow_stale or age <= ttl:
         return entry
     return None
 
@@ -563,12 +571,18 @@ def _search_all_for_profile(profile):
         try:
             max_results = 5
             time_range = "day" if spec["urgency"] == "urgent" else "week"
-            for item in _call_tavily(
+            results = _call_tavily(
                 spec["query"],
                 max_results=max_results,
                 domains=spec.get("domains"),
                 time_range=time_range,
-            ):
+            )
+            # Узкий allowlist доменов часто даёт 0 результатов, хотя новость по теме
+            # реально есть в сети — пробуем тот же запрос ещё раз без ограничения
+            # доменов, чтобы не терять категорию целиком.
+            if not results and spec.get("domains") and _reserve_credits(1):
+                results = _call_tavily(spec["query"], max_results=max_results, time_range=time_range)
+            for item in results:
                 item = dict(item)
                 item["_category_hint"] = spec["category"]
                 item["_query_language"] = spec["language"]
@@ -688,6 +702,8 @@ def _category_from_item(item):
         return "housing_money"
     if any(w in text for w in ("openai", "telegram", "apple", "cloudflare", "railway", "api")):
         return "tech"
+    if any(w in text for w in ("ind ", "verblijfsvergunning", "migratie", "asiel", "inburgering")):
+        return "migration"
     return "netherlands"
 
 
@@ -744,15 +760,15 @@ def _score_candidate(item, profile, now=None):
         score += 15
     if action_hit:
         score += 10
+    if _has_concrete_change(item):
+        score += 10
 
     if age is None:
-        score -= 15
+        score -= 10
     elif age > _category_max_age_days(category, item.get("_urgency")):
         score -= 30
-    if not _has_concrete_change(item):
-        score -= 25
-    if not (local_hit or practical or interest_hit):
-        score -= 20
+    if not (local_hit or practical or interest_hit or action_hit):
+        score -= 10
 
     return max(0, min(100, score)), category, reasons
 
@@ -782,6 +798,7 @@ def _why_important(category, reasons):
         "wardrobe_weather": "это влияет на одежду и поездки на велосипеде.",
         "travel": "это может повлиять на дорогу и вылеты.",
         "language": "это полезно для изучения нидерландского.",
+        "migration": "это важно для вида на жительство и документов.",
     }
     return defaults.get(category, "это практичное изменение для ближайших дней.")
 
