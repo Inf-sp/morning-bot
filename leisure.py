@@ -303,10 +303,9 @@ def _movie_kb(i, category=None):
     на карточке всегда ведёт в общее меню Досуга.
     """
     rows = [
-        [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}"),
-         InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"movie_love_{i}"),
-         InlineKeyboardButton("✅ Уже видел", callback_data=f"movie_seen_{i}")],
+         InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data=f"reco_{i}")],
     ]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     return InlineKeyboardMarkup(rows)
@@ -700,10 +699,9 @@ def _book_text(it):
 
 def _book_kb(i):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Заменить", callback_data=f"book_no_{i}"),
-         InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("✨ Заменить", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
-         InlineKeyboardButton("✅ Уже читал", callback_data=f"book_seen_{i}")],
+         InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data=f"reco_{i}")],
         [InlineKeyboardButton("🎚️ Настройки книг", callback_data="as_love_books")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
@@ -1251,10 +1249,9 @@ async def send_readlist(bot, cid):
 
 def _listen_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Заменить", callback_data="a_listen_no"),
-         InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data="listen_0")],
+        [InlineKeyboardButton("✨ Заменить", callback_data="a_listen_no")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love"),
-         InlineKeyboardButton("✅ Уже знаю", callback_data="listen_seen")],
+         InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data="listen_0")],
         [InlineKeyboardButton("🎚️ Настройка музыкантов", callback_data="as_love_artists")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ])
