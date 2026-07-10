@@ -44,6 +44,71 @@ def _assistant_entities_card(answer: str):
     return msg.text, msg.entities
 
 
+_LOVE_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|сохранить|закинь)\b", re.I)
+_LOVE_WORD_RE = re.compile(r"\bв\s+(?:мои\s+|мой\s+)?любим(?:ые|ое|ых|ый|ую)\b", re.I)
+
+# (regex категории, config-ключ хранилища, человекочитаемая папка для подтверждения)
+_LOVE_CATEGORIES = [
+    (re.compile(r"\b(фильм|сериал|кино)\b", re.I), "movies", "Кино"),
+    (re.compile(r"\b(книг[ауи]?|книжк[ауи]?)\b", re.I), "books", "Мои книги"),
+    (re.compile(r"\b(музыкант[а-я]*|исполнител[а-я]*|артист[а-я]*|груп[а-я]*)\b", re.I), "artists", "Мои музыканты"),
+    (re.compile(r"\b(стран[ауы]?)\b", re.I), "countries", "Мои страны"),
+]
+
+_LOVE_CATEGORY_KEY_RE = re.compile(
+    r"\b(?:фильм[а-я]*|сериал[а-я]*|кино|книг[а-я]*|книжк[а-я]*|"
+    r"музыкант[а-я]*|исполнител[а-я]*|артист[а-я]*|груп[а-я]*|стран[а-я]*)\b",
+    re.I,
+)
+
+
+def _detect_love_add(text: str):
+    """«Добавь в любимые фильм X» -> (store_key, folder_label, title) | None.
+
+    Триггер строго требует и глагол добавления, и слово «любим*» — иначе
+    «люблю фильмы про космос» не должно случайно матчиться."""
+    text = text or ""
+    if not _LOVE_ADD_VERB_RE.search(text) or not _LOVE_WORD_RE.search(text):
+        return None
+    category = next(
+        ((key, label) for pattern, key, label in _LOVE_CATEGORIES if pattern.search(text)),
+        None,
+    )
+    if not category:
+        return None
+    store_key, folder_label = category
+    payload = _LOVE_ADD_VERB_RE.sub(" ", text, count=1)
+    payload = _LOVE_WORD_RE.sub(" ", payload, count=1)
+    payload = _LOVE_CATEGORY_KEY_RE.sub(" ", payload, count=1)
+    payload = re.sub(r"\s+", " ", payload).strip(" \t\n\r:;,.-–—")
+    if not payload:
+        return None
+    return store_key, folder_label, payload
+
+
+async def try_add_love_from_chat(bot, cid, text):
+    """Перехватывает «добавь в любимые фильм/книгу/музыканта/страну X» из чата."""
+    import config
+    import store as _store
+    detected = _detect_love_add(text)
+    if not detected:
+        return False
+    store_key, folder_label, title = detected
+    key_map = {
+        "movies": config.WATCHLIST_KEY,
+        "books": config.BOOKS_KEY,
+        "artists": config.ARTISTS_KEY,
+        "countries": config.FAVCOUNTRIES_KEY,
+    }
+    existing = {str(x).strip().lower() for x in _store.get_list(key_map[store_key], cid)}
+    if title.strip().lower() in existing:
+        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» уже в любимых ({folder_label}).")
+        return True
+    _store.add_to_list(key_map[store_key], cid, title)
+    await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — добавил в любимые ({folder_label}).")
+    return True
+
+
 def _detect_intent(text: str):
     t = text.lower()
     for keywords, action in _INTENT_MAP:

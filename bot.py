@@ -855,6 +855,9 @@ async def text_router(update, context):
     # Быстрая команда из чата: «добавь в продукты крахмал»
     if await balance.try_add_fridge_from_chat(bot, cid, text):
         return
+    # Быстрая команда из чата: «добавь в любимые фильм Дюна»
+    if await assistant.try_add_love_from_chat(bot, cid, text):
+        return
 
     # Свободный чат
     await assistant.chat_reply(bot, cid, text)
