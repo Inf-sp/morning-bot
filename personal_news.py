@@ -1096,6 +1096,7 @@ def _is_admin(cid):
 
 def _default_keyboard(period, url_buttons=None, cid=None):
     rows = list(url_buttons or [])
+    rows.append([InlineKeyboardButton("🔄 Обновить", callback_data=f"a_news_refresh_{period}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
     return InlineKeyboardMarkup(rows)
 

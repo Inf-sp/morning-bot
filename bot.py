@@ -512,6 +512,9 @@ async def answer_callback(update, context):
                 await _inline_status(lambda _s: personal_news.send_period(bot, cid, "today"))
             elif act == "news_week":
                 await _inline_status(lambda _s: personal_news.send_period(bot, cid, "week"))
+            elif act.startswith("news_refresh_"):
+                period = act[len("news_refresh_"):]
+                await _inline_status(lambda _s: personal_news.send_period(bot, cid, period, force=True))
             elif act == "news_topics":
                 await personal_news.send_topics(bot, cid, q=q)
             elif act in ("food_breakfast", "recipe_breakfast"):
