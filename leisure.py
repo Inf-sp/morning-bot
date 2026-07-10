@@ -1148,15 +1148,6 @@ async def movie_love(bot, cid, i):
         await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — в любимые (Кино). Вот ещё вариант.")
     await _advance_movie(bot, cid)
 
-async def movie_seen(bot, cid, i):
-    """Фильм — уже знакомо: запомнить и не повторять, вкус не меняется."""
-    rec = store.last_recos.get(str(cid))
-    if rec and i < len(rec["items"]):
-        title = rec["items"][i]
-        _add_unique(config.MOVIE_SEEN_KEY, cid, title)
-        await bot.send_message(chat_id=cid, text=f"✅ «{title}» — уже знакомо, не буду повторять. Вот ещё вариант.")
-    await _advance_movie(bot, cid)
-
 async def book_love(bot, cid, i):
     """Книга — в любимые (Мои книги), затем следующая рекомендация."""
     rec = store.last_recos.get(str(cid))
@@ -1166,15 +1157,6 @@ async def book_love(bot, cid, i):
         await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — в любимые (Мои книги). Вот ещё вариант.")
     await _advance_book(bot, cid)
 
-async def book_seen(bot, cid, i):
-    """Книга — уже знакомо: запомнить и не повторять, вкус не меняется."""
-    rec = store.last_recos.get(str(cid))
-    if rec and i < len(rec["items"]):
-        title = rec["items"][i]
-        _add_unique(config.BOOK_SEEN_KEY, cid, title)
-        await bot.send_message(chat_id=cid, text=f"✅ «{title}» — уже знакомо, не буду повторять. Вот ещё вариант.")
-    await _advance_book(bot, cid)
-
 async def listen_love(bot, cid):
     """Артист - в любимые (Мои музыканты), затем следующая рекомендация."""
     rec = store.last_recos.get(str(cid))
@@ -1182,15 +1164,6 @@ async def listen_love(bot, cid):
         artist = rec["items"][0]
         _add_unique(config.ARTISTS_KEY, cid, artist)
         await bot.send_message(chat_id=cid, text=f"❤️ «{artist}» — в любимые (Мои музыканты). Вот ещё вариант.")
-    await send_listen(bot, cid)
-
-async def listen_seen(bot, cid):
-    """Артист — уже знакомо: запомнить и не повторять, вкус не меняется."""
-    rec = store.last_recos.get(str(cid))
-    if rec and rec.get("kind") == "listen" and rec["items"]:
-        artist = rec["items"][0]
-        _add_unique(config.MUSIC_SEEN_KEY, cid, artist)
-        await bot.send_message(chat_id=cid, text=f"✅ «{artist}» — уже знакомо, не буду повторять. Вот ещё вариант.")
     await send_listen(bot, cid)
 
 async def add_reco(bot, cid, i):

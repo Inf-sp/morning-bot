@@ -79,7 +79,7 @@ def evening_review(worries, items=None, summary="", analysis_failed=False):
     b = MessageBuilder()
     b.section(ui_label("evening", "Вечерний разбор"))
     b.spacer()
-    b.section(ui_label("worries", "Сегодня тебя беспокоили:"))
+    b.section("Сегодня тебя беспокоили:")
     items = items or []
     for idx, worry in enumerate(worries):
         b.bullet(worry["text"])

@@ -479,18 +479,6 @@ def _cache_set(cid, period, entry, now=None):
     store._save(NEWS_CACHE_KEY, data)
 
 
-def _last_refresh(cid):
-    return int((store.get_profile(cid).get("personal_news") or {}).get("last_refresh_ts", 0))
-
-
-def _set_last_refresh(cid):
-    prof = store.get_profile(cid)
-    pn = dict(prof.get("personal_news") or {})
-    pn["last_refresh_ts"] = int(time.time())
-    prof["personal_news"] = pn
-    store.set_profile(cid, prof)
-
-
 def _queries_for(cid):
     return _queries_for_profile(_profile_context(cid))
 
@@ -1139,22 +1127,6 @@ async def send_period(bot, cid, period="today", force=False):
         raise
     await bot.send_message(chat_id=cid, text=entry["text"], reply_markup=_default_keyboard(period, buttons, cid),
                            disable_web_page_preview=True)
-
-
-async def refresh(bot, cid, period="today"):
-    last = _last_refresh(cid)
-    if last and time.time() - last < REFRESH_COOLDOWN_SEC and not _is_admin(cid):
-        last_dt = datetime.fromtimestamp(last, config.TZ)
-        next_dt = datetime.fromtimestamp(last + REFRESH_COOLDOWN_SEC, config.TZ)
-        await bot.send_message(
-            chat_id=cid,
-            text=f"Последняя проверка была в {last_dt.strftime('%H:%M')}.\n"
-                 f"Новые источники проверю после {next_dt.strftime('%H:%M')}, чтобы не тратить лимит зря.",
-            reply_markup=_default_keyboard(period, cid=cid),
-        )
-        return
-    _set_last_refresh(cid)
-    await send_period(bot, cid, period, force=True)
 
 
 async def send_topics(bot, cid, q=None):

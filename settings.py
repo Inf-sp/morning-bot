@@ -481,24 +481,7 @@ async def set_style(bot, cid, i):
     await send_body(bot, cid)
 
 
-# ===== Списки в настройках: страны, артисты, книги, шкаф =====
-def _item_label(it):
-    return it if isinstance(it, str) else (it.get("name") or it.get("word") or str(it))
-
-def _list_kb(items, del_prefix, add_cb, back="set_home", clean_cb=None):
-    rows = []
-    if clean_cb and items:
-        rows.append([
-            InlineKeyboardButton("✏️ Добавить", callback_data=add_cb),
-            InlineKeyboardButton("❌ Удалить", callback_data=clean_cb),
-        ])
-    else:
-        rows.append([InlineKeyboardButton("✏️ Добавить", callback_data=add_cb)])
-    rows.extend([[InlineKeyboardButton(_item_label(it)[:40], callback_data="noop")]
-                 for it in items[-40:]])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back)])
-    return InlineKeyboardMarkup(rows)
-
+# ===== Списки в настройках: шкаф =====
 # --- Шкаф ---
 async def send_wardrobe_hub(bot, cid, back="m_wardrobe"):
     """Гардероб в Настройках: вещи + стиль + особенности телосложения - всё, что
@@ -529,34 +512,6 @@ async def send_wardrobe(bot, cid, back="m_wardrobe"):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 # --- Страны ---
-async def send_countries(bot, cid):
-    from util import country_flag
-    items = store.get_list(config.COUNTRIES_KEY, cid)
-    rows = []
-    if items:
-        rows.append([
-            InlineKeyboardButton("✏️ Добавить", callback_data="setadd_country"),
-            InlineKeyboardButton("❌ Удалить", callback_data="set_clean_countries"),
-        ])
-    else:
-        rows.append([InlineKeyboardButton("✏️ Добавить", callback_data="setadd_country")])
-    rows.extend([[InlineKeyboardButton(f"{country_flag(it)} {_item_label(it)[:36]}", callback_data="noop")]
-                 for it in items[-40:]])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
-    msg = settings_ui.countries_home()
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=InlineKeyboardMarkup(rows))
-
-# --- Артисты ---
-async def send_artists(bot, cid):
-    items = store.get_list(config.ARTISTS_KEY, cid)
-    msg = settings_ui.artists_home(items)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=_list_kb(items, "setdel_artist_", "setadd_artist",
-                                                 clean_cb="set_clean_artists"))
-
-# --- Книги ---
-
 async def send_lagom(bot, cid, back="m_balance"):
     import memory
     items = memory.get_lagom(cid)
@@ -573,41 +528,6 @@ async def send_lagom(bot, cid, back="m_balance"):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))
 
-async def send_books(bot, cid):
-    items = store.get_list(config.BOOKS_KEY, cid)
-    msg = settings_ui.books_home(items)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=_list_kb(items, "setdel_book_", "setadd_book",
-                                                 clean_cb="set_clean_books"))
-
-async def list_delete(bot, cid, kind, i):
-    keymap = {"country": config.COUNTRIES_KEY, "artist": config.ARTISTS_KEY, "book": config.BOOKS_KEY}
-    key = keymap.get(kind)
-    items = store.get_list(key, cid)
-    if i < len(items):
-        items.pop(i)
-        store.set_list(key, cid, items)
-    if kind == "country":
-        await send_countries(bot, cid)
-    elif kind == "artist":
-        await send_artists(bot, cid)
-    else:
-        await send_books(bot, cid)
-
-async def list_add_done(bot, cid, kind, text):
-    keymap = {"country": config.COUNTRIES_KEY, "artist": config.ARTISTS_KEY, "book": config.BOOKS_KEY}
-    item = text.strip()
-    store.add_to_list(keymap[kind], cid, item)
-    msg = settings_ui.list_added(kind, item)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
-    if kind == "country":
-        await send_countries(bot, cid)
-    elif kind == "artist":
-        await send_artists(bot, cid)
-    else:
-        await send_books(bot, cid)
-
-
 async def handle_callback(bot, cid, data, q=None):
     if data == "set_home":
         await send_home(bot, cid)
@@ -623,12 +543,6 @@ async def handle_callback(bot, cid, data, q=None):
         await send_food(bot, cid, q)
     elif data == "set_travel":
         await send_travel(bot, cid)
-    elif data == "set_dict":
-        await learning.send_dict(bot, cid, back="m_notes")
-    elif data == "set_dict_g":
-        await learning.send_dict(bot, cid, back="m_learn")
-    elif data == "set_leisure_settings":
-        await send_leisure_settings(bot, cid)
     elif data == "set_fridge":
         import balance
         await balance.send_fridge(bot, cid, back="m_notes")
@@ -648,8 +562,6 @@ async def handle_callback(bot, cid, data, q=None):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
     elif data == "set_notif_off_all":
         await notif_off_all(bot, cid, q)
-    elif data == "set_levels":
-        await learning.send_learning_settings(bot, cid, q=q, back="set_home")
     elif data == "set_learning_hub":
         await send_learning_hub(bot, cid)
     elif data == "set_learning_mydata":
@@ -692,33 +604,6 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_books":
         _log.info("legacy callback used: %s", data)
         await send_love_section(bot, cid, "books")
-    elif data == "setadd_country":
-        store.pending_input[cid] = "setadd_country"
-        msg = settings_ui.list_add_prompt("country")
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
-    elif data == "setadd_artist":
-        store.pending_input[cid] = "setadd_artist"
-        msg = settings_ui.list_add_prompt("artist")
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
-    elif data == "setadd_book":
-        store.pending_input[cid] = "setadd_book"
-        msg = settings_ui.list_add_prompt("book")
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
-    elif data == "set_clean_countries":
-        from cleanup import open_cleanup
-        await open_cleanup(bot, cid, "cfg_countries")
-    elif data == "set_clean_artists":
-        from cleanup import open_cleanup
-        await open_cleanup(bot, cid, "cfg_artists")
-    elif data == "set_clean_books":
-        from cleanup import open_cleanup
-        await open_cleanup(bot, cid, "cfg_books")
-    elif data.startswith("setdel_country_"):
-        await list_delete(bot, cid, "country", int(data.split("_")[-1]))
-    elif data.startswith("setdel_artist_"):
-        await list_delete(bot, cid, "artist", int(data.split("_")[-1]))
-    elif data.startswith("setdel_book_"):
-        await list_delete(bot, cid, "book", int(data.split("_")[-1]))
     elif data == "set_stylepick":
         await send_style_pick(bot, cid)
     elif data == "set_stylecustom":
@@ -727,10 +612,6 @@ async def handle_callback(bot, cid, data, q=None):
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     elif data.startswith("set_style_"):
         await set_style(bot, cid, int(data.split("_")[-1]))
-    elif data == "set_bodyinput":
-        store.pending_input[cid] = "bodyinput"
-        msg = settings_ui.body_input()
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     elif data == "adm_home":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
@@ -1045,16 +926,15 @@ async def send_mydata_leisure(bot, cid):
 
 
 async def send_learning_hub(bot, cid):
-    """Обучение в Настройках: язык/уровень + единственная кнопка на словарь
-    (было две дублирующих - "Словарь" и "Фразы" - обе вели на один экран)."""
+    """Обучение в Настройках: язык/уровень. Словарь теперь только в разделе
+    «Обучение» (не дублируется в Настройках/Сохранённом)."""
     rows = [
-        [InlineKeyboardButton(ui_label("dictionary", "Словарь"), callback_data="a_dict_mydata")],
         [InlineKeyboardButton("Язык и уровень", callback_data="set_learning_mydata")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
     ]
     msg = settings_ui.mydata_section(
         f"{ui_label('learning', 'Обучение')}",
-        "Слова из словаря сами попадают в тренажёры.",
+        "Настройка активного языка и уровня.",
     )
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
@@ -1129,18 +1009,6 @@ async def send_travel(bot, cid):
     )
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
-
-async def send_leisure_settings(bot, cid):
-    rows = [[InlineKeyboardButton(title, callback_data=f"as_love_{key}")] for title, key in LOVE_SECTIONS]
-    rows.append([InlineKeyboardButton(ui_label("cinema", "Предпочтения кино"), callback_data="movie_prefs")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
-    msg = settings_ui.leisure_settings()
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
-        reply_markup=InlineKeyboardMarkup(rows),
-    )
 
 async def send_plans(bot, cid):
     notes_list = store.get_list(config.NOTES_KEY, cid)
@@ -1392,8 +1260,6 @@ async def handle_notes_callback(bot, cid, q, data):
         return
     if data == "as_bucket_plan":
         await send_bucket(bot, cid, "plan"); return
-    if data == "as_bucket_love":
-        await send_notes(bot, cid); return
     if data.startswith("as_planview_"):
         await plan_view(bot, cid, int(data.split("_")[-1])); return
     if data.startswith("as_plandel_"):
@@ -1404,10 +1270,6 @@ async def handle_notes_callback(bot, cid, q, data):
         await note_to_blacklist(bot, cid, int(data.split("_")[-1])); return
     if data.startswith("as_notelove_"):
         await note_to_love(bot, cid, int(data.split("_")[-1])); return
-    if data.startswith("as_notedrop_"):
-        await note_drop(bot, cid, int(data.split("_")[-1])); return
-    if data.startswith("fav_view_"):
-        await fav_view(bot, cid, int(data.split("_")[-1])); return
     if data.startswith("fav_viewg_"):
         group, idx = data[len("fav_viewg_"):].rsplit("_", 1)
         await fav_view(bot, cid, int(idx), back=f"as_bucket_favgrp_{group}", delete_cb=f"fav_delg_{group}_{idx}")
@@ -1421,15 +1283,8 @@ async def handle_notes_callback(bot, cid, q, data):
     if data == "as_clean_fav":
         import cleanup
         await cleanup.open_cleanup(bot, cid, "nb"); return
-    if data.startswith("ls_loveclean_"):
-        import cleanup
-        await cleanup.open_cleanup(bot, cid, f"lvls_{data[len('ls_loveclean_'):]}", back="m_leisure_settings"); return
     if data.startswith("ls_loveadd_"):
         await love_add_start(bot, cid, data[len("ls_loveadd_"):], origin="leisure"); return
-    if data.startswith("ls_love_"):
-        key = data[len("ls_love_"):]
-        import cleanup as _cl
-        await _cl.open_cleanup(bot, cid, f"lvls_{key}", back="m_leisure_settings"); return
     if data.startswith("as_loveclean_"):
         import cleanup
         await cleanup.open_cleanup(bot, cid, f"lv_{data[len('as_loveclean_'):]}", back="as_notes"); return

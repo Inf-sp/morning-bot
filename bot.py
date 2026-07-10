@@ -294,9 +294,6 @@ async def answer_callback(update, context):
     if data.startswith("w_"):
         await wardrobe.handle_callback(bot, cid, q, data)
         return
-    if data.startswith("col_"):
-        await cleanup.open_collection(bot, cid, data[len("col_"):])
-        return
     if data.startswith("colr:"):
         _, collection_id, back = data.split(":", 2)
         await cleanup.open_collection(bot, cid, collection_id, back=back)
@@ -390,8 +387,6 @@ async def answer_callback(update, context):
                 await _inline_status(lambda _s: learning.send_proverb(bot, cid, language))
             elif act == "dict":
                 await learning.send_dict(bot, cid, q=q)
-            elif act == "dict_mydata":
-                await learning.send_dict(bot, cid, back="set_home", q=q)
             elif act == "dictconfirm_add":
                 await _ack(q)
                 await learning.confirm_pending_dict_add(bot, cid)
@@ -433,18 +428,6 @@ async def answer_callback(update, context):
                 await learning.send_dict_lang(bot, cid, "nl", back="m_learn", q=q)
             elif act == "dictlang_en_from_menu":
                 await learning.send_dict_lang(bot, cid, "en", back="m_learn", q=q)
-            elif act == "dictlang_nl_from_notes":
-                await learning.send_dict_lang(bot, cid, "nl", back="a_dict", q=q)
-            elif act == "dictlang_en_from_notes":
-                await learning.send_dict_lang(bot, cid, "en", back="a_dict", q=q)
-            elif act == "dictlang_nl_from_learn":
-                await learning.send_dict_lang(bot, cid, "nl", back="set_dict_g", q=q)
-            elif act == "dictlang_en_from_learn":
-                await learning.send_dict_lang(bot, cid, "en", back="set_dict_g", q=q)
-            elif act == "dictlang_nl_from_mydata":
-                await learning.send_dict_lang(bot, cid, "nl", back="a_dict_mydata", q=q)
-            elif act == "dictlang_en_from_mydata":
-                await learning.send_dict_lang(bot, cid, "en", back="a_dict_mydata", q=q)
             elif act.startswith("dictadd_smart_"):
                 lang = act.split("_")[2]
                 store.pending_input[cid] = f"dictadd_smart_{lang}"
@@ -476,17 +459,13 @@ async def answer_callback(update, context):
                 rest = act[len("dictedit_"):]
                 if "_" in rest:
                     lang, page = rest.rsplit("_", 1)
-                    await learning.send_dict_edit(bot, cid, lang, page=int(page), q=q)
+                    await learning.send_dict_lang(bot, cid, lang, page=int(page), q=q)
                 else:
-                    await learning.send_dict_edit(bot, cid, rest, q=q)
+                    await learning.send_dict_lang(bot, cid, rest, q=q)
             elif act == "game":
                 await learning.game_start(bot, cid)
             elif act == "levels":
                 await learning.send_levels(bot, cid, back="m_learn")
-            elif act == "w_today":
-                await _inline_status(lambda _s: weather.send_weather(bot, cid, "today"))
-            elif act == "w_tomorrow":
-                await _inline_status(lambda _s: weather.send_weather(bot, cid, "tomorrow"))
             elif act == "w_week":
                 await _inline_status(lambda _s: weather.send_weather(bot, cid, "week"))
             elif act == "setcity":
@@ -534,8 +513,6 @@ async def answer_callback(update, context):
                 await _inline_status(lambda _s: personal_news.send_period(bot, cid, "week"))
             elif act == "news_topics":
                 await personal_news.send_topics(bot, cid, q=q)
-            elif act.startswith("news_refresh_"):
-                await _inline_status(lambda _s: personal_news.refresh(bot, cid, act.split("_")[-1]))
             elif act in ("food_breakfast", "recipe_breakfast"):
                 await _inline_status(lambda status: balance.enter_meal(bot, cid, "breakfast", status=status))
             elif act in ("food_lunch", "recipe_lunch"):
@@ -546,31 +523,14 @@ async def answer_callback(update, context):
             await verify.safe_error(bot, cid, e)
         return
 
-    # Уровни языка
-    if data.startswith("lvl_"):
-        parts = data.split("_")
-        level = parts[2]
-        language = learning.active_language(cid)
-        old_level = store.get_level(cid, language)
-        store.set_level(cid, language, level)
-        await learning.send_learning_settings(bot, cid, q)
-        if old_level != level:
-            await learning.offer_seed_for_level_change(bot, cid, language, level)
-        return
     # Тренажёр слов
     if data.startswith("train_"):
         sub = data[len("train_"):]
-        if sub.startswith("ans_"):
-            try:
-                ans_idx = int(sub[4:])
-            except ValueError:
-                return
-            await _inline_status(lambda _s: learning.train_quiz_answer(bot, cid, ans_idx))
-        elif sub == "next":
+        if sub == "next":
             await _inline_status(lambda _s: learning.train_next(bot, cid))
         return
     # Тренажёр фраз: переход от учебной карточки к тесту
-    if data in ("phrase_intro_test", "phrase_intro_go"):
+    if data == "phrase_intro_test":
         await _inline_status(lambda _s: learning.phrase_intro_continue(bot, cid))
         return
     if data == "phrase_intro_mastered":
@@ -605,10 +565,6 @@ async def answer_callback(update, context):
         cfg["difficulty"] = diff
         store.game_config[cid] = cfg
         await _inline_status(lambda _s: learning.send_game(bot, cid))
-        return
-    if data == "game_change_diff":
-        cfg = store.game_config.get(cid, {"lang": "русский"})
-        await learning.ask_difficulty(bot, cid, cfg["lang"])
         return
     if data == "noop":
         return
@@ -665,20 +621,11 @@ async def answer_callback(update, context):
     if data.startswith("movie_love_"):
         await _inline_status(lambda _s: leisure.movie_love(bot, cid, int(data.split("_")[-1])))
         return
-    if data.startswith("movie_seen_"):
-        await _inline_status(lambda _s: leisure.movie_seen(bot, cid, int(data.split("_")[-1])))
-        return
     if data.startswith("book_love_"):
         await _inline_status(lambda _s: leisure.book_love(bot, cid, int(data.split("_")[-1])))
         return
-    if data.startswith("book_seen_"):
-        await _inline_status(lambda _s: leisure.book_seen(bot, cid, int(data.split("_")[-1])))
-        return
     if data == "listen_love":
         await _inline_status(lambda _s: leisure.listen_love(bot, cid))
-        return
-    if data == "listen_seen":
-        await _inline_status(lambda _s: leisure.listen_seen(bot, cid))
         return
     if data.startswith("reco_"):
         await _inline_status(lambda _s: leisure.add_reco(bot, cid, int(data.split("_")[1])))
@@ -821,10 +768,6 @@ async def text_router(update, context):
             settings.set_(cid, "wardrobe_profile", text.strip())
             await bot.send_message(chat_id=cid, text="🎚️ <b>Параметры сохранены</b>", parse_mode="HTML")
             await settings.send_wardrobe(bot, cid); return
-        if kind == "bodyinput":
-            settings.set_(cid, "body", text)
-            await bot.send_message(chat_id=cid, text="Готово, параметры сохранены.")
-            await settings.send_body(bot, cid); return
         if kind == "styleinput":
             settings.set_(cid, "style", text.strip())
             await bot.send_message(chat_id=cid, text="Стиль сохранён.")
@@ -835,12 +778,6 @@ async def text_router(update, context):
             except (ValueError, IndexError):
                 ci = -1
             await balance.fridge_add_done(bot, cid, text, ci); return
-        if kind == "setadd_country":
-            await settings.list_add_done(bot, cid, "country", text); return
-        if kind == "setadd_artist":
-            await settings.list_add_done(bot, cid, "artist", text); return
-        if kind == "setadd_book":
-            await settings.list_add_done(bot, cid, "book", text); return
         if kind == "setadd_lagom":
             import memory
             from util import esc

@@ -1240,16 +1240,6 @@ async def phrase_explain(bot, cid):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-async def train_quiz_answer(bot, cid, idx):
-    st = store.train_state.get(str(cid))
-    if not st:
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
-    options = st.get("options", [])
-    if idx >= len(options):
-        return
-    await _send_train_feedback(bot, cid, idx, st)
-
-
 async def handle_train_poll_answer(bot, poll_answer):
     cid = store.train_polls.get(poll_answer.poll_id)
     if not cid:
@@ -1913,8 +1903,12 @@ def _extract_chat_dict_add(text):
 
 async def try_add_dict_from_chat(bot, cid, text):
     """Перехватывает явную просьбу добавить слово/фразу в словарь из обычного чата.
-    Если payload похож на связный текст (несколько предложений), а не короткую
-    команду на одно слово/фразу — не добавляем сразу, а предлагаем превью."""
+    Явная команда («добавь в словарь ...») — чёткое намерение добавить именно эту
+    фразу целиком, даже если она длинная или заканчивается на «?»/«!» — поэтому
+    здесь НЕ проверяем payload на «похоже на связный текст» (в отличие от
+    add_words_batch, куда текст мог попасть без явной команды на конкретную фразу).
+    _normalize_dict_entry_full сам исправит опечатки и приведёт фразу к
+    естественной форме, а единый confirm-экран покажет итог на подтверждение."""
     payload, lang = _extract_chat_dict_add(text)
     if payload is None:
         return False
@@ -1923,9 +1917,6 @@ async def try_add_dict_from_chat(bot, cid, text):
             chat_id=cid,
             text="Пришли само слово или фразу: например «добавь в словарь de kater».",
         )
-        return True
-    if _looks_like_free_text([payload]):
-        await offer_dict_topics_from_text(bot, cid, text, lang)
         return True
     await add_dict_entry_from_chat(bot, cid, payload, lang, source_text=text)
     return True
@@ -2030,6 +2021,9 @@ async def _normalize_dict_entry_full(payload, lang_hint="nl", source_text=""):
   - Фразы/предложения — естественно и грамматически правильно, без изменения смысла.
   - Для нидерландских фраз проверяй согласование подлежащего и сказуемого:
     "Ik bereiken mijn doel" нельзя; правильно "Ik bereik mijn doel".
+  - Если во фразе явная опечатка (например лишняя/пропущенная буква, не меняющая
+    смысл: "wat doc je daar" → "wat doe je daar"), исправь её молча — term должен
+    быть уже исправленной, естественной формой, а не сырым вводом с ошибкой.
 - article: артикль "de"/"het" для нидерландских существительных, иначе пусто.
 - translation: 1-2 самых точных значения на русском, через "; ".
 - breakdown: короткий разбор — часть речи, род/артикль, особенность формы (одна строка,
@@ -2965,18 +2959,46 @@ async def send_dict(bot, cid, back="m_notes", q=None):
     ]
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
 
-async def send_dict_lang(bot, cid, lang, back="m_learn", q=None):
-    """Единый экран «Мой словарь»: Добавить, Найти, Весь список — без
-    промежуточной вкладки."""
-    count = _dict_counts(cid)[lang]
-    msg = dict_ui.dict_language(lang, count)
-    rows = [
+async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
+    """Главный экран словаря — сразу список слов «Мои слова и фразы», без
+    промежуточного меню: широкие кнопки Найти/Добавить/Сгенерировать сверху,
+    слова в 3 столбца по алфавиту, листание страниц по кругу, «⬅️ Назад» внизу
+    ведёт туда, откуда открыли словарь (раздел «Обучение»)."""
+    entries = _dict_lang_entries(cid, lang)
+    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+    top_rows = [
+        [InlineKeyboardButton("🔍 Найти в словаре", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("✏️ Добавить своё слово", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("✨ Сгенерировать набор слов", callback_data=f"a_dictseed_start_{lang}")],
-        [InlineKeyboardButton("📋 Мои слова и фразы", callback_data=f"a_dictedit_{lang}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ]
-    await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
+    if not entries:
+        rows = top_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=back)]]
+        text = f"{flag} Мой словарь\n\nПока пусто — добавь первое слово."
+        await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
+        return
+    total_pages = max(1, (len(entries) + _DICT_LIST_PAGE_SIZE - 1) // _DICT_LIST_PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * _DICT_LIST_PAGE_SIZE
+    chunk = entries[start:start + _DICT_LIST_PAGE_SIZE]
+    word_buttons = []
+    for item in chunk:
+        term_key = _dict_item_key(lang, "", _entry_term(item))[2]
+        word_buttons.append(InlineKeyboardButton(
+            _cap(_entry_term(item))[:16],
+            callback_data=f"a_dictview_{lang}_{page}_{term_key}",
+        ))
+    word_rows = [word_buttons[i:i + 3] for i in range(0, len(word_buttons), 3)]
+    nav_rows = []
+    if total_pages > 1:
+        prev_page = page - 1 if page > 0 else total_pages - 1
+        next_page = page + 1 if page < total_pages - 1 else 0
+        nav_rows.append([
+            InlineKeyboardButton("◀️ Назад", callback_data=f"a_dictedit_{lang}_{prev_page}"),
+            InlineKeyboardButton("Дальше ▶️", callback_data=f"a_dictedit_{lang}_{next_page}"),
+        ])
+    rows = top_rows + word_rows + nav_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=back)]]
+    text = f"{flag} Мой словарь · Страница {page + 1} из {total_pages}"
+    await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
 
 
 def _dict_manage_kb(lang: str):
@@ -3077,52 +3099,6 @@ def _dict_lang_entries(cid, lang):
     return sorted(entries, key=lambda w: _cap(_entry_term(w)).casefold())
 
 
-def _dict_list_kb(lang, entries, page):
-    total_pages = max(1, (len(entries) + _DICT_LIST_PAGE_SIZE - 1) // _DICT_LIST_PAGE_SIZE)
-    page = max(0, min(page, total_pages - 1))
-    start = page * _DICT_LIST_PAGE_SIZE
-    chunk = entries[start:start + _DICT_LIST_PAGE_SIZE]
-    rows = [[InlineKeyboardButton("🔍 Найти в словаре", callback_data=f"a_dictsearch_{lang}")]]
-    word_buttons = []
-    for item in chunk:
-        term_key = _dict_item_key(lang, "", _entry_term(item))[2]
-        word_buttons.append(InlineKeyboardButton(
-            _cap(_entry_term(item))[:24],
-            callback_data=f"a_dictview_{lang}_{page}_{term_key}",
-        ))
-    for i in range(0, len(word_buttons), 2):
-        rows.append(word_buttons[i:i + 2])
-    if total_pages > 1:
-        prev_btn = (InlineKeyboardButton("◀️ Назад", callback_data=f"a_dictedit_{lang}_{page - 1}")
-                    if page > 0 else InlineKeyboardButton(" ", callback_data="noop"))
-        next_btn = (InlineKeyboardButton("Дальше ▶️", callback_data=f"a_dictedit_{lang}_{page + 1}")
-                    if page < total_pages - 1 else InlineKeyboardButton(" ", callback_data="noop"))
-        rows.append([prev_btn, next_btn])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")])
-    return InlineKeyboardMarkup(rows), page, total_pages
-
-
-async def send_dict_edit(bot, cid, lang, page=0, q=None):
-    """Список «Мои слова и фразы»: только термины, без перевода, по алфавиту,
-    в 2 столбца — тап открывает карточку слова с удалением. Постранично, без
-    чекбокс-мультивыбора. Поиск по словарю — отдельной кнопкой сверху списка."""
-    entries = _dict_lang_entries(cid, lang)
-    if not entries:
-        await _show_screen(
-            bot, cid, "В словаре пока пусто.", None,
-            InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔍 Найти в словаре", callback_data=f"a_dictsearch_{lang}")],
-                [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")],
-            ]),
-            q=q,
-        )
-        return
-    kb, page, total_pages = _dict_list_kb(lang, entries, page)
-    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-    text = f"{flag} Мои слова и фразы\nСтраница {page + 1} из {total_pages}"
-    await _show_screen(bot, cid, text, None, kb, q=q)
-
-
 def _dict_entry_view_kb(lang, page, term_key):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить", callback_data=f"a_dictviewdel_{lang}_{page}_{term_key}")],
@@ -3135,7 +3111,7 @@ async def send_dict_entry_view(bot, cid, lang, page, term_key, q=None):
     entries = _dict_lang_entries(cid, lang)
     match = next((w for w in entries if _dict_item_key(lang, "", _entry_term(w))[2] == term_key), None)
     if not match:
-        await send_dict_edit(bot, cid, lang, page=page, q=q)
+        await send_dict_lang(bot, cid, lang, page=page, q=q)
         return
     if _entry_needs_ai_refresh(match):
         match = await _refresh_dict_entry(cid, match)
@@ -3563,7 +3539,13 @@ async def handle_learning_settings_callback(bot, cid, q, data):
     if data.startswith("set_learning_level_"):
         level = data[len("set_learning_level_"):]
         if level in LEVELS:
-            store.set_level(cid, active_language(cid), level)
+            language = active_language(cid)
+            old_level = store.get_level(cid, language)
+            store.set_level(cid, language, level)
+            await send_learning_settings(bot, cid, q=q, back=back)
+            if old_level != level:
+                await offer_seed_for_level_change(bot, cid, language, level)
+            return
         await send_learning_settings(bot, cid, q=q, back=back)
 
 
