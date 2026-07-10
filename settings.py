@@ -452,7 +452,7 @@ async def toggle_cuisine(bot, cid, key, q=None):
 
 _BODY_PLACEHOLDER = "не указано"
 
-async def send_body(bot, cid, back="set_wardrobe_mydata"):
+async def send_body(bot, cid, back="m_wardrobe"):
     """Особенности телосложения (используется в подборе образа в wardrobe.py)."""
     store.pending_input[str(cid)] = "wardrobe_profile_input"
     profile = get(cid, "wardrobe_profile", "")
@@ -500,7 +500,7 @@ def _list_kb(items, del_prefix, add_cb, back="set_home", clean_cb=None):
     return InlineKeyboardMarkup(rows)
 
 # --- Шкаф ---
-async def send_wardrobe_hub(bot, cid, back="set_home"):
+async def send_wardrobe_hub(bot, cid, back="m_wardrobe"):
     """Гардероб в Настройках: вещи + стиль + особенности телосложения - всё, что
     реально использует wardrobe.py при подборе образа, в одном месте."""
     rows = [
@@ -516,7 +516,7 @@ async def send_wardrobe_hub(bot, cid, back="set_home"):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
 
-async def send_wardrobe(bot, cid, back="set_wardrobe_mydata"):
+async def send_wardrobe(bot, cid, back="m_wardrobe"):
     if store.pending_input.get(str(cid)) == "wardrobe_profile_input":
         store.pending_input.pop(str(cid), None)
     rows = [[
@@ -557,7 +557,7 @@ async def send_artists(bot, cid):
 
 # --- Книги ---
 
-async def send_lagom(bot, cid, back="m_notes"):
+async def send_lagom(bot, cid, back="m_balance"):
     import memory
     items = memory.get_lagom(cid)
     rows = []
@@ -623,8 +623,6 @@ async def handle_callback(bot, cid, data, q=None):
         await send_food(bot, cid, q)
     elif data == "set_travel":
         await send_travel(bot, cid)
-    elif data == "set_health":
-        await send_lagom(bot, cid, back="set_home")
     elif data == "set_dict":
         await learning.send_dict(bot, cid, back="m_notes")
     elif data == "set_dict_g":
@@ -663,11 +661,9 @@ async def handle_callback(bot, cid, data, q=None):
         msg = settings_ui.city_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     elif data == "set_body":
-        await send_body(bot, cid, back="set_wardrobe_mydata")
+        await send_body(bot, cid, back="m_wardrobe")
     elif data == "set_wardrobe":
-        await send_wardrobe(bot, cid, back="set_wardrobe_mydata")
-    elif data == "set_wardrobe_mydata":
-        await send_wardrobe_hub(bot, cid, back="set_home")
+        await send_wardrobe(bot, cid, back="m_wardrobe")
     elif data == "set_wardrobe_g":
         await send_wardrobe_hub(bot, cid, back="m_wardrobe")
     elif data == "set_ward_add":
@@ -679,7 +675,7 @@ async def handle_callback(bot, cid, data, q=None):
         import wardrobe
         await wardrobe.send_del_zones(bot, cid, origin="s")
     elif data == "set_lagom":
-        await send_lagom(bot, cid, back="set_home")
+        await send_lagom(bot, cid, back="m_balance")
     elif data == "setadd_lagom":
         store.pending_input[cid] = "setadd_lagom"
         msg = settings_ui.lagom_input()
@@ -1026,12 +1022,6 @@ async def send_notes(bot, cid):
         [InlineKeyboardButton("🌍 Город", callback_data="set_city"),
          InlineKeyboardButton(ui_label("priorities", "Приоритеты"), callback_data="set_priorities")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
-        [InlineKeyboardButton(ui_label("wardrobe", "Гардероб"), callback_data="set_wardrobe_mydata"),
-         InlineKeyboardButton(ui_label("food", "Готовка"), callback_data="set_food")],
-        [InlineKeyboardButton(ui_label("learning", "Обучение"), callback_data="set_learning_hub"),
-         InlineKeyboardButton(ui_label("health", "Здоровье"), callback_data="set_health")],
-        [InlineKeyboardButton(ui_label("travel", "Путешествия"), callback_data="set_travel"),
-         InlineKeyboardButton(ui_label("leisure", "Досуг"), callback_data="set_mydata_leisure")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
     ]
     msg = settings_ui.settings_home()
@@ -1045,8 +1035,7 @@ async def send_mydata_leisure(bot, cid):
         [InlineKeyboardButton(ui_label("cinema", "Кино"), callback_data="set_mydata_cinema")],
         [InlineKeyboardButton(ui_label("books", "Книги"), callback_data="set_mydata_books")],
         [InlineKeyboardButton(ui_label("music", "Музыка"), callback_data="set_mydata_music")],
-        [InlineKeyboardButton(ui_label("concerts", "Концерты"), callback_data="a_concerts_find")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
     ]
     msg = settings_ui.mydata_section(
         f"{ui_label('leisure', 'Досуг')}",
@@ -1105,7 +1094,7 @@ async def send_mydata_music(bot, cid):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
 
-async def send_food(bot, cid, q=None, back="set_home"):
+async def send_food(bot, cid, q=None, back="m_food"):
     cuisine_mark = " ✅" if cuisines(cid) else ""
     rows = [
         [InlineKeyboardButton(ui_label("products", "Продукты"), callback_data="colr:fridge_items:set_food")],
@@ -1132,7 +1121,7 @@ async def send_travel(bot, cid):
     rows = [
         [InlineKeyboardButton(ui_label("countries", "Любимые страны"), callback_data="colr:travel_favorite_countries:set_travel")],
         [InlineKeyboardButton(ui_label("routes", "Сохранённые места"), callback_data="colr:travel_saved_places:set_travel")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel")],
     ]
     msg = settings_ui.mydata_section(
         f"{ui_label('travel', 'Путешествия')}",

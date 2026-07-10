@@ -109,7 +109,7 @@ def style_pick():
 def settings_home():
     b = MessageBuilder()
     b.section(ui_label("settings", "Настройки"))
-    b.line("Город, приоритеты, уведомления и данные по разделам — всё здесь.")
+    b.line("Город, приоритеты и уведомления. Настройки разделов — внутри самих разделов.")
     return b.build_stripped()
 
 

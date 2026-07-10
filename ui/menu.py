@@ -102,19 +102,9 @@ _SCREENS = {
             [(ui_label("music", "Музыка"), "a_listen")],
             [(ui_label("books", "Книги"), "a_read")],
             [(ui_label("news", "Новости"), "a_news_home")],
-            [(ui_label("settings", "Настройки досуга"), "m_leisure_settings")],
+            [(ui_label("settings", "Настройки досуга"), "set_mydata_leisure")],
         ],
         False,
-    ),
-    "m_leisure_settings": (
-        UI_SETTINGS,
-        "Настройки досуга",
-        "Любимые фильмы, страны, исполнители и книги для рекомендаций.",
-        [
-            [(ui_label("cinema", "Кино"), "ls_love_movies"), (ui_label("countries", "Страны"), "ls_love_countries")],
-            [(ui_label("music", "Музыканты"), "ls_love_artists"), (ui_label("books", "Книги"), "ls_love_books")],
-            [("⬅️ Назад", "m_leisure")],
-        ],
     ),
 }
 

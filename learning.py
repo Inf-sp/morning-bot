@@ -3213,7 +3213,7 @@ async def send_levels(bot, cid, q=None, back="set_home"):
 
 
 async def handle_learning_settings_callback(bot, cid, q, data):
-    back = "set_home"
+    back = "m_learn"
     if data == "set_learning":
         await send_learning_settings(bot, cid, q=q, back=back)
         return

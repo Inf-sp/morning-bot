@@ -955,7 +955,7 @@ def _movie_prefs_kb(cid):
                                   callback_data=f"mpref_c_{v}") for label, v in _PREF_COUNTRIES]
     for i in range(0, len(cbtns), 2):
         rows.append(cbtns[i:i + 2])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_leisure_settings")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure")])
     return InlineKeyboardMarkup(rows)
 
 
