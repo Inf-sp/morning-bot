@@ -1,3 +1,5 @@
+import re
+
 from .builder import MessageBuilder, MessageSpec
 from .constants import CUISINE_EMOJI, ui_label
 
@@ -84,12 +86,19 @@ def _strip_cuisine_from_name(name: str, cuisine_code: str) -> str:
     return name
 
 
+_STEP_TIME_RE = re.compile(r"\d+\s*мин")
+
+
 def _step_line(step) -> str:
-    """Рендерит один шаг приготовления: строка или {"text":..., "minutes":...} (§7)."""
+    """Рендерит один шаг приготовления: строка или {"text":..., "minutes":...} (§7).
+
+    Если text уже содержит упоминание минут (модель продублировала время в тексте
+    вопреки промпту), не приписываем ещё раз "— N мин." поверх — иначе получается
+    дублирующая, нечитаемая строка вида "... 2 минуты ... — 2 мин."."""
     if isinstance(step, dict):
         text = str(step.get("text", "")).strip()
         minutes = step.get("minutes")
-        if text and minutes:
+        if text and minutes and not _STEP_TIME_RE.search(text):
             return f"{text} — {minutes} мин."
         return text
     return str(step).strip()

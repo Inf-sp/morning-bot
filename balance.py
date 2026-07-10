@@ -849,6 +849,19 @@ _MEAL_CONSTRAINT = {
     "dinner": "ужин",
 }
 
+# Явный запрет на типичные блюда других приёмов пищи — чтобы летняя/сезонная
+# подсказка (например "гриль") не перетягивала завтрак в сторону обеда/ужина.
+_MEAL_GUARD = {
+    "breakfast": (
+        "Это ЗАВТРАК: лёгкие блюда, которые едят с утра (каша, омлет, тосты, сырники, "
+        "йогурт с добавками, блинчики, творог). ЗАПРЕЩЕНО предлагать блюда для обеда/ужина "
+        "(жаркое, гриль из мяса, стейк, наваристые супы, плов) — даже если сезонная "
+        "подсказка выше советует лёгкие летние блюда, это НЕ повод предложить гриль на завтрак."
+    ),
+    "lunch": "Это ОБЕД: основное блюдо сытнее завтрака — суп, горячее с гарниром, боул.",
+    "dinner": "Это УЖИН: сытное, но не тяжёлое перед сном блюдо.",
+}
+
 
 async def _send_queue_card(bot, cid, meal, d, status=None):
     """Отправляет карточку ОДНОГО показываемого рецепта без фото."""
@@ -879,9 +892,10 @@ async def _generate_and_store_queue(cid, meal, ingredients=None):
             cuisine_weights, recent_history, season_hint)
     else:
         constraint = _MEAL_CONSTRAINT.get(meal, "обычное блюдо")
+        meal_guard = _MEAL_GUARD.get(meal, "")
         items = await asyncio.to_thread(
             _gen_recipe_batch, constraint, cid,
-            cuisine_weights, recent_history, season_hint)
+            cuisine_weights, recent_history, season_hint, RECIPE_BATCH_SIZE, meal_guard)
     if items:
         set_recipe_queue(cid, meal, items, pos=0)
         add_to_recipe_history(cid, [it.get("name", "") for it in items if it.get("name")])
@@ -1060,7 +1074,7 @@ def _cuisine_weights_line(cuisine_weights: dict) -> str:
     )
 
 
-def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, season_hint, n) -> str:
+def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, season_hint, n, meal_guard="") -> str:
     """Собирает промпт батч-генерации очереди рецептов. Вынесено отдельно от
     _gen_recipe_batch, чтобы промпт можно было проверить без вызова LLM."""
     pref = _my_recipe_pref(cid)
@@ -1071,15 +1085,18 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
     avoid = recent_history or []
     avoid_line = f"Не предлагай эти блюда (уже показывались недавно): {', '.join(avoid)}.\n" if avoid else ""
     cuisine_codes_line = "Коды кухонь (машиночитаемые, используй один из них или ближайший по стране): " + ", ".join(RECIPE_CUISINE_CODES) + ".\n"
+    guard_line = f"{meal_guard}\n" if meal_guard else ""
     return (
         f"{pr}{cz}{weights_line}{season_line}{avoid_line}{pref}"
         f"Ты — шеф-повар с идеальной логикой. Составь список из {n} РАЗНЫХ рецептов "
         f"({constraint}), 1 человек, электрическая плита, духовка SAGE.\n"
+        f"{guard_line}"
         "Правила для каждого рецепта:\n"
         "• Каждый продукт из ингредиентов обязан появиться в шагах приготовления.\n"
         "• Не меняй технику без веской причины: начал на сковороде — не гони в духовку. Минимум посуды.\n"
         "• Сумма minutes по шагам должна строго равняться полю time.\n"
-        "• В каждом шаге: глагол в повелительном наклонении + конкретика (минуты, уровень огня, крышка).\n"
+        "• В каждом шаге text: глагол в повелительном наклонении + конкретика (уровень огня, крышка). "
+        "НЕ пиши время внутри text (ни минуты, ни «X мин») — время идёт только в отдельное поле minutes.\n"
         "• 3–5 шагов. Один шаг — одно-два действия. Без вводных слов и описаний вкуса.\n"
         "• В ингредиентах всегда добавляй базу (масло, соль, перец), если нужна для готовки.\n"
         "• chef_tip — НЕ банальный совет (запрещены клише вроде «используйте свежие продукты», "
@@ -1107,7 +1124,7 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
 
 
 def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history=None,
-                       season_hint=None, n=RECIPE_BATCH_SIZE):
+                       season_hint=None, n=RECIPE_BATCH_SIZE, meal_guard=""):
     """Генерирует за один вызов LLM список из ~n рецептов (§5.1 спеки).
 
     constraint — тип приёма пищи ("завтрак"/"обед"/"ужин") или список продуктов
@@ -1116,6 +1133,8 @@ def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history
     cuisine_weights — {cuisine: weight}, обычно из get_cuisine_weights(cid).
     recent_history — список названий "не повторять", обычно из get_recipe_history(cid).
     season_hint — строка из _season_hint() (можно передать заранее посчитанной).
+    meal_guard — явный жёсткий запрет на блюда других приёмов пищи (см. _MEAL_GUARD),
+    чтобы сезонная подсказка не перетягивала завтрак в сторону обеда/ужина.
 
     ai.llm_json умеет возвращать только dict верхнего уровня (JSON-массив он бы
     схлопнул до первого элемента) — поэтому просим модель обернуть массив в
@@ -1126,7 +1145,7 @@ def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history
     """
     if season_hint is None:
         season_hint = _season_hint()
-    prompt = _recipe_batch_prompt(constraint, cid, cuisine_weights or {}, recent_history or [], season_hint, n)
+    prompt = _recipe_batch_prompt(constraint, cid, cuisine_weights or {}, recent_history or [], season_hint, n, meal_guard)
     result = ai.llm_json(
         prompt, RECIPE_BATCH_MAX_TOKENS, tier="cheap", module="food",
         fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
