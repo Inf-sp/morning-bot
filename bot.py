@@ -33,6 +33,7 @@ import util
 from ui import admin as admin_ui
 from ui.constants import ui_label
 from util import ack_loading as _ack
+from util import clear_loading as _unack
 
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID
@@ -329,14 +330,17 @@ async def answer_callback(update, context):
     if data.startswith("fv_skip_"):
         section = data[len("fv_skip_"):]
         await _ack(q)
-        await firstvisit.skip(bot, cid, section); return
+        await firstvisit.skip(bot, cid, section)
+        await _unack(q); return
     # Теги-чекбоксы в опросе (fv_tag_{section}_{key})
     if data == "fv_leisure_text":
         await _ack(q)
-        await firstvisit.leisure_text_prompt(bot, cid); return
+        await firstvisit.leisure_text_prompt(bot, cid)
+        await _unack(q); return
     if data.startswith("fv_tagdone_"):
         await _ack(q)
-        await firstvisit.tags_done(bot, cid, data[len("fv_tagdone_"):]); return
+        await firstvisit.tags_done(bot, cid, data[len("fv_tagdone_"):])
+        await _unack(q); return
     if data.startswith("fv_tag_"):
         rest = data[len("fv_tag_"):]
         section, _, key = rest.partition("_")
@@ -345,14 +349,16 @@ async def answer_callback(update, context):
     # Первичный опрос при входе в раздел (wardrobe / learning / leisure / health / cooking)
     if data == "m_food" and firstvisit.needs_setup(cid, "cooking"):
         await _ack(q)
-        await firstvisit.show_prompt(bot, cid, "cooking"); return
+        await firstvisit.show_prompt(bot, cid, "cooking")
+        await _unack(q); return
     if data == "m_food":
         await menu.send_food_menu(bot, cid); return
     _FV_SECTION = {"m_wardrobe": "wardrobe", "m_learn": "learning",
                    "m_leisure": "leisure", "m_balance": "health"}
     if data in _FV_SECTION and firstvisit.needs_setup(cid, _FV_SECTION[data]):
         await _ack(q)
-        await firstvisit.show_prompt(bot, cid, _FV_SECTION[data]); return
+        await firstvisit.show_prompt(bot, cid, _FV_SECTION[data])
+        await _unack(q); return
     if data == "m_wardrobe":
         await wardrobe.send_home(bot, cid, q); return
     if data == "m_travel":
@@ -389,15 +395,19 @@ async def answer_callback(update, context):
             elif act == "dictconfirm_add":
                 await _ack(q)
                 await learning.confirm_pending_dict_add(bot, cid)
+                await _unack(q)
             elif act == "dictconfirm_fix":
                 await _ack(q)
                 await learning.fix_pending_dict_add(bot, cid)
+                await _unack(q)
             elif act == "dictbatch_add":
                 await _ack(q)
                 await learning.confirm_dict_batch(bot, cid)
+                await _unack(q)
             elif act == "dictbatch_cancel":
                 await _ack(q)
                 await learning.cancel_dict_batch(bot, cid)
+                await _unack(q)
             elif act.startswith("dictseed_start_"):
                 await learning.seed_start(bot, cid, act.split("_")[-1], q=q)
             elif act.startswith("dictseed_phrases_"):
@@ -523,7 +533,7 @@ async def answer_callback(update, context):
             elif act == "news_week":
                 await _inline_status(lambda _s: personal_news.send_period(bot, cid, "week"))
             elif act == "news_topics":
-                await personal_news.send_topics(bot, cid)
+                await personal_news.send_topics(bot, cid, q=q)
             elif act.startswith("news_refresh_"):
                 await _inline_status(lambda _s: personal_news.refresh(bot, cid, act.split("_")[-1]))
             elif act in ("food_breakfast", "recipe_breakfast"):

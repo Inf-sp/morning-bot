@@ -2189,6 +2189,9 @@ async def _refresh_dict_entry(cid, item):
 
 
 async def add_dict_entry_from_chat(bot, cid, payload, lang="nl", source_text=""):
+    """Единый стиль добавления: перед сохранением ВСЕГДА показываем карточку
+    «Ты имеешь в виду X — Y?» с подтверждением, независимо от того, счёл ли
+    LLM слово многозначным/рискованным (needs_confirmation)."""
     entry = await _normalize_dict_entry_full(payload, lang, source_text=source_text)
     if not entry:
         await bot.send_message(
@@ -2196,18 +2199,13 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang="nl", source_text="")
             text="Не уверена в форме или переводе. Пришли так: de kater → похмелье.",
         )
         return
-    if entry.get("needs_confirmation"):
-        store.dict_pending_add[str(cid)] = entry
-        msg = _dict_confirm_message(entry)
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Да, добавить", callback_data="a_dictconfirm_add"),
-            InlineKeyboardButton("✏️ Исправить", callback_data="a_dictconfirm_fix"),
-        ]])
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-        return
-    status, saved = _save_normalized_dict_entry(cid, entry)
-    msg = _dict_entry_message(saved, status=status)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+    store.dict_pending_add[str(cid)] = entry
+    msg = _dict_confirm_message(entry)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Да, добавить", callback_data="a_dictconfirm_add"),
+        InlineKeyboardButton("✏️ Исправить", callback_data="a_dictconfirm_fix"),
+    ]])
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 async def confirm_pending_dict_add(bot, cid):
@@ -2331,7 +2329,7 @@ async def confirm_dict_batch(bot, cid):
         return
     lang = pending.get("lang", "nl")
     text = "\n".join(it["term"] for it in pending.get("items") or [])
-    await add_words_batch(bot, cid, text, lang)
+    await add_words_batch(bot, cid, text, lang, detailed_confirmation=True)
 
 
 async def cancel_dict_batch(bot, cid):
@@ -2339,16 +2337,40 @@ async def cancel_dict_batch(bot, cid):
     await bot.send_message(chat_id=cid, text="Хорошо, не добавляю.")
 
 
+async def _offer_manual_batch_preview(bot, cid, lines, lang):
+    """Явный список слов/фраз пользователя (2+ строки, каждая — отдельная запись):
+    показываем превью как есть и просим общее подтверждение перед AI-разбором и
+    сохранением — единый стиль добавления, без исключений для «очевидных» слов."""
+    store.dict_pending_batch[str(cid)] = {"lang": lang, "items": [{"term": ln} for ln in lines], "source_text": "\n".join(lines)}
+    preview = "\n".join(f"• {ln}" for ln in lines)
+    await bot.send_message(
+        chat_id=cid,
+        text=f"📚 Добавить в словарь?\n\n{preview}",
+        reply_markup=_dict_batch_preview_kb(),
+    )
+
+
 async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False):
     """Добавляет одну или несколько записей: каждая строка проходит полный AI-разбор
     (нормализация + перевод + разбор + пример), см. _normalize_dict_entry_full.
-    При <= 5 строках — карточка на каждую запись; иначе короткая сводка."""
+    При <= 5 строках — карточка на каждую запись; иначе короткая сводка.
+
+    Единый стиль подтверждения: одиночное слово — карточка «Ты имеешь в виду X — Y?»
+    (см. add_dict_entry_from_chat), несколько строк — превью списка с общим
+    подтверждением (см. _offer_manual_batch_preview). detailed_confirmation=True —
+    это уже подтверждённый список, идём сразу к AI-разбору и сохранению."""
     lines = [x.strip() for x in re.split(r"[\n;]+", text or "") if x.strip()]
     if not lines:
         await bot.send_message(chat_id=cid, text="Не удалось распознать слова. Попробуй ещё раз.")
         return
     if not detailed_confirmation and _looks_like_free_text(lines):
         await offer_dict_topics_from_text(bot, cid, text, lang)
+        return
+    if not detailed_confirmation and len(lines) == 1:
+        await add_dict_entry_from_chat(bot, cid, lines[0], lang, source_text=lines[0])
+        return
+    if not detailed_confirmation and len(lines) > 1:
+        await _offer_manual_batch_preview(bot, cid, lines, lang)
         return
 
     added_entries = []
@@ -2359,15 +2381,6 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
         if not entry:
             unrecognized_lines.append(line[:60])
             continue
-        if entry.get("needs_confirmation") and len(lines) == 1:
-            store.dict_pending_add[str(cid)] = entry
-            msg = _dict_confirm_message(entry)
-            kb = InlineKeyboardMarkup([[
-                InlineKeyboardButton("✅ Да, добавить", callback_data="a_dictconfirm_add"),
-                InlineKeyboardButton("✏️ Исправить", callback_data="a_dictconfirm_fix"),
-            ]])
-            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-            return
         status, saved = _save_normalized_dict_entry(cid, entry)
         if status == "duplicate":
             duplicate_entries.append(saved)
@@ -2960,8 +2973,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None):
     rows = [
         [InlineKeyboardButton("✏️ Добавить своё слово", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("✨ Сгенерировать набор слов", callback_data=f"a_dictseed_start_{lang}")],
-        [InlineKeyboardButton("🔍 Найти в словаре", callback_data=f"a_dictsearch_{lang}")],
-        [InlineKeyboardButton("📋 Мои слова", callback_data=f"a_dictedit_{lang}")],
+        [InlineKeyboardButton("📋 Мои слова и фразы", callback_data=f"a_dictedit_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ]
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
@@ -2976,14 +2988,15 @@ def _dict_manage_kb(lang: str):
 
 async def send_dict_search_prompt(bot, cid, lang, q=None):
     store.pending_input[str(cid)] = f"dictsearch_{lang}"
-    await _show_screen(bot, cid, "🔍 Введи слово или фразу для поиска.", None, None, q=q)
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}")]])
+    await _show_screen(bot, cid, "🔍 Введи слово или фразу для поиска.", None, kb, q=q)
 
 
 def _dict_search_kb(lang, term_key):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить", callback_data=f"a_dictdel_{lang}_{term_key}")],
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}")],
     ])
 
 
@@ -3009,8 +3022,7 @@ async def handle_dict_search(bot, cid, lang, query):
             chat_id=cid,
             text="Не нашла в словаре. Попробуй другое слово или посмотри весь список.",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📋 Мои слова", callback_data=f"a_dictedit_{lang}")],
-                [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")],
+                [InlineKeyboardButton("📋 Мои слова и фразы", callback_data=f"a_dictedit_{lang}")],
             ]),
         )
         return
@@ -3059,7 +3071,10 @@ _DICT_LIST_PAGE_SIZE = 5
 
 
 def _dict_lang_entries(cid, lang):
-    return [w for w in _ensure_dict(cid) if _dict_lang(w) == lang]
+    """Слова языка, отсортированные по алфавиту — стабильный порядок для
+    постраничного списка «Мои слова и фразы»."""
+    entries = [w for w in _ensure_dict(cid) if _dict_lang(w) == lang]
+    return sorted(entries, key=lambda w: _cap(_entry_term(w)).casefold())
 
 
 def _dict_list_kb(lang, entries, page):
@@ -3067,18 +3082,21 @@ def _dict_list_kb(lang, entries, page):
     page = max(0, min(page, total_pages - 1))
     start = page * _DICT_LIST_PAGE_SIZE
     chunk = entries[start:start + _DICT_LIST_PAGE_SIZE]
-    rows = []
+    rows = [[InlineKeyboardButton("🔍 Найти в словаре", callback_data=f"a_dictsearch_{lang}")]]
+    word_buttons = []
     for item in chunk:
         term_key = _dict_item_key(lang, "", _entry_term(item))[2]
-        rows.append([InlineKeyboardButton(
-            _cap(_entry_term(item))[:40],
+        word_buttons.append(InlineKeyboardButton(
+            _cap(_entry_term(item))[:24],
             callback_data=f"a_dictview_{lang}_{page}_{term_key}",
-        )])
+        ))
+    for i in range(0, len(word_buttons), 2):
+        rows.append(word_buttons[i:i + 2])
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("◀️", callback_data=f"a_dictedit_{lang}_{page - 1}"))
+        nav.append(InlineKeyboardButton("◀️ Назад", callback_data=f"a_dictedit_{lang}_{page - 1}"))
     if page < total_pages - 1:
-        nav.append(InlineKeyboardButton("▶️", callback_data=f"a_dictedit_{lang}_{page + 1}"))
+        nav.append(InlineKeyboardButton("Дальше ▶️", callback_data=f"a_dictedit_{lang}_{page + 1}"))
     if nav:
         rows.append(nav)
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")])
@@ -3086,19 +3104,23 @@ def _dict_list_kb(lang, entries, page):
 
 
 async def send_dict_edit(bot, cid, lang, page=0, q=None):
-    """Список словаря: только термины, без перевода — тап открывает карточку
-    слова с удалением. Постранично, без чекбокс-мультивыбора."""
+    """Список «Мои слова и фразы»: только термины, без перевода, по алфавиту,
+    в 2 столбца — тап открывает карточку слова с удалением. Постранично, без
+    чекбокс-мультивыбора. Поиск по словарю — отдельной кнопкой сверху списка."""
     entries = _dict_lang_entries(cid, lang)
     if not entries:
         await _show_screen(
             bot, cid, "В словаре пока пусто.", None,
-            InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")]]),
+            InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔍 Найти в словаре", callback_data=f"a_dictsearch_{lang}")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")],
+            ]),
             q=q,
         )
         return
     kb, page, total_pages = _dict_list_kb(lang, entries, page)
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-    text = f"{flag} Мой словарь\nСтраница {page + 1} из {total_pages}"
+    text = f"{flag} Мои слова и фразы\nСтраница {page + 1} из {total_pages}"
     await _show_screen(bot, cid, text, None, kb, q=q)
 
 
@@ -3485,6 +3507,10 @@ async def game_reveal(bot, cid, q):
         [InlineKeyboardButton(ui["again"], callback_data="game_again")],
         [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
     ])
+    try:
+        await q.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 

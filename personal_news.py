@@ -1157,7 +1157,7 @@ async def refresh(bot, cid, period="today"):
     await send_period(bot, cid, period, force=True)
 
 
-async def send_topics(bot, cid):
+async def send_topics(bot, cid, q=None):
     s = store.get_settings(cid)
     city = s.get("city") or "Алкмар"
     rows = [
@@ -1176,7 +1176,14 @@ async def send_topics(bot, cid):
         "Здоровье и медицина       ✅\n"
         "🍽 Новые места и еда         ✅"
     )
-    await bot.send_message(chat_id=cid, text=text, reply_markup=InlineKeyboardMarkup(rows))
+    kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
 async def send_scheduled(bot, cid):

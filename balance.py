@@ -1718,8 +1718,9 @@ async def handle_callback(bot, cid, q, data):
         try:
             await show_next_recipe(bot, cid, status=status)
         except Exception as e:
-            await status.stop(delete=False)
             await verify.safe_error(bot, cid, e)
+        finally:
+            await status.stop(delete=False)
         return
     if data == "as_food_back":
         await back_to_food_menu(bot, cid); return
