@@ -3614,6 +3614,7 @@ async def _session3_run_step(bot, cid):
         msg = learning_ui.mistake_review_card(mistake)
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Уже понял", callback_data="session3_mistake_ok")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
         ])
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
