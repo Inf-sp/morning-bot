@@ -9,13 +9,10 @@ def notifications():
     return b.build_stripped()
 
 
-def priorities(current):
+def personalization():
     b = MessageBuilder()
-    b.section(ui_label("priorities", "Приоритеты"))
-    b.line("Выбери, на что боту обращать больше внимания в брифе, советах и рекомендациях.")
-    b.spacer()
-    b.bold("Сейчас:")
-    b.line(f" {current}")
+    b.section(ui_label("personalization", "Персонализация"))
+    b.line("Постоянные предпочтения — влияют на подбор образа, рецептов, кино и музыки.")
     return b.build_stripped()
 
 
@@ -29,19 +26,42 @@ def cuisines(current):
     return b.build_stripped()
 
 
-def body_profile(profile_line):
+def constraints_input(current):
     b = MessageBuilder()
-    b.section("Особенности телосложения")
+    b.section("Ограничения")
     b.line(
-        "Бот использует это при подборе образа — чтобы силуэт и посадка вещей "
-        "подходили именно тебе."
+        "Практические правила для подбора образа — не сами данные о теле, а что "
+        "с ними делать."
     )
     b.section("Сейчас сохранено:")
-    b.line(profile_line)
+    b.line(current or "не задано")
     b.section("Напиши одним сообщением:")
-    b.line("рост и комплекцию — то, что важно учитывать при подборе одежды.")
+    b.line("что учитывать при подборе.")
     b.spacer()
-    b.italic("Пример: рост 178 см, худощавое телосложение.")
+    b.italic("Пример: не предлагать облегающий верх, визуально вытягивать силуэт, не использовать укороченные вещи.")
+    return b.build_stripped()
+
+
+def fit_pick():
+    b = MessageBuilder()
+    b.section("Посадка")
+    b.line("Какая посадка одежды удобнее — учту при подборе образа:")
+    return b.build_stripped()
+
+
+def layers_pick():
+    b = MessageBuilder()
+    b.section("Слои")
+    b.line("Сколько слоёв одежды комфортно — учту при подборе образа:")
+    return b.build_stripped()
+
+
+def colors_input(title, current):
+    b = MessageBuilder()
+    b.section(title)
+    b.line("Перечисли цвета через запятую.")
+    b.section("Сейчас сохранено:")
+    b.line(current or "не задано")
     return b.build_stripped()
 
 
@@ -132,13 +152,6 @@ def list_section(title, items, empty_hint="Пока пусто — добавь 
     b.section(title)
     if not items:
         b.line(empty_hint)
-    return b.build_stripped()
-
-
-def wardrobe_home():
-    b = MessageBuilder()
-    b.section("👕 Мой гардероб")
-    b.line("База вещей и параметры для подбора одежды.")
     return b.build_stripped()
 
 

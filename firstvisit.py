@@ -94,7 +94,7 @@ def _has_data(cid, section: str) -> bool:
         import settings as _s
         w = store.load_wardrobe(cid)
         has_wardrobe = bool(store.wardrobe_to_text(w).strip())
-        has_style = bool(_s.get(cid, "style") or _s.get(cid, "body"))
+        has_style = bool(_s.wardrobe_styles(cid) or _s.get(cid, "body"))
         return has_wardrobe or has_style
     if section == "learning":
         import settings as _s

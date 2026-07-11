@@ -6,7 +6,6 @@ def day_summary(
     header,
     city,
     flag="",
-    priorities=None,
     weather_title="",
     weather_line="",
     humidity_title="",

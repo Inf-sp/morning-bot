@@ -50,13 +50,27 @@ def welcome():
     b.spacer()
     b.line("Помогаю с погодой, одеждой, языками, рецептами, досугом и полезными привычками.")
     b.section("Разделы:")
-    b.line(f"{ui_label('myday', 'Мой день')} — погода, сводка и советы.")
-    b.line(f"{ui_label('wardrobe', 'Гардероб')} — что надеть и покупки.")
-    b.line(f"{ui_label('food', 'Готовка')} — рецепты и идеи из продуктов.")
-    b.line(f"{ui_label('learning', 'Обучение')} — языки, игра и практика.")
-    b.line(f"{ui_label('health', 'Здоровье')} — мотивация, тревоги и здоровье.")
-    b.line(f"{ui_label('travel', 'Путешествия')} — новые страны и планы поездок.")
-    b.line(f"{ui_label('leisure', 'Досуг')} — фильмы, книги и музыка.")
+    b.bold(ui_label("myday", "Мой день"))
+    b.line(" — погода, сводка и советы.")
+
+    b.bold(ui_label("wardrobe", "Гардероб"))
+    b.line(" — что надеть и покупки.")
+
+    b.bold(ui_label("food", "Готовка"))
+    b.line(" — рецепты и идеи из продуктов.")
+
+    b.bold(ui_label("learning", "Обучение"))
+    b.line(" — языки, игра и практика.")
+
+    b.bold(ui_label("health", "Здоровье"))
+    b.line(" — мотивация, тревоги и здоровье.")
+
+    b.bold(ui_label("travel", "Путешествия"))
+    b.line(" — новые страны и планы поездок.")
+
+    b.bold(ui_label("leisure", "Досуг"))
+    b.line(" — фильмы, книги и музыка.")
+    
     b.spacer()
     b.line("Просто напиши вопрос в чат, и я помогу.")
     b.spacer()
@@ -75,7 +89,7 @@ _SCREENS = {
             [(ui_label("recommendation", "Образ на сегодня"), "w_look")],
             [("👕 Разбор гардероба", "w_improve")],
             [(ui_label("find", "Проверка покупки"), "w_check")],
-            [(ui_label("settings", "Настройки гардероба"), "set_wardrobe_g")],
+            [("👔 Мой гардероб", "set_wardrobe_g")],
         ],
     ),
     "m_balance": (
@@ -101,7 +115,6 @@ _SCREENS = {
             [(ui_label("leisure", "Кино"), "a_watch")],
             [(ui_label("music", "Музыка"), "a_listen")],
             [(ui_label("books", "Книги"), "a_read")],
-            [(ui_label("news", "Новости"), "a_news_home")],
             [(ui_label("settings", "Настройки досуга"), "set_mydata_leisure")],
         ],
         False,

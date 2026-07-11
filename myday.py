@@ -565,7 +565,6 @@ def _build_day_text(cid):
     weekday_name = _WEEKDAYS[now.weekday()]
     is_weekend = now.weekday() >= 5
     word_line, word_lang = _word_of_day(cid)
-    pr_labels = settings.priority_labels(cid)
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     flag = flag_from_cc(s.get("cc", "")) or (country_flag(s.get("country", "")) if s.get("country") else "")
@@ -574,11 +573,8 @@ def _build_day_text(cid):
     except Exception as e:
         _log.warning("myday: city_fact failed: %s", e)
         fact = ""
-    pr = set(settings.priorities(cid))
-    hack_cat, hack_text = ("", "")
-    if "quiet" not in pr:
-        hack_cat, hack_text = daily_lifehack(
-            cid, rain=rain >= 40, hot=(tmax is not None and tmax >= 24), is_weekend=is_weekend)
+    hack_cat, hack_text = daily_lifehack(
+        cid, rain=rain >= 40, hot=(tmax is not None and tmax >= 24), is_weekend=is_weekend)
     try:
         q_data = _fetch_quote(cid)
     except Exception as e:
@@ -593,7 +589,6 @@ def _build_day_text(cid):
         header,
         s.get("city", ""),
         flag=flag,
-        priorities=pr_labels,
         weather_title=weather_title,
         weather_line=weather_line,
         humidity_title=hum_title,

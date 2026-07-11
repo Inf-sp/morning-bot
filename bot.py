@@ -20,7 +20,6 @@ import learning
 import cleanup
 import settings
 import leisure
-import personal_news
 import travel
 import weather
 import verify
@@ -299,7 +298,7 @@ async def answer_callback(update, context):
         await cleanup.open_collection(bot, cid, collection_id, back=back)
         return
     # Настройки обучения
-    if data in ("set_learning", "set_learning_mydata") or data.startswith("toggle_learning_language") or data.startswith("set_learning_level_"):
+    if data == "set_learning" or data.startswith("toggle_learning_language") or data.startswith("set_learning_level_"):
         try:
             await learning.handle_learning_settings_callback(bot, cid, q, data)
         except Exception as e:
@@ -391,10 +390,12 @@ async def answer_callback(update, context):
                 await _ack(q)
                 await learning.confirm_pending_dict_add(bot, cid)
                 await _unack(q)
-            elif act == "dictconfirm_fix":
+            elif act == "dictconfirm_retry":
                 await _ack(q)
-                await learning.fix_pending_dict_add(bot, cid)
+                await learning.retry_pending_dict_add(bot, cid)
                 await _unack(q)
+            elif act == "dictconfirm_cancel":
+                await learning.cancel_pending_dict_add(bot, cid)
             elif act == "dictbatch_add":
                 await _ack(q)
                 await learning.confirm_dict_batch(bot, cid)
@@ -506,17 +507,6 @@ async def answer_callback(update, context):
                 await _inline_status(lambda _s: leisure.send_listen(bot, cid))
             elif act == "listen_no":
                 await _inline_status(lambda _s: leisure.listen_dislike(bot, cid))
-            elif act == "news_home":
-                await _inline_status(lambda _s: personal_news.send_period(bot, cid, "today"))
-            elif act == "news_today":
-                await _inline_status(lambda _s: personal_news.send_period(bot, cid, "today"))
-            elif act == "news_week":
-                await _inline_status(lambda _s: personal_news.send_period(bot, cid, "week"))
-            elif act.startswith("news_refresh_"):
-                period = act[len("news_refresh_"):]
-                await _inline_status(lambda _s: personal_news.send_period(bot, cid, period, force=True))
-            elif act == "news_topics":
-                await personal_news.send_topics(bot, cid, q=q)
             elif act in ("food_breakfast", "recipe_breakfast"):
                 await _inline_status(lambda status: balance.enter_meal(bot, cid, "breakfast", status=status))
             elif act in ("food_lunch", "recipe_lunch"):
@@ -753,7 +743,9 @@ async def text_router(update, context):
             await wardrobe.add_item(bot, cid, text); return
         if kind == "wardrobe_add_set":
             await wardrobe.add_item_settings(bot, cid, text)
-            await settings.send_wardrobe(bot, cid); return
+            await wardrobe.send_wardrobe_zones(bot, cid); return
+        if kind == "wardrobe_search":
+            await wardrobe.handle_wardrobe_search(bot, cid, text); return
         if kind == "wardrobe_check":
             await wardrobe.check_purchase(bot, cid, text); return
         if kind == "onboard_name":
@@ -768,14 +760,25 @@ async def text_router(update, context):
             await learning.add_words_batch(bot, cid, text, kind.split("_")[1]); return
         if kind.startswith("dictsearch_"):
             await learning.handle_dict_search(bot, cid, kind.split("_")[1], text); return
-        if kind == "wardrobe_profile_input":
-            settings.set_(cid, "wardrobe_profile", text.strip())
-            await bot.send_message(chat_id=cid, text="🎚️ <b>Параметры сохранены</b>", parse_mode="HTML")
-            await settings.send_wardrobe(bot, cid); return
+        if kind == "wardrobe_constraints_input":
+            settings.set_(cid, "wardrobe_constraints", text.strip())
+            await bot.send_message(chat_id=cid, text="🎚️ <b>Ограничения сохранены</b>", parse_mode="HTML")
+            await settings.send_wardrobe_prefs(bot, cid); return
+        if kind == "wardrobe_colors_love_input":
+            settings.set_(cid, "wardrobe_colors_love", settings.normalize_colors(text))
+            await bot.send_message(chat_id=cid, text="Любимые цвета сохранены.")
+            await settings.send_wardrobe_prefs(bot, cid); return
+        if kind == "wardrobe_colors_avoid_input":
+            settings.set_(cid, "wardrobe_colors_avoid", settings.normalize_colors(text))
+            await bot.send_message(chat_id=cid, text="Нежелательные цвета сохранены.")
+            await settings.send_wardrobe_prefs(bot, cid); return
         if kind == "styleinput":
-            settings.set_(cid, "style", text.strip())
-            await bot.send_message(chat_id=cid, text="Стиль сохранён.")
-            await settings.send_body(bot, cid); return
+            custom = text.strip()
+            if custom:
+                settings.set_(cid, "wardrobe_constraints",
+                    (settings.get(cid, "wardrobe_constraints", "") + " " + custom).strip())
+            await bot.send_message(chat_id=cid, text="Стиль сохранён в ограничениях.")
+            await settings.send_wardrobe_prefs(bot, cid); return
         if kind.startswith("fridge_add"):
             try:
                 ci = int(kind.split("_")[-1])
@@ -878,12 +881,6 @@ async def admin_debug_api_command(update, context):
 
 
 async def admin_debug_llm_command(update, context):
-    store.pending_input.pop(str(update.effective_chat.id), None)
-    import admin as _admin
-    await settings._admin_guard(context.bot, update.effective_chat.id, _admin.send_api_ai)
-
-
-async def admin_debug_news_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
     import admin as _admin
     await settings._admin_guard(context.bot, update.effective_chat.id, _admin.send_api_ai)
@@ -1004,16 +1001,6 @@ async def job_favorite_artists(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logging.exception("job_favorite_artists failed for cid=%s", cid)
 
-async def job_personal_news(context: ContextTypes.DEFAULT_TYPE):
-    """Отдельное уведомление новостей; не часть утреннего брифа и работает только по настройке."""
-    for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "personal_news"):
-            continue
-        try:
-            await settings.send_scheduled_notification(context.bot, cid, "personal_news")
-        except Exception:
-            logging.exception("job_personal_news failed for cid=%s", cid)
-
 async def job_live_lang(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "live_lang"):
@@ -1098,7 +1085,6 @@ def main():
     app.add_handler(CommandHandler("admin", admin_command))
     app.add_handler(CommandHandler("admin_debug_api", admin_debug_api_command))
     app.add_handler(CommandHandler("admin_debug_llm", admin_debug_llm_command))
-    app.add_handler(CommandHandler("admin_debug_news", admin_debug_news_command))
     app.add_handler(CommandHandler("admin_logs", admin_logs_command))
     app.add_handler(CallbackQueryHandler(answer_callback))
     app.add_handler(PollAnswerHandler(poll_answer_handler))
@@ -1113,7 +1099,6 @@ def main():
     jq.run_daily(job_morning_brief,   time=_t("08:30"), days=tuple(range(7)))   # Мой день без кнопок
     jq.run_daily(job_weather_warn,    time=_t("08:45"), days=tuple(range(7)))
     jq.run_daily(job_lagom,           time=_t("09:30"), days=tuple(range(7)))
-    jq.run_daily(job_personal_news,   time=_t("09:00"), days=tuple(range(7)))
     jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(6,))      # вс, прогрев кэша концертов
     jq.run_daily(job_weekly_events,   time=_t("10:00"), days=(6,))             # вс
     jq.run_daily(job_favorite_artists, time=_t("10:05"), days=(6,))            # вс, только если есть новое

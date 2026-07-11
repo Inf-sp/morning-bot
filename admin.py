@@ -152,18 +152,6 @@ def _llm_line():
     return f"{dot} LLM · {usage['calls']} запросов · {errors} ошибок"
 
 
-def _news_line(snapshot=None):
-    try:
-        import personal_news
-        snap = personal_news.budget_snapshot()
-        errors = int(snap.get("errors") or 0)
-        if errors:
-            return f"{ui.WARN} Новости · ошибок {errors}"
-    except Exception as e:
-        return f"{ui.BAD} Новости · {str(e)[:42]}"
-    return f"{ui.OK} Новости · работает"
-
-
 def _data_line():
     try:
         store._load("__health__")
@@ -223,7 +211,6 @@ def _system_rows(probe_results=None):
         _short_status("gemini", "Gemini", snapshot),
         _short_status("tavily", "Tavily", snapshot),
         _short_status("firecrawl", "Firecrawl", snapshot),
-        _news_line(snapshot),
         _short_status("pexels", "Фото рецептов", snapshot),
         _data_line(),
         f"{ui.OK} Планировщик · работает",
@@ -432,7 +419,6 @@ async def send_system(bot, cid, q=None):
 # ================= API И AI (единый экран, § docs/admin.md) =================
 
 _FEATURE_ROWS = [
-    ("Новости", "Tavily/RSS → Groq → кэш", ("groq",)),
     ("Мой день", "OpenWeather + Wiki + Gemini", ("gemini",)),
     ("Погода", "OpenWeather", ()),
     ("Гардероб", "OpenWeather + Gemini", ("gemini",)),
@@ -605,12 +591,6 @@ def get_llm_usage_summary(period_days=1):
         "avg_tokens": round(total / len(recent)) if recent else 0,
         "providers": providers,
     }
-
-async def send_personal_news(bot, cid):
-    import personal_news
-    kb = InlineKeyboardMarkup([_back()])
-    await bot.send_message(chat_id=cid, text=personal_news.admin_stats_text(), reply_markup=kb)
-
 
 async def _llm_probe_results():
     import ai

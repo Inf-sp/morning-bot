@@ -247,6 +247,16 @@ def zone_picker_screen():
     return b.build_stripped()
 
 
+def wardrobe_home_screen(total):
+    b = MessageBuilder()
+    b.section("👔 Мой гардероб")
+    if total:
+        b.line(f"Всего вещей: {total}. Выбери категорию.")
+    else:
+        b.line("Пока пусто — добавь первую вещь.")
+    return b.build_stripped()
+
+
 def subcat_picker_screen(zone):
     b = MessageBuilder()
     b.section(_clean_text(zone))

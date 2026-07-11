@@ -117,7 +117,7 @@ def _wardrobe_home_kb():
         [("✨ Образ на сегодня", "w_look")],
         [("👕 Разбор гардероба", "w_improve")],
         [("🔍 Проверка покупки", "w_check")],
-        [("🎚️ Настройки гардероба", "set_wardrobe_g")],
+        [("👔 Мой гардероб", "set_wardrobe_g")],
     ])
 
 
@@ -262,15 +262,8 @@ async def send_looks(bot, cid, status=None):
         return
     s = store.get_settings(cid)
     status = status or await util.StatusManager.start(bot, cid)
-    # Персональный профиль из настроек пользователя
-    user_profile = _settings.get(cid, "wardrobe_profile", "")
-    user_style = _settings.get(cid, "style", "")
-    user_body = _settings.get(cid, "body", "")
-    priority_line = _settings.priority_context(cid)
-    profile_line = f"Профиль пользователя: {user_profile}." if user_profile else ""
-    style_line = f"Стиль пользователя: {user_style}." if user_style and not user_profile else ""
-    body_line = f"Параметры тела: {user_body}." if user_body and not user_profile else ""
-    style_block = "\n".join(x for x in [priority_line, profile_line, style_line, body_line] if x)
+    # Персональный профиль из настроек пользователя (Персонализация → Гардероб)
+    style_block = _settings.wardrobe_prefs_context(cid)
     tmax = None
     flags = None
     has_rain = False
@@ -500,7 +493,7 @@ def _params_filled(cid):
     профиль или связку стиль+тело.
     """
     profile = _settings.get(cid, "wardrobe_profile", "")
-    style = _settings.get(cid, "style", "")
+    style = _settings.wardrobe_styles(cid)
     body = _settings.get(cid, "body", "")
     return bool(profile or (style and body))
 
@@ -562,12 +555,44 @@ async def add_item_settings(bot, cid, text):
         await verify.safe_error(bot, cid, e); return
     await bot.send_message(chat_id=cid, text=f"Добавлено в шкаф ({added}).")
 
+
+async def handle_wardrobe_search(bot, cid, query):
+    """Ищет по подстроке названия вещи (без учёта регистра), показывает
+    первое совпадение с кнопкой удаления. По образцу поиска в словаре."""
+    query_norm = re.sub(r"\s+", " ", (query or "").strip()).casefold()
+    if not query_norm:
+        await bot.send_message(chat_id=cid, text="Пришли название вещи или часть названия.")
+        return
+    w = store.load_wardrobe(cid)
+    match = None
+    for _zone, _subcat, item in _flat_wardrobe_items(w):
+        if query_norm in str(item.get("name", "")).casefold():
+            match = item
+            break
+    if not match:
+        await bot.send_message(
+            chat_id=cid, text="Не нашла такую вещь. Попробуй другое название или посмотри весь список.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👔 Мой гардероб", callback_data="w_del_g")]]),
+        )
+        return
+    lines = [match.get("name", "")]
+    if match.get("color"):
+        lines.append(f"Цвет: {match['color']}")
+    if match.get("material"):
+        lines.append(f"Материал: {match['material']}")
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Удалить", callback_data=f"w_searchdel_{match.get('id')}")],
+        [InlineKeyboardButton("🔍 Искать ещё", callback_data="w_search")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="w_del_g")],
+    ])
+    await bot.send_message(chat_id=cid, text="\n".join(lines), reply_markup=kb)
+
 # ---------- удаление: навигация Зона → Подкатегория → мультивыбор (cleanup.py) ----------
 # origin-слаг вместо полного callback «назад» — чтобы не протаскивать "_" сквозь разбор data.split("_").
 ZONE_SLUG = {"Верх": "top", "Низ": "bot", "Верхняя одежда": "out",
              "Обувь": "shoe", "Аксессуары": "acc", "Другое": "oth"}
 ZONE_BY_SLUG = {slug: zone for zone, slug in ZONE_SLUG.items()}
-_ORIGIN_BACK = {"m": "m_wardrobe", "s": "set_wardrobe"}
+_ORIGIN_BACK = {"m": "m_wardrobe", "g": "m_wardrobe"}
 
 
 async def send_del_zones(bot, cid, q=None, origin="m"):
@@ -580,6 +605,29 @@ async def send_del_zones(bot, cid, q=None, origin="m"):
             for z in ZONE_ORDER if counts.get(z, 0) > 0]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=_ORIGIN_BACK.get(origin, "m_wardrobe"))])
     msg = wardrobe_ui.zone_picker_screen()
+    kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def send_wardrobe_zones(bot, cid, q=None):
+    """Кнопка «Мой гардероб»: сразу список зон с количеством вещей, без
+    промежуточного экрана «Добавить/Удалить». Переиспользует навигацию
+    зона → подкатегория → список вещей (cleanup.py), origin="g"."""
+    w = store.load_wardrobe(cid)
+    total, counts = wardrobe_stats(w)
+    rows = [[InlineKeyboardButton(f"{z} ({counts.get(z,0)})", callback_data=f"w_delz_{ZONE_SLUG[z]}_g")]
+            for z in ZONE_ORDER if counts.get(z, 0) > 0]
+    rows.append([InlineKeyboardButton("✏️ Добавить вещь", callback_data="w_add")])
+    if total:
+        rows.append([InlineKeyboardButton("🔍 Найти вещь", callback_data="w_search")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe")])
+    msg = wardrobe_ui.wardrobe_home_screen(total)
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
@@ -703,20 +751,8 @@ async def send_improve(bot, cid):
 
 def _improve_prompt(cid, wardrobe_text):
     """Промпт персонального стилиста: аудит гардероба, а не технический лог."""
-    user_style = _settings.get(cid, "style", "")
-    user_body = _settings.get(cid, "body", "")
-    user_profile = _settings.get(cid, "wardrobe_profile", "")
-    priority = _settings.priority_context(cid)
-    ctx = []
-    if user_profile:
-        ctx.append(f"Профиль: {user_profile}")
-    if user_style:
-        ctx.append(f"Любимый стиль: {user_style}")
-    if user_body:
-        ctx.append(f"Параметры/телосложение: {user_body}")
-    if priority:
-        ctx.append(priority)
-    ctx_block = ("Данные о пользователе (учитывай в анализе):\n" + "\n".join(ctx) + "\n\n") if ctx else ""
+    prefs = _settings.wardrobe_prefs_context(cid)
+    ctx_block = (f"Данные о пользователе (учитывай в анализе):\n{prefs}\n\n") if prefs else ""
     return f"""Ты — персональный стилист уровня Thread, Whering и мужской стилист GQ.
 Твоя задача — не перечислить вещи, а провести профессиональный аудит гардероба так, чтобы пользователь подумал: «Это разбирал живой стилист».
 
@@ -777,15 +813,10 @@ async def check_purchase(bot, cid, text):
             "\nАктуальная информация о товаре из сети (используй как дополнительный контекст):\n"
             + secure.wrap_untrusted(web_data, "web") + "\n"
         )
-    user_profile = _settings.get(cid, "wardrobe_profile", "")
-    user_style = _settings.get(cid, "style", "")
-    user_body = _settings.get(cid, "body", "")
-    priority_ctx = (_settings.priority_context(cid) + " ") if _settings.priority_context(cid) else ""
-    profile_ctx = f"Профиль пользователя: {user_profile}. " if user_profile else ""
-    style_ctx = f"Стиль: {user_style}. " if user_style and not user_profile else ""
-    body_ctx = f"Параметры тела: {user_body}. " if user_body and not user_profile else ""
+    prefs = _settings.wardrobe_prefs_context(cid)
+    prefs_ctx = f"{prefs}\n" if prefs else ""
     prompt = f"""Ты честный стилист-аналитик. Пользователь думает купить: {text}
-{priority_ctx}{profile_ctx}{style_ctx}{body_ctx}
+{prefs_ctx}
 Гардероб пользователя:
 {store.wardrobe_to_text(w)}
 {web_block}
@@ -860,6 +891,19 @@ async def handle_callback(bot, cid, q, data):
         await bot.send_message(chat_id=cid, text="Напиши вещь в формате: тип + цвет + детали/бренд.\n"
                                "Напр.: «Футболка белая Uniqlo плотная» или «Шорты серые тонкие». Можно списком.",
                                reply_markup=_back_kb()); return
+    if data == "w_search":
+        store.pending_input[str(cid)] = "wardrobe_search"
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="w_del_g")]])
+        await bot.send_message(chat_id=cid, text="🔍 Напиши название вещи или часть названия.",
+                               reply_markup=kb); return
+    if data.startswith("w_searchdel_"):
+        item_id = data[len("w_searchdel_"):]
+        n = store.remove_wardrobe_items(cid, [item_id])
+        text = "Удалено." if n else "Вещь уже удалена."
+        await bot.send_message(chat_id=cid, text=text)
+        await send_wardrobe_zones(bot, cid); return
+    if data == "w_del_g":
+        await send_wardrobe_zones(bot, cid, q=q); return
     if data.startswith("w_del_"):
         await send_del_zones(bot, cid, q=q, origin=data[len("w_del_"):]); return
     if data == "w_del":

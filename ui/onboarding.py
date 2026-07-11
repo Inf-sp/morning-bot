@@ -141,10 +141,3 @@ def onboard_level_question(code):
     return MessageSpec(text=f"{flag} Какой у тебя уровень {lang}?")
 
 
-def onboard_priorities_question():
-    return MessageSpec(
-        text=(
-            "Что для тебя сейчас важнее?\n\n"
-            "Можно выбрать несколько пунктов. Я буду учитывать это в брифе, советах и рекомендациях."
-        )
-    )

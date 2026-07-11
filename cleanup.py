@@ -374,7 +374,7 @@ def _ctx_items(cid, ctx):
         subcats = store.ZONE_SUBCATS.get(zone, ["Другое"])
         subcat = subcats[int(subcat_idx)] if int(subcat_idx) < len(subcats) else "Другое"
         items = _wardrobe_flat(cid, zone, subcat)
-        return f"Чистка: {subcat}", items, f"w_delz_{zone_slug}_{origin}"
+        return subcat, items, f"w_delz_{zone_slug}_{origin}"
     if ctx.startswith("lv_") or ctx.startswith("lvls_"):
         is_leisure = ctx.startswith("lvls_")
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]

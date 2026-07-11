@@ -149,8 +149,6 @@ def get_cost_log() -> list:
 
 _AI_CACHE_MAX = 300
 _AI_CACHE_TTLS = {
-    "personal_news": 12 * 3600,
-    "news": 12 * 3600,
     "food": 24 * 3600,
     "leisure": 18 * 3600,
     "travel": 18 * 3600,
@@ -574,8 +572,6 @@ TIERS = {
 # запрет конкретного provider не зависели от того, что явно передал вызов внутри
 # раздела. Единственный способ обойти policy — явный order=(...) в вызове.
 MODULE_POLICY = {
-    "news": ("groq", "cf"),                 # Gemini запрещён для новостей даже как fallback (§46 CLAUDE.md)
-    "personal_news": ("groq", "cf"),
     "learning": ("gemini", "groq", "cf"),
     "food": ("gemini", "groq", "cf"),
     "wardrobe": ("gemini", "groq", "cf"),

@@ -104,7 +104,6 @@ The existing text and logo placement within the template must not be moved or al
 - Groq;
 - Gemini;
 - Tavily;
-- Новости;
 - Фото рецептов;
 - Данные;
 - Планировщик.
@@ -259,7 +258,7 @@ The existing text and logo placement within the template must not be moved or al
 - `CHAT_ID` — без него не определён владелец бота;
 - `DATABASE_URL` — без него хранилище работает в памяти (данные не переживают перезапуск);
 - `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` — дополнительные LLM-провайдеры;
-- `TMDB_API_KEY`, `TICKETMASTER_API_KEY`, `TAVILY_API_KEY`, `FIRECRAWL_API_KEY` — фильмы, концерты, веб-поиск (Firecrawl — второй независимый поисковый источник рядом с Tavily для новостей);
+- `TMDB_API_KEY`, `TICKETMASTER_API_KEY`, `TAVILY_API_KEY`, `FIRECRAWL_API_KEY` — фильмы, концерты, веб-поиск;
 - `PEXELS_API_KEY` — фотографии для карточек рецептов;
 - `ZEROENTROPY_API_KEY` — вспомогательный rerank-сервис;
 - `OPENROUTER_MODEL` — модель OpenRouter fallback.

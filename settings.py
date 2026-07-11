@@ -23,21 +23,11 @@ NOTIF_TYPES = [
     ("evening_weather","Вечерняя погода"),
     ("weekly_events",  "Афиша недели"),
     ("favorite_artists","Новые концерты любимых артистов"),
-    ("personal_news", "Новости для тебя"),
     ("weekly_forecast","Недельный прогноз"),
     ("daily_words_nl", "Нидерландский"),
     ("daily_words_en", "Английский"),
     ("live_lang",      "Живой язык"),
     ("checkin_eve",    "Вечерний разбор"),
-]
-
-PRIORITY_OPTIONS = [
-    ("health", "Здоровье"),
-    ("learning", "Учёба"),
-    ("food", "Еда"),
-    ("wardrobe", "Гардероб"),
-    ("leisure", "Досуг"),
-    ("quiet", "Минимум уведомлений"),
 ]
 
 CUISINE_OPTIONS = [
@@ -72,6 +62,18 @@ STYLES = [
     "спортивный",
 ]
 
+FIT_OPTIONS = [
+    "свободная",
+    "обычная",
+    "приталенная",
+]
+
+LAYERS_OPTIONS = [
+    ("1", "1 слой"),
+    ("2", "2 слоя"),
+    ("3", "3 слоя и больше"),
+]
+
 def _all():
     return store._load(SETTINGS_KEY)
 
@@ -99,26 +101,6 @@ def study_lang(cid):
     code = "en" if legacy == "английский" else "nl"
     store.set_learning_language(cid, code)
     return "нидерландский" if code == "nl" else "английский"
-
-
-def priorities(cid):
-    saved = get(cid, "priorities", [])
-    if not isinstance(saved, list):
-        return []
-    valid = {key for key, _ in PRIORITY_OPTIONS}
-    return [key for key in saved if key in valid]
-
-
-def priority_labels(cid):
-    selected = set(priorities(cid))
-    return [label for key, label in PRIORITY_OPTIONS if key in selected]
-
-
-def priority_context(cid):
-    labels = priority_labels(cid)
-    if not labels:
-        return ""
-    return "Приоритеты пользователя: " + ", ".join(labels) + "."
 
 
 def cuisines(cid):
@@ -150,7 +132,7 @@ def _notif_label(kind: str, label: str) -> str:
         return f"{label} (ежедневно в 16:30)"
     if kind in ("daily_words_nl", "daily_words_en", "morning_brief", "weather_warn",
                 "lagom_daily", "recipe_daily", "checkin_day", "evening_weather",
-                "checkin_eve", "personal_news"):
+                "checkin_eve"):
         times = {
             "morning_brief": "08:30",
             "weather_warn": "08:45",
@@ -161,7 +143,6 @@ def _notif_label(kind: str, label: str) -> str:
             "daily_words_nl": "11:00",
             "daily_words_en": "11:00",
             "checkin_eve": "22:00",
-            "personal_news": "09:00",
         }
         return f"{label} (ежедневно в {times[kind]})"
     return label
@@ -231,9 +212,6 @@ async def send_scheduled_notification(bot, cid, kind):
     elif kind == "favorite_artists":
         import leisure as _l
         await _l.send_new_concerts_notif(_NoKbBot(bot), cid)
-    elif kind == "personal_news":
-        import personal_news as _pn
-        await _pn.send_scheduled(bot, cid)
     elif kind == "evening_weather":
         import weather as _w
         await _w.send_weather(_NoKbBot(bot), cid, "tomorrow_plain")
@@ -271,7 +249,6 @@ _ADMIN_NOTIFICATION_META = {
     "morning_brief": ("08:30", "Мой день"),
     "weather_warn": ("08:45", "Погода"),
     "lagom_daily": ("09:30", "Мотивация"),
-    "personal_news": ("09:00", "Новости"),
     "weekly_events": ("10:00", "Афиша"),
     "favorite_artists": ("10:05", "Концерты"),
     "daily_words_nl": ("11:00", "Слова NL"),
@@ -360,18 +337,28 @@ async def notif_off_all(bot, cid, q=None):
     await send_notif(bot, cid, q)
 
 
-def _priorities_kb(cid):
-    selected = set(priorities(cid))
-    buttons = [
-        InlineKeyboardButton(
-            ("✅ " if key in selected else "") + label,
-            callback_data=f"set_prio_{key}",
-        )
-        for key, label in PRIORITY_OPTIONS
+async def send_personalization(bot, cid, q=None):
+    """Персонализация: постоянные предпочтения пользователя, влияющие на подбор
+    в разных разделах. Сохранённые объекты (любимые страны/фильмы/книги и т.п.)
+    сюда не переносятся — они остаются в «Любимое», здесь только настройки алгоритма."""
+    wardrobe_prefs_mark = " ✅" if wardrobe_prefs_context(cid) else ""
+    cuisine_mark = " ✅" if cuisines(cid) else ""
+    rows = [
+        [InlineKeyboardButton(f"Гардероб{wardrobe_prefs_mark}", callback_data="set_wardrobe_prefs")],
+        [InlineKeyboardButton(f"{ui_label('cuisines', 'Кухни')}{cuisine_mark}", callback_data="set_cuisines")],
+        [InlineKeyboardButton("Кино и музыка", callback_data="set_mydata_leisure_p")],
+        [InlineKeyboardButton("Обучение", callback_data="set_learning_mydata")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
     ]
-    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
-    return InlineKeyboardMarkup(rows)
+    msg = settings_ui.personalization()
+    kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 def _cuisines_kb(cid):
@@ -384,41 +371,8 @@ def _cuisines_kb(cid):
         for key, label in CUISINE_OPTIONS
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_food")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_priorities")])
     return InlineKeyboardMarkup(rows)
-
-
-async def send_priorities(bot, cid, q=None):
-    labels = priority_labels(cid)
-    current = ", ".join(labels) if labels else "не выбраны"
-    msg = settings_ui.priorities(current)
-    text = msg.text
-    kb = _priorities_kb(cid)
-    if q is not None:
-        try:
-            await q.message.edit_text(text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, entities=msg.entities, reply_markup=kb)
-
-
-async def toggle_priority(bot, cid, key, q=None):
-    valid = {k for k, _ in PRIORITY_OPTIONS}
-    if key not in valid:
-        await send_priorities(bot, cid, q)
-        return
-    selected = priorities(cid)
-    if key in selected:
-        selected = [k for k in selected if k != key]
-    else:
-        selected.append(key)
-    set_(cid, "priorities", selected)
-    if key == "quiet" and key in selected:
-        for kind, _ in NOTIF_TYPES:
-            if kind not in ("morning_brief", "weather_warn"):
-                set_(cid, f"notif_{kind}", False)
-    await send_priorities(bot, cid, q)
 
 
 async def send_cuisines(bot, cid, q=None):
@@ -450,66 +404,200 @@ async def toggle_cuisine(bot, cid, key, q=None):
     await send_cuisines(bot, cid, q)
 
 
-_BODY_PLACEHOLDER = "не указано"
+def wardrobe_styles(cid):
+    cur = get(cid, "style", [])
+    if isinstance(cur, str):
+        return [cur] if cur else []
+    if isinstance(cur, list):
+        return [s for s in cur if s in STYLES]
+    return []
 
-async def send_body(bot, cid, back="m_wardrobe"):
-    """Особенности телосложения (используется в подборе образа в wardrobe.py)."""
-    store.pending_input[str(cid)] = "wardrobe_profile_input"
-    profile = get(cid, "wardrobe_profile", "")
-    body = get(cid, "body", "")
-    profile_line = esc(profile or body) if (profile or body) else "<i>не задано</i>"
-    msg = settings_ui.body_profile(profile_line)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
-    ])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+def _style_kb(cid):
+    selected = set(wardrobe_styles(cid))
+    buttons = [InlineKeyboardButton(("✅ " if s in selected else "") + s, callback_data=f"set_style_{i}")
+               for i, s in enumerate(STYLES)]
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    rows.append([InlineKeyboardButton("✏️ Описать своими словами", callback_data="set_stylecustom")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs")])
+    return InlineKeyboardMarkup(rows)
+
 
 async def send_style_pick(bot, cid):
-    cur = get(cid, "style", "минимализм")
-    rows = [[InlineKeyboardButton(("✅ " if cur == s else "") + s, callback_data=f"set_style_{i}")]
-            for i, s in enumerate(STYLES)]
-    rows.append([InlineKeyboardButton("✏️ Описать своими словами", callback_data="set_stylecustom")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_body")])
     msg = settings_ui.style_pick()
-    await bot.send_message(chat_id=cid,
-        text=msg.text,
-        entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_style_kb(cid))
 
-async def set_style(bot, cid, i):
+
+STYLE_LIMIT = 3
+
+async def set_style(bot, cid, i, q=None):
     if 0 <= i < len(STYLES):
-        set_(cid, "style", STYLES[i])
-    await send_body(bot, cid)
+        chosen = STYLES[i]
+        selected = wardrobe_styles(cid)
+        if chosen in selected:
+            selected = [s for s in selected if s != chosen]
+            set_(cid, "style", selected)
+        elif len(selected) >= STYLE_LIMIT:
+            if q is not None:
+                try:
+                    await q.answer(f"Можно выбрать максимум {STYLE_LIMIT} стиля.", show_alert=False)
+                except Exception:
+                    pass
+            await send_style_pick(bot, cid)
+            return
+        else:
+            selected.append(chosen)
+            set_(cid, "style", selected)
+    await send_style_pick(bot, cid)
+
+
+def _fit_kb(cid):
+    cur = get(cid, "wardrobe_fit", "")
+    buttons = [InlineKeyboardButton(("✅ " if cur == f else "") + f, callback_data=f"set_fit_{i}")
+               for i, f in enumerate(FIT_OPTIONS)]
+    rows = [[b] for b in buttons]
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def send_fit_pick(bot, cid):
+    msg = settings_ui.fit_pick()
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_fit_kb(cid))
+
+
+async def set_fit(bot, cid, i):
+    if 0 <= i < len(FIT_OPTIONS):
+        set_(cid, "wardrobe_fit", FIT_OPTIONS[i])
+    await send_wardrobe_prefs(bot, cid)
+
+
+def _layers_kb(cid):
+    cur = get(cid, "wardrobe_layers", "")
+    buttons = [InlineKeyboardButton(("✅ " if cur == k else "") + label, callback_data=f"set_layers_{k}")
+               for k, label in LAYERS_OPTIONS]
+    rows = [[b] for b in buttons]
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def send_layers_pick(bot, cid):
+    msg = settings_ui.layers_pick()
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_layers_kb(cid))
+
+
+async def set_layers(bot, cid, key):
+    valid = {k for k, _ in LAYERS_OPTIONS}
+    if key in valid:
+        set_(cid, "wardrobe_layers", key)
+    await send_wardrobe_prefs(bot, cid)
+
+
+COLORS_LIMIT = 10
+
+def normalize_colors(text: str) -> str:
+    """Разбирает свободный ввод цветов через запятую: убирает пробелы, пустые
+    элементы и дубли (без учёта регистра), приводит первую букву к нижнему
+    регистру, ограничивает количество. Возвращает готовую строку через запятую."""
+    seen = set()
+    result = []
+    for raw in str(text or "").split(","):
+        color = raw.strip()
+        if not color:
+            continue
+        color = color[0].lower() + color[1:]
+        key = color.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(color)
+        if len(result) >= COLORS_LIMIT:
+            break
+    return ", ".join(result)
+
+
+async def send_colors_love(bot, cid):
+    store.pending_input[str(cid)] = "wardrobe_colors_love_input"
+    current = get(cid, "wardrobe_colors_love", "")
+    msg = settings_ui.colors_input("Любимые цвета", current)
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs")]])
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def send_colors_avoid(bot, cid):
+    store.pending_input[str(cid)] = "wardrobe_colors_avoid_input"
+    current = get(cid, "wardrobe_colors_avoid", "")
+    msg = settings_ui.colors_input("Нежелательные цвета", current)
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs")]])
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def send_constraints(bot, cid):
+    """Ограничения: практические правила подбора (не факты тела) — напр. «не предлагать
+    облегающий верх», «визуально вытягивать силуэт». Объединяет старые «Особенности
+    телосложения» и «Комфорт и ограничения» в одно поле."""
+    store.pending_input[str(cid)] = "wardrobe_constraints_input"
+    current = get(cid, "wardrobe_constraints", "") or get(cid, "wardrobe_profile", "") or get(cid, "body", "")
+    msg = settings_ui.constraints_input(current)
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs")]])
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+def wardrobe_prefs_context(cid):
+    """Собирает все предпочтения гардероба одной строкой для промпта подбора образа.
+    Формулировки — явные инструкции, а не общее пожелание (§ Персонализация в CLAUDE.md)."""
+    parts = []
+    styles = wardrobe_styles(cid)
+    if styles:
+        if len(styles) == 1:
+            parts.append(f"Стиль пользователя: {styles[0]}.")
+        else:
+            extra = ", ".join(styles[1:])
+            parts.append(f"Основной стиль пользователя: {styles[0]} (дополнительные ориентиры: {extra}).")
+    fit = get(cid, "wardrobe_fit", "")
+    if fit:
+        parts.append(f"Предпочитаемая посадка одежды: {fit}.")
+    colors_love = get(cid, "wardrobe_colors_love", "")
+    if colors_love:
+        parts.append(f"Любимые цвета — предпочитай их в подборе: {colors_love}.")
+    colors_avoid = get(cid, "wardrobe_colors_avoid", "")
+    if colors_avoid:
+        parts.append(f"Нежелательные цвета — не предлагать: {colors_avoid}.")
+    constraints = get(cid, "wardrobe_constraints", "") or get(cid, "wardrobe_profile", "") or get(cid, "body", "")
+    if constraints:
+        parts.append(f"Ограничения — обязательно учитывай: {constraints}.")
+    layers = get(cid, "wardrobe_layers", "")
+    if layers:
+        layers_label = dict(LAYERS_OPTIONS).get(layers, "")
+        parts.append(f"Слои: {layers_label}.")
+    return "\n".join(parts)
 
 
 # ===== Списки в настройках: шкаф =====
 # --- Шкаф ---
-async def send_wardrobe_hub(bot, cid, back="m_wardrobe"):
-    """Гардероб в Настройках: вещи + стиль + особенности телосложения - всё, что
-    реально использует wardrobe.py при подборе образа, в одном месте."""
+async def send_wardrobe_prefs(bot, cid, back="set_priorities"):
+    """Гардероб в Персонализации: постоянные предпочтения, влияющие на подбор образа
+    в wardrobe.py (не сами вещи — вещи открываются напрямую из раздела Гардероб)."""
+    styles = wardrobe_styles(cid)
+    fit = get(cid, "wardrobe_fit", "")
+    colors_love = get(cid, "wardrobe_colors_love", "")
+    colors_avoid = get(cid, "wardrobe_colors_avoid", "")
+    constraints = get(cid, "wardrobe_constraints", "") or get(cid, "wardrobe_profile", "") or get(cid, "body", "")
+    layers = get(cid, "wardrobe_layers", "")
     rows = [
-        [InlineKeyboardButton(ui_label("clothes", "Вещи"), callback_data="set_wardrobe")],
-        [InlineKeyboardButton(ui_label("clothing_style", "Стиль"), callback_data="set_stylepick")],
-        [InlineKeyboardButton("Особенности телосложения", callback_data="set_body")],
+        [InlineKeyboardButton(f"{ui_label('clothing_style', 'Стиль')}{' ✅' if styles else ''}", callback_data="set_stylepick")],
+        [InlineKeyboardButton(f"Посадка{' ✅' if fit else ''}", callback_data="set_fitpick")],
+        [InlineKeyboardButton(f"Любимые цвета{' ✅' if colors_love else ''}", callback_data="set_colors_love")],
+        [InlineKeyboardButton(f"Не предлагать цвета{' ✅' if colors_avoid else ''}", callback_data="set_colors_avoid")],
+        [InlineKeyboardButton(f"Ограничения{' ✅' if constraints else ''}", callback_data="set_constraints")],
+        [InlineKeyboardButton(f"Слои{' ✅' if layers else ''}", callback_data="set_layerspick")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ]
     msg = settings_ui.mydata_section(
-        f"{ui_label('wardrobe', 'Гардероб')}",
-        "Влияет на подбор образа и разбор шкафа.",
+        "Гардероб",
+        "Влияет на подбор образа. Сами вещи — в разделе «Гардероб».",
     )
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
-
-async def send_wardrobe(bot, cid, back="m_wardrobe"):
-    if store.pending_input.get(str(cid)) == "wardrobe_profile_input":
-        store.pending_input.pop(str(cid), None)
-    rows = [[
-        InlineKeyboardButton("✏️ Добавить", callback_data="set_ward_add"),
-        InlineKeyboardButton("❌ Удалить", callback_data="set_ward_del"),
-    ]]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back)])
-    kb = InlineKeyboardMarkup(rows)
-    msg = settings_ui.wardrobe_home()
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 # --- Страны ---
 async def send_lagom(bot, cid, back="m_balance"):
@@ -533,6 +621,8 @@ async def handle_callback(bot, cid, data, q=None):
         await send_home(bot, cid)
     elif data == "set_mydata_leisure":
         await send_mydata_leisure(bot, cid)
+    elif data == "set_mydata_leisure_p":
+        await send_mydata_leisure(bot, cid, back="set_priorities")
     elif data == "set_mydata_cinema":
         await send_mydata_cinema(bot, cid)
     elif data == "set_mydata_books":
@@ -545,15 +635,39 @@ async def handle_callback(bot, cid, data, q=None):
         await send_travel(bot, cid)
     elif data == "set_fridge":
         import balance
-        await balance.send_fridge(bot, cid, back="m_notes")
+        await balance.send_fridge(bot, cid, back="set_food")
+    elif data == "set_myrecipes":
+        import balance
+        await balance.send_my_recipes(bot, cid)
     elif data == "set_fridge_g":
         await send_food(bot, cid, back="m_food")
     elif data == "set_notif":
         await send_notif(bot, cid, q)
     elif data == "set_priorities":
-        await send_priorities(bot, cid, q)
+        await send_personalization(bot, cid, q)
     elif data.startswith("set_prio_"):
-        await toggle_priority(bot, cid, data[len("set_prio_"):], q)
+        # Compat-редирект для старых сообщений: раздел "Приоритеты" стал "Персонализацией".
+        await send_personalization(bot, cid, q)
+    elif data == "set_wardrobe_prefs":
+        await send_wardrobe_prefs(bot, cid)
+    elif data == "set_stylepick":
+        await send_style_pick(bot, cid)
+    elif data.startswith("set_style_"):
+        await set_style(bot, cid, int(data[len("set_style_"):]), q)
+    elif data == "set_fitpick":
+        await send_fit_pick(bot, cid)
+    elif data.startswith("set_fit_"):
+        await set_fit(bot, cid, int(data[len("set_fit_"):]))
+    elif data == "set_layerspick":
+        await send_layers_pick(bot, cid)
+    elif data.startswith("set_layers_"):
+        await set_layers(bot, cid, data[len("set_layers_"):])
+    elif data == "set_colors_love":
+        await send_colors_love(bot, cid)
+    elif data == "set_colors_avoid":
+        await send_colors_avoid(bot, cid)
+    elif data == "set_constraints":
+        await send_constraints(bot, cid)
     elif data == "set_cuisines":
         await send_cuisines(bot, cid, q)
     elif data.startswith("set_cuisine_"):
@@ -562,10 +676,8 @@ async def handle_callback(bot, cid, data, q=None):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
     elif data == "set_notif_off_all":
         await notif_off_all(bot, cid, q)
-    elif data == "set_learning_hub":
-        await send_learning_hub(bot, cid)
     elif data == "set_learning_mydata":
-        await learning.send_learning_settings(bot, cid, q=q, back="set_learning_hub")
+        await learning.send_learning_settings(bot, cid, q=q, back="set_priorities")
     elif data == "set_learning" or data == "toggle_learning_language" or data.startswith("set_learning_level_"):
         await learning.handle_learning_settings_callback(bot, cid, q, data)
     elif data == "set_city":
@@ -573,19 +685,16 @@ async def handle_callback(bot, cid, data, q=None):
         msg = settings_ui.city_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     elif data == "set_body":
-        await send_body(bot, cid, back="m_wardrobe")
-    elif data == "set_wardrobe":
-        await send_wardrobe(bot, cid, back="m_wardrobe")
+        # Compat-редирект для старых сообщений: поле переехало в "Ограничения".
+        await send_constraints(bot, cid)
     elif data == "set_wardrobe_g":
-        await send_wardrobe_hub(bot, cid, back="m_wardrobe")
+        import wardrobe
+        await wardrobe.send_wardrobe_zones(bot, cid, q=q)
     elif data == "set_ward_add":
         store.pending_input[cid] = "wardrobe_add_set"
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_g")]])
         msg = settings_ui.wardrobe_item_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-    elif data == "set_ward_del":
-        import wardrobe
-        await wardrobe.send_del_zones(bot, cid, origin="s")
     elif data == "set_lagom":
         await send_lagom(bot, cid, back="m_balance")
     elif data == "setadd_lagom":
@@ -604,14 +713,10 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_books":
         _log.info("legacy callback used: %s", data)
         await send_love_section(bot, cid, "books")
-    elif data == "set_stylepick":
-        await send_style_pick(bot, cid)
     elif data == "set_stylecustom":
         store.pending_input[cid] = "styleinput"
         msg = settings_ui.style_custom_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
-    elif data.startswith("set_style_"):
-        await set_style(bot, cid, int(data.split("_")[-1]))
     elif data == "adm_home":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
@@ -900,9 +1005,10 @@ async def export_notes(bot, cid):
 
 async def send_notes(bot, cid):
     rows = [
-        [InlineKeyboardButton("🌍 Город", callback_data="set_city"),
-         InlineKeyboardButton(ui_label("priorities", "Приоритеты"), callback_data="set_priorities")],
+        [InlineKeyboardButton("🌍 Город", callback_data="set_city")],
+        [InlineKeyboardButton(ui_label("personalization", "Персонализация"), callback_data="set_priorities")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
+        [InlineKeyboardButton("❤️ Любимое", callback_data="as_love")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
     ]
     msg = settings_ui.settings_home()
@@ -911,30 +1017,16 @@ async def send_notes(bot, cid):
         reply_markup=InlineKeyboardMarkup(rows))
 
 
-async def send_mydata_leisure(bot, cid):
+async def send_mydata_leisure(bot, cid, back="m_leisure"):
     rows = [
         [InlineKeyboardButton(ui_label("cinema", "Кино"), callback_data="set_mydata_cinema")],
         [InlineKeyboardButton(ui_label("books", "Книги"), callback_data="set_mydata_books")],
         [InlineKeyboardButton(ui_label("music", "Музыка"), callback_data="set_mydata_music")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ]
     msg = settings_ui.mydata_section(
         f"{ui_label('leisure', 'Досуг')}",
         "Наполни любимое — рекомендации станут точнее.",
-    )
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
-
-
-async def send_learning_hub(bot, cid):
-    """Обучение в Настройках: язык/уровень. Словарь теперь только в разделе
-    «Обучение» (не дублируется в Настройках/Сохранённом)."""
-    rows = [
-        [InlineKeyboardButton("Язык и уровень", callback_data="set_learning_mydata")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
-    ]
-    msg = settings_ui.mydata_section(
-        f"{ui_label('learning', 'Обучение')}",
-        "Настройка активного языка и уровня.",
     )
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
@@ -975,16 +1067,14 @@ async def send_mydata_music(bot, cid):
 
 
 async def send_food(bot, cid, q=None, back="m_food"):
-    cuisine_mark = " ✅" if cuisines(cid) else ""
     rows = [
-        [InlineKeyboardButton(ui_label("products", "Продукты"), callback_data="colr:fridge_items:set_food")],
-        [InlineKeyboardButton(ui_label("recipes", "Рецепты"), callback_data="colr:recipes_saved:set_food")],
-        [InlineKeyboardButton(f"{ui_label('cuisines', 'Кухни')}{cuisine_mark}", callback_data="set_cuisines")],
+        [InlineKeyboardButton(ui_label("products", "Продукты"), callback_data="set_fridge")],
+        [InlineKeyboardButton(ui_label("recipes", "Рецепты"), callback_data="set_myrecipes")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ]
     msg = settings_ui.mydata_section(
         f"{ui_label('food', 'Готовка')}",
-        "Кухни влияют на рецепт дня и подбор из холодильника.",
+        "Продукты в холодильнике и сохранённые рецепты.",
     )
     text, entities = msg.text, msg.entities
     kb = InlineKeyboardMarkup(rows)
@@ -1164,6 +1254,7 @@ LOVE_SECTIONS = [
     (ui_label("countries", "Мои страны"), "countries"),
     (ui_label("music", "Мои музыканты"), "artists"),
     (ui_label("books", "Мои книги"), "books"),
+    (ui_label("recipes", "Рецепты"), "recipes"),
 ]
 
 async def send_love_home(bot, cid, back="m_notes"):
@@ -1197,7 +1288,7 @@ _HIDDEN_SUPPORTED = {"movies", "books", "artists", "countries"}
 async def send_love_section(bot, cid, key):
     if key == "recipes":
         import balance
-        await balance.send_my_recipes(bot, cid)
+        await balance.send_my_recipes(bot, cid, back="as_love")
         return
     items = _love_items(cid, key)
     title = _love_title(key)
@@ -1291,10 +1382,14 @@ async def handle_notes_callback(bot, cid, q, data):
     if data.startswith("as_lovehidden_"):
         import cleanup
         await cleanup.open_cleanup(bot, cid, f"hid_{data[len('as_lovehidden_'):]}", back="as_notes"); return
+    if data == "as_love":
+        await send_love_home(bot, cid); return
     if data.startswith("as_loveadd_"):
         await love_add_start(bot, cid, data[len("as_loveadd_"):]); return
     if data.startswith("as_love_"):
         key = data[len("as_love_"):]
+        if key == "recipes":
+            await send_love_section(bot, cid, "recipes"); return
         import cleanup as _cl
         await _cl.open_cleanup(bot, cid, f"lv_{key}", back="as_notes"); return
 

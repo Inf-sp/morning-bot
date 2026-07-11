@@ -780,12 +780,11 @@ def _my_recipe_pref(cid):
 
 def _gen_recipe(constraint, cid=None):
     pref = _my_recipe_pref(cid)
-    pr = (settings.priority_context(cid) + "\n") if cid and settings.priority_context(cid) else ""
     cz = (settings.cuisine_context(cid) + "\n") if cid and settings.cuisine_context(cid) else ""
     avoid = _leftover_recent(cid) if cid else []
     avoid_line = f"Не предлагай эти блюда (уже были из холодильника): {', '.join(avoid)}.\n" if avoid else ""
     return ai.llm_json(
-        f"{pr}{cz}{avoid_line}{pref}Ты — шеф-повар с идеальной логикой. "
+        f"{cz}{avoid_line}{pref}Ты — шеф-повар с идеальной логикой. "
         f"Создай 1 рецепт ({constraint}), 1 человек, электрическая плита, духовка SAGE.\n"
         "Правила:\n"
         "• Каждый продукт из ингредиентов обязан появиться в шагах приготовления.\n"
@@ -1078,7 +1077,6 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
     """Собирает промпт батч-генерации очереди рецептов. Вынесено отдельно от
     _gen_recipe_batch, чтобы промпт можно было проверить без вызова LLM."""
     pref = _my_recipe_pref(cid)
-    pr = (settings.priority_context(cid) + "\n") if cid and settings.priority_context(cid) else ""
     cz = (settings.cuisine_context(cid) + "\n") if cid and settings.cuisine_context(cid) else ""
     weights_line = _cuisine_weights_line(cuisine_weights)
     season_line = f"{season_hint}\n" if season_hint else ""
@@ -1087,7 +1085,7 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
     cuisine_codes_line = "Коды кухонь (машиночитаемые, используй один из них или ближайший по стране): " + ", ".join(RECIPE_CUISINE_CODES) + ".\n"
     guard_line = f"{meal_guard}\n" if meal_guard else ""
     return (
-        f"{pr}{cz}{weights_line}{season_line}{avoid_line}{pref}"
+        f"{cz}{weights_line}{season_line}{avoid_line}{pref}"
         f"Ты — шеф-повар с идеальной логикой. Составь список из {n} РАЗНЫХ рецептов "
         f"({constraint}), 1 человек, электрическая плита, духовка SAGE.\n"
         f"{guard_line}"
@@ -1402,12 +1400,12 @@ async def save_my_recipe(bot, cid):
     await bot.send_message(chat_id=cid, text=f"❤️ «{util.esc(d['name'])}» сохранён в базе рецептов.")
 
 
-async def send_my_recipes(bot, cid):
+async def send_my_recipes(bot, cid, back="as_notes"):
     cid_s = str(cid)
     recipes = store.get_list(config.MY_RECIPES_KEY, cid_s)
     if not recipes:
         msg = food_ui.my_recipes_empty()
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=back)]])
     else:
         msg = food_ui.my_recipes_list(recipes)
         rows = []
@@ -1415,7 +1413,7 @@ async def send_my_recipes(bot, cid):
             name = r.get("name", f"Рецепт {i+1}")[:30]
             rows.append([InlineKeyboardButton(f"📖 {name}", callback_data=f"as_my_recipe_{i}")])
         rows.insert(0, [InlineKeyboardButton("❌ Удалить", callback_data="as_recipe_clean")])
-        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back)])
         kb = InlineKeyboardMarkup(rows)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
@@ -1471,9 +1469,7 @@ def _gen_motiv(cid):
     angles = ["физическое действие", "ограничение", "мини-ритуал", "перезагрузку", "один микрошаг"]
     angle = random.choice(angles)
     lagom_ctx = f"Принцип лагома пользователя: «{lagom}»\n" if lagom else ""
-    priority_ctx = f"{settings.priority_context(cid)}\n" if settings.priority_context(cid) else ""
     prompt = (
-        f"{priority_ctx}"
         f"{lagom_ctx}"
         f"Предложи {angle} на основе этого принципа. "
         "Без философии и клише. Конкретно, коротко, на русском. "

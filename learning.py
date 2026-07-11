@@ -1838,7 +1838,9 @@ def _normalize_dict_term(lang, kind, term):
         return _normalize_dutch_phrase(term)
     return term, ""
 
-_DICT_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|сохранить|запомни|запомнить|внеси|закинь)\b", re.I)
+_DICT_ADD_VERB_RE = re.compile(
+    r"\b(добавь|добавить|занеси|запиши|сохрани|сохранить|запомни|запомнить|внеси|закинь|"
+    r"add|save|remember)\b", re.I)
 _DICT_WORD_RE = re.compile(r"\b(?:в\s+)?(?:мой\s+)?(?:словар[ьяьею]*|обучени[еяю]|тренировк[ауиах]*)\b", re.I)
 _DICT_LEADING_RE = re.compile(r"^\s*в\s+(?:мой\s+)?словар[ьяьею]*\b", re.I)
 _DICT_LANG_RE = re.compile(
@@ -1856,13 +1858,40 @@ _DICT_PAYLOAD_PREFIX_RE = re.compile(
 )
 _DICT_EMPTY_PAYLOAD = {"", "в", "на", "для", "туда", "это", "эту", "его", "её", "ее"}
 
-def _dict_lang_hint(text):
+def _dict_lang_hint_explicit(text):
+    """Язык, явно названный в самой команде («на английском», «dutch» и т.п.).
+    None, если язык явно не назван — тогда решение принимает вызывающий код
+    по активному языку обучения, признакам de/het или сам LLM."""
     t = (text or "").lower()
     if any(x in t for x in ("английск", "english", " en ")):
         return "en"
     if any(x in t for x in ("нидерланд", "голланд", "dutch", " nl ")):
         return "nl"
-    return "nl"
+    return None
+
+
+_DUTCH_ARTICLE_RE = re.compile(r"\b(de|het)\s+\w+", re.I)
+
+
+def _dict_lang_hint(text, cid=None):
+    """Порядок определения языка (без безусловного fallback на nl):
+    1. Язык, явно указанный в самой команде.
+    2. Признаки de/het (нидерландский артикль) в тексте — прямое доказательство
+       в самих словах, сильнее предположения по активному языку обучения.
+    3. Активный язык обучения пользователя.
+    4. Иначе — не подсказываем язык явно, финальное решение остаётся за LLM
+       (промпт _normalize_dict_entry_full сам определяет lang по слову)."""
+    explicit = _dict_lang_hint_explicit(text)
+    if explicit:
+        return explicit
+    if _DUTCH_ARTICLE_RE.search(text or ""):
+        return "nl"
+    if cid is not None:
+        try:
+            return _active_language_code(cid)
+        except Exception:
+            pass
+    return None
 
 
 def _clean_chat_dict_payload(text):
@@ -1876,11 +1905,11 @@ def _clean_chat_dict_payload(text):
     return payload
 
 
-def _extract_chat_dict_add(text):
+def _extract_chat_dict_add(text, cid=None):
     """Команда из свободного чата: «добавь в словарь слово ...» -> полезная часть."""
     text = text or ""
     if _DICT_LEADING_RE.search(text):
-        lang = _dict_lang_hint(f" {text} ")
+        lang = _dict_lang_hint(f" {text} ", cid)
         payload = _clean_chat_dict_payload(_DICT_LEADING_RE.sub(" ", text, count=1))
         if payload.casefold() in _DICT_EMPTY_PAYLOAD:
             return "", lang
@@ -1890,7 +1919,7 @@ def _extract_chat_dict_add(text):
     has_kind_word = bool(_DICT_KIND_RE.search(text))
     if not has_add_verb:
         return None, None
-    lang = _dict_lang_hint(f" {text} ")
+    lang = _dict_lang_hint(f" {text} ", cid)
     payload = _clean_chat_dict_payload(text)
     has_foreign_payload = bool(re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ]", payload)) and not _CYRILLIC_RE.search(payload)
     if not (has_dict_word or has_kind_word or has_foreign_payload):
@@ -1909,7 +1938,7 @@ async def try_add_dict_from_chat(bot, cid, text):
     add_words_batch, куда текст мог попасть без явной команды на конкретную фразу).
     _normalize_dict_entry_full сам исправит опечатки и приведёт фразу к
     естественной форме, а единый confirm-экран покажет итог на подтверждение."""
-    payload, lang = _extract_chat_dict_add(text)
+    payload, lang = _extract_chat_dict_add(text, cid)
     if payload is None:
         return False
     if not payload:
@@ -1973,13 +2002,26 @@ def _dict_entry_message(entry, status="added"):
 
 
 def _dict_confirm_message(entry):
+    """Карточка предпросмотра перед сохранением: термин, перевод, разбор, примеры —
+    тот же состав полей, что и в карточке после добавления (_dict_entry_message)."""
     from ui.builder import MessageBuilder
 
     b = MessageBuilder()
     term = entry.get("term") or ""
     if entry.get("article") and not term.lower().startswith(entry["article"].lower() + " "):
         term = f"{entry['article']} {term}"
-    b.line(f"Ты имеешь в виду {term} — {entry.get('translation')}?")
+    b.section(f"📚 Добавить: {term}?")
+    b.spacer()
+    if entry.get("translation"):
+        b.line(f"Перевод: {entry['translation']}")
+    if entry.get("breakdown"):
+        b.line(f"Разбор: {entry['breakdown']}")
+    examples = entry.get("examples") or []
+    if examples:
+        b.spacer()
+        b.line("Пример:" if len(examples) == 1 else "Примеры:")
+        for ex in examples:
+            b.line(f"{ex.get('text', '')} — {ex.get('translation', '')}")
     return b.build_stripped()
 
 
@@ -1996,18 +2038,33 @@ def _dict_loose_text(lang, word):
     return _dict_loose_key(lang, "word", word)[2]
 
 
-async def _normalize_dict_entry_full(payload, lang_hint="nl", source_text=""):
+async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", avoid_translations=None):
     """Единая точка добавления: нормализация + перевод + короткий разбор + 1-2 примера.
     Один AI-вызов на запись, кэшируется в ai.py по input_hash (module="learning_dict_add",
-    TTL 30 дней) — повторное добавление того же слова не тратит лимит повторно."""
-    language_hint = _lang_title(lang_hint)
+    TTL 30 дней) — повторное добавление того же слова не тратит лимит повторно.
+    lang_hint — nl/en/None. None означает, что язык не определён ни явной командой,
+    ни активным языком обучения, ни признаками de/het — LLM определяет его сам,
+    без принудительного fallback на nl.
+    avoid_translations — уже показанные пользователю варианты (кнопка «Другой перевод»);
+    меняет текст промпта, чтобы не попасть в тот же кэш и получить другой вариант."""
+    if lang_hint in ("nl", "en"):
+        language_line = f"Подсказка языка: {_lang_title(lang_hint)} ({lang_hint})."
+    else:
+        language_line = "Язык не подсказан — определи его сам по слову/фразе."
+    avoid_line = ""
+    if avoid_translations:
+        avoid_line = (
+            "\nПользователь уже видел эти варианты перевода и просит другой — "
+            "НЕ повторяй их, предложи следующее по точности значение: "
+            + "; ".join(avoid_translations) + "."
+        )
     prompt = f"""
 Ты лексикограф для учебного словаря Telegram-бота. Всё учится как фраза: короткая
 запись (одно слово) и длинная (выражение/предложение) хранятся одинаково.
 
 Пользователь хочет добавить: {secure.wrap_untrusted(payload, 'запись')}
 Полное сообщение пользователя: {secure.wrap_untrusted(source_text or payload, 'сообщение')}
-Подсказка языка: {language_hint} ({lang_hint}).
+{language_line}{avoid_line}
 
 Определи и нормализуй РОВНО ОДНУ учебную запись.
 
@@ -2048,10 +2105,7 @@ async def _normalize_dict_entry_full(payload, lang_hint="nl", source_text=""):
 }}
 Если это не похоже на нидерландскую или английскую учебную запись, верни {{"ok": false, "reason": "коротко почему"}}.
 """
-    try:
-        d = await ai.allm_json(prompt, 900, module="learning_dict_add")
-    except Exception:
-        d = {}
+    d = await ai.allm_json(prompt, 900, module="learning_dict_add")
     if not isinstance(d, dict) or not d.get("ok"):
         return None
     lang = "en" if d.get("lang") == "en" else "nl"
@@ -2158,7 +2212,10 @@ async def _refresh_dict_entry(cid, item):
     т.к. та считает совпадение термина дубликатом и не заменит поля."""
     term = _entry_term(item)
     lang = _dict_lang(item)
-    entry = await _normalize_dict_entry_full(term, lang, source_text=term)
+    try:
+        entry = await _normalize_dict_entry_full(term, lang, source_text=term)
+    except Exception:
+        return item
     if not entry or entry.get("needs_confirmation"):
         return item
     words = store.get_list(config.DICT_KEY, cid)
@@ -2182,24 +2239,67 @@ async def _refresh_dict_entry(cid, item):
     return item
 
 
-async def add_dict_entry_from_chat(bot, cid, payload, lang="nl", source_text=""):
+def _dict_confirm_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Добавить", callback_data="a_dictconfirm_add")],
+        [InlineKeyboardButton("🔄 Другой перевод", callback_data="a_dictconfirm_retry"),
+         InlineKeyboardButton("Отмена", callback_data="a_dictconfirm_cancel")],
+    ])
+
+
+async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text=""):
     """Единый стиль добавления: перед сохранением ВСЕГДА показываем карточку
-    «Ты имеешь в виду X — Y?» с подтверждением, независимо от того, счёл ли
-    LLM слово многозначным/рискованным (needs_confirmation)."""
-    entry = await _normalize_dict_entry_full(payload, lang, source_text=source_text)
+    предпросмотра с подтверждением, независимо от того, счёл ли LLM слово
+    многозначным/рискованным (needs_confirmation)."""
+    try:
+        entry = await _normalize_dict_entry_full(payload, lang, source_text=source_text)
+    except Exception:
+        await bot.send_message(chat_id=cid, text="⚠️ Не получилось разобрать слово. Попробуй ещё раз.")
+        return
     if not entry:
         await bot.send_message(
             chat_id=cid,
             text="Не уверена в форме или переводе. Пришли так: de kater → похмелье.",
         )
         return
+    entry["_payload"] = payload
+    entry["_source_text"] = source_text
+    entry["_seen_translations"] = [entry["translation"]]
     store.dict_pending_add[str(cid)] = entry
     msg = _dict_confirm_message(entry)
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Да, добавить", callback_data="a_dictconfirm_add"),
-        InlineKeyboardButton("✏️ Исправить", callback_data="a_dictconfirm_fix"),
-    ]])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_dict_confirm_kb())
+
+
+async def retry_pending_dict_add(bot, cid):
+    """Кнопка «Другой перевод»: перегенерирует ту же запись, исключая уже
+    показанные варианты. Обновляет то же сообщение, не создаёт цепочку."""
+    entry = store.dict_pending_add.get(str(cid))
+    if not entry:
+        await bot.send_message(chat_id=cid, text="Уточнение устарело. Пришли слово ещё раз.")
+        return
+    seen = entry.get("_seen_translations") or [entry.get("translation", "")]
+    try:
+        new_entry = await _normalize_dict_entry_full(
+            entry.get("_payload", entry.get("term", "")), entry.get("lang", "nl"),
+            source_text=entry.get("_source_text", ""), avoid_translations=seen,
+        )
+    except Exception:
+        await bot.send_message(chat_id=cid, text="⚠️ Не получилось получить другой вариант. Попробуй ещё раз.")
+        return
+    if not new_entry:
+        await bot.send_message(chat_id=cid, text="Больше вариантов перевода не нашлось.")
+        return
+    new_entry["_payload"] = entry.get("_payload", "")
+    new_entry["_source_text"] = entry.get("_source_text", "")
+    new_entry["_seen_translations"] = seen + [new_entry["translation"]]
+    store.dict_pending_add[str(cid)] = new_entry
+    msg = _dict_confirm_message(new_entry)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_dict_confirm_kb())
+
+
+async def cancel_pending_dict_add(bot, cid):
+    store.dict_pending_add.pop(str(cid), None)
+    await bot.send_message(chat_id=cid, text="Отменено.")
 
 
 async def confirm_pending_dict_add(bot, cid):
@@ -2211,12 +2311,6 @@ async def confirm_pending_dict_add(bot, cid):
     msg = _dict_entry_message(saved, status=status)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
 
-
-async def fix_pending_dict_add(bot, cid):
-    entry = store.dict_pending_add.pop(str(cid), None)
-    lang = (entry or {}).get("lang", "nl")
-    store.pending_input[str(cid)] = f"dictadd_smart_{lang}"
-    await bot.send_message(chat_id=cid, text="Пришли слово или фразу ещё раз, в правильной форме.")
 
 def _dict_item_key(lang, kind, word):
     normalized = re.sub(r"\s+", " ", (word or "").strip()).casefold()
@@ -2371,7 +2465,10 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
     duplicate_entries = []
     unrecognized_lines = []
     for line in lines:
-        entry = await _normalize_dict_entry_full(line, lang, source_text=line)
+        try:
+            entry = await _normalize_dict_entry_full(line, lang, source_text=line)
+        except Exception:
+            entry = None
         if not entry:
             unrecognized_lines.append(line[:60])
             continue
