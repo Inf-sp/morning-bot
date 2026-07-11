@@ -28,7 +28,7 @@ def day_summary(
         b.line(humidity_line)
 
     if word_line:
-        word_title = "Нидерландское слово дня" if word_lang == "nl" else "Английское слово дня"
+        word_title = "Порция нидерландского" if word_lang == "nl" else "Порция английского"
         b.section(ui_label("learning", word_title))
         b.line(word_line)
 

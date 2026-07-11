@@ -202,11 +202,11 @@ def _curated_fact_fallback(city, cid):
         if not _content_blocked(text):
             return text
     try:
-        fact = research.tavily_fact(city)
+        fact = research.best_place_fact(city)
         if fact and len(fact.strip()) > 60 and not _content_blocked(fact):
             return fact.strip()
     except Exception as e:
-        _log.warning("myday: tavily_fact(%s) failed: %s", city, e)
+        _log.warning("myday: best_place_fact(%s) failed: %s", city, e)
     return ""
 
 
@@ -242,9 +242,23 @@ def _generate_fact_pool(city, country, recent_facts=None):
         d = ai.llm_json(prompt, 1800, tier="cheap", module="myday")
     except Exception as e:
         _log.warning("myday: fact pool generation failed: %s", e)
-        return []
+        d = None
     facts = d.get("facts") if isinstance(d, dict) else []
-    return [(str(f).strip(), {}) for f in (facts or []) if str(f).strip()]
+    pool = [(str(f).strip(), {}) for f in (facts or []) if str(f).strip()]
+
+    try:
+        verified = research.place_fact_candidates(city)
+    except Exception as e:
+        _log.warning("myday: place_fact_candidates(%s) failed: %s", city, e)
+        verified = []
+    seen_texts = {text for text, _ in pool}
+    for fact in verified[:4]:
+        fact = fact.strip()
+        if fact and fact not in seen_texts and fact not in recent_facts and not _content_blocked(fact):
+            pool.append((fact, {}))
+            seen_texts.add(fact)
+
+    return pool
 
 
 def city_fact(city, country, cid, cc=""):

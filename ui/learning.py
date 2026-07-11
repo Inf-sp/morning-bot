@@ -76,19 +76,19 @@ def proverb_card(flag, original, analogs=None, meaning="", examples=None, exampl
 
     analogs = _as_list(analogs)
     if analogs:
-        b.section(ui_label("translation", "Как это переводится?"))
+        b.section("Как это переводится?")
         main_analog = _strip_final_punctuation(_cap_first(analogs[0]))
         b.line(f"«{main_analog}».")
 
     meaning = str(meaning or "").strip()
     if meaning:
-        b.section(ui_label("usage", "Когда это говорят?"))
+        b.section("Когда это говорят?")
         b.line(meaning)
 
     example, parsed_example_ru = _split_example(examples)
     example_ru = str(example_ru or parsed_example_ru or "").strip()
     if example:
-        b.section(ui_label("example", "Пример из жизни:"))
+        b.section("Пример из жизни:")
         if example_ru:
             b.line(f"{example} →")
             b.line(example_ru)

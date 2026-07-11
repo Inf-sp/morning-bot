@@ -537,9 +537,78 @@ def tavily_fact(name):
         for s in _extract_sents(r.get("content") or ""):
             if s not in seen:
                 sents.append(s); seen.add(s)
-    if not sents:
+    return sents
+
+
+def firecrawl_search(query: str, max_results: int = 5) -> list:
+    """Поиск через Firecrawl — второй независимый источник рядом с Tavily.
+    Возвращает list[{title, url, content}] или [] при ошибке/нет ключа."""
+    if not config.FIRECRAWL_API_KEY:
+        return []
+    try:
+        r = requests.post(
+            "https://api.firecrawl.dev/v1/search",
+            json={"query": query, "limit": max_results, "sources": ["web"]},
+            headers={"Authorization": f"Bearer {config.FIRECRAWL_API_KEY}"},
+            timeout=18,
+        )
+        r.raise_for_status()
+        data = r.json().get("data") or []
+        return [{
+            "title": row.get("title", ""),
+            "url": row.get("url", ""),
+            "content": row.get("description") or row.get("markdown") or "",
+        } for row in data if isinstance(row, dict)]
+    except Exception as e:
+        _log.warning("firecrawl_search failed: %s", str(e)[:120])
+        return []
+
+
+def firecrawl_fact(name):
+    """Реальные факты о месте через Firecrawl — тот же принцип, что tavily_fact."""
+    results = firecrawl_search(f"{name} интересный факт", max_results=3)
+    sents = []
+    seen = set()
+    for r in results:
+        for s in _extract_sents(r.get("content") or ""):
+            if s not in seen:
+                sents.append(s); seen.add(s)
+    return sents
+
+
+def place_fact_candidates(name):
+    """Все проверяемые факты-кандидаты о месте из Wikipedia, Tavily и Firecrawl,
+    без выбора одного — для наполнения пулов несколькими реальными фактами."""
+    candidates = []
+    seen = set()
+    for s in wiki_sentences(name):
+        if s not in seen:
+            candidates.append(s); seen.add(s)
+    for s in tavily_fact(name):
+        if s not in seen:
+            candidates.append(s); seen.add(s)
+    for s in firecrawl_fact(name):
+        if s not in seen:
+            candidates.append(s); seen.add(s)
+    return candidates
+
+
+def best_place_fact(name, llm_pick=None):
+    """Выбирает самый интересный факт о месте среди кандидатов из Wikipedia,
+    Tavily и Firecrawl. По умолчанию выбор — самое длинное/подробное
+    предложение (простая эвристика без AI-вызова); если передан llm_pick(list)
+    — вызывающий код может подключить LLM-ранжирование по вкусу/новизне."""
+    candidates = place_fact_candidates(name)
+    if not candidates:
         return ""
-    return random.choice(sents)
+    if llm_pick:
+        try:
+            picked = llm_pick(candidates)
+            if picked in candidates:
+                return picked
+        except Exception:
+            pass
+    return max(candidates, key=len)
 
 
 def web_search(query: str, max_results: int = 5) -> list:
