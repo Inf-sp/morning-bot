@@ -493,7 +493,6 @@ def tavily_search(query: str, max_results: int = 5) -> list:
     if cached and time.time() - cached[0] < _TV_TTL:
         return cached[1]
     try:
-        import secure
         r = requests.post(
             "https://api.tavily.com/search",
             json={

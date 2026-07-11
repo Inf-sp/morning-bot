@@ -13,11 +13,9 @@ _log = logging.getLogger(__name__)
 import store
 import ai
 import weather
-import balance
 import learning
 import research
 import memory
-import settings
 from util import esc, _WEEKDAYS, _MONTHS, flag_from_cc, country_flag
 import verify
 from ui import myday as myday_ui
@@ -525,7 +523,6 @@ def reset_day_cache(cid):
     _day_cache.pop(str(cid), None)
 
 def _day_menu_kb():
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
         [InlineKeyboardButton("🌍 Сменить город", callback_data="a_setcity")],
@@ -630,7 +627,7 @@ async def _maybe_prompt_dict_seed(bot, cid):
         lang = learning._active_language_code(cid)
         words = learning._ensure_dict(cid)
         has_words = any(
-            _is_word_entry(w) and (w.get("lang") or "nl") == lang
+            learning._entry_term(w) and learning._dict_lang(w) == lang
             for w in words
         )
         if has_words:

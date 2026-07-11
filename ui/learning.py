@@ -1,4 +1,4 @@
-from telegram import MessageEntity
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
 from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
@@ -277,6 +277,50 @@ def phrase_rule_breakdown(state):
     return msg
 
 
+def mistake_review_card(mistake):
+    """Повторение одной сохранённой ошибки: что написал, как правильно, почему.
+    Карточка сама строит клавиатуру — id ошибки известен только через параметр,
+    здесь только форматирование, решение «что показывать» остаётся за learning.py."""
+    mistake_id = mistake.get("id", "")
+    wrong = str(mistake.get("wrong") or "").strip()
+    correct = str(mistake.get("correct") or "").strip()
+    explanation = str(mistake.get("explanation") or "").strip()
+
+    b = MessageBuilder()
+    b.section("🧠 Повторение ошибки")
+    b.spacer()
+    if wrong:
+        b.line("Ты раньше написал:")
+        b.bold(wrong)
+        b.newline()
+        b.spacer()
+    b.line("Лучше:")
+    b.bold(correct)
+    b.newline()
+    if explanation:
+        b.spacer()
+        b.line("Почему:")
+        b.line(explanation)
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Попробовать снова", callback_data=f"mistake_retry_{mistake_id}")],
+        [InlineKeyboardButton("✅ Уже понял", callback_data=f"mistake_understood_{mistake_id}")],
+    ])
+    msg = b.build(reply_markup=kb)
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
+def no_open_mistakes_card():
+    b = MessageBuilder()
+    b.section("🧠 Повторение ошибок")
+    b.spacer()
+    b.line("Открытых ошибок нет — всё закреплено.")
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
 def train_lang_select():
     b = MessageBuilder()
     b.section(ui_label("word_trainer", "Тренажёр"))
@@ -297,6 +341,53 @@ def translate_prompt(flag, ru, lang):
     b.spacer()
     b.text_line(f"Напиши перевод на {lang} следующим сообщением.")
     return b.build()
+
+
+def smart_reveal_question(flag, ru, hint=None):
+    """«Умное раскрытие»: сначала только вопрос, подсказка появляется по кнопке
+    (добавляется в это же сообщение через edit, не как новый текст)."""
+    b = MessageBuilder()
+    b.text_line(f"{flag} Как сказать")
+    b.newline()
+    b.spacer()
+    b.bold(f"«{ru}»")
+    b.newline()
+    if hint:
+        b.spacer()
+        b.line("Подсказка:")
+        b.line(hint)
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
+def smart_reveal_kb(show_hint=True):
+    rows = []
+    if show_hint:
+        rows.append([InlineKeyboardButton("Показать подсказку", callback_data="smart_hint")])
+    rows.append([InlineKeyboardButton("Написать ответ", callback_data="smart_answer")])
+    rows.append([InlineKeyboardButton("Пропустить", callback_data="smart_skip")])
+    return InlineKeyboardMarkup(rows)
+
+
+def smart_reveal_result(flag, lang, correct, explanation=""):
+    """Карточка после ответа/пропуска: правильный вариант + короткое объяснение."""
+    b = MessageBuilder()
+    b.section("Правильный вариант:")
+    b.spacer()
+    b.bold(correct)
+    b.newline()
+    if explanation:
+        b.spacer()
+        b.line("Почему:")
+        b.line(explanation)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Понял", callback_data="smart_understood"),
+         InlineKeyboardButton("🔁 Повторить позже", callback_data="smart_later")],
+    ])
+    msg = b.build(reply_markup=kb)
+    msg.text = msg.text.rstrip("\n")
+    return msg
 
 
 def translate_result(flag, lang, ru, answer, result):
@@ -392,6 +483,77 @@ def game_hint(ui, hint):
     b.spacer()
     b.text_line(ui["who"])
     return b.build()
+
+
+def dialogue_step_card(flag, situation, line, options, step, total):
+    """Один шаг диалогового тренажёра: реплика собеседника + варианты ответа
+    кнопками. Карточка сама строит клавиатуру по переданным вариантам —
+    callback несёт только индекс выбранного варианта."""
+    b = MessageBuilder()
+    b.section(f"{flag} Диалог · {step}/{total}")
+    b.spacer()
+    if situation and step == 1:
+        b.line(situation)
+        b.spacer()
+    b.quote(str(line or "").strip())
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    rows = [[InlineKeyboardButton(str(opt)[:60], callback_data=f"dlg_pick_{i}")]
+            for i, opt in enumerate(options)]
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")])
+    msg.reply_markup = InlineKeyboardMarkup(rows)
+    return msg
+
+
+def dialogue_feedback_card(picked, is_good, note=""):
+    b = MessageBuilder()
+    b.section("✅ Естественно" if is_good else "😐 Так тоже поймут, но есть вариант лучше")
+    b.spacer()
+    b.line(str(picked or "").strip())
+    if note:
+        b.spacer()
+        b.tip(note)
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    msg.reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("Дальше", callback_data="dlg_next")]])
+    return msg
+
+
+def dialogue_summary_card(topic):
+    b = MessageBuilder()
+    b.section("Диалог закончен 🎬")
+    b.spacer()
+    if topic:
+        b.line(f"Тема: {topic}")
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Новый диалог", callback_data="dlg_start")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
+    ])
+    msg = b.build(reply_markup=kb)
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
+def session_summary_card(items, weak_spot=""):
+    """Итог короткой сессии «3 минуты»: что повторили и слабое место, если было."""
+    b = MessageBuilder()
+    b.section("Готово · быстрая практика 🎯")
+    b.spacer()
+    if items:
+        b.line("Сегодня ты повторил:")
+        for it in items[:5]:
+            b.text_line(f"• {it}\n")
+    if weak_spot:
+        b.spacer()
+        b.line("Слабое место:")
+        b.line(weak_spot)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Ещё 3 минуты", callback_data="session3_again")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
+    ])
+    msg = b.build(reply_markup=kb)
+    msg.text = msg.text.rstrip("\n")
+    return msg
 
 
 def learning_settings(active_language, active_level):

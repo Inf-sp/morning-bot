@@ -16,7 +16,6 @@ import secure
 from ui import balance as balance_ui
 from ui import food as food_ui
 from ui.constants import CUISINE_EMOJI, ui_label
-import memory
 import settings
 import menu
 

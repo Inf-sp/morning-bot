@@ -114,6 +114,7 @@ MUSIC_SEEN_KEY = "music_seen.json"
 WORRIES_KEY = "worries.json"
 NOTES_KEY = "notes.json"
 DICT_KEY = "dict.json"
+MISTAKES_KEY = "mistakes.json"  # персистентная база ошибок тренажёра, для mistakeReview
 LAGOM_KEY = "lagom.json"
 PROFILE_KEY = "profile.json"   # память пользователя: фокус, фидбек гардероба, наблюдения
 CITY_FACTS_FILE = "city_facts.json"        # аварийный fallback, если AI недоступен при генерации пула

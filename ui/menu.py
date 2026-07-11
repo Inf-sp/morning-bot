@@ -1,7 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .builder import MessageBuilder, MessageSpec
-from .constants import LANGUAGE_EMOJI, ui_label, language_label
+from .constants import LANGUAGE_EMOJI, ui_label
 
 UI_MYDAY = ui_label("myday", "").strip()
 UI_WARDROBE = ui_label("wardrobe", "").strip()
@@ -147,10 +147,13 @@ def learning_menu(active_code="nl"):
     b.line("Напиши так в чат — бот сам сохранит, переведёт и разберёт.")
 
     return b.build_stripped(reply_markup=ikb([
+        [("⚡ Быстрая практика · 3 минуты", "session3_start")],
         [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
+        [("💬 Диалог", "dlg_start")],
         [(ui_label("live_language", "Живой язык"), f"a_proverb_{code}")],
         [(ui_label("game", "Игра-детектив"), f"gamelang_{code}")],
         [(ui_label("dictionary", "Мой словарь"), f"a_dictlang_{code}_from_menu")],
+        [("🧠 Повторение ошибок", "mistake_review")],
         [(ui_label("settings", "Настройки обучения"), "set_learning")],
     ]))
 

@@ -16,7 +16,6 @@ import research
 import settings
 import tmdb
 import movie_engine
-from util import country_flag, esc
 import verify
 from ui import leisure as leisure_ui
 
@@ -46,7 +45,6 @@ _COLLECT_HINTS = {
 
 async def _ask_collect(bot, cid, kind: str):
     """Показывает экран сбора предпочтений и ставит pending_input."""
-    import secure as _sec
     store.pending_input[str(cid)] = f"collect_{kind}"
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("Пропустить", callback_data="m_leisure")]])
     await bot.send_message(chat_id=cid, text=_COLLECT_HINTS[kind], parse_mode="HTML", reply_markup=kb)
@@ -828,7 +826,6 @@ async def _advance_movie(bot, cid):
         it, tm = await _advance_in_category(cid, category)
         if not it:
             label = category["reason"]["label"]
-            what = "жанре" if category["kind"] == "genre" else "настроение"
             text = (f"В этом жанре «{label}» пока не нашёл нового. Попробуй другой."
                     if category["kind"] == "genre" else
                     f"Под настроение «{label}» пока не нашёл нового. Попробуй другое.")

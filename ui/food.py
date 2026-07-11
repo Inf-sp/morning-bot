@@ -1,7 +1,7 @@
 import re
 
 from .builder import MessageBuilder, MessageSpec
-from .constants import CUISINE_EMOJI, ui_label
+from .constants import ui_label
 
 # Эмодзи категории приёма пищи (§7 спеки) — используется в заголовке карточки.
 MEAL_EMOJI = {

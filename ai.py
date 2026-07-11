@@ -813,7 +813,7 @@ def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=No
             pass
     raise Exception("Не удалось разобрать ответ ИИ (JSON). Попробуй ещё раз.")
 
-CHAT_SYSTEM = f"""Ты помощник.
+CHAT_SYSTEM = """Ты помощник.
 
 ОТВЕЧАЙ КОРОТКО: до 8 строк.
 ФОРМАТ БЕЗ HTML, MARKDOWN И ЭМОДЗИ:

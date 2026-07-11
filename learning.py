@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import random
 import re
@@ -826,9 +825,11 @@ def _build_programmatic_card(entry, other_entries, lang):
     blank_phrase, correct = _blank_from_example(term, example_text) if example_text else ("", "")
     sentence_ru = example_ru or translation
     if not blank_phrase:
-        blank_phrase = f"____ — {translation}"
-        correct = term
-        sentence_ru = translation
+        # Нет сохранённого примера, из которого можно честно вырезать слово —
+        # раньше здесь была вырожденная фраза "____ — перевод" без контекста.
+        # Лучше явно сказать вызывающему коду, что программная карточка
+        # недоступна, чем показывать бессмысленный пропуск.
+        return {}
 
     wrong = _dict_distractors(entry, correct, other_entries, needed=3)
     if len(wrong) < 3:
@@ -865,7 +866,11 @@ def _bump_train_shown_count(cid, entry):
             return
 
 
-_TRAIN_LLM_REFRESH_EVERY = 5  # раз в столько показов одного слова — новая LLM-карточка для разнообразия
+_TRAIN_LLM_REFRESH_EVERY = 3  # раз в столько показов одного слова — новая LLM-карточка для разнообразия.
+# Программный путь (см. _build_programmatic_card) берёт тестовую фразу из ЕДИНСТВЕННОГО
+# сохранённого примера слова — того же, что уже показан на intro-карточке — и просто
+# вырезает слово, поэтому воспринимается как повтор экрана. Каждые 3 показа вместо 5
+# заметно чаще подключается настоящий новый контекст от LLM.
 
 
 async def _gen_train_card(cid, entry, other_entries, language, lang_code, show_count=0):
@@ -1051,6 +1056,11 @@ async def _render_train_quiz(bot, cid):
         or len(clean_wrong) < 3
         or (not is_programmatic and not _phrase_card_is_consistent(phrase, ru, card))
     ):
+        if st.get("session"):
+            session = st["session"]
+            session["step"] = 4
+            await _session3_run_step(bot, cid)
+            return
         await bot.send_message(
             chat_id=cid,
             text="Не получилось собрать хорошую карточку.\nПопробуй следующую.",
@@ -1110,8 +1120,16 @@ async def phrase_intro_continue(bot, cid):
     st["phrase_pending_quiz"] = False
     st["phrase_stage"] = "quiz"
 
-    if random.random() < 0.5:
+    if st.get("session"):
+        await _send_phrase_smart_reveal(bot, cid, st)
+        return
+
+    roll = random.random()
+    if roll < 0.34:
         await _send_phrase_truefalse(bot, cid, st)
+        return
+    if roll < 0.67:
+        await _send_phrase_smart_reveal(bot, cid, st)
         return
 
     language = st["lang"]
@@ -1151,6 +1169,26 @@ def _truefalse_kb():
     ])
 
 
+async def _send_phrase_smart_reveal(bot, cid, st):
+    """Третий формат теста: «умное раскрытие» — сначала вопрос на перевод текущего
+    слова/фразы, подсказка по кнопке, ответ текстом, результат с Понял/Повторить
+    позже. Строится из уже собранной карточки intro-этапа, без нового LLM-запроса."""
+    lang = st["lang"]
+    ru = st.get("sentence_ru") or st.get("ru", "")
+    correct = st.get("phrase_full") or st.get("word", "")
+    hint = st.get("intro_pattern") or st.get("intro_explanation", "")
+    explanation = st.get("phrase_short_rule") or st.get("phrase_explanation", "")
+    if not ru or not correct:
+        await _send_phrase_truefalse(bot, cid, st)
+        return
+    store.smart_reveal_state[str(cid)] = {
+        "ru": ru, "hint": hint, "lang": lang, "correct": correct, "explanation": explanation,
+    }
+    msg = learning_ui.smart_reveal_question(_flag(lang), ru)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                            reply_markup=learning_ui.smart_reveal_kb(show_hint=bool(hint)))
+
+
 async def _send_phrase_truefalse(bot, cid, st):
     """Второй формат теста: утверждение «в этой фразе пропущено слово X» — да или нет.
     Строится из уже провалидированной карточки, без нового LLM-запроса."""
@@ -1184,6 +1222,12 @@ async def phrase_intro_mastered(bot, cid):
     st = store.train_state.get(str(cid))
     if not st:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    session = st.get("session")
+    if session:
+        session["items"].append(st.get("word") or st.get("phrase_full") or "")
+        session["step"] = 4
+        await _session3_run_step(bot, cid)
+        return
     await _render_next_train_quiz(bot, cid)
 
 
@@ -1273,6 +1317,12 @@ async def _send_train_feedback(bot, cid, idx, st):
         repeated_error = st["phrase_error_count"] >= 2
         if repeated_error:
             st["needs_review"] = True
+            record_mistake(
+                cid, _code(lang), st.get("word", ""),
+                wrong=options[idx] if idx < len(options) else "",
+                correct=st.get("meaning", "") or options[correct_idx],
+                explanation=st.get("phrase_short_rule", "") or st.get("phrase_explanation", ""),
+            )
         msg = learning_ui.phrase_quiz_result(st, False, repeated_error=repeated_error)
         if repeated_error:
             kb = InlineKeyboardMarkup([
@@ -1323,6 +1373,22 @@ def generate_challenge(language, level):
     return ai.llm(f"Дай ОДНУ фразу на русском для перевода на {language}. Уровень сложности: {level_label.lower()}, "
                   f"бытовая/рабочая ситуация. Только русская фраза, без кавычек.", 200, 1.0, tier="cheap").strip()
 
+
+def generate_challenge_with_hint(language, level):
+    """Для «умного раскрытия»: фраза + короткая подсказка (ключевая конструкция/слово),
+    одним запросом — подсказку показываем по кнопке до того, как известен полный ответ."""
+    level_label = LEVEL_LABELS.get(level, "средний")
+    d = ai.llm_json(
+        f"Дай ОДНУ фразу на русском для перевода на {language}. Уровень сложности: "
+        f"{level_label.lower()}, бытовая/рабочая ситуация.\n"
+        "Дай также короткую подсказку — ключевую конструкцию или слово, которое понадобится "
+        "в переводе (не сам перевод целиком, а только намёк).\n"
+        'JSON: {"ru": "русская фраза", "hint": "короткая подсказка на русском"}',
+        300, tier="cheap")
+    ru = str((d or {}).get("ru") or "").strip()
+    hint = str((d or {}).get("hint") or "").strip()
+    return ru, hint
+
 def check_translation(language, ru, answer):
     return ai.llm_json(f"""Ученик переводит с русского на {language}.
 Русская фраза: {ru}
@@ -1360,6 +1426,128 @@ async def translate_answer(bot, cid, text):
     ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
     return True
+
+
+# ================= УМНОЕ РАСКРЫТИЕ ОТВЕТА =================
+async def smart_reveal_start(bot, cid, lang):
+    """Карточка с прогрессивным раскрытием: сначала вопрос, подсказка — по кнопке,
+    ответ — текстом, результат — с «Понял»/«Повторить позже»."""
+    store.pending_input.pop(str(cid), None)
+    store.game_state.pop(str(cid), None)
+    level = store.get_level(cid, lang)
+    try:
+        ru, hint = generate_challenge_with_hint(lang, level)
+    except Exception as e:
+        await verify.safe_error(bot, cid, e); return
+    if not ru:
+        await bot.send_message(chat_id=cid, text="Не получилось собрать вопрос. Попробуй ещё раз."); return
+    store.smart_reveal_state[str(cid)] = {"ru": ru, "hint": hint, "lang": lang, "hint_shown": False}
+    msg = learning_ui.smart_reveal_question(_flag(lang), ru)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                            reply_markup=learning_ui.smart_reveal_kb())
+
+
+async def smart_reveal_show_hint(bot, cid, q=None):
+    st = store.smart_reveal_state.get(str(cid))
+    if not st:
+        return
+    st["hint_shown"] = True
+    msg = learning_ui.smart_reveal_question(_flag(st["lang"]), st["ru"], st.get("hint"))
+    kb = learning_ui.smart_reveal_kb(show_hint=False)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def smart_reveal_ask_answer(bot, cid):
+    st = store.smart_reveal_state.get(str(cid))
+    if not st:
+        return
+    store.pending_input[str(cid)] = "smart_reveal_answer"
+    await bot.send_message(chat_id=cid, text="Напиши свой ответ следующим сообщением.")
+
+
+async def smart_reveal_answer(bot, cid, text):
+    st = store.smart_reveal_state.pop(str(cid), None)
+    if not st:
+        return False
+    store.pending_input.pop(str(cid), None)
+    await _smart_reveal_finish(bot, cid, st, text)
+    return True
+
+
+async def smart_reveal_skip(bot, cid):
+    st = store.smart_reveal_state.pop(str(cid), None)
+    if not st:
+        return
+    await _smart_reveal_finish(bot, cid, st, None)
+
+
+async def _smart_reveal_finish(bot, cid, st, answer):
+    lang = st["lang"]
+    known_correct = st.get("correct")
+    if known_correct:
+        # Вопрос построен из уже известного слова словаря (_send_phrase_smart_reveal) —
+        # сравниваем текст напрямую, без нового LLM-запроса.
+        correct = known_correct
+        explanation = st.get("explanation", "")
+        is_wrong = bool(answer) and not _fuzzy(answer, correct)
+    elif answer:
+        try:
+            r = check_translation(lang, st["ru"], answer)
+        except Exception as e:
+            await verify.safe_error(bot, cid, e); return
+        correct = str(r.get("correct") or "").strip() or answer
+        explanation = str(r.get("note") or r.get("error") or "").strip()
+        is_wrong = not r.get("ok")
+    else:
+        # Пропустил без ответа и без готового правильного варианта — проверять нечего.
+        if await _session3_after_test(bot, cid, st.get("ru")):
+            return
+        await bot.send_message(chat_id=cid, text="Хорошо, идём дальше.")
+        return
+    store.smart_reveal_result_state[str(cid)] = {
+        "lang": lang, "term": st["ru"], "wrong": answer or "", "correct": correct, "explanation": explanation,
+    }
+    if is_wrong:
+        record_mistake(cid, _code(lang), st["ru"], wrong=answer, correct=correct, explanation=explanation)
+    msg = learning_ui.smart_reveal_result(_flag(lang), lang, correct, explanation)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+
+
+async def _session3_after_test(bot, cid, term, weak_spot=""):
+    st = store.train_state.get(str(cid))
+    session = (st or {}).get("session")
+    if not session:
+        return False
+    if term:
+        session["items"].append(term)
+    if weak_spot:
+        session["weak_spot"] = weak_spot
+    session["step"] = 4
+    await _session3_run_step(bot, cid)
+    return True
+
+
+async def smart_reveal_understood(bot, cid):
+    r = store.smart_reveal_result_state.pop(str(cid), None)
+    if await _session3_after_test(bot, cid, r.get("correct") if r else None):
+        return
+    await bot.send_message(chat_id=cid, text="Отлично, идём дальше.")
+
+
+async def smart_reveal_later(bot, cid):
+    r = store.smart_reveal_result_state.pop(str(cid), None)
+    if r:
+        record_mistake(cid, r["lang"], r["term"], wrong=r.get("wrong", ""),
+                        correct=r["correct"], explanation=r.get("explanation", ""))
+    if await _session3_after_test(bot, cid, r.get("correct") if r else None, r.get("explanation", "") if r else ""):
+        return
+    await bot.send_message(chat_id=cid, text="Хорошо, вернёмся к этому в «Повторении ошибок».")
 
 
 # ================= ГЛАГОЛ ДНЯ / ПОСЛОВИЦА =================
@@ -3057,25 +3245,35 @@ async def send_dict(bot, cid, back="m_notes", q=None):
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
 
 async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
-    """Главный экран словаря — сразу список слов «Мои слова и фразы», без
-    промежуточного меню: широкие кнопки Найти/Добавить-удалить/Сгенерировать
-    сверху, слова в 2 столбца по алфавиту, одна кнопка листания по кругу,
-    «⬅️ Назад» внизу ведёт туда, откуда открыли словарь (раздел «Обучение»)."""
-    entries = _dict_lang_entries(cid, lang)
+    """Главный экран словаря — короткое меню без списка слов: Найти/Добавить-удалить
+    (список слов теперь внутри этой вкладки)/Сгенерировать, «⬅️ Назад» ведёт туда,
+    откуда открыли словарь (раздел «Обучение»)."""
+    count = len(_dict_lang_entries(cid, lang))
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-    lang_title = "нидерландского" if lang == "nl" else "английского"
-    top_rows = [
+    rows = [
         [InlineKeyboardButton("🔍 Найти в словаре", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("✏️ Добавить или удалить слово", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("✨ Сгенерировать набор слов", callback_data=f"a_dictseed_start_{lang}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ]
+    text = f"{flag} Мой словарь · {count} слов и фраз"
+    await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
+
+
+async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
+    """Вкладка «Добавить или удалить слово»: список слов (тап открывает карточку
+    с удалением) + приглашение написать слово текстом, чтобы добавить его."""
+    store.pending_input[str(cid)] = f"dictadd_smart_{lang}"
+    entries = _dict_lang_entries(cid, lang)
+    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+    lang_title = "нидерландского" if lang == "nl" else "английского"
+    add_hint = (
+        "Пришли слово или фразу для изучения — можно сразу несколько, каждую с новой строки.\n"
+        "Я сам приведу в правильную форму, переведу и разберу."
+    )
     if not entries:
-        rows = top_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=back)]]
-        text = (
-            f"{flag} Словарь {lang_title} языка пока пуст.\n\n"
-            "Добавь своё слово или фразу вручную, попроси сгенерировать набор "
-            "слов по уровню — или просто напиши в чат «добавь в словарь ...»."
-        )
+        rows = [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")]]
+        text = f"{flag} Словарь {lang_title} языка пока пуст.\n\n{add_hint}"
         await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
         return
     total_pages = max(1, (len(entries) + _DICT_LIST_PAGE_SIZE - 1) // _DICT_LIST_PAGE_SIZE)
@@ -3093,12 +3291,12 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     nav_rows = []
     if total_pages > 1:
         next_page = page + 1 if page < total_pages - 1 else 0
-        nav_rows.append([InlineKeyboardButton("▶️ Следующие слова", callback_data=f"a_dictedit_{lang}_{next_page}")])
-    rows = top_rows + word_rows + nav_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=back)]]
+        nav_rows.append([InlineKeyboardButton("Следующее слово", callback_data=f"a_dicteditpage_{lang}_{next_page}")])
+    rows = word_rows + nav_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")]]
     text = (
-        f"{flag} Мой словарь · {len(entries)} слов и фраз\n\n"
-        f"Показаны {start + 1}–{start + len(chunk)}. Нажми на слово, чтобы "
-        "посмотреть перевод, пример и удалить его."
+        f"{flag} Показаны {start + 1}–{start + len(chunk)} из {len(entries)}. "
+        "Нажми на слово, чтобы посмотреть перевод, пример и удалить его.\n\n"
+        f"{add_hint}"
     )
     await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
 
@@ -3132,14 +3330,12 @@ async def handle_dict_search(bot, cid, lang, query):
         return
     words = _ensure_dict(cid)
     match = None
-    match_idx = None
-    for idx, item in enumerate(words):
+    for item in words:
         if _dict_lang(item) != lang:
             continue
         term = _entry_term(item)
         if query_norm in term.casefold():
             match = item
-            match_idx = idx
             break
     if not match:
         await bot.send_message(
@@ -3263,6 +3459,284 @@ def _morning_method_line(method, entries):
     if not entries:
         return "В словаре пока нет записей на этом языке. Сегодня можно добавить что-то через словарь."
     return method
+
+
+# ================= БАЗА ОШИБОК (mistakeReview) =================
+
+def _mistakes(cid):
+    return store.get_list(config.MISTAKES_KEY, cid)
+
+
+def _find_open_mistake(mistakes, lang, term):
+    term_key = term.strip().casefold()
+    for m in mistakes:
+        if (not m.get("resolved") and m.get("lang") == lang
+                and str(m.get("term", "")).strip().casefold() == term_key):
+            return m
+    return None
+
+
+def record_mistake(cid, lang, term, wrong, correct, explanation=""):
+    """Записывает ошибку тренажёра в персистентную базу (mistakes.json). Если по
+    этому же слову уже есть нерешённая ошибка — обновляет её вместо дубля."""
+    import uuid
+    term = (term or "").strip()
+    wrong = (wrong or "").strip()
+    correct = (correct or "").strip()
+    if not term or not correct:
+        return
+    mistakes = _mistakes(cid)
+    existing = _find_open_mistake(mistakes, lang, term)
+    if existing:
+        existing["wrong"] = wrong or existing.get("wrong", "")
+        existing["correct"] = correct
+        existing["explanation"] = explanation or existing.get("explanation", "")
+        existing["last_reviewed_at"] = None
+    else:
+        mistakes.append({
+            "id": uuid.uuid4().hex[:8],
+            "lang": lang,
+            "term": term,
+            "wrong": wrong,
+            "correct": correct,
+            "explanation": explanation,
+            "created_at": datetime.now(config.TZ).isoformat(),
+            "review_count": 0,
+            "last_reviewed_at": None,
+            "resolved": False,
+        })
+    store.set_list(config.MISTAKES_KEY, cid, mistakes)
+
+
+def resolve_mistake(cid, mistake_id):
+    mistakes = _mistakes(cid)
+    for m in mistakes:
+        if m.get("id") == mistake_id:
+            m["resolved"] = True
+            store.set_list(config.MISTAKES_KEY, cid, mistakes)
+            return True
+    return False
+
+
+def mark_mistake_reviewed(cid, mistake_id):
+    mistakes = _mistakes(cid)
+    for m in mistakes:
+        if m.get("id") == mistake_id:
+            m["review_count"] = int(m.get("review_count") or 0) + 1
+            m["last_reviewed_at"] = datetime.now(config.TZ).isoformat()
+            store.set_list(config.MISTAKES_KEY, cid, mistakes)
+            return m
+    return None
+
+
+def next_open_mistake(cid, lang=None):
+    """Следующая нерешённая ошибка для повторения: сначала никогда не
+    повторённые, потом давно не повторявшиеся."""
+    mistakes = [m for m in _mistakes(cid) if not m.get("resolved")]
+    if lang:
+        mistakes = [m for m in mistakes if m.get("lang") == lang]
+    if not mistakes:
+        return None
+    def _key(m):
+        reviewed = m.get("last_reviewed_at")
+        return (0 if not reviewed else 1, reviewed or "")
+    return sorted(mistakes, key=_key)[0]
+
+
+def _mistake_review_kb(back="m_learn"):
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=back)]])
+
+
+async def send_mistake_review(bot, cid, language=None, back="m_learn"):
+    """Показывает одну открытую ошибку на повторение. Если ошибок нет —
+    короткое сообщение вместо пустого экрана."""
+    lang_code = _code(language) if language else _active_language_code(cid)
+    mistake = next_open_mistake(cid, lang_code)
+    if not mistake:
+        msg = learning_ui.no_open_mistakes_card()
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                                reply_markup=_mistake_review_kb(back))
+        return
+    msg = learning_ui.mistake_review_card(mistake)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+
+
+async def mistake_retry(bot, cid, mistake_id):
+    """«Попробовать снова»: помечает ошибку как повторённую и открывает
+    обычный тренажёр на активном языке — не привязывает к конкретному слову
+    напрямую (тренажёр сам выбирает следующую карточку по приоритету)."""
+    mark_mistake_reviewed(cid, mistake_id)
+    await train_start(bot, cid, active_language(cid))
+
+
+async def mistake_understood(bot, cid, mistake_id):
+    resolve_mistake(cid, mistake_id)
+    await send_mistake_review(bot, cid)
+
+
+# ================= РЕЖИМ «3 МИНУТЫ» =================
+# Оркестрация уже существующих карточек в одной короткой сессии: повторение
+# старой ошибки → новое слово → тест на него → итог. Ничего нового не
+# генерирует — только переключает шаги и собирает список пройденного.
+
+def _session_kb(callback):
+    return InlineKeyboardMarkup([[InlineKeyboardButton("Дальше", callback_data=callback)]])
+
+
+async def session3_start(bot, cid):
+    """Точка входа «⚡ Быстрая практика · 3 минуты»."""
+    language = active_language(cid)
+    store.train_state[str(cid)] = {
+        "lang": language,
+        "round": 0,
+        "used_entries": [],
+        "session": {"step": 1, "items": [], "weak_spot": ""},
+    }
+    await _session3_run_step(bot, cid)
+
+
+async def _session3_run_step(bot, cid):
+    st = store.train_state.get(str(cid))
+    session = (st or {}).get("session")
+    if not st or not session:
+        return
+    step = session["step"]
+    language = st["lang"]
+    lang_code = _code(language)
+
+    if step == 1:
+        mistake = next_open_mistake(cid, lang_code)
+        if not mistake:
+            session["step"] = 2
+            await _session3_run_step(bot, cid)
+            return
+        session["mistake_id"] = mistake.get("id")
+        msg = learning_ui.mistake_review_card(mistake)
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Уже понял", callback_data="session3_mistake_ok")],
+        ])
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+        return
+
+    if step == 2:
+        if not _train_full_entries(cid, language):
+            session["step"] = 4
+            await _session3_run_step(bot, cid)
+            return
+        await _render_train_quiz(bot, cid)
+        return
+
+    if step == 4:
+        msg = learning_ui.session_summary_card(session.get("items", []), session.get("weak_spot", ""))
+        store.train_state.pop(str(cid), None)
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+        return
+
+
+async def session3_mistake_ok(bot, cid):
+    st = store.train_state.get(str(cid))
+    session = (st or {}).get("session")
+    if not st or not session:
+        return
+    mistake_id = session.pop("mistake_id", None)
+    if mistake_id:
+        resolve_mistake(cid, mistake_id)
+        mistake = next((m for m in _mistakes(cid) if m.get("id") == mistake_id), None)
+        term = mistake.get("term") if mistake else None
+        if term:
+            session["items"].append(term)
+            session["weak_spot"] = mistake.get("explanation", "") or session["weak_spot"]
+    session["step"] = 2
+    await _session3_run_step(bot, cid)
+
+
+async def session3_again(bot, cid):
+    await session3_start(bot, cid)
+
+
+# ================= ДИАЛОГОВЫЙ ТРЕНАЖЁР =================
+# Ситуация → реплика собеседника → варианты ответа кнопками → фидбек. Весь
+# диалог (ситуация + 3-4 реплики + варианты + пометка лучшего варианта)
+# генерируется одним LLM-запросом, дальше только листаем уже готовые шаги.
+
+def generate_dialogue(language, level):
+    level_label = LEVEL_LABELS.get(level, "средний")
+    d = ai.llm_json(
+        f"Придумай короткий бытовой диалог на {language} для тренировки речи. "
+        f"Уровень: {level_label.lower()}. 3-4 реплики собеседника, на каждую — "
+        "2-3 варианта ответа ученика на том же языке, из которых один самый "
+        "естественный, остальные — тоже понятные, но менее уместные (не грубые "
+        "ошибки, а стилистически слабее).\n"
+        'JSON: {"topic": "тема диалога по-русски", "steps": ['
+        '{"line": "реплика собеседника", "options": ["вариант 1", "вариант 2", "вариант 3"], '
+        '"best": 0, "note": "короткое пояснение по-русски, почему этот вариант лучше"}'
+        "]}",
+        900, tier="cheap", module="learning",
+    )
+    return d or {}
+
+
+async def dialogue_start(bot, cid):
+    store.pending_input.pop(str(cid), None)
+    store.game_state.pop(str(cid), None)
+    language = active_language(cid)
+    level = store.get_level(cid, language)
+    try:
+        d = generate_dialogue(language, level)
+    except Exception as e:
+        await verify.safe_error(bot, cid, e); return
+    steps = [s for s in (d.get("steps") or []) if s.get("line") and s.get("options")]
+    if not steps:
+        await bot.send_message(chat_id=cid, text="Не получилось собрать диалог. Попробуй ещё раз."); return
+    store.dialogue_state[str(cid)] = {
+        "lang": language, "topic": d.get("topic", ""), "steps": steps, "step": 0,
+    }
+    await _render_dialogue_step(bot, cid)
+
+
+async def _render_dialogue_step(bot, cid):
+    st = store.dialogue_state.get(str(cid))
+    if not st:
+        await bot.send_message(chat_id=cid, text="Диалог устарел, открой заново."); return
+    idx = st["step"]
+    steps = st["steps"]
+    if idx >= len(steps):
+        msg = learning_ui.dialogue_summary_card(st.get("topic", ""))
+        store.dialogue_state.pop(str(cid), None)
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+        return
+    step = steps[idx]
+    msg = learning_ui.dialogue_step_card(
+        _flag(st["lang"]), st.get("topic", ""), step.get("line", ""),
+        step.get("options", []), idx + 1, len(steps),
+    )
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+
+
+async def dialogue_pick(bot, cid, option_idx):
+    st = store.dialogue_state.get(str(cid))
+    if not st:
+        await bot.send_message(chat_id=cid, text="Диалог устарел, открой заново."); return
+    steps = st["steps"]
+    idx = st["step"]
+    if idx >= len(steps):
+        return
+    step = steps[idx]
+    options = step.get("options", [])
+    if option_idx >= len(options):
+        return
+    picked = options[option_idx]
+    is_good = option_idx == int(step.get("best", 0))
+    msg = learning_ui.dialogue_feedback_card(picked, is_good, step.get("note", "") if not is_good else "")
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+
+
+async def dialogue_next(bot, cid):
+    st = store.dialogue_state.get(str(cid))
+    if not st:
+        await bot.send_message(chat_id=cid, text="Диалог устарел, открой заново."); return
+    st["step"] += 1
+    await _render_dialogue_step(bot, cid)
 
 
 def _entries_priority_sorted(pool):

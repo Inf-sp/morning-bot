@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from telegram import Update
 
 _log = logging.getLogger(__name__)
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
@@ -431,11 +430,7 @@ async def answer_callback(update, context):
                 await learning.send_dict_lang(bot, cid, "en", back="m_learn", q=q)
             elif act.startswith("dictadd_smart_"):
                 lang = act.split("_")[2]
-                store.pending_input[cid] = f"dictadd_smart_{lang}"
-                await bot.send_message(chat_id=cid, text=(
-                    "✏️ Пришли слово или фразу для изучения — можно сразу несколько, каждую с новой строки.\n"
-                    "Я сам приведу в правильную форму, переведу и разберу.\n\n"
-                    "Чтобы удалить слово — вернись в список и тапни по нему."))
+                await learning.send_dict_manage(bot, cid, lang, q=q)
             elif act.startswith("dictadd_"):
                 lang = act.split("_")[1]
                 store.pending_input[cid] = f"dictadd_{lang}"
@@ -457,13 +452,17 @@ async def answer_callback(update, context):
             elif act.startswith("dictdel_"):
                 _, lang, term_key = act.split("_", 2)
                 await learning.confirm_delete_dict_entry(bot, cid, lang, term_key, q=q)
+            elif act.startswith("dicteditpage_"):
+                rest = act[len("dicteditpage_"):]
+                lang, page = rest.rsplit("_", 1)
+                await learning.send_dict_manage(bot, cid, lang, page=int(page), q=q)
             elif act.startswith("dictedit_"):
                 rest = act[len("dictedit_"):]
                 if "_" in rest:
                     lang, page = rest.rsplit("_", 1)
-                    await learning.send_dict_lang(bot, cid, lang, page=int(page), q=q)
+                    await learning.send_dict_manage(bot, cid, lang, page=int(page), q=q)
                 else:
-                    await learning.send_dict_lang(bot, cid, rest, q=q)
+                    await learning.send_dict_manage(bot, cid, rest, q=q)
             elif act == "game":
                 await learning.game_start(bot, cid)
             elif act == "levels":
@@ -538,6 +537,55 @@ async def answer_callback(update, context):
         return
     if data in ("phrase_tf_yes", "phrase_tf_no"):
         await _inline_status(lambda _s: learning.phrase_truefalse_answer(bot, cid, data == "phrase_tf_yes"))
+        return
+    # Режим «3 минуты»
+    if data == "session3_start":
+        await _inline_status(lambda _s: learning.session3_start(bot, cid))
+        return
+    if data == "session3_mistake_ok":
+        await _inline_status(lambda _s: learning.session3_mistake_ok(bot, cid))
+        return
+    if data == "session3_again":
+        await _inline_status(lambda _s: learning.session3_again(bot, cid))
+        return
+    # Диалоговый тренажёр
+    if data == "dlg_start":
+        await _inline_status(lambda _s: learning.dialogue_start(bot, cid))
+        return
+    if data.startswith("dlg_pick_"):
+        opt_idx = int(data[len("dlg_pick_"):])
+        await _inline_status(lambda _s: learning.dialogue_pick(bot, cid, opt_idx))
+        return
+    if data == "dlg_next":
+        await _inline_status(lambda _s: learning.dialogue_next(bot, cid))
+        return
+    # Повторение ошибок (mistakeReview)
+    if data == "mistake_review":
+        await _inline_status(lambda _s: learning.send_mistake_review(bot, cid))
+        return
+    if data.startswith("mistake_retry_"):
+        mid = data[len("mistake_retry_"):]
+        await _inline_status(lambda _s: learning.mistake_retry(bot, cid, mid))
+        return
+    if data.startswith("mistake_understood_"):
+        mid = data[len("mistake_understood_"):]
+        await _inline_status(lambda _s: learning.mistake_understood(bot, cid, mid))
+        return
+    # Умное раскрытие ответа
+    if data == "smart_hint":
+        await learning.smart_reveal_show_hint(bot, cid, q)
+        return
+    if data == "smart_answer":
+        await learning.smart_reveal_ask_answer(bot, cid)
+        return
+    if data == "smart_skip":
+        await _inline_status(lambda _s: learning.smart_reveal_skip(bot, cid))
+        return
+    if data == "smart_understood":
+        await learning.smart_reveal_understood(bot, cid)
+        return
+    if data == "smart_later":
+        await learning.smart_reveal_later(bot, cid)
         return
     # «Ещё»
     if data.startswith("again_"):
@@ -729,6 +777,9 @@ async def text_router(update, context):
             return
     if cid in store.challenge_state:
         if await learning.translate_answer(bot, cid, text):
+            return
+    if cid in store.smart_reveal_state and store.pending_input.get(cid) == "smart_reveal_answer":
+        if await learning.smart_reveal_answer(bot, cid, text):
             return
 
     # Pending-ввод

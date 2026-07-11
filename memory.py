@@ -4,7 +4,6 @@
 Профиль - dict на пользователя: {"wardrobe_fb": [...], "observations": [...], "lagom": [...], "prefs": [...]}.
 """
 from datetime import datetime
-import json
 import re
 from pathlib import Path
 import config

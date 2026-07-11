@@ -137,7 +137,7 @@ for key, value in rows:
 cur.close()
 conn.close()
 
-print(f"\n✅ Готово:")
+print("\n✅ Готово:")
 print(f"   Очищено (убраны чужие cid): {cleaned}")
 print(f"   Удалено строк целиком: {deleted}")
 print(f"   Пропущено: {skipped}")

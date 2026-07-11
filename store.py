@@ -1,4 +1,3 @@
-import os
 import json
 import copy
 import logging
@@ -478,6 +477,9 @@ game_state = {}
 game_config = {}
 train_state = {}        # chat_id -> состояние тренажёра слов (формат/ответ/слово)
 train_polls = {}        # poll_id -> chat_id для native quiz poll
+smart_reveal_state = {}         # chat_id -> вопрос/подсказка «умного раскрытия» до ответа
+smart_reveal_result_state = {}  # chat_id -> результат «умного раскрытия», ждёт Понял/Повторить позже
+dialogue_state = {}     # chat_id -> состояние диалогового тренажёра (шаги, история реплик)
 dict_pending_add = {}   # chat_id -> нормализованная запись словаря, ожидающая подтверждения
 dict_pending_batch = {}  # chat_id -> [записи], предложенные из большого текста, ждут "Добавить всё"
 pending_input = {}

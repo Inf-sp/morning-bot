@@ -8,7 +8,6 @@ import store
 import ai
 import weather
 import util
-from util import esc
 import verify
 import secure
 import memory
@@ -51,13 +50,26 @@ def _today_label():
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
 
+def _weather_emoji(has_rain, flags):
+    """Эмодзи для строки погоды в карточке образа — по тому же приоритету, что и погодные правила
+    (дождь → ветер → солнце)."""
+    if has_rain:
+        return "🌧️"
+    if flags and flags.get("strong_wind"):
+        return "💨"
+    if flags and flags.get("sunny"):
+        return "☀️"
+    return "☁️"
+
+
 def _short_weather_line(tmax, cond, has_rain, flags):
-    """Короткая погодная строка для карточки образа, без LLM: 'Солнечно, тепло, около +25°C.'"""
+    """Короткая погодная строка для карточки образа, без LLM: '☀️ Солнечно, тепло, около +25°C.'"""
     if tmax is None:
         return ""
+    emoji = _weather_emoji(has_rain, flags)
     if has_rain:
         temp_word = "прохладно" if tmax < 17 else "тепло"
-        return f"Дождь, {temp_word}, около {tmax:+d}°C."
+        return f"{emoji} Дождь, {temp_word}, около {tmax:+d}°C."
     parts = []
     cond_low = str(cond or "").lower()
     if flags and flags.get("sunny"):
@@ -65,7 +77,7 @@ def _short_weather_line(tmax, cond, has_rain, flags):
     elif cond_low:
         parts.append(cond_low)
     parts.append("жарко" if tmax >= 24 else "тепло" if tmax >= 17 else "прохладно")
-    return f"{', '.join(parts).capitalize()}, около {tmax:+d}°C."
+    return f"{emoji} {', '.join(parts).capitalize()}, около {tmax:+d}°C."
 
 
 def _build_look_message(look_data):

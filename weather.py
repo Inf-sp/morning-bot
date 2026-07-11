@@ -782,8 +782,6 @@ def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="",
 # ---------- отправка ----------
 async def send_weather(bot, cid, mode="today"):
     s = store.get_settings(cid)
-    country = s.get("country", "")
-    place = f"{s['city']}, {country}" if country else s["city"]
     try:
         data = fetch_weather(s["lat"], s["lon"], 9)
     except WeatherDailyLimitExceeded:
@@ -807,7 +805,7 @@ async def send_weather(bot, cid, mode="today"):
         periods = []
         parts = [("Утром", 6, 12), ("Днём", 12, 18), ("Вечером", 18, 24)]
         for label, h1, h2 in parts:
-            t_vals, p_vals, w_vals, mm_vals, code_v = [], [], [], [], 1
+            t_vals, p_vals, w_vals, mm_vals = [], [], [], []
             for i, ts in enumerate(hours):
                 if ts.startswith(day_str) and h1 <= int(ts[11:13]) < h2:
                     if i < len(temps): t_vals.append(temps[i] or 0)

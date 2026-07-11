@@ -5,10 +5,8 @@ import config
 import store
 import learning
 import util
-from util import esc
 from ui import settings as settings_ui
 from ui.constants import cuisine_label, ui_label
-import onboarding_status as obs
 
 _log = logging.getLogger(__name__)
 
@@ -797,7 +795,7 @@ async def handle_callback(bot, cid, data, q=None):
     elif data.startswith("set_admin_issue_"):
         key = data[len("set_admin_issue_"):]
         import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_issue_detail(b, c, key))
     elif data == "set_admin_invite":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_invite(b, c, q))

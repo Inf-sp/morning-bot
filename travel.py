@@ -151,11 +151,6 @@ async def send_plan(bot, cid):
         await bot.send_message(chat_id=cid, text="Сначала выбери страну в Путешествиях."); return
     s = store.get_settings(cid)
     home = s.get("city", "дом")
-    visited = store.get_list(config.COUNTRIES_KEY, cid)
-    favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
-    fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
-    disliked = store.get_list(config.TRAVEL_DISLIKE_KEY, cid)
-    skip = ", ".join([str(x) for x in visited] + fav_names + [str(x) for x in disliked] + [country])
     facts = await asyncio.to_thread(research.country_facts, country)
     fblock = research.facts_block(facts)
     rfact = await asyncio.to_thread(research.wiki_fact, country)
