@@ -6,11 +6,13 @@
 
 Здесь только сборка текста. Логика/данные — в settings.py (send_admin_*).
 """
-from .builder import MessageBuilder, MessageSpec
+from .builder import MessageBuilder, MessageSpec, WARNING_EMOJI
 from .constants import STATUS_EMOJI, UI_EMOJI, ui_label
 
 # --- статус-точки (единственные допустимые «светофоры») ---
 OK, WARN, BAD, OFF = STATUS_EMOJI["ok"], STATUS_EMOJI["warn"], STATUS_EMOJI["bad"], "□"
+UNKNOWN = STATUS_EMOJI["unknown"]      # давно не было проверки - не значит "всё ок"
+WARNING = WARNING_EMOJI                # противоречивые/сломанные данные, а не статус сервиса
 
 
 def _num(n) -> str:
@@ -148,40 +150,51 @@ def welcome_admin():
     return b.build_stripped()
 
 
-def api_ai(status_dot, status_text, sub_line, fallback_line, ai_rows, api_rows,
-           last_failure, updated_at):
+def api_ai(status_dot, status_text, impact_line, fallback_line, unavailable_line,
+           ai_rows, api_rows, last_failure, updated_at):
     """Единый экран диагностики: § docs/admin.md «API и AI».
 
     status_dot/status_text: общий статус одной строкой ("🟡", "Работает с ограничениями").
-    sub_line: короткое пояснение ("Основные функции доступны · 1 сервис недоступен").
-    fallback_line: "Резерв AI: включён/выключен".
-    ai_rows / api_rows: list[str] - готовые строки "Сервис · роль · деталь".
-    last_failure: (internal_line, user_facing_text) | None.
+    impact_line: что это значит для функций ("Gemini недоступен · Готовка и Обучение
+    работают через Groq · остальные AI-функции могут не отвечать").
+    fallback_line: "включено"/"выключено" - сработает ли резервная AI-модель прямо сейчас.
+    unavailable_line: "Недоступно: N сервисов" | None, если всё в норме.
+    ai_rows / api_rows: list[str] - готовые строки "статус Сервис · роль · деталь".
+    last_failure: (kind_line, raw_msg, user_facing_text) | None.
     """
     b = MessageBuilder()
     b.bold("🔌 API и AI")
     b.newline()
     b.spacer()
-    b.line(f"{status_dot} {status_text}")
-    b.line(sub_line)
-    b.line(fallback_line)
+    b.bold(f"{status_dot} {status_text}")
+    b.newline()
+    b.line(impact_line)
     b.spacer()
-    b.bold("AI:")
+    b.line(f"Автопереключение: {fallback_line}")
+    if unavailable_line:
+        b.line(unavailable_line)
+    b.spacer()
+    b.bold("🤖 AI")
     b.newline()
     for line in ai_rows:
-        b.line(line)
+        b.line(str(line))
     b.spacer()
-    b.bold("Данные:")
+    b.bold("🌐 Данные")
     b.newline()
     for line in api_rows:
-        b.line(line)
+        b.line(str(line))
+    b.spacer()
     if last_failure:
-        internal_line, user_text = last_failure
-        b.spacer()
-        b.bold("Последний сбой:")
+        kind_line, raw_msg, user_text = last_failure
+        b.bold(f"{WARNING} Последняя ошибка")
         b.newline()
-        b.line(internal_line)
-        b.line(f"Ответ пользователю: «{user_text}»")
+        b.line(str(kind_line))
+        if raw_msg:
+            b.line(str(raw_msg))
+        b.spacer()
+        b.line(f"Пользователю: «{user_text}»")
+    else:
+        b.line("Последняя ошибка: нет")
     b.spacer()
     b.line(f"Обновлено в {updated_at}")
     return b.build_stripped()

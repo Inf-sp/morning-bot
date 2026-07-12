@@ -46,6 +46,7 @@ UI_EMOJI = {
     "status_ok": "🟢",
     "status_warn": "🟡",
     "status_bad": "🔴",
+    "status_unknown": "⚪",
     "admin": "🛠️",
     "welcome": "👋",
     "diagnostics": "📊",
@@ -152,6 +153,7 @@ STATUS_EMOJI = {
     "ok": UI_EMOJI["status_ok"],
     "warn": UI_EMOJI["status_warn"],
     "bad": UI_EMOJI["status_bad"],
+    "unknown": UI_EMOJI["status_unknown"],
 }
 
 

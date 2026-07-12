@@ -324,6 +324,8 @@ def _status(svc: dict, quotas: list[dict]):
             return "warn", "Использование растёт"
     if not svc.get("last_request_at"):
         return "off", "Запросов сегодня не было"
+    if int(time.time()) - int(svc.get("last_request_at") or 0) > 86400:
+        return "stale", "Давно не было проверки"
     return "ok", "В норме"
 
 
