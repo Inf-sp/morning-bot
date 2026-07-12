@@ -31,7 +31,7 @@ def closet_kb():
 
 def _look_result_kb():
     return _kb([
-        [("Надел", "w_fb_worn"), ("Не моё", "w_fb_nostyle")],
+        [("😍 Надел", "w_fb_worn"), ("🫥 Не моё", "w_fb_nostyle")],
         [("⬅️ Назад", "m_wardrobe")],
     ])
 
@@ -113,7 +113,7 @@ def _save_cached_look(cid, item_ids, look_data):
 # ---------- главный экран раздела (панель состояния) ----------
 def _wardrobe_home_kb():
     return _kb([
-        [("🔁 Обновить образ на сегодня", "w_look")],
+        [("✨ Обновить образ на сегодня", "w_look")],
         [("👕 Разбор гардероба", "w_improve")],
         [("🔍 Проверка покупки", "w_check")],
         [("👔 Мой гардероб", "set_wardrobe_g")],
@@ -236,9 +236,10 @@ async def send_looks(bot, cid, status=None):
         store.last_answer[str(cid)] = cached.get("text", "")
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
         text, entities = _build_look_message(cached.get("look_data", {}))
-        await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=_look_result_kb())
         if status is not None:
-            await status.stop(delete=False)
+            await status.replace(text, entities=entities, reply_markup=_look_result_kb())
+        else:
+            await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=_look_result_kb())
         return
     w = store.load_wardrobe(cid)
     wardrobe_text = store.wardrobe_to_text(w)
@@ -248,17 +249,14 @@ async def send_looks(bot, cid, status=None):
         ], [
             InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"),
         ]])
-        await bot.send_message(
-            chat_id=cid,
-            text=(
-                f"<b>{ui_label('empty_wardrobe', 'Шкаф пуст')}</b>\n\n"
-                "Чтобы собрать образ из твоих вещей, сначала добавь их в шкаф."
-            ),
-            parse_mode="HTML",
-            reply_markup=kb,
+        empty_text = (
+            f"<b>{ui_label('empty_wardrobe', 'Шкаф пуст')}</b>\n\n"
+            "Чтобы собрать образ из твоих вещей, сначала добавь их в шкаф."
         )
         if status is not None:
-            await status.stop(delete=False)
+            await status.replace(empty_text, parse_mode="HTML", reply_markup=kb)
+        else:
+            await bot.send_message(chat_id=cid, text=empty_text, parse_mode="HTML", reply_markup=kb)
         return
     s = store.get_settings(cid)
     status = status or await util.StatusManager.start(bot, cid)
@@ -384,12 +382,12 @@ _FB_ACK = {
     "worn": "Отметил: надел. Буду чаще предлагать похожее.",
 }
 
-async def look_feedback(bot, cid, verdict):
+async def look_feedback(bot, cid, verdict, status=None):
     look = store.last_look.get(str(cid), "")
     memory.add_wardrobe_feedback(cid, look, verdict)
     if verdict == "nostyle":
         store.clear_wardrobe_daylook(cid)
-        await send_looks(bot, cid)
+        await send_looks(bot, cid, status=status)
     else:
         await bot.send_message(chat_id=cid, text=_FB_ACK.get(verdict, "Запомнил — учту в следующих образах."))
 
@@ -862,23 +860,20 @@ async def ingest(bot, cid, text):
 async def handle_callback(bot, cid, q, data):
     if data == "w_look":
         store.clear_wardrobe_daylook(cid)
-        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+        status = await util.StatusManager.start(bot, cid=cid, message=q.message if q else None)
         try:
             await send_looks(bot, cid, status=status)
         except Exception as e:
             await status.stop(delete=False)
             await verify.safe_error(bot, cid, e)
-        finally:
-            await _restore_home_kb(q)
         return
     if data == "w_fb_nostyle":
-        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+        status = await util.StatusManager.start(bot, cid=cid, message=q.message if q else None)
         try:
-            await look_feedback(bot, cid, "nostyle")
+            await look_feedback(bot, cid, "nostyle", status=status)
         except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        finally:
             await status.stop(delete=False)
+            await verify.safe_error(bot, cid, e)
         return
     if data == "w_fb_worn":
         await look_feedback(bot, cid, "worn"); return
