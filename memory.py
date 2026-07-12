@@ -1,17 +1,13 @@
-"""Память пользователя («бот учится на тебе»): фидбек гардероба, наблюдения, Лагом, предпочтения.
+"""Память пользователя («бот учится на тебе»): фидбек гардероба, Лагом, предпочтения.
 
 Тонкий доменный слой поверх профиля в store (config.PROFILE_KEY). Без LLM и сети.
-Профиль - dict на пользователя: {"wardrobe_fb": [...], "observations": [...], "lagom": [...], "prefs": [...]}.
+Профиль - dict на пользователя: {"wardrobe_fb": [...], "lagom": [...], "prefs": [...]}.
 """
 from datetime import datetime
 import re
-from pathlib import Path
 import config
 import store
 
-_HERE = Path(__file__).parent
-
-_OBS_CAP = 30
 _FB_CAP = 20
 
 # коды вердиктов фидбека гардероба -> человеческие ярлыки
@@ -23,24 +19,6 @@ WARDROBE_VERDICTS = {
 
 def _today():
     return datetime.now(config.TZ).date().isoformat()
-
-
-# ---------- наблюдения ----------
-def add_observation(cid, tag, text):
-    """Лента наблюдений о пользователе (что сработало/что игнорирует). Cap _OBS_CAP."""
-    text = (text or "").strip()
-    if not text:
-        return
-    prof = store.get_profile(cid)
-    obs = prof.get("observations", [])
-    obs.append({"date": _today(), "tag": tag, "text": text})
-    prof["observations"] = obs[-_OBS_CAP:]
-    store.set_profile(cid, prof)
-
-
-def observations(cid, tag=None):
-    obs = store.get_profile(cid).get("observations", [])
-    return [o for o in obs if tag is None or o.get("tag") == tag]
 
 
 # ---------- фидбек гардероба ----------
@@ -150,35 +128,9 @@ def add_lagom_batch(cid, text: str) -> list:
 
 
 # ---------- Предпочтения пользователя (Memory Agent) ----------
-_PREFS_CAP = 50
-
-
-def add_preference(cid, text: str):
-    """Сохранить факт/предпочтение о пользователе (строка). Дубликаты отсекаются."""
-    text = (text or "").strip()
-    if not text:
-        return
-    prof = store.get_profile(cid)
-    prefs = prof.get("prefs", [])
-    if text not in prefs:
-        prefs.append(text)
-    prof["prefs"] = prefs[-_PREFS_CAP:]
-    store.set_profile(cid, prof)
-
-
 def get_preferences(cid) -> list:
     """Список сохранённых фактов о пользователе."""
     return store.get_profile(cid).get("prefs", [])
-
-
-def del_preference(cid, i: int):
-    """Удалить предпочтение по индексу."""
-    prefs = get_preferences(cid)
-    if 0 <= i < len(prefs):
-        prefs.pop(i)
-        prof = store.get_profile(cid)
-        prof["prefs"] = prefs
-        store.set_profile(cid, prof)
 
 
 def profile_hints(cid) -> str:

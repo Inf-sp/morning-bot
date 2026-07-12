@@ -9,7 +9,6 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-gemini")
 os.environ.setdefault("WEATHER_API_KEY", "test-weather")
 
-import admin
 import config
 import weather
 import requests
@@ -106,45 +105,6 @@ def test_success():
     print("ok: success response parsed")
 
 
-# 2) 401 без подписки на One Call 4.0
-def test_401_no_subscription():
-    body = '{"cod":401,"message":"Please subscribe to One Call by Call to use this API"}'
-
-    def _fake_get(url, params=None, timeout=None):
-        return _Resp(401, {}, text=body)
-
-    requests.get = _fake_get
-    label, ok, reason = admin._weather_probe()
-    assert label == "Weather"
-    assert ok is False
-    assert reason == "Нужна активация One Call API 4.0 в OpenWeather", reason
-    print("ok: 401 subscription mapped to friendly message")
-
-
-# 3) 429 превышен лимит
-def test_429_rate_limit():
-    def _fake_get(url, params=None, timeout=None):
-        return _Resp(429, {}, text="Too many requests")
-
-    requests.get = _fake_get
-    label, ok, reason = admin._weather_probe()
-    assert ok is False
-    assert "429" in reason
-    print("ok: 429 rate limit surfaced")
-
-
-# 4) timeout
-def test_timeout():
-    def _fake_get(url, params=None, timeout=None):
-        raise requests.exceptions.Timeout("Read timeout")
-
-    requests.get = _fake_get
-    label, ok, reason = admin._weather_probe()
-    assert ok is False
-    assert "timeout" in reason.lower()
-    print("ok: timeout handled")
-
-
 # 5) отсутствует current
 def test_missing_current():
     _reset_cache()
@@ -237,12 +197,6 @@ def test_no_alerts():
     print("ok: no alerts leaves empty alert list")
 
 
-def test_labels_present():
-    labels = [row[0] for row in admin._external_api_probe_results()]
-    assert "Weather" in labels
-    print("ok: Weather label present in health-check probes")
-
-
 def test_no_stale_references():
     for path in ("weather.py", "research.py", "docs/weather.md"):
         text = open(ROOT / path, encoding="utf-8").read()
@@ -253,13 +207,9 @@ def test_no_stale_references():
 
 if __name__ == "__main__":
     test_success()
-    test_401_no_subscription()
-    test_429_rate_limit()
-    test_timeout()
     test_missing_current()
     test_missing_daily()
     test_missing_precipitation()
     test_no_alerts()
-    test_labels_present()
     test_no_stale_references()
     print("ok: weather uses OpenWeatherMap One Call API 4.0 via WEATHER_API_KEY")

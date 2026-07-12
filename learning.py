@@ -1374,21 +1374,6 @@ def generate_challenge(language, level):
                   f"бытовая/рабочая ситуация. Только русская фраза, без кавычек.", 200, 1.0, tier="cheap").strip()
 
 
-def generate_challenge_with_hint(language, level):
-    """Для «умного раскрытия»: фраза + короткая подсказка (ключевая конструкция/слово),
-    одним запросом — подсказку показываем по кнопке до того, как известен полный ответ."""
-    level_label = LEVEL_LABELS.get(level, "средний")
-    d = ai.llm_json(
-        f"Дай ОДНУ фразу на русском для перевода на {language}. Уровень сложности: "
-        f"{level_label.lower()}, бытовая/рабочая ситуация.\n"
-        "Дай также короткую подсказку — ключевую конструкцию или слово, которое понадобится "
-        "в переводе (не сам перевод целиком, а только намёк).\n"
-        'JSON: {"ru": "русская фраза", "hint": "короткая подсказка на русском"}',
-        300, tier="cheap")
-    ru = str((d or {}).get("ru") or "").strip()
-    hint = str((d or {}).get("hint") or "").strip()
-    return ru, hint
-
 def check_translation(language, ru, answer):
     return ai.llm_json(f"""Ученик переводит с русского на {language}.
 Русская фраза: {ru}
@@ -1429,24 +1414,6 @@ async def translate_answer(bot, cid, text):
 
 
 # ================= УМНОЕ РАСКРЫТИЕ ОТВЕТА =================
-async def smart_reveal_start(bot, cid, lang):
-    """Карточка с прогрессивным раскрытием: сначала вопрос, подсказка — по кнопке,
-    ответ — текстом, результат — с «Понял»/«Повторить позже»."""
-    store.pending_input.pop(str(cid), None)
-    store.game_state.pop(str(cid), None)
-    level = store.get_level(cid, lang)
-    try:
-        ru, hint = generate_challenge_with_hint(lang, level)
-    except Exception as e:
-        await verify.safe_error(bot, cid, e); return
-    if not ru:
-        await bot.send_message(chat_id=cid, text="Не получилось собрать вопрос. Попробуй ещё раз."); return
-    store.smart_reveal_state[str(cid)] = {"ru": ru, "hint": hint, "lang": lang, "hint_shown": False}
-    msg = learning_ui.smart_reveal_question(_flag(lang), ru)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                            reply_markup=learning_ui.smart_reveal_kb())
-
-
 async def smart_reveal_show_hint(bot, cid, q=None):
     st = store.smart_reveal_state.get(str(cid))
     if not st:

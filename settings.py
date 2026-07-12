@@ -718,21 +718,12 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "adm_home":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
-    elif data == "adm_check_all":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.check_system(b, c, q))
-    elif data == "adm_system":
+    elif data in ("adm_check_all", "adm_system", "adm_system_check"):
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
-    elif data == "adm_system_check":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.check_system(b, c, q))
-    elif data in ("adm_diag", "adm_diag_api", "adm_diag_llm", "adm_diag_news", "adm_api_ai"):
+    elif data in ("adm_diag", "adm_diag_api", "adm_diag_llm", "adm_diag_news", "adm_api_ai", "adm_api_ai_check"):
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))
-    elif data == "adm_api_ai_check":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.check_api_ai(b, c, q))
     elif data == "adm_logs":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))
@@ -770,32 +761,22 @@ async def handle_callback(bot, cid, data, q=None):
     elif data in ("set_admin_llm", "set_admin_news", "set_admin_llmcheck", "set_admin_llmhistory"):
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))
-    elif data == "set_admin_broadcast":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_notifications(b, c, q))
-    elif data == "set_admin_broadcast_test_pick":
+    elif data in ("set_admin_broadcast", "set_admin_broadcast_test_pick"):
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_notifications(b, c, q))
     elif data.startswith("set_admin_broadcast_test_"):
         kind = data[len("set_admin_broadcast_test_"):]
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c, kind=kind: _adm.run_test(b, c, kind))
-    elif data == "set_admin_issues":
+    elif data in ("set_admin_issues", "set_admin_check_all") or data.startswith("set_admin_issue_"):
         import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))
-    elif data == "set_admin_check_all":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.check_system(b, c, q))
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
     elif data == "set_admin_api_diagnostics":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))
     elif data == "set_admin_cache_clear":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.clear_cache(b, c, q))
-    elif data.startswith("set_admin_issue_"):
-        key = data[len("set_admin_issue_"):]
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_issue_detail(b, c, key))
     elif data == "set_admin_invite":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_invite(b, c, q))

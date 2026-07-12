@@ -303,15 +303,6 @@ def get_weather_usage(dt=None):
     return out
 
 
-def get_weather_usage_last_days(days=7):
-    today = datetime.now(TZ).date()
-    rows = []
-    for i in range(max(1, days)):
-        day = today - timedelta(days=i)
-        rows.append(get_weather_usage(datetime(day.year, day.month, day.day, tzinfo=TZ)))
-    return rows
-
-
 def _reserve_weather_request(is_retry=False):
     now = datetime.now(TZ)
 
@@ -355,28 +346,6 @@ def _mark_weather_cache_hit():
         return data, True
     _usage_mutate(_mut)
     api_usage.record_cache_hit("openweather")
-
-
-def weather_usage_status(usage=None):
-    usage = usage or get_weather_usage()
-    total = int(usage.get("requests_total") or 0)
-    if total >= config.WEATHER_HARD_DAILY_LIMIT:
-        return "blocked"
-    if total >= config.WEATHER_CRITICAL_LIMIT:
-        return "critical"
-    if total >= config.WEATHER_WARNING_LIMIT:
-        return "warning"
-    return "ok"
-
-
-def weather_usage_status_text(usage=None):
-    status = weather_usage_status(usage)
-    return {
-        "ok": "🟢 Лимит в норме",
-        "warning": "🟡 Использование растёт",
-        "critical": "🟡 Почти достигнут бесплатный лимит",
-        "blocked": "🔴 Новые запросы заблокированы до следующего дня",
-    }[status]
 
 
 def _http_get_counted(url, *, params=None, timeout=20, is_retry=False):
@@ -514,17 +483,6 @@ def fetch_current_temp(lat, lon):
 
 
 # ---------- ветер ----------
-def wind_direction_text(deg):
-    """Градусы метео-направления → русское название (откуда дует)."""
-    if deg is None:
-        return ""
-    sectors = [
-        "северный", "северо-восточный", "восточный", "юго-восточный",
-        "южный", "юго-западный", "западный", "северо-западный",
-    ]
-    return sectors[round(float(deg) / 45) % 8]
-
-
 def wind_scale(ms):
     if ms < 3:
         return "🌬️", "Почти без ветра"
@@ -571,21 +529,6 @@ def _weather_main_lines(icon, tmax, rain, rain_mm, rain_when, wind_ms):
     if wind_ms >= 8:
         return [first, "", wind_str]
     return [f"{first} • {wind_str}"]
-
-
-def rain_character(code, rain_mm, rain_prob, data, day_str):
-    """Доп. фраза о характере осадков — только для нетривиальных типов."""
-    if not _rain_real(rain_prob, rain_mm):
-        return ""
-    if code in (95, 96, 99):
-        return "Возможны кратковременные грозы"
-    if code in (65, 82):
-        return "Сильный дождь" + (f" ({rain_mm:.0f} мм)" if rain_mm else "")
-    if code in (80, 81):
-        return "Ливень"
-    if code in (51, 53, 55):
-        return "Морось"
-    return ""
 
 
 def humidity_phrase(data, day_str, tmax, cc):
@@ -651,19 +594,6 @@ def _periods(data, day_str, key, threshold):
                 break
     # порядок: утром, днём, вечером, ночью
     return [p for p in ["утром", "днём", "вечером", "ночью"] if p in hit]
-
-
-# ---------- дневное среднее ветра ----------
-def _daytime_avg_wind(data, day_str):
-    """Среднее ветра 6–21ч из hourly — то, что показывают Buienradar/KNMI вместо суточного пика."""
-    try:
-        hours = data["hourly"]["time"]
-        vals = data["hourly"]["windspeed_10m"]
-    except Exception:
-        return None
-    day_vals = [v for t, v in zip(hours, vals)
-                if t.startswith(day_str) and 6 <= int(t[11:13]) < 21 and v is not None]
-    return sum(day_vals) / len(day_vals) if day_vals else None
 
 
 def _daytime_max(data, day_str, key):

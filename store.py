@@ -115,30 +115,6 @@ def set_settings(chat_id, lat, lon, city, country="", cc=""):
     _save(config.SETTINGS_FILE, d)
 
 
-def get_last_deploy_report_version():
-    state = _load(config.DEPLOY_REPORT_KEY)
-    return str(state.get("last_sent_version", "") or "")
-
-
-def set_last_deploy_report_version(version):
-    state = _load(config.DEPLOY_REPORT_KEY)
-    state["last_sent_version"] = str(version or "")
-    _save(config.DEPLOY_REPORT_KEY, state)
-
-
-def get_last_deploy_report_key():
-    state = _load(config.DEPLOY_REPORT_KEY)
-    return str(state.get("last_sent_deploy_key", "") or state.get("last_sent_version", "") or "")
-
-
-def set_last_deploy_report(version, deploy_key, sent_at):
-    state = _load(config.DEPLOY_REPORT_KEY)
-    state["last_sent_version"] = str(version or "")
-    state["last_sent_deploy_key"] = str(deploy_key or "")
-    state["sent_at"] = str(sent_at or "")
-    _save(config.DEPLOY_REPORT_KEY, state)
-
-
 def get_last_admin_deploy_notified_version():
     state = _load(config.DEPLOY_REPORT_KEY)
     return str(

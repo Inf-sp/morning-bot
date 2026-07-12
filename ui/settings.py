@@ -84,39 +84,12 @@ def lagom_input():
     return b.build()
 
 
-def list_add_prompt(kind):
-    prompts = {
-        "country": f"{ui_label('countries', '')} Напиши страну - добавлю в список.",
-        "artist": f"{ui_label('music', '')} Напиши имя артиста - добавлю в список.",
-        "book": f"{ui_label('books', '')} Напиши название книги - добавлю в список.",
-    }
-    return MessageSpec(text=prompts.get(kind, "Напиши элемент - добавлю в список."))
-
-
-def list_added(kind, item):
-    icons = {
-        "country": ui_label("countries", "").strip(),
-        "artist": ui_label("music", "").strip(),
-        "book": ui_label("books", "").strip(),
-    }
-    return MessageSpec(text=f"✅ {icons.get(kind, '')} «{item}» добавлено.")
-
-
 def style_custom_input():
     b = MessageBuilder()
     b.text_line("Опиши свой стиль — как хочешь выглядеть, что нравится, что нет.")
     b.blank()
     b.italic("Например: «Люблю тёмные оттенки, оверсайз-силуэты, минимум принтов. Стараюсь избегать костюмов.»")
     return b.build()
-
-
-def body_input():
-    b = MessageBuilder()
-    b.section("Особенности телосложения")
-    b.line("Напиши свободным текстом — рост и комплекцию.")
-    b.spacer()
-    b.italic("Пример: рост 178 см, худощавое телосложение.")
-    return b.build_stripped()
 
 
 def style_pick():
@@ -138,33 +111,6 @@ def mydata_section(title, hint=""):
     if hint:
         b.line(hint)
     return b.build_stripped()
-
-
-def leisure_settings():
-    b = MessageBuilder()
-    b.section("🍿 Настройки досуга")
-    b.line("Кино, страны, артисты и книги для рекомендаций.")
-    return b.build_stripped()
-
-
-def list_section(title, items, empty_hint="Пока пусто — добавь первый элемент."):
-    b = MessageBuilder()
-    b.section(title)
-    if not items:
-        b.line(empty_hint)
-    return b.build_stripped()
-
-
-def countries_home():
-    return MessageBuilder().section("🌍 Мои страны").build_stripped()
-
-
-def artists_home(items):
-    return list_section("🎧 Мои музыканты", items)
-
-
-def books_home(items):
-    return list_section("📚 Мои книги", items)
 
 
 def lagom_home(items):

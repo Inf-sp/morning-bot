@@ -111,36 +111,6 @@ def active_count(days: int = 1) -> int:
     return sum(1 for r in _all().values() if r.get("last_ts", 0) >= cutoff)
 
 
-def new_today() -> int:
-    """Сколько пользователей впервые появились сегодня (по first_ts)."""
-    cutoff = time.time() - DAY
-    return sum(1 for r in _all().values() if r.get("first_ts", 0) >= cutoff)
-
-
-def avg_messages() -> float:
-    """Среднее число действий на пользователя среди тех, у кого есть активность."""
-    recs = list(_all().values())
-    if not recs:
-        return 0.0
-    total = sum(r.get("count", 0) for r in recs)
-    return round(total / len(recs), 1)
-
-
-def active_days_30(cid) -> int:
-    """Сколько уникальных дней пользователь был активен за последние 30 суток."""
-    days = get_activity(cid).get("days", [])
-    cutoff = (datetime.now(timezone.utc).timestamp() - 30 * DAY)
-    cnt = 0
-    for d in days:
-        try:
-            ts = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()
-            if ts >= cutoff:
-                cnt += 1
-        except Exception:
-            continue
-    return cnt
-
-
 # ================= ФОРМАТИРОВАНИЕ (единый компонент для 3 мест) =================
 
 def human_last_seen(cid) -> str:

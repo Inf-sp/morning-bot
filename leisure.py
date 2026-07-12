@@ -1188,29 +1188,6 @@ async def add_reco(bot, cid, i):
     ni = len(rec["items"]) - 1
     await _send_book_card(bot, cid, it, ni)
 
-def _list_text(it):
-    return it.get("name", "") if isinstance(it, dict) else str(it)
-
-async def send_watchlist(bot, cid):
-    lst = store.get_list(config.WATCHLIST_KEY, cid)
-    rows = []
-    if lst:
-        rows.append([InlineKeyboardButton("❌ Очистить список", callback_data="a_watchclean")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
-    await bot.send_message(chat_id=cid,
-        text="🍿 Посмотреть:\n" + ("\n".join(f"• {_list_text(x)}" for x in lst) if lst else "пусто"),
-        reply_markup=InlineKeyboardMarkup(rows))
-
-async def send_readlist(bot, cid):
-    lst = store.get_list(config.READLIST_KEY, cid)
-    rows = []
-    if lst:
-        rows.append([InlineKeyboardButton("❌ Очистить список", callback_data="a_readclean")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")])
-    await bot.send_message(chat_id=cid,
-        text="📚 Почитать:\n" + ("\n".join(f"• {_list_text(x)}" for x in lst) if lst else "пусто"),
-        reply_markup=InlineKeyboardMarkup(rows))
-
 def _listen_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data="a_listen_no")],
@@ -1404,26 +1381,6 @@ async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3,
             seen_pairs.add(pair)
             found[e.get("id") or f"{artist}:{date}:{e.get('name', '')}"] = e
     return sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate") or "9999-99-99")
-
-def _web_concert_links_for_artists(artists, country_name, limit_artists=8, per_artist=2):
-    """Fallback через веб-поиск: Songkick/Bandsintown/официальные страницы, если Ticketmaster пуст."""
-    rows, seen = [], set()
-    domains = ("songkick.com", "bandsintown.com", "ticketmaster.", "eventim.", "livenation.")
-    for artist in artists[:limit_artists]:
-        query = f'{artist} concerts {country_name} Songkick Bandsintown official tour'
-        for result in research.web_search(query, max_results=6):
-            url = (result.get("url") or "").strip()
-            title = (result.get("title") or "").strip()
-            if not url or url in seen:
-                continue
-            low = url.lower()
-            if not any(domain in low for domain in domains):
-                continue
-            seen.add(url)
-            rows.append({"artist": str(artist), "title": title or str(artist), "url": url})
-            if sum(1 for r in rows if r["artist"] == str(artist)) >= per_artist:
-                break
-    return rows
 
 _GENRE_TRANSLATIONS = {
     "rock": "Рок", "pop": "Поп", "hip-hop/rap": "Хип-хоп", "hip hop": "Хип-хоп",
@@ -1716,32 +1673,6 @@ async def find_concerts(bot, cid, mode="home"):
                            disable_web_page_preview=True)
 
 
-
-
-async def _rank_concerts_by_taste(events, artists):
-    """LLM выбирает до 3 самых интересных концертов из уже найденных, близких вкусу пользователя."""
-    names = [e.get("_artist", "") for e in events if e.get("_artist")]
-    if not names:
-        return events[:3]
-    anchors = ", ".join(artists[:25])
-    try:
-        picked = await ai.allm_json(
-            "Ты — музыкальный куратор. Дан список артистов из афиши города и вкус пользователя.\n"
-            f"Вкус пользователя (любимые артисты): {anchors}.\n"
-            f"Афиша (артисты в городе): {', '.join(names[:30])}.\n"
-            "Выбери до 3 самых интересных пользователю имён из афиши (ближе по жанру/стилю к его вкусу).\n"
-            'JSON: {"picks": ["имя 1", "имя 2", "имя 3"]}',
-            300, tier="cheap")
-    except Exception:
-        return events[:3]
-    picks = [str(p).lower() for p in (picked or {}).get("picks", [])] if isinstance(picked, dict) else []
-    if not picks:
-        return events[:3]
-    by_name = {}
-    for e in events:
-        by_name.setdefault(e.get("_artist", "").lower(), e)
-    ranked = [by_name[p] for p in picks if p in by_name]
-    return ranked[:3] if ranked else events[:3]
 
 
 async def send_weekly_events(bot, cid):

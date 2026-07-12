@@ -55,10 +55,6 @@ def get_app_version() -> str:
     return _normalize_app_version(config.APP_VERSION or config._read_text_file("VERSION"))
 
 
-def get_current_deploy_key() -> str:
-    return get_app_version()
-
-
 def _release_heading(line: str) -> tuple[str, str] | None:
     line = line.strip()
     if not line.startswith("## "):
@@ -216,10 +212,6 @@ async def maybe_send_admin_deploy_notification(bot):
             config.ADMIN_CHAT_ID,
             started_at,
         )
-
-
-async def send_deploy_report_to_admin(bot):
-    await maybe_send_admin_deploy_notification(bot)
 
 
 async def start(update, context):

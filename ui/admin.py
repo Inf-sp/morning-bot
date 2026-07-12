@@ -86,7 +86,6 @@ def users(stats, users_list, users_total, updated_at):
     b.spacer()
     b.line("Инвайты:")
     b.line(f"Активных: {stats.get('active_invites', 0)}")
-    b.line(f"Использовано: {stats.get('used_invites', 0)}")
 
     if users_list:
         b.spacer()
@@ -386,38 +385,6 @@ def notification_picker(options):
         b.line(opt.title)
         b.line(opt.schedule_label)
         b.spacer()
-    return b.build_stripped()
-
-
-# ================= ПРОБЛЕМЫ =================
-
-def issues(rows, checked_when):
-    """rows: [(dot, name, detail)]. Пусто -> «проблем нет»."""
-    b = MessageBuilder()
-    b.bold("⚠️ Проблемы")
-    b.newline()
-    b.spacer()
-    if not rows:
-        b.line(f"{OK} Открытых проблем нет")
-        b.spacer()
-        b.line(f"Последняя проверка · {checked_when}")
-        return b.build_stripped()
-    for dot, name, detail in rows:
-        b.line(f"{dot} {name}")
-        b.line(detail)
-        b.spacer()
-    return b.build_stripped()
-
-
-def issue_detail(when, source, dot, msg):
-    b = MessageBuilder()
-    b.bold("🔍 Подробнее")
-    b.newline()
-    b.spacer()
-    b.metric("Время", when)
-    b.metric("Источник", f"{dot} {source}")
-    b.spacer()
-    b.code(msg or "—")
     return b.build_stripped()
 
 

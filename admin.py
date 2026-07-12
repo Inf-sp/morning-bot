@@ -261,56 +261,20 @@ async def send_home(bot, cid, q=None):
 # ================= ПОЛЬЗОВАТЕЛИ =================
 
 def _user_stats():
-    import onboarding_status as obs
     from settings import notif_on, NOTIF_TYPES
     cids = access.get_allowed_cids()
-    onboarded = 0
-    all_off = 0
-    with_notifications = 0
-    for c in cids:
-        if all(obs.is_settled(c, s) for s in obs.SECTIONS):
-            onboarded += 1
-        any_notif = any(notif_on(c, k) for k, _ in NOTIF_TYPES)
-        if any_notif:
-            with_notifications += 1
-        else:
-            all_off += 1
+    with_notifications = sum(1 for c in cids if any(notif_on(c, k) for k, _ in NOTIF_TYPES))
     cutoff = time.time() - 7 * DAY
     activities = tracking._all()
     new_7d = sum(1 for r in activities.values() if r.get("first_ts", 0) >= cutoff)
-    total = len(cids)
     return {
-        "total": total,
-        "new_today": tracking.new_today(),
+        "total": len(cids),
         "new_7d": new_7d,
-        "active_1d": tracking.active_count(1),
         "active_7d": tracking.active_count(7),
-        "onboarded": onboarded,
-        "not_onboarded": total - onboarded,
-        "all_off": all_off,
         "with_notifications": with_notifications,
         "admins": sum(1 for c in cids if access.is_owner(c)),
         "active_invites": len(access.pending_invites()),
-        "used_invites": 0,
-        "avg_msgs": tracking.avg_messages(),
     }
-
-
-def _last_active_user():
-    """Самый недавно активный пользователь -> (dot, name, city, action, when) | None."""
-    best_cid, best_ts = None, 0
-    for c in access.get_allowed_cids():
-        ts = tracking.get_activity(c).get("last_ts", 0)
-        if ts > best_ts:
-            best_cid, best_ts = c, ts
-    if not best_cid:
-        return None
-    prof = store.get_profile(best_cid)
-    settings = store.get_settings(best_cid)
-    name = prof.get("name") or f"ID {str(best_cid)[:4]}…"
-    city = settings.get("city", "")
-    action = store.last_source.get(str(best_cid), "")
-    return (tracking.churn_dot(best_cid), name, city, action, tracking.human_last_seen(best_cid))
 
 
 _USERS_LIST_LIMIT = 15
@@ -592,225 +556,6 @@ def get_llm_usage_summary(period_days=1):
         "providers": providers,
     }
 
-async def _llm_probe_results():
-    import ai
-    probes = [("Cloudflare", "cf"), ("Gemini", "gemini"), ("Groq", "groq")]
-    results = []
-    for label, route in probes:
-        configured, missing = _provider_configured(route)
-        if not configured:
-            detail = "ошибка ключа / доступа" if route == "gemini" else f"нет ключа: {missing}"
-            results.append((label, False, detail))
-            continue
-        if route == "gemini":
-            state = ai.gemini_status()
-            if state.get("cooldown_active"):
-                results.append((label, False, f"cooldown до {_hhmm(state.get('cooldown_until'))}", ui.WARN))
-                continue
-            if state.get("last_429_at") and state.get("last_429_at") >= time.time() - DAY and state.get("last_error_reason"):
-                results.append((label, False, "лимит запросов", ui.BAD))
-                continue
-        try:
-            await ai.allm("Ответь одним словом: ok", 10, 0.0, order=(route,), module="admin")
-            results.append((label, True, ""))
-        except Exception as e:
-            if route == "gemini":
-                text = str(e).lower()
-                if "429" in text or "rate" in text or "лимит" in text:
-                    results.append((label, False, "лимит запросов", ui.BAD))
-                elif "401" in text or "403" in text or "key" in text or "access" in text:
-                    results.append((label, False, "ошибка ключа / доступа", ui.BAD))
-                else:
-                    results.append((label, False, "ошибка проверки", ui.BAD))
-            else:
-                results.append((label, False, _issue_summary("llm", f"{route}:{e}")[:60]))
-    return results
-
-
-async def _api_probe_results():
-    import asyncio
-    llm_results = await _llm_probe_results()
-    external_results = await asyncio.to_thread(_external_api_probe_results)
-    return llm_results + external_results
-
-
-_WEATHER_ONECALL_ENDPOINT = "https://api.openweathermap.org/data/4.0/onecall/current"
-_TAVILY_SEARCH_ENDPOINT = "https://api.tavily.com/search"
-
-
-def _weather_probe():
-    """Health-check One Call API 4.0. Не логирует ключ и query-параметры."""
-    if not config.WEATHER_API_KEY:
-        return ("Weather", False, "нет ключа")
-    try:
-        import weather
-        weather._onecall_get("current", 52.37, 4.89, timeout=12)
-    except Exception as e:
-        response = getattr(e, "response", None)
-        if response is not None and getattr(response, "status_code", None) == 401:
-            body = ""
-            try:
-                body = (response.text or "")[:200]
-            except Exception:
-                pass
-            if "subscri" in body.lower():
-                reason = "Нужна активация One Call API 4.0 в OpenWeather"
-            else:
-                reason = _http_error(response)
-        elif response is not None:
-            reason = _http_error(response)
-            if reason.startswith("HTTP 429: LLM:"):
-                reason = reason.replace("HTTP 429: LLM:", "HTTP 429:", 1)
-        else:
-            reason = _probe_exception(e)
-        _log.warning("weather probe failed: endpoint=%s reason=%s", _WEATHER_ONECALL_ENDPOINT, reason)
-        return ("Weather", False, reason)
-    return ("Weather", True, "")
-
-
-def _external_api_probe_results():
-    import requests
-
-    def missing(name):
-        return (name, False, "нет ключа")
-
-    def http_probe(label, key, method, url, **kwargs):
-        if not key:
-            return missing(label)
-        try:
-            timeout = kwargs.pop("timeout", 12)
-            r = requests.request(method, url, timeout=timeout, **kwargs)
-            if 200 <= r.status_code < 300:
-                return (label, True, "")
-            return (label, False, _http_error(r))
-        except Exception as e:
-            return (label, False, _probe_exception(e))
-
-    def tavily_probe():
-        configured = bool(config.TAVILY_API_KEY)
-        if not configured:
-            return ("Tavily", False, "ключ отсутствует, неверный или отозван")
-        try:
-            r = requests.post(
-                _TAVILY_SEARCH_ENDPOINT,
-                json={
-                    "api_key": config.TAVILY_API_KEY,
-                    "query": "Amsterdam",
-                    "max_results": 1,
-                    "search_depth": "basic",
-                    "include_answer": False,
-                    "include_raw_content": False,
-                    "include_images": False,
-                },
-                timeout=12,
-            )
-            if 200 <= r.status_code < 300:
-                return ("Tavily", True, "")
-            if r.status_code == 401:
-                return ("Tavily", False, "ключ отсутствует, неверный или отозван")
-            if r.status_code == 429:
-                return ("Tavily", False, "лимит запросов исчерпан", ui.WARN)
-            reason = (getattr(r, "reason", "") or "HTTP error")[:80]
-            return ("Tavily", False,
-                    f"HTTP {r.status_code}; HTTPError: {reason}; "
-                    f"endpoint: {_TAVILY_SEARCH_ENDPOINT}; configured: yes")
-        except requests.exceptions.Timeout:
-            return ("Tavily", False, "сервис временно не ответил", ui.WARN)
-        except Exception as e:
-            exc_type = type(e).__name__
-            msg = str(e).replace(config.TAVILY_API_KEY, "[redacted]")[:80]
-            return ("Tavily", False,
-                    f"HTTP n/a; {exc_type}: {msg}; "
-                    f"endpoint: {_TAVILY_SEARCH_ENDPOINT}; configured: {'yes' if configured else 'no'}")
-
-    results = [
-        http_probe(
-            "Telegram",
-            config.TELEGRAM_TOKEN,
-            "GET",
-            f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/getMe",
-        ),
-        http_probe(
-            "TMDB",
-            config.TMDB_API_KEY,
-            "GET",
-            "https://api.themoviedb.org/3/configuration",
-            params={"api_key": config.TMDB_API_KEY},
-        ),
-        http_probe(
-            "Ticketmaster",
-            config.TICKETMASTER_API_KEY,
-            "GET",
-            "https://app.ticketmaster.com/discovery/v2/events.json",
-            params={"apikey": config.TICKETMASTER_API_KEY, "countryCode": "NL", "size": 1},
-        ),
-        tavily_probe(),
-        _weather_probe(),
-        http_probe(
-            "Pexels",
-            config.PEXELS_API_KEY,
-            "GET",
-            "https://api.pexels.com/v1/search",
-            headers={"Authorization": config.PEXELS_API_KEY},
-            params={"query": "breakfast", "per_page": 1},
-        ),
-        http_probe(
-            "ZeroEntropy",
-            config.ZEROENTROPY_API_KEY,
-            "POST",
-            "https://api.zeroentropy.dev/v1/models/rerank",
-            headers={"Authorization": f"Bearer {config.ZEROENTROPY_API_KEY}", "Content-Type": "application/json"},
-            json={"model": "zerank-2", "query": "test", "documents": ["test document"], "top_n": 1, "latency": "fast"},
-        ),
-    ]
-    return results
-
-
-def _http_error(response):
-    try:
-        body = response.text or ""
-    except Exception:
-        body = ""
-    summary = _issue_summary("llm", body)
-    if summary.endswith("сбой генерации"):
-        summary = body[:80] or response.reason or "ошибка"
-    return f"HTTP {response.status_code}: {summary[:80]}"
-
-
-def _probe_exception(exc):
-    text = str(exc)
-    if "NameResolutionError" in text or "Failed to resolve" in text:
-        return "нет сетевого доступа/DNS"
-    if "timeout" in text.lower():
-        return "timeout"
-    return text[:80]
-
-
-def _provider_configured(route):
-    if route == "openrouter":
-        return bool(config.OPENROUTER_API_KEY), "OPENROUTER_API_KEY"
-    if route == "gemini":
-        return bool(config.GEMINI_API_KEY), "GEMINI_API_KEY"
-    if route == "groq":
-        return bool(config.GROQ_API_KEY), "GROQ_API_KEY"
-    if route == "cf":
-        ok = bool(config.CF_API_TOKEN and config.CF_ACCOUNT_ID)
-        return ok, "CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID"
-    return False, route
-
-
-# ================= ПРОБЛЕМЫ =================
-
-_ISSUES_CACHE = {}
-
-
-def _issue_key(ts, source, kind) -> str:
-    """Стабильный короткий ключ проблемы (не зависит от позиции в списке).
-    Хешируем: source/kind могут быть длинными, а callback_data ограничен 64 байтами."""
-    import hashlib
-    raw = f"{ts}:{source}:{kind}"
-    return hashlib.sha1(raw.encode()).hexdigest()[:16]
-
 
 def _issue_summary(source, msg):
     msg = str(msg or "")
@@ -846,76 +591,6 @@ def _issue_summary(source, msg):
     return msg[:50]
 
 
-def _collect_issues():
-    """Реальные проблемы из error-лога за сегодня (без внешних пингов) — дёшево, для дома/списка.
-
-    rows: [(key, dot, name, detail)]."""
-    errs = tracking.get_errors(limit=50)
-    cutoff = time.time() - DAY
-    rows = []
-    for e in errs:
-        ts = e.get("ts", 0)
-        if ts < cutoff:
-            continue
-        source = e.get("source", "?")
-        kind = e.get("kind", "")
-        dot = ui.BAD if source in ("llm", "service") else ui.WARN
-        rows.append((_issue_key(ts, source, kind), dot, source, f"{_issue_summary(source, e.get('msg', ''))} · {_when(ts)}"))
-    return rows
-
-
-async def _collect_issues_with_probes(cid):
-    """То же самое + активный health-check БД/Weather/LLM API."""
-    rows = _collect_issues()
-    now = int(time.time())
-    try:
-        store._load("__health__")
-    except Exception as e:
-        rows.append((_issue_key(now, "service", "db"), ui.BAD, "База данных", str(e)[:40]))
-    try:
-        import asyncio
-        import weather
-        s = store.get_settings(cid)
-        await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 1)
-    except Exception:
-        rows.append((_issue_key(now, "service", "weather"), ui.BAD, "Weather", f"недоступна · {_when(now)}"))
-    try:
-        for result in await _api_probe_results():
-            label, ok, detail = result[:3]
-            if not ok:
-                source = "llm" if label in {"OpenRouter", "Cloudflare", "Gemini", "Groq"} else "service"
-                rows.append((_issue_key(now, source, label), ui.BAD, label, f"{detail} · {_when(now)}"))
-    except Exception as e:
-        rows.append((_issue_key(now, "llm", "probe"), ui.BAD, "LLM", f"{_issue_summary('llm', str(e))} · {_when(now)}"))
-    return rows
-
-
-async def send_issues(bot, cid, with_probes=False):
-    rows = await _collect_issues_with_probes(cid) if with_probes else _collect_issues()
-    kb_rows = []
-    for key, dot, name, detail in rows:
-        kb_rows.append([InlineKeyboardButton(f"{dot} {name}", callback_data=f"set_admin_issue_{key}")])
-    kb_rows.append([InlineKeyboardButton("Проверить API", callback_data="set_admin_check_all"),
-                     InlineKeyboardButton("Очистить ошибки", callback_data="set_admin_cache_clear")])
-    kb_rows.append(_back())
-    _ISSUES_CACHE[cid] = {key: (dot, name, detail) for key, dot, name, detail in rows}
-    msg = ui.issues([(dot, name, detail) for _, dot, name, detail in rows], _when(time.time()))
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=InlineKeyboardMarkup(kb_rows))
-
-
-async def send_issue_detail(bot, cid, key):
-    entry = _ISSUES_CACHE.get(cid, {}).get(key)
-    if entry is None:
-        await bot.send_message(chat_id=cid, text="Проблема уже не доступна. Открываю актуальный список.")
-        await send_issues(bot, cid)
-        return
-    dot, name, detail = entry
-    kb = InlineKeyboardMarkup([_back("set_admin_issues")])
-    msg = ui.issue_detail(_when(time.time()), name, dot, detail)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
 async def clear_cache(bot, cid, q=None):
     import research
     import tracking
@@ -932,23 +607,6 @@ async def clear_cache(bot, cid, q=None):
 
 # ================= УВЕДОМЛЕНИЯ =================
 
-def _next_broadcast():
-    """Ближайшее автоматическое уведомление: (title, when). Сейчас — утренний бриф."""
-    return "☀️ Утренний дайджест", "завтра, 08:00"
-
-
-_TEST_HISTORY = []
-_LAST_TEST_KIND = {}
-
-
-def _test_label(kind):
-    return _notification_options_by_kind().get(kind, kind)
-
-
-def _test_button_text(kind):
-    return _test_label(kind)
-
-
 def _notification_options_by_kind():
     import settings as _s
     return {opt.key: opt.button_label for opt in _s.get_notification_options()}
@@ -962,17 +620,6 @@ def _notification_test_rows():
     ]
 
 
-def _remember_test(kind, ok, detail):
-    label = _test_button_text(kind)
-    row = f"{_updated_at()} · {label} · {detail}"
-    _TEST_HISTORY.insert(0, row)
-    del _TEST_HISTORY[5:]
-
-
-async def send_tests(bot, cid, q=None):
-    await send_notifications(bot, cid, q)
-
-
 async def run_test(bot, cid, kind):
     import settings as _s
     options = _notification_options_by_kind()
@@ -984,21 +631,11 @@ async def run_test(bot, cid, kind):
         ok = await _s._run_notif_test(bot, cid, kind)
         detail = "OK" if ok else (_issue_summary("app", kind) or "ошибка")
         label = options[kind]
-    _LAST_TEST_KIND[str(cid)] = kind
-    _remember_test(kind, ok, detail)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_notif")],
     ])
     msg = ui.test_result(ok, _updated_at(), label, detail)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def send_broadcast(bot, cid, q=None):
-    await send_notifications(bot, cid, q)
-
-
-async def send_broadcast_test_pick(bot, cid, q=None):
-    await send_tests(bot, cid, q)
 
 
 async def send_logs(bot, cid, q=None):

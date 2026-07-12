@@ -228,5 +228,8 @@ Redirects:
 - `adm_tests` -> `adm_notif`
 - старые `set_admin_llm`, `set_admin_news`, `set_admin_llmcheck`,
   `set_admin_llmhistory`, `set_admin_api_diagnostics` -> `adm_api_ai`
+- старые `set_admin_issues`, `set_admin_check_all`, `set_admin_issue_*` (экран
+  `⚠️ Проблемы`, удалён вместе с движком активных health-check проверок) ->
+  `adm_system`
 
 Во всех админских экранах кнопка назад называется одинаково: `⬅️ Назад`.

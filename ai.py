@@ -273,16 +273,8 @@ def _gemini_cooldown_error():
     )
 
 
-def gemini_status() -> dict:
-    return api_usage.gemini_state(1)
-
-
 def get_gemini_rate_limit_stats(period_days=1) -> dict:
     return api_usage.gemini_state(period_days)
-
-
-def is_gemini_rate_limited() -> bool:
-    return bool(api_usage.gemini_state(1).get("cooldown_active"))
 
 
 def _cooldown_phrase(seconds: int) -> str:
