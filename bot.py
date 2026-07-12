@@ -375,7 +375,7 @@ async def answer_callback(update, context):
     if data == "m_myday":
         await myday.send_plany(bot, cid); return
     if data == "m_menu":
-        text, entities, kb = menu.main_menu_screen()
+        text, entities, kb = menu.main_menu_screen(cid)
         try:
             await q.message.edit_text(text, reply_markup=kb, entities=entities)
         except Exception:
@@ -891,7 +891,7 @@ async def admin_command(update, context):
 async def menu_command(update, context):
     cid = str(update.effective_chat.id)
     store.pending_input.pop(cid, None)
-    text, entities, kb = menu.main_menu_screen()
+    text, entities, kb = menu.main_menu_screen(cid)
     await update.message.reply_text(text, entities=entities, reply_markup=kb)
 
 

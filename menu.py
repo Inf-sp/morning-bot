@@ -9,7 +9,16 @@ def main_menu_kb():
     return menu_ui.main_menu_kb()
 
 
-def main_menu_screen():
+def main_menu_screen(cid=None):
+    """Первое открытие меню - полное приветствие с описанием разделов,
+    дальше - компактный экран "Выбери раздел"."""
+    if cid is not None:
+        import store
+        prof = store.get_profile(cid)
+        if not prof.get("seen_menu"):
+            prof["seen_menu"] = True
+            store.set_profile(cid, prof)
+            return WELCOME, WELCOME_ENTITIES, main_menu_kb()
     msg = menu_ui.main_menu()
     return msg.text, msg.entities, msg.reply_markup
 
