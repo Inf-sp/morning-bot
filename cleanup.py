@@ -119,7 +119,7 @@ COLLECTIONS = {
         "travel_hidden_countries", "travel", "Скрытые страны", config.TRAVEL_DISLIKE_KEY, "country",
         "m_travel", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
     "travel_saved_places": _collection(
-        "travel_saved_places", "travel", f"Сохранённое · {ui_label('travel', 'Путешествия')}", config.NOTES_KEY, "note",
+        "travel_saved_places", "travel", f"Сохранённое · {ui_label('travel', 'Поездки')}", config.NOTES_KEY, "note",
         "m_travel", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
         note_group="travel"),
 

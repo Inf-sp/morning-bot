@@ -29,7 +29,6 @@ import firstvisit
 import tracking
 import util
 from ui import admin as admin_ui
-from ui.constants import ui_label
 from util import ack_loading as _ack
 from util import clear_loading as _unack
 
@@ -223,7 +222,7 @@ async def start(update, context):
     if args:
         code = args[0].strip()
         if access.is_allowed(cid):
-            await update.message.reply_text(_WELCOME, entities=menu.WELCOME_ENTITIES, reply_markup=menu.main_kb(cid))
+            await update.message.reply_text(_WELCOME, entities=menu.WELCOME_ENTITIES, reply_markup=menu.main_menu_kb())
             return
         if access.use_invite(code, cid):
             await onboard.start(context.bot, cid)
@@ -235,7 +234,7 @@ async def start(update, context):
         await update.message.reply_text("❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
 
-    await update.message.reply_text(_WELCOME, entities=menu.WELCOME_ENTITIES, reply_markup=menu.main_kb(cid))
+    await update.message.reply_text(_WELCOME, entities=menu.WELCOME_ENTITIES, reply_markup=menu.main_menu_kb())
 
 
 # ---------- Диспетчер инлайн-кнопок ----------
@@ -351,6 +350,15 @@ async def answer_callback(update, context):
         await wardrobe.send_home(bot, cid, q); return
     if data == "m_travel":
         await travel.send_home(bot, cid, q); return
+    if data == "m_myday":
+        await myday.send_plany(bot, cid); return
+    if data == "m_menu":
+        text, entities, kb = menu.main_menu_screen()
+        try:
+            await q.message.edit_text(text, reply_markup=kb, entities=entities)
+        except Exception:
+            await bot.send_message(chat_id=cid, text=text, reply_markup=kb, entities=entities)
+        return
     if data.startswith("m_"):
         text, entities, kb = menu.menu_screen(data, cid)
         try:
@@ -693,62 +701,6 @@ async def text_router(update, context):
     if flags:
         _log.warning("[secure] injection flags: %s", flags)
 
-    # Нажата любая кнопка нижнего меню -> сбрасываем незавершённый ввод (чтобы чат не «съел» сообщение настроек)
-    if text in (ui_label("myday", "Мой день"), "/setup", "/admin") or text in menu.LABEL_TO_KEY or text == "🗂️ Моя база":
-        store.pending_input.pop(cid, None)
-
-    if text == ui_label("myday", "Мой день"):
-        try:
-            await myday.send_plany(bot, cid)
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        return
-    if text == "/setup":
-        try:
-            await settings.send_notes(bot, cid)
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        return
-    if text == "/admin":
-        try:
-            await settings.send_admin(bot, cid)
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        return
-    if text in (ui_label("settings", "Настройки"), "🗂️ Моя база"):
-        try:
-            await settings.send_notes(bot, cid)
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        return
-    if text == ui_label("food", "Готовка"):
-        try:
-            if firstvisit.needs_setup(cid, "cooking"):
-                await firstvisit.show_prompt(bot, cid, "cooking")
-                return
-            await menu.send_food_menu(bot, cid)
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        return
-    # Нажатие нижнего reply-меню -> открыть инлайн-подменю
-    if text in menu.LABEL_TO_KEY:
-        key = menu.LABEL_TO_KEY[text]
-        # Первый вход в раздел с пустым профилем — опрос
-        _FV = {"m_wardrobe": "wardrobe", "m_learn": "learning",
-               "m_leisure": "leisure", "m_balance": "health"}
-        if key in _FV and firstvisit.needs_setup(cid, _FV[key]):
-            await firstvisit.show_prompt(bot, cid, _FV[key])
-            return
-        if key == "m_wardrobe":
-            await wardrobe.send_home(bot, cid)
-            return
-        if key == "m_travel":
-            await travel.send_home(bot, cid)
-            return
-        t, entities, kb = menu.menu_screen(key, cid)
-        await bot.send_message(chat_id=cid, text=t, reply_markup=kb, entities=entities)
-        return
-
     # Режим добавления одежды (файлом)
     if store.add_wardrobe_mode.get(cid):
         await wardrobe.ingest(bot, cid, text)
@@ -913,6 +865,12 @@ async def admin_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
     await settings.send_admin(context.bot, update.effective_chat.id)
 
+async def menu_command(update, context):
+    cid = str(update.effective_chat.id)
+    store.pending_input.pop(cid, None)
+    text, entities, kb = menu.main_menu_screen()
+    await update.message.reply_text(text, entities=entities, reply_markup=kb)
+
 
 async def admin_debug_api_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
@@ -1066,7 +1024,8 @@ async def post_init(app):
         logging.exception("Secrets scan failed")
     from telegram import BotCommand
     await app.bot.set_my_commands([
-        BotCommand("start", "главное меню"),
+        BotCommand("start", "начало"),
+        BotCommand("menu", "меню"),
         BotCommand("setup", "настройки"),
         BotCommand("admin", "администратор"),
     ])
@@ -1077,6 +1036,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     app = Application.builder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("menu", menu_command))
     app.add_handler(CommandHandler("notes", notes_command))
     app.add_handler(CommandHandler("setup", setup_command))
     app.add_handler(CommandHandler("admin", admin_command))

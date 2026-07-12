@@ -549,6 +549,7 @@ def _day_menu_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
         [InlineKeyboardButton("🌍 Сменить город", callback_data="a_setcity")],
+        [InlineKeyboardButton("☰ Меню", callback_data="m_menu")],
     ])
 
 def _build_day_text(cid):

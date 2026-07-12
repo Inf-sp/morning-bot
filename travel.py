@@ -1,4 +1,4 @@
-"""Раздел «Путешествия»: подбор новой страны/направления под вкус пользователя
+"""Раздел «Поездки»: подбор новой страны/направления под вкус пользователя
 (LLM + проверенные факты через research.py) и сборка подробного плана поездки.
 
 Вынесен из leisure.py в самостоятельный раздел главного меню (был подпунктом Досуга).
@@ -30,7 +30,7 @@ def _home_kb():
 
 
 async def send_home(bot, cid, q=None):
-    """Приветственный экран раздела «Путешествия» (тот же паттерн, что у Гардероба/Кино):
+    """Приветственный экран раздела «Поездки» (тот же паттерн, что у Гардероба/Кино):
     сколько стран посещено/в любимых/в планах, снизу — вход в подбор новой страны."""
     visited_count = len(store.get_list(config.COUNTRIES_KEY, cid))
     fav_count = len(store.get_list(config.FAVCOUNTRIES_KEY, cid))
@@ -116,7 +116,7 @@ async def send_go(bot, cid):
         print("[research] travel: no grounding for", d.get("country", ""))
     country_msg = _country_card(d)
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", country_msg.text)
-    store.last_source[str(cid)] = "Путешествия"
+    store.last_source[str(cid)] = "Поездки"
     store.suggested_countries[str(cid)] = d.get("country", "")
     store.last_recipe[str(cid)] = d
     await bot.send_message(chat_id=cid, text=country_msg.text, entities=country_msg.entities, reply_markup=_travel_kb())
@@ -148,7 +148,7 @@ async def send_plan(bot, cid):
     d = store.last_recipe.get(str(cid)) or {}
     country = d.get("country") or store.suggested_countries.get(str(cid), "")
     if not country:
-        await bot.send_message(chat_id=cid, text="Сначала выбери страну в Путешествиях."); return
+        await bot.send_message(chat_id=cid, text="Сначала выбери страну в Поездках."); return
     s = store.get_settings(cid)
     home = s.get("city", "дом")
     facts = await asyncio.to_thread(research.country_facts, country)
@@ -186,7 +186,7 @@ async def send_plan(bot, cid):
         p["fact"] = rfact
     msg = travel_ui.travel_plan(p, country)
     store.last_answer[str(cid)] = msg.text
-    store.last_source[str(cid)] = "Путешествия · План"
+    store.last_source[str(cid)] = "Поездки · План"
     store.last_recipe[str(cid)] = {
         **(store.last_recipe.get(str(cid)) or {}),
         "plan_text": msg.text, "plan_entities": util.entities_to_json(msg.entities),
@@ -211,5 +211,5 @@ async def save_plan(bot, cid):
         "text": plan, "entities": d.get("plan_entities", []),
         "source": "План поездки", "bucket": "plan", "country": country,
     })
-    await bot.send_message(chat_id=cid, text=f"{ui_label('save', 'Маршрут')} ({country}) сохранён в «Мои данные» → «Путешествия».")
+    await bot.send_message(chat_id=cid, text=f"{ui_label('save', 'Маршрут')} ({country}) сохранён в «Мои данные» → «Поездки».")
     await send_go(bot, cid)

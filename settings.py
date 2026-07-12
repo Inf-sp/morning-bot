@@ -1045,7 +1045,7 @@ async def send_travel(bot, cid):
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel")],
     ]
     msg = settings_ui.mydata_section(
-        f"{ui_label('travel', 'Путешествия')}",
+        f"{ui_label('travel', 'Поездки')}",
         "Страны — для идей поездок. Места — то, что уже сохранил.",
     )
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))

@@ -43,6 +43,28 @@ def ikb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
 
 
+def main_menu_rows():
+    return [
+        [(ui_label("myday", "Мой день"), "m_myday"), (ui_label("wardrobe", "Гардероб"), "m_wardrobe")],
+        [(ui_label("food", "Готовка"), "m_food"), (ui_label("learning", "Обучение"), "m_learn")],
+        [(ui_label("health", "Здоровье"), "m_balance"), (ui_label("travel", "Поездки"), "m_travel")],
+        [(ui_label("leisure", "Досуг"), "m_leisure"), (ui_label("settings", "Настройки"), "m_notes")],
+    ]
+
+
+def main_menu_kb():
+    return ikb(main_menu_rows())
+
+
+def main_menu():
+    b = MessageBuilder()
+    b.bold("📂 Меню")
+    b.newline()
+    b.spacer()
+    b.line("Выбери раздел.")
+    return b.build_stripped(reply_markup=main_menu_kb())
+
+
 def welcome():
     b = MessageBuilder()
     b.bold("Привет! Я DM — твой помощник на каждый день.")
@@ -65,7 +87,7 @@ def welcome():
     b.bold(ui_label("health", "Здоровье"))
     b.line(" — мотивация, тревоги и здоровье.")
 
-    b.bold(ui_label("travel", "Путешествия"))
+    b.bold(ui_label("travel", "Поездки"))
     b.line(" — новые страны и планы поездок.")
 
     b.bold(ui_label("leisure", "Досуг"))
@@ -159,7 +181,7 @@ def learning_menu(active_code="nl"):
 
 def menu_screen(key):
     if key not in _SCREENS:
-        return MessageSpec(text="Выбери раздел в нижнем меню.")
+        return MessageSpec(text="Выбери раздел через /menu.")
     screen = _SCREENS[key]
     if len(screen) == 4:
         emoji, title, description, rows = screen

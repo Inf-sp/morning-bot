@@ -264,7 +264,7 @@ _FEATURE_ROWS = [
     ("Готовка", "Gemini → Groq", ("gemini",)),
     ("Здоровье", "Gemini + ZeroEntropy", ("gemini",)),
     ("Обучение", "Gemini → Groq", ("gemini",)),
-    ("Путешествия", "Tavily + Gemini", ("gemini",)),
+    ("Поездки", "Tavily + Gemini", ("gemini",)),
     ("Досуг", "TMDB/Tavily/Ticketmaster + Gemini", ("gemini",)),
     ("Ассистент", "intent-router + Gemini", ("gemini",)),
 ]
