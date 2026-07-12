@@ -115,6 +115,7 @@ _SCREENS = {
             [(ui_label("recommendation", "Заряд мотивации"), "as_motiv")],
             [(ui_label("worry_diary", "Дневник тревог"), "as_daycheck")],
             [(ui_label("settings", "Настройки здоровья"), "set_lagom")],
+            [("⬅️ Назад", "m_menu")],
         ],
     ),
     "m_leisure": (
@@ -130,6 +131,7 @@ _SCREENS = {
             [(ui_label("music", "Музыка"), "a_listen")],
             [(ui_label("books", "Книги"), "a_read")],
             [(ui_label("settings", "Настройки досуга"), "set_mydata_leisure")],
+            [("⬅️ Назад", "m_menu")],
         ],
         False,
     ),
@@ -168,6 +170,7 @@ def learning_menu(active_code="nl"):
         [(ui_label("dictionary", "Мой словарь"), f"a_dictlang_{code}_from_menu")],
         [("🧠 Повторение ошибок", "mistake_review")],
         [(ui_label("settings", "Настройки обучения"), "set_learning")],
+        [("⬅️ Назад", "m_menu")],
     ]))
 
 
@@ -192,5 +195,6 @@ def food_menu():
             [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
             [(ui_label("cook_from", "Из того что есть"), "as_fridge_cook")],
             [(ui_label("settings", "Настройки холодильника"), "set_fridge_g")],
+            [("⬅️ Назад", "m_menu")],
         ],
     )

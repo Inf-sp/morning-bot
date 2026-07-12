@@ -412,10 +412,9 @@ async def send_api_ai(bot, cid, q=None):
         _api_line("pexels", "Pexels", snapshot),
     ]
 
-    bad = _bad_services(snapshot)
-    status_dot, status_text = (ui.WARN, "Работает с ограничениями") if (gemini_cooldown or bad) else (ui.OK, "Работает")
-    if bad:
-        n_bad = len(bad)
+    n_bad = sum(1 for line in ai_rows + api_rows if line.startswith(ui.BAD))
+    status_dot, status_text = (ui.WARN, "Работает с ограничениями") if (gemini_cooldown or n_bad) else (ui.OK, "Работает")
+    if n_bad:
         word = "недоступен" if n_bad == 1 else "недоступно"
         sub_line = f"Основные функции доступны · {n_bad} {_plural_services(n_bad)} {word}"
     else:

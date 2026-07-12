@@ -220,7 +220,7 @@ async def _clear_reply_kb_once(bot, cid):
     кнопкой «☰ Меню» (Telegram держит клавиатуру, пока явно не пришлёт новую -
     одной сменой reply_markup на инлайн-кнопки она не убирается)."""
     prof = store.get_profile(cid)
-    if prof.get("reply_kb_cleared"):
+    if prof.get(menu.REPLY_KB_FLAG):
         return
     try:
         await bot.send_message(
@@ -230,7 +230,7 @@ async def _clear_reply_kb_once(bot, cid):
         )
     except Exception:
         return
-    prof["reply_kb_cleared"] = True
+    prof[menu.REPLY_KB_FLAG] = True
     store.set_profile(cid, prof)
 
 
@@ -327,7 +327,7 @@ async def answer_callback(update, context):
     # Навигация по подменю - редактируем сообщение на месте
     if data == "m_close":
         try:
-            await q.message.edit_text("Готово.")
+            await q.message.edit_text("Готово.", reply_markup=menu.main_menu_kb())
         except Exception:
             pass
         return

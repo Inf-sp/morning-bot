@@ -961,6 +961,7 @@ async def send_notes(bot, cid):
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton("❤️ Любимое", callback_data="as_love")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu")],
     ]
     msg = settings_ui.settings_home()
     await bot.send_message(chat_id=cid, entities=msg.entities,

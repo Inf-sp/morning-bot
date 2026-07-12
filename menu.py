@@ -7,6 +7,8 @@ _WELCOME = menu_ui.welcome()
 WELCOME, WELCOME_ENTITIES = _WELCOME.text, _WELCOME.entities
 
 REPLY_KB_LABEL = "☰ Меню"
+REPLY_KB_FLAG = "reply_kb_cleared_v2"  # версия флага в профиле - меняли is_persistent на
+                                        # one_time_keyboard, старым профилям шлём ещё раз
 
 
 def reply_kb():

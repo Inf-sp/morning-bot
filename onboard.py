@@ -150,7 +150,7 @@ async def _finish(bot, cid):
     _save_step(cid, None)
     store.pending_input.pop(str(cid), None)
     prof = store.get_profile(cid)
-    prof["reply_kb_cleared"] = True
+    prof[menu.REPLY_KB_FLAG] = True
     store.set_profile(cid, prof)
     await bot.send_message(
         chat_id=cid,
