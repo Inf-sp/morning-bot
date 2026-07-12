@@ -104,7 +104,7 @@ def _configured_service(service: str) -> bool:
     }.get(service, False)
 
 
-def _data_line():
+def _store_health_line():
     try:
         store._load("__health__")
     except Exception as e:
@@ -137,7 +137,7 @@ async def send_home(bot, cid, q=None):
         system_line=api_line,
         notif_line=f"OK · ошибок {notif['errors_today']}" if not notif_bad else f"ошибок {notif['errors_today']}",
         users_line=f"{stats['total']} · активны {stats['active_7d']} · новых {stats['new_7d']}",
-        data_line="OK" if _data_line().startswith(ui.OK) else "ошибка",
+        data_line="OK" if _store_health_line().startswith(ui.OK) else "ошибка",
         updated_at=_updated_at(),
     )
     await _show(bot, cid, msg, kb, q)
