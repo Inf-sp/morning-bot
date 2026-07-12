@@ -156,7 +156,7 @@ async def _finish(bot, cid):
         chat_id=cid,
         text=menu.WELCOME,
         entities=menu.WELCOME_ENTITIES,
-        reply_markup=menu.reply_kb(),
+        reply_markup=menu.main_menu_kb(),
     )
     if st.get("langs"):
         await learning.send_seed_intro(bot, cid)

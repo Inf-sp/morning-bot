@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 _log = logging.getLogger(__name__)
-from telegram import InlineKeyboardMarkup
+from telegram import InlineKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
                           ContextTypes, CallbackQueryHandler, PollAnswerHandler, ExtBot)
 from datetime import datetime, timezone
@@ -218,17 +218,17 @@ async def maybe_send_admin_deploy_notification(bot):
 
 
 async def _clear_reply_kb_once(bot, cid):
-    """Разово меняет старую нижнюю Reply-клавиатуру (разделы) на новую с одной
-    кнопкой «Меню» (Telegram держит клавиатуру, пока явно не пришлёт новую -
-    одной сменой reply_markup на инлайн-кнопки она не убирается)."""
+    """Разово убирает нижнюю Reply-клавиатуру (Telegram держит клавиатуру,
+    пока явно не пришлёт новую - одной сменой reply_markup на инлайн-кнопки
+    она не убирается)."""
     prof = store.get_profile(cid)
     if prof.get(menu.REPLY_KB_FLAG):
         return
     try:
         await bot.send_message(
             chat_id=cid,
-            text=f"Меню теперь открывается кнопкой «{menu.REPLY_KB_LABEL}» внизу или командой /menu.",
-            reply_markup=menu.reply_kb(),
+            text="Меню теперь открывается командой /menu или синей кнопкой меню Telegram.",
+            reply_markup=ReplyKeyboardRemove(),
         )
     except Exception:
         return
@@ -726,7 +726,7 @@ async def text_router(update, context):
     if flags:
         _log.warning("[secure] injection flags: %s", flags)
 
-    if text == menu.REPLY_KB_LABEL:
+    if text == "Меню":  # переходный fallback: у части пользователей ещё видна старая нижняя клавиатура
         store.pending_input.pop(cid, None)
         t, entities, kb = menu.main_menu_screen(cid)
         await bot.send_message(chat_id=cid, text=t, reply_markup=kb, entities=entities)
