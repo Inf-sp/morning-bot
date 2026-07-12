@@ -1,16 +1,21 @@
 from telegram import MessageEntity
 
 from .builder import MessageBuilder
-from .constants import ui_label
+
+
+def _compact_line(b, emoji, label, content):
+    b.text_line(f"{emoji} ")
+    b.bold(f"{label}:")
+    b.text_line(f" {content}")
+    b.newline()
 
 
 def day_summary(
     header,
     city,
     flag="",
-    weather_title="",
+    weather_icon="🌡️",
     weather_line="",
-    humidity_title="",
     humidity_line="",
     word_line="",
     word_lang="nl",
@@ -20,39 +25,37 @@ def day_summary(
     quote_author="",
     lagom_line="",
 ):
+    """Компактная сводка: заголовок, затем по одной строке на блок без пустых строк
+    между ними (правило проекта — пробел только после заголовка)."""
     title_flag = f" {flag}" if flag else ""
     b = MessageBuilder()
-    b.section(f"Мой день • {header} • {city}{title_flag}")
+    b.bold("Мой день")
+    b.text_line(f" · {header} · {city}{title_flag}")
+    b.newline()
+    b.spacer()
 
-    b.section(weather_title)
-    b.line(weather_line)
-    if humidity_title:
-        b.section(humidity_title)
+    if weather_line:
+        _compact_line(b, weather_icon, "Погода", weather_line)
+    if humidity_line:
         b.line(humidity_line)
 
     if word_line:
-        word_title = "Порция нидерландского" if word_lang == "nl" else "Порция английского"
-        b.section(ui_label("learning", word_title))
-        b.line(word_line)
+        word_label = "Нидерландский" if word_lang == "nl" else "Английский"
+        word_flag = "🇳🇱" if word_lang == "nl" else "🇬🇧"
+        _compact_line(b, word_flag, word_label, word_line)
 
     if fact:
-        b.section(ui_label("interesting", "Интересный факт"))
-        b.line(str(fact).strip())
+        _compact_line(b, "👨🏻‍💻", "Факт", str(fact).strip())
 
     if lifehack:
-        b.section(ui_label("knowledge", "База знаний"))
-        b.line(lifehack)
+        _compact_line(b, "🦉", "Полезно", lifehack)
 
     if quote_text:
-        b.section(ui_label("quote", "Цитата"))
-        b.italic(f"«{quote_text}»")
+        quote_line = f"«{quote_text}»" + (f" — по {quote_author}" if quote_author else "")
+        b.add(f"💬 {quote_line}", MessageEntity.ITALIC)
         b.newline()
-        if quote_author:
-            b.text_line(f"— {quote_author}")
-            b.newline()
 
     if lagom_line:
-        b.spacer()
         b.add(f"💭 {lagom_line}", MessageEntity.ITALIC)
 
     return b.build_stripped()

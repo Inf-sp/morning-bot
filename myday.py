@@ -16,7 +16,7 @@ import weather
 import learning
 import research
 import memory
-from util import esc, _WEEKDAYS, _MONTHS, flag_from_cc, country_flag
+from util import esc, _WEEKDAY_SHORT, _MONTHS, flag_from_cc, country_flag
 import verify
 from ui import myday as myday_ui
 
@@ -577,9 +577,9 @@ def _build_day_text(cid):
         wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
         wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
         wind_part = f"{wword} до {wind_ms:.0f} м/с{wind_when}"
-        weather_title = f"{icon} Погода сегодня"
+        weather_icon = icon
         rain_part = weather.rain_text(rain, rain_mm, rain_when)
-        weather_line = f"До {tmax:+.0f}°C" + (f" • {rain_part}" if rain_part else "") + f" • {wind_part}"
+        weather_line = f"до {tmax:+.0f}°C" + (f" · {rain_part}" if rain_part else "") + f" · {wind_part}"
         hum_title, hum_line = weather.humidity_phrase(data, day_str, tmax, s.get("cc", ""))
     else:
         rain = 0
@@ -587,16 +587,15 @@ def _build_day_text(cid):
         tmax = None
         response = getattr(weather_error, "response", None)
         status = getattr(response, "status_code", None)
+        weather_icon = "☁️"
         if isinstance(weather_error, weather.WeatherDailyLimitExceeded) or status == 429:
-            weather_title = "☁️ Погодный лимит исчерпан"
-            weather_line = weather.WEATHER_LIMIT_FALLBACK
+            weather_line = f"Погодный лимит исчерпан. {weather.WEATHER_LIMIT_FALLBACK}"
         else:
-            weather_title = "☁️ Погода сейчас недоступна"
-            weather_line = "Не удалось получить прогноз — остальная сводка всё равно готова."
+            weather_line = "Сейчас недоступна — остальная сводка всё равно готова."
         hum_title, hum_line = "", ""
 
     now = datetime.now(TZ)
-    weekday_name = _WEEKDAYS[now.weekday()]
+    weekday_name = _WEEKDAY_SHORT[now.weekday()]
     is_weekend = now.weekday() >= 5
     word_line, word_lang = _word_of_day(cid)
 
@@ -629,10 +628,9 @@ def _build_day_text(cid):
         header,
         s.get("city", ""),
         flag=flag,
-        weather_title=weather_title,
+        weather_icon=weather_icon,
         weather_line=weather_line,
-        humidity_title=hum_title,
-        humidity_line=hum_line,
+        humidity_line=f"{hum_title} · {hum_line}" if hum_title else "",
         word_line=word_line,
         word_lang=word_lang,
         fact=fact,
