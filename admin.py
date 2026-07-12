@@ -310,6 +310,10 @@ def _gemini_ai_line(snapshot):
     limit_txt = f"{quota.get('limit')} запросов/мин" if quota else "лимит OK"
     if state.get("cooldown_active"):
         return f"{ui.WARN} {label} · пауза до {_hhmm(state.get('cooldown_until'))} · {limit_txt}"
+    svc = _snapshot_service(snapshot, "gemini")
+    if svc.get("status") == "bad":
+        reason = _friendly_error(svc.get("last_error_reason")) or "ошибка"
+        return f"{ui.BAD} {label} · основной · {str(reason)[:40]}"
     return f"{ui.OK} {label} · основной · {limit_txt}"
 
 

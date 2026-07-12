@@ -214,9 +214,30 @@ async def maybe_send_admin_deploy_notification(bot):
         )
 
 
+async def _clear_reply_kb_once(bot, cid):
+    """Разово снимает старую нижнюю Reply-клавиатуру у тех, кому она ещё показана
+    (Telegram держит её, пока не придёт ReplyKeyboardRemove -- одной сменой
+    reply_markup на инлайн-кнопки она не убирается)."""
+    prof = store.get_profile(cid)
+    if prof.get("reply_kb_cleared"):
+        return
+    from telegram import ReplyKeyboardRemove
+    try:
+        await bot.send_message(
+            chat_id=cid,
+            text="Меню теперь открывается через /menu или кнопку «☰ Меню» на «Мой день».",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+    except Exception:
+        return
+    prof["reply_kb_cleared"] = True
+    store.set_profile(cid, prof)
+
+
 async def start(update, context):
     cid = str(update.effective_chat.id)
     args = context.args or []
+    await _clear_reply_kb_once(context.bot, cid)
 
     # Инвайт-код передан через /start <code>
     if args:
@@ -244,6 +265,7 @@ async def answer_callback(update, context):
     cid = str(q.message.chat_id)
     data = q.data
     bot = context.bot
+    await _clear_reply_kb_once(bot, cid)
 
     async def _inline_status(call):
         status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
@@ -696,6 +718,7 @@ async def text_router(update, context):
         await bot.send_message(chat_id=cid, text="❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
     tracking.touch(cid)
+    await _clear_reply_kb_once(bot, cid)
 
     flags = secure.injection_flags(text)
     if flags:
