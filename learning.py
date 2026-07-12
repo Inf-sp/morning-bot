@@ -3099,16 +3099,20 @@ async def _show_screen(bot, cid, text, entities=None, reply_markup=None, q=None)
     await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=reply_markup)
 
 
+_DICT_ORIGIN_TO_BACK = {
+    "notes": "m_notes",
+    "menu": "m_learn",
+    "mydata": "set_home",
+}
+_DICT_BACK_TO_ORIGIN = {v: k for k, v in _DICT_ORIGIN_TO_BACK.items()}
+
+
 async def send_dict(bot, cid, back="m_notes", q=None):
     c = _dict_counts(cid)
     nl_total = c["nl"]
     en_total = c["en"]
     msg = dict_ui.dict_overview(nl_total, en_total)
-    origin = {
-        "m_notes": "notes",
-        "m_learn": "menu",
-        "set_home": "mydata",
-    }.get(back, "notes")
+    origin = _DICT_BACK_TO_ORIGIN.get(back, "notes")
     rows = [
         [InlineKeyboardButton(f"🇳🇱 Нидерландский ({nl_total})", callback_data=f"a_dictlang_nl_from_{origin}")],
         [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data=f"a_dictlang_en_from_{origin}")],

@@ -449,10 +449,14 @@ async def answer_callback(update, context):
                 await learning.send_dict_lang(bot, cid, "nl", q=q)
             elif act == "dictlang_en":
                 await learning.send_dict_lang(bot, cid, "en", q=q)
-            elif act == "dictlang_nl_from_menu":
-                await learning.send_dict_lang(bot, cid, "nl", back="m_learn", q=q)
-            elif act == "dictlang_en_from_menu":
-                await learning.send_dict_lang(bot, cid, "en", back="m_learn", q=q)
+            elif act.startswith("dictlang_nl_from_"):
+                origin = act[len("dictlang_nl_from_"):]
+                back = learning._DICT_ORIGIN_TO_BACK.get(origin, "m_learn")
+                await learning.send_dict_lang(bot, cid, "nl", back=back, q=q)
+            elif act.startswith("dictlang_en_from_"):
+                origin = act[len("dictlang_en_from_"):]
+                back = learning._DICT_ORIGIN_TO_BACK.get(origin, "m_learn")
+                await learning.send_dict_lang(bot, cid, "en", back=back, q=q)
             elif act.startswith("dictadd_smart_"):
                 lang = act.split("_")[2]
                 await learning.send_dict_manage(bot, cid, lang, q=q)
