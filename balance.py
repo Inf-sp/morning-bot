@@ -1809,12 +1809,12 @@ async def handle_callback(bot, cid, q, data):
 
 
 # ---------- «Продолжить» / «Ещё раз» ----------
-async def retry(bot, cid):
+async def retry(bot, cid, status=None):
     la = store.last_action.get(str(cid))
     if la and la[0] == "recipe":
-        await send_recipe(bot, cid, la[1]); return
+        await send_recipe(bot, cid, la[1], status=status); return
     if la and la[0] == "leftovers":
-        await send_leftovers(bot, cid, la[1]); return
+        await send_leftovers(bot, cid, la[1], status=status); return
     if la and la[0] == "role":
         await handle_role(bot, cid, la[1], la[2]); return
     hist = list(store.chat_history.get(str(cid), []))

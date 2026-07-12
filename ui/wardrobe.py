@@ -39,7 +39,7 @@ def improve_card(data):
            avoid[], best_look{items[],why}, potential}
     """
     b = MessageBuilder()
-    b.section("👕 Разбор гардероба")
+    b.section("✂️ Разбор гардероба")
     b.spacer()
 
     score = data.get("score")

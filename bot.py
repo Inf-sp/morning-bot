@@ -714,7 +714,7 @@ async def answer_callback(update, context):
         return
     # «Продолжить / ещё раз»
     if data == "chat_retry":
-        await _inline_status(lambda _s: balance.retry(bot, cid))
+        await _inline_status(lambda status: balance.retry(bot, cid, status=status))
         return
     # «Короче / Глубже» - переписать последний ответ
     if data in ("ans_short", "ans_deep"):

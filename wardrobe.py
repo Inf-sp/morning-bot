@@ -19,6 +19,7 @@ from ui.constants import ui_label
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
+WARDROBE_OUTERWEAR_MAX_TEMP = 20  # °C — выше этой tmax верхняя одежда не предлагается (без дождя/ветра)
 
 # Нейтральные цвета не создают конфликт с любым другим цветом в наборе (§ score_outfit).
 NEUTRAL_COLORS = ("бел", "чёрн", "черн", "сер", "беж", "сини", "деним", "джинс")
@@ -60,18 +61,24 @@ def _weather_emoji(has_rain, flags):
     return "☁️"
 
 
+def _wind_label(wind_ms, strong_wind):
+    """Ветер — важный для одежды фактор, показываем его всегда, не только когда заметный."""
+    if strong_wind:
+        return "сильный ветер"
+    if wind_ms >= WARDROBE_WIND_LAYER_MS:
+        return "умеренный ветер"
+    return "слабый ветер"
+
+
 def _short_weather_line(weather_ctx):
-    """Погодная строка новой карточки: '☁️ +18…+23°C · сухо · умеренный ветер'."""
+    """Погодная строка новой карточки: '☁️ +18…+23°C · сухо · слабый ветер'."""
     if not weather_ctx or weather_ctx.get("tmax") is None:
         return ""
     emoji = _weather_emoji(weather_ctx["has_rain"], weather_ctx)
     tmin, tmax = weather_ctx.get("tmin"), weather_ctx["tmax"]
     temp = f"{tmin:+d}…{tmax:+d}°C" if tmin is not None else f"до {tmax:+d}°C"
-    parts = [temp, "дождь" if weather_ctx["has_rain"] else "сухо"]
-    if weather_ctx.get("strong_wind"):
-        parts.append("сильный ветер")
-    elif (weather_ctx.get("wind_ms") or 0) >= WARDROBE_WIND_LAYER_MS:
-        parts.append("умеренный ветер")
+    wind_label = _wind_label(weather_ctx.get("wind_ms") or 0, weather_ctx.get("strong_wind"))
+    parts = [temp, "дождь" if weather_ctx["has_rain"] else "сухо", wind_label]
     return f"{emoji} " + " · ".join(parts)
 
 
@@ -141,7 +148,7 @@ def _save_cached_look(cid, item_ids, look_data):
 def build_wardrobe_keyboard():
     return _kb([
         [("✨ Обновить образ на сегодня", "w_look")],
-        [("👕 Разбор гардероба", "w_improve")],
+        [("✂️ Разбор гардероба", "w_improve")],
         [("🔍 Проверка покупки", "w_check")],
         [("👔 Мой гардероб", "set_wardrobe_g")],
         [("⬅️ Назад", "m_menu")],
@@ -337,7 +344,8 @@ def select_outfit_candidates(w, weather_ctx):
         items = [it for _s, items in (w.get("zones", {}).get(zone, {}) or {}).items() for it in items]
         items = [it for it in items if not _temp_conflicts(it, weather_ctx)]
         if zone == "Верхняя одежда":
-            outerwear_needed = weather_ctx.get("has_rain") or weather_ctx.get("strong_wind") or not weather_ctx.get("hot")
+            too_warm_for_outer = (weather_ctx.get("tmax") or 0) > WARDROBE_OUTERWEAR_MAX_TEMP
+            outerwear_needed = weather_ctx.get("has_rain") or weather_ctx.get("strong_wind") or not too_warm_for_outer
             if not outerwear_needed:
                 candidates[zone] = []
                 continue
