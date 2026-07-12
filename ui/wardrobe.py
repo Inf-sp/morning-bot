@@ -118,9 +118,9 @@ def _finish_dot(value):
 
 def look_message(look_data):
     """Образ на сегодня — компактная карточка на один экран: шапка с датой и городом,
-    строка погоды, вещи в одну строку через " · " и одно объяснение.
+    строка погоды, вещи построчно и одно объяснение.
 
-    look_data: {short_date, city, weather_line, items[{name,short_name}], explanation}
+    look_data: {short_date, city, weather_line, items[{name,short_name}], explanation, wardrobe_total}
     """
     look_data = look_data or {}
     b = MessageBuilder()
@@ -133,16 +133,23 @@ def look_message(look_data):
         b.line(_finish_dot(weather_line))
 
     items = [_clean_text(_item_display(it)) for it in (look_data.get("items") or [])]
-    items = [it[:1].lower() + it[1:] if it else it for it in items if it]
+    items = [it for it in items if it]
     if items:
         b.spacer()
-        b.text_line("✨ Надень: ")
-        b.line(" · ".join(items))
+        b.bold("Надень:")
+        b.newline()
+        for it in items:
+            b.line(it)
 
     explanation = _finish_dot(look_data.get("explanation"))
     if explanation:
         b.spacer()
         b.line(explanation)
+
+    total = look_data.get("wardrobe_total")
+    if total is not None:
+        b.spacer()
+        b.line(f"Всего в гардеробе: {total} " + _pluralize_items(total) + ".")
 
     return b.build_stripped()
 

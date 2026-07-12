@@ -113,7 +113,7 @@ def _save_cached_look(cid, item_ids, look_data):
 # ---------- главный экран раздела (панель состояния) ----------
 def _wardrobe_home_kb():
     return _kb([
-        [("✨ Образ на сегодня", "w_look")],
+        [("🔁 Обновить образ на сегодня", "w_look")],
         [("👕 Разбор гардероба", "w_improve")],
         [("🔍 Проверка покупки", "w_check")],
         [("👔 Мой гардероб", "set_wardrobe_g")],
@@ -362,12 +362,14 @@ async def send_looks(bot, cid, status=None):
     rl.append(", ".join(items)[:80])
     store.recent_looks[str(cid)] = rl[-3:]
     store.last_look[str(cid)] = ", ".join(str(it) for it in items)[:120]   # для фидбека
+    wardrobe_total, _ = wardrobe_stats(w)
     look_data = {
         "short_date": short_date,
         "city": city,
         "weather_line": _short_weather_line(tmax, cond, has_rain, flags),
         "items": raw_items,
         "explanation": d.get("explanation", ""),
+        "wardrobe_total": wardrobe_total,
     }
     text, entities = _build_look_message(look_data)
     item_ids = _resolve_item_ids(w, items)
@@ -859,6 +861,7 @@ async def ingest(bot, cid, text):
 # ---------- роутер кнопок ----------
 async def handle_callback(bot, cid, q, data):
     if data == "w_look":
+        store.clear_wardrobe_daylook(cid)
         status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
         try:
             await send_looks(bot, cid, status=status)
