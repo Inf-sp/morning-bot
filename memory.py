@@ -1,56 +1,11 @@
-"""Память пользователя («бот учится на тебе»): фидбек гардероба, Лагом, предпочтения.
+"""Память пользователя («бот учится на тебе»): Лагом, предпочтения.
 
 Тонкий доменный слой поверх профиля в store (config.PROFILE_KEY). Без LLM и сети.
-Профиль - dict на пользователя: {"wardrobe_fb": [...], "lagom": [...], "prefs": [...]}.
+Профиль - dict на пользователя: {"lagom": [...], "prefs": [...]}.
 """
-from datetime import datetime
 import re
 import config
 import store
-
-_FB_CAP = 20
-
-# коды вердиктов фидбека гардероба -> человеческие ярлыки
-WARDROBE_VERDICTS = {
-    "worn": "надел",
-    "nostyle": "не нравится",
-}
-
-
-def _today():
-    return datetime.now(config.TZ).date().isoformat()
-
-
-# ---------- фидбек гардероба ----------
-def add_wardrobe_feedback(cid, look, verdict):
-    """Записать реакцию на образ. verdict - код из WARDROBE_VERDICTS. Cap _FB_CAP."""
-    if verdict not in WARDROBE_VERDICTS:
-        return
-    prof = store.get_profile(cid)
-    fb = prof.get("wardrobe_fb", [])
-    fb.append({"date": _today(), "look": (look or "").strip()[:120], "verdict": verdict})
-    prof["wardrobe_fb"] = fb[-_FB_CAP:]
-    store.set_profile(cid, prof)
-
-
-def wardrobe_hints(cid, recent=10):
-    """Компактная сводка последнего фидбека для подмешивания в промпт. '' если пусто."""
-    fb = store.get_profile(cid).get("wardrobe_fb", [])[-recent:]
-    if not fb:
-        return ""
-    counts = {}
-    nostyle_looks = []
-    for f in fb:
-        v = f.get("verdict")
-        counts[v] = counts.get(v, 0) + 1
-        if v == "nostyle" and f.get("look"):
-            nostyle_looks.append(f["look"])
-    parts = []
-    if nostyle_looks:
-        parts.append("не его стиль: " + "; ".join(nostyle_looks[-2:]))
-    if counts.get("worn"):
-        parts.append(f"носит охотно похожие образы (×{counts['worn']})")
-    return "; ".join(parts)
 
 
 # ---------- Лагом (ценности/установки пользователя) ----------

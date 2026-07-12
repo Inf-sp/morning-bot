@@ -139,7 +139,7 @@ def look_message(look_data):
         b.bold("Надень:")
         b.newline()
         for it in items:
-            b.line(it)
+            b.line(f"- {it}")
 
     explanation = _finish_dot(look_data.get("explanation"))
     if explanation:
@@ -158,60 +158,6 @@ def _item_display(it):
     if not isinstance(it, dict):
         return it
     return it.get("short_name") or it.get("name")
-
-
-def _wardrobe_verdict(total):
-    """Живая оценка наполненности шкафа, без канцелярита."""
-    if total <= 0:
-        return "В шкафу пока пусто."
-    if total < 10:
-        return "База уже есть, но для точных образов нужно добавить ещё верх, низ и обувь."
-    if total < 30:
-        return "Шкаф уже рабочий — можно собирать базовые образы."
-    return "Шкаф заполнен хорошо — есть, из чего собирать образы."
-
-
-_BAR_WIDTH = 10
-_BAR_FILLED = "▓"
-_BAR_EMPTY = "░"
-
-
-def _zone_bars(b, zone_counts, zone_order):
-    """Разбивка по зонам в виде мини-баров вместо точек — нагляднее показывает,
-    где вещей много, а где пусто."""
-    present = [(z, zone_counts.get(z, 0)) for z in zone_order if zone_counts.get(z, 0) > 0]
-    if not present:
-        return
-    max_n = max(n for _, n in present)
-    label_width = max(len(z) for z, _ in present) + 2
-    for z, n in present:
-        filled = max(1, round(n / max_n * _BAR_WIDTH))
-        bar = _BAR_FILLED * filled + _BAR_EMPTY * (_BAR_WIDTH - filled)
-        b.text_line(f"{z.ljust(label_width)}{bar} ")
-        b.bold(str(n))
-        b.newline()
-
-
-def home_screen(total, zone_counts, zone_order):
-    """Главный экран раздела «Гардероб»: состояние шкафа и действия."""
-    b = MessageBuilder()
-    b.text_line("👟 ")
-    b.bold("Гардероб")
-    b.newline()
-    b.spacer()
-
-    if total <= 0:
-        b.quote(_wardrobe_verdict(total))
-        b.spacer()
-        b.line("Добавь несколько вещей, и бот сможет собирать образы под погоду.")
-    else:
-        b.text_line(f"В шкафу {total} " + _pluralize_items(total) + ". ")
-        b.text_line(_wardrobe_verdict(total))
-        b.newline()
-        b.spacer()
-        _zone_bars(b, zone_counts, zone_order)
-
-    return b.build_stripped()
 
 
 def _pluralize_items(n):

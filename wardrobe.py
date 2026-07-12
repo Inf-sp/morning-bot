@@ -29,12 +29,6 @@ def closet_kb():
         [("⬅️ Назад", "m_wardrobe")],
     ])
 
-def _look_result_kb():
-    return _kb([
-        [("😍 Надел", "w_fb_worn"), ("🫥 Не моё", "w_fb_nostyle")],
-        [("⬅️ Назад", "m_wardrobe")],
-    ])
-
 def _back_kb():
     return _kb([[("⬅️ Назад", "m_wardrobe")]])
 
@@ -131,22 +125,9 @@ async def _restore_home_kb(q):
 
 
 async def send_home(bot, cid, q=None):
-    """Динамическая панель состояния раздела «Гардероб».
-
-    Статистика пересчитывается на лету из store.load_wardrobe, поэтому всегда
-    актуальна после любых изменений шкафа.
-    """
-    w = store.load_wardrobe(cid)
-    total, counts = wardrobe_stats(w)
-    msg = wardrobe_ui.home_screen(total, counts, ZONE_ORDER)
-    kb = _wardrobe_home_kb()
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    """Главный экран раздела «Гардероб» — сразу образ на сегодня."""
+    status = await util.StatusManager.start(bot, cid=cid, message=q.message if q else None)
+    await send_looks(bot, cid, status=status, kb=_wardrobe_home_kb())
 
 
 _PRIORITY_BLOCK = (
@@ -154,7 +135,6 @@ _PRIORITY_BLOCK = (
     "не ориентируйся только на температуру):\n"
     "1. Защита от дождя\n2. Комфорт по температуре\n3. Защита от ветра\n"
     "4. Соответствие стилю пользователя\n5. Не повторять недавние образы\n"
-    "6. Прошлые оценки «Надел»/«Не моё»\n"
     "Порядок анализа погоды: осадки → температура → ветер → солнце/облачность.\n"
     "Практичность важнее красоты: не предлагай промокнуть ради образа.\n"
     "Примеры компромисса: +23 и дождь → футболка + лёгкая ветровка/дождевик; "
@@ -228,7 +208,8 @@ def _build_weather_rules(cid, w, flags):
 
 
 # ---------- генерация лука по погоде ----------
-async def send_looks(bot, cid, status=None):
+async def send_looks(bot, cid, status=None, kb=None):
+    result_kb = kb or _wardrobe_home_kb()
     cached = _get_cached_look(cid)
     if cached:
         cached_names = [_item_name(it) for it in (cached.get("look_data") or {}).get("items", [])]
@@ -237,9 +218,9 @@ async def send_looks(bot, cid, status=None):
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
         text, entities = _build_look_message(cached.get("look_data", {}))
         if status is not None:
-            await status.replace(text, entities=entities, reply_markup=_look_result_kb())
+            await status.replace(text, entities=entities, reply_markup=result_kb)
         else:
-            await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=_look_result_kb())
+            await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=result_kb)
         return
     w = store.load_wardrobe(cid)
     wardrobe_text = store.wardrobe_to_text(w)
@@ -314,9 +295,6 @@ async def send_looks(bot, cid, status=None):
     weather_rules, _gap_note = _build_weather_rules(cid, w, flags)
     recent = store.recent_looks.get(str(cid), [])
     avoid = ("\nНе повторяй образы за последние 3 дня: " + "; ".join(recent)) if recent else ""
-    hints = memory.wardrobe_hints(cid)
-    fb_line = ("\nУчитывай прошлый фидбек (НЕ показывай его дословно, просто учти): "
-               + secure.wrap_untrusted(hints, "фидбек гардероба")) if hints else ""
     pref_hints = memory.profile_hints(cid)
     pref_line = ("\n" + secure.wrap_untrusted(pref_hints, "предпочтения")) if pref_hints else ""
     profile_block = (f"\n{style_block}" if style_block else "")
@@ -327,7 +305,7 @@ async def send_looks(bot, cid, status=None):
     prompt = f"""Ты — личный стилист и ассистент по гардеробу. Составь один готовый образ на сегодня только из вещей пользователя.
 Дата: {short_date}. Город: {city}.{profile_block}
 Погода: {wctx}
-ТЕМПЕРАТУРНОЕ ПРАВИЛО (строго, не нарушать): {temp_rule}{weather_block}{fb_line}{pref_line}
+ТЕМПЕРАТУРНОЕ ПРАВИЛО (строго, не нарушать): {temp_rule}{weather_block}{pref_line}
 Гардероб пользователя (ТОЛЬКО эти вещи, другие не добавлять):
 {wardrobe_text}
 Задача:
@@ -354,7 +332,7 @@ async def send_looks(bot, cid, status=None):
     items = [it.get("name", "") if isinstance(it, dict) else str(it) for it in raw_items]
     items = [it for it in items if it.strip()]
     if not items:
-        await status.replace("Не удалось собрать образ. Попробуй ещё раз.", reply_markup=_look_result_kb())
+        await status.replace("Не удалось собрать образ. Попробуй ещё раз.", reply_markup=result_kb)
         return
     rl = store.recent_looks.get(str(cid), [])
     rl.append(", ".join(items)[:80])
@@ -374,22 +352,7 @@ async def send_looks(bot, cid, status=None):
     _save_cached_look(cid, item_ids, look_data=look_data)
     store.last_source[str(cid)] = "Гардероб · Образ"
     store.last_answer[str(cid)] = text
-    await status.replace(text, entities=entities, reply_markup=_look_result_kb())
-
-
-# ---------- фидбек по образу ----------
-_FB_ACK = {
-    "worn": "Отметил: надел. Буду чаще предлагать похожее.",
-}
-
-async def look_feedback(bot, cid, verdict, status=None):
-    look = store.last_look.get(str(cid), "")
-    memory.add_wardrobe_feedback(cid, look, verdict)
-    if verdict == "nostyle":
-        store.clear_wardrobe_daylook(cid)
-        await send_looks(bot, cid, status=status)
-    else:
-        await bot.send_message(chat_id=cid, text=_FB_ACK.get(verdict, "Запомнил — учту в следующих образах."))
+    await status.replace(text, entities=entities, reply_markup=result_kb)
 
 
 # ---------- шкаф ----------
@@ -860,23 +823,11 @@ async def ingest(bot, cid, text):
 async def handle_callback(bot, cid, q, data):
     if data == "w_look":
         store.clear_wardrobe_daylook(cid)
-        status = await util.StatusManager.start(bot, cid=cid, message=q.message if q else None)
         try:
-            await send_looks(bot, cid, status=status)
+            await send_home(bot, cid, q=q)
         except Exception as e:
-            await status.stop(delete=False)
             await verify.safe_error(bot, cid, e)
         return
-    if data == "w_fb_nostyle":
-        status = await util.StatusManager.start(bot, cid=cid, message=q.message if q else None)
-        try:
-            await look_feedback(bot, cid, "nostyle", status=status)
-        except Exception as e:
-            await status.stop(delete=False)
-            await verify.safe_error(bot, cid, e)
-        return
-    if data == "w_fb_worn":
-        await look_feedback(bot, cid, "worn"); return
     if data == "w_add":
         store.pending_input[str(cid)] = "wardrobe_add"
         await bot.send_message(chat_id=cid, text="Напиши вещь в формате: тип + цвет + детали/бренд.\n"
