@@ -73,7 +73,9 @@ def _release_heading(line: str) -> tuple[str, str] | None:
 def _clean_release_note_line(line: str) -> str:
     line = line.strip()
     if line.startswith("- ") or line.startswith("* "):
-        return line[2:].strip()
+        line = line[2:].strip()
+    if line == "Бот развёрнут и работает ✅":
+        return ""
     return line
 
 

@@ -1284,7 +1284,7 @@ async def love_add_done(bot, cid, key, text, origin="base"):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     ctx_prefix = "lvls" if origin == "leisure" else "lv"
     await _cl.open_cleanup(bot, cid, f"{ctx_prefix}_{key}",
-                           back="m_leisure_settings" if origin == "leisure" else "as_notes")
+                           back="set_mydata_leisure" if origin == "leisure" else "as_notes")
 
 
 async def handle_notes_callback(bot, cid, q, data):

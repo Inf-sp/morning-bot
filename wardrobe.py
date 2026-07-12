@@ -54,21 +54,17 @@ def _weather_emoji(has_rain, flags):
 
 
 def _short_weather_line(tmax, cond, has_rain, flags):
-    """Короткая погодная строка для карточки образа, без LLM: '☀️ Солнечно, тепло, около +25°C.'"""
+    """Короткая погодная строка для карточки образа, без LLM: '☀️ Сегодня: солнечно · до +25°C.'"""
     if tmax is None:
         return ""
     emoji = _weather_emoji(has_rain, flags)
     if has_rain:
-        temp_word = "прохладно" if tmax < 17 else "тепло"
-        return f"{emoji} Дождь, {temp_word}, около {tmax:+d}°C."
-    parts = []
-    cond_low = str(cond or "").lower()
-    if flags and flags.get("sunny"):
-        parts.append("солнечно")
-    elif cond_low:
-        parts.append(cond_low)
-    parts.append("жарко" if tmax >= 24 else "тепло" if tmax >= 17 else "прохладно")
-    return f"{emoji} {', '.join(parts).capitalize()}, около {tmax:+d}°C."
+        word = "дождь"
+    elif flags and flags.get("sunny"):
+        word = "солнечно"
+    else:
+        word = str(cond or "").lower() or "облачно"
+    return f"{emoji} Сегодня: {word} · до {tmax:+d}°C."
 
 
 def _build_look_message(look_data):
@@ -317,7 +313,7 @@ async def send_looks(bot, cid, status=None):
     else:
         temp_rule = (f"tmax={tmax}°C, ПРОХЛАДНО{' / дождь' if has_rain else ''} — "
                      "слои уместны, можно ветровку или флис, закрытая обувь.")
-    weather_rules, gap_note = _build_weather_rules(cid, w, flags)
+    weather_rules, _gap_note = _build_weather_rules(cid, w, flags)
     recent = store.recent_looks.get(str(cid), [])
     avoid = ("\nНе повторяй образы за последние 3 дня: " + "; ".join(recent)) if recent else ""
     hints = memory.wardrobe_hints(cid)
@@ -327,22 +323,30 @@ async def send_looks(bot, cid, status=None):
     pref_line = ("\n" + secure.wrap_untrusted(pref_hints, "предпочтения")) if pref_hints else ""
     profile_block = (f"\n{style_block}" if style_block else "")
     weather_block = (f"\n{weather_rules}" if weather_rules else "")
-    prompt = f"""Ты — персональный стилист. Собери ОДИН образ из гардероба на сегодня.
-Пиши коротко, по делу, без воды.{profile_block}
+    now_dt = datetime.now(config.TZ)
+    short_date = f"{util._WEEKDAY_SHORT[now_dt.weekday()]}, {now_dt.day} {util._MONTHS[now_dt.month - 1]}"
+    city = s.get("city", "")
+    prompt = f"""Ты — личный стилист и ассистент по гардеробу. Составь один готовый образ на сегодня только из вещей пользователя.
+Дата: {short_date}. Город: {city}.{profile_block}
 Погода: {wctx}
 ТЕМПЕРАТУРНОЕ ПРАВИЛО (строго, не нарушать): {temp_rule}{weather_block}{fb_line}{pref_line}
 Гардероб пользователя (ТОЛЬКО эти вещи, другие не добавлять):
 {wardrobe_text}
-Правила: 1 верх + 1 низ + обувь (+ опц. аксессуар). Сочетание по цвету, силуэту и стилю.
-Можно давать один практичный совет по носке образа: закатать рукава рубашки, оставить рубашку навыпуск, расстегнуть верхнюю пуговицу, выбрать носки/аксессуар. Пользователь любит закатанные рукава и НИКОГДА не заправляет рубашку в штаны — не советуй заправлять рубашку.
+Задача:
+1. Выбери полноценный и практичный образ под погоду и стиль пользователя.
+2. Используй только вещи из списка выше.
+3. Учитывай сочетание цветов, посадку, силуэт, материалы и удобство.
+4. Не повторяй без необходимости недавние вещи.{avoid}
+5. Включай все нужные детали: верх, низ, обувь (+ опц. аксессуар или верхняя одежда, если нужна по погоде).
+6. Не добавляй вещь только ради заполнения списка — например, не указывай куртку, если она не нужна.
+7. Можно один практичный совет по носке: закатать рукава рубашки, оставить рубашку навыпуск, расстегнуть верхнюю пуговицу. Пользователь НИКОГДА не заправляет рубашку в штаны — не советуй это.
 Поле name — вещь ПОЛНЫМ названием из списка выше, точь-в-точь как там написано (для сверки со шкафом).
-Поле short_name — то же название без бренда (напр. «Белая футболка Uniqlo» → «Белая футболка»), в остальном не меняй формулировку.{avoid}
-Обращайся на «ты», без имени. Никакой воды и шаблонных фраз («вот образ», «хорошего дня»).
+Поле short_name — то же название без бренда (напр. «Белая футболка Uniqlo» → «Белая футболка»), в остальном не меняй формулировку.
+Обращайся на «ты», без имени. Не пиши «вот образ», «хорошего дня», «шкаф заполнен хорошо», «образ идеально подходит», «стильно и комфортно». Не повторяй погоду в объяснении. Не называй стиль отдельным словом — он должен чувствоваться в подборе, а не быть тегом. Не добавляй рекомендаций докупить что-либо.
 
 Верни строго валидный JSON (без markdown):
 {{"items":[{{"name":"вещь полным названием из списка","short_name":"вещь без бренда"}}, "... 3-4 вещи: верх, низ, обувь, опц. аксессуар"],
-"summary":"2-4 слова итогом образа, например 'легко, не жарко, аккуратно' — самая суть, без предложений",
-"recommendation":"1 предложение с одной рекомендацией докупить, если в гардеробе не хватает вещи для идеального образа, иначе пустая строка"}}"""
+"explanation":"одно естественное предложение, максимум 18 слов, почему сочетание работает именно сегодня"}}"""
     try:
         d = await ai.allm_json(prompt, 500, module="wardrobe")
     except Exception as e:
@@ -358,15 +362,12 @@ async def send_looks(bot, cid, status=None):
     rl.append(", ".join(items)[:80])
     store.recent_looks[str(cid)] = rl[-3:]
     store.last_look[str(cid)] = ", ".join(str(it) for it in items)[:120]   # для фидбека
-    recommendation = d.get("recommendation", "")
-    if gap_note:
-        # Честно сообщаем о пробеле под дождь прямо в образе.
-        recommendation = (recommendation + " " + gap_note).strip() if recommendation else gap_note
     look_data = {
+        "short_date": short_date,
+        "city": city,
         "weather_line": _short_weather_line(tmax, cond, has_rain, flags),
         "items": raw_items,
-        "summary": d.get("summary", ""),
-        "recommendation": recommendation,
+        "explanation": d.get("explanation", ""),
     }
     text, entities = _build_look_message(look_data)
     item_ids = _resolve_item_ids(w, items)

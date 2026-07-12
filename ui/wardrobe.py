@@ -117,14 +117,15 @@ def _finish_dot(value):
 
 
 def look_message(look_data):
-    """Образ на сегодня — максимально короткая карточка для быстрого решения:
-    одна строка погоды, простой список вещей без эмодзи, одна итоговая фраза.
+    """Образ на сегодня — компактная карточка на один экран: шапка с датой и городом,
+    строка погоды, вещи в одну строку через " · " и одно объяснение.
 
-    look_data: {weather_line, items[{name,short_name}], summary, recommendation}
+    look_data: {short_date, city, weather_line, items[{name,short_name}], explanation}
     """
     look_data = look_data or {}
     b = MessageBuilder()
-    b.section("✨ Образ на сегодня")
+    header_bits = [x for x in (_clean_text(look_data.get("short_date")), _clean_text(look_data.get("city"))) if x]
+    b.section(" · ".join(["👟 Гардероб", *header_bits]))
 
     weather_line = _clean_text(look_data.get("weather_line"))
     if weather_line:
@@ -132,24 +133,16 @@ def look_message(look_data):
         b.line(_finish_dot(weather_line))
 
     items = [_clean_text(_item_display(it)) for it in (look_data.get("items") or [])]
-    items = [it for it in items if it]
+    items = [it[:1].lower() + it[1:] if it else it for it in items if it]
     if items:
         b.spacer()
-        b.line("Надеть:")
-        for it in items:
-            b.bullet(it[:1].lower() + it[1:] if it else it)
+        b.text_line("✨ Надень: ")
+        b.line(" · ".join(items))
 
-    summary = _clean_text(look_data.get("summary"))
-    if summary:
+    explanation = _finish_dot(look_data.get("explanation"))
+    if explanation:
         b.spacer()
-        b.text_line("Коротко: ")
-        b.bold(_finish_dot(summary))
-        b.newline()
-
-    recommendation = _finish_dot(look_data.get("recommendation"))
-    if recommendation:
-        b.spacer()
-        b.add(recommendation, MessageEntity.ITALIC)
+        b.line(explanation)
 
     return b.build_stripped()
 
