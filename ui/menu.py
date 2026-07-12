@@ -45,24 +45,16 @@ def ikb(rows):
 
 def main_menu_rows():
     return [
-        [(ui_label("myday", "Мой день"), "m_myday"), (ui_label("wardrobe", "Гардероб"), "m_wardrobe")],
-        [(ui_label("food", "Готовка"), "m_food"), (ui_label("learning", "Обучение"), "m_learn")],
-        [(ui_label("health", "Здоровье"), "m_balance"), (ui_label("travel", "Поездки"), "m_travel")],
-        [(ui_label("leisure", "Досуг"), "m_leisure"), (ui_label("settings", "Настройки"), "m_notes")],
+        [(ui_label("myday", "Мой день"), "m_myday")],
+        [(ui_label("wardrobe", "Гардероб"), "m_wardrobe"), (ui_label("food", "Готовка"), "m_food")],
+        [(ui_label("learning", "Обучение"), "m_learn"), (ui_label("health", "Здоровье"), "m_balance")],
+        [(ui_label("travel", "Поездки"), "m_travel"), (ui_label("leisure", "Досуг"), "m_leisure")],
+        [(ui_label("settings", "Настройки"), "m_notes")],
     ]
 
 
 def main_menu_kb():
     return ikb(main_menu_rows())
-
-
-def main_menu():
-    b = MessageBuilder()
-    b.bold("📂 Меню")
-    b.newline()
-    b.spacer()
-    b.line("Выбери раздел.")
-    return b.build_stripped(reply_markup=main_menu_kb())
 
 
 def welcome():

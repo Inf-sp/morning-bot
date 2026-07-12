@@ -8,6 +8,7 @@ def _compact_line(b, emoji, label, content):
     b.bold(f"{label}:")
     b.text_line(f" {content}")
     b.newline()
+    b.spacer()
 
 
 def day_summary(
@@ -19,14 +20,12 @@ def day_summary(
     humidity_line="",
     word_line="",
     word_lang="nl",
-    fact="",
     lifehack="",
     quote_text="",
     quote_author="",
     lagom_line="",
 ):
-    """Компактная сводка: заголовок, затем по одной строке на блок без пустых строк
-    между ними (правило проекта — пробел только после заголовка)."""
+    """Сводка дня: заголовок, затем по одной строке на блок с пустой строкой между ними."""
     title_flag = f" {flag}" if flag else ""
     b = MessageBuilder()
     b.bold("Мой день")
@@ -38,14 +37,12 @@ def day_summary(
         _compact_line(b, weather_icon, "Погода", weather_line)
     if humidity_line:
         b.line(humidity_line)
+        b.spacer()
 
     if word_line:
         word_label = "Нидерландский" if word_lang == "nl" else "Английский"
         word_flag = "🇳🇱" if word_lang == "nl" else "🇬🇧"
         _compact_line(b, word_flag, word_label, word_line)
-
-    if fact:
-        _compact_line(b, "👨🏻‍💻", "Факт", str(fact).strip())
 
     if lifehack:
         _compact_line(b, "🦉", "Полезно", lifehack)
@@ -56,6 +53,7 @@ def day_summary(
         b.newline()
 
     if lagom_line:
+        b.spacer()
         b.add(f"💭 {lagom_line}", MessageEntity.ITALIC)
 
     return b.build_stripped()

@@ -304,7 +304,7 @@ def _extract_record_sents(extract: str) -> list:
 
 
 def nl_world_records() -> list:
-    """Факты-рекорды о Нидерландах из Википедии — для пула city_fact при cc=NL."""
+    """Факты-рекорды о Нидерландах из Википедии."""
     key = "nl_records"
     hit = _NL_RECORDS_CACHE.get(key)
     if hit and time.time() - hit[0] < _NL_RECORDS_TTL:
@@ -529,19 +529,6 @@ def tavily_snippet(query: str, max_chars: int = 1200) -> str:
     return "\n---\n".join(parts)
 
 
-def tavily_fact(name):
-    """Реальный факт о месте/стране через Tavily — без LLM (тот же принцип, что wiki_fact,
-    для аварийного пути, когда сам LLM недоступен). Пустая строка если ключа нет/нет кандидатов."""
-    results = tavily_search(f"{name} интересный факт", max_results=3)
-    sents = []
-    seen = set()
-    for r in results:
-        for s in _extract_sents(r.get("content") or ""):
-            if s not in seen:
-                sents.append(s); seen.add(s)
-    return sents
-
-
 def firecrawl_search(query: str, max_results: int = 5) -> list:
     """Поиск через Firecrawl — второй независимый источник рядом с Tavily.
     Возвращает list[{title, url, content}] или [] при ошибке/нет ключа."""
@@ -572,51 +559,18 @@ def firecrawl_search(query: str, max_results: int = 5) -> list:
         return []
 
 
-def firecrawl_fact(name):
-    """Реальные факты о месте через Firecrawl — тот же принцип, что tavily_fact."""
-    results = firecrawl_search(f"{name} интересный факт", max_results=3)
-    sents = []
-    seen = set()
+def firecrawl_snippet(query: str, max_chars: int = 1200) -> str:
+    """Top-3 Firecrawl сниппета, склеенные для LLM-промпта. Пустая строка если ключа нет."""
+    results = firecrawl_search(query, max_results=3)
+    parts, total = [], 0
     for r in results:
-        for s in _extract_sents(r.get("content") or ""):
-            if s not in seen:
-                sents.append(s); seen.add(s)
-    return sents
+        chunk = (r.get("content") or "").strip()
+        if chunk and total + len(chunk) < max_chars:
+            parts.append(chunk)
+            total += len(chunk)
+    return "\n---\n".join(parts)
 
 
-def place_fact_candidates(name):
-    """Все проверяемые факты-кандидаты о месте из Wikipedia, Tavily и Firecrawl,
-    без выбора одного — для наполнения пулов несколькими реальными фактами."""
-    candidates = []
-    seen = set()
-    for s in wiki_sentences(name):
-        if s not in seen:
-            candidates.append(s); seen.add(s)
-    for s in tavily_fact(name):
-        if s not in seen:
-            candidates.append(s); seen.add(s)
-    for s in firecrawl_fact(name):
-        if s not in seen:
-            candidates.append(s); seen.add(s)
-    return candidates
-
-
-def best_place_fact(name, llm_pick=None):
-    """Выбирает самый интересный факт о месте среди кандидатов из Wikipedia,
-    Tavily и Firecrawl. По умолчанию выбор — самое длинное/подробное
-    предложение (простая эвристика без AI-вызова); если передан llm_pick(list)
-    — вызывающий код может подключить LLM-ранжирование по вкусу/новизне."""
-    candidates = place_fact_candidates(name)
-    if not candidates:
-        return ""
-    if llm_pick:
-        try:
-            picked = llm_pick(candidates)
-            if picked in candidates:
-                return picked
-        except Exception:
-            pass
-    return max(candidates, key=len)
 
 
 def web_search(query: str, max_results: int = 5) -> list:

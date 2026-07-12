@@ -149,11 +149,14 @@ async def _finish(bot, cid):
     _ob.pop(str(cid), None)
     _save_step(cid, None)
     store.pending_input.pop(str(cid), None)
+    prof = store.get_profile(cid)
+    prof["reply_kb_cleared"] = True
+    store.set_profile(cid, prof)
     await bot.send_message(
         chat_id=cid,
         text=menu.WELCOME,
         entities=menu.WELCOME_ENTITIES,
-        reply_markup=menu.main_menu_kb(),
+        reply_markup=menu.reply_kb(),
     )
     if st.get("langs"):
         await learning.send_seed_intro(bot, cid)

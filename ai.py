@@ -537,8 +537,10 @@ def _friendly(errs):
 DEFAULT_ORDER  = ("gemini", "groq", "cf")
 # Чат: Gemini первым — лучше поддерживает диалог, свободный и живой стиль
 CHAT_ORDER     = ("gemini", "groq", "cf")
-# Грамматика/быстрые задачи: Groq (Llama-70b) первым — скорость, structured output
-GRAMMAR_ORDER  = ("groq", "gemini", "cf")
+# Грамматика/быстрые задачи: Groq (Llama-70b) первым — скорость, structured output.
+# Cloudflare вторым (не последним) — простые задачи ему по силам, а без реального
+# трафика он никогда не используется (см. RELEASE_NOTES v1.8.78).
+GRAMMAR_ORDER  = ("groq", "cf", "gemini")
 # Досуг/рекомендации: Gemini первым — богатое знание культуры, кино, музыки, путешествий
 LEISURE_ORDER  = ("gemini", "groq", "cf")
 
@@ -550,7 +552,7 @@ PROVIDER_ORDER = {
 }
 
 # --- тиры: маршрутизация по задаче ---
-# cheap  → Groq первым (грамматика, переводы, простые lookup-и)
+# cheap  → Groq первым, Cloudflare вторым (грамматика, переводы, простые lookup-и)
 # smart  → Gemini первым (чат, рецепты, гардероб, мотивация — требуют рассуждений)
 # leisure → Gemini первым (досуг, путешествия, рекомендации — требуют знания мира)
 TIERS = {

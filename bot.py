@@ -215,18 +215,17 @@ async def maybe_send_admin_deploy_notification(bot):
 
 
 async def _clear_reply_kb_once(bot, cid):
-    """Разово снимает старую нижнюю Reply-клавиатуру у тех, кому она ещё показана
-    (Telegram держит её, пока не придёт ReplyKeyboardRemove -- одной сменой
-    reply_markup на инлайн-кнопки она не убирается)."""
+    """Разово меняет старую нижнюю Reply-клавиатуру (разделы) на новую с одной
+    кнопкой «☰ Меню» (Telegram держит клавиатуру, пока явно не пришлёт новую -
+    одной сменой reply_markup на инлайн-кнопки она не убирается)."""
     prof = store.get_profile(cid)
     if prof.get("reply_kb_cleared"):
         return
-    from telegram import ReplyKeyboardRemove
     try:
         await bot.send_message(
             chat_id=cid,
-            text="Меню теперь открывается через /menu или кнопку «☰ Меню» на «Мой день».",
-            reply_markup=ReplyKeyboardRemove(),
+            text=f"Меню теперь открывается кнопкой «{menu.REPLY_KB_LABEL}» внизу или командой /menu.",
+            reply_markup=menu.reply_kb(),
         )
     except Exception:
         return
@@ -723,6 +722,12 @@ async def text_router(update, context):
     flags = secure.injection_flags(text)
     if flags:
         _log.warning("[secure] injection flags: %s", flags)
+
+    if text == menu.REPLY_KB_LABEL:
+        store.pending_input.pop(cid, None)
+        t, entities, kb = menu.main_menu_screen(cid)
+        await bot.send_message(chat_id=cid, text=t, reply_markup=kb, entities=entities)
+        return
 
     # Режим добавления одежды (файлом)
     if store.add_wardrobe_mode.get(cid):

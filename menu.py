@@ -1,8 +1,18 @@
+from telegram import ReplyKeyboardMarkup
+
 from ui import menu as menu_ui
 
 
 _WELCOME = menu_ui.welcome()
 WELCOME, WELCOME_ENTITIES = _WELCOME.text, _WELCOME.entities
+
+REPLY_KB_LABEL = "☰ Меню"
+
+
+def reply_kb():
+    """Единственная кнопка нижней Reply-клавиатуры - открывает инлайн-меню,
+    а не старую панель разделов."""
+    return ReplyKeyboardMarkup([[REPLY_KB_LABEL]], resize_keyboard=True, is_persistent=True)
 
 
 def main_menu_kb():
@@ -10,17 +20,7 @@ def main_menu_kb():
 
 
 def main_menu_screen(cid=None):
-    """Первое открытие меню - полное приветствие с описанием разделов,
-    дальше - компактный экран "Выбери раздел"."""
-    if cid is not None:
-        import store
-        prof = store.get_profile(cid)
-        if not prof.get("seen_menu"):
-            prof["seen_menu"] = True
-            store.set_profile(cid, prof)
-            return WELCOME, WELCOME_ENTITIES, main_menu_kb()
-    msg = menu_ui.main_menu()
-    return msg.text, msg.entities, msg.reply_markup
+    return WELCOME, WELCOME_ENTITIES, main_menu_kb()
 
 
 def _back(parent="m_close"):

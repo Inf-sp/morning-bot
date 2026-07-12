@@ -18,7 +18,7 @@ def _env_int(name, default):
         return default
 
 
-WEATHER_FREE_DAILY_LIMIT = _env_int("WEATHER_FREE_DAILY_LIMIT", 500)
+WEATHER_FREE_DAILY_LIMIT = _env_int("WEATHER_FREE_DAILY_LIMIT", 1000)
 WEATHER_HARD_DAILY_LIMIT = _env_int("WEATHER_HARD_DAILY_LIMIT", WEATHER_FREE_DAILY_LIMIT)
 WEATHER_WARNING_LIMIT = _env_int("WEATHER_WARNING_LIMIT", int(WEATHER_HARD_DAILY_LIMIT * 0.7))
 WEATHER_CRITICAL_LIMIT = _env_int("WEATHER_CRITICAL_LIMIT", int(WEATHER_HARD_DAILY_LIMIT * 0.9))
@@ -64,6 +64,7 @@ API_QUOTAS = {
     "gemini": [
         {"mode": "fixed", "unit": "requests", "period": "minute", "limit": 5},
         {"mode": "fixed", "unit": "tokens", "period": "minute", "limit": 250_000},
+        {"mode": "fixed", "unit": "requests", "period": "day", "limit": 20},
     ],
     "tavily": [
         {"mode": "fixed", "unit": "credits", "period": "month", "limit": 1000},
@@ -75,14 +76,14 @@ API_QUOTAS = {
         {"mode": "local", "unit": "requests", "period": "day"},
     ],
     "groq": [
-        {"mode": "local", "unit": "requests", "period": "day"},
+        {"mode": "local", "unit": "requests", "period": "day", "limit": 1000},
     ],
     "tmdb": [
         {"mode": "local", "unit": "requests", "period": "day"},
     ],
     "ticketmaster": [
         {"mode": "headers", "unit": "requests", "period": "day", "enabled": False},
-        {"mode": "local", "unit": "requests", "period": "day"},
+        {"mode": "local", "unit": "requests", "period": "day", "limit": 5000},
     ],
     "zeroentropy": [
         {"mode": "local", "unit": "tokens", "period": "day"},
@@ -117,11 +118,7 @@ DICT_KEY = "dict.json"
 MISTAKES_KEY = "mistakes.json"  # персистентная база ошибок тренажёра, для mistakeReview
 LAGOM_KEY = "lagom.json"
 PROFILE_KEY = "profile.json"   # память пользователя: фокус, фидбек гардероба, наблюдения
-CITY_FACTS_FILE = "city_facts.json"        # аварийный fallback, если AI недоступен при генерации пула
-CITY_FACT_IDX_KEY = "city_fact_idx.json"   # anti-repeat индексы curated-фактов (только для fallback-пути)
 LIFEHACK_KEY = "lifehacks_seen.json"       # anti-repeat для fallback lifehacks.json
-FACT_POOL_KEY = "myday_fact_pool.json"     # недельный AI-пул интересных фактов {cid: {...}}
-CITY_FACT_HISTORY_KEY = "city_fact_history.json"  # показанные факты за 12 мес, anti-repeat для промпта
 LIFEHACK_POOL_KEY = "myday_lifehack_pool.json"  # недельный AI-пул базы знаний {cid: {...}}
 FRIDGE_KEY = "fridge.json"
 MY_RECIPES_KEY = "my_recipes.json"

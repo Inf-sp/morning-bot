@@ -8,6 +8,8 @@ from __future__ import annotations
 import time
 from datetime import datetime, timedelta
 
+import requests
+
 import config
 import store
 
@@ -376,6 +378,73 @@ def snapshot():
             "errors": list(svc.get("errors") or [])[-10:],
         })
     return {"updated_at": int(time.time()), "services": out}
+
+
+_REMOTE_QUOTA_CACHE = {}   # service -> (ts, dict|None)
+_REMOTE_QUOTA_TTL = 1800   # 30 минут - диагностический экран, свежесть не критична
+
+
+def _cached_remote_quota(service: str, fetch_fn) -> dict | None:
+    hit = _REMOTE_QUOTA_CACHE.get(service)
+    if hit and time.time() - hit[0] < _REMOTE_QUOTA_TTL:
+        return hit[1]
+    try:
+        data = fetch_fn()
+    except Exception:
+        data = None
+    _REMOTE_QUOTA_CACHE[service] = (time.time(), data)
+    return data
+
+
+def firecrawl_credit_usage() -> dict | None:
+    """Реальный остаток кредитов Firecrawl через /v2/team/credit-usage (кэш 30 мин)."""
+    if not config.FIRECRAWL_API_KEY:
+        return None
+
+    def fetch():
+        r = requests.get(
+            "https://api.firecrawl.dev/v2/team/credit-usage",
+            headers={"Authorization": f"Bearer {config.FIRECRAWL_API_KEY}"},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return None
+        d = (r.json() or {}).get("data") or {}
+        if d.get("remainingCredits") is None:
+            return None
+        return {
+            "remaining": d.get("remainingCredits"),
+            "limit": d.get("planCredits"),
+            "reset_at": d.get("billingPeriodEnd"),
+        }
+
+    return _cached_remote_quota("firecrawl", fetch)
+
+
+def openrouter_key_usage() -> dict | None:
+    """Реальный остаток кредитов OpenRouter через /api/v1/key (кэш 30 мин)."""
+    if not config.OPENROUTER_API_KEY:
+        return None
+
+    def fetch():
+        r = requests.get(
+            "https://openrouter.ai/api/v1/key",
+            headers={"Authorization": f"Bearer {config.OPENROUTER_API_KEY}"},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return None
+        d = (r.json() or {}).get("data") or {}
+        limit = d.get("limit")
+        remaining = d.get("limit_remaining")
+        used = d.get("usage")
+        if remaining is None and limit is not None and used is not None:
+            remaining = max(0, limit - used)
+        if remaining is None:
+            return None
+        return {"remaining": remaining, "limit": limit}
+
+    return _cached_remote_quota("openrouter", fetch)
 
 
 def seconds_until_gemini_slot(limit: int = 4, window: int = 60) -> float:

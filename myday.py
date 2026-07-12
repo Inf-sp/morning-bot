@@ -63,20 +63,6 @@ def _content_blocked(text: str) -> bool:
     return any(word in low for word in _CONTENT_BLACKLIST)
 
 
-_GENERIC_FACT_PHRASES = (
-    "сочетание истор", "сочетание современ", "отражает эволюц", "богатое культурн",
-    "город известен своей", "демонстрирует эволюц", "городского планирования",
-    "уникальное сочетание", "гармонично сочетает",
-)
-
-
-def _fact_is_generic(text: str) -> bool:
-    """Отсекает филлер без единого конкретного факта/числа/имени (§46 CLAUDE.md:
-    факт должен быть рекордом/достижением/вау-историей, а не общей справкой)."""
-    low = (text or "").lower()
-    return any(phrase in low for phrase in _GENERIC_FACT_PHRASES)
-
-
 def _iso_week_key(dt=None) -> str:
     dt = dt or datetime.now(TZ)
     year, week, _ = dt.isocalendar()
@@ -143,163 +129,6 @@ def _pool_ensure_fresh(store_key: str, cid: str, pool_id: str, generate_fn) -> N
         _pool_save(store_key, cid, pool_id, filtered)
 
 
-# --- Факты о городе (недельный AI-пул + curated JSON только как fallback) ---
-
-_CURATED_FACTS: dict = {}   # кеш city_facts.json на время сессии
-
-
-def _load_curated_facts(city: str) -> list:
-    """Загружает факты из city_facts.json (кеш в памяти). Поиск по имени города."""
-    global _CURATED_FACTS
-    if not _CURATED_FACTS:
-        try:
-            _CURATED_FACTS = json.loads((_HERE / config.CITY_FACTS_FILE).read_text(encoding="utf-8"))
-        except Exception as e:
-            _log.warning("myday: city_facts.json not loaded: %s", e)
-            return []
-    city_lower = city.strip().lower()
-    for key, facts in _CURATED_FACTS.items():
-        if key.strip().lower() == city_lower:
-            return list(facts)
-    return []
-
-
-_FACT_HISTORY_DAYS = 365
-
-
-def _fact_history_get(cid, city_key):
-    """Тексты фактов, показанных за последние 12 месяцев, для anti-repeat в промпте."""
-    cid = str(cid)
-    data = store._load(config.CITY_FACT_HISTORY_KEY) or {}
-    entries = (data.get(cid) or {}).get(city_key) or []
-    cutoff = int(datetime.now(TZ).timestamp()) - _FACT_HISTORY_DAYS * 86400
-    return [e["text"] for e in entries if isinstance(e, dict) and e.get("shown_at", 0) >= cutoff and e.get("text")]
-
-
-def _fact_history_add(cid, city_key, text):
-    """Записывает показанный факт в историю и вычищает записи старше 12 месяцев."""
-    if not text:
-        return
-    cid = str(cid)
-    cutoff = int(datetime.now(TZ).timestamp()) - _FACT_HISTORY_DAYS * 86400
-
-    def mut(data):
-        entries = data.setdefault(cid, {}).setdefault(city_key, [])
-        entries[:] = [e for e in entries if isinstance(e, dict) and e.get("shown_at", 0) >= cutoff]
-        entries.append({"text": text, "shown_at": int(datetime.now(TZ).timestamp())})
-        return data, True
-
-    store.mutate_kv(config.CITY_FACT_HISTORY_KEY, mut)
-
-
-def _curated_fact_fallback(city, cid):
-    """Аварийный путь, если AI недоступен при генерации недельного пула:
-    curated JSON с anti-repeat → research.tavily_fact → ''."""
-    cid = str(cid)
-    facts = _load_curated_facts(city)
-    if facts:
-        all_idx = list(range(len(facts)))
-        seen_data = store._load(config.CITY_FACT_IDX_KEY) or {}
-        city_key = city.strip().lower()
-        seen_set = set(seen_data.get(cid, {}).get(city_key, []))
-        unseen = [i for i in all_idx if i not in seen_set]
-        if not unseen:
-            seen_set = set()
-            unseen = all_idx
-        chosen_idx = random.choice(unseen)
-        seen_set.add(chosen_idx)
-        seen_data.setdefault(cid, {})[city_key] = list(seen_set)
-        store._save(config.CITY_FACT_IDX_KEY, seen_data)
-        text = facts[chosen_idx]["text"]
-        if not _content_blocked(text):
-            return text
-    try:
-        fact = research.best_place_fact(city)
-        if fact and len(fact.strip()) > 60 and not _content_blocked(fact):
-            return fact.strip()
-    except Exception as e:
-        _log.warning("myday: best_place_fact(%s) failed: %s", city, e)
-    return ""
-
-
-def _generate_fact_pool(city, country, recent_facts=None):
-    recent_facts = [str(f).strip() for f in (recent_facts or []) if str(f).strip()]
-    avoid_block = ""
-    if recent_facts:
-        avoid_block = (
-            "Не повторяй эти факты и не пересказывай их другими словами "
-            "(за последние 12 месяцев уже использовались):\n"
-            + "\n".join(f"- {f}" for f in recent_facts[-60:]) + "\n"
-        )
-    prompt = (
-        f"Составь {_POOL_TARGET_ITEMS} коротких вау-фактов о городе {city}"
-        f"{f', {country}' if country else ''} для утреннего уведомления Telegram-бота.\n"
-        "Каждый факт — это рекорд, достижение, «первый в истории/стране/мире», необычная "
-        "цифра с конкретным контекстом или неожиданный поворот реальной истории: то, что "
-        "хочется сразу пересказать другу, а не сухая справка.\n"
-        "Хорошо: «первый, кто...», «единственный в стране, где...», «самый старый/большой/"
-        "быстрый среди...», конкретное число + почему оно впечатляет, малоизвестная деталь "
-        "про известное место или человека.\n"
-        "Плохо и СТРОГО ЗАПРЕЩЕНО: общие описательные фразы без единого конкретного факта/числа/"
-        "имени, вроде «сочетание исторической и современной архитектуры», «город известен своей "
-        "культурой», «отражает эволюцию городского планирования», «богатое культурное наследие» — "
-        "если фраза подходит под любой европейский город без изменений, это не факт, а филлер.\n"
-        "Пиши в стиле короткой журнальной заметки, максимум 3 коротких предложения на факт.\n"
-        "Без списков внутри факта, без голых дат без контекста, без канцелярского языка.\n"
-        "Не начинай факт с фраз «Знаете ли вы», «Мало кто знает», «Интересный факт» или "
-        "похожих вводных клише.\n"
-        "Не преувеличивай и не придумывай эффект неожиданности — только то, что "
-        "подтверждается надёжными источниками.\n"
-        f"{avoid_block}"
-        "СТРОГО ЗАПРЕЩЕНО: футбол, спорт любого вида, результаты матчей, клубы, спортивные "
-        "даты, политика, выборы, партии, криминал, преступления, войны, теракты, суды.\n"
-        'Верни JSON: {"facts": ["факт 1", "факт 2", ...]}'
-    )
-    try:
-        d = ai.llm_json(prompt, 1800, tier="cheap", module="myday")
-    except Exception as e:
-        _log.warning("myday: fact pool generation failed: %s", e)
-        d = None
-    facts = d.get("facts") if isinstance(d, dict) else []
-    pool = [
-        (str(f).strip(), {}) for f in (facts or [])
-        if str(f).strip() and not _fact_is_generic(str(f))
-    ]
-
-    try:
-        verified = research.place_fact_candidates(city)
-    except Exception as e:
-        _log.warning("myday: place_fact_candidates(%s) failed: %s", city, e)
-        verified = []
-    seen_texts = {text for text, _ in pool}
-    for fact in verified[:4]:
-        fact = fact.strip()
-        if (fact and fact not in seen_texts and fact not in recent_facts
-                and not _content_blocked(fact) and not _fact_is_generic(fact)):
-            pool.append((fact, {}))
-            seen_texts.add(fact)
-
-    return pool
-
-
-def city_fact(city, country, cid, cc=""):
-    """Факт о городе из недельного AI-пула (§46 CLAUDE.md: без спорта/политики/криминала).
-    Если AI недоступен при первой генерации пула за неделю - curated JSON/Tavily.
-    Факты, показанные за последние 12 месяцев, не повторяются (передаются в промпт при
-    генерации нового пула) и записываются в историю при каждом реальном показе."""
-    if not city:
-        return ""
-    cid = str(cid)
-    pool_id = city.strip().lower()
-    recent = _fact_history_get(cid, pool_id)
-    _pool_ensure_fresh(config.FACT_POOL_KEY, cid, pool_id, lambda: _generate_fact_pool(city, country, recent))
-    item = _pool_next_unshown(config.FACT_POOL_KEY, cid, pool_id)
-    text = item["text"] if item else _curated_fact_fallback(city, cid)
-    if text:
-        _fact_history_add(cid, pool_id, text)
-    return text
-
-
 # --- Сводка дня (Мой день) ---
 
 
@@ -355,11 +184,18 @@ def _generate_lifehack_pool(cid):
         interests.append(f"любит книги: {', '.join(str(b) for b in books if b)}")
     interest_block = ("Интересы пользователя: " + "; ".join(interests) + ".\n") if interests else ""
     cats_str = ", ".join(_LIFEHACK_CATEGORIES)
+    nl_snippet = research.firecrawl_snippet("жизнь в Нидерландах советы быт бюрократия велосипед", 900)
+    nl_ground_block = (
+        f"Для категории 'жизнь в Нидерландах' используй как источник этот реальный веб-контент "
+        f"(не противоречь ему, не выдумывай факты про NL, если он есть):\n{nl_snippet}\n"
+        if nl_snippet else ""
+    )
     prompt = (
         f"Составь {_POOL_TARGET_ITEMS} практичных, не банальных советов для персональной "
         f"'Базы знаний' в утреннем уведомлении Telegram-бота.\n"
         f"Категории (используй только их): {cats_str}.\n"
         f"{interest_block}"
+        f"{nl_ground_block}"
         "Каждый совет должен быть конкретным и применимым сразу, без общих фраз вроде "
         "'пейте больше воды' или 'высыпайтесь'.\n"
         'Верни JSON: {"tips": [{"category": "одна из категорий выше", "text": "совет"}]}'
@@ -540,7 +376,7 @@ def _word_of_day(cid):
 
     return f"{_cap(term)} → {_cap(ru)}", lang
 
-_day_cache = {}  # cid -> {"date":..., "text":..., "entities":..., "has_fact": bool, "ts": float}
+_day_cache = {}  # cid -> {"date":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
     _day_cache.pop(str(cid), None)
@@ -602,11 +438,6 @@ def _build_day_text(cid):
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     flag = flag_from_cc(s.get("cc", "")) or (country_flag(s.get("country", "")) if s.get("country") else "")
-    try:
-        fact = city_fact(s.get("city", ""), s.get("country", ""), cid, cc=s.get("cc", ""))
-    except Exception as e:
-        _log.warning("myday: city_fact failed: %s", e)
-        fact = ""
     hack_cat, hack_text = daily_lifehack(
         cid, rain=rain >= 40, hot=(tmax is not None and tmax >= 24), is_weekend=is_weekend)
     try:
@@ -634,7 +465,6 @@ def _build_day_text(cid):
         humidity_line=f"{hum_title} · {hum_line}" if hum_title else "",
         word_line=word_line,
         word_lang=word_lang,
-        fact=fact,
         lifehack=hack_text,
         quote_text=quote_text,
         quote_author=quote_author,
@@ -645,8 +475,6 @@ def _build_day_text(cid):
     _, _uw = verify.grade_umbrella(text, weather._rain_real(rain, rain_mm))
     for w in _uw:
         _log.warning("[verify] weather: %s", w)
-    # помечаем, есть ли факт — чтобы кешировать короче если нет
-    _build_day_text._has_fact = bool(fact)
     return text, msg.entities
 
 async def _maybe_prompt_dict_seed(bot, cid):
@@ -680,27 +508,18 @@ async def send_plany(bot, cid, force=False, show_loading=True):
     await _maybe_prompt_dict_seed(bot, cid)
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     cache = _day_cache.get(str(cid))
-    # Кеш устарел если: другой день, принудительное обновление,
-    # или факт не был получен и прошло >30 минут (чтобы дать build ещё шанс)
-    stale = (
-        not cache
-        or cache.get("date") != today
-        or force
-        or (not cache.get("has_fact") and _time.time() - cache.get("ts", 0) > 1800)
-    )
+    stale = not cache or cache.get("date") != today or force
     if stale:
         try:
             await bot.send_chat_action(chat_id=cid, action="typing")
         except Exception:
             pass
-        _build_day_text._has_fact = False
         try:
             text, entities = await asyncio.to_thread(_build_day_text, cid)
         except Exception as e:
             await verify.safe_error(bot, cid, e); return
         _day_cache[str(cid)] = {
             "date": today, "text": text, "entities": entities,
-            "has_fact": getattr(_build_day_text, "_has_fact", False),
             "ts": _time.time(),
         }
     cached = _day_cache[str(cid)]

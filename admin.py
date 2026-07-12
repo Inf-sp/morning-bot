@@ -301,20 +301,43 @@ def _plural_services(n):
     return "сервисов"
 
 
+_PERIOD_RU = {"day": "в день", "hour": "в час", "month": "в месяц", "minute": "в минуту"}
+_PERIOD_PRIORITY = {"day": 0, "month": 1, "hour": 2, "minute": 3}
+
+
+def _quota_left_line(svc) -> str | None:
+    """'X из Y в период осталось' по квоте с известным лимитом (config.API_QUOTAS) - день/месяц
+    важнее часа/минуты для беглого взгляда на экран, поминутный берём только если больше нечего.
+    Считаем сами каждый исходящий запрос - для дневных/часовых квот это точная цифра."""
+    quotas = [q for q in svc.get("quotas", []) if q.get("limit")]
+    if not quotas:
+        return None
+    q = min(quotas, key=lambda q: _PERIOD_PRIORITY.get(q.get("period"), 9))
+    limit = int(q["limit"])
+    used = int(q.get("used") or 0)
+    period_ru = _PERIOD_RU.get(q.get("period"), "")
+    suffix = f" {period_ru}" if period_ru else ""
+    return f"{max(0, limit - used)} из {limit}{suffix} осталось"
+
+
+def _requests_today_line(svc) -> str | None:
+    n = svc.get("day_requests") or 0
+    return f"{n} запросов сегодня" if n else None
+
+
 def _gemini_ai_line(snapshot):
     label = "Gemini"
     if not _configured_service("gemini"):
         return f"{ui.OFF} {label} · нет ключа"
     state = api_usage.gemini_state(1)
-    quota = next((q for q in config.API_QUOTAS.get("gemini", []) if q.get("unit") == "requests"), None)
-    limit_txt = f"{quota.get('limit')} запросов/мин" if quota else "лимит OK"
-    if state.get("cooldown_active"):
-        return f"{ui.WARN} {label} · пауза до {_hhmm(state.get('cooldown_until'))} · {limit_txt}"
     svc = _snapshot_service(snapshot, "gemini")
+    left = _quota_left_line(svc) or "лимит OK"
+    if state.get("cooldown_active"):
+        return f"{ui.WARN} {label} · пауза до {_hhmm(state.get('cooldown_until'))} · {left}"
     if svc.get("status") == "bad":
         reason = _friendly_error(svc.get("last_error_reason")) or "ошибка"
         return f"{ui.BAD} {label} · основной · {str(reason)[:40]}"
-    return f"{ui.OK} {label} · основной · {limit_txt}"
+    return f"{ui.OK} {label} · основной · {left}"
 
 
 def _simple_ai_line(service, label, snapshot, used_by=None):
@@ -325,10 +348,20 @@ def _simple_ai_line(service, label, snapshot, used_by=None):
     if svc.get("status") == "bad":
         reason = _friendly_error(svc.get("last_error_reason")) or "ошибка"
         return f"{ui.BAD} {label} · {role} · {str(reason)[:40]}"
-    requests_today = svc.get("day_requests") or 0
-    if requests_today:
-        return f"{ui.OK} {label} · {role} · {requests_today} запросов сегодня"
-    return f"{ui.OK} {label} · {role}"
+    left = _quota_left_line(svc) or _requests_today_line(svc)
+    return f"{ui.OK} {label} · {role}" + (f" · {left}" if left else "")
+
+
+def _openrouter_ai_line(snapshot, ai_module):
+    if not config.OPENROUTER_API_KEY:
+        return None
+    usage = api_usage.openrouter_key_usage()
+    if usage and usage.get("limit"):
+        return f"{ui.OK} OpenRouter · резерв · {usage['remaining']} из {int(usage['limit'])} осталось"
+    fallback_stats = ai_module.get_openrouter_fallback_stats(1)
+    errors = int(fallback_stats.get("errors") or 0)
+    return (f"{ui.OK} OpenRouter · резерв" if not errors
+            else f"{ui.WARN} OpenRouter · резерв · {errors} ошибок сегодня")
 
 
 def _api_line(service, label, snapshot):
@@ -340,22 +373,18 @@ def _api_line(service, label, snapshot):
         if usage.get("last_error_reason") and usage.get("last_error_at"):
             return f"{ui.BAD} {label} · {_friendly_error(str(usage.get('last_error_reason')))[:40]}"
         return f"{ui.OK} {label} · {max(0, limit - total)} из {limit} осталось"
+    if service == "firecrawl":
+        remote = api_usage.firecrawl_credit_usage()
+        if remote and remote.get("limit"):
+            return f"{ui.OK} {label} · {remote['remaining']} из {int(remote['limit'])} осталось"
     if not _configured_service(service):
         return f"{ui.OFF} {label} · нет ключа"
     svc = _snapshot_service(snapshot, service)
     if svc.get("status") == "bad":
         reason = _friendly_error(svc.get("last_error_reason")) or "ошибка"
         return f"{ui.BAD} {label} · {str(reason)[:40]}"
-    if service == "tavily":
-        quota = next((q for q in svc.get("quotas", []) if q.get("unit") == "credits"), None)
-        if quota:
-            limit = int(quota.get("limit") or 1000)
-            used = int(quota.get("used") or 0)
-            return f"{ui.OK} {label} · {max(0, limit - used)} из {limit} осталось"
-        return f"{ui.OK} {label} · лимит OK"
-    if service == "ticketmaster":
-        return f"{ui.OK} {label} · кэш 7 дней"
-    return f"{ui.OK} {label} · лимит OK"
+    left = _quota_left_line(svc) or _requests_today_line(svc)
+    return f"{ui.OK} {label} · {left}" if left else f"{ui.OK} {label} · лимит OK"
 
 
 async def send_api_ai(bot, cid, q=None):
@@ -369,13 +398,9 @@ async def send_api_ai(bot, cid, q=None):
         _simple_ai_line("groq", "Groq", snapshot, used_by=_used_by("Groq")),
         _simple_ai_line("cloudflare", "Cloudflare AI", snapshot),
     ]
-    if config.OPENROUTER_API_KEY:
-        fallback_stats = ai.get_openrouter_fallback_stats(1)
-        errors = int(fallback_stats.get("errors") or 0)
-        ai_rows.append(
-            f"{ui.OK} OpenRouter · резерв" if not errors
-            else f"{ui.WARN} OpenRouter · резерв · {errors} ошибок сегодня"
-        )
+    openrouter_line = _openrouter_ai_line(snapshot, ai)
+    if openrouter_line:
+        ai_rows.append(openrouter_line)
 
     api_rows = [
         _api_line("openweather", "OpenWeather", snapshot),
