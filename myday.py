@@ -63,6 +63,20 @@ def _content_blocked(text: str) -> bool:
     return any(word in low for word in _CONTENT_BLACKLIST)
 
 
+_GENERIC_FACT_PHRASES = (
+    "сочетание истор", "сочетание современ", "отражает эволюц", "богатое культурн",
+    "город известен своей", "демонстрирует эволюц", "городского планирования",
+    "уникальное сочетание", "гармонично сочетает",
+)
+
+
+def _fact_is_generic(text: str) -> bool:
+    """Отсекает филлер без единого конкретного факта/числа/имени (§46 CLAUDE.md:
+    факт должен быть рекордом/достижением/вау-историей, а не общей справкой)."""
+    low = (text or "").lower()
+    return any(phrase in low for phrase in _GENERIC_FACT_PHRASES)
+
+
 def _iso_week_key(dt=None) -> str:
     dt = dt or datetime.now(TZ)
     year, week, _ = dt.isocalendar()
@@ -218,13 +232,18 @@ def _generate_fact_pool(city, country, recent_facts=None):
             + "\n".join(f"- {f}" for f in recent_facts[-60:]) + "\n"
         )
     prompt = (
-        f"Составь {_POOL_TARGET_ITEMS} коротких интересных фактов о городе {city}"
+        f"Составь {_POOL_TARGET_ITEMS} коротких вау-фактов о городе {city}"
         f"{f', {country}' if country else ''} для утреннего уведомления Telegram-бота.\n"
-        "Тема каждого факта — город, регион, Нидерланды, наука, технологии, культура, "
-        "архитектура или повседневная жизнь.\n"
-        "Факт должен удивлять, а не просто сообщать справочную информацию: ищи "
-        "неожиданный масштаб, контраст, неочевидную связь или малоизвестную деталь, и "
-        "объясняй прямо в тексте, почему это интересно.\n"
+        "Каждый факт — это рекорд, достижение, «первый в истории/стране/мире», необычная "
+        "цифра с конкретным контекстом или неожиданный поворот реальной истории: то, что "
+        "хочется сразу пересказать другу, а не сухая справка.\n"
+        "Хорошо: «первый, кто...», «единственный в стране, где...», «самый старый/большой/"
+        "быстрый среди...», конкретное число + почему оно впечатляет, малоизвестная деталь "
+        "про известное место или человека.\n"
+        "Плохо и СТРОГО ЗАПРЕЩЕНО: общие описательные фразы без единого конкретного факта/числа/"
+        "имени, вроде «сочетание исторической и современной архитектуры», «город известен своей "
+        "культурой», «отражает эволюцию городского планирования», «богатое культурное наследие» — "
+        "если фраза подходит под любой европейский город без изменений, это не факт, а филлер.\n"
         "Пиши в стиле короткой журнальной заметки, максимум 3 коротких предложения на факт.\n"
         "Без списков внутри факта, без голых дат без контекста, без канцелярского языка.\n"
         "Не начинай факт с фраз «Знаете ли вы», «Мало кто знает», «Интересный факт» или "
@@ -242,7 +261,10 @@ def _generate_fact_pool(city, country, recent_facts=None):
         _log.warning("myday: fact pool generation failed: %s", e)
         d = None
     facts = d.get("facts") if isinstance(d, dict) else []
-    pool = [(str(f).strip(), {}) for f in (facts or []) if str(f).strip()]
+    pool = [
+        (str(f).strip(), {}) for f in (facts or [])
+        if str(f).strip() and not _fact_is_generic(str(f))
+    ]
 
     try:
         verified = research.place_fact_candidates(city)
@@ -252,7 +274,8 @@ def _generate_fact_pool(city, country, recent_facts=None):
     seen_texts = {text for text, _ in pool}
     for fact in verified[:4]:
         fact = fact.strip()
-        if fact and fact not in seen_texts and fact not in recent_facts and not _content_blocked(fact):
+        if (fact and fact not in seen_texts and fact not in recent_facts
+                and not _content_blocked(fact) and not _fact_is_generic(fact)):
             pool.append((fact, {}))
             seen_texts.add(fact)
 
