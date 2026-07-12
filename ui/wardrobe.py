@@ -116,11 +116,12 @@ def _finish_dot(value):
     return value
 
 
-def look_message(look_data):
-    """Образ на сегодня — компактная карточка на один экран: шапка с датой и городом,
-    строка погоды, вещи построчно и одно объяснение.
+def render_wardrobe_message(look_data):
+    """Образ на сегодня — компактная карточка: шапка с датой и городом, строка
+    погоды, состав образа одной строкой, причины подбора, совет по стилю и
+    опциональный инсайт по истории образов.
 
-    look_data: {short_date, city, weather_line, items[{name,short_name}], explanation, wardrobe_total}
+    look_data: {short_date, city, weather_line, items[{name}], reasons[], style_tip, insight}
     """
     look_data = look_data or {}
     b = MessageBuilder()
@@ -130,28 +131,40 @@ def look_message(look_data):
     weather_line = _clean_text(look_data.get("weather_line"))
     if weather_line:
         b.spacer()
-        b.line(_finish_dot(weather_line))
+        b.line(weather_line)
 
     items = [_clean_text(_item_display(it)) for it in (look_data.get("items") or [])]
     items = [it for it in items if it]
     if items:
         b.spacer()
-        b.bold("Надень:")
+        b.bold("Образ дня:")
         b.newline()
-        for it in items:
-            b.line(f"- {it}")
+        b.line(" · ".join(items))
 
-    explanation = _finish_dot(look_data.get("explanation"))
-    if explanation:
+    reasons = [_finish_dot(r) for r in (look_data.get("reasons") or []) if _clean_text(r)]
+    if reasons:
         b.spacer()
-        b.line(explanation)
+        b.bold("Почему сегодня")
+        b.newline()
+        for r in reasons[:3]:
+            b.line(f"- {r}")
 
-    total = look_data.get("wardrobe_total")
-    if total is not None:
+    tip = _finish_dot(look_data.get("style_tip"))
+    if tip:
         b.spacer()
-        b.line(f"Всего в гардеробе: {total} " + _pluralize_items(total) + ".")
+        b.text_line("Совет по стилю: ")
+        b.line(tip)
+
+    insight = _finish_dot(look_data.get("insight"))
+    if insight:
+        b.spacer()
+        b.line(insight)
 
     return b.build_stripped()
+
+
+# Старое имя — на случай, если что-то ещё зовёт карточку образа по прежней сигнатуре.
+look_message = render_wardrobe_message
 
 
 def _item_display(it):

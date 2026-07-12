@@ -157,6 +157,26 @@ def clear_wardrobe_daylook(chat_id):
         prof.pop("wardrobe_daylook", None)
         set_profile(chat_id, prof)
 
+WARDROBE_HISTORY_LIMIT = 14
+
+
+def get_wardrobe_history(chat_id) -> list:
+    """Персистентная история собранных образов (не путать с recent_looks —
+    in-memory антиповтор по названиям, не переживающий рестарт). Каждая запись:
+    {"date","weather_tags","item_ids"}. Последние WARDROBE_HISTORY_LIMIT записей."""
+    hist = get_profile(chat_id).get("wardrobe_history", [])
+    return hist if isinstance(hist, list) else []
+
+
+def add_wardrobe_history_entry(chat_id, date, weather_tags, item_ids):
+    prof = get_profile(chat_id)
+    hist = prof.get("wardrobe_history", [])
+    if not isinstance(hist, list):
+        hist = []
+    hist.append({"date": date, "weather_tags": list(weather_tags or []), "item_ids": list(item_ids or [])})
+    prof["wardrobe_history"] = hist[-WARDROBE_HISTORY_LIMIT:]
+    set_profile(chat_id, prof)
+
 _LEVEL_MIGRATION = {
     "A1": "simple", "A2": "simple",
     "B1": "medium",
