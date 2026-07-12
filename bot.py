@@ -2,8 +2,9 @@ import asyncio
 import logging
 
 _log = logging.getLogger(__name__)
+from telegram import InlineKeyboardMarkup
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
-                          ContextTypes, CallbackQueryHandler, PollAnswerHandler)
+                          ContextTypes, CallbackQueryHandler, PollAnswerHandler, ExtBot)
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -1060,9 +1061,53 @@ async def post_init(app):
     await maybe_send_admin_deploy_notification(app.bot)
 
 
+class _MenuCleanupBot(ExtBot):
+    """Bot, который перед каждой отправкой снимает инлайн-кнопки с предыдущего
+    сообщения этого чата - в переписке всегда активны кнопки только последнего
+    экрана, старые сообщения остаются просто текстом."""
+
+    async def _pre_send(self, chat_id):
+        msg_id = store.last_inline_message.pop(str(chat_id), None)
+        if not msg_id:
+            return
+        try:
+            await self.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=None)
+        except Exception:
+            pass
+
+    def _post_send(self, chat_id, msg):
+        if isinstance(getattr(msg, "reply_markup", None), InlineKeyboardMarkup):
+            store.last_inline_message[str(chat_id)] = msg.message_id
+
+    async def send_message(self, chat_id, *args, **kwargs):
+        await self._pre_send(chat_id)
+        msg = await super().send_message(chat_id, *args, **kwargs)
+        self._post_send(chat_id, msg)
+        return msg
+
+    async def send_photo(self, chat_id, *args, **kwargs):
+        await self._pre_send(chat_id)
+        msg = await super().send_photo(chat_id, *args, **kwargs)
+        self._post_send(chat_id, msg)
+        return msg
+
+    async def send_document(self, chat_id, *args, **kwargs):
+        await self._pre_send(chat_id)
+        msg = await super().send_document(chat_id, *args, **kwargs)
+        self._post_send(chat_id, msg)
+        return msg
+
+    async def send_poll(self, chat_id, *args, **kwargs):
+        await self._pre_send(chat_id)
+        msg = await super().send_poll(chat_id, *args, **kwargs)
+        self._post_send(chat_id, msg)
+        return msg
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    app = Application.builder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
+    bot = _MenuCleanupBot(token=config.TELEGRAM_TOKEN)
+    app = Application.builder().bot(bot).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", menu_command))
     app.add_handler(CommandHandler("notes", notes_command))

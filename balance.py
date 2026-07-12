@@ -1652,7 +1652,7 @@ async def send_evening_review(bot, cid):
                 "Итог дня - 1 короткое предложение.\n"
                 'Верни JSON: {"items":[{"worry":"тревога как есть","note":"коротко, до 20 слов"}],'
                 '"summary":"короткий итог, до 22 слов"}\n\n'
-                f"Тревоги:\n{wlist}", 700, 0.5, module="balance")
+                f"Тревоги:\n{wlist}", 700, module="balance")
         except Exception as e:
             _log.warning("send_evening_review: LLM failed, analysis empty: %s", e)
             d = {}

@@ -11,8 +11,11 @@ REPLY_KB_LABEL = "☰ Меню"
 
 def reply_kb():
     """Единственная кнопка нижней Reply-клавиатуры - открывает инлайн-меню,
-    а не старую панель разделов."""
-    return ReplyKeyboardMarkup([[REPLY_KB_LABEL]], resize_keyboard=True, is_persistent=True)
+    а не старую панель разделов. one_time_keyboard - Telegram сворачивает
+    клавиатуру сразу после нажатия кнопки; вернуть можно значком клавиатуры
+    у поля ввода. Отправляется один раз (см. _clear_reply_kb_once/onboard) -
+    повторно slать не нужно, свернувшись она остаётся доступной по значку."""
+    return ReplyKeyboardMarkup([[REPLY_KB_LABEL]], resize_keyboard=True, one_time_keyboard=True)
 
 
 def main_menu_kb():
