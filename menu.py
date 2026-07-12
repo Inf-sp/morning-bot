@@ -6,9 +6,9 @@ from ui import menu as menu_ui
 _WELCOME = menu_ui.welcome()
 WELCOME, WELCOME_ENTITIES = _WELCOME.text, _WELCOME.entities
 
-REPLY_KB_LABEL = "Ассистент"
-REPLY_KB_FLAG = "reply_kb_cleared_v5"  # версия флага в профиле - нижняя Reply-клавиатура
-                                        # вернулась с кнопкой "Ассистент", старым профилям шлём ещё раз
+REPLY_KB_LABEL = "💬 Ассистент"
+REPLY_KB_FLAG = "reply_kb_cleared_v6"  # версия флага в профиле - кнопка получила эмодзи,
+                                        # старым профилям шлём обновлённую клавиатуру ещё раз
 
 
 def reply_kb():
