@@ -219,7 +219,7 @@ async def maybe_send_admin_deploy_notification(bot):
 
 async def _clear_reply_kb_once(bot, cid):
     """Разово меняет старую нижнюю Reply-клавиатуру (разделы) на новую с одной
-    кнопкой «☰ Меню» (Telegram держит клавиатуру, пока явно не пришлёт новую -
+    кнопкой «Меню» (Telegram держит клавиатуру, пока явно не пришлёт новую -
     одной сменой reply_markup на инлайн-кнопки она не убирается)."""
     prof = store.get_profile(cid)
     if prof.get(menu.REPLY_KB_FLAG):

@@ -6,18 +6,17 @@ from ui import menu as menu_ui
 _WELCOME = menu_ui.welcome()
 WELCOME, WELCOME_ENTITIES = _WELCOME.text, _WELCOME.entities
 
-REPLY_KB_LABEL = "☰ Меню"
-REPLY_KB_FLAG = "reply_kb_cleared_v2"  # версия флага в профиле - меняли is_persistent на
-                                        # one_time_keyboard, старым профилям шлём ещё раз
+REPLY_KB_LABEL = "Меню"
+REPLY_KB_FLAG = "reply_kb_cleared_v3"  # версия флага в профиле - меняли is_persistent на
+                                        # one_time_keyboard и обратно, старым профилям шлём ещё раз
 
 
 def reply_kb():
     """Единственная кнопка нижней Reply-клавиатуры - открывает инлайн-меню,
-    а не старую панель разделов. one_time_keyboard - Telegram сворачивает
-    клавиатуру сразу после нажатия кнопки; вернуть можно значком клавиатуры
-    у поля ввода. Отправляется один раз (см. _clear_reply_kb_once/onboard) -
-    повторно slать не нужно, свернувшись она остаётся доступной по значку."""
-    return ReplyKeyboardMarkup([[REPLY_KB_LABEL]], resize_keyboard=True, one_time_keyboard=True)
+    а не старую панель разделов. is_persistent - клавиатура остаётся видна
+    внизу постоянно, а не сворачивается после нажатия. Отправляется один раз
+    (см. _clear_reply_kb_once/onboard) - повторно слать не нужно."""
+    return ReplyKeyboardMarkup([[REPLY_KB_LABEL]], resize_keyboard=True, is_persistent=True)
 
 
 def main_menu_kb():
