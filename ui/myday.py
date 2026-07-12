@@ -1,5 +1,6 @@
 from telegram import MessageEntity
 
+from .balance import finish_dot
 from .builder import MessageBuilder
 
 
@@ -45,7 +46,7 @@ def day_summary(
         _compact_line(b, word_flag, word_label, word_line)
 
     if lifehack:
-        _compact_line(b, "🦉", "Полезно", lifehack)
+        _compact_line(b, "🦉", "Полезно", finish_dot(lifehack))
 
     if quote_text:
         quote_line = f"«{quote_text}»" + (f" — по {quote_author}" if quote_author else "")

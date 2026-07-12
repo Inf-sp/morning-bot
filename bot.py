@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 _log = logging.getLogger(__name__)
-from telegram import InlineKeyboardMarkup, ReplyKeyboardRemove
+from telegram import InlineKeyboardMarkup
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
                           ContextTypes, CallbackQueryHandler, PollAnswerHandler, ExtBot)
 from datetime import datetime, timezone
@@ -43,6 +43,14 @@ _ROOT = Path(__file__).parent
 _DEFAULT_DEPLOY_NOTE = "Бот получил небольшие внутренние улучшения."
 _DEFAULT_DEPLOY_TITLE = "Обновление"
 _WORRY_PROMPT_WINDOW_S = 1800  # окно, в течение которого свободный текст ещё считается ответом на "Дневную разгрузку"
+
+
+def _looks_like_command(text: str) -> bool:
+    """Текст похож на команду/кнопку, а не на тревогу - не глотать его окном
+    "Дневной разгрузки" (напр. нажатие кнопки "Ассистент" сразу после
+    вечернего разбора не должно улететь в дневник тревог)."""
+    t = (text or "").strip()
+    return t.startswith("/") or t == menu.REPLY_KB_LABEL
 
 
 def _normalize_app_version(version: str) -> str:
@@ -217,18 +225,18 @@ async def maybe_send_admin_deploy_notification(bot):
         )
 
 
-async def _clear_reply_kb_once(bot, cid):
-    """Разово убирает нижнюю Reply-клавиатуру (Telegram держит клавиатуру,
-    пока явно не пришлёт новую - одной сменой reply_markup на инлайн-кнопки
-    она не убирается)."""
+async def _send_reply_kb_once(bot, cid):
+    """Разово присылает нижнюю Reply-клавиатуру с кнопкой «Ассистент» (Telegram
+    держит клавиатуру, пока явно не пришлёт новую - одной сменой reply_markup
+    на инлайн-кнопки она не убирается и не появляется)."""
     prof = store.get_profile(cid)
     if prof.get(menu.REPLY_KB_FLAG):
         return
     try:
         await bot.send_message(
             chat_id=cid,
-            text="Меню теперь открывается командой /menu или синей кнопкой меню Telegram.",
-            reply_markup=ReplyKeyboardRemove(),
+            text=f"Открыть меню теперь можно и кнопкой «{menu.REPLY_KB_LABEL}» внизу.",
+            reply_markup=menu.reply_kb(),
         )
     except Exception:
         return
@@ -239,7 +247,7 @@ async def _clear_reply_kb_once(bot, cid):
 async def start(update, context):
     cid = str(update.effective_chat.id)
     args = context.args or []
-    await _clear_reply_kb_once(context.bot, cid)
+    await _send_reply_kb_once(context.bot, cid)
 
     # Инвайт-код передан через /start <code>
     if args:
@@ -267,7 +275,7 @@ async def answer_callback(update, context):
     cid = str(q.message.chat_id)
     data = q.data
     bot = context.bot
-    await _clear_reply_kb_once(bot, cid)
+    await _send_reply_kb_once(bot, cid)
 
     async def _inline_status(call):
         status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
@@ -724,13 +732,13 @@ async def text_router(update, context):
         await bot.send_message(chat_id=cid, text="❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
     tracking.touch(cid)
-    await _clear_reply_kb_once(bot, cid)
+    await _send_reply_kb_once(bot, cid)
 
     flags = secure.injection_flags(text)
     if flags:
         _log.warning("[secure] injection flags: %s", flags)
 
-    if text == "Меню":  # переходный fallback: у части пользователей ещё видна старая нижняя клавиатура
+    if text == menu.REPLY_KB_LABEL:
         store.pending_input.pop(cid, None)
         t, entities, kb = menu.main_menu_screen(cid)
         await bot.send_message(chat_id=cid, text=t, reply_markup=kb, entities=entities)
@@ -758,7 +766,7 @@ async def text_router(update, context):
         if kind == "worry":
             worry_ts = settings.get(cid, "_worry_prompt_ts", 0)
             stale = worry_ts and (datetime.now(config.TZ).timestamp() - worry_ts) >= _WORRY_PROMPT_WINDOW_S
-            if not stale:
+            if not stale and not _looks_like_command(text):
                 _log.info("worry: routed via pending_input for cid=%s", cid)
                 await balance.save_worries(bot, cid, text); return
             settings.set_(cid, "_worry_prompt_ts", 0)
@@ -846,7 +854,7 @@ async def text_router(update, context):
     # Fallback: недавняя "Дневная разгрузка" — pending_input мог потеряться,
     # но персистентная метка (survives рестарт) ещё в окне — не теряем текст.
     worry_ts = settings.get(cid, "_worry_prompt_ts", 0)
-    if worry_ts and (datetime.now(config.TZ).timestamp() - worry_ts) < _WORRY_PROMPT_WINDOW_S:
+    if worry_ts and (datetime.now(config.TZ).timestamp() - worry_ts) < _WORRY_PROMPT_WINDOW_S and not _looks_like_command(text):
         settings.set_(cid, "_worry_prompt_ts", 0)
         _log.info("worry: routed via fallback timestamp for cid=%s", cid)
         await balance.save_worries(bot, cid, text); return
