@@ -1,6 +1,6 @@
 import re
 
-from .builder import MessageBuilder, MessageSpec
+from .builder import MessageBuilder
 from .constants import ui_label
 
 # Эмодзи категории приёма пищи (§7 спеки) — используется в заголовке карточки.
@@ -162,50 +162,6 @@ def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallba
     b.spacer()
     b.bold("😋 Приятного аппетита!")
     return b.build_stripped()
-
-
-TELEGRAM_CAPTION_LIMIT = 1024
-
-
-def fit_caption(msg: MessageSpec) -> MessageSpec:
-    """Обрезает MessageSpec под лимит caption у send_photo (§7 спеки).
-
-    Telegram ограничивает caption 1024 символами (в UTF-16 code units — как и entities,
-    см. builder.u16_len). Если карточка не влезает, обрезаем текст по границе строки,
-    сохраняя структуру (не разрывая слово на середине), а не переходим на два сообщения.
-    entities, выходящие за обрезанную длину, отбрасываются/укорачиваются вместе с текстом."""
-    from .builder import u16_len, MessageEntity
-
-    text = msg.text
-    if u16_len(text) <= TELEGRAM_CAPTION_LIMIT:
-        return msg
-
-    # Обрезаем по UTF-16 длине, по границе последнего переноса строки в пределах лимита,
-    # чтобы не рвать структуру карточки. Но если это съедает больше ~15% лимита (длинная
-    # строка без переносов — например совет шефа), откатываемся к границе слова, чтобы
-    # не выбрасывать блок целиком.
-    encoded = text.encode("utf-16-le")
-    cut_units = TELEGRAM_CAPTION_LIMIT - 1  # запас на многоточие
-    truncated = encoded[: cut_units * 2].decode("utf-16-le", errors="ignore")
-    last_newline = truncated.rfind("\n")
-    if last_newline > 0 and (len(truncated) - last_newline) <= cut_units * 0.15:
-        truncated = truncated[:last_newline]
-    else:
-        last_space = truncated.rfind(" ")
-        if last_space > 0:
-            truncated = truncated[:last_space]
-    truncated = truncated.rstrip() + "…"
-
-    new_len = u16_len(truncated)
-    kept_entities = []
-    for e in (msg.entities or []):
-        if e.offset >= new_len:
-            continue
-        length = min(e.length, new_len - e.offset)
-        if length <= 0:
-            continue
-        kept_entities.append(MessageEntity(e.type, e.offset, length, url=getattr(e, "url", None)))
-    return MessageSpec(text=truncated, entities=kept_entities, reply_markup=msg.reply_markup, parse_mode=msg.parse_mode)
 
 
 def fridge_home_empty():

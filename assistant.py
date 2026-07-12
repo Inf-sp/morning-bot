@@ -39,11 +39,6 @@ _INTENT_MAP = [
     (("заметк", "сохран", "запомни это", "мои заметки", "база"), "notes"),
 ]
 
-def _assistant_entities_card(answer: str):
-    msg = assistant_ui.assistant_answer(answer)
-    return msg.text, msg.entities
-
-
 _LOVE_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|сохранить|закинь)\b", re.I)
 _LOVE_WORD_RE = re.compile(r"\bв\s+(?:мои\s+|мой\s+)?любим(?:ые|ое|ых|ый|ую)\b", re.I)
 

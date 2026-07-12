@@ -38,15 +38,6 @@ def _look_result_kb():
 def _back_kb():
     return _kb([[("⬅️ Назад", "m_wardrobe")]])
 
-def _today_label():
-    now = datetime.now(config.TZ)
-    weekdays = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
-    months = [
-        "января", "февраля", "марта", "апреля", "мая", "июня",
-        "июля", "августа", "сентября", "октября", "ноября", "декабря",
-    ]
-    return f"• {weekdays[now.weekday()]}, {now.day} {months[now.month - 1]}"
-
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
 
@@ -496,18 +487,6 @@ def wardrobe_stats(w):
         counts[zone if zone in counts else "Другое"] += 1
         total += 1
     return total, counts
-
-
-def _params_filled(cid):
-    """Заполнены ли личные параметры для точных рекомендаций.
-
-    Отдельных полей пол/рост/вес в модели нет — ориентируемся на свободный
-    профиль или связку стиль+тело.
-    """
-    profile = _settings.get(cid, "wardrobe_profile", "")
-    style = _settings.wardrobe_styles(cid)
-    body = _settings.get(cid, "body", "")
-    return bool(profile or (style and body))
 
 
 # --- слабые места гардероба (персистентный список пробелов) ---

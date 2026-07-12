@@ -596,6 +596,12 @@ def _build_day_text(cid):
     if raw_quote and _quote_valid(raw_quote):
         quote_text = esc(raw_quote)
         quote_author = esc(q_data.get("src", "")).strip()
+    try:
+        import balance as _b
+        lagom_line = esc(_b._pick_lagom(cid))
+    except Exception as e:
+        _log.warning("myday: _pick_lagom failed: %s", e)
+        lagom_line = ""
     msg = myday_ui.day_summary(
         header,
         s.get("city", ""),
@@ -610,6 +616,7 @@ def _build_day_text(cid):
         lifehack=hack_text,
         quote_text=quote_text,
         quote_author=quote_author,
+        lagom_line=lagom_line,
     )
     text = msg.text
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя

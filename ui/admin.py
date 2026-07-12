@@ -62,7 +62,7 @@ def home(system_dot, system_text, system_line, notif_line, users_line, data_line
     b.spacer()
     b.line(f"{system_dot} {system_text}")
     b.spacer()
-    b.line(f"{ui_label('system', 'Система')}: {system_line}")
+    b.line(f"{ui_label('system', 'API и AI')}: {system_line}")
     b.line(f"{ui_label('notifications', 'Уведомления')}: {notif_line}")
     b.line(f"{ui_label('users', 'Пользователи')}: {users_line}")
     b.line(f"Данные: {data_line}")
@@ -148,55 +148,42 @@ def welcome_admin():
     return b.build_stripped()
 
 
-def system(rows, updated_at):
-    b = MessageBuilder()
-    b.bold(ui_label("system", "Система"))
-    b.newline()
-    b.spacer()
-    for line in rows:
-        b.line(line)
-    b.spacer()
-    b.line(f"Обновлено: {updated_at}")
-    return b.build_stripped()
-
-
-def api_ai(status_ok, fallback_on, problem_line, ai_rows, api_rows, feature_rows,
-           last_error_line, updated_at):
+def api_ai(status_dot, status_text, sub_line, fallback_line, ai_rows, api_rows,
+           last_failure, updated_at):
     """Единый экран диагностики: § docs/admin.md «API и AI».
 
-    status_ok: bool - общий статус (работает / есть проблемы).
-    fallback_on: bool - хоть один provider сейчас работает через fallback.
-    problem_line: str|None - короткое описание главной проблемы, если есть.
-    ai_rows / api_rows: list[str] - готовые строки "Сервис · статус · деталь".
-    feature_rows: list[str] - готовые строки "Раздел · провайдеры · статус".
-    last_error_line: str|None.
+    status_dot/status_text: общий статус одной строкой ("🟡", "Работает с ограничениями").
+    sub_line: короткое пояснение ("Основные функции доступны · 1 сервис недоступен").
+    fallback_line: "Резерв AI: включён/выключен".
+    ai_rows / api_rows: list[str] - готовые строки "Сервис · роль · деталь".
+    last_failure: (internal_line, user_facing_text) | None.
     """
     b = MessageBuilder()
     b.bold("🔌 API и AI")
     b.newline()
     b.spacer()
-    b.line(f"Статус: {'работает' if status_ok else 'есть проблемы'}")
-    b.line(f"Fallback: {'включён' if fallback_on else 'выключен'}")
-    if problem_line:
-        b.line(f"Проблема: {problem_line}")
+    b.line(f"{status_dot} {status_text}")
+    b.line(sub_line)
+    b.line(fallback_line)
     b.spacer()
-    b.line("AI:")
+    b.bold("AI:")
+    b.newline()
     for line in ai_rows:
         b.line(line)
     b.spacer()
-    b.line("API:")
+    b.bold("Данные:")
+    b.newline()
     for line in api_rows:
         b.line(line)
-    b.spacer()
-    b.line("Функции:")
-    for line in feature_rows:
-        b.line(line)
-    if last_error_line:
+    if last_failure:
+        internal_line, user_text = last_failure
         b.spacer()
-        b.line("Последняя ошибка:")
-        b.line(last_error_line)
+        b.bold("Последний сбой:")
+        b.newline()
+        b.line(internal_line)
+        b.line(f"Ответ пользователю: «{user_text}»")
     b.spacer()
-    b.line(f"Обновлено: {updated_at}")
+    b.line(f"Обновлено в {updated_at}")
     return b.build_stripped()
 
 
@@ -213,34 +200,6 @@ def notifications(sent_today, errors_today, active_types, updated_at):
     b.line("Выберите уведомление для теста:")
     b.spacer()
     b.line(f"Обновлено: {updated_at}")
-    return b.build_stripped()
-
-
-def tests(history):
-    b = MessageBuilder()
-    b.bold(ui_label("tests", "Тесты"))
-    b.newline()
-    b.spacer()
-    b.line("Тесты отправляются только вам.")
-    b.spacer()
-    b.line("Последние:")
-    if history:
-        for row in history[:3]:
-            b.line(row)
-    else:
-        b.line("—")
-    b.spacer()
-    b.line("Выберите тест:")
-    return b.build_stripped()
-
-
-def test_result(ok, when, label, detail):
-    b = MessageBuilder()
-    b.bold("✅ Тест отправлен" if ok else "🔴 Тест не прошёл")
-    b.newline()
-    b.spacer()
-    b.line(f"{when} · {label} · {detail}")
-    b.line("Получатель: только админ")
     return b.build_stripped()
 
 

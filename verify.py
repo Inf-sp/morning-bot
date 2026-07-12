@@ -11,7 +11,6 @@
 """
 import logging
 import re
-import json
 
 _log = logging.getLogger(__name__)
 
@@ -65,21 +64,6 @@ def grade_html(html):
         if opens != closes:
             warnings.append(f"html: <{tag}> unbalanced {opens}/{closes}")
     return warnings
-
-
-def valid_json(raw):
-    """Парсится ли ответ LLM как JSON (по той же логике, что ai.llm_json)."""
-    if raw is None:
-        return False
-    s = re.sub(r"```(json)?", "", str(raw)).strip()
-    m = re.search(r"\{.*\}", s, re.S)
-    if m:
-        s = m.group(0)
-    try:
-        json.loads(s, strict=False)
-        return True
-    except Exception:
-        return False
 
 
 def grade_text(text, surface, rain_real=None):

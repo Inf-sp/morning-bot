@@ -165,6 +165,3 @@ def cuisine_label(key, text):
     return f"{emoji} {text}" if emoji else text
 
 
-def language_label(code, text):
-    emoji = LANGUAGE_EMOJI.get(code)
-    return f"{emoji} {text}" if emoji else text

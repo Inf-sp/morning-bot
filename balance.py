@@ -991,20 +991,6 @@ async def send_recipe_featured(bot, cid, status=None):
     store.last_answer[str(cid)] = card.text
     await status.replace(card.text, entities=card.entities, reply_markup=_recipe_typed_kb())
 
-async def send_recipe_push(bot, cid):
-    """Уведомление 12:30 — без кнопок."""
-    status = await util.StatusManager.start(bot, cid)
-    try:
-        d = await asyncio.to_thread(_gen_recipe, "любое блюдо под вкус пользователя", cid=cid)
-    except Exception as e:
-        _log.warning("recipe push AI failed, using fallback: %r", e)
-        d = _fallback_recipe()
-    card = _recipe_card(d)
-    store.last_source[str(cid)] = "Питание · Рецепт"
-    store.last_answer[str(cid)] = card.text
-    await status.replace(card.text, entities=card.entities)
-
-
 def _gen_leftovers_recipe(ingredients, cid=None):
     avoid = _leftover_recent(cid) if cid else []
     avoid_line = f"Не предлагай снова: {', '.join(avoid)}.\n" if avoid else ""

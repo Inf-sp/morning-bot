@@ -147,7 +147,6 @@ def learning_menu(active_code="nl"):
     b.line("Напиши так в чат — бот сам сохранит, переведёт и разберёт.")
 
     return b.build_stripped(reply_markup=ikb([
-        [("⚡ Быстрая практика · 3 минуты", "session3_start")],
         [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
         [("💬 Диалог", "dlg_start")],
         [(ui_label("live_language", "Живой язык"), f"a_proverb_{code}")],

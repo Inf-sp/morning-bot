@@ -54,16 +54,6 @@ def _period_start(period: str, dt=None):
     return dt.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
-def _period_seconds(period: str) -> int:
-    if period == "minute":
-        return 60
-    if period == "hour":
-        return 3600
-    if period == "month":
-        return 31 * 86400
-    return 86400
-
-
 def _template():
     return {"services": {}}
 

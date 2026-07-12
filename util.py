@@ -178,30 +178,6 @@ async def clear_loading(q) -> None:
     except Exception:
         pass
 
-async def send_html(bot, cid, text: str | None, reply_markup=None) -> None:
-    """Одиночное сообщение в Telegram с чисткой markdown; форматирование через entities."""
-    from telegram.error import BadRequest
-    plain, entities = html_to_entities(tg_html(text or ""))
-    try:
-        await bot.send_message(chat_id=cid, text=plain, entities=entities, reply_markup=reply_markup)
-    except BadRequest:
-        await bot.send_message(chat_id=cid, text=plain, reply_markup=reply_markup)
-
-async def edit_html(message, text: str | None, reply_markup=None) -> bool:
-    """Редактирует сообщение (форматирование через entities). Возвращает False, если нужно отправить заново."""
-    from telegram.error import BadRequest
-    plain, entities = html_to_entities(tg_html(text or ""))
-    try:
-        await message.edit_text(plain, entities=entities, reply_markup=reply_markup)
-        return True
-    except BadRequest:
-        try:
-            await message.edit_text(plain, reply_markup=reply_markup)
-            return True
-        except Exception:
-            return False
-    except Exception:
-        return False
 
 # Имя страны (ru/en, нижний регистр) -> ISO-2 код. Офлайн, без LLM.
 _COUNTRY_CC = {

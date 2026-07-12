@@ -6,6 +6,7 @@ MessageSpec из ui.admin. Роутинг (settings.dispatch) делегируе
 Все функции — async send_*(bot, cid); гард на владельца — в settings._admin_guard.
 """
 import logging
+import re
 import time
 from datetime import datetime
 
@@ -22,12 +23,6 @@ from ui import admin as ui
 _log = logging.getLogger(__name__)
 
 DAY = 86400
-
-_PROV_ORDER = [
-    ("gemini", "Gemini", lambda: True),
-    ("groq", "Groq", lambda: bool(config.GROQ_API_KEY)),
-    ("cf", "Cloudflare", lambda: bool(config.CF_API_TOKEN and config.CF_ACCOUNT_ID)),
-]
 
 
 def _back(target="set_admin"):
@@ -109,49 +104,6 @@ def _configured_service(service: str) -> bool:
     }.get(service, False)
 
 
-def _short_status(service: str, label: str, snapshot=None):
-    svc = _snapshot_service(snapshot or api_usage.snapshot(), service)
-    if not _configured_service(service):
-        return f"{ui.WARN} {label} · нет ключа"
-    if service == "gemini":
-        state = api_usage.gemini_state(1)
-        if state.get("cooldown_active"):
-            return f"{ui.WARN} {label} · cooldown до {_hhmm(state.get('cooldown_until'))}"
-        if state.get("last_429_at") and state.get("last_429_at") >= time.time() - DAY and svc.get("last_ok") is False:
-            scope = f" {state.get('cooldown_scope')}" if state.get("cooldown_scope") else ""
-            return f"{ui.BAD} {label} · лимит{scope}".strip()
-    if svc:
-        status = svc.get("status")
-        if status == "bad":
-            reason = svc.get("last_error_reason") or svc.get("status_text") or "есть ошибка"
-            return f"{ui.BAD} {label} · {str(reason)[:42]}"
-        if status == "warn":
-            return f"{ui.WARN} {label} · {svc.get('status_text') or 'есть предупреждение'}"
-    return f"{ui.OK} {label} · работает"
-
-
-def _openweather_line(snapshot=None):
-    import weather
-    usage = weather.get_weather_usage()
-    total = int(usage.get("requests_total") or 0)
-    limit = int(config.WEATHER_FREE_DAILY_LIMIT)
-    last_error = usage.get("last_error_reason") or ""
-    if total >= int(config.WEATHER_HARD_DAILY_LIMIT):
-        return f"{ui.BAD} OpenWeather · лимит {total}/{limit}"
-    if last_error and usage.get("last_error_at"):
-        return f"{ui.BAD} OpenWeather · {str(last_error)[:42]}"
-    if total >= int(config.WEATHER_WARNING_LIMIT):
-        return f"{ui.WARN} OpenWeather · {total}/{limit} сегодня"
-    return f"{ui.OK} OpenWeather · {total}/{limit} сегодня"
-
-
-def _llm_line():
-    usage = get_llm_usage_summary(1)
-    errors = len(_today_errors("llm"))
-    dot = ui.OK if errors == 0 else ui.BAD
-    return f"{dot} LLM · {usage['calls']} запросов · {errors} ошибок"
-
-
 def _data_line():
     try:
         store._load("__health__")
@@ -160,96 +112,29 @@ def _data_line():
     return f"{ui.OK} Данные · работает"
 
 
-def _probe_overrides(probe_results):
-    overrides = {}
-    if not probe_results:
-        return overrides
-    label_map = {
-        "Weather": "OpenWeather",
-        "Cloudflare": "Cloudflare",
-        "Gemini": "Gemini",
-        "Groq": "Groq",
-        "Telegram": "Telegram",
-        "TMDB": "TMDB",
-        "Pexels": "Pexels",
-        "Tavily": "Tavily",
-    }
-    for result in probe_results:
-        label, ok, detail = result[:3]
-        target = label_map.get(label, label)
-        overrides[target] = f"{ui.OK} {target} · работает" if ok else f"{ui.BAD} {target} · {str(detail)[:42]}"
-    return overrides
-
-
-def _apply_probe_overrides(rows, probe_results):
-    overrides = _probe_overrides(probe_results)
-    if not overrides:
-        return rows
-    out = []
-    for row in rows:
-        replaced = False
-        for label, line in overrides.items():
-            if f" {label} ·" in row:
-                out.append(line)
-                replaced = True
-                break
-        if not replaced:
-            out.append(row)
-    return out
-
-
-def _system_rows(probe_results=None):
-    snapshot = api_usage.snapshot()
-    rows = [
-        _llm_line(),
-        _openweather_line(snapshot),
-        _short_status("telegram", "Telegram", snapshot),
-        _short_status("tmdb", "TMDB", snapshot),
-        _short_status("pexels", "Pexels", snapshot),
-        _short_status("cloudflare", "Cloudflare", snapshot),
-        _short_status("groq", "Groq", snapshot),
-        _short_status("gemini", "Gemini", snapshot),
-        _short_status("tavily", "Tavily", snapshot),
-        _short_status("firecrawl", "Firecrawl", snapshot),
-        _short_status("pexels", "Фото рецептов", snapshot),
-        _data_line(),
-        f"{ui.OK} Планировщик · работает",
-    ]
-    return _apply_probe_overrides(rows, probe_results)
-
-
-def _has_bad_system_row(rows):
-    return any(row.startswith(ui.BAD) for row in rows)
-
-
-def _line_summary_for_home(rows):
-    bad = next((row for row in rows if row.startswith(ui.BAD)), None)
-    if bad:
-        return bad.split(" ", 1)[1]
-    warn = next((row for row in rows if row.startswith(ui.WARN)), None)
-    if warn:
-        return warn.split(" ", 1)[1]
-    return "OK · лимиты в норме"
+def _bad_services(snapshot):
+    return [s for s in snapshot.get("services", []) if s.get("status") == "bad"]
 
 
 # ================= ДОМ =================
 
 async def send_home(bot, cid, q=None):
     stats = _user_stats()
-    system_rows = _system_rows()
+    snapshot = api_usage.snapshot()
+    bad = _bad_services(snapshot)
     notif = _notification_stats(cid)
-    system_bad = _has_bad_system_row(system_rows)
     notif_bad = notif["errors_today"] > 0
-    dot, txt = (ui.BAD, "Есть проблема") if (system_bad or notif_bad) else (ui.OK, "Всё работает")
+    dot, txt = (ui.BAD, "Есть проблема") if (bad or notif_bad) else (ui.OK, "Всё работает")
+    api_line = f"{len(bad)} недоступно" if bad else "OK · лимиты в норме"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(ui_label("system", "Система"), callback_data="adm_system")],
+        [InlineKeyboardButton("🔌 API и AI", callback_data="adm_api_ai")],
         [InlineKeyboardButton(ui_label("notifications", "Уведомления"), callback_data="adm_notif")],
         [InlineKeyboardButton(ui_label("users", "Пользователи"), callback_data="adm_users")],
     ])
     msg = ui.home(
         system_dot=dot,
         system_text=txt,
-        system_line=_line_summary_for_home(system_rows),
+        system_line=api_line,
         notif_line=f"OK · ошибок {notif['errors_today']}" if not notif_bad else f"ошибок {notif['errors_today']}",
         users_line=f"{stats['total']} · активны {stats['active_7d']} · новых {stats['new_7d']}",
         data_line="OK" if _data_line().startswith(ui.OK) else "ошибка",
@@ -370,16 +255,6 @@ def _notification_stats(cid):
     }
 
 
-async def send_system(bot, cid, q=None):
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔌 API и AI", callback_data="adm_api_ai")],
-        [InlineKeyboardButton(ui_label("logs", "Логи"), callback_data="adm_logs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
-    ])
-    msg = ui.system(_system_rows(), _updated_at())
-    await _show(bot, cid, msg, kb, q)
-
-
 # ================= API И AI (единый экран, § docs/admin.md) =================
 
 _FEATURE_ROWS = [
@@ -394,6 +269,37 @@ _FEATURE_ROWS = [
     ("Ассистент", "intent-router + Gemini", ("gemini",)),
 ]
 
+_HTTP_REASONS = {
+    401: "неверный ключ", 402: "закончились кредиты", 403: "доступ запрещён",
+    404: "не найдено", 408: "таймаут", 429: "лимит запросов",
+    500: "сервис недоступен", 502: "сервис недоступен",
+    503: "сервис недоступен", 504: "таймаут сервиса",
+}
+
+_USER_FALLBACK_TEXT = "Сейчас не удалось подготовить ответ. Попробуй ещё раз."
+
+
+def _friendly_error(reason):
+    """'HTTP 402' -> 'HTTP 402 · закончились кредиты'; иначе не трогает текст."""
+    m = re.match(r"^HTTP (\d+)$", str(reason or "").strip())
+    if not m:
+        return reason
+    code = int(m.group(1))
+    hint = _HTTP_REASONS.get(code)
+    return f"HTTP {code} · {hint}" if hint else f"HTTP {code}"
+
+
+def _used_by(name_substr):
+    return [name for name, providers, _deps in _FEATURE_ROWS if name_substr in providers]
+
+
+def _plural_services(n):
+    if n % 10 == 1 and n % 100 != 11:
+        return "сервис"
+    if 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
+        return "сервиса"
+    return "сервисов"
+
 
 def _gemini_ai_line(snapshot):
     label = "Gemini"
@@ -401,20 +307,24 @@ def _gemini_ai_line(snapshot):
         return f"{ui.OFF} {label} · нет ключа"
     state = api_usage.gemini_state(1)
     quota = next((q for q in config.API_QUOTAS.get("gemini", []) if q.get("unit") == "requests"), None)
-    limit_txt = f"{quota.get('limit')} / мин" if quota else "лимит OK"
+    limit_txt = f"{quota.get('limit')} запросов/мин" if quota else "лимит OK"
     if state.get("cooldown_active"):
         return f"{ui.WARN} {label} · пауза до {_hhmm(state.get('cooldown_until'))} · {limit_txt}"
-    return f"{ui.OK} {label} · работает · {limit_txt}"
+    return f"{ui.OK} {label} · основной · {limit_txt}"
 
 
-def _simple_ai_line(service, label, snapshot):
+def _simple_ai_line(service, label, snapshot, used_by=None):
+    role = f"основной для {', '.join(used_by)}" if used_by else "резерв"
     if not _configured_service(service):
-        return f"{ui.OFF} {label} · резерв · нет ключа"
+        return f"{ui.OFF} {label} · {role} · нет ключа"
     svc = _snapshot_service(snapshot, service)
     if svc.get("status") == "bad":
-        reason = svc.get("last_error_reason") or "ошибка"
-        return f"{ui.BAD} {label} · резерв · {str(reason)[:40]}"
-    return f"{ui.OK} {label} · резерв · лимит OK"
+        reason = _friendly_error(svc.get("last_error_reason")) or "ошибка"
+        return f"{ui.BAD} {label} · {role} · {str(reason)[:40]}"
+    requests_today = svc.get("day_requests") or 0
+    if requests_today:
+        return f"{ui.OK} {label} · {role} · {requests_today} запросов сегодня"
+    return f"{ui.OK} {label} · {role}"
 
 
 def _api_line(service, label, snapshot):
@@ -424,34 +334,24 @@ def _api_line(service, label, snapshot):
         total = int(usage.get("requests_total") or 0)
         limit = int(config.WEATHER_FREE_DAILY_LIMIT)
         if usage.get("last_error_reason") and usage.get("last_error_at"):
-            return f"{ui.BAD} {label} · ошибка · {str(usage.get('last_error_reason'))[:40]}"
-        return f"{ui.OK} {label} · работает · осталось {max(0, limit - total)} / {limit}"
+            return f"{ui.BAD} {label} · {_friendly_error(str(usage.get('last_error_reason')))[:40]}"
+        return f"{ui.OK} {label} · {max(0, limit - total)} из {limit} осталось"
     if not _configured_service(service):
         return f"{ui.OFF} {label} · нет ключа"
     svc = _snapshot_service(snapshot, service)
+    if svc.get("status") == "bad":
+        reason = _friendly_error(svc.get("last_error_reason")) or "ошибка"
+        return f"{ui.BAD} {label} · {str(reason)[:40]}"
     if service == "tavily":
         quota = next((q for q in svc.get("quotas", []) if q.get("unit") == "credits"), None)
         if quota:
             limit = int(quota.get("limit") or 1000)
             used = int(quota.get("used") or 0)
-            return f"{ui.OK} {label} · работает · осталось {max(0, limit - used)} / {limit}"
-        return f"{ui.OK} {label} · работает · лимит OK"
+            return f"{ui.OK} {label} · {max(0, limit - used)} из {limit} осталось"
+        return f"{ui.OK} {label} · лимит OK"
     if service == "ticketmaster":
-        return f"{ui.OK} {label} · работает · кэш 7 дней"
-    if svc.get("status") == "bad":
-        reason = svc.get("last_error_reason") or "ошибка"
-        return f"{ui.BAD} {label} · ошибка · {str(reason)[:40]}"
-    return f"{ui.OK} {label} · работает · лимит OK"
-
-
-def _feature_status(snapshot, gemini_cooldown):
-    rows = []
-    for name, providers, deps in _FEATURE_ROWS:
-        is_fallback = gemini_cooldown and "gemini" in deps
-        dot = ui.WARN if is_fallback else ui.OK
-        status = "fallback" if is_fallback else "работает"
-        rows.append(f"{dot} {name} · {providers} · {status}")
-    return rows
+        return f"{ui.OK} {label} · кэш 7 дней"
+    return f"{ui.OK} {label} · лимит OK"
 
 
 async def send_api_ai(bot, cid, q=None):
@@ -462,14 +362,15 @@ async def send_api_ai(bot, cid, q=None):
 
     ai_rows = [
         _gemini_ai_line(snapshot),
-        _simple_ai_line("groq", "Groq", snapshot),
+        _simple_ai_line("groq", "Groq", snapshot, used_by=_used_by("Groq")),
         _simple_ai_line("cloudflare", "Cloudflare AI", snapshot),
     ]
     if config.OPENROUTER_API_KEY:
         fallback_stats = ai.get_openrouter_fallback_stats(1)
         errors = int(fallback_stats.get("errors") or 0)
         ai_rows.append(
-            "OpenRouter · резерв · лимит OK" if not errors else f"OpenRouter · резерв · {errors} ошибок"
+            f"{ui.OK} OpenRouter · резерв" if not errors
+            else f"{ui.WARN} OpenRouter · резерв · {errors} ошибок сегодня"
         )
 
     api_rows = [
@@ -482,31 +383,30 @@ async def send_api_ai(bot, cid, q=None):
         _api_line("pexels", "Pexels", snapshot),
     ]
 
-    feature_rows = _feature_status(snapshot, gemini_cooldown)
-
-    problem_line = None
-    status_ok = True
-    if gemini_cooldown:
-        scope = gemini_state.get("cooldown_scope") or ""
-        problem_line = f"Gemini на паузе до {_hhmm(gemini_state.get('cooldown_until'))}" + (f" - {scope}" if scope else "")
-        status_ok = False
-    bad_service = next((s for s in snapshot.get("services", []) if s.get("status") == "bad"), None)
-    if bad_service and not problem_line:
-        problem_line = f"{bad_service.get('label')} · {bad_service.get('last_error_reason') or 'ошибка'}"
-        status_ok = False
+    bad = _bad_services(snapshot)
+    status_dot, status_text = (ui.WARN, "Работает с ограничениями") if (gemini_cooldown or bad) else (ui.OK, "Работает")
+    if bad:
+        n_bad = len(bad)
+        word = "недоступен" if n_bad == 1 else "недоступно"
+        sub_line = f"Основные функции доступны · {n_bad} {_plural_services(n_bad)} {word}"
+    else:
+        sub_line = "Все сервисы в норме"
+    fallback_line = f"Резерв AI: {'включён' if gemini_cooldown else 'выключен'}"
 
     errors = _today_errors()
-    last_error_line = None
+    last_failure = None
     if errors:
         last = errors[0]
-        last_error_line = f"{_hhmm(last.get('ts', 0))} · {_issue_summary(last.get('source', 'app'), last.get('msg', ''))}"
+        summary = _issue_summary(last.get("source", "app"), last.get("msg", ""))
+        kind = last.get("kind", "")
+        code = f" ({kind})" if kind else ""
+        last_failure = (f"{_hhmm(last.get('ts', 0))} · {summary}{code}", _USER_FALLBACK_TEXT)
 
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(ui_label("logs", "Логи"), callback_data="adm_logs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_system")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
     ])
-    msg = ui.api_ai(status_ok, gemini_cooldown, problem_line, ai_rows, api_rows, feature_rows,
-                     last_error_line, _updated_at())
+    msg = ui.api_ai(status_dot, status_text, sub_line, fallback_line, ai_rows, api_rows,
+                     last_failure, _updated_at())
     await _show(bot, cid, msg, kb, q)
 
 
@@ -525,36 +425,6 @@ async def send_notifications(bot, cid, q=None):
 
 async def check_notifications(bot, cid, q=None):
     await send_notifications(bot, cid, q)
-
-
-# ================= LLM =================
-
-def _cost_recent(days):
-    import ai
-    cutoff = time.time() - days * DAY
-    return [e for e in ai.get_cost_log() if e.get("ts", 0) >= cutoff]
-
-def get_llm_usage_summary(period_days=1):
-    """Расходы/нагрузка LLM за период — данные, без Telegram-разметки."""
-    recent = _cost_recent(period_days)
-    total = sum(e.get("tokens", 0) for e in recent)
-    by_prov = {}
-    for e in recent:
-        prov = e.get("provider") or "?"
-        by_prov[prov] = by_prov.get(prov, 0) + e.get("tokens", 0)
-    providers = []
-    if total:
-        for key, label, _cfg in _PROV_ORDER:
-            tok = by_prov.get(key, 0)
-            if tok:
-                providers.append((label, round(tok / total * 100)))
-        providers.sort(key=lambda x: -x[1])
-    return {
-        "calls": len(recent),
-        "tokens": total,
-        "avg_tokens": round(total / len(recent)) if recent else 0,
-        "providers": providers,
-    }
 
 
 def _issue_summary(source, msg):
@@ -621,21 +491,11 @@ def _notification_test_rows():
 
 
 async def run_test(bot, cid, kind):
+    """Прогоняет плановое уведомление прямо сейчас - само уведомление и есть результат теста,
+    без отдельной карточки "Тест отправлен" поверх него."""
     import settings as _s
-    options = _notification_options_by_kind()
-    if kind not in options:
-        ok = False
-        detail = "неизвестный тест"
-        label = kind
-    else:
-        ok = await _s._run_notif_test(bot, cid, kind)
-        detail = "OK" if ok else (_issue_summary("app", kind) or "ошибка")
-        label = options[kind]
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_notif")],
-    ])
-    msg = ui.test_result(ok, _updated_at(), label, detail)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    if kind in _notification_options_by_kind():
+        await _s._run_notif_test(bot, cid, kind)
 
 
 async def send_logs(bot, cid, q=None):

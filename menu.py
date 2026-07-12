@@ -42,10 +42,6 @@ LABEL_TO_KEY = {
 }
 
 
-def _ikb(rows):
-    return menu_ui.ikb(rows)
-
-
 def _back(parent="m_close"):
     return [("⬅️ Назад", parent)]
 

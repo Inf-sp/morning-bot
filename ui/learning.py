@@ -4,16 +4,6 @@ from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
 
 
-def train_question(phrase):
-    prefix = "Переведи «"
-    suffix = "»"
-    text = f"{prefix}{phrase}{suffix}"
-    return MessageSpec(
-        text=text,
-        entities=[MessageEntity(MessageEntity.BOLD, u16_len(prefix), u16_len(str(phrase)))],
-    )
-
-
 def phrase_poll_question(blank_phrase, sentence_ru):
     b = MessageBuilder()
     b.section("🧩 Проверь себя")
@@ -99,68 +89,6 @@ def proverb_card(flag, original, analogs=None, meaning="", examples=None, exampl
     b.add("Прочитай вслух один раз. Этого достаточно.", MessageEntity.ITALIC)
     msg = b.build()
     msg.text = msg.text.rstrip()
-    return msg
-
-
-def train_result(state, idx, correct_idx, options, chosen_fl=""):
-    word = state.get("phrase") or state.get("word", "")
-    correct = str(options[correct_idx])
-    chosen = str(options[idx])
-    sentence = state.get("sentence", "")
-    sentence_ru = state.get("sentence_ru", "")
-    meaning = state.get("meaning") or correct
-    mode = state.get("mode", "word")
-
-    b = MessageBuilder()
-    if mode == "phrase":
-        if idx == correct_idx:
-            b.section("✅ Верно.")
-        else:
-            b.section("❌ Не совсем так.")
-        b.spacer()
-        b.text_line(f"{sentence} → ")
-        b.bold(correct)
-        b.newline()
-        if idx != correct_idx:
-            b.text_line(f"Твой ответ: «{chosen}».")
-            b.newline()
-        b.spacer()
-        b.bold(word)
-        b.newline()
-        if sentence_ru:
-            b.line(sentence_ru)
-        if state.get("phrase_explanation"):
-            b.spacer()
-            b.line(state.get("phrase_explanation", ""))
-        msg = b.build()
-        msg.text = msg.text.rstrip("\n")
-        return msg
-
-    if idx == correct_idx:
-        b.section("✅ Верно.")
-    else:
-        b.section("❌ Не совсем так.")
-    b.spacer()
-    b.bold(word)
-    b.text_line(f" → {meaning}")
-    b.newline()
-    if idx != correct_idx:
-        b.text_line(f"Твой ответ: «{chosen}»")
-        if chosen_fl:
-            b.text_line(" — это ")
-            b.bold(chosen_fl)
-            b.text_line(".")
-        else:
-            b.text_line(".")
-        b.newline()
-    if sentence:
-        b.spacer()
-        context = sentence
-        if sentence_ru:
-            context += f" → {sentence_ru}"
-        b.line(context)
-    msg = b.build()
-    msg.text = msg.text.rstrip("\n")
     return msg
 
 
@@ -527,28 +455,6 @@ def dialogue_summary_card(topic):
         b.line(f"Тема: {topic}")
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Новый диалог", callback_data="dlg_start")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
-    ])
-    msg = b.build(reply_markup=kb)
-    msg.text = msg.text.rstrip("\n")
-    return msg
-
-
-def session_summary_card(items, weak_spot=""):
-    """Итог короткой сессии «3 минуты»: что повторили и слабое место, если было."""
-    b = MessageBuilder()
-    b.section("Готово · быстрая практика 🎯")
-    b.spacer()
-    if items:
-        b.line("Сегодня ты повторил:")
-        for it in items[:5]:
-            b.text_line(f"• {it}\n")
-    if weak_spot:
-        b.spacer()
-        b.line("Слабое место:")
-        b.line(weak_spot)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Ещё 3 минуты", callback_data="session3_again")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
     ])
     msg = b.build(reply_markup=kb)

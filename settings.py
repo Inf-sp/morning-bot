@@ -13,19 +13,13 @@ _log = logging.getLogger(__name__)
 
 SETTINGS_KEY = "user_settings.json"
 NOTIF_TYPES = [
-    ("morning_brief",  "Утренний бриф"),
-    ("weather_warn",   "Погодное предупреждение"),
-    ("lagom_daily",    "Мотивация дня"),
-    ("recipe_daily",   "Рецепт дня"),
-    ("checkin_day",    "Дневная разгрузка"),
-    ("evening_weather","Вечерняя погода"),
-    ("weekly_events",  "Афиша недели"),
-    ("favorite_artists","Новые концерты любимых артистов"),
-    ("weekly_forecast","Недельный прогноз"),
-    ("daily_words_nl", "Нидерландский"),
-    ("daily_words_en", "Английский"),
-    ("live_lang",      "Живой язык"),
-    ("checkin_eve",    "Вечерний разбор"),
+    ("morning_brief",   "Утро"),
+    ("weekend_events",  "Куда сходить"),
+    ("daily_words",     "Практика языка"),
+    ("checkin_day",     "Дневная разгрузка"),
+    ("evening_weather", "Погода на завтра"),
+    ("checkin_eve",     "Вечерний разбор"),
+    ("weather_warn",    "Погодное предупреждение"),
 ]
 
 CUISINE_OPTIONS = [
@@ -83,13 +77,22 @@ def set_(cid, key, value):
     d.setdefault(str(cid), {})[key] = value
     store._save(SETTINGS_KEY, d)
 
+_LEGACY_NOTIF_KINDS = {
+    "daily_words": ("daily_words_nl", "daily_words_en", "live_lang", "grammar_nl", "grammar_en"),
+    "weekend_events": ("weekly_events", "favorite_artists"),
+}
+
 def notif_on(cid, kind):
     value = get(cid, f"notif_{kind}", None)
-    if value is None and kind in ("daily_words_nl", "daily_words_en"):
-        legacy_kind = "grammar_nl" if kind.endswith("_nl") else "grammar_en"
+    if value is not None:
+        return bool(value)
+    for legacy_kind in _LEGACY_NOTIF_KINDS.get(kind, ()):
         legacy_value = get(cid, f"notif_{legacy_kind}", None)
-        return get(cid, "notif_grammar", False) if legacy_value is None else bool(legacy_value)
-    return bool(value)
+        if legacy_value is not None:
+            return bool(legacy_value)
+    if kind == "daily_words":
+        return bool(get(cid, "notif_grammar", False))
+    return False
 
 def study_lang(cid):
     code = store.get_learning_language(cid)
@@ -122,26 +125,17 @@ def cuisine_context(cid):
 
 
 def _notif_label(kind: str, label: str) -> str:
-    if kind == "favorite_artists":
-        return f"{label} (проверка по ВС, только если есть новое)"
-    if kind in ("weekly_events", "weekly_forecast"):
-        return f"{label} (1 раз в ВС в {'10:00' if kind == 'weekly_events' else '19:00'})"
-    if kind in ("live_lang",):
-        return f"{label} (ежедневно в 16:30)"
-    if kind in ("daily_words_nl", "daily_words_en", "morning_brief", "weather_warn",
-                "lagom_daily", "recipe_daily", "checkin_day", "evening_weather",
-                "checkin_eve"):
-        times = {
-            "morning_brief": "08:30",
-            "weather_warn": "08:45",
-            "lagom_daily": "09:30",
-            "recipe_daily": "12:30",
-            "checkin_day": "14:00",
-            "evening_weather": "21:30",
-            "daily_words_nl": "11:00",
-            "daily_words_en": "11:00",
-            "checkin_eve": "22:00",
-        }
+    if kind == "weekend_events":
+        return f"{label} (по пятницам в 10:00)"
+    times = {
+        "morning_brief": "08:30",
+        "weather_warn": "08:45",
+        "daily_words": "11:00",
+        "checkin_day": "14:00",
+        "evening_weather": "19:00",
+        "checkin_eve": "21:30",
+    }
+    if kind in times:
         return f"{label} (ежедневно в {times[kind]})"
     return label
 
@@ -181,16 +175,8 @@ async def send_scheduled_notification(bot, cid, kind):
         # Тихий день без значимых погодных факторов — ничего не отправляем.
         if msg is not None:
             await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
-    elif kind == "lagom_daily":
-        import balance as _b
-        await _b.send_motiv_push(_NoKbBot(bot), cid)
-    elif kind in ("daily_words_nl", "daily_words_en"):
-        await learning.send_morning_word(bot, cid, language=study_lang(cid), with_kb=False)
-    elif kind == "live_lang":
-        await learning.send_proverb_both(bot, cid, with_kb=False)
-    elif kind == "recipe_daily":
-        import balance as _b
-        await _b.send_recipe_push(_NoKbBot(bot), cid)
+    elif kind == "daily_words":
+        await learning.send_daily_practice(_NoKbBot(bot), cid)
     elif kind == "checkin_day":
         store.pending_input[str(cid)] = "worry"
         set_(cid, "_worry_prompt_ts", datetime.now(config.TZ).timestamp())
@@ -201,15 +187,9 @@ async def send_scheduled_notification(bot, cid, kind):
     elif kind == "checkin_eve":
         import balance as _b
         await _b.send_evening_review(bot, cid)
-    elif kind == "weekly_forecast":
-        import weather as _w
-        await _w.send_weather(_NoKbBot(bot), cid, "week_plain")
-    elif kind == "weekly_events":
+    elif kind == "weekend_events":
         import leisure as _l
-        await _l.send_weekly_events(_NoKbBot(bot), cid)
-    elif kind == "favorite_artists":
-        import leisure as _l
-        await _l.send_new_concerts_notif(_NoKbBot(bot), cid)
+        await _l.send_weekend_events(_NoKbBot(bot), cid)
     elif kind == "evening_weather":
         import weather as _w
         await _w.send_weather(_NoKbBot(bot), cid, "tomorrow_plain")
@@ -244,19 +224,13 @@ class NotificationOption:
 
 
 _ADMIN_NOTIFICATION_META = {
-    "morning_brief": ("08:30", "Мой день"),
-    "weather_warn": ("08:45", "Погода"),
-    "lagom_daily": ("09:30", "Мотивация"),
-    "weekly_events": ("10:00", "Афиша"),
-    "favorite_artists": ("10:05", "Концерты"),
-    "daily_words_nl": ("11:00", "Слова NL"),
-    "daily_words_en": ("11:00", "Слова EN"),
-    "recipe_daily": ("12:30", "Еда"),
+    "morning_brief": ("08:30", "Утро"),
+    "weekend_events": ("10:00", "Куда сходить"),
+    "daily_words": ("11:00", "Практика языка"),
     "checkin_day": ("14:00", "Разгрузка"),
-    "live_lang": ("16:30", "Живой язык"),
-    "weekly_forecast": ("19:00", "Неделя"),
-    "evening_weather": ("21:30", "Вечер"),
-    "checkin_eve": ("22:00", "Разбор"),
+    "evening_weather": ("19:00", "Погода"),
+    "checkin_eve": ("21:30", "Разбор"),
+    "weather_warn": ("08:45", "Предупреждение"),
 }
 
 
@@ -718,10 +692,8 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "adm_home":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
-    elif data in ("adm_check_all", "adm_system", "adm_system_check"):
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
-    elif data in ("adm_diag", "adm_diag_api", "adm_diag_llm", "adm_diag_news", "adm_api_ai", "adm_api_ai_check"):
+    elif data in ("adm_check_all", "adm_system", "adm_system_check", "adm_diag", "adm_diag_api",
+                  "adm_diag_llm", "adm_diag_news", "adm_api_ai", "adm_api_ai_check"):
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))
     elif data == "adm_logs":
@@ -770,7 +742,7 @@ async def handle_callback(bot, cid, data, q=None):
         await _admin_guard(bot, cid, lambda b, c, kind=kind: _adm.run_test(b, c, kind))
     elif data in ("set_admin_issues", "set_admin_check_all") or data.startswith("set_admin_issue_"):
         import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_system(b, c, q))
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))
     elif data == "set_admin_api_diagnostics":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))

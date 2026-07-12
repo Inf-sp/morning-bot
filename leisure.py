@@ -1537,19 +1537,19 @@ async def find_new_favorite_concerts(cid):
     return [e for e in events if _concert_event_id(e) not in seen]
 
 
-async def send_new_concerts_notif(bot, cid):
-    """⭐ Новые концерты любимых артистов — событийное уведомление: молчит, если ничего
-    нового не появилось с прошлой проверки (в отличие от еженедельной «Афиши»).
-    При первом включении (нет истории seen) тихо запоминает текущие концерты, ничего не шлёт —
-    иначе первый запуск продублировал бы всю афишу как «новое»."""
+async def _build_new_concerts_msg(cid):
+    """Новые концерты любимых артистов -> MessageSpec, либо None если показывать нечего.
+    Молчит, если ничего нового не появилось с прошлой проверки. При первом включении
+    (нет истории seen) тихо запоминает текущие концерты, ничего не шлёт — иначе первый
+    запуск продублировал бы всю афишу как «новое»."""
     if not _seen_concerts_has_history(cid):
         events = await _fetch_favorite_events(cid)
         _seen_concerts_add(cid, [_concert_event_id(e) for e in events])
-        return
+        return None
 
     new_events = await find_new_favorite_concerts(cid)
     if not new_events:
-        return
+        return None
     s = store.get_settings(cid)
     cc = (s.get("cc") or "NL").upper()
     flag = util.flag_from_cc(cc)
@@ -1578,10 +1578,8 @@ async def send_new_concerts_notif(bot, cid):
         })
 
     msg = leisure_ui.concerts_list("Новые концерты твоих артистов", rows_data)
-    store.last_source[str(cid)] = "Досуг · Концерты"
-    store.last_answer[str(cid)] = msg.text
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, disable_web_page_preview=True)
     _seen_concerts_add(cid, [_concert_event_id(e) for e in new_events])
+    return msg
 
 
 async def find_concerts(bot, cid, mode="home"):
@@ -1675,8 +1673,8 @@ async def find_concerts(bot, cid, mode="home"):
 
 
 
-async def send_weekly_events(bot, cid):
-    """Вс 10:00 — концерты артистов пользователя + кинопремьеры ближайших дней."""
+async def _build_weekly_events_msg(cid):
+    """Афиша недели: концерты артистов пользователя + кинопремьеры ближайших дней -> MessageSpec."""
     from datetime import datetime, timedelta
 
     s = store.get_settings(cid)
@@ -1728,7 +1726,20 @@ async def send_weekly_events(bot, cid):
         except Exception:
             movie_items = []
 
-    msg = leisure_ui.weekly_events_card(period_start, period_end, concert_items, movie_items[:5])
+    return leisure_ui.weekly_events_card(period_start, period_end, concert_items, movie_items[:5])
+
+
+async def send_weekend_events(bot, cid):
+    """Пятница 10:00 — «Куда сходить»: афиша недели (концерты + кино) и новые концерты
+    любимых артистов одним сообщением."""
+    from ui.builder import MessageBuilder
+    weekly_msg = await _build_weekly_events_msg(cid)
+    new_concerts_msg = await _build_new_concerts_msg(cid)
+    combined = MessageBuilder()
+    combined.embed(weekly_msg)
+    if new_concerts_msg is not None:
+        combined.embed(new_concerts_msg)
+    msg = combined.build_stripped()
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, disable_web_page_preview=True)
 
 

@@ -42,6 +42,7 @@ _WELCOME = menu.WELCOME
 _ROOT = Path(__file__).parent
 _DEFAULT_DEPLOY_NOTE = "Бот получил небольшие внутренние улучшения."
 _DEFAULT_DEPLOY_TITLE = "Обновление"
+_WORRY_PROMPT_WINDOW_S = 1800  # окно, в течение которого свободный текст ещё считается ответом на "Дневную разгрузку"
 
 
 def _normalize_app_version(version: str) -> str:
@@ -530,16 +531,6 @@ async def answer_callback(update, context):
     if data in ("phrase_tf_yes", "phrase_tf_no"):
         await _inline_status(lambda _s: learning.phrase_truefalse_answer(bot, cid, data == "phrase_tf_yes"))
         return
-    # Режим «3 минуты»
-    if data == "session3_start":
-        await _inline_status(lambda _s: learning.session3_start(bot, cid))
-        return
-    if data == "session3_mistake_ok":
-        await _inline_status(lambda _s: learning.session3_mistake_ok(bot, cid))
-        return
-    if data == "session3_again":
-        await _inline_status(lambda _s: learning.session3_again(bot, cid))
-        return
     # Диалоговый тренажёр
     if data == "dlg_start":
         await _inline_status(lambda _s: learning.dialogue_start(bot, cid))
@@ -778,8 +769,14 @@ async def text_router(update, context):
     if cid in store.pending_input:
         kind = store.pending_input.pop(cid)
         if kind == "worry":
-            _log.info("worry: routed via pending_input for cid=%s", cid)
-            await balance.save_worries(bot, cid, text); return
+            worry_ts = settings.get(cid, "_worry_prompt_ts", 0)
+            stale = worry_ts and (datetime.now(config.TZ).timestamp() - worry_ts) >= _WORRY_PROMPT_WINDOW_S
+            if not stale:
+                _log.info("worry: routed via pending_input for cid=%s", cid)
+                await balance.save_worries(bot, cid, text); return
+            settings.set_(cid, "_worry_prompt_ts", 0)
+            # застрявший pending_input от старого приглашения "Дневная разгрузка" -
+            # не глотаем никак не связанное сообщение, продолжаем обычную обработку ниже
         if kind in ("role_doctor", "role_state"):
             await balance.handle_role(bot, cid, kind.split("_")[1], text); return
         if kind == "wardrobe_add":
@@ -862,7 +859,7 @@ async def text_router(update, context):
     # Fallback: недавняя "Дневная разгрузка" — pending_input мог потеряться,
     # но персистентная метка (survives рестарт) ещё в окне — не теряем текст.
     worry_ts = settings.get(cid, "_worry_prompt_ts", 0)
-    if worry_ts and (datetime.now(config.TZ).timestamp() - worry_ts) < 1800:
+    if worry_ts and (datetime.now(config.TZ).timestamp() - worry_ts) < _WORRY_PROMPT_WINDOW_S:
         settings.set_(cid, "_worry_prompt_ts", 0)
         _log.info("worry: routed via fallback timestamp for cid=%s", cid)
         await balance.save_worries(bot, cid, text); return
@@ -970,20 +967,12 @@ async def job_warm_weather_cache(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logging.exception("job_warm_weather_cache failed for cid=%s", cid)
 
-async def job_lagom(context: ContextTypes.DEFAULT_TYPE):
-    for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "lagom_daily"):
-            continue
-        try:
-            await settings.send_scheduled_notification(context.bot, cid, "lagom_daily")
-        except Exception:
-            logging.exception("job_lagom failed for cid=%s", cid)
-
 async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "daily_words"):
+            continue
         try:
-            if settings.notif_on(cid, "daily_words_nl") or settings.notif_on(cid, "daily_words_en"):
-                await settings.send_scheduled_notification(context.bot, cid, "daily_words_nl")
+            await settings.send_scheduled_notification(context.bot, cid, "daily_words")
         except Exception:
             logging.exception("job_daily_words failed for cid=%s", cid)
 
@@ -996,15 +985,6 @@ async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logging.exception("job_checkin_day failed for cid=%s", cid)
 
-async def job_recipe(context: ContextTypes.DEFAULT_TYPE):
-    for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "recipe_daily"):
-            continue
-        try:
-            await settings.send_scheduled_notification(context.bot, cid, "recipe_daily")
-        except Exception:
-            logging.exception("job_recipe failed for cid=%s", cid)
-
 async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "checkin_eve"):
@@ -1015,52 +995,26 @@ async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_checkin_evening failed for cid=%s", cid)
 
 async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
-    """Прогревает недельный кэш концертов перед уведомлением «Афиша недели» (10:00 вс),
+    """Прогревает недельный кэш концертов перед уведомлением «Куда сходить» (10:00 пт),
     чтобы само уведомление и последующие интерактивные «Концерты» читали кэш, а не ждали Ticketmaster."""
     for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "weekly_events"):
+        if not settings.notif_on(cid, "weekend_events"):
             continue
         try:
             await leisure.refresh_concerts_cache(cid)
         except Exception:
             logging.exception("job_refresh_concerts_cache failed for cid=%s", cid)
 
-async def job_weekly_events(context: ContextTypes.DEFAULT_TYPE):
+async def job_weekend_events(context: ContextTypes.DEFAULT_TYPE):
+    """«Куда сходить» — афиша недели (концерты + кино) и новые концерты любимых артистов
+    одним сообщением по пятницам."""
     for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "weekly_events"):
+        if not settings.notif_on(cid, "weekend_events"):
             continue
         try:
-            await settings.send_scheduled_notification(context.bot, cid, "weekly_events")
+            await settings.send_scheduled_notification(context.bot, cid, "weekend_events")
         except Exception:
-            logging.exception("job_weekly_events failed for cid=%s", cid)
-
-async def job_favorite_artists(context: ContextTypes.DEFAULT_TYPE):
-    """⭐ Новые концерты любимых артистов — шлёт только если появилось что-то новое."""
-    for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "favorite_artists"):
-            continue
-        try:
-            await settings.send_scheduled_notification(context.bot, cid, "favorite_artists")
-        except Exception:
-            logging.exception("job_favorite_artists failed for cid=%s", cid)
-
-async def job_live_lang(context: ContextTypes.DEFAULT_TYPE):
-    for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "live_lang"):
-            continue
-        try:
-            await settings.send_scheduled_notification(context.bot, cid, "live_lang")
-        except Exception:
-            logging.exception("job_live_lang failed for cid=%s", cid)
-
-async def job_weekly_forecast(context: ContextTypes.DEFAULT_TYPE):
-    for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "weekly_forecast"):
-            continue
-        try:
-            await settings.send_scheduled_notification(context.bot, cid, "weekly_forecast")
-        except Exception:
-            logging.exception("job_weekly_forecast failed for cid=%s", cid)
+            logging.exception("job_weekend_events failed for cid=%s", cid)
 
 
 async def job_evening_weather(context: ContextTypes.DEFAULT_TYPE):
@@ -1139,19 +1093,14 @@ def main():
     def _t(hm):
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
     jq.run_daily(job_warm_weather_cache, time=_t("08:10"), days=tuple(range(7)))   # прогрев погоды перед брифом
-    jq.run_daily(job_morning_brief,   time=_t("08:30"), days=tuple(range(7)))   # Мой день без кнопок
-    jq.run_daily(job_weather_warn,    time=_t("08:45"), days=tuple(range(7)))
-    jq.run_daily(job_lagom,           time=_t("09:30"), days=tuple(range(7)))
-    jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(6,))      # вс, прогрев кэша концертов
-    jq.run_daily(job_weekly_events,   time=_t("10:00"), days=(6,))             # вс
-    jq.run_daily(job_favorite_artists, time=_t("10:05"), days=(6,))            # вс, только если есть новое
-    jq.run_daily(job_daily_words,     time=_t("11:00"), days=tuple(range(7)))
-    jq.run_daily(job_live_lang,       time=_t("16:30"), days=tuple(range(7)))
-    jq.run_daily(job_recipe,          time=_t("12:30"), days=tuple(range(7)))
+    jq.run_daily(job_morning_brief,   time=_t("08:30"), days=tuple(range(7)))   # Утро: Мой день + погода + мотивация
+    jq.run_daily(job_weather_warn,    time=_t("08:45"), days=tuple(range(7)))   # экстренное предупреждение, если нужно
+    jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(4,))      # пт, прогрев кэша концертов
+    jq.run_daily(job_weekend_events,  time=_t("10:00"), days=(4,))             # пт, «Куда сходить»
+    jq.run_daily(job_daily_words,     time=_t("11:00"), days=tuple(range(7)))  # «Практика языка»
     jq.run_daily(job_checkin_day,     time=_t("14:00"), days=tuple(range(7)))
-    jq.run_daily(job_weekly_forecast, time=_t("19:00"), days=(6,))             # вс
-    jq.run_daily(job_evening_weather, time=_t("21:30"), days=(0, 1, 2, 3, 4, 5))
-    jq.run_daily(job_checkin_evening, time=_t("22:00"), days=tuple(range(7)))
+    jq.run_daily(job_evening_weather, time=_t("19:00"), days=tuple(range(7)))  # «Погода на завтра»
+    jq.run_daily(job_checkin_evening, time=_t("21:30"), days=tuple(range(7)))
 
     logging.info("Bot started via polling")
     app.run_polling(drop_pending_updates=True)

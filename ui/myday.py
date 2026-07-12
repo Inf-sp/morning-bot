@@ -1,3 +1,5 @@
+from telegram import MessageEntity
+
 from .builder import MessageBuilder
 from .constants import ui_label
 
@@ -16,6 +18,7 @@ def day_summary(
     lifehack="",
     quote_text="",
     quote_author="",
+    lagom_line="",
 ):
     title_flag = f" {flag}" if flag else ""
     b = MessageBuilder()
@@ -47,5 +50,9 @@ def day_summary(
         if quote_author:
             b.text_line(f"— {quote_author}")
             b.newline()
+
+    if lagom_line:
+        b.spacer()
+        b.add(f"💭 {lagom_line}", MessageEntity.ITALIC)
 
     return b.build_stripped()

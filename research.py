@@ -14,6 +14,7 @@ import requests
 _log = logging.getLogger(__name__)
 import util
 import config
+import api_usage
 
 _WIKI_UA = {"User-Agent": "morning-bot/1.0"}
 
@@ -228,12 +229,6 @@ def wikidata_city_facts(name: str) -> dict:
 
     _WDF_CACHE[key] = (time.time(), facts)
     return facts
-
-
-def wikidata_city_sentence(name: str) -> str:
-    """Один факт из Wikidata (обратная совместимость)."""
-    facts = wikidata_city_facts(name)
-    return random.choice(list(facts.values())) if facts else ""
 
 
 # ================= COUNTRY FACTS =================
@@ -506,10 +501,18 @@ def tavily_search(query: str, max_results: int = 5) -> list:
             },
             timeout=15,
         )
+        ok = 200 <= r.status_code < 300
+        api_usage.record_request("tavily", ok=ok, status_code=r.status_code,
+                                 units={"credits": 1} if ok else {},
+                                 error="" if ok else f"HTTP {r.status_code}")
+        if not ok:
+            _log.warning("tavily_search failed: HTTP %s", r.status_code)
+            return []
         results = r.json().get("results", [])
         _TV_CACHE[key] = (time.time(), results)
         return results
     except Exception as e:
+        api_usage.record_request("tavily", ok=False, error=type(e).__name__)
         _log.warning("tavily_search failed: %s", str(e)[:120])
         return []
 
@@ -551,7 +554,12 @@ def firecrawl_search(query: str, max_results: int = 5) -> list:
             headers={"Authorization": f"Bearer {config.FIRECRAWL_API_KEY}"},
             timeout=18,
         )
-        r.raise_for_status()
+        ok = 200 <= r.status_code < 300
+        api_usage.record_request("firecrawl", ok=ok, status_code=r.status_code,
+                                 error="" if ok else f"HTTP {r.status_code}")
+        if not ok:
+            _log.warning("firecrawl_search failed: HTTP %s", r.status_code)
+            return []
         data = r.json().get("data") or []
         return [{
             "title": row.get("title", ""),
@@ -559,6 +567,7 @@ def firecrawl_search(query: str, max_results: int = 5) -> list:
             "content": row.get("description") or row.get("markdown") or "",
         } for row in data if isinstance(row, dict)]
     except Exception as e:
+        api_usage.record_request("firecrawl", ok=False, error=type(e).__name__)
         _log.warning("firecrawl_search failed: %s", str(e)[:120])
         return []
 
