@@ -279,9 +279,6 @@ _HTTP_REASONS = {
     503: "сервис недоступен", 504: "таймаут сервиса",
 }
 
-_USER_FALLBACK_TEXT = "Сейчас не удалось подготовить ответ. Попробуй ещё раз."
-
-
 def _friendly_error(reason):
     """'HTTP 402' -> 'HTTP 402 · закончились кредиты'; иначе не трогает текст."""
     m = re.match(r"^HTTP (\d+)$", str(reason or "").strip())
@@ -561,7 +558,7 @@ async def send_api_ai(bot, cid, q=None):
         last = errors[0]
         kind_line = f"{_hhmm(last.get('ts', 0))} · {str(last.get('kind') or 'ошибка')}"
         raw_msg = str(last.get("msg") or "")[:180]
-        last_failure = (kind_line, raw_msg, _USER_FALLBACK_TEXT)
+        last_failure = (kind_line, raw_msg)
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],

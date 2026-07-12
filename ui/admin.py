@@ -160,7 +160,7 @@ def api_ai(status_dot, status_text, impact_line, fallback_line, unavailable_line
     fallback_line: "включено"/"выключено" - сработает ли резервная AI-модель прямо сейчас.
     unavailable_line: "Недоступно: N сервисов" | None, если всё в норме.
     ai_rows / api_rows: list[str] - готовые строки "статус Сервис · роль · деталь".
-    last_failure: (kind_line, raw_msg, user_facing_text) | None.
+    last_failure: (kind_line, raw_msg) | None.
     """
     b = MessageBuilder()
     b.bold("🔌 API и AI")
@@ -185,14 +185,12 @@ def api_ai(status_dot, status_text, impact_line, fallback_line, unavailable_line
         b.line(str(line))
     b.spacer()
     if last_failure:
-        kind_line, raw_msg, user_text = last_failure
+        kind_line, raw_msg = last_failure
         b.bold(f"{WARNING} Последняя ошибка")
         b.newline()
         b.line(str(kind_line))
         if raw_msg:
             b.line(str(raw_msg))
-        b.spacer()
-        b.line(f"Пользователю: «{user_text}»")
     else:
         b.line("Последняя ошибка: нет")
     b.spacer()

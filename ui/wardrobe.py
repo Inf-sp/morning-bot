@@ -219,7 +219,7 @@ def zone_picker_screen():
 
 def wardrobe_home_screen(total):
     b = MessageBuilder()
-    b.section("👔 Мой гардероб")
+    b.section("🎚️ Настройки гардероба")
     if total:
         b.line(f"Всего вещей: {total}. Выбери категорию.")
     else:

@@ -33,20 +33,56 @@ class StatusManager:
         (15, "✨ Почти готово..."),
     )
 
-    def __init__(self, bot, cid=None, message=None, parse_mode=None, mode="message"):
+    # Тематические фразы ожидания по разделу — вместо общего "Ищу ответ" на
+    # экране конкретного раздела (гардероб, готовка и т.п.), см. TOPIC_STAGES.
+    TOPIC_STAGES = {
+        "wardrobe": (
+            (0, "⏳ Разбираю шкаф..."),
+            (3, "🧩 Собираю образ..."),
+            (8, "✨ Почти готово..."),
+        ),
+        "food": (
+            (0, "⏳ Ищу рецепт..."),
+            (3, "🥕 Подбираю продукты..."),
+            (8, "✨ Почти готово..."),
+        ),
+        "learning": (
+            (0, "⏳ Готовлю задание..."),
+            (3, "📚 Подбираю слова..."),
+            (8, "✨ Почти готово..."),
+        ),
+        "leisure": (
+            (0, "⏳ Подбираю варианты..."),
+            (3, "🎬 Сверяюсь со вкусом..."),
+            (8, "✨ Почти готово..."),
+        ),
+        "travel": (
+            (0, "⏳ Ищу маршрут..."),
+            (3, "🗺️ Прикидываю план..."),
+            (8, "✨ Почти готово..."),
+        ),
+        "health": (
+            (0, "⏳ Собираю мысли..."),
+            (3, "💬 Подбираю слова..."),
+            (8, "✨ Почти готово..."),
+        ),
+    }
+
+    def __init__(self, bot, cid=None, message=None, parse_mode=None, mode="message", stages=None):
         self.bot = bot
         self.cid = cid
         self.message = message
         self.parse_mode = parse_mode
         self.mode = mode
+        self.stages = stages or self.STAGES
         self._inline_cleared = False
         self._task = None
         self._stopped = asyncio.Event()
 
     @classmethod
-    async def start(cls, bot, cid=None, message=None, text=None, parse_mode=None):
-        manager = cls(bot, cid=cid, message=message, parse_mode=parse_mode)
-        first_text = text or cls.STAGES[0][1]
+    async def start(cls, bot, cid=None, message=None, text=None, parse_mode=None, stages=None):
+        manager = cls(bot, cid=cid, message=message, parse_mode=parse_mode, stages=stages)
+        first_text = text or manager.stages[0][1]
         if manager.message is None:
             manager.message = await bot.send_message(chat_id=cid, text=first_text, parse_mode=parse_mode)
         else:
@@ -55,15 +91,15 @@ class StatusManager:
         return manager
 
     @classmethod
-    async def start_inline(cls, q, bot=None, cid=None, text=None):
-        manager = cls(bot, cid=cid, message=q.message, mode="inline")
-        await manager._edit(text or cls.STAGES[0][1])
+    async def start_inline(cls, q, bot=None, cid=None, text=None, stages=None):
+        manager = cls(bot, cid=cid, message=q.message, mode="inline", stages=stages)
+        await manager._edit(text or manager.stages[0][1])
         manager._task = asyncio.create_task(manager._run())
         return manager
 
     async def _run(self):
         started = time.monotonic()
-        for delay, text in self.STAGES[1:]:
+        for delay, text in self.stages[1:]:
             timeout = max(0, delay - (time.monotonic() - started))
             try:
                 await asyncio.wait_for(self._stopped.wait(), timeout=timeout)

@@ -148,9 +148,8 @@ def _save_cached_look(cid, item_ids, look_data):
 def build_wardrobe_keyboard():
     return _kb([
         [("✨ Обновить образ на сегодня", "w_look")],
-        [("✂️ Разбор гардероба", "w_improve")],
-        [("🔍 Проверка покупки", "w_check")],
-        [("👔 Мой гардероб", "set_wardrobe_g")],
+        [("✂️ Разбор гардероба", "w_improve"), ("🔍 Проверка покупки", "w_check")],
+        [("🎚️ Настройки гардероба", "set_wardrobe_g")],
         [("⬅️ Назад", "m_menu")],
     ])
 
@@ -381,6 +380,11 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text):
         tr = it.get("temp_range")
         if tr and tmax is not None and tr[0] <= tmax <= tr[1]:
             score += 5
+        if it.get("zone") == "Аксессуары":
+            # У аксессуаров обычно нет temp_range (не привязаны к погоде) — без
+            # небольшого бонуса они никогда не выигрывают у варианта "без аксессуара"
+            # при равном score и не попадают в образ вовсе.
+            score += 2
     score += _color_penalty(items)
     item_ids = {it.get("id") for it in items}
     cutoff_3d = (datetime.now(config.TZ) - timedelta(days=3)).date().isoformat()
@@ -518,9 +522,6 @@ def build_wardrobe_insight(cid, items, wardrobe_history):
         for it in items:
             if all(it.get("id") in (e.get("item_ids") or []) for e in last3):
                 return f"{it.get('name')} — в последних образах подряд."
-    unused = sum(1 for it in items if it.get("use_count", 0) == 0)
-    if unused >= 3:
-        return f"{unused} вещей ещё не использовались."
     return None
 
 
@@ -712,7 +713,7 @@ _SUBCAT_KEYWORDS = {
     "Ботинки": ["ботин"], "Сандалии": ["сандал"], "Тапочки": ["тапоч"],
     "Кепки": ["кепк"], "Шапки": ["шапк"], "Ремни": ["ремен", "ремн"], "Часы": ["час"],
     "Очки": ["очк"], "Украшения": ["украшен", "цепоч", "кольц"], "Шарфы": ["шарф"],
-    "Перчатки": ["перчат"], "Сумки": ["сумк"],
+    "Перчатки": ["перчат"], "Сумки": ["сумк"], "Рюкзаки": ["рюкзак"], "Носки": ["носк"],
 }
 
 
@@ -845,7 +846,7 @@ async def handle_wardrobe_search(bot, cid, query):
     if not match:
         await bot.send_message(
             chat_id=cid, text="Не нашла такую вещь. Попробуй другое название или посмотри весь список.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👔 Мой гардероб", callback_data="w_del_g")]]),
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🎚️ Настройки гардероба", callback_data="w_del_g")]]),
         )
         return
     lines = [match.get("name", "")]
@@ -889,7 +890,7 @@ async def send_del_zones(bot, cid, q=None, origin="m"):
 
 
 async def send_wardrobe_zones(bot, cid, q=None):
-    """Кнопка «Мой гардероб»: сразу список зон с количеством вещей, без
+    """Кнопка «Настройки гардероба»: сразу список зон с количеством вещей, без
     промежуточного экрана «Добавить/Удалить». Переиспользует навигацию
     зона → подкатегория → список вещей (cleanup.py), origin="g"."""
     w = store.load_wardrobe(cid)
@@ -1175,7 +1176,7 @@ async def handle_callback(bot, cid, q, data):
         import cleanup
         await cleanup.open_cleanup(bot, cid, f"kast_{zone_slug}_{idx}_{origin}"); return
     if data == "w_improve":
-        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["wardrobe"])
         try:
             await send_improve(bot, cid)
         except Exception as e:

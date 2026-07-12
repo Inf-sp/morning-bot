@@ -101,9 +101,8 @@ _SCREENS = {
         "Одежда без хаоса. Подберу образ, помогу разобрать шкаф и выбрать, что стоит докупить. Чем полнее гардероб, тем точнее рекомендации.",
         [
             [(ui_label("recommendation", "Образ на сегодня"), "w_look")],
-            [("✂️ Разбор гардероба", "w_improve")],
-            [(ui_label("find", "Проверка покупки"), "w_check")],
-            [("👔 Мой гардероб", "set_wardrobe_g")],
+            [("✂️ Разбор гардероба", "w_improve"), (ui_label("find", "Проверка покупки"), "w_check")],
+            [("🎚️ Настройки гардероба", "set_wardrobe_g")],
         ],
     ),
     "m_balance": (
@@ -126,10 +125,8 @@ _SCREENS = {
             "Предпочтения и сохранённое - в настройках.",
         ],
         [
-            [(ui_label("concerts", "Концерты"), "a_concerts_find")],
-            [(ui_label("leisure", "Кино"), "a_watch")],
-            [(ui_label("music", "Музыка"), "a_listen")],
-            [(ui_label("books", "Книги"), "a_read")],
+            [(ui_label("concerts", "Концерты"), "a_concerts_find"), (ui_label("leisure", "Кино"), "a_watch")],
+            [(ui_label("music", "Музыка"), "a_listen"), (ui_label("books", "Книги"), "a_read")],
             [(ui_label("settings", "Настройки досуга"), "set_mydata_leisure")],
             [("⬅️ Назад", "m_menu")],
         ],
@@ -167,8 +164,6 @@ def learning_menu(active_code="nl"):
         [("💬 Диалог", "dlg_start")],
         [(ui_label("live_language", "Живой язык"), f"a_proverb_{code}")],
         [(ui_label("game", "Игра-детектив"), f"gamelang_{code}")],
-        [(ui_label("dictionary", "Мой словарь"), f"a_dictlang_{code}_from_menu")],
-        [("🧠 Повторение ошибок", "mistake_review")],
         [(ui_label("settings", "Настройки обучения"), "set_learning")],
         [("⬅️ Назад", "m_menu")],
     ]))

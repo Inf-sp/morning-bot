@@ -1695,7 +1695,7 @@ _MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("⬅️ На
 async def handle_callback(bot, cid, q, data):
     # Готовка: «Ещё рецепт» / «Назад» — строго в рамках активной категории (§6 спеки)
     if data == "as_food":
-        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["food"])
         try:
             await show_next_recipe(bot, cid, status=status)
         except Exception as e:
@@ -1711,7 +1711,7 @@ async def handle_callback(bot, cid, q, data):
         await send_daycheck(bot, cid); return
     # мотивация
     if data == "as_motiv":
-        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["health"])
         try:
             out, entities = _gen_motiv(cid)
         except Exception as e:
@@ -1753,7 +1753,7 @@ async def handle_callback(bot, cid, q, data):
             text="✏️ Напиши продукты через запятую или с новой строки — добавлю в список.",
             reply_markup=_back_kb()); return
     if data == "as_fridge_cook":
-        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid)
+        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["food"])
         try:
             raw = store.get_list(config.FRIDGE_KEY, str(cid))
             available = _fridge_available(raw)

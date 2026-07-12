@@ -953,9 +953,16 @@ async def train_start(bot, cid, language, mode=None):
 
 
 
+_MISTAKE_EVERY_N_ROUNDS = 3
+
+
 async def _render_train_quiz(bot, cid):
     """Единая карточка тренажёра: интро (термин + перевод + пример) и отдельный тест
-    с пропуском — см. phrase_intro_continue(). Один формат для всех записей словаря."""
+    с пропуском — см. phrase_intro_continue(). Один формат для всех записей словаря.
+
+    Каждый _MISTAKE_EVERY_N_ROUNDS-й раунд, если есть открытая ошибка на активном
+    языке — показывает её вместо случайного слова (§ record_mistake/mistake_review_card),
+    без отдельного раздела «Повторение ошибок»."""
     import random as _r
     store.pending_input.pop(str(cid), None)
     st = store.train_state.get(str(cid))
@@ -963,6 +970,13 @@ async def _render_train_quiz(bot, cid):
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
     language = st["lang"]
     lang_code = _code(language)
+    round_n = st.get("round", 0)
+    if round_n > 0 and round_n % _MISTAKE_EVERY_N_ROUNDS == 0:
+        mistake = next_open_mistake(cid, lang_code)
+        if mistake:
+            msg = learning_ui.mistake_review_card(mistake)
+            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+            return
     full_entries = _train_full_entries(cid, language)
     if not full_entries:
         await bot.send_message(chat_id=cid, text="В словаре нет записей с переводом."); return
@@ -1329,7 +1343,7 @@ async def translate_answer(bot, cid, text):
     code = _code(st["lang"])
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё пример", callback_data=f"again_tr_{code}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"m_{code}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
     ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
     return True
@@ -1423,7 +1437,7 @@ async def smart_reveal_later(bot, cid):
 def _proverb_kb(code):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё вариант", callback_data=f"a_proverb_{code}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"m_{code}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
     ])
 
 def _proverb_entities_card(flag, original, analogs=None, meaning="", examples=None, example_ru=""):
@@ -3103,6 +3117,7 @@ _DICT_ORIGIN_TO_BACK = {
     "notes": "m_notes",
     "menu": "m_learn",
     "mydata": "set_home",
+    "learnset": "set_learning",
 }
 _DICT_BACK_TO_ORIGIN = {v: k for k, v in _DICT_ORIGIN_TO_BACK.items()}
 
@@ -3438,16 +3453,23 @@ async def send_mistake_review(bot, cid, language=None, back="m_learn"):
 
 
 async def mistake_retry(bot, cid, mistake_id):
-    """«Попробовать снова»: помечает ошибку как повторённую и открывает
-    обычный тренажёр на активном языке — не привязывает к конкретному слову
-    напрямую (тренажёр сам выбирает следующую карточку по приоритету)."""
+    """«Попробовать снова»: помечает ошибку как повторённую и продолжает
+    тренажёр (следующая карточка по обычной логике)."""
     mark_mistake_reviewed(cid, mistake_id)
-    await train_start(bot, cid, active_language(cid))
+    if store.train_state.get(str(cid)):
+        await _render_next_train_quiz(bot, cid)
+    else:
+        await train_start(bot, cid, active_language(cid))
 
 
 async def mistake_understood(bot, cid, mistake_id):
+    """«Уже понял»: ошибка закрыта, продолжаем тренажёр той же карточкой
+    выбора (следующее слово по обычной логике)."""
     resolve_mistake(cid, mistake_id)
-    await send_mistake_review(bot, cid)
+    if store.train_state.get(str(cid)):
+        await _render_next_train_quiz(bot, cid)
+    else:
+        await send_mistake_review(bot, cid)
 
 
 # ================= ДИАЛОГОВЫЙ ТРЕНАЖЁР =================
@@ -3462,10 +3484,13 @@ def generate_dialogue(language, level):
         f"Уровень: {level_label.lower()}. 3-4 реплики собеседника, на каждую — "
         "2-3 варианта ответа ученика на том же языке, из которых один самый "
         "естественный, остальные — тоже понятные, но менее уместные (не грубые "
-        "ошибки, а стилистически слабее).\n"
+        "ошибки, а стилистически слабее). Перемешивай позицию самого естественного "
+        "варианта в списке options от шага к шагу — не ставь его всегда первым.\n"
         'JSON: {"topic": "тема диалога по-русски", "steps": ['
         '{"line": "реплика собеседника", "options": ["вариант 1", "вариант 2", "вариант 3"], '
-        '"best": 0, "note": "короткое пояснение по-русски, почему этот вариант лучше"}'
+        '"best": "индекс (0, 1 или 2) самого естественного варианта в options — определи заново для каждого шага, '
+        'не копируй одно и то же число", '
+        '"note": "короткое пояснение по-русски, почему вариант под индексом best лучше остальных"}'
         "]}",
         900, tier="cheap", module="learning",
     )
@@ -3857,7 +3882,7 @@ async def game_hint(bot, cid, q):
     if st and i < len(hints):
         st["hint_i"] = i + 1
         msg = learning_ui.game_hint(ui, hints[i])
-        await q.message.reply_text(msg.text, entities=msg.entities)
+        await q.message.reply_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
     else:
         await q.message.reply_text(ui["nohint"])
 
@@ -3887,9 +3912,11 @@ def learning_settings_kb(active_lang, active_level, back="set_home"):
     for level in LEVELS:
         mark = "✅ " if level == active_level else ""
         row.append(InlineKeyboardButton(f"{mark}{LEVEL_LABELS[level]}", callback_data=f"set_learning_level_{level}"))
+    code = _code(active_lang)
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(f"📚 Язык: {_language_display(active_lang)}", callback_data="toggle_learning_language")],
         row,
+        [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{code}_from_learnset")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
     ])
 

@@ -85,8 +85,6 @@ def proverb_card(flag, original, analogs=None, meaning="", examples=None, exampl
         else:
             b.line(example)
 
-    b.spacer()
-    b.add("Прочитай вслух один раз. Этого достаточно.", MessageEntity.ITALIC)
     msg = b.build()
     msg.text = msg.text.rstrip()
     return msg
@@ -410,7 +408,8 @@ def game_hint(ui, hint):
     b.bold(hint)
     b.spacer()
     b.text_line(ui["who"])
-    return b.build()
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")]])
+    return b.build(reply_markup=kb)
 
 
 def dialogue_step_card(flag, situation, line, options, step, total):
