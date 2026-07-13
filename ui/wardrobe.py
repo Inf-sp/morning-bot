@@ -17,7 +17,7 @@ def improve_card(data):
            missing_title, missing, next_buy_title, next_buy_item, next_buy_why}
     """
     b = MessageBuilder()
-    b.section("👕 Разбор гардероба")
+    b.section("👕 Разбор шкафа")
     b.spacer()
 
     headline = _clean_text(data.get("headline"))
@@ -76,34 +76,35 @@ def _finish_dot(value):
 
 
 def render_wardrobe_message(look_data):
-    """Образ на сегодня — компактная карточка: шапка с датой и городом, строка
-    погоды, состав образа одной строкой, причины подбора, совет по стилю и
-    опциональный инсайт по истории образов.
+    """Образ на сегодня — компактная карточка: одно погодное решение вместо цифр,
+    вещи списком по одной на строку, до трёх причин подбора, совет по стилю и
+    опциональный инсайт по истории образов. Без даты и города в шапке — они уже
+    есть в "Мой день".
 
-    look_data: {short_date, city, weather_line, items[{name}], reasons[], style_tip, insight}
+    look_data: {weather_decision, items[{name}], reasons[], style_tip, insight}
     """
     look_data = look_data or {}
     b = MessageBuilder()
-    header_bits = [x for x in (_clean_text(look_data.get("short_date")), _clean_text(look_data.get("city"))) if x]
-    b.section(" · ".join(["👟 Гардероб", *header_bits]))
+    b.section("👟 Гардероб")
 
-    weather_line = _clean_text(look_data.get("weather_line"))
-    if weather_line:
+    decision = _clean_text(look_data.get("weather_decision"))
+    if decision:
         b.spacer()
-        b.line(weather_line)
+        b.line(decision)
 
     items = [_clean_text(_item_display(it)) for it in (look_data.get("items") or [])]
     items = [it for it in items if it]
     if items:
         b.spacer()
-        b.bold("Образ дня:")
+        b.bold("Надень:")
         b.newline()
-        b.line(" · ".join(items))
+        for it in items:
+            b.line(f"- {it}")
 
     reasons = [_finish_dot(r) for r in (look_data.get("reasons") or []) if _clean_text(r)]
     if reasons:
         b.spacer()
-        b.bold("Почему сегодня")
+        b.bold("Почему этот образ")
         b.newline()
         for r in reasons[:3]:
             b.line(f"- {r}")
@@ -169,6 +170,47 @@ def entity_card(title, summary="", quote="", bullets=None, final="", bullet_labe
     return b.build_stripped()
 
 
+def purchase_check_card(data):
+    """Оценка покупки: до трёх цифр, влияющих на решение (сколько уже есть, сколько
+    похоже, сколько новых сочетаний даст покупка), не голые комплименты.
+
+    data: {item, verdict, have_count, have_category, similar_count, why[], alternative}
+    """
+    data = data or {}
+    b = MessageBuilder()
+    b.section("Оценка")
+    b.spacer()
+    b.bold(_clean_text(data.get("item")))
+
+    verdict = _clean_text(data.get("verdict"))
+    if verdict:
+        b.spacer()
+        b.text_line("Вердикт: ")
+        b.line(_finish_dot(verdict))
+
+    have_category = _clean_text(data.get("have_category"))
+    have_count = data.get("have_count")
+    if have_category and have_count is not None:
+        similar = data.get("similar_count")
+        similar_bit = f", из них {similar} похожи по назначению" if similar else ""
+        b.spacer()
+        b.text_line("У тебя уже: ")
+        b.line(_finish_dot(f"{have_count} {have_category}{similar_bit}"))
+
+    why = [_finish_dot(x) for x in (data.get("why") or []) if _clean_text(x)]
+    if why:
+        b.section("Почему:")
+        b.line("\n".join(f"- {x}" for x in why[:3]))
+
+    alternative = _clean_text(data.get("alternative"))
+    if alternative:
+        b.spacer()
+        b.text_line("Лучше искать: ")
+        b.line(_finish_dot(alternative))
+
+    return b.build_stripped()
+
+
 def zone_picker_screen():
     b = MessageBuilder()
     b.section(ui_label("delete", "Что удалить"))
@@ -178,7 +220,7 @@ def zone_picker_screen():
 
 def wardrobe_home_screen(total):
     b = MessageBuilder()
-    b.section("🎚️ Настройки гардероба")
+    b.section("👕 Мой гардероб")
     if total:
         b.line(f"Всего вещей: {total}. Выбери категорию.")
     else:

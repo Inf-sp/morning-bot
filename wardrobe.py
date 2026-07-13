@@ -49,37 +49,32 @@ def _back_kb():
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
 
-def _weather_emoji(has_rain, flags):
-    """Эмодзи для строки погоды в карточке образа — по тому же приоритету, что и погодные правила
-    (дождь → ветер → солнце)."""
-    if has_rain:
-        return "🌧️"
-    if flags and flags.get("strong_wind"):
-        return "💨"
-    if flags and flags.get("sunny"):
-        return "☀️"
-    return "☁️"
 
-
-def _wind_label(wind_ms, strong_wind):
-    """Ветер — важный для одежды фактор, показываем его всегда, не только когда заметный."""
-    if strong_wind:
-        return "сильный ветер"
-    if wind_ms >= WARDROBE_WIND_LAYER_MS:
-        return "умеренный ветер"
-    return "слабый ветер"
-
-
-def _short_weather_line(weather_ctx):
-    """Погодная строка новой карточки: '☁️ +18…+23°C · сухо · слабый ветер'."""
+def _weather_decision(weather_ctx):
+    """Одно предложение-решение про одежду вместо цифр погоды — пользователь
+    открывает Гардероб, чтобы не думать над прогнозом самому."""
     if not weather_ctx or weather_ctx.get("tmax") is None:
         return ""
-    emoji = _weather_emoji(weather_ctx["has_rain"], weather_ctx)
-    tmin, tmax = weather_ctx.get("tmin"), weather_ctx["tmax"]
-    temp = f"{tmin:+d}…{tmax:+d}°C" if tmin is not None else f"до {tmax:+d}°C"
-    wind_label = _wind_label(weather_ctx.get("wind_ms") or 0, weather_ctx.get("strong_wind"))
-    parts = [temp, "дождь" if weather_ctx["has_rain"] else "сухо", wind_label]
-    return f"{emoji} " + " · ".join(parts)
+    has_rain = weather_ctx.get("has_rain")
+    strong_wind = weather_ctx.get("strong_wind")
+    hot = weather_ctx.get("hot")
+    warm = weather_ctx.get("warm")
+
+    if has_rain and hot:
+        return "Сегодня дождь, но тепло — возьми дождевик, тяжёлую куртку надевать не стоит."
+    if has_rain and strong_wind:
+        return "Дождь и ветер — нужна непромокаемая куртка и закрытая обувь."
+    if has_rain:
+        return "Сегодня дождь — возьми дождевик или непромокаемую куртку."
+    if strong_wind and hot:
+        return "Тепло, но ветрено — лёгкая ветровка не помешает."
+    if strong_wind:
+        return "Сильный ветер — нужен верхний слой."
+    if hot:
+        return "Сегодня жарко — одевайся легко."
+    if warm:
+        return "Сегодня лучше одеться легко, но оставить один слой на прохладное утро."
+    return "Сегодня прохладно — нужен тёплый верхний слой."
 
 
 def build_weather_context(wdata, day_str, tmax, tmin, wind_ms, rain_prob_day, rain_mm_day, weathercode):
@@ -123,6 +118,10 @@ def _build_entity_card(title, summary="", quote="", bullets=None, final="", bull
     msg = wardrobe_ui.entity_card(title, summary, quote, bullets, final, bullet_label)
     return msg.text, msg.entities
 
+def _build_purchase_message(data):
+    msg = wardrobe_ui.purchase_check_card(data)
+    return msg.text, msg.entities
+
 def _get_cached_look(cid):
     cached = store.get_valid_wardrobe_daylook(cid)   # ссылочная целостность (version+id)
     if not cached or cached.get("date") != _day_key():   # день — бизнес-правило «раз в день»
@@ -148,8 +147,9 @@ def _save_cached_look(cid, item_ids, look_data):
 def build_wardrobe_keyboard():
     return _kb([
         [("✨ Обновить образ на сегодня", "w_look")],
-        [("✂️ Разбор гардероба", "w_improve"), ("🔍 Проверка покупки", "w_check")],
-        [("🎚️ Настройки гардероба", "set_wardrobe_g")],
+        [("✂️ Разбор шкафа", "w_improve"), ("🔍 Оценка", "w_check")],
+        [("👕 Мой гардероб", "set_wardrobe_g")],
+        [("🎚️ Настройки гардероба", "set_wardrobe_settings")],
         [("⬅️ Назад", "m_menu"), ("🏠 Меню", "m_menu")],
     ])
 
@@ -386,6 +386,11 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text):
             # при равном score и не попадают в образ вовсе.
             score += 2
     score += _color_penalty(items)
+    for it in items:
+        # Маленький тай-брейкер, не решающий фактор: при прочих равных чуть
+        # предпочитаем вещь, которая реже носилась в последнее время — но только
+        # после того, как цельность образа (цвет/погода/антиповтор) уже учтена.
+        score -= 0.1 * min(int(it.get("use_count", 0)), 20)
     item_ids = {it.get("id") for it in items}
     cutoff_3d = (datetime.now(config.TZ) - timedelta(days=3)).date().isoformat()
     for entry in wardrobe_history:
@@ -409,9 +414,10 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text):
 
 
 def _top_candidates(items, limit=3):
-    """Топ-N кандидатов зоны по частоте использования (use_count), иначе как есть —
-    ограничивает размер перебора комбинаций до разумных ~100 вариантов."""
-    return sorted(items, key=lambda it: it.get("use_count", 0))[:limit]
+    """Ограничивает размер зоны до перебора комбинаций (см. _combos) без
+    предвзятости по частоте ношения — какая вещь выигрывает, решает score_outfit
+    (цельность образа), а не то, что вещь ещё не использовалась."""
+    return items[:limit]
 
 
 def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text):
@@ -474,10 +480,6 @@ def build_outfit_reasons(items, weather_ctx, score_details=None):
     low = next((it for it in items if it.get("zone") == "Низ"), None)
     if low and weather_ctx.get("hot"):
         reasons.append(f"{low.get('name')} — без перегрева в жару.")
-    if len(reasons) < 3:
-        unused = next((it for it in items if it.get("use_count", 0) == 0), None)
-        if unused:
-            reasons.append(f"{unused.get('name')} — ещё не было в образах, стоит попробовать.")
     return reasons[:3]
 
 
@@ -490,7 +492,7 @@ def build_style_tip(items, weather_ctx=None):
     weather_ctx = weather_ctx or {}
     outer = next((it for it in items if it.get("zone") == "Верхняя одежда"), None)
     if outer and weather_ctx.get("warm"):
-        return f"Днём {outer.get('name')} можно снять или расстегнуть."
+        return f"Носи {outer.get('name')} расстёгнутой и слегка подверни рукава."
     sleeved = next((it for it in items
                     if it.get("zone") == "Верх" and any(m in str(it.get("name", "")).lower() for m in _LONG_SLEEVE_MARKERS)),
                    None)
@@ -564,7 +566,7 @@ def _no_outfit_screen(result_kb):
     return text, result_kb
 
 
-async def _ai_reframe_look(cid, items, weather_ctx, reasons, tip, short_date, city):
+async def _ai_reframe_look(cid, items, weather_ctx, reasons, tip):
     """Опциональный тонкий AI-рефрейз локального текста — тот же образ, живее
     формулировки. Тихий fallback на локальные reasons/tip при любой ошибке."""
     names = ", ".join(it.get("name", "") for it in items)
@@ -646,16 +648,11 @@ async def send_looks(bot, cid, status=None, kb=None):
     tip = build_style_tip(best_sorted, weather_ctx)
     insight = build_wardrobe_insight(cid, best_sorted, wardrobe_history)
 
-    now_dt = datetime.now(config.TZ)
-    short_date = f"{util._WEEKDAY_SHORT[now_dt.weekday()]}, {now_dt.day} {util._MONTHS[now_dt.month - 1]}"
-    city = s.get("city", "")
-    reasons, tip = await _ai_reframe_look(cid, best_sorted, weather_ctx, reasons, tip, short_date, city)
+    reasons, tip = await _ai_reframe_look(cid, best_sorted, weather_ctx, reasons, tip)
 
     item_ids = [it.get("id") for it in best_sorted]
     look_data = {
-        "short_date": short_date,
-        "city": city,
-        "weather_line": _short_weather_line(weather_ctx),
+        "weather_decision": _weather_decision(weather_ctx),
         "items": [{"name": it.get("name", "")} for it in best_sorted],
         "reasons": reasons,
         "style_tip": tip,
@@ -847,7 +844,7 @@ async def handle_wardrobe_search(bot, cid, query):
     if not match:
         await bot.send_message(
             chat_id=cid, text="Не нашла такую вещь. Попробуй другое название или посмотри весь список.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🎚️ Настройки гардероба", callback_data="w_del_g")]]),
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👕 Мой гардероб", callback_data="w_del_g")]]),
         )
         return
     lines = [match.get("name", "")]
@@ -891,7 +888,7 @@ async def send_del_zones(bot, cid, q=None, origin="m"):
 
 
 async def send_wardrobe_zones(bot, cid, q=None):
-    """Кнопка «Настройки гардероба»: сразу список зон с количеством вещей, без
+    """Кнопка «Мой гардероб»: сразу список зон с количеством вещей, без
     промежуточного экрана «Добавить/Удалить». Переиспользует навигацию
     зона → подкатегория → список вещей (cleanup.py), origin="g"."""
     w = store.load_wardrobe(cid)
@@ -1119,37 +1116,29 @@ async def check_purchase(bot, cid, text):
 Гардероб пользователя:
 {store.wardrobe_to_text(w)}
 {web_block}
-Задача — конкретный анализ, не комплименты. Ответь на вопросы:
-1. С какими конкретными вещами из гардероба это сочетается (назови их)?
-2. Каких вещей не хватает, чтобы это носить?
+Задача — конкретный анализ на цифрах, не комплименты. Ответь на вопросы:
+1. Сколько в гардеробе вещей той же категории (например «рубашки») и сколько из них похожи по назначению на эту покупку?
+2. С какими конкретными вещами это сочетается — сколько новых сочетаний реально даст покупка?
 3. Дублирует ли это что-то уже имеющееся?
-4. Насколько вещь соответствует стилю и повседневным задачам?
+4. Насколько вещь соответствует стилю пользователя?
 
 Верни JSON (без markdown):
-{{"verdict":"БРАТЬ или НЕ БРАТЬ","why":["2-3 конкретные причины на основе реального гардероба, на ты, без имени"],"outro":"1 строка — честный итог с характером, на ты, без имени"}}
+{{"verdict":"скорее брать или скорее не брать, коротко","have_category":"категория во мн.ч., напр. рубашек","have_count":число вещей этой категории в гардеробе или 0,"similar_count":число из них похожих по назначению или 0,"why":["2-3 конкретные причины на основе реального гардероба и цифр выше, на ты, без имени"],"alternative":"1 строка — что искать вместо этого, если вердикт скорее не брать, иначе пусто"}}
 
-Если гардероб пустой — честно скажи что оценка приблизительная."""
+Если гардероб пустой — верни have_count 0 и в why честно скажи, что оценка приблизительная."""
     try:
         d = await ai.allm_json(prompt, 600, tier="smart", module="wardrobe")
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
-    verdict = d.get("verdict", "")
-    why = list(d.get("why") or [])
-    total, _ = wardrobe_stats(w)
-    if total <= 0:
-        why.insert(0, (
-            "Сейчас рекомендация основана в основном на характеристиках вещи и отзывах из "
-            "интернета. После заполнения гардероба я смогу оценивать совместимость покупки с "
-            "твоими вещами и выявлять дубликаты."
-        ))
-    text_out, entities = _build_entity_card(
-        "Проверка покупки",
-        _clean_text(text),
-        f"Вердикт: {verdict}" if verdict else "",
-        why,
-        d.get("outro") or "Покупай только если вещь закрывает реальный пробел в гардеробе.",
-        bullet_label="Почему:",
-    )
+    text_out, entities = _build_purchase_message({
+        "item": text,
+        "verdict": d.get("verdict", ""),
+        "have_category": d.get("have_category", ""),
+        "have_count": d.get("have_count"),
+        "similar_count": d.get("similar_count"),
+        "why": d.get("why") or [],
+        "alternative": d.get("alternative", ""),
+    })
     store.last_source[str(cid)] = "Гардероб · Покупка"
     store.last_answer[str(cid)] = text_out
     await bot.send_message(chat_id=cid, text=text_out, entities=entities,

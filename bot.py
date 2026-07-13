@@ -781,22 +781,22 @@ async def text_router(update, context):
         if kind == "wardrobe_constraints_input":
             settings.set_(cid, "wardrobe_constraints", text.strip())
             await bot.send_message(chat_id=cid, text="🎚️ <b>Ограничения сохранены</b>", parse_mode="HTML")
-            await settings.send_wardrobe_prefs(bot, cid); return
+            await settings.send_wardrobe_style(bot, cid); return
         if kind == "wardrobe_colors_love_input":
             settings.set_(cid, "wardrobe_colors_love", settings.normalize_colors(text))
             await bot.send_message(chat_id=cid, text="Любимые цвета сохранены.")
-            await settings.send_wardrobe_prefs(bot, cid); return
+            await settings.send_wardrobe_style(bot, cid); return
         if kind == "wardrobe_colors_avoid_input":
             settings.set_(cid, "wardrobe_colors_avoid", settings.normalize_colors(text))
             await bot.send_message(chat_id=cid, text="Нежелательные цвета сохранены.")
-            await settings.send_wardrobe_prefs(bot, cid); return
+            await settings.send_wardrobe_style(bot, cid); return
         if kind == "styleinput":
             custom = text.strip()
             if custom:
                 settings.set_(cid, "wardrobe_constraints",
                     (settings.get(cid, "wardrobe_constraints", "") + " " + custom).strip())
             await bot.send_message(chat_id=cid, text="Стиль сохранён в ограничениях.")
-            await settings.send_wardrobe_prefs(bot, cid); return
+            await settings.send_wardrobe_style(bot, cid); return
         if kind.startswith("fridge_add"):
             try:
                 ci = int(kind.split("_")[-1])
