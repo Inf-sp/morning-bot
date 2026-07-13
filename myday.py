@@ -360,7 +360,10 @@ def _fetch_quote(cid=None):
         "Только кириллица, никаких латинских букв в тексте цитаты."
     )
 
-    d = ai.llm_json(prompt, 200, tier="cheap")
+    # tier="cheap" ставит groq первым (GRAMMAR_ORDER) - он хуже держит требование
+    # "только кириллица" и стабильно ронял цитату через _quote_valid. Gemini
+    # (smart) справляется надёжнее с этим требованием к языку.
+    d = ai.llm_json(prompt, 200, tier="smart", module="myday")
     if not isinstance(d, dict):
         return {}
 

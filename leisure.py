@@ -1981,7 +1981,7 @@ async def find_concerts(bot, cid, mode="home"):
         except Exception:
             return ds
 
-    place_label = f"Концерты в {cname_place} — ближайшие 6 месяцев"
+    place_label = f"Концерты в {cname_place}"
     today_str = datetime.now(config.TZ).date().isoformat()
     seen_artist_events = set()
     rows_data = []
@@ -2108,7 +2108,7 @@ async def concert_pick_country(bot, cid):
         InlineKeyboardButton(label, callback_data=f"a_concerts_{cc}")
         for cc, _name, label in sorted(countries, key=lambda x: x[1])
     ]
-    rows = [buttons[i:i + 3] for i in range(0, len(buttons), 3)]
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
                            reply_markup=InlineKeyboardMarkup(rows))

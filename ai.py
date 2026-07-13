@@ -195,6 +195,20 @@ def _cache_get(key: str, ttl: int):
         return None
 
 
+def _is_cacheable_response(out: str, response_mode: str) -> bool:
+    """Не кэшируем ответ в json-режиме, если он не парсится как JSON — иначе
+    один невалидный ответ модели (например, лишняя кавычка внутри строки)
+    навсегда застревает в кэше на TTL модуля (до 30 дней), и повторные попытки
+    пользователя получают тот же сломанный ответ вместо новой генерации."""
+    if response_mode != "json":
+        return True
+    try:
+        _parse_json_response(out)
+        return True
+    except ValueError:
+        return False
+
+
 def _cache_set(key: str, value):
     if value is None:
         return
@@ -207,6 +221,17 @@ def _cache_set(key: str, value):
             for k, _v in oldest[:len(items) - _AI_CACHE_MAX]:
                 items.pop(k, None)
         store._save(config.AI_RESPONSE_CACHE_KEY, data)
+    except Exception:
+        pass
+
+
+def _cache_delete(key: str):
+    try:
+        data = store._load(config.AI_RESPONSE_CACHE_KEY)
+        items = data.get("items") or {}
+        if key in items:
+            items.pop(key, None)
+            store._save(config.AI_RESPONSE_CACHE_KEY, data)
     except Exception:
         pass
 
@@ -628,7 +653,12 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
     cache_key = _cache_key(order, prompt, max_tokens, temperature, module, response_mode)
     cached = _cache_get(cache_key, cache_ttl)
     if cached:
-        return cached
+        if _is_cacheable_response(cached, response_mode):
+            return cached
+        # Ранее закэширован ответ, который не парсится как JSON (баг, уже
+        # исправлен на записи) - не отдаём его снова на TTL модуля (до 30 дней),
+        # чистим и генерируем заново.
+        _cache_delete(cache_key)
     calls = {
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature, response_mode),
         "groq": lambda: _gen_groq(prompt, max_tokens, temperature, response_mode),
@@ -659,7 +689,8 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
                     _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
                     rate_limit_logged = True
                 _log_cost(name, name, prompt, out, module, ms=ms, ok=True)
-                _cache_set(cache_key, out)
+                if _is_cacheable_response(out, response_mode):
+                    _cache_set(cache_key, out)
                 return out
         except Exception as e:
             _mark_cooldown(name, e)
@@ -680,7 +711,8 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
                 _log_gemini_limit("gemini_rate_limit", err, fallback=True)
                 rate_limit_logged = True
             _log_cost("openrouter_fallback", config.OPENROUTER_MODEL, "", out, module, ok=True)
-            _cache_set(cache_key, out)
+            if _is_cacheable_response(out, response_mode):
+                _cache_set(cache_key, out)
             return out
         if origin == "gemini" and getattr(err, "error_type", "") == "rate_limit":
             api_usage.record_gemini_fallback(target="local", reason="openrouter_failed")
