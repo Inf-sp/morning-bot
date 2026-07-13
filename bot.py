@@ -1078,7 +1078,6 @@ async def post_init(app):
     from telegram import BotCommand
     await app.bot.set_my_commands([
         BotCommand("menu", "меню"),
-        BotCommand("setup", "настройки"),
         BotCommand("admin", "администратор"),
     ])
     await maybe_send_admin_deploy_notification(app.bot)
