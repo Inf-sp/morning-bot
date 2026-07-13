@@ -479,6 +479,7 @@ dict_pending_add = {}   # chat_id -> нормализованная запись
 dict_pending_batch = {}  # chat_id -> [записи], предложенные из большого текста, ждут "Добавить всё"
 pending_input = {}
 last_inline_message = {}  # chat_id -> message_id последнего сообщения с инлайн-кнопками (для авто-снятия)
+pinned_menu_message = {}  # chat_id -> message_id главного меню (/menu) - исключение из авто-снятия
 last_recos = {}
 suggested_countries = {}
 last_action = {}        # chat_id -> ("oneshot", key) | ("role", role, text) | None

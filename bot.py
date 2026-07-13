@@ -887,7 +887,10 @@ async def menu_command(update, context):
     cid = str(update.effective_chat.id)
     store.pending_input.pop(cid, None)
     text, entities, kb = menu.main_menu_screen(cid)
-    await update.message.reply_text(text, entities=entities, reply_markup=kb)
+    # pin_menu=True: кнопки главного меню остаются прикреплёнными всегда,
+    # даже после следующих сообщений бота (см. _MenuCleanupBot) - отдельное
+    # правило только для /menu, не для остальных экранов.
+    await context.bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb, pin_menu=True)
 
 
 async def admin_debug_api_command(update, context):
@@ -1051,25 +1054,49 @@ async def post_init(app):
 class _MenuCleanupBot(ExtBot):
     """Bot, который перед каждой отправкой снимает инлайн-кнопки с предыдущего
     сообщения этого чата - в переписке всегда активны кнопки только последнего
-    экрана, старые сообщения остаются просто текстом."""
+    экрана, старые сообщения остаются просто текстом.
 
-    async def _pre_send(self, chat_id):
-        msg_id = store.last_inline_message.pop(str(chat_id), None)
+    Исключение - главное меню (/menu, см. menu_command): его кнопки остаются
+    прикреплёнными всегда, даже после следующих сообщений бота в этом чате -
+    отдельное продуктовое правило, не общее поведение остальных экранов."""
+
+    async def _unpin_menu(self, chat_id):
+        """Снимает закреплённое главное меню - вызывается только когда новое
+        сообщение само является меню (pin_menu=True), иначе закреплённое
+        меню не трогается ни одним другим экраном."""
+        msg_id = store.pinned_menu_message.pop(str(chat_id), None)
         if not msg_id:
             return
+        if store.last_inline_message.get(str(chat_id)) == msg_id:
+            store.last_inline_message.pop(str(chat_id), None)
         try:
             await self.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=None)
         except Exception:
             pass
 
-    def _post_send(self, chat_id, msg):
+    async def _pre_send(self, chat_id, allow_unpin=False):
+        if allow_unpin:
+            await self._unpin_menu(chat_id)
+        msg_id = store.last_inline_message.get(str(chat_id))
+        if not msg_id or msg_id == store.pinned_menu_message.get(str(chat_id)):
+            return
+        store.last_inline_message.pop(str(chat_id), None)
+        try:
+            await self.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=None)
+        except Exception:
+            pass
+
+    def _post_send(self, chat_id, msg, pin_menu=False):
         if isinstance(getattr(msg, "reply_markup", None), InlineKeyboardMarkup):
             store.last_inline_message[str(chat_id)] = msg.message_id
+            if pin_menu:
+                store.pinned_menu_message[str(chat_id)] = msg.message_id
 
     async def send_message(self, chat_id, *args, **kwargs):
-        await self._pre_send(chat_id)
+        pin_menu = kwargs.pop("pin_menu", False)
+        await self._pre_send(chat_id, allow_unpin=pin_menu)
         msg = await super().send_message(chat_id, *args, **kwargs)
-        self._post_send(chat_id, msg)
+        self._post_send(chat_id, msg, pin_menu=pin_menu)
         return msg
 
     async def send_photo(self, chat_id, *args, **kwargs):
