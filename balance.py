@@ -572,8 +572,8 @@ def _clean_card_text(value):
 def _finish_dot(value):
     return balance_ui.finish_dot(value)
 
-def _build_entity_card(title, summary="", quote="", bullets=None, final="", bullet_label="Рекомендации:"):
-    msg = balance_ui.entity_card(title, summary, quote, bullets, final, bullet_label)
+def _build_entity_card(title, summary="", quote="", bullets=None, final="", bullet_label="Рекомендации:", emoji=""):
+    msg = balance_ui.entity_card(title, summary, quote, bullets, final, bullet_label, emoji=emoji)
     return msg.text, msg.entities
 
 # универсальная клавиатура под ответом: [Продолжить][Короче|Глубже][⭐][В меню]
@@ -872,10 +872,12 @@ async def _send_queue_card(bot, cid, meal, d, status=None):
     store.last_answer[str(cid)] = card.text
     kb = _recipe_kb()
     _persist_current_queue_recipe(cid, d)
+    _log.info("_send_queue_card: meal=%s cid=%s status_mode=%s", meal, cid, getattr(status, "mode", None))
     if status is not None:
         await status.replace(card.text, entities=card.entities, reply_markup=kb)
     else:
-        await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=kb)
+        msg = await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=kb)
+        _log.info("_send_queue_card: sent directly message_id=%s cid=%s", msg.message_id, cid)
 
 
 async def _generate_and_store_queue(cid, meal, ingredients=None):
@@ -973,6 +975,7 @@ async def show_next_recipe(bot, cid, status=None):
 async def back_to_food_menu(bot, cid):
     """«Назад» из карточки рецепта (§2 спеки): возврат в меню «Готовка» вместо «Готово.»,
     со сбросом активной категории и очереди — новый явный выбор категории обязателен."""
+    _log.info("back_to_food_menu: cid=%s", cid)
     clear_active_meal(cid)
     clear_recipe_queue(cid)
     await menu.send_food_menu(bot, cid)
@@ -1431,6 +1434,14 @@ async def my_recipe_del(bot, cid, idx):
 
 
 # ---------- СДВГ / Следующий шаг ----------
+def _lagom_text(item) -> str:
+    """Текст принципа: элемент может быть строкой (старый формат) или
+    {"id":..., "value": строка} (после захода в удаление, см. store.ensure_list_ids_via)."""
+    if isinstance(item, dict):
+        return str(item.get("value", "")).strip()
+    return str(item or "").strip()
+
+
 def _pick_lagom(cid) -> str:
     """Берёт один неиспользованный Лагом-принцип, при исчерпании — сбрасывает счётчик."""
     import memory
@@ -1447,7 +1458,7 @@ def _pick_lagom(cid) -> str:
     idx = random.choice(unused)
     seen.append(idx)
     store.set_list(config.MOTIV_LAGOM_SEEN_KEY, cid, seen)
-    return items[idx]
+    return _lagom_text(items[idx])
 
 def _gen_motiv(cid):
     import random
@@ -1461,23 +1472,28 @@ def _gen_motiv(cid):
         "Без философии и клише. Конкретно, коротко, на русском. "
         "Верни JSON (без markdown):\n"
         '{"steps":["конкретное действие или ограничение","ещё одно если нужно"],'
-        '"why":"1-2 предложения: зачем это работает прямо сейчас"}'
+        '"why":"1-2 предложения: зачем это работает прямо сейчас",'
+        '"now":"одно самое первое конкретное действие прямо сейчас, 3-6 слов, без вступления"}'
     )
     try:
         d = ai.llm_json(prompt, 300, tier="smart")
         steps = [str(s).strip() for s in (d.get("steps") or []) if str(s).strip()]
         why = str(d.get("why", "")).strip()
+        now = str(d.get("now", "")).strip()
     except Exception:
         steps = ["Встань и пройди круг по комнате"]
         why = "Движение быстро снижает внутренний шум и помогает начать с малого"
+        now = ""
     lagom_full = lagom if lagom else "Один шаг лучше идеального плана."
+    final = f"Сейчас: {now}" if now else "Сделай первый шаг сейчас, без подготовки."
     return _build_entity_card(
         "Мотивация",
         lagom_full,
         why,
         steps,
-        "Сделай первый шаг сейчас, без подготовки.",
-        bullet_label="Действие:",
+        final,
+        bullet_label="Что сделать:",
+        emoji="⚡",
     )
 
 
@@ -1497,12 +1513,24 @@ def _role_system(role):
         )
     if role == "doctor":
         return ("Ты помощник по здоровью. Это справочная информация, не диагноз. "
+                "Не пиши так, будто ставишь диагноз — только вероятные причины, явно связанные "
+                "с описанными признаками. Не добавляй советы без причины (например, не советуй "
+                "измерить давление, если это не связано с симптомом) — каждый пункт должен "
+                "объясняться конкретным признаком из описания. "
                 "Отвечай кратко и верни строго валидный JSON без markdown:\n"
                 "{\"title\":\"Разбор симптомов\","
                 "\"summary\":\"1 короткое предложение: основная жалоба\","
-                "\"quote\":\"1-2 предложения: на что это может быть похоже, без диагноза\","
-                "\"bullets\":[\"рекомендация\", \"когда срочно к врачу\"],"
-                "\"final\":\"короткий безопасный итог с точкой\"}")
+                "\"causes\":\"1-2 предложения: вероятные причины, каждая связана с конкретным "
+                "признаком из описания, без слова 'диагноз'\","
+                "\"bullets\":[\"конкретное действие, оправданное симптомом\", \"...до 4\"],"
+                "\"urgent\":\"признаки, при которых нужна экстренная помощь прямо сейчас (сильная "
+                "внезапная боль, нарушение речи/зрения, слабость, онемение, спутанность сознания, "
+                "судороги, высокая температура с ригидностью шеи, боль после травмы) — только если "
+                "они уместны для этих симптомов, иначе пусто\","
+                "\"plan\":\"когда стоит записаться к врачу в обычном порядке (повторяется, "
+                "усиливается, стало необычным) — только если уместно, иначе пусто\","
+                "\"final\":\"короткий итог ТОЛЬКО если он даёт одно чёткое решение и не повторяет "
+                "предыдущие блоки, иначе пустая строка\"}")
     return "Ты полезный ассистент."
 
 _MED_RE = ("лекарств", "таблет", "препарат", "доз", "мг ", " мг", "метилфенидат", "ибупрофен",
@@ -1532,13 +1560,24 @@ def _fallback_health_card(title, user_text):
     return {
         "title": title,
         "summary": f"Запрос: {_clean_card_text(user_text)[:160]}",
-        "quote": "По описанию нельзя поставить диагноз заочно, но можно оценить риски и ближайшие действия.",
+        "quote": "По описанию нельзя оценить заочно, но можно дать общие ориентиры.",
         "bullets": [
             "Следи за усилением симптомов, температурой, дыханием, болью и общим состоянием",
-            "Обратись к врачу срочно, если состояние быстро ухудшается или симптомы выраженные",
             "Не начинай лекарства и дозировки без инструкции врача или фармацевта",
         ],
         "final": "Это справочная информация, не диагноз и не назначение.",
+    }
+
+def _fallback_doctor_card(user_text):
+    return {
+        "title": "Разбор симптомов",
+        "summary": f"Запрос: {_clean_card_text(user_text)[:160]}",
+        "causes": "По описанию нельзя оценить заочно, но можно дать общие ориентиры.",
+        "bullets": [
+            "Следи за усилением симптомов, температурой, дыханием, болью и общим состоянием",
+        ],
+        "urgent": "Состояние быстро ухудшается или симптомы выраженные.",
+        "final": "",
     }
 
 async def _send_health_card(bot, cid, data, kb=None):
@@ -1550,6 +1589,16 @@ async def _send_health_card(bot, cid, data, kb=None):
         data.get("final") or "Это справочная информация, не диагноз и не назначение.",
         bullet_label=data.get("bullet_label") or "Рекомендации:",
     )
+    store.last_answer[str(cid)] = text
+    store.last_source.setdefault(str(cid), "Здоровье")
+    store.last_surface[str(cid)] = "health"
+    await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb)
+
+async def _send_doctor_card(bot, cid, data, kb=None):
+    """Разбор симптомов — отдельный формат от лекарств: возможные причины
+    связаны с признаками, срочный/плановый сценарий разделены (см. ui/balance.py doctor_card)."""
+    msg = balance_ui.doctor_card(data)
+    text, entities = msg.text, msg.entities
     store.last_answer[str(cid)] = text
     store.last_source.setdefault(str(cid), "Здоровье")
     store.last_surface[str(cid)] = "health"
@@ -1589,10 +1638,10 @@ async def doctor_answer(bot, cid, symptoms):
         d = await ai.allm_json(prompt, 900, route="gemini", module="health")
     except Exception as e:
         _log.warning("doctor symptoms AI failed, using fallback: %r", e, exc_info=True)
-        d = _fallback_health_card("Разбор симптомов", symptoms)
+        d = _fallback_doctor_card(symptoms)
     store.last_source[str(cid)] = "Здоровье · Врач"
     store.last_action[str(cid)] = ("role", "doctor", symptoms)
-    await _send_health_card(bot, cid, d, kb=_ans_kb(None, None, depth=False))
+    await _send_doctor_card(bot, cid, d, kb=_ans_kb(None, None, depth=False))
 
 async def handle_role(bot, cid, role, text):
     if role == "doctor":

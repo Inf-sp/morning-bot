@@ -1253,7 +1253,8 @@ async def send_listen(bot, cid):
                 1000, tier="leisure", route="gemini", module="leisure")
         except Exception:
             cand = None
-        if cand and cand.get("artist") and cand["artist"].strip().lower() not in known:
+        cand_artist = str(cand.get("artist") or "").strip() if isinstance(cand, dict) else ""
+        if cand_artist and cand_artist.lower() not in known:
             data = cand
             break
         data = cand

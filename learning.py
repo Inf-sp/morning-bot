@@ -1661,6 +1661,12 @@ def _dict_entry_message(entry, status="added"):
     if entry.get("breakdown"):
         b.spacer()
         b.line(f"Разбор: {entry['breakdown']}")
+    usage = entry.get("usage") or []
+    if usage:
+        b.spacer()
+        b.line("Когда так говорят:")
+        for u in usage:
+            b.line(f"• {u.get('situation', '')} → {u.get('example', '')}")
     examples = entry.get("examples") or []
     if examples:
         b.spacer()
@@ -1776,6 +1782,10 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
   ("отказ", "согласие", "извинение" и т.п.), иначе пусто.
 - alt_translations: до 2 дополнительных естественных вариантов перевода, отличных от translation,
   если они реально уместны, иначе пустой список.
+- usage: ТОЛЬКО для разговорных фраз/выражений с несколькими разными значениями в зависимости
+  от ситуации (не для обычных слов и не для фраз с одним понятным смыслом) — до 4 пар
+  {{"situation": "коротко когда так говорят", "example": "короткий пример употребления в этом
+  значении на изучаемом языке"}}. Если у фразы одно чёткое значение, верни пустой список.
 - Не выдумывай значение. Если слово многозначное, редкое, написано с ошибкой, не хватает
   артикля для нидерландского существительного или есть риск неверного перевода, поставь
   needs_confirmation=true и дай наиболее вероятную трактовку.
@@ -1797,6 +1807,7 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
   "construction": "",
   "situation_type": "",
   "alt_translations": [],
+  "usage": [],
   "needs_confirmation": false,
   "reason": "короткая причина уточнения или пусто"
 }}
@@ -1824,6 +1835,14 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
     if article and "глагол" in breakdown.lower():
         # У глаголов нет артикля de/het — модель иногда всё равно его возвращает.
         article = ""
+    usage = []
+    for u in (d.get("usage") or [])[:4]:
+        if not isinstance(u, dict):
+            continue
+        situation = re.sub(r"\s+", " ", str(u.get("situation") or "").strip())
+        example = re.sub(r"\s+", " ", str(u.get("example") or "").strip())
+        if situation and example:
+            usage.append({"situation": situation[:60], "example": example[:80]})
     return {
         "lang": lang,
         "term": term[:120],
@@ -1831,6 +1850,7 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
         "translation": translation[:180],
         "breakdown": breakdown,
         "examples": examples,
+        "usage": usage,
         "source_text": source_text or payload,
         "added_at": datetime.now(config.TZ).isoformat(),
         "status": "new",
@@ -1874,6 +1894,7 @@ def _save_normalized_dict_entry(cid, entry):
                 "translation": entry["translation"],
                 "breakdown": entry.get("breakdown", ""),
                 "examples": entry.get("examples", []),
+                "usage": entry.get("usage", []),
                 "source_text": entry.get("source_text", ""),
                 "added_at": item.get("added_at") or entry["added_at"],
                 "status": item.get("status") or "new",
@@ -1894,6 +1915,7 @@ def _save_normalized_dict_entry(cid, entry):
         "translation": entry["translation"],
         "breakdown": entry.get("breakdown", ""),
         "examples": entry.get("examples", []),
+        "usage": entry.get("usage", []),
         "source_text": entry.get("source_text", ""),
         "added_at": entry["added_at"],
         "status": entry.get("status") or "new",
@@ -2046,12 +2068,15 @@ async def retry_pending_dict_add(bot, cid):
         await bot.send_message(chat_id=cid, text="⚠️ Не получилось получить другой вариант. Попробуй ещё раз.")
         return
     if not new_entry or new_entry["translation"] in seen:
-        await bot.send_message(chat_id=cid, text="Больше вариантов перевода не нашлось.")
+        term_key = _dict_item_key(entry["lang"], "", _entry_term(entry))[2]
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Удалить", callback_data=f"a_dictdelok_{entry['lang']}_{term_key}")]])
+        await bot.send_message(chat_id=cid, text="Больше вариантов перевода не нашлось.", reply_markup=kb)
         return
     updated = _overwrite_dict_entry_fields(cid, entry["lang"], entry["term"], {
         "translation": new_entry["translation"],
         "breakdown": new_entry.get("breakdown", ""),
         "examples": new_entry.get("examples", []),
+        "usage": new_entry.get("usage", []),
     }) or new_entry
     updated["_payload"] = entry.get("_payload", "")
     updated["_source_text"] = entry.get("_source_text", "")
@@ -3196,6 +3221,8 @@ async def send_daily_practice(bot, cid):
 
 
 # ================= ИГРА-ДЕТЕКТИВ =================
+# Служебные заголовки локализованы под язык игры (см. game_lang_kb/gamelang_*) —
+# улики и служебный UI на одном языке, а не в смеси.
 GAME_UI = {
     "русский": {
         "diff_q": "Выбери сложность:",
@@ -3208,16 +3235,53 @@ GAME_UI = {
         "suspect": "Подозреваемый:",
         "found": "✅ Дело раскрыто!",
         "answer": "Ответ",
+        "analyse": "Анализ:",
         "again": "✨ Ещё",
         "back": "⬅️ Назад",
         "nohint": "Подсказок больше нет.",
         "wrong": "❌ Не то",
         "retry": "Ещё попытка - напиши ответ или возьми подсказку.",
     },
+    "английский": {
+        "diff_q": "Choose difficulty:",
+        "easy": "Easy",
+        "hard": "Hard",
+        "title": "Detective Game",
+        "who": "Who am I?",
+        "hint": "💡 Hint",
+        "reveal": "😞 Give up",
+        "suspect": "Suspect:",
+        "found": "✅ Case solved!",
+        "answer": "Answer",
+        "analyse": "Analysis:",
+        "again": "✨ Again",
+        "back": "⬅️ Back",
+        "nohint": "No more hints.",
+        "wrong": "❌ Not quite",
+        "retry": "One more try - write the answer or take a hint.",
+    },
+    "нидерландский": {
+        "diff_q": "Kies de moeilijkheidsgraad:",
+        "easy": "Makkelijk",
+        "hard": "Moeilijk",
+        "title": "Detectivespel",
+        "who": "Wie ben ik?",
+        "hint": "💡 Hint",
+        "reveal": "😞 Opgeven",
+        "suspect": "Verdachte:",
+        "found": "✅ Zaak opgelost!",
+        "answer": "Antwoord",
+        "analyse": "Analyse:",
+        "again": "✨ Nog een",
+        "back": "⬅️ Terug",
+        "nohint": "Geen hints meer.",
+        "wrong": "❌ Niet juist",
+        "retry": "Nog een poging - schrijf het antwoord of neem een hint.",
+    },
 }
 
-def _game_ui(_lang=None):
-    return GAME_UI["русский"]
+def _game_ui(lang=None):
+    return GAME_UI.get(lang) or GAME_UI["русский"]
 
 
 def _dot(s):
@@ -3371,7 +3435,7 @@ async def send_game(bot, cid):
          InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="game_change"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
-    clues = "\n".join(f"•{c.strip()}" for c in d.get("clues", "").split("\n") if c.strip())
+    clues = "\n".join(f"• {c.strip()}" for c in d.get("clues", "").split("\n") if c.strip())
     msg = learning_ui.game_card(ui, clues)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 

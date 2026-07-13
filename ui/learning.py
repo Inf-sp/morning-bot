@@ -341,12 +341,12 @@ def morning_words(flag, method, is_read_aloud=False, phrases=None, words=None, e
 
 
 def game_start():
-    return MessageSpec(text="Игра-детектив. На каком языке играем?")
+    return MessageSpec(text="🕵️ Игра-детектив. На каком языке играем?")
 
 
 def game_card(ui, clues):
     b = MessageBuilder()
-    b.section(ui["title"])
+    b.section(f"🕵️ {ui['title']}")
     b.section(ui["suspect"])
     b.line(clues)
     b.section(ui["who"])
@@ -363,6 +363,8 @@ def game_found(ui, answer, body=""):
     b.bold(answer)
     if body:
         b.spacer()
+        b.bold(ui.get("analyse", "Анализ:"))
+        b.newline()
         b.text_line(body)
     return b.build()
 

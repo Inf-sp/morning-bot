@@ -92,7 +92,7 @@ _SCREENS = {
         "Здоровье и эмоции. Разберу симптом, поддержу и помогу разгрузить голову.",
         [
             [(ui_label("doctor", "Спросить врача"), "as_doctor")],
-            [(ui_label("recommendation", "Заряд мотивации"), "as_motiv")],
+            [("⚡ Заряд мотивации", "as_motiv")],
             [(ui_label("worry_diary", "Дневник тревог"), "as_daycheck")],
             [(ui_label("settings", "Настройки здоровья"), "set_lagom")],
             [("⬅️ Назад", "m_menu"), ("🏠 Меню", "m_menu")],

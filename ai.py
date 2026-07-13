@@ -833,8 +833,12 @@ def _chat_system(cid=None):
     items = memory.get_lagom(cid)
     if not items:
         return CHAT_SYSTEM
+    texts = [it.get("value", "") if isinstance(it, dict) else str(it) for it in items[:12]]
+    texts = [t.strip() for t in texts if str(t).strip()]
+    if not texts:
+        return CHAT_SYSTEM
     block = "Лагом-установки пользователя (ориентир тона и ценностей):\n" + \
-            "\n".join(f"• {it}" for it in items[:12])
+            "\n".join(f"• {t}" for t in texts)
     return CHAT_SYSTEM + "\n\n" + block
 
 def _chat(provider, history, system):

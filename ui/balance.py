@@ -19,9 +19,10 @@ def finish_dot(value):
     return value
 
 
-def entity_card(title, summary="", quote="", bullets=None, final="", bullet_label="Рекомендации:"):
+def entity_card(title, summary="", quote="", bullets=None, final="", bullet_label="Рекомендации:", emoji=""):
     b = MessageBuilder()
-    b.section(clean_card_text(title).rstrip(".:"))
+    heading = clean_card_text(title).rstrip(".:")
+    b.section(f"{emoji} {heading}" if emoji else heading)
 
     summary = finish_dot(summary)
     if summary:
@@ -42,6 +43,56 @@ def entity_card(title, summary="", quote="", bullets=None, final="", bullet_labe
         b.line("\n".join(f"- {x}" for x in clean_bullets))
 
     final = finish_dot(final)
+    if final:
+        b.spacer()
+        b.line(final)
+
+    return b.build_stripped()
+
+
+def doctor_card(data):
+    """Разбор симптомов: возможные причины связаны с признаками (не диагноз-заголовок),
+    срочный и плановый сценарий обращения к врачу разделены на два явных блока, "Итог"
+    показывается только когда даёт одно чёткое решение, а не повторяет предыдущий блок.
+
+    data: {title, summary, causes, bullets[], urgent, plan, final, bullet_label}
+    """
+    data = data or {}
+    b = MessageBuilder()
+    b.section(f"👩🏻‍⚕️ {clean_card_text(data.get('title')).rstrip('.:') or 'Разбор симптомов'}")
+
+    summary = finish_dot(data.get("summary"))
+    if summary:
+        b.spacer()
+        b.text_line("Основная жалоба: ")
+        b.line(summary)
+
+    causes = finish_dot(data.get("causes"))
+    if causes:
+        b.spacer()
+        b.text_line("Возможные причины: ")
+        b.line(causes)
+
+    clean_bullets = [finish_dot(x) for x in (data.get("bullets") or []) if clean_card_text(x)]
+    if clean_bullets:
+        b.spacer()
+        b.bold(clean_card_text(data.get("bullet_label") or "Что сделать").rstrip(":") + ":")
+        b.newline()
+        b.line("\n".join(f"- {x}" for x in clean_bullets))
+
+    urgent = finish_dot(data.get("urgent"))
+    if urgent:
+        b.spacer()
+        b.text_line("Срочно за помощью: ")
+        b.line(urgent)
+
+    plan = finish_dot(data.get("plan"))
+    if plan:
+        b.spacer()
+        b.text_line("Записаться к врачу: ")
+        b.line(plan)
+
+    final = finish_dot(data.get("final"))
     if final:
         b.spacer()
         b.line(final)

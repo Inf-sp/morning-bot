@@ -47,6 +47,7 @@ _WORRY_PROMPT_WINDOW_S = 1800  # окно, в течение которого с
 _STATUS_TOPIC_PREFIXES = (
     ("w_", "wardrobe"),
     ("m_food", "food"), ("as_food", "food"), ("as_fridge", "food"), ("as_recipe", "food"), ("as_my_recipe", "food"),
+    ("a_recipe_", "food"), ("food_", "food"),
     ("a_dict", "learning"), ("a_train", "learning"), ("a_tr_", "learning"), ("a_proverb", "learning"),
     ("ex_", "learning"), ("again_tr_", "learning"), ("game", "learning"),
     ("gamelang_", "learning"), ("gamediff_", "learning"),
@@ -295,14 +296,18 @@ async def answer_callback(update, context):
     async def _inline_status(call):
         topic = _status_topic(data)
         stages = util.StatusManager.TOPIC_STAGES.get(topic) if topic else None
+        _log.info("_inline_status: data=%s topic=%s cid=%s q_message_id=%s",
+                  data, topic, cid, getattr(q.message, "message_id", None))
         status = await util.StatusManager.start_inline(q, bot=bot, cid=cid, stages=stages)
         try:
             return await call(status)
         except Exception as e:
+            _log.error("_inline_status: call failed data=%s cid=%s: %r", data, cid, e, exc_info=True)
             await verify.safe_error(bot, cid, e)
             return None
         finally:
             await status.stop(delete=False)
+            _log.info("_inline_status: done data=%s cid=%s", data, cid)
 
     if not access.is_allowed(cid):
         await bot.send_message(chat_id=cid, text="❌ Бот приватный. Попроси владельца прислать инвайт.")

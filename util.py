@@ -1,9 +1,12 @@
 import asyncio
 import contextlib
+import logging
 import random
 import re
 import time
 from html import escape as _html_escape
+
+_log = logging.getLogger(__name__)
 
 _WEEKDAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 _WEEKDAY_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
@@ -43,7 +46,7 @@ class StatusManager:
         ),
         "food": (
             (0, "⏳ Ищу рецепт..."),
-            (3, "🥕 Подбираю продукты..."),
+            (3, "🥕 Подбираю ингредиенты..."),
             (8, "✨ Почти готово..."),
         ),
         "learning": (
@@ -131,15 +134,21 @@ class StatusManager:
         if self.mode == "inline" and self.message is not None:
             await self._clear_inline_markup()
         elif delete and self.message is not None:
-            with contextlib.suppress(Exception):
+            _log.info("StatusManager.stop: deleting message_id=%s cid=%s",
+                      getattr(self.message, "message_id", None), self.cid)
+            try:
                 await self.message.delete()
+            except Exception as e:
+                _log.warning("StatusManager.stop: delete failed: %r", e)
 
     async def _clear_inline_markup(self):
         self._inline_cleared = True
         ok = False
-        with contextlib.suppress(Exception):
+        try:
             await self.message.edit_reply_markup(reply_markup=None)
             ok = True
+        except Exception as e:
+            _log.info("StatusManager._clear_inline_markup: edit_reply_markup via message failed: %r", e)
         if ok or self.bot is None:
             return
         chat_id = self.cid
@@ -148,20 +157,31 @@ class StatusManager:
             chat_id = getattr(chat, "id", None) or getattr(self.message, "chat_id", None)
         message_id = getattr(self.message, "message_id", None)
         if chat_id is not None and message_id is not None:
-            with contextlib.suppress(Exception):
+            try:
                 await self.bot.edit_message_reply_markup(
                     chat_id=chat_id,
                     message_id=message_id,
                     reply_markup=None,
                 )
+            except Exception as e:
+                _log.warning("StatusManager._clear_inline_markup: edit via bot failed chat_id=%s message_id=%s: %r",
+                            chat_id, message_id, e)
 
     async def replace(self, text, **kwargs):
         await self._cancel()
         if self.mode == "inline":
             await self.stop(delete=False)
             if self.cid is not None and self.bot is not None:
-                await self.bot.send_message(chat_id=self.cid, text=text, **kwargs)
+                _log.info("StatusManager.replace(inline): sending new message cid=%s text_len=%s",
+                          self.cid, len(text or ""))
+                try:
+                    msg = await self.bot.send_message(chat_id=self.cid, text=text, **kwargs)
+                except Exception as e:
+                    _log.error("StatusManager.replace(inline): send_message failed cid=%s: %r", self.cid, e, exc_info=True)
+                    raise
+                _log.info("StatusManager.replace(inline): sent message_id=%s cid=%s", msg.message_id, self.cid)
                 return True
+            _log.warning("StatusManager.replace(inline): no cid/bot, cid=%s bot=%s", self.cid, self.bot is not None)
             return False
         ok = await self._edit(text, **kwargs)
         if not ok and self.cid is not None:
