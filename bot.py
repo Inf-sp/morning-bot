@@ -1077,7 +1077,6 @@ async def post_init(app):
         logging.exception("Secrets scan failed")
     from telegram import BotCommand
     await app.bot.set_my_commands([
-        BotCommand("start", "начало"),
         BotCommand("menu", "меню"),
         BotCommand("setup", "настройки"),
         BotCommand("admin", "администратор"),
