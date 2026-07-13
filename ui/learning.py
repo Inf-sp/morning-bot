@@ -45,9 +45,11 @@ def proverb_card(flag, original, analogs=None, meaning="", examples=None, exampl
 
     analogs = _as_list(analogs)
     if analogs:
-        b.section("Как это переводится?")
         main_analog = _strip_final_punctuation(_cap_first(analogs[0]))
-        b.line(f"«{main_analog}».")
+        b.spacer()
+        b.bold("Перевод:")
+        b.italic(f" «{main_analog}».")
+        b.newline()
 
     meaning = str(meaning or "").strip()
     if meaning:
@@ -57,12 +59,11 @@ def proverb_card(flag, original, analogs=None, meaning="", examples=None, exampl
     example, parsed_example_ru = _split_example(examples)
     example_ru = str(example_ru or parsed_example_ru or "").strip()
     if example:
-        b.section("Пример из жизни:")
-        if example_ru:
-            b.line(f"{example} →")
-            b.line(example_ru)
-        else:
-            b.line(example)
+        b.spacer()
+        b.bold("Пример из жизни:")
+        example_line = f" {example} → {example_ru}" if example_ru else f" {example}"
+        b.text_line(example_line)
+        b.newline()
 
     msg = b.build()
     msg.text = msg.text.rstrip()

@@ -11,9 +11,9 @@ def _pluralize_countries(n):
     return "стран"
 
 
-def home_screen(visited_count, fav_count, plan_count):
-    """Главный экран раздела «Поездки»: польза, сколько стран посещено/в
-    любимых/в планах. Тот же визуальный паттерн, что у Гардероба и Кино (home_screen)."""
+def home_screen(visited_count, plan_count, facts=None):
+    """Главный экран раздела «Поездки»: сколько стран посещено/в планах и несколько
+    фактов о посещённых странах пользователя. Тот же паттерн, что у Гардероба и Кино."""
     b = MessageBuilder()
     b.text_line("✈️ ")
     b.bold("Поездки")
@@ -22,15 +22,24 @@ def home_screen(visited_count, fav_count, plan_count):
     b.line("Подбираю страны и направления под твой вкус — и помогаю собрать план поездки.")
 
     b.spacer()
-    if visited_count <= 0 and fav_count <= 0 and plan_count <= 0:
+    if visited_count <= 0 and plan_count <= 0:
         b.line("Пока пусто — начни с подбора новой страны.")
     else:
         if visited_count > 0:
-            b.line(f"🌍 Посещено {visited_count} {_pluralize_countries(visited_count)}")
-        if fav_count > 0:
-            b.line(f"❤️ В любимых {fav_count} {_pluralize_countries(fav_count)}")
+            b.line(f"🧳 Посещено {visited_count} {_pluralize_countries(visited_count)}")
         if plan_count > 0:
             b.line(f"{ui_label('routes', 'Маршрутов')} {plan_count}")
+
+    facts = facts or []
+    if facts:
+        b.spacer()
+        b.bold("Знаешь ли ты?")
+        b.newline()
+        for fact in facts:
+            b.spacer()
+            b.bold(fact["title"])
+            b.newline()
+            b.line(fact["text"])
 
     return b.build_stripped()
 
@@ -113,7 +122,7 @@ def travel_plan(plan, fallback_country):
     return b.build_stripped()
 
 
-# ================= 10 ФАКТОВ О СТРАНЕ =================
+# ================= ИНТЕРЕСНЫЕ ФАКТЫ О СТРАНЕ =================
 
 def facts_prompt_screen():
     b = MessageBuilder()
@@ -129,15 +138,17 @@ def facts_prompt_screen():
 
 
 def facts_card(country_name, facts):
-    """10 фактов нумерованным списком: «N. Название текст», без канцеляризмов
-    и без списка источников (см. docs/travel.md, «10 фактов»)."""
+    """Факты списком: жирное короткое название, с новой строки сам факт, без
+    канцеляризмов и без списка источников (см. docs/travel.md, «Интересные факты»)."""
     b = MessageBuilder()
     b.text_line("🧭 ")
-    b.bold(f"10 фактов о {country_name}")
+    b.bold(f"Интересные факты о {country_name}")
     b.newline()
     b.spacer()
-    for i, fact in enumerate(facts, start=1):
-        b.line(f"{i}. {fact['title']} {fact['text']}")
+    for fact in facts:
+        b.bold(fact["title"])
+        b.newline()
+        b.line(fact["text"])
         b.spacer()
     return b.build_stripped()
 
@@ -171,4 +182,14 @@ def facts_exhausted_screen():
     b.newline()
     b.spacer()
     b.line("Я уже показал самые интересные и хорошо подтверждённые факты об этой стране.")
+    return b.build_stripped()
+
+
+def facts_not_found_for_country_screen():
+    b = MessageBuilder()
+    b.text_line("🧭 ")
+    b.bold("Не нашлось сильных фактов")
+    b.newline()
+    b.spacer()
+    b.line("Не получилось найти достаточно подтверждённых фактов об этой стране. Попробуй ещё раз или выбери другую страну.")
     return b.build_stripped()

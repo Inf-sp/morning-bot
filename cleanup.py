@@ -69,7 +69,7 @@ COLLECTIONS = {
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("Добавить / Найти фильм", "as_loveadd_movies")),
     "cinema_saved": _collection(
-        "cinema_saved", "cinema", f"Сохранённое · {ui_label('cinema', 'Кино')}", config.NOTES_KEY, "note",
+        "cinema_saved", "cinema", f"⭐️ Сохранённое · {ui_label('cinema', 'Кино')}", config.NOTES_KEY, "note",
         "a_watch", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
         note_group="movies"),
     "cinema_watched": _collection(
@@ -85,7 +85,7 @@ COLLECTIONS = {
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("Добавить / Найти книгу", "as_loveadd_books")),
     "books_saved": _collection(
-        "books_saved", "books", f"Сохранённое · {ui_label('books', 'Книги')}", config.READLIST_KEY, "book",
+        "books_saved", "books", f"⭐️ Сохранённое · {ui_label('books', 'Книги')}", config.READLIST_KEY, "book",
         "a_read", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": False}]),
     "books_read": _collection(
         "books_read", "books", f"{ui_label('seen', 'Прочитано')} · {ui_label('books', 'Книги')}", config.BOOK_SEEN_KEY, "book",
@@ -103,7 +103,7 @@ COLLECTIONS = {
         "music_hidden_artists", "music", "Скрытые артисты", config.MUSIC_DISLIKE_KEY, "artist",
         "a_listen", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
     "music_saved": _collection(
-        "music_saved", "music", f"Сохранённое · {ui_label('music', 'Музыка')}", config.NOTES_KEY, "note",
+        "music_saved", "music", f"⭐️ Сохранённое · {ui_label('music', 'Музыка')}", config.NOTES_KEY, "note",
         "a_listen", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
         note_group="music"),
     "music_seen_artists": _collection(
@@ -111,7 +111,7 @@ COLLECTIONS = {
         "a_listen", [{"id": "remove", "label": "Убрать из знакомого", "confirm": False}]),
 
     "travel_favorite_countries": _collection(
-        "travel_favorite_countries", "travel", "Любимые страны", config.FAVCOUNTRIES_KEY, "country",
+        "travel_favorite_countries", "travel", "🧳 Посещённые страны", config.FAVCOUNTRIES_KEY, "country",
         "m_travel", [{"id": "remove", "label": "Убрать страны", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("Добавить / Найти страну", "as_loveadd_countries")),
@@ -119,7 +119,7 @@ COLLECTIONS = {
         "travel_hidden_countries", "travel", "Скрытые страны", config.TRAVEL_DISLIKE_KEY, "country",
         "m_travel", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
     "travel_saved_places": _collection(
-        "travel_saved_places", "travel", f"Сохранённое · {ui_label('travel', 'Поездки')}", config.NOTES_KEY, "note",
+        "travel_saved_places", "travel", f"⭐️ Сохранённое · {ui_label('travel', 'Поездки')}", config.NOTES_KEY, "note",
         "m_travel", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
         note_group="travel"),
 

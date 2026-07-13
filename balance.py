@@ -872,12 +872,17 @@ async def _send_queue_card(bot, cid, meal, d, status=None):
     store.last_answer[str(cid)] = card.text
     kb = _recipe_kb()
     _persist_current_queue_recipe(cid, d)
-    _log.info("_send_queue_card: meal=%s cid=%s status_mode=%s", meal, cid, getattr(status, "mode", None))
+    _log.info("_send_queue_card: meal=%s cid=%s status_mode=%s text_len=%s",
+              meal, cid, getattr(status, "mode", None), len(card.text or ""))
     if status is not None:
-        await status.replace(card.text, entities=card.entities, reply_markup=kb)
-    else:
+        await status.stop(delete=False)
+    try:
         msg = await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=kb)
-        _log.info("_send_queue_card: sent directly message_id=%s cid=%s", msg.message_id, cid)
+    except Exception as e:
+        _log.error("_send_queue_card: send_message FAILED cid=%s meal=%s: %r\ncard.text=%r",
+                   cid, meal, e, card.text, exc_info=True)
+        raise
+    _log.info("_send_queue_card: sent message_id=%s cid=%s", msg.message_id, cid)
 
 
 async def _generate_and_store_queue(cid, meal, ingredients=None):
@@ -1726,7 +1731,8 @@ async def worry_clear_all(bot, cid):
     cid = str(cid)
     store.set_list(config.WORRIES_KEY, cid, [])
     msg = balance_ui.worries_cleared()
-    await bot.send_message(chat_id=cid, text=msg.text)
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_balance"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]])
+    await bot.send_message(chat_id=cid, text=msg.text, reply_markup=kb)
 
 async def save_worries(bot, cid, text):
     cid = str(cid)

@@ -28,24 +28,15 @@ def _pluralize_titles(n):
     return "фильмов/сериалов"
 
 
-def movie_home_screen(loved_count, genre_labels, country_label=None, now_playing=None):
-    """Главный экран раздела «Кино»: польза, сколько уже в любимых, какие жанры
-    выбраны в предпочтениях, что сейчас в прокате. Тот же визуальный паттерн,
-    что у Гардероба (home_screen)."""
+def movie_home_screen(genre_labels, country_label=None, now_playing=None):
+    """Главный экран раздела «Кино»: как искать и что сейчас в прокате. Тот же
+    визуальный паттерн, что у Гардероба (home_screen)."""
     b = MessageBuilder()
     b.text_line("🍿 ")
     b.bold("Что посмотреть")
     b.newline()
     b.spacer()
-    b.line("Подберу фильм или сериал под твой вечер.")
-
-    b.spacer()
-    if loved_count <= 0:
-        b.line("В любимых пока пусто.")
-        b.spacer()
-        b.line("Добавь фильмы или сериалы, которые понравились, — и я подберу похожее.")
-    else:
-        b.line(f"❤️ В любимых {loved_count} {_pluralize_titles(loved_count)}")
+    b.line("Выбери, как искать, или посмотри свежие фильмы в прокате.")
 
     if genre_labels:
         b.spacer()
@@ -56,7 +47,7 @@ def movie_home_screen(loved_count, genre_labels, country_label=None, now_playing
     if now_playing:
         b.spacer()
         b.text_line("🎬 ")
-        b.bold(f"В кино сейчас · {country_label}")
+        b.bold(f"Сейчас в кино · {country_label}")
         b.newline()
         for item in now_playing:
             _format_movie_row(b, item)

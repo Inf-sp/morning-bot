@@ -250,6 +250,40 @@ def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
     return _lifehack_fallback(cid, rain=rain, hot=hot, is_weekend=is_weekend)
 
 
+def kitchen_lifehacks(cid, n=3):
+    """N кухонных лайфхаков из того же недельного пула, что и «Мой день» (категория
+    «кухня») — без отдельного AI-вызова на каждый заход в «Готовку». Помечает выданные
+    как показанные, чтобы при следующем входе на этой неделе не повторяться."""
+    cid = str(cid)
+    _pool_ensure_fresh(config.LIFEHACK_POOL_KEY, cid, "default", lambda: _generate_lifehack_pool(cid))
+    bucket = _pool_get(config.LIFEHACK_POOL_KEY, cid, "default")
+    items = bucket.get("items") or []
+    unshown_kitchen = [i for i in items if i.get("category") == "кухня" and not i.get("shown_at")]
+    if len(unshown_kitchen) < n:
+        # даже показанные ранее кухонные лучше, чем пустой экран - лучше повторить, чем показать ничего
+        any_kitchen = [i for i in items if i.get("category") == "кухня"]
+        unshown_kitchen = any_kitchen if len(any_kitchen) >= n else unshown_kitchen
+    chosen = unshown_kitchen[:n]
+    if chosen:
+        ids = {c["id"] for c in chosen}
+
+        def mut(data):
+            b = data.setdefault(cid, {}).setdefault("default", {})
+            for it in b.get("items") or []:
+                if it.get("id") in ids and not it.get("shown_at"):
+                    it["shown_at"] = int(datetime.now(TZ).timestamp())
+            return data, True
+
+        store.mutate_kv(config.LIFEHACK_POOL_KEY, mut)
+        return [c["text"] for c in chosen]
+    fallback = []
+    for _ in range(n):
+        _label, text = _lifehack_fallback(cid)
+        if text and text not in fallback:
+            fallback.append(text)
+    return fallback
+
+
 
 _QUOTE_RESET_AFTER = 15  # сбрасываем anti-repeat после N авторов
 
@@ -427,12 +461,6 @@ def _build_day_text(cid):
     if raw_quote and _quote_valid(raw_quote):
         quote_text = esc(raw_quote)
         quote_author = esc(q_data.get("src", "")).strip()
-    try:
-        import balance as _b
-        lagom_line = esc(_b._pick_lagom(cid))
-    except Exception as e:
-        _log.warning("myday: _pick_lagom failed: %s", e)
-        lagom_line = ""
     msg = myday_ui.day_summary(
         header,
         s.get("city", ""),
@@ -445,7 +473,6 @@ def _build_day_text(cid):
         lifehack=hack_text,
         quote_text=quote_text,
         quote_author=quote_author,
-        lagom_line=lagom_line,
     )
     text = msg.text
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя

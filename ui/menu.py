@@ -60,7 +60,7 @@ def main_menu_kb():
 
 def welcome(name: str = ""):
     name = str(name or "").strip()
-    greeting = f"Привет, {name}! Я DM — помощник на каждый день." if name else "Привет! Я DM — помощник на каждый день."
+    greeting = f"👋🏻 Привет, {name}! Я DM — помощник на каждый день." if name else "👋🏻 Привет! Я DM — помощник на каждый день."
     b = MessageBuilder()
     b.bold(greeting)
     b.newline()
@@ -92,8 +92,7 @@ _SCREENS = {
         "Здоровье и эмоции. Разберу симптом, поддержу и помогу разгрузить голову.",
         [
             [(ui_label("doctor", "Спросить врача"), "as_doctor")],
-            [("⚡ Заряд мотивации", "as_motiv")],
-            [(ui_label("worry_diary", "Дневник тревог"), "as_daycheck")],
+            [("⚡ Заряд мотивации", "as_motiv"), (ui_label("worry_diary", "Дневник тревог"), "as_daycheck")],
             [(ui_label("settings", "Настройки здоровья"), "set_lagom")],
             [("⬅️ Назад", "m_menu"), ("🏠 Меню", "m_menu")],
         ],
@@ -180,15 +179,24 @@ def menu_screen(key):
     return _screen_message(emoji, title, description, rows, show_footer=show_footer)
 
 
-def food_menu():
-    return _screen_message(
-        UI_FOOD,
-        "Готовка",
-        "Еда без хаоса. Соберу понятное меню на день, разберу холодильник и честно скажу, что с ним не так.",
-        [
-            [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
-            [(ui_label("cook_from", "Из того что есть"), "as_fridge_cook")],
-            [(ui_label("settings", "Настройки готовки"), "set_fridge_g")],
-            [("⬅️ Назад", "m_menu"), ("🏠 Меню", "m_menu")],
-        ],
-    )
+def food_menu(lifehacks=None):
+    b = MessageBuilder()
+    b.text_line(f"{UI_FOOD} ")
+    b.bold("Готовка")
+    b.newline()
+    b.spacer()
+    b.line("Еда без хаоса. Соберу понятное меню на день, разберу холодильник и честно скажу, что с ним не так.")
+    if lifehacks:
+        b.spacer()
+        b.bold("Кухонный лайфхак:" if len(lifehacks) == 1 else "Кухонные лайфхаки:")
+        b.newline()
+        for tip in lifehacks:
+            b.bullet(tip)
+    _add_footer(b)
+    rows = [
+        [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
+        [(ui_label("cook_from", "Из того что есть"), "as_fridge_cook")],
+        [(ui_label("settings", "Настройки готовки"), "set_fridge_g")],
+        [("⬅️ Назад", "m_menu"), ("🏠 Меню", "m_menu")],
+    ]
+    return b.build_stripped(reply_markup=ikb(rows))

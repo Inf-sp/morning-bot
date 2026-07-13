@@ -106,6 +106,29 @@ def users(stats, users_list, users_total, updated_at):
     return b.build_stripped()
 
 
+def user_delete_list(removable):
+    b = MessageBuilder()
+    b.bold("❌ Удалить пользователя")
+    b.newline()
+    b.spacer()
+    if removable:
+        b.line("Выбери, кого удалить из бота.")
+    else:
+        b.line("Удалять некого — кроме тебя, других пользователей нет.")
+    return b.build_stripped()
+
+
+def user_delete_confirm(name):
+    b = MessageBuilder()
+    b.bold("❌ Удалить пользователя")
+    b.newline()
+    b.spacer()
+    b.text_line("Удалить ")
+    b.bold(name)
+    b.text_line("? Он потеряет доступ к боту, пока не получит новый инвайт.")
+    return b.build_stripped()
+
+
 def invite_prompt():
     b = MessageBuilder()
     b.bold(ui_label("invite", "Инвайт"))
@@ -163,7 +186,7 @@ def api_ai(status_dot, status_text, impact_line, fallback_line, unavailable_line
     last_failure: (kind_line, raw_msg) | None.
     """
     b = MessageBuilder()
-    b.bold("🔌 API и AI")
+    b.bold("🛠 Система")
     b.newline()
     b.spacer()
     b.bold(f"{status_dot} {status_text}")
@@ -174,14 +197,7 @@ def api_ai(status_dot, status_text, impact_line, fallback_line, unavailable_line
     if unavailable_line:
         b.line(unavailable_line)
     b.spacer()
-    b.bold("🤖 AI")
-    b.newline()
-    for line in ai_rows:
-        b.line(str(line))
-    b.spacer()
-    b.bold("🌐 Данные")
-    b.newline()
-    for line in api_rows:
+    for line in ai_rows + api_rows:
         b.line(str(line))
     b.spacer()
     if last_failure:
@@ -195,22 +211,6 @@ def api_ai(status_dot, status_text, impact_line, fallback_line, unavailable_line
         b.line("Последняя ошибка: нет")
     b.spacer()
     b.line(f"Обновлено в {updated_at}")
-    return b.build_stripped()
-
-
-def notifications(sent_today, errors_today, active_types, updated_at):
-    b = MessageBuilder()
-    b.bold(ui_label("notifications", "Уведомления"))
-    b.newline()
-    b.spacer()
-    b.line(f"Сегодня: {sent_today} отправлено · {errors_today} ошибок")
-    b.line(f"Активных типов: {active_types}")
-    b.spacer()
-    b.line("Тесты отправляются только вам.")
-    b.spacer()
-    b.line("Выберите уведомление для теста:")
-    b.spacer()
-    b.line(f"Обновлено: {updated_at}")
     return b.build_stripped()
 
 

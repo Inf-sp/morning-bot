@@ -92,18 +92,18 @@ def render_wardrobe_message(look_data):
         for it in items:
             b.line(f"- {it}")
 
-    reasons = [_finish_dot(r) for r in (look_data.get("reasons") or []) if _clean_text(r)]
+    reasons = [_clean_text(r).rstrip(".!?") for r in (look_data.get("reasons") or []) if _clean_text(r)]
     if reasons:
         b.spacer()
-        b.bold("Почему этот образ")
-        b.newline()
-        for r in reasons[:3]:
-            b.line(f"- {r}")
+        b.bold("Почему этот образ:")
+        b.text_line(" ")
+        b.line(_finish_dot(" и ".join(reasons[:3])))
 
     tip = _finish_dot(look_data.get("style_tip"))
     if tip:
         b.spacer()
-        b.text_line("Совет по стилю: ")
+        b.bold("Совет по стилю:")
+        b.text_line(" ")
         b.line(tip)
 
     insight = _finish_dot(look_data.get("insight"))

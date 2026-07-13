@@ -24,7 +24,6 @@ def day_summary(
     lifehack="",
     quote_text="",
     quote_author="",
-    lagom_line="",
 ):
     """Сводка дня: заголовок, затем по одной строке на блок с пустой строкой между ними."""
     title_flag = f" {flag}" if flag else ""
@@ -50,11 +49,7 @@ def day_summary(
 
     if quote_text:
         quote_line = f"«{quote_text}»" + (f" — по {quote_author}" if quote_author else "")
-        b.add(f"💬 {quote_line}", MessageEntity.ITALIC)
+        b.add(f"💭 {quote_line}", MessageEntity.ITALIC)
         b.newline()
-
-    if lagom_line:
-        b.spacer()
-        b.add(f"💭 {lagom_line}", MessageEntity.ITALIC)
 
     return b.build_stripped()

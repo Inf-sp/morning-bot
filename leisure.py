@@ -490,8 +490,8 @@ async def send_recos(bot, cid, kind):
 def _movie_home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать кино", callback_data="movie_reco")],
-        [InlineKeyboardButton("По жанру", callback_data="movie_genre_menu")],
-        [InlineKeyboardButton("По настроению", callback_data="movie_mood_menu")],
+        [InlineKeyboardButton("👻 По жанру", callback_data="movie_genre_menu"),
+         InlineKeyboardButton("🫥 По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
@@ -529,7 +529,6 @@ async def send_movie_home(bot, cid, q=None):
     """Приветственный экран раздела «Кино» (тот же паттерн, что у Гардероба):
     сколько уже в любимых + какие жанры выбраны в предпочтениях + что сейчас в прокате,
     снизу — вход в обычную рекомендацию по любимым, по жанру или по настроению."""
-    loved_count = len(store.get_list(config.WATCHLIST_KEY, cid))
     selected = {int(x) for x in (settings.get(cid, "movie_genres", []) or []) if str(x).isdigit()}
     genre_labels = [label for label, gid in _GENRE_ALL if gid in selected]
 
@@ -544,7 +543,7 @@ async def send_movie_home(bot, cid, q=None):
             now_playing = []
     now_playing = [m for m in now_playing if (m.rating or 0) > 7]
 
-    msg = leisure_ui.movie_home_screen(loved_count, genre_labels, country_label, now_playing[:10])
+    msg = leisure_ui.movie_home_screen(genre_labels, country_label, now_playing[:10])
     kb = _movie_home_kb()
     if q is not None:
         try:
@@ -1203,32 +1202,51 @@ async def listen_dislike(bot, cid):
         _add_unique(config.MUSIC_DISLIKE_KEY, cid, rec["items"][0])
     await send_listen(bot, cid)
 
+def _item_text(item):
+    """Текст элемента списка: элемент может быть строкой или {"id":..., "value": строка}
+    (после захода в удаление, см. store.ensure_list_ids_via)."""
+    if isinstance(item, dict):
+        return str(item.get("value", "")).strip()
+    return str(item or "").strip()
+
+
 async def send_listen(bot, cid):
-    arts = _ensure_artists(cid)
+    _log.info("send_listen: start cid=%s", cid)
+    arts_raw = _ensure_artists(cid)
+    if not arts_raw:
+        _log.info("send_listen: no artists cid=%s", cid)
+        await _ask_collect(bot, cid, "artists")
+        return
+    arts = [_item_text(a) for a in arts_raw if _item_text(a)]
     if not arts:
+        _log.info("send_listen: no artists after normalize cid=%s", cid)
         await _ask_collect(bot, cid, "artists")
         return
     anchors = ", ".join(arts[:25])
-    disliked = store.get_list(config.MUSIC_DISLIKE_KEY, cid)
-    music_seen = store.get_list(config.MUSIC_SEEN_KEY, cid)
+    disliked = [_item_text(d) for d in store.get_list(config.MUSIC_DISLIKE_KEY, cid) if _item_text(d)]
+    music_seen = [_item_text(s) for s in store.get_list(config.MUSIC_SEEN_KEY, cid) if _item_text(s)]
     notes = store.get_list(config.NOTES_KEY, cid)
     booked = [n.get("text", "") for n in notes
               if isinstance(n, dict) and "музык" in str(n.get("source", "")).lower()]
     known = (set(a.lower() for a in arts) | set(b.lower() for b in booked)
-             | set(str(d).lower() for d in disliked) | set(str(s).lower() for s in music_seen))
-    avoid_all = ", ".join(list(arts) + booked + [str(d) for d in disliked] + [str(s) for s in music_seen])[:600]
+             | set(d.lower() for d in disliked) | set(s.lower() for s in music_seen))
+    avoid_all = ", ".join(list(arts) + booked + disliked + music_seen)[:600]
     web_block = ""
-    web = await asyncio.to_thread(
-        research.tavily_snippet,
-        f"new music similar to {anchors[:60]} indie alternative recommendations 2024 2025",
-        500,
-    )
+    try:
+        web = await asyncio.to_thread(
+            research.tavily_snippet,
+            f"new music similar to {anchors[:60]} indie alternative recommendations 2024 2025",
+            500,
+        )
+    except Exception as e:
+        _log.error("send_listen: tavily_snippet failed cid=%s: %r", cid, e, exc_info=True)
+        web = ""
     if web:
         web_block = (
             f"\nАктуальные данные из сети (используй для реальных названий треков и альбомов):\n{web}\n"
         )
     data = None
-    for _ in range(3):
+    for attempt in range(3):
         try:
             cand = await ai.allm_json(
                 "Ты — музыкальный эксперт-минималист. Пиши коротко, емко, без воды и лишних вводных слов "
@@ -1251,20 +1269,29 @@ async def send_listen(bot, cid):
                 '"tracks": ["трек 1 - короткая пометка", "трек 2", "трек 3"], '
                 '"fact": "1 интересный факт об исполнителе"}',
                 1000, tier="leisure", route="gemini", module="leisure")
-        except Exception:
+        except Exception as e:
+            _log.warning("send_listen: allm_json attempt=%s failed cid=%s: %r", attempt, cid, e, exc_info=True)
             cand = None
         cand_artist = str(cand.get("artist") or "").strip() if isinstance(cand, dict) else ""
+        _log.info("send_listen: attempt=%s cid=%s cand_type=%s cand_artist=%r",
+                  attempt, cid, type(cand).__name__, cand_artist)
         if cand_artist and cand_artist.lower() not in known:
             data = cand
             break
         data = cand
     if not data or not data.get("artist"):
+        _log.info("send_listen: no data after retries cid=%s data=%r", cid, data)
         await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
     artist = data.get("artist", "")
     store.last_recos[str(cid)] = {"kind": "listen", "items": [artist]}
     store.last_source[str(cid)] = "Досуг · Музыка"
-    msg = leisure_ui.artist_card(data)
+    try:
+        msg = leisure_ui.artist_card(data)
+    except Exception as e:
+        _log.error("send_listen: artist_card render failed cid=%s data=%r: %r", cid, data, e, exc_info=True)
+        raise
     store.last_answer[str(cid)] = leisure_ui.plain_from_html(msg.text)
+    _log.info("send_listen: sending card cid=%s artist=%r", cid, artist)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_listen_kb())
 
 async def add_listen(bot, cid, i):

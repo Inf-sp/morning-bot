@@ -574,6 +574,8 @@ async def _ai_reframe_look(cid, items, weather_ctx, reasons, tip):
 Причины (локальные заметки, переформулируй естественно): {"; ".join(reasons) if reasons else "нет"}
 Совет по носке: {tip or "нет"}
 Обращайся на «ты», без имени, без приветствий. Не выдумывай факты, которых нет выше.
+Никогда не пиши, что вещь "давно не носили"/"ещё не пробовали"/"пора попробовать" — это не факт, а
+предположение, даже если звучит правдоподобно.
 Верни строго валидный JSON (без markdown): {{"reasons": ["до 3 строк"], "tip": "1 строка или пусто"}}"""
     try:
         d = await ai.allm_json(prompt, 400, tier="cheap", module="wardrobe")
@@ -1004,7 +1006,7 @@ async def send_improve(bot, cid, force=False):
     else:
         prompt = _improve_prompt(cid, wardrobe_text)
         try:
-            d = await ai.allm_json(prompt, 1200, module="wardrobe", route="gemini")
+            d = await ai.allm_json(prompt, 1800, module="wardrobe", route="gemini")
             w["_analysis"] = {
                 "data": d,
                 "wardrobe_hash": content_hash,
@@ -1046,6 +1048,7 @@ def _improve_prompt(cid, wardrobe_text):
 - skip_buying — вещи, которые пользователь может захотеть купить, но они дублируют то, что уже есть.
 - Никакой воды, повторов и шаблонов. Короткие ёмкие предложения. Telegram-формат.
 - Не упоминай сегодняшнюю погоду и не описывай готовый образ на сегодня — это отдельный экран.
+- Заполни ВСЕ поля JSON содержательно (headline, works, clashes, fix_first, skip_buying, next_capsule) — пустых или отсутствующих полей быть не должно, гардероб пользователя для этого достаточно большой.
 
 Верни строго валидный JSON (без markdown):
 {{"headline": "1 предложение — главный вывод по гардеробу целиком",

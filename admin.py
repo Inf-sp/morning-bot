@@ -127,8 +127,7 @@ async def send_home(bot, cid, q=None):
     dot, txt = (ui.BAD, "Есть проблема") if (bad or notif_bad) else (ui.OK, "Всё работает")
     api_line = f"{len(bad)} недоступно" if bad else "OK · лимиты в норме"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔌 API и AI", callback_data="adm_api_ai")],
-        [InlineKeyboardButton(ui_label("notifications", "Уведомления"), callback_data="adm_notif")],
+        [InlineKeyboardButton("🛠 Система", callback_data="adm_api_ai")],
         [InlineKeyboardButton(ui_label("users", "Пользователи"), callback_data="adm_users")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
@@ -179,15 +178,60 @@ def _users_list():
     return [(dot, name, last_seen) for _ts, dot, name, last_seen in rows]
 
 
+def _removable_users():
+    """Пользователи, которых можно удалить из allowlist (без owner) -> [(cid, name, last_seen)]."""
+    cids = [c for c in access.get_allowed_cids() if not access.is_owner(c)]
+    rows = []
+    for c in cids:
+        ts = tracking.get_activity(c).get("last_ts", 0)
+        prof = store.get_profile(c)
+        name = prof.get("name") or f"ID {str(c)[:4]}…"
+        rows.append((ts, c, name, tracking.human_last_seen(c)))
+    rows.sort(key=lambda r: r[0], reverse=True)
+    return [(cid, name, last_seen) for _ts, cid, name, last_seen in rows]
+
+
 async def send_users(bot, cid, q=None):
     stats = _user_stats()
     users_list = _users_list()
     rows = [
         [InlineKeyboardButton(ui_label("invite", "Инвайт"), callback_data="adm_invite")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
+    if _removable_users():
+        rows.append([InlineKeyboardButton("❌ Удалить пользователя", callback_data="adm_user_del")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     msg = ui.users(stats, users_list[:_USERS_LIST_LIMIT], len(users_list), _updated_at())
     await _show(bot, cid, msg, InlineKeyboardMarkup(rows), q)
+
+
+async def send_user_delete_list(bot, cid, q=None):
+    removable = _removable_users()
+    rows = [
+        [InlineKeyboardButton(f"{name} · {last_seen}", callback_data=f"adm_user_delconfirm_{u_cid}")]
+        for u_cid, name, last_seen in removable
+    ]
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    msg = ui.user_delete_list(removable)
+    await _show(bot, cid, msg, InlineKeyboardMarkup(rows), q)
+
+
+async def send_user_delete_confirm(bot, cid, target_cid, q=None):
+    prof = store.get_profile(target_cid)
+    name = prof.get("name") or f"ID {str(target_cid)[:4]}…"
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Удалить", callback_data=f"adm_user_delok_{target_cid}"),
+         InlineKeyboardButton("Отмена", callback_data="adm_user_del")],
+    ])
+    msg = ui.user_delete_confirm(name)
+    await _show(bot, cid, msg, kb, q)
+
+
+async def do_user_delete(bot, cid, target_cid, q=None):
+    if access.is_owner(target_cid):
+        await send_user_delete_list(bot, cid, q)
+        return
+    access.revoke_user(target_cid)
+    await send_user_delete_list(bot, cid, q)
 
 
 async def send_invite(bot, cid, q=None):
@@ -569,23 +613,6 @@ async def send_api_ai(bot, cid, q=None):
     await _show(bot, cid, msg, kb, q)
 
 
-async def send_notifications(bot, cid, q=None):
-    stats = _notification_stats(cid)
-    rows = _notification_test_rows()
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
-    msg = ui.notifications(
-        stats["sent_today"],
-        stats["errors_today"],
-        stats["active_types"],
-        _updated_at(),
-    )
-    await _show(bot, cid, msg, InlineKeyboardMarkup(rows), q)
-
-
-async def check_notifications(bot, cid, q=None):
-    await send_notifications(bot, cid, q)
-
-
 def _issue_summary(source, msg):
     msg = str(msg or "")
     low = msg.lower()
@@ -632,29 +659,6 @@ async def clear_cache(bot, cid, q=None):
     research._GSR_CACHE.clear()
     tracking.clear_errors()
     await send_logs(bot, cid, q)
-
-
-# ================= УВЕДОМЛЕНИЯ =================
-
-def _notification_options_by_kind():
-    import settings as _s
-    return {opt.key: opt.button_label for opt in _s.get_notification_options()}
-
-
-def _notification_test_rows():
-    import settings as _s
-    return [
-        [InlineKeyboardButton(opt.button_label, callback_data=f"set_admin_broadcast_test_{opt.key}")]
-        for opt in _s.get_notification_options()
-    ]
-
-
-async def run_test(bot, cid, kind):
-    """Прогоняет плановое уведомление прямо сейчас - само уведомление и есть результат теста,
-    без отдельной карточки "Тест отправлен" поверх него."""
-    import settings as _s
-    if kind in _notification_options_by_kind():
-        await _s._run_notif_test(bot, cid, kind)
 
 
 async def send_logs(bot, cid, q=None):
