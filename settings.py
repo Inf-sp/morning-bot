@@ -283,7 +283,7 @@ async def send_notif(bot, cid, q=None):
         rows.append([InlineKeyboardButton(f"{mark} {opt.button_label}", callback_data=f"set_notiftgl_{opt.key}")])
     if any(notif_on(cid, kind) for kind, _ in NOTIF_TYPES):
         rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     msg = settings_ui.notifications()
     text = msg.text
     kb = InlineKeyboardMarkup(rows)
@@ -320,7 +320,7 @@ async def send_personalization(bot, cid, q=None):
         [InlineKeyboardButton(f"{ui_label('cuisines', 'Кухни')}{cuisine_mark}", callback_data="set_cuisines")],
         [InlineKeyboardButton("Кино и музыка", callback_data="set_mydata_leisure_p")],
         [InlineKeyboardButton("Обучение", callback_data="set_learning_mydata")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.personalization()
     kb = InlineKeyboardMarkup(rows)
@@ -343,7 +343,7 @@ def _cuisines_kb(cid):
         for key, label in CUISINE_OPTIONS
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_priorities")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_priorities"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -391,7 +391,7 @@ def _style_kb(cid):
                for i, s in enumerate(STYLES)]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     rows.append([InlineKeyboardButton("✏️ Описать своими словами", callback_data="set_stylecustom")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -428,7 +428,7 @@ def _fit_kb(cid):
     buttons = [InlineKeyboardButton(("✅ " if cur == f else "") + f, callback_data=f"set_fit_{i}")
                for i, f in enumerate(FIT_OPTIONS)]
     rows = [[b] for b in buttons]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -448,7 +448,7 @@ def _layers_kb(cid):
     buttons = [InlineKeyboardButton(("✅ " if cur == k else "") + label, callback_data=f"set_layers_{k}")
                for k, label in LAYERS_OPTIONS]
     rows = [[b] for b in buttons]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -491,7 +491,7 @@ async def send_colors_love(bot, cid):
     store.pending_input[str(cid)] = "wardrobe_colors_love_input"
     current = get(cid, "wardrobe_colors_love", "")
     msg = settings_ui.colors_input("Любимые цвета", current)
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
@@ -499,7 +499,7 @@ async def send_colors_avoid(bot, cid):
     store.pending_input[str(cid)] = "wardrobe_colors_avoid_input"
     current = get(cid, "wardrobe_colors_avoid", "")
     msg = settings_ui.colors_input("Нежелательные цвета", current)
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
@@ -510,7 +510,7 @@ async def send_constraints(bot, cid):
     store.pending_input[str(cid)] = "wardrobe_constraints_input"
     current = get(cid, "wardrobe_constraints", "") or get(cid, "wardrobe_profile", "") or get(cid, "body", "")
     msg = settings_ui.constraints_input(current)
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_prefs"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
@@ -562,7 +562,7 @@ async def send_wardrobe_prefs(bot, cid, back="set_priorities"):
         [InlineKeyboardButton(f"Не предлагать цвета{' ✅' if colors_avoid else ''}", callback_data="set_colors_avoid")],
         [InlineKeyboardButton(f"Ограничения{' ✅' if constraints else ''}", callback_data="set_constraints")],
         [InlineKeyboardButton(f"Слои{' ✅' if layers else ''}", callback_data="set_layerspick")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(
         "Гардероб",
@@ -583,7 +583,7 @@ async def send_lagom(bot, cid, back="m_balance"):
         ])
     else:
         rows.append([InlineKeyboardButton("✏️ Добавить", callback_data="setadd_lagom")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back)])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     msg = settings_ui.lagom_home(items)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -664,7 +664,7 @@ async def handle_callback(bot, cid, data, q=None):
         await wardrobe.send_wardrobe_zones(bot, cid, q=q)
     elif data == "set_ward_add":
         store.pending_input[cid] = "wardrobe_add_set"
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_g")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_g"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]])
         msg = settings_ui.wardrobe_item_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
     elif data == "set_lagom":
@@ -961,7 +961,7 @@ async def send_notes(bot, cid):
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton("❤️ Любимое", callback_data="as_love")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.settings_home()
     await bot.send_message(chat_id=cid, entities=msg.entities,
@@ -974,7 +974,7 @@ async def send_mydata_leisure(bot, cid, back="m_leisure"):
         [InlineKeyboardButton(ui_label("cinema", "Кино"), callback_data="set_mydata_cinema")],
         [InlineKeyboardButton(ui_label("books", "Книги"), callback_data="set_mydata_books")],
         [InlineKeyboardButton(ui_label("music", "Музыка"), callback_data="set_mydata_music")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(
         f"{ui_label('leisure', 'Досуг')}",
@@ -990,7 +990,7 @@ async def send_mydata_cinema(bot, cid):
         [InlineKeyboardButton("Смотрел", callback_data="colr:cinema_watched:set_mydata_leisure")],
         [InlineKeyboardButton("Скрытое", callback_data="colr:cinema_hidden:set_mydata_leisure")],
         [InlineKeyboardButton("Предпочтения", callback_data="movie_prefs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(f"{ui_label('cinema', 'Кино')}")
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
@@ -1002,7 +1002,7 @@ async def send_mydata_books(bot, cid):
         [InlineKeyboardButton("Сохранённое", callback_data="colr:books_saved:set_mydata_leisure")],
         [InlineKeyboardButton("Прочитано", callback_data="colr:books_read:set_mydata_leisure")],
         [InlineKeyboardButton("Скрытое", callback_data="colr:books_hidden:set_mydata_leisure")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(f"{ui_label('books', 'Книги')}")
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
@@ -1012,7 +1012,7 @@ async def send_mydata_music(bot, cid):
     rows = [
         [InlineKeyboardButton("Любимые артисты", callback_data="colr:music_favorite_artists:set_mydata_leisure")],
         [InlineKeyboardButton("Скрытые артисты", callback_data="colr:music_hidden_artists:set_mydata_leisure")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(f"{ui_label('music', 'Музыка')}")
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
@@ -1022,7 +1022,7 @@ async def send_food(bot, cid, q=None, back="m_food"):
     rows = [
         [InlineKeyboardButton(ui_label("products", "Продукты"), callback_data="set_fridge")],
         [InlineKeyboardButton(ui_label("recipes", "Рецепты"), callback_data="set_myrecipes")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(
         f"{ui_label('food', 'Готовка')}",
@@ -1043,7 +1043,7 @@ async def send_travel(bot, cid):
     rows = [
         [InlineKeyboardButton(ui_label("countries", "Любимые страны"), callback_data="colr:travel_favorite_countries:set_travel")],
         [InlineKeyboardButton(ui_label("routes", "Сохранённые места"), callback_data="colr:travel_saved_places:set_travel")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(
         f"{ui_label('travel', 'Поездки')}",
@@ -1058,14 +1058,14 @@ async def send_plans(bot, cid):
     if not items:
         msg = settings_ui.trips_empty()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_fav")]]))
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_fav"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]]))
         return
     rows = []
     for i, n in items:
         country = (n.get("country") or "Поездка") if isinstance(n, dict) else "Поездка"
         d = n.get("date", "") if isinstance(n, dict) else ""
         rows.append([InlineKeyboardButton(f"{ui_label('travel', '').strip()} {d} · {country}"[:40], callback_data=f"as_planview_{i}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_fav")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_fav"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     msg = settings_ui.trips_home()
     await bot.send_message(chat_id=cid, entities=msg.entities,
         text=msg.text,
@@ -1080,7 +1080,7 @@ async def plan_view(bot, cid, i):
     entities = util.entities_from_json(n.get("entities") if isinstance(n, dict) else None)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить план", callback_data=f"as_plandel_{i}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_plan")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_plan"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     chunks = util.chunk_text_with_entities(text, entities, 4000)
     for idx, (chunk_text, chunk_entities) in enumerate(chunks):
@@ -1105,12 +1105,12 @@ async def fav_view(bot, cid, i, back="as_bucket_fav", delete_cb=None):
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("❤️ В любимые", callback_data=f"as_notelove_{i}"),
              InlineKeyboardButton("Скрыть", callback_data=f"as_noteblack_{i}")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
+            [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
         ])
     else:
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("❌ Удалить", callback_data=delete_cb or f"fav_del_{i}")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
+            [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
         ])
     chunks = util.chunk_text_with_entities(full.text, full.entities, 4000)
     for idx, (chunk_text, chunk_entities) in enumerate(chunks):
@@ -1156,7 +1156,7 @@ async def send_fav_group(bot, cid, group):
         rows.append([InlineKeyboardButton(f"{prefix}{src} · {short}"[:60], callback_data=f"fav_viewg_{group}_{i}")])
     if items:
         rows.append([InlineKeyboardButton("Убрать из сохранённого", callback_data=f"as_clean_favgrp_{group}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_fav")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_fav"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
 
@@ -1180,7 +1180,7 @@ async def send_bucket(bot, cid, bucket):
              InlineKeyboardButton(ui_label("wardrobe", "Гардероб"), callback_data="as_bucket_favgrp_wardrobe")],
             [InlineKeyboardButton(ui_label("health", "Здоровье"), callback_data="as_bucket_favgrp_health"),
              InlineKeyboardButton("Прочее", callback_data="as_bucket_favgrp_other")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="as_notes"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
         ]
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                                reply_markup=InlineKeyboardMarkup(rows)); return
@@ -1196,7 +1196,7 @@ async def send_bucket(bot, cid, bucket):
             rows.append([InlineKeyboardButton(f"{label} ({len(groups[key])})", callback_data=f"as_bucket_favgrp_{key}")])
     rows.append([InlineKeyboardButton(ui_label("travel", "Мои поездки"), callback_data="as_bucket_plan")])
     rows.append([InlineKeyboardButton("Убрать из сохранённого", callback_data="as_clean_fav")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -1211,7 +1211,7 @@ LOVE_SECTIONS = [
 
 async def send_love_home(bot, cid, back="m_notes"):
     rows = [[InlineKeyboardButton(title, callback_data=f"as_love_{key}")] for title, key in LOVE_SECTIONS]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back)])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     msg = settings_ui.favorites_home()
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
@@ -1255,7 +1255,7 @@ async def send_love_section(bot, cid, key):
         rows.append([InlineKeyboardButton("✏️ Добавить", callback_data=f"as_loveadd_{key}")])
     if key in _HIDDEN_SUPPORTED:
         rows.append([InlineKeyboardButton("Скрытое", callback_data=f"as_lovehidden_{key}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))
 

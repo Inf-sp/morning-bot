@@ -518,7 +518,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
             rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"ls_loveadd_{ctx[5:]}")])
         else:
             rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"as_loveadd_{ctx[3:]}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back)])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
     if q is not None:
@@ -808,7 +808,8 @@ async def _render_view(bot, cid, view_id, q=None):
     if add_button:
         label, callback_data = add_button
         rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=view["back"])])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=view["back"]),
+                 InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
     if q is not None:
@@ -831,7 +832,7 @@ async def _render_confirm(bot, cid, view_id, action_id="remove", q=None):
     text = f"{label} ({n})? Это действие нельзя отменить."
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"{label} ({n})", callback_data=f"clactc:{view_id}:{action_id}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"clcancel:{view_id}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"clcancel:{view_id}"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     if q is not None:
         try:

@@ -22,6 +22,7 @@ WEATHER_FILES = {
 # Explicitly allowed action/status emoji. These are not decorative UI entities.
 ACTION_EMOJI = {
     "⬅️",
+    "🏠",
     "✅",
     "❌",
     "⭐️",

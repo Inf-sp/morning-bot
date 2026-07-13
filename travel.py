@@ -26,7 +26,7 @@ def _home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🌍 Подобрать страну", callback_data="a_trav_go")],
         [InlineKeyboardButton("🎚️ Настройки поездок", callback_data="set_travel")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
 
 
@@ -82,7 +82,7 @@ def _travel_kb():
         [InlineKeyboardButton("❤️ В любимые", callback_data="a_trav_fav"),
          InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
         [InlineKeyboardButton("🎚️ Настройки поездок", callback_data="set_travel")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
 
 
@@ -195,7 +195,7 @@ async def send_plan(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
         [InlineKeyboardButton(ui_label("save", "Сохранить маршрут"), callback_data="a_trav_save")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 

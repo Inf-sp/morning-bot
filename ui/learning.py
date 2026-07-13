@@ -427,7 +427,7 @@ def dialogue_step_card(flag, situation, line, options, step, total):
     msg.text = msg.text.rstrip("\n")
     rows = [[InlineKeyboardButton(str(opt)[:60], callback_data=f"dlg_pick_{i}")]
             for i, opt in enumerate(options)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     msg.reply_markup = InlineKeyboardMarkup(rows)
     return msg
 
@@ -454,7 +454,7 @@ def dialogue_summary_card(topic):
         b.line(f"Тема: {topic}")
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Новый диалог", callback_data="dlg_start")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     msg = b.build(reply_markup=kb)
     msg.text = msg.text.rstrip("\n")

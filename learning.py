@@ -917,7 +917,7 @@ def _train_back_target(language=None):
 def _train_again_kb(language=None):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё", callback_data="train_next")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(language))],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(language)), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
 
 
@@ -926,7 +926,7 @@ def _phrase_unavailable_kb(language=None):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Следующая", callback_data="train_next")],
         [InlineKeyboardButton("Повторить позже", callback_data=back)],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
 
 
@@ -1052,7 +1052,7 @@ async def _render_train_quiz(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🧩 Тест", callback_data="phrase_intro_test")],
         [InlineKeyboardButton("✅ Выучил", callback_data="phrase_intro_mastered")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(language))],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(language)), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
@@ -1216,7 +1216,7 @@ async def phrase_explain(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Новый пример", callback_data="phrase_new_example"),
          InlineKeyboardButton("Дальше", callback_data="train_next")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(st.get("lang", "")))],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(st.get("lang", ""))), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
@@ -1247,7 +1247,7 @@ async def _send_train_feedback(bot, cid, idx, st):
         msg = learning_ui.phrase_quiz_result(st, True)
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("Следующая", callback_data="train_next")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(lang))],
+            [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(lang)), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
         ])
     else:
         st["phrase_error_count"] = int(st.get("phrase_error_count", 0)) + 1
@@ -1265,14 +1265,15 @@ async def _send_train_feedback(bot, cid, idx, st):
             kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔍 Разобрать", callback_data="phrase_explain"),
                  InlineKeyboardButton("Новый пример", callback_data="phrase_new_example")],
-                [InlineKeyboardButton("Дальше", callback_data="train_next"),
-                 InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(lang))],
+                [InlineKeyboardButton("Дальше", callback_data="train_next")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(lang)),
+                 InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
             ])
         else:
             kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("Новый пример", callback_data="phrase_new_example"),
                  InlineKeyboardButton("Дальше", callback_data="train_next")],
-                [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(lang))],
+                [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(lang)), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
             ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
@@ -1296,7 +1297,7 @@ async def send_train_lang_select(bot, cid):
     language = active_language(cid)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"▶️ {_language_display(language)}", callback_data=f"a_train_{_code(language)}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     msg = learning_ui.train_lang_select()
     await bot.send_message(chat_id=cid,
@@ -1344,7 +1345,7 @@ async def translate_answer(bot, cid, text):
     code = _code(st["lang"])
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё пример", callback_data=f"again_tr_{code}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
     return True
@@ -1447,7 +1448,7 @@ async def smart_reveal_later(bot, cid):
 def _proverb_kb(code):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё вариант", callback_data=f"a_proverb_{code}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
 
 def _proverb_entities_card(flag, original, analogs=None, meaning="", examples=None, example_ru=""):
@@ -3010,7 +3011,7 @@ def _seed_level_kb(cid, code):
     for level in _SEED_LEVELS:
         mark = "✅ " if level == current else ""
         row.append(InlineKeyboardButton(f"{mark}{LEVEL_LABELS[level]}", callback_data=f"a_dictseedlvl_{code}_{level}"))
-    rows = [row, [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictseed_start_{code}")]]
+    rows = [row, [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictseed_start_{code}"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]]
     return InlineKeyboardMarkup(rows)
 
 
@@ -3078,7 +3079,7 @@ async def seed_add_selected(bot, cid, q=None):
         text = f"✅ Добавлено {len(added)} {noun}: {terms}{more}"
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("🎯 Начать обучение", callback_data=f"a_train_{lang}")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
         ])
     else:
         text = "Ничего не отмечено — словарь не изменился."
@@ -3141,7 +3142,7 @@ async def send_dict(bot, cid, back="m_notes", q=None):
     rows = [
         [InlineKeyboardButton(f"🇳🇱 Нидерландский ({nl_total})", callback_data=f"a_dictlang_nl_from_{origin}")],
         [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data=f"a_dictlang_en_from_{origin}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
 
@@ -3155,7 +3156,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
         [InlineKeyboardButton("🔍 Найти в словаре", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("✏️ Добавить или удалить слово", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("✨ Сгенерировать набор слов", callback_data=f"a_dictseed_start_{lang}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     text = f"{flag} Мой словарь · {count} слов и фраз"
     await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
@@ -3173,7 +3174,7 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
         "Я сам приведу в правильную форму, переведу и разберу."
     )
     if not entries:
-        rows = [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")]]
+        rows = [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]]
         text = f"{flag} Словарь {lang_title} языка пока пуст.\n\n{add_hint}"
         await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
         return
@@ -3193,7 +3194,7 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
     if total_pages > 1:
         next_page = page + 1 if page < total_pages - 1 else 0
         nav_rows.append([InlineKeyboardButton("Следующее слово", callback_data=f"a_dicteditpage_{lang}_{next_page}")])
-    rows = word_rows + nav_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}")]]
+    rows = word_rows + nav_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]]
     text = (
         f"{flag} Показаны {start + 1}–{start + len(chunk)} из {len(entries)}. "
         "Нажми на слово, чтобы посмотреть перевод, пример и удалить его.\n\n"
@@ -3211,7 +3212,7 @@ def _dict_manage_kb(lang: str):
 
 async def send_dict_search_prompt(bot, cid, lang, q=None):
     store.pending_input[str(cid)] = f"dictsearch_{lang}"
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]])
     await _show_screen(bot, cid, "🔍 Введи слово или фразу для поиска.", None, kb, q=q)
 
 
@@ -3219,7 +3220,7 @@ def _dict_search_kb(lang, term_key):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить", callback_data=f"a_dictdel_{lang}_{term_key}")],
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
 
 
@@ -3301,7 +3302,7 @@ def _dict_lang_entries(cid, lang):
 def _dict_entry_view_kb(lang, page, term_key):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить", callback_data=f"a_dictviewdel_{lang}_{page}_{term_key}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}_{page}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}_{page}"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
 
 
@@ -3445,7 +3446,7 @@ def next_open_mistake(cid, lang=None):
 
 
 def _mistake_review_kb(back="m_learn"):
-    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=back)]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]])
 
 
 async def send_mistake_review(bot, cid, language=None, back="m_learn"):
@@ -3831,7 +3832,7 @@ async def send_game(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["hint"], callback_data="game_hint"),
          InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="game_change")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="game_change"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     clues = "\n".join(f"•{c.strip()}" for c in d.get("clues", "").split("\n") if c.strip())
     msg = learning_ui.game_card(ui, clues)
@@ -3865,7 +3866,8 @@ async def game_answer(bot, cid, text):
         _remember_game_answer(cid, st)
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton(ui["again"], callback_data="game_again")],
-            [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
+            [InlineKeyboardButton(ui["back"], callback_data="m_learn"),
+             InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
         ])
         body = st.get("explain") or st.get("quote", "")
         msg = learning_ui.game_found(ui, st["answer"], body)
@@ -3907,7 +3909,8 @@ async def game_reveal(bot, cid, q):
     msg = learning_ui.game_found(ui, st.get("answer", ""), body)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["again"], callback_data="game_again")],
-        [InlineKeyboardButton(ui["back"], callback_data="m_learn")],
+        [InlineKeyboardButton(ui["back"], callback_data="m_learn"),
+         InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     try:
         await q.message.edit_reply_markup(reply_markup=None)
@@ -3927,7 +3930,7 @@ def learning_settings_kb(active_lang, active_level, back="set_home"):
         [InlineKeyboardButton(f"📚 Язык: {_language_display(active_lang)}", callback_data="toggle_learning_language")],
         row,
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{code}_from_learnset")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back)],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
 
 

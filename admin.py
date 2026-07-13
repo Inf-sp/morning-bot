@@ -26,7 +26,7 @@ DAY = 86400
 
 
 def _back(target="set_admin"):
-    return [InlineKeyboardButton("⬅️ Назад", callback_data=target)]
+    return [InlineKeyboardButton("⬅️ Назад", callback_data=target), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]
 
 
 async def _show(bot, cid, msg, reply_markup=None, q=None):
@@ -183,7 +183,7 @@ async def send_users(bot, cid, q=None):
     users_list = _users_list()
     rows = [
         [InlineKeyboardButton(ui_label("invite", "Инвайт"), callback_data="adm_invite")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     msg = ui.users(stats, users_list[:_USERS_LIST_LIMIT], len(users_list), _updated_at())
     await _show(bot, cid, msg, InlineKeyboardMarkup(rows), q)
@@ -192,7 +192,7 @@ async def send_users(bot, cid, q=None):
 async def send_invite(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Создать", callback_data="adm_invite_create")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     msg = ui.invite_prompt()
     await _show(bot, cid, msg, kb, q)
@@ -203,7 +203,7 @@ async def create_invite(bot, cid, q=None):
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={code}"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     msg = ui.invite_created(link)
     if q is not None and getattr(q, "message", None) is not None:
@@ -230,7 +230,7 @@ async def send_welcome(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✏️ Изменить", callback_data="adm_welcome_edit"),
          InlineKeyboardButton("Предпросмотр", callback_data="adm_welcome_preview")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     msg = ui.welcome_admin()
     await _show(bot, cid, msg, kb, q)
@@ -561,7 +561,7 @@ async def send_api_ai(bot, cid, q=None):
         last_failure = (kind_line, raw_msg)
 
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     msg = ui.api_ai(status_dot, status_text, impact_line, fallback_line, unavailable_line,
                      ai_rows, api_rows, last_failure, _updated_at())
@@ -571,7 +571,7 @@ async def send_api_ai(bot, cid, q=None):
 async def send_notifications(bot, cid, q=None):
     stats = _notification_stats(cid)
     rows = _notification_test_rows()
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     msg = ui.notifications(
         stats["sent_today"],
         stats["errors_today"],
@@ -684,7 +684,7 @@ async def send_logs(bot, cid, q=None):
     }
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Обновить", callback_data="adm_logs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_system")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_system"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     msg = ui.logs(rows, len(errors), _updated_at(), summary)
     await _show(bot, cid, msg, kb, q)

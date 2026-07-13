@@ -17,7 +17,7 @@ def main_menu_screen(cid=None):
 
 
 def _back(parent="m_close"):
-    return [("⬅️ Назад", parent)]
+    return [("⬅️ Назад", parent), ("🏠 Меню", "m_menu")]
 
 
 def _learning_code(cid):
