@@ -15,6 +15,64 @@ _BODY_TEMP_HINTS = ("у меня температур", "температура 
                     "температура 37", "температура 38", "температура 39", "температура 40")
 _WEATHER_HINTS = ("погода", "на улице", "прогноз", "зонт", "ветер", "дождь")
 
+# Короткие реплики-реакции: разбираются правилами, без похода в основной AI-промпт
+# (см. classify_short_reply). Ключи — точное совпадение реплики целиком (после
+# lower/strip), не подстрока — иначе "спасибо, что помог с холодильником" тоже
+# попал бы сюда и потерял содержательный запрос.
+_ACKNOWLEDGEMENT_WORDS = {"ок", "окей", "ok", "okay", "хорошо", "понял", "поняла", "ясно",
+                          "ладно", "договорились", "принято", "принял"}
+_THANKS_WORDS = {"спасибо", "спс", "благодарю", "спасибо большое", "thanks", "thank you"}
+_POSITIVE_WORDS = {"отлично", "супер", "класс", "идеально", "круто", "здорово", "прекрасно"}
+_CONFIRM_WORDS = {"да", "ага", "угу", "верно", "точно", "именно", "конечно", "yes", "yep"}
+_REJECT_WORDS = {"нет", "не", "не надо", "не хочу", "отмена", "неа", "no"}
+
+ACKNOWLEDGEMENT = "ACKNOWLEDGEMENT"
+THANKS = "THANKS"
+POSITIVE_REACTION = "POSITIVE_REACTION"
+CONFIRMATION = "CONFIRMATION"
+REJECTION = "REJECTION"
+
+_ACK_REPLIES = ("Хорошо.", "Понял.", "Принято.")
+_THANKS_REPLIES = ("Пожалуйста.", "Рад помочь.")
+_POSITIVE_REPLIES = ("Отлично.", "Супер.")
+
+
+def classify_short_reply(text: str):
+    """Короткая реплика-реакция (ок/спасибо/да/нет и т.п.) -> тип, иначе None.
+
+    None означает «не короткая реакция» — вызывающий код должен продолжить
+    обычным путём (intent-роутинг, затем основной AI-промпт). Работает по
+    точному совпадению всей реплики, поэтому длинные содержательные сообщения
+    ("печень", "Амстердам", "манник", "устал") сюда не попадают."""
+    t = (text or "").strip().lower().strip(".!?…")
+    if not t or len(t.split()) > 3:
+        return None
+    if t in _ACKNOWLEDGEMENT_WORDS:
+        return ACKNOWLEDGEMENT
+    if t in _THANKS_WORDS:
+        return THANKS
+    if t in _POSITIVE_WORDS:
+        return POSITIVE_REACTION
+    if t in _CONFIRM_WORDS:
+        return CONFIRMATION
+    if t in _REJECT_WORDS:
+        return REJECTION
+    return None
+
+
+def _short_reply_answer(kind: str) -> str:
+    import random
+    if kind == ACKNOWLEDGEMENT:
+        return random.choice(_ACK_REPLIES)
+    if kind == THANKS:
+        return random.choice(_THANKS_REPLIES)
+    if kind == POSITIVE_REACTION:
+        return random.choice(_POSITIVE_REPLIES)
+    if kind == REJECTION:
+        return "Хорошо, не буду."
+    return "Понял."  # CONFIRMATION и фолбэк
+
+
 # (ключевые слова, action)
 _INTENT_MAP = [
     (("что сегодня", "что на сегодня", "план на день", "дела на день", "расписан", "планировать день", "мой день"),
@@ -171,6 +229,20 @@ async def _run_intent(bot, cid, action):
 async def chat_reply(bot, cid, text):
     store.last_action[str(cid)] = None
     store.last_source[str(cid)] = "Ассистент"
+
+    # Короткие реплики-реакции (ок/спасибо/да/нет) — разбираются правилами,
+    # без похода в AI: там нет содержательного запроса, только реакция на
+    # предыдущий ответ бота.
+    short_kind = classify_short_reply(text)
+    if short_kind:
+        reply = _short_reply_answer(short_kind)
+        await bot.send_message(chat_id=cid, text=reply)
+        hist = store.chat_history.get(str(cid), [])
+        hist.append({"role": "user", "content": text})
+        hist.append({"role": "assistant", "content": reply})
+        store.chat_history[str(cid)] = hist[-10:]
+        store.last_surface[str(cid)] = "chat"
+        return
 
     # Явные вопросы о здоровье сразу идут в медицинский сценарий.
     if _looks_medical(text):
