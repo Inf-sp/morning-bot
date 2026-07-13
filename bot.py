@@ -289,6 +289,18 @@ async def answer_callback(update, context):
     q = update.callback_query
     await q.answer()
     cid = str(q.message.chat_id)
+    bot = context.bot
+    try:
+        await _answer_callback_impl(update, context)
+    except Exception as e:
+        # Страховка: необработанное исключение в ветке диспетчера без собственного
+        # try/except иначе оставляло пользователя с "зависшей" кнопкой и без ответа.
+        await verify.safe_error(bot, cid, e)
+
+
+async def _answer_callback_impl(update, context):
+    q = update.callback_query
+    cid = str(q.message.chat_id)
     data = q.data
     bot = context.bot
     await _remove_reply_kb_once(bot, cid)
@@ -717,6 +729,17 @@ async def answer_callback(update, context):
 
 # ---------- Текстовый роутер ----------
 async def text_router(update, context):
+    cid = str(update.effective_chat.id)
+    bot = context.bot
+    try:
+        await _text_router_impl(update, context)
+    except Exception as e:
+        # Без этой страховки необработанное исключение внутри любой ветки роутера
+        # (тренажёр, добавление в словарь и т.д.) оставляло пользователя без ответа.
+        await verify.safe_error(bot, cid, e)
+
+
+async def _text_router_impl(update, context):
     cid = str(update.effective_chat.id)
     text = secure.clamp(update.message.text)        # лимит длины + чистка невидимых/управляющих
     bot = context.bot

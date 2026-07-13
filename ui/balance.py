@@ -118,27 +118,54 @@ def worries_diary(worries):
     return b.build_stripped()
 
 
-def evening_review(worries, items=None, summary="", analysis_failed=False):
+def evening_review(worries, items=None, summary="", principle="", analysis_failed=False):
     b = MessageBuilder()
-    b.section(ui_label("evening", "Вечерний разбор"))
+    b.text_line("🥸 ")
+    b.bold("Вечерний разбор")
+    b.newline()
     b.spacer()
-    b.section("Сегодня тебя беспокоили:")
-    items = items or []
-    for idx, worry in enumerate(worries):
+    b.line("Сегодня тебя беспокоили:")
+    for worry in worries:
         b.bullet(worry["text"])
-        note = ""
-        if idx < len(items) and isinstance(items[idx], dict):
-            note = (items[idx].get("note") or "").strip()
-        if note:
-            b.italic(note)
+
+    items = items or []
+    if items:
+        b.spacer()
+        b.bold("Разбор тревог")
+        b.newline()
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            worry_text = (it.get("worry") or "").strip()
+            fact = (it.get("fact") or "").strip()
+            assumption = (it.get("assumption") or "").strip()
+            if not worry_text:
+                continue
+            b.spacer()
+            b.text_line("📌 ")
+            b.bold(worry_text)
             b.newline()
+            if fact:
+                b.text_line("Факт: ")
+                b.line(cap_sentence(fact))
+            if assumption:
+                b.text_line("Предположение: ")
+                b.line(cap_sentence(assumption))
+
     if summary:
         b.spacer()
-        b.section(ui_label("summary", "Итог дня:"))
+        b.text_line("🧠 ")
+        b.bold("Итог дня")
+        b.newline()
         b.line(cap_sentence(summary))
     elif analysis_failed:
         b.spacer()
         b.line("⚠️ Не удалось собрать разбор. Попробуй ещё раз чуть позже.")
+
+    if principle:
+        b.spacer()
+        b.line(f"🌿 {cap_sentence(principle)}")
+
     return b.build_stripped()
 
 

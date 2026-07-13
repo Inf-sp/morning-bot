@@ -104,6 +104,24 @@ async def safe_send(bot, cid, text, *, surface="card", rain_real=None, reply_mar
             await bot.send_message(chat_id=cid, text=c, reply_markup=markup)
 
 
+_SKIP_MODULES = frozenset({"verify", "ai", "bot", "asyncio", "concurrent"})
+
+
+def _origin_module(exc) -> str:
+    """Имя модуля проекта, где реально возникло исключение (последний фрейм
+    traceback вне verify.py/ai.py/библиотек) - чтобы в админке было видно, какой
+    раздел сломался, а не только тип ошибки."""
+    import os
+    import traceback
+    for frame in reversed(traceback.extract_tb(exc.__traceback__)):
+        fname = os.path.basename(frame.filename)
+        if fname.endswith(".py"):
+            m = fname[:-3]
+            if m not in _SKIP_MODULES:
+                return m
+    return ""
+
+
 async def safe_error(bot, cid, exc, *, skill=None):
     """Полную ошибку - в логи, пользователю - нейтральный текст. Никогда не показываем str(exc)."""
     import traceback
@@ -118,7 +136,9 @@ async def safe_error(bot, cid, exc, *, skill=None):
             or "ИИ" in msg
             or "llm" in msg.lower()
         ) else "app"
-        tracking.log_error(src, str(exc), kind=type(exc).__name__)
+        origin = _origin_module(exc)
+        kind = f"{origin}: {type(exc).__name__}" if origin else type(exc).__name__
+        tracking.log_error(src, str(exc), kind=kind)
     except Exception:
         pass
     msg = str(exc)

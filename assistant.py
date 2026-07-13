@@ -153,7 +153,10 @@ async def try_add_love_from_chat(bot, cid, text):
         "artists": config.ARTISTS_KEY,
         "countries": config.FAVCOUNTRIES_KEY,
     }
-    existing = {str(x).strip().lower() for x in _store.get_list(key_map[store_key], cid)}
+    existing = {
+        (x.get("value", "") if isinstance(x, dict) else str(x)).strip().lower()
+        for x in _store.get_list(key_map[store_key], cid)
+    }
     if title.strip().lower() in existing:
         await bot.send_message(chat_id=cid, text=f"❤️ «{title}» уже в любимых ({folder_label}).")
         return True

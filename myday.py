@@ -288,6 +288,14 @@ def kitchen_lifehacks(cid, n=3):
 _QUOTE_RESET_AFTER = 15  # сбрасываем anti-repeat после N авторов
 
 
+def _item_text(item):
+    """Текст элемента списка: элемент может быть строкой или {"id":..., "value": строка}
+    (после захода в удаление, см. store.ensure_list_ids_via)."""
+    if isinstance(item, dict):
+        return str(item.get("value", "")).strip()
+    return str(item or "").strip()
+
+
 def _build_quote_context(cid):
     """Собирает контекст пользователя для персонализации цитаты."""
     movies = store.get_list(config.WATCHLIST_KEY, cid)[:6]
@@ -298,9 +306,9 @@ def _build_quote_context(cid):
         store.set_list(config.QUOTE_AUTHORS_KEY, cid, [])
         seen_authors = []
     return {
-        "movies": [str(m) for m in movies if m],
-        "books": [str(b) for b in books if b],
-        "artists": [str(a) for a in artists if a],
+        "movies": [_item_text(m) for m in movies if _item_text(m)],
+        "books": [_item_text(b) for b in books if _item_text(b)],
+        "artists": [_item_text(a) for a in artists if _item_text(a)],
         "seen_authors": seen_authors,
     }
 

@@ -1695,17 +1695,22 @@ async def send_evening_review(bot, cid):
     analysis_failed = False
     cache = store.get_profile(cid).get("evening_review_cache") or {}
     if cache.get("date") == today and cache.get("worries") == wlist:
-        d = {"items": cache.get("items") or [], "summary": cache.get("summary") or ""}
+        d = {"items": cache.get("items") or [], "summary": cache.get("summary") or "",
+             "principle": cache.get("principle") or ""}
     else:
         try:
             d = await ai.allm_json(
                 "Ты спокойный психолог. Разбери тревоги человека с СДВГ по-доброму, на русском.\n"
                 "Нужно коротко, без медицинских назначений и без длинной поддержки.\n"
-                "Для каждой тревоги дай одну короткую интерпретацию: что может быть фактом, а что предположением.\n"
-                "Итог дня - 1 короткое предложение.\n"
-                'Верни JSON: {"items":[{"worry":"тревога как есть","note":"коротко, до 20 слов"}],'
-                '"summary":"короткий итог, до 22 слов"}\n\n'
-                f"Тревоги:\n{wlist}", 700, module="balance")
+                "Для каждой тревоги раздели факт (что реально известно) и предположение (что додумано, "
+                "не подтверждено) — коротко, до 15 слов каждое.\n"
+                "Итог дня - 1-2 коротких предложения: сколько тревог из записанных подтвердились фактами, "
+                "а сколько оказались предположениями.\n"
+                "Principle - одна короткая обобщающая мысль-принцип на будущее (не банальность, без совета "
+                "\"дышите глубже\"), до 12 слов.\n"
+                'Верни JSON: {"items":[{"worry":"тревога как есть","fact":"коротко","assumption":"коротко"}],'
+                '"summary":"короткий итог, до 30 слов","principle":"короткая мысль"}\n\n'
+                f"Тревоги:\n{wlist}", 800, module="balance")
         except Exception as e:
             _log.warning("send_evening_review: LLM failed, analysis empty: %s", e)
             d = {}
@@ -1715,11 +1720,13 @@ async def send_evening_review(bot, cid):
             prof["evening_review_cache"] = {
                 "date": today, "worries": wlist,
                 "items": d.get("items") or [], "summary": (d.get("summary") or "").strip(),
+                "principle": (d.get("principle") or "").strip(),
             }
             store.set_profile(cid, prof)
     items = d.get("items") or []
     summary = (d.get("summary") or "").strip()
-    msg = balance_ui.evening_review(worries, items, summary, analysis_failed=analysis_failed)
+    principle = (d.get("principle") or "").strip()
+    msg = balance_ui.evening_review(worries, items, summary, principle, analysis_failed=analysis_failed)
     rows = [
         [InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")],
     ]
