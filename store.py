@@ -386,7 +386,8 @@ def _invalidate_dependents(cid, removed_ids, added_ids):
     текущему скоупу зависимых кэшей — только wardrobe_daylook требует активной
     инвалидации (recent_looks/last_look — текстовые снапшоты на момент показа,
     wardrobe_gaps пересчитывается отдельно в wardrobe._resync_wardrobe_gaps,
-    send_improve не персистится вовсе)."""
+    кэш send_improve (w["_analysis"]) самоинвалидируется через хэш состава вещей —
+    активная очистка ему не нужна)."""
     if not removed_ids:
         return
     daylook = get_wardrobe_daylook(cid)

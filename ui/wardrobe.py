@@ -4,103 +4,62 @@ from .builder import MessageBuilder
 from .constants import ui_label
 
 
-def _stars(score):
-    """Число 0-100 → строка звёзд (5 позиций, шаг 20)."""
-    try:
-        filled = max(0, min(5, round(int(score) / 20)))
-    except (TypeError, ValueError):
-        filled = 0
-    return "⭐️" * filled
-
-
 def _lower_first(text):
     return text[:1].lower() + text[1:] if text else text
 
 
-def _weakness_line(wk):
-    if isinstance(wk, dict):
-        title = _clean_text(wk.get("title"))
-        text = _clean_text(wk.get("text"))
-        return _finish_dot(f"{title} — {_lower_first(text)}" if title and text else title or text)
-    return _finish_dot(wk)
-
-
-def _buy_line(it):
-    item = _clean_text(it.get("item")) if isinstance(it, dict) else _clean_text(it)
-    why = _clean_text(it.get("why")) if isinstance(it, dict) else ""
-    return _finish_dot(f"{item} — {_lower_first(why)}" if item and why else item or why)
-
-
 def improve_card(data):
-    """Разбор гардероба — сжатая карточка для быстрого сканирования (не аудит на экран текста):
-    оценка, по 2-3 пункта на блок вместо развёрнутых мини-абзацев.
+    """Разбор гардероба — одна тема за показ (баланс/дубли/цвета/слои/сезон/...),
+    без повтора погоды, образа дня и статистики, которые уже есть на главном
+    экране раздела (см. render_wardrobe_message).
 
-    data: {score, summary, strengths[], weaknesses[{title,text}], buy[{rank,item,why}],
-           avoid[], best_look{items[],why}, potential}
+    data: {score, headline, summary, imbalance_title, imbalance, covered[],
+           missing_title, missing, next_buy_title, next_buy_item, next_buy_why}
     """
     b = MessageBuilder()
-    b.section("✂️ Разбор гардероба")
+    b.section("👕 Разбор гардероба")
     b.spacer()
 
-    score = data.get("score")
-    if score is not None:
-        b.text_line(f"{_stars(score)} ")
-        b.bold(f"{score}/100")
+    headline = _clean_text(data.get("headline"))
+    if headline:
+        b.bold(headline)
         b.newline()
+        b.spacer()
+
     summary = _clean_text(data.get("summary"))
     if summary:
-        b.quote(_finish_dot(summary))
+        b.line(_finish_dot(summary))
 
-    raw_strengths = data.get("strengths")
-    strengths = [_clean_text(s) for s in (raw_strengths if isinstance(raw_strengths, list) else [])]
-    strengths = [s for s in strengths if s]
-    if strengths:
+    imbalance = _clean_text(data.get("imbalance"))
+    if imbalance:
         b.spacer()
-        b.text_line("Сильное: ")
-        b.line(_finish_dot(", ".join(strengths[:2])))
+        b.bold(_clean_text(data.get("imbalance_title")) or "Главный перекос")
+        b.newline()
+        b.line(_finish_dot(imbalance))
 
-    raw_weaknesses = data.get("weaknesses")
-    weaknesses = raw_weaknesses if isinstance(raw_weaknesses, list) else []
-    if weaknesses:
+    raw_covered = data.get("covered")
+    covered = [_clean_text(c) for c in (raw_covered if isinstance(raw_covered, list) else [])]
+    covered = [c for c in covered if c]
+    if covered:
         b.spacer()
-        b.line("Слабое:")
-        for wk in weaknesses[:3]:
-            line = _weakness_line(wk)
-            if line:
-                b.bullet(line)
+        b.bold("Что уже закрыто")
+        b.newline()
+        b.line(" · ".join(covered[:4]))
 
-    buy = data.get("buy")
-    buy = buy if isinstance(buy, list) else []
-    if buy:
+    missing = _clean_text(data.get("missing"))
+    if missing:
         b.spacer()
-        b.line("Купить:")
-        for it in buy[:3]:
-            line = _buy_line(it)
-            if line:
-                b.bullet(line)
+        b.bold(_clean_text(data.get("missing_title")) or "Чего реально не хватает")
+        b.newline()
+        b.line(_finish_dot(missing))
 
-    raw_avoid = data.get("avoid")
-    avoid = [_clean_text(a) for a in (raw_avoid if isinstance(raw_avoid, list) else [])]
-    avoid = [a for a in avoid if a]
-    if avoid:
+    buy_item = _clean_text(data.get("next_buy_item"))
+    buy_why = _clean_text(data.get("next_buy_why"))
+    if buy_item:
         b.spacer()
-        b.text_line("Не брать: ")
-        b.line(_finish_dot(", ".join(avoid[:2])))
-
-    best = data.get("best_look")
-    best = best if isinstance(best, dict) else {}
-    raw_look_items = best.get("items")
-    look_items = [_clean_text(x) for x in (raw_look_items if isinstance(raw_look_items, list) else [])]
-    look_items = [x for x in look_items if x]
-    if look_items:
-        b.spacer()
-        b.text_line("✨ Готовый образ: ")
-        b.line(_finish_dot(", ".join(look_items)))
-
-    potential = _finish_dot(data.get("potential"))
-    if potential:
-        b.spacer()
-        b.add(potential, MessageEntity.ITALIC)
+        b.bold(_clean_text(data.get("next_buy_title")) or "Следующая разумная покупка")
+        b.newline()
+        b.line(_finish_dot(f"{buy_item} — {_lower_first(buy_why)}" if buy_why else buy_item))
 
     return b.build_stripped()
 

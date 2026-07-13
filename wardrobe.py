@@ -932,67 +932,70 @@ async def send_del_subcats(bot, cid, zone_slug, origin="m", q=None):
 
 
 # ---------- улучшить гардероб ----------
+# Одна тема на показ — экран не пытается разобрать всё гардероб сразу (см. docs/wardrobe.md).
+_ANALYSIS_TOPICS = [
+    ("balance", "баланс категорий (чего в шкафу много, а чего не хватает по зонам)"),
+    ("duplicates", "повторяющиеся, почти одинаковые вещи"),
+    ("colors", "слабые или отсутствующие цветовые сочетания"),
+    ("layers", "нехватка слоёв (верхних слоёв, фактур, что надеть поверх базы)"),
+    ("seasonal", "готовность гардероба к текущему сезону"),
+    ("hard_to_combine", "вещи, которые сложно сочетать с остальным гардеробом"),
+    ("best_buy", "одна покупка, которая даст максимальный эффект на все будущие образы"),
+]
+_ANALYSIS_TTL_DAYS = 14
+
+
+def _wardrobe_content_hash(w):
+    """Хэш состава шкафа (какие вещи есть, не порядок) — меняется при добавлении/
+    удалении вещи, не меняется от простого перечитывания. Определяет, устарел ли
+    кэшированный разбор."""
+    import hashlib
+    ids = sorted(it.get("id", "") for _z, _s, it in _flat_wardrobe_items(w))
+    return hashlib.sha1("|".join(ids).encode("utf-8")).hexdigest()[:16]
+
+
 def _fallback_improve_data(w):
-    """Резервный разбор по зонам (без ИИ) в новой схеме карточки-стилиста."""
+    """Резервный разбор по зонам (без ИИ), всегда в теме «баланс категорий» —
+    остальные темы без ИИ содержательно не собрать."""
     items = _flat_wardrobe_items(w)
     zones = {}
     for zone, _subcat, item in items:
         zones.setdefault(zone, []).append(item["name"])
 
-    strengths = []
-    if zones.get("Верх"):
-        strengths.append(f"{zones['Верх'][0]} — рабочая база для верхнего слоя, сочетается с большинством низа.")
-    if zones.get("Низ"):
-        strengths.append(f"{zones['Низ'][0]} — держит силуэт и подходит под разный верх.")
-    if zones.get("Обувь"):
-        strengths.append(f"{zones['Обувь'][0]} — закрывает повседневные сценарии.")
+    covered = [f"{zone.lower()}" for zone in ("Верх", "Низ", "Обувь", "Аксессуары") if zones.get(zone)]
 
-    weaknesses = []
-    buy = []
-    if not zones.get("Верх"):
-        weaknesses.append({"title": "Нет базового верха",
-                           "text": "Без него сложно собрать даже повседневный образ."})
-        buy.append({"item": "Плотная однотонная футболка или рубашка спокойного цвета",
-                    "why": "Станет основой верха и свяжет низ с обувью — десятки новых сочетаний."})
-    if not zones.get("Низ"):
-        weaknesses.append({"title": "Нет базового низа",
-                           "text": "Силуэт держится без опоры, образы выглядят незавершённо."})
-        buy.append({"item": "Прямые джинсы или лёгкие брюки нейтрального цвета",
-                    "why": "Дадут универсальный низ под весь имеющийся верх."})
-    if not zones.get("Обувь"):
-        weaknesses.append({"title": "Нет базовой обуви",
-                           "text": "Без неё любой образ выглядит недоделанным."})
-        buy.append({"item": "Нейтральные кеды или кроссовки",
-                    "why": "Завершат большинство повседневных образов."})
-    if not zones.get("Аксессуары"):
-        buy.append({"item": "Один спокойный аксессуар (часы или ремень)",
-                    "why": "Меняет характер образа без покупки новой одежды."})
+    missing_zone = next((z for z in ("Верх", "Низ", "Обувь") if not zones.get(z)), None)
+    if missing_zone == "Верх":
+        missing = "Базового верха — без него не собрать даже повседневный образ."
+        buy_item, buy_why = ("Плотная однотонная футболка или рубашка спокойного цвета",
+                              "Станет основой верха и свяжет низ с обувью.")
+    elif missing_zone == "Низ":
+        missing = "Базового низа — силуэт держится без опоры, образы выглядят незавершённо."
+        buy_item, buy_why = ("Прямые джинсы или лёгкие брюки нейтрального цвета",
+                              "Дадут универсальный низ под весь имеющийся верх.")
+    elif missing_zone == "Обувь":
+        missing = "Базовой обуви — без неё любой образ выглядит недоделанным."
+        buy_item, buy_why = ("Нейтральные кеды или кроссовки", "Завершат большинство повседневных образов.")
+    else:
+        missing = "Явных пустых категорий нет — дальше есть смысл смотреть на сочетаемость цветов и слоёв."
+        buy_item, buy_why = ("Один лёгкий верхний слой нейтрального цвета",
+                              "Добавит многослойность без ухода от уже сложившегося стиля.")
 
-    if not weaknesses:
-        weaknesses.append({"title": "База выглядит рабочей",
-                           "text": "Точные слабые места видно после примерки сочетаний."})
-
-    look_items = []
-    for zone in ("Верх", "Низ", "Обувь", "Аксессуары"):
-        if zones.get(zone):
-            look_items.append(f"{zone}: {zones[zone][0]}")
-
-    total = len(items)
-    score = max(40, min(90, 40 + total * 4))
     return {
-        "score": score,
-        "summary": "Разбор по категориям (базовый режим). Начни с баланса верха, низа и обуви — это даст больше всего новых сочетаний.",
-        "strengths": strengths,
-        "weaknesses": weaknesses[:5],
-        "buy": buy[:5],
-        "avoid": [],
-        "best_look": {"items": look_items,
-                      "why": "Простое сочетание базовых вещей с понятными пропорциями."} if look_items else {},
-        "potential": "Гардероб собирается вокруг базы. Следующий шаг — закрыть пустые категории и добавить один цветовой акцент, чтобы образы стали разнообразнее.",
+        "headline": "Базовый разбор по категориям",
+        "summary": "Разбор по зонам без ИИ. Начни с баланса верха, низа и обуви — это даст больше всего новых сочетаний.",
+        "imbalance_title": "Главный перекос",
+        "imbalance": missing,
+        "covered": covered,
+        "missing_title": "Чего реально не хватает",
+        "missing": missing,
+        "next_buy_title": "Следующая разумная покупка",
+        "next_buy_item": buy_item,
+        "next_buy_why": buy_why,
     }
 
 
-async def send_improve(bot, cid):
+async def send_improve(bot, cid, force=False):
     w = store.load_wardrobe(cid)
     wardrobe_text = store.wardrobe_to_text(w)
     if not wardrobe_text.strip():
@@ -1009,68 +1012,88 @@ async def send_improve(bot, cid):
             reply_markup=kb,
         )
         return
-    prompt = _improve_prompt(cid, wardrobe_text)
-    try:
-        d = await ai.allm_json(prompt, 2000, module="wardrobe", route="gemini")
-    except Exception as e:
-        _log.warning("wardrobe improve AI failed, using fallback: %r", e, exc_info=True)
-        d = _fallback_improve_data(w)
+
+    content_hash = _wardrobe_content_hash(w)
+    cached = w.get("_analysis") or {}
+    is_fresh = (
+        not force
+        and cached.get("wardrobe_hash") == content_hash
+        and cached.get("generated_at")
+        and (datetime.now(config.TZ) - datetime.fromisoformat(cached["generated_at"])) < timedelta(days=_ANALYSIS_TTL_DAYS)
+    )
+    if is_fresh:
+        d = cached["data"]
+    else:
+        topic_idx = (int(cached.get("topic_idx", -1)) + 1) % len(_ANALYSIS_TOPICS)
+        _topic_key, topic_desc = _ANALYSIS_TOPICS[topic_idx]
+        prompt = _improve_prompt(cid, wardrobe_text, topic_desc)
+        try:
+            d = await ai.allm_json(prompt, 1200, module="wardrobe", route="gemini")
+            w["_analysis"] = {
+                "data": d,
+                "wardrobe_hash": content_hash,
+                "topic_idx": topic_idx,
+                "generated_at": datetime.now(config.TZ).isoformat(),
+            }
+            store.save_wardrobe(w, cid)
+        except Exception as e:
+            _log.warning("wardrobe improve AI failed, using fallback: %r", e, exc_info=True)
+            d = _fallback_improve_data(w)
+
     d = _merge_priority_gaps(cid, d)
     msg = wardrobe_ui.improve_card(d)
-    store.last_source[str(cid)] = "Гардероб · Улучшение"
+    store.last_source[str(cid)] = "Гардероб · Разбор"
     store.last_answer[str(cid)] = msg.text
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
         reply_markup=_kb([[("⬅️ Назад", "m_wardrobe")]]))
 
 
-def _improve_prompt(cid, wardrobe_text):
-    """Промпт персонального стилиста: аудит гардероба, а не технический лог."""
+def _improve_prompt(cid, wardrobe_text, topic_desc):
+    """Промпт персонального стилиста — один фокус за раз (see _ANALYSIS_TOPICS),
+    а не полный аудит на экран текста."""
     prefs = _settings.wardrobe_prefs_context(cid)
     ctx_block = (f"Данные о пользователе (учитывай в анализе):\n{prefs}\n\n") if prefs else ""
     return f"""Ты — персональный стилист уровня Thread, Whering и мужской стилист GQ.
-Твоя задача — не перечислить вещи, а провести профессиональный аудит гардероба так, чтобы пользователь подумал: «Это разбирал живой стилист».
+Твоя задача — не перечислить вещи, а провести короткий точечный разбор одной темы гардероба так, чтобы пользователь подумал: «Это разбирал живой стилист».
 
 Опирайся на знания мужского стиля, цветовых сочетаний, пропорций силуэта, капсульного гардероба, минимализма, smart casual, streetwear, old money, японского минимализма и современной европейской моды.
 
 {ctx_block}Гардероб пользователя:
 {wardrobe_text}
 
-Оцени: баланс категорий, универсальность вещей, лёгкость сборки образов, сочетаемость цветов и силуэтов, качество базы, слабые места, дубли, редко используемые вещи, отсутствующие категории.
+Сегодняшняя тема разбора: {topic_desc}. Разбирай только её — не пытайся охватить весь гардероб сразу.
 
 ПРАВИЛА:
 - Обращайся на «ты», без имени.
 - Никаких общих фраз («гардероб выглядит рабочим», «докупайте точечно»).
-- Каждая рекомендация объясняет ПОЧЕМУ и какой эффект даёт (сколько новых сочетаний, что с чем свяжет).
+- Рекомендация покупки объясняет ПОЧЕМУ и какой эффект даёт (с чем свяжет, сколько новых сочетаний).
 - Никакой воды, повторов и шаблонов. Короткие ёмкие предложения. Telegram-формат.
+- Не упоминай сегодняшнюю погоду и не описывай готовый образ на сегодня — это отдельный экран.
 
 Верни строго валидный JSON (без markdown):
-{{"score": число 0-100,
-"summary": "2-3 предложения: общая оценка гардероба и главный вывод",
-"strengths": ["сильная сторона с объяснением ценности", "..."],
-"weaknesses": [{{"title":"кратко проблема","text":"последствие для образов"}}, "... максимум 5, по важности"],
-"buy": [{{"item":"конкретная вещь","why":"зачем, сколько новых сочетаний, с чем работает"}}, "... максимум 5, по влиянию"],
-"avoid": ["лишняя покупка или дубль с объяснением", "... если есть"],
-"best_look": {{"items":["Верх: вещь","Низ: вещь","Обувь: вещь","Аксессуары: акцент"], "why":"почему образ работает"}},
-"potential": "1 абзац: универсальность, лёгкость сборки, какой стиль просматривается, следующий логичный шаг"}}"""
+{{"headline": "заголовок в 3-5 слов про сегодняшнюю тему (например «Гардероб собран, но немного однообразен»)",
+"summary": "1 предложение — суть темы для этого гардероба",
+"imbalance_title": "короткий заголовок находки по теме (например «Главный перекос»)",
+"imbalance": "1-2 предложения — конкретная находка по теме на основе реального гардероба",
+"covered": ["категория, которая уже хорошо закрыта", "... максимум 4, короткие фразы"],
+"missing_title": "короткий заголовок (например «Чего реально не хватает»)",
+"missing": "1-2 предложения — чего конкретно не хватает по теме",
+"next_buy_title": "короткий заголовок (например «Следующая разумная покупка»)",
+"next_buy_item": "одна конкретная вещь (тип, цвет, посадка)",
+"next_buy_why": "1-2 предложения — почему именно она и какой эффект даст"}}"""
 
 
 def _merge_priority_gaps(cid, d):
-    """Персистентные пробелы гардероба (например, дождевик) — первыми в списке покупок."""
-    gaps = get_wardrobe_gaps(cid)
-    priority_gaps = [g for g in gaps if g.get("priority")]
-    if not priority_gaps:
+    """Персистентный пробел гардероба (например, дождевик под сегодняшнюю погоду)
+    важнее темы дня — если он есть, заменяет собой next_buy разбора."""
+    gaps = [g for g in get_wardrobe_gaps(cid) if g.get("priority")]
+    if not gaps:
         return d
-    buy = list(d.get("buy") or [])
-    existing = {(b.get("item") if isinstance(b, dict) else str(b)).lower() for b in buy}
-    prepend = []
-    for g in priority_gaps[:2]:
-        item = g.get("item", "")
-        if item.lower() in existing:
-            continue
-        prepend.append({"item": item.capitalize(),
-                        "why": f"Приоритетная покупка: {g.get('reason', '')}."})
+    gap = gaps[0]
     d = dict(d)
-    d["buy"] = (prepend + buy)[:5]
+    d["next_buy_title"] = "Срочная покупка"
+    d["next_buy_item"] = str(gap.get("item", "")).capitalize()
+    d["next_buy_why"] = str(gap.get("reason", "")) or "Закрывает реальный пробел под текущую погоду."
     return d
 
 
