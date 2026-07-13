@@ -83,7 +83,6 @@ _SCREENS = {
         [
             [(ui_label("recommendation", "Образ на сегодня"), "w_look")],
             [("✂️ Разбор шкафа", "w_improve"), (ui_label("find", "Оценка"), "w_check")],
-            [("👕 Мой гардероб", "set_wardrobe_g")],
             [("🎚️ Настройки гардероба", "set_wardrobe_settings")],
         ],
     ),
@@ -163,7 +162,8 @@ def learning_menu(home: dict):
     return b.build_stripped(reply_markup=ikb([
         [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
         [(ui_label("live_language", "Живой язык"), f"a_proverb_{code}"), (ui_label("game", "Игра-детектив"), f"gamelang_{code}")],
-        [("📊 Прогресс", "a_train_progress"), (ui_label("settings", "Настройки обучения"), "set_learning")],
+        [("📊 Прогресс", "a_train_progress")],
+        [(ui_label("settings", "Настройки обучения"), "set_learning")],
         [("⬅️ Назад", "m_menu"), ("🏠 Меню", "m_menu")],
     ]))
 
@@ -188,7 +188,7 @@ def food_menu():
         [
             [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
             [(ui_label("cook_from", "Из того что есть"), "as_fridge_cook")],
-            [(ui_label("settings", "Настройки холодильника"), "set_fridge_g")],
+            [(ui_label("settings", "Настройки готовки"), "set_fridge_g")],
             [("⬅️ Назад", "m_menu"), ("🏠 Меню", "m_menu")],
         ],
     )

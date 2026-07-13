@@ -9,57 +9,48 @@ def _lower_first(text):
 
 
 def improve_card(data):
-    """Разбор гардероба — одна тема за показ (баланс/дубли/цвета/слои/сезон/...),
-    без повтора погоды, образа дня и статистики, которые уже есть на главном
-    экране раздела (см. render_wardrobe_message).
+    """Разбор шкафа — капсульный аудит всего гардероба сразу: что уже работает,
+    что выбивается, что менять первым, что пока не покупать и как выглядит
+    капсула после следующей замены. Без повтора погоды, образа дня и статистики,
+    которые уже есть на главном экране раздела (см. render_wardrobe_message).
 
-    data: {score, headline, summary, imbalance_title, imbalance, covered[],
-           missing_title, missing, next_buy_title, next_buy_item, next_buy_why}
+    data: {headline, works[], clashes[], fix_first[], skip_buying, next_capsule}
     """
     b = MessageBuilder()
-    b.section("👕 Разбор шкафа")
+    b.section("✂️ Разбор шкафа")
     b.spacer()
 
     headline = _clean_text(data.get("headline"))
     if headline:
-        b.bold(headline)
-        b.newline()
-        b.spacer()
+        b.text_line("Главный вывод: ")
+        b.line(_finish_dot(headline))
 
-    summary = _clean_text(data.get("summary"))
-    if summary:
-        b.line(_finish_dot(summary))
+    works = [_finish_dot(x) for x in (data.get("works") or []) if _clean_text(x)]
+    if works:
+        b.section("Что работает")
+        b.line("\n".join(f"- {x}" for x in works[:5]))
 
-    imbalance = _clean_text(data.get("imbalance"))
-    if imbalance:
-        b.spacer()
-        b.bold(_clean_text(data.get("imbalance_title")) or "Главный перекос")
-        b.newline()
-        b.line(_finish_dot(imbalance))
+    clashes = [_finish_dot(x) for x in (data.get("clashes") or []) if _clean_text(x)]
+    if clashes:
+        b.section("Что выбивается")
+        b.line("\n".join(f"- {x}" for x in clashes[:5]))
 
-    raw_covered = data.get("covered")
-    covered = [_clean_text(c) for c in (raw_covered if isinstance(raw_covered, list) else [])]
-    covered = [c for c in covered if c]
-    if covered:
-        b.spacer()
-        b.bold("Что уже закрыто")
-        b.newline()
-        b.line(" · ".join(covered[:4]))
+    fix_first = [_finish_dot(x) for x in (data.get("fix_first") or []) if _clean_text(x)]
+    if fix_first:
+        b.section("Что менять первым")
+        b.line("\n".join(f"{i}. {x}" for i, x in enumerate(fix_first[:3], 1)))
 
-    missing = _clean_text(data.get("missing"))
-    if missing:
+    skip_buying = _finish_dot(data.get("skip_buying"))
+    if skip_buying:
         b.spacer()
-        b.bold(_clean_text(data.get("missing_title")) or "Чего реально не хватает")
-        b.newline()
-        b.line(_finish_dot(missing))
+        b.text_line("Пока не покупать: ")
+        b.line(skip_buying)
 
-    buy_item = _clean_text(data.get("next_buy_item"))
-    buy_why = _clean_text(data.get("next_buy_why"))
-    if buy_item:
+    next_capsule = _clean_text(data.get("next_capsule"))
+    if next_capsule:
         b.spacer()
-        b.bold(_clean_text(data.get("next_buy_title")) or "Следующая разумная покупка")
-        b.newline()
-        b.line(_finish_dot(f"{buy_item} — {_lower_first(buy_why)}" if buy_why else buy_item))
+        b.text_line("После следующей замены: ")
+        b.line(_finish_dot(next_capsule))
 
     return b.build_stripped()
 
@@ -172,13 +163,15 @@ def entity_card(title, summary="", quote="", bullets=None, final="", bullet_labe
 
 def purchase_check_card(data):
     """Оценка покупки: до трёх цифр, влияющих на решение (сколько уже есть, сколько
-    похоже, сколько новых сочетаний даст покупка), не голые комплименты.
+    похоже, сколько новых сочетаний даст покупка), не голые комплименты. Заголовок
+    несёт эмодзи кнопки «🔍 Оценка», из которой пользователь сюда попал.
 
-    data: {item, verdict, have_count, have_category, similar_count, why[], alternative}
+    data: {item, verdict, why[], have_count, have_category, similar_count,
+           reconsider_if, alternative}
     """
     data = data or {}
     b = MessageBuilder()
-    b.section("Оценка")
+    b.section("🔍 Оценка")
     b.spacer()
     b.bold(_clean_text(data.get("item")))
 
@@ -188,19 +181,25 @@ def purchase_check_card(data):
         b.text_line("Вердикт: ")
         b.line(_finish_dot(verdict))
 
-    have_category = _clean_text(data.get("have_category"))
-    have_count = data.get("have_count")
-    if have_category and have_count is not None:
-        similar = data.get("similar_count")
-        similar_bit = f", из них {similar} похожи по назначению" if similar else ""
-        b.spacer()
-        b.text_line("У тебя уже: ")
-        b.line(_finish_dot(f"{have_count} {have_category}{similar_bit}"))
-
     why = [_finish_dot(x) for x in (data.get("why") or []) if _clean_text(x)]
     if why:
         b.section("Почему:")
         b.line("\n".join(f"- {x}" for x in why[:3]))
+
+    have_category = _clean_text(data.get("have_category"))
+    have_count = data.get("have_count")
+    if have_category and have_count is not None:
+        similar = data.get("similar_count")
+        similar_bit = f" · {similar} похожих по назначению" if similar else ""
+        b.spacer()
+        b.text_line("У тебя уже: ")
+        b.line(_finish_dot(f"{have_count} {have_category}{similar_bit}"))
+
+    reconsider_if = _finish_dot(data.get("reconsider_if"))
+    if reconsider_if:
+        b.spacer()
+        b.text_line("Рассмотреть можно, если: ")
+        b.line(reconsider_if)
 
     alternative = _clean_text(data.get("alternative"))
     if alternative:

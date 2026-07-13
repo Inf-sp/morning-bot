@@ -317,16 +317,11 @@ async def notif_off_all(bot, cid, q=None):
 
 
 async def send_personalization(bot, cid, q=None):
-    """Персонализация: постоянные предпочтения пользователя, влияющие на подбор
-    в разных разделах. Сохранённые объекты (любимые страны/фильмы/книги и т.п.)
-    сюда не переносятся — они остаются в «Любимое», здесь только настройки алгоритма.
-    Гардероб сюда не входит — его настройки живут в самом разделе «Гардероб»
-    (кнопка «Настройки гардероба» → «Стиль»)."""
-    cuisine_mark = " ✅" if cuisines(cid) else ""
+    """Персонализация сейчас пустует по содержанию — Гардероб, Обучение, Кино/музыка
+    и Кухни переехали в свои разделы («Гардероб» → «Настройки гардероба», «Обучение»
+    → «Настройки обучения», «Досуг» → «Настройки досуга», «Готовка» → «Настройки
+    готовки»). Экран оставлен как compat-редирект на главные Настройки."""
     rows = [
-        [InlineKeyboardButton(f"{ui_label('cuisines', 'Кухни')}{cuisine_mark}", callback_data="set_cuisines")],
-        [InlineKeyboardButton("Кино и музыка", callback_data="set_mydata_leisure_p")],
-        [InlineKeyboardButton("Обучение", callback_data="set_learning_mydata")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.personalization()
@@ -350,7 +345,7 @@ def _cuisines_kb(cid):
         for key, label in CUISINE_OPTIONS
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_priorities"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_fridge_g"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -503,14 +498,14 @@ def wardrobe_prefs_context(cid):
 
 # ===== Настройки гардероба (живут в разделе «Гардероб», не в Персонализации) =====
 async def send_wardrobe_settings_hub(bot, cid, q=None):
-    """«Настройки гардероба»: сейчас единственный пункт — Стиль. Отдельный экран,
-    чтобы при появлении новых настроек гардероба не пришлось перестраивать вход."""
+    """«Настройки гардероба»: Стиль (предпочтения подбора) и Мой гардероб (сами вещи)."""
     msg = settings_ui.mydata_section(
         "Настройки гардероба",
-        "Влияет на подбор образа. Сами вещи — в разделе «Гардероб».",
+        "Стиль влияет на подбор образа. Мой гардероб — управление вещами.",
     )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎨 Стиль", callback_data="set_wardrobe_style")],
+        [InlineKeyboardButton("👕 Мой гардероб", callback_data="set_wardrobe_g")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     if q is not None:
@@ -952,9 +947,9 @@ async def export_notes(bot, cid):
 async def send_notes(bot, cid):
     rows = [
         [InlineKeyboardButton("🌍 Город", callback_data="set_city")],
-        [InlineKeyboardButton(ui_label("personalization", "Персонализация"), callback_data="set_priorities")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton("❤️ Любимое", callback_data="as_love")],
+        [InlineKeyboardButton("⭐️ Сохранённое", callback_data="as_bucket_fav")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
@@ -1014,9 +1009,11 @@ async def send_mydata_music(bot, cid):
 
 
 async def send_food(bot, cid, q=None, back="m_food"):
+    cuisine_mark = " ✅" if cuisines(cid) else ""
     rows = [
         [InlineKeyboardButton(ui_label("products", "Продукты"), callback_data="set_fridge")],
         [InlineKeyboardButton(ui_label("recipes", "Рецепты"), callback_data="set_myrecipes")],
+        [InlineKeyboardButton(f"{ui_label('cuisines', 'Кухни')}{cuisine_mark}", callback_data="set_cuisines")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(
