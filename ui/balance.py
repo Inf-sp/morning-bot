@@ -118,14 +118,6 @@ def worries_diary(worries):
     return b.build_stripped()
 
 
-def evening_review_empty():
-    b = MessageBuilder()
-    b.section(ui_label("evening", "Вечерний разбор"))
-    b.spacer()
-    b.line("Сегодня тревог не записано. Если что-то крутится - выгрузи сейчас, каждую с новой строки.")
-    return b.build_stripped()
-
-
 def evening_review(worries, items=None, summary="", analysis_failed=False):
     b = MessageBuilder()
     b.section(ui_label("evening", "Вечерний разбор"))

@@ -1688,10 +1688,8 @@ async def send_evening_review(bot, cid):
     all_worries = store.get_list(config.WORRIES_KEY, cid)
     worries = [w for w in all_worries if w.get("date", today) == today]
     if not worries:
-        msg = balance_ui.evening_review_empty()
-        await bot.send_message(chat_id=cid, entities=msg.entities, text=msg.text)
-        store.pending_input[cid] = "worry"
-        settings.set_(cid, "_worry_prompt_ts", datetime.now(TZ).timestamp())
+        # Вечерний разбор разбирает записанные за день тревоги — если их не было,
+        # разбирать нечего, и плановое уведомление не приходит вовсе.
         return
     wlist = "\n".join(f"- {w['text']}" for w in worries)
     analysis_failed = False

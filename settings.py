@@ -1261,7 +1261,6 @@ async def send_bucket(bot, cid, bucket):
         if groups.get(key):
             rows.append([InlineKeyboardButton(f"{label} ({len(groups[key])})", callback_data=f"as_bucket_favgrp_{key}")])
     rows.append([InlineKeyboardButton(ui_label("travel", "Мои поездки"), callback_data="as_bucket_plan")])
-    rows.append([InlineKeyboardButton("Убрать из сохранённого", callback_data="as_clean_fav")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))
