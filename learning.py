@@ -974,6 +974,7 @@ async def _render_train_quiz(bot, cid):
     if round_n > 0 and round_n % _MISTAKE_EVERY_N_ROUNDS == 0:
         mistake = next_open_mistake(cid, lang_code)
         if mistake:
+            st["round"] = round_n + 1
             msg = learning_ui.mistake_review_card(mistake)
             await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
             return
@@ -1221,7 +1222,7 @@ async def phrase_explain(bot, cid):
 
 
 async def handle_train_poll_answer(bot, poll_answer):
-    cid = store.train_polls.get(poll_answer.poll_id)
+    cid = store.train_polls.pop(poll_answer.poll_id, None)
     if not cid:
         return
     st = store.train_state.get(str(cid))
@@ -1241,9 +1242,9 @@ async def _send_train_feedback(bot, cid, idx, st):
     lang = st.get("lang", "нидерландский")
 
     is_correct = idx == correct_idx
+    st["round"] = st.get("round", 0) + 1
     if is_correct:
         msg = learning_ui.phrase_quiz_result(st, True)
-        st["round"] = st.get("round", 0) + 1
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("Следующая", callback_data="train_next")],
             [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(lang))],
@@ -1409,28 +1410,37 @@ async def _smart_reveal_finish(bot, cid, st, answer):
         is_wrong = not r.get("ok")
     else:
         # Пропустил без ответа и без готового правильного варианта — проверять нечего.
-        await bot.send_message(chat_id=cid, text="Хорошо, идём дальше.")
+        await _smart_reveal_continue(bot, cid)
         return
     store.smart_reveal_result_state[str(cid)] = {
-        "lang": lang, "term": st["ru"], "wrong": answer or "", "correct": correct, "explanation": explanation,
+        "lang": lang, "term": correct, "wrong": answer or "", "correct": correct, "explanation": explanation,
     }
     if is_wrong:
-        record_mistake(cid, _code(lang), st["ru"], wrong=answer, correct=correct, explanation=explanation)
+        record_mistake(cid, _code(lang), correct, wrong=answer, correct=correct, explanation=explanation)
     msg = learning_ui.smart_reveal_result(_flag(lang), lang, correct, explanation)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
 
 
+async def _smart_reveal_continue(bot, cid):
+    st = store.train_state.get(str(cid))
+    if st:
+        st["round"] = st.get("round", 0) + 1
+        await _render_next_train_quiz(bot, cid)
+    else:
+        await bot.send_message(chat_id=cid, text="Хорошо, идём дальше.")
+
+
 async def smart_reveal_understood(bot, cid):
     store.smart_reveal_result_state.pop(str(cid), None)
-    await bot.send_message(chat_id=cid, text="Отлично, идём дальше.")
+    await _smart_reveal_continue(bot, cid)
 
 
 async def smart_reveal_later(bot, cid):
     r = store.smart_reveal_result_state.pop(str(cid), None)
-    if r:
+    if r and r.get("wrong"):
         record_mistake(cid, r["lang"], r["term"], wrong=r.get("wrong", ""),
                         correct=r["correct"], explanation=r.get("explanation", ""))
-    await bot.send_message(chat_id=cid, text="Хорошо, вернёмся к этому в «Повторении ошибок».")
+    await _smart_reveal_continue(bot, cid)
 
 
 # ================= ГЛАГОЛ ДНЯ / ПОСЛОВИЦА =================

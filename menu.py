@@ -1,21 +1,11 @@
-from telegram import ReplyKeyboardMarkup
-
 from ui import menu as menu_ui
 
 
 _WELCOME = menu_ui.welcome()
 WELCOME, WELCOME_ENTITIES = _WELCOME.text, _WELCOME.entities
 
-REPLY_KB_LABEL = "💬 Ассистент"
-REPLY_KB_FLAG = "reply_kb_cleared_v6"  # версия флага в профиле - кнопка получила эмодзи,
-                                        # старым профилям шлём обновлённую клавиатуру ещё раз
-
-
-def reply_kb():
-    """Единственная кнопка нижней Reply-клавиатуры - открывает главное меню.
-    is_persistent - клавиатура остаётся видна внизу постоянно, а не сворачивается
-    после нажатия. Отправляется один раз (см. _send_reply_kb_once/onboard)."""
-    return ReplyKeyboardMarkup([[REPLY_KB_LABEL]], resize_keyboard=True, is_persistent=True)
+REPLY_KB_REMOVED_FLAG = "reply_kb_removed_v7"  # разово снимаем нижнюю Reply-клавиатуру
+                                                # «Ассистент» у профилей, где она уже была
 
 
 def main_menu_kb():

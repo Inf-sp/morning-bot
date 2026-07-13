@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 _log = logging.getLogger(__name__)
-from telegram import InlineKeyboardMarkup
+from telegram import InlineKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
                           ContextTypes, CallbackQueryHandler, PollAnswerHandler, ExtBot)
 from datetime import datetime, timezone
@@ -65,11 +65,10 @@ def _status_topic(data: str) -> str | None:
 
 
 def _looks_like_command(text: str) -> bool:
-    """Текст похож на команду/кнопку, а не на тревогу - не глотать его окном
-    "Дневной разгрузки" (напр. нажатие кнопки "Ассистент" сразу после
-    вечернего разбора не должно улететь в дневник тревог)."""
+    """Текст похож на команду, а не на тревогу - не глотать его окном
+    "Дневной разгрузки"."""
     t = (text or "").strip()
-    return t.startswith("/") or t == menu.REPLY_KB_LABEL
+    return t.startswith("/")
 
 
 def _normalize_app_version(version: str) -> str:
@@ -244,29 +243,25 @@ async def maybe_send_admin_deploy_notification(bot):
         )
 
 
-async def _send_reply_kb_once(bot, cid):
-    """Разово присылает нижнюю Reply-клавиатуру с кнопкой «Ассистент» (Telegram
-    держит клавиатуру, пока явно не пришлёт новую - одной сменой reply_markup
-    на инлайн-кнопки она не убирается и не появляется)."""
+async def _remove_reply_kb_once(bot, cid):
+    """Разово снимает нижнюю Reply-клавиатуру «Ассистент» у профилей, где она уже
+    была показана (Telegram держит клавиатуру, пока явно не пришлёт другую)."""
     prof = store.get_profile(cid)
-    if prof.get(menu.REPLY_KB_FLAG):
+    if prof.get(menu.REPLY_KB_REMOVED_FLAG):
         return
     try:
-        await bot.send_message(
-            chat_id=cid,
-            text=f"Открыть меню теперь можно и кнопкой «{menu.REPLY_KB_LABEL}» внизу.",
-            reply_markup=menu.reply_kb(),
-        )
+        msg = await bot.send_message(chat_id=cid, text=".", reply_markup=ReplyKeyboardRemove())
+        await bot.delete_message(chat_id=cid, message_id=msg.message_id)
     except Exception:
         return
-    prof[menu.REPLY_KB_FLAG] = True
+    prof[menu.REPLY_KB_REMOVED_FLAG] = True
     store.set_profile(cid, prof)
 
 
 async def start(update, context):
     cid = str(update.effective_chat.id)
     args = context.args or []
-    await _send_reply_kb_once(context.bot, cid)
+    await _remove_reply_kb_once(context.bot, cid)
 
     # Инвайт-код передан через /start <code>
     if args:
@@ -294,7 +289,7 @@ async def answer_callback(update, context):
     cid = str(q.message.chat_id)
     data = q.data
     bot = context.bot
-    await _send_reply_kb_once(bot, cid)
+    await _remove_reply_kb_once(bot, cid)
 
     async def _inline_status(call):
         topic = _status_topic(data)
@@ -753,17 +748,11 @@ async def text_router(update, context):
         await bot.send_message(chat_id=cid, text="❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
     tracking.touch(cid)
-    await _send_reply_kb_once(bot, cid)
+    await _remove_reply_kb_once(bot, cid)
 
     flags = secure.injection_flags(text)
     if flags:
         _log.warning("[secure] injection flags: %s", flags)
-
-    if text == menu.REPLY_KB_LABEL:
-        store.pending_input.pop(cid, None)
-        t, entities, kb = menu.main_menu_screen(cid)
-        await bot.send_message(chat_id=cid, text=t, reply_markup=kb, entities=entities)
-        return
 
     # Режим добавления одежды (файлом)
     if store.add_wardrobe_mode.get(cid):
