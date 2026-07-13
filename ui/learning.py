@@ -107,37 +107,39 @@ def _strip_repeated_pattern(pattern, explanation):
 
 
 def phrase_intro_card(phrase, sentence_ru, pattern, explanation, example="", example_ru=""):
-    """Этап 1 тренажёра фраз: фраза целиком + разбор устойчивой конструкции, без пропусков."""
+    """Этап 1 тренажёра: термин + перевод, короткая часть речи или разбор
+    устойчивой конструкции (если это не сам термин), один живой пример.
+
+    Если pattern совпадает с самим термином (программная карточка из
+    словаря — см. _build_programmatic_card), это не конструкция, а просто
+    грамматическая метка (часть речи/род) — показываем её компактной строкой
+    без заголовка «Разбор», не раздувая карточку одного слова."""
+    phrase = str(phrase or "").strip()
     pattern = str(pattern or "").strip()
     explanation = _strip_repeated_pattern(pattern, explanation)
     example = str(example or "").strip()
     example_ru = str(example_ru or "").strip()
+    sentence_ru = str(sentence_ru or "").replace(";", ",").strip()
+    is_construction = bool(pattern) and pattern.casefold() != phrase.casefold()
 
     b = MessageBuilder()
-    b.section("🧩 Фраза-тренажёр")
+    b.section("🧩 Практика")
     b.spacer()
-    b.line(str(phrase or "").strip())
-    if sentence_ru:
-        b.line(f"Перевод: {str(sentence_ru).strip()}")
-
-    if pattern or explanation:
-        b.spacer()
-        b.section("💡 Разбор")
-        b.spacer()
-        if pattern and explanation:
-            b.line(f"{pattern} — {explanation}")
-        else:
-            b.line(pattern or explanation)
+    b.line(f"{phrase} — {sentence_ru}" if sentence_ru else phrase)
+    if not is_construction and explanation:
+        b.line(explanation)
 
     if example:
         b.spacer()
-        b.line("Пример:")
         b.line(example)
         if example_ru:
-            b.line(f"→ {example_ru}")
+            b.line(example_ru)
 
-    b.spacer()
-    b.text_line("Дальше проверим это выражение на новом примере.")
+    if is_construction and explanation:
+        b.spacer()
+        b.text_line("💡 ")
+        b.line(f"{pattern}: {explanation}" if explanation else pattern)
+
     return b.build()
 
 
