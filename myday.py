@@ -343,37 +343,15 @@ def _clip_quote(text):
     return text[:_QUOTE_MAX_CHARS - 1].rstrip(" ,.;:") + "…"
 
 def _word_of_day(cid):
-    """Запись дня: из единого словаря на активном изучаемом языке, с приоритетом
-    давно не показанных/невыученных записей (last_shown_at, status). Обновляет
-    last_shown_at при показе."""
+    """Запись дня для карточки 'Мой день' — тот же материал, что показывает
+    экран 'Обучение' (см. learning.select_daily_material): выбор и его
+    побочные эффекты (last_shown_at) живут в learning.py, здесь только формат."""
+    entry = learning.select_daily_material(cid)
     lang = learning._active_language_code(cid)
-    words = learning._ensure_dict(cid)
-    pool = [w for w in words
-            if learning._entry_term(w) and learning._entry_translation(w)
-            and learning._dict_lang(w) == lang]
-    if not pool:
+    if not entry:
         return "", lang
-
-    def _priority_key(w):
-        shown = w.get("last_shown_at")
-        never_shown = 0 if not shown else 1
-        not_known = 0 if w.get("status") != "known" else 1
-        return (never_shown, not_known, shown or "")
-
-    pool.sort(key=_priority_key)
-    top_n = pool[:max(1, len(pool) // 3)] or pool
-    w = random.choice(top_n)
-    term = learning._entry_term(w)
-    ru = learning._entry_translation(w).replace(";", ",")
-
-    w["last_shown_at"] = datetime.now(TZ).isoformat()
-    try:
-        idx = words.index(w)
-        words[idx] = w
-        store.set_list(config.DICT_KEY, cid, words)
-    except Exception:
-        pass
-
+    term = learning._entry_term(entry)
+    ru = learning._entry_translation(entry).replace(";", ",")
     return f"{_cap(term)} → {_cap(ru)}.", lang
 
 _day_cache = {}  # cid -> {"date":..., "text":..., "entities":..., "ts": float}

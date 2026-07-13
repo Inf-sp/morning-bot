@@ -4,27 +4,6 @@ from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
 
 
-def phrase_poll_question(blank_phrase, sentence_ru):
-    b = MessageBuilder()
-    b.section("🧩 Проверь себя")
-    b.spacer()
-    b.quote(str(blank_phrase or "").strip())
-    msg = b.build()
-    stripped = msg.text.strip()
-    leading_trim = u16_len(msg.text[:len(msg.text) - len(msg.text.lstrip())])
-    limit = 300
-    msg.text = stripped[:limit]
-    new_len = u16_len(msg.text)
-    kept_entities = []
-    for e in msg.entities or []:
-        offset = e.offset - leading_trim
-        if offset < 0 or offset + e.length > new_len:
-            continue
-        kept_entities.append(MessageEntity(e.type, offset, e.length, url=getattr(e, "url", None)))
-    msg.entities = kept_entities
-    return msg
-
-
 def _as_list(value):
     if isinstance(value, list):
         return [str(x).strip() for x in value if str(x).strip()]
@@ -90,160 +69,192 @@ def proverb_card(flag, original, analogs=None, meaning="", examples=None, exampl
     return msg
 
 
-def _strip_repeated_pattern(pattern, explanation):
-    pattern = str(pattern or "").strip()
-    explanation = str(explanation or "").strip()
-    if not pattern or not explanation:
-        return explanation
-    low_pattern = pattern.casefold()
-    low_explanation = explanation.casefold()
-    if low_explanation == low_pattern:
-        return ""
-    for sep in (" — ", " - ", " = ", ": "):
-        prefix = f"{low_pattern}{sep.casefold()}"
-        if low_explanation.startswith(prefix):
-            return explanation[len(pattern) + len(sep):].strip()
-    return explanation
+# ================= ТРЕНАЖЁР: 9 ФОРМАТОВ ЗАДАНИЙ =================
+# Единый формат по всему тренажёру (см. docs/word-trainer.md): "**Название:**
+# текст" одной строкой, переводы через →, без отдельной строки "Перевод:".
+
+def _q(b, label, text):
+    b.bold(f"{label}:")
+    b.text_line(f" {text}")
+    b.newline()
+    return b
 
 
-def phrase_intro_card(phrase, sentence_ru, pattern, explanation, example="", example_ru=""):
-    """Этап 1 тренажёра: термин + перевод, короткая часть речи или разбор
-    устойчивой конструкции (если это не сам термин), один живой пример.
+def exercise_choose_translation_question(term):
+    """Вопрос для native quiz poll (формат 1) — сам poll строится в learning.py,
+    эта функция только для текста вопроса, если понадобится вне poll."""
+    return f"Что значит: {term}?"
 
-    Если pattern совпадает с самим термином (программная карточка из
-    словаря — см. _build_programmatic_card), это не конструкция, а просто
-    грамматическая метка (часть речи/род) — показываем её компактной строкой
-    без заголовка «Разбор», не раздувая карточку одного слова."""
-    phrase = str(phrase or "").strip()
-    pattern = str(pattern or "").strip()
-    explanation = _strip_repeated_pattern(pattern, explanation)
-    example = str(example or "").strip()
-    example_ru = str(example_ru or "").strip()
-    sentence_ru = str(sentence_ru or "").replace(";", ",").strip()
-    is_construction = bool(pattern) and pattern.casefold() != phrase.casefold()
 
+def exercise_recall_free(data, hint_shown=False):
     b = MessageBuilder()
-    b.section("🧩 Практика")
+    b.section("🧠 Вспомни")
     b.spacer()
-    b.line(f"{phrase} — {sentence_ru}" if sentence_ru else phrase)
-    if not is_construction and explanation:
-        b.line(explanation)
-
-    if example:
+    _q(b, "Как сказать", data["ru"])
+    if hint_shown and data.get("hint"):
         b.spacer()
-        b.line(example)
-        if example_ru:
-            b.line(example_ru)
-
-    if is_construction and explanation:
-        b.spacer()
-        b.text_line("💡 ")
-        b.line(f"{pattern}: {explanation}" if explanation else pattern)
-
-    return b.build()
+        _q(b, "Подсказка", data["hint"])
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
 
 
-def phrase_truefalse_question(statement):
-    """Этап теста в формате да/нет: короткое утверждение о разобранной фразе."""
+def exercise_build_sentence(data):
     b = MessageBuilder()
-    b.section("🤔 Верно или нет?")
+    b.section("🧩 Собери предложение")
     b.spacer()
-    b.quote(str(statement or "").strip())
-    return b.build()
+    _q(b, "Перевод", data["ru"])
+    picked = data.get("_picked") or []
+    if picked:
+        b.spacer()
+        b.line(" ".join(picked))
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
 
 
-def phrase_quiz_result(state, is_correct, repeated_error=False):
-    correct = str(state.get("meaning") or "").strip()
-    full_phrase = str(state.get("phrase_test_full") or "").strip()
-    sentence_ru = str(state.get("sentence_ru") or "").strip()
-    short_rule = str(state.get("phrase_short_rule") or state.get("phrase_explanation") or "").strip()
+def exercise_find_error(data):
+    b = MessageBuilder()
+    b.section("🔍 Где ошибка")
+    b.spacer()
+    _q(b, "Фраза", " ".join(data["tokens"]))
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
+def exercise_choose_natural(data):
+    b = MessageBuilder()
+    b.section("💬 Выбери естественный вариант")
+    b.spacer()
+    _q(b, "Перевод", data["ru"])
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
+def exercise_fill_gap(data):
+    b = MessageBuilder()
+    b.section("✏️ Заполни пропуск")
+    b.spacer()
+    b.quote(data["blank_phrase"])
+    if data.get("ru"):
+        b.spacer()
+        _q(b, "Перевод", data["ru"])
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
+def exercise_translate_context(data):
+    b = MessageBuilder()
+    b.section("🗣 Переведи в контексте")
+    b.spacer()
+    if data.get("situation"):
+        _q(b, "Ситуация", data["situation"])
+        b.spacer()
+    _q(b, "Напиши", data["ru"])
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
+def exercise_choose_reaction(data):
+    b = MessageBuilder()
+    b.section("💭 Что ответить")
+    b.spacer()
+    _q(b, "Тебе говорят", data["situation"])
+    if data.get("situation_ru"):
+        b.line(data["situation_ru"])
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
+def exercise_continue_dialogue(data):
+    b = MessageBuilder()
+    b.section("💬 Продолжи диалог")
+    b.spacer()
+    _q(b, "Собеседник", data["line"])
+    if data.get("line_ru"):
+        b.line(data["line_ru"])
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
+_SENTENCE_CONTEXT_FORMATS = {"fill_gap", "find_error", "build_sentence"}
+
+
+def exercise_result(data, is_correct, chosen=""):
+    """Общий результат после ответа — единая структура для всех форматов
+    (см. docs/word-trainer.md, 'Поведение после ошибки'): короткое подтверждение
+    или короткое объяснение причины, без сухого 'Неверно. Правильный ответ: X.'
+
+    Для форматов с целым предложением (fill_gap/find_error/build_sentence) ru —
+    перевод ВСЕЙ фразы, а не отдельного слова, поэтому строится как отдельная
+    строка полным предложением, а не 'слово → перевод'."""
+    correct = str(data.get("correct") or data.get("correct_text") or "").strip()
+    ru = str(data.get("ru") or "").strip()
+    note = str(data.get("note") or "").strip()
+    is_sentence = data.get("exercise_type") in _SENTENCE_CONTEXT_FORMATS
+
+    if is_sentence and ru:
+        correct_line = f"{correct}. → {ru}" if correct and not correct.endswith((".", "!", "?")) else f"{correct} → {ru}"
+    else:
+        correct_line = f"{correct} → {ru}" if ru else correct
 
     b = MessageBuilder()
     if is_correct:
         b.section("✅ Верно")
-    elif repeated_error:
-        b.section("❌ Не закрепилось")
         b.spacer()
-        b.text_line("Правильный ответ: ")
-        b.bold(correct)
-        b.newline()
+        _q(b, "Правильно", correct_line)
     else:
-        b.section(f"❌ Правильный ответ: {correct}")
-
-    if full_phrase:
+        b.section("Почти")
         b.spacer()
-        b.line(full_phrase)
-    if sentence_ru:
-        b.line(sentence_ru)
-    if not is_correct and short_rule:
+        _q(b, "Правильно", correct_line)
+        if note:
+            b.spacer()
+            _q(b, "Разбор", note)
         b.spacer()
-        b.tip(short_rule)
-
+        b.line("Это вернётся позже в тренировке.")
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
 
 
-def phrase_rule_breakdown(state):
-    correct = str(state.get("meaning") or "").strip()
-    full_phrase = str(state.get("phrase_test_full") or "").strip()
-    sentence_ru = str(state.get("sentence_ru") or "").strip()
-    detail = str(state.get("phrase_detail") or state.get("phrase_explanation") or "").strip()
-
+def training_result(session):
+    """Компактный итог тренировки (см. ТЗ 'Завершение тренировки') — без
+    процента правильных ответов как главной метрики и без таблиц."""
     b = MessageBuilder()
-    b.section(f"💡 Почему `{correct}`?")
-    if detail:
-        b.spacer()
-        b.line(detail[:450].rstrip())
-    if full_phrase:
-        b.spacer()
-        b.line(full_phrase)
-    if sentence_ru:
-        b.line(sentence_ru)
+    b.section("✅ Готово")
+    b.spacer()
+    consolidated = list(dict.fromkeys(session.get("consolidated") or []))
+    returning = list(dict.fromkeys(session.get("returning") or []))
+    if consolidated:
+        _q(b, "Закреплено", " · ".join(consolidated[:6]))
+    if returning:
+        _q(b, "Вернём позже", " · ".join(returning[:6]))
+    _q(b, "Без подсказок", f"{session.get('no_hint_count', 0)} ответов")
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
 
 
-def mistake_review_card(mistake):
-    """Повторение одной сохранённой ошибки: что написал, как правильно, почему.
-    Карточка сама строит клавиатуру — id ошибки известен только через параметр,
-    здесь только форматирование, решение «что показывать» остаётся за learning.py."""
-    mistake_id = mistake.get("id", "")
-    wrong = str(mistake.get("wrong") or "").strip()
-    correct = str(mistake.get("correct") or "").strip()
-    explanation = str(mistake.get("explanation") or "").strip()
-
+def progress_screen(data):
+    """Экран прогресса — главная метрика доля самостоятельных ответов без
+    подсказок, не процент правильных ответов в quiz (см. docs/word-trainer.md)."""
     b = MessageBuilder()
-    b.section("🧠 Повторение ошибки")
+    b.section(f"📊 Прогресс · {data['lang_title']}")
     b.spacer()
-    if wrong:
-        b.line("Ты раньше написал:")
-        b.bold(wrong)
-        b.newline()
-        b.spacer()
-    b.line("Лучше:")
-    b.bold(correct)
-    b.newline()
-    if explanation:
-        b.spacer()
-        b.line("Почему:")
-        b.line(explanation)
-
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Попробовать снова", callback_data=f"mistake_retry_{mistake_id}")],
-        [InlineKeyboardButton("✅ Уже понял", callback_data=f"mistake_understood_{mistake_id}")],
-    ])
-    msg = b.build(reply_markup=kb)
-    msg.text = msg.text.rstrip("\n")
-    return msg
-
-
-def no_open_mistakes_card():
-    b = MessageBuilder()
-    b.section("🧠 Повторение ошибок")
-    b.spacer()
-    b.line("Открытых ошибок нет — всё закреплено.")
+    _q(b, "В активном изучении", str(data["total"]))
+    _q(b, "Уверенно знаю", str(data["confident"]))
+    _q(b, "Нужно повторить", str(data["due_count"]))
+    if data.get("strongest"):
+        _q(b, "Сильнее всего", data["strongest"])
+    if data.get("weakest"):
+        _q(b, "Нужно подтянуть", data["weakest"])
+    _q(b, "Без подсказок", f"{data['no_hint_pct']}%")
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
@@ -269,53 +280,6 @@ def translate_prompt(flag, ru, lang):
     b.spacer()
     b.text_line(f"Напиши перевод на {lang} следующим сообщением.")
     return b.build()
-
-
-def smart_reveal_question(flag, ru, hint=None):
-    """«Умное раскрытие»: сначала только вопрос, подсказка появляется по кнопке
-    (добавляется в это же сообщение через edit, не как новый текст)."""
-    b = MessageBuilder()
-    b.text_line(f"{flag} Как сказать")
-    b.newline()
-    b.spacer()
-    b.bold(f"«{ru}»")
-    b.newline()
-    if hint:
-        b.spacer()
-        b.line("Подсказка:")
-        b.line(hint)
-    msg = b.build()
-    msg.text = msg.text.rstrip("\n")
-    return msg
-
-
-def smart_reveal_kb(show_hint=True):
-    rows = []
-    if show_hint:
-        rows.append([InlineKeyboardButton("Показать подсказку", callback_data="smart_hint")])
-    rows.append([InlineKeyboardButton("Написать ответ", callback_data="smart_answer")])
-    rows.append([InlineKeyboardButton("Пропустить", callback_data="smart_skip")])
-    return InlineKeyboardMarkup(rows)
-
-
-def smart_reveal_result(flag, lang, correct, explanation=""):
-    """Карточка после ответа/пропуска: правильный вариант + короткое объяснение."""
-    b = MessageBuilder()
-    b.section("Правильный вариант:")
-    b.spacer()
-    b.bold(correct)
-    b.newline()
-    if explanation:
-        b.spacer()
-        b.line("Почему:")
-        b.line(explanation)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Понял", callback_data="smart_understood"),
-         InlineKeyboardButton("🔁 Повторить позже", callback_data="smart_later")],
-    ])
-    msg = b.build(reply_markup=kb)
-    msg.text = msg.text.rstrip("\n")
-    return msg
 
 
 def translate_result(flag, lang, ru, answer, result):
@@ -412,55 +376,6 @@ def game_hint(ui, hint):
     b.text_line(ui["who"])
     kb = InlineKeyboardMarkup([[InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")]])
     return b.build(reply_markup=kb)
-
-
-def dialogue_step_card(flag, situation, line, options, step, total):
-    """Один шаг диалогового тренажёра: реплика собеседника + варианты ответа
-    кнопками. Карточка сама строит клавиатуру по переданным вариантам —
-    callback несёт только индекс выбранного варианта."""
-    b = MessageBuilder()
-    b.section(f"{flag} Диалог · {step}/{total}")
-    b.spacer()
-    if situation and step == 1:
-        b.line(situation)
-        b.spacer()
-    b.quote(str(line or "").strip())
-    msg = b.build()
-    msg.text = msg.text.rstrip("\n")
-    rows = [[InlineKeyboardButton(str(opt)[:60], callback_data=f"dlg_pick_{i}")]
-            for i, opt in enumerate(options)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
-    msg.reply_markup = InlineKeyboardMarkup(rows)
-    return msg
-
-
-def dialogue_feedback_card(picked, is_good, note=""):
-    b = MessageBuilder()
-    b.section("✅ Естественно" if is_good else "😐 Так тоже поймут, но есть вариант лучше")
-    b.spacer()
-    b.line(str(picked or "").strip())
-    if note:
-        b.spacer()
-        b.tip(note)
-    msg = b.build()
-    msg.text = msg.text.rstrip("\n")
-    msg.reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("Дальше", callback_data="dlg_next")]])
-    return msg
-
-
-def dialogue_summary_card(topic):
-    b = MessageBuilder()
-    b.section("Диалог закончен 🎬")
-    b.spacer()
-    if topic:
-        b.line(f"Тема: {topic}")
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Новый диалог", callback_data="dlg_start")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
-    ])
-    msg = b.build(reply_markup=kb)
-    msg.text = msg.text.rstrip("\n")
-    return msg
 
 
 def learning_settings(active_language, active_level):

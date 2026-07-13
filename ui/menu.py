@@ -1,5 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from .balance import finish_dot
 from .builder import MessageBuilder, MessageSpec
 from .constants import LANGUAGE_EMOJI, ui_label
 
@@ -115,36 +116,53 @@ _SCREENS = {
 }
 
 
-def learning_menu(active_code="nl"):
-    """Единое меню обучения — без промежуточного экрана выбора языка. Показывает
-    сразу тренажёр/живой язык/игру/словарь для текущего активного языка."""
-    is_en = active_code == "en"
-    flag = LANGUAGE_EMOJI["en"] if is_en else LANGUAGE_EMOJI["nl"]
-    title = "Английский" if is_en else "Нидерландский"
-    code = "en" if is_en else "nl"
+_MATERIAL_LABELS = {"word": "Слово дня", "phrase": "Фраза дня", "rule": "Правило дня"}
+
+
+def _labeled_line(b: MessageBuilder, label: str, text: str):
+    """Единый формат по всей карточке: '**Название:** текст' одной строкой,
+    без переноса содержимого на следующую строку (см. docs/word-trainer.md)."""
+    b.bold(f"{label}:")
+    b.text_line(f" {text}")
+    b.newline()
+    return b
+
+
+def learning_menu(home: dict):
+    """Главный экран раздела 'Обучение' — сразу материал дня и переход в
+    тренажёр, без описания возможностей и списка форматов (см. §27 CLAUDE.md
+    и docs/word-trainer.md). `home` — результат learning.build_learning_home(cid);
+    эта функция только рендерит готовые поля, не читает store и не выбирает
+    материал сама."""
+    code = home.get("lang_code", "nl")
+    flag = LANGUAGE_EMOJI.get(code, LANGUAGE_EMOJI["nl"])
+    title = "Английский" if code == "en" else "Нидерландский"
 
     b = MessageBuilder()
     b.text_line(f"{UI_LEARNING} ")
-    b.bold("Обучение")
+    b.bold(f"Обучение · {title} {flag}")
     b.newline()
     b.spacer()
-    b.text_line("Сейчас учим: ")
-    b.text_line(f"{flag} ")
-    b.bold(title)
-    b.newline()
-    b.spacer()
-    b.line("Тренажёр, живой язык, игра и личный словарь — для этого языка.")
-    b.spacer()
-    b.quote("добавь слово ... / добавь фразу ...")
-    b.spacer()
-    b.line("Напиши так в чат — бот сам сохранит, переведёт и разберёт.")
+
+    if not home.get("has_material"):
+        b.line("В словаре пока нет слов с переводом — начни с тренажёра, он поможет добавить первые.")
+    else:
+        label = _MATERIAL_LABELS.get(home.get("kind"), "Слово дня")
+        _labeled_line(b, label, finish_dot(f"{home['term']} → {home['translation']}"))
+        if home.get("example_text"):
+            example = home["example_text"]
+            if home.get("example_translation"):
+                example += f" → {home['example_translation']}"
+            _labeled_line(b, "Пример", finish_dot(example))
+        if home.get("note"):
+            _labeled_line(b, "Полезно", finish_dot(home["note"]))
+        if home.get("focus"):
+            _labeled_line(b, "Сегодня в фокусе", finish_dot(home["focus"]))
 
     return b.build_stripped(reply_markup=ikb([
         [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
-        [("💬 Диалог", "dlg_start")],
-        [(ui_label("live_language", "Живой язык"), f"a_proverb_{code}")],
-        [(ui_label("game", "Игра-детектив"), f"gamelang_{code}")],
-        [(ui_label("settings", "Настройки обучения"), "set_learning")],
+        [(ui_label("live_language", "Живой язык"), f"a_proverb_{code}"), (ui_label("game", "Игра-детектив"), f"gamelang_{code}")],
+        [("📊 Прогресс", "a_train_progress"), (ui_label("settings", "Настройки обучения"), "set_learning")],
         [("⬅️ Назад", "m_menu"), ("🏠 Меню", "m_menu")],
     ]))
 

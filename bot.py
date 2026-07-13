@@ -48,8 +48,8 @@ _STATUS_TOPIC_PREFIXES = (
     ("w_", "wardrobe"),
     ("m_food", "food"), ("as_food", "food"), ("as_fridge", "food"), ("as_recipe", "food"), ("as_my_recipe", "food"),
     ("a_dict", "learning"), ("a_train", "learning"), ("a_tr_", "learning"), ("a_proverb", "learning"),
-    ("train_", "learning"), ("again_tr_", "learning"), ("game", "learning"), ("dlg_", "learning"),
-    ("mistake_", "learning"), ("smart_", "learning"), ("phrase_", "learning"), ("gamelang_", "learning"), ("gamediff_", "learning"),
+    ("ex_", "learning"), ("again_tr_", "learning"), ("game", "learning"),
+    ("gamelang_", "learning"), ("gamediff_", "learning"),
     ("movie_", "leisure"), ("book_", "leisure"), ("listen", "leisure"), ("reco_", "leisure"), ("a_concerts", "leisure"),
     ("m_travel", "travel"), ("a_trav_", "travel"),
     ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
@@ -426,6 +426,8 @@ async def answer_callback(update, context):
                 await learning.send_train_lang_select(bot, cid)
             elif act in ("train_nl", "train_en"):
                 await _inline_status(lambda _s: learning.train_start(bot, cid, learning.active_language(cid)))
+            elif act == "train_progress":
+                await _inline_status(lambda _s: learning.send_progress(bot, cid))
             elif act == "tr_nl":
                 await _inline_status(lambda _s: learning.do_translate(bot, cid, "нидерландский"))
             elif act == "tr_en":
@@ -570,66 +572,29 @@ async def answer_callback(update, context):
             await verify.safe_error(bot, cid, e)
         return
 
-    # Тренажёр слов
-    if data.startswith("train_"):
-        sub = data[len("train_"):]
-        if sub == "next":
-            await _inline_status(lambda _s: learning.train_next(bot, cid))
+    # Единый тренажёр: 9 форматов заданий (см. docs/word-trainer.md)
+    if data == "ex_next":
+        await _inline_status(lambda _s: learning.train_next(bot, cid))
         return
-    # Тренажёр фраз: переход от учебной карточки к тесту
-    if data == "phrase_intro_test":
-        await _inline_status(lambda _s: learning.phrase_intro_continue(bot, cid))
+    if data.startswith("ex_pick_"):
+        idx = int(data[len("ex_pick_"):])
+        await _inline_status(lambda _s: learning.handle_pick(bot, cid, idx))
         return
-    if data == "phrase_intro_mastered":
-        await _inline_status(lambda _s: learning.phrase_intro_mastered(bot, cid))
+    if data == "ex_hint":
+        await learning.handle_hint(bot, cid)
         return
-    if data == "phrase_new_example":
-        await _inline_status(lambda _s: learning.phrase_new_example(bot, cid))
+    if data == "ex_answer":
+        await learning.handle_answer_prompt(bot, cid)
         return
-    if data == "phrase_explain":
-        await _inline_status(lambda _s: learning.phrase_explain(bot, cid))
+    if data == "ex_giveup":
+        await _inline_status(lambda _s: learning.handle_giveup(bot, cid))
         return
-    if data in ("phrase_tf_yes", "phrase_tf_no"):
-        await _inline_status(lambda _s: learning.phrase_truefalse_answer(bot, cid, data == "phrase_tf_yes"))
-        return
-    # Диалоговый тренажёр
-    if data == "dlg_start":
-        await _inline_status(lambda _s: learning.dialogue_start(bot, cid))
-        return
-    if data.startswith("dlg_pick_"):
-        opt_idx = int(data[len("dlg_pick_"):])
-        await _inline_status(lambda _s: learning.dialogue_pick(bot, cid, opt_idx))
-        return
-    if data == "dlg_next":
-        await _inline_status(lambda _s: learning.dialogue_next(bot, cid))
-        return
-    # Повторение ошибок (mistakeReview)
-    if data == "mistake_review":
-        await _inline_status(lambda _s: learning.send_mistake_review(bot, cid))
-        return
-    if data.startswith("mistake_retry_"):
-        mid = data[len("mistake_retry_"):]
-        await _inline_status(lambda _s: learning.mistake_retry(bot, cid, mid))
-        return
-    if data.startswith("mistake_understood_"):
-        mid = data[len("mistake_understood_"):]
-        await _inline_status(lambda _s: learning.mistake_understood(bot, cid, mid))
-        return
-    # Умное раскрытие ответа
-    if data == "smart_hint":
-        await learning.smart_reveal_show_hint(bot, cid, q)
-        return
-    if data == "smart_answer":
-        await learning.smart_reveal_ask_answer(bot, cid)
-        return
-    if data == "smart_skip":
-        await _inline_status(lambda _s: learning.smart_reveal_skip(bot, cid))
-        return
-    if data == "smart_understood":
-        await learning.smart_reveal_understood(bot, cid)
-        return
-    if data == "smart_later":
-        await learning.smart_reveal_later(bot, cid)
+    if data.startswith("ex_tok_"):
+        sub = data[len("ex_tok_"):]
+        if sub == "reset":
+            await learning.handle_token_reset(bot, cid)
+        else:
+            await _inline_status(lambda _s: learning.handle_token_pick(bot, cid, int(sub)))
         return
     # «Ещё»
     if data.startswith("again_"):
@@ -767,10 +732,6 @@ async def text_router(update, context):
     if cid in store.challenge_state:
         if await learning.translate_answer(bot, cid, text):
             return
-    if cid in store.smart_reveal_state and store.pending_input.get(cid) == "smart_reveal_answer":
-        if await learning.smart_reveal_answer(bot, cid, text):
-            return
-
     # Pending-ввод
     if cid in store.pending_input:
         kind = store.pending_input.pop(cid)
@@ -783,6 +744,9 @@ async def text_router(update, context):
             settings.set_(cid, "_worry_prompt_ts", 0)
             # застрявший pending_input от старого приглашения "Дневная разгрузка" -
             # не глотаем никак не связанное сообщение, продолжаем обычную обработку ниже
+        if kind == "trainer_answer":
+            if await learning.handle_text_answer(bot, cid, text):
+                return
         if kind in ("role_doctor", "role_state"):
             await balance.handle_role(bot, cid, kind.split("_")[1], text); return
         if kind == "wardrobe_add":

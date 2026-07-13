@@ -47,718 +47,120 @@ def _flag(language):
 def _level_label(level):
     return LEVEL_LABELS.get(level, "Средний")
 
-# ================= ЕДИНЫЙ ТРЕНАЖЁР =================
-TRAIN_FORMATS = ["gap", "tf", "card"]  # legacy — не используется в новом квизе
 
-def _train_entries(cid, language):
-    """Все записи словаря нужного языка с переводом — единый тренажёр, без деления
-    на слова и фразы: [(term, ru), ...]."""
-    code = _code(language)
-    out = []
-    for w in _ensure_dict(cid):
-        if _dict_lang(w) != code:
-            continue
-        term = _entry_term(w)
-        ru = _entry_translation(w)
-        term, _grammar_note = _normalize_dict_term(code, _kind_of(term), term)
-        if term and ru:
-            out.append((str(term).strip(), str(ru).strip()))
-    return out
+_DAILY_MATERIAL_CACHE = {}  # cid -> {"date": iso, "entry": dict, "lang": code}
 
 
-def _train_full_entries(cid, language):
-    """Полные записи словаря (term/translation/breakdown/examples), нужные для
-    программной сборки карточки тренажёра без LLM."""
-    code = _code(language)
-    out = []
-    for w in _ensure_dict(cid):
-        if _dict_lang(w) != code:
-            continue
-        term = _entry_term(w)
-        ru = _entry_translation(w)
-        if term and ru:
-            out.append(w)
-    return out
+def daily_material_type(entry):
+    """'rule' — устойчивая конструкция, 'phrase' — многословный term без
+    конструкции, 'word' — одно слово. Определяет заголовок карточки материала
+    дня ("Слово дня"/"Фраза дня"/"Правило дня")."""
+    if str(entry.get("construction") or "").strip():
+        return "rule"
+    term = _entry_term(entry)
+    return "phrase" if " " in term.strip() else "word"
 
 
-def _clip_poll_explanation(text, limit=200):
-    text = re.sub(r"\s+\n", "\n", (text or "").strip())
-    if len(text) <= limit:
-        return text
-    return text[:limit - 1].rstrip() + "…"
+def select_daily_material(cid):
+    """Материал дня для карточек 'Мой день' и 'Обучение' — ОДИН и тот же выбор
+    на календарный день, без похода в AI. Приоритет — давно не показанные и
+    ещё не выученные записи словаря активного языка. Кэшируется по дате
+    (см. _DAILY_MATERIAL_CACHE), чтобы оба экрана показывали одно и то же и не
+    выбирали заново при каждом открытии. Возвращает саму запись (dict) или None,
+    если словарь на активном языке пуст — вызывающий код решает, как это
+    показать."""
+    lang = _active_language_code(cid)
+    today = datetime.now(config.TZ).date().isoformat()
+    cached = _DAILY_MATERIAL_CACHE.get(str(cid))
+    if cached and cached.get("date") == today and cached.get("lang") == lang:
+        return cached.get("entry")
+
+    words = _ensure_dict(cid)
+    pool = [w for w in words if _entry_term(w) and _entry_translation(w) and _dict_lang(w) == lang]
+    if not pool:
+        _DAILY_MATERIAL_CACHE[str(cid)] = {"date": today, "lang": lang, "entry": None}
+        return None
+
+    def _priority_key(w):
+        shown = w.get("last_shown_at")
+        never_shown = 0 if not shown else 1
+        not_known = 0 if w.get("status") != "known" else 1
+        return (never_shown, not_known, shown or "")
+
+    pool.sort(key=_priority_key)
+    top_n = pool[:max(1, len(pool) // 3)] or pool
+    entry = random.choice(top_n)
+
+    entry = dict(entry)
+    entry["last_shown_at"] = datetime.now(config.TZ).isoformat()
+    for idx, w in enumerate(words):
+        if _dict_lang(w) == lang and _entry_term(w) == _entry_term(entry):
+            words[idx] = entry
+            store.set_list(config.DICT_KEY, cid, words)
+            break
+
+    _DAILY_MATERIAL_CACHE[str(cid)] = {"date": today, "lang": lang, "entry": entry}
+    return entry
 
 
-def _phrase_poll_question(blank_phrase, sentence_ru):
-    msg = learning_ui.phrase_poll_question(blank_phrase, sentence_ru)
-    return msg.text, msg.entities
+def _daily_focus_text(entry):
+    """'Сегодня в фокусе' на главном экране — вытекает из SRS-уровня материала
+    дня (0-1: узнать перевод; 2-3: вспомнить без вариантов; 4-5: применить
+    самостоятельно), без AI-вызова — правило по уже посчитанному уровню."""
+    level = int(entry.get("srs_level") or 0)
+    if level <= 1:
+        return "узнать перевод и запомнить пример."
+    if level <= 3:
+        return "вспомнить слово без вариантов и применить его в предложении."
+    return "использовать это в предложении самостоятельно, без подсказок."
 
 
-def _phrase_poll_explanation(blank_phrase, correct, full_phrase, sentence_ru, extra=""):
-    full_phrase = str(full_phrase or "").strip()
-    sentence_ru = str(sentence_ru or "").strip()
-    if full_phrase and sentence_ru:
-        return _clip_poll_explanation(f"{full_phrase} → {sentence_ru}", limit=160)
-    return _clip_poll_explanation(sentence_ru or full_phrase, limit=160)
-
-
-async def _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=None):
-    """Учебная карточка фразы и отдельный тест на применение правила в новом контексте."""
-    avoid_tests = [str(x).strip() for x in (avoid_tests or []) if str(x).strip()]
-    avoid_note = ""
-    if avoid_tests:
-        avoid_note = "\nНе повторяй эти тестовые фразы:\n" + "\n".join(f"- {x}" for x in avoid_tests[-5:])
-    prompt = f"""
-Ты методист тренажёра фраз для языка: {language}.
-Учебная фраза: «{phrase}».
-Перевод на русский: «{ru}».
-{avoid_note}
-
-Сделай учебную карточку и ОТДЕЛЬНЫЙ тест на применение того же правила.
-
-Учебная карточка должна быстро объяснить выражение без повторов:
-- исходная фраза;
-- естественный русский перевод;
-- одна строка разбора: intro_pattern — intro_explanation;
-- один новый короткий пример с переводом.
-
-Правила учебной карточки:
-- intro_pattern — ключевое слово или всё устойчивое выражение. Если нужна грамматика, добавь её прямо в паттерн:
-  "zin hebben om te + инфинитив", "beginnen met + существительное", "stoppen met + инфинитив",
-  "kijken naar + существительное".
-- intro_explanation — новая информация после заголовка "Разбор": значение конструкции, правило,
-  особенность употребления или отличие от похожего выражения.
-- Не делай intro_explanation простым повтором intro_pattern или перевода.
-- Если выражение устойчивое, объясняй всё выражение, а не отдельные слова.
-- card_example — новый короткий пример на {language}, не копия учебной фразы и не тестовая фраза.
-- card_example_ru — естественный перевод card_example на русский.
-- Не используй лингвистические термины без необходимости.
-
-Перед ответом проверь согласованность:
-- перевод относится именно к учебной фразе;
-- construction реально присутствует в учебной фразе;
-- target_token используется в учебной фразе именно в роли из правила;
-- нельзя смешивать разные значения одного слова в одной карточке.
-
-Пример: для "Dat is bijzonder." нельзя давать перевод "Эта машина необычно дорогая" и правило
-"bijzonder + прилагательное". Это другая карточка: "Deze auto is bijzonder duur."
-
-Тестовая фраза должна быть НОВОЙ, не копией учебной фразы. Она проверяет применение правила, а не память
-исходного предложения. Нельзя повторять одновременно тот же глагол, то же существительное, тот же перевод
-и ту же структуру предложения. Сохрани только целевое слово, грамматическую конструкцию и смысл правила.
-Новый пример обязан отличаться контекстом: другой субъект, другой объект и другое обстоятельство времени,
-места или ситуации. Не повторяй целевое слово в видимом тексте test_blank_phrase вне пропуска.
-
-Правила теста:
-1. test_blank_phrase — новая фраза с ____ вместо целевого слова.
-2. test_full_phrase — та же новая фраза полностью, с правильным словом.
-3. correct — ровно пропущенное слово, без артиклей и лишних слов.
-4. wrong — три правдоподобных неправильных варианта на {language}, той же части речи.
-5. test_sentence_ru — перевод test_full_phrase на русский.
-6. short_rule — короткая подсказка для результата теста, не дубль intro_pattern.
-7. detail — разбор 350-450 символов простыми словами, только про test_full_phrase.
-8. target_token — слово, правило которого проверяем; обычно совпадает с correct.
-9. self_check — все поля true только если карточка полностью согласована.
-
-Верни JSON:
-{{
-  "test_blank_phrase": "новая тестовая фраза с ____",
-  "test_full_phrase": "новая тестовая фраза полностью",
-  "correct": "пропущенное слово",
-  "target_token": "целевое слово правила",
-  "wrong": ["неверный вариант 1", "неверный вариант 2", "неверный вариант 3"],
-  "test_sentence_ru": "перевод test_full_phrase на русский",
-  "construction": "название конструкции, например 'ziek door iets'",
-  "construction_meaning": "что значит конструкция целиком, коротко по-русски",
-  "intro_pattern": "строка для разбора, например 'zin hebben om te + инфинитив'",
-  "intro_explanation": "краткое объяснение значения/правила без повтора intro_pattern",
-  "card_example": "новый короткий пример с той же конструкцией",
-  "card_example_ru": "естественный перевод card_example на русский",
-  "short_rule": "короткая подсказка",
-  "detail": "короткий разбор по тестовой фразе",
-  "other_forms": [
-    {{"word": "слово", "meaning": "другое значение, только если оно не конфликтует с правилом"}}
-  ],
-  "self_check": {{
-    "translation_matches_learning_phrase": true,
-    "pattern_present_in_learning_phrase": true,
-    "target_token_role_ok": true,
-    "learning_phrase_natural": true,
-    "test_checks_same_rule": true,
-    "test_is_new_not_copy": true,
-    "no_mixed_meanings": true
-  }}
-}}
-
-Для устойчивых выражений, фразовых конструкций и идиом focus_unit/construction должен быть смысловым блоком,
-а не отдельным словом. Например:
-- "Het is niet te doen" -> focus_unit/construction: "niet te doen", не "doen";
-- "geen zin hebben in", "het maakt niet uit", "dat is de druppel", "ik heb er genoeg van",
-  "zin hebben om", "bezig zijn met" — это цельные смысловые блоки.
-
-Не возвращай placeholders, технические заглушки и фразы из промта в любых пользовательских полях.
-Поле other_forms заполняй максимум одним пунктом и только если оно не повторяет главное правило, не создаёт
-конфликтующее значение и реально помогает. Если сомневаешься — верни пустой список.
-"""
-    try:
-        d = await ai.allm_json(prompt, 1400, tier="smart", route="gemini", module="learning")
-    except Exception:
-        return {}
-    wrong = [str(x).strip() for x in (d.get("wrong") or []) if str(x).strip()][:3]
-    other_forms = []
-    for item in (d.get("other_forms") or [])[:3]:
-        if not isinstance(item, dict):
-            continue
-        pos = str(item.get("word") or item.get("pos") or "").strip()
-        meaning = str(item.get("meaning") or "").strip()
-        if pos and meaning:
-            other_forms.append({"pos": pos, "meaning": meaning})
-    blank_phrase = str(d.get("test_blank_phrase") or d.get("blank_phrase") or "").strip()
-    correct = str(d.get("correct") or "").strip()
-    full_phrase = str(d.get("test_full_phrase") or "").strip()
-    if not full_phrase and blank_phrase and correct:
-        full_phrase = blank_phrase.replace("____", correct, 1)
-    construction = str(d.get("focus_unit") or d.get("construction") or "").strip()
-    construction_meaning = str(d.get("focus_explanation_ru") or d.get("construction_meaning") or "").strip()
-    short_rule = str(d.get("rule_ru") or d.get("usage_note_ru") or d.get("short_rule") or "").strip()
+def build_learning_home(cid):
+    """Данные для главного экрана раздела 'Обучение': материал дня + короткий
+    фокус тренировки. UI (ui/menu.py) только рендерит эти поля, не читает
+    store и не выбирает материал сам — см. §8 CLAUDE.md."""
+    entry = select_daily_material(cid)
+    lang_code = _active_language_code(cid)
+    if not entry:
+        return {"has_material": False, "lang_code": lang_code}
+    kind = daily_material_type(entry)
+    examples = entry.get("examples") or []
+    example = examples[0] if examples else {}
     return {
-        "blank_phrase": blank_phrase,
-        "correct": correct,
-        "target_token": str(d.get("target_token") or correct).strip(),
-        "wrong": wrong,
-        "sentence_ru": str(d.get("test_sentence_ru") or d.get("sentence_ru") or "").strip(),
-        "test_full_phrase": full_phrase,
-        "construction": construction,
-        "construction_meaning": construction_meaning,
-        "intro_pattern": str(d.get("intro_pattern") or construction).strip(),
-        "intro_explanation": str(d.get("intro_explanation") or construction_meaning or short_rule).strip(),
-        "card_example": str(d.get("card_example") or d.get("example") or "").strip(),
-        "card_example_ru": str(d.get("card_example_ru") or d.get("example_ru") or "").strip(),
-        "short_rule": short_rule,
-        "detail": str(d.get("detail") or "").strip(),
-        "other_forms": _filter_phrase_other_forms(other_forms, d),
-        "explanation": str(d.get("rule_ru") or d.get("usage_note_ru") or d.get("short_rule") or d.get("explanation") or "").strip(),
-        "self_check": d.get("self_check") if isinstance(d.get("self_check"), dict) else {},
+        "has_material": True,
+        "lang_code": lang_code,
+        "kind": kind,  # "word" | "phrase" | "rule"
+        "term": _cap(_entry_term(entry)),
+        "translation": _entry_translation(entry).replace(";", ","),
+        "example_text": str(example.get("text") or "").strip(),
+        "example_translation": str(example.get("translation") or "").strip(),
+        "note": str(entry.get("breakdown") or "").strip(),
+        "focus": _daily_focus_text(entry),
     }
 
 
-_PHRASE_SKIP = {
-    "a", "an", "the", "to", "of", "in", "on", "at", "for", "with", "and", "or", "but",
-    "i", "you", "he", "she", "it", "we", "they", "me", "my", "your", "his", "her",
-    "de", "het", "een", "ik", "je", "jij", "hij", "zij", "ze", "we", "wij", "mijn",
-    "jouw", "zijn", "haar", "en", "of", "maar", "op", "in", "aan", "van", "voor",
-}
+# ================= ЕДИНЫЙ ТРЕНАЖЁР =================
+# Один режим "Тренажёр": сам выбирает материал, формат задания и сложность
+# (см. docs/word-trainer.md, spec-learning-rework). Прогресс/уровни/интервалы
+# считает srs.py — этот модуль только оркестрирует UI и очередь.
 
-_PHRASE_DISTRACTORS = {
-    "нидерландский": ["maken", "denken", "werken", "vragen", "kijken", "nodig", "samen", "later"],
-    "английский": ["make", "think", "work", "ask", "look", "need", "together", "later"],
-}
+EXERCISE_CHOOSE_TRANSLATION = "choose_translation"
+EXERCISE_RECALL_FREE = "recall_free"
+EXERCISE_BUILD_SENTENCE = "build_sentence"
+EXERCISE_FIND_ERROR = "find_error"
+EXERCISE_CHOOSE_NATURAL = "choose_natural"
+EXERCISE_FILL_GAP = "fill_gap"
+EXERCISE_TRANSLATE_CONTEXT = "translate_context"
+EXERCISE_CHOOSE_REACTION = "choose_reaction"
+EXERCISE_CONTINUE_DIALOGUE = "continue_dialogue"
 
-_PATTERN_PLACEHOLDERS = {
-    "iets", "iemand", "someone", "something", "somebody", "sth", "sb",
-    "adjective", "adjectief", "прилагательное", "сущ", "существительное",
-    "verb", "глагол", "noun", "prep", "предлог", "infinitief", "infinitive",
-    "инфинитив", "zelfstandig", "naamwoord",
-}
-
-_UI_PLACEHOLDER_PATTERNS = (
-    "значение из учебной фразы в новом контексте",
-    "смотри значение в переводе фразы",
-    "смотри перевод фразы",
-    "перевод зависит от контекста",
-    "объяснение будет добавлено позже",
-    "значение слова из фразы",
-    "учебное значение",
-    "новый контекст",
-    "placeholder",
+_ALL_EXERCISES = (
+    EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL_FREE, EXERCISE_BUILD_SENTENCE,
+    EXERCISE_FIND_ERROR, EXERCISE_CHOOSE_NATURAL, EXERCISE_FILL_GAP,
+    EXERCISE_TRANSLATE_CONTEXT, EXERCISE_CHOOSE_REACTION, EXERCISE_CONTINUE_DIALOGUE,
 )
 
-_UI_PLACEHOLDER_TOKENS = {"todo", "n/a", "none", "null"}
-
-_PHRASE_FOCUS_FALLBACKS = {
-    "niet te doen": {
-        "focus": "niet te doen",
-        "meaning": "устойчивое выражение: \"невозможно\", \"нереально\", \"слишком трудно\"",
-        "rule": "Конструкция \"niet te + infinitief\" часто означает, что действие невозможно или почти невозможно выполнить.",
-        "intro_pattern": "niet te + инфинитив",
-        "intro_explanation": "действие невозможно или почти нереально выполнить.",
-        "card_example": "Die drukte is niet te doen.",
-        "card_example_ru": "Эта толпа невыносима.",
-        "blank": "Deze opdracht is niet te ____.",
-        "correct": "doen",
-        "wrong": ["maken", "gaan", "zijn"],
-        "ru": "Это задание невозможно выполнить.",
-    },
-    "geen zin": {
-        "focus": "geen zin hebben in",
-        "meaning": "не хотеть чего-то, не иметь желания что-то делать",
-        "rule": "Конструкция \"geen zin hebben in\" значит, что у человека нет желания или настроения для действия или ситуации.",
-        "intro_pattern": "geen zin hebben in + существительное",
-        "intro_explanation": "не хотеть чего-то, не иметь настроения для ситуации.",
-        "card_example": "We hebben geen zin in regen.",
-        "card_example_ru": "Нам не хочется дождя.",
-        "blank": "Zij heeft geen zin ____ die vergadering.",
-        "correct": "in",
-        "wrong": ["om", "met", "van"],
-        "ru": "Ей не хочется на это собрание.",
-    },
-    "maakt niet uit": {
-        "focus": "het maakt niet uit",
-        "meaning": "это не важно, без разницы",
-        "rule": "Выражение \"het maakt niet uit\" используют, когда выбор или деталь не имеет значения.",
-        "intro_pattern": "het maakt niet uit",
-        "intro_explanation": "используют, когда выбор или деталь не имеет значения.",
-        "card_example": "Het maakt niet uit waar we zitten.",
-        "card_example_ru": "Не важно, где мы сядем.",
-        "blank": "Het maakt niet ____ welke trein we nemen.",
-        "correct": "uit",
-        "wrong": ["op", "mee", "af"],
-        "ru": "Не важно, на какой поезд мы сядем.",
-    },
-    "dat is de druppel": {
-        "focus": "dat is de druppel",
-        "meaning": "это последняя капля",
-        "rule": "Выражение \"dat is de druppel\" означает последнюю неприятность, после которой терпение заканчивается.",
-        "intro_pattern": "dat is de druppel",
-        "intro_explanation": "последняя неприятность, после которой терпение заканчивается.",
-        "card_example": "Nog een boete, dat is de druppel.",
-        "card_example_ru": "Ещё один штраф — это последняя капля.",
-        "blank": "Nu is dat echt de ____.",
-        "correct": "druppel",
-        "wrong": ["regen", "dag", "vraag"],
-        "ru": "Теперь это правда последняя капля.",
-    },
-    "genoeg van": {
-        "focus": "ik heb er genoeg van",
-        "meaning": "мне надоело, с меня хватит",
-        "rule": "Выражение \"ergens genoeg van hebben\" значит, что человеку что-то надоело или он больше не хочет это терпеть.",
-        "intro_pattern": "ergens genoeg van hebben",
-        "intro_explanation": "говорят, когда что-то надоело и человек больше не хочет это терпеть.",
-        "card_example": "Wij hebben genoeg van deze discussie.",
-        "card_example_ru": "Нам надоела эта дискуссия.",
-        "blank": "Zij heeft genoeg ____ het lawaai.",
-        "correct": "van",
-        "wrong": ["in", "op", "mee"],
-        "ru": "Ей надоел шум.",
-    },
-    "zin om": {
-        "focus": "zin hebben om",
-        "meaning": "хотеть что-то сделать, иметь желание",
-        "rule": "Конструкция \"zin hebben om te + infinitief\" говорит о желании сделать действие.",
-        "intro_pattern": "zin hebben om te + инфинитив",
-        "intro_explanation": "хотеть что-то сделать, иметь настроение или желание для действия.",
-        "card_example": "Ik heb zin om te wandelen.",
-        "card_example_ru": "Мне хочется пойти гулять.",
-        "blank": "Wij hebben zin ____ te koken.",
-        "correct": "om",
-        "wrong": ["in", "van", "met"],
-        "ru": "Нам хочется готовить.",
-    },
-    "bezig met": {
-        "focus": "bezig zijn met",
-        "meaning": "быть занятым чем-то, заниматься чем-то",
-        "rule": "Конструкция \"bezig zijn met\" показывает, чем человек сейчас занят.",
-        "intro_pattern": "bezig zijn met + существительное",
-        "intro_explanation": "показывает, чем человек сейчас занят.",
-        "card_example": "Ik ben bezig met mijn presentatie.",
-        "card_example_ru": "Я занимаюсь своей презентацией.",
-        "blank": "We zijn bezig ____ de planning.",
-        "correct": "met",
-        "wrong": ["om", "in", "van"],
-        "ru": "Мы занимаемся планированием.",
-    },
-}
-
-
-def _phrase_tokens(text):
-    return [m.group(0).lower() for m in re.finditer(r"[\wÀ-ÖØ-öø-ÿ'-]+", str(text or ""), flags=re.UNICODE)]
-
-
-def _normalize_phrase_for_compare(text):
-    return " ".join(_phrase_tokens(text))
-
-
-def _has_cyrillic(text):
-    return bool(re.search(r"[А-Яа-яЁё]", str(text or "")))
-
-
-def _looks_like_ui_placeholder(text):
-    value = str(text or "").strip()
-    if not value:
-        return False
-    low = value.lower()
-    if any(pattern in low for pattern in _UI_PLACEHOLDER_PATTERNS):
-        return True
-    tokens = set(_phrase_tokens(low))
-    if tokens & _UI_PLACEHOLDER_TOKENS:
-        return True
-    if re.search(r"\bN\s*/\s*A\b", value, flags=re.IGNORECASE):
-        return True
-    return False
-
-
-def _phrase_card_has_placeholder(card):
-    keys = (
-        "phrase", "translation_ru", "focus_unit", "focus_explanation_ru", "rule_ru", "usage_note_ru",
-        "blank_phrase", "test_blank_phrase", "test_sentence", "test_full_phrase", "correct",
-        "correct_answer", "target_token", "sentence_ru", "test_sentence_ru", "construction",
-        "construction_meaning", "intro_pattern", "intro_explanation", "card_example", "card_example_ru",
-        "short_rule", "detail", "explanation",
-    )
-    for key in keys:
-        if _looks_like_ui_placeholder(card.get(key)):
-            return True
-    for item in list(card.get("wrong") or []) + list(card.get("options") or []):
-        if _looks_like_ui_placeholder(item):
-            return True
-    for item in card.get("other_forms") or []:
-        if isinstance(item, dict) and any(_looks_like_ui_placeholder(v) for v in item.values()):
-            return True
-    return False
-
-
-def _known_phrase_focus_unit(phrase):
-    phrase_norm = _normalize_phrase_for_compare(phrase)
-    if not phrase_norm:
-        return ""
-    for marker, spec in _PHRASE_FOCUS_FALLBACKS.items():
-        marker_norm = _normalize_phrase_for_compare(marker)
-        focus_norm = _normalize_phrase_for_compare(spec["focus"])
-        if marker_norm in phrase_norm or focus_norm in phrase_norm:
-            return spec["focus"]
-    if "niet te" in phrase_norm:
-        tokens = phrase_norm.split()
-        for idx in range(len(tokens) - 2):
-            if tokens[idx] == "niet" and tokens[idx + 1] == "te":
-                return " ".join(tokens[idx:idx + 3])
-    return ""
-
-
-def _phrase_option_is_junk(option):
-    option = str(option or "").strip()
-    if not option:
-        return True
-    if _looks_like_ui_placeholder(option):
-        return True
-    if "____" in option or len(option) > 40:
-        return True
-    return False
-
-
-def _phrase_pattern_token_present(token, learn_tokens):
-    if token in learn_tokens:
-        return True
-    variants = {
-        "hebben": {"heb", "hebt", "heeft", "hebben", "had", "hadden"},
-        "zijn": {"ben", "bent", "is", "zijn", "was", "waren"},
-    }
-    return bool(variants.get(token, set()) & set(learn_tokens))
-
-
-def _phrase_without_target_tokens(text, target):
-    target_tokens = set(_phrase_tokens(target))
-    return [t for t in _phrase_tokens(text) if t not in target_tokens]
-
-
-def _phrase_repeats_source(learn_phrase, blank_phrase, correct):
-    """Reject source-sentence clozes and near copies."""
-    learn_norm = _normalize_phrase_for_compare(learn_phrase)
-    full_norm = _normalize_phrase_for_compare(_phrase_full_from_blank(blank_phrase, correct))
-    if not learn_norm or not full_norm:
-        return True
-    if learn_norm == full_norm:
-        return True
-
-    learn_tokens = _phrase_without_target_tokens(learn_phrase, correct)
-    test_tokens = _phrase_without_target_tokens(full_norm, correct)
-    if not learn_tokens or not test_tokens:
-        return True
-    test_counts = {}
-    for token in test_tokens:
-        test_counts[token] = test_counts.get(token, 0) + 1
-    overlap = 0
-    for token in learn_tokens:
-        if test_counts.get(token, 0) > 0:
-            overlap += 1
-            test_counts[token] -= 1
-    if len(learn_tokens) <= 4:
-        learn_set = set(learn_tokens)
-        new_tokens = [token for token in test_tokens if token not in learn_set]
-        return len(new_tokens) < 2
-    return (overlap / max(1, len(learn_tokens))) > 0.60
-
-
-def _phrase_text_repeats_source(source, candidate):
-    source_norm = _normalize_phrase_for_compare(source)
-    candidate_norm = _normalize_phrase_for_compare(candidate)
-    if not source_norm or not candidate_norm:
-        return True
-    if source_norm == candidate_norm:
-        return True
-    source_tokens = source_norm.split()
-    candidate_tokens = candidate_norm.split()
-    if not source_tokens or not candidate_tokens:
-        return True
-    candidate_counts = {}
-    for token in candidate_tokens:
-        candidate_counts[token] = candidate_counts.get(token, 0) + 1
-    overlap = 0
-    for token in source_tokens:
-        if candidate_counts.get(token, 0) > 0:
-            overlap += 1
-            candidate_counts[token] -= 1
-    if len(source_tokens) <= 4:
-        source_set = set(source_tokens)
-        new_tokens = [token for token in candidate_tokens if token not in source_set]
-        return len(new_tokens) < 2
-    source_set = set(source_tokens)
-    new_tokens = [token for token in candidate_tokens if token not in source_set]
-    return (overlap / max(1, len(source_tokens))) > 0.60 and len(new_tokens) < 2
-
-
-def _phrase_blank_repeats_target(blank_phrase, correct):
-    visible_tokens = _phrase_tokens(str(blank_phrase or "").replace("____", " "))
-    target_tokens = set(_phrase_tokens(correct))
-    return bool(target_tokens and any(t in target_tokens for t in visible_tokens))
-
-
-def _filter_phrase_other_forms(other_forms, card):
-    if not other_forms:
-        return []
-    main = " ".join(str(card.get(k) or "").lower() for k in (
-        "construction", "construction_meaning", "intro_pattern", "intro_explanation", "short_rule",
-    ))
-    filtered = []
-    for item in other_forms:
-        pos = str(item.get("pos") or "").strip()
-        meaning = str(item.get("meaning") or "").strip()
-        if not pos or not meaning:
-            continue
-        combined = f"{pos} {meaning}".lower()
-        if combined in main or meaning.lower() in main:
-            continue
-        filtered.append({"pos": pos, "meaning": meaning})
-        break
-    return filtered
-
-
-def _phrase_card_consistency_check(learn_phrase, learn_ru, card):
-    """Проверяет карточку и возвращает (ok, reason). reason — короткий код первой
-    провалившейся проверки, для диагностики частых отказов тренажёра в логах."""
-    learn_phrase = str(learn_phrase or "").strip()
-    learn_ru = str(learn_ru or "").strip()
-    if _phrase_card_has_placeholder(card):
-        return False, "placeholder"
-    blank = str(card.get("test_sentence") or card.get("test_blank_phrase") or card.get("blank_phrase") or "").strip()
-    full = str(card.get("test_full_phrase") or "").strip()
-    correct = str(card.get("correct_answer") or card.get("correct") or "").strip()
-    target = str(card.get("target_token") or correct).strip()
-    construction = str(card.get("focus_unit") or card.get("construction") or "").strip()
-    construction_meaning = str(card.get("focus_explanation_ru") or card.get("construction_meaning") or "").strip()
-    intro_pattern = str(card.get("intro_pattern") or construction).strip()
-    intro_explanation = str(card.get("intro_explanation") or construction_meaning or card.get("short_rule") or "").strip()
-    card_example = str(card.get("card_example") or "").strip()
-    card_example_ru = str(card.get("card_example_ru") or "").strip()
-    short_rule = str(card.get("rule_ru") or card.get("usage_note_ru") or card.get("short_rule") or "").strip()
-    test_ru = str(card.get("test_sentence_ru") or card.get("sentence_ru") or "").strip()
-    wrong = _clean_phrase_options(correct, list(card.get("wrong") or []), needed=3)
-    self_check = card.get("self_check") if isinstance(card.get("self_check"), dict) else {}
-    required_checks = (
-        "translation_matches_learning_phrase",
-        "pattern_present_in_learning_phrase",
-        "target_token_role_ok",
-        "learning_phrase_natural",
-        "test_checks_same_rule",
-        "test_is_new_not_copy",
-        "no_mixed_meanings",
-    )
-    failed_self_check = [k for k in required_checks if self_check.get(k) is not True]
-    if failed_self_check:
-        return False, f"self_check:{failed_self_check[0]}"
-    missing = [
-        name for name, value in [
-            ("learn_phrase", learn_phrase), ("learn_ru", learn_ru), ("blank", blank), ("full", full),
-            ("correct", correct), ("target", target), ("construction", construction),
-            ("construction_meaning", construction_meaning), ("intro_pattern", intro_pattern),
-            ("intro_explanation", intro_explanation), ("card_example", card_example),
-            ("card_example_ru", card_example_ru), ("short_rule", short_rule), ("test_ru", test_ru),
-        ] if not value
-    ]
-    if missing:
-        return False, f"missing:{missing[0]}"
-    if not _has_cyrillic(learn_ru):
-        return False, "no_cyrillic:learn_ru"
-    if not _has_cyrillic(construction_meaning):
-        return False, "no_cyrillic:construction_meaning"
-    if not _has_cyrillic(intro_explanation):
-        return False, "no_cyrillic:intro_explanation"
-    if not _has_cyrillic(card_example_ru):
-        return False, "no_cyrillic:card_example_ru"
-    if not _has_cyrillic(short_rule):
-        return False, "no_cyrillic:short_rule"
-    if _normalize_phrase_for_compare(intro_pattern) == _normalize_phrase_for_compare(intro_explanation):
-        return False, "intro_pattern_equals_explanation"
-    if "____" not in blank:
-        return False, "no_blank_marker"
-    if len(wrong) < 3:
-        return False, "not_enough_wrong_options"
-    if _normalize_phrase_for_compare(learn_phrase) == _normalize_phrase_for_compare(full):
-        return False, "full_equals_learn_phrase"
-    if _normalize_phrase_for_compare(learn_phrase) == _normalize_phrase_for_compare(blank):
-        return False, "blank_equals_learn_phrase"
-    if _phrase_repeats_source(learn_phrase, blank, correct):
-        return False, "blank_repeats_source"
-    if _phrase_blank_repeats_target(blank, correct):
-        return False, "blank_repeats_target"
-    if _phrase_text_repeats_source(learn_phrase, card_example):
-        return False, "example_repeats_source"
-    if _normalize_phrase_for_compare(card_example) == _normalize_phrase_for_compare(full):
-        return False, "example_equals_full"
-
-    known_focus = _known_phrase_focus_unit(learn_phrase)
-    if known_focus and _normalize_phrase_for_compare(construction) != _normalize_phrase_for_compare(known_focus):
-        return False, "construction_mismatch_known_focus"
-
-    learn_tokens = set(_phrase_tokens(learn_phrase))
-    learn_token_list = _phrase_tokens(learn_phrase)
-    full_tokens = set(_phrase_tokens(full))
-    target_low = target.lower()
-    correct_low = correct.lower()
-    if target_low not in learn_tokens or correct_low not in full_tokens:
-        return False, "target_or_correct_not_in_tokens"
-
-    pattern_tokens = [
-        t for t in _phrase_tokens(construction)
-        if t not in _PATTERN_PLACEHOLDERS and len(t) > 1
-    ]
-    if pattern_tokens and not all(_phrase_pattern_token_present(t, learn_tokens) for t in pattern_tokens):
-        return False, "pattern_token_missing"
-    if pattern_tokens and correct_low not in pattern_tokens and target_low not in pattern_tokens:
-        return False, "correct_not_in_pattern"
-    construction_low = construction.lower()
-    if any(marker in construction_low for marker in ("+ прилагательное", "+ adjective", "+ adjectief")):
-        positions = [i for i, t in enumerate(learn_token_list) if t == target_low]
-        if not positions or all(i >= len(learn_token_list) - 1 for i in positions):
-            return False, "adjective_position_invalid"
-    return True, ""
-
-
-def _phrase_card_is_consistent(learn_phrase, learn_ru, card):
-    ok, _reason = _phrase_card_consistency_check(learn_phrase, learn_ru, card)
-    return ok
-
-
-async def _validate_phrase_card_semantics(phrase, ru, language, card):
-    prompt = f"""
-Проверь карточку фразового тренажёра для языка: {language}.
-
-Учебная фраза: {phrase}
-Русский перевод учебной фразы: {ru}
-Паттерн: {card.get("construction") or ""}
-Значение паттерна: {card.get("construction_meaning") or ""}
-Строка разбора для пользователя: {card.get("intro_pattern") or ""}
-Объяснение в разборе: {card.get("intro_explanation") or ""}
-Целевой токен: {card.get("target_token") or card.get("correct") or ""}
-
-Пример в учебной карточке: {card.get("card_example") or ""}
-Перевод примера: {card.get("card_example_ru") or ""}
-
-Тестовая фраза с пропуском: {card.get("blank_phrase") or ""}
-Полная тестовая фраза: {card.get("test_full_phrase") or ""}
-Перевод тестовой фразы: {card.get("sentence_ru") or ""}
-Правильный ответ: {card.get("correct") or ""}
-
-Ответь строго JSON:
-{{
-  "ok": true,
-  "reason": ""
-}}
-
-Поставь ok=false, если:
-- русский перевод не относится именно к учебной фразе;
-- паттерн не присутствует в учебной фразе;
-- target_token используется не в той роли;
-- смешаны разные значения одного слова;
-- разбор после заголовка повторяет паттерн или перевод и не добавляет новой информации;
-- пример в учебной карточке не использует тот же паттерн;
-- пример в учебной карточке копирует учебную фразу или тестовую фразу;
-- тестовая фраза проверяет другое правило;
-- тестовая фраза копирует учебную.
-"""
-    try:
-        d = await ai.allm_json(prompt, 350, tier="cheap", route="gemini", module="learning")
-    except Exception:
-        return False
-    return bool(isinstance(d, dict) and d.get("ok") is True)
-
-
-def _fallback_phrase_quiz_card(phrase, ru, language):
-    phrase = str(phrase or "").strip()
-    focus = _known_phrase_focus_unit(phrase)
-    if not focus:
-        return {}
-    spec = None
-    focus_norm = _normalize_phrase_for_compare(focus)
-    for item in _PHRASE_FOCUS_FALLBACKS.values():
-        if _normalize_phrase_for_compare(item["focus"]) == focus_norm:
-            spec = item
-            break
-    if not spec:
-        return {}
-    correct = spec["correct"]
-    blank_phrase = spec["blank"]
-    if _phrase_repeats_source(phrase, blank_phrase, correct) or _phrase_blank_repeats_target(blank_phrase, correct):
-        return {}
-    wrong = _clean_phrase_options(correct, spec["wrong"], needed=3)
-    if len(wrong) < 3:
-        return {}
-    self_check = {
-        "translation_matches_learning_phrase": True,
-        "pattern_present_in_learning_phrase": True,
-        "target_token_role_ok": True,
-        "learning_phrase_natural": True,
-        "test_checks_same_rule": True,
-        "test_is_new_not_copy": True,
-        "no_mixed_meanings": True,
-    }
-    return {
-        "blank_phrase": blank_phrase,
-        "correct": correct,
-        "wrong": wrong,
-        "sentence_ru": spec["ru"],
-        "test_full_phrase": _phrase_full_from_blank(blank_phrase, correct),
-        "construction": spec["focus"],
-        "construction_meaning": spec["meaning"],
-        "intro_pattern": spec.get("intro_pattern") or spec["focus"],
-        "intro_explanation": spec.get("intro_explanation") or spec["meaning"],
-        "card_example": spec.get("card_example") or "",
-        "card_example_ru": spec.get("card_example_ru") or "",
-        "short_rule": spec["rule"],
-        "detail": spec["rule"],
-        "other_forms": [],
-        "explanation": spec["rule"],
-        "self_check": self_check,
-    }
-
-
-def _phrase_full_from_blank(blank_phrase, correct):
-    blank_phrase = str(blank_phrase or "").strip()
-    correct = str(correct or "").strip()
-    if blank_phrase and correct and "____" in blank_phrase:
-        return blank_phrase.replace("____", correct, 1)
-    return blank_phrase
-
-
-def _clean_phrase_options(correct_answer, wrong, needed=3):
-    clean_wrong = []
-    seen = {str(correct_answer).lower()}
-    for item in wrong:
-        item = str(item).strip()
-        if item and item.lower() not in seen and not _phrase_option_is_junk(item):
-            clean_wrong.append(item)
-            seen.add(item.lower())
-        if len(clean_wrong) >= needed:
-            break
-    return clean_wrong
+_QUEUE_SIZE = 12  # заданий на одну тренировку
 
 
 def _strip_article(lang, term):
@@ -789,9 +191,52 @@ def _blank_from_example(term, example_text):
     return "", ""
 
 
+_UI_PLACEHOLDER_TOKENS = {"todo", "n/a", "none", "null"}
+
+
+def _phrase_tokens(text):
+    return [m.group(0).lower() for m in re.finditer(r"[\wÀ-ÖØ-öø-ÿ'-]+", str(text or ""), flags=re.UNICODE)]
+
+
+def _normalize_phrase_for_compare(text):
+    return " ".join(_phrase_tokens(text))
+
+
+def _looks_like_ui_placeholder(text):
+    value = str(text or "").strip()
+    if not value:
+        return False
+    tokens = set(_phrase_tokens(value.lower()))
+    return bool(tokens & _UI_PLACEHOLDER_TOKENS)
+
+
+def _phrase_option_is_junk(option):
+    option = str(option or "").strip()
+    if not option:
+        return True
+    if _looks_like_ui_placeholder(option):
+        return True
+    if "____" in option or len(option) > 40:
+        return True
+    return False
+
+
+def _clean_phrase_options(correct_answer, wrong, needed=3):
+    clean_wrong = []
+    seen = {str(correct_answer).lower()}
+    for item in wrong:
+        item = str(item).strip()
+        if item and item.lower() not in seen and not _phrase_option_is_junk(item):
+            clean_wrong.append(item)
+            seen.add(item.lower())
+        if len(clean_wrong) >= needed:
+            break
+    return clean_wrong
+
+
 def _dict_distractors(entry, correct, other_entries, needed=3):
     """Дистракторы для wrong-варианта — термины других слов того же словаря,
-    без LLM."""
+    без LLM (см. §11 CLAUDE.md — LLM не нужен для выбора из фиксированных списков)."""
     term_self = _entry_term(entry)
     pool = [
         _cap(_entry_term(w)) for w in other_entries
@@ -801,647 +246,777 @@ def _dict_distractors(entry, correct, other_entries, needed=3):
     return _clean_phrase_options(correct, pool, needed=needed)
 
 
-def _build_programmatic_card(entry, other_entries, lang):
-    """Собирает тест-карточку тренажёра из уже сохранённых term/translation/
-    breakdown/examples записи словаря — без единого LLM-вызова. Формат
-    результата совпадает с _gen_consistent_phrase_card, чтобы вся остальная
-    логика тренажёра (интро/quiz/true-false/feedback) работала без изменений."""
-    term = _cap(_entry_term(entry))
-    translation = _entry_translation(entry)
-    breakdown = entry.get("breakdown") or ""
-    examples = entry.get("examples") or []
-    example_text = examples[0].get("text") if examples else ""
-    example_ru = examples[0].get("translation") if examples else ""
-
-    blank_phrase, correct = _blank_from_example(term, example_text) if example_text else ("", "")
-    sentence_ru = example_ru or translation
-    if not blank_phrase:
-        # Нет сохранённого примера, из которого можно честно вырезать слово —
-        # раньше здесь была вырожденная фраза "____ — перевод" без контекста.
-        # Лучше явно сказать вызывающему коду, что программная карточка
-        # недоступна, чем показывать бессмысленный пропуск.
-        return {}
-
-    wrong = _dict_distractors(entry, correct, other_entries, needed=3)
-    if len(wrong) < 3:
-        return {}
-
-    return {
-        "blank_phrase": blank_phrase,
-        "correct": correct,
-        "wrong": wrong,
-        "sentence_ru": sentence_ru,
-        "test_full_phrase": _phrase_full_from_blank(blank_phrase, correct),
-        "intro_pattern": term,
-        "intro_explanation": breakdown or translation,
-        "card_example": example_text or "",
-        "card_example_ru": example_ru or "",
-        "short_rule": breakdown or f"{term} — {translation}",
-        "detail": breakdown or f"{term} — {translation}",
-        "explanation": breakdown or f"{term} — {translation}",
-        "programmatic": True,
-    }
-
-
-def _bump_train_shown_count(cid, entry):
-    """Считает показы слова в тренажёре — определяет, когда изредка подмешать
-    LLM-карточку для разнообразия (см. _TRAIN_LLM_REFRESH_EVERY). Не влияет на
-    last_shown_at (используется в других местах для приоритизации утренней подборки)."""
-    words = store.get_list(config.DICT_KEY, cid)
-    term_self = _entry_term(entry)
-    lang_self = _dict_lang(entry)
-    for idx, w in enumerate(words):
-        if _dict_lang(w) == lang_self and _entry_term(w) == term_self:
-            words[idx]["train_shown_count"] = int(w.get("train_shown_count") or 0) + 1
-            store.set_list(config.DICT_KEY, cid, words)
-            return
-
-
-_TRAIN_LLM_REFRESH_EVERY = 3  # раз в столько показов одного слова — новая LLM-карточка для разнообразия.
-# Программный путь (см. _build_programmatic_card) берёт тестовую фразу из ЕДИНСТВЕННОГО
-# сохранённого примера слова — того же, что уже показан на intro-карточке — и просто
-# вырезает слово, поэтому воспринимается как повтор экрана. Каждые 3 показа вместо 5
-# заметно чаще подключается настоящий новый контекст от LLM.
-
-
-async def _gen_train_card(cid, entry, other_entries, language, lang_code, show_count=0):
-    """Основной путь тренажёра: программная карточка без LLM. Изредка (не каждый
-    показ) подмешивает LLM-карточку для разнообразия — результат не сохраняется
-    обратно в словарь, это одноразовое разнообразие."""
-    if show_count and show_count % _TRAIN_LLM_REFRESH_EVERY == 0:
-        term = _cap(_entry_term(entry))
-        ru = _entry_translation(entry)
-        card = await _gen_consistent_phrase_card(term, ru, language)
-        if card:
-            return card
-    return _build_programmatic_card(entry, other_entries, lang_code)
-
-
-async def _gen_consistent_phrase_card(phrase, ru, language, avoid_tests=None, attempts=3):
-    for attempt in range(max(1, attempts)):
-        card = await _gen_phrase_quiz_card(phrase, ru, language, avoid_tests=avoid_tests)
-        correct_answer = card.get("correct") or ""
-        clean_wrong = _clean_phrase_options(correct_answer, list(card.get("wrong") or []), needed=3)
-        blank_phrase = card.get("blank_phrase") or ""
-        ok, reason = _phrase_card_consistency_check(phrase, ru, card)
-        if (
-            correct_answer
-            and "____" in blank_phrase
-            and len(clean_wrong) >= 3
-            and not _phrase_repeats_source(phrase, blank_phrase, correct_answer)
-            and not _phrase_blank_repeats_target(blank_phrase, correct_answer)
-            and ok
-            and await _validate_phrase_card_semantics(phrase, ru, language, card)
-        ):
-            card["wrong"] = clean_wrong[:3]
-            return card
-        if not ok:
-            reason = reason or "unknown"
-        elif not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 3:
-            reason = "malformed_card"
-        else:
-            reason = "semantic_validation_failed"
-        _log.info("phrase_card_rejected phrase=%r language=%s attempt=%d reason=%s",
-                   phrase, language, attempt + 1, reason)
-    fallback = _fallback_phrase_quiz_card(phrase, ru, language)
-    if fallback and _phrase_card_is_consistent(phrase, ru, fallback):
-        return fallback
-    _log.info("phrase_card_fallback_unavailable phrase=%r language=%s", phrase, language)
-    return {}
+def _train_full_entries(cid, language):
+    """Полные записи словаря нужного языка с переводом — материал для тренировки."""
+    code = _code(language)
+    out = []
+    for w in _ensure_dict(cid):
+        if _dict_lang(w) != code:
+            continue
+        if _entry_term(w) and _entry_translation(w):
+            out.append(w)
+    return out
 
 
 def _train_back_target(language=None):
+    code = _code(language) if language else None
     return "m_learn"
 
 
-def _train_again_kb(language=None):
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Ещё", callback_data="train_next")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(language)), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
-    ])
+# ---------- построение очереди тренировки ----------
+
+def build_training_queue(cid, language):
+    """Очередь материалов на одну тренировку: 60% на повторение (due),
+    20% сложное/недавние ошибки, 20% новое — доли плавают, если материала
+    одного типа не хватает (см. docs/word-trainer.md, 'Как выбирать задания').
+    Каждый элемент очереди — {"entry": словарная запись, "exercise_type": ...}.
+    Формат выбирается сразу при построении очереди (не на лету), чтобы не
+    повторять один формат подряд для одного материала (srs_last_exercise_type)."""
+    import srs
+    entries = _train_full_entries(cid, language)
+    if not entries:
+        return []
+    today = datetime.now(config.TZ).date()
+
+    due = [e for e in entries if srs.is_due(_entry_srs_state(e), today)]
+    mistakes = [e for e in due if int(e.get("srs_level") or 0) <= 1]
+    due_ok = [e for e in due if e not in mistakes]
+    new_material = [e for e in entries if not e.get("srs_history")]
+    new_material = [e for e in new_material if e not in due]
+
+    target_due = round(_QUEUE_SIZE * 0.6)
+    target_mistakes = round(_QUEUE_SIZE * 0.2)
+    target_new = _QUEUE_SIZE - target_due - target_mistakes
+
+    # Если ошибок накопилось больше обычного — их доля растёт за счёт "нового"
+    # материала (см. ТЗ: "если накопилось много ошибок, доля повторения
+    # должна временно увеличиваться").
+    if len(mistakes) > target_mistakes:
+        extra = min(len(mistakes) - target_mistakes, target_new)
+        target_mistakes += extra
+        target_new -= extra
+
+    picked = []
+
+    def _take(pool, n):
+        random.shuffle(pool)
+        chunk = pool[:n]
+        picked.extend(chunk)
+        return chunk
+
+    _take(mistakes, target_mistakes)
+    _take(due_ok, target_due)
+    _take(new_material, target_new)
+
+    # Очередь не набралась (маленький словарь) — добираем чем есть, без дублей.
+    if len(picked) < _QUEUE_SIZE:
+        picked_terms = {_entry_term(e) for e in picked}
+        rest = [e for e in entries if _entry_term(e) not in picked_terms]
+        random.shuffle(rest)
+        picked.extend(rest[:_QUEUE_SIZE - len(picked)])
+
+    random.shuffle(picked)
+    return [{"entry": e, "exercise_type": select_exercise_type(e)} for e in picked]
 
 
-def _phrase_unavailable_kb(language=None):
-    back = _train_back_target(language)
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Следующая", callback_data="train_next")],
-        [InlineKeyboardButton("Повторить позже", callback_data=back)],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
-    ])
+def select_exercise_type(entry):
+    """Формат задания по srs_level материала и типу материала (слово/фраза/
+    конструкция/ситуация) — не повторяет srs_last_exercise_type, если есть
+    из чего выбрать другой (см. docs/word-trainer.md, таблица уровней)."""
+    level = int(entry.get("srs_level") or 0)
+    kind = daily_material_type(entry)
+    last = entry.get("srs_last_exercise_type") or ""
+
+    if level <= 1:
+        candidates = [EXERCISE_CHOOSE_TRANSLATION]
+        if entry.get("examples"):
+            candidates.append(EXERCISE_FILL_GAP)
+    elif level <= 3:
+        candidates = [EXERCISE_RECALL_FREE, EXERCISE_FILL_GAP]
+        if kind == "phrase" and len(_phrase_tokens(_entry_term(entry))) >= 3:
+            candidates.append(EXERCISE_BUILD_SENTENCE)
+        if entry.get("situation_type"):
+            candidates.append(EXERCISE_CHOOSE_REACTION)
+        if kind == "rule":
+            candidates.append(EXERCISE_FIND_ERROR)
+    else:
+        candidates = [EXERCISE_TRANSLATE_CONTEXT, EXERCISE_RECALL_FREE]
+        if entry.get("situation_type"):
+            candidates.append(EXERCISE_CONTINUE_DIALOGUE)
+        if kind == "phrase":
+            candidates.append(EXERCISE_CHOOSE_NATURAL)
+
+    filtered = [c for c in candidates if c != last] or candidates
+    return random.choice(filtered)
+
+
+# ---------- сборка данных задания (без Telegram-специфики) ----------
+
+def _example_of(entry):
+    examples = entry.get("examples") or []
+    return examples[0] if examples else {}
+
+
+def _build_choose_translation(entry, other_entries):
+    correct = _entry_translation(entry).split(";")[0].split(",")[0].strip()
+    wrong_pool = [
+        _entry_translation(w).split(";")[0].split(",")[0].strip()
+        for w in other_entries if _entry_term(w) != _entry_term(entry)
+    ]
+    wrong = _clean_phrase_options(correct, wrong_pool, needed=3)
+    if len(wrong) < 3:
+        return None
+    return {"term": _cap(_entry_term(entry)), "correct": correct, "wrong": wrong}
+
+
+def _build_recall_free(entry):
+    ru = _entry_translation(entry).split(";")[0].split(",")[0].strip()
+    correct = _cap(_entry_term(entry))
+    hint = entry.get("construction") or entry.get("pos") or ""
+    return {"ru": ru, "correct": correct, "hint": hint}
+
+
+def _build_build_sentence(entry):
+    correct = _cap(_entry_term(entry))
+    tokens = _entry_term(entry).split()
+    if len(tokens) < 3:
+        return None
+    shuffled = list(tokens)
+    random.shuffle(shuffled)
+    ru = _entry_translation(entry).split(";")[0].split(",")[0].strip()
+    return {"ru": ru, "correct": correct, "tokens": tokens, "shuffled": shuffled}
+
+
+_FIND_ERROR_DROPPABLE = {"de", "het", "een", "the", "a", "an"}
+
+
+def _build_find_error(entry):
+    """Реально ломает предложение (убирает артикль/служебное слово), а не
+    указывает случайный индекс в корректном тексте — иначе задание не имеет
+    решения (баг, найденный при ручной проверке): предложение без реальной
+    ошибки не может честно проверяться на 'найди ошибку'."""
+    example = _example_of(entry)
+    text = str(example.get("text") or "").strip()
+    if not text:
+        return None
+    tokens = text.split()
+    if len(tokens) < 3:
+        return None
+    droppable_idx = [i for i, t in enumerate(tokens) if t.lower().strip(".,!?") in _FIND_ERROR_DROPPABLE]
+    if not droppable_idx:
+        return None
+    drop_idx = random.choice(droppable_idx)
+    broken_tokens = tokens[:drop_idx] + tokens[drop_idx + 1:]
+    correct_text = text
+    ru = str(example.get("translation") or _entry_translation(entry)).split(";")[0].strip()
+    # Индекс "ошибки" в укороченном списке — слово ПОСЛЕ пропущенного артикля,
+    # так пользователь указывает на место, где артикля не хватает.
+    error_idx = min(drop_idx, len(broken_tokens) - 1)
+    return {"tokens": broken_tokens, "broken_idx": error_idx, "correct_text": correct_text, "ru": ru,
+            "note": entry.get("breakdown") or f"пропущен артикль «{tokens[drop_idx]}»"}
+
+
+def _build_choose_natural(entry, other_entries):
+    correct = _cap(_entry_term(entry))
+    ru = _entry_translation(entry).split(";")[0].split(",")[0].strip()
+    wrong_pool = [_cap(_entry_term(w)) for w in other_entries if _entry_term(w) != _entry_term(entry)]
+    wrong = _clean_phrase_options(correct, wrong_pool, needed=3)
+    if len(wrong) < 3:
+        return None
+    return {"ru": ru, "correct": correct, "wrong": wrong}
+
+
+def _build_fill_gap(entry, other_entries):
+    example = _example_of(entry)
+    blank_phrase, correct = _blank_from_example(_entry_term(entry), str(example.get("text") or ""))
+    if not blank_phrase:
+        return None
+    wrong = _dict_distractors(entry, correct, other_entries, needed=3)
+    if len(wrong) < 3:
+        return None
+    return {"blank_phrase": blank_phrase, "correct": correct, "wrong": wrong,
+            "ru": str(example.get("translation") or _entry_translation(entry)).strip(),
+            "note": entry.get("breakdown") or ""}
+
+
+def _build_translate_context(entry):
+    ru = _entry_translation(entry).split(";")[0].split(",")[0].strip()
+    correct = _cap(_entry_term(entry))
+    alt = list(entry.get("alt_translations") or [])
+    situation = entry.get("situation_type") or ""
+    return {"ru": ru, "correct": correct, "alt": alt, "situation": situation}
+
+
+async def _generate_situation_line(entry, language):
+    """Одна реплика собеседника + правильная реакция термином записи — общая
+    AI-генерация для choose_reaction/continue_dialogue (см. ТЗ: 'создание
+    похожей жизненной ситуации' разрешено §11 CLAUDE.md). Кэшируется в ai.py
+    по input_hash, поэтому повтор той же записи не тратит лимит повторно."""
+    term = _entry_term(entry)
+    prompt = f"""Ты методист разговорной практики для языка: {language}.
+Целевое слово/фраза: «{term}» — {_entry_translation(entry)}.
+
+Придумай ОДНУ короткую реплику собеседника на {language}, в ответ на которую
+естественно употребить именно «{term}» (как реакцию, согласие, отказ или ответ
+по смыслу — в зависимости от того, что это за слово/фраза).
+
+Верни JSON: {{"line": "реплика собеседника на {language}", "line_ru": "перевод реплики"}}"""
+    try:
+        d = await ai.allm_json(prompt, 300, tier="cheap", module="learning_trainer")
+        line = str(d.get("line") or "").strip()
+        line_ru = str(d.get("line_ru") or "").strip()
+    except Exception:
+        line, line_ru = "", ""
+    if not line:
+        return None
+    return {"line": line, "line_ru": line_ru}
+
+
+async def _build_choose_reaction(entry, other_entries, language):
+    correct = _cap(_entry_term(entry))
+    wrong_pool = [_cap(_entry_term(w)) for w in other_entries if _entry_term(w) != _entry_term(entry)]
+    wrong = _clean_phrase_options(correct, wrong_pool, needed=3)
+    if len(wrong) < 3:
+        return None
+    situation = await _generate_situation_line(entry, language)
+    if not situation:
+        return None
+    return {"situation": situation["line"], "situation_ru": situation["line_ru"],
+            "correct": correct, "wrong": wrong}
+
+
+async def _build_continue_dialogue(entry, other_entries, language):
+    correct = _cap(_entry_term(entry))
+    wrong_pool = [_cap(_entry_term(w)) for w in other_entries if _entry_term(w) != _entry_term(entry)]
+    wrong = _clean_phrase_options(correct, wrong_pool, needed=3)
+    if len(wrong) < 3:
+        return None
+    situation = await _generate_situation_line(entry, language)
+    if not situation:
+        return None
+    return {"line": situation["line"], "line_ru": situation["line_ru"], "correct": correct, "wrong": wrong}
+
+
+async def build_exercise_data(cid, item):
+    """Данные конкретного задания по элементу очереди {"entry", "exercise_type"}.
+    Возвращает dict со всем нужным для render_exercise/check_user_answer, или
+    None если для этой записи формат собрать не удалось (вызывающий код должен
+    пропустить задание и взять следующее из очереди, а не показывать пустоту)."""
+    entry = item["entry"]
+    ex_type = item["exercise_type"]
+    language = _language_for_code(_dict_lang(entry))
+    other_entries = _train_full_entries(cid, entry.get("lang") or "nl")
+    data = None
+    if ex_type == EXERCISE_CHOOSE_TRANSLATION:
+        data = _build_choose_translation(entry, other_entries)
+    elif ex_type == EXERCISE_RECALL_FREE:
+        data = _build_recall_free(entry)
+    elif ex_type == EXERCISE_BUILD_SENTENCE:
+        data = _build_build_sentence(entry)
+    elif ex_type == EXERCISE_FIND_ERROR:
+        data = _build_find_error(entry)
+    elif ex_type == EXERCISE_CHOOSE_NATURAL:
+        data = _build_choose_natural(entry, other_entries)
+    elif ex_type == EXERCISE_FILL_GAP:
+        data = _build_fill_gap(entry, other_entries)
+    elif ex_type == EXERCISE_TRANSLATE_CONTEXT:
+        data = _build_translate_context(entry)
+    elif ex_type == EXERCISE_CHOOSE_REACTION:
+        data = await _build_choose_reaction(entry, other_entries, language)
+    elif ex_type == EXERCISE_CONTINUE_DIALOGUE:
+        data = await _build_continue_dialogue(entry, other_entries, language)
+    if data is None:
+        return None
+    data["exercise_type"] = ex_type
+    data["term"] = _entry_term(entry)
+    data["lang"] = _dict_lang(entry)
+    return data
+
+
+# ---------- проверка ответа ----------
+
+def _fuzzy_match(a, b):
+    a = _normalize_phrase_for_compare(a)
+    b = _normalize_phrase_for_compare(b)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    # Небольшие опечатки допустимы (см. ТЗ формат 2) — сравниваем по расстоянию
+    # Левенштейна, без внешних зависимостей.
+    if abs(len(a) - len(b)) > max(2, len(b) // 4):
+        return False
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i] + [0] * len(b)
+        for j, cb in enumerate(b, 1):
+            cost = 0 if ca == cb else 1
+            cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
+        prev = cur
+    distance = prev[len(b)]
+    return distance <= max(1, len(b) // 6)
+
+
+def check_choice_answer(data, chosen_idx, options):
+    """Для форматов с фиксированными вариантами (choose_translation/choose_natural/
+    fill_gap/choose_reaction/continue_dialogue): idx варианта -> (is_correct, quality)."""
+    import srs
+    if chosen_idx < 0 or chosen_idx >= len(options):
+        return False, srs.NOT_REMEMBERED
+    is_correct = str(options[chosen_idx]).strip().lower() == str(data["correct"]).strip().lower()
+    return is_correct, (srs.CHOSE_OPTION if is_correct else srs.NOT_REMEMBERED)
+
+
+def check_free_text_answer(data, user_text, used_hint=False):
+    """Для форматов со свободным вводом (recall_free/translate_context/find_error
+    на высоком уровне): текст пользователя -> (is_correct, quality)."""
+    import srs
+    correct_variants = [data["correct"]] + list(data.get("alt") or [])
+    is_correct = any(_fuzzy_match(user_text, v) for v in correct_variants)
+    if not is_correct:
+        return False, srs.NOT_REMEMBERED
+    if used_hint:
+        return True, srs.HINT_USED
+    return True, srs.RECALLED_FREE
+
+
+def check_build_sentence_answer(data, chosen_tokens):
+    """Собранное предложение из токенов — допускает грамматически другой
+    порядок, если это тот же набор слов, что и в эталоне (ТЗ: 'проверять не
+    только один заранее заданный порядок')."""
+    import srs
+    correct_tokens = data["tokens"]
+    if sorted(t.lower() for t in chosen_tokens) != sorted(t.lower() for t in correct_tokens):
+        return False, srs.NOT_REMEMBERED
+    is_exact_order = [t.lower() for t in chosen_tokens] == [t.lower() for t in correct_tokens]
+    return True, (srs.RECALLED_FREE if is_exact_order else srs.USED_IN_SENTENCE)
+
+
+# ---------- session / точка входа ----------
+
+def _new_session():
+    return {"consolidated": [], "returning": [], "no_hint_count": 0, "total": 0}
 
 
 async def train_start(bot, cid, language, mode=None):
-    """Единый тренажёр: без деления на режимы слов/фраз — все записи словаря
-    учатся одинаково (карточка + тест с пропуском)."""
+    """Единый тренажёр: одна очередь на тренировку, сам решает формат и
+    сложность (см. docs/word-trainer.md). mode сохранён в сигнатуре для
+    обратной совместимости вызовов — режимов больше нет, игнорируется."""
     store.challenge_state.pop(str(cid), None)
     store.game_state.pop(str(cid), None)
     store.pending_input.pop(str(cid), None)
-    if not _train_entries(cid, language):
-        code = _code(language)
+    lang_code = _code(language)
+    if not _train_full_entries(cid, language):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(
-            "📖 Открыть словарь", callback_data=f"a_dictlang_{code}_from_menu")]])
+            "📖 Открыть словарь", callback_data=f"a_dictlang_{lang_code}_from_menu")]])
         await bot.send_message(chat_id=cid,
             text=f"{_flag(language)} В словаре нет слов или фраз с переводом. Добавь записи через словарь.",
             reply_markup=kb)
         return
+    await migrate_dict_entries_for_srs(cid, lang_code)
+    queue = build_training_queue(cid, language)
+    if not queue:
+        await bot.send_message(chat_id=cid, text="Не получилось собрать тренировку. Попробуй ещё раз.")
+        return
     store.train_state[str(cid)] = {
-        "lang": language,
-        "round": 0,
-        "used_entries": [],
+        "lang": language, "queue": queue, "queue_idx": 0,
+        "session": _new_session(), "current": None,
     }
-    await _render_next_train_quiz(bot, cid)
+    await _render_next_exercise(bot, cid)
 
 
-
-_MISTAKE_EVERY_N_ROUNDS = 3
-
-
-async def _render_train_quiz(bot, cid):
-    """Единая карточка тренажёра: интро (термин + перевод + пример) и отдельный тест
-    с пропуском — см. phrase_intro_continue(). Один формат для всех записей словаря.
-
-    Каждый _MISTAKE_EVERY_N_ROUNDS-й раунд, если есть открытая ошибка на активном
-    языке — показывает её вместо случайного слова (§ record_mistake/mistake_review_card),
-    без отдельного раздела «Повторение ошибок»."""
-    import random as _r
-    store.pending_input.pop(str(cid), None)
+async def _render_next_exercise(bot, cid):
+    """Берёт следующий элемент очереди, пытается собрать по нему задание —
+    если не вышло (недостаточно данных для формата), пропускает и пробует
+    следующий, а не показывает пустой экран. Очередь исчерпана -> итог."""
     st = store.train_state.get(str(cid))
     if not st:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
-    language = st["lang"]
-    lang_code = _code(language)
-    round_n = st.get("round", 0)
-    if round_n > 0 and round_n % _MISTAKE_EVERY_N_ROUNDS == 0:
-        mistake = next_open_mistake(cid, lang_code)
-        if mistake:
-            st["round"] = round_n + 1
-            msg = learning_ui.mistake_review_card(mistake)
-            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
-            return
-    full_entries = _train_full_entries(cid, language)
-    if not full_entries:
-        await bot.send_message(chat_id=cid, text="В словаре нет записей с переводом."); return
-
-    used = st.get("used_entries", [])
-    available = [(i, e) for i, e in enumerate(full_entries) if i not in used]
-    if not available:
-        used = []
-        available = list(enumerate(full_entries))
-        st["used_entries"] = used
-    idx, entry = _r.choice(available)
-    used.append(idx)
-    st["used_entries"] = used
-
-    phrase, _note = _normalize_dict_term(lang_code, _kind_of(_entry_term(entry)), _entry_term(entry))
-    ru = _entry_translation(entry)
-    show_count = int(entry.get("train_shown_count") or 0)
-    card = await _gen_train_card(cid, entry, full_entries, language, lang_code, show_count=show_count)
-    _bump_train_shown_count(cid, entry)
-    correct_answer = card.get("correct") or ""
-    wrong = list(card.get("wrong") or [])
-    clean_wrong = _clean_phrase_options(correct_answer, wrong, needed=3)
-    blank_phrase = card.get("blank_phrase") or ""
-    is_programmatic = bool(card.get("programmatic"))
-    if (
-        not correct_answer
-        or "____" not in blank_phrase
-        or len(clean_wrong) < 3
-        or (not is_programmatic and not _phrase_card_is_consistent(phrase, ru, card))
-    ):
-        await bot.send_message(
-            chat_id=cid,
-            text="Не получилось собрать хорошую карточку.\nПопробуй следующую.",
-            reply_markup=_phrase_unavailable_kb(language),
-        )
+    queue = st["queue"]
+    while st["queue_idx"] < len(queue):
+        item = queue[st["queue_idx"]]
+        st["queue_idx"] += 1
+        data = await build_exercise_data(cid, item)
+        if data is None:
+            continue
+        data["hint_shown"] = False
+        st["current"] = data
+        await _send_exercise(bot, cid, data)
         return
-
-    options = [correct_answer] + clean_wrong[:3]
-    _r.shuffle(options)
-    correct_idx = options.index(correct_answer)
-    st.update({
-        "word": phrase,
-        "ru": ru,
-        "sentence": blank_phrase,
-        "sentence_ru": card.get("sentence_ru") or ru,
-        "meaning": correct_answer,
-        "phrase_explanation": card.get("explanation") or "",
-        "phrase_short_rule": card.get("short_rule") or card.get("explanation") or "",
-        "phrase_detail": card.get("detail") or "",
-        "wrong_map": {},
-        "options": options,
-        "correct_idx": correct_idx,
-        "phrase_full": phrase,
-        "phrase_test_full": card.get("test_full_phrase") or _phrase_full_from_blank(blank_phrase, correct_answer),
-        "phrase_seen_tests": [blank_phrase],
-        "phrase_error_count": 0,
-        "phrase_pending_quiz": True,
-        "phrase_stage": "intro",
-    })
-
-    st["intro_pattern"] = card.get("intro_pattern") or card.get("construction") or ""
-    st["intro_explanation"] = card.get("intro_explanation") or card.get("construction_meaning") or card.get("short_rule") or ""
-
-    msg = learning_ui.phrase_intro_card(
-        phrase,
-        ru,
-        st["intro_pattern"],
-        st["intro_explanation"],
-        card.get("card_example") or "",
-        card.get("card_example_ru") or "",
-    )
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🧩 Тест", callback_data="phrase_intro_test")],
-        [InlineKeyboardButton("✅ Выучил", callback_data="phrase_intro_mastered")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(language)), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
-    ])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await _finish_training(bot, cid, st)
 
 
-async def phrase_intro_continue(bot, cid):
-    """Реакция на «Тест» после учебной карточки — случайно выбирает формат теста
-    (quiz poll с 4 вариантами или короткое утверждение да/нет), чтобы форматы
-    чередовались и тренажёр не приедался."""
-    st = store.train_state.get(str(cid))
-    if not st or not st.get("phrase_pending_quiz"):
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
-    st["phrase_pending_quiz"] = False
-    st["phrase_stage"] = "quiz"
+def _ex_kb(rows):
+    return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
 
-    roll = random.random()
-    if roll < 0.34:
-        await _send_phrase_truefalse(bot, cid, st)
-        return
-    if roll < 0.67:
-        await _send_phrase_smart_reveal(bot, cid, st)
-        return
 
-    language = st["lang"]
-    phrase = st.get("phrase_full", "")
-    blank_phrase = st.get("sentence", "")
-    correct_answer = st.get("meaning", "")
-    options = st.get("options", [])
-    correct_idx = st.get("correct_idx", 0)
+async def _send_exercise(bot, cid, data):
+    ex_type = data["exercise_type"]
+    if ex_type == EXERCISE_CHOOSE_TRANSLATION:
+        await _send_choose_translation(bot, cid, data)
+    elif ex_type == EXERCISE_RECALL_FREE:
+        await _send_recall_free(bot, cid, data)
+    elif ex_type == EXERCISE_BUILD_SENTENCE:
+        await _send_build_sentence(bot, cid, data)
+    elif ex_type == EXERCISE_FIND_ERROR:
+        await _send_find_error(bot, cid, data)
+    elif ex_type == EXERCISE_CHOOSE_NATURAL:
+        await _send_choose_options(bot, cid, data, learning_ui.exercise_choose_natural)
+    elif ex_type == EXERCISE_FILL_GAP:
+        await _send_choose_options(bot, cid, data, learning_ui.exercise_fill_gap)
+    elif ex_type == EXERCISE_TRANSLATE_CONTEXT:
+        await _send_translate_context(bot, cid, data)
+    elif ex_type == EXERCISE_CHOOSE_REACTION:
+        await _send_choose_options(bot, cid, data, learning_ui.exercise_choose_reaction)
+    elif ex_type == EXERCISE_CONTINUE_DIALOGUE:
+        await _send_choose_options(bot, cid, data, learning_ui.exercise_continue_dialogue)
 
-    question, question_entities = _phrase_poll_question(blank_phrase, st.get("sentence_ru", ""))
-    explanation = _phrase_poll_explanation(
-        blank_phrase,
-        correct_answer,
-        st.get("phrase_test_full", "") or phrase,
-        st.get("sentence_ru", ""),
-        "",
-    )
+
+def _options_for(data):
+    options = [data["correct"]] + list(data.get("wrong") or [])
+    random.shuffle(options)
+    return options
+
+
+async def _send_choose_translation(bot, cid, data):
+    """Единственный формат на native Telegram quiz poll (см. spec-learning-rework:
+    'Только формат Выбрать перевод использует нативный quiz poll') — авто-проверка
+    от Telegram, ответ приходит в handle_train_poll_answer."""
+    options = _options_for(data)
+    data["_options"] = options
+    correct_idx = options.index(data["correct"])
     msg = await bot.send_poll(
         chat_id=cid,
-        question=question,
-        question_entities=question_entities,
-        options=[str(x)[:100] for x in options[:10]],
+        question=f"Что значит: {data['term']}?",
+        options=[str(o)[:100] for o in options[:10]],
         type="quiz",
         correct_option_id=correct_idx,
         is_anonymous=True,
-        explanation=explanation,
-        reply_markup=_train_again_kb(language),
     )
     if getattr(msg, "poll", None):
         store.train_polls[msg.poll.id] = str(cid)
-
-
-def _truefalse_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Да", callback_data="phrase_tf_yes"),
-         InlineKeyboardButton("❌ Нет", callback_data="phrase_tf_no")],
-    ])
-
-
-async def _send_phrase_smart_reveal(bot, cid, st):
-    """Третий формат теста: «умное раскрытие» — сначала вопрос на перевод текущего
-    слова/фразы, подсказка по кнопке, ответ текстом, результат с Понял/Повторить
-    позже. Строится из уже собранной карточки intro-этапа, без нового LLM-запроса."""
-    lang = st["lang"]
-    ru = st.get("sentence_ru") or st.get("ru", "")
-    correct = st.get("phrase_full") or st.get("word", "")
-    hint = st.get("intro_pattern") or st.get("intro_explanation", "")
-    explanation = st.get("phrase_short_rule") or st.get("phrase_explanation", "")
-    if not ru or not correct:
-        await _send_phrase_truefalse(bot, cid, st)
-        return
-    store.smart_reveal_state[str(cid)] = {
-        "ru": ru, "hint": hint, "lang": lang, "correct": correct, "explanation": explanation,
-    }
-    msg = learning_ui.smart_reveal_question(_flag(lang), ru)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                            reply_markup=learning_ui.smart_reveal_kb(show_hint=bool(hint)))
-
-
-async def _send_phrase_truefalse(bot, cid, st):
-    """Второй формат теста: утверждение «в этой фразе пропущено слово X» — да или нет.
-    Строится из уже провалидированной карточки, без нового LLM-запроса."""
-    blank_phrase = st.get("sentence", "")
-    correct_answer = st.get("meaning", "")
-    options = [o for o in st.get("options", []) if o]
-    wrong_options = [o for o in options if o.lower() != str(correct_answer).lower()]
-
-    is_true = random.random() < 0.5 or not wrong_options
-    shown_word = correct_answer if is_true else random.choice(wrong_options)
-    st["truefalse_is_true"] = is_true
-
-    statement = blank_phrase.replace("____", f"«{shown_word}»") if "____" in blank_phrase else blank_phrase
-    msg = learning_ui.phrase_truefalse_question(statement)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_truefalse_kb())
-
-
-async def phrase_truefalse_answer(bot, cid, answered_yes):
-    st = store.train_state.get(str(cid))
-    if not st or "truefalse_is_true" not in st:
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
-    is_true = st.pop("truefalse_is_true")
-    correct_idx = int(st.get("correct_idx", 0))
-    options = st.get("options") or []
-    is_correct = answered_yes == is_true
-    idx = correct_idx if is_correct else next((i for i in range(len(options)) if i != correct_idx), correct_idx)
-    await _send_train_feedback(bot, cid, idx, st)
-
-
-async def phrase_intro_mastered(bot, cid):
-    st = store.train_state.get(str(cid))
-    if not st:
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
-    await _render_next_train_quiz(bot, cid)
-
-
-async def phrase_new_example(bot, cid):
-    import random as _r
-    st = store.train_state.get(str(cid))
-    if not st:
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
-    phrase = st.get("phrase_full") or st.get("word", "")
-    ru = st.get("ru", "")
-    language = st.get("lang", "нидерландский")
-    seen_tests = list(st.get("phrase_seen_tests") or [])
-    card = await _gen_consistent_phrase_card(phrase, ru, language, avoid_tests=seen_tests)
-    correct_answer = card.get("correct") or st.get("meaning", "")
-    clean_wrong = _clean_phrase_options(correct_answer, list(card.get("wrong") or []), needed=3)
-    blank_phrase = card.get("blank_phrase") or ""
-    if not correct_answer or "____" not in blank_phrase or len(clean_wrong) < 3 or blank_phrase in seen_tests:
-        await bot.send_message(
-            chat_id=cid,
-            text="Не удалось собрать новый пример. Попробуй дальше.",
-            reply_markup=_train_again_kb(language),
-        )
-        return
-
-    options = [correct_answer] + clean_wrong[:3]
-    _r.shuffle(options)
-    st.update({
-        "sentence": blank_phrase,
-        "sentence_ru": card.get("sentence_ru") or "",
-        "meaning": correct_answer,
-        "phrase_explanation": card.get("explanation") or "",
-        "phrase_short_rule": card.get("short_rule") or card.get("explanation") or "",
-        "phrase_detail": card.get("detail") or "",
-        "options": options,
-        "correct_idx": options.index(correct_answer),
-        "phrase_test_full": card.get("test_full_phrase") or _phrase_full_from_blank(blank_phrase, correct_answer),
-        "phrase_seen_tests": (seen_tests + [blank_phrase])[-8:],
-        "phrase_pending_quiz": True,
-        "phrase_stage": "intro",
-    })
-    await phrase_intro_continue(bot, cid)
-
-
-async def phrase_explain(bot, cid):
-    st = store.train_state.get(str(cid))
-    if not st:
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
-    msg = learning_ui.phrase_rule_breakdown(st)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Новый пример", callback_data="phrase_new_example"),
-         InlineKeyboardButton("Дальше", callback_data="train_next")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(st.get("lang", ""))), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
-    ])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 async def handle_train_poll_answer(bot, poll_answer):
     cid = store.train_polls.pop(poll_answer.poll_id, None)
     if not cid:
         return
-    st = store.train_state.get(str(cid))
-    if not st:
-        return
     option_ids = list(getattr(poll_answer, "option_ids", []) or [])
     if not option_ids:
         return
-    await _send_train_feedback(bot, cid, int(option_ids[0]), st)
+    await handle_pick(bot, cid, int(option_ids[0]))
 
 
-async def _send_train_feedback(bot, cid, idx, st):
-    options = st.get("options", [])
-    if idx >= len(options):
-        return
-    correct_idx = int(st.get("correct_idx", 0))
-    lang = st.get("lang", "нидерландский")
+async def _send_choose_options(bot, cid, data, render_fn):
+    options = _options_for(data)
+    data["_options"] = options
+    msg = render_fn(data)
+    rows = [[(opt, f"ex_pick_{i}")] for i, opt in enumerate(options)]
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_ex_kb(rows))
 
-    is_correct = idx == correct_idx
-    st["round"] = st.get("round", 0) + 1
-    if is_correct:
-        msg = learning_ui.phrase_quiz_result(st, True)
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Следующая", callback_data="train_next")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(lang)), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
-        ])
+
+async def _send_recall_free(bot, cid, data):
+    msg = learning_ui.exercise_recall_free(data, hint_shown=data.get("hint_shown"))
+    rows = []
+    if data.get("hint") and not data.get("hint_shown"):
+        rows.append([("💡 Подсказка", "ex_hint"), ("⌨️ Ответить", "ex_answer")])
     else:
-        st["phrase_error_count"] = int(st.get("phrase_error_count", 0)) + 1
-        repeated_error = st["phrase_error_count"] >= 2
-        if repeated_error:
-            st["needs_review"] = True
-            record_mistake(
-                cid, _code(lang), st.get("word", ""),
-                wrong=options[idx] if idx < len(options) else "",
-                correct=st.get("meaning", "") or options[correct_idx],
-                explanation=st.get("phrase_short_rule", "") or st.get("phrase_explanation", ""),
-            )
-        msg = learning_ui.phrase_quiz_result(st, False, repeated_error=repeated_error)
-        if repeated_error:
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔍 Разобрать", callback_data="phrase_explain"),
-                 InlineKeyboardButton("Новый пример", callback_data="phrase_new_example")],
-                [InlineKeyboardButton("Дальше", callback_data="train_next")],
-                [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(lang)),
-                 InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
-            ])
-        else:
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Новый пример", callback_data="phrase_new_example"),
-                 InlineKeyboardButton("Дальше", callback_data="train_next")],
-                [InlineKeyboardButton("⬅️ Назад", callback_data=_train_back_target(lang)), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
-            ])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+        rows.append([("⌨️ Ответить", "ex_answer")])
+    rows.append([("Не помню", "ex_giveup")])
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_ex_kb(rows))
 
 
-async def _render_next_train_quiz(bot, cid):
+async def _send_translate_context(bot, cid, data):
+    msg = learning_ui.exercise_translate_context(data)
+    rows = [[("⌨️ Ответить", "ex_answer")], [("Показать ответ", "ex_giveup")]]
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_ex_kb(rows))
+
+
+async def _send_build_sentence(bot, cid, data):
+    data.setdefault("_picked", [])
+    msg = learning_ui.exercise_build_sentence(data)
+    remaining = [t for i, t in enumerate(data["shuffled"]) if i not in data.get("_picked_idx", [])]
+    rows = [[(t, f"ex_tok_{data['shuffled'].index(t)}")] for t in remaining[:6]]
+    if data.get("_picked"):
+        rows.append([("↩️ Сбросить", "ex_tok_reset")])
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_ex_kb(rows))
+
+
+async def _send_find_error(bot, cid, data):
+    msg = learning_ui.exercise_find_error(data)
+    rows = [[(t, f"ex_word_{i}")] for i, t in enumerate(data["tokens"][:6])]
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_ex_kb(rows))
+
+
+# ---------- обработка ответов ----------
+
+async def _apply_result(bot, cid, st, is_correct, quality, feedback_text, feedback_entities=None):
+    """Общая финализация ответа: SRS-запись, session-статистика, reinsert при
+    ошибке, кнопка 'Дальше'."""
+    import srs
+    data = st["current"]
+    entry_term = data["term"]
+    _update_entry_srs(cid, data["lang"], entry_term, data["exercise_type"], quality)
+
+    session = st["session"]
+    session["total"] += 1
+    if quality in (srs.RECALLED_FREE, srs.USED_IN_SENTENCE, srs.CONFIDENT_NO_HINT):
+        session["no_hint_count"] += 1
+    if is_correct and quality in (srs.USED_IN_SENTENCE, srs.CONFIDENT_NO_HINT):
+        session["consolidated"].append(entry_term)
+    if not is_correct:
+        session["returning"].append(entry_term)
+        reinsert_failed_material(st, data)
+
+    kb = _ex_kb([[("Дальше", "ex_next")]])
+    await bot.send_message(chat_id=cid, text=feedback_text, entities=feedback_entities, reply_markup=kb)
+
+
+def _update_entry_srs(cid, lang, term, exercise_type, quality):
+    import srs
+    words = store.get_list(config.DICT_KEY, cid)
+    for idx, w in enumerate(words):
+        if _dict_lang(w) == lang and _entry_term(w) == term:
+            state = _entry_srs_state(w)
+            updated = srs.record_answer(state, exercise_type, quality)
+            words[idx] = {**w, **updated}
+            store.set_list(config.DICT_KEY, cid, words)
+            return
+
+
+def reinsert_failed_material(st, data):
+    """Материал, на котором ошиблись, возвращается ПОЗЖЕ В ЭТОЙ ЖЕ тренировке
+    другим форматом — без ручной кнопки 'Повторить' (см. ТЗ 'Поведение после
+    ошибки'). Вставляется на 3-5 позиций вперёд в очередь, не сразу следующим."""
+    entry = None
+    for item in st["queue"]:
+        if _entry_term(item["entry"]) == data["term"]:
+            entry = item["entry"]
+            break
+    if entry is None:
+        return
+    used_types = {data["exercise_type"]}
+    other_types = [t for t in _ALL_EXERCISES if t not in used_types]
+    next_type = random.choice(other_types) if other_types else data["exercise_type"]
+    insert_at = min(len(st["queue"]), st["queue_idx"] + random.randint(2, 4))
+    st["queue"].insert(insert_at, {"entry": entry, "exercise_type": next_type})
+
+
+async def handle_pick(bot, cid, idx):
     st = store.train_state.get(str(cid))
-    if not st:
+    if not st or not st.get("current"):
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
-    await _render_train_quiz(bot, cid)
+    data = st["current"]
+    options = data.get("_options") or []
+    is_correct, quality = check_choice_answer(data, idx, options)
+    msg = learning_ui.exercise_result(data, is_correct, chosen=options[idx] if idx < len(options) else "")
+    await _apply_result(bot, cid, st, is_correct, quality, msg.text, msg.entities)
+
+
+async def handle_hint(bot, cid):
+    st = store.train_state.get(str(cid))
+    if not st or not st.get("current"):
+        return
+    st["current"]["hint_shown"] = True
+    await _send_exercise(bot, cid, st["current"])
+
+
+async def handle_answer_prompt(bot, cid):
+    st = store.train_state.get(str(cid))
+    if not st or not st.get("current"):
+        return
+    store.pending_input[str(cid)] = "trainer_answer"
+    await bot.send_message(chat_id=cid, text="Напиши свой ответ следующим сообщением.")
+
+
+async def handle_giveup(bot, cid):
+    st = store.train_state.get(str(cid))
+    if not st or not st.get("current"):
+        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    import srs
+    data = st["current"]
+    msg = learning_ui.exercise_result(data, False, chosen="")
+    await _apply_result(bot, cid, st, False, srs.NOT_REMEMBERED, msg.text, msg.entities)
+
+
+async def handle_text_answer(bot, cid, text):
+    """Свободный текстовый ответ — вызывается из общего текстового роутера,
+    когда pending_input == 'trainer_answer'. Возвращает True, если сообщение
+    было ответом тренажёра (роутер не должен обрабатывать его иначе)."""
+    st = store.train_state.get(str(cid))
+    if not st or not st.get("current"):
+        return False
+    store.pending_input.pop(str(cid), None)
+    data = st["current"]
+    used_hint = bool(data.get("hint_shown"))
+    if data["exercise_type"] == EXERCISE_TRANSLATE_CONTEXT:
+        is_correct, quality = await _check_translate_context_ai(data, text)
+    else:
+        is_correct, quality = check_free_text_answer(data, text, used_hint=used_hint)
+    msg = learning_ui.exercise_result(data, is_correct, chosen=text)
+    await _apply_result(bot, cid, st, is_correct, quality, msg.text, msg.entities)
+    return True
+
+
+async def _check_translate_context_ai(data, text):
+    """Перевод в контексте принимает несколько формулировок — сверка смысла
+    через AI (короткий вызов, разрешён §11 CLAUDE.md для разбора свободного
+    текста), не только точное совпадение с эталоном."""
+    import srs
+    if check_free_text_answer(data, text)[0]:
+        return True, srs.RECALLED_FREE
+    prompt = (
+        f"Ученик переводит на {('нидерландский' if data['lang'] == 'nl' else 'английский')}: "
+        f"{secure.wrap_untrusted(data['ru'], 'фраза для перевода')}\n"
+        f"Ответ ученика: {secure.wrap_untrusted(text, 'ответ ученика')}\n"
+        f"Эталон: {data['correct']}\n"
+        'Верни JSON: {"ok": true/false} — true, если смысл и грамматика ученика приемлемы, '
+        "даже если формулировка отличается от эталона."
+    )
+    try:
+        r = await ai.allm_json(prompt, 300, tier="cheap", module="learning_trainer")
+        ok = bool(r.get("ok"))
+    except Exception:
+        ok = False
+    return ok, (srs.RECALLED_FREE if ok else srs.NOT_REMEMBERED)
+
+
+async def handle_token_pick(bot, cid, token_idx):
+    """Для build_sentence/find_error — набор токена по индексу в data['shuffled']
+    или data['tokens']."""
+    st = store.train_state.get(str(cid))
+    if not st or not st.get("current"):
+        return
+    data = st["current"]
+    if data["exercise_type"] == EXERCISE_BUILD_SENTENCE:
+        picked_idx = data.setdefault("_picked_idx", [])
+        picked = data.setdefault("_picked", [])
+        if token_idx not in picked_idx and token_idx < len(data["shuffled"]):
+            picked_idx.append(token_idx)
+            picked.append(data["shuffled"][token_idx])
+        if len(picked) == len(data["tokens"]):
+            is_correct, quality = check_build_sentence_answer(data, picked)
+            msg = learning_ui.exercise_result(data, is_correct, chosen=" ".join(picked))
+            await _apply_result(bot, cid, st, is_correct, quality, msg.text, msg.entities)
+            return
+        await _send_exercise(bot, cid, data)
+    elif data["exercise_type"] == EXERCISE_FIND_ERROR:
+        is_correct = token_idx == data["broken_idx"]
+        import srs
+        quality = srs.CHOSE_OPTION if is_correct else srs.NOT_REMEMBERED
+        msg = learning_ui.exercise_result(data, is_correct, chosen=data["tokens"][token_idx])
+        await _apply_result(bot, cid, st, is_correct, quality, msg.text, msg.entities)
+
+
+async def handle_token_reset(bot, cid):
+    st = store.train_state.get(str(cid))
+    if not st or not st.get("current"):
+        return
+    data = st["current"]
+    data["_picked"] = []
+    data["_picked_idx"] = []
+    await _send_exercise(bot, cid, data)
 
 
 async def train_next(bot, cid):
     st = store.train_state.get(str(cid))
     if not st:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
-    store.pending_input.pop(str(cid), None)
-    await _render_next_train_quiz(bot, cid)
+    st["current"] = None
+    await _render_next_exercise(bot, cid)
 
 
 async def send_train_lang_select(bot, cid):
     language = active_language(cid)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"▶️ {_language_display(language)}", callback_data=f"a_train_{_code(language)}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     msg = learning_ui.train_lang_select()
-    await bot.send_message(chat_id=cid,
-        text=msg.text,
-        entities=msg.entities, reply_markup=kb)
-
-
-# ================= ОБРАТНЫЙ ПЕРЕВОД =================
-def generate_challenge(language, level):
-    level_label = LEVEL_LABELS.get(level, "средний")
-    return ai.llm(f"Дай ОДНУ фразу на русском для перевода на {language}. Уровень сложности: {level_label.lower()}, "
-                  f"бытовая/рабочая ситуация. Только русская фраза, без кавычек.", 200, 1.0, tier="cheap").strip()
-
-
-def check_translation(language, ru, answer):
-    return ai.llm_json(f"""Ученик переводит с русского на {language}.
-Русская фраза: {ru}
-Перевод ученика: {answer}
-JSON: {{"ok": true/false, "error": "ошибка коротко по-русски или пусто",
- "correct": "правильный естественный вариант на {language}", "note": "короткое правило/слово по-русски или пусто"}}""", 800, tier="cheap")
-
-async def do_translate(bot, cid, lang):
-    store.pending_input.pop(str(cid), None)
-    store.game_state.pop(str(cid), None)   # фикс: чтобы ответ не уходил в игру
-    level = store.get_level(cid, lang)
-    try:
-        ru = generate_challenge(lang, level)
-    except Exception as e:
-        await verify.safe_error(bot, cid, e); return
-    store.challenge_state[str(cid)] = {"ru": ru, "lang": lang}
-    msg = learning_ui.translate_prompt(_flag(lang), ru, lang)
-    await bot.send_message(chat_id=cid,
-        text=msg.text,
-        entities=msg.entities)
-
-async def translate_answer(bot, cid, text):
-    st = store.challenge_state.pop(str(cid), None)
-    if not st:
-        return False
-    try:
-        r = check_translation(st["lang"], st["ru"], text)
-    except Exception as e:
-        await verify.safe_error(bot, cid, e); return True
-    msg = learning_ui.translate_result(_flag(st["lang"]), st["lang"], st["ru"], text, r)
-    code = _code(st["lang"])
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Ещё пример", callback_data=f"again_tr_{code}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
-    ])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-    return True
-
-
-# ================= УМНОЕ РАСКРЫТИЕ ОТВЕТА =================
-async def smart_reveal_show_hint(bot, cid, q=None):
-    st = store.smart_reveal_state.get(str(cid))
-    if not st:
-        return
-    st["hint_shown"] = True
-    msg = learning_ui.smart_reveal_question(_flag(st["lang"]), st["ru"], st.get("hint"))
-    kb = learning_ui.smart_reveal_kb(show_hint=False)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-async def smart_reveal_ask_answer(bot, cid):
-    st = store.smart_reveal_state.get(str(cid))
-    if not st:
-        return
-    store.pending_input[str(cid)] = "smart_reveal_answer"
-    await bot.send_message(chat_id=cid, text="Напиши свой ответ следующим сообщением.")
+async def _finish_training(bot, cid, st):
+    session = st["session"]
+    store.train_state.pop(str(cid), None)
+    msg = learning_ui.training_result(session)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"),
+        InlineKeyboardButton("🏠 Меню", callback_data="m_menu"),
+    ]])
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-async def smart_reveal_answer(bot, cid, text):
-    st = store.smart_reveal_state.pop(str(cid), None)
-    if not st:
-        return False
-    store.pending_input.pop(str(cid), None)
-    await _smart_reveal_finish(bot, cid, st, text)
-    return True
+def build_progress_screen(cid):
+    """Данные экрана прогресса — доля самостоятельных ответов без подсказок
+    важнее процента правильных ответов в quiz (см. docs/word-trainer.md,
+    'Экран прогресса'). Только чтение уже посчитанного SRS-состояния, без AI."""
+    language = active_language(cid)
+    lang_code = _code(language)
+    entries = _train_full_entries(cid, language)
+    total = len(entries)
+    confident = sum(1 for e in entries if int(e.get("srs_level") or 0) >= 4)
+    due_count = sum(1 for e in entries if int(e.get("srs_level") or 0) <= 1)
 
+    no_hint_answers = 0
+    total_answers = 0
+    by_exercise_ok = {}
+    by_exercise_total = {}
+    for e in entries:
+        for h in (e.get("srs_history") or []):
+            total_answers += 1
+            quality = h.get("result", "")
+            ex_type = h.get("exercise_type", "")
+            if quality in ("recalled_free", "used_in_sentence", "confident_no_hint"):
+                no_hint_answers += 1
+            by_exercise_total[ex_type] = by_exercise_total.get(ex_type, 0) + 1
+            if quality not in ("not_remembered",):
+                by_exercise_ok[ex_type] = by_exercise_ok.get(ex_type, 0) + 1
 
-async def smart_reveal_skip(bot, cid):
-    st = store.smart_reveal_state.pop(str(cid), None)
-    if not st:
-        return
-    await _smart_reveal_finish(bot, cid, st, None)
+    no_hint_pct = round(100 * no_hint_answers / total_answers) if total_answers else 0
+    strongest = weakest = ""
+    if by_exercise_total:
+        rates = {
+            k: by_exercise_ok.get(k, 0) / v
+            for k, v in by_exercise_total.items() if v >= 3
+        }
+        if rates:
+            strongest = _EXERCISE_LABELS.get(max(rates, key=rates.get), "")
+            weakest = _EXERCISE_LABELS.get(min(rates, key=rates.get), "")
 
-
-async def _smart_reveal_finish(bot, cid, st, answer):
-    lang = st["lang"]
-    known_correct = st.get("correct")
-    if known_correct:
-        # Вопрос построен из уже известного слова словаря (_send_phrase_smart_reveal) —
-        # сравниваем текст напрямую, без нового LLM-запроса.
-        correct = known_correct
-        explanation = st.get("explanation", "")
-        is_wrong = bool(answer) and not _fuzzy(answer, correct)
-    elif answer:
-        try:
-            r = check_translation(lang, st["ru"], answer)
-        except Exception as e:
-            await verify.safe_error(bot, cid, e); return
-        correct = str(r.get("correct") or "").strip() or answer
-        explanation = str(r.get("note") or r.get("error") or "").strip()
-        is_wrong = not r.get("ok")
-    else:
-        # Пропустил без ответа и без готового правильного варианта — проверять нечего.
-        await _smart_reveal_continue(bot, cid)
-        return
-    store.smart_reveal_result_state[str(cid)] = {
-        "lang": lang, "term": correct, "wrong": answer or "", "correct": correct, "explanation": explanation,
+    return {
+        "lang_code": lang_code,
+        "lang_title": "Английский" if lang_code == "en" else "Нидерландский",
+        "total": total,
+        "confident": confident,
+        "due_count": due_count,
+        "strongest": strongest,
+        "weakest": weakest,
+        "no_hint_pct": no_hint_pct,
     }
-    if is_wrong:
-        record_mistake(cid, _code(lang), correct, wrong=answer, correct=correct, explanation=explanation)
-    msg = learning_ui.smart_reveal_result(_flag(lang), lang, correct, explanation)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
 
 
-async def _smart_reveal_continue(bot, cid):
-    st = store.train_state.get(str(cid))
-    if st:
-        st["round"] = st.get("round", 0) + 1
-        await _render_next_train_quiz(bot, cid)
-    else:
-        await bot.send_message(chat_id=cid, text="Хорошо, идём дальше.")
+_EXERCISE_LABELS = {
+    EXERCISE_CHOOSE_TRANSLATION: "перевод и понимание",
+    EXERCISE_RECALL_FREE: "самостоятельное вспоминание",
+    EXERCISE_BUILD_SENTENCE: "порядок слов в предложении",
+    EXERCISE_FIND_ERROR: "поиск ошибок",
+    EXERCISE_CHOOSE_NATURAL: "естественность формулировок",
+    EXERCISE_FILL_GAP: "грамматику в контексте",
+    EXERCISE_TRANSLATE_CONTEXT: "перевод в контексте",
+    EXERCISE_CHOOSE_REACTION: "реакции в разговоре",
+    EXERCISE_CONTINUE_DIALOGUE: "поддержание диалога",
+}
 
 
-async def smart_reveal_understood(bot, cid):
-    store.smart_reveal_result_state.pop(str(cid), None)
-    await _smart_reveal_continue(bot, cid)
-
-
-async def smart_reveal_later(bot, cid):
-    r = store.smart_reveal_result_state.pop(str(cid), None)
-    if r and r.get("wrong"):
-        record_mistake(cid, r["lang"], r["term"], wrong=r.get("wrong", ""),
-                        correct=r["correct"], explanation=r.get("explanation", ""))
-    await _smart_reveal_continue(bot, cid)
+async def send_progress(bot, cid):
+    data = build_progress_screen(cid)
+    msg = learning_ui.progress_screen(data)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"),
+        InlineKeyboardButton("🏠 Меню", callback_data="m_menu"),
+    ]])
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 # ================= ГЛАГОЛ ДНЯ / ПОСЛОВИЦА =================
@@ -2094,6 +1669,36 @@ def _dict_loose_text(lang, word):
     return _dict_loose_key(lang, "word", word)[2]
 
 
+_DIFFICULTY_LEVELS = ("A1", "A2", "B1", "B2", "C1")
+
+
+def _extract_srs_fields(d):
+    """Достаёт новые поля тренажёра (часть речи, конструкция, SRS-состояние по
+    умолчанию) из ответа AI. Общий парсер для добавления одной записи
+    (_normalize_dict_entry_full) и батч-миграции старых записей
+    (migrate_dict_entries_for_srs) — единый источник правды на формат этих
+    полей, чтобы не разойтись между двумя точками входа."""
+    import srs
+    if not isinstance(d, dict):
+        d = {}
+    forms = [str(f).strip() for f in (d.get("forms") or []) if str(f).strip()][:3]
+    alt_translations = [str(t).strip() for t in (d.get("alt_translations") or []) if str(t).strip()][:2]
+    difficulty = str(d.get("difficulty") or "").strip().upper()
+    if difficulty not in _DIFFICULTY_LEVELS:
+        difficulty = ""
+    return {
+        "pos": str(d.get("pos") or "").strip()[:40],
+        "plural": str(d.get("plural") or "").strip()[:60],
+        "forms": forms,
+        "topic": str(d.get("topic") or "").strip()[:40],
+        "difficulty": difficulty,
+        "construction": str(d.get("construction") or "").strip()[:120],
+        "situation_type": str(d.get("situation_type") or "").strip()[:40],
+        "alt_translations": alt_translations,
+        **srs.default_srs_state(),
+    }
+
+
 async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", avoid_translations=None):
     """Единая точка добавления: нормализация + перевод + короткий разбор + 1-2 примера.
     Один AI-вызов на запись, кэшируется в ai.py по input_hash (module="learning_dict_add",
@@ -2144,6 +1749,17 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
   без пояснений сверх необходимого).
 - examples: 1-2 примера предложений на изучаемом языке с переводом на русский, естественных
   и коротких.
+- pos: часть речи одним словом ("существительное", "глагол", "прилагательное", "фраза" и т.п.).
+- plural: множественное число, если применимо к существительному, иначе пусто.
+- forms: до 3 других форм слова (склонения/спряжения), если это уместно, иначе пустой список.
+- topic: одна короткая тема ("быт", "работа", "путешествия" и т.п.).
+- difficulty: оценка уровня CEFR одной меткой ("A1".."C1") по сложности слова/фразы.
+- construction: если это устойчивая конструкция/идиома — сама конструкция целиком
+  (например "zin hebben om te + infinitief"), иначе пусто. Для одиночных слов — пусто.
+- situation_type: если term — фраза для конкретной жизненной ситуации, короткий тип ситуации
+  ("отказ", "согласие", "извинение" и т.п.), иначе пусто.
+- alt_translations: до 2 дополнительных естественных вариантов перевода, отличных от translation,
+  если они реально уместны, иначе пустой список.
 - Не выдумывай значение. Если слово многозначное, редкое, написано с ошибкой, не хватает
   артикля для нидерландского существительного или есть риск неверного перевода, поставь
   needs_confirmation=true и дай наиболее вероятную трактовку.
@@ -2157,6 +1773,14 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
   "translation": "перевод",
   "breakdown": "короткий разбор",
   "examples": [{{"text": "...", "translation": "..."}}],
+  "pos": "часть речи",
+  "plural": "",
+  "forms": [],
+  "topic": "",
+  "difficulty": "A1|A2|B1|B2|C1",
+  "construction": "",
+  "situation_type": "",
+  "alt_translations": [],
   "needs_confirmation": false,
   "reason": "короткая причина уточнения или пусто"
 }}
@@ -2197,14 +1821,25 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
         "last_shown_at": None,
         "needs_confirmation": bool(d.get("needs_confirmation")),
         "reason": str(d.get("reason") or "").strip(),
+        **_extract_srs_fields(d),
     }
+
+
+_SRS_FIELD_KEYS = (
+    "pos", "plural", "forms", "topic", "difficulty", "construction",
+    "situation_type", "alt_translations",
+    "srs_level", "srs_easiness", "srs_interval_days", "srs_due_at",
+    "srs_history", "srs_last_exercise_type",
+)
 
 
 def _save_normalized_dict_entry(cid, entry):
     """Сохраняет запись единого словаря (структура из спеки: term/article/translation/
-    breakdown/examples/status). Возвращает (status, saved_entry) где status —
+    breakdown/examples/status + поля тренажёра pos/construction/SRS-состояние,
+    см. _extract_srs_fields). Возвращает (status, saved_entry) где status —
     added/updated/duplicate."""
     entry = dict(entry)
+    srs_fields = {k: entry[k] for k in _SRS_FIELD_KEYS if k in entry}
     words = store.get_list(config.DICT_KEY, cid)
     loose_text = _dict_loose_text(entry["lang"], entry["term"])
     for idx, item in enumerate(words):
@@ -2229,6 +1864,10 @@ def _save_normalized_dict_entry(cid, entry):
                 "last_shown_at": item.get("last_shown_at"),
                 "updated_at": datetime.now(config.TZ).isoformat(),
             })
+            # SRS-прогресс существующей записи не затирается повторным добавлением —
+            # только доопределяем поля, которых у записи ещё нет вовсе.
+            for k, v in srs_fields.items():
+                updated.setdefault(k, v)
             words[idx] = updated
             store.set_list(config.DICT_KEY, cid, words)
             return "updated", updated
@@ -2243,6 +1882,7 @@ def _save_normalized_dict_entry(cid, entry):
         "added_at": entry["added_at"],
         "status": entry.get("status") or "new",
         "last_shown_at": entry.get("last_shown_at"),
+        **srs_fields,
     }
     store.add_to_list(config.DICT_KEY, cid, saved)
     return "added", saved
@@ -2259,6 +1899,24 @@ def _entry_translation(item):
     if not isinstance(item, dict):
         return ""
     return item.get("translation") or item.get("ru") or ""
+
+
+def _entry_srs_state(item):
+    """SRS-состояние записи с фолбэком на дефолт для записей, ещё не прошедших
+    миграцию (см. migrate_dict_entries_for_srs)."""
+    import srs
+    if not isinstance(item, dict) or "srs_due_at" not in item:
+        return srs.default_srs_state()
+    return {k: item.get(k) for k in (
+        "srs_level", "srs_easiness", "srs_interval_days", "srs_due_at",
+        "srs_history", "srs_last_exercise_type",
+    )}
+
+
+def _entry_needs_srs_migration(item):
+    """True, если запись ещё не прошла батч-миграцию на новые поля тренажёра
+    (см. migrate_dict_entries_for_srs) — нет SRS-состояния вообще."""
+    return isinstance(item, dict) and "srs_due_at" not in item
 
 
 def _entry_needs_ai_refresh(item):
@@ -3112,6 +2770,76 @@ def _dict_counts(cid):
         out[lang] += 1
     return out
 
+
+_SRS_MIGRATION_BATCH_SIZE = 40  # ограничивает размер одного промпта на очень больших словарях
+
+
+def _srs_migration_prompt(lang, entries):
+    """Промпт батч-миграции: доопределяет поля тренажёра (pos/construction/...)
+    для записей словаря, у которых их ещё нет — одним запросом на пачку,
+    а не по одному слову (см. spec-learning-rework: 'Миграция')."""
+    lang_title = "нидерландский" if lang == "nl" else "английский"
+    lines = "\n".join(
+        f'{i}. term="{_entry_term(e)}" translation="{_entry_translation(e)}" breakdown="{e.get("breakdown", "")}"'
+        for i, e in enumerate(entries)
+    )
+    return f"""Ты лексикограф учебного словаря. Язык записей: {lang_title}.
+Для каждой записи ниже доопредели поля тренажёра. Не меняй term/translation — только
+доопредели недостающее по ним.
+
+Записи:
+{secure.wrap_untrusted(lines, "словарь пользователя")}
+
+Для каждой записи верни:
+- pos: часть речи одним словом.
+- plural: множественное число, если применимо к существительному, иначе пусто.
+- forms: до 3 других форм слова, если уместно, иначе пустой список.
+- topic: одна короткая тема.
+- difficulty: уровень CEFR одной меткой ("A1".."C1").
+- construction: если это устойчивая конструкция/идиома — сама конструкция целиком,
+  иначе пусто.
+- situation_type: если это фраза для конкретной жизненной ситуации — короткий тип
+  ситуации, иначе пусто.
+- alt_translations: до 2 дополнительных вариантов перевода, если уместны, иначе пустой список.
+
+Верни строго JSON-объект с ключом "items" — массив в ТОМ ЖЕ ПОРЯДКЕ, что записи выше,
+без markdown:
+{{"items": [{{"pos": "...", "plural": "", "forms": [], "topic": "...", "difficulty": "B1",
+   "construction": "", "situation_type": "", "alt_translations": []}}, ...]}}"""
+
+
+async def migrate_dict_entries_for_srs(cid, lang):
+    """Батч-миграция словаря на новую структуру тренажёра: доопределяет поля
+    (pos/construction/...) и проставляет SRS-дефолты одним AI-запросом на всю
+    пачку записей без srs_due_at (а не лениво по одной). Вызывается один раз
+    при первом заходе в новый тренажёр (см. train_start). Если батч не удался —
+    записи участвуют в тренажёре с дефолтными SRS-полями и пустыми новыми
+    текстовыми полями (не блокирует тренажёр), повторная попытка — при
+    следующем заходе, т.к. записи без srs_due_at останутся немигрированными."""
+    words = store.get_list(config.DICT_KEY, cid)
+    pending_idx = [
+        i for i, w in enumerate(words)
+        if _dict_lang(w) == lang and _entry_needs_srs_migration(w)
+    ]
+    if not pending_idx:
+        return
+    for batch_start in range(0, len(pending_idx), _SRS_MIGRATION_BATCH_SIZE):
+        batch_idx = pending_idx[batch_start:batch_start + _SRS_MIGRATION_BATCH_SIZE]
+        entries = [words[i] for i in batch_idx]
+        try:
+            prompt = _srs_migration_prompt(lang, entries)
+            results = await ai.allm_json(prompt, 2000, module="learning_srs_migration")
+            results = results if isinstance(results, list) else results.get("items", [])
+        except Exception as e:
+            _log.warning("srs migration batch failed, using defaults: %r", e, exc_info=True)
+            results = []
+        for pos, idx in enumerate(batch_idx):
+            fields = results[pos] if pos < len(results) and isinstance(results[pos], dict) else {}
+            extra = _extract_srs_fields(fields)
+            for k, v in extra.items():
+                words[idx].setdefault(k, v)
+    store.set_list(config.DICT_KEY, cid, words)
+
 async def _show_screen(bot, cid, text, entities=None, reply_markup=None, q=None):
     """Навигация внутри словаря: редактирует текущее сообщение, если есть callback
     query, иначе (первый вход, текстовая команда) шлёт новое."""
@@ -3361,214 +3089,6 @@ def _morning_method_line(method, entries):
     if not entries:
         return "В словаре пока нет записей на этом языке. Сегодня можно добавить что-то через словарь."
     return method
-
-
-# ================= БАЗА ОШИБОК (mistakeReview) =================
-
-def _mistakes(cid):
-    return store.get_list(config.MISTAKES_KEY, cid)
-
-
-def _find_open_mistake(mistakes, lang, term):
-    term_key = term.strip().casefold()
-    for m in mistakes:
-        if (not m.get("resolved") and m.get("lang") == lang
-                and str(m.get("term", "")).strip().casefold() == term_key):
-            return m
-    return None
-
-
-def record_mistake(cid, lang, term, wrong, correct, explanation=""):
-    """Записывает ошибку тренажёра в персистентную базу (mistakes.json). Если по
-    этому же слову уже есть нерешённая ошибка — обновляет её вместо дубля."""
-    import uuid
-    term = (term or "").strip()
-    wrong = (wrong or "").strip()
-    correct = (correct or "").strip()
-    if not term or not correct:
-        return
-    mistakes = _mistakes(cid)
-    existing = _find_open_mistake(mistakes, lang, term)
-    if existing:
-        existing["wrong"] = wrong or existing.get("wrong", "")
-        existing["correct"] = correct
-        existing["explanation"] = explanation or existing.get("explanation", "")
-        existing["last_reviewed_at"] = None
-    else:
-        mistakes.append({
-            "id": uuid.uuid4().hex[:8],
-            "lang": lang,
-            "term": term,
-            "wrong": wrong,
-            "correct": correct,
-            "explanation": explanation,
-            "created_at": datetime.now(config.TZ).isoformat(),
-            "review_count": 0,
-            "last_reviewed_at": None,
-            "resolved": False,
-        })
-    store.set_list(config.MISTAKES_KEY, cid, mistakes)
-
-
-def resolve_mistake(cid, mistake_id):
-    mistakes = _mistakes(cid)
-    for m in mistakes:
-        if m.get("id") == mistake_id:
-            m["resolved"] = True
-            store.set_list(config.MISTAKES_KEY, cid, mistakes)
-            return True
-    return False
-
-
-def mark_mistake_reviewed(cid, mistake_id):
-    mistakes = _mistakes(cid)
-    for m in mistakes:
-        if m.get("id") == mistake_id:
-            m["review_count"] = int(m.get("review_count") or 0) + 1
-            m["last_reviewed_at"] = datetime.now(config.TZ).isoformat()
-            store.set_list(config.MISTAKES_KEY, cid, mistakes)
-            return m
-    return None
-
-
-def next_open_mistake(cid, lang=None):
-    """Следующая нерешённая ошибка для повторения: сначала никогда не
-    повторённые, потом давно не повторявшиеся."""
-    mistakes = [m for m in _mistakes(cid) if not m.get("resolved")]
-    if lang:
-        mistakes = [m for m in mistakes if m.get("lang") == lang]
-    if not mistakes:
-        return None
-    def _key(m):
-        reviewed = m.get("last_reviewed_at")
-        return (0 if not reviewed else 1, reviewed or "")
-    return sorted(mistakes, key=_key)[0]
-
-
-def _mistake_review_kb(back="m_learn"):
-    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]])
-
-
-async def send_mistake_review(bot, cid, language=None, back="m_learn"):
-    """Показывает одну открытую ошибку на повторение. Если ошибок нет —
-    короткое сообщение вместо пустого экрана."""
-    lang_code = _code(language) if language else _active_language_code(cid)
-    mistake = next_open_mistake(cid, lang_code)
-    if not mistake:
-        msg = learning_ui.no_open_mistakes_card()
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                                reply_markup=_mistake_review_kb(back))
-        return
-    msg = learning_ui.mistake_review_card(mistake)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
-
-
-async def mistake_retry(bot, cid, mistake_id):
-    """«Попробовать снова»: помечает ошибку как повторённую и продолжает
-    тренажёр (следующая карточка по обычной логике)."""
-    mark_mistake_reviewed(cid, mistake_id)
-    if store.train_state.get(str(cid)):
-        await _render_next_train_quiz(bot, cid)
-    else:
-        await train_start(bot, cid, active_language(cid))
-
-
-async def mistake_understood(bot, cid, mistake_id):
-    """«Уже понял»: ошибка закрыта, продолжаем тренажёр той же карточкой
-    выбора (следующее слово по обычной логике)."""
-    resolve_mistake(cid, mistake_id)
-    if store.train_state.get(str(cid)):
-        await _render_next_train_quiz(bot, cid)
-    else:
-        await send_mistake_review(bot, cid)
-
-
-# ================= ДИАЛОГОВЫЙ ТРЕНАЖЁР =================
-# Ситуация → реплика собеседника → варианты ответа кнопками → фидбек. Весь
-# диалог (ситуация + 3-4 реплики + варианты + пометка лучшего варианта)
-# генерируется одним LLM-запросом, дальше только листаем уже готовые шаги.
-
-def generate_dialogue(language, level):
-    level_label = LEVEL_LABELS.get(level, "средний")
-    d = ai.llm_json(
-        f"Придумай короткий бытовой диалог на {language} для тренировки речи. "
-        f"Уровень: {level_label.lower()}. 3-4 реплики собеседника, на каждую — "
-        "2-3 варианта ответа ученика на том же языке, из которых один самый "
-        "естественный, остальные — тоже понятные, но менее уместные (не грубые "
-        "ошибки, а стилистически слабее). Перемешивай позицию самого естественного "
-        "варианта в списке options от шага к шагу — не ставь его всегда первым.\n"
-        'JSON: {"topic": "тема диалога по-русски", "steps": ['
-        '{"line": "реплика собеседника", "options": ["вариант 1", "вариант 2", "вариант 3"], '
-        '"best": "индекс (0, 1 или 2) самого естественного варианта в options — определи заново для каждого шага, '
-        'не копируй одно и то же число", '
-        '"note": "короткое пояснение по-русски, почему вариант под индексом best лучше остальных"}'
-        "]}",
-        900, tier="cheap", module="learning",
-    )
-    return d or {}
-
-
-async def dialogue_start(bot, cid):
-    store.pending_input.pop(str(cid), None)
-    store.game_state.pop(str(cid), None)
-    language = active_language(cid)
-    level = store.get_level(cid, language)
-    try:
-        d = generate_dialogue(language, level)
-    except Exception as e:
-        await verify.safe_error(bot, cid, e); return
-    steps = [s for s in (d.get("steps") or []) if s.get("line") and s.get("options")]
-    if not steps:
-        await bot.send_message(chat_id=cid, text="Не получилось собрать диалог. Попробуй ещё раз."); return
-    store.dialogue_state[str(cid)] = {
-        "lang": language, "topic": d.get("topic", ""), "steps": steps, "step": 0,
-    }
-    await _render_dialogue_step(bot, cid)
-
-
-async def _render_dialogue_step(bot, cid):
-    st = store.dialogue_state.get(str(cid))
-    if not st:
-        await bot.send_message(chat_id=cid, text="Диалог устарел, открой заново."); return
-    idx = st["step"]
-    steps = st["steps"]
-    if idx >= len(steps):
-        msg = learning_ui.dialogue_summary_card(st.get("topic", ""))
-        store.dialogue_state.pop(str(cid), None)
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
-        return
-    step = steps[idx]
-    msg = learning_ui.dialogue_step_card(
-        _flag(st["lang"]), st.get("topic", ""), step.get("line", ""),
-        step.get("options", []), idx + 1, len(steps),
-    )
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
-
-
-async def dialogue_pick(bot, cid, option_idx):
-    st = store.dialogue_state.get(str(cid))
-    if not st:
-        await bot.send_message(chat_id=cid, text="Диалог устарел, открой заново."); return
-    steps = st["steps"]
-    idx = st["step"]
-    if idx >= len(steps):
-        return
-    step = steps[idx]
-    options = step.get("options", [])
-    if option_idx >= len(options):
-        return
-    picked = options[option_idx]
-    is_good = option_idx == int(step.get("best", 0))
-    msg = learning_ui.dialogue_feedback_card(picked, is_good, step.get("note", "") if not is_good else "")
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
-
-
-async def dialogue_next(bot, cid):
-    st = store.dialogue_state.get(str(cid))
-    if not st:
-        await bot.send_message(chat_id=cid, text="Диалог устарел, открой заново."); return
-    st["step"] += 1
-    await _render_dialogue_step(bot, cid)
 
 
 def _entries_priority_sorted(pool):
