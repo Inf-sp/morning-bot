@@ -442,7 +442,7 @@ _PER_USER_KEYS = {
     config.NOTES_KEY, config.DICT_KEY,
     config.LAGOM_KEY, config.DIARY_KEY, config.LIFEHACK_KEY,
     config.FRIDGE_KEY, config.MY_RECIPES_KEY, config.LEFTOVER_RECIPES_SEEN_KEY, config.QUOTE_AUTHORS_KEY,
-    config.MOTIV_LAGOM_SEEN_KEY, config.CONCERTS_CACHE_KEY,
+    config.MOTIV_LAGOM_SEEN_KEY, config.CONCERTS_CACHE_KEY, config.TRAVEL_FACTS_SEEN_KEY,
 }
 
 def purge_user(cid):
@@ -477,6 +477,7 @@ train_state = {}        # chat_id -> состояние тренировки: о
 train_polls = {}        # poll_id -> chat_id для native quiz poll (формат "выбрать перевод")
 dict_pending_add = {}   # chat_id -> нормализованная запись словаря, ожидающая подтверждения
 dict_pending_batch = {}  # chat_id -> [записи], предложенные из большого текста, ждут "Добавить всё"
+trav_facts_state = {}   # chat_id -> {"iso", "name_ru"} последней страны в разделе «10 фактов»
 pending_input = {}
 last_inline_message = {}  # chat_id -> message_id последнего сообщения с инлайн-кнопками (для авто-снятия)
 pinned_menu_message = {}  # chat_id -> message_id главного меню (/menu) - исключение из авто-снятия

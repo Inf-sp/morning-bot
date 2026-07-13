@@ -1498,6 +1498,18 @@ _DICT_PAYLOAD_PREFIX_RE = re.compile(
 )
 _DICT_EMPTY_PAYLOAD = {"", "в", "на", "для", "туда", "это", "эту", "его", "её", "ее"}
 
+_DICT_LEADING_ADD_VERB_RE = re.compile(
+    r"^\s*(добавь|добавить|занеси|запиши|сохрани|сохранить|запомни|запомнить|внеси|закинь|"
+    r"add|save|remember)\s+", re.I)
+
+
+def _strip_leading_add_verb(line):
+    """Убирает командный глагол (add/добавь/...) ТОЛЬКО в начале строки — пользователь
+    внутри уже открытого диалога добавления ('Пришли слово или фразу') иногда по
+    привычке начинает со слова-команды, как в общем чате (см. try_add_dict_from_chat).
+    Не трогает середину строки, чтобы не откусить часть настоящей фразы."""
+    return _DICT_LEADING_ADD_VERB_RE.sub("", line, count=1).strip()
+
 def _dict_lang_hint_explicit(text):
     """Язык, явно названный в самой команде («на английском», «dutch» и т.п.).
     None, если язык явно не назван — тогда решение принимает вызывающий код
@@ -1610,8 +1622,9 @@ def _add_term_run(b, term):
 
 
 def _dict_entry_message(entry, status="added"):
-    """Карточка после добавления/обновления/поиска: термин жирным курсивом с большой буквы,
-    перевод одной строкой через жирную стрелку "→", разбор, примеры."""
+    """Карточка после добавления/обновления/поиска: заголовок статуса отдельной
+    строкой, термин жирным курсивом с большой буквы + перевод одной строкой
+    через жирную стрелку "→", разбор, пример полностью курсивом через "→"."""
     from ui.builder import MessageBuilder
 
     b = MessageBuilder()
@@ -1637,22 +1650,25 @@ def _dict_entry_message(entry, status="added"):
     emoji = "✅" if status in ("added", "updated") else "📚"
     b.text_line(f"{emoji} ")
     b.bold(titles.get(status, "Добавлено"))
-    b.text_line(": ")
-    _add_term_run(b, term)
     b.newline()
     b.spacer()
+    _add_term_run(b, term)
     if entry.get("translation"):
+        b.text_line(" ")
         b.bold("→")
         b.text_line(f" {entry['translation']}")
-        b.newline()
+    b.newline()
     if entry.get("breakdown"):
+        b.spacer()
         b.line(f"Разбор: {entry['breakdown']}")
     examples = entry.get("examples") or []
     if examples:
         b.spacer()
         b.line("Пример:" if len(examples) == 1 else "Примеры:")
         for ex in examples:
-            b.line(f"{ex.get('text', '')} — {ex.get('translation', '')}")
+            example_line = f"{ex.get('text', '')} → {ex.get('translation', '')}"
+            b.italic(example_line)
+            b.newline()
     return b.build_stripped()
 
 
@@ -2197,7 +2213,8 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
     (см. add_dict_entry_from_chat), несколько строк — превью списка с общим
     подтверждением (см. _offer_manual_batch_preview). detailed_confirmation=True —
     это уже подтверждённый список, идём сразу к AI-разбору и сохранению."""
-    lines = [x.strip() for x in re.split(r"[\n;]+", text or "") if x.strip()]
+    lines = [_strip_leading_add_verb(x) for x in re.split(r"[\n;]+", text or "")]
+    lines = [x for x in lines if x]
     if not lines:
         await bot.send_message(chat_id=cid, text="Не удалось распознать слова. Попробуй ещё раз.")
         return

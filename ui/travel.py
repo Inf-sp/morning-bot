@@ -111,3 +111,64 @@ def travel_plan(plan, fallback_country):
         b.newline()
         b.line(plan["fact"])
     return b.build_stripped()
+
+
+# ================= 10 ФАКТОВ О СТРАНЕ =================
+
+def facts_prompt_screen():
+    b = MessageBuilder()
+    b.text_line("🧭 ")
+    b.bold("О какой стране рассказать?")
+    b.newline()
+    b.spacer()
+    b.line("Напиши название страны на русском, английском или нидерландском.")
+    b.spacer()
+    b.line("Пример:")
+    b.quote("Япония")
+    return b.build_stripped()
+
+
+def facts_card(country_name, facts):
+    """10 фактов нумерованным списком: «N. Название текст», без канцеляризмов
+    и без списка источников (см. docs/travel.md, «10 фактов»)."""
+    b = MessageBuilder()
+    b.text_line("🧭 ")
+    b.bold(f"10 фактов о {country_name}")
+    b.newline()
+    b.spacer()
+    for i, fact in enumerate(facts, start=1):
+        b.line(f"{i}. {fact['title']} {fact['text']}")
+        b.spacer()
+    return b.build_stripped()
+
+
+def facts_not_found_screen():
+    b = MessageBuilder()
+    b.text_line("🌍 ")
+    b.bold("Не нашёл такую страну")
+    b.newline()
+    b.spacer()
+    b.line("Проверь название или напиши его по-другому.")
+    b.spacer()
+    b.line("Например: Япония, Japan или Nederland.")
+    return b.build_stripped()
+
+
+def facts_search_unavailable_screen():
+    b = MessageBuilder()
+    b.text_line("⚠️ ")
+    b.bold("Не удалось найти факты")
+    b.newline()
+    b.spacer()
+    b.line("Сервис поиска сейчас недоступен. Попробуй ещё раз позже.")
+    return b.build_stripped()
+
+
+def facts_exhausted_screen():
+    b = MessageBuilder()
+    b.text_line("🧭 ")
+    b.bold("Больше сильных фактов не нашлось")
+    b.newline()
+    b.spacer()
+    b.line("Я уже показал самые интересные и хорошо подтверждённые факты об этой стране.")
+    return b.build_stripped()

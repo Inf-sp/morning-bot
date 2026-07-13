@@ -538,6 +538,12 @@ async def answer_callback(update, context):
                 await _inline_status(lambda _s: travel.travel_fav(bot, cid))
             elif act == "trav_save":
                 await _inline_status(lambda _s: travel.save_plan(bot, cid))
+            elif act == "trav_facts":
+                await travel.facts_start(bot, cid)
+            elif act == "trav_facts_more":
+                await _inline_status(lambda _s: travel.facts_more(bot, cid))
+            elif act == "trav_facts_new":
+                await travel.facts_new_country(bot, cid)
             elif act == "watch":
                 await _ack(q); await leisure.send_movie_home(bot, cid, q)
             elif act == "read":
@@ -764,6 +770,8 @@ async def text_router(update, context):
             await onboard.handle_city(bot, cid, text); return
         if kind == "setcity":
             await weather.set_city_text(bot, cid, text); return
+        if kind == "trav_facts_country":
+            await travel.handle_facts_country_input(bot, cid, text); return
         if kind.startswith("dictadd_smart_"):
             await learning.add_smart_batch(bot, cid, text, kind.split("_")[2]); return
         if kind.startswith("dictadd_"):
