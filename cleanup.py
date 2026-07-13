@@ -67,7 +67,7 @@ COLLECTIONS = {
         "cinema_favorites", "cinema", f"Любимое · {ui_label('cinema', 'Кино')}", config.WATCHLIST_KEY, "movie",
         "a_watch", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("Добавить / Найти фильм", "as_loveadd_movies")),
+        add_button=("✏️ Добавить", "as_loveadd_movies")),
     "cinema_saved": _collection(
         "cinema_saved", "cinema", f"⭐️ Сохранённое · {ui_label('cinema', 'Кино')}", config.NOTES_KEY, "note",
         "a_watch", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
@@ -83,7 +83,7 @@ COLLECTIONS = {
         "books_favorites", "books", f"Любимое · {ui_label('books', 'Книги')}", config.BOOKS_KEY, "book",
         "a_read", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("Добавить / Найти книгу", "as_loveadd_books")),
+        add_button=("✏️ Добавить", "as_loveadd_books")),
     "books_saved": _collection(
         "books_saved", "books", f"⭐️ Сохранённое · {ui_label('books', 'Книги')}", config.READLIST_KEY, "book",
         "a_read", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": False}]),
@@ -98,7 +98,7 @@ COLLECTIONS = {
         "music_favorite_artists", "music", "Любимые артисты", config.ARTISTS_KEY, "artist",
         "a_listen", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("Добавить / Найти артиста", "as_loveadd_artists")),
+        add_button=("✏️ Добавить", "as_loveadd_artists")),
     "music_hidden_artists": _collection(
         "music_hidden_artists", "music", "Скрытые артисты", config.MUSIC_DISLIKE_KEY, "artist",
         "a_listen", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
@@ -114,7 +114,7 @@ COLLECTIONS = {
         "travel_favorite_countries", "travel", "🧳 Посещённые страны", config.FAVCOUNTRIES_KEY, "country",
         "m_travel", [{"id": "remove", "label": "Убрать страны", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("Добавить / Найти страну", "as_loveadd_countries")),
+        add_button=("✏️ Добавить", "as_loveadd_countries")),
     "travel_hidden_countries": _collection(
         "travel_hidden_countries", "travel", "Скрытые страны", config.TRAVEL_DISLIKE_KEY, "country",
         "m_travel", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),

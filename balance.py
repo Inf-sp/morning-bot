@@ -1672,7 +1672,10 @@ async def send_daycheck(bot, cid):
     worries = store.get_list(config.WORRIES_KEY, cid)
     msg = balance_ui.worries_diary(worries)
     store.pending_input[cid] = "worry"
-    settings.set_(cid, "_worry_prompt_ts", datetime.now(TZ).timestamp())
+    # _worry_prompt_ts НЕ ставим здесь: это только страховка на случай рестарта
+    # бота между плановым уведомлением "Дневная разгрузка" и ответом пользователя
+    # (см. bot.py). При ручном открытии раздела pending_input и так переживёт
+    # обычную работу бота — окно по времени тут только ловит несвязанные сообщения.
     rows = []
     if worries:
         rows.append([InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")])
