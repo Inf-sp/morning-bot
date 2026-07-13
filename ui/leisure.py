@@ -334,6 +334,8 @@ def concerts_list(place_label, events, empty_hint=""):
             b.line(f"Цена: {ev['price']}")
         if ev.get("date"):
             b.line(f"Дата: {ev['date']}")
+        if ev.get("source"):
+            b.line(f"Источник: {ev['source']}")
         if ev.get("url"):
             b.link("Подробнее…", ev["url"])
             b.newline()

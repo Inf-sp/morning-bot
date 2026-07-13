@@ -1346,6 +1346,9 @@ async def love_add_done(bot, cid, key, text, origin="base"):
     elif store_key:
         for item in items:
             store.add_to_list(store_key, cid, item)
+    if key == "artists" and items:
+        import leisure as _leisure
+        _leisure._kick_off_new_artist_concert_check(cid, items)
     import cleanup as _cl
     msg = settings_ui.favorite_added()
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)

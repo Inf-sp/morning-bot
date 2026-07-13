@@ -1146,12 +1146,30 @@ async def book_love(bot, cid, i):
         await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — в любимые (Мои книги). Вот ещё вариант.")
     await _advance_book(bot, cid)
 
+def _kick_off_new_artist_concert_check(cid, artist_names):
+    """При добавлении нового артиста запускает внешний поиск концертов сразу
+    (Tavily/Firecrawl/AI), не дожидаясь недельного цикла — фоновой задачей."""
+    s = store.get_settings(cid)
+    cc = (s.get("cc") or "NL").upper()
+    cname = s.get("country") or "твоя страна"
+
+    async def _run():
+        for name in artist_names:
+            try:
+                await refresh_artist_external_events(name, cc, cname)
+            except Exception as e:
+                _log.warning("new artist concert check failed for %r: %r", name, e)
+
+    asyncio.create_task(_run())
+
+
 async def listen_love(bot, cid):
     """Артист - в любимые (Мои музыканты), затем следующая рекомендация."""
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
         artist = rec["items"][0]
         _add_unique(config.ARTISTS_KEY, cid, artist)
+        _kick_off_new_artist_concert_check(cid, [artist])
         await bot.send_message(chat_id=cid, text=f"❤️ «{artist}» — в любимые (Мои музыканты). Вот ещё вариант.")
     await send_listen(bot, cid)
 
@@ -1311,8 +1329,10 @@ async def add_listen(bot, cid, i):
     await send_listen(bot, cid)
 
 def _ensure_artists(cid):
-    """Возвращает список артистов пользователя (без авто-сида)."""
-    return store.get_list(config.ARTISTS_KEY, cid)
+    """Возвращает список артистов пользователя (без авто-сида). Элемент может быть
+    строкой или {"id":..., "value": строка} (после захода в удаление, см.
+    store.ensure_list_ids_via) — нормализуем сразу здесь, единственной точке чтения."""
+    return [_item_text(a) for a in store.get_list(config.ARTISTS_KEY, cid) if _item_text(a)]
 
 _TRIBUTE_MARKERS = ("tribute", "cover", "covers", "candlelight", "songs of", "the music of",
                     "performed by", "celebrating", "by candle", "symphonic", "reimagined",
@@ -1415,6 +1435,256 @@ async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3,
             found[e.get("id") or f"{artist}:{date}:{e.get('name', '')}"] = e
     return sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate") or "9999-99-99")
 
+# ---------- Внешний поиск концертов (Tavily + Firecrawl + AI) ----------
+# Ticketmaster — основной источник, но не полный: маленькие площадки, локальные
+# промоутеры и часть европейских туров туда не попадают. Раз в 7 дней на артиста
+# добираем события через веб-поиск (см. find_concerts/refresh_concerts_cache).
+_ARTIST_EXTERNAL_TTL = 7 * 86400
+
+_EXTERNAL_SOURCE_PRIORITY = {
+    "official_site": 0,
+    "venue": 1,
+    "ticketmaster": 2,
+    "ticket_service": 3,
+    "other": 4,
+}
+
+_EXTERNAL_SOURCE_LABEL = {
+    "official_site": "сайт исполнителя",
+    "venue": "сайт площадки",
+    "ticket_service": "билетный сервис",
+    "other": "веб-поиск",
+}
+
+
+def _artist_cache_key(artist: str, cc: str) -> str:
+    return f"{artist.strip().lower()}|{cc.upper()}"
+
+
+def _external_events_cache_get(artist: str, cc: str):
+    data = store._load(config.ARTIST_EXTERNAL_EVENTS_KEY) or {}
+    entry = data.get(_artist_cache_key(artist, cc))
+    if not entry:
+        return None
+    if time.time() - int(entry.get("ts") or 0) > _ARTIST_EXTERNAL_TTL:
+        return None
+    return entry.get("events") or []
+
+
+def _external_events_cache_set(artist: str, cc: str, events: list):
+    data = store._load(config.ARTIST_EXTERNAL_EVENTS_KEY) or {}
+    data[_artist_cache_key(artist, cc)] = {"ts": int(time.time()), "events": events}
+    store._save(config.ARTIST_EXTERNAL_EVENTS_KEY, data)
+
+
+def _classify_external_source(url: str, artist: str) -> str:
+    """Грубая эвристика источника по URL — используется и для приоритета отбора,
+    и как подпись 'откуда' событие в UI (§ докс поиска концертов)."""
+    low = (url or "").lower()
+    artist_slug = re.sub(r"[^a-z0-9]+", "", artist.lower())
+    host = re.sub(r"^https?://(www\.)?", "", low).split("/")[0]
+    if artist_slug and artist_slug in re.sub(r"[^a-z0-9]+", "", host):
+        return "official_site"
+    if any(k in low for k in ("ticketmaster.", "eventim.", "songkick.", "bandsintown.")):
+        return "ticket_service" if "ticketmaster." not in low else "ticketmaster"
+    if any(k in low for k in ("ziggodome", "afaslive", "paradiso", "melkweg", "ahoy",
+                              "arena", "stadium", "hall", "venue", "club", "theater", "theatre")):
+        return "venue"
+    return "other"
+
+
+async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
+    """Tavily ищет упоминания, Firecrawl достаёт содержимое найденных страниц,
+    AI извлекает из каждой структурированные события. Только будущие концерты
+    в cc и его соседях (см. _neighbor_ccs)."""
+    import secure
+    from datetime import datetime
+    import research
+    queries = [
+        f"{artist} concert {cname} {time.strftime('%Y')}",
+        f"{artist} tour dates tickets {cname}",
+        f"{artist} live {cname} tickets",
+    ]
+    try:
+        results_batches = await asyncio.gather(
+            *[asyncio.to_thread(research.tavily_search, q, 5) for q in queries],
+            return_exceptions=True,
+        )
+    except Exception as e:
+        _log.warning("concerts external: tavily failed for artist=%s: %r", artist, e)
+        return []
+    urls = []
+    for batch in results_batches:
+        if isinstance(batch, Exception):
+            continue
+        for r in batch or []:
+            u = (r.get("url") or "").strip()
+            if u and u not in urls:
+                urls.append(u)
+    urls = urls[:8]
+    if not urls:
+        return []
+
+    # firecrawl_search работает по запросу, а не по конкретному URL — для извлечения
+    # содержимого уже найденных Tavily-страниц переиспользуем сами tavily-сниппеты
+    # (content уже получен на шаге поиска) вместо повторного похода в Firecrawl per-URL,
+    # плюс один точечный firecrawl-поиск по официальному сайту артиста для полноты.
+    firecrawl_extra = []
+    try:
+        firecrawl_extra = await asyncio.to_thread(
+            research.firecrawl_search, f"{artist} official tour dates {cname}", 3)
+    except Exception as e:
+        _log.warning("concerts external: firecrawl failed for artist=%s: %r", artist, e)
+
+    context_parts = []
+    for batch in results_batches:
+        if isinstance(batch, Exception):
+            continue
+        for r in batch or []:
+            content = (r.get("content") or "").strip()
+            url = (r.get("url") or "").strip()
+            if content and url:
+                context_parts.append(f"URL: {url}\n{content[:500]}")
+    for r in firecrawl_extra or []:
+        content = (r.get("content") or "").strip()
+        url = (r.get("url") or "").strip()
+        if content and url:
+            context_parts.append(f"URL: {url}\n{content[:500]}")
+    if not context_parts:
+        return []
+    raw_context = "\n---\n".join(context_parts)[:8000]
+
+    allowed_cc = [cc] + _neighbor_ccs(cc)
+    today = datetime.now(config.TZ).date().isoformat()
+    prompt = f"""Ты извлекаешь реальные концертные события артиста "{artist}" из текста веб-страниц.
+
+{secure.wrap_untrusted(raw_context, "материалы поиска")}
+
+Извлеки только БУДУЩИЕ концерты (дата не раньше {today}), которые проходят в одной из стран:
+{', '.join(allowed_cc)}. Игнорируй прошедшие даты, другие страны, tribute-концерты и кавер-группы.
+Добавляй событие ТОЛЬКО если дата, исполнитель и площадка прямо подтверждены текстом страницы —
+не додумывай и не угадывай недостающие поля.
+
+Верни JSON (без markdown):
+{{"events": [{{"artist": "{artist}", "date": "YYYY-MM-DD", "time": "HH:MM или пусто",
+"venue": "название площадки", "city": "город", "country_cc": "двухбуквенный код страны",
+"event_url": "ссылка на страницу события", "ticket_url": "ссылка на билеты или пусто",
+"source_url": "URL страницы-источника, откуда взято событие"}}]}}"""
+    try:
+        d = await ai.allm_json(prompt, 1500, module="leisure_concerts", route=None)
+    except Exception as e:
+        _log.warning("concerts external: AI extraction failed for artist=%s: %r", artist, e)
+        return []
+    raw_events = d.get("events") if isinstance(d, dict) else None
+    if not isinstance(raw_events, list):
+        return []
+
+    events = []
+    for e in raw_events:
+        if not isinstance(e, dict):
+            continue
+        date = str(e.get("date") or "").strip()
+        venue = str(e.get("venue") or "").strip()
+        city = str(e.get("city") or "").strip()
+        country_cc = str(e.get("country_cc") or "").strip().upper()
+        source_url = str(e.get("source_url") or "").strip()
+        if not (date and venue and source_url):
+            continue  # не подтверждено страницей источника — не добавляем
+        if country_cc and country_cc not in allowed_cc:
+            continue
+        if date < today:
+            continue
+        events.append({
+            "artist": artist,
+            "date": date,
+            "time": str(e.get("time") or "").strip(),
+            "venue": venue,
+            "city": city,
+            "country_cc": country_cc or cc,
+            "event_url": str(e.get("event_url") or source_url).strip(),
+            "ticket_url": str(e.get("ticket_url") or "").strip(),
+            "source": _classify_external_source(source_url, artist),
+        })
+    return events
+
+
+async def get_external_events_for_artist(artist: str, cc: str, cname: str = "", force: bool = False):
+    """Внешние (не-Ticketmaster) события артиста с недельным глобальным кэшем.
+    force=True — пропустить кэш (используется при добавлении нового артиста)."""
+    if not force:
+        cached = _external_events_cache_get(artist, cc)
+        if cached is not None:
+            return cached
+    events = await _collect_external_events_for_artist(artist, cc, cname or cc)
+    _external_events_cache_set(artist, cc, events)
+    return events
+
+
+def _external_event_to_tm_shape(ev: dict) -> dict:
+    """Оборачивает нормализованное внешнее событие в ту же форму, что отдаёт
+    Ticketmaster (dates.start.localDate, _embedded.venues[0], _artist, url) —
+    так весь существующий даунстрим-код (жанр/цена/рендер/дедуп по id) продолжает
+    работать без изменений, не различая источник события."""
+    artist = ev.get("artist", "")
+    date = ev.get("date", "")
+    city = ev.get("city", "")
+    venue = ev.get("venue", "")
+    source = ev.get("source", "other")
+    return {
+        "id": f"ext:{source}:{artist.lower()}:{date}:{city.lower()}",
+        "name": f"{artist} — {venue}".strip(" —"),
+        "url": ev.get("ticket_url") or ev.get("event_url") or "",
+        "dates": {"start": {"localDate": date, "localTime": ev.get("time", "")}},
+        "_embedded": {
+            "venues": [{
+                "name": venue,
+                "city": {"name": city},
+                "country": {"countryCode": ev.get("country_cc", "")},
+            }],
+        },
+        "_artist": artist,
+        "_source": source,
+        "_event_url": ev.get("event_url", ""),
+    }
+
+
+def _tm_event_key(e: dict) -> tuple:
+    """Ключ дедупликации по нормализованному артисту/дате/городу/площадке —
+    работает и на сырых Ticketmaster-событиях, и на обёрнутых внешних."""
+    artist = e.get("_artist", "")
+    date = e.get("dates", {}).get("start", {}).get("localDate", "")
+    venue_obj = (e.get("_embedded", {}).get("venues") or [{}])[0]
+    city = (venue_obj.get("city") or {}).get("name", "")
+    venue = venue_obj.get("name", "")
+    return (artist.strip().lower(), date.strip(), city.strip().lower(), venue.strip().lower())
+
+
+def merge_concert_events(tm_events: list, external_events: list) -> list:
+    """Объединяет Ticketmaster и внешние события (уже в TM-подобной форме), убирает
+    дубли по (артист, дата, город, площадка), при конфликте оставляет источник
+    с наивысшим приоритетом (официальный сайт → площадка → Ticketmaster →
+    билетный сервис → прочее)."""
+    def prio(e):
+        source = e.get("_source", "ticketmaster")
+        return _EXTERNAL_SOURCE_PRIORITY.get(source, 9)
+
+    best = {}
+    for e in list(tm_events) + [_external_event_to_tm_shape(ev) for ev in external_events]:
+        key = _tm_event_key(e)
+        if not key[0] or not key[1]:
+            continue
+        current = best.get(key)
+        if current is None or prio(e) < prio(current):
+            best[key] = e
+    return sorted(best.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate") or "9999-99-99")
+
+
+async def refresh_artist_external_events(artist: str, cc: str, cname: str = ""):
+    """Запускает проверку внешних источников сразу для одного артиста — вызывается
+    при добавлении нового артиста в любимые, не дожидаясь недельного цикла."""
+    return await get_external_events_for_artist(artist, cc, cname, force=True)
+
+
 _GENRE_TRANSLATIONS = {
     "rock": "Рок", "pop": "Поп", "hip-hop/rap": "Хип-хоп", "hip hop": "Хип-хоп",
     "electronic": "Электроника", "dance/electronic": "Электроника", "jazz": "Джаз",
@@ -1492,14 +1762,26 @@ def _concerts_cache_set(cid, cc, events):
 
 
 async def _fetch_concerts(artists, cc, cname):
-    """Живой запрос к Ticketmaster без кэша — общая часть для
-    find_concerts/send_weekly_events и для job'а прогрева кэша по воскресеньям."""
+    """Живой запрос к Ticketmaster + внешний поиск (Tavily/Firecrawl/AI, кэш 7 дней
+    на артиста) без кэша — общая часть для find_concerts/send_weekly_events и для
+    job'а прогрева кэша по воскресеньям. Ticketmaster — основной источник, но не
+    полный: внешний поиск добирает события, которых там нет."""
     from datetime import datetime, timedelta
     now = datetime.now(config.TZ)
     date_from = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     date_to = (now + timedelta(days=182)).strftime("%Y-%m-%dT%H:%M:%SZ")  # ~6 месяцев
 
-    return await _ticketmaster_events_many(artists, cc, start_dt=date_from, end_dt=date_to, size=10, limit=40)
+    tm_events = await _ticketmaster_events_many(artists, cc, start_dt=date_from, end_dt=date_to, size=10, limit=40)
+    external_batches = await asyncio.gather(
+        *[get_external_events_for_artist(artist, cc, cname) for artist in artists[:40]],
+        return_exceptions=True,
+    )
+    external_events = []
+    for batch in external_batches:
+        if isinstance(batch, Exception):
+            continue
+        external_events.extend(batch or [])
+    return merge_concert_events(tm_events, external_events)
 
 
 async def refresh_concerts_cache(cid):
@@ -1600,6 +1882,7 @@ async def _build_new_concerts_msg(cid):
     for e in new_events:
         date = e.get("dates", {}).get("start", {}).get("localDate", "")
         city = ((e.get("_embedded", {}).get("venues") or [{}])[0].get("city") or {}).get("name", "")
+        source = e.get("_source", "ticketmaster")
         rows_data.append({
             "artist": e.get("_artist", ""),
             "flag": flag,
@@ -1608,11 +1891,53 @@ async def _build_new_concerts_msg(cid):
             "price": _concert_min_price(e),
             "date": _fmt_date(date) if date else "",
             "url": e.get("url", ""),
+            "source": "" if source == "ticketmaster" else _EXTERNAL_SOURCE_LABEL.get(source, ""),
         })
 
     msg = leisure_ui.concerts_list("Новые концерты твоих артистов", rows_data)
     _seen_concerts_add(cid, [_concert_event_id(e) for e in new_events])
     return msg
+
+
+_CONCERT_CC_MAP = {
+    "nl": ("NL", COUNTRY_EMOJI["nl"], "Нидерланды"),
+    "be": ("BE", COUNTRY_EMOJI["be"], "Бельгия"),
+    "de": ("DE", COUNTRY_EMOJI["de"], "Германия"),
+    "fr": ("FR", COUNTRY_EMOJI["fr"], "Франция"),
+    "gb": ("GB", COUNTRY_EMOJI["gb"], "Великобритания"),
+    "es": ("ES", COUNTRY_EMOJI["es"], "Испания"),
+    "it": ("IT", COUNTRY_EMOJI["it"], "Италия"),
+    "at": ("AT", COUNTRY_EMOJI["at"], "Австрия"),
+    "ch": ("CH", COUNTRY_EMOJI["ch"], "Швейцария"),
+    "pl": ("PL", COUNTRY_EMOJI["pl"], "Польша"),
+    "se": ("SE", COUNTRY_EMOJI["se"], "Швеция"),
+    "dk": ("DK", COUNTRY_EMOJI["dk"], "Дания"),
+    "pt": ("PT", COUNTRY_EMOJI["pt"], "Португалия"),
+}
+
+# Реальные географические соседи (сухопутная граница/ближайший регион), ограничены
+# набором стран выше — используется для "соседние регионы" в поиске концертов
+# (§ внешний поиск по артисту), не для смены страны кнопкой.
+_NEIGHBOR_CC = {
+    "NL": ["BE", "DE"],
+    "BE": ["NL", "FR", "DE"],
+    "DE": ["NL", "BE", "FR", "CH", "AT", "PL", "DK"],
+    "FR": ["BE", "DE", "CH", "IT", "ES", "GB"],
+    "GB": ["FR"],
+    "ES": ["FR", "PT"],
+    "IT": ["FR", "CH", "AT"],
+    "AT": ["DE", "CH", "IT"],
+    "CH": ["DE", "FR", "IT", "AT"],
+    "PL": ["DE"],
+    "SE": ["DK"],
+    "DK": ["DE", "SE"],
+    "PT": ["ES"],
+}
+
+
+def _neighbor_ccs(cc: str) -> list:
+    """Соседние страны для cc из _CONCERT_CC_MAP; [] если cc вне этого набора."""
+    return list(_NEIGHBOR_CC.get((cc or "").upper(), []))
 
 
 async def find_concerts(bot, cid, mode="home"):
@@ -1629,23 +1954,8 @@ async def find_concerts(bot, cid, mode="home"):
     home_cc = (s.get("cc") or "NL").upper()
     home_flag = util.flag_from_cc(home_cc)
     home_name = s.get("country") or "твоя страна"
-    CC_MAP = {
-        "nl": ("NL", COUNTRY_EMOJI["nl"], "Нидерланды"),
-        "be": ("BE", COUNTRY_EMOJI["be"], "Бельгия"),
-        "de": ("DE", COUNTRY_EMOJI["de"], "Германия"),
-        "fr": ("FR", COUNTRY_EMOJI["fr"], "Франция"),
-        "gb": ("GB", COUNTRY_EMOJI["gb"], "Великобритания"),
-        "es": ("ES", COUNTRY_EMOJI["es"], "Испания"),
-        "it": ("IT", COUNTRY_EMOJI["it"], "Италия"),
-        "at": ("AT", COUNTRY_EMOJI["at"], "Австрия"),
-        "ch": ("CH", COUNTRY_EMOJI["ch"], "Швейцария"),
-        "pl": ("PL", COUNTRY_EMOJI["pl"], "Польша"),
-        "se": ("SE", COUNTRY_EMOJI["se"], "Швеция"),
-        "dk": ("DK", COUNTRY_EMOJI["dk"], "Дания"),
-        "pt": ("PT", COUNTRY_EMOJI["pt"], "Португалия"),
-    }
-    if mode in CC_MAP:
-        cc, flag, cname = CC_MAP[mode]
+    if mode in _CONCERT_CC_MAP:
+        cc, flag, cname = _CONCERT_CC_MAP[mode]
     else:
         cc, flag, cname = home_cc, home_flag, home_name
     cname_place = _concert_place_name(cname, cc)
@@ -1687,6 +1997,7 @@ async def find_concerts(bot, cid, mode="home"):
         seen_artist_events.add(dedup_key)
 
         place = city
+        source = e.get("_source", "ticketmaster")
         rows_data.append({
             "artist": artist,
             "flag": flag,
@@ -1695,6 +2006,7 @@ async def find_concerts(bot, cid, mode="home"):
             "price": _concert_min_price(e),
             "date": _fmt_date(date) if date else "",
             "url": e.get("url", ""),
+            "source": "" if source == "ticketmaster" else _EXTERNAL_SOURCE_LABEL.get(source, ""),
         })
 
     msg = leisure_ui.concerts_list(place_label, rows_data)
