@@ -209,7 +209,12 @@ async def _run_notif_test(bot, cid, kind) -> bool:
 
 
 class NotificationOption:
-    """Одно тестируемое уведомление для админ-панели: ключ + заголовок + расписание."""
+    """Одно тестируемое уведомление для админ-панели: ключ + заголовок + расписание.
+
+    button_title — ровно тот заголовок, который видно в реальном пришедшем
+    сообщении (см. send_scheduled_notification), не служебный ярлык — чтобы
+    пользователь на экране «Уведомления» узнавал кнопку по тому, что ему
+    приходит, а не гадал по короткому названию."""
     __slots__ = ("key", "title", "schedule_label", "time_label", "button_title", "button_label", "sort_key")
 
     def __init__(self, key: str, title: str, schedule_label: str, time_label: str = "",
@@ -219,27 +224,29 @@ class NotificationOption:
         self.schedule_label = schedule_label
         self.time_label = time_label
         self.button_title = button_title or title
-        self.button_label = f"{time_label} {self.button_title}".strip()
+        self.button_label = f"{self.button_title} · {time_label}".strip(" ·") if time_label else self.button_title
         self.sort_key = sort_key
 
 
 _ADMIN_NOTIFICATION_META = {
-    "morning_brief": ("08:30", "Утро"),
-    "weekend_events": ("10:00", "Куда сходить"),
-    "daily_words": ("11:00", "Практика языка"),
-    "checkin_day": ("14:00", "Разгрузка"),
-    "evening_weather": ("19:00", "Погода"),
-    "checkin_eve": ("21:30", "Разбор"),
-    "weather_warn": ("08:45", "Предупреждение"),
+    "morning_brief":   ("08:30", "☀️ Мой день"),
+    "weekend_events":  ("пт 10:00", "🎧 Ближайшие события"),
+    "daily_words":     ("11:00", "📚 Слова и фразы дня"),
+    "checkin_day":     ("14:00", "🫣 Дневная разгрузка"),
+    "evening_weather": ("19:00", "🌦️ Погода на завтра"),
+    "checkin_eve":     ("21:30", "🌙 Вечерний разбор"),
+    "weather_warn":    ("08:45, если есть повод", "⚠️ Погодное предупреждение"),
 }
 
 
 def _time_sort_key(value: str) -> int:
-    try:
-        hh, mm = str(value).split(":", 1)
-        return int(hh) * 60 + int(mm)
-    except Exception:
+    """Извлекает HH:MM из произвольного места строки (не только 'HH:MM' целиком) —
+    time_label теперь может быть 'пт 10:00' или '08:45, если есть повод'."""
+    import re
+    m = re.search(r"(\d{1,2}):(\d{2})", str(value or ""))
+    if not m:
         return 9999
+    return int(m.group(1)) * 60 + int(m.group(2))
 
 
 def get_notification_options() -> list:

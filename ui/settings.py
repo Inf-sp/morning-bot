@@ -5,6 +5,7 @@ from .constants import ui_label
 def notifications():
     b = MessageBuilder()
     b.section(ui_label("broadcasts", "Уведомления"))
+    b.line("На каждой кнопке — название и время того, что тебе придёт.")
     b.line("Нажми для включения/выключения. ✅ — включено.")
     return b.build_stripped()
 
