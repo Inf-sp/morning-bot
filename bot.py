@@ -38,7 +38,6 @@ CHAT_ID = config.CHAT_ID
 
 
 
-_WELCOME = menu.WELCOME
 _ROOT = Path(__file__).parent
 _DEFAULT_DEPLOY_NOTE = "Бот получил небольшие внутренние улучшения."
 _DEFAULT_DEPLOY_TITLE = "Обновление"
@@ -267,7 +266,8 @@ async def start(update, context):
     if args:
         code = args[0].strip()
         if access.is_allowed(cid):
-            await update.message.reply_text(_WELCOME, entities=menu.WELCOME_ENTITIES, reply_markup=menu.main_menu_kb())
+            msg = menu.welcome_for(cid)
+            await update.message.reply_text(msg.text, entities=msg.entities, reply_markup=menu.main_menu_kb())
             return
         if access.use_invite(code, cid):
             await onboard.start(context.bot, cid)
@@ -279,7 +279,8 @@ async def start(update, context):
         await update.message.reply_text("❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
 
-    await update.message.reply_text(_WELCOME, entities=menu.WELCOME_ENTITIES, reply_markup=menu.main_menu_kb())
+    msg = menu.welcome_for(cid)
+    await update.message.reply_text(msg.text, entities=msg.entities, reply_markup=menu.main_menu_kb())
 
 
 # ---------- Диспетчер инлайн-кнопок ----------

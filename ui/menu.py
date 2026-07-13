@@ -57,9 +57,11 @@ def main_menu_kb():
     return ikb(main_menu_rows())
 
 
-def welcome():
+def welcome(name: str = ""):
+    name = str(name or "").strip()
+    greeting = f"Привет, {name}! Я DM — помощник на каждый день." if name else "Привет! Я DM — помощник на каждый день."
     b = MessageBuilder()
-    b.bold("Привет! Я DM — помощник на каждый день.")
+    b.bold(greeting)
     b.newline()
     b.spacer()
     b.line("Помогу подобрать одежду, найти рецепт, потренировать язык, спланировать поездку или просто разобраться с вопросом.")

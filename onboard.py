@@ -152,10 +152,11 @@ async def _finish(bot, cid):
     prof = store.get_profile(cid)
     prof[menu.REPLY_KB_REMOVED_FLAG] = True
     store.set_profile(cid, prof)
+    msg = menu.welcome_for(cid)
     await bot.send_message(
         chat_id=cid,
-        text=menu.WELCOME,
-        entities=menu.WELCOME_ENTITIES,
+        text=msg.text,
+        entities=msg.entities,
     )
     if st.get("langs"):
         await learning.send_seed_intro(bot, cid)

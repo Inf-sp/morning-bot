@@ -1,11 +1,14 @@
 from ui import menu as menu_ui
 
-
-_WELCOME = menu_ui.welcome()
-WELCOME, WELCOME_ENTITIES = _WELCOME.text, _WELCOME.entities
-
 REPLY_KB_REMOVED_FLAG = "reply_kb_removed_v7"  # разово снимаем нижнюю Reply-клавиатуру
                                                 # «Ассистент» у профилей, где она уже была
+
+
+def welcome_for(cid):
+    """Приветствие с именем пользователя из профиля, если оно уже собрано онбордингом."""
+    import store
+    name = store.get_profile(cid).get("name", "") if cid is not None else ""
+    return menu_ui.welcome(name)
 
 
 def main_menu_kb():
@@ -13,7 +16,8 @@ def main_menu_kb():
 
 
 def main_menu_screen(cid=None):
-    return WELCOME, WELCOME_ENTITIES, main_menu_kb()
+    msg = welcome_for(cid)
+    return msg.text, msg.entities, main_menu_kb()
 
 
 def _back(parent="m_close"):
