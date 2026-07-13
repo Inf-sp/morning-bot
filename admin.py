@@ -130,6 +130,7 @@ async def send_home(bot, cid, q=None):
         [InlineKeyboardButton("🔌 API и AI", callback_data="adm_api_ai")],
         [InlineKeyboardButton(ui_label("notifications", "Уведомления"), callback_data="adm_notif")],
         [InlineKeyboardButton(ui_label("users", "Пользователи"), callback_data="adm_users")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
     ])
     msg = ui.home(
         system_dot=dot,
