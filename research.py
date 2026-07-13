@@ -594,7 +594,7 @@ def firecrawl_search(query: str, max_results: int = 5) -> list:
     try:
         r = requests.post(
             "https://api.firecrawl.dev/v1/search",
-            json={"query": query, "limit": max_results, "sources": ["web"]},
+            json={"query": query, "limit": max_results, "sources": [{"type": "web"}]},
             headers={"Authorization": f"Bearer {config.FIRECRAWL_API_KEY}"},
             timeout=18,
         )

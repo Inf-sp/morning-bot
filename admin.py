@@ -477,7 +477,7 @@ def _service_state_detail(service, label, snapshot):
     return "ok", detail, override
 
 
-def _ai_line(service, label, snapshot, *, role):
+def _ai_line(service, label, snapshot, *, role=None):
     state, detail, override = _service_state_detail(service, label, snapshot)
     return _compose_line(override or state, label, detail, role)
 
@@ -551,7 +551,7 @@ async def send_api_ai(bot, cid, q=None):
 
     ai_rows = [
         _gemini_line(snapshot),
-        _ai_line("groq", "Groq", snapshot, role=_join_and(_used_by("Groq")) or "резерв"),
+        _ai_line("groq", "Groq", snapshot),
         _ai_line("cloudflare", "Cloudflare AI", snapshot, role="резерв"),
     ]
     openrouter_line = _openrouter_line(snapshot, ai)
