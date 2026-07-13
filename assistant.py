@@ -126,6 +126,9 @@ def _looks_medical(text: str) -> bool:
 async def _run_intent(bot, cid, action):
     import balance, leisure, learning, wardrobe, myday, settings, travel
     import weather as wx
+    # Ответы ассистента на свободный текст не должны нести кнопку «⬅️ Назад» -
+    # пользователь не открывал раздел через меню, и вести её было бы некуда.
+    no_kb_bot = settings._NoKbBot(bot)
     if action == "meal_picker":
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("🥐 Завтрак", callback_data="a_recipe_breakfast"),
@@ -135,34 +138,34 @@ async def _run_intent(bot, cid, action):
         await bot.send_message(chat_id=cid, text="🍽 <b>Что готовим?</b>",
                                parse_mode="HTML", reply_markup=kb)
     elif action == "day_plan":
-        await myday.send_plany(bot, cid)
+        await myday.send_plany(no_kb_bot, cid)
     elif action == "fridge":
-        await balance.send_fridge_recipe(bot, cid)
+        await balance.send_fridge_recipe(no_kb_bot, cid)
     elif action == "movie":
-        await leisure.send_recos(bot, cid, "movie")
+        await leisure.send_recos(no_kb_bot, cid, "movie")
     elif action == "book":
-        await leisure.send_recos(bot, cid, "book")
+        await leisure.send_recos(no_kb_bot, cid, "book")
     elif action == "music":
-        await leisure.send_listen(bot, cid)
+        await leisure.send_listen(no_kb_bot, cid)
     elif action == "travel":
-        await travel.send_go(bot, cid)
+        await travel.send_go(no_kb_bot, cid)
     elif action == "concerts":
-        await leisure.find_concerts(bot, cid, "home")
+        await leisure.find_concerts(no_kb_bot, cid, "home")
     elif action == "motivation":
-        await balance.send_motiv_push(bot, cid)
+        await balance.send_motiv_push(no_kb_bot, cid)
     elif action == "learn":
         text, entities, kb = __import__("menu").menu_screen("m_learn", cid)
         await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb)
     elif action == "dictionary":
-        await learning.send_dict(bot, cid)
+        await learning.send_dict(no_kb_bot, cid)
     elif action == "outfit":
-        await wardrobe.send_looks(bot, cid)
+        await wardrobe.send_looks(no_kb_bot, cid)
     elif action == "weather":
-        await wx.send_weather(bot, cid, "today")
+        await wx.send_weather(no_kb_bot, cid, "today")
     elif action == "worry":
-        await balance.send_daycheck(bot, cid)
+        await balance.send_daycheck(no_kb_bot, cid)
     elif action == "notes":
-        await settings.send_notes(bot, cid)
+        await settings.send_notes(no_kb_bot, cid)
 
 
 async def chat_reply(bot, cid, text):

@@ -364,7 +364,7 @@ def _word_of_day(cid):
     top_n = pool[:max(1, len(pool) // 3)] or pool
     w = random.choice(top_n)
     term = learning._entry_term(w)
-    ru = learning._entry_translation(w)
+    ru = learning._entry_translation(w).replace(";", ",")
 
     w["last_shown_at"] = datetime.now(TZ).isoformat()
     try:
@@ -374,7 +374,7 @@ def _word_of_day(cid):
     except Exception:
         pass
 
-    return f"{_cap(term)} → {_cap(ru)}", lang
+    return f"{_cap(term)} → {_cap(ru)}.", lang
 
 _day_cache = {}  # cid -> {"date":..., "text":..., "entities":..., "ts": float}
 
