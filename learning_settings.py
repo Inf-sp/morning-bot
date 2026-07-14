@@ -4,9 +4,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import store
 from ui import learning as learning_ui
-
-
-LEVEL_LABELS = {"simple": "Простой", "medium": "Средний", "hard": "Сложный"}
+from dictionary_seed_ui import LEVEL_LABELS, SEED_LEVELS as LEVELS
 
 
 def _code(language):
@@ -21,6 +19,20 @@ def _active_language_code(cid):
         return code
     import settings
     return _code(settings.study_lang(cid))
+
+
+def _language_for_code(code):
+    return "английский" if code == "en" else "нидерландский"
+
+
+def active_language(cid):
+    return _language_for_code(_active_language_code(cid))
+
+
+def _language_display(language):
+    flag = "🇳🇱" if _code(language) == "nl" else "🇬🇧"
+    title = "Нидерландский" if _code(language) == "nl" else "Английский"
+    return f"{flag} {title}"
 
 
 def _level_label(level):
@@ -82,6 +94,7 @@ async def handle_learning_settings_callback(bot, cid, q, data):
             store.set_level(cid, language, level)
             await send_learning_settings(bot, cid, q=q, back=back)
             if old_level != level:
+                from dictionary_seed import offer_seed_for_level_change
                 await offer_seed_for_level_change(bot, cid, language, level)
             return
         await send_learning_settings(bot, cid, q=q, back=back)

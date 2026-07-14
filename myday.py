@@ -15,6 +15,7 @@ import ai
 import weather
 import learning
 import learning_dictionary as dictionary
+import dictionary_seed
 import research
 import memory
 from util import esc, _WEEKDAY_SHORT, _MONTHS, flag_from_cc, country_flag
@@ -139,7 +140,7 @@ _LIFEHACK_CATEGORIES = (
 )
 
 _LIFEHACK_CATEGORY_EMOJI = {
-    "дом": "🏠", "кухня": "🍳", "гардероб": "👕", "продуктивность": "⚡",
+    "дом": "🏠", "кухня": "🍽", "гардероб": "👕", "продуктивность": "⚡",
     "технологии": "💻", "фотография": "📷", "жизнь в нидерландах": "🇳🇱",
     "растения": "🌿", "домашние животные": "🐾",
 }
@@ -516,7 +517,7 @@ async def _maybe_prompt_dict_seed(bot, cid):
             return
         prof["_myday_seed_prompted"] = True
         store.set_profile(cid, prof)
-        await dictionary.send_seed_intro(bot, cid, lang)
+        await dictionary_seed.send_seed_intro(bot, cid, lang)
     except Exception as e:
         _log.warning("myday: _maybe_prompt_dict_seed failed: %s", e)
 

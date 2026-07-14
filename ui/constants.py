@@ -86,6 +86,17 @@ UI_EMOJI = {
     "budget": "💶",
     "dont_miss": "❗️",
     "lgbtq": "🌈",
+    # Дополнительная семантика разделов и действий. Значения централизованы здесь,
+    # даже если конкретный экран пока использует литерал для читаемости разметки.
+    "answer": "⌨️", "energy": "⚡", "evening_weather": "🌦️",
+    "art": "🎨", "theatre": "🎭", "target": "🎯", "guitar": "🎸",
+    "pets": "🐾", "clothes": "👕", "ghost": "👻", "romance": "💕",
+    "romance_alt": "💘", "action_movie": "💥", "technology": "💻",
+    "clipboard": "📋", "pin": "📌", "signal": "📶", "photo": "📷",
+    "knife": "🔪", "speech": "🗣", "route_alt": "🗺️", "comedy": "😂",
+    "calm": "😌", "scary": "😱", "surprise": "😲", "tools": "🛠",
+    "thinking": "🤔", "disguise": "🥸", "compass": "🧭", "luggage": "🧳",
+    "mood": "🫥", "give_up": "🫪", "atmosphere": "🌫️",
 }
 
 CUISINE_EMOJI = {
@@ -164,4 +175,3 @@ def ui_label(key, text):
 def cuisine_label(key, text):
     emoji = CUISINE_EMOJI.get(key)
     return f"{emoji} {text}" if emoji else text
-

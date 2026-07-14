@@ -12,6 +12,7 @@ os.environ.setdefault("WEATHER_API_KEY", "test-weather")
 import config
 import weather
 import requests
+import storage_driver
 
 NOW_TS = int(weather.datetime.now(weather.TZ).replace(hour=8, minute=0, second=0, microsecond=0).timestamp())
 
@@ -78,8 +79,7 @@ def _install_fake_get(responder):
 
 def _reset_cache():
     weather._WX_CACHE.clear()
-    if config.WEATHER_CACHE_KEY in weather.store._mem:
-        del weather.store._mem[config.WEATHER_CACHE_KEY]
+    storage_driver._memory.pop(config.WEATHER_CACHE_KEY, None)
 
 
 # 1) успешный ответ One Call 4.0: current + hourly + daily

@@ -211,14 +211,45 @@ def audit_architecture(root=None):
         "trainer_grading.py", "trainer_session.py", "learning_dictionary.py",
         "dictionary_model.py", "dictionary_repository.py", "dictionary_seed_state.py",
         "dictionary_seed_ui.py",
+        "dictionary_seed_catalog.py",
+        "dictionary_seed.py",
+        "dictionary_morning.py",
+        "dictionary_import.py",
         "live_language.py", "learning_game.py", "learning_settings.py",
         "cooking.py", "leisure_movies.py", "leisure_books.py",
+        "leisure_collection.py",
         "leisure_music.py", "leisure_concerts.py", "saved_items.py",
         "storage_driver.py", "runtime_state.py", "repositories.py",
         "response_delivery.py", "retry_flow.py",
+        "fridge.py",
+        "fridge_model.py",
+        "recipe_state.py",
+        "saved_recipes.py",
+        "recipe_generation.py",
+        "wardrobe_model.py",
+        "wardrobe_outfit.py",
+        "bot_callbacks.py",
+        "bot_text.py",
+        "weather_provider.py",
     }
     missing = sorted(name for name in required if not os.path.exists(os.path.join(root, name)))
     findings.extend(f"missing module: {name}" for name in missing)
+
+    # Контроллеры не должны снова разрастись предметной логикой после выноса слоёв.
+    line_limits = {
+        "bot.py": 750,
+        "cooking.py": 500,
+        "learning_dictionary.py": 700,
+        "leisure_movies.py": 850,
+        "wardrobe.py": 900,
+        "weather.py": 750,
+    }
+    for name, limit in line_limits.items():
+        path = os.path.join(root, name)
+        if os.path.exists(path):
+            count = sum(1 for _ in open(path, encoding="utf-8"))
+            if count > limit:
+                findings.append(f"{name}: {count} lines exceeds controller limit {limit}")
 
     forbidden = {"telegram", "store", "ai"}
     for name in ("trainer_engine.py", "trainer_exercises.py", "trainer_grading.py"):
@@ -239,6 +270,11 @@ def audit_architecture(root=None):
         "dictionary_model.py": {"telegram", "store", "ai", "config", "repositories"},
         "dictionary_repository.py": {"telegram", "ai"},
         "dictionary_seed_state.py": {"telegram", "ai"},
+        "dictionary_seed_catalog.py": {"telegram", "store", "ai", "config", "repositories"},
+        "wardrobe_model.py": {"telegram", "store", "ai", "config", "repositories"},
+        "fridge_model.py": {"telegram", "store", "ai", "config", "repositories"},
+        "wardrobe_outfit.py": {"telegram", "ai"},
+        "weather_provider.py": {"telegram", "ai"},
         "response_delivery.py": {"ai"},
     }
     for name, denied in boundary_rules.items():
@@ -266,6 +302,12 @@ def audit_architecture(root=None):
     dictionary_path = os.path.join(root, "learning_dictionary.py")
     if os.path.exists(dictionary_path):
         source = open(dictionary_path, encoding="utf-8").read()
+        if re.search(r"(?:async\s+)?def\s+(?:send_seed_intro|seed_start|seed_toggle|seed_page)\s*\(", source):
+            findings.append("learning_dictionary.py: still owns seed workflow")
+        if re.search(r"(?:async\s+)?def\s+(?:send_morning_word|send_daily_practice)\s*\(", source):
+            findings.append("learning_dictionary.py: still owns morning practice")
+        if re.search(r"(?:async\s+)?def\s+(?:try_add_dict_from_chat|add_words_batch|confirm_dict_batch)\s*\(", source):
+            findings.append("learning_dictionary.py: still owns dictionary import")
         for function in ("normalize_entry", "migrate_dict_entries_for_srs", "send_dict"):
             if function == "normalize_entry":
                 if not re.search(r"from dictionary_model import \(", source) or function not in source:
@@ -283,7 +325,19 @@ def audit_architecture(root=None):
         "balance.py": ("def enter_meal(", "def send_fridge(", "import cooking", "from cooking import"),
         "settings.py": ("def send_notes(", "def handle_notes_callback("),
         "leisure.py": ("def send_movie_home(", "def send_listen(", "def find_concerts("),
+        "leisure_movies.py": ("def content_recommend(", "def collect_done(", "def dedupe_lists("),
         "store.py": ("def db(", "def load(", "def mutate("),
+        "cooking.py": [
+            "async def send_fridge(", "async def fridge_add_done(",
+            "async def fridge_toggle(", "async def fridge_del(",
+            "def get_active_meal(", "def get_recipe_queue(",
+            "def get_recipe_history(", "def get_cuisine_weights(",
+            "async def save_my_recipe(", "async def send_my_recipes(",
+            "def _gen_recipe(", "def _gen_recipe_batch(",
+            "def _gen_leftovers_recipe(", "def _recipe_batch_prompt(",
+            "def _fridge_migrate(", "def _fridge_split_input(",
+        ],
+        "bot.py": ["async def _answer_callback_impl(", "async def _text_router_impl("],
     }
     for name, forbidden_fragments in ownership_rules.items():
         path = os.path.join(root, name)
@@ -351,4 +405,47 @@ def audit_trainer_contracts():
     trainer_session.finish(cid)
     if trainer_session.get(cid) is not None:
         findings.append("trainer session finish contract failed")
+    return findings
+
+
+def audit_navigation_contracts(root=None):
+    """Статические инварианты навигации ключевых пользовательских сценариев."""
+    import os
+
+    root = root or os.path.dirname(os.path.abspath(__file__))
+    findings = []
+
+    def source(name):
+        try:
+            return open(os.path.join(root, name), encoding="utf-8").read()
+        except OSError:
+            findings.append(f"navigation module missing: {name}")
+            return ""
+
+    callbacks = source("bot_callbacks.py")
+    menu_branch = callbacks.partition('if data == "m_menu":')[2].partition("return")[0]
+    if "bot.send_message(" not in menu_branch or "pin_menu=True" not in menu_branch:
+        findings.append("main menu must open as a new pinned menu message")
+    if "edit_text(" in menu_branch or "delete(" in menu_branch:
+        findings.append("main menu must not replace or delete the previous card")
+
+    bot_source = source("bot.py")
+    if "bot_callbacks.handle(" not in bot_source:
+        findings.append("bot.py does not delegate callbacks")
+    if "bot_text.handle(" not in bot_source:
+        findings.append("bot.py does not delegate text")
+
+    delivery = source("response_delivery.py")
+    for callback in ('"m_close"', '"m_menu"'):
+        if callback not in delivery:
+            findings.append(f"response keyboard missing {callback}")
+
+    balance_source = source("balance.py")
+    doctor_branch = balance_source.partition('if data == "as_doctor":')[2].partition("return")[0]
+    if '"role_doctor"' not in doctor_branch or "_back_kb()" not in doctor_branch:
+        findings.append("doctor prompt must set pending input and show navigation")
+
+    trainer_source = source("trainer.py")
+    if '"ex_next"' not in trainer_source or '"m_menu"' not in trainer_source:
+        findings.append("trainer answer navigation is incomplete")
     return findings

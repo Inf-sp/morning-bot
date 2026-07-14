@@ -6,6 +6,8 @@
 
 import learning
 import learning_dictionary as dictionary
+import dictionary_import
+import dictionary_seed
 import learning_game as game
 import learning_settings as learning_preferences
 import live_language
@@ -58,39 +60,39 @@ async def handle_action(bot, cid, q, act, run_with_status):
         await dictionary.send_dict(bot, cid, q=q)
     elif act == "dictconfirm_add":
         await util.ack_loading(q)
-        await dictionary.confirm_pending_dict_add(bot, cid)
+        await dictionary_import.confirm_pending_dict_add(bot, cid)
         await util.clear_loading(q)
     elif act == "dictconfirm_retry":
         await util.ack_loading(q)
-        await dictionary.retry_pending_dict_add(bot, cid)
+        await dictionary_import.retry_pending_dict_add(bot, cid)
         await util.clear_loading(q)
     elif act == "dictconfirm_cancel":
-        await dictionary.cancel_pending_dict_add(bot, cid)
+        await dictionary_import.cancel_pending_dict_add(bot, cid)
     elif act == "dictbatch_add":
         await util.ack_loading(q)
-        await dictionary.confirm_dict_batch(bot, cid)
+        await dictionary_import.confirm_dict_batch(bot, cid)
         await util.clear_loading(q)
     elif act == "dictbatch_cancel":
         await util.ack_loading(q)
-        await dictionary.cancel_dict_batch(bot, cid)
+        await dictionary_import.cancel_dict_batch(bot, cid)
         await util.clear_loading(q)
     elif act.startswith("dictseed_start_"):
-        await dictionary.seed_start(bot, cid, act.split("_")[-1], q=q)
+        await dictionary_seed.seed_start(bot, cid, act.split("_")[-1], q=q)
     elif act.startswith("dictseed_phrases_"):
-        await dictionary.seed_start(bot, cid, act.split("_")[-1], kind="phrase", q=q)
+        await dictionary_seed.seed_start(bot, cid, act.split("_")[-1], kind="phrase", q=q)
     elif act.startswith("dictseed_toggle_"):
-        await dictionary.seed_toggle(bot, cid, int(act.split("_")[-1]), q=q)
+        await dictionary_seed.seed_toggle(bot, cid, int(act.split("_")[-1]), q=q)
     elif act.startswith("dictseed_page_"):
-        await dictionary.seed_page(bot, cid, int(act.split("_")[-1]), q=q)
+        await dictionary_seed.seed_page(bot, cid, int(act.split("_")[-1]), q=q)
     elif act == "dictseed_add":
-        await dictionary.seed_add_selected(bot, cid, q=q)
+        await dictionary_seed.seed_add_selected(bot, cid, q=q)
     elif act == "dictseed_later":
-        await dictionary.seed_later(bot, cid)
+        await dictionary_seed.seed_later(bot, cid)
     elif act == "dictseed_level":
-        await dictionary.seed_choose_level(bot, cid, q=q)
+        await dictionary_seed.seed_choose_level(bot, cid, q=q)
     elif act.startswith("dictseedlvl_"):
         _, lang, level = act.split("_", 2)
-        await dictionary.seed_set_level(bot, cid, lang, level, q=q)
+        await dictionary_seed.seed_set_level(bot, cid, lang, level, q=q)
     elif act in ("dictlang_nl", "dictlang_en"):
         await dictionary.send_dict_lang(bot, cid, act.rsplit("_", 1)[-1], q=q)
     elif act.startswith(("dictlang_nl_from_", "dictlang_en_from_")):

@@ -28,13 +28,13 @@ def _add_unique(key, cid, value):
 
 
 async def _ask_collect(bot, cid, kind):
-    import leisure_movies
-    return await leisure_movies._ask_collect(bot, cid, kind)
+    import leisure_collection
+    return await leisure_collection._ask_collect(bot, cid, kind)
 
 
 def content_recommend(kind, cid):
-    import leisure_movies
-    return leisure_movies.content_recommend(kind, cid)
+    import leisure_collection
+    return leisure_collection.content_recommend(kind, cid)
 def _book_cover(title, title_en=""):
     import requests
     for q in [t for t in (title_en, title) if t]:

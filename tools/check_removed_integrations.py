@@ -20,8 +20,6 @@ REMOVED_CONFIG = {
     "GRAMMAR" + "_MODEL",
     "WARDROBE" + "_MODEL",
     "EVENT" + "BRITE_API_KEY",
-    "REST" + "COUNTRIES_API_KEY",
-    "REST" + "COUNTRIES_BASE_URL",
     "SERP" + "API_API_KEY",
 }
 

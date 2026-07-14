@@ -482,7 +482,8 @@ _HIDDEN_SUPPORTED = {"movies", "books", "artists", "countries"}
 async def send_love_section(bot, cid, key):
     if key == "recipes":
         import cooking
-        await cooking.send_my_recipes(bot, cid, back="as_love")
+        import saved_recipes
+        await saved_recipes.send_my_recipes(bot, cid, back="as_love")
         return
     items = _love_items(cid, key)
     title = _love_title(key)

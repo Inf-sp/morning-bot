@@ -40,13 +40,13 @@ def _note_fav_exists(cid, text):
 
 
 async def _ask_collect(bot, cid, kind):
-    import leisure_movies
-    return await leisure_movies._ask_collect(bot, cid, kind)
+    import leisure_collection
+    return await leisure_collection._ask_collect(bot, cid, kind)
 
 
 def content_recommend(kind, cid):
-    import leisure_movies
-    return leisure_movies.content_recommend(kind, cid)
+    import leisure_collection
+    return leisure_collection.content_recommend(kind, cid)
 def _kick_off_new_artist_concert_check(cid, artist_names):
     """При добавлении нового артиста запускает внешний поиск концертов сразу
     (Tavily/Firecrawl/AI), не дожидаясь недельного цикла — фоновой задачей."""

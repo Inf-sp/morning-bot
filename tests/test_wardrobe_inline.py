@@ -26,10 +26,10 @@ def test_restore_home_kb_puts_inline_buttons_back():
     asyncio.run(wardrobe._restore_home_kb(q))
 
     assert _labels(q.message.reply_markup) == [
-        ["✨ Образ на сегодня"],
-        ["✂️ Разбор гардероба"],
-        ["🔍 Проверка покупки"],
+        ["✨ Обновить образ на сегодня"],
+        ["✂️ Разбор шкафа", "🔍 Оценка"],
         ["🎚️ Настройки гардероба"],
+        ["⬅️ Назад", "🏠 Меню"],
     ]
 
 
@@ -46,8 +46,6 @@ def test_send_home_includes_inline_keyboard():
 
     assert bot.message["reply_markup"] is not None
     assert _labels(bot.message["reply_markup"]) == [
-        ["✨ Образ на сегодня"],
-        ["✂️ Разбор гардероба"],
-        ["🔍 Проверка покупки"],
-        ["🎚️ Настройки гардероба"],
+        ["✏️ Добавить вещи в шкаф"],
+        ["⬅️ Назад", "🏠 Меню"],
     ]

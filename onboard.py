@@ -2,6 +2,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import store
 from ui import onboarding as onboarding_ui
+import dictionary_seed
 
 # in-memory кеш шага (быстрый доступ; _onboard_step в профиле — персистентный бэкап)
 _ob: dict = {}
@@ -159,4 +160,4 @@ async def _finish(bot, cid):
         entities=msg.entities,
     )
     if st.get("langs"):
-        await dictionary.send_seed_intro(bot, cid)
+        await dictionary_seed.send_seed_intro(bot, cid)

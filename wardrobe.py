@@ -15,14 +15,28 @@ import research
 import settings as _settings
 from ui import wardrobe as wardrobe_ui
 from ui.constants import ui_label
+from wardrobe_model import (
+    ZONE_ORDER,
+    flat_items as _flat_wardrobe_items,
+    guess_subcategory as _guess_subcategory,
+    has_rain_outerwear as _has_rain_outerwear,
+    normalize_parsed_item,
+    wardrobe_stats,
+    zone_of as _zone_of,
+)
+from wardrobe_outfit import (
+    build_outfit_reasons,
+    build_style_tip,
+    build_wardrobe_insight,
+    pick_best_outfit,
+    save_outfit_feedback,
+    score_outfit,
+    select_outfit_candidates,
+)
 
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
-WARDROBE_OUTERWEAR_MAX_TEMP = 20  # °C — выше этой tmax верхняя одежда не предлагается (без дождя/ветра)
-
-# Нейтральные цвета не создают конфликт с любым другим цветом в наборе (§ score_outfit).
-NEUTRAL_COLORS = ("бел", "чёрн", "черн", "сер", "беж", "сини", "деним", "джинс")
 
 # zone -> с какими зонами сочетается (простое правило по ZONE_ORDER, без похода в AI).
 _ZONE_COMPAT = {
@@ -318,230 +332,6 @@ rain_ok (true если куртка/обувь непромокаемая или
     return store.mutate_wardrobe(cid, _mut)
 
 
-# ---------- локальный подбор образа (без AI) ----------
-_TEMP_CONFLICT_MARGIN = 10  # °C — насколько диапазон temp_range должен разойтись с погодой, чтобы вещь исключалась
-
-
-def _temp_conflicts(item, weather_ctx):
-    tr = item.get("temp_range")
-    tmax = weather_ctx.get("tmax")
-    if not tr or tmax is None:
-        return False
-    lo, hi = tr
-    return tmax > hi + _TEMP_CONFLICT_MARGIN or tmax < lo - _TEMP_CONFLICT_MARGIN
-
-
-def select_outfit_candidates(w, weather_ctx):
-    """Жёсткая фильтрация кандидатов по зонам (не скоринг). Возвращает
-    {zone: [item, ...]} — зона «Верхняя одежда» опциональна по погоде и может
-    вернуть пустой список кандидатов, даже если в шкафу есть куртки."""
-    candidates = {}
-    for zone in store.ZONE_ORDER:
-        if zone == "Другое":
-            continue
-        items = [it for _s, items in (w.get("zones", {}).get(zone, {}) or {}).items() for it in items]
-        items = [it for it in items if not _temp_conflicts(it, weather_ctx)]
-        if zone == "Верхняя одежда":
-            too_warm_for_outer = (weather_ctx.get("tmax") or 0) > WARDROBE_OUTERWEAR_MAX_TEMP
-            outerwear_needed = weather_ctx.get("has_rain") or weather_ctx.get("strong_wind") or not too_warm_for_outer
-            if not outerwear_needed:
-                candidates[zone] = []
-                continue
-            if weather_ctx.get("has_rain"):
-                items = sorted(items, key=lambda it: not it.get("rain_ok"))
-        candidates[zone] = items
-    return candidates
-
-
-def _is_neutral_color(color):
-    c = str(color or "").lower()
-    return any(p in c for p in NEUTRAL_COLORS)
-
-
-def _color_penalty(items):
-    """Штраф за 2+ ярких (не-нейтральных) цвета одновременно в наборе."""
-    bright = []
-    for it in items:
-        for c in (it.get("colors") or []):
-            if not _is_neutral_color(c):
-                bright.append(c.lower())
-    if len(bright) <= 1:
-        return 0
-    return -10 * (len(bright) - 1)
-
-
-def score_outfit(items, weather_ctx, wardrobe_history, prefs_text):
-    """Скоринг одной комбинации вещей (одна вещь на зону, максимум 5 вещей).
-    Возвращает float — выше лучше."""
-    score = 0.0
-    tmax = weather_ctx.get("tmax")
-    for it in items:
-        tr = it.get("temp_range")
-        if tr and tmax is not None and tr[0] <= tmax <= tr[1]:
-            score += 5
-        if it.get("zone") == "Аксессуары":
-            # У аксессуаров обычно нет temp_range (не привязаны к погоде) — без
-            # небольшого бонуса они никогда не выигрывают у варианта "без аксессуара"
-            # при равном score и не попадают в образ вовсе.
-            score += 2
-    score += _color_penalty(items)
-    for it in items:
-        # Маленький тай-брейкер, не решающий фактор: при прочих равных чуть
-        # предпочитаем вещь, которая реже носилась в последнее время — но только
-        # после того, как цельность образа (цвет/погода/антиповтор) уже учтена.
-        score -= 0.1 * min(int(it.get("use_count", 0)), 20)
-    item_ids = {it.get("id") for it in items}
-    cutoff_3d = (datetime.now(config.TZ) - timedelta(days=3)).date().isoformat()
-    for entry in wardrobe_history:
-        if entry.get("date", "") < cutoff_3d:
-            continue
-        if item_ids & set(entry.get("item_ids") or []):
-            score -= 3
-    cutoff_7d = (datetime.now(config.TZ) - timedelta(days=7)).date().isoformat()
-    for entry in wardrobe_history:
-        if entry.get("date", "") < cutoff_7d:
-            continue
-        if item_ids and item_ids == set(entry.get("item_ids") or []):
-            score -= 100
-    if prefs_text:
-        avoid_raw = str(prefs_text)
-        for it in items:
-            for c in (it.get("colors") or []):
-                if c and c.lower() in avoid_raw.lower() and "нежелательные цвета" in avoid_raw.lower():
-                    score -= 4
-    return score
-
-
-def _top_candidates(items, limit=3):
-    """Ограничивает размер зоны до перебора комбинаций (см. _combos) без
-    предвзятости по частоте ношения — какая вещь выигрывает, решает score_outfit
-    (цельность образа), а не то, что вещь ещё не использовалась."""
-    return items[:limit]
-
-
-def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text):
-    """Собирает кандидатов, перебирает ограниченные комбинации (топ-3 на зону),
-    возвращает лучший набор вещей (list[item]) или None, если нет кандидатов хотя
-    бы на одну обязательную зону (Верх/Низ/Обувь)."""
-    candidates = select_outfit_candidates(w, weather_ctx)
-    required = ["Верх", "Низ", "Обувь"]
-    if any(not candidates.get(z) for z in required):
-        return None
-
-    def _combos():
-        import itertools
-        pools = [_top_candidates(candidates[z]) for z in required]
-        optional_zones = [z for z in ("Верхняя одежда", "Аксессуары") if candidates.get(z)]
-        for zone in optional_zones:
-            pools.append([None] + _top_candidates(candidates[zone], limit=2))
-        for combo in itertools.product(*pools):
-            yield [it for it in combo if it is not None]
-
-    scored = [(score_outfit(combo, weather_ctx, wardrobe_history, prefs_text), combo) for combo in _combos()]
-    if not scored:
-        return None
-    scored.sort(key=lambda x: x[0], reverse=True)
-    best_score, best_combo = scored[0]
-    if best_score <= -50:
-        # Похоже, единственный приемлемый вариант — это тот самый 7-дневный повтор
-        # (guard). Пересчитываем без 7-дневного штрафа — маленький гардероб важнее антиповтора.
-        rescored = [(score_outfit(combo, weather_ctx, [
-            e for e in wardrobe_history
-            if e.get("date", "") >= (datetime.now(config.TZ) - timedelta(days=3)).date().isoformat()
-        ], prefs_text), combo) for _s, combo in scored]
-        rescored.sort(key=lambda x: x[0], reverse=True)
-        best_score, best_combo = rescored[0]
-    return best_combo
-
-
-# ---------- текст образа: локальный fallback ----------
-def build_outfit_reasons(items, weather_ctx, score_details=None):
-    """До 3 строк, каждая — про конкретную вещь/погоду, не шаблонная общая фраза.
-
-    Все шаблоны — конструкция "вещь — свойство" (тире, без глагольного
-    согласования рода/числа с названием вещи): названия вещей — свободный текст
-    от AI, их род/число не гарантированы ("Дождевик" муж., "Шорты" мн.ч.)."""
-    reasons = []
-    colors = [c for it in items for c in (it.get("colors") or [])]
-    bright = [c for c in colors if not _is_neutral_color(c)]
-    neutral_anchor = next((it for it in items if any(_is_neutral_color(c) for c in (it.get("colors") or []))), None)
-    if neutral_anchor and len(set(bright)) >= 2:
-        reasons.append(
-            f"{neutral_anchor.get('name')} — нейтральная база, держит {' и '.join(sorted(set(bright))[:2])} в одной палитре."
-        )
-    outer = next((it for it in items if it.get("zone") == "Верхняя одежда"), None)
-    if outer and weather_ctx.get("has_rain") and outer.get("rain_ok"):
-        reasons.append(f"{outer.get('name')} — защита от дождя.")
-    elif weather_ctx.get("has_rain") and not (outer and outer.get("rain_ok")):
-        reasons.append("Дождевика или непромокаемой куртки в шкафу нет — сегодня без защиты от дождя.")
-    elif outer and weather_ctx.get("warm"):
-        reasons.append(f"{outer.get('name')} — пригодится утром, после обеда можно убрать.")
-    low = next((it for it in items if it.get("zone") == "Низ"), None)
-    if low and weather_ctx.get("hot"):
-        reasons.append(f"{low.get('name')} — без перегрева в жару.")
-    return reasons[:3]
-
-
-_LONG_SLEEVE_MARKERS = ("рубаш", "свитер", "худи")
-
-
-def build_style_tip(items, weather_ctx=None):
-    """Один совет по носке, использующий только вещи из items. Пустая строка,
-    если нет подходящего шаблона — не выдумываем совет ради совета."""
-    weather_ctx = weather_ctx or {}
-    outer = next((it for it in items if it.get("zone") == "Верхняя одежда"), None)
-    if outer and weather_ctx.get("warm"):
-        return f"Носи {outer.get('name')} расстёгнутой и слегка подверни рукава."
-    sleeved = next((it for it in items
-                    if it.get("zone") == "Верх" and any(m in str(it.get("name", "")).lower() for m in _LONG_SLEEVE_MARKERS)),
-                   None)
-    if sleeved:
-        return f"Подверни рукава {sleeved.get('name')} — образ станет легче."
-    return ""
-
-
-def build_wardrobe_insight(cid, items, wardrobe_history):
-    """Один инсайт по фиксированному приоритету правил, первое совпавшее — оно и
-    возвращается. None, если ничего не подошло."""
-    item_ids = {it.get("id") for it in items}
-    if wardrobe_history:
-        last = wardrobe_history[-1]
-        if item_ids and item_ids == set(last.get("item_ids") or []):
-            return "Этот образ был и вчера."
-    today = datetime.now(config.TZ).date()
-    for it in items:
-        last_used = it.get("last_used")
-        if last_used:
-            try:
-                days = (today - datetime.fromisoformat(last_used).date()).days
-            except ValueError:
-                days = None
-            if days is not None and days > 14:
-                return f"{it.get('name')} — впервые за {days} дней."
-    if len(wardrobe_history) >= 3:
-        last3 = wardrobe_history[-3:]
-        for it in items:
-            if all(it.get("id") in (e.get("item_ids") or []) for e in last3):
-                return f"{it.get('name')} — в последних образах подряд."
-    return None
-
-
-def save_outfit_feedback(cid, item_ids, weather_tags):
-    """Вызывается только при НОВОЙ генерации образа (не при показе кэша дня):
-    use_count/last_used вещей + запись в персистентную историю образов."""
-    today = _day_key()
-    id_set = set(item_ids)
-
-    def _mut(w):
-        for _zone, _subcat, item in _flat_wardrobe_items(w):
-            if item.get("id") in id_set:
-                item["use_count"] = int(item.get("use_count", 0)) + 1
-                item["last_used"] = today
-
-    store.mutate_wardrobe(cid, _mut)
-    store.add_wardrobe_history_entry(cid, today, weather_tags, item_ids)
-
-
 # ---------- генерация лука по погоде ----------
 def _empty_wardrobe_screen():
     kb = InlineKeyboardMarkup([[
@@ -670,116 +460,6 @@ async def send_looks(bot, cid, status=None, kb=None):
     store.last_source[str(cid)] = "Гардероб · Образ"
     store.last_answer[str(cid)] = text
     await status.replace(text, entities=entities, reply_markup=result_kb)
-
-
-# ---------- шкаф ----------
-# Порядок важен: «Верхняя одежда» проверяется раньше «Верх», иначе «куртка»/«ветровка»
-# по подстроке «верх» ушли бы в «Верх».
-# _zone_of используется только для миграции старых записей и как fallback в
-# _guess_subcategory — новые вещи получают zone/subcategory явно от LLM.
-ZONES = [
-    ("Верхняя одежда", ["верхняя одежд", "верхн", "куртк", "ветровк", "пиджак", "пальто",
-                        "плащ", "дождевик", "парк", "пуховик", "тренч", "анорак", "бомбер",
-                        "жилет"]),
-    ("Верх", ["верх", "футбол", "рубаш", "свит", "толстов", "худи", "лонгслив", "поло", "майк", "кофт"]),
-    ("Низ", ["низ", "джинс", "брюк", "штан", "шорт", "юбк"]),
-    ("Обувь", ["обув", "кроссов", "ботин", "кед", "туфл", "сандал"]),
-    ("Аксессуары", ["аксессуар", "часы", "кольц", "ремен", "шапк", "кепк", "очк", "шарф", "сумк", "цепоч", "носк", "украшен"]),
-]
-
-# Порядок зон для отображения статистики и шкафа (владелец — store.py, здесь алиас
-# для обратной совместимости импортов ui/тестов).
-ZONE_ORDER = store.ZONE_ORDER
-ZONE_EMOJI = {}
-
-def _zone_of(category):
-    c = category.lower()
-    for zone, keys in ZONES:
-        if any(k in c for k in keys):
-            return zone
-    return "Другое"
-
-
-_SUBCAT_KEYWORDS = {
-    "Футболки": ["футболк", "майк"], "Поло": ["поло"], "Рубашки": ["рубаш"],
-    "Лонгсливы": ["лонгслив"], "Свитеры": ["свитер", "свитш", "джемпер"],
-    "Кардиганы": ["кардиган"], "Худи": ["худи", "толстовк"], "Пиджаки": ["пиджак"],
-    "Ветровки": ["ветровк"], "Куртки": ["куртк", "бомбер", "анорак", "жилет"], "Пальто": ["пальто"],
-    "Пуховики": ["пуховик"], "Плащи": ["плащ", "тренч", "дождевик"],
-    "Джинсы": ["джинс"], "Брюки": ["брюк", "штан"], "Чиносы": ["чино"],
-    "Шорты": ["шорт"], "Спортивные брюки": ["спортивн"],
-    "Кеды": ["кед"], "Кроссовки": ["кроссов"], "Лоферы": ["лофер"],
-    "Ботинки": ["ботин"], "Сандалии": ["сандал"], "Тапочки": ["тапоч"],
-    "Кепки": ["кепк"], "Шапки": ["шапк"], "Ремни": ["ремен", "ремн"], "Часы": ["час"],
-    "Очки": ["очк"], "Украшения": ["украшен", "цепоч", "кольц"], "Шарфы": ["шарф"],
-    "Перчатки": ["перчат"], "Сумки": ["сумк"], "Рюкзаки": ["рюкзак"], "Носки": ["носк"],
-}
-
-
-def _guess_subcategory(zone, name, fallback_text=""):
-    """Fallback-эвристика (без LLM): по ключевым словам в названии вещи внутри
-    зоны. Если по названию ничего не нашлось — вторая попытка по fallback_text
-    (например, исходная строка-категория при миграции старых записей). Возвращает
-    валидную подкатегорию из store.ZONE_SUBCATS[zone] или «Другое»."""
-    valid = set(store.ZONE_SUBCATS.get(zone, ["Другое"]))
-    for text in (str(name).lower(), str(fallback_text).lower()):
-        if not text:
-            continue
-        for subcat, keys in _SUBCAT_KEYWORDS.items():
-            if subcat in valid and any(k in text for k in keys):
-                return subcat
-    return "Другое"
-
-
-def normalize_parsed_item(raw):
-    """Валидирует/нормализует один сырой объект от LLM (добавление вещи) в готовый
-    для store.add_wardrobe_items item без id. None, если нет названия."""
-    if not isinstance(raw, dict) or not str(raw.get("name") or "").strip():
-        return None
-    name = str(raw["name"]).strip()
-    zone = raw.get("zone") if raw.get("zone") in store.ZONE_SUBCATS else _zone_of(name)
-    subcat = raw.get("subcategory")
-    if subcat not in store.ZONE_SUBCATS.get(zone, []):
-        subcat = _guess_subcategory(zone, name)
-    return {
-        "zone": zone, "subcategory": subcat, "name": name,
-        "color": str(raw.get("color") or "").strip(),
-        "color_secondary": (str(raw["color_secondary"]).strip() or None) if raw.get("color_secondary") else None,
-        "material": (str(raw["material"]).strip() or None) if raw.get("material") else None,
-        "style": (str(raw.get("style") or "").strip() or None),
-        "season": None,
-    }
-
-
-def _flat_wardrobe_items(w):
-    """[(zone, subcategory, item_dict), ...] по всему гардеробу."""
-    items = []
-    for zone, subs in (w or {}).get("zones", {}).items():
-        for subcat, values in subs.items():
-            for item in values:
-                items.append((zone, subcat, item))
-    return items
-
-# ---------- статистика и готовность гардероба ----------
-def wardrobe_stats(w):
-    """Считает вещи по зонам. Возвращает (total, {zone: count}) с полным набором зон."""
-    counts = {z: 0 for z in ZONE_ORDER}
-    total = 0
-    for zone, _subcat, _item in _flat_wardrobe_items(w):
-        counts[zone if zone in counts else "Другое"] += 1
-        total += 1
-    return total, counts
-
-
-# --- слабые места гардероба (персистентный список пробелов) ---
-_RAIN_OUTER_MARKERS = ("дождевик", "ветровк", "непромокаем", "мембран", "raincoat",
-                       "waterproof", "плащ", "тренч", "анорак")
-
-
-def _has_rain_outerwear(w):
-    """Есть ли в гардеробе верх для дождя (по ключевым словам)."""
-    text = store.wardrobe_to_text(w).lower()
-    return any(m in text for m in _RAIN_OUTER_MARKERS)
 
 
 def get_wardrobe_gaps(cid):

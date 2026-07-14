@@ -14,6 +14,7 @@ import requests
 import config
 import store
 import weather
+import storage_driver
 
 NOW_TS = int(weather.datetime.now(weather.TZ).replace(hour=8, minute=0, second=0, microsecond=0).timestamp())
 
@@ -41,9 +42,9 @@ DAILY_OK = {"data": [{"dt": NOW_TS, "temp": {"max": 9.1, "min": 4.2}, "pop": 0.6
 def _reset():
     config.DATABASE_URL = ""
     weather._WX_CACHE.clear()
-    for key in list(store._mem.keys()):
+    for key in list(storage_driver._memory.keys()):
         if str(key).startswith("weather_usage:") or key == config.WEATHER_CACHE_KEY:
-            del store._mem[key]
+            del storage_driver._memory[key]
 
 
 def _usage():
@@ -241,7 +242,7 @@ def test_stale_same_day_cache_used_after_failure():
         "daily": {"time": [today]},
     }
     old_ts = __import__("time").time() - weather._WX_TTL - 5
-    store._mem[config.WEATHER_CACHE_KEY] = {
+    storage_driver._memory[config.WEATHER_CACHE_KEY] = {
         weather._weather_cache_key(52.37, 4.89, 2): {"ts": old_ts, "data": cached}
     }
 
@@ -263,7 +264,7 @@ def test_previous_day_cache_not_used_as_today():
         "provider": "old",
         "daily": {"time": [yesterday]},
     }
-    store._mem[config.WEATHER_CACHE_KEY] = {
+    storage_driver._memory[config.WEATHER_CACHE_KEY] = {
         weather._weather_cache_key(52.37, 4.89, 2): {"ts": __import__("time").time(), "data": cached}
     }
     _seed_total(config.WEATHER_HARD_DAILY_LIMIT)

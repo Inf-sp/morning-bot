@@ -5,6 +5,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 import learning_dictionary as dictionary
+import dictionary_morning
 import learning_settings as learning_preferences
 import saved_items
 import cooking
@@ -196,7 +197,7 @@ async def send_scheduled_notification(bot, cid, kind):
         if msg is not None:
             await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     elif kind == "daily_words":
-        await dictionary.send_daily_practice(_NoKbBot(bot), cid)
+        await dictionary_morning.send_daily_practice(_NoKbBot(bot), cid)
     elif kind == "checkin_day":
         store.pending_input[str(cid)] = "worry"
         set_(cid, "_worry_prompt_ts", datetime.now(config.TZ).timestamp())
@@ -664,10 +665,12 @@ async def handle_callback(bot, cid, data, q=None):
         await saved_items.send_travel(bot, cid)
     elif data == "set_fridge":
         import balance
-        await cooking.send_fridge(bot, cid, back="set_food")
+        import fridge
+        await fridge.send_fridge(bot, cid, back="set_food")
     elif data == "set_myrecipes":
         import balance
-        await cooking.send_my_recipes(bot, cid)
+        import saved_recipes
+        await saved_recipes.send_my_recipes(bot, cid)
     elif data == "set_fridge_g":
         await saved_items.send_food(bot, cid, back="m_food")
     elif data == "set_notif":

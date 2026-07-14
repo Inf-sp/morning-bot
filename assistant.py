@@ -186,6 +186,7 @@ def _looks_medical(text: str) -> bool:
 
 async def _run_intent(bot, cid, action):
     import balance, cooking, leisure_movies, wardrobe, myday, settings, travel
+    import fridge
     import leisure_concerts
     import leisure_music
     import learning_dictionary as dictionary
@@ -205,7 +206,7 @@ async def _run_intent(bot, cid, action):
     elif action == "day_plan":
         await myday.send_plany(no_kb_bot, cid)
     elif action == "fridge":
-        await cooking.send_fridge_recipe(no_kb_bot, cid)
+        await fridge.send_fridge_recipe(no_kb_bot, cid)
     elif action == "movie":
         await leisure_movies.send_recos(no_kb_bot, cid, "movie")
     elif action == "book":
