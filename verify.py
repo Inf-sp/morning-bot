@@ -209,7 +209,8 @@ def audit_architecture(root=None):
     required = {
         "trainer.py", "trainer_engine.py", "trainer_exercises.py",
         "trainer_grading.py", "trainer_session.py", "learning_dictionary.py",
-        "dictionary_model.py", "dictionary_repository.py",
+        "dictionary_model.py", "dictionary_repository.py", "dictionary_seed_state.py",
+        "dictionary_seed_ui.py",
         "live_language.py", "learning_game.py", "learning_settings.py",
         "cooking.py", "leisure_movies.py", "leisure_books.py",
         "leisure_music.py", "leisure_concerts.py", "saved_items.py",
@@ -237,6 +238,7 @@ def audit_architecture(root=None):
     boundary_rules = {
         "dictionary_model.py": {"telegram", "store", "ai", "config", "repositories"},
         "dictionary_repository.py": {"telegram", "ai"},
+        "dictionary_seed_state.py": {"telegram", "ai"},
         "response_delivery.py": {"ai"},
     }
     for name, denied in boundary_rules.items():

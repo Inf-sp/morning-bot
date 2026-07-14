@@ -24,6 +24,14 @@ from dictionary_model import (
     normalize_key,
 )
 from dictionary_repository import DictionaryRepository
+from dictionary_seed_state import SeedStateRepository
+from dictionary_seed_ui import (
+    LEVEL_LABELS,
+    SEED_LEVELS as _SEED_LEVELS,
+    render_keyboard as _seed_render_kb,
+    render_text as _seed_render_text,
+    level_keyboard as _seed_level_keyboard,
+)
 from ui import dictionary as dict_ui
 from ui import learning as learning_ui
 
@@ -1006,15 +1014,7 @@ def _ensure_dict(cid):
     return store.get_list(config.DICT_KEY, cid)
 
 
-_DICT_SEED_PROFILE_KEY = "_dict_seed"
-_DICT_SEED_SEEN_PROFILE_KEY = "_dict_seed_seen"
-_DICT_SEED_PAGE_SIZE = 5
 _DICT_SEED_LIMIT = 30
-_SEED_LEVELS = ["simple", "medium", "hard"]
-_DICT_SEED_SOURCE_NOTE = (
-    "Списки собраны как частотный старт: Oxford 3000/5000, Cambridge/English "
-    "Vocabulary Profile и частотные разговорные списки; редкие книжные слова исключены."
-)
 
 _EN_SEED_WORDS = {
     "simple": [
@@ -1168,7 +1168,7 @@ def _seed_language(cid, lang=None):
         code = _code(_s.study_lang(cid))
     language = "нидерландский" if code == "nl" else "английский"
     level = store.get_level(cid, language)
-    if level not in LEVELS:
+    if level not in _SEED_LEVELS:
         level = "medium"
     return code, language, level
 
@@ -1181,20 +1181,13 @@ def _seed_existing_keys(cid):
 
 
 def _seed_seen_keys(cid):
-    prof = store.get_profile(cid)
-    raw = prof.get(_DICT_SEED_SEEN_PROFILE_KEY) or []
-    return {tuple(x) for x in raw if isinstance(x, (list, tuple)) and len(x) == 3}
+    return SeedStateRepository(cid).seen_keys()
 
 
 def _seed_mark_seen(cid, items):
-    if not items:
-        return
-    prof = store.get_profile(cid)
-    seen = _seed_seen_keys(cid)
-    for item in items:
-        seen.add(_dict_item_key(item.get("lang"), item.get("kind"), item.get("word")))
-    prof[_DICT_SEED_SEEN_PROFILE_KEY] = [list(x) for x in sorted(seen)]
-    store.set_profile(cid, prof)
+    keys = [_dict_item_key(item.get("lang"), item.get("kind"), item.get("word"))
+            for item in items]
+    SeedStateRepository(cid).mark_seen(keys)
 
 
 def _seed_candidates(cid, lang, level, kind="word"):
@@ -1211,81 +1204,15 @@ def _seed_candidates(cid, lang, level, kind="word"):
 
 
 def _seed_state_get(cid):
-    prof = store.get_profile(cid)
-    st = prof.get(_DICT_SEED_PROFILE_KEY)
-    return st if isinstance(st, dict) else {}
+    return SeedStateRepository(cid).get()
 
 
 def _seed_state_set(cid, st):
-    prof = store.get_profile(cid)
-    prof[_DICT_SEED_PROFILE_KEY] = st
-    store.set_profile(cid, prof)
+    SeedStateRepository(cid).set(st)
 
 
 def _seed_state_clear(cid):
-    prof = store.get_profile(cid)
-    prof.pop(_DICT_SEED_PROFILE_KEY, None)
-    store.set_profile(cid, prof)
-
-
-def _seed_item_line(item):
-    text = f"{item.get('word')} — {item.get('ru')}"
-    if item.get("note"):
-        text += f" ({item['note']})"
-    return text
-
-
-def _seed_render_text(st):
-    level = st.get("level", "medium")
-    kind = st.get("kind", "word")
-    items = st.get("items") or []
-    selected = set(st.get("selected") or [])
-    page = int(st.get("page") or 0)
-    total_pages = max(1, (len(items) + _DICT_SEED_PAGE_SIZE - 1) // _DICT_SEED_PAGE_SIZE)
-    page = max(0, min(page, total_pages - 1))
-    start = page * _DICT_SEED_PAGE_SIZE
-    chunk = items[start:start + _DICT_SEED_PAGE_SIZE]
-    level_label = LEVEL_LABELS.get(level, level)
-    header = f"🧩 Стартовые фразы · {level_label}" if kind == "phrase" else f"📚 Популярные слова · {level_label}"
-    lines = [
-        header,
-        f"Страница {page + 1} из {total_pages}",
-        "",
-        "Отметьте слова, которые хотите добавить в словарь:" if kind == "word" else "Отметьте фразы, которые хотите добавить в словарь:",
-        "",
-    ]
-    for offset, item in enumerate(chunk):
-        idx = start + offset
-        mark = "✅" if idx in selected else "□"
-        lines.append(f"{mark} {_seed_item_line(item)}")
-    lines.extend(["", _DICT_SEED_SOURCE_NOTE])
-    return "\n".join(lines)
-
-
-def _seed_render_kb(st):
-    items = st.get("items") or []
-    selected = set(st.get("selected") or [])
-    page = int(st.get("page") or 0)
-    total_pages = max(1, (len(items) + _DICT_SEED_PAGE_SIZE - 1) // _DICT_SEED_PAGE_SIZE)
-    start = page * _DICT_SEED_PAGE_SIZE
-    chunk = items[start:start + _DICT_SEED_PAGE_SIZE]
-    rows = []
-    for offset, item in enumerate(chunk):
-        idx = start + offset
-        mark = "✅" if idx in selected else "□"
-        rows.append([InlineKeyboardButton(f"{mark} {item.get('word')[:38]}", callback_data=f"a_dictseed_toggle_{idx}")])
-    nav = []
-    if page > 0:
-        nav.append(InlineKeyboardButton("◀️", callback_data=f"a_dictseed_page_{page - 1}"))
-    if page < total_pages - 1:
-        nav.append(InlineKeyboardButton("▶️ Далее", callback_data=f"a_dictseed_page_{page + 1}"))
-    if nav:
-        rows.append(nav)
-    level_label = LEVEL_LABELS.get(st.get("level"), "Средний")
-    rows.append([InlineKeyboardButton(f"📶 Другой уровень ({level_label})", callback_data="a_dictseed_level")])
-    add_label = f"✅ Добавить отмеченные ({len(selected)})" if selected else "✅ Добавить отмеченные"
-    rows.append([InlineKeyboardButton(add_label, callback_data="a_dictseed_add")])
-    return InlineKeyboardMarkup(rows)
+    SeedStateRepository(cid).clear()
 
 
 async def send_seed_intro(bot, cid, lang=None):
@@ -1402,12 +1329,7 @@ async def seed_page(bot, cid, page, q=None):
 
 def _seed_level_kb(cid, code):
     _l, _language, current = _seed_language(cid, code)
-    row = []
-    for level in _SEED_LEVELS:
-        mark = "✅ " if level == current else ""
-        row.append(InlineKeyboardButton(f"{mark}{LEVEL_LABELS[level]}", callback_data=f"a_dictseedlvl_{code}_{level}"))
-    rows = [row, [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictseed_start_{code}"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]]
-    return InlineKeyboardMarkup(rows)
+    return _seed_level_keyboard(code, current)
 
 
 async def seed_choose_level(bot, cid, q=None):
