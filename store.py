@@ -1,3 +1,4 @@
+import copy
 import uuid as _uuid
 from pathlib import Path
 import config

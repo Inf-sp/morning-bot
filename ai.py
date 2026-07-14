@@ -526,19 +526,32 @@ def _gen_cf(prompt, max_tokens):
         40, "cf")
     return _as_text(r.json().get("result", {}).get("response"))
 
-# ---------- circuit breaker для 429 ----------
-_COOLDOWN_SEC = 300  # 5 минут - на столько провайдер уходит в конец очереди после 429
+# ---------- circuit breaker для временных сбоев ----------
+_RATE_LIMIT_COOLDOWN_SEC = 300
+_OUTAGE_COOLDOWN_SEC = 90
 _cooldowns = {}  # provider -> ts до которого он считается недоступным
 
 def _mark_cooldown(name, err):
-    if "429" in str(err) or "Too Many Requests" in str(err):
-        _cooldowns[name] = time.time() + _COOLDOWN_SEC
+    """Временно убирает нестабильного провайдера из начала цепочки.
+
+    429 требует более длинной паузы, а 5xx/timeout/network — короткой. При этом
+    провайдер не исключается навсегда: после паузы он автоматически проверяется
+    следующим обычным запросом.
+    """
+    if not _is_temporary_exception(err):
+        return
+    status = getattr(err, "status_code", None)
+    seconds = _RATE_LIMIT_COOLDOWN_SEC if status == 429 else _OUTAGE_COOLDOWN_SEC
+    retry_after = getattr(err, "retry_after", None)
+    if retry_after:
+        seconds = max(seconds, min(int(retry_after), 3600))
+    _cooldowns[name] = max(_cooldowns.get(name, 0), time.time() + seconds)
 
 def _is_cooling(name):
     return _cooldowns.get(name, 0) > time.time()
 
 def _reorder_for_cooldown(order):
-    """Провайдеров на cooldown (недавний 429) отодвигаем в конец, чтобы не терять
+    """Провайдеров на cooldown (недавний временный сбой) отодвигаем в конец, чтобы не терять
     время на заведомо неудачный запрос перед рабочим fallback-ом."""
     if not any(_is_cooling(n) for n in order):
         return order
@@ -547,7 +560,9 @@ def _reorder_for_cooldown(order):
 
 def _provider_is_unavailable(name):
     if name == "gemini":
-        return _gemini_cooldown_error()
+        rate_limit = _gemini_cooldown_error()
+        if rate_limit is not None:
+            return rate_limit
     if _is_cooling(name):
         return LLMProviderError(name, f"{name} cooldown", temporary=True, error_type="cooldown")
     return None

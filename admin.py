@@ -583,10 +583,12 @@ async def send_api_ai(bot, cid, q=None):
     if gemini_down:
         groq_role = _join_and(_used_by("Groq"))
         parts = ["Gemini недоступен"]
-        if fallback_ok and groq_role:
-            parts.append(f"{groq_role} работают через Groq")
-        parts.append("остальные AI-функции могут не отвечать" if fallback_ok
-                     else "резервных моделей нет — AI-функции сейчас не отвечают")
+        if fallback_ok:
+            parts.append("AI-функции автоматически работают через резерв")
+            if groq_role:
+                parts.append(f"{groq_role} переключены на Groq")
+        else:
+            parts.append("резервных моделей нет — AI-функции сейчас не отвечают")
         impact_line = " · ".join(parts)
     elif n_bad:
         impact_line = (f"{n_bad} {_plural_services(n_bad)} {'недоступен' if n_bad == 1 else 'недоступно'} · "
