@@ -213,6 +213,7 @@ def audit_architecture(root=None):
         "cooking.py", "leisure_movies.py", "leisure_books.py",
         "leisure_music.py", "leisure_concerts.py", "saved_items.py",
         "storage_driver.py", "runtime_state.py", "repositories.py",
+        "response_delivery.py", "retry_flow.py",
     }
     missing = sorted(name for name in required if not os.path.exists(os.path.join(root, name)))
     findings.extend(f"missing module: {name}" for name in missing)
@@ -250,7 +251,7 @@ def audit_architecture(root=None):
                 findings.append(f"learning_dictionary.py: {function} missing")
 
     ownership_rules = {
-        "balance.py": ("def enter_meal(", "def send_fridge("),
+        "balance.py": ("def enter_meal(", "def send_fridge(", "import cooking", "from cooking import"),
         "settings.py": ("def send_notes(", "def handle_notes_callback("),
         "leisure.py": ("def send_movie_home(", "def send_listen(", "def find_concerts("),
         "store.py": ("def db(", "def load(", "def mutate("),

@@ -18,8 +18,14 @@ from ui import food as food_ui
 from ui.constants import CUISINE_EMOJI, ui_label
 import settings
 import menu
-import cooking
-from cooking import _ans_kb, _back_kb, _build_entity_card, _clean_card_text, _kb, _send
+from response_delivery import (
+    answer_keyboard as _ans_kb,
+    back_keyboard as _back_kb,
+    build_entity_card as _build_entity_card,
+    clean_card_text as _clean_card_text,
+    keyboard as _kb,
+    send_response as _send,
+)
 
 TZ = config.TZ
 
@@ -376,8 +382,6 @@ async def handle_callback(bot, cid, q, data):
 # ---------- «Продолжить» / «Ещё раз» ----------
 async def retry(bot, cid, status=None):
     la = store.last_action.get(str(cid))
-    if await cooking.retry_last_action(bot, cid, status=status):
-        return
     if la and la[0] == "role":
         await handle_role(bot, cid, la[1], la[2]); return
     hist = list(store.chat_history.get(str(cid), []))

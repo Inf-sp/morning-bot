@@ -16,6 +16,7 @@ import menu
 import assistant
 import balance
 import cooking
+import retry_flow
 import myday
 import wardrobe
 import learning_dictionary as dictionary
@@ -616,7 +617,7 @@ async def _answer_callback_impl(update, context):
         return
     # «Продолжить / ещё раз»
     if data == "chat_retry":
-        await _inline_status(lambda status: balance.retry(bot, cid, status=status))
+        await _inline_status(lambda status: retry_flow.retry_last_response(bot, cid, status=status))
         return
     # «Короче / Глубже» - переписать последний ответ
     if data in ("ans_short", "ans_deep"):

@@ -18,6 +18,14 @@ from ui import food as food_ui
 from ui.constants import CUISINE_EMOJI, ui_label
 import settings
 import menu
+from response_delivery import (
+    answer_keyboard as _ans_kb,
+    back_keyboard as _back_kb,
+    build_entity_card as _build_entity_card,
+    clean_card_text as _clean_card_text,
+    keyboard as _kb,
+    send_response as _send,
+)
 
 TZ = config.TZ
 
@@ -556,29 +564,8 @@ def _food_card(d, label="Рецепт дня"):
     """Единый формат карточки рецепта для радара и нового рецепта."""
     return food_ui.food_card(d, label=label)
 
-def _kb(rows):
-    return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
-
-def _clean_card_text(value):
-    return balance_ui.clean_card_text(value)
-
 def _finish_dot(value):
     return balance_ui.finish_dot(value)
-
-def _build_entity_card(title, summary="", quote="", bullets=None, final="", bullet_label="Рекомендации:", emoji=""):
-    msg = balance_ui.entity_card(title, summary, quote, bullets, final, bullet_label, emoji=emoji)
-    return msg.text, msg.entities
-
-# универсальная клавиатура под ответом: [Продолжить][Короче|Глубже][⭐][В меню]
-def _ans_kb(cont_label="Продолжить", cont_cb="chat_retry", depth=True):
-    rows = []
-    if cont_label and cont_cb:
-        rows.append([(cont_label, cont_cb)])
-    if depth:
-        rows.append([("Короче", "ans_short"), ("Глубже", "ans_deep")])
-    rows.append([("⭐️ Сохранить", "as_fav")])
-    rows.append([("⬅️ Назад", "m_close"), ("🏠 Меню", "m_menu")])
-    return _kb(rows)
 
 def _recipe_kb():
     """Единая клавиатура карточки рецепта для всех 4 категорий (§6.2 спеки).
@@ -610,29 +597,6 @@ def _fridge_recipe_kb():
         [("✨ Заменить", "as_fridge_cook")],
         [("⬅️ Назад", "m_food"), ("🏠 Меню", "m_menu")],
     ])
-
-def _back_kb():
-    return _kb([[("⬅️ Назад", "m_close"), ("🏠 Меню", "m_menu")]])
-
-
-async def _send(bot, cid, text, kb=None, surface="card"):
-    text = (text or "").strip() or "Пусто, попробуй ещё раз."
-    text, _w = verify.grade_text(text, surface)   # health->дисклеймер, chat->≤1 эмодзи
-    for w in _w:
-        print(f"[verify] {surface}: {w}")
-    store.last_answer[str(cid)] = text
-    store.last_source.setdefault(str(cid), "Ассистент")
-    store.last_surface[str(cid)] = surface       # для «Короче/Глубже»
-    html = util.tg_html(text)
-    chunks = [html[i:i+4000] for i in range(0, len(html), 4000)]
-    for i, c in enumerate(chunks):
-        markup = (kb if kb is not None else _ans_kb()) if i == len(chunks) - 1 else None
-        try:
-            await bot.send_message(chat_id=cid, text=c, parse_mode="HTML", reply_markup=markup)
-        except Exception:
-            # если HTML невалиден - отправляем как обычный текст, без падения
-            await bot.send_message(chat_id=cid, text=c, reply_markup=markup)
-
 
 _LEFTOVER_RECENT_LIMIT = 12
 
