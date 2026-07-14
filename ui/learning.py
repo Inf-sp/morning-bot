@@ -187,6 +187,16 @@ def exercise_continue_dialogue(data):
 _SENTENCE_CONTEXT_FORMATS = {"fill_gap", "find_error", "build_sentence"}
 
 
+def _bold_translation_line(b, label, original, translation=""):
+    b.bold(f"{label}:")
+    b.text_line(" ")
+    b.bold(original)
+    if translation:
+        b.text_line(" → ")
+        b.bold(translation)
+    b.newline()
+
+
 def exercise_result(data, is_correct, chosen=""):
     """Общий результат после ответа — единая структура для всех форматов
     (см. docs/word-trainer.md, 'Поведение после ошибки'): короткое подтверждение
@@ -195,30 +205,40 @@ def exercise_result(data, is_correct, chosen=""):
     Для форматов с целым предложением (fill_gap/find_error/build_sentence) ru —
     перевод ВСЕЙ фразы, а не отдельного слова, поэтому строится как отдельная
     строка полным предложением, а не 'слово → перевод'."""
-    correct = str(data.get("correct") or data.get("correct_text") or "").strip()
+    correct = str(data.get("result_correct") or data.get("correct") or data.get("correct_text") or "").strip()
     ru = str(data.get("ru") or "").strip()
+    english = str(data.get("english") or "").strip()
     note = str(data.get("note") or "").strip()
     is_sentence = data.get("exercise_type") in _SENTENCE_CONTEXT_FORMATS
 
-    if is_sentence and ru:
-        correct_line = f"{correct}. → {ru}" if correct and not correct.endswith((".", "!", "?")) else f"{correct} → {ru}"
-    else:
-        correct_line = f"{correct} → {ru}" if ru else correct
+    if is_sentence and correct and not correct.endswith((".", "!", "?")):
+        correct += "."
 
     b = MessageBuilder()
     if is_correct:
         b.section("✅ Верно")
         b.spacer()
-        _q(b, "Правильно", correct_line)
+        _bold_translation_line(b, "Правильно", correct, ru)
     else:
         b.section("Почти")
         b.spacer()
-        _q(b, "Правильно", correct_line)
+        _bold_translation_line(b, "Правильно", correct, ru)
+        if english:
+            b.spacer()
+            _bold_translation_line(b, "По-английски", english)
         if note:
             b.spacer()
             _q(b, "Разбор", note)
         b.spacer()
         b.line("Это вернётся позже в тренировке.")
+        if data.get("bad_translation"):
+            b.spacer()
+            b.text_line("Фраза ")
+            b.bold(f"«{data['bad_translation']}»")
+            b.text_line(" по-русски неграмотна. Предлог ")
+            b.bold(f"«{data['unneeded_preposition']}»")
+            b.text_line(" здесь не нужен.")
+            b.newline()
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg

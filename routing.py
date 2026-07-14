@@ -28,7 +28,7 @@ _SUBROUTERS = {
     "wardrobe": ("wardrobe.py", "handle_callback"),
     "myday": ("myday.py", "handle_callback"),
     "balance": ("balance.py", "handle_callback"),
-    "learning": ("learning.py", "handle_callback"),
+    "learning_router": ("learning_router.py", "handle_callback"),
     "cleanup": ("cleanup.py", "handle_cleanup"),
 }
 # handle_notes_callback - отдельная функция в settings.py, с другим именем.
@@ -128,7 +128,7 @@ def _direct_subrouter_call(stmts):
             continue
         for n in ast.walk(stmt):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute):
-                if n.func.attr in ("handle_callback", "handle_notes_callback") and isinstance(n.func.value, ast.Name):
+                if n.func.attr in ("handle_callback", "handle_notes_callback", "handle_action") and isinstance(n.func.value, ast.Name):
                     return n.func.value.id
     return None
 
@@ -214,11 +214,14 @@ def _handled_by_toplevel(callback_data, tree):
         )
         if not matched:
             continue
-        sub = _body_calls_subrouter(stmt.body, callback_data)
-        if sub is not None:
-            return True, sub
-        # Особый случай a_<act>: тело содержит `act = data[2:]` и elif-цепочку по act.
+        # Особый случай a_<act>: часть действий делегирована
+        # локальному роутеру learning, остальные остаются в bot.py.
         if kind == "prefix" and "a_" in values:
+            learning_tree = ast.parse(_read_source("learning_router.py"))
+            learning_action = _find_function(learning_tree, "handle_action")
+            if (learning_action is not None
+                    and _sub_router_handles(callback_data[2:], learning_action, "act")):
+                return True, "learning_router"
             act_rules = _extract_act_prefix_rules(stmt.body)
             for act_kind, act_values in act_rules:
                 act_matched = (
@@ -230,6 +233,9 @@ def _handled_by_toplevel(callback_data, tree):
             # data.startswith("a_") совпал, но конкретного act-правила нет —
             # это НЕ обработано (тело падает в try/except без действия для этого act).
             return False, None
+        sub = _body_calls_subrouter(stmt.body, callback_data)
+        if sub is not None:
+            return True, sub
         return True, None
     return False, None
 
@@ -238,7 +244,7 @@ def resolve_callback_handler(callback_data: str):
     """Определяет, какой handler реально обработает данный callback_data.
 
     Возвращает dict {"handled": bool, "module": str|None, "detail": str} —
-    "module" - под-роутер (settings/wardrobe/myday/balance/cleanup/onboard),
+    "module" - под-роутер (settings/wardrobe/myday/balance/learning_router/cleanup/onboard),
     None если обработка целиком в bot.py, либо None+handled=False, если callback
     не совпал ни с одной веткой ни на одном уровне.
 
@@ -265,13 +271,17 @@ def resolve_callback_handler(callback_data: str):
         return {"handled": False, "module": sub_module,
                 "detail": f"{file_name}:{func_name} not found — resolver out of sync"}
 
-    if _sub_router_handles(callback_data, fn):
+    routed_value = callback_data[2:] if func_name == "handle_action" and callback_data.startswith("a_") else callback_data
+    subject_name = "act" if func_name == "handle_action" else "data"
+    if _sub_router_handles(routed_value, fn, subject_name):
         return {"handled": True, "module": f"{file_name}:{func_name}", "detail": "matched inside sub-router"}
     return {"handled": False, "module": f"{file_name}:{func_name}",
             "detail": "reached sub-router but no matching branch inside it"}
 
 
 def _resolve_subrouter_target(sub_module, callback_data, bot_tree):
+    if sub_module == "learning_router" and callback_data.startswith("a_"):
+        return "learning_router.py", "handle_action"
     if sub_module != "settings":
         return _SUBROUTERS[sub_module]
     # settings.py has two entrypoints; bot.py's own branching decides which one.
@@ -284,10 +294,10 @@ def _resolve_subrouter_target(sub_module, callback_data, bot_tree):
     return _SUBROUTERS["settings"]
 
 
-def _sub_router_handles(callback_data, fn):
+def _sub_router_handles(callback_data, fn, subject_name="data"):
     """Ищет совпадение внутри тела под-роутера — плоская if/elif по `data`."""
     for stmt in fn.body:
-        for kind, values, _body in _iter_all_ifs(stmt):
+        for kind, values, _body in _iter_all_ifs(stmt, subject_name):
             if kind == "exact" and callback_data in values:
                 return True
             if kind == "prefix" and any(callback_data.startswith(p) for p in values):
@@ -295,12 +305,12 @@ def _sub_router_handles(callback_data, fn):
     return False
 
 
-def _iter_all_ifs(node):
+def _iter_all_ifs(node, subject_name="data"):
     """Рекурсивно обходит все if (в т.ч. вложенные elif-цепочки и if внутри try)
     и для каждого условия по `data` возвращает (kind, values, body)."""
     for n in ast.walk(node):
         if isinstance(n, ast.If):
-            m = _match_condition(n.test, "data")
+            m = _match_condition(n.test, subject_name)
             if m is not None:
                 kind, values = m
                 yield kind, values, n.body

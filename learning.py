@@ -163,6 +163,16 @@ _ALL_EXERCISES = (
 
 _QUEUE_SIZE = 12  # заданий на одну тренировку
 
+_TRAINER_PHRASE_CORRECTIONS = {
+    "waar wacht je op": {
+        "term": "Waar wacht je op?",
+        "translation": "Что ты ждёшь?",
+        "english": "What are you waiting for?",
+        "bad_translation": "На что ты ждешь",
+        "unneeded_preposition": "на",
+    },
+}
+
 
 def _strip_article(lang, term):
     term = (term or "").strip()
@@ -257,6 +267,42 @@ def _train_full_entries(cid, language):
         if _entry_term(w) and _entry_translation(w):
             out.append(w)
     return out
+
+
+def _trainer_phrase_correction(entry):
+    return _TRAINER_PHRASE_CORRECTIONS.get(
+        _normalize_phrase_for_compare(_entry_term(entry)))
+
+
+def _apply_known_translation_corrections(cid, language):
+    """Исправляет известные кальки в старых записях словаря."""
+    lang_code = _code(language)
+    words = store.get_list(config.DICT_KEY, cid)
+    changed = False
+    for idx, entry in enumerate(words):
+        if _dict_lang(entry) != lang_code:
+            continue
+        correction = _trainer_phrase_correction(entry)
+        if not correction:
+            continue
+        updated = dict(entry)
+        if _entry_translation(updated) != correction["translation"]:
+            updated["translation"] = correction["translation"]
+            changed = True
+        examples = []
+        for example in updated.get("examples") or []:
+            example = dict(example)
+            if (_normalize_phrase_for_compare(example.get("text"))
+                    == _normalize_phrase_for_compare(updated.get("term") or updated.get("word"))):
+                if example.get("translation") != correction["translation"]:
+                    example["translation"] = correction["translation"]
+                    changed = True
+            examples.append(example)
+        if examples:
+            updated["examples"] = examples
+        words[idx] = updated
+    if changed:
+        store.set_list(config.DICT_KEY, cid, words)
 
 
 def _train_back_target(language=None):
@@ -535,6 +581,13 @@ async def build_exercise_data(cid, item):
         data = await _build_continue_dialogue(entry, other_entries, language)
     if data is None:
         return None
+    correction = _trainer_phrase_correction(entry)
+    if correction:
+        data["result_correct"] = correction["term"]
+        data["ru"] = correction["translation"]
+        data["english"] = correction["english"]
+        data["bad_translation"] = correction["bad_translation"]
+        data["unneeded_preposition"] = correction["unneeded_preposition"]
     data["exercise_type"] = ex_type
     data["term"] = _entry_term(entry)
     data["lang"] = _dict_lang(entry)
@@ -614,6 +667,7 @@ async def train_start(bot, cid, language, mode=None):
     store.game_state.pop(str(cid), None)
     store.pending_input.pop(str(cid), None)
     lang_code = _code(language)
+    _apply_known_translation_corrections(cid, language)
     if not _train_full_entries(cid, language):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(
             "📖 Открыть словарь", callback_data=f"a_dictlang_{lang_code}_from_menu")]])
@@ -960,34 +1014,6 @@ async def train_next(bot, cid):
         return
     st["current"] = None
     await _render_next_exercise(bot, cid)
-
-
-async def handle_callback(bot, cid, data, run_with_status):
-    """Локальный роутер callback-ов тренажёра; bot.py знает только
-    о префиксе ex_, а не о каждой кнопке и переходе сценария.
-    """
-    if data == "ex_next":
-        await run_with_status(lambda _s: train_next(bot, cid))
-    elif data.startswith("ex_pick_"):
-        await run_with_status(lambda _s: handle_pick(bot, cid, int(data[len("ex_pick_"):])))
-    elif data == "ex_hint":
-        await handle_hint(bot, cid)
-    elif data == "ex_answer":
-        await handle_answer_prompt(bot, cid)
-    elif data == "ex_giveup":
-        await run_with_status(lambda _s: handle_giveup(bot, cid))
-    elif data.startswith("ex_tok_"):
-        token = data[len("ex_tok_"):]
-        if token == "reset":
-            await handle_token_reset(bot, cid)
-        else:
-            await run_with_status(lambda _s: handle_token_pick(bot, cid, int(token)))
-    elif data.startswith("ex_word_"):
-        await run_with_status(lambda _s: handle_token_pick(
-            bot, cid, int(data[len("ex_word_"):])))
-    else:
-        return False
-    return True
 
 
 def cancel_training(cid):
@@ -1835,7 +1861,9 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
     быть уже исправленной, естественной формой, а не сырым вводом с ошибкой.
 - article: артикль "de"/"het" ТОЛЬКО для нидерландских существительных. У глаголов, прилагательных,
   фраз и предложений артикля нет и не может быть — всегда пусто.
-- translation: 1-2 самых точных значения на русском, через "; ".
+- translation: 1-2 самых точных и естественных значения на русском, через "; ".
+  Не кальируй иностранные предлоги: "Waar wacht je op?" → "Что ты ждёшь?",
+  а не "На что ты ждёшь?".
 - breakdown: короткий разбор — часть речи, род/артикль, особенность формы (одна строка,
   без пояснений сверх необходимого).
 - examples: 1-2 примера предложений на изучаемом языке с переводом на русский, естественных
