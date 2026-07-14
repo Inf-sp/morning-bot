@@ -399,6 +399,9 @@ async def _answer_callback_impl(update, context):
         section, _, key = rest.partition("_")
         await _ack(q)
         await firstvisit.toggle_tag(bot, cid, section, key, q); return
+    if data in ("m_learn", "m_menu"):
+        learning.cancel_training(cid)
+
     # Первичный опрос при входе в раздел (wardrobe / learning / leisure / health / cooking)
     if data == "m_food" and firstvisit.needs_setup(cid, "cooking"):
         await _ack(q)

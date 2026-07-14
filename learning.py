@@ -316,10 +316,16 @@ def build_training_queue(cid, language):
         picked.extend(rest[:_QUEUE_SIZE - len(picked)])
 
     random.shuffle(picked)
-    return [{"entry": e, "exercise_type": select_exercise_type(e)} for e in picked]
+    queue = []
+    previous_type = ""
+    for entry in picked:
+        exercise_type = select_exercise_type(entry, avoid=previous_type)
+        queue.append({"entry": entry, "exercise_type": exercise_type})
+        previous_type = exercise_type
+    return queue
 
 
-def select_exercise_type(entry):
+def select_exercise_type(entry, avoid=""):
     """Формат задания по srs_level материала и типу материала (слово/фраза/
     конструкция/ситуация) — не повторяет srs_last_exercise_type, если есть
     из чего выбрать другой (см. docs/word-trainer.md, таблица уровней)."""
@@ -328,7 +334,7 @@ def select_exercise_type(entry):
     last = entry.get("srs_last_exercise_type") or ""
 
     if level <= 1:
-        candidates = [EXERCISE_CHOOSE_TRANSLATION]
+        candidates = [EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL_FREE]
         if entry.get("examples"):
             candidates.append(EXERCISE_FILL_GAP)
     elif level <= 3:
@@ -346,7 +352,8 @@ def select_exercise_type(entry):
         if kind == "phrase":
             candidates.append(EXERCISE_CHOOSE_NATURAL)
 
-    filtered = [c for c in candidates if c != last] or candidates
+    filtered = [c for c in candidates if c != last and c != avoid]
+    filtered = filtered or [c for c in candidates if c != last] or candidates
     return random.choice(filtered)
 
 
@@ -364,7 +371,7 @@ def _build_choose_translation(entry, other_entries):
         for w in other_entries if _entry_term(w) != _entry_term(entry)
     ]
     wrong = _clean_phrase_options(correct, wrong_pool, needed=3)
-    if len(wrong) < 3:
+    if not wrong:
         return None
     return {"term": _cap(_entry_term(entry)), "correct": correct, "wrong": wrong}
 
@@ -372,7 +379,7 @@ def _build_choose_translation(entry, other_entries):
 def _build_recall_free(entry):
     ru = _entry_translation(entry).split(";")[0].split(",")[0].strip()
     correct = _cap(_entry_term(entry))
-    hint = entry.get("construction") or entry.get("pos") or ""
+    hint = entry.get("construction") or entry.get("pos") or f"Начинается на «{correct[:1]}»"
     return {"ru": ru, "correct": correct, "hint": hint}
 
 
@@ -432,7 +439,7 @@ def _build_fill_gap(entry, other_entries):
     if not blank_phrase:
         return None
     wrong = _dict_distractors(entry, correct, other_entries, needed=3)
-    if len(wrong) < 3:
+    if not wrong:
         return None
     return {"blank_phrase": blank_phrase, "correct": correct, "wrong": wrong,
             "ru": str(example.get("translation") or _entry_translation(entry)).strip(),
@@ -620,7 +627,7 @@ async def train_start(bot, cid, language, mode=None):
         return
     store.train_state[str(cid)] = {
         "lang": language, "queue": queue, "queue_idx": 0,
-        "session": _new_session(), "current": None,
+        "session": _new_session(), "current": None, "last_exercise_type": "",
     }
     await _render_next_exercise(bot, cid)
 
@@ -636,11 +643,24 @@ async def _render_next_exercise(bot, cid):
     while st["queue_idx"] < len(queue):
         item = queue[st["queue_idx"]]
         st["queue_idx"] += 1
+        if (int(item["entry"].get("srs_level") or 0) <= 1
+                and item["exercise_type"] == st.get("last_exercise_type")):
+            item = {"entry": item["entry"], "exercise_type": select_exercise_type(
+                item["entry"], avoid=st.get("last_exercise_type", ""))}
         data = await build_exercise_data(cid, item)
+        if data is None and int(item["entry"].get("srs_level") or 0) <= 1:
+            fallback_type = next(
+                exercise_type for exercise_type in (
+                    EXERCISE_RECALL_FREE, EXERCISE_CHOOSE_TRANSLATION)
+                if exercise_type != st.get("last_exercise_type"))
+            data = await build_exercise_data(cid, {
+                "entry": item["entry"], "exercise_type": fallback_type,
+            })
         if data is None:
             continue
         data["hint_shown"] = False
         st["current"] = data
+        st["last_exercise_type"] = data["exercise_type"]
         await _send_exercise(bot, cid, data)
         return
     await _finish_training(bot, cid, st)
@@ -648,6 +668,10 @@ async def _render_next_exercise(bot, cid):
 
 def _ex_kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
+
+
+def _train_nav_row():
+    return [("⬅️ Назад", "m_learn"), ("🏠 Меню", "m_menu")]
 
 
 async def _send_exercise(bot, cid, data):
@@ -695,6 +719,7 @@ async def _send_choose_translation(bot, cid, data):
         # неанонимных опросов. Без этого тренажёр не узнает,
         # что пользователь ответил, и не может показать следующий шаг.
         is_anonymous=False,
+        reply_markup=_ex_kb([_train_nav_row()]),
     )
     if getattr(msg, "poll", None):
         store.train_polls[msg.poll.id] = str(cid)
@@ -715,6 +740,7 @@ async def _send_choose_options(bot, cid, data, render_fn):
     data["_options"] = options
     msg = render_fn(data)
     rows = [[(opt, f"ex_pick_{i}")] for i, opt in enumerate(options)]
+    rows.append(_train_nav_row())
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_ex_kb(rows))
 
 
@@ -726,12 +752,13 @@ async def _send_recall_free(bot, cid, data):
     else:
         rows.append([("⌨️ Ответить", "ex_answer")])
     rows.append([("Не помню", "ex_giveup")])
+    rows.append(_train_nav_row())
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_ex_kb(rows))
 
 
 async def _send_translate_context(bot, cid, data):
     msg = learning_ui.exercise_translate_context(data)
-    rows = [[("⌨️ Ответить", "ex_answer")], [("Показать ответ", "ex_giveup")]]
+    rows = [[("⌨️ Ответить", "ex_answer")], [("Показать ответ", "ex_giveup")], _train_nav_row()]
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_ex_kb(rows))
 
 
@@ -742,12 +769,14 @@ async def _send_build_sentence(bot, cid, data):
     rows = [[(t, f"ex_tok_{data['shuffled'].index(t)}")] for t in remaining[:6]]
     if data.get("_picked"):
         rows.append([("↩️ Сбросить", "ex_tok_reset")])
+    rows.append(_train_nav_row())
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_ex_kb(rows))
 
 
 async def _send_find_error(bot, cid, data):
     msg = learning_ui.exercise_find_error(data)
     rows = [[(t, f"ex_word_{i}")] for i, t in enumerate(data["tokens"][:6])]
+    rows.append(_train_nav_row())
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_ex_kb(rows))
 
 
@@ -774,7 +803,7 @@ async def _apply_result(bot, cid, st, is_correct, quality, feedback_text, feedba
         session["returning"].append(entry_term)
         reinsert_failed_material(st, data)
 
-    kb = _ex_kb([[('Следующее задание', "ex_next")]])
+    kb = _ex_kb([[("Следующее задание", "ex_next")], _train_nav_row()])
     await bot.send_message(chat_id=cid, text=feedback_text, entities=feedback_entities, reply_markup=kb)
 
 
@@ -832,7 +861,8 @@ async def handle_answer_prompt(bot, cid):
     if not st or not st.get("current"):
         return
     store.pending_input[str(cid)] = "trainer_answer"
-    await bot.send_message(chat_id=cid, text="Напиши свой ответ следующим сообщением.")
+    await bot.send_message(chat_id=cid, text="Напиши свой ответ следующим сообщением.",
+                           reply_markup=_ex_kb([_train_nav_row()]))
 
 
 async def handle_giveup(bot, cid):
@@ -932,6 +962,17 @@ async def train_next(bot, cid):
         return
     st["current"] = None
     await _render_next_exercise(bot, cid)
+
+
+def cancel_training(cid):
+    """Завершает текущую тренировку при выходе в раздел или меню."""
+    cid = str(cid)
+    store.train_state.pop(cid, None)
+    if store.pending_input.get(cid) == "trainer_answer":
+        store.pending_input.pop(cid, None)
+    for poll_id, poll_cid in list(store.train_polls.items()):
+        if str(poll_cid) == cid:
+            store.train_polls.pop(poll_id, None)
 
 
 async def send_train_lang_select(bot, cid):

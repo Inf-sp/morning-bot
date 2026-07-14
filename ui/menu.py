@@ -140,6 +140,8 @@ def learning_menu(home: dict):
     b.bold(f"Обучение · {title} {flag}")
     b.newline()
     b.spacer()
+    b.line("Тренажёр начинает с простых заданий и добавляет новые форматы по мере закрепления слов.")
+    b.spacer()
 
     if not home.get("has_material"):
         b.line("В словаре пока нет слов с переводом — начни с тренажёра, он поможет добавить первые.")
