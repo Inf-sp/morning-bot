@@ -556,13 +556,6 @@ def _food_card(d, label="Рецепт дня"):
     """Единый формат карточки рецепта для радара и нового рецепта."""
     return food_ui.food_card(d, label=label)
 
-DOCTOR_INTRO = (
-    f"{ui_label('doctor', 'Врач')}\n\n"
-    "Дам общую справочную информацию о здоровье и лекарствах. Это не диагноз и не назначение - "
-    "при тревожных симптомах обратись к специалисту.\n\n"
-    "Опиши, что беспокоит, или спроси про лекарство."
-)
-
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
 
