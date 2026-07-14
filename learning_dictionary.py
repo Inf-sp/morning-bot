@@ -14,18 +14,21 @@ import secure
 import srs
 import store
 import verify
-from repositories import UserListRepository
+from dictionary_model import (
+    PHRASE_CORRECTIONS,
+    entry_language,
+    entry_term,
+    entry_translation,
+    language_code as _code,
+    normalize_entry,
+    normalize_key,
+)
+from dictionary_repository import DictionaryRepository
 from ui import dictionary as dict_ui
 from ui import learning as learning_ui
 
 _HERE = Path(__file__).parent
 _log = logging.getLogger(__name__)
-
-
-def _code(language):
-    if language in ("nl", "en"):
-        return language
-    return "nl" if language == "нидерландский" else "en"
 
 
 def _active_language_code(cid):
@@ -36,116 +39,6 @@ def _active_language_code(cid):
     return _code(settings.study_lang(cid))
 
 
-PHRASE_CORRECTIONS = {
-    "waar wacht je op": {
-        "term": "Waar wacht je op?",
-        "translation": "Что ты ждёшь?",
-        "english": "What are you waiting for?",
-        "bad_translation": "На что ты ждешь",
-        "unneeded_preposition": "на",
-    },
-}
-
-
-def entry_term(entry):
-    if not isinstance(entry, dict):
-        return str(entry)
-    return str(entry.get("term") or entry.get("word") or entry.get("base_form") or "")
-
-
-def entry_translation(entry):
-    if not isinstance(entry, dict):
-        return ""
-    return str(entry.get("translation") or entry.get("ru") or "")
-
-
-def entry_language(entry):
-    return str(entry.get("lang") or "nl") if isinstance(entry, dict) else "nl"
-
-
-def normalize_key(text):
-    import re
-    return " ".join(re.findall(
-        r"[\wÀ-ÖØ-öø-ÿ'-]+", str(text or "").lower(), re.UNICODE))
-
-
-def normalize_entry(entry, *, language=None):
-    """Возвращает единую схему поверх legacy term/word/base_form и ru."""
-    source = dict(entry) if isinstance(entry, dict) else {"term": str(entry)}
-    source["term"] = entry_term(source)
-    source["translation"] = entry_translation(source)
-    source["lang"] = language or entry_language(source)
-    source.setdefault("kind", "phrase" if " " in source["term"].strip() else "word")
-    source.setdefault("examples", [])
-    source.setdefault("srs_history", [])
-    return source
-
-
-class DictionaryRepository:
-    def __init__(self, cid):
-        self.cid = str(cid)
-        self.records = UserListRepository(config.DICT_KEY, self.cid)
-
-    def all(self):
-        return self.records.all()
-
-    def save_all(self, entries):
-        self.records.save(entries)
-
-    def training_entries(self, language):
-        code = language if language in ("nl", "en") else (
-            "nl" if language == "нидерландский" else "en")
-        return [entry for entry in self.all()
-                if entry_language(entry) == code and entry_term(entry) and entry_translation(entry)]
-
-    def correction_for(self, entry):
-        return PHRASE_CORRECTIONS.get(normalize_key(entry_term(entry)))
-
-    def apply_known_corrections(self, language):
-        code = language if language in ("nl", "en") else (
-            "nl" if language == "нидерландский" else "en")
-        entries = self.all()
-        changed = False
-        for index, entry in enumerate(entries):
-            if entry_language(entry) != code:
-                continue
-            correction = self.correction_for(entry)
-            if not correction:
-                continue
-            updated = dict(entry)
-            if entry_translation(updated) != correction["translation"]:
-                updated["translation"] = correction["translation"]
-                changed = True
-            examples = []
-            for example in updated.get("examples") or []:
-                example = dict(example)
-                if normalize_key(example.get("text")) == normalize_key(entry_term(updated)):
-                    if example.get("translation") != correction["translation"]:
-                        example["translation"] = correction["translation"]
-                        changed = True
-                examples.append(example)
-            if examples:
-                updated["examples"] = examples
-            entries[index] = updated
-        if changed:
-            self.save_all(entries)
-        return changed
-
-    def record_answer(self, language, term, exercise_type, quality):
-        def update(entries):
-            for index, entry in enumerate(entries):
-                if entry_language(entry) != language or entry_term(entry) != term:
-                    continue
-                state = ({key: entry.get(key) for key in (
-                    "srs_level", "srs_easiness", "srs_interval_days", "srs_due_at",
-                    "srs_history", "srs_last_exercise_type")}
-                    if "srs_due_at" in entry else srs.default_srs_state())
-                updated = {**entry, **srs.record_answer(state, exercise_type, quality)}
-                entries[index] = updated
-                return entries, updated
-            return entries, None
-
-        return self.records.mutate(update)
 # ================= СЛОВАРЬ (раздельно NL / EN) =================
 def _cap(s):
     """Первая буква термина - заглавная (с учётом орфографии), остальное не трогаем."""

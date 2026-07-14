@@ -316,7 +316,7 @@ def concerts_list(place_label, events, empty_hint=""):
     """Список концертов твоих артистов -> MessageBuilder. Каждое событие - мини-блок:
     имя артиста, место, цена от, дата, скрытая ссылка "Подробнее…"."""
     b = MessageBuilder()
-    b.text_line(f"{ui_label('music', '')} ")
+    b.text_line(f"{ui_label('concerts', '')} ")
     b.bold(place_label)
     b.newline()
     if not events:
@@ -334,8 +334,10 @@ def concerts_list(place_label, events, empty_hint=""):
             b.line(f"Цена: {ev['price']}")
         if ev.get("date"):
             b.line(f"Дата: {ev['date']}")
-        if ev.get("source"):
-            b.line(f"Источник: {ev['source']}")
+        if ev.get("verification") == "confirmed":
+            b.line("✅ Подтверждён")
+        elif ev.get("verification") == "review":
+            b.line("🟡 Требует проверки")
         if ev.get("url"):
             b.link("Подробнее…", ev["url"])
             b.newline()
@@ -503,7 +505,7 @@ def weekly_events_card(period_start: date, period_end: date, concerts, movies) -
     b.newline()
 
     if concert_groups:
-        b.section("🎸 Концерты")
+        b.section(f"{ui_label('concerts', 'Концерты')}")
         for idx, event in enumerate(concert_groups):
             if idx:
                 b.spacer()

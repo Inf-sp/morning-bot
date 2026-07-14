@@ -4,7 +4,7 @@ UI_EMOJI = {
     "cinema": "🎬",
     "books": "📖",
     "music": "🎧",
-    "concerts": "🎸",
+    "concerts": "🎫",
     "wardrobe": "👟",
     "food": "🥣",
     "recipes": "🍽",
@@ -164,5 +164,4 @@ def ui_label(key, text):
 def cuisine_label(key, text):
     emoji = CUISINE_EMOJI.get(key)
     return f"{emoji} {text}" if emoji else text
-
 

@@ -209,6 +209,7 @@ def audit_architecture(root=None):
     required = {
         "trainer.py", "trainer_engine.py", "trainer_exercises.py",
         "trainer_grading.py", "trainer_session.py", "learning_dictionary.py",
+        "dictionary_model.py", "dictionary_repository.py",
         "live_language.py", "learning_game.py", "learning_settings.py",
         "cooking.py", "leisure_movies.py", "leisure_books.py",
         "leisure_music.py", "leisure_concerts.py", "saved_items.py",
@@ -233,6 +234,25 @@ def audit_architecture(root=None):
         for module in sorted(imports & forbidden):
             findings.append(f"{name}: forbidden import {module}")
 
+    boundary_rules = {
+        "dictionary_model.py": {"telegram", "store", "ai", "config", "repositories"},
+        "dictionary_repository.py": {"telegram", "ai"},
+        "response_delivery.py": {"ai"},
+    }
+    for name, denied in boundary_rules.items():
+        path = os.path.join(root, name)
+        if not os.path.exists(path):
+            continue
+        tree = ast.parse(open(path, encoding="utf-8").read(), filename=path)
+        imports = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imports.update(alias.name.split(".")[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imports.add(node.module.split(".")[0])
+        for module in sorted(imports & denied):
+            findings.append(f"{name}: forbidden import {module}")
+
     learning_path = os.path.join(root, "learning.py")
     if os.path.exists(learning_path):
         source = open(learning_path, encoding="utf-8").read()
@@ -244,11 +264,18 @@ def audit_architecture(root=None):
     dictionary_path = os.path.join(root, "learning_dictionary.py")
     if os.path.exists(dictionary_path):
         source = open(dictionary_path, encoding="utf-8").read()
-        if "class DictionaryRepository" not in source:
-            findings.append("learning_dictionary.py: DictionaryRepository missing")
         for function in ("normalize_entry", "migrate_dict_entries_for_srs", "send_dict"):
-            if not re.search(rf"(?:async\s+)?def\s+{function}\s*\(", source):
+            if function == "normalize_entry":
+                if not re.search(r"from dictionary_model import \(", source) or function not in source:
+                    findings.append("learning_dictionary.py: normalize_entry re-export missing")
+            elif not re.search(rf"(?:async\s+)?def\s+{function}\s*\(", source):
                 findings.append(f"learning_dictionary.py: {function} missing")
+
+    repository_path = os.path.join(root, "dictionary_repository.py")
+    if os.path.exists(repository_path):
+        source = open(repository_path, encoding="utf-8").read()
+        if "class DictionaryRepository" not in source:
+            findings.append("dictionary_repository.py: DictionaryRepository missing")
 
     ownership_rules = {
         "balance.py": ("def enter_meal(", "def send_fridge(", "import cooking", "from cooking import"),

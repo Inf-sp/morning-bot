@@ -156,6 +156,36 @@ _EXTERNAL_SOURCE_LABEL = {
     "other": "веб-поиск",
 }
 
+_NL_VENUE_DOMAINS = (
+    "paradiso.nl", "melkweg.nl", "afaslive.nl", "ziggodome.nl",
+    "013.nl", "tivolivredenburg.nl", "doornroosje.nl", "paard.nl",
+    "effenaar.nl", "grenswerk.nl",
+)
+
+# География служит защитным инвариантом, а не способом расширить поиск. Если
+# город однозначно известен, он имеет приоритет над ошибочным country_cc от AI.
+_CITY_COUNTRY_CC = {
+    "amsterdam": "NL", "rotterdam": "NL", "utrecht": "NL",
+    "den haag": "NL", "the hague": "NL", "eindhoven": "NL",
+    "tilburg": "NL", "nijmegen": "NL", "maastricht": "NL",
+    "groningen": "NL", "arnhem": "NL", "haarlem": "NL",
+    "biddinghuizen": "NL", "lievelde": "NL", "venlo": "NL",
+    "leipzig": "DE", "hamburg": "DE", "berlin": "DE", "köln": "DE",
+    "cologne": "DE", "düsseldorf": "DE", "munich": "DE", "münchen": "DE",
+    "brussels": "BE", "brussel": "BE", "antwerp": "BE", "antwerpen": "BE",
+    "ghent": "BE", "gent": "BE", "paris": "FR", "london": "GB",
+}
+
+
+def _normalized_city(value: str) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip().casefold())
+
+
+def _verified_country_cc(city: str, declared_cc: str = "") -> str:
+    """Страна площадки: известный город сильнее извлечённого AI-кода."""
+    inferred = _CITY_COUNTRY_CC.get(_normalized_city(city))
+    return inferred or str(declared_cc or "").strip().upper()
+
 
 def _artist_cache_key(artist: str, cc: str) -> str:
     return f"{artist.strip().lower()}|{cc.upper()}"
@@ -187,7 +217,7 @@ def _classify_external_source(url: str, artist: str) -> str:
         return "official_site"
     if any(k in low for k in ("ticketmaster.", "eventim.", "songkick.", "bandsintown.")):
         return "ticket_service" if "ticketmaster." not in low else "ticketmaster"
-    if any(k in low for k in ("ziggodome", "afaslive", "paradiso", "melkweg", "ahoy",
+    if any(domain in low for domain in _NL_VENUE_DOMAINS) or any(k in low for k in ("ahoy",
                               "arena", "stadium", "hall", "venue", "club", "theater", "theatre")):
         return "venue"
     return "other"
@@ -200,10 +230,11 @@ async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
     import secure
     from datetime import datetime
     import research
+    year = time.strftime('%Y')
     queries = [
-        f"{artist} concert {cname} {time.strftime('%Y')}",
-        f"{artist} tour dates tickets {cname}",
-        f"{artist} live {cname} tickets",
+        f'{artist} official tour dates {cname} {year}',
+        f'{artist} Netherlands {year} ' + " ".join(f"site:{domain}" for domain in _NL_VENUE_DOMAINS),
+        f'{artist} concert {cname} {year}',
     ]
     try:
         results_batches = await asyncio.gather(
@@ -254,7 +285,7 @@ async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
         return []
     raw_context = "\n---\n".join(context_parts)[:8000]
 
-    allowed_cc = [cc] + _neighbor_ccs(cc)
+    allowed_cc = [cc]
     today = datetime.now(config.TZ).date().isoformat()
     prompt = f"""Ты извлекаешь реальные концертные события артиста "{artist}" из текста веб-страниц.
 
@@ -286,11 +317,12 @@ async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
         date = str(e.get("date") or "").strip()
         venue = str(e.get("venue") or "").strip()
         city = str(e.get("city") or "").strip()
-        country_cc = str(e.get("country_cc") or "").strip().upper()
+        country_cc = _verified_country_cc(city, e.get("country_cc"))
         source_url = str(e.get("source_url") or "").strip()
         if not (date and venue and source_url):
             continue  # не подтверждено страницей источника — не добавляем
-        if country_cc and country_cc not in allowed_cc:
+        # Не подставляем выбранную страну, если источник не подтвердил географию.
+        if country_cc != cc:
             continue
         if date < today:
             continue
@@ -300,7 +332,7 @@ async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
             "time": str(e.get("time") or "").strip(),
             "venue": venue,
             "city": city,
-            "country_cc": country_cc or cc,
+            "country_cc": country_cc,
             "event_url": str(e.get("event_url") or source_url).strip(),
             "ticket_url": str(e.get("ticket_url") or "").strip(),
             "source": _classify_external_source(source_url, artist),
@@ -356,12 +388,26 @@ def _tm_event_key(e: dict) -> tuple:
     venue_obj = (e.get("_embedded", {}).get("venues") or [{}])[0]
     city = (venue_obj.get("city") or {}).get("name", "")
     venue = venue_obj.get("name", "")
-    return (artist.strip().lower(), date.strip(), city.strip().lower(), venue.strip().lower())
+    place = city.strip().lower() or venue.strip().lower()
+    return (artist.strip().lower(), date.strip(), place)
+
+
+def _event_country_cc(event: dict) -> str:
+    venue = (event.get("_embedded", {}).get("venues") or [{}])[0]
+    city = (venue.get("city") or {}).get("name", "")
+    declared = (venue.get("country") or {}).get("countryCode", "")
+    return _verified_country_cc(city, declared)
+
+
+def filter_concert_events(events: list, cc: str) -> list:
+    """Оставляет только события с подтверждённой страной площадки."""
+    target = str(cc or "").upper()
+    return [event for event in events if _event_country_cc(event) == target]
 
 
 def merge_concert_events(tm_events: list, external_events: list) -> list:
     """Объединяет Ticketmaster и внешние события (уже в TM-подобной форме), убирает
-    дубли по (артист, дата, город, площадка), при конфликте оставляет источник
+    дубли по (артист, дата, город), при конфликте оставляет источник
     с наивысшим приоритетом (официальный сайт → площадка → Ticketmaster →
     билетный сервис → прочее)."""
     def prio(e):
@@ -451,13 +497,13 @@ def _concerts_cache_get(cid, cc):
     import time
     if time.time() - entry.get("ts", 0) > _CONCERTS_CACHE_TTL:
         return None
-    return entry.get("events", [])
+    return filter_concert_events(entry.get("events", []), cc)
 
 
 def _concerts_cache_set(cid, cc, events):
     import time
     d = store._load(config.CONCERTS_CACHE_KEY)
-    d[str(cid)] = {"ts": time.time(), "cc": cc, "events": events}
+    d[str(cid)] = {"ts": time.time(), "cc": cc, "events": filter_concert_events(events, cc)}
     store._save(config.CONCERTS_CACHE_KEY, d)
 
 
@@ -481,7 +527,7 @@ async def _fetch_concerts(artists, cc, cname):
         if isinstance(batch, Exception):
             continue
         external_events.extend(batch or [])
-    return merge_concert_events(tm_events, external_events)
+    return filter_concert_events(merge_concert_events(tm_events, external_events), cc)
 
 
 async def refresh_concerts_cache(cid):
@@ -591,7 +637,7 @@ async def _build_new_concerts_msg(cid):
             "price": _concert_min_price(e),
             "date": _fmt_date(date) if date else "",
             "url": e.get("url", ""),
-            "source": "" if source == "ticketmaster" else _EXTERNAL_SOURCE_LABEL.get(source, ""),
+            "verification": "confirmed" if source in ("official_site", "venue", "ticketmaster") else "review",
         })
 
     msg = leisure_ui.concerts_list("Новые концерты твоих артистов", rows_data)
@@ -706,7 +752,7 @@ async def find_concerts(bot, cid, mode="home"):
             "price": _concert_min_price(e),
             "date": _fmt_date(date) if date else "",
             "url": e.get("url", ""),
-            "source": "" if source == "ticketmaster" else _EXTERNAL_SOURCE_LABEL.get(source, ""),
+            "verification": "confirmed" if source in ("official_site", "venue", "ticketmaster") else "review",
         })
 
     msg = leisure_ui.concerts_list(place_label, rows_data)
