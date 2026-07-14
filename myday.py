@@ -426,7 +426,7 @@ def _build_day_text(cid):
         data = None
         weather_error = e
 
-    if data:
+    if data and (data.get("daily") or {}).get("time"):
         d = data["daily"]
         day_str = d["time"][0]
         code = d["weathercode"][0]
