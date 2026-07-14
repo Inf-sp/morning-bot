@@ -113,24 +113,8 @@ _SCREENS = {
 }
 
 
-_MATERIAL_LABELS = {"word": "Слово дня", "phrase": "Фраза дня", "rule": "Правило дня"}
-
-
-def _labeled_line(b: MessageBuilder, label: str, text: str):
-    """Единый формат по всей карточке: '**Название:** текст' одной строкой,
-    без переноса содержимого на следующую строку (см. docs/word-trainer.md)."""
-    b.bold(f"{label}:")
-    b.text_line(f" {text}")
-    b.newline()
-    return b
-
-
 def learning_menu(home: dict):
-    """Главный экран раздела 'Обучение' — сразу материал дня и переход в
-    тренажёр, без описания возможностей и списка форматов (см. §27 CLAUDE.md
-    и docs/word-trainer.md). `home` — результат learning.build_learning_home(cid);
-    эта функция только рендерит готовые поля, не читает store и не выбирает
-    материал сама."""
+    """Главный экран обучения: материал дня, прогресс и следующий шаг."""
     code = home.get("lang_code", "nl")
     flag = LANGUAGE_EMOJI.get(code, LANGUAGE_EMOJI["nl"])
     title = "Английский" if code == "en" else "Нидерландский"
@@ -140,28 +124,35 @@ def learning_menu(home: dict):
     b.bold(f"Обучение · {title} {flag}")
     b.newline()
     b.spacer()
-    b.line("Тренажёр начинает с простых заданий и добавляет новые форматы по мере закрепления слов.")
-    b.spacer()
 
     if not home.get("has_material"):
         b.line("В словаре пока нет слов с переводом — начни с тренажёра, он поможет добавить первые.")
     else:
-        label = _MATERIAL_LABELS.get(home.get("kind"), "Слово дня")
-        _labeled_line(b, label, finish_dot(f"{home['term']} → {home['translation']}"))
-        if home.get("example_text"):
-            example = home["example_text"]
-            if home.get("example_translation"):
-                example += f" → {home['example_translation']}"
-            _labeled_line(b, "Пример", finish_dot(example))
-        if home.get("note"):
-            _labeled_line(b, "Полезно", finish_dot(home["note"]))
-        if home.get("focus"):
-            _labeled_line(b, "Сегодня в фокусе", finish_dot(home["focus"]))
+        b.bold("Конструкция дня:")
+        b.text_line(" ")
+        b.italic(home["term"])
+        b.text_line(f" → {finish_dot(home['translation'])}")
+        b.newline()
+        b.line("Сегодня тренажёр поможет запомнить перевод и пример. Новые типы заданий откроются после закрепления слов.")
+
+    progress = home.get("progress") or {}
+    b.spacer()
+    b.bold("Прогресс:")
+    b.text_line(" Слов и фраз ")
+    b.bold(str(progress.get("total", 0)))
+    b.text_line(" изучаю · ")
+    b.bold(str(progress.get("due_count", 0)))
+    b.text_line(" повторить · ")
+    b.bold(f"{progress.get('no_hint_pct', 0)}%")
+    b.text_line(" без подсказок")
+    b.newline()
+    b.spacer()
+    b.bold("Следующая цель:")
+    b.text_line(" Перевод и понимание → самостоятельное вспоминание.")
 
     return b.build_stripped(reply_markup=ikb([
         [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
         [(ui_label("live_language", "Живой язык"), f"a_proverb_{code}"), (ui_label("game", "Игра-детектив"), f"gamelang_{code}")],
-        [("📊 Прогресс", "a_train_progress")],
         [(ui_label("settings", "Настройки обучения"), "set_learning")],
         [("⬅️ Назад", "m_menu"), ("🏠 Меню", "m_menu")],
     ]))

@@ -1,109 +1,15 @@
-import json
-import copy
-import logging
 import uuid as _uuid
-import threading
 from pathlib import Path
 import config
+import storage_driver
+import runtime_state
 
 _HERE = Path(__file__).parent
 
-_log = logging.getLogger(__name__)
-
-# --- Postgres (с откатом в память) ---
-_conn = None
-_mem = {}
-_mem_locks = {}
-_conn_lock = threading.RLock()
-
-def _db():
-    global _conn
-    if not config.DATABASE_URL:
-        return None
-    try:
-        if _conn is None or _conn.closed:
-            import psycopg2
-            _conn = psycopg2.connect(config.DATABASE_URL)
-            _conn.autocommit = True
-            with _conn.cursor() as cur:
-                cur.execute("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value JSONB)")
-        with _conn.cursor() as cur:
-            cur.execute("SELECT 1")
-        return _conn
-    except Exception:
-        try:
-            import psycopg2
-            _conn = psycopg2.connect(config.DATABASE_URL)
-            _conn.autocommit = True
-            with _conn.cursor() as cur:
-                cur.execute("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value JSONB)")
-            return _conn
-        except Exception as e:
-            _log.warning("store: DB reconnect failed, using memory: %s", e)
-            return None
-
-def _load(key):
-    conn = _db()
-    if conn is None:
-        return {k: list(v) if isinstance(v, list) else v for k, v in _mem.get(key, {}).items()}
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT value FROM kv WHERE key = %s", (key,))
-            row = cur.fetchone()
-            return row[0] if row else {}
-    except Exception as e:
-        _log.warning("store: _load(%s) DB error, using memory: %s", key, e)
-        return {k: list(v) if isinstance(v, list) else v for k, v in _mem.get(key, {}).items()}
-
-def _save(key, data):
-    conn = _db()
-    if conn is None:
-        _mem[key] = data
-        return
-    try:
-        with conn.cursor() as cur:
-            cur.execute("INSERT INTO kv (key, value) VALUES (%s, %s) "
-                        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
-                        (key, json.dumps(data, ensure_ascii=False)))
-    except Exception as e:
-        _log.warning("store: _save(%s) DB error, falling back to memory: %s", key, e)
-        _mem[key] = data
-
-def mutate_kv(key, mutator_fn):
-    """Atomically load/mutate/save one JSON KV record.
-
-    With Postgres, uses transaction-scoped advisory lock per key, so concurrent
-    worker processes cannot race on limit counters. In memory fallback is only
-    process-local and intended for local/dev operation.
-    """
-    conn = _db()
-    if conn is None:
-        lock = _mem_locks.setdefault(key, threading.Lock())
-        with lock:
-            current = copy.deepcopy(_mem.get(key, {}))
-            new_value, result = mutator_fn(current if isinstance(current, dict) else {})
-            _mem[key] = new_value
-            return result
-    with _conn_lock:
-        old_autocommit = conn.autocommit
-        conn.autocommit = False
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (key,))
-                cur.execute("SELECT value FROM kv WHERE key = %s FOR UPDATE", (key,))
-                row = cur.fetchone()
-                current = row[0] if row else {}
-                new_value, result = mutator_fn(current if isinstance(current, dict) else {})
-                cur.execute("INSERT INTO kv (key, value) VALUES (%s, %s) "
-                            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
-                            (key, json.dumps(new_value, ensure_ascii=False)))
-            conn.commit()
-            return result
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.autocommit = old_autocommit
+_db = storage_driver.db
+_load = storage_driver.load
+_save = storage_driver.save
+mutate_kv = storage_driver.mutate
 
 # --- helpers ---
 def get_settings(chat_id):
@@ -456,43 +362,34 @@ def purge_user(cid):
             _save(key, d)
     # Отдельный ключ шкафа
     wardrobe_key = f"wardrobe_user_{cid_str}"
-    conn = _db()
-    if conn:
-        try:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM kv WHERE key = %s", (wardrobe_key,))
-        except Exception as e:
-            _log.warning("purge_user: cannot delete %s: %s", wardrobe_key, e)
-    elif wardrobe_key in _mem:
-        del _mem[wardrobe_key]
+    storage_driver.delete(wardrobe_key)
 
-# --- общее состояние в памяти (сбрасывается при рестарте) ---
-challenge_state = {}
-chat_history = {}
-add_wardrobe_mode = {}
-game_state = {}
-game_config = {}
-train_state = {}        # chat_id -> состояние тренировки: очередь заданий, текущее задание,
-                         # session-статистика (см. learning.build_training_queue)
-train_polls = {}        # poll_id -> chat_id для native quiz poll (формат "выбрать перевод")
-dict_pending_add = {}   # chat_id -> нормализованная запись словаря, ожидающая подтверждения
-dict_pending_batch = {}  # chat_id -> [записи], предложенные из большого текста, ждут "Добавить всё"
-trav_facts_state = {}   # chat_id -> {"iso", "name_ru"} последней страны в разделе «10 фактов»
-pending_input = {}
-last_inline_message = {}  # chat_id -> message_id последнего сообщения с инлайн-кнопками (для авто-снятия)
-pinned_menu_message = {}  # chat_id -> message_id главного меню (/menu) - исключение из авто-снятия
-last_recos = {}
-suggested_countries = {}
-last_action = {}        # chat_id -> ("oneshot", key) | ("role", role, text) | None
-last_answer = {}        # chat_id -> текст последнего ответа ассистента (для «Сохранить в заметки»)
-last_recipe = {}        # chat_id -> dict рецепта (для «Полный рецепт»)
-recent_looks = {}       # chat_id -> [последние луки] (не повторять 3 дня)
-last_word = {}          # chat_id -> последнее показанное слово/фраза (для «Добавить слово»)
-game_recent = {}        # chat_id -> [последние загаданные персонажи]
-list_sel = {}           # "chat_id:ctx" -> set(индексов) для чистки списков
-last_source = {}        # chat_id -> откуда последний ответ (для категорий избранного)
-last_surface = {}       # chat_id -> surface последнего ответа (для «Короче/Глубже»)
-last_look = {}          # chat_id -> последний показанный образ (для фидбека гардероба)
+# Совместимые ссылки: владельцем временных состояний является runtime_state.py.
+challenge_state = runtime_state.challenge_state
+chat_history = runtime_state.chat_history
+add_wardrobe_mode = runtime_state.add_wardrobe_mode
+game_state = runtime_state.game_state
+game_config = runtime_state.game_config
+train_state = runtime_state.train_state
+train_polls = runtime_state.train_polls
+dict_pending_add = runtime_state.dict_pending_add
+dict_pending_batch = runtime_state.dict_pending_batch
+trav_facts_state = runtime_state.trav_facts_state
+pending_input = runtime_state.pending_input
+last_inline_message = runtime_state.last_inline_message
+pinned_menu_message = runtime_state.pinned_menu_message
+last_recos = runtime_state.last_recos
+suggested_countries = runtime_state.suggested_countries
+last_action = runtime_state.last_action
+last_answer = runtime_state.last_answer
+last_recipe = runtime_state.last_recipe
+recent_looks = runtime_state.recent_looks
+last_word = runtime_state.last_word
+game_recent = runtime_state.game_recent
+list_sel = runtime_state.list_sel
+last_source = runtime_state.last_source
+last_surface = runtime_state.last_surface
+last_look = runtime_state.last_look
 
 # --- ListRecord: стабильный id + revision для списков вне гардероба (PR3a) ---
 # Формат элемента: строка -> {"id": uuid4_hex, "value": строка} (обёртка);

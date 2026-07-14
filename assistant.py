@@ -185,7 +185,11 @@ def _looks_medical(text: str) -> bool:
 
 
 async def _run_intent(bot, cid, action):
-    import balance, leisure, learning, wardrobe, myday, settings, travel
+    import balance, cooking, leisure_movies, wardrobe, myday, settings, travel
+    import leisure_concerts
+    import leisure_music
+    import learning_dictionary as dictionary
+    import saved_items
     import weather as wx
     # Ответы ассистента на свободный текст не должны нести кнопку «⬅️ Назад» -
     # пользователь не открывал раздел через меню, и вести её было бы некуда.
@@ -201,24 +205,24 @@ async def _run_intent(bot, cid, action):
     elif action == "day_plan":
         await myday.send_plany(no_kb_bot, cid)
     elif action == "fridge":
-        await balance.send_fridge_recipe(no_kb_bot, cid)
+        await cooking.send_fridge_recipe(no_kb_bot, cid)
     elif action == "movie":
-        await leisure.send_recos(no_kb_bot, cid, "movie")
+        await leisure_movies.send_recos(no_kb_bot, cid, "movie")
     elif action == "book":
-        await leisure.send_recos(no_kb_bot, cid, "book")
+        await leisure_movies.send_recos(no_kb_bot, cid, "book")
     elif action == "music":
-        await leisure.send_listen(no_kb_bot, cid)
+        await leisure_music.send_listen(no_kb_bot, cid)
     elif action == "travel":
         await travel.send_go(no_kb_bot, cid)
     elif action == "concerts":
-        await leisure.find_concerts(no_kb_bot, cid, "home")
+        await leisure_concerts.find_concerts(no_kb_bot, cid, "home")
     elif action == "motivation":
         await balance.send_motiv_push(no_kb_bot, cid)
     elif action == "learn":
         text, entities, kb = __import__("menu").menu_screen("m_learn", cid)
         await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb)
     elif action == "dictionary":
-        await learning.send_dict(no_kb_bot, cid)
+        await dictionary.send_dict(no_kb_bot, cid)
     elif action == "outfit":
         await wardrobe.send_looks(no_kb_bot, cid)
     elif action == "weather":
@@ -226,7 +230,7 @@ async def _run_intent(bot, cid, action):
     elif action == "worry":
         await balance.send_daycheck(no_kb_bot, cid)
     elif action == "notes":
-        await settings.send_notes(no_kb_bot, cid)
+        await saved_items.send_notes(no_kb_bot, cid)
 
 
 async def chat_reply(bot, cid, text):

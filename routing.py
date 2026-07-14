@@ -28,11 +28,13 @@ _SUBROUTERS = {
     "wardrobe": ("wardrobe.py", "handle_callback"),
     "myday": ("myday.py", "handle_callback"),
     "balance": ("balance.py", "handle_callback"),
+    "cooking": ("cooking.py", "handle_callback"),
     "learning_router": ("learning_router.py", "handle_callback"),
+    "saved_items": ("saved_items.py", "handle_notes_callback"),
     "cleanup": ("cleanup.py", "handle_cleanup"),
 }
 # handle_notes_callback - отдельная функция в settings.py, с другим именем.
-_NOTES_ROUTER = ("settings.py", "handle_notes_callback")
+_NOTES_ROUTER = ("saved_items.py", "handle_notes_callback")
 
 
 def _read_source(filename):

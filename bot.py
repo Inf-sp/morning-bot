@@ -15,13 +15,21 @@ import access
 import menu
 import assistant
 import balance
+import cooking
 import myday
 import wardrobe
-import learning
+import learning_dictionary as dictionary
+import learning_game
+import learning_settings
+import trainer
 import learning_router
 import cleanup
 import settings
-import leisure
+import saved_items
+import leisure_movies
+import leisure_concerts
+import leisure_music
+import leisure_books
 import travel
 import weather
 import verify
@@ -335,18 +343,19 @@ async def _answer_callback_impl(update, context):
 
     # Закладки: fav_view_* и fav_del_*
     if data.startswith("fav_"):
-        await settings.handle_notes_callback(bot, cid, q, data)
+        await saved_items.handle_notes_callback(bot, cid, q, data)
         return
     # Баланс (врач/мотивация/рецепты/тревоги/холодильник) vs Закладки/Любимое
     if data.startswith("ls_"):
-        await settings.handle_notes_callback(bot, cid, q, data)
+        await saved_items.handle_notes_callback(bot, cid, q, data)
         return
     if data.startswith("as_"):
-        if data.startswith(("as_food", "as_fridge", "as_recipe", "as_my_recipe",
-                             "as_daycheck", "as_motiv", "as_doctor")):
+        if data.startswith(("as_food", "as_fridge", "as_recipe", "as_my_recipe")):
+            await cooking.handle_callback(bot, cid, q, data)
+        elif data.startswith(("as_daycheck", "as_motiv", "as_doctor")):
             await balance.handle_callback(bot, cid, q, data)
         else:
-            await settings.handle_notes_callback(bot, cid, q, data)
+            await saved_items.handle_notes_callback(bot, cid, q, data)
         return
     # Гардероб: инлайн-кабинет
     if data.startswith("w_"):
@@ -357,9 +366,15 @@ async def _answer_callback_impl(update, context):
         await cleanup.open_collection(bot, cid, collection_id, back=back)
         return
     # Настройки обучения
-    if data == "set_learning" or data.startswith("toggle_learning_language") or data.startswith("set_learning_level_"):
+    if data in ("set_learning", "toggle_learning_language"):
         try:
-            await learning.handle_learning_settings_callback(bot, cid, q, data)
+            await learning_settings.handle_learning_settings_callback(bot, cid, q, data)
+        except Exception as e:
+            await verify.safe_error(bot, cid, e)
+        return
+    if data.startswith("set_learning_level_"):
+        try:
+            await learning_settings.handle_learning_settings_callback(bot, cid, q, data)
         except Exception as e:
             await verify.safe_error(bot, cid, e)
         return
@@ -378,9 +393,9 @@ async def _answer_callback_impl(update, context):
             pass
         return
     if data == "m_notes":
-        await settings.send_notes(bot, cid); return
+        await saved_items.send_notes(bot, cid); return
     if data == "m_food_gen":
-        await _inline_status(lambda status: balance.send_recipe_featured(bot, cid, status=status)); return
+        await _inline_status(lambda status: cooking.send_recipe_featured(bot, cid, status=status)); return
     # Пропустить первичный опрос раздела
     if data.startswith("fv_skip_"):
         section = data[len("fv_skip_"):]
@@ -402,7 +417,7 @@ async def _answer_callback_impl(update, context):
         await _ack(q)
         await firstvisit.toggle_tag(bot, cid, section, key, q); return
     if data in ("m_learn", "m_menu"):
-        learning.cancel_training(cid)
+        trainer.cancel(cid)
 
     # Первичный опрос при входе в раздел (wardrobe / learning / leisure / health / cooking)
     if data == "m_food" and firstvisit.needs_setup(cid, "cooking"):
@@ -473,9 +488,9 @@ async def _answer_callback_impl(update, context):
             elif act == "trav_facts_new":
                 await travel.facts_new_country(bot, cid)
             elif act == "watch":
-                await _ack(q); await leisure.send_movie_home(bot, cid, q)
+                await _ack(q); await leisure_movies.send_movie_home(bot, cid, q)
             elif act == "read":
-                await _inline_status(lambda _s: leisure.send_recos(bot, cid, "book"))
+                await _inline_status(lambda _s: leisure_movies.send_recos(bot, cid, "book"))
             elif act == "watchlist":
                 await cleanup.open_collection(bot, cid, "cinema_favorites", back="a_watch")
             elif act == "readlist":
@@ -485,23 +500,23 @@ async def _answer_callback_impl(update, context):
             elif act == "readclean":
                 await cleanup.open_collection(bot, cid, "books_saved", back="a_read")
             elif act == "concerts_find":
-                await _inline_status(lambda _s: leisure.find_concerts(bot, cid, "home"))
+                await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, "home"))
             elif act == "concerts_pick":
-                await leisure.concert_pick_country(bot, cid)
+                await leisure_concerts.concert_pick_country(bot, cid)
             elif act in ("concerts_nl", "concerts_be", "concerts_de", "concerts_fr", "concerts_gb",
                          "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
                          "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
-                await _inline_status(lambda _s: leisure.find_concerts(bot, cid, act.split("_")[1]))
+                await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, act.split("_")[1]))
             elif act == "listen":
-                await _inline_status(lambda _s: leisure.send_listen(bot, cid))
+                await _inline_status(lambda _s: leisure_music.send_listen(bot, cid))
             elif act == "listen_no":
-                await _inline_status(lambda _s: leisure.listen_dislike(bot, cid))
+                await _inline_status(lambda _s: leisure_music.listen_dislike(bot, cid))
             elif act in ("food_breakfast", "recipe_breakfast"):
-                await _inline_status(lambda status: balance.enter_meal(bot, cid, "breakfast", status=status))
+                await _inline_status(lambda status: cooking.enter_meal(bot, cid, "breakfast", status=status))
             elif act in ("food_lunch", "recipe_lunch"):
-                await _inline_status(lambda status: balance.enter_meal(bot, cid, "lunch", status=status))
+                await _inline_status(lambda status: cooking.enter_meal(bot, cid, "lunch", status=status))
             elif act in ("food_dinner", "recipe_dinner"):
-                await _inline_status(lambda status: balance.enter_meal(bot, cid, "dinner", status=status))
+                await _inline_status(lambda status: cooking.enter_meal(bot, cid, "dinner", status=status))
         except Exception as e:
             await verify.safe_error(bot, cid, e)
         return
@@ -509,26 +524,18 @@ async def _answer_callback_impl(update, context):
     if data.startswith("ex_"):
         await learning_router.handle_callback(bot, cid, data, _inline_status)
         return
-    # «Ещё»
-    if data.startswith("again_"):
-        what = data[len("again_"):]
-        if what == "tr_nl":
-            await _inline_status(lambda _s: learning.do_translate(bot, cid, "нидерландский"))
-        elif what == "tr_en":
-            await _inline_status(lambda _s: learning.do_translate(bot, cid, "английский"))
-        return
     # Игра
     if data.startswith("gamelang_"):
         lang = {"ru": "русский", "en": "английский", "nl": "нидерландский"}[data.split("_")[1]]
         store.game_config[cid] = {"lang": lang, "difficulty": "med"}
-        await learning.ask_difficulty(bot, cid, lang)
+        await learning_game.ask_difficulty(bot, cid, lang)
         return
     if data.startswith("gamediff_"):
         diff = data.split("_")[1]
         cfg = store.game_config.get(cid, {"lang": "русский"})
         cfg["difficulty"] = diff
         store.game_config[cid] = cfg
-        await _inline_status(lambda _s: learning.send_game(bot, cid))
+        await _inline_status(lambda _s: learning_game.send_game(bot, cid))
         return
     if data == "noop":
         return
@@ -542,66 +549,66 @@ async def _answer_callback_impl(update, context):
         await cleanup.handle_cleanup(bot, cid, data, q)
         return
     if data.startswith("worddel_"):
-        await learning.del_word(bot, cid, int(data.split("_")[1]))
+        await dictionary.del_word(bot, cid, int(data.split("_")[1]))
         return
     if data == "game_again":
-        await _inline_status(lambda _s: learning.send_game(bot, cid))
+        await _inline_status(lambda _s: learning_game.send_game(bot, cid))
         return
     if data == "game_hint":
-        await learning.game_hint(bot, cid, q)
+        await learning_game.game_hint(bot, cid, q)
         return
     if data == "game_reveal":
-        await learning.game_reveal(bot, cid, q)
+        await learning_game.game_reveal(bot, cid, q)
         return
     if data == "game_change":
-        await learning.game_start(bot, cid)
+        await learning_game.game_start(bot, cid)
         return
     # Развлечения / путешествия
     if data == "movie_prefs":
         await _ack(q)
-        await leisure.send_movie_prefs(bot, cid, q)
+        await leisure_movies.send_movie_prefs(bot, cid, q)
         return
     if data.startswith("mpref_"):
         await _ack(q)
-        await leisure.toggle_movie_pref(bot, cid, data, q)
+        await leisure_movies.toggle_movie_pref(bot, cid, data, q)
         return
     if data == "movie_reco":
-        await _inline_status(lambda _s: leisure.send_recos(bot, cid, "movie"))
+        await _inline_status(lambda _s: leisure_movies.send_recos(bot, cid, "movie"))
         return
     if data == "movie_genre_menu":
         await _ack(q)
-        await leisure.send_movie_genre_menu(bot, cid, q)
+        await leisure_movies.send_movie_genre_menu(bot, cid, q)
         return
     if data == "movie_mood_menu":
         await _ack(q)
-        await leisure.send_movie_mood_menu(bot, cid, q)
+        await leisure_movies.send_movie_mood_menu(bot, cid, q)
         return
     if data.startswith("movie_g_"):
-        await _inline_status(lambda _s: leisure.send_movie_by_genre(bot, cid, data[len("movie_g_"):]))
+        await _inline_status(lambda _s: leisure_movies.send_movie_by_genre(bot, cid, data[len("movie_g_"):]))
         return
     if data.startswith("movie_mood_"):
-        await _inline_status(lambda _s: leisure.send_movie_by_mood(bot, cid, data[len("movie_mood_"):]))
+        await _inline_status(lambda _s: leisure_movies.send_movie_by_mood(bot, cid, data[len("movie_mood_"):]))
         return
     if data.startswith("movie_love_"):
-        await _inline_status(lambda _s: leisure.movie_love(bot, cid, int(data.split("_")[-1])))
+        await _inline_status(lambda _s: leisure_movies.movie_love(bot, cid, int(data.split("_")[-1])))
         return
     if data.startswith("book_love_"):
-        await _inline_status(lambda _s: leisure.book_love(bot, cid, int(data.split("_")[-1])))
+        await _inline_status(lambda _s: leisure_books.book_love(bot, cid, int(data.split("_")[-1])))
         return
     if data == "listen_love":
-        await _inline_status(lambda _s: leisure.listen_love(bot, cid))
+        await _inline_status(lambda _s: leisure_music.listen_love(bot, cid))
         return
     if data.startswith("reco_"):
-        await _inline_status(lambda _s: leisure.add_reco(bot, cid, int(data.split("_")[1])))
+        await _inline_status(lambda _s: leisure_movies.add_reco(bot, cid, int(data.split("_")[1])))
         return
     if data.startswith("movie_no_"):
-        await _inline_status(lambda _s: leisure.movie_dislike(bot, cid, int(data.split("_")[-1])))
+        await _inline_status(lambda _s: leisure_movies.movie_dislike(bot, cid, int(data.split("_")[-1])))
         return
     if data.startswith("book_no_"):
-        await _inline_status(lambda _s: leisure.book_dislike(bot, cid, int(data.split("_")[-1])))
+        await _inline_status(lambda _s: leisure_books.book_dislike(bot, cid, int(data.split("_")[-1])))
         return
     if data.startswith("listen_"):
-        await _inline_status(lambda _s: leisure.add_listen(bot, cid, int(data.split("_")[1])))
+        await _inline_status(lambda _s: leisure_music.add_listen(bot, cid, int(data.split("_")[1])))
         return
     # Проверка дня (тревоги)
     if data == "worry_clearall":
@@ -651,10 +658,7 @@ async def _text_router_impl(update, context):
 
     # Игра и перевод проверяем ПЕРЕД pending - иначе ответ уходит не туда (в дневник)
     if cid in store.game_state:
-        if await learning.game_answer(bot, cid, text):
-            return
-    if cid in store.challenge_state:
-        if await learning.translate_answer(bot, cid, text):
+        if await learning_game.game_answer(bot, cid, text):
             return
     # Pending-ввод
     if cid in store.pending_input:
@@ -669,7 +673,7 @@ async def _text_router_impl(update, context):
             # застрявший pending_input от старого приглашения "Дневная разгрузка" -
             # не глотаем никак не связанное сообщение, продолжаем обычную обработку ниже
         if kind == trainer_session.PENDING_ANSWER:
-            if await learning.handle_text_answer(bot, cid, text):
+            if await trainer.handle_text(bot, cid, text):
                 return
         if kind in ("role_doctor", "role_state"):
             await balance.handle_role(bot, cid, kind.split("_")[1], text); return
@@ -691,11 +695,11 @@ async def _text_router_impl(update, context):
         if kind == "trav_facts_country":
             await travel.handle_facts_country_input(bot, cid, text); return
         if kind.startswith("dictadd_smart_"):
-            await learning.add_smart_batch(bot, cid, text, kind.split("_")[2]); return
+            await dictionary.add_smart_batch(bot, cid, text, kind.split("_")[2]); return
         if kind.startswith("dictadd_"):
-            await learning.add_words_batch(bot, cid, text, kind.split("_")[1]); return
+            await dictionary.add_words_batch(bot, cid, text, kind.split("_")[1]); return
         if kind.startswith("dictsearch_"):
-            await learning.handle_dict_search(bot, cid, kind.split("_")[1], text); return
+            await dictionary.handle_dict_search(bot, cid, kind.split("_")[1], text); return
         if kind == "styleinput":
             custom = text.strip()
             if custom:
@@ -707,7 +711,7 @@ async def _text_router_impl(update, context):
                 ci = int(kind.split("_")[-1])
             except (ValueError, IndexError):
                 ci = -1
-            await balance.fridge_add_done(bot, cid, text, ci); return
+            await cooking.fridge_add_done(bot, cid, text, ci); return
         if kind == "setadd_lagom":
             import memory
             from util import esc
@@ -724,13 +728,13 @@ async def _text_router_impl(update, context):
                     parse_mode="HTML")
             await settings.send_lagom(bot, cid); return
         if kind.startswith("collect_"):
-            await leisure.collect_done(bot, cid, kind[len("collect_"):], text); return
+            await leisure_movies.collect_done(bot, cid, kind[len("collect_"):], text); return
         if kind.startswith("firstvisit_"):
             await firstvisit.handle_response(bot, cid, kind[len("firstvisit_"):], text); return
         if kind.startswith("loveadd_"):
-            await settings.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
+            await saved_items.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
         if kind.startswith("loveaddls_"):
-            await settings.love_add_done(bot, cid, kind[len("loveaddls_"):], text, origin="leisure"); return
+            await saved_items.love_add_done(bot, cid, kind[len("loveaddls_"):], text, origin="leisure"); return
 
     # Fallback: pending_input мог быть сброшен при рестарте — проверяем профиль
     ob_step = onboard.get_text_step(cid)
@@ -748,10 +752,10 @@ async def _text_router_impl(update, context):
         await balance.save_worries(bot, cid, text); return
 
     # Быстрая команда из чата: «добавь в словарь слово de Aandacht - внимание»
-    if await learning.try_add_dict_from_chat(bot, cid, text):
+    if await dictionary.try_add_dict_from_chat(bot, cid, text):
         return
     # Быстрая команда из чата: «добавь в продукты крахмал»
-    if await balance.try_add_fridge_from_chat(bot, cid, text):
+    if await cooking.try_add_fridge_from_chat(bot, cid, text):
         return
     # Быстрая команда из чата: «добавь в любимые фильм Дюна»
     if await assistant.try_add_love_from_chat(bot, cid, text):
@@ -780,17 +784,17 @@ async def document_handler(update, context):
 
 
 async def poll_answer_handler(update, context):
-    await learning.handle_train_poll_answer(context.bot, update.poll_answer)
+    await trainer.handle_poll_answer(context.bot, update.poll_answer)
 
 
 # ---------- Команды-обёртки ----------
 async def notes_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
-    await settings.send_notes(context.bot, update.effective_chat.id)
+    await saved_items.send_notes(context.bot, update.effective_chat.id)
 
 async def setup_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
-    await settings.send_notes(context.bot, update.effective_chat.id)
+    await saved_items.send_notes(context.bot, update.effective_chat.id)
 
 async def admin_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
@@ -893,7 +897,7 @@ async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
         if not settings.notif_on(cid, "weekend_events"):
             continue
         try:
-            await leisure.refresh_concerts_cache(cid)
+            await leisure_concerts.refresh_concerts_cache(cid)
         except Exception:
             logging.exception("job_refresh_concerts_cache failed for cid=%s", cid)
 
@@ -921,17 +925,17 @@ async def job_evening_weather(context: ContextTypes.DEFAULT_TYPE):
 
 async def post_init(app):
     try:
-        if learning.migrate_dict_caps():
+        if dictionary.migrate_dict_caps():
             logging.info("Dict caps migration: applied")
     except Exception:
         logging.exception("Dict caps migration failed")
     try:
-        if leisure.dedupe_lists():
+        if leisure_movies.dedupe_lists():
             logging.info("Dedupe lists: applied")
     except Exception:
         logging.exception("Dedupe lists failed")
     try:
-        if leisure.seed_movies_from_content():
+        if leisure_movies.seed_movies_from_content():
             logging.info("Movies seed: applied")
     except Exception:
         logging.exception("Movies seed failed")
@@ -948,6 +952,22 @@ async def post_init(app):
             logging.info("Callback audit: OK")
     except Exception:
         logging.exception("Callback audit failed")
+    try:
+        violations = verify.audit_architecture()
+        if violations:
+            logging.warning("Architecture audit: violations -> %s", "; ".join(violations))
+        else:
+            logging.info("Architecture audit: OK")
+    except Exception:
+        logging.exception("Architecture audit failed")
+    try:
+        trainer_violations = verify.audit_trainer_contracts()
+        if trainer_violations:
+            logging.warning("Trainer contract audit: violations -> %s", "; ".join(trainer_violations))
+        else:
+            logging.info("Trainer contract audit: OK")
+    except Exception:
+        logging.exception("Trainer contract audit failed")
     try:
         leaks = secure.scan_secrets()
         if leaks:

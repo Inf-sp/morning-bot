@@ -14,6 +14,7 @@ import store
 import ai
 import weather
 import learning
+import learning_dictionary as dictionary
 import research
 import memory
 from util import esc, _WEEKDAY_SHORT, _MONTHS, flag_from_cc, country_flag
@@ -401,8 +402,8 @@ def _word_of_day(cid):
     lang = learning._active_language_code(cid)
     if not entry:
         return "", lang
-    term = learning._entry_term(entry)
-    ru = learning._entry_translation(entry).replace(";", ",")
+    term = dictionary.entry_term(entry)
+    ru = dictionary.entry_translation(entry).replace(";", ",")
     return f"{_cap(term)} → {_cap(ru)}.", lang
 
 _day_cache = {}  # cid -> {"date":..., "text":..., "entities":..., "ts": float}
@@ -503,9 +504,9 @@ async def _maybe_prompt_dict_seed(bot, cid):
     один раз наполнить словарь (§28 CLAUDE.md: стартовые слова по language/level)."""
     try:
         lang = learning._active_language_code(cid)
-        words = learning._ensure_dict(cid)
+        words = dictionary.DictionaryRepository(cid).all()
         has_words = any(
-            learning._entry_term(w) and learning._dict_lang(w) == lang
+            dictionary.entry_term(w) and dictionary.entry_language(w) == lang
             for w in words
         )
         if has_words:
@@ -515,7 +516,7 @@ async def _maybe_prompt_dict_seed(bot, cid):
             return
         prof["_myday_seed_prompted"] = True
         store.set_profile(cid, prof)
-        await learning.send_seed_intro(bot, cid, lang)
+        await dictionary.send_seed_intro(bot, cid, lang)
     except Exception as e:
         _log.warning("myday: _maybe_prompt_dict_seed failed: %s", e)
 

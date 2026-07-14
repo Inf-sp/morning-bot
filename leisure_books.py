@@ -1,0 +1,212 @@
+"""Книжные рекомендации, замены, сохранение и любимые книги."""
+
+import asyncio
+import random
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+import config
+import store
+from ui import leisure as leisure_ui
+
+
+def _item_text(item):
+    if isinstance(item, dict):
+        return str(item.get("value", "")).strip()
+    return str(item or "").strip()
+
+
+def _ensure_books(cid):
+    return [_item_text(item) for item in store.get_list(config.BOOKS_KEY, cid)
+            if _item_text(item)]
+
+
+def _add_unique(key, cid, value):
+    items = store.get_list(key, cid)
+    if value and value.lower() not in {_item_text(item).lower() for item in items}:
+        store.set_list(key, cid, [*items, value])
+
+
+async def _ask_collect(bot, cid, kind):
+    import leisure_movies
+    return await leisure_movies._ask_collect(bot, cid, kind)
+
+
+def content_recommend(kind, cid):
+    import leisure_movies
+    return leisure_movies.content_recommend(kind, cid)
+def _book_cover(title, title_en=""):
+    import requests
+    for q in [t for t in (title_en, title) if t]:
+        try:
+            r = requests.get("https://openlibrary.org/search.json",
+                             params={"title": q, "limit": 1}, timeout=10)
+            docs = r.json().get("docs", [])
+            if docs and docs[0].get("cover_i"):
+                return f"https://covers.openlibrary.org/b/id/{docs[0]['cover_i']}-L.jpg"
+        except Exception:
+            continue
+    return None
+
+def _book_text(it):
+    return leisure_ui.book_text(it)
+
+def _book_kb(i):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Заменить", callback_data=f"book_no_{i}")],
+        [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
+         InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+    ])
+
+async def _send_book_card(bot, cid, it, i):
+    msg = _book_text(it)
+    kb = _book_kb(i)
+    cover = _book_cover(it.get("title", ""), it.get("title_en", ""))
+    if cover:
+        try:
+            await bot.send_photo(chat_id=cid, photo=cover, caption=msg.text, caption_entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+_FALLBACK_BOOKS = [
+    {"title": "Мастер и Маргарита", "title_en": "The Master and Margarita", "year": "1967",
+     "author": "Михаил Булгаков", "desc": "Сатира, мистика и история любви в одном романе.",
+     "why": ["Многослойность: дьявол в Москве, Понтий Пилат и вечная любовь сразу",
+             "Из тех книг, что перечитывают всю жизнь и каждый раз видят новое"],
+     "plot": "Воланд со свитой устраивает хаос в советской Москве, а параллельно разворачивается роман Мастера о Пилате и история его любви к Маргарите.",
+     "quote": "Рукописи не горят.",
+     "hook": "Абсолютная классика, которую стоит прочесть хотя бы раз."},
+    {"title": "1984", "title_en": "1984", "year": "1949",
+     "author": "Джордж Оруэлл", "desc": "Главная антиутопия XX века о тотальной слежке.",
+     "why": ["Предсказала мир, в котором мы во многом живём",
+             "Меняет взгляд на свободу, правду и язык"],
+     "plot": "Уинстон Смит живёт в государстве, где Большой Брат следит за каждым, и пытается сохранить способность думать самостоятельно.",
+     "quote": "Война - это мир. Свобода - это рабство. Незнание - сила.",
+     "hook": "Если не читал - это пробел, который точно стоит закрыть."},
+    {"title": "Маленький принц", "title_en": "Le Petit Prince", "year": "1943",
+     "author": "Антуан де Сент-Экзюпери", "desc": "Мудрая сказка для взрослых о главном.",
+     "why": ["Читается за вечер, остаётся с тобой на годы",
+             "Простыми словами о любви, дружбе и смысле"],
+     "plot": "Лётчик в пустыне встречает мальчика с другой планеты, и через его рассказы открываются простые истины о том, что по-настоящему важно.",
+     "quote": "Мы в ответе за тех, кого приручили.",
+     "hook": "Тёплая книга, которую стоит прочитать всем."},
+    {"title": "Убить пересмешника", "title_en": "To Kill a Mockingbird", "year": "1960",
+     "author": "Харпер Ли", "desc": "Роман о справедливости и взрослении на юге США.",
+     "why": ["Учит эмпатии без морализаторства",
+             "Один из главных романов о совести и предрассудках"],
+     "plot": "Девочка Скаут растёт в маленьком городке, где её отец-адвокат защищает несправедливо обвинённого, и взрослеет, сталкиваясь с миром взрослых.",
+     "hook": "Книга из всех списков «обязательного к прочтению»."},
+    {"title": "Сто лет одиночества", "title_en": "Cien años de soledad", "year": "1967",
+     "author": "Габриэль Гарсиа Маркес", "desc": "Эталон магического реализма.",
+     "why": ["Завораживающий язык и целый придуманный мир",
+             "Семейная сага, которую считают одной из лучших книг века"],
+     "plot": "История нескольких поколений семьи Буэндиа в вымышленном городке Макондо, где обыденное и волшебное переплетены.",
+     "hook": "Если хочешь большую сильную книгу - начни с неё."},
+    {"title": "Преступление и наказание", "title_en": "Crime and Punishment", "year": "1866",
+     "author": "Фёдор Достоевский", "desc": "Психологический роман о вине и искуплении.",
+     "why": ["Заглядывает в самые тёмные уголки разума",
+             "Классика, которая держит как триллер"],
+     "plot": "Студент Раскольников убивает старуху-процентщицу, проверяя свою теорию, и оказывается раздавлен муками совести.",
+     "hook": "Достоевский, с которого стоит начать знакомство."},
+]
+
+def _book_used(cid):
+    """Названия книг, которые нельзя повторять: любимые, знакомые, закладки, отклонённые."""
+    used = set()
+    for key in (config.BOOKS_KEY, config.BOOK_SEEN_KEY, config.READLIST_KEY, config.BOOK_BLACKLIST_KEY):
+        for x in store.get_list(key, cid):
+            used.add((x if isinstance(x, str) else str(x)).strip().lower())
+    return used
+
+def _fallback_book(cid, extra_skip=()):
+    """Гарантированная рекомендация: популярная must-read книга, ещё не виденная пользователем."""
+    used = _book_used(cid) | {str(x).strip().lower() for x in extra_skip}
+    pool = [b for b in _FALLBACK_BOOKS if b["title"].lower() not in used] or _FALLBACK_BOOKS
+    return random.choice(pool)
+
+def _pick_good_book(items, cid, extra_skip=()):
+    """Первая книга из items, которой ещё нет в списках/показанных; иначе - гарантированный фолбэк."""
+    used = _book_used(cid) | {str(x).strip().lower() for x in extra_skip}
+    for it in items or []:
+        t = (it.get("title", "") or "").strip().lower()
+        if t and t not in used:
+            return it
+    return _fallback_book(cid, extra_skip=extra_skip)
+
+async def send_books_reco(bot, cid):
+    if not _ensure_books(cid):
+        await _ask_collect(bot, cid, "books")
+        return
+    items = []
+    for _ in range(2):
+        try:
+            data = await asyncio.to_thread(content_recommend, "book", str(cid))
+            items = data.get("items", []) if isinstance(data, dict) else []
+        except Exception:
+            items = []
+        if items:
+            break
+    it = _pick_good_book(items, cid)
+    store.last_recos[str(cid)] = {"kind": "book", "items": [it.get("title", "")]}
+    store.last_source[str(cid)] = "Досуг · Книги"
+    store.last_answer[str(cid)] = it.get("title", "")
+    await _send_book_card(bot, cid, it, 0)
+
+async def book_dislike(bot, cid, i):
+    rec = store.last_recos.get(str(cid))
+    if rec and i < len(rec["items"]):
+        title = rec["items"][i]
+        _add_unique(config.BOOK_BLACKLIST_KEY, cid, title)
+        await bot.send_message(chat_id=cid, text=f"Понял, «{title}» исключил. Вот другая книга.")
+    try:
+        data = await asyncio.to_thread(content_recommend, "book", str(cid))
+        items = data.get("items", [])
+    except Exception:
+        items = []
+    rec = store.last_recos.get(str(cid), {"kind": "book", "items": []})
+    it = _pick_good_book(items, cid, extra_skip=rec.get("items", []))
+    rec["items"].append(it.get("title", ""))
+    store.last_recos[str(cid)] = rec
+    ni = len(rec["items"]) - 1
+    await _send_book_card(bot, cid, it, ni)
+
+async def _advance_book(bot, cid):
+    """Загрузить следующую рекомендацию книги и показать карточку."""
+    try:
+        data = await asyncio.to_thread(content_recommend, "book", str(cid))
+        items = data.get("items", [])
+    except Exception:
+        items = []
+    rec = store.last_recos.get(str(cid), {"kind": "book", "items": []})
+    it = _pick_good_book(items, cid, extra_skip=rec.get("items", []))
+    rec["items"].append(it.get("title", ""))
+    store.last_recos[str(cid)] = rec
+    ni = len(rec["items"]) - 1
+    await _send_book_card(bot, cid, it, ni)
+
+async def book_love(bot, cid, i):
+    """Книга — в любимые (Мои книги), затем следующая рекомендация."""
+    rec = store.last_recos.get(str(cid))
+    if rec and i < len(rec["items"]):
+        title = rec["items"][i]
+        _add_unique(config.BOOKS_KEY, cid, title)
+        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — в любимые (Мои книги). Вот ещё вариант.")
+    await _advance_book(bot, cid)
+
+
+async def advance_after_save(bot, cid, rec):
+    """Показывает следующую книгу после сохранения текущей рекомендации."""
+    try:
+        data = await asyncio.to_thread(content_recommend, rec["kind"], str(cid))
+        items = data.get("items", []) if isinstance(data, dict) else []
+    except Exception:
+        items = []
+    if not items:
+        return
+    item = _pick_good_book(items, cid, extra_skip=rec["items"])
+    rec["items"].append(item.get("title", ""))
+    store.last_recos[str(cid)] = rec
+    await _send_book_card(bot, cid, item, len(rec["items"]) - 1)

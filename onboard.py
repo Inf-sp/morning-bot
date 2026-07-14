@@ -143,7 +143,7 @@ async def _ask_next_level(bot, cid, q):
 
 
 async def _finish(bot, cid):
-    import learning
+    import learning_dictionary as dictionary
     import menu
     st = _ob.get(str(cid), {})
     _ob.pop(str(cid), None)
@@ -159,4 +159,4 @@ async def _finish(bot, cid):
         entities=msg.entities,
     )
     if st.get("langs"):
-        await learning.send_seed_intro(bot, cid)
+        await dictionary.send_seed_intro(bot, cid)

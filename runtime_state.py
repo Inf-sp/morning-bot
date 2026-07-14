@@ -1,0 +1,27 @@
+"""Эфемерное состояние процессов бота, сбрасываемое при рестарте."""
+
+challenge_state = {}
+chat_history = {}
+add_wardrobe_mode = {}
+game_state = {}
+game_config = {}
+train_state = {}
+train_polls = {}
+dict_pending_add = {}
+dict_pending_batch = {}
+trav_facts_state = {}
+pending_input = {}
+last_inline_message = {}
+pinned_menu_message = {}
+last_recos = {}
+suggested_countries = {}
+last_action = {}
+last_answer = {}
+last_recipe = {}
+recent_looks = {}
+last_word = {}
+game_recent = {}
+list_sel = {}
+last_source = {}
+last_surface = {}
+last_look = {}

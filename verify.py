@@ -191,3 +191,134 @@ def audit_callbacks(paths=None):
     def handled(cb):
         return cb in exact or any(cb.startswith(p) for p in prefixes if p)
     return sorted(cb for cb in literals if not handled(cb))
+
+
+# ================= АУДИТ АРХИТЕКТУРНЫХ ГРАНИЦ =================
+def audit_architecture(root=None):
+    """Статически проверяет ключевые границы модульного монолита.
+
+    Это часть штатной диагностики запуска, а не test-suite: она не импортирует
+    приложение, не обращается к Telegram и не изменяет пользовательские данные.
+    Возвращает список нарушений; пустой список означает, что инварианты соблюдены.
+    """
+    import ast
+    import os
+
+    root = root or os.path.dirname(os.path.abspath(__file__))
+    findings = []
+    required = {
+        "trainer.py", "trainer_engine.py", "trainer_exercises.py",
+        "trainer_grading.py", "trainer_session.py", "learning_dictionary.py",
+        "live_language.py", "learning_game.py", "learning_settings.py",
+        "cooking.py", "leisure_movies.py", "leisure_books.py",
+        "leisure_music.py", "leisure_concerts.py", "saved_items.py",
+        "storage_driver.py", "runtime_state.py", "repositories.py",
+    }
+    missing = sorted(name for name in required if not os.path.exists(os.path.join(root, name)))
+    findings.extend(f"missing module: {name}" for name in missing)
+
+    forbidden = {"telegram", "store", "ai"}
+    for name in ("trainer_engine.py", "trainer_exercises.py", "trainer_grading.py"):
+        path = os.path.join(root, name)
+        if not os.path.exists(path):
+            continue
+        tree = ast.parse(open(path, encoding="utf-8").read(), filename=path)
+        imports = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imports.update(alias.name.split(".")[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imports.add(node.module.split(".")[0])
+        for module in sorted(imports & forbidden):
+            findings.append(f"{name}: forbidden import {module}")
+
+    learning_path = os.path.join(root, "learning.py")
+    if os.path.exists(learning_path):
+        source = open(learning_path, encoding="utf-8").read()
+        if re.search(r"[\"']ex_", source):
+            findings.append("learning.py: owns ex_* callback_data")
+        if "trainer_session" in source:
+            findings.append("learning.py: owns trainer session internals")
+
+    dictionary_path = os.path.join(root, "learning_dictionary.py")
+    if os.path.exists(dictionary_path):
+        source = open(dictionary_path, encoding="utf-8").read()
+        if "class DictionaryRepository" not in source:
+            findings.append("learning_dictionary.py: DictionaryRepository missing")
+        for function in ("normalize_entry", "migrate_dict_entries_for_srs", "send_dict"):
+            if not re.search(rf"(?:async\s+)?def\s+{function}\s*\(", source):
+                findings.append(f"learning_dictionary.py: {function} missing")
+
+    ownership_rules = {
+        "balance.py": ("def enter_meal(", "def send_fridge("),
+        "settings.py": ("def send_notes(", "def handle_notes_callback("),
+        "leisure.py": ("def send_movie_home(", "def send_listen(", "def find_concerts("),
+        "store.py": ("def db(", "def load(", "def mutate("),
+    }
+    for name, forbidden_fragments in ownership_rules.items():
+        path = os.path.join(root, name)
+        if not os.path.exists(path):
+            continue
+        source = open(path, encoding="utf-8").read()
+        for fragment in forbidden_fragments:
+            if fragment in source:
+                findings.append(f"{name}: still owns {fragment[:-1]}")
+    return findings
+
+
+def audit_trainer_contracts():
+    """Проверяет чистые контракты тренажёра на безопасных локальных данных."""
+    import random
+    import srs
+    import trainer_engine as engine
+    import trainer_exercises as exercises
+    import trainer_grading as grading
+    import trainer_session
+
+    findings = []
+    base = {
+        "term": "ik vergelijk deze boeken",
+        "translation": "я сравниваю эти книги",
+        "lang": "nl",
+        "examples": [{"text": "Ik vergelijk deze boeken.",
+                      "translation": "Я сравниваю эти книги."}],
+    }
+    error_entry = {**base, "examples": [{
+        "text": "Ik vergelijk de boeken.", "translation": "Я сравниваю книги."}]}
+    others = [
+        base,
+        {"term": "de tafel", "translation": "стол", "lang": "nl"},
+        {"term": "het huis", "translation": "дом", "lang": "nl"},
+        {"term": "goedemorgen", "translation": "доброе утро", "lang": "nl"},
+        {"term": "tot straks", "translation": "до скорого", "lang": "nl"},
+    ]
+    situation = {"line": "Welke boeken kies je?", "line_ru": "Какие книги ты выбираешь?"}
+    for kind in engine.ALL_EXERCISES:
+        entry = error_entry if kind == engine.EXERCISE_FIND_ERROR else base
+        if not exercises.build_exercise(
+                entry, others, kind, situation=situation, rng=random.Random(7)):
+            findings.append(f"exercise cannot build: {kind}")
+
+    queue = engine.build_training_queue(
+        [{**entry, "srs_level": 0} for entry in others], rng=random.Random(4))
+    if not queue or any("exercise_type" not in item for item in queue):
+        findings.append("training queue contract failed")
+
+    grade = grading.grade_free_text({"correct": "goedemorgen"}, "goedemorgen")
+    if not grade.correct:
+        findings.append("free-text grading contract failed")
+    else:
+        state = srs.record_answer(
+            srs.default_srs_state(), engine.EXERCISE_RECALL_FREE, grade.quality)
+        if state["srs_history"][-1]["result"] != "recalled_free":
+            findings.append("grading → SRS contract failed")
+
+    cid = "__architecture_session_audit__"
+    trainer_session.start(cid, "nl", queue[:1], {"total": 0})
+    session = trainer_session.get(cid)
+    if not session or session.get("queue_idx") != 0:
+        findings.append("trainer session start contract failed")
+    trainer_session.finish(cid)
+    if trainer_session.get(cid) is not None:
+        findings.append("trainer session finish contract failed")
+    return findings
