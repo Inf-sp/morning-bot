@@ -425,10 +425,15 @@ async def _answer_callback_impl(update, context):
         await myday.send_plany(bot, cid); return
     if data == "m_menu":
         text, entities, kb = menu.main_menu_screen(cid)
-        try:
-            await q.message.edit_text(text, reply_markup=kb, entities=entities)
-        except Exception:
-            await bot.send_message(chat_id=cid, text=text, reply_markup=kb, entities=entities)
+        # Главное меню открывается отдельным сообщением: полезная карточка
+        # (рецепт, рекомендация, результат тренировки) остаётся в истории.
+        await bot.send_message(
+            chat_id=cid,
+            text=text,
+            reply_markup=kb,
+            entities=entities,
+            pin_menu=True,
+        )
         return
     if data.startswith("m_"):
         text, entities, kb = menu.menu_screen(data, cid)

@@ -10,6 +10,14 @@ from cleanup import open_cleanup, send_cleanup, handle_cleanup  # noqa: F401
 _HERE = Path(__file__).parent
 import store
 import trainer_session
+import trainer_engine
+from trainer_engine import (
+    EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL_FREE,
+    EXERCISE_BUILD_SENTENCE, EXERCISE_FIND_ERROR,
+    EXERCISE_CHOOSE_NATURAL, EXERCISE_FILL_GAP,
+    EXERCISE_TRANSLATE_CONTEXT, EXERCISE_CHOOSE_REACTION,
+    EXERCISE_CONTINUE_DIALOGUE, select_exercise_type,
+)
 import ai
 import verify
 import secure
@@ -145,23 +153,7 @@ def build_learning_home(cid):
 # (см. docs/word-trainer.md, spec-learning-rework). Прогресс/уровни/интервалы
 # считает srs.py — этот модуль только оркестрирует UI и очередь.
 
-EXERCISE_CHOOSE_TRANSLATION = "choose_translation"
-EXERCISE_RECALL_FREE = "recall_free"
-EXERCISE_BUILD_SENTENCE = "build_sentence"
-EXERCISE_FIND_ERROR = "find_error"
-EXERCISE_CHOOSE_NATURAL = "choose_natural"
-EXERCISE_FILL_GAP = "fill_gap"
-EXERCISE_TRANSLATE_CONTEXT = "translate_context"
-EXERCISE_CHOOSE_REACTION = "choose_reaction"
-EXERCISE_CONTINUE_DIALOGUE = "continue_dialogue"
-
-_ALL_EXERCISES = (
-    EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL_FREE, EXERCISE_BUILD_SENTENCE,
-    EXERCISE_FIND_ERROR, EXERCISE_CHOOSE_NATURAL, EXERCISE_FILL_GAP,
-    EXERCISE_TRANSLATE_CONTEXT, EXERCISE_CHOOSE_REACTION, EXERCISE_CONTINUE_DIALOGUE,
-)
-
-_QUEUE_SIZE = 12  # заданий на одну тренировку
+_ALL_EXERCISES = trainer_engine.ALL_EXERCISES
 
 _TRAINER_PHRASE_CORRECTIONS = {
     "waar wacht je op": {
@@ -319,89 +311,9 @@ def build_training_queue(cid, language):
     Каждый элемент очереди — {"entry": словарная запись, "exercise_type": ...}.
     Формат выбирается сразу при построении очереди (не на лету), чтобы не
     повторять один формат подряд для одного материала (srs_last_exercise_type)."""
-    import srs
     entries = _train_full_entries(cid, language)
-    if not entries:
-        return []
-    today = datetime.now(config.TZ).date()
-
-    due = [e for e in entries if srs.is_due(_entry_srs_state(e), today)]
-    mistakes = [e for e in due if int(e.get("srs_level") or 0) <= 1]
-    due_ok = [e for e in due if e not in mistakes]
-    new_material = [e for e in entries if not e.get("srs_history")]
-    new_material = [e for e in new_material if e not in due]
-
-    target_due = round(_QUEUE_SIZE * 0.6)
-    target_mistakes = round(_QUEUE_SIZE * 0.2)
-    target_new = _QUEUE_SIZE - target_due - target_mistakes
-
-    # Если ошибок накопилось больше обычного — их доля растёт за счёт "нового"
-    # материала (см. ТЗ: "если накопилось много ошибок, доля повторения
-    # должна временно увеличиваться").
-    if len(mistakes) > target_mistakes:
-        extra = min(len(mistakes) - target_mistakes, target_new)
-        target_mistakes += extra
-        target_new -= extra
-
-    picked = []
-
-    def _take(pool, n):
-        random.shuffle(pool)
-        chunk = pool[:n]
-        picked.extend(chunk)
-        return chunk
-
-    _take(mistakes, target_mistakes)
-    _take(due_ok, target_due)
-    _take(new_material, target_new)
-
-    # Очередь не набралась (маленький словарь) — добираем чем есть, без дублей.
-    if len(picked) < _QUEUE_SIZE:
-        picked_terms = {_entry_term(e) for e in picked}
-        rest = [e for e in entries if _entry_term(e) not in picked_terms]
-        random.shuffle(rest)
-        picked.extend(rest[:_QUEUE_SIZE - len(picked)])
-
-    random.shuffle(picked)
-    queue = []
-    previous_type = ""
-    for entry in picked:
-        exercise_type = select_exercise_type(entry, avoid=previous_type)
-        queue.append({"entry": entry, "exercise_type": exercise_type})
-        previous_type = exercise_type
-    return queue
-
-
-def select_exercise_type(entry, avoid=""):
-    """Формат задания по srs_level материала и типу материала (слово/фраза/
-    конструкция/ситуация) — не повторяет srs_last_exercise_type, если есть
-    из чего выбрать другой (см. docs/word-trainer.md, таблица уровней)."""
-    level = int(entry.get("srs_level") or 0)
-    kind = daily_material_type(entry)
-    last = entry.get("srs_last_exercise_type") or ""
-
-    if level <= 1:
-        candidates = [EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL_FREE]
-        if entry.get("examples"):
-            candidates.append(EXERCISE_FILL_GAP)
-    elif level <= 3:
-        candidates = [EXERCISE_RECALL_FREE, EXERCISE_FILL_GAP]
-        if kind == "phrase" and len(_phrase_tokens(_entry_term(entry))) >= 3:
-            candidates.append(EXERCISE_BUILD_SENTENCE)
-        if entry.get("situation_type"):
-            candidates.append(EXERCISE_CHOOSE_REACTION)
-        if kind == "rule":
-            candidates.append(EXERCISE_FIND_ERROR)
-    else:
-        candidates = [EXERCISE_TRANSLATE_CONTEXT, EXERCISE_RECALL_FREE]
-        if entry.get("situation_type"):
-            candidates.append(EXERCISE_CONTINUE_DIALOGUE)
-        if kind == "phrase":
-            candidates.append(EXERCISE_CHOOSE_NATURAL)
-
-    filtered = [c for c in candidates if c != last and c != avoid]
-    filtered = filtered or [c for c in candidates if c != last] or candidates
-    return random.choice(filtered)
+    return trainer_engine.build_training_queue(
+        entries, today=datetime.now(config.TZ).date())
 
 
 # ---------- сборка данных задания (без Telegram-специфики) ----------
