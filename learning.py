@@ -751,7 +751,7 @@ async def _send_recall_free(bot, cid, data):
         rows.append([("💡 Подсказка", "ex_hint"), ("⌨️ Ответить", "ex_answer")])
     else:
         rows.append([("⌨️ Ответить", "ex_answer")])
-    rows.append([("Не помню", "ex_giveup")])
+    rows.append([("🫪 Не помню", "ex_giveup")])
     rows.append(_train_nav_row())
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_ex_kb(rows))
 
