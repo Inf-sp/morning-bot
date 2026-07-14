@@ -691,7 +691,10 @@ async def _send_choose_translation(bot, cid, data):
         options=[str(o)[:100] for o in options[:10]],
         type="quiz",
         correct_option_id=correct_idx,
-        is_anonymous=True,
+        # Telegram присылает PollAnswer боту только для
+        # неанонимных опросов. Без этого тренажёр не узнает,
+        # что пользователь ответил, и не может показать следующий шаг.
+        is_anonymous=False,
     )
     if getattr(msg, "poll", None):
         store.train_polls[msg.poll.id] = str(cid)
@@ -755,6 +758,9 @@ async def _apply_result(bot, cid, st, is_correct, quality, feedback_text, feedba
     ошибке, кнопка 'Дальше'."""
     import srs
     data = st["current"]
+    if data.get("_answered"):
+        return
+    data["_answered"] = True
     entry_term = data["term"]
     _update_entry_srs(cid, data["lang"], entry_term, data["exercise_type"], quality)
 
@@ -768,7 +774,7 @@ async def _apply_result(bot, cid, st, is_correct, quality, feedback_text, feedba
         session["returning"].append(entry_term)
         reinsert_failed_material(st, data)
 
-    kb = _ex_kb([[("Дальше", "ex_next")]])
+    kb = _ex_kb([[('Следующее задание', "ex_next")]])
     await bot.send_message(chat_id=cid, text=feedback_text, entities=feedback_entities, reply_markup=kb)
 
 
@@ -922,6 +928,8 @@ async def train_next(bot, cid):
     st = store.train_state.get(str(cid))
     if not st:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
+    if not st.get("current") or not st["current"].get("_answered"):
+        return
     st["current"] = None
     await _render_next_exercise(bot, cid)
 
