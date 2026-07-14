@@ -28,6 +28,7 @@ _SUBROUTERS = {
     "wardrobe": ("wardrobe.py", "handle_callback"),
     "myday": ("myday.py", "handle_callback"),
     "balance": ("balance.py", "handle_callback"),
+    "learning": ("learning.py", "handle_callback"),
     "cleanup": ("cleanup.py", "handle_cleanup"),
 }
 # handle_notes_callback - отдельная функция в settings.py, с другим именем.
@@ -196,9 +197,9 @@ def _handled_by_toplevel(callback_data, tree):
     """Проходит по всем if/elif верхнего уровня функции answer_callback в порядке
     объявления. Возвращает (True, subrouter_module_or_None) на первом совпадении,
     либо (False, None), если ни одна ветка не совпала."""
-    fn = _find_function(tree, "answer_callback")
+    fn = _find_function(tree, "_answer_callback_impl")
     if fn is None:
-        raise RuntimeError("answer_callback не найдена в bot.py — резолвер рассинхронизирован с кодом")
+        raise RuntimeError("_answer_callback_impl не найдена в bot.py — резолвер рассинхронизирован с кодом")
 
     for stmt in fn.body:
         if not isinstance(stmt, ast.If):

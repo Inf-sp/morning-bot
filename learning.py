@@ -9,6 +9,7 @@ from cleanup import open_cleanup, send_cleanup, handle_cleanup  # noqa: F401
 
 _HERE = Path(__file__).parent
 import store
+import trainer_session
 import ai
 import verify
 import secure
@@ -625,10 +626,7 @@ async def train_start(bot, cid, language, mode=None):
     if not queue:
         await bot.send_message(chat_id=cid, text="Не получилось собрать тренировку. Попробуй ещё раз.")
         return
-    store.train_state[str(cid)] = {
-        "lang": language, "queue": queue, "queue_idx": 0,
-        "session": _new_session(), "current": None, "last_exercise_type": "",
-    }
+    trainer_session.start(cid, language, queue, _new_session())
     await _render_next_exercise(bot, cid)
 
 
@@ -636,7 +634,7 @@ async def _render_next_exercise(bot, cid):
     """Берёт следующий элемент очереди, пытается собрать по нему задание —
     если не вышло (недостаточно данных для формата), пропускает и пробует
     следующий, а не показывает пустой экран. Очередь исчерпана -> итог."""
-    st = store.train_state.get(str(cid))
+    st = trainer_session.get(cid)
     if not st:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
     queue = st["queue"]
@@ -722,11 +720,11 @@ async def _send_choose_translation(bot, cid, data):
         reply_markup=_ex_kb([_train_nav_row()]),
     )
     if getattr(msg, "poll", None):
-        store.train_polls[msg.poll.id] = str(cid)
+        trainer_session.register_poll(cid, msg.poll.id)
 
 
 async def handle_train_poll_answer(bot, poll_answer):
-    cid = store.train_polls.pop(poll_answer.poll_id, None)
+    cid = trainer_session.take_poll_chat(poll_answer.poll_id)
     if not cid:
         return
     option_ids = list(getattr(poll_answer, "option_ids", []) or [])
@@ -838,7 +836,7 @@ def reinsert_failed_material(st, data):
 
 
 async def handle_pick(bot, cid, idx):
-    st = store.train_state.get(str(cid))
+    st = trainer_session.get(cid)
     if not st or not st.get("current"):
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
     data = st["current"]
@@ -849,7 +847,7 @@ async def handle_pick(bot, cid, idx):
 
 
 async def handle_hint(bot, cid):
-    st = store.train_state.get(str(cid))
+    st = trainer_session.get(cid)
     if not st or not st.get("current"):
         return
     st["current"]["hint_shown"] = True
@@ -857,16 +855,16 @@ async def handle_hint(bot, cid):
 
 
 async def handle_answer_prompt(bot, cid):
-    st = store.train_state.get(str(cid))
+    st = trainer_session.get(cid)
     if not st or not st.get("current"):
         return
-    store.pending_input[str(cid)] = "trainer_answer"
+    trainer_session.expect_text_answer(cid)
     await bot.send_message(chat_id=cid, text="Напиши свой ответ следующим сообщением.",
                            reply_markup=_ex_kb([_train_nav_row()]))
 
 
 async def handle_giveup(bot, cid):
-    st = store.train_state.get(str(cid))
+    st = trainer_session.get(cid)
     if not st or not st.get("current"):
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
     import srs
@@ -879,7 +877,7 @@ async def handle_text_answer(bot, cid, text):
     """Свободный текстовый ответ — вызывается из общего текстового роутера,
     когда pending_input == 'trainer_answer'. Возвращает True, если сообщение
     было ответом тренажёра (роутер не должен обрабатывать его иначе)."""
-    st = store.train_state.get(str(cid))
+    st = trainer_session.get(cid)
     if not st or not st.get("current"):
         return False
     store.pending_input.pop(str(cid), None)
@@ -920,7 +918,7 @@ async def _check_translate_context_ai(data, text):
 async def handle_token_pick(bot, cid, token_idx):
     """Для build_sentence/find_error — набор токена по индексу в data['shuffled']
     или data['tokens']."""
-    st = store.train_state.get(str(cid))
+    st = trainer_session.get(cid)
     if not st or not st.get("current"):
         return
     data = st["current"]
@@ -945,7 +943,7 @@ async def handle_token_pick(bot, cid, token_idx):
 
 
 async def handle_token_reset(bot, cid):
-    st = store.train_state.get(str(cid))
+    st = trainer_session.get(cid)
     if not st or not st.get("current"):
         return
     data = st["current"]
@@ -955,7 +953,7 @@ async def handle_token_reset(bot, cid):
 
 
 async def train_next(bot, cid):
-    st = store.train_state.get(str(cid))
+    st = trainer_session.get(cid)
     if not st:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново."); return
     if not st.get("current") or not st["current"].get("_answered"):
@@ -964,15 +962,37 @@ async def train_next(bot, cid):
     await _render_next_exercise(bot, cid)
 
 
+async def handle_callback(bot, cid, data, run_with_status):
+    """Локальный роутер callback-ов тренажёра; bot.py знает только
+    о префиксе ex_, а не о каждой кнопке и переходе сценария.
+    """
+    if data == "ex_next":
+        await run_with_status(lambda _s: train_next(bot, cid))
+    elif data.startswith("ex_pick_"):
+        await run_with_status(lambda _s: handle_pick(bot, cid, int(data[len("ex_pick_"):])))
+    elif data == "ex_hint":
+        await handle_hint(bot, cid)
+    elif data == "ex_answer":
+        await handle_answer_prompt(bot, cid)
+    elif data == "ex_giveup":
+        await run_with_status(lambda _s: handle_giveup(bot, cid))
+    elif data.startswith("ex_tok_"):
+        token = data[len("ex_tok_"):]
+        if token == "reset":
+            await handle_token_reset(bot, cid)
+        else:
+            await run_with_status(lambda _s: handle_token_pick(bot, cid, int(token)))
+    elif data.startswith("ex_word_"):
+        await run_with_status(lambda _s: handle_token_pick(
+            bot, cid, int(data[len("ex_word_"):])))
+    else:
+        return False
+    return True
+
+
 def cancel_training(cid):
     """Завершает текущую тренировку при выходе в раздел или меню."""
-    cid = str(cid)
-    store.train_state.pop(cid, None)
-    if store.pending_input.get(cid) == "trainer_answer":
-        store.pending_input.pop(cid, None)
-    for poll_id, poll_cid in list(store.train_polls.items()):
-        if str(poll_cid) == cid:
-            store.train_polls.pop(poll_id, None)
+    trainer_session.finish(cid)
 
 
 async def send_train_lang_select(bot, cid):
@@ -987,7 +1007,7 @@ async def send_train_lang_select(bot, cid):
 
 async def _finish_training(bot, cid, st):
     session = st["session"]
-    store.train_state.pop(str(cid), None)
+    trainer_session.finish(cid)
     msg = learning_ui.training_result(session)
     kb = InlineKeyboardMarkup([[
         InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"),

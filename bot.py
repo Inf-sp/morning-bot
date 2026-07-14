@@ -10,6 +10,7 @@ from pathlib import Path
 
 import config
 import store
+import trainer_session
 import access
 import menu
 import assistant
@@ -598,29 +599,8 @@ async def _answer_callback_impl(update, context):
             await verify.safe_error(bot, cid, e)
         return
 
-    # Единый тренажёр: 9 форматов заданий (см. docs/word-trainer.md)
-    if data == "ex_next":
-        await _inline_status(lambda _s: learning.train_next(bot, cid))
-        return
-    if data.startswith("ex_pick_"):
-        idx = int(data[len("ex_pick_"):])
-        await _inline_status(lambda _s: learning.handle_pick(bot, cid, idx))
-        return
-    if data == "ex_hint":
-        await learning.handle_hint(bot, cid)
-        return
-    if data == "ex_answer":
-        await learning.handle_answer_prompt(bot, cid)
-        return
-    if data == "ex_giveup":
-        await _inline_status(lambda _s: learning.handle_giveup(bot, cid))
-        return
-    if data.startswith("ex_tok_"):
-        sub = data[len("ex_tok_"):]
-        if sub == "reset":
-            await learning.handle_token_reset(bot, cid)
-        else:
-            await _inline_status(lambda _s: learning.handle_token_pick(bot, cid, int(sub)))
+    if data.startswith("ex_"):
+        await learning.handle_callback(bot, cid, data, _inline_status)
         return
     # «Ещё»
     if data.startswith("again_"):
@@ -781,7 +761,7 @@ async def _text_router_impl(update, context):
             settings.set_(cid, "_worry_prompt_ts", 0)
             # застрявший pending_input от старого приглашения "Дневная разгрузка" -
             # не глотаем никак не связанное сообщение, продолжаем обычную обработку ниже
-        if kind == "trainer_answer":
+        if kind == trainer_session.PENDING_ANSWER:
             if await learning.handle_text_answer(bot, cid, text):
                 return
         if kind in ("role_doctor", "role_state"):

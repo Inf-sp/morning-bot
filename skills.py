@@ -33,7 +33,7 @@ SKILLS = {s.name: s for s in (
           fallback="⚠️ Не удалось разобрать гардероб. Попробуй ещё раз."),
     Skill("language_micro_lesson", "Грамматика и тренажёр слов", "card",
           entrypoints=("a_gram_nl", "a_gram_en", "a_train_nl", "a_train_en"),
-          memory=("DICT_KEY", "LEVELS_FILE", "grammar_state", "train_state"),
+          memory=("DICT_KEY", "LEVELS_FILE", "grammar_state", "trainer_session"),
           fallback="⚠️ Не удалось подготовить задание. Попробуй ещё раз."),
     Skill("evening_review", "Вечерний разбор тревог", "card",
           entrypoints=("плановый запуск",),
