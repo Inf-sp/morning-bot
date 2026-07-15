@@ -46,6 +46,7 @@ from recipe_generation import (
     _gen_recipe_batch,
     _season_hint,
 )
+from fridge_model import _fridge_available
 
 
 def _food_card(d, label="Рецепт дня"):

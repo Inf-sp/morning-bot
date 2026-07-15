@@ -261,7 +261,10 @@ async def send_mydata_music(bot, cid):
 
 
 async def send_food(bot, cid, q=None, back="m_food"):
-    cuisine_mark = " ✅" if cuisines(cid) else ""
+    # Ленивый импорт сохраняет направление зависимостей: settings импортирует этот
+    # модуль для экранов данных, поэтому импортировать settings на верхнем уровне нельзя.
+    import settings as _settings
+    cuisine_mark = " ✅" if _settings.cuisines(cid) else ""
     rows = [
         [InlineKeyboardButton(ui_label("products", "Продукты"), callback_data="set_fridge")],
         [InlineKeyboardButton(ui_label("recipes", "Рецепты"), callback_data="set_myrecipes")],
