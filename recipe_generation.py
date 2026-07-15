@@ -1,9 +1,11 @@
 from datetime import datetime
 import hashlib
 import json
+import logging
 import re
 
 import ai
+import api_usage
 import config
 import secure
 import store
@@ -12,6 +14,7 @@ from fridge_model import _fridge_cat, _fridge_clean_name, _fridge_migrate
 from ui.constants import CUISINE_EMOJI
 
 TZ = config.TZ
+_log = logging.getLogger(__name__)
 
 
 _HOME_MEAL_LABELS = {
@@ -500,6 +503,140 @@ def _gen_leftovers_recipe(ingredients, cid=None):
         fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True)
 
 
+def _fallback_leftovers_recipe(ingredients):
+    """Простой рецепт без AI на случай лимита обоих провайдеров.
+
+    Использует только названия из холодильника; вода и сухая антипригарная
+    сковорода позволяют не приписывать пользователю масло или специи.
+    """
+    names = []
+    seen = set()
+    for raw in re.split(r"[,;\n]+", str(ingredients or "")):
+        name = " ".join(raw.split()).strip(" -•")
+        if name and name.casefold() not in seen:
+            seen.add(name.casefold())
+            names.append(name)
+    if not names:
+        return None
+
+    by_cat = {}
+    for name in names:
+        by_cat.setdefault(_fridge_cat(name), []).append(name)
+    vegetables = by_cat.get("овощи", [])
+    fruit = by_cat.get("фрукты", [])
+    grains = by_cat.get("крупы и макароны", [])
+    bread = by_cat.get("хлеб и выпечка", [])
+    proteins = by_cat.get("мясо и рыба", [])
+    dairy = by_cat.get("молочное и яйца", [])
+    eggs = [name for name in dairy if re.search(r"яйц|eieren", name, re.I)]
+    cheese = [name for name in dairy if re.search(r"сыр|пармез|моцарел|фет|kaas", name, re.I)]
+    cultured = [name for name in dairy if re.search(r"йогурт|творог|yoghurt", name, re.I)]
+    cookable_vegetables = [
+        name for name in vegetables
+        if re.search(r"морков|лук|чеснок|перец|броккол|цукини|кабач|баклаж|шпинат|капуст|тыкв|гриб|шампиньон|горош|кукуруз|помидор|томат", name, re.I)
+    ]
+    sandwich_vegetables = [
+        name for name in vegetables
+        if re.search(r"помидор|томат|перец|гриб|шампиньон|лук", name, re.I)
+    ]
+    sandwich_proteins = [
+        name for name in proteins
+        if re.search(r"ветчин|колбас|салями|мортаделл|копч[ёе]н|тунец|шпрот|сардин", name, re.I)
+    ]
+
+    def build(name, minutes, used, steps, tip):
+        return {
+            "name": name,
+            "time": f"{minutes} мин",
+            "servings": "1 порц.",
+            "ingredients": ", ".join(used),
+            "steps": steps,
+            "chef_tip": tip,
+        }
+
+    if eggs:
+        used = eggs[:1] + cookable_vegetables[:2] + cheese[:1]
+        if cookable_vegetables and cheese:
+            title = "Омлет с овощами и сыром"
+        elif cookable_vegetables:
+            title = "Омлет с овощами"
+        elif cheese:
+            title = "Омлет с сыром"
+        else:
+            title = "Омлет"
+        return build(title, 12, used, [
+            "Нарежь добавки небольшими кусочками",
+            "Прогрей их на сухой антипригарной сковороде 3–4 минуты",
+            "Взбей яйца, влей и готовь под крышкой 6–7 минут",
+        ], "Сними сковороду с огня, когда центр ещё слегка влажный: омлет дойдёт под крышкой")
+
+    pasta = next((name for name in grains if re.search(r"макар|спагет|паст|лапш|noedel", name, re.I)), None)
+    if pasta and (cookable_vegetables or cheese):
+        used = [pasta] + cookable_vegetables[:2] + cheese[:1]
+        return build("Паста с овощами" if cookable_vegetables else "Паста с сыром", 20, used, [
+            f"Отвари {pasta} по инструкции на упаковке и сохрани половника воды",
+            "Нарежь добавки и прогрей их на сковороде с двумя ложками воды 5–7 минут",
+            "Добавь пасту, влей немного воды от варки и перемешай 1 минуту",
+        ], "Вода от варки свяжет добавки с пастой и сделает соус гладким")
+
+    grain_base = next((name for name in grains if re.search(r"рис|греч|булгур|кускус|киноа|перлов|пшен|овсян", name, re.I)), None)
+    if grain_base and cookable_vegetables:
+        base = grain_base
+        used = [base] + cookable_vegetables[:3]
+        base_title = next((label for pattern, label in (
+            (r"рис", "Рис"), (r"греч", "Гречка"),
+            (r"булгур", "Булгур"), (r"кускус", "Кускус"),
+        ) if re.search(pattern, base, re.I)), "Крупа")
+        return build(f"{base_title} с овощами", 25, used, [
+            f"Приготовь {base} по инструкции на упаковке",
+            "Нарежь овощи одинаковыми кусочками и туши под крышкой с третью стакана воды 8–10 минут",
+            "Смешай крупу с овощами и прогрей 2 минуты",
+        ], "Дай крупе постоять под крышкой 3 минуты, чтобы она впитала овощной сок")
+
+    if bread and (cheese or sandwich_proteins or sandwich_vegetables):
+        used = bread[:1] + cheese[:1] + sandwich_proteins[:1] + sandwich_vegetables[:1]
+        return build("Горячие бутерброды", 12, used, [
+            "Нарежь начинку тонкими ломтиками",
+            "Разложи начинку на хлебе, сыр положи сверху",
+            "Прогрей под крышкой на сухой сковороде 6–8 минут",
+        ], "Капля воды под крышкой создаст пар: сыр расплавится, а хлеб не пересохнет")
+
+    if cultured and fruit:
+        used = cultured[:1] + fruit[:3]
+        title = "Творог с фруктами" if re.search(r"творог", cultured[0], re.I) else "Йогурт с фруктами"
+        return build(title, 5, used, [
+            "Нарежь фрукты небольшими кусочками",
+            "Выложи основу в миску и добавь фрукты",
+            "Перемешай часть фруктов с основой, остальные оставь сверху",
+        ], "Часть фруктов разомни ложкой: сок сделает основу мягче без отдельного соуса")
+
+    if proteins and cookable_vegetables:
+        used = proteins[:1] + cookable_vegetables[:3]
+        is_fish = bool(re.search(r"рыб|лосос|с[её]мг|тунец|треск|форел|кревет", proteins[0], re.I))
+        return build("Рыба с овощами" if is_fish else "Мясо с овощами", 25, used, [
+            "Подготовь основной продукт и нарежь овощи одинаковыми кусочками",
+            "Готовь основной продукт на антипригарной сковороде до полной готовности",
+            "Добавь овощи и треть стакана воды, накрой и туши 8–10 минут",
+        ], "Нарежь овощи одинаково: тогда они дойдут до готовности одновременно")
+
+    if len(cookable_vegetables) >= 2:
+        used = cookable_vegetables[:4]
+        return build("Тушёные овощи", 20, used, [
+            "Нарежь овощи одинаковыми кусочками",
+            "Выложи плотные овощи в сковороду, добавь треть стакана воды и туши 8 минут",
+            "Добавь мягкие овощи и готовь под крышкой ещё 6–8 минут",
+        ], "Клади плотные овощи первыми, а сочные — в конце, чтобы они не развалились")
+
+    if len(fruit) >= 2:
+        used = fruit[:4]
+        return build("Фруктовый салат", 7, used, [
+            "Нарежь фрукты кусочками одного размера",
+            "Сложи их в миску и аккуратно перемешай",
+            "Оставь на 3 минуты, чтобы фрукты дали сок",
+        ], "Самые мягкие фрукты добавь последними, чтобы они сохранили форму")
+    return None
+
+
 # ---------- Батч-генерация очереди рецептов (§5 спеки) ----------
 # Набор машиночитаемых кодов кухонь совпадает с settings.CUISINE_OPTIONS
 # (кросс-региональные группы вроде "asian" совпадают с настройками пользователя,
@@ -647,9 +784,34 @@ def _gen_leftovers_recipe_batch(ingredients, cid=None, cuisine_weights=None, rec
     secure.wrap_untrusted, как и в одиночной _gen_leftovers_recipe, — список продуктов
     вводится пользователем и не должен трактоваться моделью как инструкции.
     """
+    if api_usage.gemini_state(1).get("cooldown_active"):
+        local = _fallback_leftovers_recipe(ingredients)
+        if local:
+            _log.info("gemini cooldown active, using local fridge recipe")
+            return [local]
+
     constraint = (
         f"только из доступных продуктов: {secure.wrap_untrusted(ingredients, 'продукты')} "
         "(+ базовые специи, максимум 1 доп. продукт на рецепт)"
     )
-    return _gen_recipe_batch(constraint, cid=cid, cuisine_weights=cuisine_weights,
-                              recent_history=recent_history, season_hint=season_hint, n=n)
+    try:
+        items = _gen_recipe_batch(
+            constraint, cid=cid, cuisine_weights=cuisine_weights,
+            recent_history=recent_history, season_hint=season_hint, n=n,
+        )
+    except Exception as error:
+        _log.warning("fridge recipe batch failed, retrying one recipe: %s", error)
+        items = []
+
+    # Большой JSON с очередью иногда приходит пустым или обрезанным. Не оставляем
+    # пользователя без результата: компактный запрос на один рецепт заметно надёжнее.
+    complete = [
+        item for item in items
+        if (isinstance(item, dict) and item.get("name")
+            and item.get("ingredients") and item.get("steps"))
+    ]
+    if complete:
+        return complete
+
+    local = _fallback_leftovers_recipe(ingredients)
+    return [local] if local else []
