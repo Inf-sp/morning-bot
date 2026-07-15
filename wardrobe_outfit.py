@@ -108,6 +108,10 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text):
             score += 1
         if "светлые" in prefs_low and any(any(marker in color for marker in ("бел", "беж", "светл")) for color in colors):
             score += 1
+        if "предпочитаемая палитра" in prefs_low and "яркие" in prefs_low and any(
+            not _is_neutral_color(color) for color in colors
+        ):
+            score += 1
         # Маленький тай-брейкер, не решающий фактор: при прочих равных чуть
         # предпочитаем вещь, которая реже носилась в последнее время — но только
         # после того, как цельность образа (цвет/погода/антиповтор) уже учтена.

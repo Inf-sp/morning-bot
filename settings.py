@@ -63,8 +63,14 @@ FIT_OPTIONS = [
     "приталенная",
 ]
 
-PALETTE_OPTIONS = ["тёмные", "светлые", "цветные"]
-STYLE_AVOID_OPTIONS = ["яркие цвета", "крупные принты", "узкий крой", "слишком спортивное"]
+PALETTE_OPTIONS = ["тёмные", "светлые", "яркие"]
+PALETTE_ALIASES = {"цветные": "яркие"}
+STYLE_AVOID_OPTIONS = ["крупные принты", "узкий крой", "слишком спортивное"]
+STYLE_AVOID_LABELS = {
+    "крупные принты": "Без крупных принтов",
+    "узкий крой": "Без узкого кроя",
+    "слишком спортивное": "Меньше спортивного",
+}
 
 COLOR_OPTIONS = [
     "белый", "чёрный", "серый", "бежевый", "синий", "зелёный",
@@ -491,11 +497,27 @@ def wardrobe_constraints_list(cid):
 
 
 def wardrobe_palette(cid):
-    return _multi_selected(cid, "wardrobe_palette", PALETTE_OPTIONS)
+    return _normalize_palette(get(cid, "wardrobe_palette", []))
 
 
 def wardrobe_style_avoid(cid):
     return _multi_selected(cid, "wardrobe_style_avoid", STYLE_AVOID_OPTIONS)
+
+
+def _normalize_palette(values):
+    if not isinstance(values, list):
+        return []
+    normalized = [PALETTE_ALIASES.get(value, value) for value in values]
+    return list(dict.fromkeys(value for value in normalized if value in PALETTE_OPTIONS))
+
+
+def _toggle_palette(cid, idx):
+    if not (0 <= idx < len(PALETTE_OPTIONS)):
+        return
+    chosen = PALETTE_OPTIONS[idx]
+    selected = wardrobe_palette(cid)
+    selected = [value for value in selected if value != chosen] if chosen in selected else [*selected, chosen]
+    set_(cid, "wardrobe_palette", selected)
 
 
 def _toggle_multi(cid, key, options, idx):
@@ -638,7 +660,7 @@ def _wardrobe_style_state(cid):
     return {
         "styles": _normalize_wardrobe_styles(raw.get("style", [])),
         "fit": raw.get("wardrobe_fit", ""),
-        "palette": [value for value in palette if value in PALETTE_OPTIONS] if isinstance(palette, list) else [],
+        "palette": _normalize_palette(palette),
         "avoid": [value for value in avoid if value in STYLE_AVOID_OPTIONS] if isinstance(avoid, list) else [],
     }
 
@@ -655,12 +677,13 @@ def _wardrobe_style_kb(cid, state=None):
     avoid = set(state["avoid"])
     rows = [style_buttons[i:i + 2] for i in range(0, len(style_buttons), 2)]
     rows.extend(fit_buttons[i:i + 3] for i in range(0, len(fit_buttons), 3))
-    rows.append([InlineKeyboardButton("Палитра", callback_data="noop")])
     palette_buttons = [InlineKeyboardButton(("✅ " if value in palette else "") + value.capitalize(), callback_data=f"set_palette_{i}")
                        for i, value in enumerate(PALETTE_OPTIONS)]
     rows.append(palette_buttons)
-    rows.append([InlineKeyboardButton("Не предлагать", callback_data="noop")])
-    avoid_buttons = [InlineKeyboardButton(("✅ " if value in avoid else "") + value.capitalize(), callback_data=f"set_styleavoid_{i}")
+    avoid_buttons = [InlineKeyboardButton(
+        ("✅ " if value in avoid else "") + STYLE_AVOID_LABELS[value],
+        callback_data=f"set_stylelimit_{i}",
+    )
                      for i, value in enumerate(STYLE_AVOID_OPTIONS)]
     rows.extend(avoid_buttons[i:i + 2] for i in range(0, len(avoid_buttons), 2))
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
@@ -749,10 +772,14 @@ async def handle_callback(bot, cid, data, q=None):
     elif data.startswith("set_fit_"):
         await set_fit(bot, cid, int(data[len("set_fit_"):]), q)
     elif data.startswith("set_palette_"):
-        _toggle_multi(cid, "wardrobe_palette", PALETTE_OPTIONS, int(data[len("set_palette_"):]))
+        _toggle_palette(cid, int(data[len("set_palette_"):]))
+        await send_wardrobe_style(bot, cid, q)
+    elif data.startswith("set_stylelimit_"):
+        _toggle_multi(cid, "wardrobe_style_avoid", STYLE_AVOID_OPTIONS, int(data[len("set_stylelimit_"):]))
         await send_wardrobe_style(bot, cid, q)
     elif data.startswith("set_styleavoid_"):
-        _toggle_multi(cid, "wardrobe_style_avoid", STYLE_AVOID_OPTIONS, int(data[len("set_styleavoid_"):]))
+        # Старые кнопки содержат другой порядок вариантов: только открываем
+        # актуальный экран, чтобы не включить неверное ограничение по индексу.
         await send_wardrobe_style(bot, cid, q)
     elif data.startswith("set_layers_"):
         # Compat: кнопки слоёв в старых сообщениях больше никуда не ведут отдельно.

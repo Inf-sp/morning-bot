@@ -108,8 +108,8 @@ def wardrobe_style(styles, fit, palette, avoid):
     b.labeled_line("Посадка", fit or "не выбрана")
     b.labeled_line("Цвета", " · ".join(palette) if palette else "не выбраны")
     b.labeled_line("Не предлагать", ", ".join(avoid) if avoid else "нет ограничений")
-    b.line("Выбери направления, посадку, палитру и ограничения. Изменения сохраняются сразу.")
-    b.line("В блоке «Не предлагать» галочка означает запрет.")
+    b.line("Выбери стиль, посадку и цвета. Изменения сохраняются сразу.")
+    b.line("Кнопки «Без…» и «Меньше…» — дополнительные ограничения.")
     return b.build_stripped()
 
 
