@@ -98,7 +98,7 @@ def doctor_card(data):
 
 def worries_diary(worries):
     b = MessageBuilder()
-    b.section(ui_label("worry_diary", "Дневник тревог"))
+    b.section(ui_label("worry_diary", "Тревоги"))
     b.spacer()
     b.line("Сюда выгружай всё, что крутится в голове. Не анализируй - просто запиши.")
     b.line("Каждую тревогу с новой строки. Вечером проверим, что было фактами, а что шумом.")
@@ -164,8 +164,20 @@ def evening_review(worries, items=None, summary="", principle="", analysis_faile
 
 
 def worries_cleared():
-    return MessageSpec(text="✅ Дневник тревог очищен. Приятного настроения!")
+    return MessageSpec(text="✅ Тревоги очищены. Приятного настроения!")
 
 
 def worries_saved(count):
-    return MessageSpec(text=f"Записал в дневник тревоги: +{count}. Вечером проверим, что реально случилось.")
+    return MessageSpec(text=f"Записал тревоги: +{count}. Вечером проверим, что реально случилось.")
+
+
+def health_principles(selected_count):
+    b = MessageBuilder()
+    b.section("Выбрать принципы")
+    b.line("Выбери, что важно поддерживать сейчас. Эти принципы будут направлять «Мотивацию».")
+    b.spacer()
+    if selected_count:
+        b.line(f"Выбрано: {selected_count}.")
+    else:
+        b.line("Пока ничего не выбрано.")
+    return b.build_stripped()

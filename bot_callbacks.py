@@ -43,7 +43,7 @@ _STATUS_TOPIC_PREFIXES = (
     ("gamelang_", "learning"), ("gamediff_", "learning"),
     ("movie_", "leisure"), ("book_", "leisure"), ("listen", "leisure"), ("reco_", "leisure"), ("a_concerts", "leisure"),
     ("m_travel", "travel"), ("a_trav_", "travel"),
-    ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
+    ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("as_health_", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
 )
 
 def _status_topic(data):
@@ -93,7 +93,7 @@ async def handle(update, context, remove_reply_keyboard):
     if data.startswith("as_"):
         if data.startswith(("as_food", "as_fridge", "as_recipe", "as_my_recipe")):
             await cooking.handle_callback(bot, cid, q, data)
-        elif data.startswith(("as_daycheck", "as_motiv", "as_doctor")):
+        elif data.startswith(("as_daycheck", "as_motiv", "as_doctor", "as_health_")):
             await balance.handle_callback(bot, cid, q, data)
         else:
             await saved_items.handle_notes_callback(bot, cid, q, data)
@@ -177,7 +177,9 @@ async def handle(update, context, remove_reply_keyboard):
         await firstvisit.show_prompt(bot, cid, _FV_SECTION[data])
         await _unack(q); return
     if data == "m_wardrobe":
-        await wardrobe.send_home(bot, cid, q); return
+        # Образ — полезный результат, поэтому открываем его отдельным сообщением,
+        # не превращая закреплённое главное меню в карточку Гардероба.
+        await wardrobe.send_home(bot, cid); return
     if data == "m_travel":
         await travel.send_home(bot, cid, q); return
     if data == "m_myday":
@@ -196,19 +198,23 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data.startswith("m_"):
         text, entities, kb = menu.menu_screen(data, cid)
+        if data in ("m_balance", "m_leisure"):
+            await bot.send_message(
+                chat_id=cid,
+                text=text,
+                reply_markup=kb,
+                entities=entities,
+                transient=True,
+            )
+            return
         try:
             await q.message.edit_text(text, reply_markup=kb, entities=entities)
-            if data in ("m_balance", "m_leisure"):
-                marker = getattr(bot, "mark_transient_message", None)
-                if marker is not None:
-                    marker(cid, getattr(q.message, "message_id", None))
         except Exception:
             await bot.send_message(
                 chat_id=cid,
                 text=text,
                 reply_markup=kb,
                 entities=entities,
-                transient=data in ("m_balance", "m_leisure"),
             )
         return
 

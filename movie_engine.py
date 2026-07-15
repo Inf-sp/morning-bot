@@ -9,6 +9,7 @@ Similar по каждому любимому (anchor), фильтруются и
 «Потому что вам понравился X»).
 """
 import re
+import math
 
 import config
 import store
@@ -20,6 +21,9 @@ RATING_STEPS = (7.0, 6.8, 6.5)
 SHOWN_LIMIT = 40
 # Сколько любимых брать как anchors для сбора кандидатов.
 MAX_ANCHORS = 12
+# Рейтинг на нескольких случайных оценках не является сигналом качества.
+MIN_VOTE_COUNT = 50
+MIN_SIMILAR_GENRE_RATIO = 0.5
 
 
 def _norm(s):
@@ -133,8 +137,23 @@ def collect_candidates(taste):
     endpoints = (("recommendations", tmdb.recommendations), ("similar", tmdb.similar))
     for a in taste.get("anchors", []):
         aid, kind, atitle = a["id"], a["kind"], a["title"]
+        anchor_genres = set((a.get("detail") or {}).get("genre_ids") or [])
         for via, fn in endpoints:
             for c in fn(aid, kind):
+                if c.get("adult"):
+                    continue
+                shared_genres = []
+                if via == "similar":
+                    candidate_genres = set(c.get("genre_ids") or [])
+                    union = anchor_genres | candidate_genres
+                    genre_ratio = len(anchor_genres & candidate_genres) / len(union) if union else 0
+                    if genre_ratio < MIN_SIMILAR_GENRE_RATIO:
+                        continue
+                    shared_genres = [
+                        tmdb.GENRES[genre_id]
+                        for genre_id in sorted(anchor_genres & candidate_genres)
+                        if genre_id in tmdb.GENRES
+                    ]
                 cid_ = c.get("id")
                 if not cid_:
                     continue
@@ -146,6 +165,7 @@ def collect_candidates(taste):
                     cand = dict(c)
                     cand["because"] = atitle
                     cand["via"] = via
+                    cand["shared_genres"] = shared_genres
                     cand["anchors"] = {atitle}
                     cand["freq"] = 1
                     pool[key] = cand
@@ -158,6 +178,8 @@ def filter_candidates(cid, pool, min_rating):
     out = []
     for c in pool.values():
         if _norm(c.get("name")) in excluded:
+            continue
+        if c.get("adult") or int(c.get("vote_count") or 0) < MIN_VOTE_COUNT:
             continue
         if (c.get("rating") or 0) < min_rating:
             continue
@@ -177,6 +199,8 @@ def _score(c, taste, prefs=None):
     if taste.get("kind_pref") and c.get("kind") == taste["kind_pref"]:
         score += 1.5
     score += (c.get("rating") or 0) * 0.5
+    score += math.log10(max(1, int(c.get("vote_count") or 0))) * 0.8
+    score += min(float(c.get("popularity") or 0), 100.0) * 0.02
     score += (c.get("freq", 1) - 1) * 2.0  # рекомендован от нескольких любимых
     # предпочтения из настроек (приоритет, не запрет)
     if prefs:

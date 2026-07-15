@@ -273,8 +273,8 @@ async def send_mydata_music(bot, cid):
 async def send_food(bot, cid, q=None, back="m_food"):
     """Compat-экран для старых кнопок Готовки: без отдельной базы рецептов."""
     rows = [
-        [InlineKeyboardButton("Мой холодильник", callback_data="set_fridge")],
-        [InlineKeyboardButton("Мои кухни", callback_data="set_cuisines")],
+        [InlineKeyboardButton("🧊 Мой холодильник", callback_data="set_fridge")],
+        [InlineKeyboardButton("Выбрать кухни", callback_data="set_cuisines")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(

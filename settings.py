@@ -377,9 +377,9 @@ async def notif_off_all(bot, cid, q=None):
 
 async def send_personalization(bot, cid, q=None):
     """Персонализация сейчас пустует по содержанию — Гардероб, Обучение, Кино/музыка
-    и Кухни переехали в свои разделы («Гардероб» → «Настройки гардероба», «Обучение»
-    → «Настройки обучения», «Досуг» → «Настройки досуга», «Готовка» → «Настройки
-    готовки»). Экран оставлен как compat-редирект на главные Настройки."""
+    и Кухни переехали в свои разделы («Гардероб» → «Выбрать стили», «Обучение»
+    → «Выбрать язык», «Досуг» → «Настройки досуга», «Готовка» → «Выбрать кухни»).
+    Экран оставлен как compat-редирект на главные Настройки."""
     rows = [
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]
@@ -654,7 +654,7 @@ async def send_wardrobe_settings_hub(bot, cid, q=None):
         "Стиль влияет на подбор образа. Мой гардероб — управление вещами.",
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎨 Стиль", callback_data="set_wardrobe_style")],
+        [InlineKeyboardButton("Выбрать стили", callback_data="set_wardrobe_style")],
         [InlineKeyboardButton("👕 Мой гардероб", callback_data="set_wardrobe_g")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
@@ -730,7 +730,7 @@ async def send_wardrobe_prefs(bot, cid, back="set_priorities", q=None):
 
 
 # --- Страны ---
-async def send_lagom(bot, cid, back="m_balance"):
+async def send_lagom(bot, cid, back="m_balance", q=None):
     import memory
     items = memory.get_lagom(cid)
     rows = [[InlineKeyboardButton("🆕 Добавить принцип", callback_data="setadd_lagom")]]
@@ -738,8 +738,21 @@ async def send_lagom(bot, cid, back="m_balance"):
         rows.append([InlineKeyboardButton(delete_label("Удалить принципы"), callback_data="set_lagom_clean")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     msg = settings_ui.lagom_home(items)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=InlineKeyboardMarkup(rows))
+    kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            _mark_transient_edit(bot, cid, q.message)
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid,
+        text=msg.text,
+        entities=msg.entities,
+        reply_markup=kb,
+        transient=True,
+    )
 
 async def handle_callback(bot, cid, data, q=None):
     if data == "set_home":
@@ -843,7 +856,7 @@ async def handle_callback(bot, cid, data, q=None):
         msg = settings_ui.wardrobe_item_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
     elif data == "set_lagom":
-        await send_lagom(bot, cid, back="m_balance")
+        await send_lagom(bot, cid, back="m_balance", q=q)
     elif data == "setadd_lagom":
         store.pending_input[cid] = "setadd_lagom"
         msg = settings_ui.lagom_input()

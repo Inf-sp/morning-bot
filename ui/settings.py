@@ -19,7 +19,7 @@ def personalization():
 
 def cuisines(current):
     b = MessageBuilder()
-    b.section("Мои кухни")
+    b.section("Выбрать кухни")
     b.line("Выбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника с их учётом.")
     b.spacer()
     b.bold("Сейчас:")
@@ -102,7 +102,7 @@ def style_pick():
 
 def wardrobe_style(styles, fit, palette, avoid):
     b = MessageBuilder()
-    b.section("🎨 Мой стиль")
+    b.section("Выбрать стили")
     b.spacer()
     b.labeled_line("Стиль", " · ".join(styles) if styles else "не выбран")
     b.labeled_line("Посадка", fit or "не выбрана")
@@ -142,7 +142,7 @@ def mydata_section(title, hint=""):
 
 def lagom_home(items):
     b = MessageBuilder()
-    b.section(ui_label("lagom", "Лагом"))
+    b.section(ui_label("lagom", "Мой лагом"))
     b.text_line("Лагом (швед. ")
     b.italic("lagom")
     b.line(

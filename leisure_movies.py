@@ -52,7 +52,7 @@ def _tmdb_lookup(title, title_en=""):
                 continue
             def _ok(x):
                 nm = (x.get("title") or x.get("name") or "").lower()
-                return nm and not any(b in nm for b in _BAD_TMDB)
+                return nm and not x.get("adult") and not any(b in nm for b in _BAD_TMDB)
             good = [x for x in results if _ok(x)]
             if not good:
                 continue
@@ -73,6 +73,8 @@ def _tmdb_lookup(title, title_en=""):
                 "name": x.get("title") or x.get("name") or q,
                 "name_en": x.get("original_title") or x.get("original_name") or "",
                 "year": date[:4] if date else "", "rating": x.get("vote_average") or 0,
+                "vote_count": int(x.get("vote_count") or 0),
+                "popularity": x.get("popularity") or 0,
                 "genres": genres, "kind": kind,
                 "poster": (f"https://image.tmdb.org/t/p/w500{poster}" if poster else None),
                 "url": f"https://www.themoviedb.org/{kind}/{x.get('id')}",
@@ -239,9 +241,8 @@ def _normalize_movie_items(items):
 
 def _pick_good_movie(items, used_titles):
     """Возвращает (item, tm) для первого фильма с рейтингом >= порога и не из used_titles.
-    Если подходящих нет - первый доступный."""
+    Фильмы без достаточного числа голосов не используются как запасной вариант."""
     used = {str(u).lower() for u in used_titles}
-    fallback = None
     for it in items:
         if not isinstance(it, dict):
             continue
@@ -251,12 +252,13 @@ def _pick_good_movie(items, used_titles):
         disp = _display_title(it, tm).lower()
         if disp in used:
             continue
-        if fallback is None:
-            fallback = (it, tm)
-        rating = (tm or {}).get("rating") or 0
-        if not config.TMDB_API_KEY or rating >= MIN_TMDB_RATING:
+        if not config.TMDB_API_KEY:
             return it, tm
-    return fallback if fallback else (items[0] if items else None, None)
+        rating = (tm or {}).get("rating") or 0
+        vote_count = int((tm or {}).get("vote_count") or 0)
+        if rating >= MIN_TMDB_RATING and vote_count >= movie_engine.MIN_VOTE_COUNT:
+            return it, tm
+    return None, None
 
 async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None):
     it = it if isinstance(it, dict) else {"title": str(it)}
@@ -433,6 +435,7 @@ def _candidate_to_card(cid, c, reason=None):
     else:
         tm["because"] = c.get("because")
         tm["via"] = c.get("via")
+        tm["shared_genres"] = c.get("shared_genres") or []
         tm["anchors"] = c.get("anchors")
     it = {"title": tm.get("name", ""), "title_en": tm.get("name_en", ""),
           "hook": _reason_text(tm)}
@@ -446,8 +449,10 @@ def _reason_text(tm):
         return _reason_label(reason)
     because = tm.get("because")
     if because:
-        verb = "понравился" if tm.get("via") == "recommendations" else "похоже на"
-        return f"Потому что вам {verb} «{because}»" if verb == "понравился" else f"Похоже на «{because}»"
+        if tm.get("via") == "similar":
+            genres = ", ".join(tm.get("shared_genres") or [])
+            return f"Подходит по жанрам: {genres}" if genres else ""
+        return f"Потому что вам понравился «{because}»"
     return ""
 
 
@@ -476,7 +481,13 @@ async def _llm_movie_pick(cid, used):
         items = _fallback_movie_items(cid)
     if not items:
         return None, None
-    return await asyncio.to_thread(_pick_good_movie, items, used)
+    picked = await asyncio.to_thread(_pick_good_movie, items, used)
+    if picked[0] is not None:
+        return picked
+    fallbacks = _fallback_movie_items(cid)
+    if fallbacks != items:
+        return await asyncio.to_thread(_pick_good_movie, fallbacks, used)
+    return None, None
 
 async def movie_dislike(bot, cid, i):
     rec = store.last_recos.get(str(cid))

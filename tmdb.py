@@ -188,6 +188,9 @@ def normalize(x, kind=None):
         "name_en": original,
         "year": _year(x),
         "rating": x.get("vote_average") or 0,
+        "vote_count": int(x.get("vote_count") or 0),
+        "popularity": _float_or_none(x.get("popularity")) or 0,
+        "adult": bool(x.get("adult", False)),
         "genre_ids": [g for g in genre_ids if g],
         "genres": genres,
         "kind": kind,
@@ -201,7 +204,7 @@ def _clean(results, kind=None):
     out = []
     for x in results or []:
         nm = (x.get("title") or x.get("name") or "").lower()
-        if not nm or any(b in nm for b in _BAD):
+        if not nm or x.get("adult") or any(b in nm for b in _BAD):
             continue
         out.append(normalize(x, kind))
     return out

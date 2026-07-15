@@ -94,7 +94,7 @@ _SCREENS = {
             [(ui_label("recommendation", "Образ на сегодня"), "w_look")],
             [(ui_label("assessment", "Проверить покупку"), "w_check")],
             [("✂️ Разбор шкафа", "w_improve")],
-            [("🎚️ Настройки гардероба", "set_wardrobe_settings")],
+            [("Выбрать стили", "set_wardrobe_style")],
         ],
     ),
     "m_balance": (
@@ -103,8 +103,9 @@ _SCREENS = {
         "Здоровье и эмоции. Разберу симптом, поддержу и помогу разгрузить голову.",
         [
             [(ui_label("doctor", "Спросить врача"), "as_doctor")],
-            [("⚡ Заряд мотивации", "as_motiv"), (ui_label("worry_diary", "Дневник тревог"), "as_daycheck")],
-            [(ui_label("settings", "Настройки здоровья"), "set_lagom")],
+            [("⚡ Мотивация", "as_motiv"), (ui_label("worry_diary", "Тревоги"), "as_daycheck")],
+            [("Выбрать принципы", "as_health_principles")],
+            [("Мой лагом", "set_lagom")],
             [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
         ],
     ),
@@ -166,7 +167,8 @@ def learning_menu(home: dict):
     return b.build_stripped(reply_markup=ikb([
         [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
         [(ui_label("live_language", "Живой язык"), f"a_proverb_{code}"), (ui_label("game", "Игра-детектив"), f"gamelang_{code}")],
-        [(ui_label("settings", "Настройки обучения"), "set_learning")],
+        [("📖 Мой словарь", f"a_dictlang_{code}_from_menu")],
+        [("Выбрать язык", "set_learning")],
         [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
     ]))
 
@@ -257,8 +259,8 @@ def food_menu(idea=None):
     rows = [
         [("✨ Другой рецепт", "m_food_next")],
         [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
-        [("Мой холодильник", "as_fridge_home")],
-        [("Мои кухни", "set_cuisines")],
+        [("🧊 Мой холодильник", "as_fridge_home")],
+        [("Выбрать кухни", "set_cuisines")],
         [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
     ]
     return b.build_stripped(reply_markup=ikb(rows))

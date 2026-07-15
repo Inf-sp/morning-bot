@@ -155,7 +155,7 @@ def build_wardrobe_keyboard():
         [("✨ Другой образ", "w_look")],
         [("🧐 Проверить покупку", "w_check")],
         [("👕 Мой шкаф", "w_closet")],
-        [("🎨 Мой стиль", "set_wardrobe_style")],
+        [("Выбрать стили", "set_wardrobe_style")],
         [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
     ])
 
@@ -261,7 +261,7 @@ def _empty_wardrobe_screen():
     ], [
         InlineKeyboardButton("👕 Мой шкаф", callback_data="w_closet"),
     ], [
-        InlineKeyboardButton("🎨 Мой стиль", callback_data="set_wardrobe_style"),
+        InlineKeyboardButton("Выбрать стили", callback_data="set_wardrobe_style"),
     ], [
         InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"),
         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
@@ -597,13 +597,10 @@ async def send_wardrobe_zones(bot, cid, q=None):
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     msg = wardrobe_ui.wardrobe_home_screen(total)
     kb = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    # Экран шкафа служебный. Отправляем его отдельно, чтобы карточка образа,
+    # из которой пользователь пришёл, осталась в истории как полезный результат.
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb, transient=True)
 
 
 async def send_category(bot, cid, zone_slug, q=None):

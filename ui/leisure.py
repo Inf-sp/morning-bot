@@ -122,7 +122,9 @@ def movie_card(item, tm):
 
     # 2. Стоит ли смотреть + что за жанр — одна строка-якорь без источника рейтинга.
     meta_parts = []
-    if tm and tm.get("rating"):
+    # Не показываем эффектный рейтинг вроде 10.0, если он основан на нескольких
+    # случайных голосах: для рекомендации нужна минимальная выборка.
+    if tm and tm.get("rating") and int(tm.get("vote_count") or 0) >= 50:
         meta_parts.append(f"⭐ {tm['rating']:.1f}")
     if type_label:
         meta_parts.append(type_label)
@@ -169,7 +171,8 @@ def _reason_line(item, tm):
       никак не связан с конкретным любимым тайтлом → не пишем «понравился», а называем
       реальный критерий подбора.
     - because + via — обычная рекомендация от TMDb Recommendations/Similar по любимому:
-      Recommendations → «понравился», Similar → «похоже на» (разные степени уверенности).
+      Recommendations объясняется через любимый фильм, а Similar — только через
+      подтверждённые общие жанры, без сильного утверждения «похоже на».
     - иначе — old-path LLM-хук (item["hook"]) как есть.
     """
     tm = tm or {}
@@ -183,9 +186,10 @@ def _reason_line(item, tm):
             return f"Подборка для настроения «{label}»"
     because = tm.get("because")
     if because:
-        title = _clip_title(because)
         if tm.get("via") == "similar":
-            return f"Похоже на «{title}»"
+            genres = ", ".join(tm.get("shared_genres") or [])
+            return f"Подходит по жанрам: {genres}" if genres else ""
+        title = _clip_title(because)
         return f"Потому что вам понравился «{title}»"
     hook = (item.get("hook") or "").strip()
     return hook if hook else ""

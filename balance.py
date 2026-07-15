@@ -36,6 +36,79 @@ DOCTOR_INTRO = (
     "Опиши, что беспокоит, или спроси про лекарство."
 )
 
+HEALTH_PRINCIPLES = (
+    ("sleep", "Сон и восстановление"),
+    ("movement", "Движение каждый день"),
+    ("nutrition", "Регулярное питание"),
+    ("calm", "Меньше перегруза"),
+    ("screen", "Меньше экрана"),
+    ("outdoors", "Больше свежего воздуха"),
+)
+_HEALTH_PRINCIPLE_LABELS = dict(HEALTH_PRINCIPLES)
+
+
+def health_principles(cid):
+    saved = settings.get(cid, "health_principles", [])
+    if not isinstance(saved, list):
+        return []
+    return [key for key in saved if key in _HEALTH_PRINCIPLE_LABELS]
+
+
+def health_principle_labels(cid):
+    selected = set(health_principles(cid))
+    return [label for key, label in HEALTH_PRINCIPLES if key in selected]
+
+
+def _mark_transient_edit(bot, cid, message):
+    marker = getattr(bot, "mark_transient_message", None)
+    if marker is not None:
+        marker(cid, getattr(message, "message_id", None))
+
+
+async def send_health_principles(bot, cid, q=None):
+    selected = set(health_principles(cid))
+    buttons = [
+        InlineKeyboardButton(
+            ("✅ " if key in selected else "") + label,
+            callback_data=f"as_health_principle_{key}",
+        )
+        for key, label in HEALTH_PRINCIPLES
+    ]
+    rows = [[button] for button in buttons]
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_balance"),
+        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+    ])
+    msg = balance_ui.health_principles(len(selected))
+    kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            _mark_transient_edit(bot, cid, q.message)
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid,
+        text=msg.text,
+        entities=msg.entities,
+        reply_markup=kb,
+        transient=True,
+    )
+
+
+async def toggle_health_principle(bot, cid, key, q=None):
+    if key not in _HEALTH_PRINCIPLE_LABELS:
+        await send_health_principles(bot, cid, q=q)
+        return
+    selected = health_principles(cid)
+    if key in selected:
+        selected = [item for item in selected if item != key]
+    else:
+        selected.append(key)
+    settings.set_(cid, "health_principles", selected)
+    await send_health_principles(bot, cid, q=q)
+
 # ---------- СДВГ / Следующий шаг ----------
 def _lagom_text(item) -> str:
     """Текст принципа: элемент может быть строкой (старый формат) или
@@ -65,13 +138,20 @@ def _pick_lagom(cid) -> str:
 
 def _gen_motiv(cid):
     import random
-    lagom = _pick_lagom(cid)
+    selected_principles = health_principle_labels(cid)
+    import memory
+    has_lagom = bool(memory.get_lagom(cid))
+    if selected_principles and (not has_lagom or random.choice((True, False))):
+        active_principle = random.choice(selected_principles)
+    else:
+        active_principle = _pick_lagom(cid)
     angles = ["физическое действие", "ограничение", "мини-ритуал", "перезагрузку", "один микрошаг"]
     angle = random.choice(angles)
-    lagom_ctx = f"Принцип лагома пользователя: «{lagom}»\n" if lagom else ""
+    principle_ctx = f"Актуальный принцип пользователя: «{active_principle}»\n" if active_principle else ""
+    basis = "на основе этого принципа" if active_principle else "для спокойного старта"
     prompt = (
-        f"{lagom_ctx}"
-        f"Предложи {angle} на основе этого принципа. "
+        f"{principle_ctx}"
+        f"Предложи {angle} {basis}. "
         "Без философии и клише. Конкретно, коротко, на русском. "
         "Верни JSON (без markdown):\n"
         '{"steps":["конкретное действие или ограничение","ещё одно если нужно"],'
@@ -84,10 +164,40 @@ def _gen_motiv(cid):
         why = str(d.get("why", "")).strip()
         now = str(d.get("now", "")).strip()
     except Exception:
-        steps = ["Встань и пройди круг по комнате"]
-        why = "Движение быстро снижает внутренний шум и помогает начать с малого"
+        fallbacks = {
+            "Сон и восстановление": (
+                "Убери экран за 30 минут до сна",
+                "Короткий спокойный переход помогает телу переключиться на отдых",
+            ),
+            "Движение каждый день": (
+                "Пройди один круг по комнате",
+                "Небольшое движение помогает начать без долгой подготовки",
+            ),
+            "Регулярное питание": (
+                "Запланируй время следующего приёма пищи",
+                "Конкретное время снижает шанс пропустить еду в занятом дне",
+            ),
+            "Меньше перегруза": (
+                "Убери одну необязательную задачу",
+                "Один снятый пункт сразу освобождает внимание для главного",
+            ),
+            "Меньше экрана": (
+                "Положи телефон вне руки на 10 минут",
+                "Короткая дистанция от экрана уменьшает число автоматических отвлечений",
+            ),
+            "Больше свежего воздуха": (
+                "Выйди на улицу на пять минут",
+                "Короткая смена обстановки помогает перезагрузить внимание",
+            ),
+        }
+        action, why = fallbacks.get(
+            active_principle,
+            ("Сделай один маленький шаг без подготовки",
+             "Конкретное действие снижает внутренний шум и помогает начать"),
+        )
+        steps = [action]
         now = ""
-    lagom_full = lagom if lagom else "Один шаг лучше идеального плана."
+    lagom_full = active_principle if active_principle else "Один шаг лучше идеального плана."
     final = f"Сейчас: {now}" if now else "Сделай первый шаг сейчас, без подготовки."
     return _build_entity_card(
         "Мотивация",
@@ -355,6 +465,12 @@ _MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("⬅️ На
 
 # ---------- роутер кнопок Баланса ----------
 async def handle_callback(bot, cid, q, data):
+    if data == "as_health_principles":
+        await send_health_principles(bot, cid, q=q); return
+    if data.startswith("as_health_principle_"):
+        await toggle_health_principle(
+            bot, cid, data[len("as_health_principle_"):], q=q)
+        return
     # дневник тревоги
     if data == "as_daycheck":
         await send_daycheck(bot, cid); return

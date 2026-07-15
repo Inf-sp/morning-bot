@@ -88,7 +88,7 @@ _STATUS_TOPIC_PREFIXES = (
     ("gamelang_", "learning"), ("gamediff_", "learning"),
     ("movie_", "leisure"), ("book_", "leisure"), ("listen", "leisure"), ("reco_", "leisure"), ("a_concerts", "leisure"),
     ("m_travel", "travel"), ("a_trav_", "travel"),
-    ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
+    ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("as_health_", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
 )
 
 
