@@ -14,6 +14,7 @@ from wardrobe_model import (
 WARDROBE_OUTERWEAR_MAX_TEMP = 20
 NEUTRAL_COLORS = ("бел", "чёрн", "черн", "сер", "беж", "сини", "деним", "джинс")
 SAFE_NEUTRAL_STYLE_TIP = "Носи комплект без дополнительных стилистических изменений."
+_SUNGLASSES_MARKERS = ("солнцезащит", "солнечн", "очки от солнца", "sunglasses")
 
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
@@ -27,11 +28,20 @@ def _temp_conflicts(item, weather_ctx):
     if item.get("warmth") == "тёплые" and (weather_ctx.get("hot") or (tmax is not None and tmax >= 24)):
         # Физический комфорт — жёсткий guard до любого скоринга цвета и стиля.
         return True
+    if item.get("zone") == "Аксессуары":
+        # Обычные аксессуары не имеют верхнего температурного порога одежды:
+        # очки, часы и ремень остаются допустимыми даже в сильную жару.
+        return False
     tr = item.get("temp_range")
     if not tr or tmax is None:
         return False
     lo, hi = tr
     return tmax > hi + _TEMP_CONFLICT_MARGIN or tmax < lo - _TEMP_CONFLICT_MARGIN
+
+
+def _is_sunglasses(item):
+    facts = f"{item.get('name', '')} {item.get('subcategory', '')}".casefold()
+    return item.get("zone") == "Аксессуары" and any(marker in facts for marker in _SUNGLASSES_MARKERS)
 
 
 def select_outfit_candidates(w, weather_ctx):
@@ -52,6 +62,10 @@ def select_outfit_candidates(w, weather_ctx):
                 continue
             if weather_ctx.get("has_rain"):
                 items = sorted(items, key=lambda it: not it.get("rain_ok"))
+        elif zone == "Аксессуары" and (weather_ctx.get("hot") or weather_ctx.get("sunny")):
+            # Очки могут лежать дальше первых двух аксессуаров, которые попадут
+            # в перебор, поэтому поднимаем их до ограничения пула кандидатов.
+            items = sorted(items, key=lambda item: not _is_sunglasses(item))
         candidates[zone] = items
     return candidates
 
@@ -87,6 +101,8 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text):
             # небольшого бонуса они никогда не выигрывают у варианта "без аксессуара"
             # при равном score и не попадают в образ вовсе.
             score += 2
+            if (weather_ctx.get("hot") or weather_ctx.get("sunny")) and _is_sunglasses(it):
+                score += 5
     score += _color_penalty(items)
     prefs_low = str(prefs_text or "").lower()
     for it in items:

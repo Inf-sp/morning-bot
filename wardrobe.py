@@ -19,6 +19,7 @@ from wardrobe_model import (
     flat_items as _flat_wardrobe_items,
     has_rain_outerwear as _has_rain_outerwear,
     normalize_parsed_item,
+    public_zone_name,
     public_item_name,
     wardrobe_stats,
 )
@@ -35,14 +36,14 @@ from wardrobe_migration import migrate_item_attrs
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
-COPY_VALIDATOR_VERSION = 2
+COPY_VALIDATOR_VERSION = 3
 
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
 
 def closet_kb():
     return _kb([
-        [("🆕 Добавить вещь", "w_add"), ("🔍 Найти", "w_search")],
+        [("🆕 Добавить вещь", "w_add")],
         [("🧐 Оценить вещь", "w_check")],
         [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Меню", "m_menu")],
     ])
@@ -153,7 +154,8 @@ def _save_cached_look(cid, item_ids, look_data):
 def build_wardrobe_keyboard():
     return _kb([
         [("✨ Другой образ", "w_look")],
-        [("👕 Мой шкаф", "w_closet"), ("🎨 Мой стиль", "set_wardrobe_style")],
+        [("👕 Мой шкаф", "w_closet")],
+        [("🎨 Мой стиль", "set_wardrobe_style")],
         [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
     ])
 
@@ -258,6 +260,7 @@ def _empty_wardrobe_screen():
         InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add"),
     ], [
         InlineKeyboardButton("👕 Мой шкаф", callback_data="w_closet"),
+    ], [
         InlineKeyboardButton("🎨 Мой стиль", callback_data="set_wardrobe_style"),
     ], [
         InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"),
@@ -564,12 +567,11 @@ async def handle_wardrobe_search(bot, cid, query):
     if not matches:
         await bot.send_message(
             chat_id=cid, text="Ничего не нашлось. Попробуй цвет, бренд или категорию.",
-            reply_markup=_kb([[("🔍 Найти ещё", "w_search")], [("⬅️ Назад", "w_closet"), ("#️⃣ Меню", "m_menu")]]),
+            reply_markup=_kb([[("⬅️ Назад", "w_closet"), ("#️⃣ Меню", "m_menu")]]),
         )
         return
     msg = wardrobe_ui.search_results(query, matches)
     rows = [[(str(item.get("name") or "Вещь")[:48], f"w_item_{item.get('id')}")] for item in matches[:10]]
-    rows.append([("🔍 Найти ещё", "w_search")])
     rows.append([("⬅️ Назад", "w_closet"), ("#️⃣ Меню", "m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_kb(rows))
 
@@ -584,25 +586,15 @@ async def send_wardrobe_zones(bot, cid, q=None):
     _cancel_wardrobe_input(cid)
     w = store.load_wardrobe(cid)
     total, counts = wardrobe_stats(w)
-    rows = [[
-        InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add"),
-        InlineKeyboardButton("🔍 Найти", callback_data="w_search"),
-    ], [InlineKeyboardButton("🧐 Оценить вещь", callback_data="w_check")]]
-    short_row = []
+    rows = [
+        [InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add")],
+        [InlineKeyboardButton("🧐 Оценить вещь", callback_data="w_check")],
+    ]
     for zone in (z for z in ZONE_ORDER if counts.get(z, 0) > 0):
-        button = InlineKeyboardButton(f"{zone} · {counts[zone]}", callback_data=f"w_cat_{ZONE_SLUG[zone]}")
-        if zone == "Верхняя одежда":
-            if short_row:
-                rows.append(short_row)
-                short_row = []
-            rows.append([button])
-            continue
-        short_row.append(button)
-        if len(short_row) == 2:
-            rows.append(short_row)
-            short_row = []
-    if short_row:
-        rows.append(short_row)
+        rows.append([InlineKeyboardButton(
+            f"{public_zone_name(zone)} · {counts[zone]}",
+            callback_data=f"w_cat_{ZONE_SLUG[zone]}",
+        )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     msg = wardrobe_ui.wardrobe_home_screen(total)
     kb = InlineKeyboardMarkup(rows)
@@ -622,7 +614,7 @@ async def send_category(bot, cid, zone_slug, q=None):
         return
     items = [item for item_zone, _subcat, item in _flat_wardrobe_items(store.load_wardrobe(cid))
              if item_zone == zone]
-    msg = wardrobe_ui.category_screen(zone, items)
+    msg = wardrobe_ui.category_screen(public_zone_name(zone), items)
     rows = [[InlineKeyboardButton(str(item.get("name") or "Вещь")[:48], callback_data=f"w_item_{item.get('id')}")]
             for item in items]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
@@ -761,10 +753,9 @@ async def handle_callback(bot, cid, q, data):
     if data == "w_add_edit":
         await send_wardrobe_zones(bot, cid, q=q); return
     if data == "w_search":
-        store.pending_input[str(cid)] = "wardrobe_search"
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]])
-        await bot.send_message(chat_id=cid, text="Напиши название, цвет, бренд или категорию.",
-                               reply_markup=kb); return
+        # Совместимость со старыми сообщениями: поиск убран из актуального шкафа.
+        await send_wardrobe_zones(bot, cid, q=q)
+        return
     if data.startswith("w_searchdel_"):
         item_id = data[len("w_searchdel_"):]
         await send_delete_confirmation(bot, cid, item_id, q=q); return

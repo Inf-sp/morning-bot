@@ -1,5 +1,6 @@
 from .builder import MessageBuilder
 from .constants import ui_label
+from wardrobe_model import public_zone_name
 
 
 def _lower_first(text):
@@ -197,7 +198,7 @@ def zone_picker_screen():
 def wardrobe_home_screen(total):
     b = MessageBuilder()
     b.section(f"👕 Мой шкаф · {total} {_pluralize_items(total)}")
-    b.line("Выбери категорию или найди нужную вещь.")
+    b.line("Выбери категорию.")
     return b.build_stripped()
 
 
@@ -223,7 +224,7 @@ def item_card(item):
     b = MessageBuilder()
     b.section(_clean_text(item.get("name")) or "Вещь")
     b.spacer()
-    b.labeled_line("Категория", _lower_first(item.get("zone") or "другое"))
+    b.labeled_line("Категория", _lower_first(public_zone_name(item.get("zone"))))
     if item.get("color"):
         b.labeled_line("Цвет", item["color"])
     b.labeled_line("Тепло", item.get("warmth") or "обычные")
@@ -246,7 +247,7 @@ def add_preview(item, remaining=0):
     b.bold(_clean_text(item.get("name")) or "Вещь")
     b.newline()
     b.spacer()
-    b.labeled_line("Категория", _lower_first(item.get("zone") or "другое"))
+    b.labeled_line("Категория", _lower_first(public_zone_name(item.get("zone"))))
     if item.get("color"):
         b.labeled_line("Цвет", item["color"])
     b.labeled_line("Тепло", item.get("warmth") or "обычные")
@@ -269,7 +270,7 @@ def add_batch_preview(items):
         b.spacer()
         b.bold(_clean_text(item.get("name")) or "Вещь")
         b.newline()
-        details = [_lower_first(item.get("zone") or "другое")]
+        details = [_lower_first(public_zone_name(item.get("zone")))]
         if item.get("color"):
             details.append(str(item["color"]))
         details.append(str(item.get("warmth") or "обычные"))
