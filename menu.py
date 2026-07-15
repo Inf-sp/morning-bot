@@ -21,7 +21,7 @@ def main_menu_screen(cid=None):
 
 
 def _back(parent="m_close"):
-    return [("⬅️ Назад", parent), ("🏠 Меню", "m_menu")]
+    return [("⬅️ Назад", parent), ("#️⃣ Меню", "m_menu")]
 
 
 def menu_screen(key, cid=None):

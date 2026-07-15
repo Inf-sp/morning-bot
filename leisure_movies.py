@@ -111,7 +111,7 @@ def _movie_kb(i, category=None):
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"movie_love_{i}"),
          InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data=f"reco_{i}")],
     ]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -171,7 +171,7 @@ def _movie_genre_menu_kb():
                for label, gid in _GENRE_MENU]
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i:i + 2])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -181,7 +181,7 @@ def _movie_mood_menu_kb():
                for key, label in _MOOD_MENU]
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i:i + 2])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 MIN_TMDB_RATING = 7.0
@@ -306,7 +306,7 @@ def _movie_home_kb():
         [InlineKeyboardButton("👻 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("🫥 По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 
@@ -606,7 +606,7 @@ def _movie_prefs_kb(cid):
                                   callback_data=f"mpref_c_{v}") for label, v in _PREF_COUNTRIES]
     for i in range(0, len(cbtns), 2):
         rows.append(cbtns[i:i + 2])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 

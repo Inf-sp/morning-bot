@@ -711,10 +711,10 @@ async def _extract_dict_topics(text, lang="nl"):
 
 
 def _dict_batch_preview_kb():
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Добавить всё", callback_data="a_dictbatch_add"),
-        InlineKeyboardButton("❌ Не добавлять", callback_data="a_dictbatch_cancel"),
-    ]])
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🆕 Добавить всё", callback_data="a_dictbatch_add")],
+        [InlineKeyboardButton("❌ Не добавлять", callback_data="a_dictbatch_cancel")],
+    ])
 
 
 async def offer_dict_topics_from_text(bot, cid, text, lang="nl"):

@@ -56,7 +56,7 @@ def _book_kb(i):
         [InlineKeyboardButton("✨ Заменить", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
          InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data=f"reco_{i}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 async def _send_book_card(bot, cid, it, i):

@@ -311,7 +311,7 @@ async def send_notif(bot, cid, q=None):
         rows.append([InlineKeyboardButton(f"{mark} {opt.button_label}", callback_data=f"set_notiftgl_{opt.key}")])
     if any(notif_on(cid, kind) for kind, _ in NOTIF_TYPES):
         rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     msg = settings_ui.notifications()
     text = msg.text
     kb = InlineKeyboardMarkup(rows)
@@ -343,7 +343,7 @@ async def send_personalization(bot, cid, q=None):
     → «Настройки обучения», «Досуг» → «Настройки досуга», «Готовка» → «Настройки
     готовки»). Экран оставлен как compat-редирект на главные Настройки."""
     rows = [
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.personalization()
     kb = InlineKeyboardMarkup(rows)
@@ -366,7 +366,7 @@ def _cuisines_kb(cid):
         for key, label in CUISINE_OPTIONS
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_fridge_g"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_fridge_g"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -474,7 +474,7 @@ def _multi_pick_kb(selected, options, prefix, back):
     buttons = [InlineKeyboardButton(("✅ " if v in selected else "") + v, callback_data=f"{prefix}_{i}")
                for i, v in enumerate(options)]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -574,7 +574,7 @@ async def send_wardrobe_settings_hub(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎨 Стиль", callback_data="set_wardrobe_style")],
         [InlineKeyboardButton("👕 Мой гардероб", callback_data="set_wardrobe_g")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
     if q is not None:
         try:
@@ -602,7 +602,7 @@ def _wardrobe_style_kb(cid):
     rows.append([InlineKeyboardButton(f"Любимые цвета{' ✅' if colors_love else ''}", callback_data="set_colors_love")])
     rows.append([InlineKeyboardButton(f"Не предлагать цвета{' ✅' if colors_avoid else ''}", callback_data="set_colors_avoid")])
     rows.append([InlineKeyboardButton(f"Ограничения{' ✅' if constraints else ''}", callback_data="set_constraints")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_settings"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_settings"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -633,15 +633,10 @@ async def send_wardrobe_prefs(bot, cid, back="set_priorities", q=None):
 async def send_lagom(bot, cid, back="m_balance"):
     import memory
     items = memory.get_lagom(cid)
-    rows = []
+    rows = [[InlineKeyboardButton("🆕 Добавить принцип", callback_data="setadd_lagom")]]
     if items:
-        rows.append([
-            InlineKeyboardButton("✏️ Добавить", callback_data="setadd_lagom"),
-            InlineKeyboardButton("❌ Удалить", callback_data="set_lagom_clean"),
-        ])
-    else:
-        rows.append([InlineKeyboardButton("✏️ Добавить", callback_data="setadd_lagom")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+        rows.append([InlineKeyboardButton("❌ Удалить принципы", callback_data="set_lagom_clean")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     msg = settings_ui.lagom_home(items)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))
@@ -731,7 +726,7 @@ async def handle_callback(bot, cid, data, q=None):
         await wardrobe.send_wardrobe_zones(bot, cid, q=q)
     elif data == "set_ward_add":
         store.pending_input[cid] = "wardrobe_add_set"
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_g"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_g"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]])
         msg = settings_ui.wardrobe_item_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
     elif data == "set_lagom":

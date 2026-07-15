@@ -69,8 +69,8 @@ def render_keyboard(state):
     label = LEVEL_LABELS.get(state.get("level"), "Средний")
     rows.append([InlineKeyboardButton(
         f"📶 Другой уровень ({label})", callback_data="a_dictseed_level")])
-    add_label = f"✅ Добавить отмеченные ({len(selected)})" if selected else "✅ Добавить отмеченные"
-    rows.append([InlineKeyboardButton(add_label, callback_data="a_dictseed_add")])
+    add_label = f"🆕 Добавить отмеченные ({len(selected)})" if selected else "🆕 Добавить отмеченные"
+    rows.insert(0, [InlineKeyboardButton(add_label, callback_data="a_dictseed_add")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -81,5 +81,5 @@ def level_keyboard(code, current):
     return InlineKeyboardMarkup([
         row,
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictseed_start_{code}"),
-         InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])

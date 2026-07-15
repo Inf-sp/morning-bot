@@ -23,6 +23,9 @@ WEATHER_FILES = {
 ACTION_EMOJI = {
     "⬅️",
     "🏠",
+    "#️⃣",
+    "🆕",
+    "✏️",
     "✅",
     "❌",
     "⭐️",
@@ -53,7 +56,7 @@ BANNED_UI_EMOJI = {
     "✍🏻": "use ✏️",
     "🗑": "use ❌",
     "💾": "use ⭐️",
-    "➕": "use ✏️ or 🔗",
+    "➕": "use 🆕 or 🔗",
     "⚙️": "use 🎚️",
     "🎵": "use 🎧",
     "🍳": "use 🍽",
@@ -125,7 +128,7 @@ def iter_python_lines():
 def _is_absence_test(rel, line):
     if not rel.startswith("tools/") and not rel.startswith("tests/"):
         return False
-    return "not in" in line or "BANNED_UI_EMOJI" in line
+    return "not in" in line or "not label.startswith" in line or "BANNED_UI_EMOJI" in line
 
 
 def main():
@@ -140,6 +143,9 @@ def main():
     outside = {}
     bad_weather = []
     bad_back = []
+    bad_add = []
+    bad_menu = []
+    bad_assessment = []
 
     for rel, lineno, line in iter_python_lines():
         if _is_absence_test(rel, line):
@@ -150,6 +156,26 @@ def main():
 
         if "InlineKeyboardButton" in line and "Назад" in line and "⬅️ Назад" not in line:
             bad_back.append((rel, lineno, line.strip()))
+        if "🏠 Меню" in line:
+            bad_menu.append((rel, lineno, line.strip()))
+        is_wardrobe_assessment = (
+            "Оценка" in line
+            and ("w_check" in line or "b.section" in line)
+        )
+        if is_wardrobe_assessment and "🧐" not in line and '"assessment"' not in line:
+            bad_assessment.append((rel, lineno, line.strip()))
+
+        is_add_button = (
+            "Добав" in line
+            and "Не добав" not in line
+            and (
+                "InlineKeyboardButton" in line
+                or "add_button=" in line
+                or re.search(r"[\[(]\s*\(\s*[f]?[\"'].*Добав", line)
+            )
+        )
+        if is_add_button and "🆕 Добав" not in line:
+            bad_add.append((rel, lineno, line.strip()))
 
         for emoji in EMOJI_RE.findall(line):
             if emoji in weather:
@@ -166,6 +192,15 @@ def main():
     if bad_back:
         for rel, lineno, line in bad_back:
             print(f"{rel}:{lineno}: back button must be exactly ⬅️ Назад: {line}")
+    if bad_add:
+        for rel, lineno, line in bad_add:
+            print(f"{rel}:{lineno}: add button must start with 🆕: {line}")
+    if bad_menu:
+        for rel, lineno, line in bad_menu:
+            print(f"{rel}:{lineno}: main menu button must be exactly #️⃣ Меню: {line}")
+    if bad_assessment:
+        for rel, lineno, line in bad_assessment:
+            print(f"{rel}:{lineno}: wardrobe assessment must use 🧐: {line}")
     if bad_weather:
         for rel, lineno, emoji, line in bad_weather:
             print(f"{rel}:{lineno}: weather emoji {emoji} outside weather context: {line}")
@@ -176,7 +211,7 @@ def main():
             print(f"{emoji}: {len(hits)} first={first[0]}:{first[1]} {first[2]}")
 
     print(f"Unique emoji sequences outside dictionaries: {len(outside)}")
-    if banned_failures or bad_back or bad_weather or outside:
+    if banned_failures or bad_back or bad_add or bad_menu or bad_assessment or bad_weather or outside:
         return 1
     return 0
 

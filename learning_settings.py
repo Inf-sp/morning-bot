@@ -48,7 +48,7 @@ def learning_settings_kb(active_lang, active_level, back="set_home"):
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{code}_from_learnset")],
         [InlineKeyboardButton(f"📚 Язык: {_language_display(active_lang)}", callback_data="toggle_learning_language")],
         row,
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 

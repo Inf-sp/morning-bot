@@ -31,7 +31,7 @@ def _home_kb():
         [InlineKeyboardButton("🌍 Подобрать страну", callback_data="a_trav_go")],
         [InlineKeyboardButton("🧭 Интересные факты", callback_data="a_trav_facts")],
         [InlineKeyboardButton("🎚️ Настройки поездок", callback_data="set_travel")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 
@@ -145,7 +145,7 @@ def _travel_kb():
         [InlineKeyboardButton(ui_label("routes", "Собрать маршрут"), callback_data="a_trav_plan")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="a_trav_fav"),
          InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 
@@ -258,7 +258,7 @@ async def send_plan(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
         [InlineKeyboardButton(ui_label("save", "Сохранить маршрут"), callback_data="a_trav_save")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
@@ -444,21 +444,21 @@ def _facts_kb(has_more_hint=True):
         [InlineKeyboardButton(f"✨ Ещё {_FACTS_PER_BATCH} фактов", callback_data="a_trav_facts_more")],
         [InlineKeyboardButton("🌍 Другая страна", callback_data="a_trav_facts_new")],
     ]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
 def _facts_exhausted_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🌍 Другая страна", callback_data="a_trav_facts_new")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 
 def _facts_retry_kb(action):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Повторить" if action == "retry" else "Попробовать снова", callback_data="a_trav_facts")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 

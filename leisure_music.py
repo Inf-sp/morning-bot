@@ -80,7 +80,7 @@ def _listen_kb():
         [InlineKeyboardButton("✨ Заменить", callback_data="a_listen_no")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love"),
          InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data="listen_0")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 async def listen_dislike(bot, cid):

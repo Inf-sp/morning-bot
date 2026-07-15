@@ -40,7 +40,7 @@ def _normalize_phrase_for_compare(text):
 def _proverb_kb(code):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё вариант", callback_data=f"a_proverb_{code}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 def _proverb_entities_card(flag, original, analogs=None, meaning="", examples=None, example_ru=""):
@@ -361,5 +361,4 @@ async def send_proverb(bot, cid, language=None, with_kb=True):
 async def send_proverb_both(bot, cid, with_kb=True, language=None):
     """Compatibility wrapper: live language uses the single active learning language."""
     await send_proverb(bot, cid, language or active_language(cid), with_kb=with_kb)
-
 

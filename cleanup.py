@@ -67,7 +67,7 @@ COLLECTIONS = {
         "cinema_favorites", "cinema", f"Любимое · {ui_label('cinema', 'Кино')}", config.WATCHLIST_KEY, "movie",
         "a_watch", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("✏️ Добавить", "as_loveadd_movies")),
+        add_button=("🆕 Добавить фильм", "as_loveadd_movies")),
     "cinema_saved": _collection(
         "cinema_saved", "cinema", f"⭐️ Сохранённое · {ui_label('cinema', 'Кино')}", config.NOTES_KEY, "note",
         "a_watch", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
@@ -83,7 +83,7 @@ COLLECTIONS = {
         "books_favorites", "books", f"Любимое · {ui_label('books', 'Книги')}", config.BOOKS_KEY, "book",
         "a_read", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("✏️ Добавить", "as_loveadd_books")),
+        add_button=("🆕 Добавить книгу", "as_loveadd_books")),
     "books_saved": _collection(
         "books_saved", "books", f"⭐️ Сохранённое · {ui_label('books', 'Книги')}", config.READLIST_KEY, "book",
         "a_read", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": False}]),
@@ -98,7 +98,7 @@ COLLECTIONS = {
         "music_favorite_artists", "music", "Любимые артисты", config.ARTISTS_KEY, "artist",
         "a_listen", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("✏️ Добавить", "as_loveadd_artists")),
+        add_button=("🆕 Добавить артиста", "as_loveadd_artists")),
     "music_hidden_artists": _collection(
         "music_hidden_artists", "music", "Скрытые артисты", config.MUSIC_DISLIKE_KEY, "artist",
         "a_listen", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
@@ -114,7 +114,7 @@ COLLECTIONS = {
         "travel_favorite_countries", "travel", "🧳 Посещённые страны", config.FAVCOUNTRIES_KEY, "country",
         "m_travel", [{"id": "remove", "label": "Убрать страны", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("✏️ Добавить", "as_loveadd_countries")),
+        add_button=("🆕 Добавить страну", "as_loveadd_countries")),
     "travel_hidden_countries": _collection(
         "travel_hidden_countries", "travel", "Скрытые страны", config.TRAVEL_DISLIKE_KEY, "country",
         "m_travel", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
@@ -218,10 +218,10 @@ def _view_store_key(ctx):
 
 
 _VIEW_ADD_LABEL = {
-    "movies": "✏️ Добавить фильм",
-    "countries": "✏️ Добавить страну",
-    "artists": "✏️ Добавить артиста",
-    "books": "✏️ Добавить книгу",
+    "movies": "🆕 Добавить фильм",
+    "countries": "🆕 Добавить страну",
+    "artists": "🆕 Добавить артиста",
+    "books": "🆕 Добавить книгу",
 }
 
 
@@ -483,16 +483,21 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     hint = f"Отметь нужное ✅ и нажми «{_action_label(ctx)}»."
     lines = [f"<b>{esc(title)}</b>", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
     _lv_add_label = {
-        "lv_movies": "✏️ Добавить фильм",
-        "lv_countries": "✏️ Добавить страну",
-        "lv_artists": "✏️ Добавить артиста",
-        "lv_books": "✏️ Добавить книгу",
-        "lvls_movies": "✏️ Добавить фильм",
-        "lvls_countries": "✏️ Добавить страну",
-        "lvls_artists": "✏️ Добавить артиста",
-        "lvls_books": "✏️ Добавить книгу",
+        "lv_movies": "🆕 Добавить фильм",
+        "lv_countries": "🆕 Добавить страну",
+        "lv_artists": "🆕 Добавить артиста",
+        "lv_books": "🆕 Добавить книгу",
+        "lvls_movies": "🆕 Добавить фильм",
+        "lvls_countries": "🆕 Добавить страну",
+        "lvls_artists": "🆕 Добавить артиста",
+        "lvls_books": "🆕 Добавить книгу",
     }
     rows = []
+    if ctx in _lv_add_label:
+        if ctx.startswith("lvls_"):
+            rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"ls_loveadd_{ctx[5:]}")])
+        else:
+            rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"as_loveadd_{ctx[3:]}")])
     if ctx == "fridge":
         for idx, lbl in chunk:
             mark = "✅" if idx in sel else "□"
@@ -513,12 +518,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
         rows.append([InlineKeyboardButton(page_label, callback_data=f"cla_{ctx}_{page}")])
     if sel:
         rows.append([InlineKeyboardButton(f"{_action_label(ctx)} ({len(sel)})", callback_data=f"cld_{ctx}_{page}")])
-    if ctx in _lv_add_label:
-        if ctx.startswith("lvls_"):
-            rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"ls_loveadd_{ctx[5:]}")])
-        else:
-            rows.append([InlineKeyboardButton(_lv_add_label[ctx], callback_data=f"as_loveadd_{ctx[3:]}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
     if q is not None:
@@ -783,6 +783,11 @@ async def _render_view(bot, cid, view_id, q=None):
     if total:
         lines.append("")
     rows = []
+    cfg = _collection_cfg(ctx)
+    add_button = cfg.get("add_button") if cfg else _view_add_button(ctx)
+    if add_button:
+        label, callback_data = add_button
+        rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
     for full_id, lbl in chunk:
         mark = "✅" if full_id in sel else "□"
         rows.append([InlineKeyboardButton(f"{mark} {lbl[:36]}", callback_data=f"clt:{view_id}:{short_of[full_id]}")])
@@ -803,13 +808,8 @@ async def _render_view(bot, cid, view_id, q=None):
         for action in actions:
             rows.append([InlineKeyboardButton(f"{action['label']} ({len(sel)})",
                                               callback_data=f"clact:{view_id}:{action['id']}")])
-    cfg = _collection_cfg(ctx)
-    add_button = cfg.get("add_button") if cfg else _view_add_button(ctx)
-    if add_button:
-        label, callback_data = add_button
-        rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=view["back"]),
-                 InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+                 InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
     if q is not None:
@@ -832,7 +832,7 @@ async def _render_confirm(bot, cid, view_id, action_id="remove", q=None):
     text = f"{label} ({n})? Это действие нельзя отменить."
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"{label} ({n})", callback_data=f"clactc:{view_id}:{action_id}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"clcancel:{view_id}"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"clcancel:{view_id}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
     if q is not None:
         try:

@@ -49,7 +49,7 @@ def _keyboard(rows):
 
 
 def _nav_row():
-    return [("⬅️ Назад", "m_learn"), ("🏠 Меню", "m_menu")]
+    return [("⬅️ Назад", "m_learn"), ("#️⃣ Меню", "m_menu")]
 
 
 def _options(data):

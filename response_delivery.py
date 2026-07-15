@@ -33,12 +33,12 @@ def answer_keyboard(cont_label="Продолжить", cont_callback="chat_retry
     if depth:
         rows.append([("Короче", "ans_short"), ("Глубже", "ans_deep")])
     rows.append([("⭐️ Сохранить", "as_fav")])
-    rows.append([("⬅️ Назад", "m_close"), ("🏠 Меню", "m_menu")])
+    rows.append([("⬅️ Назад", "m_close"), ("#️⃣ Меню", "m_menu")])
     return keyboard(rows)
 
 
 def back_keyboard():
-    return keyboard([[("⬅️ Назад", "m_close"), ("🏠 Меню", "m_menu")]])
+    return keyboard([[("⬅️ Назад", "m_close"), ("#️⃣ Меню", "m_menu")]])
 
 
 async def send_response(bot, cid, text, kb=None, surface="card"):

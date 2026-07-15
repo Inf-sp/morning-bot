@@ -716,7 +716,7 @@ async def find_concerts(bot, cid, mode="home"):
 
     rows = [
         [InlineKeyboardButton("🌍 Сменить страну", callback_data="a_concerts_pick")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]
     kb = InlineKeyboardMarkup(rows)
 
@@ -855,6 +855,6 @@ async def concert_pick_country(bot, cid):
         for cc, _name, label in sorted(countries, key=lambda x: x[1])
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
                            reply_markup=InlineKeyboardMarkup(rows))

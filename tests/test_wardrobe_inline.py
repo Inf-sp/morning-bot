@@ -5,6 +5,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import wardrobe
+from ui.wardrobe import purchase_check_card
 
 
 def _labels(markup):
@@ -27,9 +28,9 @@ def test_restore_home_kb_puts_inline_buttons_back():
 
     assert _labels(q.message.reply_markup) == [
         ["✨ Обновить образ на сегодня"],
-        ["✂️ Разбор шкафа", "🔍 Оценка"],
+        ["✂️ Разбор шкафа", "🧐 Оценка"],
         ["🎚️ Настройки гардероба"],
-        ["⬅️ Назад", "🏠 Меню"],
+        ["⬅️ Назад", "#️⃣ Меню"],
     ]
 
 
@@ -46,6 +47,12 @@ def test_send_home_includes_inline_keyboard():
 
     assert bot.message["reply_markup"] is not None
     assert _labels(bot.message["reply_markup"]) == [
-        ["✏️ Добавить вещи в шкаф"],
-        ["⬅️ Назад", "🏠 Меню"],
+        ["🆕 Добавить вещь"],
+        ["⬅️ Назад", "#️⃣ Меню"],
     ]
+
+
+def test_purchase_assessment_card_uses_thinking_emoji():
+    message = purchase_check_card({"item": "Куртка", "verdict": "Подходит"})
+
+    assert message.text.startswith("🧐 Оценка")

@@ -277,7 +277,7 @@ async def send_daycheck(bot, cid):
     rows = []
     if worries:
         rows.append([InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_close"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_close"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))
 
@@ -337,7 +337,7 @@ async def worry_clear_all(bot, cid):
     cid = str(cid)
     store.set_list(config.WORRIES_KEY, cid, [])
     msg = balance_ui.worries_cleared()
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_balance"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_balance"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]])
     await bot.send_message(chat_id=cid, text=msg.text, reply_markup=kb)
 
 async def save_worries(bot, cid, text):
@@ -350,7 +350,7 @@ async def save_worries(bot, cid, text):
     await bot.send_message(chat_id=cid, text=msg.text)
 
 
-_MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("⬅️ Назад", "m_balance"), ("🏠 Меню", "m_menu")]])
+_MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("⬅️ Назад", "m_balance"), ("#️⃣ Меню", "m_menu")]])
 
 
 # ---------- роутер кнопок Баланса ----------

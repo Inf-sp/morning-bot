@@ -167,7 +167,7 @@ async def send_train_lang_select(bot, cid):
     language = active_language(cid)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"▶️ {_language_display(language)}", callback_data=f"a_train_{_code(language)}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("🏠 Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
     msg = learning_ui.train_lang_select()
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
@@ -238,6 +238,6 @@ async def send_progress(bot, cid):
     msg = learning_ui.progress_screen(data)
     kb = InlineKeyboardMarkup([[
         InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"),
-        InlineKeyboardButton("🏠 Меню", callback_data="m_menu"),
+        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
     ]])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)

@@ -156,14 +156,14 @@ def entity_card(title, summary="", quote="", bullets=None, final="", bullet_labe
 def purchase_check_card(data):
     """Оценка покупки: до трёх цифр, влияющих на решение (сколько уже есть, сколько
     похоже, сколько новых сочетаний даст покупка), не голые комплименты. Заголовок
-    несёт эмодзи кнопки «🔍 Оценка», из которой пользователь сюда попал.
+    несёт эмодзи кнопки «🧐 Оценка», из которой пользователь сюда попал.
 
     data: {item, verdict, why[], have_count, have_category, similar_count,
            reconsider_if, alternative}
     """
     data = data or {}
     b = MessageBuilder()
-    b.section("🔍 Оценка")
+    b.section("🧐 Оценка")
     b.spacer()
     b.bold(_clean_text(data.get("item")))
 

@@ -65,7 +65,7 @@ def _recipe_kb():
     return _kb([
         [("✨ Ещё рецепт", "as_food")],
         [("❤️ Сохранить", "as_recipe_save")],
-        [("⬅️ Назад", "as_food_back"), ("🏠 Меню", "m_menu")],
+        [("⬅️ Назад", "as_food_back"), ("#️⃣ Меню", "m_menu")],
     ])
 
 def _recipe_typed_kb():
@@ -73,7 +73,7 @@ def _recipe_typed_kb():
     выбор типа приёма пищи; нажатие уводит в новую систему очередей через enter_meal."""
     return _kb([
         [("🥐 Завтрак", "a_recipe_breakfast"), ("🥗 Обед", "a_recipe_lunch"), ("🍲 Ужин", "a_recipe_dinner")],
-        [("⬅️ Назад", "m_food"), ("🏠 Меню", "m_menu")],
+        [("⬅️ Назад", "m_food"), ("#️⃣ Меню", "m_menu")],
     ])
 
 def _fridge_recipe_kb():
@@ -83,7 +83,7 @@ def _fridge_recipe_kb():
     который теперь тоже заводит активную категорию fridge и общую очередь."""
     return _kb([
         [("✨ Заменить", "as_fridge_cook")],
-        [("⬅️ Назад", "m_food"), ("🏠 Меню", "m_menu")],
+        [("⬅️ Назад", "m_food"), ("#️⃣ Меню", "m_menu")],
     ])
 
 # ---------- Кулинарный радар ----------
