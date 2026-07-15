@@ -1,4 +1,5 @@
 import os
+import asyncio
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
@@ -9,6 +10,7 @@ from ui.settings import wardrobe_style
 from ui.wardrobe import render_wardrobe_message
 from wardrobe_model import normalize_parsed_item
 from wardrobe_outfit import pick_best_outfit
+import settings
 
 
 def _entities(message, entity_type):
@@ -82,3 +84,33 @@ def test_style_summary_explains_that_avoid_checks_are_restrictions():
 
     assert "Стиль: минимализм · скандинавский" in message.text
     assert "Не предлагать: узкий крой" in message.text
+
+
+def test_style_screen_reads_settings_once(monkeypatch):
+    calls = {"count": 0}
+
+    def fake_all():
+        calls["count"] += 1
+        return {"fast-style": {
+            "style": ["минимализм"],
+            "wardrobe_fit": "прямая",
+            "wardrobe_palette": ["тёмные"],
+            "wardrobe_style_avoid": ["узкий крой"],
+        }}
+
+    monkeypatch.setattr(settings, "_all", fake_all)
+
+    class Message:
+        async def edit_text(self, *args, **kwargs):
+            return None
+
+    class Query:
+        message = Message()
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            raise AssertionError("edit_text should be used")
+
+    asyncio.run(settings.send_wardrobe_style(Bot(), "fast-style", q=Query()))
+
+    assert calls["count"] == 1

@@ -24,7 +24,6 @@ import retry_flow
 import saved_items
 import settings
 import store
-import tracking
 import trainer
 import travel
 import util
@@ -58,7 +57,6 @@ async def handle(update, context, remove_reply_keyboard):
     cid = str(q.message.chat_id)
     data = q.data
     bot = context.bot
-    await remove_reply_keyboard(bot, cid)
 
     async def _inline_status(call):
         topic = _status_topic(data)
@@ -79,8 +77,6 @@ async def handle(update, context, remove_reply_keyboard):
     if not access.is_allowed(cid):
         await bot.send_message(chat_id=cid, text="❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
-    tracking.touch(cid)
-
     # Онбординг новых пользователей
     if data.startswith("ob_"):
         await onboard.handle_callback(bot, cid, q, data)

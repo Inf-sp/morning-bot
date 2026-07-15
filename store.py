@@ -1,4 +1,5 @@
 import copy
+import time
 import uuid as _uuid
 from pathlib import Path
 import config
@@ -12,6 +13,8 @@ _db = storage_driver.db
 _load = storage_driver.load
 _save = storage_driver.save
 mutate_kv = storage_driver.mutate
+_PROFILE_CACHE_TTL = 60
+_profile_cache = {}
 
 # --- helpers ---
 def get_settings(chat_id):
@@ -41,12 +44,20 @@ def set_last_admin_deploy_notified_version(version, sent_at):
 
 def get_profile(chat_id):
     """Память пользователя (dict). Пусто -> {}."""
-    return _load(config.PROFILE_KEY).get(str(chat_id), {})
+    key = str(chat_id)
+    cached = _profile_cache.get(key)
+    if cached and time.monotonic() - cached[0] < _PROFILE_CACHE_TTL:
+        return copy.deepcopy(cached[1])
+    profile = _load(config.PROFILE_KEY).get(key, {})
+    _profile_cache[key] = (time.monotonic(), copy.deepcopy(profile))
+    return copy.deepcopy(profile)
 
 def set_profile(chat_id, prof):
+    key = str(chat_id)
     d = _load(config.PROFILE_KEY)
-    d[str(chat_id)] = prof
+    d[key] = prof
     _save(config.PROFILE_KEY, d)
+    _profile_cache[key] = (time.monotonic(), copy.deepcopy(prof))
 
 def get_wardrobe_daylook(chat_id):
     """Кэш дневного образа: {"date","version","item_ids","look_data","text"}.
@@ -344,6 +355,7 @@ _PER_USER_KEYS = {
 def purge_user(cid):
     """Удаляет все данные пользователя из БД: per-user ключи + wardrobe_user_{cid}."""
     cid_str = str(cid)
+    _profile_cache.pop(cid_str, None)
     # Per-user JSON-словари
     for key in _PER_USER_KEYS:
         d = _load(key)

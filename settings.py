@@ -400,8 +400,7 @@ async def toggle_cuisine(bot, cid, key, q=None):
     await send_cuisines(bot, cid, q)
 
 
-def wardrobe_styles(cid):
-    cur = get(cid, "style", [])
+def _normalize_wardrobe_styles(cur):
     if isinstance(cur, str):
         cur = [cur] if cur else []
     if isinstance(cur, list):
@@ -412,6 +411,10 @@ def wardrobe_styles(cid):
         }
         return [aliases.get(s, s) for s in cur if aliases.get(s, s) in STYLES]
     return []
+
+
+def wardrobe_styles(cid):
+    return _normalize_wardrobe_styles(get(cid, "style", []))
 
 
 STYLE_LIMIT = 3
@@ -605,15 +608,28 @@ async def send_wardrobe_settings_hub(bot, cid, q=None):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-def _wardrobe_style_kb(cid):
-    selected_styles = set(wardrobe_styles(cid))
+def _wardrobe_style_state(cid):
+    raw = _all().get(str(cid), {})
+    palette = raw.get("wardrobe_palette", [])
+    avoid = raw.get("wardrobe_style_avoid", [])
+    return {
+        "styles": _normalize_wardrobe_styles(raw.get("style", [])),
+        "fit": raw.get("wardrobe_fit", ""),
+        "palette": [value for value in palette if value in PALETTE_OPTIONS] if isinstance(palette, list) else [],
+        "avoid": [value for value in avoid if value in STYLE_AVOID_OPTIONS] if isinstance(avoid, list) else [],
+    }
+
+
+def _wardrobe_style_kb(cid, state=None):
+    state = state or _wardrobe_style_state(cid)
+    selected_styles = set(state["styles"])
     style_buttons = [InlineKeyboardButton(("✅ " if s in selected_styles else "") + s.capitalize(), callback_data=f"set_style_{i}")
                      for i, s in enumerate(STYLES)]
-    fit = get(cid, "wardrobe_fit", "")
+    fit = state["fit"]
     fit_buttons = [InlineKeyboardButton(("✅ " if fit == f else "") + f.capitalize(), callback_data=f"set_fit_{i}")
                    for i, f in enumerate(FIT_OPTIONS)]
-    palette = set(wardrobe_palette(cid))
-    avoid = set(wardrobe_style_avoid(cid))
+    palette = set(state["palette"])
+    avoid = set(state["avoid"])
     rows = [style_buttons[i:i + 2] for i in range(0, len(style_buttons), 2)]
     rows.extend(fit_buttons[i:i + 3] for i in range(0, len(fit_buttons), 3))
     rows.append([InlineKeyboardButton("Палитра", callback_data="noop")])
@@ -631,13 +647,9 @@ def _wardrobe_style_kb(cid):
 async def send_wardrobe_style(bot, cid, q=None):
     """Стиль гардероба — один экран, все переключатели нажимаются сразу (стиль и
     посадка — toggle с галочкой на месте, без перехода на отдельный подэкран)."""
-    msg = settings_ui.wardrobe_style(
-        wardrobe_styles(cid),
-        get(cid, "wardrobe_fit", ""),
-        wardrobe_palette(cid),
-        wardrobe_style_avoid(cid),
-    )
-    kb = _wardrobe_style_kb(cid)
+    state = _wardrobe_style_state(cid)
+    msg = settings_ui.wardrobe_style(state["styles"], state["fit"], state["palette"], state["avoid"])
+    kb = _wardrobe_style_kb(cid, state)
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)

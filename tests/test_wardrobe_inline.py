@@ -12,27 +12,6 @@ def _labels(markup):
     return [[button.text for button in row] for row in markup.inline_keyboard]
 
 
-def test_restore_home_kb_puts_inline_buttons_back():
-    class Message:
-        reply_markup = None
-
-        async def edit_reply_markup(self, reply_markup=None):
-            self.reply_markup = reply_markup
-
-    class Query:
-        message = Message()
-
-    q = Query()
-
-    asyncio.run(wardrobe._restore_home_kb(q))
-
-    assert _labels(q.message.reply_markup) == [
-        ["✨ Другой образ"],
-        ["👕 Мой шкаф", "🎨 Мой стиль"],
-        ["⬅️ Назад", "#️⃣ Меню"],
-    ]
-
-
 def test_send_home_includes_inline_keyboard():
     class Bot:
         message = None
@@ -50,6 +29,42 @@ def test_send_home_includes_inline_keyboard():
         ["👕 Мой шкаф", "🎨 Мой стиль"],
         ["⬅️ Назад", "#️⃣ Меню"],
     ]
+
+
+def test_cached_home_edits_once_without_loading_message(monkeypatch):
+    cached = {
+        "date": wardrobe._day_key(),
+        "text": "cached",
+        "look_data": {
+            "items": [{"name": "Белая футболка"}, {"name": "Синие брюки"}, {"name": "Белые кеды"}],
+            "reasons": ["Светлый верх поддерживает обувь"],
+            "style_tip": "Заправь футболку только спереди",
+            "final_text": "ничего добавлять не нужно",
+        },
+    }
+    monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: cached)
+
+    class Message:
+        edits = []
+
+        async def edit_text(self, *args, **kwargs):
+            self.edits.append((args, kwargs))
+
+    class Query:
+        message = Message()
+
+    class Bot:
+        sends = []
+
+        async def send_message(self, **kwargs):
+            self.sends.append(kwargs)
+
+    q = Query()
+    bot = Bot()
+    asyncio.run(wardrobe.send_home(bot, "cached-fast", q=q))
+
+    assert len(q.message.edits) == 1
+    assert bot.sends == []
 
 
 def test_purchase_assessment_card_uses_thinking_emoji():

@@ -165,16 +165,7 @@ def build_wardrobe_keyboard():
     ])
 
 
-_wardrobe_home_kb = build_wardrobe_keyboard  # старое имя — обратная совместимость вызовов ниже
-
-
-async def _restore_home_kb(q):
-    if q is None or getattr(q, "message", None) is None:
-        return
-    try:
-        await q.message.edit_reply_markup(reply_markup=_wardrobe_home_kb())
-    except Exception:
-        pass
+_wardrobe_home_kb = build_wardrobe_keyboard
 
 
 def _cancel_wardrobe_input(cid):
@@ -188,8 +179,7 @@ def _cancel_wardrobe_input(cid):
 async def send_home(bot, cid, q=None):
     """Главный экран раздела «Гардероб» — сразу образ на сегодня."""
     _cancel_wardrobe_input(cid)
-    status = await util.StatusManager.start(bot, cid=cid, message=q.message if q else None)
-    await send_looks(bot, cid, status=status, kb=_wardrobe_home_kb())
+    await send_looks(bot, cid, kb=_wardrobe_home_kb(), q=q)
 
 
 _PRIORITY_BLOCK = (
@@ -405,7 +395,7 @@ async def _ai_reframe_look(cid, items, weather_ctx, reasons, tip):
         return reasons, tip
 
 
-async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None):
+async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, q=None):
     result_kb = kb or _wardrobe_home_kb()
     cached = None if previous_item_ids else _get_cached_look(cid)
     if cached:
@@ -414,7 +404,12 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None):
         store.last_answer[str(cid)] = cached.get("text", "")
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
         text, entities = _build_look_message(cached.get("look_data", {}))
-        if status is not None:
+        if q is not None:
+            try:
+                await q.message.edit_text(text, entities=entities, reply_markup=result_kb)
+            except Exception:
+                await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=result_kb)
+        elif status is not None:
             await status.replace(text, entities=entities, reply_markup=result_kb)
         else:
             await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=result_kb)
@@ -422,13 +417,18 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None):
     w = store.load_wardrobe(cid)
     if not store.wardrobe_to_text(w).strip():
         empty_text, empty_kb = _empty_wardrobe_screen()
-        if status is not None:
+        if q is not None:
+            try:
+                await q.message.edit_text(empty_text, parse_mode="HTML", reply_markup=empty_kb)
+            except Exception:
+                await bot.send_message(chat_id=cid, text=empty_text, parse_mode="HTML", reply_markup=empty_kb)
+        elif status is not None:
             await status.replace(empty_text, parse_mode="HTML", reply_markup=empty_kb)
         else:
             await bot.send_message(chat_id=cid, text=empty_text, parse_mode="HTML", reply_markup=empty_kb)
         return
     s = store.get_settings(cid)
-    status = status or await util.StatusManager.start(bot, cid)
+    status = status or await util.StatusManager.start(bot, cid, message=q.message if q else None, stages=util.StatusManager.TOPIC_STAGES["wardrobe"])
     tmax = tmin = None
     flags = None
     try:
@@ -829,8 +829,8 @@ async def handle_callback(bot, cid, q, data):
     if data == "w_look":
         previous = _get_cached_look(cid) or {}
         store.clear_wardrobe_daylook(cid)
-        status = await util.StatusManager.start_inline(
-            q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["wardrobe"])
+        status = await util.StatusManager.start(
+            bot, cid=cid, message=q.message, stages=util.StatusManager.TOPIC_STAGES["wardrobe"])
         try:
             await send_looks(
                 bot, cid, status=status, kb=_wardrobe_home_kb(),

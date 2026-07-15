@@ -17,6 +17,8 @@ import store
 _ERR_MAX = 200          # rolling-буфер ошибок
 _ACT_DAYS_MAX = 40      # сколько последних дат активности хранить на юзера
 DAY = 86400
+_TOUCH_THROTTLE_SECONDS = 60
+_last_touch = {}
 
 
 def _today() -> str:
@@ -77,9 +79,13 @@ def touch(cid) -> None:
     Дёшево: одна запись на юзера, дни — усечённый список последних дат."""
     try:
         cid = str(cid)
+        now = time.time()
+        if now - _last_touch.get(cid, 0) < _TOUCH_THROTTLE_SECONDS:
+            return
+        _last_touch[cid] = now
         data = store._load(config.ACTIVITY_KEY)
-        rec = data.get(cid) or {"last_ts": 0, "count": 0, "days": [], "first_ts": int(time.time())}
-        rec["last_ts"] = int(time.time())
+        rec = data.get(cid) or {"last_ts": 0, "count": 0, "days": [], "first_ts": int(now)}
+        rec["last_ts"] = int(now)
         rec["count"] = rec.get("count", 0) + 1
         rec.setdefault("first_ts", rec["last_ts"])
         today = _today()

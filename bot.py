@@ -3,6 +3,8 @@ import logging
 
 _log = logging.getLogger(__name__)
 from telegram import InlineKeyboardMarkup, ReplyKeyboardRemove
+from telegram.error import TimedOut
+from telegram.request import HTTPXRequest
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
                           ContextTypes, CallbackQueryHandler, PollAnswerHandler, ExtBot)
 from datetime import datetime, timezone
@@ -56,6 +58,25 @@ _ROOT = Path(__file__).parent
 _DEFAULT_DEPLOY_NOTE = "Бот получил небольшие внутренние улучшения."
 _DEFAULT_DEPLOY_TITLE = "Обновление"
 _WORRY_PROMPT_WINDOW_S = 1800  # окно, в течение которого свободный текст ещё считается ответом на "Дневную разгрузку"
+
+
+class _RetryingHTTPXRequest(HTTPXRequest):
+    """Отдельный пул Telegram API с одним безопасным повтором ConnectTimeout.
+
+    Повторяем только ошибку установления соединения: запрос ещё не был отправлен,
+    поэтому sendMessage не может продублироваться.
+    """
+
+    async def do_request(self, *args, **kwargs):
+        try:
+            return await super().do_request(*args, **kwargs)
+        except TimedOut as error:
+            cause = error.__cause__
+            if type(cause).__name__ != "ConnectTimeout":
+                raise
+            _log.warning("Telegram connect timeout; retrying request once")
+            await asyncio.sleep(0.25)
+            return await super().do_request(*args, **kwargs)
 
 # callback-префикс -> тема для тематических фраз ожидания (util.StatusManager.TOPIC_STAGES)
 _STATUS_TOPIC_PREFIXES = (
@@ -301,15 +322,20 @@ async def start(update, context):
 # ---------- Диспетчер инлайн-кнопок ----------
 async def answer_callback(update, context):
     q = update.callback_query
-    await q.answer()
     cid = str(q.message.chat_id)
     bot = context.bot
+    answer_task = asyncio.create_task(q.answer())
     try:
         await bot_callbacks.handle(update, context, _remove_reply_kb_once)
     except Exception as e:
         # Страховка: необработанное исключение в ветке диспетчера без собственного
         # try/except иначе оставляло пользователя с "зависшей" кнопкой и без ответа.
         await verify.safe_error(bot, cid, e)
+    finally:
+        try:
+            await answer_task
+        except Exception:
+            pass
 
 
 
@@ -620,33 +646,54 @@ class _MenuCleanupBot(ExtBot):
 
     async def send_message(self, chat_id, *args, **kwargs):
         pin_menu = kwargs.pop("pin_menu", False)
-        await self._pre_send(chat_id, allow_unpin=pin_menu)
-        msg = await super().send_message(chat_id, *args, **kwargs)
+        send = super().send_message(chat_id, *args, **kwargs)
+        msg, _ = await asyncio.gather(send, self._pre_send(chat_id, allow_unpin=pin_menu))
         self._post_send(chat_id, msg, pin_menu=pin_menu)
         return msg
 
     async def send_photo(self, chat_id, *args, **kwargs):
-        await self._pre_send(chat_id)
-        msg = await super().send_photo(chat_id, *args, **kwargs)
+        send = super().send_photo(chat_id, *args, **kwargs)
+        msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
         self._post_send(chat_id, msg)
         return msg
 
     async def send_document(self, chat_id, *args, **kwargs):
-        await self._pre_send(chat_id)
-        msg = await super().send_document(chat_id, *args, **kwargs)
+        send = super().send_document(chat_id, *args, **kwargs)
+        msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
         self._post_send(chat_id, msg)
         return msg
 
     async def send_poll(self, chat_id, *args, **kwargs):
-        await self._pre_send(chat_id)
-        msg = await super().send_poll(chat_id, *args, **kwargs)
+        send = super().send_poll(chat_id, *args, **kwargs)
+        msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
         self._post_send(chat_id, msg)
         return msg
 
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    bot = _MenuCleanupBot(token=config.TELEGRAM_TOKEN)
+    # HTTPX пишет полный Telegram URL вместе с bot token — не допускаем токен в логах.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    request = _RetryingHTTPXRequest(
+        connection_pool_size=16,
+        connect_timeout=7,
+        read_timeout=20,
+        write_timeout=20,
+        pool_timeout=5,
+    )
+    updates_request = HTTPXRequest(
+        connection_pool_size=2,
+        connect_timeout=10,
+        read_timeout=35,
+        write_timeout=10,
+        pool_timeout=5,
+    )
+    bot = _MenuCleanupBot(
+        token=config.TELEGRAM_TOKEN,
+        request=request,
+        get_updates_request=updates_request,
+    )
     app = Application.builder().bot(bot).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", menu_command))
