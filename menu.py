@@ -20,6 +20,10 @@ def main_menu_screen(cid=None):
     return msg.text, msg.entities, main_menu_kb()
 
 
+def inactivity_reminder():
+    return menu_ui.inactivity_reminder()
+
+
 def _back(parent="m_close"):
     return [("⬅️ Назад", parent), ("#️⃣ Меню", "m_menu")]
 

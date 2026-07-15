@@ -1,13 +1,22 @@
 from telegram import MessageEntity
 
 from .balance import finish_dot
-from .builder import MessageBuilder
+from .builder import MessageBuilder, lower_initial
 
 
 def _compact_line(b, emoji, label, content):
     b.text_line(f"{emoji} ")
     b.labeled_line(label, content)
     b.spacer()
+
+
+def _lower_word_translation(value):
+    """Перевод после стрелки продолжается со строчной буквы: slim → худой."""
+    value = str(value or "")
+    if "→" not in value:
+        return value
+    term, translation = value.split("→", 1)
+    return f"{term.rstrip()} → {lower_initial(translation.strip())}"
 
 
 def day_summary(
@@ -40,7 +49,7 @@ def day_summary(
     if word_line:
         word_label = "Нидерландский" if word_lang == "nl" else "Английский"
         word_flag = "🇳🇱" if word_lang == "nl" else "🇬🇧"
-        _compact_line(b, word_flag, word_label, word_line)
+        _compact_line(b, word_flag, word_label, _lower_word_translation(word_line))
 
     if lifehack:
         _compact_line(b, "🦉", "Полезно", finish_dot(lifehack))

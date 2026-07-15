@@ -18,6 +18,7 @@ _ERR_MAX = 200          # rolling-буфер ошибок
 _ACT_DAYS_MAX = 40      # сколько последних дат активности хранить на юзера
 DAY = 86400
 _TOUCH_THROTTLE_SECONDS = 60
+INACTIVITY_REMINDER_SECONDS = 72 * 3600
 _last_touch = {}
 
 
@@ -86,6 +87,9 @@ def touch(cid) -> None:
         data = store._load(config.ACTIVITY_KEY)
         rec = data.get(cid) or {"last_ts": 0, "count": 0, "days": [], "first_ts": int(now)}
         rec["last_ts"] = int(now)
+        rec["inactivity_since_ts"] = int(now)
+        rec.pop("inactivity_reminded_for_ts", None)
+        rec.pop("inactivity_reminder_sent_ts", None)
         rec["count"] = rec.get("count", 0) + 1
         rec.setdefault("first_ts", rec["last_ts"])
         today = _today()
@@ -109,6 +113,64 @@ def _all() -> dict:
 def get_activity(cid) -> dict:
     """Запись активности одного пользователя или {}."""
     return _all().get(str(cid), {})
+
+
+def initialize_inactivity_tracking(cids, now=None) -> int:
+    """Переносит существующую последнюю активность в состояние напоминаний.
+
+    Благодаря ``last_ts`` давно неактивные пользователи попадают в первую
+    рассылку сразу. Повторные запуски точку отсчёта не сдвигают.
+    """
+    try:
+        now = int(time.time() if now is None else now)
+        data = store._load(config.ACTIVITY_KEY) or {}
+        changed = 0
+        for cid in (str(value) for value in (cids or [])):
+            rec = data.get(cid)
+            if not rec or rec.get("inactivity_since_ts"):
+                continue
+            rec["inactivity_since_ts"] = int(rec.get("last_ts") or now)
+            data[cid] = rec
+            changed += 1
+        if changed:
+            store._save(config.ACTIVITY_KEY, data)
+        return changed
+    except Exception:
+        return 0
+
+
+def due_inactivity_reminders(cids, now=None) -> list[tuple[str, int]]:
+    """Возвращает пользователей, неактивных 72 часа и ещё не уведомлённых."""
+    now = int(time.time() if now is None else now)
+    cutoff = now - INACTIVITY_REMINDER_SECONDS
+    data = _all()
+    due = []
+    for cid in (str(value) for value in (cids or [])):
+        rec = data.get(cid) or {}
+        since_ts = int(rec.get("inactivity_since_ts") or 0)
+        if not since_ts or since_ts > cutoff:
+            continue
+        if int(rec.get("inactivity_reminded_for_ts") or 0) == since_ts:
+            continue
+        due.append((cid, since_ts))
+    return due
+
+
+def mark_inactivity_reminded(cid, since_ts, sent_ts=None) -> bool:
+    """Помечает цикл отправленным, только если с проверки не было активности."""
+    try:
+        cid = str(cid)
+        data = store._load(config.ACTIVITY_KEY) or {}
+        rec = data.get(cid) or {}
+        if int(rec.get("inactivity_since_ts") or 0) != int(since_ts):
+            return False
+        rec["inactivity_reminded_for_ts"] = int(since_ts)
+        rec["inactivity_reminder_sent_ts"] = int(time.time() if sent_ts is None else sent_ts)
+        data[cid] = rec
+        store._save(config.ACTIVITY_KEY, data)
+        return True
+    except Exception:
+        return False
 
 
 def active_count(days: int = 1) -> int:

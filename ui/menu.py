@@ -73,6 +73,16 @@ def welcome(name: str = ""):
     return b.build()
 
 
+def inactivity_reminder():
+    b = MessageBuilder()
+    b.section("🫪 Давно не виделись")
+    b.spacer()
+    b.line("Загляни - подберу образ на сегодня, помогу с планами или предложу что-то полезное.")
+    b.spacer()
+    b.line("Выбери раздел или просто напиши, что нужно.")
+    return b.build_stripped(reply_markup=main_menu_kb())
+
+
 _SCREENS = {
     "m_wardrobe": (
         UI_WARDROBE,
@@ -80,7 +90,8 @@ _SCREENS = {
         "Одежда без хаоса. Подберу образ, помогу разобрать шкаф и выбрать, что стоит докупить. Чем полнее гардероб, тем точнее рекомендации.",
         [
             [(ui_label("recommendation", "Образ на сегодня"), "w_look")],
-            [("✂️ Разбор шкафа", "w_improve"), (ui_label("assessment", "Оценка"), "w_check")],
+            [(ui_label("assessment", "Проверить покупку"), "w_check")],
+            [("✂️ Разбор шкафа", "w_improve")],
             [("🎚️ Настройки гардероба", "set_wardrobe_settings")],
         ],
     ),

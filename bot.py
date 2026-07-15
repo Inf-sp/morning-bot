@@ -314,6 +314,7 @@ async def start(update, context):
             await update.message.reply_text(msg.text, entities=msg.entities, reply_markup=menu.main_menu_kb())
             return
         if access.use_invite(code, cid):
+            tracking.touch(cid)
             await onboard.start(context.bot, cid)
             return
         await update.message.reply_text("❌ Инвайт-код недействителен или устарел.")
@@ -332,6 +333,8 @@ async def answer_callback(update, context):
     q = update.callback_query
     cid = str(q.message.chat_id)
     bot = context.bot
+    if access.is_allowed(cid):
+        tracking.touch(cid)
     answer_task = asyncio.create_task(q.answer())
     try:
         await bot_callbacks.handle(update, context, _remove_reply_kb_once)
@@ -357,6 +360,13 @@ async def text_router(update, context):
         # Без этой страховки необработанное исключение внутри любой ветки роутера
         # (тренажёр, добавление в словарь и т.д.) оставляло пользователя без ответа.
         await verify.safe_error(bot, cid, e)
+
+
+async def message_activity_handler(update, _context):
+    """Учитывает любое сообщение, включая команды, документы и геопозицию."""
+    cid = getattr(getattr(update, "effective_chat", None), "id", None)
+    if cid is not None and access.is_allowed(cid):
+        tracking.touch(cid)
 
 
 
@@ -542,7 +552,27 @@ async def job_evening_weather(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_evening_weather failed for cid=%s", cid)
 
 
+async def job_inactivity_reminders(context: ContextTypes.DEFAULT_TYPE):
+    """Одно напоминание после 72 часов; новый цикл начинается с новой активности."""
+    for cid, since_ts in tracking.due_inactivity_reminders(access.get_allowed_cids()):
+        try:
+            msg = menu.inactivity_reminder()
+            await context.bot.send_message(
+                chat_id=cid,
+                text=msg.text,
+                entities=msg.entities,
+                reply_markup=msg.reply_markup,
+                pin_menu=True,
+            )
+            tracking.mark_inactivity_reminded(cid, since_ts)
+        except Exception:
+            logging.exception("job_inactivity_reminders failed for cid=%s", cid)
+
+
 async def post_init(app):
+    initialized = tracking.initialize_inactivity_tracking(access.get_allowed_cids())
+    if initialized:
+        logging.info("Inactivity reminders: initialized %s users", initialized)
     try:
         if dictionary.migrate_dict_caps():
             logging.info("Dict caps migration: applied")
@@ -703,6 +733,7 @@ def main():
         get_updates_request=updates_request,
     )
     app = Application.builder().bot(bot).post_init(post_init).build()
+    app.add_handler(MessageHandler(filters.ALL, message_activity_handler), group=-1)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", menu_command))
     app.add_handler(CommandHandler("notes", notes_command))
@@ -730,6 +761,7 @@ def main():
     jq.run_daily(job_checkin_day,     time=_t("14:00"), days=tuple(range(7)))
     jq.run_daily(job_evening_weather, time=_t("19:00"), days=tuple(range(7)))  # «Погода на завтра»
     jq.run_daily(job_checkin_evening, time=_t("21:30"), days=tuple(range(7)))
+    jq.run_daily(job_inactivity_reminders, time=_t("09:00"), days=tuple(range(7)))
 
     logging.info("Bot started via polling")
     app.run_polling(drop_pending_updates=True)

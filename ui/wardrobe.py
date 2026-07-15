@@ -7,6 +7,14 @@ def _lower_first(text):
     return text[:1].lower() + text[1:] if text else text
 
 
+def _upper_first(text):
+    """Поднимает первую букву названия, не меняя регистр остальной строки."""
+    for index, char in enumerate(text or ""):
+        if char.isalpha():
+            return text[:index] + char.upper() + text[index + 1:]
+    return text
+
+
 def improve_card(data):
     """Разбор шкафа — капсульный аудит всего гардероба сразу: что уже работает,
     что выбивается, что менять первым, что пока не покупать и как выглядит
@@ -80,7 +88,7 @@ def render_wardrobe_message(look_data):
         b.italic(intro)
         b.newline()
 
-    items = [_clean_text(_item_display(it)) for it in (look_data.get("items") or [])]
+    items = [_upper_first(_clean_text(_item_display(it))) for it in (look_data.get("items") or [])]
     items = [it for it in items if it]
     if items:
         b.spacer()
@@ -154,38 +162,51 @@ def entity_card(title, summary="", quote="", bullets=None, final="", bullet_labe
 
 
 def purchase_check_card(data):
-    """Оценка покупки: до трёх цифр, влияющих на решение (сколько уже есть, сколько
-    похоже, сколько новых сочетаний даст покупка), не голые комплименты. Заголовок
-    несёт эмодзи кнопки «🧐 Оценка», из которой пользователь сюда попал.
+    """Проверка покупки отвечает на один вопрос: стоит ли добавлять вещь в шкаф.
 
-    data: {item, verdict, why[], have_count, have_category, similar_count,
-           reconsider_if, alternative}
+    data: {verdict, fits_count, duplicates, closes_gap, why, wear_with[]}
     """
     data = data or {}
     b = MessageBuilder()
-    b.section("🧐 Оценка вещи")
+    b.section("🧐 Проверка покупки")
 
     verdict = _clean_text(data.get("verdict"))
     if verdict:
         b.spacer()
         b.labeled_line("Вердикт", _finish_dot(verdict))
 
-    why = [_finish_dot(x) for x in (data.get("why") or []) if _clean_text(x)]
+    fits_count = data.get("fits_count")
+    if isinstance(fits_count, int) and not isinstance(fits_count, bool) and fits_count >= 0:
+        b.labeled_line("Подойдёт", f"к {fits_count} {_pluralize_dative_items(fits_count)} из шкафа")
+    elif fits_count == "недостаточно данных":
+        b.labeled_line("Подойдёт", "недостаточно данных")
+
+    duplicates = _clean_text(data.get("duplicates"))
+    if duplicates:
+        b.labeled_line("Дублирует", _finish_dot(duplicates))
+
+    closes_gap = _clean_text(data.get("closes_gap"))
+    if closes_gap:
+        b.labeled_line("Закрывает пробел", _finish_dot(closes_gap))
+
+    why = _finish_dot(data.get("why"))
     if why:
-        b.section("Почему:")
-        b.line("\n".join(f"- {x}" for x in why[:3]))
+        b.spacer()
+        b.labeled_line("Почему", why)
 
     wear_with = [_finish_dot(x) for x in (data.get("wear_with") or []) if _clean_text(x)]
     if wear_with:
-        b.section("С чем носить:")
-        b.line("\n".join(f"- {x}" for x in wear_with[:3]))
-
-    outcome = _finish_dot(data.get("outcome"))
-    if outcome:
-        b.spacer()
-        b.labeled_line("Итог", outcome)
+        b.section("Как носить:")
+        b.line("\n".join(f"- {x}" for x in wear_with[:2]))
 
     return b.build_stripped()
+
+
+def _pluralize_dative_items(n):
+    n = abs(int(n))
+    if n % 10 == 1 and n % 100 != 11:
+        return "вещи"
+    return "вещам"
 
 
 def zone_picker_screen():

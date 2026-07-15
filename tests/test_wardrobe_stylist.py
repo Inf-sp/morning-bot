@@ -51,6 +51,15 @@ def test_outfit_card_has_one_italic_intro_and_dynamic_final():
     assert "Финальный штрих: добавь серебристые часы." in message.text
 
 
+def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
+    message = render_wardrobe_message({
+        "items": [{"name": "цепочка со значком сторон света"}, {"name": "футболка Levi's"}],
+    })
+
+    assert "- Цепочка со значком сторон света" in message.text
+    assert "- Футболка Levi's" in message.text
+
+
 def test_other_outfit_changes_the_base_not_one_random_item():
     wardrobe = {"zones": {
         "Верх": {"Футболки": [_item("t1", "Верх", "Белая футболка"), _item("t2", "Верх", "Серая футболка")]},

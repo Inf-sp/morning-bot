@@ -44,7 +44,6 @@ def _kb(rows):
 def closet_kb():
     return _kb([
         [("🆕 Добавить вещь", "w_add")],
-        [("🧐 Оценить вещь", "w_check")],
         [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Меню", "m_menu")],
     ])
 
@@ -154,6 +153,7 @@ def _save_cached_look(cid, item_ids, look_data):
 def build_wardrobe_keyboard():
     return _kb([
         [("✨ Другой образ", "w_look")],
+        [("🧐 Проверить покупку", "w_check")],
         [("👕 Мой шкаф", "w_closet")],
         [("🎨 Мой стиль", "set_wardrobe_style")],
         [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
@@ -588,7 +588,6 @@ async def send_wardrobe_zones(bot, cid, q=None):
     total, counts = wardrobe_stats(w)
     rows = [
         [InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add")],
-        [InlineKeyboardButton("🧐 Оценить вещь", callback_data="w_check")],
     ]
     for zone in (z for z in ZONE_ORDER if counts.get(z, 0) > 0):
         rows.append([InlineKeyboardButton(
@@ -668,6 +667,69 @@ async def send_delete_confirmation(bot, cid, item_id, q=None):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
+_PURCHASE_VERDICTS = {
+    "брать": "брать",
+    "брать только со скидкой": "брать только со скидкой",
+    "только со скидкой": "брать только со скидкой",
+    "не брать": "не брать",
+    "недостаточно данных": "недостаточно данных",
+}
+_PURCHASE_FLAGS = {"да", "нет", "недостаточно данных"}
+_PURCHASE_REJECT_REASONS = {
+    "duplicate", "fit", "forbidden_color", "low_compatibility",
+    "material_or_season", "price_vs_utility", "poor_condition",
+}
+
+
+def _normalize_purchase_check(data, wardrobe=None):
+    """Не пропускает неподдерживаемый вердикт и беспричинное «не брать»."""
+    data = data if isinstance(data, dict) else {}
+    verdict_key = _clean_text(data.get("verdict")).casefold().rstrip(".!?")
+    verdict = _PURCHASE_VERDICTS.get(verdict_key, "недостаточно данных")
+
+    flag_values = {}
+    for key in ("duplicates", "closes_gap"):
+        value = _clean_text(data.get(key)).casefold().rstrip(".!?")
+        flag_values[key] = value if value in _PURCHASE_FLAGS else "недостаточно данных"
+
+    try:
+        if isinstance(data.get("fits_count"), bool):
+            raise ValueError
+        fits_count = int(data.get("fits_count"))
+        if fits_count < 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        fits_count = "недостаточно данных"
+    if wardrobe is not None and isinstance(fits_count, int):
+        total, _counts = wardrobe_stats(wardrobe)
+        fits_count = min(fits_count, total)
+
+    why = data.get("why")
+    if isinstance(why, list):
+        why = why[0] if why else ""
+    why = _clean_text(why)
+    reject_reason = _clean_text(data.get("not_buy_reason")).casefold()
+    if verdict == "не брать" and (reject_reason not in _PURCHASE_REJECT_REASONS or not why):
+        verdict = "недостаточно данных"
+        why = "Нет подтверждённой конкретной причины отказываться от покупки. Нужны дополнительные данные о вещи."
+    elif verdict == "недостаточно данных" and not why:
+        why = "Не хватает подтверждённых свойств вещи, которые влияют на решение."
+
+    wear_with = data.get("wear_with")
+    if not isinstance(wear_with, list):
+        wear_with = []
+    wear_with = [_clean_text(value) for value in wear_with if _clean_text(value)][:2]
+
+    return {
+        "verdict": verdict,
+        "fits_count": fits_count,
+        "duplicates": flag_values["duplicates"],
+        "closes_gap": flag_values["closes_gap"],
+        "why": why,
+        "wear_with": wear_with,
+    }
+
+
 async def check_purchase(bot, cid, text):
     w = store.load_wardrobe(cid)
     web_block = ""
@@ -688,28 +750,27 @@ async def check_purchase(bot, cid, text):
 Гардероб пользователя:
 {store.wardrobe_to_text(w)}
 {web_block}
-Задача — конкретный анализ на цифрах, не комплименты. Ответь на вопросы:
-1. Сколько в гардеробе вещей той же категории (например «рубашки») и сколько из них похожи по назначению на эту покупку?
-2. С какими конкретными вещами это сочетается — сколько новых сочетаний реально даст покупка?
-3. Дублирует ли это что-то уже имеющееся?
-4. Насколько вещь соответствует стилю пользователя?
-5. Если вердикт скорее отрицательный — при каком условии (другая посадка, ткань, оттенок) решение могло бы измениться?
+Ответь на один вопрос: есть ли смысл добавлять эту вещь в гардероб пользователя?
+
+Правила:
+1. Вердикт — строго один из четырёх: «брать», «брать только со скидкой», «не брать», «недостаточно данных».
+2. Если из описания нельзя подтвердить важные для решения свойства (например длину, крой, материал, сезонность, состояние или цену), выбери «недостаточно данных». Не додумывай их.
+3. «Не брать» разрешено только при одной конкретной подтверждённой причине: почти полный дубль; неподходящая посадка; цвет прямо указан в запретах пользователя; сочетаемость лишь с одной-двумя позициями; неподходящие материал или сезонность; завышенная цена относительно пользы; плохое состояние.
+4. Нельзя писать «не соответствует стилю» без конкретного объяснения из фактов выше. Общего несовпадения со стилем недостаточно для вердикта «не брать».
+5. Посчитай, со сколькими конкретными вещами из шкафа покупка сочетается. Не считай саму покупку и не выдумывай отсутствующие вещи.
+6. Дублирование и закрытие пробела обозначь только как «да», «нет» или «недостаточно данных».
+7. В why дай одно конкретное компактное объяснение, максимум два предложения. Для «недостаточно данных» назови недостающие свойства. Для «не брать» объясни подтверждённую причину.
+8. В wear_with дай максимум два готовых сочетания только с реальными вещами из шкафа. При нехватке данных можно дать условное сочетание, но явно назвать условие. Если честного сочетания нет — верни пустой список.
 
 Верни JSON (без markdown):
-{{"verdict":"строго одно: брать / только со скидкой / не брать","why":["2-3 конкретные причины на основе реального гардероба и цифр выше, на ты, без имени"],"wear_with":["2-3 конкретных комплекта только из вещей пользователя"],"outcome":"1 короткий вывод: закрывает ли пробел, сколько комплектов даёт и не дублирует ли имеющееся"}}
+{{"verdict":"брать / брать только со скидкой / не брать / недостаточно данных","fits_count":0,"duplicates":"да / нет / недостаточно данных","closes_gap":"да / нет / недостаточно данных","not_buy_reason":"duplicate / fit / forbidden_color / low_compatibility / material_or_season / price_vs_utility / poor_condition / пустая строка","why":"одно конкретное объяснение","wear_with":["до двух готовых сочетаний"]}}
 
-Если гардероб пустой — верни have_count 0 и в why честно скажи, что оценка приблизительная."""
+Если гардероб пустой, fits_count должен быть 0, а вывод не должен притворяться точным."""
     try:
         d = await ai.allm_json(prompt, 600, tier="smart", module="wardrobe")
     except Exception as e:
         await verify.safe_error(bot, cid, e); return
-    text_out, entities = _build_purchase_message({
-        "item": text,
-        "verdict": d.get("verdict", ""),
-        "why": d.get("why") or [],
-        "wear_with": d.get("wear_with") or [],
-        "outcome": d.get("outcome", ""),
-    })
+    text_out, entities = _build_purchase_message(_normalize_purchase_check(d, wardrobe=w))
     store.last_source[str(cid)] = "Гардероб · Покупка"
     store.last_answer[str(cid)] = text_out
     await bot.send_message(chat_id=cid, text=text_out, entities=entities,
@@ -778,5 +839,5 @@ async def handle_callback(bot, cid, q, data):
         await send_home(bot, cid, q=q); return
     if data == "w_check":
         store.pending_input[str(cid)] = "wardrobe_check"
-        await bot.send_message(chat_id=cid, text="Опиши вещь перед покупкой: тип, цвет, посадку, бренд и цену, если она важна.",
+        await bot.send_message(chat_id=cid, text="Опиши покупку: тип вещи, цвет, длину, крой, материал, состояние и цену — всё, что известно.",
                                reply_markup=_back_kb()); return
