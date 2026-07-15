@@ -1,5 +1,3 @@
-from telegram import MessageEntity
-
 from .builder import MessageBuilder
 from .constants import ui_label
 
@@ -225,9 +223,14 @@ def item_card(item):
     b = MessageBuilder()
     b.section(_clean_text(item.get("name")) or "Вещь")
     b.spacer()
-    b.labeled_line("Категория", item.get("zone") or "другое")
+    b.labeled_line("Категория", _lower_first(item.get("zone") or "другое"))
     if item.get("color"):
         b.labeled_line("Цвет", item["color"])
+    b.labeled_line("Тепло", item.get("warmth") or "обычные")
+    if item.get("material"):
+        b.labeled_line("Материал", item["material"])
+    if item.get("length"):
+        b.labeled_line("Длина", item["length"])
     if item.get("fit"):
         b.labeled_line("Посадка", item["fit"])
     if item.get("style"):
@@ -243,13 +246,34 @@ def add_preview(item, remaining=0):
     b.bold(_clean_text(item.get("name")) or "Вещь")
     b.newline()
     b.spacer()
-    b.labeled_line("Категория", item.get("zone") or "другое")
+    b.labeled_line("Категория", _lower_first(item.get("zone") or "другое"))
     if item.get("color"):
         b.labeled_line("Цвет", item["color"])
-    if item.get("fit"):
-        b.labeled_line("Посадка", item["fit"])
+    b.labeled_line("Тепло", item.get("warmth") or "обычные")
+    if item.get("material"):
+        b.labeled_line("Материал", item["material"])
+    if item.get("length"):
+        b.labeled_line("Длина", item["length"])
+    if item.get("rain_ok"):
+        b.labeled_line("Дождь", "подходит")
+    if item.get("wind_ok"):
+        b.labeled_line("Ветер", "защищает")
     if remaining:
         b.line(f"После этой останется: {remaining}.")
+    return b.build_stripped()
+
+
+def add_batch_preview(items):
+    b = MessageBuilder().section("Добавлены вещи")
+    for item in items or []:
+        b.spacer()
+        b.bold(_clean_text(item.get("name")) or "Вещь")
+        b.newline()
+        details = [_lower_first(item.get("zone") or "другое")]
+        if item.get("color"):
+            details.append(str(item["color"]))
+        details.append(str(item.get("warmth") or "обычные"))
+        b.line(" · ".join(details))
     return b.build_stripped()
 
 

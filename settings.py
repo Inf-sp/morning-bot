@@ -165,6 +165,29 @@ async def send_home(bot, cid):
     await saved_items.send_notes(bot, cid)
 
 
+async def refresh_database(bot, cid, q=None):
+    import data_refresh
+
+    if q is not None:
+        try:
+            await q.message.edit_text("🔄 Обновляю базу и физические свойства вещей…")
+        except Exception:
+            pass
+    result = await data_refresh.refresh_user_database(cid)
+    msg = settings_ui.database_refresh_result(result)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
+        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+    ]])
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
 class _NoKbBot:
     """Обёртка для push-уведомлений: убирает кнопки, как в плановых уведомлениях."""
     def __init__(self, bot):
@@ -706,6 +729,8 @@ async def handle_callback(bot, cid, data, q=None):
         await saved_items.send_food(bot, cid, back="m_food")
     elif data == "set_notif":
         await send_notif(bot, cid, q)
+    elif data == "set_refresh_data":
+        await refresh_database(bot, cid, q)
     elif data == "set_priorities":
         await send_personalization(bot, cid, q)
     elif data.startswith("set_prio_"):

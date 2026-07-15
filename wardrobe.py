@@ -1,5 +1,4 @@
 import asyncio
-import copy
 import logging
 from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -18,37 +17,24 @@ from ui.constants import delete_label, ui_label
 from wardrobe_model import (
     ZONE_ORDER,
     flat_items as _flat_wardrobe_items,
-    guess_subcategory as _guess_subcategory,
     has_rain_outerwear as _has_rain_outerwear,
     normalize_parsed_item,
     public_item_name,
     wardrobe_stats,
-    zone_of as _zone_of,
 )
 from wardrobe_outfit import (
     build_outfit_reasons,
     build_style_tip,
     pick_best_outfit,
     save_outfit_feedback,
-    score_outfit,
-    select_outfit_candidates,
     validate_outfit_copy,
 )
 from wardrobe_copy import ai_reframe_look
+from wardrobe_migration import migrate_item_attrs
 
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
-
-# zone -> с какими зонами сочетается (простое правило по ZONE_ORDER, без похода в AI).
-_ZONE_COMPAT = {
-    "Верх": ["Низ", "Обувь", "Верхняя одежда", "Аксессуары"],
-    "Низ": ["Верх", "Обувь", "Верхняя одежда", "Аксессуары"],
-    "Верхняя одежда": ["Верх", "Низ", "Обувь", "Аксессуары"],
-    "Обувь": ["Верх", "Низ", "Верхняя одежда", "Аксессуары"],
-    "Аксессуары": ["Верх", "Низ", "Верхняя одежда", "Обувь"],
-    "Другое": [],
-}
 
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
@@ -265,80 +251,6 @@ def _build_weather_rules(cid, w, flags):
     return _PRIORITY_BLOCK + "\n" + "\n".join(rules), gap_note
 
 
-# ---------- ленивая миграция атрибутов вещи (colors/season/temp_range/...) ----------
-_ATTR_DEFAULTS = {
-    "last_used": None, "use_count": 0, "accepted_count": 0, "rejected_count": 0,
-    "season": [], "temp_range": None, "compatible_categories": [],
-    "colors": [], "formality": None, "fit": None, "occasions": [],
-    "rain_ok": False, "wind_ok": False,
-}
-
-
-def _ensure_attr_defaults(item):
-    """Проставляет недостающие ключи атрибутов дефолтом (не трогает colors, если
-    его нет вовсе — это маркер немигрированной вещи, см. _migrate_item_attrs)."""
-    for k, v in _ATTR_DEFAULTS.items():
-        item.setdefault(k, v if not isinstance(v, (list, dict)) else list(v))
-
-
-def _needs_migration(item):
-    """Маркер «вещь не мигрирована» — именно ОТСУТСТВИЕ ключа colors, не пустой
-    список (пустой список — валидный результат AI для вещи без чёткого цвета)."""
-    return "colors" not in item
-
-
-async def _migrate_item_attrs(cid, w):
-    """Батч-миграция атрибутов немигрированных вещей одним AI-запросом (экономия
-    токенов — не по одной вещи). При недоступности AI — тихий fallback: вещи
-    остаются без атрибутов и участвуют в подборе без цветового/сезонного скоринга."""
-    flat = _flat_wardrobe_items(w)
-    todo = [(zone, subcat, item) for zone, subcat, item in flat if _needs_migration(item)]
-    if not todo:
-        return w
-    listing = "\n".join(f"{i}: {item['name']} ({zone}/{subcat})"
-                        for i, (zone, subcat, item) in enumerate(todo))
-    prompt = f"""Определи атрибуты вещей одежды по названию, зоне и подкатегории. Для КАЖДОЙ верни:
-colors (список 1-2 основных цветов на русском), season (список из "лето"/"деми"/"зима"),
-temp_range ([min,max] комфортных °C), formality ("casual"/"smart_casual"/"formal"/"sport"),
-fit ("свободная"/"прямая"/"приталенная" или пусто), occasions (короткий список подходящих случаев),
-rain_ok (true если куртка/обувь непромокаемая или подходит для дождя), wind_ok (true если защищает от ветра — верхняя одежда).
-Вещи:
-{listing}
-Верни строго валидный JSON (без markdown): {{"items":[{{"i":0,"colors":[],"season":[],"temp_range":[min,max],"formality":"","fit":"","occasions":[],"rain_ok":false,"wind_ok":false}}, "..."]}}"""
-    try:
-        d = await ai.allm_json(prompt, 1400, tier="cheap", module="wardrobe")
-        by_idx = {int(it["i"]): it for it in (d.get("items") or []) if "i" in it}
-    except Exception as e:
-        _log.warning("wardrobe attr migration AI failed, item stays unmigrated for retry: %r", e, exc_info=True)
-        # Не пишем в store — вещи остаются без ключа "colors" и попробуют мигрировать
-        # заново при следующем подборе. Для ТЕКУЩЕГО подбора отдаём дефолты локально,
-        # не мутируя гардероб, чтобы не потерять шанс на повторную миграцию.
-        w_local = copy.deepcopy(w)
-        for _zone, _subcat, item in _flat_wardrobe_items(w_local):
-            if _needs_migration(item):
-                _ensure_attr_defaults(item)
-        return w_local
-
-    def _mut(w2):
-        flat2 = _flat_wardrobe_items(w2)
-        todo2 = [(zone, subcat, item) for zone, subcat, item in flat2 if _needs_migration(item)]
-        for i, (_zone, _subcat, item) in enumerate(todo2):
-            got = by_idx.get(i, {})
-            item["colors"] = [str(c).strip() for c in (got.get("colors") or []) if str(c).strip()]
-            item["season"] = [str(s).strip() for s in (got.get("season") or []) if str(s).strip()]
-            tr = got.get("temp_range")
-            item["temp_range"] = [int(tr[0]), int(tr[1])] if isinstance(tr, list) and len(tr) == 2 else None
-            item["formality"] = str(got.get("formality") or "").strip() or None
-            item["fit"] = str(got.get("fit") or item.get("fit") or "").strip() or None
-            item["occasions"] = [str(value).strip() for value in (got.get("occasions") or []) if str(value).strip()]
-            item["rain_ok"] = bool(got.get("rain_ok"))
-            item["wind_ok"] = bool(got.get("wind_ok"))
-            item["compatible_categories"] = _ZONE_COMPAT.get(item.get("zone"), [])
-            _ensure_attr_defaults(item)
-
-    return store.mutate_wardrobe(cid, _mut)
-
-
 # ---------- генерация лука по погоде ----------
 def _empty_wardrobe_screen():
     kb = InlineKeyboardMarkup([[
@@ -424,7 +336,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, q=N
                        "strong_wind": False, "sunny": False, "hot": False, "warm": False, "tags": []}
     _rules, gap_note = _build_weather_rules(cid, w, flags)
 
-    w = await _migrate_item_attrs(cid, w)
+    w = await migrate_item_attrs(cid, w)
     style_block = _settings.wardrobe_prefs_context(cid)
     wardrobe_history = store.get_wardrobe_history(cid)
     best = pick_best_outfit(
@@ -500,27 +412,34 @@ async def _parse_items(text):
         f"если не подходит ни одна — subcategory=\"Другое\"): {_ZONES_DESC}\n"
         f"Вещи:\n{secure.wrap_untrusted(text, 'список вещей')}\n"
         "Для каждой вещи верни: zone (одна из зон выше, если не ясно — \"Другое\"), "
-        "subcategory (строго из списка для этой зоны), name (полное название: тип + цвет + бренд/детали), "
+        "subcategory (строго из списка для этой зоны), name (естественное русское название: цвет перед "
+        "типом вещи, затем детали; пример: «Тёмно-оливковые брюки с карманами», но БЕЗ слов "
+        "лёгкая/тонкая/тёплая/толстая/плотная/летняя/зимняя — это отдельные поля), "
         "color (основной цвет), color_secondary (доп. цвет или пусто), material (материал или пусто), "
-        "fit (свободная/прямая/приталенная или пусто), season (массив сезонов), "
+        "length (длина или пусто), warmth (СТРОГО лёгкие/обычные/тёплые; толстая/плотная/утеплённая = тёплые), "
+        "fit (свободная/прямая/приталенная или пусто), season (массив сезонов), rain_ok, wind_ok, "
         "occasions (массив подходящих случаев), style (Casual/Formal/Sport/Streetwear и т.п. или пусто). "
         "Сохраняй бренд, если он указан.\n"
         'JSON: {"items": [{"zone":"","subcategory":"","name":"","color":"","color_secondary":"",'
-        '"material":"","fit":"","season":[],"occasions":[],"style":""}]}',
+        '"material":"","length":"","warmth":"обычные","fit":"","season":[],"rain_ok":false,"wind_ok":false,'
+        '"occasions":[],"style":""}]}',
         1100, tier="cheap", module="wardrobe")
-    norm = [normalize_parsed_item(it) for it in (parsed.get("items") or [])]
+    raw_items = parsed.get("items") or []
+    source_text = text if len(raw_items) == 1 else ""
+    norm = [normalize_parsed_item({**item, "_source_text": source_text}) for item in raw_items]
     return [it for it in norm if it]
 
 
-async def _show_add_preview(bot, cid):
-    queue = store.wardrobe_add_queue.get(str(cid), [])
-    if not queue:
-        await bot.send_message(chat_id=cid, text="Готово — вещи добавлены в шкаф.", reply_markup=closet_kb())
+async def _show_added_items(bot, cid, items):
+    if not items:
+        await bot.send_message(chat_id=cid, text="Такая вещь уже есть в шкафу.", reply_markup=closet_kb())
         return
-    msg = wardrobe_ui.add_preview(queue[0], remaining=len(queue) - 1)
-    rows = [[(ui_label("add", "Добавить"), "w_add_ok"), ("✏️ Исправить", "w_add_edit")]]
-    if len(queue) > 1:
-        rows.append([(ui_label("add", f"Добавить все · {len(queue)}"), "w_add_all")])
+    msg = wardrobe_ui.add_preview(items[0]) if len(items) == 1 else wardrobe_ui.add_batch_preview(items)
+    if len(items) == 1:
+        rows = [[(delete_label("Удалить"), f"w_delete_{items[0]['id']}")]]
+    else:
+        rows = [[(delete_label(f"Удалить: {public_item_name(item)[:28]}"), f"w_delete_{item['id']}")]
+                for item in items]
     rows.append([("⬅️ Назад", "w_closet"), ("#️⃣ Меню", "m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_kb(rows))
 
@@ -532,8 +451,8 @@ async def add_item(bot, cid, text):
     if not items:
         await bot.send_message(chat_id=cid, text="Не удалось распознать вещь. Опиши её одним сообщением.", reply_markup=_back_kb())
         return
-    store.wardrobe_add_queue[str(cid)] = items
-    await _show_add_preview(bot, cid)
+    saved = store.add_wardrobe_items(cid, items)
+    await _show_added_items(bot, cid, saved)
 
 async def add_item_settings(bot, cid, text):
     await add_item(bot, cid, text)
@@ -547,11 +466,15 @@ async def add_item_photo(bot, cid, image_bytes, mime_type="image/jpeg", caption=
             f"""Распознай только предметы одежды и аксессуары на фото. Подпись пользователя: {secure.wrap_untrusted(caption, 'подпись')}
 Зоны и подкатегории: {_ZONES_DESC}
 Для каждого отчётливо видимого предмета верни zone, subcategory, name, color, color_secondary,
-material, fit, season, occasions и style. Не выдумывай бренд, если его не видно и нет в подписи.
-JSON: {{"items":[{{"zone":"","subcategory":"","name":"","color":"","color_secondary":"","material":"","fit":"","season":[],"occasions":[],"style":""}}]}}""",
+material, length, warmth (строго лёгкие/обычные/тёплые), fit, season, rain_ok, wind_ok,
+occasions и style. Физические свойства храни полями, не добавляй их в name.
+Не выдумывай бренд и невидимые физические свойства.
+JSON: {{"items":[{{"zone":"","subcategory":"","name":"","color":"","color_secondary":"","material":"","length":"","warmth":"обычные","fit":"","season":[],"rain_ok":false,"wind_ok":false,"occasions":[],"style":""}}]}}""",
             max_tokens=1100,
         )
-        items = [normalize_parsed_item(item) for item in (parsed.get("items") or [])]
+        raw_items = parsed.get("items") or []
+        source_text = caption if len(raw_items) == 1 else ""
+        items = [normalize_parsed_item({**item, "_source_text": source_text}) for item in raw_items]
         items = [item for item in items if item]
     except Exception as e:
         store.pending_input[str(cid)] = "wardrobe_add"
@@ -561,8 +484,8 @@ JSON: {{"items":[{{"zone":"","subcategory":"","name":"","color":"","color_second
         store.pending_input[str(cid)] = "wardrobe_add"
         await bot.send_message(chat_id=cid, text="Не удалось уверенно распознать вещь. Опиши её одним сообщением.", reply_markup=_back_kb())
         return
-    store.wardrobe_add_queue[str(cid)] = items
-    await _show_add_preview(bot, cid)
+    saved = store.add_wardrobe_items(cid, items)
+    await _show_added_items(bot, cid, saved)
 
 
 def _find_item(cid, item_id):
@@ -609,10 +532,7 @@ async def edit_item_text(bot, cid, text):
 
 
 async def edit_add_preview(bot, cid, text):
-    queue = store.wardrobe_add_queue.get(str(cid), [])
-    if not queue:
-        await send_wardrobe_zones(bot, cid)
-        return
+    store.wardrobe_add_queue.pop(str(cid), None)
     try:
         parsed = await _parse_items(text)
     except Exception as e:
@@ -620,8 +540,8 @@ async def edit_add_preview(bot, cid, text):
     if not parsed:
         await bot.send_message(chat_id=cid, text="Не удалось распознать исправление.")
         return
-    queue[0] = parsed[0]
-    await _show_add_preview(bot, cid)
+    saved = store.add_wardrobe_items(cid, parsed)
+    await _show_added_items(bot, cid, saved)
 
 
 async def handle_wardrobe_search(bot, cid, query):
@@ -724,7 +644,7 @@ async def send_item_card(bot, cid, item_id, q=None):
     msg = wardrobe_ui.item_card(item)
     zone_slug = ZONE_SLUG.get(zone, "oth")
     kb = _kb([
-        [("✏️ Изменить", f"w_edit_{item_id}"), (delete_label("Удалить"), f"w_delete_{item_id}")],
+        [(delete_label("Удалить"), f"w_delete_{item_id}")],
         [("⬅️ Назад", f"w_cat_{zone_slug}"), ("#️⃣ Меню", "m_menu")],
     ])
     if q is not None:
@@ -834,20 +754,11 @@ async def handle_callback(bot, cid, q, data):
                                "Пример: Голубая свободная рубашка Uniqlo.",
                                reply_markup=_back_kb()); return
     if data == "w_add_ok":
-        queue = store.wardrobe_add_queue.get(str(cid), [])
-        if queue:
-            store.add_wardrobe_items(cid, [queue.pop(0)])
-        await _show_add_preview(bot, cid); return
+        await send_wardrobe_zones(bot, cid, q=q); return
     if data == "w_add_all":
-        queue = store.wardrobe_add_queue.pop(str(cid), [])
-        if queue:
-            store.add_wardrobe_items(cid, queue)
-        await bot.send_message(chat_id=cid, text="Готово — список добавлен в шкаф.", reply_markup=closet_kb())
-        return
+        await send_wardrobe_zones(bot, cid, q=q); return
     if data == "w_add_edit":
-        store.pending_input[str(cid)] = "wardrobe_add_edit"
-        await bot.send_message(chat_id=cid, text="Опиши эту вещь заново одним сообщением.", reply_markup=_back_kb())
-        return
+        await send_wardrobe_zones(bot, cid, q=q); return
     if data == "w_search":
         store.pending_input[str(cid)] = "wardrobe_search"
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]])
@@ -862,13 +773,7 @@ async def handle_callback(bot, cid, q, data):
         await send_item_card(bot, cid, data[len("w_item_"):], q=q); return
     if data.startswith("w_edit_"):
         item_id = data[len("w_edit_"):]
-        _zone, _subcat, item = _find_item(cid, item_id)
-        if not item:
-            await send_wardrobe_zones(bot, cid, q=q); return
-        store.wardrobe_edit_item[str(cid)] = item_id
-        store.pending_input[str(cid)] = "wardrobe_edit"
-        await bot.send_message(chat_id=cid, text="Опиши вещь заново одним сообщением. Я обновлю её карточку.",
-                               reply_markup=_kb([[("⬅️ Назад", f"w_item_{item_id}"), ("#️⃣ Меню", "m_menu")]])); return
+        await send_item_card(bot, cid, item_id, q=q); return
     if data.startswith("w_deleteok_"):
         item_id = data[len("w_deleteok_"):]
         store.remove_wardrobe_items(cid, [item_id])

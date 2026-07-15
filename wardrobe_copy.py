@@ -14,7 +14,9 @@ async def ai_reframe_look(items, reasons, tip):
     item_facts = "\n".join(
         f"- название={public_item_name(item)}; категория={item.get('zone', '')}; "
         f"цвет={item.get('color') or ', '.join(item.get('colors') or []) or 'не указан'}; "
-        f"материал={item.get('material') or 'не указан'}; посадка={item.get('fit') or 'не указана'}; "
+        f"тепло={item.get('warmth') or 'обычные'}; материал={item.get('material') or 'не указан'}; "
+        f"длина={item.get('length') or 'не указана'}; посадка={item.get('fit') or 'не указана'}; "
+        f"дождь={'да' if item.get('rain_ok') else 'нет'}; ветер={'да' if item.get('wind_ok') else 'нет'}; "
         f"детали=только явно присутствующие в названии"
         for item in items
     )

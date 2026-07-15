@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 import config
 import store
 from wardrobe_model import (
-    ZONE_ORDER,
     flat_items as _flat_wardrobe_items,
     public_item_name,
     strip_internal_tags,
@@ -24,8 +23,11 @@ _TEMP_CONFLICT_MARGIN = 10  # °C — насколько диапазон temp_r
 
 
 def _temp_conflicts(item, weather_ctx):
-    tr = item.get("temp_range")
     tmax = weather_ctx.get("tmax")
+    if item.get("warmth") == "тёплые" and (weather_ctx.get("hot") or (tmax is not None and tmax >= 24)):
+        # Физический комфорт — жёсткий guard до любого скоринга цвета и стиля.
+        return True
+    tr = item.get("temp_range")
     if not tr or tmax is None:
         return False
     lo, hi = tr
@@ -262,6 +264,7 @@ _MATERIAL_CLAIM_MARKERS = (
     "шёлк", "шелк", "полиэстер", "вискоз", "трикотаж",
 )
 _FIT_CLAIM_MARKERS = ("посадк", "объём", "объем", "свободн", "широк", "узк", "прям", "притал", "оверсайз")
+_WARMTH_CLAIM_MARKERS = ("тёпл", "тепл", "утепл", "толст", "плотн", "лёгк", "легк", "тонк")
 _LENGTH_CLAIM_MARKERS = ("длинн", "коротк", "укороч")
 _DETAIL_CLAIM_MARKERS = ("воротник", "карман", "манжет", "капюшон", "принт", "вышив", "пуговиц", "молни", "фактур")
 _GARMENT_CLAIM_MARKERS = (
@@ -276,7 +279,8 @@ def _facts_text(items):
     chunks = []
     for item in items:
         chunks.extend(str(item.get(key) or "") for key in (
-            "name", "zone", "subcategory", "color", "color_secondary", "material", "style", "fit", "formality",
+            "name", "zone", "subcategory", "color", "color_secondary", "material", "length", "warmth",
+            "style", "fit", "formality",
         ))
         for key in ("colors", "season", "occasions"):
             chunks.extend(str(value) for value in (item.get(key) or []))
@@ -303,6 +307,10 @@ def _claims_are_grounded(text, items):
     if any(marker in claim for marker in _FIT_CLAIM_MARKERS):
         fit_facts = " ".join(str(item.get("fit") or "") + " " + str(item.get("name") or "") for item in items).casefold()
         if not any(marker in fit_facts for marker in _FIT_CLAIM_MARKERS):
+            return False
+    if any(marker in claim for marker in _WARMTH_CLAIM_MARKERS):
+        warmth_facts = " ".join(str(item.get("warmth") or "") + " " + str(item.get("name") or "") for item in items).casefold()
+        if not any(marker in warmth_facts for marker in _WARMTH_CLAIM_MARKERS):
             return False
     if re.search(r"(?:объ[её]мн\w*\s+рукав|рукав\w*\s+объ[её]мн)", claim):
         return False

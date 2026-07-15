@@ -11,6 +11,17 @@ ZONE_SUBCATS = {
     "Другое": ["Другое"],
 }
 ZONE_ORDER = ["Верх", "Низ", "Верхняя одежда", "Обувь", "Аксессуары", "Другое"]
+WARMTH_VALUES = ("лёгкие", "обычные", "тёплые")
+ATTRIBUTE_SCHEMA_VERSION = 2
+WARMTH_TEMP_RANGE = {"лёгкие": [15, 35], "обычные": [5, 26], "тёплые": [-20, 18]}
+ZONE_COMPAT = {
+    "Верх": ["Низ", "Обувь", "Верхняя одежда", "Аксессуары"],
+    "Низ": ["Верх", "Обувь", "Верхняя одежда", "Аксессуары"],
+    "Верхняя одежда": ["Верх", "Низ", "Обувь", "Аксессуары"],
+    "Обувь": ["Верх", "Низ", "Верхняя одежда", "Аксессуары"],
+    "Аксессуары": ["Верх", "Низ", "Верхняя одежда", "Обувь"],
+    "Другое": [],
+}
 
 ZONES = [
     ("Верхняя одежда", ["верхняя одежд", "верхн", "куртк", "ветровк", "пиджак", "пальто", "плащ", "дождевик", "парк", "пуховик", "тренч", "анорак", "бомбер", "жилет"]),
@@ -39,12 +50,38 @@ _INTERNAL_TAG_MARKERS = (
     "прям", "притал", "оверсайз",
 )
 
+_WARM_MARKERS = ("тёпл", "тепл", "утепл", "толст", "плотн", "зимн")
+_LIGHT_MARKERS = ("лёгк", "легк", "тонк", "летн")
+_PHYSICAL_NAME_RE = re.compile(
+    r"\b(?:очень\s+)?(?:т[ёе]пл\w*|утепл[ёе]н\w*|толст\w*|плотн\w*|"
+    r"л[ёе]гк\w*|тонк\w*|летн\w*|зимн\w*|демисезонн\w*)\b",
+    re.I,
+)
+
+
+def normalize_warmth(value="", source_text=""):
+    """Возвращает одно из трёх стабильных значений физического тепла вещи."""
+    text = f"{value or ''} {source_text or ''}".casefold()
+    if any(marker in text for marker in _WARM_MARKERS):
+        return "тёплые"
+    if any(marker in text for marker in _LIGHT_MARKERS):
+        return "лёгкие"
+    return "обычные"
+
+
+def clean_physical_name(value):
+    """Убирает тепло/плотность/сезонность из имени — они хранятся полями."""
+    text = _PHYSICAL_NAME_RE.sub(" ", str(value or ""))
+    text = re.sub(r"\s*,\s*,+", ", ", text)
+    text = re.sub(r"(?:\s*,\s*)+$", "", text)
+    return re.sub(r"\s+", " ", text).strip(" ,;.-")
+
 
 def _tag_values(item):
     if not isinstance(item, dict):
         return []
     values = []
-    for key in ("color", "color_secondary", "material", "style", "fit", "formality"):
+    for key in ("color", "color_secondary", "material", "length", "style", "fit", "formality", "warmth"):
         if item.get(key):
             values.append(str(item[key]).strip().casefold())
     for key in ("colors", "season", "occasions"):
@@ -103,22 +140,42 @@ def guess_subcategory(zone, name, fallback_text=""):
 def normalize_parsed_item(raw):
     if not isinstance(raw, dict) or not str(raw.get("name") or "").strip():
         return None
-    name = str(raw["name"]).strip()
+    raw_name = str(raw["name"]).strip()
+    name = clean_physical_name(raw_name) or raw_name
     zone = raw.get("zone") if raw.get("zone") in ZONE_SUBCATS else zone_of(name)
     subcategory = raw.get("subcategory")
     if subcategory not in ZONE_SUBCATS.get(zone, []):
         subcategory = guess_subcategory(zone, name)
+    color = str(raw.get("color") or "").strip()
+    color_secondary = (str(raw["color_secondary"]).strip() or None) if raw.get("color_secondary") else None
+    warmth = normalize_warmth(raw.get("warmth"), f"{raw_name} {raw.get('_source_text') or ''}")
+    colors = [str(value).strip() for value in (raw.get("colors") or []) if str(value).strip()]
+    if not colors:
+        colors = [value for value in (color, color_secondary) if value]
     item = {
         "zone": zone, "subcategory": subcategory, "name": name,
-        "color": str(raw.get("color") or "").strip(),
-        "color_secondary": (str(raw["color_secondary"]).strip() or None) if raw.get("color_secondary") else None,
+        "color": color,
+        "color_secondary": color_secondary,
+        "colors": colors,
         "material": (str(raw["material"]).strip() or None) if raw.get("material") else None,
+        "length": (str(raw["length"]).strip() or None) if raw.get("length") else None,
         "style": str(raw.get("style") or "").strip() or None,
         "fit": str(raw.get("fit") or "").strip() or None,
+        "formality": str(raw.get("formality") or "").strip() or None,
+        "warmth": warmth,
+        "temp_range": list(WARMTH_TEMP_RANGE[warmth]),
         "season": [str(x).strip() for x in (raw.get("season") or []) if str(x).strip()]
                   if isinstance(raw.get("season"), list) else [],
         "occasions": [str(x).strip() for x in (raw.get("occasions") or []) if str(x).strip()]
                      if isinstance(raw.get("occasions"), list) else [],
+        "rain_ok": bool(raw.get("rain_ok")),
+        "wind_ok": bool(raw.get("wind_ok")),
+        "compatible_categories": list(ZONE_COMPAT.get(zone, [])),
+        "last_used": None,
+        "use_count": 0,
+        "accepted_count": 0,
+        "rejected_count": 0,
+        "attribute_schema_version": ATTRIBUTE_SCHEMA_VERSION,
     }
     item["name"] = public_item_name(item)
     return item

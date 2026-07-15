@@ -236,6 +236,7 @@ def add_wardrobe_items(cid, items: list) -> list:
     """items — нормализованные объекты без id (id генерируется здесь).
     Дедуп по (subcategory, name.lower()) в рамках зоны."""
     import uuid
+    added = []
 
     def _mut(w):
         for it in items:
@@ -244,9 +245,10 @@ def add_wardrobe_items(cid, items: list) -> list:
             bucket = w.setdefault("zones", {}).setdefault(it["zone"], {}).setdefault(it["subcategory"], [])
             if not any(existing["name"].lower() == it["name"].lower() for existing in bucket):
                 bucket.append(it)
+                added.append(it)
 
     mutate_wardrobe(cid, _mut)
-    return items
+    return added
 
 
 def remove_wardrobe_items(cid, item_ids) -> int:

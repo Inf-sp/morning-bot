@@ -201,6 +201,7 @@ async def send_notes(bot, cid):
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton("❤️ Любимое", callback_data="as_love")],
         [InlineKeyboardButton("⭐️ Сохранённое", callback_data="as_bucket_fav")],
+        [InlineKeyboardButton("🔄 Обновить базу", callback_data="set_refresh_data")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]

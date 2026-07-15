@@ -120,6 +120,19 @@ def settings_home():
     return b.build_stripped()
 
 
+def database_refresh_result(result):
+    result = result or {}
+    b = MessageBuilder().section("🔄 База обновлена")
+    b.labeled_line("Коллекции", f"проверено {result.get('collection_items', 0)} записей")
+    b.labeled_line("Новая структура", f"обновлено {result.get('changed_items', 0)} записей")
+    b.labeled_line("Гардероб", f"обновлено {result.get('wardrobe_items', 0)} вещей")
+    if result.get("wardrobe_remaining"):
+        b.line("Часть физических свойств не удалось уточнить. Повтори обновление позже.")
+    else:
+        b.line("Физические свойства вещей приведены к текущей схеме.")
+    return b.build_stripped()
+
+
 def mydata_section(title, hint=""):
     b = MessageBuilder().section(title)
     if hint:
