@@ -382,6 +382,7 @@ trav_facts_state = runtime_state.trav_facts_state
 pending_input = runtime_state.pending_input
 last_inline_message = runtime_state.last_inline_message
 pinned_menu_message = runtime_state.pinned_menu_message
+transient_message = runtime_state.transient_message
 last_recos = runtime_state.last_recos
 suggested_countries = runtime_state.suggested_countries
 last_action = runtime_state.last_action

@@ -239,7 +239,7 @@ def food_menu(idea=None):
     substitute_product = _cooking_text(substitution.get("product"))
     if substitute_for and substitute_product:
         b.spacer()
-        b.labeled_line("Чем заменить", substitute_product)
+        b.labeled_line("Чем заменить", _cooking_sentence(f"подойдёт {substitute_product}"))
 
     tip = _cooking_sentence(idea.get("tip"))
     if tip:

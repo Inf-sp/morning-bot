@@ -13,6 +13,7 @@ trav_facts_state = {}
 pending_input = {}
 last_inline_message = {}
 pinned_menu_message = {}
+transient_message = {}
 last_recos = {}
 suggested_countries = {}
 last_action = {}

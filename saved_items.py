@@ -15,6 +15,12 @@ from ui.constants import delete_label, ui_label
 _log = logging.getLogger(__name__)
 # ===== СОХРАНЕНИЯ / ЛЮБИМЫЕ (notes.py) =====
 
+
+def _mark_transient_edit(bot, cid, message):
+    marker = getattr(bot, "mark_transient_message", None)
+    if marker is not None:
+        marker(cid, getattr(message, "message_id", None))
+
 async def save_fav(bot, cid, q=None):
     # Берём оригинальный текст сообщения прямо из callback — entities уже структурированы
     # Telegram-ом (Message.entities/caption_entities), без похода через HTML-строку.
@@ -208,7 +214,7 @@ async def send_notes(bot, cid):
     msg = settings_ui.settings_home()
     await bot.send_message(chat_id=cid, entities=msg.entities,
         text=msg.text,
-        reply_markup=InlineKeyboardMarkup(rows))
+        reply_markup=InlineKeyboardMarkup(rows), transient=True)
 
 
 async def send_mydata_leisure(bot, cid, back="m_leisure"):
@@ -222,7 +228,8 @@ async def send_mydata_leisure(bot, cid, back="m_leisure"):
         f"{ui_label('leisure', 'Досуг')}",
         "Наполни любимое — рекомендации станут точнее.",
     )
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=InlineKeyboardMarkup(rows), transient=True)
 
 
 async def send_mydata_cinema(bot, cid):
@@ -235,7 +242,8 @@ async def send_mydata_cinema(bot, cid):
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(f"{ui_label('cinema', 'Кино')}")
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=InlineKeyboardMarkup(rows), transient=True)
 
 
 async def send_mydata_books(bot, cid):
@@ -247,7 +255,8 @@ async def send_mydata_books(bot, cid):
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(f"{ui_label('books', 'Книги')}")
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=InlineKeyboardMarkup(rows), transient=True)
 
 
 async def send_mydata_music(bot, cid):
@@ -257,7 +266,8 @@ async def send_mydata_music(bot, cid):
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(f"{ui_label('music', 'Музыка')}")
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=InlineKeyboardMarkup(rows), transient=True)
 
 
 async def send_food(bot, cid, q=None, back="m_food"):
@@ -280,10 +290,12 @@ async def send_food(bot, cid, q=None, back="m_food"):
     if q is not None:
         try:
             await q.message.edit_text(text, entities=entities, reply_markup=kb)
+            _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=text, entities=entities,
+                           reply_markup=kb, transient=True)
 
 
 async def send_travel(bot, cid):
@@ -296,7 +308,8 @@ async def send_travel(bot, cid):
         f"{ui_label('travel', 'Поездки')}",
         "Страны — для идей поездок. Места — то, что уже сохранил.",
     )
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=InlineKeyboardMarkup(rows), transient=True)
 
 
 async def send_plans(bot, cid):

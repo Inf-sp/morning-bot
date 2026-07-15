@@ -195,8 +195,18 @@ async def handle(update, context, remove_reply_keyboard):
         text, entities, kb = menu.menu_screen(data, cid)
         try:
             await q.message.edit_text(text, reply_markup=kb, entities=entities)
+            if data in ("m_balance", "m_leisure"):
+                marker = getattr(bot, "mark_transient_message", None)
+                if marker is not None:
+                    marker(cid, getattr(q.message, "message_id", None))
         except Exception:
-            await bot.send_message(chat_id=cid, text=text, reply_markup=kb, entities=entities)
+            await bot.send_message(
+                chat_id=cid,
+                text=text,
+                reply_markup=kb,
+                entities=entities,
+                transient=data in ("m_balance", "m_leisure"),
+            )
         return
 
     # Действия

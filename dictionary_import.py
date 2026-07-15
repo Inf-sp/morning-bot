@@ -166,6 +166,7 @@ def _dict_entry_message(entry, status="added"):
     if entry.get("article") and not term.lower().startswith(entry["article"].lower() + " "):
         term = f"{entry['article']} {term}"
     term = _cap(term)
+    translation = _entry_translation(entry)
 
     if status == "duplicate":
         b.text_line("📚 ")
@@ -173,10 +174,10 @@ def _dict_entry_message(entry, status="added"):
         b.newline()
         b.spacer()
         _add_term_run(b, term)
-        if entry.get("translation"):
+        if translation:
             b.text_line(" ")
             b.bold("→")
-            b.text_line(f" {entry['translation']}")
+            b.text_line(f" {translation}")
         b.newline()
         return b.build_stripped()
 
@@ -187,10 +188,10 @@ def _dict_entry_message(entry, status="added"):
     b.newline()
     b.spacer()
     _add_term_run(b, term)
-    if entry.get("translation"):
+    if translation:
         b.text_line(" ")
         b.bold("→")
-        b.text_line(f" {entry['translation']}")
+        b.text_line(f" {translation}")
     b.newline()
     if entry.get("breakdown"):
         b.spacer()
@@ -562,6 +563,16 @@ def _dict_saved_kb(lang, term_key):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Другой перевод", callback_data="a_dictconfirm_retry")],
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
+         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+    ])
+
+
+def _dict_duplicate_kb(lang, term_key):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
+         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 
@@ -602,10 +613,7 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
     msg = _dict_entry_message(saved, status=status)
     term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
     if status == "duplicate":
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{saved['lang']}_{term_key}"),
-             InlineKeyboardButton("✅ Оставить", callback_data="noop")],
-        ])
+        kb = _dict_duplicate_kb(saved["lang"], term_key)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
     kb = _dict_saved_kb(saved["lang"], term_key)
@@ -661,7 +669,13 @@ async def confirm_pending_dict_add(bot, cid):
         return
     status, saved = _save_normalized_dict_entry(cid, entry)
     msg = _dict_entry_message(saved, status=status)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+    term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
+    await bot.send_message(
+        chat_id=cid,
+        text=msg.text,
+        entities=msg.entities,
+        reply_markup=_dict_saved_kb(saved["lang"], term_key),
+    )
 
 
 def _dict_item_key(lang, kind, word):

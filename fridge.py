@@ -26,6 +26,12 @@ send_leftovers = cooking.send_leftovers
 _FRIDGE_PAGE = 8  # продуктов на страницу в категории
 
 
+def _mark_transient_edit(bot, cid, message):
+    marker = getattr(bot, "mark_transient_message", None)
+    if marker is not None:
+        marker(cid, getattr(message, "message_id", None))
+
+
 def _fridge_by_cat(items: list) -> dict:
     """Словарь cat → [(global_idx, item)] для отображения."""
     by_cat: dict = {}
@@ -86,10 +92,12 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=kb, transient=True)
 
 
 # ---------- Экран категории (пагинация + toggle + отдельная чистка) ----------
@@ -135,10 +143,12 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=kb, transient=True)
 
 
 async def fridge_add_done(bot, cid, text, cat_idx: int = -1):

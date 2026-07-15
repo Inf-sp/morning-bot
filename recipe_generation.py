@@ -8,7 +8,7 @@ import config
 import secure
 import store
 from recipe_state import _leftover_recent
-from fridge_model import _fridge_migrate
+from fridge_model import _fridge_cat, _fridge_clean_name, _fridge_migrate
 from ui.constants import CUISINE_EMOJI
 
 TZ = config.TZ
@@ -19,6 +19,101 @@ _HOME_MEAL_LABELS = {
     "lunch": "обед",
     "dinner": "ужин",
 }
+
+_HOME_NATURAL_INGREDIENTS = {
+    "соус сои": "соевый соус",
+    "соус из сои": "соевый соус",
+    "соус соевый": "соевый соус",
+    "масло оливковое": "оливковое масло",
+    "масло сливочное": "сливочное масло",
+    "масло подсолнечное": "подсолнечное масло",
+    "молоко кокосовое": "кокосовое молоко",
+    "молоко овсяное": "овсяное молоко",
+    "сыр твердый": "твёрдый сыр",
+    "сыр твёрдый": "твёрдый сыр",
+    "твердый сыр": "твёрдый сыр",
+    "сливки открытые": "открытые сливки",
+    "паста томатная": "томатная паста",
+    "перец болгарский": "болгарский перец",
+    "лук репчатый": "репчатый лук",
+    "сыр пармезан": "пармезан",
+}
+
+_HOME_SYNONYM_GROUPS = (
+    ("соевый соус", "соус сои", "соус из сои"),
+    ("цукини", "кабачок", "кабачки"),
+    ("помидор", "помидоры", "томат", "томаты"),
+    ("нут", "турецкий горох"),
+    ("батат", "сладкий картофель"),
+    ("баклажан", "синенький", "синенькие"),
+    ("кинза", "кориандр"),
+    ("рукола", "руккола"),
+    ("пармезан", "сыр пармезан"),
+)
+
+_HOME_CATEGORY_PAIRS = {
+    frozenset(("мясо и рыба", "крупы и макароны")),
+    frozenset(("молочное и яйца", "крупы и макароны")),
+    frozenset(("молочное и яйца", "специи и соусы")),
+    frozenset(("крупы и макароны", "хлеб и выпечка")),
+    frozenset(("овощи", "специи и соусы")),
+    frozenset(("фрукты", "специи и соусы")),
+}
+
+_HOME_TECHNICAL_REASON_RE = re.compile(
+    r"(?:поскольку|так как).{0,35}холодильник|"
+    r"(?:на основе|исходя из).{0,35}(?:содержим|продукт)|"
+    r"содержим.{0,20}холодильник|данн.{0,20}холодильник|"
+    r"в холодильнике (?:есть|имеется|находится)|"
+    r"(?:рецепт|блюдо) (?:выбран|подобран).{0,25}(?:продукт|ингредиент)|"
+    r"доступн.{0,15}(?:ингредиент|продукт)|"
+    r"(?:учитывая|с уч[её]том).{0,25}(?:холодильник|продукт|содержим)|"
+    r"оптимальн.{0,15}выбор",
+    re.IGNORECASE,
+)
+
+_HOME_GENERIC_TIP_RE = re.compile(
+    r"используй(?:те)? свежие продукты|"
+    r"не бой(?:ся|тесь) экспериментировать|"
+    r"добав(?:ь|ьте).{0,25}(?:чеснок.{0,10}лук|лук.{0,10}чеснок).{0,25}(?:аромат|вкус)|"
+    r"добав(?:ь|ьте) .* по вкусу|"
+    r"готовь(?:те)? с любовью",
+    re.IGNORECASE,
+)
+
+_HOME_FORMAL_TO_INFORMAL = {
+    "приготовьте": "приготовь",
+    "обжарьте": "обжарь",
+    "добавьте": "добавь",
+    "используйте": "используй",
+    "оставьте": "оставь",
+    "снимите": "сними",
+    "перемешайте": "перемешай",
+    "нарежьте": "нарежь",
+    "разогрейте": "разогрей",
+    "подавайте": "подавай",
+    "варите": "вари",
+    "готовьте": "готовь",
+    "влейте": "влей",
+    "дайте": "дай",
+    "смешайте": "смешай",
+    "посолите": "посоли",
+    "измельчите": "измельчи",
+    "запекайте": "запекай",
+    "жарьте": "жарь",
+    "накройте": "накрой",
+    "держите": "держи",
+    "выложите": "выложи",
+    "переверните": "переверни",
+    "доведите": "доведи",
+    "убавьте": "убавь",
+    "промойте": "промой",
+    "замочите": "замочи",
+    "взбейте": "взбей",
+    "натрите": "натри",
+}
+
+_HOME_FORMAL_IMPERATIVE_RE = re.compile(r"\b[а-яё]+(?:йте|ите)\b", re.IGNORECASE)
 
 
 def _home_meal_for_hour(hour: int) -> str:
@@ -48,12 +143,89 @@ def _home_string_list(value) -> list[str]:
     return result
 
 
+def _home_natural_ingredient(value) -> str:
+    text = " ".join(str(value or "").lower().replace("ё", "е").split()).strip(" -•.,")
+    natural = _HOME_NATURAL_INGREDIENTS.get(text, text)
+    # Возвращаем принятую в модели холодильника форму, затем ещё раз исправляем
+    # порядок слов: clean_name знает больше пользовательских вариантов.
+    natural = _fridge_clean_name(natural) or natural
+    return _HOME_NATURAL_INGREDIENTS.get(natural.replace("ё", "е"), natural)
+
+
+def _home_semantic_ingredient_key(value) -> str:
+    natural = _home_natural_ingredient(value).replace("ё", "е")
+    for index, group in enumerate(_HOME_SYNONYM_GROUPS):
+        normalized_group = {_home_natural_ingredient(item).replace("ё", "е") for item in group}
+        if natural in normalized_group:
+            return f"synonym:{index}"
+    return natural
+
+
+def _home_normalize_voice(value) -> str:
+    text = str(value or "")
+    for formal, informal in _HOME_FORMAL_TO_INFORMAL.items():
+        text = re.sub(
+            rf"\b{formal}\b",
+            lambda match: informal.capitalize() if match.group(0)[:1].isupper() else informal,
+            text,
+            flags=re.IGNORECASE,
+        )
+    return text
+
+
+def _home_human_reason(value, context: dict) -> str:
+    reason = _home_one_sentence(_home_normalize_voice(value))
+    if (reason and not _HOME_TECHNICAL_REASON_RE.search(reason)
+            and not _HOME_FORMAL_IMPERATIVE_RE.search(reason)):
+        return reason
+    meal = _HOME_MEAL_LABELS.get(context.get("meal"), "приём пищи")
+    if context.get("available"):
+        return f"Быстрый {meal} из того, что уже есть дома"
+    return f"Простой {meal} без лишних сложностей"
+
+
+def _home_useful_tip(value) -> str:
+    tip = _home_one_sentence(_home_normalize_voice(value))
+    return "" if (_HOME_GENERIC_TIP_RE.search(tip)
+                  or _HOME_FORMAL_IMPERATIVE_RE.search(tip)) else tip
+
+
+def _home_clean_substitution(value) -> str:
+    text = re.sub(
+        r"^(?:подойд[её]т|можно использовать|используй|возьми|замени(?:ть)? на)\s+",
+        "",
+        str(value or "").strip(),
+        flags=re.IGNORECASE,
+    )
+    return _home_natural_ingredient(text)
+
+
+def _home_valid_substitution(source, replacement) -> bool:
+    """Отсекает тот же продукт под другим именем и явно несовместимые категории."""
+    source = _home_natural_ingredient(source)
+    replacement = _home_clean_substitution(replacement)
+    if not source or not replacement:
+        return False
+    if _home_semantic_ingredient_key(source) == _home_semantic_ingredient_key(replacement):
+        return False
+    source_cat = _fridge_cat(source)
+    replacement_cat = _fridge_cat(replacement)
+    if source_cat == replacement_cat and source_cat != "прочее":
+        return True
+    if "прочее" in (source_cat, replacement_cat):
+        return False
+    return frozenset((source_cat, replacement_cat)) in _HOME_CATEGORY_PAIRS
+
+
 def _home_exact_fridge_names(values, available) -> list[str]:
     """Не даёт модели приписать холодильнику продукт, которого там нет."""
-    by_name = {" ".join(name.split()).casefold(): name for name in available}
+    by_name = {
+        _home_semantic_ingredient_key(name): _home_natural_ingredient(name)
+        for name in available
+    }
     result = []
     for value in _home_string_list(values):
-        actual = by_name.get(value.casefold())
+        actual = by_name.get(_home_semantic_ingredient_key(value))
         if actual and actual not in result:
             result.append(actual)
     return result
@@ -79,25 +251,30 @@ def _normalize_home_idea(data, context: dict) -> dict:
     has_fridge = bool(context.get("has_fridge"))
 
     name = " ".join(str(data.get("name") or "").split()).strip()
-    reason = _home_one_sentence(data.get("reason"))
-    tip = _home_one_sentence(data.get("tip"))
-    ingredients = _home_string_list(data.get("ingredients"))
-    ingredient_keys = {item.casefold() for item in ingredients}
+    reason = _home_human_reason(data.get("reason"), context)
+    tip = _home_useful_tip(data.get("tip"))
+    ingredients = [_home_natural_ingredient(item) for item in _home_string_list(data.get("ingredients"))]
+    ingredient_keys = {_home_semantic_ingredient_key(item) for item in ingredients}
     use_first = _home_exact_fridge_names(data.get("use_first"), available) if has_fridge else []
-    use_first = [item for item in use_first if item.casefold() in ingredient_keys]
+    use_first = [item for item in use_first if _home_semantic_ingredient_key(item) in ingredient_keys]
 
-    missing = _home_string_list(data.get("missing")) if has_fridge else []
-    available_keys = {name.casefold() for name in available}
+    missing = ([_home_natural_ingredient(item) for item in _home_string_list(data.get("missing"))]
+               if has_fridge else [])
+    available_keys = {_home_semantic_ingredient_key(name) for name in available}
     missing = [
         item for item in missing
-        if item.casefold() in ingredient_keys and item.casefold() not in available_keys
+        if (_home_semantic_ingredient_key(item) in ingredient_keys
+            and _home_semantic_ingredient_key(item) not in available_keys)
     ][:3]
 
     substitution = data.get("substitution") if isinstance(data.get("substitution"), dict) else {}
-    substitution_for = " ".join(str(substitution.get("for") or "").split()).strip()
-    substitution_product = " ".join(str(substitution.get("product") or "").split()).strip()
+    substitution_for = _home_natural_ingredient(substitution.get("for"))
+    substitution_product = _home_clean_substitution(substitution.get("product"))
     substitution_from_fridge = bool(substitution.get("from_fridge"))
-    if not missing or substitution_for.casefold() not in {item.casefold() for item in missing}:
+    missing_keys = {_home_semantic_ingredient_key(item) for item in missing}
+    if (not missing
+            or _home_semantic_ingredient_key(substitution_for) not in missing_keys
+            or not _home_valid_substitution(substitution_for, substitution_product)):
         substitution = None
     elif substitution_from_fridge:
         exact = _home_exact_fridge_names([substitution_product], available)
@@ -137,6 +314,7 @@ def _home_idea_context(cid, now=None) -> dict:
     meal = _home_meal_for_hour(now.hour)
     signature_data = {
         "date": now.date().isoformat(),
+        "home_copy_version": 2,
         "meal": meal,
         "available": available,
         "unavailable": unavailable,
@@ -180,6 +358,7 @@ def _home_idea_prompt(context: dict) -> str:
         f"Предпочтительные кухни: {secure.wrap_untrusted(cuisines, 'кухни')}.\n"
         "Правила:\n"
         "• Предложи ровно одно понятное блюдо, без рекламного названия.\n"
+        "• Все названия ингредиентов должны звучать естественно по-русски: «соевый соус», а не «соус сои».\n"
         "• Никогда не используй и не предлагай заменой исключённые продукты или аллергены.\n"
         "• Если холодильник заполнен, выбери простое блюдо, для которого уже есть максимум ингредиентов.\n"
         "• ingredients — полный список обязательных продуктов блюда без воды и необязательных специй. "
@@ -191,9 +370,15 @@ def _home_idea_prompt(context: dict) -> str:
         "предпочитай рецепт с 0–1 недостающим продуктом, максимум 3. Не считай воду и необязательные специи.\n"
         "• substitution заполняй только для одного missing-продукта и только если замена нормальная. "
         "Сначала ищи точное название замены среди продуктов в наличии. Если берёшь её оттуда, поставь from_fridge=true; "
-        "иначе предложи обычный доступный аналог и поставь false.\n"
-        "• reason — одно короткое предложение: почему блюдо подходит именно сейчас. При пустом холодильнике формулировка нейтральная.\n"
-        "• tip — один короткий конкретный приём именно для этого блюда или техники его приготовления.\n"
+        "иначе предложи обычный доступный аналог и поставь false. Замена должна позволять приготовить блюдо, "
+        "но не обязана полностью повторять вкус. Не называй заменой тот же продукт, его синоним или вариант написания.\n"
+        "• reason — одна короткая человеческая рекомендация вроде «Быстрый ужин из того, что уже есть дома». "
+        "Не пиши «поскольку в холодильнике есть», «на основе содержимого холодильника» и другие технические объяснения. "
+        "При пустом холодильнике формулировка нейтральная.\n"
+        "• tip — один конкретный приём именно для этого блюда с понятной техникой или результатом. "
+        "Запрещены общие советы вроде «добавь чеснок и лук для аромата».\n"
+        "• Во всём тексте обращайся только на «ты»: «приготовь», «обжарь», «добавь». "
+        "Не используй формы «приготовьте», «обжарьте», «добавьте».\n"
         "• Никаких эмодзи, общих вступлений, текста о настройках и нескольких советов.\n"
         'JSON без markdown: {"reason":"одно предложение","name":"Название блюда","minutes":20,'
         '"ingredients":["все обязательные продукты блюда"],'
@@ -215,11 +400,21 @@ def get_cooking_home_idea(cid, now=None) -> dict:
             if all(normalized.get(field) for field in ("name", "reason", "minutes", "ingredients", "tip")):
                 return normalized
 
-    result = ai.llm_json(
-        _home_idea_prompt(context), 700, tier="cheap", module="food",
-        fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
-    )
-    idea = _normalize_home_idea(result, context)
+    prompt = _home_idea_prompt(context)
+    idea = {}
+    for attempt in range(2):
+        result = ai.llm_json(
+            prompt, 700, tier="cheap", module="food",
+            fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
+        )
+        idea = _normalize_home_idea(result, context)
+        if all(idea.get(field) for field in ("name", "reason", "minutes", "ingredients", "tip")):
+            break
+        if attempt == 0:
+            prompt += (
+                "\nПредыдущий вариант не прошёл проверку. Верни новый вариант: обязательны естественные "
+                "русские названия и один конкретный технический лайфхак на «ты», без общего совета."
+            )
     if not all(idea.get(field) for field in ("name", "reason", "minutes", "ingredients", "tip")):
         raise ValueError("Неполная идея блюда для главного экрана Готовки")
     # За время AI-запроса профиль мог измениться в другом сценарии. Перечитываем его,

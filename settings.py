@@ -152,6 +152,12 @@ def cuisine_context(cid):
     return "Предпочитаемые кухни пользователя: " + ", ".join(labels) + "."
 
 
+def _mark_transient_edit(bot, cid, message):
+    marker = getattr(bot, "mark_transient_message", None)
+    if marker is not None:
+        marker(cid, getattr(message, "message_id", None))
+
+
 def _notif_label(kind: str, label: str) -> str:
     if kind == "weekend_events":
         return f"{label} (по пятницам в 10:00)"
@@ -348,10 +354,12 @@ async def send_notif(bot, cid, q=None):
     if q is not None:
         try:
             await q.message.edit_text(text, entities=msg.entities, reply_markup=kb)
+            _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=text, entities=msg.entities,
+                           reply_markup=kb, transient=True)
 
 async def toggle_notif(bot, cid, kind, q=None):
     if kind not in dict(NOTIF_TYPES):
@@ -409,10 +417,12 @@ async def send_cuisines(bot, cid, q=None):
     if q is not None:
         try:
             await q.message.edit_text(text, entities=msg.entities, reply_markup=kb)
+            _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=text, entities=msg.entities,
+                           reply_markup=kb, transient=True)
 
 
 async def toggle_cuisine(bot, cid, key, q=None):
@@ -546,10 +556,12 @@ async def send_colors_love(bot, cid, q=None):
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=kb, transient=True)
 
 
 async def set_colors_love_toggle(bot, cid, i, q=None):
@@ -563,10 +575,12 @@ async def send_colors_avoid(bot, cid, q=None):
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=kb, transient=True)
 
 
 async def set_colors_avoid_toggle(bot, cid, i, q=None):
@@ -647,10 +661,12 @@ async def send_wardrobe_settings_hub(bot, cid, q=None):
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=kb, transient=True)
 
 
 def _wardrobe_style_state(cid):
@@ -699,10 +715,12 @@ async def send_wardrobe_style(bot, cid, q=None):
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=kb, transient=True)
 
 
 async def send_wardrobe_prefs(bot, cid, back="set_priorities", q=None):

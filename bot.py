@@ -643,8 +643,8 @@ async def post_init(app):
 
 class _MenuCleanupBot(ExtBot):
     """Bot, который перед каждой отправкой снимает инлайн-кнопки с предыдущего
-    сообщения этого чата - в переписке всегда активны кнопки только последнего
-    экрана, старые сообщения остаются просто текстом.
+    сообщения этого чата. Временные экраны навигации при следующей отправке
+    удаляются целиком, а полезные результаты остаются в истории без кнопок.
 
     Исключение - главное меню (/menu, см. menu_command): его кнопки остаются
     прикреплёнными всегда, даже после следующих сообщений бота в этом чате -
@@ -664,9 +664,32 @@ class _MenuCleanupBot(ExtBot):
         except Exception:
             pass
 
+    def mark_transient_message(self, chat_id, message_id):
+        """Помечает служебный экран меню для удаления при следующей отправке."""
+        if message_id:
+            store.transient_message[str(chat_id)] = message_id
+
+    async def _delete_transient(self, chat_id):
+        key = str(chat_id)
+        msg_id = store.transient_message.pop(key, None)
+        if not msg_id or msg_id == store.pinned_menu_message.get(key):
+            return
+        if store.last_inline_message.get(key) == msg_id:
+            store.last_inline_message.pop(key, None)
+        try:
+            await self.delete_message(chat_id=chat_id, message_id=msg_id)
+        except Exception:
+            # Если Telegram уже не разрешает удаление, хотя бы выключаем старые кнопки.
+            try:
+                await self.edit_message_reply_markup(
+                    chat_id=chat_id, message_id=msg_id, reply_markup=None)
+            except Exception:
+                pass
+
     async def _pre_send(self, chat_id, allow_unpin=False):
         if allow_unpin:
             await self._unpin_menu(chat_id)
+        await self._delete_transient(chat_id)
         msg_id = store.last_inline_message.get(str(chat_id))
         if not msg_id or msg_id == store.pinned_menu_message.get(str(chat_id)):
             return
@@ -676,17 +699,20 @@ class _MenuCleanupBot(ExtBot):
         except Exception:
             pass
 
-    def _post_send(self, chat_id, msg, pin_menu=False):
+    def _post_send(self, chat_id, msg, pin_menu=False, transient=False):
         if isinstance(getattr(msg, "reply_markup", None), InlineKeyboardMarkup):
             store.last_inline_message[str(chat_id)] = msg.message_id
             if pin_menu:
                 store.pinned_menu_message[str(chat_id)] = msg.message_id
+        if transient:
+            self.mark_transient_message(chat_id, msg.message_id)
 
     async def send_message(self, chat_id, *args, **kwargs):
         pin_menu = kwargs.pop("pin_menu", False)
+        transient = kwargs.pop("transient", False)
         send = super().send_message(chat_id, *args, **kwargs)
         msg, _ = await asyncio.gather(send, self._pre_send(chat_id, allow_unpin=pin_menu))
-        self._post_send(chat_id, msg, pin_menu=pin_menu)
+        self._post_send(chat_id, msg, pin_menu=pin_menu, transient=transient)
         return msg
 
     async def send_photo(self, chat_id, *args, **kwargs):
