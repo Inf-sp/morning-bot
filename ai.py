@@ -9,6 +9,7 @@ import requests
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import hashlib
+import base64
 from typing import Literal
 import api_usage
 import config
@@ -442,6 +443,50 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
                 continue
             raise
     raise last_err
+
+
+def _gemini_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
+    """Один приватный vision-запрос в Gemini для распознавания изображения.
+
+    Изображение не попадает в кэш, логи или fallback-провайдеры.
+    """
+    if not config.GEMINI_API_KEY:
+        raise LLMProviderError("gemini", "no gemini key", error_type="credentials")
+    payload = {
+        "contents": [{"parts": [
+            {"inlineData": {
+                "mimeType": mime_type or "image/jpeg",
+                "data": base64.b64encode(bytes(image_bytes)).decode("ascii"),
+            }},
+            {"text": prompt},
+        ]}],
+        "generationConfig": {
+            "maxOutputTokens": max_tokens,
+            "temperature": 0.2,
+            "responseMimeType": "application/json",
+            "thinkingConfig": {"thinkingBudget": 0},
+        },
+    }
+    r = _post(
+        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={config.GEMINI_API_KEY}",
+        {}, payload, 40, "gemini",
+    )
+    data = r.json()
+    usage = data.get("usageMetadata") or {}
+    input_tokens = int(usage.get("promptTokenCount") or 0)
+    output_tokens = int(usage.get("candidatesTokenCount") or 0)
+    api_usage.record_request(
+        "gemini", ok=True,
+        units={"tokens": input_tokens + output_tokens,
+               "input_tokens": input_tokens, "output_tokens": output_tokens},
+        headers=r.headers,
+    )
+    raw = data["candidates"][0]["content"]["parts"][0]["text"]
+    return _parse_json_response(raw)
+
+
+async def allm_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
+    return await asyncio.to_thread(_gemini_image_json, image_bytes, mime_type, prompt, max_tokens)
 
 def _looks_bad_fallback_text(text: str, response_mode: ResponseMode = "plain_text") -> bool:
     s = (text or "").strip()

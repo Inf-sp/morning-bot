@@ -344,6 +344,30 @@ async def document_handler(update, context):
     await wardrobe.ingest(context.bot, cid, txt)
 
 
+async def photo_handler(update, context):
+    cid = str(update.effective_chat.id)
+    if not access.is_allowed(cid):
+        return
+    tracking.touch(cid)
+    pending = store.pending_input.get(cid)
+    if pending not in ("wardrobe_add", "wardrobe_add_set"):
+        return
+    store.pending_input.pop(cid, None)
+    photo = update.message.photo[-1]
+    if (photo.file_size or 0) > 8 * 1024 * 1024:
+        store.pending_input[cid] = "wardrobe_add"
+        await update.message.reply_text("Фото слишком большое. Пришли снимок до 8 МБ или опиши вещь текстом.")
+        return
+    try:
+        f = await context.bot.get_file(photo.file_id)
+        body = await f.download_as_bytearray()
+    except Exception as e:
+        await verify.safe_error(context.bot, cid, e)
+        return
+    await wardrobe.add_item_photo(
+        context.bot, cid, body, "image/jpeg", secure.clamp(update.message.caption or ""))
+
+
 async def poll_answer_handler(update, context):
     await trainer.handle_poll_answer(context.bot, update.poll_answer)
 
@@ -636,6 +660,7 @@ def main():
     app.add_handler(PollAnswerHandler(poll_answer_handler))
     app.add_handler(MessageHandler(filters.LOCATION, weather.location_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
+    app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
 
     jq = app.job_queue

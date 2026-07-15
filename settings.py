@@ -50,20 +50,21 @@ CUISINE_OPTIONS = [
 
 STYLES = [
     "минимализм",
-    "скандинавский стиль",
+    "скандинавский",
     "smart casual",
-    "casual / повседневный",
-    "классика",
-    "streetwear / городской",
-    "натуральный / бохо",
+    "streetwear",
+    "классический",
     "спортивный",
 ]
 
 FIT_OPTIONS = [
     "свободная",
-    "обычная",
+    "прямая",
     "приталенная",
 ]
+
+PALETTE_OPTIONS = ["тёмные", "светлые", "цветные"]
+STYLE_AVOID_OPTIONS = ["яркие цвета", "крупные принты", "узкий крой", "слишком спортивное"]
 
 COLOR_OPTIONS = [
     "белый", "чёрный", "серый", "бежевый", "синий", "зелёный",
@@ -402,9 +403,14 @@ async def toggle_cuisine(bot, cid, key, q=None):
 def wardrobe_styles(cid):
     cur = get(cid, "style", [])
     if isinstance(cur, str):
-        return [cur] if cur else []
+        cur = [cur] if cur else []
     if isinstance(cur, list):
-        return [s for s in cur if s in STYLES]
+        aliases = {
+            "скандинавский стиль": "скандинавский",
+            "streetwear / городской": "streetwear",
+            "классика": "классический",
+        }
+        return [aliases.get(s, s) for s in cur if aliases.get(s, s) in STYLES]
     return []
 
 
@@ -456,6 +462,14 @@ def wardrobe_colors_avoid(cid):
 
 def wardrobe_constraints_list(cid):
     return _multi_selected(cid, "wardrobe_constraints", CONSTRAINT_OPTIONS)
+
+
+def wardrobe_palette(cid):
+    return _multi_selected(cid, "wardrobe_palette", PALETTE_OPTIONS)
+
+
+def wardrobe_style_avoid(cid):
+    return _multi_selected(cid, "wardrobe_style_avoid", STYLE_AVOID_OPTIONS)
 
 
 def _toggle_multi(cid, key, options, idx):
@@ -548,6 +562,12 @@ def wardrobe_prefs_context(cid):
     fit = get(cid, "wardrobe_fit", "")
     if fit:
         parts.append(f"Предпочитаемая посадка одежды: {fit}.")
+    palette = wardrobe_palette(cid)
+    if palette:
+        parts.append(f"Предпочитаемая палитра: {', '.join(palette)}.")
+    style_avoid = wardrobe_style_avoid(cid)
+    if style_avoid:
+        parts.append(f"Не предлагать: {', '.join(style_avoid)}.")
     colors_love = wardrobe_colors_love(cid)
     if colors_love:
         parts.append(f"Любимые цвета — предпочитай их в подборе: {', '.join(colors_love)}.")
@@ -587,31 +607,35 @@ async def send_wardrobe_settings_hub(bot, cid, q=None):
 
 def _wardrobe_style_kb(cid):
     selected_styles = set(wardrobe_styles(cid))
-    style_buttons = [InlineKeyboardButton(("✅ " if s in selected_styles else "") + s, callback_data=f"set_style_{i}")
+    style_buttons = [InlineKeyboardButton(("✅ " if s in selected_styles else "") + s.capitalize(), callback_data=f"set_style_{i}")
                      for i, s in enumerate(STYLES)]
     fit = get(cid, "wardrobe_fit", "")
-    fit_buttons = [InlineKeyboardButton(("✅ " if fit == f else "") + f, callback_data=f"set_fit_{i}")
+    fit_buttons = [InlineKeyboardButton(("✅ " if fit == f else "") + f.capitalize(), callback_data=f"set_fit_{i}")
                    for i, f in enumerate(FIT_OPTIONS)]
-    colors_love = wardrobe_colors_love(cid)
-    colors_avoid = wardrobe_colors_avoid(cid)
-    constraints = wardrobe_constraints_list(cid)
-    style_custom = get(cid, "wardrobe_style_custom", "")
+    palette = set(wardrobe_palette(cid))
+    avoid = set(wardrobe_style_avoid(cid))
     rows = [style_buttons[i:i + 2] for i in range(0, len(style_buttons), 2)]
-    rows.append([InlineKeyboardButton(f"✏️ Описать стиль своими словами{' ✅' if style_custom else ''}", callback_data="set_stylecustom")])
     rows.extend(fit_buttons[i:i + 3] for i in range(0, len(fit_buttons), 3))
-    rows.append([InlineKeyboardButton(f"Любимые цвета{' ✅' if colors_love else ''}", callback_data="set_colors_love")])
-    rows.append([InlineKeyboardButton(f"Не предлагать цвета{' ✅' if colors_avoid else ''}", callback_data="set_colors_avoid")])
-    rows.append([InlineKeyboardButton(f"Ограничения{' ✅' if constraints else ''}", callback_data="set_constraints")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_settings"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("Палитра", callback_data="noop")])
+    palette_buttons = [InlineKeyboardButton(("✅ " if value in palette else "") + value.capitalize(), callback_data=f"set_palette_{i}")
+                       for i, value in enumerate(PALETTE_OPTIONS)]
+    rows.append(palette_buttons)
+    rows.append([InlineKeyboardButton("Не предлагать", callback_data="noop")])
+    avoid_buttons = [InlineKeyboardButton(("✅ " if value in avoid else "") + value.capitalize(), callback_data=f"set_styleavoid_{i}")
+                     for i, value in enumerate(STYLE_AVOID_OPTIONS)]
+    rows.extend(avoid_buttons[i:i + 2] for i in range(0, len(avoid_buttons), 2))
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
 async def send_wardrobe_style(bot, cid, q=None):
     """Стиль гардероба — один экран, все переключатели нажимаются сразу (стиль и
     посадка — toggle с галочкой на месте, без перехода на отдельный подэкран)."""
-    msg = settings_ui.mydata_section(
-        "Стиль",
-        "Стиль и посадка переключаются сразу. Цвета и ограничения — свободный текст.",
+    msg = settings_ui.wardrobe_style(
+        wardrobe_styles(cid),
+        get(cid, "wardrobe_fit", ""),
+        wardrobe_palette(cid),
+        wardrobe_style_avoid(cid),
     )
     kb = _wardrobe_style_kb(cid)
     if q is not None:
@@ -687,6 +711,12 @@ async def handle_callback(bot, cid, data, q=None):
         await set_style(bot, cid, int(data[len("set_style_"):]), q)
     elif data.startswith("set_fit_"):
         await set_fit(bot, cid, int(data[len("set_fit_"):]), q)
+    elif data.startswith("set_palette_"):
+        _toggle_multi(cid, "wardrobe_palette", PALETTE_OPTIONS, int(data[len("set_palette_"):]))
+        await send_wardrobe_style(bot, cid, q)
+    elif data.startswith("set_styleavoid_"):
+        _toggle_multi(cid, "wardrobe_style_avoid", STYLE_AVOID_OPTIONS, int(data[len("set_styleavoid_"):]))
+        await send_wardrobe_style(bot, cid, q)
     elif data.startswith("set_layers_"):
         # Compat: кнопки слоёв в старых сообщениях больше никуда не ведут отдельно.
         await send_wardrobe_style(bot, cid, q)

@@ -30,7 +30,9 @@ def _assert_add_menu(rows, expected_add):
 
 
 def test_wardrobe_add_action_is_first_and_separate():
-    _assert_add_menu(_labels(wardrobe.closet_kb()), "🆕 Добавить вещь")
+    rows = _labels(wardrobe.closet_kb())
+    assert rows[0] == ["🆕 Добавить вещь", "🔍 Найти"]
+    assert rows[-1] == ["⬅️ Назад", "#️⃣ Меню"]
 
 
 def test_fridge_add_action_is_first_and_separate(monkeypatch):

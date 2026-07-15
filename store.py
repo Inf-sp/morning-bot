@@ -380,6 +380,8 @@ list_sel = runtime_state.list_sel
 last_source = runtime_state.last_source
 last_surface = runtime_state.last_surface
 last_look = runtime_state.last_look
+wardrobe_add_queue = runtime_state.wardrobe_add_queue
+wardrobe_edit_item = runtime_state.wardrobe_edit_item
 
 # --- ListRecord: стабильный id + revision для списков вне гардероба (PR3a) ---
 # Формат элемента: строка -> {"id": uuid4_hex, "value": строка} (обёртка);

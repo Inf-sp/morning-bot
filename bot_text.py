@@ -82,7 +82,11 @@ async def handle(update, context, remove_reply_keyboard):
             await wardrobe.add_item(bot, cid, text); return
         if kind == "wardrobe_add_set":
             await wardrobe.add_item_settings(bot, cid, text)
-            await wardrobe.send_wardrobe_zones(bot, cid); return
+            return
+        if kind == "wardrobe_add_edit":
+            await wardrobe.edit_add_preview(bot, cid, text); return
+        if kind == "wardrobe_edit":
+            await wardrobe.edit_item_text(bot, cid, text); return
         if kind == "wardrobe_search":
             await wardrobe.handle_wardrobe_search(bot, cid, text); return
         if kind == "wardrobe_check":

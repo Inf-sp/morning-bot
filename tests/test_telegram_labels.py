@@ -30,7 +30,7 @@ def test_wardrobe_card_uses_all_outfit_labels():
     })
 
     assert _bold_fragments(message) == [
-        "👟 Гардероб",
+        "👟 Гардероб · Образ на сегодня",
         "Надень:",
         "Как носить:",
         "Почему работает:",

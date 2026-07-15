@@ -62,7 +62,11 @@ def normalize_parsed_item(raw):
         "color_secondary": (str(raw["color_secondary"]).strip() or None) if raw.get("color_secondary") else None,
         "material": (str(raw["material"]).strip() or None) if raw.get("material") else None,
         "style": str(raw.get("style") or "").strip() or None,
-        "season": None,
+        "fit": str(raw.get("fit") or "").strip() or None,
+        "season": [str(x).strip() for x in (raw.get("season") or []) if str(x).strip()]
+                  if isinstance(raw.get("season"), list) else [],
+        "occasions": [str(x).strip() for x in (raw.get("occasions") or []) if str(x).strip()]
+                     if isinstance(raw.get("occasions"), list) else [],
     }
 
 

@@ -73,7 +73,13 @@ def render_wardrobe_message(look_data):
     """
     look_data = look_data or {}
     b = MessageBuilder()
-    b.section("👟 Гардероб")
+    b.section("👟 Гардероб · Образ на сегодня")
+
+    intro = _finish_dot(look_data.get("weather_intro"))
+    if intro:
+        b.spacer()
+        b.italic(intro)
+        b.newline()
 
     items = [_clean_text(_item_display(it)) for it in (look_data.get("items") or [])]
     items = [it for it in items if it]
@@ -93,15 +99,10 @@ def render_wardrobe_message(look_data):
         b.spacer()
         b.labeled_line("Почему работает", _finish_dot(" и ".join(reasons[:3])))
 
-    decision = _finish_dot(look_data.get("weather_decision"))
-    if decision:
+    final_text = _finish_dot(look_data.get("final_text") or look_data.get("weather_decision"))
+    if final_text:
         b.spacer()
-        b.labeled_line("Образ готов", decision)
-
-    insight = _finish_dot(look_data.get("insight"))
-    if insight:
-        b.spacer()
-        b.line(insight)
+        b.labeled_line(look_data.get("final_heading") or "Образ готов", final_text)
 
     return b.build_stripped()
 
@@ -163,9 +164,7 @@ def purchase_check_card(data):
     """
     data = data or {}
     b = MessageBuilder()
-    b.section("🧐 Оценка")
-    b.spacer()
-    b.bold(_clean_text(data.get("item")))
+    b.section("🧐 Оценка вещи")
 
     verdict = _clean_text(data.get("verdict"))
     if verdict:
@@ -177,23 +176,15 @@ def purchase_check_card(data):
         b.section("Почему:")
         b.line("\n".join(f"- {x}" for x in why[:3]))
 
-    have_category = _clean_text(data.get("have_category"))
-    have_count = data.get("have_count")
-    if have_category and have_count is not None:
-        similar = data.get("similar_count")
-        similar_bit = f" · {similar} похожих по назначению" if similar else ""
-        b.spacer()
-        b.labeled_line("У тебя уже", _finish_dot(f"{have_count} {have_category}{similar_bit}"))
+    wear_with = [_finish_dot(x) for x in (data.get("wear_with") or []) if _clean_text(x)]
+    if wear_with:
+        b.section("С чем носить:")
+        b.line("\n".join(f"- {x}" for x in wear_with[:3]))
 
-    reconsider_if = _finish_dot(data.get("reconsider_if"))
-    if reconsider_if:
+    outcome = _finish_dot(data.get("outcome"))
+    if outcome:
         b.spacer()
-        b.labeled_line("Рассмотреть можно, если", reconsider_if)
-
-    alternative = _clean_text(data.get("alternative"))
-    if alternative:
-        b.spacer()
-        b.labeled_line("Лучше искать", _finish_dot(alternative))
+        b.labeled_line("Итог", outcome)
 
     return b.build_stripped()
 
@@ -207,12 +198,8 @@ def zone_picker_screen():
 
 def wardrobe_home_screen(total):
     b = MessageBuilder()
-    b.section("👕 Мой гардероб")
-    if total:
-        b.label("Всего вещей", total, lowercase=False)
-        b.line(". Выбери категорию.")
-    else:
-        b.line("Пока пусто — добавь первую вещь.")
+    b.section(f"👕 Мой шкаф · {total} {_pluralize_items(total)}")
+    b.line("Выбери категорию или найди нужную вещь.")
     return b.build_stripped()
 
 
@@ -220,4 +207,65 @@ def subcat_picker_screen(zone):
     b = MessageBuilder()
     b.section(_clean_text(zone))
     b.line("Выбери подкатегорию.")
+    return b.build_stripped()
+
+
+def category_screen(zone, items):
+    b = MessageBuilder()
+    b.section(f"{_clean_text(zone)} · {len(items)}")
+    if items:
+        b.spacer()
+        for index, item in enumerate(items, 1):
+            b.line(f"{index}. {_clean_text(_item_display(item))}")
+    return b.build_stripped()
+
+
+def item_card(item):
+    item = item or {}
+    b = MessageBuilder()
+    b.section(_clean_text(item.get("name")) or "Вещь")
+    b.spacer()
+    b.labeled_line("Категория", item.get("zone") or "другое")
+    if item.get("color"):
+        b.labeled_line("Цвет", item["color"])
+    if item.get("fit"):
+        b.labeled_line("Посадка", item["fit"])
+    if item.get("style"):
+        b.labeled_line("Стиль", str(item["style"]).replace("/", " · "))
+    return b.build_stripped()
+
+
+def add_preview(item, remaining=0):
+    item = item or {}
+    b = MessageBuilder()
+    b.section("Добавить вещь?")
+    b.spacer()
+    b.bold(_clean_text(item.get("name")) or "Вещь")
+    b.newline()
+    b.spacer()
+    b.labeled_line("Категория", item.get("zone") or "другое")
+    if item.get("color"):
+        b.labeled_line("Цвет", item["color"])
+    if item.get("fit"):
+        b.labeled_line("Посадка", item["fit"])
+    if remaining:
+        b.line(f"После этой останется: {remaining}.")
+    return b.build_stripped()
+
+
+def search_results(query, items):
+    b = MessageBuilder()
+    b.section("🔍 Найдено")
+    b.line(f"По запросу «{_clean_text(query)}»: {len(items)}.")
+    if items:
+        b.spacer()
+        for index, item in enumerate(items, 1):
+            b.line(f"{index}. {_clean_text(_item_display(item))}")
+    return b.build_stripped()
+
+
+def delete_confirmation(item):
+    b = MessageBuilder()
+    b.section("Удалить вещь?")
+    b.line(f"Удалить «{_clean_text((item or {}).get('name'))}» из шкафа?")
     return b.build_stripped()

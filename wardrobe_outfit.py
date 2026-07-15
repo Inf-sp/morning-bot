@@ -79,7 +79,26 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text):
             # при равном score и не попадают в образ вовсе.
             score += 2
     score += _color_penalty(items)
+    prefs_low = str(prefs_text or "").lower()
     for it in items:
+        colors = [str(color).lower() for color in (it.get("colors") or [])]
+        fit = str(it.get("fit") or "").lower()
+        style = " ".join((str(it.get("style") or ""), str(it.get("formality") or ""))).lower()
+        name = str(it.get("name") or "").lower()
+        if fit and f"посадка одежды: {fit}" in prefs_low:
+            score += 3
+        if "яркие цвета" in prefs_low and any(not _is_neutral_color(color) for color in colors):
+            score -= 6
+        if "крупные принты" in prefs_low and any(word in name for word in ("крупный принт", "логотип", "график")):
+            score -= 7
+        if "узкий крой" in prefs_low and any(word in fit + " " + name for word in ("узк", "скинни", "slim")):
+            score -= 8
+        if "слишком спортивное" in prefs_low and any(word in style + " " + name for word in ("sport", "спортив")):
+            score -= 5
+        if "тёмные" in prefs_low and any(any(marker in color for marker in ("чёрн", "черн", "тём", "темн", "бордов")) for color in colors):
+            score += 1
+        if "светлые" in prefs_low and any(any(marker in color for marker in ("бел", "беж", "светл")) for color in colors):
+            score += 1
         # Маленький тай-брейкер, не решающий фактор: при прочих равных чуть
         # предпочитаем вещь, которая реже носилась в последнее время — но только
         # после того, как цельность образа (цвет/погода/антиповтор) уже учтена.
@@ -113,7 +132,7 @@ def _top_candidates(items, limit=3):
     return items[:limit]
 
 
-def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text):
+def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=None):
     """Собирает кандидатов, перебирает ограниченные комбинации (топ-3 на зону),
     возвращает лучший набор вещей (list[item]) или None, если нет кандидатов хотя
     бы на одну обязательную зону (Верх/Низ/Обувь)."""
@@ -131,7 +150,16 @@ def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text):
         for combo in itertools.product(*pools):
             yield [it for it in combo if it is not None]
 
-    scored = [(score_outfit(combo, weather_ctx, wardrobe_history, prefs_text), combo) for combo in _combos()]
+    previous_item_ids = set(previous_item_ids or [])
+    combos = list(_combos())
+    if previous_item_ids:
+        # «Другой образ» должен менять основу комплекта, а не одну случайную вещь.
+        # Для полного набора из 4–5 элементов требуем минимум две замены; для
+        # маленького шкафа оставляем честную возможность заменить хотя бы одну.
+        min_changes = 2 if any(len(combo) >= 4 for combo in combos) else 1
+        combos = [combo for combo in combos
+                  if len(previous_item_ids - {it.get("id") for it in combo}) >= min_changes]
+    scored = [(score_outfit(combo, weather_ctx, wardrobe_history, prefs_text), combo) for combo in combos]
     if not scored:
         return None
     scored.sort(key=lambda x: x[0], reverse=True)
@@ -173,6 +201,21 @@ def build_outfit_reasons(items, weather_ctx, score_details=None):
     low = next((it for it in items if it.get("zone") == "Низ"), None)
     if low and weather_ctx.get("hot"):
         reasons.append(f"{low.get('name')} — без перегрева в жару.")
+    top = next((it for it in items if it.get("zone") == "Верх"), None)
+    shoe = next((it for it in items if it.get("zone") == "Обувь"), None)
+    if top and low and not reasons:
+        top_fit = str(top.get("fit") or top.get("name") or "").lower()
+        low_fit = str(low.get("fit") or low.get("name") or "").lower()
+        if any(x in top_fit for x in ("свобод", "оверсайз")) and any(x in low_fit for x in ("широк", "свобод")):
+            reasons.append("Свободный верх поддерживает ширину брюк и собирает цельный силуэт.")
+        else:
+            reasons.append("Пропорции верха и низа сохраняют силуэт собранным.")
+    if shoe and len(reasons) < 2:
+        shoe_text = str(shoe.get("name") or "").lower()
+        if any(x in shoe_text for x in ("бел", "светл")):
+            reasons.append("Светлая обувь облегчает нижнюю часть образа.")
+        else:
+            reasons.append("Обувь добавляет нижней части нужный визуальный вес.")
     return reasons[:3]
 
 
@@ -185,12 +228,15 @@ def build_style_tip(items, weather_ctx=None):
     weather_ctx = weather_ctx or {}
     outer = next((it for it in items if it.get("zone") == "Верхняя одежда"), None)
     if outer and weather_ctx.get("warm"):
-        return f"Носи {outer.get('name')} расстёгнутой и слегка подверни рукава."
+        return "Оставь верхний слой расстёгнутым."
     sleeved = next((it for it in items
                     if it.get("zone") == "Верх" and any(m in str(it.get("name", "")).lower() for m in _LONG_SLEEVE_MARKERS)),
                    None)
     if sleeved:
-        return f"Подверни рукава {sleeved.get('name')} — образ станет легче."
+        return "Подверни рукава, верх оставь навыпуск."
+    low = next((it for it in items if it.get("zone") == "Низ"), None)
+    if low and any(x in str(low.get("name") or "").lower() for x in ("брюк", "джинс", "чинос")):
+        return "Слегка подверни брюки, чтобы открыть обувь."
     return ""
 
 
@@ -234,5 +280,3 @@ def save_outfit_feedback(cid, item_ids, weather_tags):
 
     store.mutate_wardrobe(cid, _mut)
     store.add_wardrobe_history_entry(cid, today, weather_tags, item_ids)
-
-

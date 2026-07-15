@@ -25,3 +25,5 @@ list_sel = {}
 last_source = {}
 last_surface = {}
 last_look = {}
+wardrobe_add_queue = {}
+wardrobe_edit_item = {}
