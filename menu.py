@@ -39,12 +39,21 @@ def menu_screen(key, cid=None):
 
 
 async def send_food_menu(bot, cid):
-    import myday
-    lifehacks = myday.kitchen_lifehacks(cid, 3)
-    msg = menu_ui.food_menu(lifehacks)
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
-        reply_markup=msg.reply_markup,
-    )
+    import asyncio
+    import recipe_generation
+    import util
+    import verify
+
+    status = await util.StatusManager.start(
+        bot, cid, stages=util.StatusManager.TOPIC_STAGES["food"])
+    try:
+        idea = await asyncio.to_thread(recipe_generation.get_cooking_home_idea, cid)
+        msg = menu_ui.food_menu(idea)
+        await status.replace(
+            msg.text,
+            entities=msg.entities,
+            reply_markup=msg.reply_markup,
+        )
+    except Exception as error:
+        await status.stop(delete=True)
+        await verify.safe_error(bot, cid, error)

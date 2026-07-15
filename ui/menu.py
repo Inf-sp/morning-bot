@@ -1,3 +1,5 @@
+import re
+
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .balance import finish_dot
@@ -181,20 +183,69 @@ def menu_screen(key):
     return _screen_message(emoji, title, description, rows, show_footer=show_footer)
 
 
-def food_menu(lifehacks=None):
+_COOKING_EMOJI_RE = re.compile(
+    r"[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF"
+    r"\u2190-\u21FF\u2300-\u23FF\u2B00-\u2BFF\ufe0f\u200d\U0001F3FB-\U0001F3FF]+"
+)
+
+
+def _cooking_text(value) -> str:
+    value = _COOKING_EMOJI_RE.sub("", str(value or ""))
+    return " ".join(value.split()).strip(" -•")
+
+
+def _cooking_sentence(value) -> str:
+    value = _cooking_text(value)
+    if value and value[-1] not in ".!?…":
+        value += "."
+    return value
+
+
+def food_menu(idea=None):
+    """Главный экран Готовки: одно персональное действие на текущий приём пищи."""
+    idea = idea or {}
     b = MessageBuilder()
-    b.text_line(f"{UI_FOOD} ")
-    b.bold("Готовка")
-    b.newline()
-    b.spacer()
-    b.line("Еда без хаоса. Соберу понятное меню на день, разберу холодильник и честно скажу, что с ним не так.")
-    if lifehacks:
+    b.section(f"{UI_FOOD} Готовка · Идея на сегодня")
+
+    reason = _cooking_sentence(idea.get("reason"))
+    if reason:
         b.spacer()
-        b.bold("Кухонный лайфхак:" if len(lifehacks) == 1 else "Кухонные лайфхаки:")
+        b.italic(reason)
         b.newline()
-        for tip in lifehacks:
-            b.bullet(tip)
-    _add_footer(b)
+
+    name = _cooking_text(idea.get("name"))
+    minutes = idea.get("minutes")
+    use_first = [_cooking_text(item) for item in (idea.get("use_first") or [])]
+    use_first = [item for item in use_first if item]
+    if name:
+        b.spacer()
+        b.labeled_line("Приготовь")
+        b.bullet(name)
+        if minutes:
+            b.bullet(f"Готовится за {minutes} минут")
+        if use_first:
+            b.bullet(f"Нужно использовать: {', '.join(use_first)}")
+
+    missing = [_cooking_text(item) for item in (idea.get("missing") or [])]
+    missing = [item for item in missing if item]
+    if missing:
+        b.spacer()
+        b.labeled_line("Не хватает")
+        for item in missing:
+            b.bullet(item)
+
+    substitution = idea.get("substitution") or {}
+    substitute_for = _cooking_text(substitution.get("for"))
+    substitute_product = _cooking_text(substitution.get("product"))
+    if substitute_for and substitute_product:
+        b.spacer()
+        b.labeled_line("Чем заменить", substitute_product)
+
+    tip = _cooking_sentence(idea.get("tip"))
+    if tip:
+        b.spacer()
+        b.labeled_line("Полезно", tip)
+
     rows = [
         [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
         [(ui_label("cook_from", "Из того что есть"), "as_fridge_cook")],

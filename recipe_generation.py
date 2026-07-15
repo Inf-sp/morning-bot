@@ -1,13 +1,233 @@
 from datetime import datetime
+import hashlib
+import json
+import re
 
 import ai
 import config
 import secure
 import store
 from recipe_state import _leftover_recent
+from fridge_model import _fridge_migrate
 from ui.constants import CUISINE_EMOJI
 
 TZ = config.TZ
+
+
+_HOME_MEAL_LABELS = {
+    "breakfast": "завтрак",
+    "lunch": "обед",
+    "dinner": "ужин",
+}
+
+
+def _home_meal_for_hour(hour: int) -> str:
+    """Тип блюда для главного экрана по локальному времени пользователя/бота."""
+    if 5 <= hour < 12:
+        return "breakfast"
+    if 12 <= hour < 18:
+        return "lunch"
+    return "dinner"
+
+
+def _home_string_list(value) -> list[str]:
+    if isinstance(value, list):
+        raw = value
+    elif isinstance(value, str):
+        raw = re.split(r"[,;\n]+", value)
+    else:
+        return []
+    result = []
+    seen = set()
+    for item in raw:
+        text = " ".join(str(item or "").split()).strip(" -•")
+        key = text.casefold()
+        if text and key not in seen:
+            seen.add(key)
+            result.append(text)
+    return result
+
+
+def _home_exact_fridge_names(values, available) -> list[str]:
+    """Не даёт модели приписать холодильнику продукт, которого там нет."""
+    by_name = {" ".join(name.split()).casefold(): name for name in available}
+    result = []
+    for value in _home_string_list(values):
+        actual = by_name.get(value.casefold())
+        if actual and actual not in result:
+            result.append(actual)
+    return result
+
+
+def _home_minutes(value) -> int | None:
+    match = re.search(r"\d+", str(value or ""))
+    if not match:
+        return None
+    minutes = int(match.group())
+    return minutes if 1 <= minutes <= 360 else None
+
+
+def _home_one_sentence(value) -> str:
+    text = " ".join(str(value or "").split()).strip()
+    return re.split(r"(?<=[.!?…])\s+", text, maxsplit=1)[0] if text else ""
+
+
+def _normalize_home_idea(data, context: dict) -> dict:
+    """Нормализует AI-ответ и структурно скрывает недостоверные блоки."""
+    data = data if isinstance(data, dict) else {}
+    available = context.get("available") or []
+    has_fridge = bool(context.get("has_fridge"))
+
+    name = " ".join(str(data.get("name") or "").split()).strip()
+    reason = _home_one_sentence(data.get("reason"))
+    tip = _home_one_sentence(data.get("tip"))
+    ingredients = _home_string_list(data.get("ingredients"))
+    ingredient_keys = {item.casefold() for item in ingredients}
+    use_first = _home_exact_fridge_names(data.get("use_first"), available) if has_fridge else []
+    use_first = [item for item in use_first if item.casefold() in ingredient_keys]
+
+    missing = _home_string_list(data.get("missing")) if has_fridge else []
+    available_keys = {name.casefold() for name in available}
+    missing = [
+        item for item in missing
+        if item.casefold() in ingredient_keys and item.casefold() not in available_keys
+    ][:3]
+
+    substitution = data.get("substitution") if isinstance(data.get("substitution"), dict) else {}
+    substitution_for = " ".join(str(substitution.get("for") or "").split()).strip()
+    substitution_product = " ".join(str(substitution.get("product") or "").split()).strip()
+    substitution_from_fridge = bool(substitution.get("from_fridge"))
+    if not missing or substitution_for.casefold() not in {item.casefold() for item in missing}:
+        substitution = None
+    elif substitution_from_fridge:
+        exact = _home_exact_fridge_names([substitution_product], available)
+        substitution = {
+            "for": substitution_for,
+            "product": exact[0],
+        } if exact else None
+    elif substitution_product:
+        substitution = {"for": substitution_for, "product": substitution_product}
+    else:
+        substitution = None
+
+    return {
+        "reason": reason,
+        "name": name,
+        "minutes": _home_minutes(data.get("minutes")),
+        "ingredients": ingredients,
+        "use_first": use_first,
+        "missing": missing,
+        "substitution": substitution,
+        "tip": tip,
+    }
+
+
+def _home_idea_context(cid, now=None) -> dict:
+    now = now or datetime.now(TZ)
+    raw_fridge = store.get_list(config.FRIDGE_KEY, str(cid))
+    fridge = _fridge_migrate(raw_fridge)
+    available = [item["name"] for item in fridge if item.get("on", True)]
+    unavailable = [item["name"] for item in fridge if not item.get("on", True)]
+    profile = store.get_profile(cid)
+    diet_prefs = " ".join(str(profile.get("diet_prefs") or "").split())
+    raw_memory_prefs = profile.get("prefs") or []
+    if not isinstance(raw_memory_prefs, list):
+        raw_memory_prefs = [raw_memory_prefs]
+    memory_prefs = [str(item).strip() for item in raw_memory_prefs if str(item).strip()][:20]
+    meal = _home_meal_for_hour(now.hour)
+    signature_data = {
+        "date": now.date().isoformat(),
+        "meal": meal,
+        "available": available,
+        "unavailable": unavailable,
+        "diet_prefs": diet_prefs,
+        "memory_prefs": memory_prefs,
+        "cuisines": _cuisine_context(cid),
+    }
+    signature = hashlib.sha256(
+        json.dumps(signature_data, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return {
+        **signature_data,
+        "has_fridge": bool(fridge),
+        "signature": signature,
+    }
+
+
+def _home_idea_prompt(context: dict) -> str:
+    meal = _HOME_MEAL_LABELS[context["meal"]]
+    available = context.get("available") or []
+    unavailable = context.get("unavailable") or []
+    if context.get("has_fridge"):
+        fridge_context = (
+            "Данные холодильника — единственный источник истины о наличии продуктов.\n"
+            f"В наличии: {secure.wrap_untrusted(', '.join(available) or 'ничего', 'продукты в наличии')}.\n"
+            f"Закончились: {secure.wrap_untrusted(', '.join(unavailable) or 'нет отметок', 'закончившиеся продукты')}.\n"
+        )
+    else:
+        fridge_context = (
+            "Данных о холодильнике нет. Не утверждай, что продукты уже есть дома, "
+            "не заполняй use_first, missing и substitution.\n"
+        )
+    restrictions = context.get("diet_prefs") or "не указаны"
+    memory_prefs = "; ".join(context.get("memory_prefs") or []) or "не указаны"
+    cuisines = context.get("cuisines") or "не указаны"
+    return (
+        f"Сейчас нужен {meal}. Составь одну короткую идею полноценного блюда на сегодня.\n"
+        f"{fridge_context}"
+        f"Пищевые предпочтения, аллергии и ограничения: {secure.wrap_untrusted(restrictions, 'ограничения')}.\n"
+        f"Другие сохранённые факты пользователя: {secure.wrap_untrusted(memory_prefs, 'предпочтения')}.\n"
+        f"Предпочтительные кухни: {secure.wrap_untrusted(cuisines, 'кухни')}.\n"
+        "Правила:\n"
+        "• Предложи ровно одно понятное блюдо, без рекламного названия.\n"
+        "• Никогда не используй и не предлагай заменой исключённые продукты или аллергены.\n"
+        "• Если холодильник заполнен, выбери простое блюдо, для которого уже есть максимум ингредиентов.\n"
+        "• ingredients — полный список обязательных продуктов блюда без воды и необязательных специй. "
+        "Для продуктов из холодильника сохраняй точное написание из входного списка.\n"
+        "• use_first — только точные названия из списка «В наличии», особенно открытые, скоропортящиеся "
+        "или явно требующие скорого использования, и только если они входят в ingredients. "
+        "Не выдумывай срочность и не добавляй отсутствующие продукты.\n"
+        "• missing — только действительно обязательные для выбранного блюда ингредиенты, которых нет в наличии; "
+        "предпочитай рецепт с 0–1 недостающим продуктом, максимум 3. Не считай воду и необязательные специи.\n"
+        "• substitution заполняй только для одного missing-продукта и только если замена нормальная. "
+        "Сначала ищи точное название замены среди продуктов в наличии. Если берёшь её оттуда, поставь from_fridge=true; "
+        "иначе предложи обычный доступный аналог и поставь false.\n"
+        "• reason — одно короткое предложение: почему блюдо подходит именно сейчас. При пустом холодильнике формулировка нейтральная.\n"
+        "• tip — один короткий конкретный приём именно для этого блюда или техники его приготовления.\n"
+        "• Никаких эмодзи, общих вступлений, текста о настройках и нескольких советов.\n"
+        'JSON без markdown: {"reason":"одно предложение","name":"Название блюда","minutes":20,'
+        '"ingredients":["все обязательные продукты блюда"],'
+        '"use_first":["точное название из холодильника"],"missing":["обязательный продукт"],'
+        '"substitution":{"for":"обязательный продукт","product":"замена","from_fridge":false},'
+        '"tip":"один совет"}. Если блока нет, используй пустой массив или null.'
+    )
+
+
+def get_cooking_home_idea(cid, now=None) -> dict:
+    """Одна стабильная идея для текущего приёма пищи и актуального холодильника."""
+    context = _home_idea_context(cid, now=now)
+    profile = store.get_profile(cid)
+    cached = profile.get("cooking_home_idea")
+    if isinstance(cached, dict) and cached.get("signature") == context["signature"]:
+        idea = cached.get("idea")
+        if isinstance(idea, dict):
+            normalized = _normalize_home_idea(idea, context)
+            if all(normalized.get(field) for field in ("name", "reason", "minutes", "ingredients", "tip")):
+                return normalized
+
+    result = ai.llm_json(
+        _home_idea_prompt(context), 700, tier="cheap", module="food",
+        fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
+    )
+    idea = _normalize_home_idea(result, context)
+    if not all(idea.get(field) for field in ("name", "reason", "minutes", "ingredients", "tip")):
+        raise ValueError("Неполная идея блюда для главного экрана Готовки")
+    # За время AI-запроса профиль мог измениться в другом сценарии. Перечитываем его,
+    # чтобы запись кэша не затёрла новые предпочтения или другие пользовательские данные.
+    profile = store.get_profile(cid)
+    profile["cooking_home_idea"] = {"signature": context["signature"], "idea": idea}
+    store.set_profile(cid, profile)
+    return idea
 
 
 def _cuisine_context(cid):
@@ -238,5 +458,3 @@ def _gen_leftovers_recipe_batch(ingredients, cid=None, cuisine_weights=None, rec
     )
     return _gen_recipe_batch(constraint, cid=cid, cuisine_weights=cuisine_weights,
                               recent_history=recent_history, season_hint=season_hint, n=n)
-
-
