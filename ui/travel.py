@@ -55,22 +55,18 @@ def country_card(data):
         b.line(data["about"])
     if data.get("for_what"):
         b.spacer()
-        b.bold(ui_label("reason", "Ради чего ехать:"))
-        b.line(f" {data['for_what']}")
+        b.labeled_line(ui_label("reason", "Ради чего ехать:"), data["for_what"])
     if data.get("langs"):
         b.spacer()
-        b.bold(ui_label("spoken_language", "Язык:"))
-        b.line(f" {data['langs']}")
+        b.labeled_line(ui_label("spoken_language", "Язык:"), data["langs"])
     if data.get("note"):
         b.spacer()
         b.text_line("⚠️ ")
-        b.bold("Главный нюанс:")
-        b.line(f" {data['note']}")
+        b.labeled_line("Главный нюанс", data["note"])
     if data.get("fact"):
         b.spacer()
         b.text_line("🔍 ")
-        b.bold(ui_label("interesting", "Факт:"))
-        b.line(f" {data['fact']}")
+        b.labeled_line(ui_label("interesting", "Факт:"), data["fact"])
     return b.build_stripped()
 
 
@@ -132,7 +128,7 @@ def facts_prompt_screen():
     b.spacer()
     b.line("Напиши название страны на русском, английском или нидерландском.")
     b.spacer()
-    b.line("Пример:")
+    b.labeled_line("Пример")
     b.quote("Япония")
     return b.build_stripped()
 

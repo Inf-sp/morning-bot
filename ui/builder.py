@@ -15,6 +15,24 @@ def u16_len(text: str) -> int:
     return len((text or "").encode("utf-16-le")) // 2
 
 
+def lower_initial(text: str) -> str:
+    """Опускает первую букву фразы, сохраняя пробелы и открывающие кавычки.
+
+    Вызывается только для обычного текста после подписи с двоеточием. Для имён,
+    аббревиатур и других значений, где регистр значим, у label()/labeled_line()
+    есть явный флаг ``lowercase=False``.
+    """
+    text = str(text or "")
+    for index, char in enumerate(text):
+        if char.isalpha():
+            return text[:index] + char.lower() + text[index + 1:]
+        if char.isdigit():
+            break
+        if not char.isspace() and char not in "«„\"'([{—–-":
+            break
+    return text
+
+
 def from_html(html_text: str) -> MessageSpec:
     """Собирает готовый HTML-текст (составленный из нескольких кусков/эскейпов) в MessageSpec
     с entities — удобно, когда проще склеить строки с тегами, чем звать MessageBuilder по кускам."""
@@ -106,6 +124,29 @@ class MessageBuilder:
         ровно одну пустую строку перед собой (если после неё уже что-то было) и перевод строки после."""
         self._ensure_blank_line()
         self.bold(title)
+        self.newline()
+        return self
+
+    def label(self, title: str, content=None, *, lowercase: bool = True):
+        """Жирная подпись с двоеточием и необязательным текстом в той же строке.
+
+        Это единая точка оформления конструкций вида ``Надень: ...`` во всех
+        Telegram-карточках. Двоеточие входит в bold-entity; обычная фраза после
+        него по умолчанию начинается со строчной буквы.
+        """
+        title = str(title or "").strip().rstrip(":") + ":"
+        self.bold(title)
+        if content is not None:
+            content = str(content).strip()
+            if content:
+                if lowercase:
+                    content = lower_initial(content)
+                self.text_line(f" {content}")
+        return self
+
+    def labeled_line(self, title: str, content=None, *, lowercase: bool = True):
+        """label(), завершённый переводом строки."""
+        self.label(title, content, lowercase=lowercase)
         self.newline()
         return self
 

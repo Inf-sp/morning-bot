@@ -335,7 +335,9 @@ def _movie_country_label(name, cc=""):
 
 
 def _movie_service_language(_cid=None):
-    return "ru-RU"
+    # Официальное локальное название проката; русская машинная локализация
+    # нередко создаёт несуществующие названия фильмов.
+    return "nl-NL"
 
 
 async def send_movie_home(bot, cid, q=None):
@@ -351,12 +353,11 @@ async def send_movie_home(bot, cid, q=None):
     now_playing = []
     if config.TMDB_API_KEY:
         try:
-            now_playing = await asyncio.to_thread(tmdb.get_now_playing, cc, _movie_service_language(cid))
+            now_playing = await asyncio.to_thread(
+                tmdb.get_now_playing, cc, _movie_service_language(cid), 8)
         except Exception:
             now_playing = []
-    now_playing = [m for m in now_playing if (m.rating or 0) > 7]
-
-    msg = leisure_ui.movie_home_screen(genre_labels, country_label, now_playing[:10])
+    msg = leisure_ui.movie_home_screen(genre_labels, country_label, now_playing)
     kb = _movie_home_kb()
     if q is not None:
         try:

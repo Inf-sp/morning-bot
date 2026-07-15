@@ -177,7 +177,7 @@ def fridge_home(count, available):
     b.bold(ui_label("products", "Мой холодильник"))
     b.text_line(f" · {count} продуктов · {available} в наличии")
     b.spacer()
-    b.line("Выбери категорию:")
+    b.labeled_line("Выбери категорию")
     return b.build_stripped()
 
 

@@ -64,12 +64,12 @@ def home(system_dot, system_text, system_line, notif_line, users_line, data_line
     b.spacer()
     b.line(f"{system_dot} {system_text}")
     b.spacer()
-    b.line(f"{ui_label('system', 'API и AI')}: {system_line}")
-    b.line(f"{ui_label('notifications', 'Уведомления')}: {notif_line}")
-    b.line(f"{ui_label('users', 'Пользователи')}: {users_line}")
-    b.line(f"Данные: {data_line}")
+    b.labeled_line(ui_label("system", "API и AI"), system_line)
+    b.labeled_line(ui_label("notifications", "Уведомления"), notif_line)
+    b.labeled_line(ui_label("users", "Пользователи"), users_line)
+    b.labeled_line("Данные", data_line)
     b.spacer()
-    b.line(f"Обновлено: {updated_at}")
+    b.labeled_line("Обновлено", updated_at, lowercase=False)
     return b.build_stripped()
 
 
@@ -80,14 +80,14 @@ def users(stats, users_list, users_total, updated_at):
     b.bold(ui_label("users", "Пользователи"))
     b.newline()
     b.spacer()
-    b.line(f"Всего: {stats.get('total', 0)}")
-    b.line(f"Активны за 7 дней: {stats.get('active_7d', 0)}")
-    b.line(f"Новых за 7 дней: {stats.get('new_7d', 0)}")
-    b.line(f"С уведомлениями: {stats.get('with_notifications', 0)}")
-    b.line(f"Админов: {stats.get('admins', 0)}")
+    b.labeled_line("Всего", stats.get("total", 0), lowercase=False)
+    b.labeled_line("Активны за 7 дней", stats.get("active_7d", 0), lowercase=False)
+    b.labeled_line("Новых за 7 дней", stats.get("new_7d", 0), lowercase=False)
+    b.labeled_line("С уведомлениями", stats.get("with_notifications", 0), lowercase=False)
+    b.labeled_line("Админов", stats.get("admins", 0), lowercase=False)
     b.spacer()
-    b.line("Инвайты:")
-    b.line(f"Активных: {stats.get('active_invites', 0)}")
+    b.labeled_line("Инвайты")
+    b.labeled_line("Активных", stats.get("active_invites", 0), lowercase=False)
 
     if users_list:
         b.spacer()
@@ -102,7 +102,7 @@ def users(stats, users_list, users_total, updated_at):
             b.line(f"…и ещё {users_total - len(users_list)}")
 
     b.spacer()
-    b.line(f"Обновлено: {updated_at}")
+    b.labeled_line("Обновлено", updated_at, lowercase=False)
     return b.build_stripped()
 
 
@@ -136,8 +136,8 @@ def invite_prompt():
     b.spacer()
     b.line("Создать ссылку для нового пользователя.")
     b.spacer()
-    b.line("Срок: 7 дней")
-    b.line("Лимит: 1 пользователь")
+    b.labeled_line("Срок", "7 дней", lowercase=False)
+    b.labeled_line("Лимит", "1 пользователь", lowercase=False)
     b.spacer()
     b.line("После входа пользователь получит приветствие.")
     return b.build_stripped()
@@ -148,10 +148,10 @@ def invite_created(link):
     b.bold("✅ Инвайт создан")
     b.newline()
     b.spacer()
-    b.line("Срок: 7 дней")
-    b.line("Лимит: 1 пользователь")
+    b.labeled_line("Срок", "7 дней", lowercase=False)
+    b.labeled_line("Лимит", "1 пользователь", lowercase=False)
     b.spacer()
-    b.line("Ссылка:")
+    b.labeled_line("Ссылка")
     b.line(link)
     b.spacer()
     b.line("Новый пользователь получит приветствие после входа.")
@@ -163,7 +163,7 @@ def welcome_admin():
     b.bold(ui_label("welcome", "Приветствие"))
     b.newline()
     b.spacer()
-    b.line("Текст, который увидит новый пользователь после входа:")
+    b.labeled_line("Текст, который увидит новый пользователь после входа")
     b.spacer()
     b.line("Привет! Я персональный помощник Дмитрия.")
     b.line("Я помогаю с погодой, одеждой, обучением, рецептами, досугом и важными напоминаниями.")
@@ -193,7 +193,7 @@ def api_ai(status_dot, status_text, impact_line, fallback_line, unavailable_line
     b.newline()
     b.line(impact_line)
     b.spacer()
-    b.line(f"Автопереключение: {fallback_line}")
+    b.labeled_line("Автопереключение", fallback_line)
     if unavailable_line:
         b.line(unavailable_line)
     b.spacer()
@@ -208,7 +208,7 @@ def api_ai(status_dot, status_text, impact_line, fallback_line, unavailable_line
         if raw_msg:
             b.line(str(raw_msg))
     else:
-        b.line("Последняя ошибка: нет")
+        b.labeled_line("Последняя ошибка", "нет")
     b.spacer()
     b.line(f"Обновлено в {updated_at}")
     return b.build_stripped()
@@ -231,12 +231,12 @@ def logs(rows, errors_24h, updated_at, summary=None):
     if not rows:
         b.line("Ошибок за 24 часа нет")
     else:
-        b.line("Последние ошибки:")
+        b.labeled_line("Последние ошибки")
         b.spacer()
         for row in rows:
             b.line(row)
         b.spacer()
-        b.line("За 24 часа:")
+        b.labeled_line("За 24 часа")
         b.line(
             f"лимитов {summary.get('rate_limits', 0)}"
             f" · fallback {summary.get('fallbacks', 0)}"
@@ -245,7 +245,7 @@ def logs(rows, errors_24h, updated_at, summary=None):
         if summary.get("last_429_at"):
             b.line(f"последний лимит {_hm(summary.get('last_429_at'))}")
     b.spacer()
-    b.line(f"Обновлено: {updated_at}")
+    b.labeled_line("Обновлено", updated_at, lowercase=False)
     return b.build_stripped()
 
 
@@ -305,13 +305,17 @@ def weather_usage_block(usage):
     b.bold("OpenWeather · сегодня")
     b.newline()
     b.spacer()
-    b.line(f"Запросы: {total} / {config.WEATHER_FREE_DAILY_LIMIT:,}".replace(",", " "))
-    b.line(f"Успешно: {success} · Ошибки: {failed} · Повторы: {retry}")
-    b.line(f"Из кэша: {cache_hits}")
-    b.line(f"Осталось бесплатно: {left}")
-    b.line(f"Последний запрос: {_weather_ts_hhmm(usage.get('last_request_at'))}")
+    b.label("Запросы", f"{total} / {config.WEATHER_FREE_DAILY_LIMIT:,}".replace(",", " "), lowercase=False).newline()
+    b.label("Успешно", success, lowercase=False)
+    b.text_line(" · ")
+    b.label("Ошибки", failed, lowercase=False)
+    b.text_line(" · ")
+    b.labeled_line("Повторы", retry, lowercase=False)
+    b.labeled_line("Из кэша", cache_hits, lowercase=False)
+    b.labeled_line("Осталось бесплатно", left, lowercase=False)
+    b.labeled_line("Последний запрос", _weather_ts_hhmm(usage.get("last_request_at")), lowercase=False)
     if usage.get("last_error_reason"):
-        b.line(f"Последняя ошибка: {usage.get('last_error_reason')}")
+        b.labeled_line("Последняя ошибка", usage.get("last_error_reason"))
     b.spacer()
     b.line(_weather_usage_status(total))
     return b.build_stripped().text

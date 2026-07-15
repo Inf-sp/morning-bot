@@ -22,8 +22,7 @@ def improve_card(data):
 
     headline = _clean_text(data.get("headline"))
     if headline:
-        b.text_line("Главный вывод: ")
-        b.line(_finish_dot(headline))
+        b.labeled_line("Главный вывод", _finish_dot(headline))
 
     works = [_finish_dot(x) for x in (data.get("works") or []) if _clean_text(x)]
     if works:
@@ -43,14 +42,12 @@ def improve_card(data):
     skip_buying = _finish_dot(data.get("skip_buying"))
     if skip_buying:
         b.spacer()
-        b.text_line("Пока не покупать: ")
-        b.line(skip_buying)
+        b.labeled_line("Пока не покупать", skip_buying)
 
     next_capsule = _clean_text(data.get("next_capsule"))
     if next_capsule:
         b.spacer()
-        b.text_line("После следующей замены: ")
-        b.line(_finish_dot(next_capsule))
+        b.labeled_line("После следующей замены", _finish_dot(next_capsule))
 
     return b.build_stripped()
 
@@ -78,33 +75,28 @@ def render_wardrobe_message(look_data):
     b = MessageBuilder()
     b.section("👟 Гардероб")
 
-    decision = _clean_text(look_data.get("weather_decision"))
-    if decision:
-        b.spacer()
-        b.line(decision)
-
     items = [_clean_text(_item_display(it)) for it in (look_data.get("items") or [])]
     items = [it for it in items if it]
     if items:
         b.spacer()
-        b.bold("Надень:")
-        b.newline()
+        b.labeled_line("Надень")
         for it in items:
             b.line(f"- {it}")
-
-    reasons = [_clean_text(r).rstrip(".!?") for r in (look_data.get("reasons") or []) if _clean_text(r)]
-    if reasons:
-        b.spacer()
-        b.bold("Почему этот образ:")
-        b.text_line(" ")
-        b.line(_finish_dot(" и ".join(reasons[:3])))
 
     tip = _finish_dot(look_data.get("style_tip"))
     if tip:
         b.spacer()
-        b.bold("Совет по стилю:")
-        b.text_line(" ")
-        b.line(tip)
+        b.labeled_line("Как носить", tip)
+
+    reasons = [_clean_text(r).rstrip(".!?") for r in (look_data.get("reasons") or []) if _clean_text(r)]
+    if reasons:
+        b.spacer()
+        b.labeled_line("Почему работает", _finish_dot(" и ".join(reasons[:3])))
+
+    decision = _finish_dot(look_data.get("weather_decision"))
+    if decision:
+        b.spacer()
+        b.labeled_line("Образ готов", decision)
 
     insight = _finish_dot(look_data.get("insight"))
     if insight:
@@ -178,8 +170,7 @@ def purchase_check_card(data):
     verdict = _clean_text(data.get("verdict"))
     if verdict:
         b.spacer()
-        b.text_line("Вердикт: ")
-        b.line(_finish_dot(verdict))
+        b.labeled_line("Вердикт", _finish_dot(verdict))
 
     why = [_finish_dot(x) for x in (data.get("why") or []) if _clean_text(x)]
     if why:
@@ -192,20 +183,17 @@ def purchase_check_card(data):
         similar = data.get("similar_count")
         similar_bit = f" · {similar} похожих по назначению" if similar else ""
         b.spacer()
-        b.text_line("У тебя уже: ")
-        b.line(_finish_dot(f"{have_count} {have_category}{similar_bit}"))
+        b.labeled_line("У тебя уже", _finish_dot(f"{have_count} {have_category}{similar_bit}"))
 
     reconsider_if = _finish_dot(data.get("reconsider_if"))
     if reconsider_if:
         b.spacer()
-        b.text_line("Рассмотреть можно, если: ")
-        b.line(reconsider_if)
+        b.labeled_line("Рассмотреть можно, если", reconsider_if)
 
     alternative = _clean_text(data.get("alternative"))
     if alternative:
         b.spacer()
-        b.text_line("Лучше искать: ")
-        b.line(_finish_dot(alternative))
+        b.labeled_line("Лучше искать", _finish_dot(alternative))
 
     return b.build_stripped()
 
@@ -221,7 +209,8 @@ def wardrobe_home_screen(total):
     b = MessageBuilder()
     b.section("👕 Мой гардероб")
     if total:
-        b.line(f"Всего вещей: {total}. Выбери категорию.")
+        b.label("Всего вещей", total, lowercase=False)
+        b.line(". Выбери категорию.")
     else:
         b.line("Пока пусто — добавь первую вещь.")
     return b.build_stripped()

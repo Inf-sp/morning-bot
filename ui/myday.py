@@ -6,9 +6,7 @@ from .builder import MessageBuilder
 
 def _compact_line(b, emoji, label, content):
     b.text_line(f"{emoji} ")
-    b.bold(f"{label}:")
-    b.text_line(f" {content}")
-    b.newline()
+    b.labeled_line(label, content)
     b.spacer()
 
 

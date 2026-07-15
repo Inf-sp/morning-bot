@@ -11,8 +11,8 @@ Endpoint'ы:
 - detail         — детали (runtime/страна/студия для movie; сезоны/статус/… для tv)
 - discover       — подбор по жанру/настроению/фильтрам
 """
-from dataclasses import dataclass
-from datetime import date, datetime
+from dataclasses import dataclass, replace
+from datetime import date, datetime, timedelta
 
 import config
 import api_usage
@@ -57,6 +57,7 @@ class CinemaMovie:
     popularity: float | None
     country_code: str
     is_theatrical: bool
+    vote_count: int = 0
 
 
 def _get(path, params, timeout=12, language=None):
@@ -167,7 +168,10 @@ def _cinema_movie(x, country_code):
         rating=rating,
         popularity=popularity,
         country_code=(country_code or "").upper(),
-        is_theatrical=True,
+        # Региональный endpoint — только источник кандидатов. Театральный
+        # статус подтверждается отдельно через /release_dates.
+        is_theatrical=False,
+        vote_count=int(x.get("vote_count") or 0),
     )
 
 
@@ -366,8 +370,39 @@ def _recent_release_bucket(movie, today):
     return 0 if 0 <= delta <= 7 else 1
 
 
-def get_now_playing(country_code, language=_LANG):
-    """Фильмы, которые сейчас идут в кинотеатрах выбранной страны."""
+def _regional_theatrical_release_date(movie_id, country_code):
+    """Подтверждённая региональная дата кинотеатрального релиза TMDB.
+
+    Типы TMDB 2 и 3 означают limited theatrical и theatrical. Цифровой,
+    телевизионный и физический релизы намеренно не принимаются.
+    """
+    cc = (country_code or "").upper()
+    key = f"{movie_id}|{cc}"
+    cached = util.ttl_get("tmdb_theatrical_release", key, 24 * 3600)
+    if cached is not None:
+        return _parse_date(cached) if cached else None
+
+    data = _get(f"/movie/{movie_id}/release_dates", {}, timeout=15, language="en-US")
+    if not isinstance(data, dict):
+        # Сетевую ошибку не кэшируем как отсутствие проката.
+        return None
+    dates = []
+    for region in data.get("results") or []:
+        if str(region.get("iso_3166_1") or "").upper() != cc:
+            continue
+        for release in region.get("release_dates") or []:
+            if release.get("type") not in (2, 3):
+                continue
+            parsed = _parse_date(str(release.get("release_date") or "")[:10])
+            if parsed:
+                dates.append(parsed)
+    result = min(dates) if dates else None
+    util.ttl_set("tmdb_theatrical_release", key, result.isoformat() if result else False)
+    return result
+
+
+def get_now_playing(country_code, language=_LANG, max_results=10):
+    """Только подтверждённый текущий кинотеатральный прокат страны."""
     if not config.TMDB_API_KEY:
         return []
     movies = _regional_movies(
@@ -380,13 +415,30 @@ def get_now_playing(country_code, language=_LANG):
         error_ttl=15 * 60,
     )
     today = date.today()
-    ranked = list(enumerate(movies))
+    earliest = today - timedelta(days=70)
+    limit = max(1, int(max_results or 10))
+    confirmed = []
+    # Сначала наиболее популярные кандидаты; проверяем не более 30 и завершаем,
+    # как только набран экран. Это удерживает время ответа и расход API под контролем.
+    candidates = sorted(movies, key=lambda movie: -(movie.popularity or 0.0))[:30]
+    for movie in candidates:
+        theatrical_date = _regional_theatrical_release_date(movie.id, country_code)
+        if theatrical_date is None or not (earliest <= theatrical_date <= today):
+            continue
+        confirmed.append(replace(
+            movie,
+            release_date=theatrical_date,
+            is_theatrical=True,
+        ))
+        if len(confirmed) >= limit:
+            break
+    ranked = list(enumerate(confirmed))
     ranked.sort(key=lambda pair: (
         _recent_release_bucket(pair[1], today),
         -(pair[1].popularity or 0.0),
         pair[0],
     ))
-    return [movie for _idx, movie in ranked]
+    return [movie for _idx, movie in ranked[:limit]]
 
 
 def get_upcoming_theatrical_releases(country_code, start_date, end_date, language=_LANG):

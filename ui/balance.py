@@ -64,14 +64,12 @@ def doctor_card(data):
     summary = finish_dot(data.get("summary"))
     if summary:
         b.spacer()
-        b.text_line("Основная жалоба: ")
-        b.line(summary)
+        b.labeled_line("Основная жалоба", summary)
 
     causes = finish_dot(data.get("causes"))
     if causes:
         b.spacer()
-        b.text_line("Возможные причины: ")
-        b.line(causes)
+        b.labeled_line("Возможные причины", causes)
 
     clean_bullets = [finish_dot(x) for x in (data.get("bullets") or []) if clean_card_text(x)]
     if clean_bullets:
@@ -83,14 +81,12 @@ def doctor_card(data):
     urgent = finish_dot(data.get("urgent"))
     if urgent:
         b.spacer()
-        b.text_line("Срочно за помощью: ")
-        b.line(urgent)
+        b.labeled_line("Срочно за помощью", urgent)
 
     plan = finish_dot(data.get("plan"))
     if plan:
         b.spacer()
-        b.text_line("Записаться к врачу: ")
-        b.line(plan)
+        b.labeled_line("Записаться к врачу", plan)
 
     final = finish_dot(data.get("final"))
     if final:
@@ -124,7 +120,7 @@ def evening_review(worries, items=None, summary="", principle="", analysis_faile
     b.bold("Вечерний разбор")
     b.newline()
     b.spacer()
-    b.line("Сегодня тебя беспокоили:")
+    b.labeled_line("Сегодня тебя беспокоили")
     for worry in worries:
         b.bullet(worry["text"])
 
@@ -146,11 +142,9 @@ def evening_review(worries, items=None, summary="", principle="", analysis_faile
             b.bold(worry_text)
             b.newline()
             if fact:
-                b.text_line("Факт: ")
-                b.line(cap_sentence(fact))
+                b.labeled_line("Факт", cap_sentence(fact))
             if assumption:
-                b.text_line("Предположение: ")
-                b.line(cap_sentence(assumption))
+                b.labeled_line("Предположение", cap_sentence(assumption))
 
     if summary:
         b.spacer()

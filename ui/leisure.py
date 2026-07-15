@@ -36,21 +36,22 @@ def movie_home_screen(genre_labels, country_label=None, now_playing=None):
     b.bold("Что посмотреть")
     b.newline()
     b.spacer()
-    b.line("Выбери, как искать, или посмотри свежие фильмы в прокате.")
-
-    if genre_labels:
-        b.spacer()
-        b.line("Жанры в предпочтениях:")
-        for label in genre_labels:
-            b.bullet(label)
+    b.line("Выбери, как искать, или посмотри фильмы, которые сейчас идут в кинотеатрах Нидерландов.")
 
     if now_playing:
         b.spacer()
         b.text_line("🎬 ")
         b.bold(f"Сейчас в кино · {country_label}")
         b.newline()
+        b.line("Только подтверждённый кинотеатральный прокат. До 8 популярных фильмов.")
         for item in now_playing:
             _format_movie_row(b, item)
+    elif country_label:
+        b.spacer()
+        b.text_line("🎬 ")
+        b.bold(f"Сейчас в кино · {country_label}")
+        b.newline()
+        b.line("Пока не удалось подтвердить актуальные кинотеатральные показы.")
 
     return b.build_stripped()
 
@@ -90,7 +91,10 @@ def _format_movie_row(b: MessageBuilder, movie) -> None:
     genre = _primary_genre(movie)
     if genre:
         b.text_line(f" · {genre}")
-    rating = _format_rating(_item_value(movie, "rating"))
+    # Рейтинг с несколькими голосами выглядит убедительно, но вводит в заблуждение.
+    # Для свежего проката показываем его только после минимальной выборки.
+    vote_count = int(_item_value(movie, "vote_count", 0) or 0)
+    rating = _format_rating(_item_value(movie, "rating")) if vote_count >= 25 else None
     if rating:
         b.text_line(f" · {rating}")
     b.newline()
@@ -329,11 +333,11 @@ def concerts_list(place_label, events, empty_hint=""):
         b.newline()
         if ev.get("place"):
             place = f"{ev.get('flag', '')} {ev['place']}".strip()
-            b.line(f"Место: {place}")
+            b.labeled_line("Место", place, lowercase=False)
         if ev.get("price"):
-            b.line(f"Цена: {ev['price']}")
+            b.labeled_line("Цена", ev["price"], lowercase=False)
         if ev.get("date"):
-            b.line(f"Дата: {ev['date']}")
+            b.labeled_line("Дата", ev["date"], lowercase=False)
         if ev.get("verification") == "confirmed":
             b.line("✅ Подтверждён")
         elif ev.get("verification") == "review":
@@ -477,10 +481,10 @@ def _concert_card(b: MessageBuilder, event: dict) -> None:
     b.bold(event.get("title", ""))
     b.newline()
     if event.get("place"):
-        b.line(f"Место: {event['place']}")
+        b.labeled_line("Место", event["place"], lowercase=False)
     date_text = _format_dates([d for d in event.get("dates", []) if isinstance(d, date)])
     if date_text:
-        b.line(f"Дата: {date_text}")
+        b.labeled_line("Дата", date_text, lowercase=False)
 
 
 def _movie_item(b: MessageBuilder, event: dict) -> None:

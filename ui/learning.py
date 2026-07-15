@@ -297,7 +297,7 @@ def translate_prompt(flag, ru, lang):
     b = MessageBuilder()
     b.section(f"{flag} Обратный перевод")
     b.spacer()
-    b.line(f"Фраза: «{ru}»")
+    b.labeled_line("Фраза", f"«{ru}»", lowercase=False)
     b.spacer()
     b.text_line(f"Напиши перевод на {lang} следующим сообщением.")
     return b.build()
@@ -307,7 +307,7 @@ def translate_result(flag, lang, ru, answer, result):
     b = MessageBuilder()
     b.section(f"{flag} Обратный перевод")
     b.spacer()
-    b.line(f"Твой ответ: {answer}")
+    b.labeled_line("Твой ответ", answer, lowercase=False)
     b.spacer()
     if result.get("ok"):
         b.text_line("✅ Верно")
@@ -316,7 +316,8 @@ def translate_result(flag, lang, ru, answer, result):
             b.text_line(f"💡 {ru} → {result['correct']}")
     else:
         if result.get("error"):
-            b.text_line(f"❌ Ошибка: {result['error']}")
+            b.text_line("❌ ")
+            b.label("Ошибка", result["error"])
         if result.get("correct"):
             b.spacer()
             b.text_line(f"✅ {ru} → {result['correct']}")
@@ -405,11 +406,11 @@ def learning_settings(active_language, active_level):
     b = MessageBuilder()
     b.section("🎚️ Настройки обучения")
     b.spacer()
-    b.line("Активный язык:")
+    b.labeled_line("Активный язык")
     b.bold(active_language)
     b.newline()
     b.spacer()
-    b.line("Уровень:")
+    b.labeled_line("Уровень")
     b.bold(active_level)
     b.newline()
     b.spacer()

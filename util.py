@@ -290,6 +290,54 @@ def flag_from_cc(cc: str) -> str:
 # --- markdown -> Telegram HTML (страховка поверх системного промпта) ---
 _ALLOWED_TAGS = ("b", "i", "u", "s", "code", "pre", "a")
 _TAG_RE = re.compile(r"</?(?:" + "|".join(_ALLOWED_TAGS) + r")(?:\s[^>]*)?>", re.I)
+_PLAIN_LABEL_LINE_RE = re.compile(
+    r"^(?P<indent>\s*)(?P<label>[^:<>{}\n]{1,64}):(?P<space>\s+)(?P<body>.+)$"
+)
+_CASE_SENSITIVE_LABELS = {
+    "автор", "город", "дата", "имя", "место", "название", "ссылка",
+    "страна", "фраза", "твой ответ",
+}
+
+
+def _lower_plain_initial(text: str) -> str:
+    for index, char in enumerate(text):
+        if char.isalpha():
+            return text[:index] + char.lower() + text[index + 1:]
+        if char.isdigit() or char == "<":
+            break
+        if not char.isspace() and char not in "«„\"'([{—–-":
+            break
+    return text
+
+
+def _format_plain_label_line(line: str) -> str:
+    """Страховка для свободного AI-текста: ``Подпись: текст`` -> Telegram HTML."""
+    match = _PLAIN_LABEL_LINE_RE.match(line)
+    if not match:
+        return line
+    label = match.group("label").strip()
+    if not any(char.isalpha() for char in label) or len(label.split()) > 7:
+        return line
+    first_alpha = next((char for char in label if char.isalpha()), "")
+    if not first_alpha.isupper():
+        return line
+    body = match.group("body").strip()
+    if label.casefold() not in _CASE_SENSITIVE_LABELS:
+        body = _lower_plain_initial(body)
+    return f'{match.group("indent")}<b>{label}:</b> {body}'
+
+
+def _lower_html_label_content(line: str) -> str:
+    match = re.match(
+        r"^(?P<prefix>\s*<b>(?P<label>[^<]{1,64}):</b>\s+)(?P<body>.+)$",
+        line,
+    )
+    if not match:
+        return line
+    body = match.group("body")
+    if match.group("label").strip().casefold() not in _CASE_SENSITIVE_LABELS:
+        body = _lower_plain_initial(body)
+    return match.group("prefix") + body
 
 def tg_html(text: str | None) -> str:
     """Чистит ответ модели под Telegram HTML: убирает markdown, оставляет
@@ -321,11 +369,12 @@ def tg_html(text: str | None) -> str:
         indent = line[:len(line) - len(s)]
         s = re.sub(r"^#{1,6}\s+", "", s)          # markdown-заголовки -> обычный текст
         s = re.sub(r"^[-*•]\s+", "• ", s)         # маркеры списка -> «• »
-        out.append(indent + s)
+        out.append(_format_plain_label_line(indent + s))
     t = "\n".join(out)
 
     # 5) вернуть спрятанные теги
     t = re.sub(r"\x00(\d+)\x00", lambda m: saved[int(m.group(1))], t)
+    t = "\n".join(_lower_html_label_content(line) for line in t.split("\n"))
 
     # 6) убрать лишние пустые строки (макс одна подряд)
     t = re.sub(r"\n{3,}", "\n\n", t).strip()

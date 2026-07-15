@@ -9,6 +9,10 @@ from .builder import MessageBuilder
 _LEADING_EMOJI_RE = re.compile(
     r"^[\s\U0001F1E6-\U0001FAFF\u2600-\u27BF\uFE0F]+"
 )
+_CASE_SENSITIVE_LABELS = {
+    "автор", "город", "дата", "имя", "место", "название", "ссылка",
+    "страна", "фраза", "твой ответ",
+}
 
 
 def _clean_line(line: str) -> str:
@@ -31,6 +35,20 @@ def _strip_final_intro(line: str) -> str:
         line or "",
         flags=re.I,
     ).strip()
+
+
+def _split_leading_label(line: str):
+    """Возвращает короткую подпись и текст после неё для строк ``Подпись: текст``."""
+    match = re.match(r"^([^:\n]{1,64}):(?:\s*(.*))?$", line or "")
+    if not match:
+        return None
+    label = match.group(1).strip()
+    if not any(char.isalpha() for char in label) or len(label.split()) > 7:
+        return None
+    first_alpha = next((char for char in label if char.isalpha()), "")
+    if not first_alpha.isupper():
+        return None
+    return label, (match.group(2) or "").strip()
 
 
 def assistant_answer(answer: str):
@@ -65,9 +83,19 @@ def assistant_answer(answer: str):
 
     for idx, normalized in enumerate(normalized_lines):
         next_line = normalized_lines[idx + 1] if idx != len(normalized_lines) - 1 else ""
-        is_list_label = normalized.endswith(":") and next_line.startswith("- ")
-        entity_type = MessageEntity.BLOCKQUOTE if quote_flags[idx] else MessageEntity.BOLD if is_list_label else None
-        b.add(normalized, entity_type)
+        label_parts = _split_leading_label(normalized)
+        is_list_label = bool(label_parts and not label_parts[1] and next_line.startswith("- "))
+        if quote_flags[idx]:
+            b.add(normalized, MessageEntity.BLOCKQUOTE)
+        elif label_parts:
+            label, content = label_parts
+            b.label(
+                label,
+                content or None,
+                lowercase=label.casefold() not in _CASE_SENSITIVE_LABELS,
+            )
+        else:
+            b.add(normalized)
         if idx != len(normalized_lines) - 1:
             if (
                 normalized.startswith("- ") and next_line.startswith("- ")

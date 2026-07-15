@@ -7,7 +7,7 @@ def dict_overview(nl_total, en_total):
     b = MessageBuilder()
     b.section("🗂️ Мой словарь")
     b.spacer()
-    b.line(f"Всего: {total} (🇳🇱 {nl_total} · 🇬🇧 {en_total})")
+    b.labeled_line("Всего", f"{total} (🇳🇱 {nl_total} · 🇬🇧 {en_total})", lowercase=False)
     b.spacer()
     b.line("Добавляй слова прямо в чате: «Добавь в словарь de kater».")
     b.line("Бот сам сохранит слово и добавит его в тренировки.")

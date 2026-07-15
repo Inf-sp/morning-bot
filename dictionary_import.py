@@ -193,17 +193,17 @@ def _dict_entry_message(entry, status="added"):
     b.newline()
     if entry.get("breakdown"):
         b.spacer()
-        b.line(f"Разбор: {entry['breakdown']}")
+        b.labeled_line("Разбор", entry["breakdown"])
     usage = entry.get("usage") or []
     if usage:
         b.spacer()
-        b.line("Когда так говорят:")
+        b.labeled_line("Когда так говорят")
         for u in usage:
             b.line(f"• {u.get('situation', '')} → {u.get('example', '')}")
     examples = entry.get("examples") or []
     if examples:
         b.spacer()
-        b.line("Пример:" if len(examples) == 1 else "Примеры:")
+        b.labeled_line("Пример" if len(examples) == 1 else "Примеры")
         for ex in examples:
             example_line = f"{ex.get('text', '')} → {ex.get('translation', '')}"
             b.italic(example_line)
@@ -833,4 +833,3 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
 async def add_smart_batch(bot, cid, text, lang="nl"):
     """Алиас для единого пути добавления (сохранён для совместимости вызовов)."""
     await add_words_batch(bot, cid, text, lang, detailed_confirmation=False)
-
