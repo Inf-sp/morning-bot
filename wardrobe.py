@@ -35,6 +35,7 @@ from wardrobe_migration import migrate_item_attrs
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
+COPY_VALIDATOR_VERSION = 2
 
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
@@ -128,7 +129,7 @@ def _get_cached_look(cid):
     cached = store.get_valid_wardrobe_daylook(cid)   # ссылочная целостность (version+id)
     if not cached or cached.get("date") != _day_key():   # день — бизнес-правило «раз в день»
         return None
-    if cached.get("copy_validator_version") != 1:
+    if cached.get("copy_validator_version") != COPY_VALIDATOR_VERSION:
         return None
     return cached
 
@@ -141,7 +142,7 @@ def _save_cached_look(cid, item_ids, look_data):
     store.set_wardrobe_daylook(cid, {
         "date": _day_key(),
         "version": w.get("_v", 0),
-        "copy_validator_version": 1,
+        "copy_validator_version": COPY_VALIDATOR_VERSION,
         "item_ids": list(item_ids or []),
         "look_data": look_data,
         "text": text,

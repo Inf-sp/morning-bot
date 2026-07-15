@@ -95,7 +95,7 @@ def render_wardrobe_message(look_data):
     reasons = [_clean_text(r).rstrip(".!?") for r in (look_data.get("reasons") or []) if _clean_text(r)]
     if reasons:
         b.spacer()
-        b.labeled_line("Почему работает", _finish_dot(" и ".join(reasons[:3])))
+        b.labeled_line("Почему работает", _finish_dot(reasons[0]))
 
     final_text = _finish_dot(look_data.get("final_text") or look_data.get("weather_decision"))
     if final_text:

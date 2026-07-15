@@ -186,44 +186,53 @@ def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item
 
 
 # ---------- текст образа: локальный fallback ----------
-def build_outfit_reasons(items, weather_ctx, score_details=None):
-    """До 3 строк, каждая — про конкретную вещь/погоду, не шаблонная общая фраза.
+def _sentence_item_name(item):
+    name = public_item_name(item)
+    return name[:1].lower() + name[1:] if name else "вещь"
 
-    Все шаблоны — конструкция "вещь — свойство" (тире, без глагольного
-    согласования рода/числа с названием вещи): названия вещей — свободный текст
-    от AI, их род/число не гарантированы ("Дождевик" муж., "Шорты" мн.ч.)."""
+
+def _shoe_finishing_verb(item):
+    name = public_item_name(item).casefold()
+    if any(marker in name for marker in ("обувь", "пара ", "модель ")):
+        return "завершает"
+    plural_subcategories = {"Кеды", "Кроссовки", "Лоферы", "Ботинки", "Сандалии", "Тапочки"}
+    return "завершают" if item.get("subcategory") in plural_subcategories else "завершает"
+
+
+def build_outfit_reasons(items, weather_ctx, score_details=None):
+    """Одна естественная строка о цельности образа на подтверждённых фактах.
+
+    Для обуви отдельно выбирается число глагола, потому что названия вещей —
+    свободный текст: «кеды завершают», но «обувь завершает»."""
     reasons = []
     colors = [c for it in items for c in (it.get("colors") or [])]
     bright = [c for c in colors if not _is_neutral_color(c)]
     neutral_anchor = next((it for it in items if any(_is_neutral_color(c) for c in (it.get("colors") or []))), None)
     if neutral_anchor and len(set(bright)) >= 2:
-        reasons.append(
-            f"{public_item_name(neutral_anchor)} — нейтральная цветовая основа для {' и '.join(sorted(set(bright))[:2])}."
-        )
+        return [
+            f"{_sentence_item_name(neutral_anchor)} поддерживает спокойную основу, "
+            f"а {' и '.join(sorted(set(bright))[:2])} добавляют цвет."
+        ]
     outer = next((it for it in items if it.get("zone") == "Верхняя одежда"), None)
     if outer and weather_ctx.get("has_rain") and outer.get("rain_ok"):
-        reasons.append(f"{public_item_name(outer)} подходит для дождя.")
+        return [f"{_sentence_item_name(outer)} завершает образ и защищает от дождя."]
     elif weather_ctx.get("has_rain") and not (outer and outer.get("rain_ok")):
-        reasons.append("Дождевика или непромокаемой куртки в шкафу нет — сегодня без защиты от дождя.")
+        return ["Вещи сочетаются между собой, но в шкафу нет подтверждённой защиты от дождя."]
     elif outer and weather_ctx.get("warm"):
-        reasons.append(f"{public_item_name(outer)} даёт дополнительный слой для прохладного утра.")
+        return [f"{_sentence_item_name(outer)} завершает образ и даёт слой для прохладного утра."]
     low = next((it for it in items if it.get("zone") == "Низ"), None)
     top = next((it for it in items if it.get("zone") == "Верх"), None)
     shoe = next((it for it in items if it.get("zone") == "Обувь"), None)
-    if top and low and not reasons:
-        top_fit = str(top.get("fit") or "").strip()
-        low_fit = str(low.get("fit") or "").strip()
-        if top_fit and low_fit:
-            reasons.append(f"Посадка верха — {top_fit}, посадка низа — {low_fit}; они сочетаются между собой.")
-        else:
-            reasons.append(f"{public_item_name(top)} и {public_item_name(low)} составляют основу комплекта.")
-    if shoe and len(reasons) < 2:
-        shoe_facts = " ".join([public_item_name(shoe)] + [str(c) for c in (shoe.get("colors") or [])]).lower()
-        if any(x in shoe_facts for x in ("бел", "светл")):
-            reasons.append(f"Светлый цвет обуви ({public_item_name(shoe)}) поддерживает палитру комплекта.")
-        else:
-            reasons.append(f"{public_item_name(shoe)} завершает комплект.")
-    return reasons[:3]
+    if top and low and shoe:
+        return [
+            f"{_sentence_item_name(top)} и {_sentence_item_name(low)} создают лёгкую базу, "
+            f"а {_sentence_item_name(shoe)} {_shoe_finishing_verb(shoe)} образ."
+        ]
+    if top and low:
+        return [f"{_sentence_item_name(top)} и {_sentence_item_name(low)} создают цельную основу образа."]
+    if shoe:
+        return [f"{_sentence_item_name(shoe)} {_shoe_finishing_verb(shoe)} образ."]
+    return reasons
 
 
 _LONG_SLEEVE_MARKERS = ("длинн", "лонгслив")
@@ -308,7 +317,12 @@ def _claims_are_grounded(text, items):
         fit_facts = " ".join(str(item.get("fit") or "") + " " + str(item.get("name") or "") for item in items).casefold()
         if not any(marker in fit_facts for marker in _FIT_CLAIM_MARKERS):
             return False
-    if any(marker in claim for marker in _WARMTH_CLAIM_MARKERS):
+    physical_warmth_claim = re.sub(
+        r"л[её]гк\w*\s+(?:баз\w*|палитр\w*|образ\w*)",
+        "",
+        claim,
+    )
+    if any(marker in physical_warmth_claim for marker in _WARMTH_CLAIM_MARKERS):
         warmth_facts = " ".join(str(item.get("warmth") or "") + " " + str(item.get("name") or "") for item in items).casefold()
         if not any(marker in warmth_facts for marker in _WARMTH_CLAIM_MARKERS):
             return False
@@ -324,6 +338,24 @@ def _sanitize_generated_text(text, items):
         if raw_name:
             clean = clean.replace(raw_name, public_item_name(item))
     return strip_internal_tags(clean).strip()
+
+
+def _natural_reason(reason):
+    text = re.sub(r"\s+", " ", str(reason or "")).strip().casefold()
+    banned = (
+        "составляют основу комплекта",
+        "светлый цвет обуви",
+        "поддерживает палитру комплекта",
+        "завершает комплект",
+        "завершают комплект",
+    )
+    return (
+        bool(text)
+        and "(" not in text
+        and ")" not in text
+        and text.count("комплект") <= 1
+        and not any(phrase in text for phrase in banned)
+    )
 
 
 def _valid_style_tip(tip, items):
@@ -353,7 +385,7 @@ def validate_outfit_copy(items, wardrobe, weather_ctx, reasons, tip, final_headi
     clean_reasons = []
     for reason in reasons or []:
         clean = _sanitize_generated_text(reason, verified_items)
-        if _claims_are_grounded(clean, verified_items):
+        if _claims_are_grounded(clean, verified_items) and _natural_reason(clean):
             clean_reasons.append(clean)
     if not clean_reasons:
         clean_reasons = build_outfit_reasons(verified_items, weather_ctx)
@@ -372,7 +404,7 @@ def validate_outfit_copy(items, wardrobe, weather_ctx, reasons, tip, final_headi
 
     return {
         "items": verified_items,
-        "reasons": clean_reasons[:3],
+        "reasons": clean_reasons[:1],
         "style_tip": clean_tip,
         "final_text": clean_final or "Комплект собран из вещей твоего шкафа",
     }
