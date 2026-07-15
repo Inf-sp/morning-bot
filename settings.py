@@ -404,7 +404,7 @@ def _cuisines_kb(cid):
         for key, label in CUISINE_OPTIONS
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_fridge_g"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_food"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -767,7 +767,8 @@ async def handle_callback(bot, cid, data, q=None):
         import saved_recipes
         await saved_recipes.send_my_recipes(bot, cid)
     elif data == "set_fridge_g":
-        await saved_items.send_food(bot, cid, back="m_food")
+        import menu
+        await menu.send_food_menu(bot, cid)
     elif data == "set_notif":
         await send_notif(bot, cid, q)
     elif data == "set_refresh_data":

@@ -19,7 +19,7 @@ def personalization():
 
 def cuisines(current):
     b = MessageBuilder()
-    b.section(ui_label("cuisines", "Кухни"))
+    b.section("Мои кухни")
     b.line("Выбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника с их учётом.")
     b.spacer()
     b.bold("Сейчас:")

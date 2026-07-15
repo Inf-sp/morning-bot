@@ -247,6 +247,29 @@ def _home_one_sentence(value) -> str:
     return re.split(r"(?<=[.!?…])\s+", text, maxsplit=1)[0] if text else ""
 
 
+def _home_steps(value) -> list[dict]:
+    """Шаги полного рецепта в едином обращении на «ты»."""
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value[:5]:
+        structured = isinstance(item, dict)
+        if structured:
+            text = item.get("text")
+            minutes = _home_minutes(item.get("minutes"))
+        else:
+            text = item
+            minutes = None
+        text = " ".join(_home_normalize_voice(text).split()).strip(" -•")
+        has_time = bool(re.search(r"\d+(?:\s*[–-]\s*\d+)?\s*(?:мин|минут)", text, re.I))
+        if not structured and not has_time:
+            minutes = 2
+        if not text or _HOME_FORMAL_IMPERATIVE_RE.search(text) or not (minutes or has_time):
+            continue
+        result.append({"text": text, "minutes": minutes})
+    return result if 3 <= len(result) <= 5 else []
+
+
 def _normalize_home_idea(data, context: dict) -> dict:
     """Нормализует AI-ответ и структурно скрывает недостоверные блоки."""
     data = data if isinstance(data, dict) else {}
@@ -257,6 +280,7 @@ def _normalize_home_idea(data, context: dict) -> dict:
     reason = _home_human_reason(data.get("reason"), context)
     tip = _home_useful_tip(data.get("tip"))
     ingredients = [_home_natural_ingredient(item) for item in _home_string_list(data.get("ingredients"))]
+    steps = _home_steps(data.get("steps"))
     ingredient_keys = {_home_semantic_ingredient_key(item) for item in ingredients}
     use_first = _home_exact_fridge_names(data.get("use_first"), available) if has_fridge else []
     use_first = [item for item in use_first if _home_semantic_ingredient_key(item) in ingredient_keys]
@@ -295,6 +319,7 @@ def _normalize_home_idea(data, context: dict) -> dict:
         "name": name,
         "minutes": _home_minutes(data.get("minutes")),
         "ingredients": ingredients,
+        "steps": steps,
         "use_first": use_first,
         "missing": missing,
         "substitution": substitution,
@@ -317,7 +342,7 @@ def _home_idea_context(cid, now=None) -> dict:
     meal = _home_meal_for_hour(now.hour)
     signature_data = {
         "date": now.date().isoformat(),
-        "home_copy_version": 2,
+        "home_copy_version": 3,
         "meal": meal,
         "available": available,
         "unavailable": unavailable,
@@ -363,18 +388,16 @@ def _home_idea_prompt(context: dict) -> str:
         "• Предложи ровно одно понятное блюдо, без рекламного названия.\n"
         "• Все названия ингредиентов должны звучать естественно по-русски: «соевый соус», а не «соус сои».\n"
         "• Никогда не используй и не предлагай заменой исключённые продукты или аллергены.\n"
-        "• Если холодильник заполнен, выбери простое блюдо, для которого уже есть максимум ингредиентов.\n"
-        "• ingredients — полный список обязательных продуктов блюда без воды и необязательных специй. "
+        "• Если список «В наличии» не пуст, используй только эти продукты, воду и базовые масло, соль и перец. "
+        "Не добавляй другие покупки.\n"
+        "• ingredients — полный список всего, что используется в блюде, включая масло, соль и перец, если они нужны. "
         "Для продуктов из холодильника сохраняй точное написание из входного списка.\n"
+        "• steps — 3–5 коротких шагов. Каждый начинается с действия на «ты» и имеет отдельное поле minutes. "
+        "Каждый ингредиент должен появиться в шагах. Сумма минут по шагам равна общему minutes.\n"
         "• use_first — только точные названия из списка «В наличии», особенно открытые, скоропортящиеся "
         "или явно требующие скорого использования, и только если они входят в ingredients. "
         "Не выдумывай срочность и не добавляй отсутствующие продукты.\n"
-        "• missing — только действительно обязательные для выбранного блюда ингредиенты, которых нет в наличии; "
-        "предпочитай рецепт с 0–1 недостающим продуктом, максимум 3. Не считай воду и необязательные специи.\n"
-        "• substitution заполняй только для одного missing-продукта и только если замена нормальная. "
-        "Сначала ищи точное название замены среди продуктов в наличии. Если берёшь её оттуда, поставь from_fridge=true; "
-        "иначе предложи обычный доступный аналог и поставь false. Замена должна позволять приготовить блюдо, "
-        "но не обязана полностью повторять вкус. Не называй заменой тот же продукт, его синоним или вариант написания.\n"
+        "• use_first, missing и substitution больше не показываются: верни пустые значения.\n"
         "• reason — одна короткая человеческая рекомендация вроде «Быстрый ужин из того, что уже есть дома». "
         "Не пиши «поскольку в холодильнике есть», «на основе содержимого холодильника» и другие технические объяснения. "
         "При пустом холодильнике формулировка нейтральная.\n"
@@ -384,42 +407,81 @@ def _home_idea_prompt(context: dict) -> str:
         "Не используй формы «приготовьте», «обжарьте», «добавьте».\n"
         "• Никаких эмодзи, общих вступлений, текста о настройках и нескольких советов.\n"
         'JSON без markdown: {"reason":"одно предложение","name":"Название блюда","minutes":20,'
-        '"ingredients":["все обязательные продукты блюда"],'
-        '"use_first":["точное название из холодильника"],"missing":["обязательный продукт"],'
-        '"substitution":{"for":"обязательный продукт","product":"замена","from_fridge":false},'
+        '"ingredients":["все продукты блюда"],'
+        '"steps":[{"text":"Взбей яйца","minutes":2},{"text":"Обжарь лук","minutes":3},{"text":"Влей яйца и накрой крышкой","minutes":5}],'
+        '"use_first":[],"missing":[],"substitution":null,'
         '"tip":"один совет"}. Если блока нет, используй пустой массив или null.'
     )
 
 
-def get_cooking_home_idea(cid, now=None) -> dict:
+def _home_local_idea(context: dict) -> dict:
+    local = _fallback_leftovers_recipe(", ".join(context.get("available") or []))
+    if not local:
+        return {}
+    return _normalize_home_idea({
+        "name": local.get("name"),
+        "minutes": local.get("time"),
+        "ingredients": local.get("ingredients"),
+        "steps": local.get("steps"),
+        "tip": local.get("chef_tip"),
+    }, context)
+
+
+def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
     """Одна стабильная идея для текущего приёма пищи и актуального холодильника."""
     context = _home_idea_context(cid, now=now)
     profile = store.get_profile(cid)
     cached = profile.get("cooking_home_idea")
-    if isinstance(cached, dict) and cached.get("signature") == context["signature"]:
+    previous_name = ""
+    if isinstance(cached, dict):
+        previous_name = str((cached.get("idea") or {}).get("name") or "")
+    if not refresh and isinstance(cached, dict) and cached.get("signature") == context["signature"]:
         idea = cached.get("idea")
         if isinstance(idea, dict):
             normalized = _normalize_home_idea(idea, context)
-            if all(normalized.get(field) for field in ("name", "reason", "minutes", "ingredients", "tip")):
+            if all(normalized.get(field) for field in ("name", "reason", "minutes", "ingredients", "steps", "tip")):
                 return normalized
 
+    if api_usage.gemini_state(1).get("cooldown_active"):
+        local = _home_local_idea(context)
+        if all(local.get(field) for field in ("name", "reason", "minutes", "ingredients", "steps", "tip")):
+            return local
+
     prompt = _home_idea_prompt(context)
+    if refresh and previous_name:
+        prompt += f"\nНе повторяй блюдо: {secure.wrap_untrusted(previous_name, 'предыдущий рецепт')}."
     idea = {}
     for attempt in range(2):
-        result = ai.llm_json(
-            prompt, 700, tier="cheap", module="food",
-            fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
-        )
+        try:
+            result = ai.llm_json(
+                prompt, 1100, tier="cheap", module="food",
+                fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
+            )
+        except Exception:
+            result = {}
         idea = _normalize_home_idea(result, context)
-        if all(idea.get(field) for field in ("name", "reason", "minutes", "ingredients", "tip")):
+        complete = all(idea.get(field) for field in ("name", "reason", "minutes", "ingredients", "steps", "tip"))
+        repeated = bool(
+            refresh and previous_name and idea.get("name", "").casefold() == previous_name.casefold()
+        )
+        if complete and not repeated:
             break
+        if api_usage.gemini_state(1).get("cooldown_active"):
+            local = _home_local_idea(context)
+            if all(local.get(field) for field in ("name", "reason", "minutes", "ingredients", "steps", "tip")):
+                idea = local
+                break
         if attempt == 0:
             prompt += (
                 "\nПредыдущий вариант не прошёл проверку. Верни новый вариант: обязательны естественные "
-                "русские названия и один конкретный технический лайфхак на «ты», без общего совета."
+                "русские названия, 3–5 шагов и один конкретный технический совет на «ты»."
             )
-    if not all(idea.get(field) for field in ("name", "reason", "minutes", "ingredients", "tip")):
-        raise ValueError("Неполная идея блюда для главного экрана Готовки")
+    if refresh and previous_name and idea.get("name", "").casefold() == previous_name.casefold():
+        idea = {}
+    if not all(idea.get(field) for field in ("name", "reason", "minutes", "ingredients", "steps", "tip")):
+        idea = _home_local_idea(context)
+    if not all(idea.get(field) for field in ("name", "reason", "minutes", "ingredients", "steps", "tip")):
+        raise ValueError("Неполный рецепт для главного экрана Готовки")
     # За время AI-запроса профиль мог измениться в другом сценарии. Перечитываем его,
     # чтобы запись кэша не затёрла новые предпочтения или другие пользовательские данные.
     profile = store.get_profile(cid)

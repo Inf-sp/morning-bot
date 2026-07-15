@@ -201,8 +201,22 @@ def _cooking_sentence(value) -> str:
     return value
 
 
+def _cooking_step(value) -> str:
+    if isinstance(value, dict):
+        text = _cooking_text(value.get("text"))
+        minutes = value.get("minutes")
+    else:
+        text = _cooking_text(value)
+        minutes = None
+    if not text:
+        return ""
+    if minutes and not re.search(r"\d+\s*(?:мин|минут)", text, re.IGNORECASE):
+        text = f"{text.rstrip('.!?…')} — {minutes} мин."
+    return _cooking_sentence(text)
+
+
 def food_menu(idea=None):
-    """Главный экран Готовки: одно персональное действие на текущий приём пищи."""
+    """Главный экран Готовки: один полный рецепт из холодильника."""
     idea = idea or {}
     b = MessageBuilder()
     b.section(f"{UI_FOOD} Готовка · Идея на сегодня")
@@ -214,32 +228,26 @@ def food_menu(idea=None):
         b.newline()
 
     name = _cooking_text(idea.get("name"))
-    minutes = idea.get("minutes")
-    use_first = [_cooking_text(item) for item in (idea.get("use_first") or [])]
-    use_first = [item for item in use_first if item]
     if name:
         b.spacer()
-        b.labeled_line("Приготовь")
-        b.bullet(name)
-        if minutes:
-            b.bullet(f"Готовится за {minutes} минут")
-        if use_first:
-            b.bullet(f"Нужно использовать: {', '.join(use_first)}")
+        b.bold(name)
 
-    missing = [_cooking_text(item) for item in (idea.get("missing") or [])]
-    missing = [item for item in missing if item]
-    if missing:
+    ingredients = [_cooking_text(item) for item in (idea.get("ingredients") or [])]
+    ingredients = [item for item in ingredients if item]
+    if ingredients:
         b.spacer()
-        b.labeled_line("Не хватает")
-        for item in missing:
-            b.bullet(item)
+        b.bold("Ингредиенты:")
+        b.newline()
+        b.line(", ".join(ingredients))
 
-    substitution = idea.get("substitution") or {}
-    substitute_for = _cooking_text(substitution.get("for"))
-    substitute_product = _cooking_text(substitution.get("product"))
-    if substitute_for and substitute_product:
+    steps = [_cooking_step(item) for item in (idea.get("steps") or [])]
+    steps = [item for item in steps if item]
+    if steps:
         b.spacer()
-        b.labeled_line("Чем заменить", _cooking_sentence(f"подойдёт {substitute_product}"))
+        b.bold("Приготовление:")
+        b.newline()
+        for step in steps:
+            b.bullet(step)
 
     tip = _cooking_sentence(idea.get("tip"))
     if tip:
@@ -247,9 +255,10 @@ def food_menu(idea=None):
         b.labeled_line("Полезно", tip)
 
     rows = [
+        [("✨ Другой рецепт", "m_food_next")],
         [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
-        [(ui_label("cook_from", "Из того что есть"), "as_fridge_cook")],
-        [(ui_label("settings", "Настройки готовки"), "set_fridge_g")],
+        [("Мой холодильник", "as_fridge_home")],
+        [("Мои кухни", "set_cuisines")],
         [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
     ]
     return b.build_stripped(reply_markup=ikb(rows))

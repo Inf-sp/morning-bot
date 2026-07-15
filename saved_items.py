@@ -271,19 +271,15 @@ async def send_mydata_music(bot, cid):
 
 
 async def send_food(bot, cid, q=None, back="m_food"):
-    # Ленивый импорт сохраняет направление зависимостей: settings импортирует этот
-    # модуль для экранов данных, поэтому импортировать settings на верхнем уровне нельзя.
-    import settings as _settings
-    cuisine_mark = " ✅" if _settings.cuisines(cid) else ""
+    """Compat-экран для старых кнопок Готовки: без отдельной базы рецептов."""
     rows = [
-        [InlineKeyboardButton(ui_label("products", "Продукты"), callback_data="set_fridge")],
-        [InlineKeyboardButton(ui_label("recipes", "Рецепты"), callback_data="set_myrecipes")],
-        [InlineKeyboardButton(f"{ui_label('cuisines', 'Кухни')}{cuisine_mark}", callback_data="set_cuisines")],
+        [InlineKeyboardButton("Мой холодильник", callback_data="set_fridge")],
+        [InlineKeyboardButton("Мои кухни", callback_data="set_cuisines")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(
         f"{ui_label('food', 'Готовка')}",
-        "Продукты в холодильнике и сохранённые рецепты.",
+        "Продукты в холодильнике и любимые кухни.",
     )
     text, entities = msg.text, msg.entities
     kb = InlineKeyboardMarkup(rows)

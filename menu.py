@@ -38,16 +38,18 @@ def menu_screen(key, cid=None):
     return msg.text, msg.entities, msg.reply_markup
 
 
-async def send_food_menu(bot, cid):
+async def send_food_menu(bot, cid, status=None, refresh=False):
     import asyncio
     import recipe_generation
     import util
     import verify
 
-    status = await util.StatusManager.start(
+    owns_status = status is None
+    status = status or await util.StatusManager.start(
         bot, cid, stages=util.StatusManager.TOPIC_STAGES["food"])
     try:
-        idea = await asyncio.to_thread(recipe_generation.get_cooking_home_idea, cid)
+        idea = await asyncio.to_thread(
+            recipe_generation.get_cooking_home_idea, cid, None, refresh)
         msg = menu_ui.food_menu(idea)
         await status.replace(
             msg.text,
@@ -55,5 +57,6 @@ async def send_food_menu(bot, cid):
             reply_markup=msg.reply_markup,
         )
     except Exception as error:
-        await status.stop(delete=True)
+        if owns_status:
+            await status.stop(delete=True)
         await verify.safe_error(bot, cid, error)
