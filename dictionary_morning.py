@@ -10,6 +10,7 @@ import store
 import learning_dictionary as dictionary
 from live_language import _generate_proverb
 from ui import learning as learning_ui
+from ui.constants import delete_label
 
 _code = dictionary._code
 _flag = lambda language: "🇳🇱" if _code(language) == "nl" else "🇬🇧"
@@ -88,7 +89,7 @@ def _build_morning_word(cid, language):
         try:
             idx = words.index(w)
             words[idx]["last_shown_at"] = now_iso
-            del_row.append(InlineKeyboardButton(f"❌ {term[:20]}", callback_data=f"worddel_{idx}"))
+            del_row.append(InlineKeyboardButton(delete_label(term[:20]), callback_data=f"worddel_{idx}"))
         except ValueError:
             pass
     try:

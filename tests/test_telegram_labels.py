@@ -2,6 +2,7 @@ from telegram import MessageEntity
 
 from ui.assistant import assistant_answer
 from ui.builder import MessageBuilder
+from ui.constants import delete_label
 from ui.wardrobe import render_wardrobe_message
 from util import tg_html
 
@@ -51,3 +52,9 @@ def test_assistant_card_bolds_inline_label():
 
     assert "Почему работает: светлый верх" in message.text
     assert _bold_fragments(message) == ["Образ", "Почему работает:"]
+
+
+def test_delete_button_label_always_uses_cross_emoji_once():
+    assert delete_label("Удалить") == "❌ Удалить"
+    assert delete_label("Убрать из любимого") == "❌ Убрать из любимого"
+    assert delete_label("❌ Удалить") == "❌ Удалить"

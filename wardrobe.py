@@ -14,13 +14,14 @@ import secure
 import research
 import settings as _settings
 from ui import wardrobe as wardrobe_ui
-from ui.constants import ui_label
+from ui.constants import delete_label, ui_label
 from wardrobe_model import (
     ZONE_ORDER,
     flat_items as _flat_wardrobe_items,
     guess_subcategory as _guess_subcategory,
     has_rain_outerwear as _has_rain_outerwear,
     normalize_parsed_item,
+    public_item_name,
     wardrobe_stats,
     zone_of as _zone_of,
 )
@@ -31,7 +32,9 @@ from wardrobe_outfit import (
     save_outfit_feedback,
     score_outfit,
     select_outfit_candidates,
+    validate_outfit_copy,
 )
+from wardrobe_copy import ai_reframe_look
 
 _log = logging.getLogger(__name__)
 
@@ -139,6 +142,8 @@ def _get_cached_look(cid):
     cached = store.get_valid_wardrobe_daylook(cid)   # ссылочная целостность (version+id)
     if not cached or cached.get("date") != _day_key():   # день — бизнес-правило «раз в день»
         return None
+    if cached.get("copy_validator_version") != 1:
+        return None
     return cached
 
 def _item_name(it):
@@ -150,6 +155,7 @@ def _save_cached_look(cid, item_ids, look_data):
     store.set_wardrobe_daylook(cid, {
         "date": _day_key(),
         "version": w.get("_v", 0),
+        "copy_validator_version": 1,
         "item_ids": list(item_ids or []),
         "look_data": look_data,
         "text": text,
@@ -364,37 +370,6 @@ def _no_outfit_screen(result_kb, alternative=False):
     return text, result_kb
 
 
-async def _ai_reframe_look(cid, items, weather_ctx, reasons, tip):
-    """Опциональный тонкий AI-рефрейз локального текста — тот же образ, живее
-    формулировки. Тихий fallback на локальные reasons/tip при любой ошибке."""
-    item_facts = "\n".join(
-        f"- {it.get('name', '')}; категория={it.get('zone', '')}; цвет={it.get('color', '')}; "
-        f"посадка={it.get('fit', '')}; стиль={it.get('style', '')}"
-        for it in items
-    )
-    prompt = f"""Ты современный персональный стилист. Комплект уже выбран — не меняй и не добавляй вещи.
-Вещи:
-{item_facts}
-Причины (локальные заметки, переформулируй естественно): {"; ".join(reasons) if reasons else "нет"}
-Совет по носке: {tip or "нет"}
-Дай одно точное объяснение, почему комплект визуально силён: опирайся на силуэт, баланс объёмов,
-визуальный вес обуви, длину верха, контраст или число акцентов. Не пиши пустые слова
-«универсальный», «база», «стильный», «модный» без конкретного объяснения.
-Совет по носке — одна строка, максимум два действия. Не повторяй полное название вещи.
-Обращайся на «ты», без имени и приветствий. Не выдумывай факты, которых нет выше.
-Никогда не пиши, что вещь "давно не носили"/"ещё не пробовали"/"пора попробовать" — это не факт, а
-предположение, даже если звучит правдоподобно.
-Верни строго валидный JSON (без markdown): {{"reasons": ["ровно 1 содержательная строка"], "tip": "1 строка или пусто"}}"""
-    try:
-        d = await ai.allm_json(prompt, 400, tier="cheap", module="wardrobe")
-        new_reasons = [str(r).strip() for r in (d.get("reasons") or []) if str(r).strip()]
-        new_tip = str(d.get("tip") or "").strip()
-        return (new_reasons or reasons)[:1], new_tip or tip
-    except Exception as e:
-        _log.warning("wardrobe AI reframe failed, using local text: %r", e, exc_info=True)
-        return reasons, tip
-
-
 async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, q=None):
     result_kb = kb or _wardrobe_home_kb()
     cached = None if previous_item_ids else _get_cached_look(cid)
@@ -468,16 +443,26 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, q=N
     best_sorted = sorted(best, key=lambda it: order.get(it.get("zone"), 9))
     reasons = build_outfit_reasons(best_sorted, weather_ctx)
     tip = build_style_tip(best_sorted, weather_ctx)
-    reasons, tip = await _ai_reframe_look(cid, best_sorted, weather_ctx, reasons, tip)
+    reasons, tip = await ai_reframe_look(best_sorted, reasons, tip)
 
     item_ids = [it.get("id") for it in best_sorted]
+    final_heading = "На случай дождя" if gap_note else "Образ готов"
+    validated_copy = validate_outfit_copy(
+        best_sorted,
+        w,
+        weather_ctx,
+        reasons,
+        tip,
+        final_heading,
+        gap_note or "ничего добавлять не нужно",
+    )
     look_data = {
         "weather_intro": _weather_decision(weather_ctx),
-        "items": [{"name": it.get("name", "")} for it in best_sorted],
-        "reasons": reasons,
-        "style_tip": tip,
-        "final_heading": "На случай дождя" if gap_note else "Образ готов",
-        "final_text": gap_note or "ничего добавлять не нужно",
+        "items": [{"name": public_item_name(it)} for it in validated_copy["items"]],
+        "reasons": validated_copy["reasons"],
+        "style_tip": validated_copy["style_tip"],
+        "final_heading": final_heading,
+        "final_text": validated_copy["final_text"],
     }
     text, entities = _build_look_message(look_data)
     # Порядок важен: save_outfit_feedback мутирует гардероб (use_count/last_used) и
@@ -533,9 +518,9 @@ async def _show_add_preview(bot, cid):
         await bot.send_message(chat_id=cid, text="Готово — вещи добавлены в шкаф.", reply_markup=closet_kb())
         return
     msg = wardrobe_ui.add_preview(queue[0], remaining=len(queue) - 1)
-    rows = [[("✅ Добавить", "w_add_ok"), ("✏️ Исправить", "w_add_edit")]]
+    rows = [[(ui_label("add", "Добавить"), "w_add_ok"), ("✏️ Исправить", "w_add_edit")]]
     if len(queue) > 1:
-        rows.append([(f"✅ Добавить все · {len(queue)}", "w_add_all")])
+        rows.append([(ui_label("add", f"Добавить все · {len(queue)}"), "w_add_all")])
     rows.append([("⬅️ Назад", "w_closet"), ("#️⃣ Меню", "m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_kb(rows))
 
@@ -739,7 +724,7 @@ async def send_item_card(bot, cid, item_id, q=None):
     msg = wardrobe_ui.item_card(item)
     zone_slug = ZONE_SLUG.get(zone, "oth")
     kb = _kb([
-        [("✏️ Изменить", f"w_edit_{item_id}"), ("Удалить", f"w_delete_{item_id}")],
+        [("✏️ Изменить", f"w_edit_{item_id}"), (delete_label("Удалить"), f"w_delete_{item_id}")],
         [("⬅️ Назад", f"w_cat_{zone_slug}"), ("#️⃣ Меню", "m_menu")],
     ])
     if q is not None:
@@ -758,7 +743,7 @@ async def send_delete_confirmation(bot, cid, item_id, q=None):
         return
     msg = wardrobe_ui.delete_confirmation(item)
     kb = _kb([
-        [("Удалить", f"w_deleteok_{item_id}"), ("Отмена", f"w_item_{item_id}")],
+        [(delete_label("Удалить"), f"w_deleteok_{item_id}"), ("Отмена", f"w_item_{item_id}")],
         [("⬅️ Назад", f"w_item_{item_id}"), ("#️⃣ Меню", "m_menu")],
     ])
     if q is not None:

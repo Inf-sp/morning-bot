@@ -172,6 +172,13 @@ def ui_label(key, text):
     return f"{emoji} {text}" if emoji else text
 
 
+def delete_label(text):
+    """Единая подпись для любой кнопки, удаляющей или убирающей данные."""
+    text = str(text or "").strip()
+    emoji = UI_EMOJI["delete"]
+    return text if text.startswith(emoji) else f"{emoji} {text}"
+
+
 def cuisine_label(key, text):
     emoji = CUISINE_EMOJI.get(key)
     return f"{emoji} {text}" if emoji else text

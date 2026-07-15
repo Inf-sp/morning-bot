@@ -26,6 +26,7 @@ from dictionary_model import (
 from dictionary_repository import DictionaryRepository
 from ui import dictionary as dict_ui
 from ui import learning as learning_ui
+from ui.constants import delete_label
 
 _HERE = Path(__file__).parent
 _log = logging.getLogger(__name__)
@@ -445,7 +446,7 @@ async def send_dict_search_prompt(bot, cid, lang, q=None):
 
 def _dict_search_kb(lang, term_key):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Удалить", callback_data=f"a_dictdel_{lang}_{term_key}")],
+        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
@@ -487,7 +488,7 @@ async def confirm_delete_dict_entry(bot, cid, lang, term_key, q=None):
     await _show_screen(
         bot, cid, "Точно удалить это из словаря?", None,
         InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Да, удалить", callback_data=f"a_dictdelok_{lang}_{term_key}"),
+            InlineKeyboardButton(delete_label("Да, удалить"), callback_data=f"a_dictdelok_{lang}_{term_key}"),
             InlineKeyboardButton("Отмена", callback_data=f"a_dictlang_{lang}"),
         ]]),
         q=q,
@@ -528,7 +529,7 @@ def _dict_lang_entries(cid, lang):
 
 def _dict_entry_view_kb(lang, page, term_key):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Удалить", callback_data=f"a_dictviewdel_{lang}_{page}_{term_key}")],
+        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictviewdel_{lang}_{page}_{term_key}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}_{page}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 

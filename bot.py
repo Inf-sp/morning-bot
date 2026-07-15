@@ -135,7 +135,11 @@ def _clean_release_note_line(line: str) -> str:
     line = line.strip()
     if line.startswith("- ") or line.startswith("* "):
         line = line[2:].strip()
-    if line == "Бот развёрнут и работает ✅":
+    plain_line = line.strip("*_ ").casefold()
+    if plain_line in {
+        "бот развёрнут и работает ✅",
+        "готово к развёртыванию ✅",
+    }:
         return ""
     return line
 
@@ -202,7 +206,11 @@ def load_release_title(version, release_notes) -> str:
 
 
 def build_deploy_report_message(version, release_notes, check_list=None):
-    clean_notes = [str(note).strip() for note in (release_notes or []) if str(note).strip()]
+    clean_notes = []
+    for note in release_notes or []:
+        line = _clean_release_note_line(str(note))
+        if line:
+            clean_notes.append(line)
     if not clean_notes:
         clean_notes = [_DEFAULT_DEPLOY_NOTE]
     title = load_release_title(version, clean_notes)

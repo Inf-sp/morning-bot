@@ -11,7 +11,7 @@ import saved_items
 import cooking
 import util
 from ui import settings as settings_ui
-from ui.constants import cuisine_label, ui_label
+from ui.constants import cuisine_label, delete_label, ui_label
 
 _log = logging.getLogger(__name__)
 
@@ -671,7 +671,7 @@ async def send_lagom(bot, cid, back="m_balance"):
     items = memory.get_lagom(cid)
     rows = [[InlineKeyboardButton("🆕 Добавить принцип", callback_data="setadd_lagom")]]
     if items:
-        rows.append([InlineKeyboardButton("❌ Удалить принципы", callback_data="set_lagom_clean")])
+        rows.append([InlineKeyboardButton(delete_label("Удалить принципы"), callback_data="set_lagom_clean")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     msg = settings_ui.lagom_home(items)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,

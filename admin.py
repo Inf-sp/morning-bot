@@ -15,7 +15,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import access
 import api_usage
 import config
-from ui.constants import ui_label
+from ui.constants import delete_label, ui_label
 import store
 import tracking
 from ui import admin as ui
@@ -198,7 +198,7 @@ async def send_users(bot, cid, q=None):
         [InlineKeyboardButton(ui_label("invite", "Инвайт"), callback_data="adm_invite")],
     ]
     if _removable_users():
-        rows.append([InlineKeyboardButton("❌ Удалить пользователя", callback_data="adm_user_del")])
+        rows.append([InlineKeyboardButton(delete_label("Удалить пользователя"), callback_data="adm_user_del")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     msg = ui.users(stats, users_list[:_USERS_LIST_LIMIT], len(users_list), _updated_at())
     await _show(bot, cid, msg, InlineKeyboardMarkup(rows), q)
@@ -219,7 +219,7 @@ async def send_user_delete_confirm(bot, cid, target_cid, q=None):
     prof = store.get_profile(target_cid)
     name = prof.get("name") or f"ID {str(target_cid)[:4]}…"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Удалить", callback_data=f"adm_user_delok_{target_cid}"),
+        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"adm_user_delok_{target_cid}"),
          InlineKeyboardButton("Отмена", callback_data="adm_user_del")],
     ])
     msg = ui.user_delete_confirm(name)

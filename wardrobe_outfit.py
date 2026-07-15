@@ -1,13 +1,20 @@
 """Локальный движок подбора и оценки образа."""
 
+import re
 from datetime import datetime, timedelta
 
 import config
 import store
-from wardrobe_model import ZONE_ORDER, flat_items as _flat_wardrobe_items
+from wardrobe_model import (
+    ZONE_ORDER,
+    flat_items as _flat_wardrobe_items,
+    public_item_name,
+    strip_internal_tags,
+)
 
 WARDROBE_OUTERWEAR_MAX_TEMP = 20
 NEUTRAL_COLORS = ("бел", "чёрн", "черн", "сер", "беж", "сини", "деним", "джинс")
+SAFE_NEUTRAL_STYLE_TIP = "Носи комплект без дополнительных стилистических изменений."
 
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
@@ -189,37 +196,43 @@ def build_outfit_reasons(items, weather_ctx, score_details=None):
     neutral_anchor = next((it for it in items if any(_is_neutral_color(c) for c in (it.get("colors") or []))), None)
     if neutral_anchor and len(set(bright)) >= 2:
         reasons.append(
-            f"{neutral_anchor.get('name')} — нейтральная база, держит {' и '.join(sorted(set(bright))[:2])} в одной палитре."
+            f"{public_item_name(neutral_anchor)} — нейтральная цветовая основа для {' и '.join(sorted(set(bright))[:2])}."
         )
     outer = next((it for it in items if it.get("zone") == "Верхняя одежда"), None)
     if outer and weather_ctx.get("has_rain") and outer.get("rain_ok"):
-        reasons.append(f"{outer.get('name')} — защита от дождя.")
+        reasons.append(f"{public_item_name(outer)} подходит для дождя.")
     elif weather_ctx.get("has_rain") and not (outer and outer.get("rain_ok")):
         reasons.append("Дождевика или непромокаемой куртки в шкафу нет — сегодня без защиты от дождя.")
     elif outer and weather_ctx.get("warm"):
-        reasons.append(f"{outer.get('name')} — пригодится утром, после обеда можно убрать.")
+        reasons.append(f"{public_item_name(outer)} даёт дополнительный слой для прохладного утра.")
     low = next((it for it in items if it.get("zone") == "Низ"), None)
-    if low and weather_ctx.get("hot"):
-        reasons.append(f"{low.get('name')} — без перегрева в жару.")
     top = next((it for it in items if it.get("zone") == "Верх"), None)
     shoe = next((it for it in items if it.get("zone") == "Обувь"), None)
     if top and low and not reasons:
-        top_fit = str(top.get("fit") or top.get("name") or "").lower()
-        low_fit = str(low.get("fit") or low.get("name") or "").lower()
-        if any(x in top_fit for x in ("свобод", "оверсайз")) and any(x in low_fit for x in ("широк", "свобод")):
-            reasons.append("Свободный верх поддерживает ширину брюк и собирает цельный силуэт.")
+        top_fit = str(top.get("fit") or "").strip()
+        low_fit = str(low.get("fit") or "").strip()
+        if top_fit and low_fit:
+            reasons.append(f"Посадка верха — {top_fit}, посадка низа — {low_fit}; они сочетаются между собой.")
         else:
-            reasons.append("Пропорции верха и низа сохраняют силуэт собранным.")
+            reasons.append(f"{public_item_name(top)} и {public_item_name(low)} составляют основу комплекта.")
     if shoe and len(reasons) < 2:
-        shoe_text = str(shoe.get("name") or "").lower()
-        if any(x in shoe_text for x in ("бел", "светл")):
-            reasons.append("Светлая обувь облегчает нижнюю часть образа.")
+        shoe_facts = " ".join([public_item_name(shoe)] + [str(c) for c in (shoe.get("colors") or [])]).lower()
+        if any(x in shoe_facts for x in ("бел", "светл")):
+            reasons.append(f"Светлый цвет обуви ({public_item_name(shoe)}) поддерживает палитру комплекта.")
         else:
-            reasons.append("Обувь добавляет нижней части нужный визуальный вес.")
+            reasons.append(f"{public_item_name(shoe)} завершает комплект.")
     return reasons[:3]
 
 
-_LONG_SLEEVE_MARKERS = ("рубаш", "свитер", "худи")
+_LONG_SLEEVE_MARKERS = ("длинн", "лонгслив")
+_OPENABLE_LAYER_MARKERS = ("рубаш", "куртк", "пиджак", "кардиган", "пальто", "плащ", "ветровк")
+
+
+def _has_confirmed_long_sleeves(item):
+    text = f"{item.get('name', '')} {item.get('subcategory', '')}".casefold()
+    if "коротк" in text and "рукав" in text:
+        return False
+    return "лонгслив" in text or ("длинн" in text and "рукав" in text)
 
 
 def build_style_tip(items, weather_ctx=None):
@@ -227,17 +240,134 @@ def build_style_tip(items, weather_ctx=None):
     если нет подходящего шаблона — не выдумываем совет ради совета."""
     weather_ctx = weather_ctx or {}
     outer = next((it for it in items if it.get("zone") == "Верхняя одежда"), None)
-    if outer and weather_ctx.get("warm"):
+    if outer and weather_ctx.get("warm") and any(
+        marker in str(outer.get("name") or "").casefold() for marker in _OPENABLE_LAYER_MARKERS
+    ):
         return "Оставь верхний слой расстёгнутым."
     sleeved = next((it for it in items
-                    if it.get("zone") == "Верх" and any(m in str(it.get("name", "")).lower() for m in _LONG_SLEEVE_MARKERS)),
+                    if it.get("zone") == "Верх" and _has_confirmed_long_sleeves(it)),
                    None)
     if sleeved:
         return "Подверни рукава, верх оставь навыпуск."
-    low = next((it for it in items if it.get("zone") == "Низ"), None)
-    if low and any(x in str(low.get("name") or "").lower() for x in ("брюк", "джинс", "чинос")):
-        return "Слегка подверни брюки, чтобы открыть обувь."
-    return ""
+    return SAFE_NEUTRAL_STYLE_TIP
+
+
+_COLOR_CLAIM_MARKERS = (
+    "бел", "чёрн", "черн", "сер", "беж", "син", "голуб", "красн", "зелён",
+    "зелен", "корич", "бордов", "жёлт", "желт", "оранж", "розов", "фиолет",
+    "серебр", "золот",
+)
+_MATERIAL_CLAIM_MARKERS = (
+    "лён", "лен", "льнян", "хлоп", "шерст", "кашемир", "кож", "замш", "деним",
+    "шёлк", "шелк", "полиэстер", "вискоз", "трикотаж",
+)
+_FIT_CLAIM_MARKERS = ("посадк", "объём", "объем", "свободн", "широк", "узк", "прям", "притал", "оверсайз")
+_LENGTH_CLAIM_MARKERS = ("длинн", "коротк", "укороч")
+_DETAIL_CLAIM_MARKERS = ("воротник", "карман", "манжет", "капюшон", "принт", "вышив", "пуговиц", "молни", "фактур")
+_GARMENT_CLAIM_MARKERS = (
+    "верх", "низ", "обув", "аксессуар", "рубаш", "футбол", "лонгслив", "свитер", "худи", "куртк", "пиджак", "пальто",
+    "плащ", "ветровк", "брюк", "джинс", "чинос", "шорт", "юбк", "кед", "кроссов",
+    "лофер", "ботин", "сандал", "часы", "ремн", "сумк", "рюкзак", "шарф", "кепк", "очк",
+)
+_ACCESSORY_CLAIM_MARKERS = ("аксессуар", "часы", "ремн", "сумк", "рюкзак", "шарф", "кепк", "шапк", "очк", "украшен", "кольц", "цепоч")
+
+
+def _facts_text(items):
+    chunks = []
+    for item in items:
+        chunks.extend(str(item.get(key) or "") for key in (
+            "name", "zone", "subcategory", "color", "color_secondary", "material", "style", "fit", "formality",
+        ))
+        for key in ("colors", "season", "occasions"):
+            chunks.extend(str(value) for value in (item.get(key) or []))
+    return " ".join(chunks).casefold()
+
+
+def _claims_are_grounded(text, items):
+    """Проверяет только проверяемые фактические утверждения, без AI-семантики."""
+    claim = str(text or "").casefold()
+    facts = _facts_text(items)
+    if not claim:
+        return False
+    for markers in (_COLOR_CLAIM_MARKERS, _MATERIAL_CLAIM_MARKERS, _LENGTH_CLAIM_MARKERS,
+                    _DETAIL_CLAIM_MARKERS, _GARMENT_CLAIM_MARKERS):
+        for marker in markers:
+            if marker in claim and marker not in facts:
+                return False
+    if "светл" in claim and not any(marker in facts for marker in ("светл", "бел", "беж", "серебр", "голуб")):
+        return False
+    if any(marker in claim for marker in ("тём", "темн")) and not any(
+        marker in facts for marker in ("тём", "темн", "чёрн", "черн", "син", "корич", "бордов")
+    ):
+        return False
+    if any(marker in claim for marker in _FIT_CLAIM_MARKERS):
+        fit_facts = " ".join(str(item.get("fit") or "") + " " + str(item.get("name") or "") for item in items).casefold()
+        if not any(marker in fit_facts for marker in _FIT_CLAIM_MARKERS):
+            return False
+    if re.search(r"(?:объ[её]мн\w*\s+рукав|рукав\w*\s+объ[её]мн)", claim):
+        return False
+    return True
+
+
+def _sanitize_generated_text(text, items):
+    clean = str(text or "")
+    for item in items:
+        raw_name = str(item.get("name") or "")
+        if raw_name:
+            clean = clean.replace(raw_name, public_item_name(item))
+    return strip_internal_tags(clean).strip()
+
+
+def _valid_style_tip(tip, items):
+    tip_low = str(tip or "").casefold()
+    if not _claims_are_grounded(tip, items):
+        return False
+    if any(action in tip_low for action in ("подверни рукав", "подвернуть рукав", "закатай рукав", "закатать рукав")):
+        return any(_has_confirmed_long_sleeves(item) for item in items)
+    if "подверн" in tip_low and any(word in tip_low for word in ("брюк", "джинс", "чинос")):
+        return any(
+            item.get("zone") == "Низ" and "длинн" in str(item.get("name") or "").casefold()
+            for item in items
+        )
+    return True
+
+
+def validate_outfit_copy(items, wardrobe, weather_ctx, reasons, tip, final_heading, final_text):
+    """Финальный guard между генерацией и UI: только факты из выбранных вещей.
+
+    Заодно сверяет id аксессуаров с текущей базой гардероба и не разрешает
+    финальному штриху предлагать аксессуар, которого нет в выбранном комплекте.
+    """
+    database_items = [item for _zone, _subcategory, item in _flat_wardrobe_items(wardrobe)]
+    database_ids = {item.get("id") for item in database_items if item.get("id")}
+    verified_items = [item for item in items if not item.get("id") or item.get("id") in database_ids]
+
+    clean_reasons = []
+    for reason in reasons or []:
+        clean = _sanitize_generated_text(reason, verified_items)
+        if _claims_are_grounded(clean, verified_items):
+            clean_reasons.append(clean)
+    if not clean_reasons:
+        clean_reasons = build_outfit_reasons(verified_items, weather_ctx)
+
+    clean_tip = _sanitize_generated_text(tip, verified_items)
+    if not _valid_style_tip(clean_tip, verified_items):
+        clean_tip = SAFE_NEUTRAL_STYLE_TIP
+
+    clean_final = _sanitize_generated_text(final_text, verified_items)
+    if (final_heading or "Образ готов") == "Образ готов" and any(
+        marker in clean_final.casefold() for marker in _ACCESSORY_CLAIM_MARKERS
+    ):
+        selected_accessories = [item for item in verified_items if item.get("zone") == "Аксессуары"]
+        if not selected_accessories or not _claims_are_grounded(clean_final, selected_accessories):
+            clean_final = "Комплект собран из вещей твоего шкафа"
+
+    return {
+        "items": verified_items,
+        "reasons": clean_reasons[:3],
+        "style_tip": clean_tip,
+        "final_text": clean_final or "Комплект собран из вещей твоего шкафа",
+    }
 
 
 def build_wardrobe_insight(cid, items, wardrobe_history):

@@ -19,6 +19,7 @@ from fridge_model import (
     _fridge_split_input,
 )
 from ui import food as food_ui
+from ui.constants import delete_label
 
 send_leftovers = cooking.send_leftovers
 
@@ -77,7 +78,7 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
                 callback_data=f"as_fridge_cat_{ci}_0"
             ))
         rows = [[InlineKeyboardButton("🆕 Добавить продукт", callback_data="as_fridge_add")]]
-        rows.append([InlineKeyboardButton("❌ Удалить продукты", callback_data="as_fridge_clean")])
+        rows.append([InlineKeyboardButton(delete_label("Удалить продукты"), callback_data="as_fridge_clean")])
         rows.extend([[btn] for btn in cat_btns])
         rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
 
@@ -114,7 +115,7 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
 
     # Один продукт в строку: названия должны читаться полностью.
     rows = [[InlineKeyboardButton("🆕 Добавить продукт", callback_data=f"as_fridge_add_{cat_idx}")]]
-    rows.append([InlineKeyboardButton("❌ Удалить продукты", callback_data="as_fridge_clean")])
+    rows.append([InlineKeyboardButton(delete_label("Удалить продукты"), callback_data="as_fridge_clean")])
     for gi, it in chunk:
         mark = "✅" if it.get("on", True) else "□"
         name_short = it["name"][:40]

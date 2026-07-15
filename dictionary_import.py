@@ -15,6 +15,7 @@ import verify
 import learning_dictionary as dictionary
 from dictionary_model import entry_language, entry_term, entry_translation, normalize_entry, normalize_key
 from ui import dictionary as dict_ui
+from ui.constants import delete_label
 
 _log = logging.getLogger(__name__)
 _cap = dictionary._cap
@@ -263,10 +264,30 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
     без принудительного fallback на nl.
     avoid_translations — уже показанные пользователю варианты (кнопка «Другой перевод»);
     меняет текст промпта, чтобы не попасть в тот же кэш и получить другой вариант."""
-    if lang_hint in ("nl", "en"):
+    russian_source = bool(_CYRILLIC_RE.search(payload or ""))
+    if russian_source and lang_hint in ("nl", "en"):
+        language_line = (
+            f"Исходная запись дана на русском. Целевой язык: "
+            f"{_lang_title(lang_hint)} ({lang_hint}). Переведи значение на целевой язык."
+        )
+        if lang_hint == "nl":
+            russian_source_rule = (
+                '- Русский ввод — это значение, а не иностранное написание. Дай настоящий '
+                'нидерландский перевод: "Уверенность" → "het zelfvertrouwen" (в себе) '
+                'или "de zekerheid" (определённость), НИКОГДА не транслитерацию вроде '
+                '"de Uverenheid".\n'
+            )
+        else:
+            russian_source_rule = (
+                '- Русский ввод — это значение, а не иностранное написание. Дай настоящий '
+                'английский перевод: "Уверенность" → "confidence", НИКОГДА не транслитерацию.\n'
+            )
+    elif lang_hint in ("nl", "en"):
         language_line = f"Подсказка языка: {_lang_title(lang_hint)} ({lang_hint})."
+        russian_source_rule = ""
     else:
         language_line = "Язык не подсказан — определи его сам по слову/фразе."
+        russian_source_rule = ""
     avoid_line = ""
     if avoid_translations:
         avoid_line = (
@@ -286,6 +307,8 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
 
 Правила:
 - lang: nl или en.
+{russian_source_rule}- Если исходная запись дана по-русски и целевой язык указан, это корректный
+  запрос на перевод для словаря: не отклоняй его и не копируй звучание русскими словами латиницей.
 - term: правильная учебная форма (без перевода).
   - Нидерландские существительные — с артиклем de/het.
   - Глаголы — в инфинитиве; английские глаголы словарной формой — с to.
@@ -346,7 +369,8 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
   "needs_confirmation": false,
   "reason": "короткая причина уточнения или пусто"
 }}
-Если это не похоже на нидерландскую или английскую учебную запись, верни {{"ok": false, "reason": "коротко почему"}}.
+Если ввод не является ни нидерландской/английской записью, ни русским значением для
+перевода на явно указанный целевой язык, верни {{"ok": false, "reason": "коротко почему"}}.
 """
     d = await ai.allm_json(prompt, 900, module="learning_dict_add")
     if not isinstance(d, dict) or not d.get("ok"):
@@ -356,6 +380,8 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
     translation = re.sub(r"\s+", " ", str(d.get("translation") or "").strip())
     term, _grammar_note = _normalize_dict_term(lang, _kind_of(term), term)
     if not term or not translation or _is_bad_dict_item(term, translation):
+        return None
+    if russian_source and not _CYRILLIC_RE.search(translation):
         return None
     examples = []
     for ex in (d.get("examples") or [])[:2]:
@@ -535,7 +561,7 @@ async def _refresh_dict_entry(cid, item):
 def _dict_saved_kb(lang, term_key):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Другой перевод", callback_data="a_dictconfirm_retry")],
-        [InlineKeyboardButton("❌ Удалить", callback_data=f"a_dictdelok_{lang}_{term_key}")],
+        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
     ])
 
 
@@ -577,7 +603,7 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
     term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
     if status == "duplicate":
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Удалить", callback_data=f"a_dictdelok_{saved['lang']}_{term_key}"),
+            [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{saved['lang']}_{term_key}"),
              InlineKeyboardButton("✅ Оставить", callback_data="noop")],
         ])
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
@@ -604,7 +630,7 @@ async def retry_pending_dict_add(bot, cid):
         return
     if not new_entry or new_entry["translation"] in seen:
         term_key = _dict_item_key(entry["lang"], "", _entry_term(entry))[2]
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Удалить", callback_data=f"a_dictdelok_{entry['lang']}_{term_key}")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelok_{entry['lang']}_{term_key}")]])
         await bot.send_message(chat_id=cid, text="Больше вариантов перевода не нашлось.", reply_markup=kb)
         return
     updated = _overwrite_dict_entry_fields(cid, entry["lang"], entry["term"], {

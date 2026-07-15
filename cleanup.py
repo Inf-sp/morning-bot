@@ -25,7 +25,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 from util import esc
-from ui.constants import ui_label
+from ui.constants import delete_label, ui_label
 
 CLEAN_PAGE = 8
 
@@ -451,6 +451,11 @@ def _action_label(ctx):
     return "Применить действие"
 
 
+def _button_action_label(label, action_id="remove"):
+    """Удаляющие действия всегда отмечены единым ❌; restore/hide не меняем."""
+    return delete_label(label) if action_id == "remove" else label
+
+
 # Контексты, для которых удаление обратимо штатными средствами интерфейса
 # (добавить обратно / нажать повторно) — не требуют экрана подтверждения перед
 # групповым удалением. Все остальные view-контексты физически стирают запись
@@ -517,7 +522,10 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
         page_label = "✅ Снять выбор на странице" if page_ids <= sel else "✅ Выбрать все на странице"
         rows.append([InlineKeyboardButton(page_label, callback_data=f"cla_{ctx}_{page}")])
     if sel:
-        rows.append([InlineKeyboardButton(f"{_action_label(ctx)} ({len(sel)})", callback_data=f"cld_{ctx}_{page}")])
+        rows.append([InlineKeyboardButton(
+            f"{_button_action_label(_action_label(ctx))} ({len(sel)})",
+            callback_data=f"cld_{ctx}_{page}",
+        )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
@@ -802,11 +810,12 @@ async def _render_view(bot, cid, view_id, q=None):
         page_label = "✅ Снять выбор на странице" if page_ids <= sel else "✅ Выбрать все на странице"
         rows.append([InlineKeyboardButton(page_label, callback_data=f"cla:{view_id}:{page}")])
     if _has_select_all_collection_button(ctx) and total > len(chunk) and all_ids != sel:
-        rows.append([InlineKeyboardButton(ui_label("delete", f"Удалить все {total}"), callback_data=f"clx:{view_id}")])
+        rows.append([InlineKeyboardButton(delete_label(f"Удалить все {total}"), callback_data=f"clx:{view_id}")])
     if sel:
         actions = (_collection_cfg(ctx) or {}).get("actions") or [{"id": "remove", "label": _action_label(ctx)}]
         for action in actions:
-            rows.append([InlineKeyboardButton(f"{action['label']} ({len(sel)})",
+            action_label = _button_action_label(action["label"], action.get("id"))
+            rows.append([InlineKeyboardButton(f"{action_label} ({len(sel)})",
                                               callback_data=f"clact:{view_id}:{action['id']}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=view["back"]),
                  InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
@@ -828,7 +837,7 @@ async def _render_confirm(bot, cid, view_id, action_id="remove", q=None):
     view = _views[view_id]
     n = len(view["selected_ids"])
     action = _action_by_id(view["ctx"], action_id) or {"label": "Удалить"}
-    label = action.get("label") or "Удалить"
+    label = _button_action_label(action.get("label") or "Удалить", action_id)
     text = f"{label} ({n})? Это действие нельзя отменить."
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"{label} ({n})", callback_data=f"clactc:{view_id}:{action_id}")],

@@ -1,5 +1,7 @@
 """Чистая схема гардероба и нормализация вещей."""
 
+import re
+
 ZONE_SUBCATS = {
     "Верх": ["Футболки", "Поло", "Рубашки", "Лонгсливы", "Свитеры", "Кардиганы", "Худи", "Пиджаки", "Другое"],
     "Верхняя одежда": ["Ветровки", "Куртки", "Пальто", "Пуховики", "Плащи", "Другое"],
@@ -30,6 +32,56 @@ SUBCATEGORY_KEYWORDS = {
 
 RAIN_OUTER_MARKERS = ("дождевик", "ветровк", "непромокаем", "мембран", "raincoat", "waterproof", "плащ", "тренч", "анорак")
 
+_INTERNAL_TAG_MARKERS = (
+    "летн", "зимн", "деми", "всесезон", "casual", "utility", "formal",
+    "smart casual", "smart_casual", "streetwear", "sport", "город", "офис",
+    "работ", "прогул", "путешеств", "вечер", "повседнев", "свободн",
+    "прям", "притал", "оверсайз",
+)
+
+
+def _tag_values(item):
+    if not isinstance(item, dict):
+        return []
+    values = []
+    for key in ("color", "color_secondary", "material", "style", "fit", "formality"):
+        if item.get(key):
+            values.append(str(item[key]).strip().casefold())
+    for key in ("colors", "season", "occasions"):
+        values.extend(str(value).strip().casefold() for value in (item.get(key) or []) if str(value).strip())
+    return values
+
+
+def _is_internal_tag(value, item=None):
+    value = re.sub(r"\s+", " ", str(value or "")).strip().casefold()
+    if not value:
+        return True
+    if any(marker in value for marker in _INTERNAL_TAG_MARKERS):
+        return True
+    return any(value == known or value in known or known in value for known in _tag_values(item))
+
+
+def strip_internal_tags(value, item=None):
+    """Убирает служебные season/style/occasion/fit-теги из скобок.
+
+    Значимые части вроде бренда сохраняются: ``(Nike, город)`` превращается в
+    ``(Nike)``, а полностью служебная группа исчезает целиком.
+    """
+    text = str(value or "")
+
+    def _replace(match):
+        parts = [part.strip() for part in re.split(r"[,;·]", match.group(1)) if part.strip()]
+        kept = [part for part in parts if not _is_internal_tag(part, item)]
+        return f" ({', '.join(kept)})" if kept else ""
+
+    return re.sub(r"\s*\(([^()]*)\)", _replace, text).strip()
+
+
+def public_item_name(item):
+    if not isinstance(item, dict):
+        return strip_internal_tags(item)
+    return strip_internal_tags(item.get("name") or "", item)
+
 
 def zone_of(category):
     text = str(category or "").lower()
@@ -56,7 +108,7 @@ def normalize_parsed_item(raw):
     subcategory = raw.get("subcategory")
     if subcategory not in ZONE_SUBCATS.get(zone, []):
         subcategory = guess_subcategory(zone, name)
-    return {
+    item = {
         "zone": zone, "subcategory": subcategory, "name": name,
         "color": str(raw.get("color") or "").strip(),
         "color_secondary": (str(raw["color_secondary"]).strip() or None) if raw.get("color_secondary") else None,
@@ -68,6 +120,8 @@ def normalize_parsed_item(raw):
         "occasions": [str(x).strip() for x in (raw.get("occasions") or []) if str(x).strip()]
                      if isinstance(raw.get("occasions"), list) else [],
     }
+    item["name"] = public_item_name(item)
+    return item
 
 
 def flat_items(wardrobe):

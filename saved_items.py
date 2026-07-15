@@ -10,7 +10,7 @@ import config
 import store
 import util
 from ui import settings as settings_ui
-from ui.constants import ui_label
+from ui.constants import delete_label, ui_label
 
 _log = logging.getLogger(__name__)
 # ===== СОХРАНЕНИЯ / ЛЮБИМЫЕ (notes.py) =====
@@ -322,7 +322,7 @@ async def plan_view(bot, cid, i):
     text = n.get("text", "") if isinstance(n, dict) else str(n)
     entities = util.entities_from_json(n.get("entities") if isinstance(n, dict) else None)
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Удалить план", callback_data=f"as_plandel_{i}")],
+        [InlineKeyboardButton(delete_label("Удалить план"), callback_data=f"as_plandel_{i}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_plan"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
     chunks = util.chunk_text_with_entities(text, entities, 4000)
@@ -352,7 +352,7 @@ async def fav_view(bot, cid, i, back="as_bucket_fav", delete_cb=None):
         ])
     else:
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Удалить", callback_data=delete_cb or f"fav_del_{i}")],
+            [InlineKeyboardButton(delete_label("Удалить"), callback_data=delete_cb or f"fav_del_{i}")],
             [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
         ])
     chunks = util.chunk_text_with_entities(full.text, full.entities, 4000)
@@ -398,7 +398,7 @@ async def send_fav_group(bot, cid, group):
         prefix = f"{date} · " if date else ""
         rows.append([InlineKeyboardButton(f"{prefix}{src} · {short}"[:60], callback_data=f"fav_viewg_{group}_{i}")])
     if items:
-        rows.append([InlineKeyboardButton("Убрать из сохранённого", callback_data=f"as_clean_favgrp_{group}")])
+        rows.append([InlineKeyboardButton(delete_label("Убрать из сохранённого"), callback_data=f"as_clean_favgrp_{group}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_bucket_fav"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
 
@@ -499,7 +499,7 @@ async def send_love_section(bot, cid, key):
         callback_data=f"as_loveadd_{key}",
     )]]
     if items:
-        rows.append([InlineKeyboardButton("Убрать из любимого", callback_data=f"as_loveclean_{key}")])
+        rows.append([InlineKeyboardButton(delete_label("Убрать из любимого"), callback_data=f"as_loveclean_{key}")])
     if key in _HIDDEN_SUPPORTED:
         rows.append([InlineKeyboardButton("Скрытое", callback_data=f"as_lovehidden_{key}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])

@@ -8,8 +8,13 @@ from telegram import MessageEntity
 
 from ui.settings import wardrobe_style
 from ui.wardrobe import render_wardrobe_message
-from wardrobe_model import normalize_parsed_item
-from wardrobe_outfit import pick_best_outfit
+from wardrobe_model import normalize_parsed_item, public_item_name
+from wardrobe_outfit import (
+    SAFE_NEUTRAL_STYLE_TIP,
+    build_style_tip,
+    pick_best_outfit,
+    validate_outfit_copy,
+)
 import settings
 
 
@@ -114,3 +119,68 @@ def test_style_screen_reads_settings_once(monkeypatch):
     asyncio.run(settings.send_wardrobe_style(Bot(), "fast-style", q=Query()))
 
     assert calls["count"] == 1
+
+
+def test_outfit_copy_rejects_short_sleeve_hallucinations_and_internal_tags():
+    shirt = {
+        "id": "top-1",
+        "zone": "Верх",
+        "subcategory": "Рубашки",
+        "name": "Голубая рубашка с коротким рукавом (летняя, utility casual, город)",
+        "color": "голубой",
+        "colors": ["голубой"],
+        "fit": None,
+        "season": ["лето"],
+        "style": "utility casual",
+        "occasions": ["город"],
+    }
+    trousers = _item("bottom-1", "Низ", "Синие брюки")
+    shoes = _item("shoe-1", "Обувь", "Белые кеды")
+    selected = [shirt, trousers, shoes]
+    wardrobe = {"zones": {
+        "Верх": {"Рубашки": [shirt]},
+        "Низ": {"Брюки": [trousers]},
+        "Обувь": {"Кеды": [shoes]},
+    }}
+
+    result = validate_outfit_copy(
+        selected,
+        wardrobe,
+        {},
+        ["Объёмные рукава рубашки уравновешивают широкие брюки."],
+        "Подверни рукава и оставь рубашку навыпуск.",
+        "Образ готов",
+        "Добавь серебристые часы.",
+    )
+
+    assert public_item_name(shirt) == "Голубая рубашка с коротким рукавом"
+    assert result["style_tip"] == SAFE_NEUTRAL_STYLE_TIP
+    assert all("объём" not in reason.casefold() and "широк" not in reason.casefold() for reason in result["reasons"])
+    assert "utility" not in " ".join(result["reasons"]).casefold()
+    assert result["final_text"] == "Комплект собран из вещей твоего шкафа"
+
+
+def test_style_tip_rolls_sleeves_only_when_length_is_confirmed():
+    short = {"zone": "Верх", "subcategory": "Рубашки", "name": "Рубашка с коротким рукавом"}
+    long = {"zone": "Верх", "subcategory": "Рубашки", "name": "Рубашка с длинными рукавами"}
+
+    assert build_style_tip([short]) == SAFE_NEUTRAL_STYLE_TIP
+    assert build_style_tip([long]).startswith("Подверни рукава")
+
+
+def test_final_accessory_is_allowed_only_when_selected_and_present_in_database():
+    watch = {
+        "id": "watch-1",
+        "zone": "Аксессуары",
+        "subcategory": "Часы",
+        "name": "Серебристые часы",
+        "colors": ["серебристый"],
+    }
+    wardrobe = {"zones": {"Аксессуары": {"Часы": [watch]}}}
+
+    result = validate_outfit_copy(
+        [watch], wardrobe, {}, ["Серебристые часы завершают комплект."],
+        SAFE_NEUTRAL_STYLE_TIP, "Образ готов", "Добавь серебристые часы.",
+    )
+
+    assert result["final_text"] == "Добавь серебристые часы."
