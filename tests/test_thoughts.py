@@ -479,46 +479,17 @@ def test_stale_clear_callback_never_deletes_without_cached_review(monkeypatch):
     assert "• Новая мысль" in bot.sent[0]["text"]
 
 
-def test_full_history_delete_is_only_in_settings_and_requires_confirmation(monkeypatch):
+def test_full_history_delete_is_absent_from_settings_and_legacy_callbacks_are_safe(monkeypatch):
     bot = FakeBot()
     asyncio.run(saved_items.send_notes(bot, "42"))
     labels = [button.text for row in bot.sent[0]["reply_markup"].inline_keyboard for button in row]
-    assert "❌ Удалить историю мыслей" in labels
+    assert "❌ Удалить историю мыслей" not in labels
 
     deleted = []
     monkeypatch.setattr(settings.store, "set_list", lambda *args: deleted.append(args))
     q = FakeQuery()
-    asyncio.run(settings.confirm_delete_thought_history(bot, "42", q=q))
+    asyncio.run(settings.handle_callback(bot, "42", "set_thought_history_delete", q=q))
+    asyncio.run(settings.handle_callback(bot, "42", "set_thought_history_delete_yes", q=q))
 
     assert deleted == []
-    assert q.message.text.startswith("Удалить историю мыслей?")
-    confirm_labels = [button.text for row in q.message.reply_markup.inline_keyboard for button in row]
-    assert confirm_labels == ["Да, удалить историю", "Отмена"]
-
-
-def test_confirmed_full_history_delete_preserves_personalization(monkeypatch):
-    deleted = []
-    saved_settings = []
-    source = {
-        "42": {
-            "city": "Алкмар",
-            "notif_checkin_day": False,
-            "_thoughts_review_cache": {"result": "private"},
-            "_thoughts_last_added_at": 123,
-        }
-    }
-    monkeypatch.setattr(settings.store, "set_list", lambda key, cid, items: deleted.append((key, cid, items)))
-    monkeypatch.setattr(settings, "_all", lambda: {key: dict(value) for key, value in source.items()})
-    monkeypatch.setattr(settings.store, "_save", lambda key, value: saved_settings.append((key, value)))
-    bot = FakeBot()
-    q = FakeQuery()
-
-    asyncio.run(settings.delete_thought_history(bot, "42", q=q))
-
-    assert deleted == [
-        (config.THOUGHTS_KEY, "42", []),
-        (config.THOUGHT_REVIEWS_KEY, "42", []),
-    ]
-    remaining = saved_settings[0][1]["42"]
-    assert remaining == {"city": "Алкмар", "notif_checkin_day": False}
-    assert q.message.text.startswith("✅ История мыслей удалена")
+    assert bot.sent[-1]["text"].startswith("🎚️ Настройки")

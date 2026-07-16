@@ -5,7 +5,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from .balance import finish_dot
 from .builder import MessageBuilder, MessageSpec
 from .constants import LANGUAGE_EMOJI, choose_label, ui_label
-from .food import compact_step_lines
+from .food import compact_step_lines, pairing_text
 
 UI_MYDAY = ui_label("myday", "").strip()
 UI_WARDROBE = ui_label("wardrobe", "").strip()
@@ -222,16 +222,10 @@ def food_menu(idea=None):
         b.spacer()
         b.bold(name)
 
-    minutes = str(idea.get("minutes") or "").strip()
     servings = _cooking_text(idea.get("servings"))
-    meta = []
-    if minutes:
-        meta.append(f"⏱ {minutes} мин" if "мин" not in minutes.lower() else f"⏱ {minutes}")
     if servings:
-        meta.append(f"👤 {servings}")
-    if meta:
         b.newline()
-        b.line(" · ".join(meta))
+        b.line(f"👤 {servings}")
 
     ingredients = [_cooking_text(item) for item in (idea.get("ingredients") or [])]
     ingredients = [item for item in ingredients if item]
@@ -257,22 +251,13 @@ def food_menu(idea=None):
         for step in steps:
             b.bullet(step)
 
-    pairing_wine = _cooking_text(idea.get("pairing_wine"))
-    pairing_drink = _cooking_text(idea.get("pairing_drink"))
-    if pairing_wine or pairing_drink:
+    pairing = pairing_text({
+        "pairing_wine": _cooking_text(idea.get("pairing_wine")),
+        "pairing_drink": _cooking_text(idea.get("pairing_drink")),
+    })
+    if pairing:
         b.spacer()
-        b.bold("🍷 Сочетания")
-        b.newline()
-        if pairing_wine:
-            b.line(f"🍷 К блюду подойдёт: {pairing_wine}")
-        if pairing_drink:
-            b.line(f"🥤 Без алкоголя: {pairing_drink}")
-
-    image = str(idea.get("image") or "").strip()
-    if image.startswith("https://"):
-        b.spacer()
-        b.link("🖼 Фото блюда", image)
-        b.newline()
+        b.line(f"К блюду подойдет: {pairing}")
 
     tip = _cooking_sentence(idea.get("tip"))
     if tip:

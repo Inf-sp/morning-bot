@@ -110,7 +110,7 @@ def test_system_screen_has_logs_on_separate_row(monkeypatch):
     assert "Последняя ошибка" not in bot.sent[0]["text"]
 
 
-def test_logs_have_copy_clear_and_navigation_rows(monkeypatch):
+def test_logs_have_only_clear_and_navigation_rows(monkeypatch):
     entry = {
         "id": "abc123", "ts": 1_700_000_000, "source": "app",
         "section": "Обучение", "action": "не открылось задание",
@@ -124,25 +124,5 @@ def test_logs_have_copy_clear_and_navigation_rows(monkeypatch):
     asyncio.run(admin.send_logs(bot, "42"))
 
     labels = [[button.text for button in row] for row in bot.sent[0]["reply_markup"].inline_keyboard]
-    assert labels[0][0].startswith("📋 Скопировать · ")
-    assert labels[1] == ["❌ Очистить логи"]
-    assert labels[2] == ["⬅️ Назад", "#️⃣ Меню"]
-
-
-def test_copy_log_sends_full_safe_context(monkeypatch):
-    entry = {
-        "id": "abc123", "ts": 1_700_000_000, "source": "app",
-        "section": "Обучение", "action": "не открылось задание",
-        "error": "NameError: learning_ui is not defined", "traceback": "full traceback",
-        "file": "learning.py", "line": 248, "function": "send_task",
-        "service": "Cohere", "fallback": "Gemini", "version": "1.2.3",
-    }
-    monkeypatch.setattr(tracking, "get_errors", lambda limit=200: [entry])
-    bot = _Bot()
-
-    asyncio.run(admin.send_log_copy(bot, "42", "abc123"))
-
-    text = bot.sent[0]["text"]
-    for label in ("Время:", "Раздел:", "Действие:", "Ошибка:", "Traceback:",
-                  "Файл:", "Строка:", "Функция:", "Сервис:", "Резерв:", "Версия:"):
-        assert label in text
+    assert labels == [["❌ Очистить логи"], ["⬅️ Назад", "#️⃣ Меню"]]
+    assert all("Скопировать" not in button for row in labels for button in row)

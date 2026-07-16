@@ -6,6 +6,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import config
 import learning_data_quality
+import settings
 from ui import settings as settings_ui
 
 
@@ -239,6 +240,29 @@ def test_database_refresh_summary_matches_required_format():
         "Требуют проверки: 5\n"
         "Без изменений: 134"
     )
+
+
+def test_language_review_has_no_skip_button(monkeypatch):
+    monkeypatch.setattr(learning_data_quality, "review_items", lambda _cid: [{
+        "entryId": "entry-1",
+        "original": "Ik ben opzoek naar een rode kitten voor een klein prijsje",
+        "suggestion": "Ik ben op zoek naar een rode kitten voor een klein prijsje",
+        "reason": "Проверь написание",
+    }])
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    bot = Bot()
+    asyncio.run(settings.send_language_review(bot, "42"))
+
+    labels = [
+        button.text
+        for row in bot.message["reply_markup"].inline_keyboard
+        for button in row
+    ]
+    assert labels == ["✅ Заменить", "❌ Удалить запись", "⬅️ Назад", "#️⃣ Меню"]
 
 
 def test_database_in_order_summary_is_short():

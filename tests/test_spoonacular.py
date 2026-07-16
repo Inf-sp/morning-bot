@@ -5,6 +5,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import recipe_generation
 import spoonacular
+from ui.food import food_card
 from ui.menu import food_menu
 
 
@@ -137,19 +138,41 @@ def test_themealdb_is_used_when_spoonacular_returns_no_recipes(monkeypatch):
     assert recipe_generation._recipe_sources("ужин") == fallback
 
 
-def test_cooking_idea_card_shows_wine_and_non_alcoholic_pairings():
+def test_cooking_idea_card_combines_pairings_without_labels_or_emoji():
     message = food_menu({
         "name": "Паста с овощами",
         "ingredients": ["паста", "овощи"],
         "steps": ["Отвари пасту", "Добавь овощи"],
-        "pairing_wine": "Cabernet Sauvignon",
-        "pairing_drink": "холодный чай с лимоном",
+        "pairing_wine": "🍷 Cabernet Sauvignon",
+        "pairing_drink": "🥤 холодный чай с лимоном",
     })
 
     assert "🥣 Готовка · Идея на сегодня" in message.text
-    assert "🍷 Сочетания" in message.text
-    assert "🍷 К блюду подойдёт: Cabernet Sauvignon" in message.text
-    assert "🥤 Без алкоголя: холодный чай с лимоном" in message.text
+    assert "К блюду подойдет: Cabernet Sauvignon; холодный чай с лимоном" in message.text
+    assert "Сочетания" not in message.text
+    assert "Без алкоголя" not in message.text
+    assert "🍷" not in message.text
+    assert "🥤" not in message.text
+
+
+def test_recipe_card_hides_time_and_image_and_uses_one_pairing_line():
+    message = food_card({
+        "name": "Паста с овощами",
+        "time": "25 мин",
+        "servings": "2 порц.",
+        "ingredients": "паста, овощи",
+        "steps": ["Отвари пасту", "Добавь овощи"],
+        "pairing_wine": "Cabernet Sauvignon",
+        "pairing_drink": "холодный чай с лимоном",
+        "image": "https://img.spoonacular.com/recipe.jpg",
+    })
+
+    assert "К блюду подойдет: Cabernet Sauvignon; холодный чай с лимоном" in message.text
+    assert "👤 2 порц." in message.text
+    assert "25 мин" not in message.text
+    assert "⏱" not in message.text
+    assert "Фото блюда" not in message.text
+    assert "img.spoonacular.com" not in message.text
 
 
 def test_all_llms_down_still_returns_spoonacular_card(monkeypatch):
@@ -188,9 +211,12 @@ def test_code_card_formats_source_fields_without_ai():
         "code_fallback": True,
     })
 
-    assert "⏱ 25 мин · 👤 2 порц." in message.text
+    assert "👤 2 порц." in message.text
+    assert "⏱" not in message.text
+    assert "25 мин" not in message.text
     assert "Не хватает:\nparsley" in message.text
-    assert "🖼 Фото блюда" in message.text
+    assert "Фото блюда" not in message.text
+    assert "img.spoonacular.com" not in message.text
 
 
 def test_home_idea_can_be_built_from_spoonacular_without_ai():

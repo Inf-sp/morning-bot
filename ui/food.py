@@ -92,6 +92,10 @@ _STEP_TIME_RE = re.compile(
     re.IGNORECASE,
 )
 
+_PAIRING_EMOJI_RE = re.compile(
+    r"[\U0001F000-\U0001FAFF\U00002600-\U000027BF\ufe0f\u200d]+"
+)
+
 
 def _step_text(step) -> str:
     """Оставляет действие шага без отдельного времени и служебной детализации."""
@@ -126,6 +130,20 @@ def compact_step_lines(steps) -> list[str]:
         if word_count <= 24:
             lines[pair_index:pair_index + 2] = [f"{lines[pair_index]} {lines[pair_index + 1]}"]
     return lines
+
+
+def pairing_text(data) -> str:
+    """Объединяет все подходящие напитки в одну строку без подзаголовков."""
+    values = []
+    seen = set()
+    for key in ("pairing_wine", "pairing_drink"):
+        value = " ".join(str((data or {}).get(key) or "").split())
+        value = " ".join(_PAIRING_EMOJI_RE.sub("", value).split())
+        folded = value.casefold()
+        if value and folded not in seen:
+            values.append(value)
+            seen.add(folded)
+    return "; ".join(values)
 
 
 def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallback=None):
@@ -166,16 +184,10 @@ def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallba
     if name:
         b.spacer()
         b.bold(name)
-    time_value = " ".join(str(data.get("time") or "").split())
     servings = " ".join(str(data.get("servings") or "").split())
-    meta = []
-    if time_value:
-        meta.append(f"⏱ {time_value}")
     if servings:
-        meta.append(f"👤 {servings}")
-    if meta:
         b.newline()
-        b.line(" · ".join(meta))
+        b.line(f"👤 {servings}")
     if ingredients:
         b.spacer()
         b.bold("Ингредиенты:")
@@ -196,21 +208,10 @@ def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallba
         b.newline()
         for step in steps:
             b.bullet(step)
-    pairing_wine = " ".join(str(data.get("pairing_wine") or "").split())
-    pairing_drink = " ".join(str(data.get("pairing_drink") or "").split())
-    if pairing_wine or pairing_drink:
+    pairing = pairing_text(data)
+    if pairing:
         b.spacer()
-        b.bold("🍷 Сочетания")
-        b.newline()
-        if pairing_wine:
-            b.line(f"🍷 К блюду подойдёт: {pairing_wine}")
-        if pairing_drink:
-            b.line(f"🥤 Без алкоголя: {pairing_drink}")
-    image = str(data.get("image") or "").strip()
-    if image.startswith("https://"):
-        b.spacer()
-        b.link("🖼 Фото блюда", image)
-        b.newline()
+        b.line(f"К блюду подойдет: {pairing}")
     if chef_tip:
         b.spacer()
         b.bold("Совет шефа:")

@@ -223,7 +223,6 @@ async def send_language_review(bot, cid, q=None):
         if current.get("suggestion"):
             rows.append([InlineKeyboardButton("✅ Заменить", callback_data="set_refresh_review_apply")])
         rows.append([InlineKeyboardButton("❌ Удалить запись", callback_data="set_refresh_review_delete")])
-        rows.append([InlineKeyboardButton("Пропустить", callback_data="set_refresh_review_skip")])
         rows.append([
             InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
             InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
@@ -243,55 +242,6 @@ async def resolve_language_review(bot, cid, action, q=None):
 
     learning_data_quality.resolve_review(cid, action)
     await send_language_review(bot, cid, q)
-
-
-async def confirm_delete_thought_history(bot, cid, q=None):
-    msg = settings_ui.thought_history_delete_confirmation()
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Да, удалить историю", callback_data="set_thought_history_delete_yes")],
-        [InlineKeyboardButton("Отмена", callback_data="set_home")],
-    ])
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            _mark_transient_edit(bot, cid, q.message)
-            return
-        except Exception:
-            pass
-    await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities,
-        reply_markup=kb, transient=True)
-
-
-async def delete_thought_history(bot, cid, q=None):
-    cid = str(cid)
-    store.set_list(config.THOUGHTS_KEY, cid, [])
-    store.set_list(config.THOUGHT_REVIEWS_KEY, cid, [])
-    data = _all()
-    user = data.get(cid, {})
-    if isinstance(user, dict):
-        data[cid] = {
-            key: value for key, value in user.items()
-            if not str(key).startswith("_thoughts_")
-        }
-        store._save(SETTINGS_KEY, data)
-    if store.pending_input.get(cid) in ("worry", "thought", "thought_reminder"):
-        store.pending_input.pop(cid, None)
-    msg = settings_ui.thought_history_deleted()
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
-        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
-    ]])
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            _mark_transient_edit(bot, cid, q.message)
-            return
-        except Exception:
-            pass
-    await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities,
-        reply_markup=kb, transient=True)
 
 
 class _NoKbBot:
@@ -886,11 +836,13 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_refresh_review_delete":
         await resolve_language_review(bot, cid, "delete", q)
     elif data == "set_refresh_review_skip":
-        await resolve_language_review(bot, cid, "skip", q)
-    elif data == "set_thought_history_delete":
-        await confirm_delete_thought_history(bot, cid, q)
-    elif data == "set_thought_history_delete_yes":
-        await delete_thought_history(bot, cid, q)
+        # Старые сообщения могли сохранить удалённую кнопку. Она больше не
+        # снимает запись с проверки и просто открывает актуальную карточку.
+        await send_language_review(bot, cid, q)
+    elif data in ("set_thought_history_delete", "set_thought_history_delete_yes"):
+        # Старые сообщения могли сохранить удалённую кнопку. Массовое удаление
+        # истории мыслей больше недоступно из интерфейса.
+        await saved_items.send_notes(bot, cid)
     elif data == "set_priorities":
         await send_personalization(bot, cid, q)
     elif data.startswith("set_prio_"):
@@ -996,9 +948,9 @@ async def handle_callback(bot, cid, data, q=None):
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.clear_logs(b, c, q))
     elif data.startswith("adm_log_copy_"):
+        # Совместимость со старыми сообщениями: кнопка копирования удалена.
         import admin as _adm
-        token = data[len("adm_log_copy_"):]
-        await _admin_guard(bot, cid, lambda b, c, t=token: _adm.send_log_copy(b, c, t, q))
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))
     elif data in ("adm_notif", "adm_notif_check"):
         # Compat-редирект: раздел "Уведомления" в админке удалён (ручные тесты не нужны).
         import admin as _adm

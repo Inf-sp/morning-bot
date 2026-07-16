@@ -6,8 +6,6 @@ MessageSpec из ui.admin. Роутинг (settings.dispatch) делегируе
 Все функции — async send_*(bot, cid); гард на владельца — в settings._admin_guard.
 """
 import asyncio
-import hashlib
-import html
 import logging
 import time
 from datetime import datetime
@@ -17,7 +15,6 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import access
 import api_usage
 import config
-import secure
 from ui.constants import delete_label, ui_label
 import store
 import tracking
@@ -528,13 +525,6 @@ async def clear_cache(bot, cid, q=None):
     await send_logs(bot, cid, q)
 
 
-def _log_token(entry):
-    if entry.get("id"):
-        return str(entry["id"])[:16]
-    raw = f"{entry.get('ts')}|{entry.get('kind')}|{entry.get('msg')}"
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
-
-
 def _log_error_text(entry):
     if entry.get("error"):
         return str(entry["error"])
@@ -565,43 +555,9 @@ def _compact_log_row(entry):
     return f"{_hhmm(entry.get('ts', 0))} · {section} · {action} · {error} · {location}"
 
 
-def _full_log_text(entry):
-    file_name, line = _log_location(entry)
-    section = str(entry.get("section") or tracking._section_for(file_name, entry.get("source")))
-    action = str(entry.get("action") or tracking._action_for(entry.get("function"), entry.get("source")))
-    dt = datetime.fromtimestamp(int(entry.get("ts") or 0), config.TZ).strftime("%Y-%m-%d %H:%M:%S %Z")
-    fields = (
-        ("Время", dt), ("Раздел", section), ("Действие", action),
-        ("Ошибка", _log_error_text(entry)), ("Traceback", entry.get("traceback") or _log_error_text(entry)),
-        ("Файл", file_name), ("Строка", line or "—"),
-        ("Функция", entry.get("function") or "—"), ("Сервис", entry.get("service") or "—"),
-        ("Резерв", entry.get("fallback") or "—"),
-        ("Версия", entry.get("version") or config.APP_VERSION or "—"),
-    )
-    return secure.redact("\n".join(f"{label}: {value}" for label, value in fields))
-
-
 async def clear_logs(bot, cid, q=None):
     tracking.clear_errors()
     await send_logs(bot, cid, q)
-
-
-async def send_log_copy(bot, cid, token, q=None):
-    entry = next((row for row in tracking.get_errors(limit=200) if _log_token(row) == token), None)
-    if entry is None:
-        await send_logs(bot, cid, q)
-        return
-    if q is not None:
-        try:
-            await q.answer()
-        except Exception:
-            pass
-    body = _full_log_text(entry)[:3800]
-    await bot.send_message(
-        chat_id=cid,
-        text=f"📋 Данные ошибки\n\n<pre>{html.escape(body)}</pre>",
-        parse_mode="HTML",
-    )
 
 
 async def send_logs(bot, cid, q=None):
@@ -609,10 +565,7 @@ async def send_logs(bot, cid, q=None):
     errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
     shown = errors[:5]
     rows = [_compact_log_row(entry) for entry in shown]
-    buttons = [
-        [InlineKeyboardButton(f"📋 Скопировать · {_hhmm(entry.get('ts', 0))}", callback_data=f"adm_log_copy_{_log_token(entry)}")]
-        for entry in shown
-    ]
+    buttons = []
     if errors:
         buttons.append([InlineKeyboardButton(delete_label("Очистить логи"), callback_data="adm_logs_clear")])
     buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_system"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
