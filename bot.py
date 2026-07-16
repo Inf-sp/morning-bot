@@ -18,6 +18,7 @@ import menu
 import assistant
 import balance
 import cooking
+import recipe_generation
 import fridge
 import retry_flow
 import bot_callbacks
@@ -29,6 +30,7 @@ import learning_game
 import learning_settings
 import trainer
 import learning_router
+import learning
 import cleanup
 import settings
 import saved_items
@@ -492,6 +494,35 @@ async def job_warm_weather_cache(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logging.exception("job_warm_weather_cache failed for cid=%s", cid)
 
+
+async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
+    """В 08:00 молча готовит дорогие главные экраны на день.
+
+    Ошибка одного раздела не мешает прогреть остальные. Пользователю ничего
+    не отправляется; при открытии раздела бот читает уже готовый кэш.
+    """
+    for cid in access.get_allowed_cids():
+        steps = (
+            ("myday", lambda: myday.warm_day_cache(cid)),
+            ("wardrobe", lambda: wardrobe.warm_home_cache(cid)),
+            ("cooking", lambda: asyncio.to_thread(recipe_generation.warm_cooking_home_ideas, cid)),
+            ("learning", lambda: asyncio.to_thread(learning.warm_home_cache, cid)),
+            ("travel", lambda: travel.warm_home_cache(cid)),
+            ("cinema", lambda: leisure_movies.warm_movie_home_cache(cid)),
+        )
+        warmed = []
+        for name, call in steps:
+            try:
+                result = await call()
+                if isinstance(result, dict):
+                    if any(result.values()):
+                        warmed.append(name)
+                elif result is not False:
+                    warmed.append(name)
+            except Exception:
+                logging.exception("home cache warm failed cid=%s section=%s", cid, name)
+        logging.info("home cache warm complete cid=%s sections=%s", cid, ",".join(warmed))
+
 async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "daily_words"):
@@ -778,7 +809,9 @@ def main():
     jq = app.job_queue
     def _t(hm):
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
-    jq.run_daily(job_warm_weather_cache, time=_t("08:10"), days=tuple(range(7)))   # прогрев погоды перед брифом
+    jq.run_once(job_warm_home_pages, when=5)                                   # заполнить отсутствующий кэш после запуска
+    jq.run_daily(job_warm_home_pages, time=_t("08:00"), days=tuple(range(7)))    # главные экраны без сообщений
+    jq.run_daily(job_warm_weather_cache, time=_t("08:10"), days=tuple(range(7)))   # страховочный прогрев погоды перед брифом
     jq.run_daily(job_morning_brief,   time=_t("08:30"), days=tuple(range(7)))   # Утро: Мой день + погода + мотивация
     jq.run_daily(job_weather_warn,    time=_t("08:45"), days=tuple(range(7)))   # экстренное предупреждение, если нужно
     jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(4,))      # пт, прогрев кэша концертов

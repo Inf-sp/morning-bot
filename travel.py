@@ -111,6 +111,12 @@ async def send_home(bot, cid, q=None):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
+async def warm_home_cache(cid):
+    """Прогревает недельные факты главного экрана без отправки сообщения."""
+    await asyncio.to_thread(_home_facts, cid)
+    return True
+
+
 def _plan_countries(cid):
     """Страны из уже сохранённых планов поездок (вкладка «Планы»)."""
     notes = store.get_list(config.NOTES_KEY, cid)

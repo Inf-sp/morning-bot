@@ -427,20 +427,48 @@ def _home_local_idea(context: dict) -> dict:
     }, context)
 
 
+def get_cached_cooking_home_idea(cid, now=None) -> dict | None:
+    """Возвращает готовый рецепт без AI и без побочных эффектов.
+
+    Кэш раздельный для завтрака, обеда и ужина. Подпись включает дату,
+    холодильник и предпочтения, поэтому устаревший рецепт не показывается.
+    """
+    context = _home_idea_context(cid, now=now)
+    profile = store.get_profile(cid)
+    entries = profile.get("cooking_home_ideas") or {}
+    cached = entries.get(context["meal"]) if isinstance(entries, dict) else None
+    # Совместимость с кэшем до разделения по приёмам пищи.
+    if not isinstance(cached, dict):
+        legacy = profile.get("cooking_home_idea")
+        if isinstance(legacy, dict) and legacy.get("signature") == context["signature"]:
+            cached = legacy
+    if not isinstance(cached, dict) or cached.get("signature") != context["signature"]:
+        return None
+    idea = cached.get("idea")
+    if not isinstance(idea, dict):
+        return None
+    normalized = _normalize_home_idea(idea, context)
+    required = ("name", "reason", "minutes", "ingredients", "steps", "tip")
+    return normalized if all(normalized.get(field) for field in required) else None
+
+
 def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
     """Одна стабильная идея для текущего приёма пищи и актуального холодильника."""
     context = _home_idea_context(cid, now=now)
     profile = store.get_profile(cid)
-    cached = profile.get("cooking_home_idea")
+    entries = profile.get("cooking_home_ideas") or {}
+    cached = entries.get(context["meal"]) if isinstance(entries, dict) else None
+    if not isinstance(cached, dict):
+        legacy = profile.get("cooking_home_idea")
+        if isinstance(legacy, dict) and legacy.get("signature") == context["signature"]:
+            cached = legacy
     previous_name = ""
     if isinstance(cached, dict):
         previous_name = str((cached.get("idea") or {}).get("name") or "")
-    if not refresh and isinstance(cached, dict) and cached.get("signature") == context["signature"]:
-        idea = cached.get("idea")
-        if isinstance(idea, dict):
-            normalized = _normalize_home_idea(idea, context)
-            if all(normalized.get(field) for field in ("name", "reason", "minutes", "ingredients", "steps", "tip")):
-                return normalized
+    if not refresh:
+        ready = get_cached_cooking_home_idea(cid, now=now)
+        if ready is not None:
+            return ready
 
     if api_usage.gemini_state(1).get("cooldown_active"):
         local = _home_local_idea(context)
@@ -485,9 +513,30 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
     # За время AI-запроса профиль мог измениться в другом сценарии. Перечитываем его,
     # чтобы запись кэша не затёрла новые предпочтения или другие пользовательские данные.
     profile = store.get_profile(cid)
+    entries = profile.get("cooking_home_ideas")
+    if not isinstance(entries, dict):
+        entries = {}
+    entries[context["meal"]] = {"signature": context["signature"], "idea": idea}
+    profile["cooking_home_ideas"] = entries
+    # Старое поле оставляем как последний использованный рецепт для совместимости.
     profile["cooking_home_idea"] = {"signature": context["signature"], "idea": idea}
     store.set_profile(cid, profile)
     return idea
+
+
+def warm_cooking_home_ideas(cid, now=None) -> dict:
+    """Готовит три главных рецепта дня для фонового прогрева в 08:00."""
+    base = now or datetime.now(TZ)
+    results = {}
+    for meal, hour in (("breakfast", 8), ("lunch", 13), ("dinner", 19)):
+        meal_now = base.replace(hour=hour, minute=0, second=0, microsecond=0)
+        try:
+            idea = get_cooking_home_idea(cid, now=meal_now, refresh=False)
+            results[meal] = bool(idea)
+        except Exception as error:
+            _log.warning("cooking home warm failed cid=%s meal=%s: %r", cid, meal, error)
+            results[meal] = False
+    return results
 
 
 def _cuisine_context(cid):

@@ -44,6 +44,18 @@ async def send_food_menu(bot, cid, status=None, refresh=False):
     import util
     import verify
 
+    if not refresh and status is None:
+        cached = recipe_generation.get_cached_cooking_home_idea(cid)
+        if cached is not None:
+            msg = menu_ui.food_menu(cached)
+            await bot.send_message(
+                chat_id=cid,
+                text=msg.text,
+                entities=msg.entities,
+                reply_markup=msg.reply_markup,
+            )
+            return
+
     owns_status = status is None
     status = status or await util.StatusManager.start(
         bot, cid, stages=util.StatusManager.TOPIC_STAGES["food"])

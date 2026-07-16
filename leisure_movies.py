@@ -370,6 +370,16 @@ async def send_movie_home(bot, cid, q=None):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
+async def warm_movie_home_cache(cid):
+    """Прогревает данные текущего проката, не отправляя экран в Telegram."""
+    if not config.TMDB_API_KEY:
+        return False
+    s = store.get_settings(cid)
+    cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
+    await asyncio.to_thread(tmdb.get_now_playing, cc, _movie_service_language(cid), 8)
+    return True
+
+
 def _movie_prefs(cid):
     """Предпочтения кино из настроек → dict для движка (приоритеты, не запреты)."""
     g = settings.get(cid, "movie_genres", []) or []

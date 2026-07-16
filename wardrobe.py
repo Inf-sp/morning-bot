@@ -177,6 +177,26 @@ async def send_home(bot, cid, q=None):
     await send_looks(bot, cid, kb=_wardrobe_home_kb(), q=q)
 
 
+class _WarmCacheStatus:
+    """Минимальный status для фоновой сборки без Telegram-сообщений."""
+    async def replace(self, _text, **_kwargs):
+        return True
+
+
+async def warm_home_cache(cid):
+    """Собирает образ дня в кэш без отправки пользователю."""
+    if _get_cached_look(cid):
+        return True
+    await send_looks(
+        None,
+        cid,
+        status=_WarmCacheStatus(),
+        kb=_wardrobe_home_kb(),
+    )
+    # Для пустого шкафа постоянная карточка не нужна; сам прогрев всё равно успешен.
+    return bool(_get_cached_look(cid) or not store.wardrobe_to_text(store.load_wardrobe(cid)).strip())
+
+
 _PRIORITY_BLOCK = (
     "ПОРЯДОК ВАЖНОСТИ рекомендаций (сверху вниз, при конфликте — компромисс, "
     "не ориентируйся только на температуру):\n"

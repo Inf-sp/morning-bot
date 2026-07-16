@@ -413,7 +413,7 @@ def get_now_playing(country_code, language=_LANG, max_results=10):
         country_code,
         language,
         max_pages=3,
-        success_ttl=6 * 3600,
+        success_ttl=24 * 3600,
         empty_ttl=30 * 60,
         error_ttl=15 * 60,
     )

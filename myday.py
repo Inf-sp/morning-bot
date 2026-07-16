@@ -18,6 +18,7 @@ import learning_dictionary as dictionary
 import dictionary_seed
 import research
 import memory
+import util
 from util import esc, _WEEKDAY_SHORT, _MONTHS, flag_from_cc, country_flag
 import verify
 from ui import myday as myday_ui
@@ -411,6 +412,41 @@ _day_cache = {}  # cid -> {"date":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
     _day_cache.pop(str(cid), None)
+    prof = store.get_profile(cid)
+    if prof.pop("myday_home_cache", None) is not None:
+        store.set_profile(cid, prof)
+
+
+def _load_day_cache(cid, today):
+    cached = _day_cache.get(str(cid))
+    if cached and cached.get("date") == today:
+        return cached
+    prof = store.get_profile(cid)
+    saved = prof.get("myday_home_cache")
+    if not isinstance(saved, dict) or saved.get("date") != today or not saved.get("text"):
+        return None
+    cached = {
+        "date": today,
+        "text": saved["text"],
+        "entities": util.entities_from_json(saved.get("entities")),
+        "ts": saved.get("ts", 0),
+    }
+    _day_cache[str(cid)] = cached
+    return cached
+
+
+def _save_day_cache(cid, today, text, entities, ts):
+    cached = {"date": today, "text": text, "entities": entities, "ts": ts}
+    _day_cache[str(cid)] = cached
+    prof = store.get_profile(cid)
+    prof["myday_home_cache"] = {
+        "date": today,
+        "text": text,
+        "entities": util.entities_to_json(entities),
+        "ts": ts,
+    }
+    store.set_profile(cid, prof)
+    return cached
 
 def _day_menu_kb():
     return InlineKeyboardMarkup([
@@ -530,8 +566,8 @@ async def send_plany(bot, cid, force=False, show_loading=True):
     import time as _time
     await _maybe_prompt_dict_seed(bot, cid)
     today = datetime.now(TZ).strftime("%Y-%m-%d")
-    cache = _day_cache.get(str(cid))
-    stale = not cache or cache.get("date") != today or force
+    cache = None if force else _load_day_cache(cid, today)
+    stale = cache is None
     if stale:
         try:
             await bot.send_chat_action(chat_id=cid, action="typing")
@@ -541,12 +577,21 @@ async def send_plany(bot, cid, force=False, show_loading=True):
             text, entities = await asyncio.to_thread(_build_day_text, cid)
         except Exception as e:
             await verify.safe_error(bot, cid, e); return
-        _day_cache[str(cid)] = {
-            "date": today, "text": text, "entities": entities,
-            "ts": _time.time(),
-        }
-    cached = _day_cache[str(cid)]
+        cache = _save_day_cache(cid, today, text, entities, _time.time())
+    cached = cache
     await bot.send_message(
         chat_id=cid, text=cached["text"], entities=cached.get("entities"),
         reply_markup=_day_menu_kb(),
     )
+
+
+async def warm_day_cache(cid):
+    """Фоново собирает «Мой день» один раз и сохраняет переживающий рестарт кэш."""
+    import time as _time
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    cached = _load_day_cache(cid, today)
+    if cached is not None:
+        return True
+    text, entities = await asyncio.to_thread(_build_day_text, cid)
+    _save_day_cache(cid, today, text, entities, _time.time())
+    return True

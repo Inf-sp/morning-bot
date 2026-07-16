@@ -45,6 +45,15 @@ def _flag(language):
 _DAILY_MATERIAL_CACHE = {}  # cid -> {"date": iso, "entry": dict, "lang": code}
 
 
+def _save_daily_material(cid, today, lang, entry):
+    cached = {"date": today, "lang": lang, "entry": entry}
+    _DAILY_MATERIAL_CACHE[str(cid)] = cached
+    profile = store.get_profile(cid)
+    profile["learning_daily_material"] = cached
+    store.set_profile(cid, profile)
+    return entry
+
+
 def daily_material_type(entry):
     """'rule' — устойчивая конструкция, 'phrase' — многословный term без
     конструкции, 'word' — одно слово. Определяет заголовок карточки материала
@@ -68,13 +77,17 @@ def select_daily_material(cid):
     cached = _DAILY_MATERIAL_CACHE.get(str(cid))
     if cached and cached.get("date") == today and cached.get("lang") == lang:
         return cached.get("entry")
+    saved = store.get_profile(cid).get("learning_daily_material")
+    if (isinstance(saved, dict) and saved.get("date") == today
+            and saved.get("lang") == lang and "entry" in saved):
+        _DAILY_MATERIAL_CACHE[str(cid)] = saved
+        return saved.get("entry")
 
     repository = DictionaryRepository(cid)
     words = repository.all()
     pool = [w for w in words if entry_term(w) and entry_translation(w) and entry_language(w) == lang]
     if not pool:
-        _DAILY_MATERIAL_CACHE[str(cid)] = {"date": today, "lang": lang, "entry": None}
-        return None
+        return _save_daily_material(cid, today, lang, None)
 
     def _priority_key(w):
         shown = w.get("last_shown_at")
@@ -94,8 +107,7 @@ def select_daily_material(cid):
             repository.save_all(words)
             break
 
-    _DAILY_MATERIAL_CACHE[str(cid)] = {"date": today, "lang": lang, "entry": entry}
-    return entry
+    return _save_daily_material(cid, today, lang, entry)
 
 
 def _daily_focus_text(entry):
@@ -138,6 +150,12 @@ def build_learning_home(cid):
         "focus": _daily_focus_text(entry),
         "progress": progress,
     }
+
+
+def warm_home_cache(cid):
+    """Фиксирует материал дня; AI и сеть для этого не используются."""
+    select_daily_material(cid)
+    return True
 
 
 # ================= ЕДИНЫЙ ТРЕНАЖЁР =================
