@@ -20,7 +20,7 @@ SETTINGS_KEY = "user_settings.json"
 NOTIF_TYPES = [
     ("morning_brief",   "Утро"),
     ("weekend_events",  "Куда сходить"),
-    ("daily_words",     "Практика языка"),
+    ("daily_words",     "Слова и фразы дня"),
     ("checkin_day",     "Дневная разгрузка"),
     ("evening_weather", "Погода на завтра"),
     ("checkin_eve",     "Вечерний разбор"),
@@ -106,7 +106,7 @@ def set_(cid, key, value):
     store._save(SETTINGS_KEY, d)
 
 _LEGACY_NOTIF_KINDS = {
-    "daily_words": ("daily_words_nl", "daily_words_en", "live_lang", "grammar_nl", "grammar_en"),
+    "daily_words": ("daily_words_nl", "daily_words_en", "grammar_nl", "grammar_en"),
     "weekend_events": ("weekly_events", "favorite_artists"),
 }
 

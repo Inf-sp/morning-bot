@@ -329,34 +329,35 @@ def translate_result(flag, lang, ru, answer, result):
     return msg
 
 
-def morning_words(flag, method, is_read_aloud=False, phrases=None, words=None, empty_hint=False):
-    """method приходит СЫРЫМ текстом (без esc()/HTML-тегов) — функция сама решает оформление:
-    is_read_aloud оборачивает его в italic(), иначе выводится обычной строкой."""
+def morning_words(flag, words=None, empty_hint=False):
+    """Ежедневная карточка повторения ранее изученных слов и фраз."""
     b = MessageBuilder()
     b.section(f"📚{flag} Слова и фразы дня")
-    if is_read_aloud:
-        b.italic(method)
-        b.newline()
-    else:
-        b.line(method)
     if empty_hint:
+        b.line("В прошлых занятиях пока нет слов и фраз для повторения.")
         b.spacer()
-        b.text_line("📖 Открой словарь, если хочешь добавить что-то новое или быстро повторить текущее.")
+        b.text_line("🎯 ")
+        b.label("Мини-задача", "пройди короткую тренировку — следующая подборка соберётся из неё.")
         msg = b.build()
         msg.text = msg.text.rstrip("\n")
         return msg
-    if phrases:
-        b.section(ui_label("phrases", "Фразы"))
-        for word, ru in phrases:
-            b.bullet(f"{word} → {ru}")
-    if words:
-        if not phrases:
-            b.section("📖 Повтори")
-        for word, ru in words:
-            b.bullet(f"{word} → {ru}")
-    if phrases or words:
+    b.line("Сегодня повторяем слова и фразы из прошлых занятий. Сначала вспомни перевод сам, потом проверь себя.")
+    entries = list(words or [])
+    if entries:
         b.spacer()
-        b.italic("Попробуй использовать 1-2 элемента сегодня в сообщениях, мыслях или разговоре.")
+        b.bold("Повтори:")
+        b.newline()
+        for word, ru in entries:
+            b.text_line("• ")
+            b.text_line(f"{word} → ")
+            b.add(ru, MessageEntity.SPOILER)
+            b.newline()
+        b.spacer()
+        b.text_line("🎯 ")
+        b.label(
+            "Мини-задача",
+            "используй сегодня одно слово или одну фразу в сообщении, разговоре или мысленно составь с ними предложение.",
+        )
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg

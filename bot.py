@@ -816,7 +816,7 @@ def main():
     jq.run_daily(job_weather_warn,    time=_t("08:45"), days=tuple(range(7)))   # экстренное предупреждение, если нужно
     jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(4,))      # пт, прогрев кэша концертов
     jq.run_daily(job_weekend_events,  time=_t("10:00"), days=(4,))             # пт, «Куда сходить»
-    jq.run_daily(job_daily_words,     time=_t("11:00"), days=tuple(range(7)))  # «Практика языка»
+    jq.run_daily(job_daily_words,     time=_t("11:00"), days=tuple(range(7)))  # «Слова и фразы дня»
     jq.run_daily(job_checkin_day,     time=_t("14:00"), days=tuple(range(7)))
     jq.run_daily(job_evening_weather, time=_t("19:00"), days=tuple(range(7)))  # «Погода на завтра»
     jq.run_daily(job_checkin_evening, time=_t("21:30"), days=tuple(range(7)))
