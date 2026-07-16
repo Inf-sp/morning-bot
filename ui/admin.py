@@ -43,15 +43,16 @@ def deploy_report(version, title, release_notes):
         change_notes = notes[:1]
 
     b = MessageBuilder()
-    b.bold(f"{UI_EMOJI['version']} v{version} · {title or 'Обновление'}")
+    b.text_line(f"{UI_EMOJI['version']} ")
+    b.bold(f"v{version}")
+    b.text_line(f" · {title or 'Обновление'}")
     b.newline()
-    b.spacer()
     b.bold("Что изменено:")
     b.newline()
     for note in change_notes[:4]:
-        b.line(f"• {note}")
+        b.line(f"- {note.rstrip('.')}")
     b.spacer()
-    b.italic("Бот развёрнут и работает ✅")
+    b.text_line("Бот развёрнут и работает ✅")
     return b.build_stripped()
 
 
