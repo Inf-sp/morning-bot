@@ -222,6 +222,17 @@ def food_menu(idea=None):
         b.spacer()
         b.bold(name)
 
+    minutes = str(idea.get("minutes") or "").strip()
+    servings = _cooking_text(idea.get("servings"))
+    meta = []
+    if minutes:
+        meta.append(f"⏱ {minutes} мин" if "мин" not in minutes.lower() else f"⏱ {minutes}")
+    if servings:
+        meta.append(f"👤 {servings}")
+    if meta:
+        b.newline()
+        b.line(" · ".join(meta))
+
     ingredients = [_cooking_text(item) for item in (idea.get("ingredients") or [])]
     ingredients = [item for item in ingredients if item]
     if ingredients:
@@ -230,6 +241,14 @@ def food_menu(idea=None):
         b.newline()
         b.line(", ".join(ingredients))
 
+    missing = [_cooking_text(item) for item in (idea.get("missing_ingredients") or [])]
+    missing = [item for item in missing if item]
+    if missing:
+        b.spacer()
+        b.bold("Не хватает:")
+        b.newline()
+        b.line(", ".join(missing))
+
     steps = compact_step_lines(idea.get("steps") or [])
     if steps:
         b.spacer()
@@ -237,6 +256,23 @@ def food_menu(idea=None):
         b.newline()
         for step in steps:
             b.bullet(step)
+
+    pairing_wine = _cooking_text(idea.get("pairing_wine"))
+    pairing_drink = _cooking_text(idea.get("pairing_drink"))
+    if pairing_wine or pairing_drink:
+        b.spacer()
+        b.bold("🍷 Сочетания")
+        b.newline()
+        if pairing_wine:
+            b.line(f"🍷 К блюду подойдёт: {pairing_wine}")
+        if pairing_drink:
+            b.line(f"🥤 Без алкоголя: {pairing_drink}")
+
+    image = str(idea.get("image") or "").strip()
+    if image.startswith("https://"):
+        b.spacer()
+        b.link("🖼 Фото блюда", image)
+        b.newline()
 
     tip = _cooking_sentence(idea.get("tip"))
     if tip:

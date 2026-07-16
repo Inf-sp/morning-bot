@@ -5,11 +5,14 @@
 DictionaryRepository на следующем архитектурном этапе.
 """
 
+import asyncio
+import json
 import random
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
+import language_tool
 import secure
 import srs
 import store
@@ -193,13 +196,13 @@ async def _send_exercise(bot, cid, data):
         message = learning_ui.exercise_recall_free(data, hint_shown=data.get("hint_shown"))
         rows = []
         if data.get("hint") and not data.get("hint_shown"):
-            rows.append([("💡 Подсказка", "ex_hint"), ("⌨️ Ответить", "ex_answer")])
+            rows.append([("💡 Подсказка", "ex_hint"), ("✍️ Написать", "ex_answer")])
         else:
-            rows.append([("⌨️ Ответить", "ex_answer")])
+            rows.append([("✍️ Написать", "ex_answer")])
         rows.extend([[("🫪 Не помню", "ex_giveup")], _nav_row()])
     elif kind == EXERCISE_TRANSLATE_CONTEXT:
         message = learning_ui.exercise_translate_context(data)
-        rows = [[("⌨️ Ответить", "ex_answer")], [("Показать ответ", "ex_giveup")], _nav_row()]
+        rows = [[("✍️ Написать", "ex_answer")], [("Показать ответ", "ex_giveup")], _nav_row()]
     elif kind == EXERCISE_BUILD_SENTENCE:
         data.setdefault("_picked", [])
         message = learning_ui.exercise_build_sentence(data)
@@ -301,15 +304,109 @@ async def handle_text(bot, cid, text):
         return False
     store.pending_input.pop(str(cid), None)
     data = state["current"]
-    if data["exercise_type"] == EXERCISE_TRANSLATE_CONTEXT:
+    language_report = None
+    if data.get("lang") == "nl":
+        grade, language_report = await _grade_dutch_written(data, text)
+    elif data["exercise_type"] == EXERCISE_TRANSLATE_CONTEXT:
         grade = await _grade_context(data, text)
     else:
         grade = trainer_grading.grade_free_text(
             data, text, used_hint=bool(data.get("hint_shown")))
     await _apply_result(
         bot, cid, state, grade,
-        learning_ui.exercise_result(data, grade.correct, chosen=text))
+        learning_ui.exercise_result(
+            data, grade.correct, chosen=text, language_report=language_report,
+        ))
     return True
+
+
+def _language_report_for_prompt(report) -> list[dict]:
+    return [
+        {
+            "fragment": issue.get("original") or "",
+            "message": issue.get("message") or "",
+            "variants": issue.get("replacements") or [],
+            "rule": issue.get("rule_id") or "",
+            "type": issue.get("issue_type") or "",
+        }
+        for issue in (report.get("issues") or [])[:4]
+    ]
+
+
+def _needs_ai_explanation(report) -> bool:
+    for issue in report.get("issues") or []:
+        issue_type = str(issue.get("issue_type") or "").lower()
+        replacements = issue.get("replacements") or []
+        if issue_type not in ("misspelling", "typographical") or len(replacements) != 1:
+            return True
+    return False
+
+
+async def _explain_dutch_review(text, report, *, expected="", task="") -> dict:
+    prompt = (
+        "Ты кратко проверяешь спорный нидерландский ответ ученика. "
+        "LanguageTool уже нашёл возможные ошибки; не повторяй его сообщение дословно. "
+        "Определи, приемлем ли ответ по смыслу и грамматике, и объясни максимум одним коротким предложением.\n"
+        f"Задание: {secure.wrap_untrusted(task or 'проверить нидерландский текст', 'задание')}\n"
+        f"Ожидаемый вариант: {secure.wrap_untrusted(expected or 'не задан', 'эталон')}\n"
+        f"Ответ: {secure.wrap_untrusted(text, 'ответ ученика')}\n"
+        f"Замечания LanguageTool: {secure.wrap_untrusted(json.dumps(_language_report_for_prompt(report), ensure_ascii=False), 'замечания')}\n"
+        'JSON: {"acceptable":true,"explanation":"одно понятное предложение по-русски"}'
+    )
+    try:
+        result = await ai.allm_json(
+            prompt, 350, order=("groq", "gemini"), module="learning_trainer",
+        )
+    except Exception:
+        return {}
+    return {
+        "acceptable": bool(result.get("acceptable")),
+        "explanation": " ".join(str(result.get("explanation") or "").split())[:240],
+    }
+
+
+async def _grade_dutch_written(data, text):
+    local = trainer_grading.grade_free_text(
+        data, text, used_hint=bool(data.get("hint_shown")),
+    )
+    report = await asyncio.to_thread(language_tool.check_text, text, "nl-NL")
+    decision = {}
+    needs_semantic_judgment = (
+        data.get("exercise_type") == EXERCISE_TRANSLATE_CONTEXT and not local.correct
+    )
+    needs_dispute_explanation = bool(
+        report.get("available") and _needs_ai_explanation(report)
+    )
+    if needs_semantic_judgment or needs_dispute_explanation:
+        decision = await _explain_dutch_review(
+            text,
+            report,
+            expected=str(data.get("correct") or ""),
+            task=str(data.get("ru") or data.get("situation") or ""),
+        )
+    report = {**report, "explanation": decision.get("explanation") or ""}
+    if "acceptable" not in decision:
+        return local, report
+    correct = bool(decision["acceptable"])
+    if correct:
+        quality = (trainer_grading.AnswerQuality.HINT_USED
+                   if data.get("hint_shown") else trainer_grading.AnswerQuality.RECALLED_FREE)
+    else:
+        quality = trainer_grading.AnswerQuality.NOT_REMEMBERED
+    return trainer_grading.GradeResult(correct, quality), report
+
+
+async def check_dutch_text(bot, cid, text):
+    report = await asyncio.to_thread(language_tool.check_text, text, "nl-NL")
+    explanation = ""
+    if report.get("available") and report.get("issues") and _needs_ai_explanation(report):
+        decision = await _explain_dutch_review(text, report)
+        explanation = decision.get("explanation") or ""
+    message = learning_ui.language_check_result(report, explanation=explanation)
+    await bot.send_message(
+        chat_id=cid, text=message.text, entities=message.entities,
+        reply_markup=_keyboard([_nav_row()]),
+    )
 
 
 async def _grade_context(data, text):

@@ -445,6 +445,77 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
     raise last_err
 
 
+def _gen_cohere(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text"):
+    """Cohere Chat API V2 для языковых, классификационных и JSON-задач."""
+    if not config.COHERE_API_KEY:
+        raise LLMProviderError("cohere", "no cohere key", error_type="credentials")
+    cohere_temperature = 0.3 if temperature is None else float(temperature)
+    payload = {
+        "model": config.COHERE_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": int(max_tokens or 1200),
+        "temperature": min(max(cohere_temperature, 0.0), 1.0),
+    }
+    if response_mode == "json":
+        payload["response_format"] = {"type": "json_object"}
+    r = _post(
+        "https://api.cohere.com/v2/chat",
+        {
+            "Authorization": f"Bearer {config.COHERE_API_KEY}",
+            "Content-Type": "application/json",
+            "X-Client-Name": "morning-bot",
+        },
+        payload,
+        30,
+        "cohere",
+    )
+    data = r.json()
+    content = (data.get("message") or {}).get("content") or []
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "text" and str(block.get("text") or "").strip():
+            return str(block["text"]).strip()
+    raise LLMProviderError("cohere", "empty cohere response", error_type="empty_response")
+
+
+def _gen_github_models(prompt, max_tokens, temperature,
+                       response_mode: ResponseMode = "plain_text"):
+    """GitHub Models Chat Completions как универсальный резервный провайдер."""
+    if not config.GITHUB_MODELS_TOKEN:
+        raise LLMProviderError(
+            "github_models", "no GitHub Models token", error_type="credentials",
+        )
+    github_temperature = 0.3 if temperature is None else float(temperature)
+    payload = {
+        "model": config.GITHUB_MODELS_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": int(max_tokens or 1200),
+        "temperature": min(max(github_temperature, 0.0), 1.0),
+    }
+    if response_mode == "json":
+        payload["response_format"] = {"type": "json_object"}
+    r = _post(
+        "https://models.github.ai/inference/chat/completions",
+        {
+            "Authorization": f"Bearer {config.GITHUB_MODELS_TOKEN}",
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "X-GitHub-Api-Version": "2026-03-10",
+        },
+        payload,
+        30,
+        "github_models",
+    )
+    data = r.json()
+    choices = data.get("choices") or []
+    if choices:
+        content = ((choices[0].get("message") or {}).get("content") or "").strip()
+        if content:
+            return content
+    raise LLMProviderError(
+        "github_models", "empty GitHub Models response", error_type="empty_response",
+    )
+
+
 def _gemini_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
     """Один приватный vision-запрос в Gemini для распознавания изображения.
 
@@ -619,25 +690,29 @@ def _friendly(errs):
         return "⏳ ИИ временно перегружен — подожди минуту и попробуй снова."
     return "⚠️ ИИ временно недоступен — попробуй снова через пару минут."
 
-DEFAULT_ORDER  = ("gemini", "groq", "cf")
+DEFAULT_ORDER  = ("gemini", "cohere", "github_models", "groq", "cf")
 # Чат: Gemini первым — лучше поддерживает диалог, свободный и живой стиль
-CHAT_ORDER     = ("gemini", "groq", "cf")
-# Грамматика/быстрые задачи: Groq (Llama-70b) первым — скорость, structured output.
-# Cloudflare вторым (не последним) — простые задачи ему по силам, а без реального
-# трафика он никогда не используется (см. RELEASE_NOTES v1.8.78).
-GRAMMAR_ORDER  = ("groq", "cf", "gemini")
+CHAT_ORDER     = ("gemini", "github_models", "groq", "cf")
+# Грамматика/быстрые задачи: Cohere первым — языки и structured output;
+# Gemini, GitHub Models, Groq и Cloudflare остаются автоматическим резервом.
+GRAMMAR_ORDER  = ("cohere", "gemini", "github_models", "groq", "cf")
 # Досуг/рекомендации: Gemini первым — богатое знание культуры, кино, музыки, путешествий
-LEISURE_ORDER  = ("gemini", "groq", "cf")
+LEISURE_ORDER  = ("gemini", "cohere", "github_models", "groq", "cf")
+# Готовка: отдельная продуктовая цепочка. OpenRouter вызывается последним через
+# контролируемый fallback policy, затем вызывающий код строит карточку без AI.
+FOOD_ORDER     = ("gemini", "groq", "github_models", "openrouter")
 
 # Явные пресеты: позволяют приоритизировать конкретный провайдер, не меняя код вызова по всему проекту.
 PROVIDER_ORDER = {
-    "cf": ("cf", "gemini", "groq"),
-    "groq": ("groq", "gemini", "cf"),
-    "gemini": ("gemini", "groq", "cf"),
+    "cf": ("cf", "cohere", "gemini", "github_models", "groq"),
+    "groq": ("groq", "cohere", "gemini", "github_models", "cf"),
+    "github_models": ("github_models", "gemini", "cohere", "groq", "cf"),
+    "cohere": ("cohere", "gemini", "github_models", "groq", "cf"),
+    "gemini": ("gemini", "cohere", "github_models", "groq", "cf"),
 }
 
 # --- тиры: маршрутизация по задаче ---
-# cheap  → Groq первым, Cloudflare вторым (грамматика, переводы, простые lookup-и)
+# cheap  → Cohere первым (грамматика, переводы, классификация, строгий JSON)
 # smart  → Gemini первым (чат, рецепты, гардероб, мотивация — требуют рассуждений)
 # leisure → Gemini первым (досуг, путешествия, рекомендации — требуют знания мира)
 TIERS = {
@@ -651,14 +726,37 @@ TIERS = {
 # запрет конкретного provider не зависели от того, что явно передал вызов внутри
 # раздела. Единственный способ обойти policy — явный order=(...) в вызове.
 MODULE_POLICY = {
-    "learning": ("gemini", "groq", "cf"),
-    "food": ("gemini", "groq", "cf"),
-    "wardrobe": ("gemini", "groq", "cf"),
-    "health": ("gemini", "groq", "cf"),
-    "balance": ("gemini", "groq", "cf"),
-    "assistant": ("gemini", "groq", "cf"),
-    "travel": ("gemini", "groq", "cf"),
-    "leisure": ("gemini", "groq", "cf"),
+    # Cohere первым: языки, строгий JSON, классификация и короткий анализ.
+    "learning": GRAMMAR_ORDER,
+    "learning_dict_add": GRAMMAR_ORDER,
+    "learning_trainer": GRAMMAR_ORDER,
+    "learning_srs_migration": GRAMMAR_ORDER,
+    "learning_game": GRAMMAR_ORDER,
+    "learning_dictionary": GRAMMAR_ORDER,
+    "dictionary_import": GRAMMAR_ORDER,
+    "live_language": GRAMMAR_ORDER,
+    "trainer": GRAMMAR_ORDER,
+    "health": GRAMMAR_ORDER,
+    "balance": GRAMMAR_ORDER,
+    "thoughts": GRAMMAR_ORDER,
+    # Gemini первым: творческая генерация, рекомендации и свободный диалог.
+    "food": FOOD_ORDER,
+    "cooking": FOOD_ORDER,
+    "recipe_generation": FOOD_ORDER,
+    "wardrobe": LEISURE_ORDER,
+    "wardrobe_copy": LEISURE_ORDER,
+    "wardrobe_migration": LEISURE_ORDER,
+    "assistant": LEISURE_ORDER,
+    "travel": LEISURE_ORDER,
+    "travel_facts10": LEISURE_ORDER,
+    "leisure": LEISURE_ORDER,
+    "leisure_movies": LEISURE_ORDER,
+    "leisure_music": LEISURE_ORDER,
+    "leisure_concerts": LEISURE_ORDER,
+    "leisure_collection": LEISURE_ORDER,
+    "myday": LEISURE_ORDER,
+    "firstvisit": LEISURE_ORDER,
+    "weather": LEISURE_ORDER,
 }
 
 
@@ -666,7 +764,10 @@ def _resolve(tier, order, route=None, module=""):
     """Явный order имеет наивысший приоритет (единственный способ обойти module-policy).
     Иначе — policy известного раздела; иначе route/tier, как раньше."""
     if order is not None:
-        return tuple(n for n in order if n in PROVIDER_ORDER or n in DEFAULT_ORDER)
+        return tuple(
+            n for n in order
+            if n == "openrouter" or n in PROVIDER_ORDER or n in DEFAULT_ORDER
+        )
     if module and module in MODULE_POLICY:
         return MODULE_POLICY[module]
     if route:
@@ -721,6 +822,10 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
         _cache_delete(cache_key)
     calls = {
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature, response_mode),
+        "cohere": lambda: _gen_cohere(prompt, max_tokens, temperature, response_mode),
+        "github_models": lambda: _gen_github_models(
+            prompt, max_tokens, temperature, response_mode,
+        ),
         "groq": lambda: _gen_groq(prompt, max_tokens, temperature, response_mode),
         "cf": lambda: _gen_cf(prompt, max_tokens),
     }
@@ -759,10 +864,14 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
                 temporary_errs.append((name, e))
             if name == "gemini" and getattr(e, "error_type", "") == "rate_limit":
                 gemini_rate_limit_err = e
-    if policy.openrouter_allowed and temporary_errs:
-        origin, err = temporary_errs[0]
-        reason = getattr(err, "error_type", type(err).__name__)
-        _log.warning("LLM temporary failure; trying OpenRouter fallback: provider=%s reason=%s", origin, reason)
+    if policy.openrouter_allowed and (temporary_errs or "openrouter" in order):
+        if temporary_errs:
+            origin, err = temporary_errs[0]
+            reason = getattr(err, "error_type", type(err).__name__)
+        else:
+            origin, err = "provider_chain", None
+            reason = "all_providers_failed"
+        _log.warning("LLM chain failed; trying OpenRouter fallback: provider=%s reason=%s", origin, reason)
         out = _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin, reason,
                                               response_mode=policy.response_mode)
         if out:
@@ -945,6 +1054,29 @@ def _chat(provider, history, system):
             {}, {"system_instruction": {"parts": [{"text": system}]}, "contents": contents,
                  "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, "gemini")
         return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+    if provider == "github_models":
+        if not config.GITHUB_MODELS_TOKEN:
+            raise LLMProviderError(
+                "github_models", "no GitHub Models token", error_type="credentials",
+            )
+        r = _post(
+            "https://models.github.ai/inference/chat/completions",
+            {
+                "Authorization": f"Bearer {config.GITHUB_MODELS_TOKEN}",
+                "Accept": "application/vnd.github+json",
+                "Content-Type": "application/json",
+                "X-GitHub-Api-Version": "2026-03-10",
+            },
+            {
+                "model": config.GITHUB_MODELS_MODEL,
+                "messages": [{"role": "system", "content": system}] + history,
+                "max_tokens": 700,
+                "temperature": 0.8,
+            },
+            30,
+            "github_models",
+        )
+        return r.json()["choices"][0]["message"]["content"]
     if provider == "groq":
         if not config.GROQ_API_KEY:
             raise Exception("no groq")

@@ -144,6 +144,7 @@ The existing text and logo placement within the template must not be moved or al
 ## Команды
 
 - `/menu` — открыть главное меню (инлайн); также запускает бота при первом обращении и обрабатывает инвайт-код по диплинку (`/start` остался рабочим для этого, но убран из видимого списка команд Telegram — не дублируется с `/menu`)
+- `/check_text` — проверить явно присланный нидерландский текст через LanguageTool; общий чат автоматически не проверяется
 - `/notes`, `/setup` — быстрый переход к «🎚️ Настройки» (алиасы); оба остались рабочими, но убраны из видимого списка команд Telegram — настройки уже доступны из главного меню
 - `/admin` — прямой переход в раздел администратора (только для владельца)
 
@@ -192,6 +193,8 @@ The existing text and logo placement within the template must not be moved or al
 
 - Gemini
 - Groq
+- Cohere
+- GitHub Models
 - Cloudflare
 - OpenRouter — аварийный fallback для публичного текста и явно разрешённых JSON-сценариев, например рецептов в «Готовке»
 
@@ -202,6 +205,8 @@ The existing text and logo placement within the template must not be moved or al
 - часть сценариев принудительно направлена в конкретного провайдера.
 
 Это сделано специально, чтобы балансировать качество, скорость и стоимость.
+
+Для Готовки действует отдельный фиксированный порядок: `Gemini → Groq → GitHub Models → OpenRouter`. Если все четыре недоступны, рецепт форматируется кодом напрямую из ответа Spoonacular, без AI.
 
 ---
 
@@ -254,7 +259,15 @@ The existing text and logo placement within the template must not be moved or al
 
 - `CHAT_ID` — без него не определён владелец бота;
 - `DATABASE_URL` — без него хранилище работает в памяти (данные не переживают перезапуск);
-- `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` — дополнительные LLM-провайдеры;
+- `COHERE_API_KEY` — основной провайдер для языковых, классификационных и других структурированных задач; если ключ отсутствует или сервис временно недоступен, запрос автоматически переходит в Gemini;
+- `COHERE_MODEL` — модель Cohere, по умолчанию `command-a-plus-05-2026`;
+- `GITHUB_MODELS_TOKEN` — универсальный AI-резерв через GitHub Models; токену нужен доступ `models:read`;
+- `GITHUB_MODELS_MODEL` — модель GitHub Models, по умолчанию `openai/gpt-4.1-mini`;
+- `GOOGLE_BOOKS_API_KEY` — поиск и проверка метаданных и обложек книг в Google Books;
+- `LANGUAGETOOL_API_URL` — адрес LanguageTool для точечной проверки нидерландских письменных ответов; по умолчанию `https://api.languagetool.org/v2`;
+- `SPOONACULAR_API_KEY` — основной источник рецептов и винных сочетаний для Готовки;
+- `THEMEALDB_API_KEY` — резервный источник базовых рецептов для Готовки; по умолчанию используется публичный ключ `1`;
+- `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` — дополнительные резервные LLM-провайдеры;
 - `TMDB_API_KEY`, `TICKETMASTER_API_KEY`, `TAVILY_API_KEY`, `FIRECRAWL_API_KEY` — фильмы, концерты, веб-поиск;
 - `RESTCOUNTRIES_API_KEY` — определение страны в разделе «Поездки → 10 фактов»; без него бот честно говорит, что не нашёл страну;
 - `PEXELS_API_KEY` — фотографии для карточек рецептов;

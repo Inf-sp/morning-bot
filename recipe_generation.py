@@ -8,13 +8,231 @@ import ai
 import api_usage
 import config
 import secure
+import spoonacular
 import store
+import themealdb
 from recipe_state import _leftover_recent
 from fridge_model import _fridge_cat, _fridge_clean_name, _fridge_migrate
 from ui.constants import CUISINE_EMOJI
 
 TZ = config.TZ
 _log = logging.getLogger(__name__)
+
+
+def _themealdb_sources(meal_type, *, ingredients="", limit=10, avoid=()):
+    """Внешняя база не должна блокировать готовку при ошибке или неполном ответе."""
+    try:
+        return themealdb.source_recipes(
+            meal_type, ingredients=ingredients, limit=limit, avoid=avoid,
+        )
+    except Exception as error:
+        _log.warning("TheMealDB sources unavailable: %s", type(error).__name__)
+        return []
+
+
+def _recipe_sources(meal_type, *, ingredients="", limit=10, avoid=()):
+    """Spoonacular is primary; TheMealDB keeps Cooking available as a fallback."""
+    if config.SPOONACULAR_API_KEY:
+        try:
+            sources = spoonacular.source_recipes(
+                meal_type, ingredients=ingredients, limit=limit, avoid=avoid,
+            )
+        except Exception as error:
+            _log.warning("Spoonacular sources unavailable: %s", type(error).__name__)
+            sources = []
+        if sources:
+            return sources
+    return _themealdb_sources(
+        meal_type, ingredients=ingredients, limit=limit, avoid=avoid,
+    )
+
+
+def _recipe_source_name(sources) -> str:
+    first = next((item for item in (sources or []) if isinstance(item, dict)), {})
+    return "Spoonacular" if first.get("source_provider") == "spoonacular" else "TheMealDB"
+
+
+def _recipe_source_prompt_block(sources) -> str:
+    provider = _recipe_source_name(sources)
+    compact = []
+    for source in sources or []:
+        ingredients = []
+        for item in source.get("ingredients") or []:
+            if not isinstance(item, dict) or not item.get("name"):
+                continue
+            measure = item.get("measure")
+            if not measure:
+                measure = " ".join(
+                    str(part) for part in (item.get("amount"), item.get("unit"))
+                    if part not in (None, "")
+                )
+            ingredients.append(
+                " ".join(part for part in (str(measure or ""), str(item.get("name") or "")) if part).strip()
+            )
+        instructions = source.get("instructions") or ""
+        if isinstance(instructions, list):
+            instructions = " ".join(str(item) for item in instructions if str(item).strip())
+        compact.append({
+            "source_recipe_id": source.get("id", ""),
+            "name": source.get("name", ""),
+            "category": source.get("category", ""),
+            "area": source.get("area", ""),
+            "ingredients": ingredients,
+            "instructions": str(instructions)[:1800],
+            "ready_minutes": source.get("ready_minutes"),
+            "used_ingredient_count": source.get("used_ingredient_count"),
+            "missed_ingredient_count": source.get("missed_ingredient_count"),
+            "pairing_wines": source.get("pairing_wines") or [],
+            "pairing_text": source.get("pairing_text") or "",
+        })
+    if not compact:
+        return ""
+    source_json = json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
+    return (
+        f"\n{provider} — единственный источник базовых рецептов для этого ответа. "
+        "Выбери лучший подходящий вариант из списка, переведи на русский и адаптируй под пользователя. "
+        "Не придумывай блюдо с нуля. Сохраняй source_recipe_id выбранного источника. "
+        "Если у выбранного источника есть pairing_wines, выбери в pairing_wine только одно значение из этого списка.\n"
+        f"{secure.wrap_untrusted(source_json, f'рецепты {provider}')}\n"
+    )
+
+
+def _themealdb_prompt_block(sources) -> str:
+    """Compatibility wrapper for older callers and tests."""
+    return _recipe_source_prompt_block(sources)
+
+
+def _with_recipe_source(item, sources, index=0):
+    result = dict(item or {})
+    sources = [source for source in (sources or []) if source.get("id")]
+    if not sources:
+        return result
+    by_id = {str(source["id"]): source for source in sources}
+    source_id = str(
+        result.get("source_recipe_id") or result.get("source_meal_id")
+        or result.get("spoonacular_id") or result.get("themealdb_id") or ""
+    )
+    source = by_id.get(source_id) or sources[index % len(sources)]
+    result["source_recipe_id"] = str(source["id"])
+    if source.get("thumbnail"):
+        result["image"] = str(source.get("thumbnail") or "").strip()
+    if source.get("source_provider") == "spoonacular":
+        result["spoonacular_id"] = str(source["id"])
+        result["spoonacular_source_name"] = str(source.get("name") or "")
+        wines = [str(value).strip() for value in source.get("pairing_wines") or [] if str(value).strip()]
+        requested = str(result.get("pairing_wine") or "").strip()
+        matched = next((wine for wine in wines if wine.casefold() == requested.casefold()), "")
+        result["pairing_wine"] = matched or (wines[0] if wines else "")
+    else:
+        result["source_meal_id"] = str(source["id"])
+        result["themealdb_id"] = str(source["id"])
+        result["themealdb_source_name"] = str(source.get("name") or "")
+    return result
+
+
+def _with_themealdb_source(item, sources, index=0):
+    """Compatibility wrapper for older callers and tests."""
+    return _with_recipe_source(item, sources, index=index)
+
+
+def _source_amount(value) -> str:
+    if value in (None, ""):
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _source_ingredient_label(item) -> str:
+    if not isinstance(item, dict):
+        return " ".join(str(item or "").split())
+    original = " ".join(str(item.get("original") or "").split())
+    if original:
+        return original
+    measure = " ".join(str(item.get("measure") or "").split())
+    if not measure:
+        measure = " ".join(
+            part for part in (_source_amount(item.get("amount")), str(item.get("unit") or "").strip())
+            if part
+        )
+    name = " ".join(str(item.get("name") or "").split())
+    return " ".join(part for part in (measure, name) if part).strip()
+
+
+def _source_instruction_steps(source) -> list[str]:
+    instructions = source.get("instructions") or []
+    if isinstance(instructions, list):
+        return [" ".join(str(item).split()).strip(" -•") for item in instructions if str(item).strip()]
+    text = " ".join(str(instructions).split())
+    if not text:
+        return []
+    parts = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+    return parts or [text]
+
+
+def _source_recipe_card(source) -> dict:
+    """Build a usable recipe from source data only, without any LLM call."""
+    if not isinstance(source, dict) or not source.get("name"):
+        return {}
+    ingredients = [
+        _source_ingredient_label(item) for item in source.get("ingredients") or []
+    ]
+    ingredients = [item for item in ingredients if item]
+    minutes = _home_minutes(source.get("ready_minutes"))
+    servings = source.get("servings")
+    wines = [str(item).strip() for item in source.get("pairing_wines") or [] if str(item).strip()]
+    card = {
+        "source_recipe_id": str(source.get("id") or ""),
+        "name": " ".join(str(source.get("name") or "").split()),
+        "time": f"{minutes} мин" if minutes else "",
+        "servings": f"{servings} порц." if servings else "",
+        "ingredients": ", ".join(ingredients),
+        "steps": _source_instruction_steps(source),
+        "missing_ingredients": [
+            " ".join(str(item).split()) for item in source.get("missed_ingredients") or []
+            if str(item).strip()
+        ],
+        "image": str(source.get("thumbnail") or "").strip(),
+        "pairing_wine": wines[0] if wines else "",
+        "pairing_drink": "",
+        "code_fallback": True,
+    }
+    return _with_recipe_source(card, [source])
+
+
+def _source_fallback_card(sources) -> dict:
+    for source in sources or []:
+        card = _source_recipe_card(source)
+        if card.get("name") and card.get("ingredients") and card.get("steps"):
+            return card
+    return {}
+
+
+def _source_home_idea(source, context) -> dict:
+    card = _source_recipe_card(source)
+    if not card:
+        return {}
+    provider = "Spoonacular" if source.get("source_provider") == "spoonacular" else "базы рецептов"
+    idea = _normalize_home_idea({
+        **card,
+        "minutes": card.get("time"),
+        "ingredients": [
+            _source_ingredient_label(item) for item in source.get("ingredients") or []
+        ],
+        "reason": f"Базовый рецепт из {provider} — без AI-адаптации.",
+        "tip": "",
+    }, context)
+    idea.update({
+        "missing_ingredients": card.get("missing_ingredients") or [],
+        "image": card.get("image") or "",
+        "servings": card.get("servings") or "",
+        "code_fallback": True,
+    })
+    if not idea.get("steps"):
+        idea["steps"] = [
+            {"text": step, "minutes": None} for step in _source_instruction_steps(source)
+        ]
+    return _with_recipe_source(idea, [source])
 
 
 _HOME_MEAL_LABELS = {
@@ -341,6 +559,12 @@ def _normalize_home_idea(data, context: dict) -> dict:
         substitution = None
 
     return {
+        "source_recipe_id": str(
+            data.get("source_recipe_id") or data.get("source_meal_id")
+            or data.get("spoonacular_id") or data.get("themealdb_id") or ""
+        ),
+        "spoonacular_id": str(data.get("spoonacular_id") or ""),
+        "spoonacular_source_name": str(data.get("spoonacular_source_name") or ""),
         "reason": reason,
         "name": name,
         "minutes": _home_minutes(data.get("minutes")),
@@ -350,7 +574,24 @@ def _normalize_home_idea(data, context: dict) -> dict:
         "missing": missing,
         "substitution": substitution,
         "tip": tip,
+        "pairing_wine": " ".join(str(data.get("pairing_wine") or "").split())[:80],
+        "pairing_drink": " ".join(str(data.get("pairing_drink") or "").split())[:100],
+        "missing_ingredients": _home_string_list(data.get("missing_ingredients")),
+        "image": str(data.get("image") or "").strip(),
+        "servings": str(data.get("servings") or "").strip(),
+        "code_fallback": bool(data.get("code_fallback")),
     }
+
+
+def _home_idea_complete(idea) -> bool:
+    if not isinstance(idea, dict):
+        return False
+    required = ("name", "minutes", "ingredients", "steps")
+    if not all(idea.get(field) for field in required):
+        return False
+    if idea.get("code_fallback"):
+        return True
+    return bool(idea.get("reason") and idea.get("tip"))
 
 
 def _home_idea_context(cid, now=None) -> dict:
@@ -368,7 +609,7 @@ def _home_idea_context(cid, now=None) -> dict:
     meal = _home_meal_for_hour(now.hour)
     signature_data = {
         "date": now.date().isoformat(),
-        "home_copy_version": 4,
+        "home_copy_version": 5,
         "meal": meal,
         "available": available,
         "unavailable": unavailable,
@@ -386,7 +627,7 @@ def _home_idea_context(cid, now=None) -> dict:
     }
 
 
-def _home_idea_prompt(context: dict) -> str:
+def _home_idea_prompt(context: dict, sources=None) -> str:
     meal = _HOME_MEAL_LABELS[context["meal"]]
     available = context.get("available") or []
     unavailable = context.get("unavailable") or []
@@ -404,12 +645,14 @@ def _home_idea_prompt(context: dict) -> str:
     restrictions = context.get("diet_prefs") or "не указаны"
     memory_prefs = "; ".join(context.get("memory_prefs") or []) or "не указаны"
     cuisines = context.get("cuisines") or "не указаны"
+    source_block = _themealdb_prompt_block(sources)
     return (
         f"Сейчас нужен {meal}. Составь одну короткую идею полноценного блюда на сегодня.\n"
         f"{fridge_context}"
         f"Пищевые предпочтения, аллергии и ограничения: {secure.wrap_untrusted(restrictions, 'ограничения')}.\n"
         f"Другие сохранённые факты пользователя: {secure.wrap_untrusted(memory_prefs, 'предпочтения')}.\n"
         f"Предпочтительные кухни: {secure.wrap_untrusted(cuisines, 'кухни')}.\n"
+        f"{source_block}"
         "Правила:\n"
         "• Предложи ровно одно понятное блюдо, без рекламного названия.\n"
         "• Все названия ингредиентов должны звучать естественно по-русски: «соевый соус», а не «соус сои».\n"
@@ -431,19 +674,22 @@ def _home_idea_prompt(context: dict) -> str:
         "При пустом холодильнике формулировка нейтральная.\n"
         "• tip — один конкретный приём именно для этого блюда с понятной техникой или результатом. "
         "Запрещены общие советы вроде «добавь чеснок и лук для аромата».\n"
+        "• pairing_wine — одно сочетание только из pairing_wines выбранного рецепта; если список пуст, верни пустую строку.\n"
+        "• pairing_drink — один конкретный безалкогольный напиток, подходящий к блюду; без пояснений и общих слов.\n"
         "• Во всём тексте обращайся только на «ты»: «приготовь», «обжарь», «добавь». "
         "Не используй формы «приготовьте», «обжарьте», «добавьте».\n"
         "• Никаких эмодзи, общих вступлений, текста о настройках и нескольких советов.\n"
-        'JSON без markdown: {"reason":"одно предложение","name":"Название блюда","minutes":20,'
+        'JSON без markdown: {"source_recipe_id":"ID выбранного источника или пустая строка","reason":"одно предложение","name":"Название блюда","minutes":20,'
         '"ingredients":["все продукты блюда"],'
         '"steps":[{"text":"Нарежь начинку","minutes":3},{"text":"Взбей яйца и вылей на сковороду","minutes":4},{"text":"Добавь начинку и сложи омлет","minutes":5}],'
         '"use_first":[],"missing":[],"substitution":null,'
-        '"tip":"один совет"}. Если блока нет, используй пустой массив или null.'
+        '"tip":"один совет","pairing_wine":"Cabernet Sauvignon или пустая строка",'
+        '"pairing_drink":"безалкогольный напиток"}. Если блока нет, используй пустой массив или null.'
     )
 
 
 def _home_local_idea(context: dict) -> dict:
-    local = _fallback_leftovers_recipe(", ".join(context.get("available") or []))
+    local = _fallback_leftovers_recipe(", ".join(context.get("available") or [])) or _fallback_recipe()
     if not local:
         return {}
     return _normalize_home_idea({
@@ -452,6 +698,8 @@ def _home_local_idea(context: dict) -> dict:
         "ingredients": local.get("ingredients"),
         "steps": local.get("steps"),
         "tip": local.get("chef_tip"),
+        "reason": "Простой базовый рецепт без AI-адаптации.",
+        "code_fallback": True,
     }, context)
 
 
@@ -476,8 +724,7 @@ def get_cached_cooking_home_idea(cid, now=None) -> dict | None:
     if not isinstance(idea, dict):
         return None
     normalized = _normalize_home_idea(idea, context)
-    required = ("name", "reason", "minutes", "ingredients", "steps", "tip")
-    return normalized if all(normalized.get(field) for field in required) else None
+    return normalized if _home_idea_complete(normalized) else None
 
 
 def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
@@ -498,35 +745,36 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
         if ready is not None:
             return ready
 
-    if api_usage.gemini_state(1).get("cooldown_active"):
-        local = _home_local_idea(context)
-        if all(local.get(field) for field in ("name", "reason", "minutes", "ingredients", "steps", "tip")):
-            return local
-
-    prompt = _home_idea_prompt(context)
+    sources = _recipe_sources(
+        _HOME_MEAL_LABELS[context["meal"]],
+        ingredients=", ".join(context.get("available") or []),
+        limit=10,
+        avoid=[previous_name] if previous_name else [],
+    )
+    prompt = _home_idea_prompt(context, sources=sources)
     if refresh and previous_name:
         prompt += f"\nНе повторяй блюдо: {secure.wrap_untrusted(previous_name, 'предыдущий рецепт')}."
     idea = {}
     for attempt in range(2):
+        llm_failed = False
         try:
             result = ai.llm_json(
                 prompt, 1100, tier="cheap", module="food",
                 fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
             )
-        except Exception:
+        except Exception as error:
+            _log.warning("home recipe LLM chain unavailable, using source card: %s", type(error).__name__)
             result = {}
-        idea = _normalize_home_idea(result, context)
-        complete = all(idea.get(field) for field in ("name", "reason", "minutes", "ingredients", "steps", "tip"))
+            llm_failed = True
+        idea = _with_recipe_source(_normalize_home_idea(result, context), sources)
+        complete = _home_idea_complete(idea)
         repeated = bool(
             refresh and previous_name and idea.get("name", "").casefold() == previous_name.casefold()
         )
         if complete and not repeated:
             break
-        if api_usage.gemini_state(1).get("cooldown_active"):
-            local = _home_local_idea(context)
-            if all(local.get(field) for field in ("name", "reason", "minutes", "ingredients", "steps", "tip")):
-                idea = local
-                break
+        if llm_failed:
+            break
         if attempt == 0:
             prompt += (
                 "\nПредыдущий вариант не прошёл проверку. Верни новый вариант: обязательны естественные "
@@ -534,9 +782,14 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
             )
     if refresh and previous_name and idea.get("name", "").casefold() == previous_name.casefold():
         idea = {}
-    if not all(idea.get(field) for field in ("name", "reason", "minutes", "ingredients", "steps", "tip")):
+    if not _home_idea_complete(idea) and sources:
+        for source in sources:
+            idea = _source_home_idea(source, context)
+            if _home_idea_complete(idea):
+                break
+    if not _home_idea_complete(idea):
         idea = _home_local_idea(context)
-    if not all(idea.get(field) for field in ("name", "reason", "minutes", "ingredients", "steps", "tip")):
+    if not _home_idea_complete(idea):
         raise ValueError("Неполный рецепт для главного экрана Готовки")
     # За время AI-запроса профиль мог измениться в другом сценарии. Перечитываем его,
     # чтобы запись кэша не затёрла новые предпочтения или другие пользовательские данные.
@@ -588,24 +841,31 @@ def _gen_recipe(constraint, cid=None):
     cz = (context + "\n") if context else ""
     avoid = _leftover_recent(cid) if cid else []
     avoid_line = f"Не предлагай эти блюда (уже были из холодильника): {', '.join(avoid)}.\n" if avoid else ""
-    return ai.llm_json(
-        f"{cz}{avoid_line}{pref}Ты — шеф-повар с идеальной логикой. "
-        f"Создай 1 рецепт ({constraint}), 1 человек, электрическая плита, духовка SAGE.\n"
-        "Правила:\n"
-        "• Все ингредиенты должны быть использованы, но не перечисляй их повторно в каждом шаге.\n"
-        "• Не меняй технику без веской причины: начал на сковороде — не гони в духовку. Минимум посуды.\n"
-        "• time — общее время блюда; время каждого шага отдельно не показывай.\n"
-        "• Каждый шаг начинай с глагола в повелительном наклонении и оставляй только нужное действие.\n"
-        "• Обычно 3 шага; для простого блюда можно 2, для сложного максимум 4. Объединяй связанные действия. "
-        "Каждый шаг — не больше 1–2 коротких предложений, только действия без вводных слов и описаний вкуса.\n"
-        "• В ингредиентах всегда добавляй базу (масло, соль, перец), если нужна для готовки.\n"
-        'JSON (без markdown): {"name":"Название блюда","time":"X мин","servings":"1 порц.",'
-        '"ingredients":"список через запятую",'
-        '"steps":["Глагол + действие + конкретика","шаг 2","шаг 3"],'
-        '"full":"тот же рецепт в том же стиле: сначала заголовок, затем <b>Ингредиенты</b>, затем <b>Приготовление</b>, затем <b>😋 Приятного аппетита!</b>. '
-        'Без времени и порции, без лишнего текста."}',
-        900, tier="cheap", module="food",
-        fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True)
+    sources = _recipe_sources(constraint, limit=10, avoid=avoid)
+    source_block = _themealdb_prompt_block(sources)
+    try:
+        result = ai.llm_json(
+            f"{cz}{avoid_line}{pref}Ты — шеф-повар с идеальной логикой. "
+            f"Выбери и адаптируй 1 рецепт ({constraint}), 1 человек, электрическая плита, духовка SAGE.\n"
+            f"{source_block}"
+            "Правила:\n"
+            "• Все ингредиенты должны быть использованы, но не перечисляй их повторно в каждом шаге.\n"
+            "• Не меняй технику без веской причины: начал на сковороде — не гони в духовку. Минимум посуды.\n"
+            "• time — общее время блюда; время каждого шага отдельно не показывай.\n"
+            "• Каждый шаг начинай с глагола в повелительном наклонении и оставляй только нужное действие.\n"
+            "• Обычно 3 шага; для простого блюда можно 2, для сложного максимум 4. Объединяй связанные действия. "
+            "Каждый шаг — не больше 1–2 коротких предложений, только действия без вводных слов и описаний вкуса.\n"
+            "• В ингредиентах всегда добавляй базу (масло, соль, перец), если нужна для готовки.\n"
+            "• Верни только данные. Заголовки, подписи, эмодзи и HTML формирует код.\n"
+            'JSON (без markdown): {"source_recipe_id":"ID выбранного источника или пустая строка","name":"Название блюда","time":"X мин","servings":"1 порц.",'
+            '"ingredients":"список через запятую",'
+            '"steps":["Глагол + действие + конкретика","шаг 2","шаг 3"]}',
+            900, tier="cheap", module="food",
+            fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True)
+    except Exception as error:
+        _log.warning("recipe LLM chain unavailable, using source card: %s", type(error).__name__)
+        return _source_fallback_card(sources) or _fallback_recipe()
+    return _with_recipe_source(result, sources)
 
 def _fallback_recipe():
     return {
@@ -633,14 +893,26 @@ def _gen_leftovers_recipe(ingredients, cid=None):
     avoid_line = f"Не предлагай снова: {', '.join(avoid)}.\n" if avoid else ""
     context = _cuisine_context(cid) if cid else ""
     cz = (context + " Учитывай как пожелание к стилю блюда, но используй только доступные продукты.\n") if context else ""
-    return ai.llm_json(
-        f"{avoid_line}{cz}Есть продукты: {secure.wrap_untrusted(ingredients, 'продукты')}. "
-        "Предложи 1 простой рецепт только из них (+ базовые специи, максимум 1 доп продукт). 1 человек.\n"
-        'JSON: {"name":"название","time":"X мин","servings":"1 порц.",'
-        '"ingredients":"список использованных продуктов через запятую",'
-        '"steps":["шаг 1 (до 15 слов)","шаг 2","шаг 3"]}',
-        500, tier="cheap", module="food",
-        fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True)
+    sources = _recipe_sources(
+        "рецепт из холодильника", ingredients=ingredients, limit=10, avoid=avoid,
+    )
+    source_block = _themealdb_prompt_block(sources)
+    try:
+        result = ai.llm_json(
+            f"{avoid_line}{cz}Есть продукты: {secure.wrap_untrusted(ingredients, 'продукты')}. "
+            "Выбери и адаптируй 1 простой рецепт только из них (+ базовые специи, максимум 1 доп продукт). 1 человек.\n"
+            f"{source_block}"
+            "Верни только данные: карточку, подписи и эмодзи формирует код.\n"
+            'JSON: {"source_recipe_id":"ID выбранного источника или пустая строка","name":"название","time":"X мин","servings":"1 порц.",'
+            '"ingredients":"список использованных продуктов через запятую",'
+            '"steps":["шаг 1 (до 15 слов)","шаг 2","шаг 3"]}',
+            500, tier="cheap", module="food",
+            fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True)
+    except Exception as error:
+        _log.warning("leftovers LLM chain unavailable, using source card: %s", type(error).__name__)
+        source_card = _source_fallback_card(sources)
+        return source_card or _fallback_leftovers_recipe(ingredients) or _fallback_recipe()
+    return _with_recipe_source(result, sources)
 
 
 def _fallback_leftovers_recipe(ingredients):
@@ -849,7 +1121,8 @@ def _cuisine_weights_line(cuisine_weights: dict) -> str:
     )
 
 
-def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, season_hint, n, meal_guard="") -> str:
+def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, season_hint, n,
+                         meal_guard="", sources=None) -> str:
     """Собирает промпт батч-генерации очереди рецептов. Вынесено отдельно от
     _gen_recipe_batch, чтобы промпт можно было проверить без вызова LLM."""
     pref = _my_recipe_pref(cid)
@@ -861,11 +1134,13 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
     avoid_line = f"Не предлагай эти блюда (уже показывались недавно): {', '.join(avoid)}.\n" if avoid else ""
     cuisine_codes_line = "Коды кухонь (машиночитаемые, используй один из них или ближайший по стране): " + ", ".join(RECIPE_CUISINE_CODES) + ".\n"
     guard_line = f"{meal_guard}\n" if meal_guard else ""
+    source_block = _themealdb_prompt_block(sources)
     return (
         f"{cz}{weights_line}{season_line}{avoid_line}{pref}"
         f"Ты — шеф-повар с идеальной логикой. Составь список из {n} РАЗНЫХ рецептов "
         f"({constraint}), 1 человек, электрическая плита, духовка SAGE.\n"
         f"{guard_line}"
+        f"{source_block}"
         "Правила для каждого рецепта:\n"
         "• Каждый продукт из ингредиентов обязан появиться в шагах приготовления.\n"
         "• Не меняй технику без веской причины: начал на сковороде — не гони в духовку. Минимум посуды.\n"
@@ -883,24 +1158,23 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
         "«Омлет с луком», «Шакшука»).\n"
         f"{cuisine_codes_line}"
         "• cuisine_emoji — эмодзи флага страны происхождения блюда (например 🇯🇵, 🇮🇹, 🇰🇷, 🇹🇷).\n"
-        "• Фото в готовке не используются. Не добавляй name_en, photo_query_en и photo_fallback_queries.\n"
+        "• Верни только данные. Карточку, заголовки, подписи, эмодзи и ссылку на изображение формирует код.\n"
         "• Разнообразие внутри списка: не более 2 рецептов одной кухни подряд, но общий перекос в сторону "
         "любимых кухонь пользователя (см. предпочтения выше) сохраняй.\n"
         f"• Верни ровно {n} рецептов в массиве, без повторов названий внутри самого списка.\n"
         'JSON (без markdown, объект с одним ключом "recipes"): {"recipes":[{'
-        '"name":"Название блюда","cuisine":"код кухни","cuisine_emoji":"🇯🇵",'
+        '"source_recipe_id":"ID выбранного источника или пустая строка","name":"Название блюда","cuisine":"код кухни","cuisine_emoji":"🇯🇵",'
         '"time":"X мин","servings":"1 порц.",'
         '"ingredients":"список через запятую",'
         '"steps":[{"text":"Глагол + действие + конкретика","minutes":2},{"text":"шаг 2","minutes":4}],'
-        '"chef_tip":"неочевидный совет именно для этого блюда",'
-        '"full":"тот же рецепт в том же стиле: сначала заголовок, затем <b>Ингредиенты</b>, затем '
-        '<b>Приготовление</b>, затем <b>😋 Приятного аппетита!</b>. Без времени и порции, без лишнего текста."'
+        '"chef_tip":"неочевидный совет именно для этого блюда"'
         "}, ... ещё " + str(n - 1) + " таких объектов]}"
     )
 
 
 def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history=None,
-                       season_hint=None, n=RECIPE_BATCH_SIZE, meal_guard=""):
+                       season_hint=None, n=RECIPE_BATCH_SIZE, meal_guard="",
+                       source_ingredients=""):
     """Генерирует за один вызов LLM список из ~n рецептов (§5.1 спеки).
 
     constraint — тип приёма пищи ("завтрак"/"обед"/"ужин") или список продуктов
@@ -921,18 +1195,38 @@ def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history
     """
     if season_hint is None:
         season_hint = _season_hint()
-    prompt = _recipe_batch_prompt(constraint, cid, cuisine_weights or {}, recent_history or [], season_hint, n, meal_guard)
-    result = ai.llm_json(
-        prompt, RECIPE_BATCH_MAX_TOKENS, tier="cheap", module="food",
-        fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
+    sources = _recipe_sources(
+        constraint, ingredients=source_ingredients, limit=max(n, 10),
+        avoid=recent_history or [],
     )
+    prompt = _recipe_batch_prompt(
+        constraint, cid, cuisine_weights or {}, recent_history or [], season_hint, n,
+        meal_guard, sources=sources,
+    )
+    try:
+        result = ai.llm_json(
+            prompt, RECIPE_BATCH_MAX_TOKENS, tier="cheap", module="food",
+            fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
+        )
+    except Exception as error:
+        _log.warning("recipe batch LLM chain unavailable, using source cards: %s", type(error).__name__)
+        source_cards = [_source_recipe_card(source) for source in sources[:n]]
+        source_cards = [card for card in source_cards if card.get("name") and card.get("steps")]
+        return source_cards or [_fallback_recipe()]
     items = result.get("recipes") if isinstance(result, dict) else None
     if not isinstance(items, list):
         # модель могла вернуть один рецепт плоским объектом вместо {"recipes":[...]}"
         # (например, при очень коротком max_tokens/шумном ответе) — не роняем вызывающий
         # код, просто отдаём то, что похоже на единственный рецепт.
         items = [result] if isinstance(result, dict) and result.get("name") else []
-    return [it for it in items if isinstance(it, dict) and it.get("name")][:n]
+    items = [it for it in items if isinstance(it, dict) and it.get("name")][:n]
+    if not items and sources:
+        source_cards = [_source_recipe_card(source) for source in sources[:n]]
+        source_cards = [card for card in source_cards if card.get("name") and card.get("steps")]
+        return source_cards or [_fallback_recipe()]
+    if not items:
+        return [_fallback_recipe()]
+    return [_with_recipe_source(item, sources, index) for index, item in enumerate(items)]
 
 
 def _gen_leftovers_recipe_batch(ingredients, cid=None, cuisine_weights=None, recent_history=None,
@@ -944,12 +1238,6 @@ def _gen_leftovers_recipe_batch(ingredients, cid=None, cuisine_weights=None, rec
     secure.wrap_untrusted, как и в одиночной _gen_leftovers_recipe, — список продуктов
     вводится пользователем и не должен трактоваться моделью как инструкции.
     """
-    if api_usage.gemini_state(1).get("cooldown_active"):
-        local = _fallback_leftovers_recipe(ingredients)
-        if local:
-            _log.info("gemini cooldown active, using local fridge recipe")
-            return [local]
-
     constraint = (
         f"только из доступных продуктов: {secure.wrap_untrusted(ingredients, 'продукты')} "
         "(+ базовые специи, максимум 1 доп. продукт на рецепт)"
@@ -958,6 +1246,7 @@ def _gen_leftovers_recipe_batch(ingredients, cid=None, cuisine_weights=None, rec
         items = _gen_recipe_batch(
             constraint, cid=cid, cuisine_weights=cuisine_weights,
             recent_history=recent_history, season_hint=season_hint, n=n,
+            source_ingredients=ingredients,
         )
     except Exception as error:
         _log.warning("fridge recipe batch failed, retrying one recipe: %s", error)

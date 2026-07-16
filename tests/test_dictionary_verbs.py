@@ -179,7 +179,7 @@ def test_cached_analysis_is_reused_without_new_request(monkeypatch):
     assert entry["analysis_updated_at"] == "2026-07-16T12:00:00+02:00"
 
 
-def test_request_uses_gemini_public_fallback_policy_and_retries_timeout(monkeypatch):
+def test_request_uses_cohere_gemini_public_fallback_and_retries_timeout(monkeypatch):
     calls = []
 
     async def fake_allm_json(prompt, *_args, **kwargs):
@@ -193,7 +193,7 @@ def test_request_uses_gemini_public_fallback_policy_and_retries_timeout(monkeypa
 
     assert result["is_verb"] is True
     assert len(calls) == 2
-    assert calls[0][1]["order"] == ("gemini",)
+    assert calls[0][1]["order"] == ("cohere", "gemini", "github_models")
     assert calls[0][1]["fallback_allowed"] is True
     assert calls[0][1]["privacy_level"] == "public"
     assert '"word": "vervangen"' in calls[0][0]

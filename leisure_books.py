@@ -6,9 +6,11 @@ import random
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import config
+import google_books
 import recommendation_stoplist
 import store
 from ui import leisure as leisure_ui
+from ui.constants import ui_label
 
 
 def _item_text(item):
@@ -61,9 +63,13 @@ def _book_kb(i):
     ])
 
 async def _send_book_card(bot, cid, it, i):
+    try:
+        it = await asyncio.to_thread(google_books.enrich_book, it)
+    except Exception:
+        it = dict(it or {})
     msg = _book_text(it)
     kb = _book_kb(i)
-    cover = _book_cover(it.get("title", ""), it.get("title_en", ""))
+    cover = it.get("cover_url") or _book_cover(it.get("title", ""), it.get("title_en", ""))
     if cover:
         try:
             await bot.send_photo(chat_id=cid, photo=cover, caption=msg.text, caption_entities=msg.entities, reply_markup=kb)

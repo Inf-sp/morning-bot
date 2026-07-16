@@ -97,6 +97,12 @@ def _configured_service(service: str) -> bool:
         "firecrawl": bool(config.FIRECRAWL_API_KEY),
         "cloudflare": bool(config.CF_API_TOKEN and config.CF_ACCOUNT_ID),
         "groq": bool(config.GROQ_API_KEY),
+        "cohere": bool(config.COHERE_API_KEY),
+        "github_models": bool(config.GITHUB_MODELS_TOKEN),
+        "google_books": bool(config.GOOGLE_BOOKS_API_KEY),
+        "languagetool": bool(config.LANGUAGETOOL_API_URL),
+        "spoonacular": bool(config.SPOONACULAR_API_KEY),
+        "themealdb": bool(config.THEMEALDB_API_KEY),
         "telegram": bool(config.TELEGRAM_TOKEN),
         "tmdb": bool(config.TMDB_API_KEY),
         "ticketmaster": bool(config.TICKETMASTER_API_KEY),
@@ -302,19 +308,19 @@ def _notification_stats(cid):
 
 # ================= API И AI (единый экран, § docs/admin.md) =================
 
-# providers — реальная цепочка автопереключения (§ ai.MODULE_POLICY): Gemini -> Groq ->
-# Cloudflare для всех этих разделов. Groq отдельно подписан как "основной" только там,
-# где это осознанный продуктовый выбор (простые задачи), а не просто факт из order-цепочки.
+# providers — продуктовая маршрутизация из ai.MODULE_POLICY: Cohere первым для
+# языков/структуры, Gemini первым для творческой генерации, далее GitHub Models
+# и остальные резервные провайдеры.
 _FEATURE_ROWS = [
-    ("Мой день", "OpenWeather + Wiki + Gemini", ("gemini",)),
+    ("Мой день", "OpenWeather + Wiki + Gemini → Cohere → GitHub Models", ("gemini", "cohere", "github_models")),
     ("Погода", "OpenWeather", ()),
-    ("Гардероб", "OpenWeather + Gemini", ("gemini",)),
-    ("Готовка", "Gemini → Groq", ("gemini",)),
-    ("Здоровье", "Gemini + ZeroEntropy", ("gemini", "zeroentropy")),
-    ("Обучение", "Gemini → Groq", ("gemini",)),
-    ("Поездки", "Tavily + Gemini", ("gemini",)),
-    ("Досуг", "TMDB/Tavily/Ticketmaster + Gemini", ("gemini",)),
-    ("Ассистент", "intent-router + Gemini", ("gemini",)),
+    ("Гардероб", "OpenWeather + Gemini → Cohere → GitHub Models", ("gemini", "cohere", "github_models")),
+    ("Готовка", "Spoonacular + Gemini → Groq → GitHub Models → OpenRouter → код · TheMealDB резерв", ("gemini", "groq", "github_models", "spoonacular", "themealdb")),
+    ("Здоровье", "Cohere → Gemini → GitHub Models + ZeroEntropy", ("cohere", "gemini", "github_models", "zeroentropy")),
+    ("Обучение", "LanguageTool + Cohere · спорные ошибки Groq → Gemini", ("languagetool", "cohere", "groq", "gemini", "github_models")),
+    ("Поездки", "Tavily + Gemini → Cohere → GitHub Models", ("gemini", "cohere", "github_models")),
+    ("Досуг", "TMDB/Google Books/Tavily/Ticketmaster + Gemini → Cohere → GitHub Models", ("gemini", "cohere", "github_models", "google_books")),
+    ("Ассистент", "intent-router + Gemini → Cohere → GitHub Models", ("gemini", "cohere", "github_models")),
 ]
 
 _HTTP_REASONS = {
@@ -488,7 +494,15 @@ def _data_line(service, label, snapshot):
 
 
 def _gemini_line(snapshot):
-    return _ai_line("gemini", "Gemini", snapshot, role="основной AI")
+    return _ai_line("gemini", "Gemini", snapshot, role="генерация и рекомендации")
+
+
+def _cohere_line(snapshot):
+    return _ai_line("cohere", "Cohere", snapshot, role="языки и структура")
+
+
+def _github_models_line(snapshot):
+    return _ai_line("github_models", "GitHub Models", snapshot, role="универсальный резерв")
 
 
 def _openrouter_line(snapshot, ai_module):
@@ -534,9 +548,8 @@ def _firecrawl_line(snapshot):
 
 
 def _fallback_active(snapshot) -> bool:
-    """Сработает ли локальная резервная модель, если Gemini сейчас недоступен -
-    честный ответ на 'Groq/Cloudflare реально подхватят запрос', а не наличие ключа."""
-    for service in ("groq", "cloudflare"):
+    """Сработает ли резервная модель, если Gemini сейчас недоступен."""
+    for service in ("cohere", "github_models", "groq", "cloudflare"):
         if not _configured_service(service):
             continue
         svc = _snapshot_service(snapshot, service)
@@ -550,7 +563,9 @@ async def send_api_ai(bot, cid, q=None):
     snapshot = api_usage.snapshot()
 
     ai_rows = [
+        _cohere_line(snapshot),
         _gemini_line(snapshot),
+        _github_models_line(snapshot),
         _ai_line("groq", "Groq", snapshot),
         _ai_line("cloudflare", "Cloudflare AI", snapshot, role="резерв"),
     ]
@@ -563,6 +578,10 @@ async def send_api_ai(bot, cid, q=None):
         _data_line("tavily", "Tavily", snapshot),
         _firecrawl_line(snapshot),
         _data_line("tmdb", "TMDB", snapshot),
+        _data_line("google_books", "Google Books", snapshot),
+        _data_line("languagetool", "LanguageTool", snapshot),
+        _data_line("spoonacular", "Spoonacular", snapshot),
+        _data_line("themealdb", "TheMealDB", snapshot),
         _data_line("ticketmaster", "Ticketmaster", snapshot),
         _data_line("zeroentropy", "ZeroEntropy", snapshot),
         _data_line("pexels", "Pexels", snapshot),
@@ -627,7 +646,7 @@ def _issue_summary(source, msg):
                     break
             return f"Gemini: лимит{scope}"
         providers = []
-        for provider in ("openrouter", "gemini", "groq", "cf"):
+        for provider in ("openrouter", "github_models", "cohere", "gemini", "groq", "cf"):
             if f"{provider}:" in low or f"{provider} " in low:
                 providers.append(provider)
         prefix = ", ".join(dict.fromkeys(providers)) if providers else "LLM"

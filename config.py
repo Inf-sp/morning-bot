@@ -23,6 +23,16 @@ WEATHER_HARD_DAILY_LIMIT = _env_int("WEATHER_HARD_DAILY_LIMIT", WEATHER_FREE_DAI
 WEATHER_WARNING_LIMIT = _env_int("WEATHER_WARNING_LIMIT", int(WEATHER_HARD_DAILY_LIMIT * 0.7))
 WEATHER_CRITICAL_LIMIT = _env_int("WEATHER_CRITICAL_LIMIT", int(WEATHER_HARD_DAILY_LIMIT * 0.9))
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+COHERE_API_KEY = os.environ.get("COHERE_API_KEY", "")
+COHERE_MODEL = os.environ.get("COHERE_MODEL", "command-a-plus-05-2026")
+GITHUB_MODELS_TOKEN = os.environ.get("GITHUB_MODELS_TOKEN", "")
+GITHUB_MODELS_MODEL = os.environ.get("GITHUB_MODELS_MODEL", "openai/gpt-4.1-mini")
+GOOGLE_BOOKS_API_KEY = os.environ.get("GOOGLE_BOOKS_API_KEY", "")
+LANGUAGETOOL_API_URL = os.environ.get(
+    "LANGUAGETOOL_API_URL", "https://api.languagetool.org/v2",
+).strip().rstrip("/")
+SPOONACULAR_API_KEY = os.environ.get("SPOONACULAR_API_KEY", "").strip()
+THEMEALDB_API_KEY = os.environ.get("THEMEALDB_API_KEY", "1").strip() or "1"
 CF_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
 CF_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 CHAT_ID = os.environ.get("CHAT_ID", "")
@@ -78,6 +88,25 @@ API_QUOTAS = {
     ],
     "groq": [
         {"mode": "local", "unit": "requests", "period": "day", "limit": 1000},
+    ],
+    "cohere": [
+        {"mode": "local", "unit": "requests", "period": "day"},
+    ],
+    "github_models": [
+        {"mode": "local", "unit": "requests", "period": "day"},
+    ],
+    "google_books": [
+        {"mode": "local", "unit": "requests", "period": "day"},
+    ],
+    "languagetool": [
+        {"mode": "local", "unit": "requests", "period": "day"},
+        {"mode": "local", "unit": "characters", "period": "day"},
+    ],
+    "themealdb": [
+        {"mode": "local", "unit": "requests", "period": "day"},
+    ],
+    "spoonacular": [
+        {"mode": "local", "unit": "requests", "period": "day"},
     ],
     "tmdb": [
         {"mode": "local", "unit": "requests", "period": "day"},

@@ -197,7 +197,42 @@ def _bold_translation_line(b, label, original, translation=""):
     b.newline()
 
 
-def exercise_result(data, is_correct, chosen=""):
+def _add_language_tool_report(b, report, explanation="", *, show_unavailable=False):
+    report = report if isinstance(report, dict) else {}
+    if not report.get("available"):
+        if show_unavailable:
+            b.spacer()
+            b.line("Проверка LanguageTool сейчас недоступна.")
+        return
+    issues = report.get("issues") or []
+    b.spacer()
+    b.bold("🔎 LanguageTool")
+    b.newline()
+    if not issues:
+        b.line("Ошибок не найдено.")
+    else:
+        for issue in issues[:3]:
+            fragment = str(issue.get("original") or "").strip()
+            replacements = [str(item).strip() for item in issue.get("replacements") or [] if str(item).strip()]
+            message = str(issue.get("short_message") or issue.get("message") or "Проверь этот фрагмент").strip()
+            if fragment and replacements:
+                b.bullet(f"{fragment} → {' / '.join(replacements[:3])}")
+            elif fragment:
+                b.bullet(f"{fragment}: {message}")
+            else:
+                b.bullet(message)
+        corrected = str(report.get("corrected_text") or "").strip()
+        original = str(report.get("text") or "").strip()
+        if corrected and corrected != original:
+            b.spacer()
+            b.labeled_line("Вариант", corrected, lowercase=False)
+    explanation = " ".join(str(explanation or report.get("explanation") or "").split())
+    if explanation:
+        b.spacer()
+        b.labeled_line("Почему", explanation, lowercase=False)
+
+
+def exercise_result(data, is_correct, chosen="", language_report=None):
     """Общий результат после ответа — единая структура для всех форматов
     (см. docs/word-trainer.md, 'Поведение после ошибки'): короткое подтверждение
     или короткое объяснение причины, без сухого 'Неверно. Правильный ответ: X.'
@@ -239,9 +274,23 @@ def exercise_result(data, is_correct, chosen=""):
             b.bold(f"«{data['unneeded_preposition']}»")
             b.text_line(" здесь не нужен.")
             b.newline()
+    if language_report is not None:
+        _add_language_tool_report(b, language_report)
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
+
+
+def language_check_result(report, explanation=""):
+    report = report if isinstance(report, dict) else {}
+    b = MessageBuilder()
+    b.section("🇳🇱 Проверка текста")
+    original = str(report.get("text") or "").strip()
+    if original:
+        b.spacer()
+        b.labeled_line("Текст", original, lowercase=False)
+    _add_language_tool_report(b, report, explanation, show_unavailable=True)
+    return b.build_stripped()
 
 
 def training_result(session):

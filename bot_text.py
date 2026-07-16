@@ -92,6 +92,9 @@ async def handle(update, context, remove_reply_keyboard):
         if kind == trainer_session.PENDING_ANSWER:
             if await trainer.handle_text(bot, cid, text):
                 return
+        if kind == "languagetool_check_nl":
+            await trainer.check_dutch_text(bot, cid, text)
+            return
         if kind in ("role_doctor", "role_state"):
             await balance.handle_role(bot, cid, kind.split("_")[1], text); return
         if kind == "wardrobe_add":

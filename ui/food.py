@@ -166,17 +166,51 @@ def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallba
     if name:
         b.spacer()
         b.bold(name)
+    time_value = " ".join(str(data.get("time") or "").split())
+    servings = " ".join(str(data.get("servings") or "").split())
+    meta = []
+    if time_value:
+        meta.append(f"⏱ {time_value}")
+    if servings:
+        meta.append(f"👤 {servings}")
+    if meta:
+        b.newline()
+        b.line(" · ".join(meta))
     if ingredients:
         b.spacer()
         b.bold("Ингредиенты:")
         b.newline()
         b.line(ingredients)
+    missing = data.get("missing_ingredients") or []
+    if isinstance(missing, str):
+        missing = [missing]
+    missing = [" ".join(str(item).split()) for item in missing if str(item).strip()]
+    if missing:
+        b.spacer()
+        b.bold("Не хватает:")
+        b.newline()
+        b.line(", ".join(missing))
     if steps:
         b.spacer()
         b.bold("Приготовление:")
         b.newline()
         for step in steps:
             b.bullet(step)
+    pairing_wine = " ".join(str(data.get("pairing_wine") or "").split())
+    pairing_drink = " ".join(str(data.get("pairing_drink") or "").split())
+    if pairing_wine or pairing_drink:
+        b.spacer()
+        b.bold("🍷 Сочетания")
+        b.newline()
+        if pairing_wine:
+            b.line(f"🍷 К блюду подойдёт: {pairing_wine}")
+        if pairing_drink:
+            b.line(f"🥤 Без алкоголя: {pairing_drink}")
+    image = str(data.get("image") or "").strip()
+    if image.startswith("https://"):
+        b.spacer()
+        b.link("🖼 Фото блюда", image)
+        b.newline()
     if chef_tip:
         b.spacer()
         b.bold("Совет шефа:")

@@ -470,7 +470,8 @@ async def _request_verb_analysis(word):
         try:
             return await asyncio.wait_for(
                 ai.allm_json(
-                    prompt, 700, order=("gemini",), module="learning_dict_add",
+                    prompt, 700, order=("cohere", "gemini", "github_models"),
+                    module="learning_dict_add",
                     fallback_allowed=True, privacy_level="public",
                 ),
                 timeout=10,
