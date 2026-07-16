@@ -560,6 +560,9 @@ def _cleanup_delete(cid, ctx):
                      "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
         if store_key:
             store.set_list(store_key, cid, [it for i, it in enumerate(store.get_list(store_key, cid)) if i not in sel])
+            if key == "artists":
+                import leisure_concerts
+                leisure_concerts.invalidate_user_concerts_cache(cid)
     elif ctx.startswith("hid_"):
         key = ctx[len("hid_"):]
         store_key = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
@@ -573,6 +576,9 @@ def _cleanup_delete(cid, ctx):
                      "books": config.BOOKS_KEY}.get(key)
         if store_key:
             store.set_list(store_key, cid, [it for i, it in enumerate(store.get_list(store_key, cid)) if i not in sel])
+            if key == "artists":
+                import leisure_concerts
+                leisure_concerts.invalidate_user_concerts_cache(cid)
     elif ctx == "fridge":
         store.set_list(config.FRIDGE_KEY, cid, [it for i, it in enumerate(store.get_list(config.FRIDGE_KEY, cid)) if i not in sel])
     elif ctx == "recipes":
@@ -682,7 +688,11 @@ def _view_delete(ctx, cid, ids):
     store_key = _view_store_key(ctx)
     if not store_key:
         return 0
-    return store.remove_from_list_by_ids(store_key, cid, ids)
+    removed = store.remove_from_list_by_ids(store_key, cid, ids)
+    if removed and store_key == config.ARTISTS_KEY:
+        import leisure_concerts
+        leisure_concerts.invalidate_user_concerts_cache(cid)
+    return removed
 
 
 def _hidden_key_for_collection(ctx):

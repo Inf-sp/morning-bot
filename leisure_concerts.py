@@ -140,6 +140,7 @@ async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3,
 # промоутеры и часть европейских туров туда не попадают. Раз в 7 дней на артиста
 # добираем события через веб-поиск (см. find_concerts/refresh_concerts_cache).
 _ARTIST_EXTERNAL_TTL = 7 * 86400
+_EXTERNAL_SEARCH_INFLIGHT = {}
 
 _EXTERNAL_SOURCE_PRIORITY = {
     "official_site": 0,
@@ -343,13 +344,27 @@ async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
 async def get_external_events_for_artist(artist: str, cc: str, cname: str = "", force: bool = False):
     """Внешние (не-Ticketmaster) события артиста с недельным глобальным кэшем.
     force=True — пропустить кэш (используется при добавлении нового артиста)."""
+    cache_key = _artist_cache_key(artist, cc)
     if not force:
         cached = _external_events_cache_get(artist, cc)
         if cached is not None:
             return cached
-    events = await _collect_external_events_for_artist(artist, cc, cname or cc)
-    _external_events_cache_set(artist, cc, events)
-    return events
+    running = _EXTERNAL_SEARCH_INFLIGHT.get(cache_key)
+    if running is not None:
+        return await running
+
+    async def _load():
+        events = await _collect_external_events_for_artist(artist, cc, cname or cc)
+        _external_events_cache_set(artist, cc, events)
+        return events
+
+    task = asyncio.create_task(_load())
+    _EXTERNAL_SEARCH_INFLIGHT[cache_key] = task
+    try:
+        return await task
+    finally:
+        if _EXTERNAL_SEARCH_INFLIGHT.get(cache_key) is task:
+            _EXTERNAL_SEARCH_INFLIGHT.pop(cache_key, None)
 
 
 def _external_event_to_tm_shape(ev: dict) -> dict:
@@ -486,7 +501,7 @@ def _concert_place_name(name, cc=""):
         return "Нидерландах"
     return str(name or "твоей стране").strip()
 
-_CONCERTS_CACHE_TTL = 7 * 86400  # неделя — кэш обновляется job'ом по воскресеньям перед уведомлением
+_CONCERTS_CACHE_TTL = 7 * 86400  # неделя — кэш прогревается job'ом перед пятничной афишей
 
 
 def _concerts_cache_get(cid, cc):
@@ -505,6 +520,20 @@ def _concerts_cache_set(cid, cc, events):
     d = store._load(config.CONCERTS_CACHE_KEY)
     d[str(cid)] = {"ts": time.time(), "cc": cc, "events": filter_concert_events(events, cc)}
     store._save(config.CONCERTS_CACHE_KEY, d)
+
+
+def invalidate_user_concerts_cache(cid):
+    """Сбрасывает только сводную подборку пользователя.
+
+    Кэши конкретных исполнителей остаются: при следующей сборке старые артисты
+    переиспользуют свежие данные, а новый артист запрашивается отдельно.
+    """
+    data = store._load(config.CONCERTS_CACHE_KEY)
+    if str(cid) not in data:
+        return False
+    data.pop(str(cid), None)
+    store._save(config.CONCERTS_CACHE_KEY, data)
+    return True
 
 
 async def _fetch_concerts(artists, cc, cname):
@@ -531,16 +560,25 @@ async def _fetch_concerts(artists, cc, cname):
 
 
 async def refresh_concerts_cache(cid):
-    """Прогревает недельный кэш концертов пользователя — вызывается job'ом по воскресеньям
-    перед уведомлением «Афиша недели», чтобы само уведомление и последующие «Концерты» не ждали API."""
+    """Прогревает недельный кэш концертов пользователя — вызывается пятничным job'ом
+    перед уведомлением «Афиша недели», чтобы само уведомление и последующие «Концерты» не ждали API.
+    Возвращает короткий результат и подходит для ручного «Обновить базу»."""
     artists = _ensure_artists(cid)
-    if not artists or not config.TICKETMASTER_API_KEY:
-        return
+    if not artists:
+        invalidate_user_concerts_cache(cid)
+        return {"status": "no_artists", "artists": 0, "events": 0}
+    if not config.TICKETMASTER_API_KEY:
+        return {"status": "unavailable", "artists": len(artists), "events": 0}
     s = store.get_settings(cid)
     cc = (s.get("cc") or "NL").upper()
     cname = s.get("country") or "твоя страна"
     events = await _fetch_concerts(artists, cc, cname)
     _concerts_cache_set(cid, cc, events)
+    return {
+        "status": "updated",
+        "artists": len(artists),
+        "events": len(events),
+    }
 
 
 _SEEN_CONCERTS_LIMIT = 300  # ограничение размера истории «виденных» concert ID на пользователя

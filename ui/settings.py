@@ -123,9 +123,22 @@ def settings_home():
 def database_refresh_result(result):
     result = result or {}
     b = MessageBuilder().section("🔄 База обновлена")
-    b.labeled_line("Коллекции", f"проверено {result.get('collection_items', 0)} записей")
-    b.labeled_line("Новая структура", f"обновлено {result.get('changed_items', 0)} записей")
-    b.labeled_line("Гардероб", f"обновлено {result.get('wardrobe_items', 0)} вещей")
+    b.labeled_line("Коллекции", f"проверено — {result.get('collection_items', 0)}")
+    b.labeled_line("Новая структура", f"обновлено — {result.get('changed_items', 0)}")
+    b.labeled_line("Гардероб", f"обновлено — {result.get('wardrobe_items', 0)}")
+    concert_status = result.get("concerts_status")
+    if concert_status == "updated":
+        b.labeled_line(
+            "Концерты",
+            f"исполнителей — {result.get('concerts_artists', 0)} · "
+            f"событий — {result.get('concerts_events', 0)}",
+        )
+    elif concert_status == "no_artists":
+        b.labeled_line("Концерты", "добавь любимых исполнителей для поиска")
+    elif concert_status == "unavailable":
+        b.labeled_line("Концерты", "сервис поиска сейчас не настроен")
+    elif concert_status == "failed":
+        b.labeled_line("Концерты", "не удалось обновить · попробуй позже")
     if result.get("wardrobe_remaining"):
         b.line("Часть физических свойств не удалось уточнить. Повтори обновление позже.")
     else:

@@ -50,12 +50,15 @@ def content_recommend(kind, cid):
 def _kick_off_new_artist_concert_check(cid, artist_names):
     """При добавлении нового артиста запускает внешний поиск концертов сразу
     (Tavily/Firecrawl/AI), не дожидаясь недельного цикла — фоновой задачей."""
+    # Сводная подборка хранится неделю. Сбрасываем её сразу, иначе новый артист
+    # не попадёт в «Концерты» до планового воскресного обновления.
+    import leisure_concerts
+    leisure_concerts.invalidate_user_concerts_cache(cid)
     s = store.get_settings(cid)
     cc = (s.get("cc") or "NL").upper()
     cname = s.get("country") or "твоя страна"
 
     async def _run():
-        import leisure_concerts
         for name in artist_names:
             try:
                 await leisure_concerts.refresh_artist_external_events(name, cc, cname)

@@ -1,11 +1,14 @@
 """Ручное обновление пользовательской базы до текущих схем."""
 
+import logging
 import uuid
 
 import cleanup
 import config
 import store
 from wardrobe_migration import migrate_item_attrs, migration_count
+
+_log = logging.getLogger(__name__)
 
 
 def _collection_keys():
@@ -19,7 +22,7 @@ def _collection_keys():
 
 
 async def refresh_user_database(cid):
-    """Идемпотентно обновляет коллекции и физическую схему Гардероба."""
+    """Обновляет коллекции, Гардероб и концертную подборку пользователя."""
     collection_items = 0
     changed_items = 0
     for key in _collection_keys():
@@ -43,9 +46,18 @@ async def refresh_user_database(cid):
     wardrobe_pending = migration_count(wardrobe_before)
     wardrobe_after = await migrate_item_attrs(cid, wardrobe_before)
     wardrobe_remaining = migration_count(wardrobe_after)
+    try:
+        import leisure_concerts
+        concerts = await leisure_concerts.refresh_concerts_cache(cid)
+    except Exception as error:
+        _log.warning("manual concert refresh failed cid=%s: %r", cid, error, exc_info=True)
+        concerts = {"status": "failed", "artists": 0, "events": 0}
     return {
         "collection_items": collection_items,
         "changed_items": changed_items,
         "wardrobe_items": max(0, wardrobe_pending - wardrobe_remaining),
         "wardrobe_remaining": wardrobe_remaining,
+        "concerts_status": concerts.get("status", "failed"),
+        "concerts_artists": concerts.get("artists", 0),
+        "concerts_events": concerts.get("events", 0),
     }

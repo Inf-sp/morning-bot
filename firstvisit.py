@@ -392,6 +392,8 @@ async def _save_leisure_titles(cid, raw: str, mode: str) -> list:
         saved.append(f"Фильмы ({len(movies)}): {', '.join(str(m) for m in movies[:3])}…")
     if artists:
         _merge_list(config.ARTISTS_KEY, cid, artists, mode)
+        import leisure_music
+        leisure_music._kick_off_new_artist_concert_check(cid, artists)
         saved.append(f"Музыканты ({len(artists)}): {', '.join(str(a) for a in artists[:3])}…")
     if books:
         _merge_list(config.BOOKS_KEY, cid, books, mode)
