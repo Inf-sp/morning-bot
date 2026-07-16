@@ -7,6 +7,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
 import config
+import recommendation_stoplist
 import settings
 import store
 from ui import leisure as leisure_ui
@@ -89,7 +90,7 @@ def _listen_kb():
 async def listen_dislike(bot, cid):
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
-        _add_unique(config.MUSIC_DISLIKE_KEY, cid, rec["items"][0])
+        recommendation_stoplist.add(cid, "artist", rec["items"][0], "hidden")
     await send_listen(bot, cid)
 
 def _item_text(item):
@@ -119,14 +120,13 @@ async def send_listen(bot, cid):
         await _ask_collect(bot, cid, "artists")
         return
     anchors = ", ".join(arts[:25])
-    disliked = [_item_text(d) for d in store.get_list(config.MUSIC_DISLIKE_KEY, cid) if _item_text(d)]
-    music_seen = [_item_text(s) for s in store.get_list(config.MUSIC_SEEN_KEY, cid) if _item_text(s)]
+    blocked = recommendation_stoplist.values(cid, "artist")
     notes = store.get_list(config.NOTES_KEY, cid)
     booked = [n.get("text", "") for n in notes
               if isinstance(n, dict) and "музык" in str(n.get("source", "")).lower()]
     known = (set(a.lower() for a in arts) | set(b.lower() for b in booked)
-             | set(d.lower() for d in disliked) | set(s.lower() for s in music_seen))
-    avoid_all = ", ".join(list(arts) + booked + disliked + music_seen)[:600]
+             | set(value.lower() for value in blocked))
+    avoid_all = ", ".join(list(arts) + booked + blocked)[:600]
     web_block = ""
     try:
         web = await asyncio.to_thread(

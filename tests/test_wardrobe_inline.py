@@ -27,7 +27,7 @@ def test_send_home_includes_inline_keyboard():
     assert _labels(bot.message["reply_markup"]) == [
         ["🆕 Добавить вещь"],
         ["👕 Мой шкаф"],
-        ["🎨 Мой стиль"],
+        ["*️⃣ Выбрать стили"],
         ["⬅️ Назад", "#️⃣ Меню"],
     ]
 

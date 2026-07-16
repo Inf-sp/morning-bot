@@ -15,6 +15,7 @@ import util
 import settings
 import tmdb
 import movie_engine
+import recommendation_stoplist
 import verify
 from ui import leisure as leisure_ui
 from leisure_collection import (
@@ -199,13 +200,12 @@ _MOVIE_FALLBACKS = [
 def _movie_used(cid):
     """Множество названий, которые нельзя повторять: любимые, знакомые, чёрный список, закладки."""
     wl = store.get_list(config.WATCHLIST_KEY, cid)
-    ms = store.get_list(config.MOVIE_SEEN_KEY, cid)
-    bl = store.get_list(config.MOVIE_BLACKLIST_KEY, cid)
+    blocked = recommendation_stoplist.values(cid, "movie")
     notes_all = store.get_list(config.NOTES_KEY, cid)
     noted = [n.get("text", "") for n in notes_all
              if isinstance(n, dict) and "кино" in str(n.get("source", "")).lower()]
     used = set()
-    for x in list(wl) + list(ms) + list(bl) + noted:
+    for x in list(wl) + blocked + noted:
         used.add((x if isinstance(x, str) else str(x)).lower())
     return used
 
@@ -503,7 +503,7 @@ async def movie_dislike(bot, cid, i):
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
-        _add_unique(config.MOVIE_BLACKLIST_KEY, cid, title)
+        recommendation_stoplist.add(cid, "movie", title, "hidden")
         await bot.send_message(chat_id=cid, text=f"Понял, больше не буду рекомендовать «{title}». Вот другой вариант.")
     await _advance_movie(bot, cid)
 

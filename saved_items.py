@@ -7,6 +7,7 @@ from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import config
+import recommendation_stoplist
 import store
 import util
 from ui import settings as settings_ui
@@ -46,13 +47,13 @@ async def save_fav(bot, cid, q=None):
 def _note_type(source):
     s = (source or "").lower()
     if "фильм" in s or "сериал" in s or "кино" in s:
-        return ("movie", config.MOVIE_BLACKLIST_KEY, config.WATCHLIST_KEY, "Кино")
+        return ("movie", "movie", config.WATCHLIST_KEY, "Кино")
     if "книг" in s:
-        return ("book", config.BOOK_BLACKLIST_KEY, config.BOOKS_KEY, "Книги")
+        return ("book", "book", config.BOOKS_KEY, "Книги")
     if "музык" in s or "концерт" in s:
-        return ("music", config.MUSIC_DISLIKE_KEY, config.ARTISTS_KEY, "Артисты")
+        return ("music", "artist", config.ARTISTS_KEY, "Артисты")
     if "путешеств" in s or "стран" in s:
-        return ("travel", config.TRAVEL_DISLIKE_KEY, config.FAVCOUNTRIES_KEY, "Страны")
+        return ("travel", "country", config.FAVCOUNTRIES_KEY, "Страны")
     return (None, None, None, None)
 
 def _note_bucket(n):
@@ -105,14 +106,26 @@ def _pop_note(cid, i):
 def _note_text(n):
     return (n.get("text", "") if isinstance(n, dict) else str(n)).strip()
 
+
+def _note_stoplist_kind(n):
+    source = n.get("source", "") if isinstance(n, dict) else ""
+    _typ, stoplist_kind, _, _ = _note_type(source)
+    return stoplist_kind
+
+
+def _stoplist_removed_note(cid, note, reason="removed"):
+    kind = _note_stoplist_kind(note)
+    if kind:
+        recommendation_stoplist.add(cid, kind, _note_text(note), reason)
+
 async def note_to_blacklist(bot, cid, i):
     n = _pop_note(cid, i)
     if not n:
         await send_notes(bot, cid); return
-    typ, black_key, _, cat = _note_type(n.get("source", "") if isinstance(n, dict) else "")
+    _typ, stoplist_kind, _, cat = _note_type(n.get("source", "") if isinstance(n, dict) else "")
     t = _note_text(n)
-    if black_key:
-        store.add_to_list(black_key, cid, t)
+    if stoplist_kind:
+        _stoplist_removed_note(cid, n, "hidden")
         msg = settings_ui.note_blacklisted(t, cat)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     else:
@@ -236,8 +249,6 @@ async def send_mydata_cinema(bot, cid):
     rows = [
         [InlineKeyboardButton("Любимое", callback_data="colr:cinema_favorites:set_mydata_leisure")],
         [InlineKeyboardButton("⭐️ Сохранённое", callback_data="colr:cinema_saved:set_mydata_leisure")],
-        [InlineKeyboardButton("Смотрел", callback_data="colr:cinema_watched:set_mydata_leisure")],
-        [InlineKeyboardButton("Скрытое", callback_data="colr:cinema_hidden:set_mydata_leisure")],
         [InlineKeyboardButton("Предпочтения", callback_data="movie_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]
@@ -250,8 +261,6 @@ async def send_mydata_books(bot, cid):
     rows = [
         [InlineKeyboardButton("Любимое", callback_data="colr:books_favorites:set_mydata_leisure")],
         [InlineKeyboardButton("⭐️ Сохранённое", callback_data="colr:books_saved:set_mydata_leisure")],
-        [InlineKeyboardButton("Прочитано", callback_data="colr:books_read:set_mydata_leisure")],
-        [InlineKeyboardButton("Скрытое", callback_data="colr:books_hidden:set_mydata_leisure")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(f"{ui_label('books', 'Книги')}")
@@ -262,7 +271,6 @@ async def send_mydata_books(bot, cid):
 async def send_mydata_music(bot, cid):
     rows = [
         [InlineKeyboardButton("Любимые артисты", callback_data="colr:music_favorite_artists:set_mydata_leisure")],
-        [InlineKeyboardButton("Скрытые артисты", callback_data="colr:music_hidden_artists:set_mydata_leisure")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(f"{ui_label('music', 'Музыка')}")
@@ -378,12 +386,16 @@ async def fav_view(bot, cid, i, back="as_bucket_fav", delete_cb=None):
 
 
 async def fav_del(bot, cid, i):
-    _pop_note(cid, i)
+    note = _pop_note(cid, i)
+    if note:
+        _stoplist_removed_note(cid, note)
     await send_bucket(bot, cid, "fav")
 
 
 async def fav_del_group(bot, cid, group, i):
-    _pop_note(cid, i)
+    note = _pop_note(cid, i)
+    if note:
+        _stoplist_removed_note(cid, note)
     await send_fav_group(bot, cid, group)
 
 
@@ -490,7 +502,6 @@ def _love_title(key):
         "books": ui_label("books", "Мои книги"),
     }.get(key, "Любимые")
 
-_HIDDEN_SUPPORTED = {"movies", "books", "artists", "countries"}
 _LOVE_ADD_LABEL = {
     "movies": "🆕 Добавить фильм",
     "countries": "🆕 Добавить страну",
@@ -513,8 +524,6 @@ async def send_love_section(bot, cid, key):
     )]]
     if items:
         rows.append([InlineKeyboardButton(delete_label("Убрать из любимого"), callback_data=f"as_loveclean_{key}")])
-    if key in _HIDDEN_SUPPORTED:
-        rows.append([InlineKeyboardButton("Скрытое", callback_data=f"as_lovehidden_{key}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_notes"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))

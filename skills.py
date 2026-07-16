@@ -45,7 +45,7 @@ SKILLS = {s.name: s for s in (
           fallback="⚠️ Не удалось подготовить разбор. При тревожных симптомах обратись к врачу."),
     Skill("travel_recommender", "Поездки", "card",
           entrypoints=("a_trav_go", "a_trav_plan"),
-          memory=("FAVCOUNTRIES_KEY", "TRAVEL_DISLIKE_KEY", "NOTES_KEY", "suggested_countries"),
+          memory=("FAVCOUNTRIES_KEY", "RECOMMENDATION_STOPLIST_KEY", "NOTES_KEY", "suggested_countries"),
           fallback="⚠️ Не удалось подобрать направление. Попробуй ещё раз."),
     Skill("free_chat", "Свободный чат", "chat",
           entrypoints=("текстовое сообщение",),

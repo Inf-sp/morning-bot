@@ -187,33 +187,41 @@ def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallba
     return b.build_stripped()
 
 
-def fridge_home_empty():
-    b = MessageBuilder()
-    b.section(ui_label("products", "Мой холодильник"))
-    b.spacer()
-    b.line("Пусто — добавь продукты, которые обычно есть дома.")
-    return b.build_stripped()
+def _products_label(count):
+    count = abs(int(count))
+    if count % 10 == 1 and count % 100 != 11:
+        return "продукт"
+    if 2 <= count % 10 <= 4 and not 12 <= count % 100 <= 14:
+        return "продукта"
+    return "продуктов"
 
 
-def fridge_home(count, available):
+def fridge_home(available):
     b = MessageBuilder()
     b.bold(ui_label("products", "Мой холодильник"))
-    b.text_line(f" · {count} продуктов · {available} в наличии")
+    b.text_line(f" · {available} {_products_label(available)} в наличии")
     b.spacer()
     b.labeled_line("Выбери категорию")
     return b.build_stripped()
 
 
-def fridge_category(emoji, label, total, available):
+def fridge_category(label, total, available):
     b = MessageBuilder()
-    b.text_line(f"{emoji} ")
     b.bold(label)
     b.text_line(
-        f" · {total} продуктов · {available} в наличии\n\n"
-        "✅ — есть в наличии  □ — закончилось\n"
+        f" · {total} {_products_label(total)} · {available} в наличии\n\n"
+        "🟢 — есть в наличии  🔴 — закончилось\n"
         "Нажми продукт, чтобы изменить статус."
     )
     return b.build()
+
+
+def fridge_category_choice(name):
+    b = MessageBuilder()
+    b.section("🧊 Выбери категорию")
+    b.line(f"Не удалось уверенно определить категорию для «{name}».")
+    b.line("Куда добавить продукт?")
+    return b.build_stripped()
 
 
 def fridge_updated(added_by_cat, added, duplicates, rejected, cat_order, cat_emoji, cat_labels):

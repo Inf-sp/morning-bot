@@ -22,9 +22,9 @@ def test_labeled_line_bolds_colon_and_lowercases_sentence():
     assert _bold_fragments(message) == ["Как носить:"]
 
 
-def test_wardrobe_card_uses_all_outfit_labels():
+def test_wardrobe_card_uses_current_outfit_labels():
     message = render_wardrobe_message({
-        "weather_decision": "Сегодня прохладно — нужен верхний слой.",
+        "weather_intro": "Сегодня прохладно — нужен верхний слой.",
         "items": [{"name": "Белая рубашка"}, {"name": "Синие брюки"}],
         "style_tip": "Подверни рукава рубашки.",
         "reasons": ["Рубашка связывает светлый верх и тёмный низ"],
@@ -33,13 +33,10 @@ def test_wardrobe_card_uses_all_outfit_labels():
     assert _bold_fragments(message) == [
         "👟 Гардероб · Образ на сегодня",
         "Надень:",
-        "Как носить:",
-        "Почему работает:",
-        "Образ готов:",
+        "Полезно:",
     ]
-    assert "Как носить: подверни рукава рубашки." in message.text
-    assert "Почему работает: рубашка связывает" in message.text
-    assert "Образ готов: сегодня прохладно" in message.text
+    assert "Надень:\n• Белая рубашка\n• Синие брюки" in message.text
+    assert "💡 Полезно: подверни рукава рубашки." in message.text
 
 
 def test_free_text_formatter_applies_same_rule_to_plain_and_markdown_labels():

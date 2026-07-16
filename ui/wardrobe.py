@@ -91,9 +91,8 @@ def render_wardrobe_message(look_data):
     if items:
         b.spacer()
         b.labeled_line("Надень")
-        b.spacer()
         for it in items:
-            b.line(it)
+            b.bullet(it)
 
     tip = _finish_dot(look_data.get("style_tip"))
     if tip:

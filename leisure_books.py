@@ -6,6 +6,7 @@ import random
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import config
+import recommendation_stoplist
 import store
 from ui import leisure as leisure_ui
 
@@ -116,9 +117,10 @@ _FALLBACK_BOOKS = [
 def _book_used(cid):
     """Названия книг, которые нельзя повторять: любимые, знакомые, закладки, отклонённые."""
     used = set()
-    for key in (config.BOOKS_KEY, config.BOOK_SEEN_KEY, config.READLIST_KEY, config.BOOK_BLACKLIST_KEY):
+    for key in (config.BOOKS_KEY, config.READLIST_KEY):
         for x in store.get_list(key, cid):
             used.add((x if isinstance(x, str) else str(x)).strip().lower())
+    used.update(value.strip().lower() for value in recommendation_stoplist.values(cid, "book"))
     return used
 
 def _fallback_book(cid, extra_skip=()):
@@ -159,7 +161,7 @@ async def book_dislike(bot, cid, i):
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
-        _add_unique(config.BOOK_BLACKLIST_KEY, cid, title)
+        recommendation_stoplist.add(cid, "book", title, "hidden")
         await bot.send_message(chat_id=cid, text=f"Понял, «{title}» исключил. Вот другая книга.")
     try:
         data = await asyncio.to_thread(content_recommend, "book", str(cid))

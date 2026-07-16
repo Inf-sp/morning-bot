@@ -23,6 +23,7 @@ import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
+import recommendation_stoplist
 import store
 from util import esc
 from ui.constants import choose_label, delete_label, ui_label
@@ -705,6 +706,19 @@ def _hidden_key_for_collection(ctx):
     }.get(canonical)
 
 
+def _stoplist_kind_for_collection(ctx):
+    canonical = _canonical_ctx(ctx)
+    if canonical.startswith("cinema_"):
+        return "movie"
+    if canonical.startswith("books_"):
+        return "book"
+    if canonical.startswith("music_"):
+        return "artist"
+    if canonical.startswith("travel_"):
+        return "country"
+    return None
+
+
 def _add_unique_raw(key, cid, value):
     target = str(value.get("name", value.get("value", value)) if isinstance(value, dict) else value).strip().lower()
     if not target:
@@ -736,13 +750,21 @@ def _selected_values(ctx, cid, ids):
 def _apply_collection_action(ctx, cid, action_id, ids):
     if not ids:
         return 0
+    selected_values = _selected_values(ctx, cid, ids)
+    stoplist_kind = _stoplist_kind_for_collection(ctx)
+    if stoplist_kind:
+        if action_id == "restore":
+            for value in selected_values:
+                recommendation_stoplist.remove(cid, stoplist_kind, value)
+        else:
+            canonical = _canonical_ctx(ctx)
+            reason = "hidden" if action_id == "hide" else (
+                "seen" if canonical in {"cinema_watched", "books_read", "music_seen_artists"}
+                else "removed"
+            )
+            for value in selected_values:
+                recommendation_stoplist.add(cid, stoplist_kind, value, reason)
     if action_id == "hide":
-        hidden_key = _hidden_key_for_collection(ctx)
-        if hidden_key:
-            for value in _selected_values(ctx, cid, ids):
-                if hidden_key == config.TRAVEL_DISLIKE_KEY and isinstance(value, dict):
-                    value = value.get("name", "")
-                _add_unique_raw(hidden_key, cid, value)
         return _view_delete(ctx, cid, ids)
     # remove and restore both mean: remove from the current collection only.
     # For hidden collections this is "Вернуть в рекомендации" and does not add

@@ -12,6 +12,7 @@ import re
 import math
 
 import config
+import recommendation_stoplist
 import store
 import tmdb
 
@@ -59,10 +60,11 @@ def _shown_norms(cid):
 # ---------- множества исключений ----------
 def _excluded_norms(cid, include_shown=True):
     """Названия, которые нельзя показывать: любимые/seen/blacklist/закладки(+показанные)."""
-    keys = [config.WATCHLIST_KEY, config.MOVIE_SEEN_KEY, config.MOVIE_BLACKLIST_KEY]
+    keys = [config.WATCHLIST_KEY]
     names = []
     for k in keys:
         names += store.get_list(k, cid)
+    names += recommendation_stoplist.values(cid, "movie")
     notes = store.get_list(config.NOTES_KEY, cid)
     names += [n.get("text", "") for n in notes
               if isinstance(n, dict) and "кино" in str(n.get("source", "")).lower()]

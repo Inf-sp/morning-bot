@@ -14,6 +14,7 @@ from ui.constants import ui_label
 
 import ai
 import config
+import recommendation_stoplist
 import research
 import secure
 import store
@@ -128,9 +129,9 @@ def travel_suggest_one(cid):
     visited = store.get_list(config.COUNTRIES_KEY, cid)
     favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
     fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
-    disliked = store.get_list(config.TRAVEL_DISLIKE_KEY, cid)
+    blocked = recommendation_stoplist.values(cid, "country")
     plans = _plan_countries(cid)
-    skip = ", ".join([str(x) for x in visited] + fav_names + [str(x) for x in disliked] + plans)
+    skip = ", ".join([str(x) for x in visited] + fav_names + blocked + plans)
     prompt = f"""Уже был / в закладках / не интересно (СТРОГО НЕ предлагай ничего из этого списка): {skip}.
 Профиль: любит интеллектуальную атмосферу, города с характером, природу; путешествия важнее вещей.
 Предложи РОВНО 1 НОВУЮ страну, которой ТОЧНО НЕТ в списке выше. Перепроверь, что её нет в списке. Компактно. Верни JSON:
@@ -159,9 +160,9 @@ async def send_go(bot, cid):
     visited = store.get_list(config.COUNTRIES_KEY, cid)
     favs = store.get_list(config.FAVCOUNTRIES_KEY, cid)
     fav_names = [f.get("name", "") if isinstance(f, dict) else str(f) for f in favs]
-    disliked = store.get_list(config.TRAVEL_DISLIKE_KEY, cid)
+    blocked = recommendation_stoplist.values(cid, "country")
     plans = _plan_countries(cid)
-    skip_set = {str(x).strip().lower() for x in (list(visited) + fav_names + list(disliked) + plans) if str(x).strip()}
+    skip_set = {str(x).strip().lower() for x in (list(visited) + fav_names + blocked + plans) if str(x).strip()}
     d = None
     try:
         for _ in range(3):
@@ -194,9 +195,8 @@ async def send_go(bot, cid):
 
 async def travel_dislike(bot, cid):
     c = store.suggested_countries.get(str(cid))
-    existing = {str(x).strip().lower() for x in store.get_list(config.TRAVEL_DISLIKE_KEY, cid)}
-    if c and c.strip().lower() not in existing:
-        store.add_to_list(config.TRAVEL_DISLIKE_KEY, cid, c)
+    if c:
+        recommendation_stoplist.add(cid, "country", c, "hidden")
     await send_go(bot, cid)
 
 

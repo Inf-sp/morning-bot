@@ -306,6 +306,14 @@ async def handle_callback(bot, cid, q, data):
     if data in ("as_fridge", "as_fridge_home"):
         await fridge_flow.send_fridge(bot, cid, q)
         return True
+    if data.startswith("as_fridge_pick_"):
+        try:
+            category = int(data.rsplit("_", 1)[-1])
+        except (ValueError, IndexError):
+            await fridge_flow.send_fridge(bot, cid, q)
+        else:
+            await fridge_flow.fridge_assign_category(bot, cid, category, q)
+        return True
     if data.startswith("as_fridge_cat_"):
         parts = data.split("_")
         try:

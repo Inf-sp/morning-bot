@@ -37,7 +37,7 @@ def _item(item_id, zone, name):
     }
 
 
-def test_outfit_card_has_one_italic_intro_and_dynamic_final():
+def test_outfit_card_has_one_italic_intro_and_one_useful_tip():
     message = render_wardrobe_message({
         "weather_intro": "Жарко и сухо — нужен лёгкий образ",
         "items": [{"name": "Белая футболка"}, {"name": "Широкие брюки"}, {"name": "Белые кеды"}],
@@ -48,7 +48,8 @@ def test_outfit_card_has_one_italic_intro_and_dynamic_final():
     })
 
     assert _entities(message, MessageEntity.ITALIC) == ["Жарко и сухо — нужен лёгкий образ."]
-    assert "Финальный штрих: добавь серебристые часы." in message.text
+    assert "💡 Полезно: заправь футболку только спереди." in message.text
+    assert "Финальный штрих" not in message.text
 
 
 def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
@@ -56,8 +57,8 @@ def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
         "items": [{"name": "цепочка со значком сторон света"}, {"name": "футболка Levi's"}],
     })
 
-    assert "- Цепочка со значком сторон света" in message.text
-    assert "- Футболка Levi's" in message.text
+    assert "\nНадень:\n• Цепочка со значком сторон света\n• Футболка Levi's" in message.text
+    assert "Надень:\n\n" not in message.text
 
 
 def test_other_outfit_changes_the_base_not_one_random_item():

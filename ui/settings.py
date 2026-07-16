@@ -126,6 +126,8 @@ def database_refresh_result(result):
     b.labeled_line("Коллекции", f"проверено — {result.get('collection_items', 0)}")
     b.labeled_line("Новая структура", f"обновлено — {result.get('changed_items', 0)}")
     b.labeled_line("Гардероб", f"обновлено — {result.get('wardrobe_items', 0)}")
+    b.labeled_line("Холодильник", f"упорядочено — {result.get('fridge_items', 0)}")
+    b.labeled_line("Не рекомендовать", f"объединено — {result.get('stoplist_items', 0)}")
     concert_status = result.get("concerts_status")
     if concert_status == "updated":
         b.labeled_line(
