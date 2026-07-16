@@ -313,7 +313,13 @@ async def start(update, context):
         code = args[0].strip()
         if access.is_allowed(cid):
             msg = menu.welcome_for(cid)
-            await update.message.reply_text(msg.text, entities=msg.entities, reply_markup=menu.main_menu_kb())
+            await context.bot.send_message(
+                chat_id=cid,
+                text=msg.text,
+                entities=msg.entities,
+                reply_markup=menu.main_menu_kb(),
+                transient=True,
+            )
             return
         if access.use_invite(code, cid):
             tracking.touch(cid)
@@ -327,7 +333,13 @@ async def start(update, context):
         return
 
     msg = menu.welcome_for(cid)
-    await update.message.reply_text(msg.text, entities=msg.entities, reply_markup=menu.main_menu_kb())
+    await context.bot.send_message(
+        chat_id=cid,
+        text=msg.text,
+        entities=msg.entities,
+        reply_markup=menu.main_menu_kb(),
+        transient=True,
+    )
 
 
 # ---------- Диспетчер инлайн-кнопок ----------
@@ -335,6 +347,9 @@ async def answer_callback(update, context):
     q = update.callback_query
     cid = str(q.message.chat_id)
     bot = context.bot
+    marker = getattr(bot, "mark_transient_message", None)
+    if marker and menu.is_main_menu_markup(getattr(q.message, "reply_markup", None)):
+        marker(cid, q.message.message_id)
     if access.is_allowed(cid):
         tracking.touch(cid)
     answer_task = asyncio.create_task(q.answer())
@@ -435,10 +450,13 @@ async def menu_command(update, context):
     cid = str(update.effective_chat.id)
     store.pending_input.pop(cid, None)
     text, entities, kb = menu.main_menu_screen(cid)
-    # pin_menu=True: кнопки главного меню остаются прикреплёнными всегда,
-    # даже после следующих сообщений бота (см. _MenuCleanupBot) - отдельное
-    # правило только для /menu, не для остальных экранов.
-    await context.bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb, pin_menu=True)
+    await context.bot.send_message(
+        chat_id=cid,
+        text=text,
+        entities=entities,
+        reply_markup=kb,
+        transient=True,
+    )
 
 
 async def admin_debug_api_command(update, context):
@@ -593,7 +611,7 @@ async def job_inactivity_reminders(context: ContextTypes.DEFAULT_TYPE):
                 text=msg.text,
                 entities=msg.entities,
                 reply_markup=msg.reply_markup,
-                pin_menu=True,
+                transient=True,
             )
             tracking.mark_inactivity_reminded(cid, since_ts)
         except Exception:
@@ -675,54 +693,44 @@ async def post_init(app):
 class _MenuCleanupBot(ExtBot):
     """Bot, который перед каждой отправкой снимает инлайн-кнопки с предыдущего
     сообщения этого чата. Временные экраны навигации при следующей отправке
-    удаляются целиком, а полезные результаты остаются в истории без кнопок.
-
-    Исключение - главное меню (/menu, см. menu_command): его кнопки остаются
-    прикреплёнными всегда, даже после следующих сообщений бота в этом чате -
-    отдельное продуктовое правило, не общее поведение остальных экранов."""
-
-    async def _unpin_menu(self, chat_id):
-        """Снимает закреплённое главное меню - вызывается только когда новое
-        сообщение само является меню (pin_menu=True), иначе закреплённое
-        меню не трогается ни одним другим экраном."""
-        msg_id = store.pinned_menu_message.pop(str(chat_id), None)
-        if not msg_id:
-            return
-        if store.last_inline_message.get(str(chat_id)) == msg_id:
-            store.last_inline_message.pop(str(chat_id), None)
-        try:
-            await self.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=None)
-        except Exception:
-            pass
+    удаляются целиком, а полезные результаты остаются в истории без кнопок."""
 
     def mark_transient_message(self, chat_id, message_id):
-        """Помечает служебный экран меню для удаления при следующей отправке."""
+        """Помечает служебный экран для удаления, сохраняя id между рестартами."""
         if message_id:
-            store.transient_message[str(chat_id)] = message_id
+            key = str(chat_id)
+            store.transient_message[key] = message_id
+            store.set_persisted_transient_message_id(key, message_id)
 
     async def _delete_transient(self, chat_id):
         key = str(chat_id)
-        msg_id = store.transient_message.pop(key, None)
-        if not msg_id or msg_id == store.pinned_menu_message.get(key):
-            return
-        if store.last_inline_message.get(key) == msg_id:
-            store.last_inline_message.pop(key, None)
-        try:
-            await self.delete_message(chat_id=chat_id, message_id=msg_id)
-        except Exception:
-            # Если Telegram уже не разрешает удаление, хотя бы выключаем старые кнопки.
+        runtime_id = store.transient_message.pop(key, None)
+        persisted_id = store.get_persisted_transient_message_id(key)
+        message_ids = list(dict.fromkeys(
+            msg_id for msg_id in (runtime_id, persisted_id) if msg_id
+        ))
+        for msg_id in message_ids:
+            if store.last_inline_message.get(key) == msg_id:
+                store.last_inline_message.pop(key, None)
+            cleaned = False
             try:
-                await self.edit_message_reply_markup(
-                    chat_id=chat_id, message_id=msg_id, reply_markup=None)
+                await self.delete_message(chat_id=chat_id, message_id=msg_id)
+                cleaned = True
             except Exception:
-                pass
+                # Если Telegram уже не разрешает удаление, хотя бы выключаем кнопки.
+                try:
+                    await self.edit_message_reply_markup(
+                        chat_id=chat_id, message_id=msg_id, reply_markup=None)
+                    cleaned = True
+                except Exception:
+                    pass
+            if cleaned:
+                store.clear_persisted_transient_message_id(key, msg_id)
 
-    async def _pre_send(self, chat_id, allow_unpin=False):
-        if allow_unpin:
-            await self._unpin_menu(chat_id)
+    async def _pre_send(self, chat_id):
         await self._delete_transient(chat_id)
         msg_id = store.last_inline_message.get(str(chat_id))
-        if not msg_id or msg_id == store.pinned_menu_message.get(str(chat_id)):
+        if not msg_id:
             return
         store.last_inline_message.pop(str(chat_id), None)
         try:
@@ -730,20 +738,17 @@ class _MenuCleanupBot(ExtBot):
         except Exception:
             pass
 
-    def _post_send(self, chat_id, msg, pin_menu=False, transient=False):
+    def _post_send(self, chat_id, msg, transient=False):
         if isinstance(getattr(msg, "reply_markup", None), InlineKeyboardMarkup):
             store.last_inline_message[str(chat_id)] = msg.message_id
-            if pin_menu:
-                store.pinned_menu_message[str(chat_id)] = msg.message_id
         if transient:
             self.mark_transient_message(chat_id, msg.message_id)
 
     async def send_message(self, chat_id, *args, **kwargs):
-        pin_menu = kwargs.pop("pin_menu", False)
         transient = kwargs.pop("transient", False)
         send = super().send_message(chat_id, *args, **kwargs)
-        msg, _ = await asyncio.gather(send, self._pre_send(chat_id, allow_unpin=pin_menu))
-        self._post_send(chat_id, msg, pin_menu=pin_menu, transient=transient)
+        msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
+        self._post_send(chat_id, msg, transient=transient)
         return msg
 
     async def send_photo(self, chat_id, *args, **kwargs):
@@ -819,7 +824,7 @@ def main():
     jq.run_daily(job_daily_words,     time=_t("11:00"), days=tuple(range(7)))  # «Слова и фразы дня»
     jq.run_daily(job_checkin_day,     time=_t("14:00"), days=tuple(range(7)))
     jq.run_daily(job_evening_weather, time=_t("19:00"), days=tuple(range(7)))  # «Погода на завтра»
-    jq.run_daily(job_checkin_evening, time=_t("21:30"), days=tuple(range(7)))
+    jq.run_daily(job_checkin_evening, time=_t("20:00"), days=tuple(range(7)))
     jq.run_daily(job_inactivity_reminders, time=_t("09:00"), days=tuple(range(7)))
 
     logging.info("Bot started via polling")

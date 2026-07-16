@@ -47,6 +47,7 @@ async def start(bot, cid):
         chat_id=cid,
         text=msg.text,
         entities=msg.entities,
+        transient=True,
     )
 
 
@@ -63,6 +64,7 @@ async def handle_name(bot, cid, text: str):
         chat_id=cid,
         text=msg.text,
         entities=msg.entities,
+        transient=True,
     )
 
 
@@ -77,6 +79,7 @@ async def handle_city(bot, cid, text: str):
         chat_id=cid,
         text=msg.text,
         reply_markup=_LANG_KB,
+        transient=True,
     )
 
 
@@ -131,20 +134,23 @@ async def _ask_next_level(bot, cid, q):
     code = queue[0]
     msg = onboarding_ui.onboard_level_question(code)
     try:
-        await q.edit_message_text(
+        edited = await q.edit_message_text(
             msg.text,
             reply_markup=_lvl_kb(code),
         )
+        marker = getattr(bot, "mark_transient_message", None)
+        if marker:
+            marker(cid, getattr(edited, "message_id", None) or q.message.message_id)
     except Exception:
         await bot.send_message(
             chat_id=cid,
             text=msg.text,
             reply_markup=_lvl_kb(code),
+            transient=True,
         )
 
 
 async def _finish(bot, cid):
-    import learning_dictionary as dictionary
     import menu
     st = _ob.get(str(cid), {})
     _ob.pop(str(cid), None)
@@ -158,6 +164,8 @@ async def _finish(bot, cid):
         chat_id=cid,
         text=msg.text,
         entities=msg.entities,
+        reply_markup=menu.main_menu_kb(),
+        transient=True,
     )
     if st.get("langs"):
         await dictionary_seed.send_seed_intro(bot, cid)

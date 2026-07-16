@@ -21,9 +21,9 @@ NOTIF_TYPES = [
     ("morning_brief",   "Утро"),
     ("weekend_events",  "Куда сходить"),
     ("daily_words",     "Слова и фразы дня"),
-    ("checkin_day",     "Дневная разгрузка"),
+    ("checkin_day",     "Мысли днём"),
     ("evening_weather", "Погода на завтра"),
-    ("checkin_eve",     "Вечерний разбор"),
+    ("checkin_eve",     "Закрыть день"),
     ("weather_warn",    "Погодное предупреждение"),
 ]
 
@@ -120,6 +120,8 @@ def notif_on(cid, kind):
             return bool(legacy_value)
     if kind == "daily_words":
         return bool(get(cid, "notif_grammar", False))
+    if kind in ("checkin_day", "checkin_eve"):
+        return True
     return False
 
 def study_lang(cid):
@@ -167,7 +169,7 @@ def _notif_label(kind: str, label: str) -> str:
         "daily_words": "11:00",
         "checkin_day": "14:00",
         "evening_weather": "19:00",
-        "checkin_eve": "21:30",
+        "checkin_eve": "20:00",
     }
     if kind in times:
         return f"{label} (ежедневно в {times[kind]})"
@@ -235,15 +237,11 @@ async def send_scheduled_notification(bot, cid, kind):
     elif kind == "daily_words":
         await dictionary_morning.send_daily_practice(_NoKbBot(bot), cid)
     elif kind == "checkin_day":
-        store.pending_input[str(cid)] = "worry"
-        set_(cid, "_worry_prompt_ts", datetime.now(config.TZ).timestamp())
-        _log.info("checkin_day: pending_input=worry set for cid=%s", cid)
-        await bot.send_message(chat_id=cid, parse_mode="HTML",
-            text="🫣 <b>Дневная разгрузка</b>\n\nСейчас не анализируй, просто выгрузи мысли.\n\n"
-                 "Каждая тревога - с новой строки.\n\nВечером проверим, что было фактами, а что шумом…")
+        import thoughts as _thoughts
+        return await _thoughts.send_day_reminder(bot, cid)
     elif kind == "checkin_eve":
-        import balance as _b
-        await _b.send_evening_review(bot, cid)
+        import thoughts as _thoughts
+        return await _thoughts.send_evening_close(bot, cid)
     elif kind == "weekend_events":
         import leisure_concerts
         await leisure_concerts.send_weekend_events(_NoKbBot(bot), cid)
@@ -289,9 +287,9 @@ _ADMIN_NOTIFICATION_META = {
     "morning_brief":   ("08:30", "☀️ Мой день"),
     "weekend_events":  ("пт 10:00", "🎧 Ближайшие события"),
     "daily_words":     ("11:00", "📚 Слова и фразы дня"),
-    "checkin_day":     ("14:00", "🫣 Дневная разгрузка"),
+    "checkin_day":     ("14:00", "😮‍💨 Есть что выгрузить?"),
     "evening_weather": ("19:00", "🌦️ Погода на завтра"),
-    "checkin_eve":     ("21:30", "🌙 Вечерний разбор"),
+    "checkin_eve":     ("20:00", "😌 Закроем день"),
     "weather_warn":    ("08:45, если есть повод", "⚠️ Погодное предупреждение"),
 }
 

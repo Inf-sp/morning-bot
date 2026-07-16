@@ -15,6 +15,23 @@ def main_menu_kb():
     return menu_ui.main_menu_kb()
 
 
+_MAIN_MENU_CALLBACKS = {
+    "m_myday", "m_wardrobe", "m_food", "m_learn", "m_balance",
+    "m_travel", "m_leisure", "m_notes",
+}
+
+
+def is_main_menu_markup(markup):
+    """Распознаёт главное меню, включая сообщения из версии до персистентного id."""
+    callbacks = {
+        button.callback_data
+        for row in getattr(markup, "inline_keyboard", [])
+        for button in row
+        if getattr(button, "callback_data", None)
+    }
+    return _MAIN_MENU_CALLBACKS.issubset(callbacks)
+
+
 def main_menu_screen(cid=None):
     msg = welcome_for(cid)
     return msg.text, msg.entities, main_menu_kb()

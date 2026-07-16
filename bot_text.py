@@ -64,13 +64,16 @@ async def handle(update, context, remove_reply_keyboard):
     # Pending-ввод
     if cid in store.pending_input:
         kind = store.pending_input.pop(cid)
-        if kind == "worry":
-            worry_ts = settings.get(cid, "_worry_prompt_ts", 0)
-            stale = worry_ts and (datetime.now(config.TZ).timestamp() - worry_ts) >= _WORRY_PROMPT_WINDOW_S
+        if kind in ("worry", "thought", "thought_reminder"):
+            prompt_key = "_thoughts_prompt_ts" if kind.startswith("thought") else "_worry_prompt_ts"
+            prompt_ts = settings.get(cid, prompt_key, 0)
+            stale = prompt_ts and (datetime.now(config.TZ).timestamp() - prompt_ts) >= _WORRY_PROMPT_WINDOW_S
             if not stale and not _looks_like_command(text):
-                _log.info("worry: routed via pending_input for cid=%s", cid)
-                await balance.save_worries(bot, cid, text); return
-            settings.set_(cid, "_worry_prompt_ts", 0)
+                _log.info("thought: routed via pending_input for cid=%s", cid)
+                settings.set_(cid, prompt_key, 0)
+                await balance.thoughts.capture(
+                    bot, cid, text, split_commas=kind == "thought_reminder"); return
+            settings.set_(cid, prompt_key, 0)
             # застрявший pending_input от старого приглашения "Дневная разгрузка" -
             # не глотаем никак не связанное сообщение, продолжаем обычную обработку ниже
         if kind == trainer_session.PENDING_ANSWER:
@@ -156,6 +159,13 @@ async def handle(update, context, remove_reply_keyboard):
         settings.set_(cid, "_worry_prompt_ts", 0)
         _log.info("worry: routed via fallback timestamp for cid=%s", cid)
         await balance.save_worries(bot, cid, text); return
+
+    thought_ts = settings.get(cid, "_thoughts_prompt_ts", 0)
+    if thought_ts and (datetime.now(config.TZ).timestamp() - thought_ts) < _WORRY_PROMPT_WINDOW_S and not _looks_like_command(text):
+        settings.set_(cid, "_thoughts_prompt_ts", 0)
+        _log.info("thought: routed via fallback timestamp for cid=%s", cid)
+        split_commas = settings.get(cid, "_thoughts_capture_mode", "manual") == "reminder"
+        await balance.thoughts.capture(bot, cid, text, split_commas=split_commas); return
 
     # Быстрая команда из чата: «добавь в словарь слово de Aandacht - внимание»
     if await dictionary_import.try_add_dict_from_chat(bot, cid, text):

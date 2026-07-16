@@ -77,6 +77,12 @@ async def handle(update, context, remove_reply_keyboard):
     if not access.is_allowed(cid):
         await bot.send_message(chat_id=cid, text="❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
+    if data.startswith("m_") and store.pending_input.get(cid) in (
+        "worry", "thought", "thought_reminder"
+    ):
+        store.pending_input.pop(cid, None)
+        settings.set_(cid, "_thoughts_prompt_ts", 0)
+        settings.set_(cid, "_worry_prompt_ts", 0)
     # Онбординг новых пользователей
     if data.startswith("ob_"):
         await onboard.handle_callback(bot, cid, q, data)
@@ -86,7 +92,10 @@ async def handle(update, context, remove_reply_keyboard):
     if data.startswith("fav_"):
         await saved_items.handle_notes_callback(bot, cid, q, data)
         return
-    # Баланс (врач/мотивация/рецепты/тревоги/холодильник) vs Закладки/Любимое
+    if data.startswith("thought_"):
+        await balance.thoughts.handle_callback(bot, cid, q, data)
+        return
+    # Здоровье/готовка vs Закладки/Любимое
     if data.startswith("ls_"):
         await saved_items.handle_notes_callback(bot, cid, q, data)
         return
@@ -178,7 +187,7 @@ async def handle(update, context, remove_reply_keyboard):
         await _unack(q); return
     if data == "m_wardrobe":
         # Образ — полезный результат, поэтому открываем его отдельным сообщением,
-        # не превращая закреплённое главное меню в карточку Гардероба.
+        # а временное главное меню после этого удаляется автоматически.
         await wardrobe.send_home(bot, cid); return
     if data == "m_travel":
         await travel.send_home(bot, cid, q); return
@@ -193,7 +202,7 @@ async def handle(update, context, remove_reply_keyboard):
             text=text,
             reply_markup=kb,
             entities=entities,
-            pin_menu=True,
+            transient=True,
         )
         return
     if data.startswith("m_"):
@@ -370,7 +379,7 @@ async def handle(update, context, remove_reply_keyboard):
     if data.startswith("listen_"):
         await _inline_status(lambda _s: leisure_music.add_listen(bot, cid, int(data.split("_")[1])))
         return
-    # Проверка дня (тревоги)
+    # Совместимость со старыми сообщениями дневника тревог.
     if data == "worry_clearall":
         await balance.worry_clear_all(bot, cid)
         return

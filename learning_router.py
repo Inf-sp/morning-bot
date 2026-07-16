@@ -68,6 +68,15 @@ async def handle_action(bot, cid, q, act, run_with_status):
         await util.clear_loading(q)
     elif act == "dictconfirm_cancel":
         await dictionary_import.cancel_pending_dict_add(bot, cid)
+    elif act == "dictdone":
+        store.pending_input.pop(str(cid), None)
+        try:
+            await q.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        message_id = getattr(getattr(q, "message", None), "message_id", None)
+        if store.last_inline_message.get(str(cid)) == message_id:
+            store.last_inline_message.pop(str(cid), None)
     elif act == "dictbatch_add":
         await util.ack_loading(q)
         await dictionary_import.confirm_dict_batch(bot, cid)

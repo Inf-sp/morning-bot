@@ -59,6 +59,37 @@ def set_profile(chat_id, prof):
     _save(config.PROFILE_KEY, d)
     _profile_cache[key] = (time.monotonic(), copy.deepcopy(prof))
 
+
+def get_persisted_transient_message_id(chat_id):
+    """Последний служебный экран пользователя, в том числе после рестарта."""
+    value = _load(config.TRANSIENT_MESSAGES_KEY).get(str(chat_id))
+    try:
+        return int(value) if value else None
+    except (TypeError, ValueError):
+        return None
+
+
+def set_persisted_transient_message_id(chat_id, message_id):
+    key = str(chat_id)
+
+    def change(data):
+        data[key] = int(message_id)
+        return data, None
+
+    mutate_kv(config.TRANSIENT_MESSAGES_KEY, change)
+
+
+def clear_persisted_transient_message_id(chat_id, expected_message_id=None):
+    key = str(chat_id)
+
+    def change(data):
+        current = data.get(key)
+        if expected_message_id is None or str(current) == str(expected_message_id):
+            data.pop(key, None)
+        return data, None
+
+    mutate_kv(config.TRANSIENT_MESSAGES_KEY, change)
+
 def get_wardrobe_daylook(chat_id):
     """Кэш дневного образа: {"date","version","item_ids","look_data","text"}.
     Читать напрямую не стоит — используйте get_valid_wardrobe_daylook для проверки
@@ -343,6 +374,7 @@ def set_list(key, chat_id, items):
 
 # Ключи с per-user данными вида {str(cid): ...}
 _PER_USER_KEYS = {
+    config.TRANSIENT_MESSAGES_KEY,
     config.SETTINGS_FILE, config.PROFILE_KEY, config.LEVELS_FILE,
     config.ARTISTS_KEY, config.WATCHLIST_KEY, config.READLIST_KEY,
     config.COUNTRIES_KEY, config.BOOKS_KEY,
@@ -383,7 +415,6 @@ dict_pending_batch = runtime_state.dict_pending_batch
 trav_facts_state = runtime_state.trav_facts_state
 pending_input = runtime_state.pending_input
 last_inline_message = runtime_state.last_inline_message
-pinned_menu_message = runtime_state.pinned_menu_message
 transient_message = runtime_state.transient_message
 last_recos = runtime_state.last_recos
 suggested_countries = runtime_state.suggested_countries

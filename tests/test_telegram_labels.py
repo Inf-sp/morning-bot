@@ -1,5 +1,7 @@
 from telegram import MessageEntity
 
+from ui import balance as balance_ui
+from ui import menu as menu_ui
 from ui.assistant import assistant_answer
 from ui.builder import MessageBuilder
 from ui.constants import delete_label
@@ -55,3 +57,16 @@ def test_delete_button_label_always_uses_cross_emoji_once():
     assert delete_label("Удалить") == "❌ Удалить"
     assert delete_label("Убрать из любимого") == "❌ Убрать из любимого"
     assert delete_label("❌ Удалить") == "❌ Удалить"
+
+
+def test_health_uses_thoughts_label_and_new_emoji():
+    health_menu = menu_ui.menu_screen("m_balance")
+    labels = [
+        button.text
+        for row in health_menu.reply_markup.inline_keyboard
+        for button in row
+    ]
+
+    assert "😮‍💨 Мысли" in labels
+    assert "📓 Тревоги" not in labels
+    assert balance_ui.worries_diary([]).text.startswith("😮‍💨 Мысли\n")

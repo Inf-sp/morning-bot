@@ -22,7 +22,7 @@ UI_EMOJI = {
     "routes": "🗺",
     "health": "🚑",
     "doctor": "👩🏻‍⚕️",
-    "worry_diary": "📓",
+    "worry_diary": "😮‍💨",
     "recommendation": "✨",
     "save": "⭐️",
     "favorite": "❤️",

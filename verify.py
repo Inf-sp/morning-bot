@@ -424,8 +424,8 @@ def audit_navigation_contracts(root=None):
 
     callbacks = source("bot_callbacks.py")
     menu_branch = callbacks.partition('if data == "m_menu":')[2].partition("return")[0]
-    if "bot.send_message(" not in menu_branch or "pin_menu=True" not in menu_branch:
-        findings.append("main menu must open as a new pinned menu message")
+    if "bot.send_message(" not in menu_branch or "transient=True" not in menu_branch:
+        findings.append("main menu must open as a new transient message")
     if "edit_text(" in menu_branch or "delete(" in menu_branch:
         findings.append("main menu must not replace or delete the previous card")
 

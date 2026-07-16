@@ -18,6 +18,7 @@ from ui import food as food_ui
 from ui.constants import CUISINE_EMOJI, ui_label
 import settings
 import menu
+import thoughts
 from response_delivery import (
     answer_keyboard as _ans_kb,
     back_keyboard as _back_kb,
@@ -372,92 +373,20 @@ async def handle_role(bot, cid, role, text):
     await _send(bot, cid, out, kb=_ans_kb(*cont), surface="chat" if role == "state" else "card")
 
 
-# ---------- Дневник тревоги ----------
+# ---------- 😮‍💨 Мысли ----------
 async def send_daycheck(bot, cid):
-    cid = str(cid)
-    store.challenge_state.pop(cid, None)   # фикс: ответ не уйдёт в Обратный перевод
-    store.game_state.pop(cid, None)
-    worries = store.get_list(config.WORRIES_KEY, cid)
-    msg = balance_ui.worries_diary(worries)
-    store.pending_input[cid] = "worry"
-    # _worry_prompt_ts НЕ ставим здесь: это только страховка на случай рестарта
-    # бота между плановым уведомлением "Дневная разгрузка" и ответом пользователя
-    # (см. bot.py). При ручном открытии раздела pending_input и так переживёт
-    # обычную работу бота — окно по времени тут только ловит несвязанные сообщения.
-    rows = []
-    if worries:
-        rows.append([InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_close"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=InlineKeyboardMarkup(rows))
+    await thoughts.send_home(bot, cid)
 
 async def send_evening_review(bot, cid):
-    cid = str(cid)
-    store.challenge_state.pop(cid, None)
-    store.game_state.pop(cid, None)
-    today = datetime.now(TZ).strftime("%Y-%m-%d")
-    all_worries = store.get_list(config.WORRIES_KEY, cid)
-    worries = [w for w in all_worries if w.get("date", today) == today]
-    if not worries:
-        # Вечерний разбор разбирает записанные за день тревоги — если их не было,
-        # разбирать нечего, и плановое уведомление не приходит вовсе.
-        return
-    wlist = "\n".join(f"- {w['text']}" for w in worries)
-    analysis_failed = False
-    cache = store.get_profile(cid).get("evening_review_cache") or {}
-    if cache.get("date") == today and cache.get("worries") == wlist:
-        d = {"items": cache.get("items") or [], "summary": cache.get("summary") or "",
-             "principle": cache.get("principle") or ""}
-    else:
-        try:
-            d = await ai.allm_json(
-                "Ты спокойный психолог. Разбери тревоги человека с СДВГ по-доброму, на русском.\n"
-                "Нужно коротко, без медицинских назначений и без длинной поддержки.\n"
-                "Для каждой тревоги раздели факт (что реально известно) и предположение (что додумано, "
-                "не подтверждено) — коротко, до 15 слов каждое.\n"
-                "Итог дня - 1-2 коротких предложения: сколько тревог из записанных подтвердились фактами, "
-                "а сколько оказались предположениями.\n"
-                "Principle - одна короткая обобщающая мысль-принцип на будущее (не банальность, без совета "
-                "\"дышите глубже\"), до 12 слов.\n"
-                'Верни JSON: {"items":[{"worry":"тревога как есть","fact":"коротко","assumption":"коротко"}],'
-                '"summary":"короткий итог, до 30 слов","principle":"короткая мысль"}\n\n'
-                f"Тревоги:\n{wlist}", 800, module="balance")
-        except Exception as e:
-            _log.warning("send_evening_review: LLM failed, analysis empty: %s", e)
-            d = {}
-            analysis_failed = True
-        if not analysis_failed:
-            prof = store.get_profile(cid)
-            prof["evening_review_cache"] = {
-                "date": today, "worries": wlist,
-                "items": d.get("items") or [], "summary": (d.get("summary") or "").strip(),
-                "principle": (d.get("principle") or "").strip(),
-            }
-            store.set_profile(cid, prof)
-    items = d.get("items") or []
-    summary = (d.get("summary") or "").strip()
-    principle = (d.get("principle") or "").strip()
-    msg = balance_ui.evening_review(worries, items, summary, principle, analysis_failed=analysis_failed)
-    rows = [
-        [InlineKeyboardButton("❌ Очистить все тревоги", callback_data="worry_clearall")],
-    ]
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup(rows))
+    return await thoughts.send_evening_close(bot, cid)
 
 async def worry_clear_all(bot, cid):
-    cid = str(cid)
-    store.set_list(config.WORRIES_KEY, cid, [])
-    msg = balance_ui.worries_cleared()
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_balance"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]])
-    await bot.send_message(chat_id=cid, text=msg.text, reply_markup=kb)
+    # Совместимость со старыми Telegram-сообщениями: историческая кнопка
+    # «Очистить всё» больше не выполняет массовое удаление.
+    await thoughts.send_inbox(bot, cid)
 
 async def save_worries(bot, cid, text):
-    cid = str(cid)
-    today = datetime.now(TZ).strftime("%Y-%m-%d")
-    new = [{"text": w.strip(), "status": "pending", "date": today} for w in text.split("\n") if w.strip()]
-    existing = store.get_list(config.WORRIES_KEY, cid)
-    store.set_list(config.WORRIES_KEY, cid, existing + new)
-    msg = balance_ui.worries_saved(len(new))
-    await bot.send_message(chat_id=cid, text=msg.text)
+    await thoughts.capture(bot, cid, text)
 
 
 _MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("⬅️ Назад", "m_balance"), ("#️⃣ Меню", "m_menu")]])
@@ -471,7 +400,7 @@ async def handle_callback(bot, cid, q, data):
         await toggle_health_principle(
             bot, cid, data[len("as_health_principle_"):], q=q)
         return
-    # дневник тревоги
+    # мысли
     if data == "as_daycheck":
         await send_daycheck(bot, cid); return
     # мотивация

@@ -310,7 +310,7 @@ _FEATURE_ROWS = [
     ("Погода", "OpenWeather", ()),
     ("Гардероб", "OpenWeather + Gemini", ("gemini",)),
     ("Готовка", "Gemini → Groq", ("gemini",)),
-    ("Здоровье", "Gemini + ZeroEntropy", ("gemini",)),
+    ("Здоровье", "Gemini + ZeroEntropy", ("gemini", "zeroentropy")),
     ("Обучение", "Gemini → Groq", ("gemini",)),
     ("Поездки", "Tavily + Gemini", ("gemini",)),
     ("Досуг", "TMDB/Tavily/Ticketmaster + Gemini", ("gemini",)),

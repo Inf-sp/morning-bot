@@ -97,37 +97,31 @@ def doctor_card(data):
 
 
 def worries_diary(worries):
+    """Совместимый рендер старого вызова до перехода на ui.thoughts."""
     b = MessageBuilder()
-    b.section(ui_label("worry_diary", "Тревоги"))
+    b.section(ui_label("worry_diary", "Мысли"))
+    b.line("Не держи всё в голове.")
+    b.line("Напиши мысль, задачу или тревогу одним сообщением.")
     b.spacer()
-    b.line("Сюда выгружай всё, что крутится в голове. Не анализируй - просто запиши.")
-    b.line("Каждую тревогу с новой строки. Вечером проверим, что было фактами, а что шумом.")
-    b.spacer()
-    if worries:
-        b.section(ui_label("worries", "Тревоги за сегодня:"))
-        for worry in worries:
-            b.bullet(worry["text"])
-        b.spacer()
-        b.line("Напиши новые мысли сообщением или очисти список.")
-    else:
-        b.line("Пока пусто. Напиши тревоги одним сообщением.")
+    b.line(f"Сегодня записано: {len(worries)}")
+    b.line(f"Осталось разобрать: {len(worries)}")
     return b.build_stripped()
 
 
 def evening_review(worries, items=None, summary="", principle="", analysis_failed=False):
     b = MessageBuilder()
     b.text_line("🥸 ")
-    b.bold("Вечерний разбор")
+    b.bold("Закроем день")
     b.newline()
     b.spacer()
-    b.labeled_line("Сегодня тебя беспокоили")
+    b.labeled_line("Сегодня в голове")
     for worry in worries:
         b.bullet(worry["text"])
 
     items = items or []
     if items:
         b.spacer()
-        b.bold("Разбор тревог")
+        b.bold("Разбор мыслей")
         b.newline()
         for it in items:
             if not isinstance(it, dict):
@@ -164,11 +158,11 @@ def evening_review(worries, items=None, summary="", principle="", analysis_faile
 
 
 def worries_cleared():
-    return MessageSpec(text="✅ Тревоги очищены. Приятного настроения!")
+    return MessageSpec(text="Массовое удаление записей недоступно.")
 
 
 def worries_saved(count):
-    return MessageSpec(text=f"Записал тревоги: +{count}. Вечером проверим, что реально случилось.")
+    return MessageSpec(text=f"✅ Сохранено: +{count}.")
 
 
 def health_principles(selected_count):

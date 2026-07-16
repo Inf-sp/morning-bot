@@ -94,6 +94,7 @@ API_QUOTAS = {
 TZ = ZoneInfo("Europe/Amsterdam")
 
 # --- Storage keys ---
+TRANSIENT_MESSAGES_KEY = "transient_messages.json"
 SETTINGS_FILE = "settings.json"
 LEVELS_FILE = "levels.json"
 WARDROBE_FILE = "wardrobe.json"
@@ -115,6 +116,9 @@ BOOK_SEEN_KEY = "book_seen.json"
 MUSIC_SEEN_KEY = "music_seen.json"
 RECOMMENDATION_STOPLIST_KEY = "recommendation_stoplist.json"
 WORRIES_KEY = "worries.json"
+# Новое имя раздела использует прежний ключ, чтобы существующие записи
+# мигрировали лениво и не потерялись после обновления.
+THOUGHTS_KEY = WORRIES_KEY
 NOTES_KEY = "notes.json"
 DICT_KEY = "dict.json"
 LAGOM_KEY = "lagom.json"
