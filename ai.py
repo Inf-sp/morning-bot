@@ -327,7 +327,11 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
             second += f" · повтор после {_cooldown_phrase(int(seconds))}"
         else:
             second += " · повтор после cooldown"
-        tracking.log_error("llm", f"{first}\n{second}", kind=kind or "gemini_rate_limit")
+        tracking.log_error(
+            "llm", f"{first}\n{second}", kind=kind or "gemini_rate_limit",
+            section="Разные категории", action="не сформирован ответ",
+            service="Gemini", fallback="автоматический резерв" if fallback else "",
+        )
     except Exception:
         pass
 
@@ -895,7 +899,11 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
     try:
         import tracking
         if gemini_rate_limit_err is None:
-            tracking.log_error("llm", "; ".join(errs)[:200] or _friendly_msg, kind="all-providers-failed")
+            tracking.log_error(
+                "llm", "; ".join(errs)[:1000] or _friendly_msg,
+                kind="all-providers-failed", action="не сформирован ответ",
+                service="несколько AI-сервисов", fallback="шаблон без AI",
+            )
     except Exception:
         pass
     raise Exception(_friendly_msg)
@@ -1003,7 +1011,10 @@ def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=No
     except Exception:
         try:
             import tracking
-            tracking.log_error("llm", "Не удалось разобрать JSON", kind="json-parse")
+            tracking.log_error(
+                "llm", "Не удалось разобрать JSON", kind="json-parse",
+                action="не обработан ответ сервиса", fallback="безопасный шаблон",
+            )
         except Exception:
             pass
     raise Exception("Не удалось разобрать ответ ИИ (JSON). Попробуй ещё раз.")

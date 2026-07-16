@@ -29,3 +29,16 @@ def test_no_literal_delete_button_is_missing_cross_emoji():
                 violations.append(f"{path.name}:{line_no}")
 
     assert violations == []
+
+
+def test_no_clear_button_bypasses_shared_cross_label():
+    pattern = re.compile(r"InlineKeyboardButton\([^\n]*(?:Очистить|очистить)")
+    violations = []
+    for path in ROOT.rglob("*.py"):
+        if "tests" in path.parts:
+            continue
+        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if pattern.search(line) and "delete_label(" not in line:
+                violations.append(f"{path.relative_to(ROOT)}:{line_no}")
+
+    assert violations == []

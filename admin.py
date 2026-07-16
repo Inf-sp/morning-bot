@@ -5,8 +5,10 @@ MessageSpec из ui.admin. Роутинг (settings.dispatch) делегируе
 
 Все функции — async send_*(bot, cid); гард на владельца — в settings._admin_guard.
 """
+import asyncio
+import hashlib
+import html
 import logging
-import re
 import time
 from datetime import datetime
 
@@ -15,6 +17,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import access
 import api_usage
 import config
+import secure
 from ui.constants import delete_label, ui_label
 import store
 import tracking
@@ -37,20 +40,6 @@ async def _show(bot, cid, msg, reply_markup=None, q=None):
         except Exception:
             pass
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=reply_markup)
-
-
-def _when(ts) -> str:
-    """Компактное «X назад» / время из timestamp."""
-    if not ts:
-        return "—"
-    delta = time.time() - ts
-    if delta < 60:
-        return "только что"
-    if delta < 3600:
-        return f"{int(delta // 60)} мин назад"
-    if delta < DAY:
-        return f"{int(delta // 3600)} ч назад"
-    return f"{int(delta // DAY)} дн назад"
 
 
 def _hhmm(ts) -> str:
@@ -99,6 +88,7 @@ def _configured_service(service: str) -> bool:
         "groq": bool(config.GROQ_API_KEY),
         "cohere": bool(config.COHERE_API_KEY),
         "github_models": bool(config.GITHUB_MODELS_TOKEN),
+        "openrouter": bool(config.OPENROUTER_API_KEY),
         "google_books": bool(config.GOOGLE_BOOKS_API_KEY),
         "languagetool": bool(config.LANGUAGETOOL_API_URL),
         "spoonacular": bool(config.SPOONACULAR_API_KEY),
@@ -108,6 +98,8 @@ def _configured_service(service: str) -> bool:
         "tmdb": bool(config.TMDB_API_KEY),
         "ticketmaster": bool(config.TICKETMASTER_API_KEY),
         "zeroentropy": bool(config.ZEROENTROPY_API_KEY),
+        "restcountries": bool(config.RESTCOUNTRIES_API_KEY),
+        "database": bool(config.DATABASE_URL),
     }.get(service, False)
 
 
@@ -309,40 +301,56 @@ def _notification_stats(cid):
 
 # ================= API И AI (единый экран, § docs/admin.md) =================
 
-# providers — продуктовая маршрутизация из ai.MODULE_POLICY: Cohere первым для
-# языков/структуры, Gemini первым для творческой генерации, далее GitHub Models
-# и остальные резервные провайдеры.
-_FEATURE_ROWS = [
-    ("Мой день", "OpenWeather + Wiki + Gemini → Cohere → GitHub Models", ("gemini", "cohere", "github_models")),
-    ("Погода", "OpenWeather", ()),
-    ("Гардероб", "OpenWeather + Gemini → Cohere → GitHub Models", ("gemini", "cohere", "github_models")),
-    ("Готовка", "Spoonacular + Gemini → Groq → GitHub Models → OpenRouter → код · TheMealDB резерв", ("gemini", "groq", "github_models", "spoonacular", "themealdb")),
-    ("Здоровье", "Cohere → Gemini → GitHub Models + ZeroEntropy", ("cohere", "gemini", "github_models", "zeroentropy")),
-    ("Обучение", "Azure Speech + LanguageTool + Cohere · спорные ошибки Groq → Gemini", ("azure_speech", "languagetool", "cohere", "groq", "gemini", "github_models")),
-    ("Поездки", "Tavily + Gemini → Cohere → GitHub Models", ("gemini", "cohere", "github_models")),
-    ("Досуг", "TMDB/Google Books/Tavily/Ticketmaster + Gemini → Cohere → GitHub Models", ("gemini", "cohere", "github_models", "google_books")),
-    ("Ассистент", "intent-router + Gemini → Cohere → GitHub Models", ("gemini", "cohere", "github_models")),
-]
-
-_HTTP_REASONS = {
-    401: "неверный ключ", 402: "закончились кредиты", 403: "доступ запрещён",
-    404: "не найдено", 408: "таймаут", 429: "лимит запросов",
-    500: "сервис недоступен", 502: "сервис недоступен",
-    503: "сервис недоступен", 504: "таймаут сервиса",
-}
+# Один продуктовый реестр для системного экрана. В строке нет технического
+# назначения API: только имя раздела из интерфейса и реальный путь деградации.
+_SYSTEM_SERVICES = (
+    ("cohere", "Cohere", "Обучение", "Gemini"),
+    ("gemini", "Gemini", "Разные категории", "GitHub Models"),
+    ("github_models", "GitHub Models", "резерв", "Groq"),
+    ("groq", "Groq", "Готовка, Обучение", "GitHub Models"),
+    ("openrouter", "OpenRouter", "Готовка", "шаблон без AI"),
+    ("cloudflare", "Cloudflare AI", "резерв", "GitHub Models"),
+    ("openweather", "OpenWeather", "Погода", "сохранённый прогноз"),
+    ("tavily", "Tavily", "Поиск", "Firecrawl"),
+    ("firecrawl", "Firecrawl", "Поиск", "Tavily"),
+    ("tmdb", "TMDB", "Кино", "Gemini"),
+    ("google_books", "Google Books", "Книги", "Open Library"),
+    ("languagetool", "LanguageTool", "Обучение", "проверка в коде"),
+    ("spoonacular", "Spoonacular", "Готовка", "TheMealDB"),
+    ("themealdb", "TheMealDB", "Готовка", "Spoonacular"),
+    ("azure_speech", "Azure Speech", "Озвучка", "текстовая карточка"),
+    ("ticketmaster", "Ticketmaster", "Концерты", "Tavily"),
+    ("zeroentropy", "ZeroEntropy", "Здоровье", "поиск в базе"),
+    ("pexels", "Pexels", "Изображения", "изображение источника"),
+    ("restcountries", "REST Countries", "Поездка", "Поиск"),
+    ("telegram", "Telegram", "Сообщения", ""),
+    ("database", "PostgreSQL", "Данные", "локальное хранилище"),
+)
 
 def _friendly_error(reason):
-    """'HTTP 402' -> 'HTTP 402 · закончились кредиты'; иначе не трогает текст."""
-    m = re.match(r"^HTTP (\d+)$", str(reason or "").strip())
-    if not m:
-        return reason
-    code = int(m.group(1))
-    hint = _HTTP_REASONS.get(code)
-    return f"HTTP {code} · {hint}" if hint else f"HTTP {code}"
-
-
-def _used_by(name_substr):
-    return [name for name, providers, _deps in _FEATURE_ROWS if name_substr in providers]
+    """Преобразовать техническую ошибку в короткий текст для экрана системы."""
+    value = str(reason or "").strip()
+    low = value.casefold().replace("_", " ")
+    mappings = (
+        (("http 429", "rate limit exceeded", "too many requests"), "лимит запросов"),
+        (("quota exceeded", "quota exhausted"), "лимит исчерпан"),
+        (("http 402",), "закончились кредиты"),
+        (("http 401", "invalid api key", "unauthorized"), "неверный API-ключ"),
+        (("http 403", "forbidden"), "доступ запрещён"),
+        (("http 404",), "адрес API не найден"),
+        (("http 432",), "сервис отклонил запрос"),
+        (("http 408", "timeout", "timed out"), "сервис не ответил вовремя"),
+        (("json parse", "jsondecode", "не удалось разобрать json", "невалидный json"), "некорректный ответ"),
+        (("nameerror",), "ошибка в коде бота"),
+        (("connection error", "connectionerror", "network error", "networkerror"), "нет подключения"),
+        (("service unavailable", "http 500", "http 502", "http 503", "http 504"), "сервис временно недоступен"),
+    )
+    for needles, text_value in mappings:
+        if any(needle in low for needle in needles):
+            return text_value
+    if "limit" in low or "лимит" in low:
+        return "лимит запросов"
+    return "не работает" if value else "нет данных"
 
 
 def _pluralize(n, one, few, many) -> str:
@@ -356,22 +364,8 @@ def _pluralize(n, one, few, many) -> str:
     return many
 
 
-def _plural_services(n) -> str:
-    return _pluralize(n, "сервис", "сервиса", "сервисов")
-
-
 def _plural_requests(n) -> str:
     return _pluralize(n, "запрос", "запроса", "запросов")
-
-
-def _join_and(items) -> str:
-    """['Готовка', 'Обучение'] -> 'Готовка и Обучение'; ['A','B','C'] -> 'A, B и C'."""
-    items = [str(x) for x in items if x]
-    if not items:
-        return ""
-    if len(items) == 1:
-        return items[0]
-    return ", ".join(items[:-1]) + " и " + items[-1]
 
 
 def _thousands(n) -> str:
@@ -383,7 +377,6 @@ def _thousands(n) -> str:
         return str(n)
 
 
-_PERIOD_RU = {"day": "в день", "hour": "в час", "month": "в месяц", "minute": "в минуту"}
 _PERIOD_PRIORITY = {"day": 0, "month": 1, "hour": 2, "minute": 3}
 
 
@@ -419,255 +412,106 @@ def _valid_quota(used=None, remaining=None, limit=None):
     return remaining, limit
 
 
-def _quota_or_requests(label, svc) -> tuple[str | None, str]:
-    """Общая логика 'что показать в конце строки' для любого сервиса с локальными
-    квотами (api_usage.snapshot). Возвращает (переопределение точки статуса | None, текст).
-    Один формат на весь экран: 'осталось X / Y{ период}', без смешения с 'использовано'."""
+def _usage_stat(service, svc):
+    """Короткая единая статистика: «использовано из лимита» или число запросов."""
     quotas = [q for q in (svc.get("quotas") or []) if q.get("limit")]
     if quotas:
         quota = min(quotas, key=lambda q: _PERIOD_PRIORITY.get(q.get("period"), 9))
-        valid = _valid_quota(used=quota.get("used"), limit=quota.get("limit"))
-        if valid is None:
-            _log.warning("api_ai: invalid local quota for %s used=%r limit=%r",
-                        label, quota.get("used"), quota.get("limit"))
-            return "warning", "ошибка данных лимита"
-        remaining, limit = valid
-        period_ru = _PERIOD_RU.get(quota.get("period"), "")
-        suffix = f" {period_ru}" if period_ru else ""
-        return None, f"осталось {_thousands(remaining)} / {_thousands(limit)}{suffix}"
-    n = int(svc.get("day_requests") or 0)
-    if n:
-        return None, f"{_thousands(n)} {_plural_requests(n)} сегодня"
-    return None, "доступен"
-
-
-def _remote_quota_or_requests(label, remote, requests_today=None):
-    """Тот же формат, что и _quota_or_requests, но для сервисов с удалённой квотой
-    (Firecrawl/OpenRouter) - не из локального счётчика, а из ответа самого API."""
-    if remote and remote.get("limit") is not None:
-        valid = _valid_quota(remaining=remote.get("remaining"), limit=remote.get("limit"))
-        if valid is None:
-            _log.warning("api_ai: invalid remote quota for %s remote=%r", label, remote)
-            return "warning", "ошибка данных лимита"
-        remaining, limit = valid
-        return None, f"осталось {_thousands(remaining)} / {_thousands(limit)}"
+        try:
+            used, limit = int(quota.get("used") or 0), int(quota.get("limit"))
+        except (TypeError, ValueError):
+            return ""
+        if used < 0 or limit <= 0:
+            return ""
+        return f"{_thousands(used)} из {_thousands(limit)}"
+    requests_today = int(svc.get("day_requests") or 0)
     if requests_today:
-        return None, f"{_thousands(requests_today)} {_plural_requests(requests_today)} сегодня"
-    return None, None
+        return f"{_thousands(requests_today)} {_plural_requests(requests_today)}"
+    return ""
 
 
-def _compose_line(state, label, detail, role=None) -> str:
-    dot = {"ok": ui.OK, "warn": ui.WARN, "bad": ui.BAD, "off": ui.OFF,
-           "unknown": ui.UNKNOWN, "warning": ui.WARNING}[state]
-    parts = [label] + ([role] if role else []) + [str(detail)]
-    return f"{dot} " + " · ".join(parts)
-
-
-def _service_state_detail(service, label, snapshot):
-    """Единая точка принятия решения о статусе локально отслеживаемого сервиса:
-    disabled(нет ключа) / bad(ошибка) / rate_limited(лимит/cooldown) / stale(давно не
-    проверялся) / healthy. Возвращает (state, detail, quota_override_state|None)."""
-    if not _configured_service(service):
-        return "off", "нет ключа", None
-    svc = _snapshot_service(snapshot, service)
-    status = svc.get("status") or "off"
-    if status == "bad":
-        return "bad", _friendly_error(svc.get("last_error_reason")) or "ошибка", None
-    cooldown_until = int(svc.get("cooldown_until") or 0)
-    if status == "warn" and cooldown_until > time.time():
-        return "warn", f"пауза до {_hhmm(cooldown_until)}", None
-    if status == "warn":
-        return "warn", "было превышение лимита", None
-    if status == "stale":
-        return "unknown", f"статус неизвестен · было {_when(svc.get('last_request_at'))}", None
-    override, detail = _quota_or_requests(label, svc)
-    return "ok", detail, override
-
-
-def _ai_line(service, label, snapshot, *, role=None):
-    state, detail, override = _service_state_detail(service, label, snapshot)
-    return _compose_line(override or state, label, detail, role)
-
-
-def _data_line(service, label, snapshot):
-    state, detail, override = _service_state_detail(service, label, snapshot)
-    return _compose_line(override or state, label, detail)
-
-
-def _gemini_line(snapshot):
-    return _ai_line("gemini", "Gemini", snapshot, role="генерация и рекомендации")
-
-
-def _cohere_line(snapshot):
-    return _ai_line("cohere", "Cohere", snapshot, role="языки и структура")
-
-
-def _github_models_line(snapshot):
-    return _ai_line("github_models", "GitHub Models", snapshot, role="универсальный резерв")
-
-
-def _openrouter_line(snapshot, ai_module):
-    if not config.OPENROUTER_API_KEY:
-        return None
-    remote = api_usage.openrouter_key_usage()
-    override, detail = _remote_quota_or_requests("OpenRouter", remote)
-    if detail is None:
-        fallback_stats = ai_module.get_openrouter_fallback_stats(1)
-        errors = int(fallback_stats.get("errors") or 0)
-        state, detail = ("warn", f"{errors} {_plural_requests(errors)} с ошибкой сегодня") if errors else ("ok", "доступен")
-        return _compose_line(state, "OpenRouter", detail, "резерв")
-    return _compose_line(override or "ok", "OpenRouter", detail, "резерв")
-
-
-def _openweather_line():
-    import weather
-    label = "OpenWeather"
-    if not _configured_service("openweather"):
-        return _compose_line("off", label, "нет ключа")
-    usage = weather.get_weather_usage()
-    if usage.get("last_error_reason") and usage.get("last_error_at"):
-        reason = _friendly_error(str(usage.get("last_error_reason")))
-        return _compose_line("bad", label, str(reason)[:40])
-    valid = _valid_quota(used=usage.get("requests_total"), limit=config.WEATHER_FREE_DAILY_LIMIT)
+def _remote_stat(service):
+    remote = None
+    if service == "firecrawl":
+        remote = api_usage.firecrawl_credit_usage()
+    elif service == "openrouter":
+        remote = api_usage.openrouter_key_usage()
+    if not remote or remote.get("limit") is None:
+        return ""
+    valid = _valid_quota(remaining=remote.get("remaining"), limit=remote.get("limit"))
     if valid is None:
-        _log.warning("api_ai: invalid OpenWeather quota requests_total=%r limit=%r",
-                    usage.get("requests_total"), config.WEATHER_FREE_DAILY_LIMIT)
-        return _compose_line("warning", label, "ошибка данных лимита")
+        return ""
     remaining, limit = valid
-    return _compose_line("ok", label, f"осталось {_thousands(remaining)} / {_thousands(limit)} сегодня")
+    return f"{_thousands(limit - remaining)} из {_thousands(limit)}"
 
 
-def _firecrawl_line(snapshot):
-    label = "Firecrawl"
-    if not _configured_service("firecrawl"):
-        return _compose_line("off", label, "нет ключа")
-    remote = api_usage.firecrawl_credit_usage()
-    override, detail = _remote_quota_or_requests(label, remote)
-    if detail is not None:
-        return _compose_line(override or "ok", label, detail)
-    return _data_line("firecrawl", label, snapshot)
-
-
-def _fallback_active(snapshot) -> bool:
-    """Сработает ли резервная модель, если Gemini сейчас недоступен."""
-    for service in ("cohere", "github_models", "groq", "cloudflare"):
-        if not _configured_service(service):
-            continue
+def _system_service_line(service, label, area, fallback, snapshot, remote_stats=None):
+    """Собрать одну продуктовую строку без raw-кодов и технических ролей."""
+    if service == "database":
+        try:
+            store._load("__health__")
+            state, detail = "ok", ""
+        except Exception as exc:
+            state, detail = "warn", _friendly_error(exc)
+        configured = bool(config.DATABASE_URL)
+        if not configured and state == "ok":
+            state, detail = "warn", "не настроен"
+    else:
+        configured = _configured_service(service)
         svc = _snapshot_service(snapshot, service)
-        if (svc.get("status") or "off") != "bad":
-            return True
-    return False
+        if service in ("firecrawl", "openrouter"):
+            remote_stat = (
+                remote_stats.get(service, "") if remote_stats is not None else _remote_stat(service)
+            )
+        else:
+            remote_stat = ""
+        if not configured:
+            state, detail = "warn", "не настроен"
+        elif remote_stat:
+            state, detail = "ok", remote_stat
+        elif not svc:
+            state, detail = "warn", "нет данных"
+        else:
+            raw_status = svc.get("status") or "off"
+            cooldown_until = int(svc.get("cooldown_until") or 0)
+            if cooldown_until > time.time():
+                state, detail = "warn", f"пауза до {_hhmm(cooldown_until)}"
+            elif raw_status in ("bad", "warn"):
+                state = "warn" if fallback else "bad"
+                detail = _friendly_error(svc.get("last_error_reason") or svc.get("status_text"))
+            elif raw_status in ("off", "stale"):
+                state, detail = "warn", "нет данных"
+            else:
+                state = "ok"
+                detail = _remote_stat(service) or _usage_stat(service, svc)
+
+    dot = {"ok": ui.OK, "warn": ui.WARN, "bad": ui.BAD}.get(state, ui.UNKNOWN)
+    parts = [f"{dot} {label}", area]
+    if detail:
+        parts.append(detail)
+    if state != "ok" and fallback:
+        parts.append(f"используется {fallback}")
+    return " · ".join(parts)
 
 
 async def send_api_ai(bot, cid, q=None):
-    import ai
     snapshot = api_usage.snapshot()
-
-    ai_rows = [
-        _cohere_line(snapshot),
-        _gemini_line(snapshot),
-        _github_models_line(snapshot),
-        _ai_line("groq", "Groq", snapshot),
-        _ai_line("cloudflare", "Cloudflare AI", snapshot, role="резерв"),
+    firecrawl_stat, openrouter_stat = await asyncio.gather(
+        asyncio.to_thread(_remote_stat, "firecrawl"),
+        asyncio.to_thread(_remote_stat, "openrouter"),
+    )
+    remote_stats = {"firecrawl": firecrawl_stat, "openrouter": openrouter_stat}
+    rows = [
+        _system_service_line(service, label, area, fallback, snapshot, remote_stats)
+        for service, label, area, fallback in _SYSTEM_SERVICES
     ]
-    openrouter_line = _openrouter_line(snapshot, ai)
-    if openrouter_line:
-        ai_rows.append(openrouter_line)
-
-    api_rows = [
-        _openweather_line(),
-        _data_line("tavily", "Tavily", snapshot),
-        _firecrawl_line(snapshot),
-        _data_line("tmdb", "TMDB", snapshot),
-        _data_line("google_books", "Google Books", snapshot),
-        _data_line("languagetool", "LanguageTool", snapshot),
-        _data_line("spoonacular", "Spoonacular", snapshot),
-        _data_line("themealdb", "TheMealDB", snapshot),
-        _data_line("azure_speech", "Azure Speech", snapshot),
-        _data_line("ticketmaster", "Ticketmaster", snapshot),
-        _data_line("zeroentropy", "ZeroEntropy", snapshot),
-        _data_line("pexels", "Pexels", snapshot),
-    ]
-
-    gemini_svc = _snapshot_service(snapshot, "gemini")
-    gemini_down = (gemini_svc.get("status") or "off") in ("bad", "warn")
-    fallback_ok = _fallback_active(snapshot)
-    n_bad = sum(1 for line in ai_rows + api_rows if line.startswith(ui.BAD))
-
-    if gemini_down and not fallback_ok:
-        status_dot, status_text = ui.BAD, "Критический сбой"
-    elif gemini_down or n_bad:
-        status_dot, status_text = ui.WARN, "Работает с ограничениями"
-    else:
-        status_dot, status_text = ui.OK, "Все системы работают"
-
-    if gemini_down:
-        groq_role = _join_and(_used_by("Groq"))
-        parts = ["Gemini недоступен"]
-        if fallback_ok:
-            parts.append("AI-функции автоматически работают через резерв")
-            if groq_role:
-                parts.append(f"{groq_role} переключены на Groq")
-        else:
-            parts.append("резервных моделей нет — AI-функции сейчас не отвечают")
-        impact_line = " · ".join(parts)
-    elif n_bad:
-        impact_line = (f"{n_bad} {_plural_services(n_bad)} {'недоступен' if n_bad == 1 else 'недоступно'} · "
-                       "соответствующие функции могут не отвечать")
-    else:
-        impact_line = "Все ключевые сервисы доступны"
-
-    fallback_line = "включено" if fallback_ok else "выключено"
-    unavailable_line = (f"Недоступно: {n_bad} {_plural_services(n_bad)}" if n_bad else None)
-
-    errors = _today_errors()
-    last_failure = None
-    if errors:
-        last = errors[0]
-        kind_line = f"{_hhmm(last.get('ts', 0))} · {str(last.get('kind') or 'ошибка')}"
-        raw_msg = str(last.get("msg") or "")[:180]
-        last_failure = (kind_line, raw_msg)
 
     kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⚠️ Логи", callback_data="adm_logs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
-    msg = ui.api_ai(status_dot, status_text, impact_line, fallback_line, unavailable_line,
-                     ai_rows, api_rows, last_failure, _updated_at())
+    msg = ui.api_ai(rows, _updated_at())
     await _show(bot, cid, msg, kb, q)
-
-
-def _issue_summary(source, msg):
-    msg = str(msg or "")
-    low = msg.lower()
-    if source == "llm":
-        if "gemini · лимит" in low or "gemini cooldown" in low or "resource_exhausted" in low:
-            scope = ""
-            for candidate in ("RPM", "RPD", "TPM"):
-                if candidate.lower() in low:
-                    scope = f" {candidate}"
-                    break
-            return f"Gemini: лимит{scope}"
-        providers = []
-        for provider in ("openrouter", "github_models", "cohere", "gemini", "groq", "cf"):
-            if f"{provider}:" in low or f"{provider} " in low:
-                providers.append(provider)
-        prefix = ", ".join(dict.fromkeys(providers)) if providers else "LLM"
-        if "429" in msg or "too many requests" in low or "rate limit" in low:
-            return f"{prefix}: лимит запросов"
-        if "400" in msg or "bad request" in low or "invalid" in low:
-            return f"{prefix}: ошибка запроса"
-        if "json" in low:
-            return f"{prefix}: невалидный JSON"
-        if "no " in low:
-            return f"{prefix}: нет ключа или провайдер выключен"
-        return f"{prefix}: сбой генерации"
-    if source == "service":
-        return "Сервис недоступен"
-    if "перегружен" in low:
-        return "ИИ временно перегружен"
-    if "json" in low:
-        return "Не удалось разобрать JSON"
-    return msg[:50]
 
 
 async def clear_cache(bot, cid, q=None):
@@ -684,35 +528,94 @@ async def clear_cache(bot, cid, q=None):
     await send_logs(bot, cid, q)
 
 
+def _log_token(entry):
+    if entry.get("id"):
+        return str(entry["id"])[:16]
+    raw = f"{entry.get('ts')}|{entry.get('kind')}|{entry.get('msg')}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def _log_error_text(entry):
+    if entry.get("error"):
+        return str(entry["error"])
+    kind = str(entry.get("kind") or "Ошибка")
+    msg = str(entry.get("msg") or "")
+    if ":" in kind and kind.rsplit(":", 1)[-1].strip().endswith("Error"):
+        kind = kind.rsplit(":", 1)[-1].strip()
+    return f"{kind}: {msg}" if msg and not msg.startswith(f"{kind}:") else (msg or kind)
+
+
+def _log_location(entry):
+    file_name = str(entry.get("file") or "")
+    line = int(entry.get("line") or 0)
+    if not file_name:
+        kind = str(entry.get("kind") or "")
+        candidate = kind.split(":", 1)[0].strip()
+        if candidate and candidate not in ("app", "llm", "service"):
+            file_name = candidate if candidate.endswith(".py") else f"{candidate}.py"
+    return file_name or "—", line
+
+
+def _compact_log_row(entry):
+    file_name, line = _log_location(entry)
+    section = str(entry.get("section") or tracking._section_for(file_name, entry.get("source")))
+    action = str(entry.get("action") or tracking._action_for(entry.get("function"), entry.get("source")))
+    error = " ".join(_log_error_text(entry).split())[:170]
+    location = f"{file_name}:{line}" if line else file_name
+    return f"{_hhmm(entry.get('ts', 0))} · {section} · {action} · {error} · {location}"
+
+
+def _full_log_text(entry):
+    file_name, line = _log_location(entry)
+    section = str(entry.get("section") or tracking._section_for(file_name, entry.get("source")))
+    action = str(entry.get("action") or tracking._action_for(entry.get("function"), entry.get("source")))
+    dt = datetime.fromtimestamp(int(entry.get("ts") or 0), config.TZ).strftime("%Y-%m-%d %H:%M:%S %Z")
+    fields = (
+        ("Время", dt), ("Раздел", section), ("Действие", action),
+        ("Ошибка", _log_error_text(entry)), ("Traceback", entry.get("traceback") or _log_error_text(entry)),
+        ("Файл", file_name), ("Строка", line or "—"),
+        ("Функция", entry.get("function") or "—"), ("Сервис", entry.get("service") or "—"),
+        ("Резерв", entry.get("fallback") or "—"),
+        ("Версия", entry.get("version") or config.APP_VERSION or "—"),
+    )
+    return secure.redact("\n".join(f"{label}: {value}" for label, value in fields))
+
+
+async def clear_logs(bot, cid, q=None):
+    tracking.clear_errors()
+    await send_logs(bot, cid, q)
+
+
+async def send_log_copy(bot, cid, token, q=None):
+    entry = next((row for row in tracking.get_errors(limit=200) if _log_token(row) == token), None)
+    if entry is None:
+        await send_logs(bot, cid, q)
+        return
+    if q is not None:
+        try:
+            await q.answer()
+        except Exception:
+            pass
+    body = _full_log_text(entry)[:3800]
+    await bot.send_message(
+        chat_id=cid,
+        text=f"📋 Данные ошибки\n\n<pre>{html.escape(body)}</pre>",
+        parse_mode="HTML",
+    )
+
+
 async def send_logs(bot, cid, q=None):
-    import ai
     cutoff = time.time() - DAY
     errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
-    rows = []
-    for e in errors[:5]:
-        source = str(e.get("source") or "app")
-        msg = str(e.get("msg") or "")
-        if source == "llm" and str(e.get("kind") or "").startswith("gemini_rate_limit"):
-            lines = [line.strip() for line in msg.splitlines() if line.strip()]
-            title = (
-                lines[0].replace("Gemini ·", f"{_hhmm(e.get('ts', 0))} · Gemini ·", 1)
-                if lines else f"{_hhmm(e.get('ts', 0))} · Gemini · лимит"
-            )
-            rows.append("\n".join([title] + lines[1:2]))
-        else:
-            rows.append(f"{_hhmm(e.get('ts', 0))} · {source} · {_issue_summary(source, msg)}")
-    gemini = ai.get_gemini_rate_limit_stats(1)
-    summary = {
-        "errors": len(errors),
-        "rate_limits": int(gemini.get("rate_limits") or 0),
-        "fallbacks": int(gemini.get("fallbacks") or 0),
-        "last_429_at": int(gemini.get("last_429_at") or 0),
-        "cooldown_active": bool(gemini.get("cooldown_active")),
-        "cooldown_until": int(gemini.get("cooldown_until") or 0),
-    }
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Обновить", callback_data="adm_logs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_system"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
-    ])
-    msg = ui.logs(rows, len(errors), _updated_at(), summary)
+    shown = errors[:5]
+    rows = [_compact_log_row(entry) for entry in shown]
+    buttons = [
+        [InlineKeyboardButton(f"📋 Скопировать · {_hhmm(entry.get('ts', 0))}", callback_data=f"adm_log_copy_{_log_token(entry)}")]
+        for entry in shown
+    ]
+    if errors:
+        buttons.append([InlineKeyboardButton(delete_label("Очистить логи"), callback_data="adm_logs_clear")])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_system"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    kb = InlineKeyboardMarkup(buttons)
+    msg = ui.logs(rows, len(errors), _updated_at())
     await _show(bot, cid, msg, kb, q)

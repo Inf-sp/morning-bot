@@ -13,6 +13,7 @@ import secure
 import settings
 import store
 from ui import thoughts as thoughts_ui
+from ui.constants import delete_label
 
 
 THOUGHT_TYPES = {
@@ -572,7 +573,7 @@ async def _leave_review_for_later(bot, cid, q):
 async def _confirm_clear_review(bot, cid, q):
     msg = thoughts_ui.clear_confirmation()
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Да, очистить", callback_data="thought_review_clear_yes")],
+        [InlineKeyboardButton(delete_label("Да, очистить"), callback_data="thought_review_clear_yes")],
         [InlineKeyboardButton("↩️ Отмена", callback_data="thought_review_clear_cancel")],
     ])
     try:

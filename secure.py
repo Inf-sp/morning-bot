@@ -61,7 +61,8 @@ def _env_secret_values():
                  "TMDB_API_KEY", "GOOGLE_BOOKS_API_KEY", "SPOONACULAR_API_KEY", "THEMEALDB_API_KEY",
                  "AZURE_SPEECH_KEY",
                  "ZEROENTROPY_API_KEY", "DATABASE_URL",
-                 "PEXELS_API_KEY", "CF_ACCOUNT_ID", "TAVILY_API_KEY", "WEATHER_API_KEY")
+                 "PEXELS_API_KEY", "CF_ACCOUNT_ID", "TAVILY_API_KEY", "FIRECRAWL_API_KEY",
+                 "RESTCOUNTRIES_API_KEY", "WEATHER_API_KEY")
         return [getattr(config, n, "") for n in names]
     except Exception:
         return []

@@ -8,7 +8,12 @@
 Все записи best-effort: трекинг НИКОГДА не должен ломать основной поток бота,
 поэтому каждая точка входа обёрнута в try/except с молчаливым проглатыванием.
 """
+import inspect
+import os
+import sys
 import time
+import traceback as traceback_module
+import uuid
 from datetime import datetime, timezone
 
 import config
@@ -21,6 +26,47 @@ _TOUCH_THROTTLE_SECONDS = 60
 INACTIVITY_REMINDER_SECONDS = 72 * 3600
 _last_touch = {}
 
+_SECTION_BY_MODULE = {
+    "myday": "Мой день", "weather": "Мой день", "weather_provider": "Мой день",
+    "cooking": "Готовка", "recipe_generation": "Готовка", "spoonacular": "Готовка",
+    "themealdb": "Готовка", "learning": "Обучение", "trainer": "Обучение",
+    "learning_game": "Обучение", "learning_dictionary": "Обучение",
+    "dictionary_import": "Обучение", "language_tool": "Обучение",
+    "wardrobe": "Гардероб", "wardrobe_copy": "Гардероб",
+    "research": "Поиск", "assistant": "Ассистент", "leisure_movies": "Кино",
+    "tmdb": "Кино", "leisure_books": "Книги", "google_books": "Книги",
+    "leisure_music": "Музыка", "leisure_concerts": "Концерты",
+    "azure_speech": "Озвучка", "dictionary_tts": "Озвучка", "travel": "Поездка",
+    "balance": "Здоровье", "thoughts": "Здоровье", "settings": "Настройки",
+    "menu": "Меню", "bot_callbacks": "Меню", "bot": "Бот",
+}
+
+_SERVICE_NAMES = (
+    "azure speech", "language tool", "languagetool", "spoonacular", "themealdb",
+    "openweather", "ticketmaster", "google books", "rest countries", "firecrawl",
+    "openrouter", "github models", "cloudflare", "zeroentropy", "cohere", "gemini",
+    "groq", "tavily", "telegram", "tmdb", "pexels",
+)
+
+_SERVICE_BY_MODULE = {
+    "weather": "OpenWeather", "weather_provider": "OpenWeather",
+    "spoonacular": "Spoonacular", "themealdb": "TheMealDB",
+    "language_tool": "LanguageTool", "azure_speech": "Azure Speech",
+    "dictionary_tts": "Azure Speech", "tmdb": "TMDB",
+    "leisure_movies": "TMDB", "google_books": "Google Books",
+    "leisure_books": "Google Books", "leisure_concerts": "Ticketmaster",
+    "rerank": "ZeroEntropy", "research": "Tavily", "ai": "несколько AI-сервисов",
+}
+
+_FALLBACK_BY_SERVICE = {
+    "OpenWeather": "сохранённый прогноз", "Spoonacular": "TheMealDB",
+    "TheMealDB": "шаблон без AI", "LanguageTool": "проверка в коде",
+    "Azure Speech": "текстовая карточка", "TMDB": "Gemini",
+    "Google Books": "Open Library", "Ticketmaster": "Tavily",
+    "ZeroEntropy": "поиск в базе", "Tavily": "Firecrawl",
+    "Gemini": "GitHub Models", "Cohere": "Gemini", "Groq": "GitHub Models",
+}
+
 
 def _today() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -28,14 +74,96 @@ def _today() -> str:
 
 # ================= ОШИБКИ =================
 
-def log_error(source: str, msg: str, kind: str = "") -> None:
-    """Добавить ошибку в rolling-лог. source: 'llm'|'service'|'broadcast'|'app', kind: код/тип."""
+def _safe_text(value, limit):
     try:
+        import secure
+        return secure.redact(str(value or ""))[:limit]
+    except Exception:
+        return str(value or "")[:limit]
+
+
+def _error_frame(exc):
+    if exc is not None and getattr(exc, "__traceback__", None) is not None:
+        frames = traceback_module.extract_tb(exc.__traceback__)
+        if frames:
+            frame = frames[-1]
+            return os.path.basename(frame.filename), int(frame.lineno), frame.name
+    frame = inspect.stack()[2]
+    return os.path.basename(frame.filename), int(frame.lineno), frame.function
+
+
+def _section_for(file_name, source=""):
+    module = os.path.basename(str(file_name or "")).removesuffix(".py")
+    if module in _SECTION_BY_MODULE:
+        return _SECTION_BY_MODULE[module]
+    return "Ассистент" if source == "llm" else "Система"
+
+
+def _action_for(function, source=""):
+    name = str(function or "").casefold()
+    if source == "llm":
+        return "не сформирован ответ"
+    if any(part in name for part in ("send", "show", "open")):
+        return "не открылся экран"
+    if any(part in name for part in ("save", "add", "create", "update")):
+        return "не сохранились данные"
+    if any(part in name for part in ("fetch", "search", "load")):
+        return "не загрузились данные"
+    if any(part in name for part in ("generate", "build", "render")):
+        return "не создалась карточка"
+    return "не выполнилось действие"
+
+
+def _service_for(text, file_name=""):
+    low = str(text or "").casefold().replace("_", " ")
+    for name in _SERVICE_NAMES:
+        if name in low:
+            return (
+                name.title()
+                .replace("Languagetool", "LanguageTool")
+                .replace("Themealdb", "TheMealDB")
+                .replace("Github Models", "GitHub Models")
+                .replace("Openweather", "OpenWeather")
+                .replace("Openrouter", "OpenRouter")
+                .replace("Firecrawl", "Firecrawl")
+                .replace("Zeroentropy", "ZeroEntropy")
+            )
+    module = os.path.basename(str(file_name or "")).removesuffix(".py")
+    return _SERVICE_BY_MODULE.get(module, "")
+
+
+def log_error(source: str, msg: str, kind: str = "", *, section: str = "",
+              action: str = "", service: str = "", fallback: str = "", exc=None) -> None:
+    """Добавить безопасную диагностическую запись, не влияя на основной поток."""
+    try:
+        if exc is None:
+            active = sys.exc_info()[1]
+            exc = active if isinstance(active, BaseException) else None
+        file_name, line, function = _error_frame(exc)
+        error_type = type(exc).__name__ if exc is not None else ""
+        raw_message = str(msg or exc or "Ошибка")
+        error_text = f"{error_type}: {raw_message}" if error_type and not raw_message.startswith(f"{error_type}:") else raw_message
+        if exc is not None:
+            trace = "".join(traceback_module.format_exception(type(exc), exc, exc.__traceback__))
+        else:
+            trace = error_text
+        service_name = _safe_text(service or _service_for(f"{kind} {raw_message}", file_name), 80)
         entry = {
             "ts": int(time.time()),
+            "id": uuid.uuid4().hex[:12],
             "source": (source or "app")[:20],
             "kind": (kind or "")[:40],
-            "msg": (msg or "")[:200],
+            "msg": _safe_text(raw_message, 1000),
+            "error": _safe_text(error_text, 1400),
+            "section": _safe_text(section or _section_for(file_name, source), 40),
+            "action": _safe_text(action or _action_for(function, source), 100),
+            "traceback": _safe_text(trace, 7000),
+            "file": _safe_text(file_name, 120),
+            "line": int(line or 0),
+            "function": _safe_text(function, 120),
+            "service": service_name,
+            "fallback": _safe_text(fallback or _FALLBACK_BY_SERVICE.get(service_name, ""), 80),
+            "version": _safe_text(getattr(config, "APP_VERSION", ""), 40),
         }
         buf = store._load(config.ERROR_LOG_KEY).get("log", [])
         buf.append(entry)

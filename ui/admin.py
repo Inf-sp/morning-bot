@@ -174,79 +174,35 @@ def welcome_admin():
     return b.build_stripped()
 
 
-def api_ai(status_dot, status_text, impact_line, fallback_line, unavailable_line,
-           ai_rows, api_rows, last_failure, updated_at):
-    """Единый экран диагностики: § docs/admin.md «API и AI».
-
-    status_dot/status_text: общий статус одной строкой ("🟡", "Работает с ограничениями").
-    impact_line: что это значит для функций ("Gemini недоступен · Готовка и Обучение
-    работают через Groq · остальные AI-функции могут не отвечать").
-    fallback_line: "включено"/"выключено" - сработает ли резервная AI-модель прямо сейчас.
-    unavailable_line: "Недоступно: N сервисов" | None, если всё в норме.
-    ai_rows / api_rows: list[str] - готовые строки "статус Сервис · роль · деталь".
-    last_failure: (kind_line, raw_msg) | None.
-    """
+def api_ai(rows, updated_at):
+    """Компактный экран сервисов без технических ошибок и лишних секций."""
     b = MessageBuilder()
     b.bold("🛠 Система")
     b.newline()
     b.spacer()
-    b.bold(f"{status_dot} {status_text}")
-    b.newline()
-    b.line(impact_line)
+    b.labeled_line("Автоматический резерв", "включён")
     b.spacer()
-    b.labeled_line("Автопереключение", fallback_line)
-    if unavailable_line:
-        b.line(unavailable_line)
-    b.spacer()
-    for line in ai_rows + api_rows:
+    for line in rows:
         b.line(str(line))
-    b.spacer()
-    if last_failure:
-        kind_line, raw_msg = last_failure
-        b.bold(f"{WARNING} Последняя ошибка")
-        b.newline()
-        b.line(str(kind_line))
-        if raw_msg:
-            b.line(str(raw_msg))
-    else:
-        b.labeled_line("Последняя ошибка", "нет")
     b.spacer()
     b.line(f"Обновлено в {updated_at}")
     return b.build_stripped()
 
 
-def logs(rows, errors_24h, updated_at, summary=None):
-    summary = summary or {"errors": errors_24h}
+def logs(rows, errors_24h, updated_at):
     b = MessageBuilder()
-    b.bold(ui_label("logs", "Логи"))
+    b.bold("⚠️ Логи")
     b.newline()
-    b.spacer()
-    cooldown_active = bool(summary.get("cooldown_active"))
-    if cooldown_active:
-        until = _hm(summary.get("cooldown_until"))
-        b.line(f"🔴 Gemini на паузе до {until}")
-        b.line("Бот работает через fallback, лимит не превышается повторно.")
-    else:
-        b.line(f"{OK} Gemini работает")
     b.spacer()
     if not rows:
         b.line("Ошибок за 24 часа нет")
     else:
-        b.labeled_line("Последние ошибки")
-        b.spacer()
         for row in rows:
             b.line(row)
-        b.spacer()
-        b.labeled_line("За 24 часа")
-        b.line(
-            f"лимитов {summary.get('rate_limits', 0)}"
-            f" · fallback {summary.get('fallbacks', 0)}"
-            f" · записей {summary.get('errors', errors_24h)}"
-        )
-        if summary.get("last_429_at"):
-            b.line(f"последний лимит {_hm(summary.get('last_429_at'))}")
+        if errors_24h > len(rows):
+            b.line(f"Ещё записей: {errors_24h - len(rows)}")
     b.spacer()
-    b.labeled_line("Обновлено", updated_at, lowercase=False)
+    b.line(f"Обновлено в {updated_at}")
     return b.build_stripped()
 
 

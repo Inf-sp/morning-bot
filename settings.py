@@ -351,7 +351,10 @@ async def _run_notif_test(bot, cid, kind) -> bool:
     except Exception as e:
         _log.error("notif test failed for kind=%s: %r", kind, e, exc_info=True)
         import tracking
-        tracking.log_error("app", str(e), kind=f"notif_test:{kind}")
+        tracking.log_error(
+            "app", str(e), kind=f"notif_test:{kind}", exc=e,
+            section="Мой день", action="не отправлено уведомление",
+        )
         return False
 
 
@@ -989,6 +992,13 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "adm_logs":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))
+    elif data == "adm_logs_clear":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.clear_logs(b, c, q))
+    elif data.startswith("adm_log_copy_"):
+        import admin as _adm
+        token = data[len("adm_log_copy_"):]
+        await _admin_guard(bot, cid, lambda b, c, t=token: _adm.send_log_copy(b, c, t, q))
     elif data in ("adm_notif", "adm_notif_check"):
         # Compat-редирект: раздел "Уведомления" в админке удалён (ручные тесты не нужны).
         import admin as _adm

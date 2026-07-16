@@ -138,7 +138,7 @@ async def safe_error(bot, cid, exc, *, skill=None):
         ) else "app"
         origin = _origin_module(exc)
         kind = f"{origin}: {type(exc).__name__}" if origin else type(exc).__name__
-        tracking.log_error(src, str(exc), kind=kind)
+        tracking.log_error(src, str(exc), kind=kind, exc=exc)
     except Exception:
         pass
     msg = str(exc)

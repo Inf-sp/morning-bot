@@ -23,6 +23,7 @@ SERVICE_LABELS = {
     "groq": "Groq",
     "cohere": "Cohere",
     "github_models": "GitHub Models",
+    "openrouter": "OpenRouter",
     "google_books": "Google Books",
     "languagetool": "LanguageTool",
     "spoonacular": "Spoonacular",
@@ -32,6 +33,7 @@ SERVICE_LABELS = {
     "tmdb": "TMDB",
     "ticketmaster": "Ticketmaster",
     "zeroentropy": "ZeroEntropy",
+    "restcountries": "REST Countries",
 }
 
 SERVICE_ICONS = SERVICE_LABELS
@@ -274,14 +276,17 @@ def _configured(service: str) -> bool:
         "groq": bool(config.GROQ_API_KEY),
         "cohere": bool(config.COHERE_API_KEY),
         "github_models": bool(config.GITHUB_MODELS_TOKEN),
+        "openrouter": bool(config.OPENROUTER_API_KEY),
         "google_books": bool(config.GOOGLE_BOOKS_API_KEY),
         "languagetool": bool(config.LANGUAGETOOL_API_URL),
         "spoonacular": bool(config.SPOONACULAR_API_KEY),
         "themealdb": bool(config.THEMEALDB_API_KEY),
+        "azure_speech": bool(config.AZURE_SPEECH_KEY and config.AZURE_SPEECH_REGION),
         "telegram": bool(config.TELEGRAM_TOKEN),
         "tmdb": bool(config.TMDB_API_KEY),
         "ticketmaster": bool(config.TICKETMASTER_API_KEY),
         "zeroentropy": bool(config.ZEROENTROPY_API_KEY),
+        "restcountries": bool(config.RESTCOUNTRIES_API_KEY),
     }.get(service, False)
 
 
