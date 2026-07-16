@@ -9,46 +9,6 @@ import tracking
 from ui import admin as admin_ui
 
 
-def _snapshot(service, **values):
-    return {"services": [{"service": service, **values}]}
-
-
-def test_green_service_uses_section_and_short_usage_without_status_noise(monkeypatch):
-    monkeypatch.setattr(admin, "_configured_service", lambda _service: True)
-    snapshot = _snapshot(
-        "cohere", status="ok", day_requests=3,
-        quotas=[{"period": "day", "used": 3, "limit": 1000}],
-    )
-
-    line = admin._system_service_line("cohere", "Cohere", "Обучение", "Gemini", snapshot)
-
-    assert line == "🟢 Cohere · Обучение · 3 из 1 000"
-    assert all(word not in line for word in ("доступен", "работает", "активен", "в норме"))
-
-
-def test_failed_service_with_fallback_is_yellow_and_hides_http_code(monkeypatch):
-    monkeypatch.setattr(admin, "_configured_service", lambda _service: True)
-    snapshot = _snapshot("gemini", status="bad", last_error_reason="HTTP 429")
-
-    line = admin._system_service_line(
-        "gemini", "Gemini", "Разные категории", "GitHub Models", snapshot,
-    )
-
-    assert line == (
-        "🟡 Gemini · Разные категории · лимит запросов · используется GitHub Models"
-    )
-    assert "429" not in line
-
-
-def test_service_without_working_fallback_can_be_red(monkeypatch):
-    monkeypatch.setattr(admin, "_configured_service", lambda _service: True)
-    snapshot = _snapshot("telegram", status="bad", last_error_reason="connection error")
-
-    line = admin._system_service_line("telegram", "Telegram", "Сообщения", "", snapshot)
-
-    assert line == "🔴 Telegram · Сообщения · нет подключения"
-
-
 def test_system_ui_has_no_last_raw_error_block():
     message = admin_ui.api_ai(["🟢 Cohere · Обучение · 3 из 1 000"], "21:44")
 
@@ -96,10 +56,8 @@ class _Bot:
 
 
 def test_system_screen_has_logs_on_separate_row(monkeypatch):
-    monkeypatch.setattr(admin.api_usage, "snapshot", lambda: {"services": []})
-    monkeypatch.setattr(admin, "_remote_stat", lambda _service: "")
-    monkeypatch.setattr(admin, "_configured_service", lambda _service: True)
-    monkeypatch.setattr(admin.config, "DATABASE_URL", "postgres://configured")
+    monkeypatch.setattr(admin.service_monitor, "rows", lambda: ["⚪ Gemini · Везде · лимит неизвестен"])
+    monkeypatch.setattr(admin.service_monitor, "last_check_time", lambda: "21:44")
     bot = _Bot()
 
     asyncio.run(admin.send_api_ai(bot, "42"))

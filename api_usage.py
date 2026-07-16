@@ -144,6 +144,14 @@ def record_request(service: str, ok: bool = True, *, units: dict | None = None,
         store.mutate_kv(config.API_USAGE_KEY, mut)
     except Exception:
         pass
+    try:
+        import service_monitor
+        service_monitor.record_result(
+            service, ok, status_code=status_code, error=error, headers=headers,
+        )
+    except Exception:
+        # Usage accounting must never make a product request fail.
+        pass
 
 
 def set_gemini_rate_limit(*, limit_scope: str = "", retry_after: int | None = None,
@@ -177,6 +185,13 @@ def set_gemini_rate_limit(*, limit_scope: str = "", retry_after: int | None = No
         store.mutate_kv(config.API_USAGE_KEY, mut)
     except Exception:
         pass
+    try:
+        import service_monitor
+        service_monitor.record_result(
+            "gemini", False, status_code=429, error=message or f"quota {scope}",
+        )
+    except Exception:
+        pass
 
 
 def record_gemini_fallback(*, target: str = "local", reason: str = "") -> None:
@@ -197,6 +212,11 @@ def record_gemini_fallback(*, target: str = "local", reason: str = "") -> None:
 
     try:
         store.mutate_kv(config.API_USAGE_KEY, mut)
+    except Exception:
+        pass
+    try:
+        import service_monitor
+        service_monitor.activate_fallback("gemini", target, reason=reason)
     except Exception:
         pass
 

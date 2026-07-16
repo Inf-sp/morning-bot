@@ -13,6 +13,7 @@ import base64
 from typing import Literal
 import api_usage
 import config
+import service_monitor
 import store
 import secure
 
@@ -603,19 +604,26 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
         )
         status_code = r.status_code
         if r.status_code != 200:
+            api_usage.record_request(
+                "openrouter", ok=False, status_code=r.status_code,
+                error=f"HTTP {r.status_code}", headers=r.headers,
+            )
             _log_openrouter_fallback(origin_provider, reason, False, status_code,
                                      int((time.time() - t0) * 1000))
             return None
         text = _as_text(r.json()["choices"][0]["message"]["content"])
         if not text or _looks_bad_fallback_text(text, response_mode=response_mode):
+            api_usage.record_request("openrouter", ok=False, error="invalid response")
             _log_openrouter_fallback(origin_provider, "bad_output", False, status_code,
                                      int((time.time() - t0) * 1000))
             return None
+        api_usage.record_request("openrouter", ok=True, headers=r.headers)
         _log_openrouter_fallback(origin_provider, reason, True, status_code,
                                  int((time.time() - t0) * 1000))
         return text.strip()
     except Exception as e:
         err_type = type(e).__name__
+        api_usage.record_request("openrouter", ok=False, error=err_type)
         _log_openrouter_fallback(origin_provider, err_type, False, status_code,
                                  int((time.time() - t0) * 1000))
         return None
@@ -676,6 +684,27 @@ def _reorder_for_cooldown(order):
     if not any(_is_cooling(n) for n in order):
         return order
     return tuple(sorted(order, key=lambda n: _is_cooling(n)))
+
+
+def _monitor_name(provider):
+    return "cloudflare" if provider == "cf" else provider
+
+
+def _provider_name(service):
+    return "cf" if service == "cloudflare" else service
+
+
+def _reorder_for_monitor(order):
+    """Put a genuinely selected reserve first; keep the primary in the chain so
+    a later successful call can automatically restore it."""
+    result = list(order)
+    if not result:
+        return tuple(result)
+    selected = _provider_name(service_monitor.selected_service(_monitor_name(result[0])))
+    if selected in result and selected != result[0]:
+        result.remove(selected)
+        result.insert(0, selected)
+    return tuple(result)
 
 
 def _provider_is_unavailable(name):
@@ -813,7 +842,7 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
                             allow_personal_openrouter)
     order = _resolve(tier, order, route=route, module=module)
     pre_gemini_unavailable = _gemini_cooldown_error() if "gemini" in order else None
-    order = _reorder_for_cooldown(order)
+    order = _reorder_for_cooldown(_reorder_for_monitor(order))
     cache_ttl = _cache_ttl(module, response_mode)
     cache_key = _cache_key(order, prompt, max_tokens, temperature, module, response_mode)
     cached = _cache_get(cache_key, cache_ttl)
@@ -837,11 +866,13 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
     temporary_errs = []
     gemini_rate_limit_err = pre_gemini_unavailable
     rate_limit_logged = False
+    failed_providers = []
     for name in order:
         if name == "openrouter":
             continue
         unavailable = _provider_is_unavailable(name)
         if unavailable is not None:
+            failed_providers.append(name)
             errs.append(f"{name}:{unavailable}")
             if _is_temporary_exception(unavailable):
                 temporary_errs.append((name, unavailable))
@@ -852,6 +883,10 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
         try:
             out = _as_text(calls[name]())
             if out and out.strip():
+                for failed in failed_providers:
+                    service_monitor.activate_fallback(
+                        _monitor_name(failed), _monitor_name(name), reason="request",
+                    )
                 ms = int((time.time() - t0) * 1000)
                 if name != "gemini" and gemini_rate_limit_err is not None:
                     api_usage.record_gemini_fallback(target=name, reason="cooldown")
@@ -862,6 +897,7 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
                     _cache_set(cache_key, out)
                 return out
         except Exception as e:
+            failed_providers.append(name)
             _mark_cooldown(name, e)
             errs.append(f"{name}:{e}")
             if _is_temporary_exception(e):
@@ -879,6 +915,10 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
         out = _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin, reason,
                                               response_mode=policy.response_mode)
         if out:
+            if origin in calls:
+                service_monitor.activate_fallback(
+                    _monitor_name(origin), "openrouter", reason=reason,
+                )
             if origin == "gemini" and getattr(err, "error_type", "") == "rate_limit":
                 api_usage.record_gemini_fallback(target="openrouter", reason=reason)
                 _log_gemini_limit("gemini_rate_limit", err, fallback=True)
@@ -1109,9 +1149,11 @@ def chat_chain(history, cid=None):
     errs = []
     prompt_len = sum(len(m.get("content", "")) for m in history)
     gemini_rate_limit_err = _gemini_cooldown_error() if "gemini" in CHAT_ORDER else None
-    for p in _reorder_for_cooldown(CHAT_ORDER):
+    failed_providers = []
+    for p in _reorder_for_cooldown(_reorder_for_monitor(CHAT_ORDER)):
         unavailable = _provider_is_unavailable(p)
         if unavailable is not None:
+            failed_providers.append(p)
             errs.append(f"{p}:{unavailable}")
             if p == "gemini" and getattr(unavailable, "error_type", "") == "rate_limit":
                 gemini_rate_limit_err = unavailable
@@ -1119,12 +1161,17 @@ def chat_chain(history, cid=None):
         try:
             out = _as_text(_chat(p, history, system))
             if out and out.strip():
+                for failed in failed_providers:
+                    service_monitor.activate_fallback(
+                        _monitor_name(failed), _monitor_name(p), reason="request",
+                    )
                 if p != "gemini" and gemini_rate_limit_err is not None:
                     api_usage.record_gemini_fallback(target=p, reason="cooldown")
                     _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
                 _log_cost(p, p, "c" * prompt_len, out, "assistant")
                 return out
         except Exception as e:
+            failed_providers.append(p)
             _mark_cooldown(p, e)
             errs.append(f"{p}:{e}")
             if p == "gemini" and getattr(e, "error_type", "") == "rate_limit":

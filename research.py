@@ -631,14 +631,23 @@ def firecrawl_snippet(query: str, max_chars: int = 1200) -> str:
 
 
 def web_search(query: str, max_results: int = 5) -> list:
-    """Web search через Tavily, один формат результата."""
+    """Web search through Tavily with a one-way Firecrawl fallback."""
+    import service_monitor
     out, seen = [], set()
-    for item in tavily_search(query, max_results=max_results):
-        url = (item.get("url") or "").strip()
-        if not url or url in seen:
-            continue
-        seen.add(url)
-        out.append(item)
-        if len(out) >= max_results:
+    preferred = service_monitor.selected_service("tavily")
+    providers = (firecrawl_search,) if preferred == "firecrawl" else (tavily_search, firecrawl_search)
+    for provider in providers:
+        rows = provider(query, max_results=max_results)
+        if provider is firecrawl_search and rows:
+            service_monitor.activate_fallback("tavily", "firecrawl", reason="request")
+        for item in rows:
+            url = (item.get("url") or "").strip()
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            out.append(item)
+            if len(out) >= max_results:
+                return out
+        if out:
             return out
     return out

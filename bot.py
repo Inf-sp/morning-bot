@@ -42,6 +42,7 @@ import travel
 import weather
 import verify
 import secure
+import service_monitor
 import memory
 import onboard
 import firstvisit
@@ -822,6 +823,8 @@ def main():
     def _t(hm):
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
     jq.run_once(job_warm_home_pages, when=5)                                   # заполнить отсутствующий кэш после запуска
+    jq.run_once(service_monitor.monitoring_job, when=10)                       # первая независимая проверка сервисов
+    jq.run_repeating(service_monitor.monitoring_job, interval=300, first=310)  # затем каждые 5 минут
     jq.run_daily(job_warm_home_pages, time=_t("08:00"), days=tuple(range(7)))    # главные экраны без сообщений
     jq.run_daily(job_warm_weather_cache, time=_t("08:10"), days=tuple(range(7)))   # страховочный прогрев погоды перед брифом
     jq.run_daily(job_morning_brief,   time=_t("08:30"), days=tuple(range(7)))   # Утро: Мой день + погода + мотивация

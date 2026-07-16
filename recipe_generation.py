@@ -8,6 +8,7 @@ import ai
 import api_usage
 import config
 import secure
+import service_monitor
 import spoonacular
 import store
 import themealdb
@@ -32,6 +33,13 @@ def _themealdb_sources(meal_type, *, ingredients="", limit=10, avoid=()):
 
 def _recipe_sources(meal_type, *, ingredients="", limit=10, avoid=()):
     """Spoonacular is primary; TheMealDB keeps Cooking available as a fallback."""
+    preferred = service_monitor.selected_service("spoonacular")
+    if preferred == "themealdb":
+        fallback_sources = _themealdb_sources(
+            meal_type, ingredients=ingredients, limit=limit, avoid=avoid,
+        )
+        if fallback_sources:
+            return fallback_sources
     if config.SPOONACULAR_API_KEY:
         try:
             sources = spoonacular.source_recipes(
@@ -42,9 +50,12 @@ def _recipe_sources(meal_type, *, ingredients="", limit=10, avoid=()):
             sources = []
         if sources:
             return sources
-    return _themealdb_sources(
+    fallback_sources = _themealdb_sources(
         meal_type, ingredients=ingredients, limit=limit, avoid=avoid,
     )
+    if fallback_sources:
+        service_monitor.activate_fallback("spoonacular", "themealdb", reason="request")
+    return fallback_sources
 
 
 def _recipe_source_name(sources) -> str:

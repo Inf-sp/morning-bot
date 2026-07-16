@@ -68,6 +68,7 @@ RAILWAY_ENVIRONMENT = os.environ.get("RAILWAY_ENVIRONMENT", "").strip()
 RAILWAY_SERVICE_NAME = os.environ.get("RAILWAY_SERVICE_NAME", "").strip()
 
 API_USAGE_KEY = "api_usage.json"
+SERVICE_MONITOR_KEY = "service_monitor.json"
 API_QUOTAS = {
     "openweather": [
         {"mode": "fixed", "unit": "requests", "period": "day", "limit": WEATHER_FREE_DAILY_LIMIT},

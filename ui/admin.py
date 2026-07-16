@@ -50,7 +50,7 @@ def deploy_report(version, title, release_notes):
     b.bold("Что изменено:")
     b.newline()
     for note in change_notes[:4]:
-        b.line(f"- {note.rstrip('.')}")
+        b.line(f"• {note}")
     b.spacer()
     b.text_line("Бот развёрнут и работает ✅")
     return b.build_stripped()
