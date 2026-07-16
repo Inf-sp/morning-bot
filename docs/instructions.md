@@ -144,7 +144,6 @@ The existing text and logo placement within the template must not be moved or al
 ## Команды
 
 - `/menu` — открыть главное меню (инлайн); также запускает бота при первом обращении и обрабатывает инвайт-код по диплинку (`/start` остался рабочим для этого, но убран из видимого списка команд Telegram — не дублируется с `/menu`)
-- `/check_text` — проверить явно присланный нидерландский текст через LanguageTool; общий чат автоматически не проверяется
 - `/notes`, `/setup` — быстрый переход к «🎚️ Настройки» (алиасы); оба остались рабочими, но убраны из видимого списка команд Telegram — настройки уже доступны из главного меню
 - `/admin` — прямой переход в раздел администратора (только для владельца)
 
@@ -264,7 +263,7 @@ The existing text and logo placement within the template must not be moved or al
 - `GITHUB_MODELS_TOKEN` — универсальный AI-резерв через GitHub Models; токену нужен доступ `models:read`;
 - `GITHUB_MODELS_MODEL` — модель GitHub Models, по умолчанию `openai/gpt-4.1-mini`;
 - `GOOGLE_BOOKS_API_KEY` — поиск и проверка метаданных и обложек книг в Google Books;
-- `LANGUAGETOOL_API_URL` — адрес LanguageTool для точечной проверки нидерландских письменных ответов; по умолчанию `https://api.languagetool.org/v2`;
+- `LANGUAGETOOL_API_URL` — адрес LanguageTool для проверки письменных ответов тренажёра и учебных данных; по умолчанию `https://api.languagetool.org/v2`;
 - `SPOONACULAR_API_KEY` — основной источник рецептов и винных сочетаний для Готовки;
 - `THEMEALDB_API_KEY` — резервный источник базовых рецептов для Готовки; по умолчанию используется публичный ключ `1`;
 - `AZURE_SPEECH_KEY` — ключ Azure AI Speech для озвучивания нидерландских слов и примеров;

@@ -205,27 +205,19 @@ def _add_language_tool_report(b, report, explanation="", *, show_unavailable=Fal
             b.line("Проверка LanguageTool сейчас недоступна.")
         return
     issues = report.get("issues") or []
-    b.spacer()
-    b.bold("🔎 LanguageTool")
-    b.newline()
     if not issues:
-        b.line("Ошибок не найдено.")
+        return
+    b.spacer()
+    original = str(report.get("text") or "").strip()
+    if original:
+        b.labeled_line("Твой ответ", original, lowercase=False)
+    corrected = str(report.get("corrected_text") or "").strip()
+    if corrected and corrected != original:
+        b.labeled_line("Лучше", corrected, lowercase=False)
     else:
-        for issue in issues[:3]:
-            fragment = str(issue.get("original") or "").strip()
-            replacements = [str(item).strip() for item in issue.get("replacements") or [] if str(item).strip()]
-            message = str(issue.get("short_message") or issue.get("message") or "Проверь этот фрагмент").strip()
-            if fragment and replacements:
-                b.bullet(f"{fragment} → {' / '.join(replacements[:3])}")
-            elif fragment:
-                b.bullet(f"{fragment}: {message}")
-            else:
-                b.bullet(message)
-        corrected = str(report.get("corrected_text") or "").strip()
-        original = str(report.get("text") or "").strip()
-        if corrected and corrected != original:
-            b.spacer()
-            b.labeled_line("Вариант", corrected, lowercase=False)
+        replacements = issues[0].get("replacements") or []
+        if replacements:
+            b.labeled_line("Лучше", str(replacements[0]), lowercase=False)
     explanation = " ".join(str(explanation or report.get("explanation") or "").split())
     if explanation:
         b.spacer()
@@ -279,18 +271,6 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
-
-
-def language_check_result(report, explanation=""):
-    report = report if isinstance(report, dict) else {}
-    b = MessageBuilder()
-    b.section("🇳🇱 Проверка текста")
-    original = str(report.get("text") or "").strip()
-    if original:
-        b.spacer()
-        b.labeled_line("Текст", original, lowercase=False)
-    _add_language_tool_report(b, report, explanation, show_unavailable=True)
-    return b.build_stripped()
 
 
 def training_result(session):

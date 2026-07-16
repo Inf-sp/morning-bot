@@ -1,9 +1,11 @@
-"""Narrow LanguageTool integration for Dutch writing practice."""
+"""LanguageTool client and conservative correction helpers for learning data."""
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import time
+import unicodedata
 from urllib.parse import urlparse
 
 import requests
@@ -15,6 +17,11 @@ import util
 
 _CACHE_TTL = 24 * 60 * 60
 _MAX_TEXT_CHARS = 5000
+_STYLE_TYPES = {"style", "locale-violation"}
+_SAFE_RULE_PARTS = (
+    "WHITESPACE", "SPACE", "DOUBLE_PUNCTUATION", "UPPERCASE_SENTENCE_START",
+    "LOWERCASE_SENTENCE_START", "UNPAIRED_BRACKETS",
+)
 
 
 def _check_url() -> str:
@@ -63,6 +70,77 @@ def apply_first_replacements(text: str, issues) -> str:
     for offset, length, replacement in sorted(edits, reverse=True):
         corrected = corrected[:offset] + replacement + corrected[offset + length:]
     return corrected
+
+
+def is_style_issue(issue: dict) -> bool:
+    issue_type = str(issue.get("issue_type") or "").strip().lower()
+    category = str(issue.get("category") or "").strip().lower()
+    return issue_type in _STYLE_TYPES or "style" in category
+
+
+def _edit_distance(left: str, right: str) -> int:
+    left, right = left.casefold(), right.casefold()
+    previous = list(range(len(right) + 1))
+    for row, char_left in enumerate(left, 1):
+        current = [row]
+        for column, char_right in enumerate(right, 1):
+            current.append(min(
+                current[-1] + 1,
+                previous[column] + 1,
+                previous[column - 1] + (char_left != char_right),
+            ))
+        previous = current
+    return previous[-1]
+
+
+def is_safe_issue(issue: dict, *, allow_spelling=True) -> bool:
+    """True only for deterministic formatting or an obvious one-word typo."""
+    if is_style_issue(issue):
+        return False
+    rule_id = str(issue.get("rule_id") or "").upper()
+    if any(part in rule_id for part in _SAFE_RULE_PARTS):
+        return bool(issue.get("replacements"))
+    issue_type = str(issue.get("issue_type") or "").lower()
+    replacements = issue.get("replacements") or []
+    original = str(issue.get("original") or "").strip()
+    if not allow_spelling or issue_type not in ("misspelling", "typographical"):
+        return False
+    if len(replacements) != 1 or not original or original.casefold() in {
+        "de", "het", "een", "the", "a", "an",
+    }:
+        return False
+    replacement = str(replacements[0] or "").strip()
+    if not replacement or " " in original or " " in replacement:
+        return False
+    distance = _edit_distance(original, replacement)
+    return distance <= (1 if max(len(original), len(replacement)) < 9 else 2)
+
+
+def meaningful_issues(report: dict) -> list[dict]:
+    return [issue for issue in (report.get("issues") or []) if not is_style_issue(issue)]
+
+
+def apply_safe_replacements(text: str, issues, *, allow_spelling=True) -> str:
+    safe = [issue for issue in issues or [] if is_safe_issue(issue, allow_spelling=allow_spelling)]
+    return unicodedata.normalize("NFC", apply_first_replacements(text, safe))
+
+
+async def check_text_retry(text: str, language="nl-NL", *, retries=1,
+                           delay=0.4, semaphore=None) -> dict:
+    """Async wrapper with bounded concurrency and one short retry on outage."""
+    async def run_once():
+        if semaphore is None:
+            return await asyncio.to_thread(check_text, text, language)
+        async with semaphore:
+            return await asyncio.to_thread(check_text, text, language)
+
+    report = await run_once()
+    for attempt in range(max(0, int(retries))):
+        if report.get("available"):
+            break
+        await asyncio.sleep(float(delay) * (attempt + 1))
+        report = await run_once()
+    return report
 
 
 def check_text(text: str, language="nl-NL") -> dict:

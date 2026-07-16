@@ -5,6 +5,7 @@ import json
 import logging
 import random
 import re
+import unicodedata
 import uuid
 from datetime import datetime
 
@@ -16,6 +17,7 @@ import secure
 import store
 import verify
 import learning_dictionary as dictionary
+import learning_data_quality
 from dictionary_model import entry_language, entry_term, entry_translation, normalize_entry, normalize_key
 from ui import dictionary as dict_ui
 from ui.constants import delete_label
@@ -282,7 +284,8 @@ def _dict_entry_message(entry, status="added"):
 
 
 def _dict_loose_key(lang, entry_type, word):
-    base = re.sub(r"\s+", " ", (word or "").strip()).casefold()
+    base = unicodedata.normalize("NFKC", str(word or ""))
+    base = re.sub(r"\s+", " ", base.strip()).rstrip(".").casefold()
     if lang == "nl":
         base = re.sub(r"^(de|het|een)\s+", "", base)
     if lang == "en":
@@ -292,6 +295,15 @@ def _dict_loose_key(lang, entry_type, word):
 
 def _dict_loose_text(lang, word):
     return _dict_loose_key(lang, "word", word)[2]
+
+
+def _merge_translation_values(left, right):
+    values = []
+    for value in (left, right):
+        value = re.sub(r"\s+", " ", str(value or "")).strip()
+        if value and value.casefold() not in {item.casefold() for item in values}:
+            values.append(value)
+    return "; ".join(values)
 
 
 _DIFFICULTY_LEVELS = ("A1", "A2", "B1", "B2", "C1")
@@ -719,6 +731,9 @@ _SRS_FIELD_KEYS = (
     "srs_level", "srs_easiness", "srs_interval_days", "srs_due_at",
     "srs_history", "srs_last_exercise_type",
 )
+_LANGUAGE_CHECK_KEYS = (
+    "pending_language_check", "language_check_status", "language_review_required",
+)
 
 
 def _save_normalized_dict_entry(cid, entry):
@@ -728,6 +743,7 @@ def _save_normalized_dict_entry(cid, entry):
     added/updated/duplicate."""
     entry = dict(entry)
     srs_fields = {k: entry[k] for k in _SRS_FIELD_KEYS if k in entry}
+    language_check_fields = {k: entry[k] for k in _LANGUAGE_CHECK_KEYS if k in entry}
     verb_fields = _verb_analysis_fields(entry)
     words = store.ensure_list_ids(config.DICT_KEY, cid)
     loose_text = _dict_loose_text(entry["lang"], entry["term"])
@@ -738,8 +754,13 @@ def _save_normalized_dict_entry(cid, entry):
         if existing_term.casefold() == entry["term"].casefold():
             duplicate = dict(item)
             changed = False
+            merged_translation = _merge_translation_values(
+                duplicate.get("translation"), entry.get("translation"),
+            )
+            if merged_translation and merged_translation != duplicate.get("translation"):
+                duplicate["translation"] = merged_translation
+                changed = True
             if entry.get("analysis_provider") and not duplicate.get("analysis_provider"):
-                duplicate["translation"] = entry.get("translation", duplicate.get("translation", ""))
                 duplicate["examples"] = entry.get("examples", duplicate.get("examples", []))
                 changed = True
             for field in ("breakdown", "examples"):
@@ -757,6 +778,10 @@ def _save_normalized_dict_entry(cid, entry):
                 if duplicate.get(key) != value:
                     duplicate[key] = value
                     changed = True
+            for key, value in language_check_fields.items():
+                if duplicate.get(key) != value:
+                    duplicate[key] = value
+                    changed = True
             if entry.get("analysis_provider") and "verb_analysis_failed" in duplicate:
                 duplicate.pop("verb_analysis_failed", None)
                 changed = True
@@ -770,7 +795,9 @@ def _save_normalized_dict_entry(cid, entry):
                 "lang": entry["lang"],
                 "term": entry["term"],
                 "article": entry.get("article", ""),
-                "translation": entry["translation"],
+                "translation": _merge_translation_values(
+                    item.get("translation"), entry.get("translation"),
+                ),
                 "breakdown": entry.get("breakdown", ""),
                 "examples": entry.get("examples", []),
                 "source_text": entry.get("source_text", ""),
@@ -779,6 +806,7 @@ def _save_normalized_dict_entry(cid, entry):
                 "last_shown_at": item.get("last_shown_at"),
                 "updated_at": datetime.now(config.TZ).isoformat(),
                 **verb_fields,
+                **language_check_fields,
             })
             if entry.get("analysis_provider"):
                 updated.pop("verb_analysis_failed", None)
@@ -803,6 +831,7 @@ def _save_normalized_dict_entry(cid, entry):
         "last_shown_at": entry.get("last_shown_at"),
         **srs_fields,
         **verb_fields,
+        **language_check_fields,
     }
     store.add_to_list(config.DICT_KEY, cid, saved)
     return "added", saved
@@ -932,6 +961,7 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
         entry = await _normalize_dict_entry_full(payload, lang, source_text=source_text)
         if entry:
             entry = await _enrich_dutch_verb(entry, cid)
+            entry = await learning_data_quality.check_new_entry(entry)
     except Exception:
         await bot.send_message(chat_id=cid, text="⚠️ Не получилось разобрать слово. Попробуй ещё раз.")
         return
@@ -966,6 +996,7 @@ async def retry_pending_dict_add(bot, cid):
         )
         if new_entry:
             new_entry = await _enrich_dutch_verb(new_entry, cid)
+            new_entry = await learning_data_quality.check_new_entry(new_entry)
     except Exception:
         await bot.send_message(chat_id=cid, text="⚠️ Не получилось получить другой вариант. Попробуй ещё раз.")
         return
@@ -999,6 +1030,7 @@ async def confirm_pending_dict_add(bot, cid):
     if not entry:
         await bot.send_message(chat_id=cid, text="Уточнение устарело. Пришли слово ещё раз.")
         return
+    entry = await learning_data_quality.check_new_entry(entry)
     status, saved = _save_normalized_dict_entry(cid, entry)
     msg = _dict_entry_message(saved, status=status)
     term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
@@ -1168,6 +1200,7 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
             entry = await _normalize_dict_entry_full(line, lang, source_text=line)
             if entry:
                 entry = await _enrich_dutch_verb(entry, cid)
+                entry = await learning_data_quality.check_new_entry(entry)
         except Exception:
             entry = None
         if not entry:

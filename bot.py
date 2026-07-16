@@ -462,23 +462,6 @@ async def menu_command(update, context):
     )
 
 
-async def check_text_command(update, context):
-    cid = str(update.effective_chat.id)
-    if not access.is_allowed(cid):
-        await context.bot.send_message(chat_id=cid, text="❌ Бот приватный.")
-        return
-    store.pending_input.pop(cid, None)
-    text = secure.clamp(" ".join(context.args or []))
-    if text:
-        await trainer.check_dutch_text(context.bot, cid, text)
-        return
-    store.pending_input[cid] = "languagetool_check_nl"
-    await context.bot.send_message(
-        chat_id=cid,
-        text="🇳🇱 Пришли нидерландский текст следующим сообщением — проверю грамматику и предложу исправления.",
-    )
-
-
 async def admin_debug_api_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
     import admin as _admin
@@ -705,7 +688,6 @@ async def post_init(app):
     from telegram import BotCommand
     await app.bot.set_my_commands([
         BotCommand("menu", "меню"),
-        BotCommand("check_text", "проверить нидерландский текст"),
         BotCommand("admin", "администратор"),
     ])
     await maybe_send_admin_deploy_notification(app.bot)
@@ -823,7 +805,6 @@ def main():
     app.add_handler(MessageHandler(filters.ALL, message_activity_handler), group=-1)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", menu_command))
-    app.add_handler(CommandHandler("check_text", check_text_command))
     app.add_handler(CommandHandler("notes", notes_command))
     app.add_handler(CommandHandler("setup", setup_command))
     app.add_handler(CommandHandler("admin", admin_command))

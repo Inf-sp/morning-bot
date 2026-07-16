@@ -189,10 +189,14 @@ async def refresh_database(bot, cid, q=None):
             pass
     result = await data_refresh.refresh_user_database(cid)
     msg = settings_ui.database_refresh_result(result)
-    kb = InlineKeyboardMarkup([[
+    rows = []
+    if result.get("language_review_items"):
+        rows.append([InlineKeyboardButton("🔎 Проверить изменения", callback_data="set_refresh_review")])
+    rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
-    ]])
+    ])
+    kb = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
@@ -200,6 +204,45 @@ async def refresh_database(bot, cid, q=None):
         except Exception:
             pass
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def send_language_review(bot, cid, q=None):
+    import learning_data_quality
+
+    items = learning_data_quality.review_items(cid)
+    if not items:
+        msg = settings_ui.mydata_section("✅ Проверка завершена", "Сомнительных изменений больше нет.")
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
+            InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+        ]])
+    else:
+        current = items[0]
+        msg = settings_ui.language_review_item(current, len(items))
+        rows = []
+        if current.get("suggestion"):
+            rows.append([InlineKeyboardButton("✅ Заменить", callback_data="set_refresh_review_apply")])
+        rows.append([InlineKeyboardButton("❌ Удалить запись", callback_data="set_refresh_review_delete")])
+        rows.append([InlineKeyboardButton("Пропустить", callback_data="set_refresh_review_skip")])
+        rows.append([
+            InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
+            InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+        ])
+        kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def resolve_language_review(bot, cid, action, q=None):
+    import learning_data_quality
+
+    learning_data_quality.resolve_review(cid, action)
+    await send_language_review(bot, cid, q)
 
 
 async def confirm_delete_thought_history(bot, cid, q=None):
@@ -833,6 +876,14 @@ async def handle_callback(bot, cid, data, q=None):
         await send_notif(bot, cid, q)
     elif data == "set_refresh_data":
         await refresh_database(bot, cid, q)
+    elif data == "set_refresh_review":
+        await send_language_review(bot, cid, q)
+    elif data == "set_refresh_review_apply":
+        await resolve_language_review(bot, cid, "apply", q)
+    elif data == "set_refresh_review_delete":
+        await resolve_language_review(bot, cid, "delete", q)
+    elif data == "set_refresh_review_skip":
+        await resolve_language_review(bot, cid, "skip", q)
     elif data == "set_thought_history_delete":
         await confirm_delete_thought_history(bot, cid, q)
     elif data == "set_thought_history_delete_yes":

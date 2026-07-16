@@ -8,7 +8,7 @@ import language_tool
 import trainer
 import trainer_grading
 from trainer_engine import EXERCISE_TRANSLATE_CONTEXT
-from ui.learning import language_check_result
+from ui.learning import exercise_result
 
 
 class FakeResponse:
@@ -82,6 +82,26 @@ def test_public_api_check_normalizes_issues_and_correction(monkeypatch):
     assert usage[-1][1]["units"] == {"characters": 17}
 
 
+def test_async_check_retries_once_after_temporary_outage(monkeypatch):
+    calls = []
+
+    def check(text, language):
+        calls.append((text, language))
+        if len(calls) == 1:
+            return {"ok": False, "available": False, "text": text, "issues": []}
+        return {"ok": True, "available": True, "text": text, "issues": []}
+
+    async def no_delay(_seconds):
+        return None
+
+    monkeypatch.setattr(language_tool, "check_text", check)
+    monkeypatch.setattr(language_tool.asyncio, "sleep", no_delay)
+    report = asyncio.run(language_tool.check_text_retry("Ik ga.", "nl-NL", retries=1))
+
+    assert report["available"] is True
+    assert calls == [("Ik ga.", "nl-NL"), ("Ik ga.", "nl-NL")]
+
+
 def test_disputed_dutch_error_uses_groq_then_gemini(monkeypatch):
     captured = {}
     monkeypatch.setattr(trainer.language_tool, "check_text", lambda *_args: _report())
@@ -124,20 +144,43 @@ def test_simple_spelling_suggestion_does_not_call_llm(monkeypatch):
         "hint_shown": False,
     }, "Ik gaat naar huis."))
 
-    assert grade.correct is True
+    assert grade.correct is False
     assert checked["issues"]
 
 
 def test_language_tool_card_is_formatted_by_code():
-    message = language_check_result(
-        _report(), explanation="После ik используется форма ga.",
+    report = {**_report(), "explanation": "После ik используется форма ga."}
+    message = exercise_result(
+        {
+            "exercise_type": EXERCISE_TRANSLATE_CONTEXT,
+            "correct": "Ik ga naar huis.",
+            "ru": "Я иду домой.",
+        },
+        False,
+        chosen="Ik gaat naar huis.",
+        language_report=report,
     )
 
-    assert "🇳🇱 Проверка текста" in message.text
-    assert "🔎 LanguageTool" in message.text
-    assert "• gaat → ga" in message.text
-    assert "Вариант: Ik ga naar huis." in message.text
+    assert "Твой ответ: Ik gaat naar huis." in message.text
+    assert "Лучше: Ik ga naar huis." in message.text
     assert "Почему: После ik используется форма ga." in message.text
+    assert "SUBJECT_VERB_AGREEMENT" not in message.text
+
+
+def test_style_recommendation_does_not_make_answer_wrong(monkeypatch):
+    report = _report(issue_type="style", replacements=["Ik wandel naar huis."])
+    monkeypatch.setattr(trainer.language_tool, "check_text", lambda *_args: report)
+
+    grade, checked = asyncio.run(trainer._grade_dutch_written({
+        "lang": "nl",
+        "exercise_type": "recall_free",
+        "correct": "Ik gaat naar huis.",
+        "alt": [],
+        "hint_shown": False,
+    }, "Ik gaat naar huis."))
+
+    assert grade.correct is True
+    assert checked["issues"] == []
 
 
 def test_english_written_answer_does_not_use_language_tool(monkeypatch):

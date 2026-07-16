@@ -370,6 +370,12 @@ async def _grade_dutch_written(data, text):
         data, text, used_hint=bool(data.get("hint_shown")),
     )
     report = await asyncio.to_thread(language_tool.check_text, text, "nl-NL")
+    effective_issues = language_tool.meaningful_issues(report)
+    report = {
+        **report,
+        "issues": effective_issues,
+        "corrected_text": language_tool.apply_first_replacements(text, effective_issues),
+    }
     decision = {}
     needs_semantic_judgment = (
         data.get("exercise_type") == EXERCISE_TRANSLATE_CONTEXT and not local.correct
@@ -384,10 +390,14 @@ async def _grade_dutch_written(data, text):
             expected=str(data.get("correct") or ""),
             task=str(data.get("ru") or data.get("situation") or ""),
         )
-    report = {**report, "explanation": decision.get("explanation") or ""}
-    if "acceptable" not in decision:
+    explanation = decision.get("explanation") or _default_language_reason(report)
+    report = {**report, "explanation": explanation}
+    if "acceptable" in decision:
+        correct = bool(decision["acceptable"])
+    elif report.get("available") and effective_issues:
+        correct = False
+    else:
         return local, report
-    correct = bool(decision["acceptable"])
     if correct:
         quality = (trainer_grading.AnswerQuality.HINT_USED
                    if data.get("hint_shown") else trainer_grading.AnswerQuality.RECALLED_FREE)
@@ -396,17 +406,18 @@ async def _grade_dutch_written(data, text):
     return trainer_grading.GradeResult(correct, quality), report
 
 
-async def check_dutch_text(bot, cid, text):
-    report = await asyncio.to_thread(language_tool.check_text, text, "nl-NL")
-    explanation = ""
-    if report.get("available") and report.get("issues") and _needs_ai_explanation(report):
-        decision = await _explain_dutch_review(text, report)
-        explanation = decision.get("explanation") or ""
-    message = learning_ui.language_check_result(report, explanation=explanation)
-    await bot.send_message(
-        chat_id=cid, text=message.text, entities=message.entities,
-        reply_markup=_keyboard([_nav_row()]),
-    )
+def _default_language_reason(report) -> str:
+    issues = report.get("issues") or []
+    if not issues:
+        return ""
+    issue_type = str(issues[0].get("issue_type") or "").lower()
+    if issue_type == "grammar":
+        return "В ответе есть грамматическая ошибка."
+    if issue_type == "misspelling":
+        return "Проверь написание слова."
+    if issue_type == "typographical":
+        return "Проверь пробелы, регистр и пунктуацию."
+    return "Эту формулировку лучше исправить."
 
 
 async def _grade_context(data, text):

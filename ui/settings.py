@@ -137,29 +137,28 @@ def thought_history_deleted():
 
 def database_refresh_result(result):
     result = result or {}
-    b = MessageBuilder().section("🔄 База обновлена")
-    b.labeled_line("Коллекции", f"проверено — {result.get('collection_items', 0)}")
-    b.labeled_line("Новая структура", f"обновлено — {result.get('changed_items', 0)}")
-    b.labeled_line("Гардероб", f"обновлено — {result.get('wardrobe_items', 0)}")
-    b.labeled_line("Холодильник", f"упорядочено — {result.get('fridge_items', 0)}")
-    b.labeled_line("Не рекомендовать", f"объединено — {result.get('stoplist_items', 0)}")
-    concert_status = result.get("concerts_status")
-    if concert_status == "updated":
-        b.labeled_line(
-            "Концерты",
-            f"исполнителей — {result.get('concerts_artists', 0)} · "
-            f"событий — {result.get('concerts_events', 0)}",
+    if not any(result.get(key) for key in ("fixed", "duplicates", "review")):
+        return MessageSpec(
+            text="✅ База в порядке\nВсе записи уже соответствуют актуальному формату.",
         )
-    elif concert_status == "no_artists":
-        b.labeled_line("Концерты", "добавь любимых исполнителей для поиска")
-    elif concert_status == "unavailable":
-        b.labeled_line("Концерты", "сервис поиска сейчас не настроен")
-    elif concert_status == "failed":
-        b.labeled_line("Концерты", "не удалось обновить · попробуй позже")
-    if result.get("wardrobe_remaining"):
-        b.line("Часть физических свойств не удалось уточнить. Повтори обновление позже.")
-    else:
-        b.line("Физические свойства вещей приведены к текущей схеме.")
+    return MessageSpec(text=(
+        "✅ База обновлена\n"
+        f"Проверено: {result.get('checked', 0)}\n"
+        f"Исправлено: {result.get('fixed', 0)}\n"
+        f"Объединено дубликатов: {result.get('duplicates', 0)}\n"
+        f"Требуют проверки: {result.get('review', 0)}\n"
+        f"Без изменений: {result.get('unchanged', 0)}"
+    ))
+
+
+def language_review_item(item, remaining):
+    item = item or {}
+    b = MessageBuilder().section("🔎 Проверить изменение")
+    b.labeled_line("Сейчас", str(item.get("original") or "—"), lowercase=False)
+    if item.get("suggestion"):
+        b.labeled_line("Предлагается", str(item["suggestion"]), lowercase=False)
+    b.labeled_line("Почему", str(item.get("reason") or "Нужна ручная проверка"), lowercase=False)
+    b.labeled_line("Осталось", str(remaining))
     return b.build_stripped()
 
 

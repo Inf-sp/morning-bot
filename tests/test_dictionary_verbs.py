@@ -230,6 +230,10 @@ def test_analysis_failure_still_saves_word_and_shows_safe_fallback(monkeypatch):
 
     monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", fake_normalize)
     monkeypatch.setattr(dictionary_import, "_request_verb_analysis", fail_request)
+    monkeypatch.setattr(
+        dictionary_import.learning_data_quality, "check_new_entry",
+        lambda entry: asyncio.sleep(0, result=entry),
+    )
     monkeypatch.setattr(dictionary_import.store, "get_list", lambda _key, _cid: [])
     monkeypatch.setattr(
         dictionary_import.store, "add_to_list",
