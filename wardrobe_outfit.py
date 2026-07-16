@@ -13,7 +13,7 @@ from wardrobe_model import (
 
 WARDROBE_OUTERWEAR_MAX_TEMP = 20
 NEUTRAL_COLORS = ("бел", "чёрн", "черн", "сер", "беж", "сини", "деним", "джинс")
-SAFE_NEUTRAL_STYLE_TIP = "Носи комплект без дополнительных стилистических изменений."
+SAFE_NEUTRAL_STYLE_TIP = "Слегка заправь верх спереди, чтобы силуэт выглядел собраннее."
 _SUNGLASSES_MARKERS = ("солнцезащит", "солнечн", "очки от солнца", "sunglasses")
 
 def _day_key():
@@ -274,12 +274,12 @@ def build_style_tip(items, weather_ctx=None):
     if outer and weather_ctx.get("warm") and any(
         marker in str(outer.get("name") or "").casefold() for marker in _OPENABLE_LAYER_MARKERS
     ):
-        return "Оставь верхний слой расстёгнутым."
+        return "Оставь верхний слой расстёгнутым, чтобы силуэт выглядел легче."
     sleeved = next((it for it in items
                     if it.get("zone") == "Верх" and _has_confirmed_long_sleeves(it)),
                    None)
     if sleeved:
-        return "Подверни рукава, верх оставь навыпуск."
+        return "Подверни рукава до середины предплечья, чтобы образ выглядел легче."
     return SAFE_NEUTRAL_STYLE_TIP
 
 
@@ -302,6 +302,16 @@ _GARMENT_CLAIM_MARKERS = (
     "лофер", "ботин", "сандал", "часы", "ремн", "сумк", "рюкзак", "шарф", "кепк", "очк",
 )
 _ACCESSORY_CLAIM_MARKERS = ("аксессуар", "часы", "ремн", "сумк", "рюкзак", "шарф", "кепк", "шапк", "очк", "украшен", "кольц", "цепоч")
+_STYLE_TIP_ACTION_RE = re.compile(
+    r"\b(?:заправ|подверн|закат|остав|расстег|застег|подтян|сдвин|слож|нос|"
+    r"добав|сними|убери|возьми)\w*",
+    re.IGNORECASE,
+)
+_STYLE_TIP_RESULT_RE = re.compile(r"(?:чтобы|так\s+(?:образ|силуэт|сочетание))", re.IGNORECASE)
+_UNHELPFUL_STYLE_TIP_MARKERS = (
+    "без дополнительных", "без изменений", "ничего добавлять", "ничего менять",
+    "образ готов", "не нужно", "носи комплект", "носи этот наряд",
+)
 
 
 def _facts_text(items):
@@ -380,6 +390,10 @@ def _natural_reason(reason):
 
 def _valid_style_tip(tip, items):
     tip_low = str(tip or "").casefold()
+    if (any(marker in tip_low for marker in _UNHELPFUL_STYLE_TIP_MARKERS)
+            or not _STYLE_TIP_ACTION_RE.search(tip_low)
+            or not _STYLE_TIP_RESULT_RE.search(tip_low)):
+        return False
     if not _claims_are_grounded(tip, items):
         return False
     if any(action in tip_low for action in ("подверни рукав", "подвернуть рукав", "закатай рукав", "закатать рукав")):

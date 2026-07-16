@@ -36,7 +36,7 @@ from wardrobe_migration import migrate_item_attrs
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
-COPY_VALIDATOR_VERSION = 3
+COPY_VALIDATOR_VERSION = 4
 
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
@@ -395,10 +395,10 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, q=N
     look_data = {
         "weather_intro": _weather_decision(weather_ctx),
         "items": [{"name": public_item_name(it)} for it in validated_copy["items"]],
-        "reasons": validated_copy["reasons"],
-        "style_tip": validated_copy["style_tip"],
-        "final_heading": final_heading,
-        "final_text": validated_copy["final_text"],
+        "style_tip": (
+            "Возьми зонт или лёгкий дождевик, чтобы выбранные вещи не промокли."
+            if gap_note else validated_copy["style_tip"]
+        ),
     }
     text, entities = _build_look_message(look_data)
     # Порядок важен: save_outfit_feedback мутирует гардероб (use_count/last_used) и

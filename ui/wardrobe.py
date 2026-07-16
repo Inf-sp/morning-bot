@@ -71,12 +71,10 @@ def _finish_dot(value):
 
 
 def render_wardrobe_message(look_data):
-    """Образ на сегодня — компактная карточка: одно погодное решение вместо цифр,
-    вещи списком по одной на строку, до трёх причин подбора, совет по стилю и
-    опциональный инсайт по истории образов. Без даты и города в шапке — они уже
-    есть в "Мой день".
+    """Образ на сегодня: погодное решение, вещи и один практический совет.
+    Без повторяющих объяснений и итогового подтверждения готовности образа.
 
-    look_data: {weather_decision, items[{name}], reasons[], style_tip, insight}
+    look_data: {weather_intro, items[{name}], style_tip}
     """
     look_data = look_data or {}
     b = MessageBuilder()
@@ -93,23 +91,15 @@ def render_wardrobe_message(look_data):
     if items:
         b.spacer()
         b.labeled_line("Надень")
+        b.spacer()
         for it in items:
-            b.line(f"- {it}")
+            b.line(it)
 
     tip = _finish_dot(look_data.get("style_tip"))
     if tip:
         b.spacer()
-        b.labeled_line("Как носить", tip)
-
-    reasons = [_clean_text(r).rstrip(".!?") for r in (look_data.get("reasons") or []) if _clean_text(r)]
-    if reasons:
-        b.spacer()
-        b.labeled_line("Почему работает", _finish_dot(reasons[0]))
-
-    final_text = _finish_dot(look_data.get("final_text") or look_data.get("weather_decision"))
-    if final_text:
-        b.spacer()
-        b.labeled_line(look_data.get("final_heading") or "Образ готов", final_text)
+        b.text_line("💡 ")
+        b.labeled_line("Полезно", tip)
 
     return b.build_stripped()
 
