@@ -51,6 +51,10 @@ def _repo(cid):
     return UserListRepository(config.THOUGHTS_KEY, cid)
 
 
+def _review_repo(cid):
+    return UserListRepository(config.THOUGHT_REVIEWS_KEY, cid)
+
+
 def _now():
     return datetime.now(config.TZ)
 
@@ -134,8 +138,15 @@ def _update_record(cid, thought_id, **changes):
     return _repo(cid).mutate(mutate)
 
 
-def _get_record(cid, thought_id):
-    return next((item for item in records(cid) if item.get("id") == thought_id), None)
+def _append_review_event(cid, event):
+    review_id = event.get("id")
+
+    def mutate(items):
+        if review_id and any(item.get("id") == review_id for item in items if isinstance(item, dict)):
+            return items, False
+        return [*items, event], True
+
+    return _review_repo(cid).mutate(mutate)
 
 
 def _heuristic_classification(text):
@@ -199,153 +210,191 @@ async def classify(text):
     }
 
 
-def _fallback_scenario(kind, force_action=False):
-    if kind == "practical_problem":
-        return {
-            "title": "🎯 Начнём с малого",
-            "body": "Выбери только один небольшой результат на сейчас.",
-            "action": "Первый шаг: открыть нужные материалы и отметить один пункт.",
-            "question": "Что важнее всего закончить сегодня?",
-        }
-    if kind == "anxious_prediction":
-        return {
-            "title": "😌 Пока это мысль, а не факт",
-            "body": "Не нужно сейчас доказывать обратное.",
-            "action": "Что поможет сейчас: записать один факт, который уже известен.",
-            "question": "",
-        }
-    if kind == "emotion":
-        return {
-            "title": "😮‍💨 Сейчас тяжело собраться",
-            "body": "Начнём с одного действия на две минуты.",
-            "action": "Поставь короткий таймер и убери один предмет." if force_action else "",
-            "question": "",
-        }
-    return {
-        "title": "😮‍💨 Мысль сохранена",
-        "body": "Сейчас её не обязательно решать.",
-        "action": "",
-        "question": "",
-    }
+def _review_is_deferred_today(cid):
+    return settings.get(cid, "_thoughts_review_later_date", "") == _today()
 
 
-def _scenario_word_count(data):
-    return len(" ".join(str(data.get(key, "")) for key in ("title", "body", "action", "question")).split())
-
-
-async def _build_scenario(record, *, force_action=False, avoid_actions=()):
-    kind = record.get("type", "unknown")
-    fallback = _fallback_scenario(kind, force_action=force_action)
-    guidance = await asyncio.to_thread(
-        thoughts_knowledge.retrieve, record.get("text", ""), kind, 3)
-    prompt = (
-        "Сформируй короткий ответ для органайзера мыслей, не для терапии. До 45 слов целиком, "
-        "один заголовок, максимум два коротких абзаца, не больше одного вопроса и ровно одно действие. "
-        "Без диагнозов, психологических терминов, заверений что всё будет хорошо и без просьбы рассказать подробнее. "
-        "Действие должно занимать 2–15 минут. Не предлагай дыхание при медицинских симптомах. "
-        "Верни JSON {\"title\":\"...\",\"body\":\"...\",\"action\":\"...\",\"question\":\"...\"}.\n"
-        f"Тип: {kind}. Нужен новый конкретный шаг: {bool(force_action)}. "
-        f"Не повторять действия: {list(avoid_actions)}.\n"
-        f"Проверенные материалы:\n- " + "\n- ".join(guidance) + "\n"
-        f"Мысль: {secure.wrap_untrusted(record.get('text', ''), 'мысль пользователя')}"
-    )
-    try:
-        data = await ai.allm_json(prompt, 320, module="health")
-        result = {
-            # Поля модели всегда превращаем в одну строку: структуру карточки
-            # задаёт только наш рендер, поэтому лишние заголовки и абзацы невозможны.
-            key: " ".join(str(data.get(key) or "").split())
-            for key in ("title", "body", "action", "question")
-        }
-        if not result["title"] or _scenario_word_count(result) > 45:
-            return fallback
-        if sum(value.count("?") for value in result.values()) > 1:
-            result["question"] = ""
-        if kind != "emotion" or force_action:
-            if not result["action"]:
-                return fallback
-        else:
-            result["action"] = ""
-        return result
-    except Exception:
-        return fallback
-
-
-def _scenario_keyboard(record, *, action_offered=False):
-    thought_id = record["id"]
-    kind = record.get("type")
-    if kind == "practical_problem" or action_offered:
-        return InlineKeyboardMarkup([
-            [InlineKeyboardButton("Другой шаг", callback_data=f"thought_other_{thought_id}")],
-            [InlineKeyboardButton("✅ Готово", callback_data=f"thought_done_{thought_id}"),
-             InlineKeyboardButton("Оставить до вечера", callback_data=f"thought_evening_{thought_id}")],
-        ])
-    if kind == "anxious_prediction":
-        return InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Готово", callback_data=f"thought_done_{thought_id}"),
-            InlineKeyboardButton("Оставить до вечера", callback_data=f"thought_evening_{thought_id}"),
-        ]])
-    if kind == "emotion":
-        return InlineKeyboardMarkup([[
-            InlineKeyboardButton("Предложить действие", callback_data=f"thought_action_{thought_id}"),
-            InlineKeyboardButton("Оставить на потом", callback_data=f"thought_later_{thought_id}"),
-        ]])
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Готово", callback_data=f"thought_done_{thought_id}"),
-        InlineKeyboardButton("Оставить на потом", callback_data=f"thought_later_{thought_id}"),
-    ]])
-
-
-async def send_home(bot, cid):
+async def send_home(bot, cid, *, notice_title="", notice_body=""):
     cid = str(cid)
     store.pending_input[cid] = "thought"
     settings.set_(cid, "_thoughts_prompt_ts", _now().timestamp())
     settings.set_(cid, "_thoughts_capture_mode", "manual")
-    msg = thoughts_ui.home(count_today(cid), len(open_records(cid)))
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📋 Что в голове", callback_data="thought_list")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_balance"),
-         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
-    ])
-    await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities,
-        reply_markup=kb, transient=True)
-
-
-async def send_inbox(bot, cid):
-    cid = str(cid)
-    all_records = records(cid)
-    today_items = [item for item in all_records if item.get("date") == _today()]
     opened = open_records(cid)
-    msg = thoughts_ui.inbox(today_items, len(opened))
+    msg = thoughts_ui.home(
+        count_today(cid), opened,
+        notice_title=notice_title, notice_body=notice_body)
     rows = []
-    if opened:
-        rows.append([InlineKeyboardButton("Разобрать мысли", callback_data="thought_review")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_daycheck")])
+    if opened and not _review_is_deferred_today(cid):
+        rows.append([InlineKeyboardButton("✨ Разобрать мысли", callback_data="thought_review")])
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_balance"),
+        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+    ])
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,
         reply_markup=InlineKeyboardMarkup(rows), transient=True)
 
 
-async def _send_scenario(bot, cid, record, *, force_action=False, q=None):
-    history = list(record.get("action_history") or [])
-    data = await _build_scenario(record, force_action=force_action, avoid_actions=history)
-    action = data.get("action", "")
-    if action and action not in history:
-        history.append(action)
-        record = _update_record(cid, record["id"], action_history=history) or record
-    msg = thoughts_ui.scenario(**data)
-    kb = _scenario_keyboard(record, action_offered=force_action)
-    store.last_source[str(cid)] = "Здоровье · Мысли"
-    store.last_answer[str(cid)] = msg.text
+async def send_inbox(bot, cid):
+    # Старые кнопки «Что в голове» ведут на новый единый главный экран.
+    await send_home(bot, cid)
+
+
+def _clean_review_line(value):
+    return " ".join(str(value or "").replace("?", ".").split()).strip()
+
+
+def _fallback_review(items):
+    practical = [
+        _clean_review_line(item.get("text", "")).strip(" .")
+        for item in items
+        if item.get("type") == "practical_problem"
+    ]
+    actions = []
+    for value in practical:
+        value = re.sub(r"(?i)^(?:мне\s+)?(?:нужно|надо|не забыть)\s+", "", value).strip()
+        if value:
+            actions.append(value[:1].upper() + value[1:] + ".")
+        if len(actions) == 2:
+            break
+    if len(actions) < 3:
+        actions.append("Выбрать одну главную задачу на сегодня.")
+    has_anxious = any(item.get("type") == "anxious_prediction" for item in items)
+    return {
+        "summary": "Сейчас в голове смешались задачи и тревожные предположения.",
+        "actions": actions[:3],
+        "reframe": (
+            "Тревожная мысль пока не является фактом. Всё делать необязательно — достаточно закончить главное."
+            if has_anxious else ""
+        ),
+    }
+
+
+def _review_word_count(data):
+    return len(" ".join([
+        str(data.get("summary", "")),
+        *[str(value) for value in data.get("actions", [])],
+        str(data.get("reframe", "")),
+    ]).split())
+
+
+async def _build_review(items):
+    unique_items = []
+    seen_texts = set()
+    for item in items:
+        normalized = " ".join(str(item.get("text", "")).casefold().split()).strip(" .!?")
+        if normalized and normalized not in seen_texts:
+            seen_texts.add(normalized)
+            unique_items.append(item)
+    items = unique_items
+    fallback = _fallback_review(items)
+    combined = "\n".join(f"- {item.get('text', '')}" for item in items)
+    kinds = ", ".join(item.get("type", "unknown") for item in items)
+    guidance = []
+    for kind in ("practical_problem", "anxious_prediction", "emotion"):
+        found = await asyncio.to_thread(thoughts_knowledge.retrieve, combined, kind, 2)
+        for value in found:
+            if value not in guidance:
+                guidance.append(value)
+    prompt = (
+        "Сделай единый компактный разбор активных записей для внешней памяти, не психотерапию. "
+        "Объедини повторы. Найди только то, что требует действия. Предложи максимум три конкретных "
+        "действия на 2–15 минут. Для всех тревожных предположений дай ровно одну спокойную формулировку, "
+        "отделяющую предположение от факта, без ложных заверений. Не разбирай каждую запись отдельно, "
+        "не ставь диагноз, не используй проценты и оценки, не задавай вопросов. Весь результат до 120 слов. "
+        "Верни JSON {\"summary\":\"1-2 коротких предложения\",\"actions\":[\"до 3 действий\"],"
+        "\"reframe\":\"одна формулировка или пусто\"}.\n"
+        f"Скрытые типы: {kinds}.\n"
+        f"Проверенные материалы:\n- " + "\n- ".join(guidance[:5]) + "\n"
+        f"Активные записи:\n{secure.wrap_untrusted(combined, 'активные мысли пользователя')}"
+    )
+    try:
+        data = await ai.allm_json(prompt, 600, module="health")
+        actions = []
+        for raw in data.get("actions", []) if isinstance(data.get("actions"), list) else []:
+            action = _clean_review_line(raw)
+            if action and action.casefold() not in {value.casefold() for value in actions}:
+                actions.append(action)
+        result = {
+            "summary": _clean_review_line(data.get("summary")),
+            "actions": actions[:3],
+            "reframe": _clean_review_line(data.get("reframe")),
+        }
+        has_anxious = any(item.get("type") == "anxious_prediction" for item in items)
+        if not has_anxious:
+            result["reframe"] = ""
+        rendered_words = len(thoughts_ui.review(
+            result["summary"], result["actions"], result["reframe"]).text.split())
+        if (not result["summary"] or not result["actions"]
+                or (has_anxious and not result["reframe"])
+                or _review_word_count(result) > 115 or rendered_words > 120):
+            return fallback
+        return result
+    except Exception:
+        return fallback
+
+
+def _review_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Оставить на потом", callback_data="thought_review_later"),
+         InlineKeyboardButton("Очистить мысли", callback_data="thought_review_clear")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="as_daycheck"),
+         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+    ])
+
+
+def _cached_review(cid):
+    value = settings.get(cid, "_thoughts_review_cache", {})
+    return value if isinstance(value, dict) else {}
+
+
+async def _show_cached_review(bot, cid, q=None):
+    cache = _cached_review(cid)
+    result = cache.get("result") if isinstance(cache.get("result"), dict) else None
+    if not result:
+        await send_home(bot, cid)
+        return
+    msg = thoughts_ui.review(
+        result.get("summary", ""), result.get("actions", []), result.get("reframe", ""))
     if q is not None:
         try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=_review_keyboard())
             return
         except Exception:
             pass
     await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_review_keyboard())
+
+
+async def review_all(bot, cid, q=None):
+    cid = str(cid)
+    opened = open_records(cid)
+    if not opened or _review_is_deferred_today(cid):
+        await send_home(bot, cid)
+        return
+    result = await _build_review(opened)
+    cache = {
+        "id": uuid.uuid4().hex,
+        "date": _today(),
+        "created_at": _now().isoformat(),
+        "thought_ids": [item["id"] for item in opened],
+        "result": result,
+    }
+    settings.set_(cid, "_thoughts_review_cache", cache)
+    store.last_source[cid] = "Здоровье · Мысли"
+    msg = thoughts_ui.review(result["summary"], result["actions"], result["reframe"])
+    store.last_answer[cid] = msg.text
+    if q is not None:
+        message_id = getattr(getattr(q, "message", None), "message_id", None)
+        store.transient_message.pop(cid, None)
+        store.clear_persisted_transient_message_id(cid, message_id)
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=_review_keyboard())
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_review_keyboard())
 
 
 def _split_input(text, split_commas=False):
@@ -383,9 +432,6 @@ async def capture(bot, cid, text, *, split_commas=False):
     _repo(cid).mutate(lambda items: (items + new_records, None))
     settings.set_(cid, "_thoughts_last_added_at", now.timestamp())
     settings.set_(cid, "_worry_prompt_ts", 0)
-    ack = thoughts_ui.saved(count_today(cid))
-    await bot.send_message(
-        chat_id=cid, text=ack.text, entities=ack.entities, transient=True)
 
     classified = []
     for record in new_records:
@@ -409,17 +455,15 @@ async def capture(bot, cid, text, *, split_commas=False):
         await bot.send_message(
             chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
-    actionable = next((item for item in classified if item.get("type") != "unknown"), None)
-    if actionable:
-        await _send_scenario(bot, cid, actionable)
+    await send_home(
+        bot, cid,
+        notice_title="✅ Сохранено",
+        notice_body="Больше не нужно держать это в голове.")
 
 
 async def review_next(bot, cid):
-    opened = open_records(cid)
-    if not opened:
-        await send_inbox(bot, cid)
-        return
-    await _send_scenario(bot, cid, opened[0])
+    # Совместимость со старым именем функции: разбор теперь общий, не поштучный.
+    await review_all(bot, cid)
 
 
 async def _dismiss_message(bot, cid, q):
@@ -437,12 +481,93 @@ async def _dismiss_message(bot, cid, q):
     store.clear_persisted_transient_message_id(cid, message_id)
 
 
+def _review_items(cid, cache):
+    wanted = set(cache.get("thought_ids") or [])
+    return [item for item in records(cid) if item.get("id") in wanted]
+
+
+async def _leave_review_for_later(bot, cid, q):
+    cache = _cached_review(cid)
+    if cache:
+        event = {
+            "id": cache.get("id") or uuid.uuid4().hex,
+            "date": cache.get("date") or _today(),
+            "created_at": cache.get("created_at") or _now().isoformat(),
+            "outcome": "left_for_later",
+            "thought_ids": list(cache.get("thought_ids") or []),
+            "result": cache.get("result") or {},
+        }
+        _append_review_event(cid, event)
+        for item in _review_items(cid, cache):
+            _update_record(cid, item["id"], status="later")
+    settings.set_(cid, "_thoughts_review_later_date", _today())
+    settings.set_(cid, "_thoughts_evening_closed_date", _today())
+    try:
+        await q.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await send_home(
+        bot, cid,
+        notice_title="✅ Оставлено",
+        notice_body="К мыслям можно вернуться позже.")
+
+
+async def _confirm_clear_review(bot, cid, q):
+    msg = thoughts_ui.clear_confirmation()
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("Да, очистить", callback_data="thought_review_clear_yes"),
+        InlineKeyboardButton("Отмена", callback_data="thought_review_clear_cancel"),
+    ]])
+    try:
+        await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+    except Exception:
+        await bot.send_message(
+            chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb, transient=True)
+
+
+async def _clear_review(bot, cid, q):
+    cache = _cached_review(cid)
+    selected = _review_items(cid, cache) if cache else open_records(cid)
+    type_counts = {}
+    for item in selected:
+        kind = item.get("type", "unknown")
+        type_counts[kind] = type_counts.get(kind, 0) + 1
+        _update_record(
+            cid, item["id"], status="closed",
+            completed_at=_now().isoformat(), closed_reason="review_clear")
+    # После очистки сохраняется только обезличенный факт завершения, без текста
+    # разбора и без идентификаторов мыслей.
+    _append_review_event(cid, {
+        "id": uuid.uuid4().hex,
+        "date": _today(),
+        "completed_at": _now().isoformat(),
+        "outcome": "cleared",
+        "record_count": len(selected),
+        "type_counts": type_counts,
+    })
+    settings.set_(cid, "_thoughts_review_cache", {})
+    settings.set_(cid, "_thoughts_evening_closed_date", _today())
+    await _dismiss_message(bot, cid, q)
+    await send_home(
+        bot, cid,
+        notice_title="✅ Мысли очищены",
+        notice_body="Сейчас список пуст.")
+
+
 async def handle_callback(bot, cid, q, data):
     cid = str(cid)
     if data == "thought_list":
         await send_inbox(bot, cid); return True
     if data == "thought_review":
-        await review_next(bot, cid); return True
+        await review_all(bot, cid, q=q); return True
+    if data == "thought_review_later":
+        await _leave_review_for_later(bot, cid, q); return True
+    if data == "thought_review_clear":
+        await _confirm_clear_review(bot, cid, q); return True
+    if data == "thought_review_clear_cancel":
+        await _show_cached_review(bot, cid, q=q); return True
+    if data == "thought_review_clear_yes":
+        await _clear_review(bot, cid, q); return True
     if data == "thought_calm":
         settings.set_(cid, "_thoughts_calm_date", _today())
         store.pending_input.pop(cid, None)
@@ -453,50 +578,12 @@ async def handle_callback(bot, cid, q, data):
             _update_record(cid, item["id"], status="open", deferred_until=tomorrow)
         settings.set_(cid, "_thoughts_evening_closed_date", _today())
         await _dismiss_message(bot, cid, q); return True
-    if data == "thought_close_day":
-        settings.set_(cid, "_thoughts_evening_closed_date", _today())
-        await _dismiss_message(bot, cid, q); return True
-
-    prefixes = {
-        "thought_other_": "other",
-        "thought_action_": "action",
-        "thought_done_": "done",
-        "thought_evening_": "evening",
-        "thought_later_": "later",
-    }
-    selected = next(((prefix, name) for prefix, name in prefixes.items() if data.startswith(prefix)), None)
-    if not selected:
-        return False
-    prefix, name = selected
-    thought_id = data[len(prefix):]
-    record = _get_record(cid, thought_id)
-    if not record:
-        await send_inbox(bot, cid); return True
-    if name in ("other", "action"):
-        await _send_scenario(bot, cid, record, force_action=True, q=q); return True
-    if name == "done":
-        _update_record(cid, thought_id, status="done", completed_at=_now().isoformat())
-        try:
-            await q.edit_message_reply_markup(reply_markup=None)
-        except Exception:
-            pass
-        msg = thoughts_ui.completed()
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Закрыть день", callback_data="thought_close_day")
-        ]])
-        await bot.send_message(
-            chat_id=cid, text=msg.text, entities=msg.entities,
-            reply_markup=kb, transient=True)
-        return True
-    if name in ("evening", "later"):
-        _update_record(cid, thought_id, status="later")
-        msg = thoughts_ui.scenario(
-            "😌 Оставлено на потом",
-            "Мысль сохранена. Вернёмся к ней во время вечернего закрытия.")
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=None)
-        except Exception:
-            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+    # Старые поштучные кнопки больше не запускают отдельные разборы.
+    if data == "thought_close_day" or data.startswith((
+        "thought_other_", "thought_action_", "thought_done_",
+        "thought_evening_", "thought_later_",
+    )):
+        await send_home(bot, cid)
         return True
     return False
 

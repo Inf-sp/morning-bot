@@ -19,7 +19,10 @@ def _collection_keys():
         for cfg in cleanup.COLLECTIONS.values()
         if cfg.get("storage_key") and not str(cfg.get("storage_key")).startswith("profile.")
     }
-    keys.update({config.DICT_KEY, config.DIARY_KEY, config.WORRIES_KEY, config.COUNTRIES_KEY})
+    keys.update({
+        config.DICT_KEY, config.DIARY_KEY, config.WORRIES_KEY,
+        config.THOUGHT_REVIEWS_KEY, config.COUNTRIES_KEY,
+    })
     return sorted(keys)
 
 

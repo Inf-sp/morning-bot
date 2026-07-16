@@ -67,8 +67,9 @@ def test_saved_word_actions_include_delete_and_dictionary():
     assert keyboard.inline_keyboard[0][0].callback_data == "a_dictdel_nl_zekerheid"
     assert keyboard.inline_keyboard[1][0].text == "📖 Мой словарь"
     assert keyboard.inline_keyboard[1][0].callback_data == "a_dictlang_nl"
-    assert keyboard.inline_keyboard[2][0].text == "✅ Готово"
-    assert keyboard.inline_keyboard[2][0].callback_data == "a_dictdone"
+    assert [button.text for row in keyboard.inline_keyboard for button in row] == [
+        "❌ Удалить", "📖 Мой словарь", "⬅️ Назад", "#️⃣ Меню",
+    ]
 
 
 def test_duplicate_word_actions_include_dictionary():
@@ -77,6 +78,9 @@ def test_duplicate_word_actions_include_dictionary():
     assert keyboard.inline_keyboard[0][0].callback_data == "a_dictdel_en_confidence"
     assert keyboard.inline_keyboard[1][0].text == "📖 Мой словарь"
     assert keyboard.inline_keyboard[1][0].callback_data == "a_dictlang_en"
+    assert [button.text for row in keyboard.inline_keyboard for button in row] == [
+        "❌ Удалить", "📖 Мой словарь", "⬅️ Назад", "#️⃣ Меню",
+    ]
 
 
 def test_done_removes_buttons_but_keeps_saved_word_card():

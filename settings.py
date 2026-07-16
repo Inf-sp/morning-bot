@@ -202,6 +202,55 @@ async def refresh_database(bot, cid, q=None):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
+async def confirm_delete_thought_history(bot, cid, q=None):
+    msg = settings_ui.thought_history_delete_confirmation()
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Да, удалить историю", callback_data="set_thought_history_delete_yes")],
+        [InlineKeyboardButton("Отмена", callback_data="set_home")],
+    ])
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            _mark_transient_edit(bot, cid, q.message)
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities,
+        reply_markup=kb, transient=True)
+
+
+async def delete_thought_history(bot, cid, q=None):
+    cid = str(cid)
+    store.set_list(config.THOUGHTS_KEY, cid, [])
+    store.set_list(config.THOUGHT_REVIEWS_KEY, cid, [])
+    data = _all()
+    user = data.get(cid, {})
+    if isinstance(user, dict):
+        data[cid] = {
+            key: value for key, value in user.items()
+            if not str(key).startswith("_thoughts_")
+        }
+        store._save(SETTINGS_KEY, data)
+    if store.pending_input.get(cid) in ("worry", "thought", "thought_reminder"):
+        store.pending_input.pop(cid, None)
+    msg = settings_ui.thought_history_deleted()
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
+        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+    ]])
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            _mark_transient_edit(bot, cid, q.message)
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities,
+        reply_markup=kb, transient=True)
+
+
 class _NoKbBot:
     """Обёртка для push-уведомлений: убирает кнопки, как в плановых уведомлениях."""
     def __init__(self, bot):
@@ -784,6 +833,10 @@ async def handle_callback(bot, cid, data, q=None):
         await send_notif(bot, cid, q)
     elif data == "set_refresh_data":
         await refresh_database(bot, cid, q)
+    elif data == "set_thought_history_delete":
+        await confirm_delete_thought_history(bot, cid, q)
+    elif data == "set_thought_history_delete_yes":
+        await delete_thought_history(bot, cid, q)
     elif data == "set_priorities":
         await send_personalization(bot, cid, q)
     elif data.startswith("set_prio_"):

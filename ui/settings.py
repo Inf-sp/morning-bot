@@ -120,6 +120,21 @@ def settings_home():
     return b.build_stripped()
 
 
+def thought_history_delete_confirmation():
+    b = MessageBuilder()
+    b.section("Удалить историю мыслей?")
+    b.line("Будут навсегда удалены все текущие и прошлые записи и сохранённые разборы.")
+    b.line("Настройки, уведомления и персонализация останутся без изменений.")
+    return b.build_stripped()
+
+
+def thought_history_deleted():
+    b = MessageBuilder()
+    b.section("✅ История мыслей удалена")
+    b.line("Записи и сохранённые разборы удалены.")
+    return b.build_stripped()
+
+
 def database_refresh_result(result):
     result = result or {}
     b = MessageBuilder().section("🔄 База обновлена")

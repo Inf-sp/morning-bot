@@ -557,7 +557,6 @@ def _dict_saved_kb(lang, term_key):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}")],
-        [InlineKeyboardButton("✅ Готово", callback_data="a_dictdone")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
          InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
@@ -567,7 +566,6 @@ def _dict_duplicate_kb(lang, term_key):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}")],
-        [InlineKeyboardButton("✅ Готово", callback_data="a_dictdone")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
          InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])

@@ -222,6 +222,7 @@ async def send_notes(bot, cid):
         [InlineKeyboardButton("⭐️ Сохранённое", callback_data="as_bucket_fav")],
         [InlineKeyboardButton("🔄 Обновить базу", callback_data="set_refresh_data")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
+        [InlineKeyboardButton("❌ Удалить историю мыслей", callback_data="set_thought_history_delete")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.settings_home()

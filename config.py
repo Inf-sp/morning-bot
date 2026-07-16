@@ -119,6 +119,7 @@ WORRIES_KEY = "worries.json"
 # Новое имя раздела использует прежний ключ, чтобы существующие записи
 # мигрировали лениво и не потерялись после обновления.
 THOUGHTS_KEY = WORRIES_KEY
+THOUGHT_REVIEWS_KEY = "thought_reviews.json"
 NOTES_KEY = "notes.json"
 DICT_KEY = "dict.json"
 LAGOM_KEY = "lagom.json"

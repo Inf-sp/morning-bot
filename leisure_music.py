@@ -8,23 +8,13 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import ai
 import config
 import recommendation_stoplist
+import research
 import settings
 import store
 from ui import leisure as leisure_ui
 from ui.constants import ui_label
 
 _log = logging.getLogger(__name__)
-
-
-def _item_text(item):
-    if isinstance(item, dict):
-        return str(item.get("value", "")).strip()
-    return str(item or "").strip()
-
-
-def _ensure_artists(cid):
-    return [_item_text(item) for item in store.get_list(config.ARTISTS_KEY, cid)
-            if _item_text(item)]
 
 
 def _add_unique(key, cid, value):
@@ -48,6 +38,8 @@ async def _ask_collect(bot, cid, kind):
 def content_recommend(kind, cid):
     import leisure_collection
     return leisure_collection.content_recommend(kind, cid)
+
+
 def _kick_off_new_artist_concert_check(cid, artist_names):
     """При добавлении нового артиста запускает внешний поиск концертов сразу
     (Tavily/Firecrawl/AI), не дожидаясь недельного цикла — фоновой задачей."""
@@ -107,6 +99,49 @@ def _ensure_artists(cid):
             if _item_text(item)]
 
 
+_LANGUAGE_MUSIC = {
+    "nl": {
+        "label": "нидерландский",
+        "search": "contemporary popular Dutch-language artists",
+        "example": "Eefje de Visser — De Parade",
+    },
+    "en": {
+        "label": "английский",
+        "search": "contemporary popular English-language artists",
+        "example": "",
+    },
+}
+
+
+def _learning_language_code(cid):
+    """Язык — сигнал только после явного выбора, не по системному default."""
+    code = store.get_learning_language(cid)
+    if code:
+        return code
+    legacy = str(settings.get(cid, "study_lang", "") or "").strip().casefold()
+    return {"нидерландский": "nl", "английский": "en", "nl": "nl", "en": "en"}.get(legacy, "")
+
+
+def _language_music_context(cid):
+    profile = _LANGUAGE_MUSIC.get(_learning_language_code(cid))
+    if not profile:
+        return {"search": "", "prompt": ""}
+    example = (
+        f' Ориентир по сочетанию языка и красивого современного звучания: {profile["example"]}.'
+        if profile["example"] else ""
+    )
+    return {
+        "search": profile["search"],
+        "prompt": (
+            f'Пользователь изучает {profile["label"]} язык. Это сильный дополнительный приоритет, '
+            "но не жёсткий фильтр: сначала ищи современного заметного исполнителя, который поёт на этом "
+            "языке и действительно совпадает с музыкальным вкусом пользователя. Если совпадение по звучанию "
+            "слабое, выбери более точного артиста независимо от языка."
+            f"{example} Не повторяй этот пример автоматически в каждой рекомендации."
+        ),
+    }
+
+
 async def send_listen(bot, cid):
     _log.info("send_listen: start cid=%s", cid)
     arts_raw = _ensure_artists(cid)
@@ -120,6 +155,7 @@ async def send_listen(bot, cid):
         await _ask_collect(bot, cid, "artists")
         return
     anchors = ", ".join(arts[:25])
+    language_context = _language_music_context(cid)
     blocked = recommendation_stoplist.values(cid, "artist")
     notes = store.get_list(config.NOTES_KEY, cid)
     booked = [n.get("text", "") for n in notes
@@ -131,7 +167,12 @@ async def send_listen(bot, cid):
     try:
         web = await asyncio.to_thread(
             research.tavily_snippet,
-            f"new music similar to {anchors[:60]} indie alternative recommendations 2024 2025",
+            " ".join(part for part in (
+                "modern popular currently active music artists",
+                language_context["search"],
+                f"similar to {anchors[:100]}",
+                "real songs albums",
+            ) if part),
             500,
         )
     except Exception as e:
@@ -156,10 +197,13 @@ async def send_listen(bot, cid):
                 "2. Не смешивай полярные жанры: никакого симфо-метала, чистого клубного хауса "
                 "и других дальних жанров в сравнениях, если их нет во вкусе пользователя.\n\n"
                 f"Любимые исполнители пользователя (его вкус): {anchors}.\n"
+                f"Дополнительные предпочтения: {language_context['prompt'] or 'не указаны'}.\n"
                 f"НЕ предлагай никого из этого списка (уже в закладках/любимых/отклонены): {avoid_this_try}.\n"
                 f"{web_block}"
                 "Предложи РОВНО ОДНОГО НОВОГО исполнителя, максимально близкого по вкусу "
-                "(электроника, синтипоп, альт, дрим-поп, дарквейв, арт-поп и близкое).\n"
+                "пользователя. Предпочитай современных активных артистов с выразительной, мелодичной, "
+                "качественно спродюсированной музыкой. Исполнитель должен быть заметным, популярным или "
+                "признанным в своей сцене — не выбирай чрезмерно малоизвестного артиста без сильного совпадения.\n"
                 "Треки указывай ТОЛЬКО реально существующие — без выдуманных названий.\n"
                 "В why дай 2 коротких контрастных пункта: сначала точное сходство, затем отличие/зацепку.\n"
                 f"Попытка генерации: {attempt + 1}. Если сомневаешься, выбирай менее очевидный вариант.\n"

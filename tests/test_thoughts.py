@@ -9,9 +9,9 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import config
 import secure
 import settings
+import saved_items
 import thoughts
 import thoughts_knowledge
-from ui import thoughts as thoughts_ui
 
 
 class FakeRepo:
@@ -39,15 +39,40 @@ class FakeBot:
         return SimpleNamespace(message_id=len(self.sent), reply_markup=kwargs.get("reply_markup"))
 
 
+class FakeMessage:
+    def __init__(self, message_id=10):
+        self.message_id = message_id
+        self.text = ""
+        self.reply_markup = None
+        self.deleted = False
+
+    async def edit_text(self, text, **kwargs):
+        self.text = text
+        self.reply_markup = kwargs.get("reply_markup")
+
+    async def delete(self):
+        self.deleted = True
+
+
+class FakeQuery:
+    def __init__(self):
+        self.message = FakeMessage()
+
+    async def edit_message_reply_markup(self, reply_markup=None):
+        self.message.reply_markup = reply_markup
+
+
 def _button_count(markup):
     return sum(len(row) for row in markup.inline_keyboard)
 
 
 def _setup_state(monkeypatch):
     repo = FakeRepo()
+    repo.reviews = FakeRepo()
     settings_state = {}
     fixed_now = datetime(2026, 7, 16, 14, 0, tzinfo=config.TZ)
     monkeypatch.setattr(thoughts, "_repo", lambda _cid: repo)
+    monkeypatch.setattr(thoughts, "_review_repo", lambda _cid: repo.reviews)
     monkeypatch.setattr(thoughts, "_now", lambda: fixed_now)
     monkeypatch.setattr(
         thoughts.settings,
@@ -62,7 +87,7 @@ def _setup_state(monkeypatch):
     return repo, settings_state, fixed_now
 
 
-def test_home_is_compact_and_has_at_most_three_buttons(monkeypatch):
+def test_empty_home_has_no_review_button(monkeypatch):
     _setup_state(monkeypatch)
     bot = FakeBot()
 
@@ -73,11 +98,33 @@ def test_home_is_compact_and_has_at_most_three_buttons(monkeypatch):
         "😮‍💨 Мысли\n\n"
         "Не держи всё в голове.\n"
         "Напиши мысль, задачу или тревогу одним сообщением.\n\n"
-        "Сегодня записано: 0\n"
-        "Осталось разобрать: 0"
+        "Сейчас в голове:\n"
+        "Список пуст.\n\n"
+        "Сегодня записано: 0"
     )
     assert message["transient"] is True
-    assert _button_count(message["reply_markup"]) == 3
+    assert [button.text for row in message["reply_markup"].inline_keyboard for button in row] == [
+        "⬅️ Назад", "#️⃣ Меню"
+    ]
+
+
+def test_home_shows_active_thoughts_and_review_button(monkeypatch):
+    repo, _settings, fixed_now = _setup_state(monkeypatch)
+    repo.items = [
+        {"id": "1", "text": "Кажется, я не успею закончить всё сегодня.", "status": "open", "date": "2026-07-16"},
+        {"id": "2", "text": "Нужно купить фильтры для фонтана.", "status": "open", "date": "2026-07-16"},
+        {"id": "3", "text": "Не забыть ответить на сообщение.", "status": "open", "date": "2026-07-16"},
+    ]
+    bot = FakeBot()
+
+    asyncio.run(thoughts.send_home(bot, "42"))
+
+    text = bot.sent[0]["text"]
+    assert "Сейчас в голове:\n• Кажется, я не успею" in text
+    assert "• Нужно купить фильтры для фонтана." in text
+    assert "Сегодня записано: 3" in text
+    labels = [button.text for row in bot.sent[0]["reply_markup"].inline_keyboard for button in row]
+    assert labels == ["✨ Разобрать мысли", "⬅️ Назад", "#️⃣ Меню"]
 
 
 def test_crisis_and_medical_have_priority_without_model(monkeypatch):
@@ -98,7 +145,6 @@ def test_crisis_and_medical_have_priority_without_model(monkeypatch):
 def test_capture_preserves_original_text_and_hidden_fields(monkeypatch):
     repo, _settings, _fixed_now = _setup_state(monkeypatch)
     bot = FakeBot()
-    shown = []
 
     async def classify(_text):
         return {
@@ -110,11 +156,7 @@ def test_capture_preserves_original_text_and_hidden_fields(monkeypatch):
             "requires_safety_response": False,
         }
 
-    async def show(_bot, _cid, record, **_kwargs):
-        shown.append(record)
-
     monkeypatch.setattr(thoughts, "classify", classify)
-    monkeypatch.setattr(thoughts, "_send_scenario", show)
     original = "  Нужно подготовиться к экзамену.  "
 
     asyncio.run(thoughts.capture(bot, "42", original))
@@ -124,8 +166,8 @@ def test_capture_preserves_original_text_and_hidden_fields(monkeypatch):
     assert repo.items[0]["confidence"] == 0.87
     assert repo.items[0]["can_be_actioned"] is True
     assert bot.sent[0]["text"].startswith("✅ Сохранено")
+    assert original in bot.sent[0]["text"]
     assert bot.sent[0]["transient"] is True
-    assert shown[0]["id"] == repo.items[0]["id"]
 
 
 def test_crisis_capture_uses_direct_netherlands_protocol(monkeypatch):
@@ -174,7 +216,7 @@ def test_evening_close_only_sends_when_open_records_exist(monkeypatch):
     assert _button_count(bot.sent[0]["reply_markup"]) == 2
 
 
-def test_inbox_has_no_statistics_filters_or_clear_all(monkeypatch):
+def test_legacy_inbox_opens_new_home_without_clear_all(monkeypatch):
     repo, _settings, fixed_now = _setup_state(monkeypatch)
     repo.items = [{
         "id": "one",
@@ -191,15 +233,9 @@ def test_inbox_has_no_statistics_filters_or_clear_all(monkeypatch):
         for row in bot.sent[0]["reply_markup"].inline_keyboard
         for button in row
     ]
-    assert labels == ["Разобрать мысли", "⬅️ Назад"]
+    assert labels == ["✨ Разобрать мысли", "⬅️ Назад", "#️⃣ Меню"]
     assert "статист" not in bot.sent[0]["text"].casefold()
     assert "очист" not in " ".join(labels).casefold()
-
-
-def test_all_ordinary_scenario_keyboards_have_at_most_three_buttons():
-    for kind in ("practical_problem", "anxious_prediction", "emotion", "unknown"):
-        markup = thoughts._scenario_keyboard({"id": "abc", "type": kind})
-        assert _button_count(markup) <= 3
 
 
 def test_knowledge_base_contains_only_allowed_source_families():
@@ -231,50 +267,6 @@ def test_thought_notifications_are_on_by_default_and_evening_is_at_20(monkeypatc
     assert "20:00" in settings._notif_label("checkin_eve", "Закрыть день")
 
 
-def test_standard_ui_response_stays_under_word_limit():
-    data = thoughts._fallback_scenario("practical_problem")
-    message = thoughts_ui.scenario(**data)
-    assert len(message.text.split()) <= 45
-
-
-def test_model_line_breaks_cannot_create_extra_headings(monkeypatch):
-    async def fake_model(*_args, **_kwargs):
-        return {
-            "title": "🎯 Начнём\nЕщё один заголовок",
-            "body": "Одна строка\nи продолжение",
-            "action": "Открой документ.",
-            "question": "Что закончить первым?",
-        }
-
-    monkeypatch.setattr(thoughts.ai, "allm_json", fake_model)
-    monkeypatch.setattr(
-        thoughts.thoughts_knowledge,
-        "retrieve",
-        lambda *_args, **_kwargs: ["Короткий проверенный совет"],
-    )
-    record = {"text": "Нужно закончить отчёт", "type": "practical_problem"}
-
-    result = asyncio.run(thoughts._build_scenario(record))
-
-    assert "\n" not in result["title"]
-    assert "\n" not in result["body"]
-
-
-def test_scenario_has_at_most_two_body_paragraphs():
-    message = thoughts_ui.scenario(
-        "🎯 Начнём с малого",
-        "Выбери один небольшой результат.",
-        "Открой нужный документ.",
-        "Что важнее закончить сегодня?",
-    )
-
-    assert message.text.split("\n\n") == [
-        "🎯 Начнём с малого",
-        "Выбери один небольшой результат.",
-        "Открой нужный документ.\nЧто важнее закончить сегодня?",
-    ]
-
-
 def test_legacy_clear_all_button_no_longer_deletes_records(monkeypatch):
     repo, _settings, fixed_now = _setup_state(monkeypatch)
     repo.items = [{
@@ -291,4 +283,133 @@ def test_legacy_clear_all_button_no_longer_deletes_records(monkeypatch):
     asyncio.run(balance.worry_clear_all(bot, "42"))
 
     assert len(repo.items) == 1
-    assert bot.sent[0]["text"].startswith("😮‍💨 Что в голове")
+    assert bot.sent[0]["text"].startswith("😮‍💨 Мысли")
+
+
+def test_batch_review_is_short_deduplicated_and_has_only_allowed_buttons(monkeypatch):
+    repo, _settings, _fixed_now = _setup_state(monkeypatch)
+    repo.items = [
+        {"id": "1", "text": "Купить фильтры", "type": "practical_problem", "status": "open", "date": "2026-07-16"},
+        {"id": "2", "text": "Кажется, ничего не успею", "type": "anxious_prediction", "status": "open", "date": "2026-07-16"},
+    ]
+
+    async def fake_model(*_args, **_kwargs):
+        return {
+            "summary": "Смешались задачи и тревожные предположения.",
+            "actions": ["Заказать фильтры.", "Заказать фильтры.", "Выбрать главную задачу.", "Лишнее действие."],
+            "reframe": "Мысль о том, что ничего не получится, пока не является фактом?",
+        }
+
+    monkeypatch.setattr(thoughts.ai, "allm_json", fake_model)
+    monkeypatch.setattr(thoughts.thoughts_knowledge, "retrieve", lambda *_args, **_kwargs: [])
+    bot = FakeBot()
+    q = FakeQuery()
+
+    asyncio.run(thoughts.review_all(bot, "42", q=q))
+
+    assert q.message.text.startswith("✨ Разбор мыслей")
+    assert q.message.text.count("• Заказать фильтры.") == 1
+    assert "Лишнее действие" in q.message.text
+    assert "?" not in q.message.text
+    assert len(q.message.text.split()) <= 120
+    labels = [button.text for row in q.message.reply_markup.inline_keyboard for button in row]
+    assert labels == ["Оставить на потом", "Очистить мысли", "⬅️ Назад", "#️⃣ Меню"]
+
+
+def test_leave_for_later_saves_review_and_hides_repeat_review_today(monkeypatch):
+    repo, settings_state, _fixed_now = _setup_state(monkeypatch)
+    repo.items = [{
+        "id": "1", "text": "Купить фильтры", "type": "practical_problem",
+        "status": "open", "date": "2026-07-16",
+    }]
+    settings_state[("42", "_thoughts_review_cache")] = {
+        "id": "review-1", "date": "2026-07-16", "created_at": "now",
+        "thought_ids": ["1"],
+        "result": {"summary": "Есть одна задача.", "actions": ["Купить фильтры."], "reframe": ""},
+    }
+    bot = FakeBot()
+    q = FakeQuery()
+
+    asyncio.run(thoughts.handle_callback(bot, "42", q, "thought_review_later"))
+
+    assert repo.items[0]["status"] == "later"
+    assert repo.reviews.items[0]["result"]["actions"] == ["Купить фильтры."]
+    assert settings_state[("42", "_thoughts_review_later_date")] == "2026-07-16"
+    assert settings_state[("42", "_thoughts_evening_closed_date")] == "2026-07-16"
+    assert bot.sent[0]["text"].startswith("✅ Оставлено\n\nК мыслям можно вернуться позже.")
+    labels = [button.text for row in bot.sent[0]["reply_markup"].inline_keyboard for button in row]
+    assert "✨ Разобрать мысли" not in labels
+
+
+def test_clear_requires_confirmation_then_closes_only_current_list(monkeypatch):
+    repo, settings_state, _fixed_now = _setup_state(monkeypatch)
+    repo.items = [
+        {"id": "current", "text": "Ответить", "type": "practical_problem", "status": "open", "date": "2026-07-16"},
+        {"id": "old", "text": "Старая запись", "type": "unknown", "status": "done", "date": "2026-07-15"},
+    ]
+    settings_state[("42", "_thoughts_review_cache")] = {
+        "id": "review-1", "date": "2026-07-16", "thought_ids": ["current"],
+        "result": {"summary": "Есть задача.", "actions": ["Ответить."], "reframe": ""},
+    }
+    bot = FakeBot()
+    q = FakeQuery()
+
+    asyncio.run(thoughts.handle_callback(bot, "42", q, "thought_review_clear"))
+    assert q.message.text == "Очистить мысли?\n\nВсе записи из текущего списка будут убраны."
+    assert next(item for item in repo.items if item["id"] == "current")["status"] == "open"
+
+    asyncio.run(thoughts.handle_callback(bot, "42", q, "thought_review_clear_yes"))
+
+    assert next(item for item in repo.items if item["id"] == "current")["status"] == "closed"
+    assert next(item for item in repo.items if item["id"] == "old")["status"] == "done"
+    event = repo.reviews.items[0]
+    assert event["outcome"] == "cleared"
+    assert event["record_count"] == 1
+    assert "result" not in event and "thought_ids" not in event
+    assert bot.sent[0]["text"].startswith("✅ Мысли очищены\n\nСейчас список пуст.")
+    assert "Список пуст." in bot.sent[0]["text"]
+
+
+def test_full_history_delete_is_only_in_settings_and_requires_confirmation(monkeypatch):
+    bot = FakeBot()
+    asyncio.run(saved_items.send_notes(bot, "42"))
+    labels = [button.text for row in bot.sent[0]["reply_markup"].inline_keyboard for button in row]
+    assert "❌ Удалить историю мыслей" in labels
+
+    deleted = []
+    monkeypatch.setattr(settings.store, "set_list", lambda *args: deleted.append(args))
+    q = FakeQuery()
+    asyncio.run(settings.confirm_delete_thought_history(bot, "42", q=q))
+
+    assert deleted == []
+    assert q.message.text.startswith("Удалить историю мыслей?")
+    confirm_labels = [button.text for row in q.message.reply_markup.inline_keyboard for button in row]
+    assert confirm_labels == ["Да, удалить историю", "Отмена"]
+
+
+def test_confirmed_full_history_delete_preserves_personalization(monkeypatch):
+    deleted = []
+    saved_settings = []
+    source = {
+        "42": {
+            "city": "Алкмар",
+            "notif_checkin_day": False,
+            "_thoughts_review_cache": {"result": "private"},
+            "_thoughts_last_added_at": 123,
+        }
+    }
+    monkeypatch.setattr(settings.store, "set_list", lambda key, cid, items: deleted.append((key, cid, items)))
+    monkeypatch.setattr(settings, "_all", lambda: {key: dict(value) for key, value in source.items()})
+    monkeypatch.setattr(settings.store, "_save", lambda key, value: saved_settings.append((key, value)))
+    bot = FakeBot()
+    q = FakeQuery()
+
+    asyncio.run(settings.delete_thought_history(bot, "42", q=q))
+
+    assert deleted == [
+        (config.THOUGHTS_KEY, "42", []),
+        (config.THOUGHT_REVIEWS_KEY, "42", []),
+    ]
+    remaining = saved_settings[0][1]["42"]
+    assert remaining == {"city": "Алкмар", "notif_checkin_day": False}
+    assert q.message.text.startswith("✅ История мыслей удалена")
