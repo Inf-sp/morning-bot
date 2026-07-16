@@ -57,10 +57,23 @@ async def handle(update, context, remove_reply_keyboard):
         await wardrobe.ingest(bot, cid, text)
         return
 
+    # Явная команда словаря сильнее открытого режима ожидания любого раздела.
+    # Например, «Добавить *twijfelt*» из экрана «Мысли» должна попасть в словарь,
+    # а не сохраниться как мысль. После успешной команды старый pending сбрасываем.
+    if await dictionary_import.try_add_dict_from_chat(bot, cid, text):
+        previous_kind = store.pending_input.pop(cid, None)
+        store.game_state.pop(cid, None)
+        store.challenge_state.pop(cid, None)
+        if previous_kind in ("worry", "thought", "thought_reminder"):
+            settings.set_(cid, "_thoughts_prompt_ts", 0)
+            settings.set_(cid, "_worry_prompt_ts", 0)
+        return
+
     # Игра и перевод проверяем ПЕРЕД pending - иначе ответ уходит не туда (в дневник)
     if cid in store.game_state:
         if await learning_game.game_answer(bot, cid, text):
             return
+
     # Pending-ввод
     if cid in store.pending_input:
         kind = store.pending_input.pop(cid)
@@ -167,9 +180,6 @@ async def handle(update, context, remove_reply_keyboard):
         split_commas = settings.get(cid, "_thoughts_capture_mode", "manual") == "reminder"
         await balance.thoughts.capture(bot, cid, text, split_commas=split_commas); return
 
-    # Быстрая команда из чата: «добавь в словарь слово de Aandacht - внимание»
-    if await dictionary_import.try_add_dict_from_chat(bot, cid, text):
-        return
     # Быстрая команда из чата: «добавь в продукты крахмал»
     if await cooking.try_add_fridge_from_chat(bot, cid, text):
         return

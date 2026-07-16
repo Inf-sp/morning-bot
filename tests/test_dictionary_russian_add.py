@@ -7,6 +7,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import dictionary_import
 import learning_router
+import bot_text
 
 
 def test_add_word_command_extracts_russian_value(monkeypatch):
@@ -18,6 +19,56 @@ def test_add_word_command_extracts_russian_value(monkeypatch):
 
     assert payload == "Уверенность"
     assert lang == "nl"
+
+
+def test_short_add_command_strips_telegram_markdown(monkeypatch):
+    monkeypatch.setattr(dictionary_import, "_active_language_code", lambda _cid: "nl")
+
+    payload, lang = dictionary_import._extract_chat_dict_add(
+        "Добавить *twijfelt*", "42"
+    )
+
+    assert payload == "twijfelt"
+    assert lang == "nl"
+
+
+def test_dictionary_command_has_priority_over_open_thoughts(monkeypatch):
+    cid = "dictionary-over-thoughts"
+    routed = []
+    captured_as_thought = []
+    settings_changes = []
+
+    async def fake_dict(_bot, routed_cid, text):
+        routed.append((routed_cid, text))
+        return True
+
+    async def fail_thought(*args, **kwargs):
+        captured_as_thought.append((args, kwargs))
+
+    async def remove_keyboard(_bot, _cid):
+        return None
+
+    monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
+    monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", fake_dict)
+    monkeypatch.setattr(bot_text.balance.thoughts, "capture", fail_thought)
+    monkeypatch.setattr(
+        bot_text.settings, "set_",
+        lambda routed_cid, key, value: settings_changes.append((routed_cid, key, value)),
+    )
+    bot_text.store.pending_input[cid] = "thought"
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=cid),
+        message=SimpleNamespace(text="Добавить *twijfelt*"),
+    )
+    context = SimpleNamespace(bot=SimpleNamespace())
+
+    asyncio.run(bot_text.handle(update, context, remove_keyboard))
+
+    assert routed == [(cid, "Добавить *twijfelt*")]
+    assert captured_as_thought == []
+    assert cid not in bot_text.store.pending_input
+    assert (cid, "_thoughts_prompt_ts", 0) in settings_changes
 
 
 def test_russian_value_is_translated_not_transliterated(monkeypatch):

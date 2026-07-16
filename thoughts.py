@@ -1,6 +1,5 @@
 """Сценарий «😮‍💨 Мысли»: внешняя память, один следующий шаг и безопасный triage."""
 
-import asyncio
 from datetime import datetime, timedelta
 import re
 import uuid
@@ -13,7 +12,6 @@ from repositories import UserListRepository
 import secure
 import settings
 import store
-import thoughts_knowledge
 from ui import thoughts as thoughts_ui
 
 
@@ -45,6 +43,22 @@ _EMOTION_RE = re.compile(
     r"(?i)(мне тревожно|мне страшно|я злюсь|мне грустно|не могу собраться|перегружен|"
     r"тяжело|паник|раздраж|устал|эмоци)"
 )
+_DECISION_RE = re.compile(
+    r"(?i)(уже (?:решил|решила|решено|выбрал|выбрала|договорил|запланировал|запланировала)|"
+    r"договорились|запланирован[аоы]?|решение принято|поедем|встречаемся)"
+)
+_BANNED_REVIEW_ADVICE = (
+    "записать мысль",
+    "сменить обстановку",
+    "вернуться к текущему делу",
+    "выбрать действие на 5–15 минут",
+    "выбрать действие на 5-15 минут",
+    "отложить мысль до отдельного времени",
+)
+_GENERIC_STEP_WORDS = {
+    "важн", "дело", "дела", "мысл", "сдел", "сейчас", "одно", "один",
+    "текущ", "следующ", "действ", "задач", "сегодня", "просто", "нужно",
+}
 
 
 def _repo(cid):
@@ -116,11 +130,6 @@ def open_records(cid):
         item for item in records(cid)
         if item.get("status") in OPEN_STATUSES and _available_today(item, today)
     ]
-
-
-def count_today(cid):
-    today = _today()
-    return sum(item.get("date") == today for item in records(cid))
 
 
 def _update_record(cid, thought_id, **changes):
@@ -210,29 +219,20 @@ async def classify(text):
     }
 
 
-def _review_is_deferred_today(cid):
-    return settings.get(cid, "_thoughts_review_later_date", "") == _today()
-
-
-async def send_home(bot, cid, *, notice_title="", notice_body=""):
+async def send_home(bot, cid, *, cleared=False):
     cid = str(cid)
     store.pending_input[cid] = "thought"
     settings.set_(cid, "_thoughts_prompt_ts", _now().timestamp())
     settings.set_(cid, "_thoughts_capture_mode", "manual")
     opened = open_records(cid)
-    msg = thoughts_ui.home(
-        count_today(cid), opened,
-        notice_title=notice_title, notice_body=notice_body)
+    msg = thoughts_ui.cleared_home() if cleared else thoughts_ui.home(opened)
     rows = []
-    if opened and not _review_is_deferred_today(cid):
-        rows.append([InlineKeyboardButton("✨ Разобрать мысли", callback_data="thought_review")])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_balance"),
-        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
-    ])
+    if opened and not cleared:
+        rows.append([InlineKeyboardButton("🧐 Разобрать мысли", callback_data="thought_review")])
+    kb = InlineKeyboardMarkup(rows) if rows else None
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,
-        reply_markup=InlineKeyboardMarkup(rows), transient=True)
+        reply_markup=kb, transient=True)
 
 
 async def send_inbox(bot, cid):
@@ -244,90 +244,153 @@ def _clean_review_line(value):
     return " ".join(str(value or "").replace("?", ".").split()).strip()
 
 
+def _word_count(value):
+    return len(str(value or "").split())
+
+
+def _short_reference(value, limit=8):
+    words = _clean_review_line(value).strip(" .").split()
+    text = " ".join(words[:limit])
+    return text + ("…" if len(words) > limit else "")
+
+
+def _imperative_from_thought(value):
+    text = _clean_review_line(value).strip(" .")
+    lower = text.casefold()
+    if "кучу дел" in lower or "много дел" in lower:
+        return "До запланированной поездки выбери одно дело, которое действительно нужно закончить сегодня."
+    patterns = (
+        (r"(?i)^(?:мне\s+)?(?:нужно|надо|не забыть)\s+купить\s+(.+)$", "Купи {}."),
+        (r"(?i)^(?:мне\s+)?(?:нужно|надо|не забыть)\s+заказать\s+(.+)$", "Закажи {}."),
+        (r"(?i)^(?:мне\s+)?(?:нужно|надо|не забыть)\s+ответить\s+(.+)$", "Ответь {}."),
+        (r"(?i)^(?:мне\s+)?(?:нужно|надо|не забыть)\s+позвонить\s+(.+)$", "Позвони {}."),
+        (r"(?i)^(?:мне\s+)?(?:нужно|надо|не забыть)\s+отправить\s+(.+)$", "Отправь {}."),
+        (r"(?i)^(?:мне\s+)?(?:нужно|надо|не забыть)\s+закончить\s+(.+)$", "Закончи {}."),
+    )
+    for pattern, template in patterns:
+        match = re.match(pattern, text)
+        if match:
+            return template.format(match.group(1).strip(" ."))
+    reference = _short_reference(text, 10)
+    return f"Сейчас доведи до конкретного результата только это дело: «{reference}»."
+
+
 def _fallback_review(items):
+    decisions = [item for item in items if _DECISION_RE.search(item.get("text", ""))]
+    anxious = [item for item in items if item.get("type") == "anxious_prediction"]
     practical = [
-        _clean_review_line(item.get("text", "")).strip(" .")
-        for item in items
-        if item.get("type") == "practical_problem"
+        item for item in items
+        if item.get("type") == "practical_problem" and item not in decisions
     ]
-    actions = []
-    for value in practical:
-        value = re.sub(r"(?i)^(?:мне\s+)?(?:нужно|надо|не забыть)\s+", "", value).strip()
-        if value:
-            actions.append(value[:1].upper() + value[1:] + ".")
-        if len(actions) == 2:
-            break
-    if len(actions) < 3:
-        actions.append("Выбрать одну главную задачу на сегодня.")
-    has_anxious = any(item.get("type") == "anxious_prediction" for item in items)
+    categories = []
+    if practical:
+        categories.append("дела, которые требуют действия")
+    if anxious:
+        categories.append("тревожное ощущение срочности")
+    if decisions:
+        categories.append("уже принятые решения")
+    summary = "Смешались " + ", ".join(categories or ["разные мысли, которым нужен порядок"]) + "."
+    analysis = []
+    if decisions:
+        ref = _short_reference(decisions[0].get("text", ""))
+        analysis.append(f"«{ref}» уже решено — повторно принимать это решение не нужно.")
+    if anxious:
+        ref = _short_reference(anxious[0].get("text", ""))
+        analysis.append(f"В «{ref}» чувствуется срочность, но конкретный срок пока не указан.")
+    if practical:
+        ref = _short_reference(practical[0].get("text", ""))
+        analysis.append(f"Реального действия сейчас требует «{ref}».")
+    if not analysis and items:
+        ref = _short_reference(items[0].get("text", ""))
+        analysis.append(f"Содержание мысли «{ref}» пока не указывает на отдельное срочное действие.")
+    if practical:
+        next_step = _imperative_from_thought(practical[0].get("text", ""))
+    elif decisions:
+        next_step = f"Следуй уже принятому решению: «{_short_reference(decisions[0].get('text', ''), 10)}»."
+    else:
+        next_step = (
+            f"Проверь реальный срок для «{_short_reference(items[0].get('text', ''), 8)}», "
+            "прежде чем считать это срочным."
+        )
     return {
-        "summary": "Сейчас в голове смешались задачи и тревожные предположения.",
-        "actions": actions[:3],
-        "reframe": (
-            "Тревожная мысль пока не является фактом. Всё делать необязательно — достаточно закончить главное."
-            if has_anxious else ""
-        ),
+        "summary": summary,
+        "analysis": analysis[:3],
+        "next_step": next_step,
     }
 
 
-def _review_word_count(data):
-    return len(" ".join([
+def _review_has_banned_advice(data):
+    combined = " ".join([
         str(data.get("summary", "")),
-        *[str(value) for value in data.get("actions", [])],
-        str(data.get("reframe", "")),
-    ]).split())
+        *[str(value) for value in data.get("analysis", [])],
+        str(data.get("next_step", "")),
+    ]).casefold()
+    return any(value in combined for value in _BANNED_REVIEW_ADVICE)
+
+
+def _content_stems(value):
+    stems = set()
+    for word in re.findall(r"[a-zа-яё0-9]+", str(value or "").casefold()):
+        if len(word) < 4:
+            continue
+        stem = word[:5]
+        if not any(stem.startswith(generic) or generic.startswith(stem) for generic in _GENERIC_STEP_WORDS):
+            stems.add(stem)
+    return stems
+
+
+def _step_is_content_specific(next_step, items):
+    source = " ".join(str(item.get("text", "")) for item in items)
+    return bool(_content_stems(next_step) & _content_stems(source))
 
 
 async def _build_review(items):
-    unique_items = []
-    seen_texts = set()
-    for item in items:
-        normalized = " ".join(str(item.get("text", "")).casefold().split()).strip(" .!?")
-        if normalized and normalized not in seen_texts:
-            seen_texts.add(normalized)
-            unique_items.append(item)
-    items = unique_items
     fallback = _fallback_review(items)
     combined = "\n".join(f"- {item.get('text', '')}" for item in items)
     kinds = ", ".join(item.get("type", "unknown") for item in items)
-    guidance = []
-    for kind in ("practical_problem", "anxious_prediction", "emotion"):
-        found = await asyncio.to_thread(thoughts_knowledge.retrieve, combined, kind, 2)
-        for value in found:
-            if value not in guidance:
-                guidance.append(value)
+    now = _now()
     prompt = (
-        "Сделай единый компактный разбор активных записей для внешней памяти, не психотерапию. "
-        "Объедини повторы. Найди только то, что требует действия. Предложи максимум три конкретных "
-        "действия на 2–15 минут. Для всех тревожных предположений дай ровно одну спокойную формулировку, "
-        "отделяющую предположение от факта, без ложных заверений. Не разбирай каждую запись отдельно, "
-        "не ставь диагноз, не используй проценты и оценки, не задавай вопросов. Весь результат до 120 слов. "
-        "Верни JSON {\"summary\":\"1-2 коротких предложения\",\"actions\":[\"до 3 действий\"],"
-        "\"reframe\":\"одна формулировка или пусто\"}.\n"
+        "Профессионально и кратко разбери текущие мысли пользователя с учётом их конкретного содержания. "
+        "Раздели тревоги и уже принятые решения, покажи, что реально требует действия, и сними ложное "
+        "ощущение срочности без утверждения, что тревога необоснованна. Не повторяй исходные мысли полностью. "
+        "Предложи ровно один конкретный следующий шаг. Не давай универсальных советов: «записать мысль», "
+        "«сменить обстановку», «вернуться к текущему делу», «выбрать действие на 5–15 минут», "
+        "«отложить мысль до отдельного времени». Не предлагай снова записывать уже записанные мысли. "
+        "Не задавай вопросов, не ставь диагноз и не используй психологические оценки.\n"
+        "Верни только валидный JSON: {\"summary\":\"до 20 слов\",\"analysis\":[\"от 1 до 3 пунктов, "
+        "каждый до 20 слов\"],\"next_step\":\"ровно одно конкретное действие\"}.\n"
+        f"Текущая локальная дата: {now.strftime('%Y-%m-%d')}. "
+        f"Локальное время: {now.strftime('%H:%M %Z')}. Количество мыслей: {len(items)}.\n"
         f"Скрытые типы: {kinds}.\n"
-        f"Проверенные материалы:\n- " + "\n- ".join(guidance[:5]) + "\n"
         f"Активные записи:\n{secure.wrap_untrusted(combined, 'активные мысли пользователя')}"
     )
     try:
         data = await ai.allm_json(prompt, 600, module="health")
-        actions = []
-        for raw in data.get("actions", []) if isinstance(data.get("actions"), list) else []:
-            action = _clean_review_line(raw)
-            if action and action.casefold() not in {value.casefold() for value in actions}:
-                actions.append(action)
+        analysis = []
+        raw_analysis = data.get("analysis", []) if isinstance(data.get("analysis"), list) else []
+        for raw in raw_analysis:
+            item = _clean_review_line(raw)
+            if item and item.casefold() not in {value.casefold() for value in analysis}:
+                analysis.append(item)
         result = {
             "summary": _clean_review_line(data.get("summary")),
-            "actions": actions[:3],
-            "reframe": _clean_review_line(data.get("reframe")),
+            "analysis": analysis[:3],
+            "next_step": _clean_review_line(data.get("next_step")),
         }
-        has_anxious = any(item.get("type") == "anxious_prediction" for item in items)
-        if not has_anxious:
-            result["reframe"] = ""
-        rendered_words = len(thoughts_ui.review(
-            result["summary"], result["actions"], result["reframe"]).text.split())
-        if (not result["summary"] or not result["actions"]
-                or (has_anxious and not result["reframe"])
-                or _review_word_count(result) > 115 or rendered_words > 120):
+        invalid = (
+            not result["summary"]
+            or _word_count(result["summary"]) > 20
+            or not (1 <= len(result["analysis"]) <= 3)
+            or any(_word_count(value) > 20 for value in result["analysis"])
+            or not result["next_step"]
+            or _word_count(result["next_step"]) > 35
+            or ";" in result["next_step"]
+            or len(re.findall(r"[^.!?]+[.!?]+", result["next_step"])) > 1
+            or " и " in result["next_step"].casefold()
+            or not _step_is_content_specific(result["next_step"], items)
+            or _review_has_banned_advice(result)
+        )
+        if invalid:
             return fallback
         return result
     except Exception:
@@ -336,10 +399,8 @@ async def _build_review(items):
 
 def _review_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Оставить на потом", callback_data="thought_review_later"),
-         InlineKeyboardButton("Очистить мысли", callback_data="thought_review_clear")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="as_daycheck"),
-         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("🕒 Оставить на потом", callback_data="thought_review_later")],
+        [InlineKeyboardButton("❌ Удалить мысли", callback_data="thought_review_clear")],
     ])
 
 
@@ -354,8 +415,11 @@ async def _show_cached_review(bot, cid, q=None):
     if not result:
         await send_home(bot, cid)
         return
-    msg = thoughts_ui.review(
-        result.get("summary", ""), result.get("actions", []), result.get("reframe", ""))
+    analysis = result.get("analysis")
+    if not isinstance(analysis, list):
+        analysis = result.get("actions", [])
+    next_step = result.get("next_step") or result.get("reframe", "")
+    msg = thoughts_ui.review(result.get("summary", ""), analysis, next_step)
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=_review_keyboard())
@@ -369,7 +433,7 @@ async def _show_cached_review(bot, cid, q=None):
 async def review_all(bot, cid, q=None):
     cid = str(cid)
     opened = open_records(cid)
-    if not opened or _review_is_deferred_today(cid):
+    if not opened:
         await send_home(bot, cid)
         return
     result = await _build_review(opened)
@@ -382,7 +446,7 @@ async def review_all(bot, cid, q=None):
     }
     settings.set_(cid, "_thoughts_review_cache", cache)
     store.last_source[cid] = "Здоровье · Мысли"
-    msg = thoughts_ui.review(result["summary"], result["actions"], result["reframe"])
+    msg = thoughts_ui.review(result["summary"], result["analysis"], result["next_step"])
     store.last_answer[cid] = msg.text
     if q is not None:
         message_id = getattr(getattr(q, "message", None), "message_id", None)
@@ -397,16 +461,18 @@ async def review_all(bot, cid, q=None):
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_review_keyboard())
 
 
+def _clean_thought_text(text):
+    value = " ".join(str(text or "").split()).strip()
+    value = re.sub(r"^[•\-–—]\s*", "", value).strip()
+    if value and value[0].isalpha():
+        value = value[0].upper() + value[1:]
+    return value
+
+
 def _split_input(text, split_commas=False):
-    raw = str(text or "")
-    if not split_commas and not re.search(r"[\n;]", raw):
-        return [raw] if raw.strip() else []
-    parts = [part.strip() for part in re.split(r"[\n;]+", raw) if part.strip()]
-    if split_commas and len(parts) == 1 and "," in parts[0]:
-        comma_parts = [part.strip() for part in parts[0].split(",") if part.strip()]
-        if len(comma_parts) > 1 and all(len(part) >= 4 for part in comma_parts):
-            parts = comma_parts
-    return parts
+    # Одно сообщение всегда сохраняется как одна мысль.
+    value = _clean_thought_text(text)
+    return [value] if value else []
 
 
 async def capture(bot, cid, text, *, split_commas=False):
@@ -455,10 +521,7 @@ async def capture(bot, cid, text, *, split_commas=False):
         await bot.send_message(
             chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
-    await send_home(
-        bot, cid,
-        notice_title="✅ Сохранено",
-        notice_body="Больше не нужно держать это в голове.")
+    await send_home(bot, cid)
 
 
 async def review_next(bot, cid):
@@ -500,24 +563,18 @@ async def _leave_review_for_later(bot, cid, q):
         _append_review_event(cid, event)
         for item in _review_items(cid, cache):
             _update_record(cid, item["id"], status="later")
-    settings.set_(cid, "_thoughts_review_later_date", _today())
     settings.set_(cid, "_thoughts_evening_closed_date", _today())
-    try:
-        await q.edit_message_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    await send_home(
-        bot, cid,
-        notice_title="✅ Оставлено",
-        notice_body="К мыслям можно вернуться позже.")
+    await _dismiss_message(bot, cid, q)
+    settings.set_(cid, "_thoughts_review_cache", {})
+    await send_home(bot, cid)
 
 
 async def _confirm_clear_review(bot, cid, q):
     msg = thoughts_ui.clear_confirmation()
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("Да, очистить", callback_data="thought_review_clear_yes"),
-        InlineKeyboardButton("Отмена", callback_data="thought_review_clear_cancel"),
-    ]])
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Да, очистить", callback_data="thought_review_clear_yes")],
+        [InlineKeyboardButton("↩️ Отмена", callback_data="thought_review_clear_cancel")],
+    ])
     try:
         await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
     except Exception:
@@ -527,14 +584,22 @@ async def _confirm_clear_review(bot, cid, q):
 
 async def _clear_review(bot, cid, q):
     cache = _cached_review(cid)
-    selected = _review_items(cid, cache) if cache else open_records(cid)
+    selected = _review_items(cid, cache) if cache else []
+    if not selected:
+        settings.set_(cid, "_thoughts_review_cache", {})
+        await _dismiss_message(bot, cid, q)
+        await send_home(bot, cid)
+        return
     type_counts = {}
+    selected_ids = {item.get("id") for item in selected}
     for item in selected:
         kind = item.get("type", "unknown")
         type_counts[kind] = type_counts.get(kind, 0) + 1
-        _update_record(
-            cid, item["id"], status="closed",
-            completed_at=_now().isoformat(), closed_reason="review_clear")
+    if selected_ids:
+        _repo(cid).mutate(lambda items: (
+            [item for item in items if not isinstance(item, dict) or item.get("id") not in selected_ids],
+            None,
+        ))
     # После очистки сохраняется только обезличенный факт завершения, без текста
     # разбора и без идентификаторов мыслей.
     _append_review_event(cid, {
@@ -548,10 +613,7 @@ async def _clear_review(bot, cid, q):
     settings.set_(cid, "_thoughts_review_cache", {})
     settings.set_(cid, "_thoughts_evening_closed_date", _today())
     await _dismiss_message(bot, cid, q)
-    await send_home(
-        bot, cid,
-        notice_title="✅ Мысли очищены",
-        notice_body="Сейчас список пуст.")
+    await send_home(bot, cid, cleared=True)
 
 
 async def handle_callback(bot, cid, q, data):
@@ -627,7 +689,7 @@ async def send_evening_close(bot, cid):
         return False
     msg = thoughts_ui.evening(len(opened))
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("Разобрать мысли", callback_data="thought_review"),
+        InlineKeyboardButton("🧐 Разобрать мысли", callback_data="thought_review"),
         InlineKeyboardButton("Оставить до завтра", callback_data="thought_tomorrow"),
     ]])
     await bot.send_message(

@@ -3,13 +3,8 @@
 from .builder import MessageBuilder
 
 
-def home(count_today, items, notice_title="", notice_body=""):
+def home(items):
     b = MessageBuilder()
-    if notice_title:
-        b.section(notice_title)
-        if notice_body:
-            b.line(notice_body)
-        b.spacer()
     b.section("😮‍💨 Мысли")
     b.line("Не держи всё в голове.")
     b.line("Напиши мысль, задачу или тревогу одним сообщением.")
@@ -21,32 +16,39 @@ def home(count_today, items, notice_title="", notice_body=""):
             b.bullet(item.get("text", ""))
     else:
         b.line("Список пуст.")
-    b.spacer()
-    b.line(f"Сегодня записано: {count_today}")
     return b.build_stripped()
 
 
-def review(summary, actions, reframe=""):
+def cleared_home():
     b = MessageBuilder()
-    b.section("✨ Разбор мыслей")
+    b.section("😮‍💨 Мысли")
+    b.line("Голова немного свободнее.")
+    b.line("Можешь записать новую мысль, задачу или тревогу.")
+    return b.build_stripped()
+
+
+def review(summary, analysis, next_step):
+    b = MessageBuilder()
+    b.section("🧐 Разбор мыслей")
     if summary:
         b.line(summary)
-    if actions:
+    if analysis:
         b.spacer()
-        b.bold("Что можно сделать:")
+        b.bold("Что происходит:")
         b.newline()
-        for action in actions[:3]:
-            b.bullet(action)
-    if reframe:
+        for item in analysis[:3]:
+            b.bullet(item)
+    if next_step:
         b.spacer()
-        b.line(reframe)
+        b.bold("Сейчас сделай одно:")
+        b.newline()
+        b.line(next_step)
     return b.build_stripped()
 
 
 def clear_confirmation():
     b = MessageBuilder()
-    b.section("Очистить мысли?")
-    b.line("Все записи из текущего списка будут убраны.")
+    b.section("Очистить разобранные мысли?")
     return b.build_stripped()
 
 
@@ -60,7 +62,7 @@ def medical():
 def day_reminder():
     b = MessageBuilder()
     b.section("😮‍💨 Есть что выгрузить?")
-    b.line("Запиши то, что занимает голову, через запятую или с новой строки — каждую мысль отдельно.")
+    b.line("Запиши то, что занимает голову, одним сообщением — оно сохранится как одна мысль.")
     b.line("Разбирать сейчас не нужно.")
     return b.build_stripped()
 
