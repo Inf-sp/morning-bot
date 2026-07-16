@@ -267,6 +267,10 @@ The existing text and logo placement within the template must not be moved or al
 - `LANGUAGETOOL_API_URL` — адрес LanguageTool для точечной проверки нидерландских письменных ответов; по умолчанию `https://api.languagetool.org/v2`;
 - `SPOONACULAR_API_KEY` — основной источник рецептов и винных сочетаний для Готовки;
 - `THEMEALDB_API_KEY` — резервный источник базовых рецептов для Готовки; по умолчанию используется публичный ключ `1`;
+- `AZURE_SPEECH_KEY` — ключ Azure AI Speech для озвучивания нидерландских слов и примеров;
+- `AZURE_SPEECH_REGION` — регион ресурса Azure Speech, например `westeurope`;
+- `AZURE_SPEECH_VOICE` — нидерландский голос; по умолчанию `nl-NL-MaartenNeural`;
+- `AZURE_SPEECH_RATE` — скорость произношения; по умолчанию `-10%`;
 - `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` — дополнительные резервные LLM-провайдеры;
 - `TMDB_API_KEY`, `TICKETMASTER_API_KEY`, `TAVILY_API_KEY`, `FIRECRAWL_API_KEY` — фильмы, концерты, веб-поиск;
 - `RESTCOUNTRIES_API_KEY` — определение страны в разделе «Поездки → 10 фактов»; без него бот честно говорит, что не нашёл страну;

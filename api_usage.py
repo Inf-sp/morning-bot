@@ -27,6 +27,7 @@ SERVICE_LABELS = {
     "languagetool": "LanguageTool",
     "spoonacular": "Spoonacular",
     "themealdb": "TheMealDB",
+    "azure_speech": "Azure Speech",
     "telegram": "Telegram",
     "tmdb": "TMDB",
     "ticketmaster": "Ticketmaster",

@@ -5,6 +5,7 @@ import json
 import logging
 import random
 import re
+import uuid
 from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -728,7 +729,7 @@ def _save_normalized_dict_entry(cid, entry):
     entry = dict(entry)
     srs_fields = {k: entry[k] for k in _SRS_FIELD_KEYS if k in entry}
     verb_fields = _verb_analysis_fields(entry)
-    words = store.get_list(config.DICT_KEY, cid)
+    words = store.ensure_list_ids(config.DICT_KEY, cid)
     loose_text = _dict_loose_text(entry["lang"], entry["term"])
     for idx, item in enumerate(words):
         existing_term = _entry_term(item)
@@ -789,6 +790,7 @@ def _save_normalized_dict_entry(cid, entry):
             store.set_list(config.DICT_KEY, cid, words)
             return "updated", updated
     saved = {
+        "id": entry.get("id") or uuid.uuid4().hex,
         "lang": entry["lang"],
         "term": entry["term"],
         "article": entry.get("article", ""),
@@ -882,19 +884,27 @@ async def _refresh_dict_entry(cid, item):
     return item
 
 
-def _dict_saved_kb(lang, term_key):
-    return InlineKeyboardMarkup([
+def _dict_tts_row(entry):
+    if entry.get("lang") == "nl" and entry.get("id"):
+        return [[InlineKeyboardButton("🔊 Прослушать", callback_data=f"tts_word:{entry['id']}")]]
+    return []
+
+
+def _dict_saved_kb(entry, term_key):
+    lang = entry["lang"]
+    return InlineKeyboardMarkup(_dict_tts_row(entry) + [
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
-        [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}")],
+        [InlineKeyboardButton("📋 Мой словарь", callback_data=f"a_dictlang_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
          InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 
-def _dict_duplicate_kb(lang, term_key):
-    return InlineKeyboardMarkup([
+def _dict_duplicate_kb(entry, term_key):
+    lang = entry["lang"]
+    return InlineKeyboardMarkup(_dict_tts_row(entry) + [
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
-        [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}")],
+        [InlineKeyboardButton("📋 Мой словарь", callback_data=f"a_dictlang_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
          InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
@@ -903,7 +913,7 @@ def _dict_duplicate_kb(lang, term_key):
 def _overwrite_dict_entry_fields(cid, lang, term, fields):
     """Обновляет уже сохранённую запись на месте по точному совпадению term
     (используется "Другим переводом" после мгновенного сохранения)."""
-    words = store.get_list(config.DICT_KEY, cid)
+    words = store.ensure_list_ids(config.DICT_KEY, cid)
     for idx, item in enumerate(words):
         if _dict_lang(item) == lang and _entry_term(item).casefold() == term.casefold():
             updated = dict(item)
@@ -935,10 +945,10 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
     msg = _dict_entry_message(saved, status=status)
     term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
     if status == "duplicate":
-        kb = _dict_duplicate_kb(saved["lang"], term_key)
+        kb = _dict_duplicate_kb(saved, term_key)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
-    kb = _dict_saved_kb(saved["lang"], term_key)
+    kb = _dict_saved_kb(saved, term_key)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
@@ -975,7 +985,7 @@ async def retry_pending_dict_add(bot, cid):
     store.dict_pending_add[str(cid)] = updated
     msg = _dict_entry_message(updated, status="updated")
     term_key = _dict_item_key(updated["lang"], "", _entry_term(updated))[2]
-    kb = _dict_saved_kb(updated["lang"], term_key)
+    kb = _dict_saved_kb(updated, term_key)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
@@ -996,7 +1006,7 @@ async def confirm_pending_dict_add(bot, cid):
         chat_id=cid,
         text=msg.text,
         entities=msg.entities,
-        reply_markup=_dict_saved_kb(saved["lang"], term_key),
+        reply_markup=_dict_saved_kb(saved, term_key),
     )
 
 
@@ -1182,7 +1192,13 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
     if len(added_entries) <= _BATCH_CARD_LIMIT:
         for saved in added_entries:
             msg = _dict_entry_message(saved, status="added")
-            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+            term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
+            await bot.send_message(
+                chat_id=cid,
+                text=msg.text,
+                entities=msg.entities,
+                reply_markup=_dict_saved_kb(saved, term_key),
+            )
     else:
         terms = ", ".join(e.get("term", "") for e in added_entries[:10])
         more = f" и ещё {len(added_entries) - 10}" if len(added_entries) > 10 else ""

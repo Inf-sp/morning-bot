@@ -353,6 +353,9 @@ async def answer_callback(update, context):
     if access.is_allowed(cid):
         tracking.touch(cid)
     answer_task = asyncio.create_task(q.answer())
+    # Даём answerCallbackQuery начать отправку до любого синхронного чтения БД
+    # внутри обработчика (особенно перед Azure Speech TTS).
+    await asyncio.sleep(0)
     try:
         await bot_callbacks.handle(update, context, _remove_reply_kb_once)
     except Exception as e:
@@ -764,8 +767,12 @@ class _MenuCleanupBot(ExtBot):
 
     async def send_message(self, chat_id, *args, **kwargs):
         transient = kwargs.pop("transient", False)
+        preserve_previous_inline = kwargs.pop("preserve_previous_inline", False)
         send = super().send_message(chat_id, *args, **kwargs)
-        msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
+        if preserve_previous_inline:
+            msg = await send
+        else:
+            msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
         self._post_send(chat_id, msg, transient=transient)
         return msg
 

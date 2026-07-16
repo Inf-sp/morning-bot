@@ -87,7 +87,7 @@ News, последних API-вызовов, последних сбоев и OK
   (`универсальный резерв`), Groq и Cloudflare AI (`резерв`), OpenRouter, если
   настроен (`резерв` + реальный остаток кредитов через `/api/v1/key`, либо
   число ошибок за сегодня, если остаток недоступен);
-- `🌐 Данные` - OpenWeather, Tavily, Firecrawl, TMDB, Google Books, TheMealDB,
+- `🌐 Данные` - OpenWeather, Tavily, Firecrawl, TMDB, Google Books, TheMealDB, Azure Speech,
   Ticketmaster, ZeroEntropy, Pexels - единый формат `осталось X / Y{ период}`, если лимит
   известен, иначе счётчик запросов за сегодня с правильным склонением («1
   запрос», «2 запроса», «5 запросов»). Firecrawl показывает реальный остаток

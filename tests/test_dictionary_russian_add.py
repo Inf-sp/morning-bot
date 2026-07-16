@@ -112,25 +112,49 @@ def test_russian_value_is_translated_not_transliterated(monkeypatch):
     assert "de Uverenheid" in captured["prompt"]
 
 
-def test_saved_word_actions_include_delete_and_dictionary():
-    keyboard = dictionary_import._dict_saved_kb("nl", "zekerheid")
+def test_new_dictionary_entry_gets_stable_word_id(monkeypatch):
+    stored = []
+    monkeypatch.setattr(dictionary_import.store, "ensure_list_ids", lambda key, cid: [])
+    monkeypatch.setattr(dictionary_import.store, "add_to_list", lambda key, cid, item: stored.append(item))
 
-    assert keyboard.inline_keyboard[0][0].callback_data == "a_dictdel_nl_zekerheid"
-    assert keyboard.inline_keyboard[1][0].text == "📖 Мой словарь"
-    assert keyboard.inline_keyboard[1][0].callback_data == "a_dictlang_nl"
+    status, saved = dictionary_import._save_normalized_dict_entry("42", {
+        "lang": "nl",
+        "term": "vervangen",
+        "translation": "заменять",
+        "added_at": "2026-07-16T12:00:00+02:00",
+    })
+
+    assert status == "added"
+    assert len(saved["id"]) == 32
+    assert stored[0]["id"] == saved["id"]
+
+
+def test_saved_word_actions_include_delete_and_dictionary():
+    keyboard = dictionary_import._dict_saved_kb(
+        {"id": "abc123", "lang": "nl"}, "zekerheid",
+    )
+
+    assert keyboard.inline_keyboard[0][0].text == "🔊 Прослушать"
+    assert keyboard.inline_keyboard[0][0].callback_data == "tts_word:abc123"
+    assert len(keyboard.inline_keyboard[0][0].callback_data.encode("utf-8")) <= 64
+    assert keyboard.inline_keyboard[1][0].callback_data == "a_dictdel_nl_zekerheid"
+    assert keyboard.inline_keyboard[2][0].text == "📋 Мой словарь"
+    assert keyboard.inline_keyboard[2][0].callback_data == "a_dictlang_nl"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
-        "❌ Удалить", "📖 Мой словарь", "⬅️ Назад", "#️⃣ Меню",
+        "🔊 Прослушать", "❌ Удалить", "📋 Мой словарь", "⬅️ Назад", "#️⃣ Меню",
     ]
 
 
 def test_duplicate_word_actions_include_dictionary():
-    keyboard = dictionary_import._dict_duplicate_kb("en", "confidence")
+    keyboard = dictionary_import._dict_duplicate_kb(
+        {"id": "def456", "lang": "en"}, "confidence",
+    )
 
     assert keyboard.inline_keyboard[0][0].callback_data == "a_dictdel_en_confidence"
-    assert keyboard.inline_keyboard[1][0].text == "📖 Мой словарь"
+    assert keyboard.inline_keyboard[1][0].text == "📋 Мой словарь"
     assert keyboard.inline_keyboard[1][0].callback_data == "a_dictlang_en"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
-        "❌ Удалить", "📖 Мой словарь", "⬅️ Назад", "#️⃣ Меню",
+        "❌ Удалить", "📋 Мой словарь", "⬅️ Назад", "#️⃣ Меню",
     ]
 
 

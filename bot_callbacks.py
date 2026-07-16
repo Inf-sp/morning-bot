@@ -6,6 +6,7 @@ import access
 import balance
 import cleanup
 import cooking
+import dictionary_tts
 import firstvisit
 import fridge
 import learning_dictionary as dictionary
@@ -94,6 +95,11 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data.startswith("thought_"):
         await balance.thoughts.handle_callback(bot, cid, q, data)
+        return
+    if data.startswith("tts_word:"):
+        # answerCallbackQuery запускается заранее в bot.answer_callback, поэтому
+        # кнопка перестаёт крутиться до сетевого запроса Azure.
+        await dictionary_tts.send_pronunciation(bot, cid, data.split(":", 1)[1])
         return
     # Здоровье/готовка vs Закладки/Любимое
     if data.startswith("ls_"):

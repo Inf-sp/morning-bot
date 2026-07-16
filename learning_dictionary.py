@@ -245,7 +245,7 @@ def _w_field(w, *keys):
 
 def _ensure_dict(cid):
     """Возвращает словарь пользователя (без авто-сида)."""
-    return store.get_list(config.DICT_KEY, cid)
+    return store.ensure_list_ids(config.DICT_KEY, cid)
 
 
 _DICT_SEED_LIMIT = 30
@@ -444,8 +444,15 @@ async def send_dict_search_prompt(bot, cid, lang, q=None):
     await _show_screen(bot, cid, "🔍 Введи слово или фразу для поиска.", None, kb, q=q)
 
 
-def _dict_search_kb(lang, term_key):
-    return InlineKeyboardMarkup([
+def _dict_tts_row(entry):
+    if entry.get("lang") == "nl" and entry.get("id"):
+        return [[InlineKeyboardButton("🔊 Прослушать", callback_data=f"tts_word:{entry['id']}")]]
+    return []
+
+
+def _dict_search_kb(entry, term_key):
+    lang = _dict_lang(entry)
+    return InlineKeyboardMarkup(_dict_tts_row(entry) + [
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
@@ -481,7 +488,7 @@ async def handle_dict_search(bot, cid, lang, query):
     msg = _dict_entry_message(match, status="found")
     term_key = _dict_item_key(lang, "", _entry_term(match))[2]
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                            reply_markup=_dict_search_kb(lang, term_key))
+                            reply_markup=_dict_search_kb(match, term_key))
 
 
 async def confirm_delete_dict_entry(bot, cid, lang, term_key, q=None):
@@ -527,8 +534,9 @@ def _dict_lang_entries(cid, lang):
     return sorted(entries, key=lambda w: _cap(_entry_term(w)).casefold())
 
 
-def _dict_entry_view_kb(lang, page, term_key):
-    return InlineKeyboardMarkup([
+def _dict_entry_view_kb(entry, page, term_key):
+    lang = _dict_lang(entry)
+    return InlineKeyboardMarkup(_dict_tts_row(entry) + [
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictviewdel_{lang}_{page}_{term_key}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}_{page}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
@@ -544,7 +552,7 @@ async def send_dict_entry_view(bot, cid, lang, page, term_key, q=None):
     if _entry_needs_ai_refresh(match):
         match = await _refresh_dict_entry(cid, match)
     msg = _dict_entry_message(match, status="found")
-    await _show_screen(bot, cid, msg.text, msg.entities, _dict_entry_view_kb(lang, page, term_key), q=q)
+    await _show_screen(bot, cid, msg.text, msg.entities, _dict_entry_view_kb(match, page, term_key), q=q)
 
 
 async def del_word(bot, cid, i):
