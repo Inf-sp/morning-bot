@@ -19,7 +19,7 @@ import dictionary_seed
 import research
 import memory
 import util
-from util import esc, _WEEKDAY_SHORT, _MONTHS, flag_from_cc, country_flag
+from util import esc, _WEEKDAY_SHORT, _MONTHS
 import verify
 from ui import myday as myday_ui
 
@@ -53,6 +53,7 @@ def _strip_quotes(s):
 
 _POOL_MIN_ITEMS = 7
 _POOL_TARGET_ITEMS = 18
+_LIFEHACK_POOL_VERSION = 2
 
 _CONTENT_BLACKLIST = (
     "футбол", "спорт", "voetbal", "match", "wedstrijd", "club", "клуб", "score", "счёт",
@@ -64,6 +65,39 @@ _CONTENT_BLACKLIST = (
 def _content_blocked(text: str) -> bool:
     low = (text or "").lower()
     return any(word in low for word in _CONTENT_BLACKLIST)
+
+
+_LIFEHACK_ACTION_RE = re.compile(
+    r"\b(?:наб|полож|постав|добав|хран|пров|включ|отключ|сдел|использ|держ|закр|"
+    r"перенес|замен|прот|сфотограф|подпиш|оберн|нажм|покат|встан|посмотр|разлож|"
+    r"нареж|вымой|остав|сним|удали|проветр|заряд|запиши|отлож|настро|полив|полей|"
+    r"перестав|замороз|размороз|убир|купи|надень|возьми|прикреп|открой|создай|"
+    r"выбери|смеш|обжар|отвар|запек|накрой|слож|обнов)\w*",
+    re.IGNORECASE,
+)
+_LIFEHACK_RESULT_RE = re.compile(
+    r"(?:чтобы|—|помож|быстр|дольше|меньше|сниж|эконом|избав|улучш|сохран|"
+    r"предотврат|легче|удобнее|точнее|сократ|защит|останет|получит|избеж|"
+    r"не промок|не испорт|не забуд)",
+    re.IGNORECASE,
+)
+_LIFEHACK_GENERIC_RE = re.compile(
+    r"\b(?:важно помнить|просто расслабься|постарайся|не забывай|слушай себя|"
+    r"будь продуктивн|мысли позитивно)\b",
+    re.IGNORECASE,
+)
+
+
+def _lifehack_useful(text: str) -> bool:
+    """Отсекает общие мысли: лайфхак обязан содержать действие и понятный результат."""
+    text = " ".join(str(text or "").split())
+    return (
+        45 <= len(text) <= 240
+        and not _content_blocked(text)
+        and not _LIFEHACK_GENERIC_RE.search(text)
+        and bool(_LIFEHACK_ACTION_RE.search(text))
+        and bool(_LIFEHACK_RESULT_RE.search(text))
+    )
 
 
 def _iso_week_key(dt=None) -> str:
@@ -101,6 +135,7 @@ def _pool_save(store_key: str, cid: str, pool_id: str, items: list) -> None:
 
     def mut(data):
         data.setdefault(cid, {})[pool_id] = {
+            "version": _LIFEHACK_POOL_VERSION,
             "week": _iso_week_key(),
             "generated_at": int(datetime.now(TZ).timestamp()),
             "items": items,
@@ -115,14 +150,15 @@ def _pool_ensure_fresh(store_key: str, cid: str, pool_id: str, generate_fn) -> N
     bucket = _pool_get(store_key, cid, pool_id)
     items = bucket.get("items") or []
     stale_week = bucket.get("week") != _iso_week_key()
+    stale_format = bucket.get("version") != _LIFEHACK_POOL_VERSION
     exhausted = bool(items) and all(i.get("shown_at") for i in items)
-    if items and not stale_week and not exhausted:
+    if items and not stale_week and not stale_format and not exhausted:
         return
     raw_items = generate_fn()
     filtered = [
         {"id": idx, "text": text, **extra, "shown_at": None}
         for idx, (text, extra) in enumerate(raw_items)
-        if text and not _content_blocked(text)
+        if text and _lifehack_useful(text)
     ]
     if len(filtered) < _POOL_MIN_ITEMS and items and not exhausted:
         # генерация дала слишком мало валидных элементов - лучше донашивать старый пул,
@@ -158,7 +194,8 @@ def _lifehack_fallback(cid, rain=False, hot=False, is_weekend=False):
         (cat["emoji"], cat["cat"], f"{ci}:{ti}", tip["text"], tip.get("tags", []))
         for ci, cat in enumerate(cats)
         for ti, tip in enumerate(cat["tips"])
-        if not _content_blocked(tip["text"])
+        if cat.get("cat", "").strip().lower() not in {"здоровье", "деньги"}
+        and _lifehack_useful(tip["text"])
     ]
     if not all_tips:
         return "", ""
@@ -201,11 +238,17 @@ def _generate_lifehack_pool(cid):
         f"{nl_ground_block}"
         "Каждый совет должен быть конкретным и применимым сразу, без общих фраз вроде "
         "'пейте больше воды' или 'высыпайтесь'.\n"
+        "Пиши на 'ты' и давай ровно одно действие в одном предложении длиной 80-180 знаков. "
+        "Обязательно укажи, что именно сделать, при каком условии или каким способом и какой "
+        "практический результат это даст. Совет должен экономить время, предотвращать частую "
+        "ошибку, упрощать бытовое действие или заметно улучшать результат. Не выдавай наблюдение, "
+        "общеизвестный факт, мотивационную фразу или непроверяемое обещание за лайфхак. "
+        "Не давай медицинских, юридических и финансовых рекомендаций.\n"
         "Для категории 'кухня': только практичные лайфхаки — что помогает готовить быстрее, "
         "улучшает вкус, исправляет частую ошибку или продлевает хранение продукта. Не используй "
         "фильмы, книги, знаменитостей и абстрактные идеи. Не предлагай целое блюдо вместо лайфхака. "
         "Один пункт — одно конкретное действие с понятным результатом "
-        "(например: 'Чтобы омлет получился пышнее, добавьте к яйцам ложку воды и готовьте под "
+        "(например: 'Чтобы омлет получился пышнее, добавь к яйцам ложку воды и готовь под "
         "крышкой на слабом огне').\n"
         'Верни JSON: {"tips": [{"category": "одна из категорий выше", "text": "совет"}]}'
     )
@@ -221,7 +264,7 @@ def _generate_lifehack_pool(cid):
         cat = str((t or {}).get("category") or "").strip().lower()
         if cat not in [c.lower() for c in _LIFEHACK_CATEGORIES]:
             cat = ""
-        if text:
+        if _lifehack_useful(text):
             out.append((text, {"category": cat}))
     return out
 
@@ -236,7 +279,7 @@ def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
     if items:
         # контекстный приоритет среди непоказанных: дождь/жара -> гардероб, иначе любой
         ctx_cat = "гардероб" if (rain or hot) else ""
-        unshown = [i for i in items if not i.get("shown_at")]
+        unshown = [i for i in items if not i.get("shown_at") and _lifehack_useful(i.get("text"))]
         preferred = [i for i in unshown if ctx_cat and i.get("category") == ctx_cat]
         candidates = preferred or unshown
         if candidates:
@@ -267,10 +310,16 @@ def kitchen_lifehacks(cid, n=3):
     _pool_ensure_fresh(config.LIFEHACK_POOL_KEY, cid, "default", lambda: _generate_lifehack_pool(cid))
     bucket = _pool_get(config.LIFEHACK_POOL_KEY, cid, "default")
     items = bucket.get("items") or []
-    unshown_kitchen = [i for i in items if i.get("category") == "кухня" and not i.get("shown_at")]
+    unshown_kitchen = [
+        i for i in items
+        if i.get("category") == "кухня" and not i.get("shown_at") and _lifehack_useful(i.get("text"))
+    ]
     if len(unshown_kitchen) < n:
         # даже показанные ранее кухонные лучше, чем пустой экран - лучше повторить, чем показать ничего
-        any_kitchen = [i for i in items if i.get("category") == "кухня"]
+        any_kitchen = [
+            i for i in items
+            if i.get("category") == "кухня" and _lifehack_useful(i.get("text"))
+        ]
         unshown_kitchen = any_kitchen if len(any_kitchen) >= n else unshown_kitchen
     chosen = unshown_kitchen[:n]
     if chosen:
@@ -408,7 +457,8 @@ def _word_of_day(cid):
     ru = dictionary.entry_translation(entry).replace(";", ",")
     return f"{_cap(term)} → {_cap(ru)}.", lang
 
-_day_cache = {}  # cid -> {"date":..., "text":..., "entities":..., "ts": float}
+_DAY_CACHE_VERSION = 2
+_day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
     _day_cache.pop(str(cid), None)
@@ -419,14 +469,16 @@ def reset_day_cache(cid):
 
 def _load_day_cache(cid, today):
     cached = _day_cache.get(str(cid))
-    if cached and cached.get("date") == today:
+    if cached and cached.get("date") == today and cached.get("version") == _DAY_CACHE_VERSION:
         return cached
     prof = store.get_profile(cid)
     saved = prof.get("myday_home_cache")
-    if not isinstance(saved, dict) or saved.get("date") != today or not saved.get("text"):
+    if (not isinstance(saved, dict) or saved.get("date") != today
+            or saved.get("version") != _DAY_CACHE_VERSION or not saved.get("text")):
         return None
     cached = {
         "date": today,
+        "version": _DAY_CACHE_VERSION,
         "text": saved["text"],
         "entities": util.entities_from_json(saved.get("entities")),
         "ts": saved.get("ts", 0),
@@ -436,11 +488,12 @@ def _load_day_cache(cid, today):
 
 
 def _save_day_cache(cid, today, text, entities, ts):
-    cached = {"date": today, "text": text, "entities": entities, "ts": ts}
+    cached = {"date": today, "version": _DAY_CACHE_VERSION, "text": text, "entities": entities, "ts": ts}
     _day_cache[str(cid)] = cached
     prof = store.get_profile(cid)
     prof["myday_home_cache"] = {
         "date": today,
+        "version": _DAY_CACHE_VERSION,
         "text": text,
         "entities": util.entities_to_json(entities),
         "ts": ts,
@@ -503,8 +556,7 @@ def _build_day_text(cid):
     word_line, word_lang = _word_of_day(cid)
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
-    flag = flag_from_cc(s.get("cc", "")) or (country_flag(s.get("country", "")) if s.get("country") else "")
-    hack_cat, hack_text = daily_lifehack(
+    _hack_cat, hack_text = daily_lifehack(
         cid, rain=rain >= 40, hot=(tmax is not None and tmax >= 24), is_weekend=is_weekend)
     try:
         q_data = _fetch_quote(cid)
@@ -519,7 +571,6 @@ def _build_day_text(cid):
     msg = myday_ui.day_summary(
         header,
         s.get("city", ""),
-        flag=flag,
         weather_icon=weather_icon,
         weather_line=weather_line,
         humidity_line=f"{hum_title} · {hum_line}" if hum_title else "",

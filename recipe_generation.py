@@ -248,11 +248,11 @@ def _home_one_sentence(value) -> str:
 
 
 def _home_steps(value) -> list[dict]:
-    """Шаги полного рецепта в едином обращении на «ты»."""
+    """Компактные шаги полного рецепта в едином обращении на «ты»."""
     if not isinstance(value, list):
         return []
     result = []
-    for item in value[:5]:
+    for item in value[:6]:
         structured = isinstance(item, dict)
         if structured:
             text = item.get("text")
@@ -262,12 +262,42 @@ def _home_steps(value) -> list[dict]:
             minutes = None
         text = " ".join(_home_normalize_voice(text).split()).strip(" -•")
         has_time = bool(re.search(r"\d+(?:\s*[–-]\s*\d+)?\s*(?:мин|минут)", text, re.I))
+        text = re.sub(
+            r"\s*(?:—|-|,)?\s*\d+(?:\s*[–-]\s*\d+)?\s*мин(?:ут(?:а|ы|у)?|\.)?",
+            "",
+            text,
+            flags=re.I,
+        ).strip(" -—,.;")
+        sentences = [part.strip() for part in re.split(r"(?<=[.!?…])\s+", text) if part.strip()]
+        text = " ".join(sentences[:2]) if sentences else text
         if not structured and not has_time:
             minutes = 2
         if not text or _HOME_FORMAL_IMPERATIVE_RE.search(text) or not (minutes or has_time):
             continue
         result.append({"text": text, "minutes": minutes})
-    return result if 3 <= len(result) <= 5 else []
+    while len(result) > 4:
+        pair_index = min(
+            range(len(result) - 1),
+            key=lambda index: len((result[index]["text"] + " " + result[index + 1]["text"]).split()),
+        )
+        first, second = result[pair_index:pair_index + 2]
+        result[pair_index:pair_index + 2] = [{
+            "text": f"{first['text'].rstrip('.!?…')}. {second['text']}",
+            "minutes": (first.get("minutes") or 0) + (second.get("minutes") or 0) or None,
+        }]
+    if len(result) == 4:
+        pairs = [
+            (len((result[index]["text"] + " " + result[index + 1]["text"]).split()), index)
+            for index in range(3)
+        ]
+        word_count, pair_index = min(pairs)
+        if word_count <= 24:
+            first, second = result[pair_index:pair_index + 2]
+            result[pair_index:pair_index + 2] = [{
+                "text": f"{first['text'].rstrip('.!?…')}. {second['text']}",
+                "minutes": (first.get("minutes") or 0) + (second.get("minutes") or 0) or None,
+            }]
+    return result if 2 <= len(result) <= 4 else []
 
 
 def _normalize_home_idea(data, context: dict) -> dict:
@@ -342,7 +372,7 @@ def _home_idea_context(cid, now=None) -> dict:
     meal = _home_meal_for_hour(now.hour)
     signature_data = {
         "date": now.date().isoformat(),
-        "home_copy_version": 3,
+        "home_copy_version": 4,
         "meal": meal,
         "available": available,
         "unavailable": unavailable,
@@ -392,8 +422,10 @@ def _home_idea_prompt(context: dict) -> str:
         "Не добавляй другие покупки.\n"
         "• ingredients — полный список всего, что используется в блюде, включая масло, соль и перец, если они нужны. "
         "Для продуктов из холодильника сохраняй точное написание из входного списка.\n"
-        "• steps — 3–5 коротких шагов. Каждый начинается с действия на «ты» и имеет отдельное поле minutes. "
-        "Каждый ингредиент должен появиться в шагах. Сумма минут по шагам равна общему minutes.\n"
+        "• steps — обычно ровно 3 коротких шага; для очень простого блюда можно 2, для сложного максимум 4. "
+        "Объединяй логически связанные действия. Каждый шаг начинается с глагола на «ты», содержит не больше "
+        "1–2 коротких предложений и не повторяет ингредиенты без необходимости. В text не пиши время шага; "
+        "minutes оставь только отдельным техническим полем, сумма равна общему minutes.\n"
         "• use_first — только точные названия из списка «В наличии», особенно открытые, скоропортящиеся "
         "или явно требующие скорого использования, и только если они входят в ingredients. "
         "Не выдумывай срочность и не добавляй отсутствующие продукты.\n"
@@ -408,7 +440,7 @@ def _home_idea_prompt(context: dict) -> str:
         "• Никаких эмодзи, общих вступлений, текста о настройках и нескольких советов.\n"
         'JSON без markdown: {"reason":"одно предложение","name":"Название блюда","minutes":20,'
         '"ingredients":["все продукты блюда"],'
-        '"steps":[{"text":"Взбей яйца","minutes":2},{"text":"Обжарь лук","minutes":3},{"text":"Влей яйца и накрой крышкой","minutes":5}],'
+        '"steps":[{"text":"Нарежь начинку","minutes":3},{"text":"Взбей яйца и вылей на сковороду","minutes":4},{"text":"Добавь начинку и сложи омлет","minutes":5}],'
         '"use_first":[],"missing":[],"substitution":null,'
         '"tip":"один совет"}. Если блока нет, используй пустой массив или null.'
     )
@@ -502,7 +534,7 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
         if attempt == 0:
             prompt += (
                 "\nПредыдущий вариант не прошёл проверку. Верни новый вариант: обязательны естественные "
-                "русские названия, 3–5 шагов и один конкретный технический совет на «ты»."
+                "русские названия, 2–3 коротких шага без времени в тексте и один конкретный совет на «ты»."
             )
     if refresh and previous_name and idea.get("name", "").casefold() == previous_name.casefold():
         idea = {}
@@ -564,11 +596,12 @@ def _gen_recipe(constraint, cid=None):
         f"{cz}{avoid_line}{pref}Ты — шеф-повар с идеальной логикой. "
         f"Создай 1 рецепт ({constraint}), 1 человек, электрическая плита, духовка SAGE.\n"
         "Правила:\n"
-        "• Каждый продукт из ингредиентов обязан появиться в шагах приготовления.\n"
+        "• Все ингредиенты должны быть использованы, но не перечисляй их повторно в каждом шаге.\n"
         "• Не меняй технику без веской причины: начал на сковороде — не гони в духовку. Минимум посуды.\n"
-        "• Сумма минут по шагам должна строго равняться полю time.\n"
-        "• В каждом шаге: глагол в повелительном наклонении + конкретика (минуты, уровень огня, крышка).\n"
-        "• 3–5 шагов. Один шаг — одно-два действия. Без вводных слов и описаний вкуса.\n"
+        "• time — общее время блюда; время каждого шага отдельно не показывай.\n"
+        "• Каждый шаг начинай с глагола в повелительном наклонении и оставляй только нужное действие.\n"
+        "• Обычно 3 шага; для простого блюда можно 2, для сложного максимум 4. Объединяй связанные действия. "
+        "Каждый шаг — не больше 1–2 коротких предложений, только действия без вводных слов и описаний вкуса.\n"
         "• В ингредиентах всегда добавляй базу (масло, соль, перец), если нужна для готовки.\n"
         'JSON (без markdown): {"name":"Название блюда","time":"X мин","servings":"1 порц.",'
         '"ingredients":"список через запятую",'
@@ -824,7 +857,8 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
         "• Сумма minutes по шагам должна строго равняться полю time.\n"
         "• В каждом шаге text: глагол в повелительном наклонении + конкретика (уровень огня, крышка). "
         "НЕ пиши время внутри text (ни минуты, ни «X мин») — время идёт только в отдельное поле minutes.\n"
-        "• 3–5 шагов. Один шаг — одно-два действия. Без вводных слов и описаний вкуса.\n"
+        "• Обычно 3 шага; для простого блюда можно 2, для сложного максимум 4. Объединяй связанные действия. "
+        "Каждый шаг — не больше 1–2 коротких предложений, только действия без вводных слов и описаний вкуса.\n"
         "• В ингредиентах всегда добавляй базу (масло, соль, перец), если нужна для готовки.\n"
         "• chef_tip — НЕ банальный совет (запрещены клише вроде «используйте свежие продукты», "
         "«не пересаливайте», «дайте настояться») — только неочевидный приём именно для этого блюда.\n"

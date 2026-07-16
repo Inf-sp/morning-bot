@@ -1,7 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
 from .builder import MessageBuilder, MessageSpec, u16_len
-from .constants import ui_label
+from .constants import choose_label, ui_label
 
 
 def _as_list(value):
@@ -405,7 +405,7 @@ def game_hint(ui, hint):
 
 def learning_settings(active_language, active_level):
     b = MessageBuilder()
-    b.section("Выбрать язык")
+    b.section(choose_label("Выбрать язык"))
     b.spacer()
     b.labeled_line("Активный язык")
     b.bold(active_language)

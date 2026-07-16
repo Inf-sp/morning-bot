@@ -25,7 +25,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 from util import esc
-from ui.constants import delete_label, ui_label
+from ui.constants import choose_label, delete_label, ui_label
 
 CLEAN_PAGE = 8
 
@@ -468,7 +468,7 @@ def _is_reversible_ctx(ctx):
     return ctx.startswith("lv_") or ctx.startswith("lvls_") or ctx.startswith("hid_")
 
 
-# Контексты, где помимо «Выбрать все на странице» доступна кнопка «Удалить все
+# Контексты, где помимо «*️⃣ Выбрать все на странице» доступна кнопка «Удалить все
 # N» (выбор всей коллекции, не только видимой страницы) — см. P2-1: сохраняет
 # прежнее поведение кнопки «Удалить все» из самодельного чистильщика словаря
 # без чекбоксов, но проводит её через общее правило подтверждения P2-2.
@@ -517,15 +517,15 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
             InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"clp_{ctx}_{(page + 1) % pages}"),
         ])
-    if len(chunk) >= 2:
-        page_ids = {i for i, _ in chunk}
-        page_label = "✅ Снять выбор на странице" if page_ids <= sel else "✅ Выбрать все на странице"
-        rows.append([InlineKeyboardButton(page_label, callback_data=f"cla_{ctx}_{page}")])
     if sel:
         rows.append([InlineKeyboardButton(
             f"{_button_action_label(_action_label(ctx))} ({len(sel)})",
             callback_data=f"cld_{ctx}_{page}",
         )])
+    if len(chunk) >= 2:
+        page_ids = {i for i, _ in chunk}
+        page_label = "✅ Снять выбор на странице" if page_ids <= sel else choose_label("Выбрать все на странице")
+        rows.append([InlineKeyboardButton(page_label, callback_data=f"cla_{ctx}_{page}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
@@ -815,10 +815,6 @@ async def _render_view(bot, cid, view_id, q=None):
             InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"clp:{view_id}:{(page + 1) % pages}"),
         ])
-    if len(chunk) >= 2:
-        page_ids = {i for i, _ in chunk}
-        page_label = "✅ Снять выбор на странице" if page_ids <= sel else "✅ Выбрать все на странице"
-        rows.append([InlineKeyboardButton(page_label, callback_data=f"cla:{view_id}:{page}")])
     if _has_select_all_collection_button(ctx) and total > len(chunk) and all_ids != sel:
         rows.append([InlineKeyboardButton(delete_label(f"Удалить все {total}"), callback_data=f"clx:{view_id}")])
     if sel:
@@ -827,6 +823,10 @@ async def _render_view(bot, cid, view_id, q=None):
             action_label = _button_action_label(action["label"], action.get("id"))
             rows.append([InlineKeyboardButton(f"{action_label} ({len(sel)})",
                                               callback_data=f"clact:{view_id}:{action['id']}")])
+    if len(chunk) >= 2:
+        page_ids = {i for i, _ in chunk}
+        page_label = "✅ Снять выбор на странице" if page_ids <= sel else choose_label("Выбрать все на странице")
+        rows.append([InlineKeyboardButton(page_label, callback_data=f"cla:{view_id}:{page}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=view["back"]),
                  InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)

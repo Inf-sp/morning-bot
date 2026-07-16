@@ -86,22 +86,46 @@ def _strip_cuisine_from_name(name: str, cuisine_code: str) -> str:
     return name
 
 
-_STEP_TIME_RE = re.compile(r"\d+\s*мин")
+_STEP_TIME_RE = re.compile(
+    r"\s*(?:—|-|,)?\s*(?:около\s+)?\d+(?:\s*[–-]\s*\d+)?\s*"
+    r"(?:мин(?:ут(?:а|ы|у)?|\.)?)",
+    re.IGNORECASE,
+)
 
 
-def _step_line(step) -> str:
-    """Рендерит один шаг приготовления: строка или {"text":..., "minutes":...} (§7).
+def _step_text(step) -> str:
+    """Оставляет действие шага без отдельного времени и служебной детализации."""
+    text = str(step.get("text", "") if isinstance(step, dict) else step).strip()
+    text = _STEP_TIME_RE.sub("", text)
+    text = re.sub(r"\s+", " ", text).strip(" -—,.;")
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?…])\s+", text) if part.strip()]
+    text = " ".join(sentences[:2]) if sentences else text
+    if text and text[-1] not in ".!?…":
+        text += "."
+    return text
 
-    Если text уже содержит упоминание минут (модель продублировала время в тексте
-    вопреки промпту), не приписываем ещё раз "— N мин." поверх — иначе получается
-    дублирующая, нечитаемая строка вида "... 2 минуты ... — 2 мин."."""
-    if isinstance(step, dict):
-        text = str(step.get("text", "")).strip()
-        minutes = step.get("minutes")
-        if text and minutes and not _STEP_TIME_RE.search(text):
-            return f"{text} — {minutes} мин."
-        return text
-    return str(step).strip()
+
+def compact_step_lines(steps) -> list[str]:
+    """Сжимает приготовление до 2–3 шагов, оставляя максимум 4 для сложного блюда."""
+    if isinstance(steps, str):
+        steps = [steps]
+    lines = [_step_text(step) for step in (steps or [])]
+    lines = [line for line in lines if line]
+    while len(lines) > 4:
+        pair_index = min(
+            range(len(lines) - 1),
+            key=lambda index: len((lines[index] + " " + lines[index + 1]).split()),
+        )
+        lines[pair_index:pair_index + 2] = [f"{lines[pair_index]} {lines[pair_index + 1]}"]
+    if len(lines) == 4:
+        pairs = [
+            (len((lines[index] + " " + lines[index + 1]).split()), index)
+            for index in range(3)
+        ]
+        word_count, pair_index = min(pairs)
+        if word_count <= 24:
+            lines[pair_index:pair_index + 2] = [f"{lines[pair_index]} {lines[pair_index + 1]}"]
+    return lines
 
 
 def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallback=None):
@@ -118,6 +142,7 @@ def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallba
     steps = data.get("steps") or []
     if isinstance(steps, str):
         steps = [steps]
+    steps = compact_step_lines(steps)
     cuisine_code = str(data.get("cuisine") or "").strip().lower()
     cuisine_label = str(data.get("cuisine_label") or CUISINE_RU.get(cuisine_code) or data.get("cuisine") or "").strip()
     cuisine_emoji = str(data.get("cuisine_emoji") or "").strip()
@@ -151,9 +176,7 @@ def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallba
         b.bold("Приготовление:")
         b.newline()
         for step in steps:
-            line = _step_line(step)
-            if line:
-                b.bullet(line)
+            b.bullet(step)
     if chef_tip:
         b.spacer()
         b.bold("Совет шефа:")

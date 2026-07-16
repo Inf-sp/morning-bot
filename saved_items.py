@@ -10,7 +10,7 @@ import config
 import store
 import util
 from ui import settings as settings_ui
-from ui.constants import delete_label, ui_label
+from ui.constants import choose_label, delete_label, ui_label
 
 _log = logging.getLogger(__name__)
 # ===== СОХРАНЕНИЯ / ЛЮБИМЫЕ (notes.py) =====
@@ -203,7 +203,7 @@ async def export_notes(bot, cid):
 
 async def send_notes(bot, cid):
     rows = [
-        [InlineKeyboardButton("🌍 Город", callback_data="set_city")],
+        [InlineKeyboardButton("📍 Сменить город", callback_data="set_city")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton("❤️ Любимое", callback_data="as_love")],
         [InlineKeyboardButton("⭐️ Сохранённое", callback_data="as_bucket_fav")],
@@ -274,7 +274,7 @@ async def send_food(bot, cid, q=None, back="m_food"):
     """Compat-экран для старых кнопок Готовки: без отдельной базы рецептов."""
     rows = [
         [InlineKeyboardButton("🧊 Мой холодильник", callback_data="set_fridge")],
-        [InlineKeyboardButton("Выбрать кухни", callback_data="set_cuisines")],
+        [InlineKeyboardButton(choose_label("Выбрать кухни"), callback_data="set_cuisines")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(

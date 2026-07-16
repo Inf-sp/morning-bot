@@ -33,10 +33,9 @@ def day_summary(
     quote_author="",
 ):
     """Сводка дня: заголовок, затем по одной строке на блок с пустой строкой между ними."""
-    title_flag = f" {flag}" if flag else ""
     b = MessageBuilder()
     b.bold("Мой день")
-    b.text_line(f" · {header} · {city}{title_flag}")
+    b.text_line(f" · {header} · {city}{' 📍' if city else ''}")
     b.newline()
     b.spacer()
 
@@ -52,7 +51,9 @@ def day_summary(
         _compact_line(b, word_flag, word_label, _lower_word_translation(word_line))
 
     if lifehack:
-        _compact_line(b, "🦉", "Полезно", finish_dot(lifehack))
+        b.text_line("🦉")
+        b.labeled_line("Лайфхак", finish_dot(lifehack))
+        b.spacer()
 
     if quote_text:
         quote_line = f"«{quote_text}»" + (f" — по {quote_author}" if quote_author else "")

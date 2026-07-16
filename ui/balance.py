@@ -2,7 +2,7 @@ import re
 
 from .builder import MessageBuilder
 from .builder import MessageSpec
-from .constants import ui_label
+from .constants import choose_label, ui_label
 from util import cap_sentence
 
 
@@ -173,7 +173,7 @@ def worries_saved(count):
 
 def health_principles(selected_count):
     b = MessageBuilder()
-    b.section("Выбрать принципы")
+    b.section(choose_label("Выбрать принципы"))
     b.line("Выбери, что важно поддерживать сейчас. Эти принципы будут направлять «Мотивацию».")
     b.spacer()
     if selected_count:

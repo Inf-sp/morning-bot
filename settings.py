@@ -11,7 +11,7 @@ import saved_items
 import cooking
 import util
 from ui import settings as settings_ui
-from ui.constants import cuisine_label, delete_label, ui_label
+from ui.constants import choose_label, cuisine_label, delete_label, ui_label
 
 _log = logging.getLogger(__name__)
 
@@ -377,8 +377,8 @@ async def notif_off_all(bot, cid, q=None):
 
 async def send_personalization(bot, cid, q=None):
     """Персонализация сейчас пустует по содержанию — Гардероб, Обучение, Кино/музыка
-    и Кухни переехали в свои разделы («Гардероб» → «Выбрать стили», «Обучение»
-    → «Выбрать язык», «Досуг» → «Настройки досуга», «Готовка» → «Выбрать кухни»).
+    и Кухни переехали в свои разделы («Гардероб» → «*️⃣ Выбрать стили», «Обучение»
+    → «*️⃣ Выбрать язык», «Досуг» → «Настройки досуга», «Готовка» → «*️⃣ Выбрать кухни»).
     Экран оставлен как compat-редирект на главные Настройки."""
     rows = [
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
@@ -654,8 +654,8 @@ async def send_wardrobe_settings_hub(bot, cid, q=None):
         "Стиль влияет на подбор образа. Мой гардероб — управление вещами.",
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Выбрать стили", callback_data="set_wardrobe_style")],
         [InlineKeyboardButton("👕 Мой гардероб", callback_data="set_wardrobe_g")],
+        [InlineKeyboardButton(choose_label("Выбрать стили"), callback_data="set_wardrobe_style")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
     if q is not None:

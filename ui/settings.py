@@ -1,5 +1,5 @@
 from .builder import MessageBuilder, MessageSpec
-from .constants import ui_label
+from .constants import choose_label, ui_label
 
 
 def notifications():
@@ -19,7 +19,7 @@ def personalization():
 
 def cuisines(current):
     b = MessageBuilder()
-    b.section("Выбрать кухни")
+    b.section(choose_label("Выбрать кухни"))
     b.line("Выбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника с их учётом.")
     b.spacer()
     b.bold("Сейчас:")
@@ -67,7 +67,7 @@ def colors_input(title, current):
 
 
 def city_input():
-    return MessageSpec(text="🌍 Напиши город - переключу.")
+    return MessageSpec(text="📍 Напиши город — переключу.")
 
 
 def wardrobe_item_input():
@@ -95,14 +95,14 @@ def style_custom_input():
 
 def style_pick():
     b = MessageBuilder()
-    b.section(ui_label("clothing_style", "Стиль одежды"))
+    b.section(choose_label("Выбрать стили"))
     b.line("Выбери из предложенных или опиши своими словами — бот учтёт при подборе образа:")
     return b.build_stripped()
 
 
 def wardrobe_style(styles, fit, palette, avoid):
     b = MessageBuilder()
-    b.section("Выбрать стили")
+    b.section(choose_label("Выбрать стили"))
     b.spacer()
     b.labeled_line("Стиль", " · ".join(styles) if styles else "не выбран")
     b.labeled_line("Посадка", fit or "не выбрана")
@@ -116,7 +116,7 @@ def wardrobe_style(styles, fit, palette, avoid):
 def settings_home():
     b = MessageBuilder()
     b.section(ui_label("settings", "Настройки"))
-    b.line("Город, приоритеты и уведомления. Настройки разделов — внутри самих разделов.")
+    b.line("Смена города, уведомления и сохранённые данные. Настройки разделов — внутри самих разделов.")
     return b.build_stripped()
 
 

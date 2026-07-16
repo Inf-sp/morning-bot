@@ -33,6 +33,7 @@ UI_EMOJI = {
     "add": "🆕",
     "delete": "❌",
     "find": "🔍",
+    "choose": "*️⃣",
     "seen": "✅",
     "warning": "⚠️",
     "hot": "🔥",
@@ -176,6 +177,13 @@ def delete_label(text):
     """Единая подпись для любой кнопки, удаляющей или убирающей данные."""
     text = str(text or "").strip()
     emoji = UI_EMOJI["delete"]
+    return text if text.startswith(emoji) else f"{emoji} {text}"
+
+
+def choose_label(text):
+    """Единая подпись для любого действия выбора: «*️⃣ Выбрать …»."""
+    text = str(text or "").strip()
+    emoji = UI_EMOJI["choose"]
     return text if text.startswith(emoji) else f"{emoji} {text}"
 
 

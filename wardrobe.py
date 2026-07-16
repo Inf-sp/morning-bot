@@ -13,7 +13,7 @@ import secure
 import research
 import settings as _settings
 from ui import wardrobe as wardrobe_ui
-from ui.constants import delete_label, ui_label
+from ui.constants import choose_label, delete_label, ui_label
 from wardrobe_model import (
     ZONE_ORDER,
     flat_items as _flat_wardrobe_items,
@@ -155,7 +155,7 @@ def build_wardrobe_keyboard():
         [("✨ Другой образ", "w_look")],
         [("🧐 Проверить покупку", "w_check")],
         [("👕 Мой шкаф", "w_closet")],
-        [("Выбрать стили", "set_wardrobe_style")],
+        [(choose_label("Выбрать стили"), "set_wardrobe_style")],
         [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
     ])
 
@@ -281,7 +281,7 @@ def _empty_wardrobe_screen():
     ], [
         InlineKeyboardButton("👕 Мой шкаф", callback_data="w_closet"),
     ], [
-        InlineKeyboardButton("Выбрать стили", callback_data="set_wardrobe_style"),
+        InlineKeyboardButton(choose_label("Выбрать стили"), callback_data="set_wardrobe_style"),
     ], [
         InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"),
         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),

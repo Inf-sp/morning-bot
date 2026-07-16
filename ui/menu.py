@@ -4,7 +4,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .balance import finish_dot
 from .builder import MessageBuilder, MessageSpec
-from .constants import LANGUAGE_EMOJI, ui_label
+from .constants import LANGUAGE_EMOJI, choose_label, ui_label
+from .food import compact_step_lines
 
 UI_MYDAY = ui_label("myday", "").strip()
 UI_WARDROBE = ui_label("wardrobe", "").strip()
@@ -94,7 +95,8 @@ _SCREENS = {
             [(ui_label("recommendation", "Образ на сегодня"), "w_look")],
             [(ui_label("assessment", "Проверить покупку"), "w_check")],
             [("✂️ Разбор шкафа", "w_improve")],
-            [("Выбрать стили", "set_wardrobe_style")],
+            [(choose_label("Выбрать стили"), "set_wardrobe_style")],
+            [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
         ],
     ),
     "m_balance": (
@@ -104,8 +106,8 @@ _SCREENS = {
         [
             [(ui_label("doctor", "Спросить врача"), "as_doctor")],
             [("⚡ Мотивация", "as_motiv"), (ui_label("worry_diary", "Тревоги"), "as_daycheck")],
-            [("Выбрать принципы", "as_health_principles")],
             [("Мой лагом", "set_lagom")],
+            [(choose_label("Выбрать принципы"), "as_health_principles")],
             [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
         ],
     ),
@@ -168,7 +170,7 @@ def learning_menu(home: dict):
         [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
         [(ui_label("live_language", "Живой язык"), f"a_proverb_{code}"), (ui_label("game", "Игра-детектив"), f"gamelang_{code}")],
         [("📖 Мой словарь", f"a_dictlang_{code}_from_menu")],
-        [("Выбрать язык", "set_learning")],
+        [(choose_label("Выбрать язык"), "set_learning")],
         [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
     ]))
 
@@ -203,20 +205,6 @@ def _cooking_sentence(value) -> str:
     return value
 
 
-def _cooking_step(value) -> str:
-    if isinstance(value, dict):
-        text = _cooking_text(value.get("text"))
-        minutes = value.get("minutes")
-    else:
-        text = _cooking_text(value)
-        minutes = None
-    if not text:
-        return ""
-    if minutes and not re.search(r"\d+\s*(?:мин|минут)", text, re.IGNORECASE):
-        text = f"{text.rstrip('.!?…')} — {minutes} мин."
-    return _cooking_sentence(text)
-
-
 def food_menu(idea=None):
     """Главный экран Готовки: один полный рецепт из холодильника."""
     idea = idea or {}
@@ -242,8 +230,7 @@ def food_menu(idea=None):
         b.newline()
         b.line(", ".join(ingredients))
 
-    steps = [_cooking_step(item) for item in (idea.get("steps") or [])]
-    steps = [item for item in steps if item]
+    steps = compact_step_lines(idea.get("steps") or [])
     if steps:
         b.spacer()
         b.bold("Приготовление:")
@@ -254,13 +241,14 @@ def food_menu(idea=None):
     tip = _cooking_sentence(idea.get("tip"))
     if tip:
         b.spacer()
+        b.text_line("💡 ")
         b.labeled_line("Полезно", tip)
 
     rows = [
         [("✨ Другой рецепт", "m_food_next")],
         [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
         [("🧊 Мой холодильник", "as_fridge_home")],
-        [("Выбрать кухни", "set_cuisines")],
+        [(choose_label("Выбрать кухни"), "set_cuisines")],
         [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
     ]
     return b.build_stripped(reply_markup=ikb(rows))

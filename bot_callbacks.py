@@ -230,7 +230,7 @@ async def handle(update, context, remove_reply_keyboard):
                 await _inline_status(lambda _s: weather.send_weather(bot, cid, "week"))
             elif act == "setcity":
                 store.pending_input[cid] = "setcity"
-                await bot.send_message(chat_id=cid, text="🌍 Напиши название города - переключу на него!")
+                await bot.send_message(chat_id=cid, text="📍 Напиши название города — переключу на него.")
             elif act == "trav_go":
                 await _inline_status(lambda _s: travel.send_go(bot, cid))
             elif act == "trav_no":

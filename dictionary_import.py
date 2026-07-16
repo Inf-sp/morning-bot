@@ -5,7 +5,7 @@ import random
 import re
 from datetime import datetime
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
 import config
@@ -145,20 +145,22 @@ def _lang_loc_title(lang):
     return "нидерландском" if lang == "nl" else "английском"
 
 
-def _add_term_run(b, term):
-    """Термин жирным курсивом (правило проекта: термин выделен, перевод — через жирную стрелку)."""
-    from ui.builder import u16_len
-    offset = u16_len(b.text)
-    b.add(term)
-    length = u16_len(term)
-    b._entities.append(MessageEntity(MessageEntity.BOLD, offset, length))
-    b._entities.append(MessageEntity(MessageEntity.ITALIC, offset, length))
+def _dict_example(entry):
+    """Один короткий пример для карточки; из старых записей берём самый компактный."""
+    candidates = []
+    for example in (entry.get("examples") or []):
+        if not isinstance(example, dict):
+            continue
+        text = re.sub(r"\s+", " ", str(example.get("text") or "")).strip()
+        translation = re.sub(r"\s+", " ", str(example.get("translation") or "")).strip()
+        if (text and translation and len(text) <= 140 and len(translation) <= 140
+                and len(text.split()) <= 16 and len(translation.split()) <= 16):
+            candidates.append((text, translation))
+    return min(candidates, key=lambda pair: len(pair[0]) + len(pair[1])) if candidates else None
 
 
 def _dict_entry_message(entry, status="added"):
-    """Карточка после добавления/обновления/поиска: заголовок статуса отдельной
-    строкой, термин жирным курсивом с большой буквы + перевод одной строкой
-    через жирную стрелку "→", разбор, пример полностью курсивом через "→"."""
+    """Единая карточка слова или фразы: статус, перевод, разбор и один пример."""
     from ui.builder import MessageBuilder
 
     b = MessageBuilder()
@@ -169,47 +171,34 @@ def _dict_entry_message(entry, status="added"):
     translation = _entry_translation(entry)
 
     if status == "duplicate":
-        b.text_line("📚 ")
-        b.bold(f"Уже есть в {_lang_loc_title(entry.get('lang'))} словаре")
-        b.newline()
-        b.spacer()
-        _add_term_run(b, term)
-        if translation:
-            b.text_line(" ")
-            b.bold("→")
-            b.text_line(f" {translation}")
-        b.newline()
-        return b.build_stripped()
-
-    titles = {"updated": "Обновлено", "found": "Найдено"}
-    emoji = "✅" if status in ("added", "updated") else "📚"
+        title = f"Уже есть в {_lang_loc_title(entry.get('lang'))} словаре"
+        emoji = "📚"
+    else:
+        titles = {"updated": "Обновлено", "found": "Найдено"}
+        title = titles.get(status, "Добавлено")
+        emoji = "✅" if status in ("added", "updated") else "📚"
     b.text_line(f"{emoji} ")
-    b.bold(titles.get(status, "Добавлено"))
+    b.bold(title)
     b.newline()
     b.spacer()
-    _add_term_run(b, term)
+    b.bold(term)
     if translation:
-        b.text_line(" ")
-        b.bold("→")
-        b.text_line(f" {translation}")
+        b.text_line(f" → {translation}")
     b.newline()
     if entry.get("breakdown"):
         b.spacer()
         b.labeled_line("Разбор", entry["breakdown"])
-    usage = entry.get("usage") or []
-    if usage:
+    example = _dict_example(entry)
+    if example:
+        example_text, example_ru = example
+        example_text = example_text.rstrip(".")
+        if example_ru[-1] not in ".!?…":
+            example_ru += "."
         b.spacer()
-        b.labeled_line("Когда так говорят")
-        for u in usage:
-            b.line(f"• {u.get('situation', '')} → {u.get('example', '')}")
-    examples = entry.get("examples") or []
-    if examples:
-        b.spacer()
-        b.labeled_line("Пример" if len(examples) == 1 else "Примеры")
-        for ex in examples:
-            example_line = f"{ex.get('text', '')} → {ex.get('translation', '')}"
-            b.italic(example_line)
-            b.newline()
+        b.text_line("💡 ")
+        b.bold("Полезно:")
+        b.text_line(f" {example_text} → {example_ru}")
+        b.newline()
     return b.build_stripped()
 
 
@@ -257,13 +246,13 @@ def _extract_srs_fields(d):
 
 
 async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", avoid_translations=None):
-    """Единая точка добавления: нормализация + перевод + короткий разбор + 1-2 примера.
+    """Единая точка добавления: нормализация, перевод, разбор и один пример.
     Один AI-вызов на запись, кэшируется в ai.py по input_hash (module="learning_dict_add",
     TTL 30 дней) — повторное добавление того же слова не тратит лимит повторно.
     lang_hint — nl/en/None. None означает, что язык не определён ни явной командой,
     ни активным языком обучения, ни признаками de/het — LLM определяет его сам,
     без принудительного fallback на nl.
-    avoid_translations — уже показанные пользователю варианты (кнопка «Другой перевод»);
+    avoid_translations — уже показанные варианты из старых совместимых карточек;
     меняет текст промпта, чтобы не попасть в тот же кэш и получить другой вариант."""
     russian_source = bool(_CYRILLIC_RE.search(payload or ""))
     if russian_source and lang_hint in ("nl", "en"):
@@ -328,8 +317,9 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
   а не "На что ты ждёшь?".
 - breakdown: короткий разбор — часть речи, род/артикль, особенность формы (одна строка,
   без пояснений сверх необходимого).
-- examples: 1-2 примера предложений на изучаемом языке с переводом на русский, естественных
-  и коротких.
+- examples: ровно один короткий пример на изучаемом языке с переводом на русский.
+  Пример должен быть естественным, частотным и пригодным для обычной речи. Не используй
+  редкие, книжные, сложные или искусственно составленные конструкции.
 - pos: часть речи одним словом ("существительное", "глагол", "прилагательное", "фраза" и т.п.).
 - plural: множественное число, если применимо к существительному, иначе пусто.
 - forms: до 3 других форм слова (склонения/спряжения), если это уместно, иначе пустой список.
@@ -341,10 +331,6 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
   ("отказ", "согласие", "извинение" и т.п.), иначе пусто.
 - alt_translations: до 2 дополнительных естественных вариантов перевода, отличных от translation,
   если они реально уместны, иначе пустой список.
-- usage: ТОЛЬКО для разговорных фраз/выражений с несколькими разными значениями в зависимости
-  от ситуации (не для обычных слов и не для фраз с одним понятным смыслом) — до 4 пар
-  {{"situation": "коротко когда так говорят", "example": "короткий пример употребления в этом
-  значении на изучаемом языке"}}. Если у фразы одно чёткое значение, верни пустой список.
 - Не выдумывай значение. Если слово многозначное, редкое, написано с ошибкой, не хватает
   артикля для нидерландского существительного или есть риск неверного перевода, поставь
   needs_confirmation=true и дай наиболее вероятную трактовку.
@@ -366,7 +352,6 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
   "construction": "",
   "situation_type": "",
   "alt_translations": [],
-  "usage": [],
   "needs_confirmation": false,
   "reason": "короткая причина уточнения или пусто"
 }}
@@ -385,26 +370,23 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
     if russian_source and not _CYRILLIC_RE.search(translation):
         return None
     examples = []
-    for ex in (d.get("examples") or [])[:2]:
+    for ex in (d.get("examples") or [])[:1]:
         if not isinstance(ex, dict):
             continue
         text = re.sub(r"\s+", " ", str(ex.get("text") or "").strip())
         ex_ru = re.sub(r"\s+", " ", str(ex.get("translation") or "").strip())
-        if text and ex_ru:
-            examples.append({"text": text[:200], "translation": ex_ru[:200]})
+        if (text and ex_ru and len(text) <= 140 and len(ex_ru) <= 140
+                and len(text.split()) <= 16 and len(ex_ru.split()) <= 16):
+            examples.append({"text": text, "translation": ex_ru})
+    if not examples:
+        return None
     breakdown = re.sub(r"\s+", " ", str(d.get("breakdown") or "").strip())[:180]
+    if not breakdown:
+        return None
     article = str(d.get("article") or "").strip() if lang == "nl" else ""
     if article and "глагол" in breakdown.lower():
         # У глаголов нет артикля de/het — модель иногда всё равно его возвращает.
         article = ""
-    usage = []
-    for u in (d.get("usage") or [])[:4]:
-        if not isinstance(u, dict):
-            continue
-        situation = re.sub(r"\s+", " ", str(u.get("situation") or "").strip())
-        example = re.sub(r"\s+", " ", str(u.get("example") or "").strip())
-        if situation and example:
-            usage.append({"situation": situation[:60], "example": example[:80]})
     return {
         "lang": lang,
         "term": term[:120],
@@ -412,7 +394,6 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
         "translation": translation[:180],
         "breakdown": breakdown,
         "examples": examples,
-        "usage": usage,
         "source_text": source_text or payload,
         "added_at": datetime.now(config.TZ).isoformat(),
         "status": "new",
@@ -446,6 +427,21 @@ def _save_normalized_dict_entry(cid, entry):
             continue
         if existing_term.casefold() == entry["term"].casefold():
             duplicate = dict(item)
+            changed = False
+            for field in ("breakdown", "examples"):
+                missing = not duplicate.get(field)
+                if field == "examples":
+                    missing = _dict_example(duplicate) is None
+                if missing and entry.get(field):
+                    duplicate[field] = entry[field]
+                    changed = True
+            for key, value in srs_fields.items():
+                if key not in duplicate:
+                    duplicate[key] = value
+                    changed = True
+            if changed:
+                words[idx] = duplicate
+                store.set_list(config.DICT_KEY, cid, words)
             return "duplicate", duplicate
         if _dict_loose_text(entry["lang"], existing_term) == loose_text:
             updated = dict(item)
@@ -456,7 +452,6 @@ def _save_normalized_dict_entry(cid, entry):
                 "translation": entry["translation"],
                 "breakdown": entry.get("breakdown", ""),
                 "examples": entry.get("examples", []),
-                "usage": entry.get("usage", []),
                 "source_text": entry.get("source_text", ""),
                 "added_at": item.get("added_at") or entry["added_at"],
                 "status": item.get("status") or "new",
@@ -477,7 +472,6 @@ def _save_normalized_dict_entry(cid, entry):
         "translation": entry["translation"],
         "breakdown": entry.get("breakdown", ""),
         "examples": entry.get("examples", []),
-        "usage": entry.get("usage", []),
         "source_text": entry.get("source_text", ""),
         "added_at": entry["added_at"],
         "status": entry.get("status") or "new",
@@ -520,10 +514,10 @@ def _entry_needs_srs_migration(item):
 
 
 def _entry_needs_ai_refresh(item):
-    """Старая запись без разбора/примеров — донасытим при первом обращении (ленивая миграция)."""
+    """Старую запись без разбора или короткого примера донасытим при обращении."""
     if not isinstance(item, dict):
         return False
-    return not item.get("breakdown") or not item.get("examples")
+    return not item.get("breakdown") or _dict_example(item) is None
 
 
 async def _refresh_dict_entry(cid, item):
@@ -561,7 +555,6 @@ async def _refresh_dict_entry(cid, item):
 
 def _dict_saved_kb(lang, term_key):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Другой перевод", callback_data="a_dictconfirm_retry")],
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
          InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
@@ -606,10 +599,6 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
         )
         return
     status, saved = _save_normalized_dict_entry(cid, entry)
-    saved["_payload"] = payload
-    saved["_source_text"] = source_text
-    saved["_seen_translations"] = [entry["translation"]]
-    store.dict_pending_add[str(cid)] = saved
     msg = _dict_entry_message(saved, status=status)
     term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
     if status == "duplicate":
@@ -621,8 +610,7 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
 
 
 async def retry_pending_dict_add(bot, cid):
-    """Кнопка «Другой перевод»: перегенерирует перевод, исключая уже показанные
-    варианты, и обновляет уже сохранённую запись на месте (слово уже в словаре)."""
+    """Совместимость со старыми сообщениями, где ещё была смена перевода."""
     entry = store.dict_pending_add.get(str(cid))
     if not entry:
         await bot.send_message(chat_id=cid, text="Уточнение устарело. Пришли слово ещё раз.")
@@ -645,7 +633,6 @@ async def retry_pending_dict_add(bot, cid):
         "translation": new_entry["translation"],
         "breakdown": new_entry.get("breakdown", ""),
         "examples": new_entry.get("examples", []),
-        "usage": new_entry.get("usage", []),
     }) or new_entry
     updated["_payload"] = entry.get("_payload", "")
     updated["_source_text"] = entry.get("_source_text", "")
