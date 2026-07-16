@@ -486,7 +486,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     page = max(0, min(page, pages - 1))
     chunk = items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]
     hint = f"Отметь нужное ✅ и нажми «{_action_label(ctx)}»."
-    lines = [f"<b>{esc(title)}</b>", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
+    lines = [f"<b>{esc(title)}</b>", "", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
     _lv_add_label = {
         "lv_movies": "🆕 Добавить фильм",
         "lv_countries": "🆕 Добавить страну",

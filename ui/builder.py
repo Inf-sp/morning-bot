@@ -66,7 +66,31 @@ class MessageBuilder:
     def text(self) -> str:
         return "".join(self._chunks)
 
+    def _ensure_gap_after_title(self, next_text: str):
+        """Добавляет пустую строку после первой жирной строки экрана.
+
+        Срабатывает только перед первым содержательным блоком. Поэтому обычные
+        подписи внутри карточки не получают лишний отступ, а старые и новые
+        способы сборки заголовка соблюдают одно правило автоматически.
+        """
+        if not str(next_text or "").strip():
+            return
+        current = self.text
+        if not current.endswith("\n") or current.endswith("\n\n"):
+            return
+        first_break = current.find("\n")
+        if first_break != len(current) - 1:
+            return
+        first_line_length = u16_len(current[:first_break])
+        has_bold_title = any(
+            entity.type == MessageEntity.BOLD and entity.offset < first_line_length
+            for entity in self._entities
+        )
+        if has_bold_title:
+            self._chunks.append("\n")
+
     def add(self, text: str, entity_type=None):
+        self._ensure_gap_after_title(text)
         offset = u16_len(self.text)
         self._chunks.append(text)
         if entity_type and text:
@@ -91,6 +115,7 @@ class MessageBuilder:
         return self.add(text, MessageEntity.BLOCKQUOTE)
 
     def link(self, text: str, url: str):
+        self._ensure_gap_after_title(text)
         offset = u16_len(self.text)
         self._chunks.append(text)
         if text:
@@ -125,6 +150,12 @@ class MessageBuilder:
         self._ensure_blank_line()
         self.bold(title)
         self.newline()
+        return self
+
+    def title(self, title: str):
+        """Главный заголовок экрана с обязательной пустой строкой после него."""
+        self.bold(title)
+        self.blank()
         return self
 
     def label(self, title: str, content=None, *, lowercase: bool = True):
