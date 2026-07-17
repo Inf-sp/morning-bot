@@ -31,6 +31,40 @@ _DEFAULT_EASINESS = 2.5
 _HISTORY_LIMIT = 20
 
 
+def normalize_state(source: dict | None) -> dict:
+    """Безопасное SRS-состояние поверх старых или повреждённых значений KV."""
+    source = source if isinstance(source, dict) else {}
+    default = default_srs_state()
+    try:
+        level = max(0, min(5, int(source.get("srs_level", default["srs_level"]))))
+    except (TypeError, ValueError):
+        level = default["srs_level"]
+    try:
+        easiness = max(_MIN_EASINESS, float(source.get("srs_easiness", default["srs_easiness"])))
+    except (TypeError, ValueError):
+        easiness = default["srs_easiness"]
+    try:
+        interval = max(0, int(source.get("srs_interval_days", default["srs_interval_days"])))
+    except (TypeError, ValueError):
+        interval = default["srs_interval_days"]
+    try:
+        due_at = datetime.fromisoformat(str(source.get("srs_due_at"))).date().isoformat()
+    except (TypeError, ValueError):
+        due_at = default["srs_due_at"]
+    history = source.get("srs_history")
+    if not isinstance(history, list):
+        history = []
+    history = [item for item in history if isinstance(item, dict)][-_HISTORY_LIMIT:]
+    return {
+        "srs_level": level,
+        "srs_easiness": round(easiness, 2),
+        "srs_interval_days": interval,
+        "srs_due_at": due_at,
+        "srs_history": history,
+        "srs_last_exercise_type": str(source.get("srs_last_exercise_type") or ""),
+    }
+
+
 def default_srs_state() -> dict:
     """Начальное SRS-состояние для новой записи словаря."""
     today = datetime.now(config.TZ).date().isoformat()
@@ -61,6 +95,8 @@ def schedule_next_review(srs_state: dict, quality: str) -> dict:
     """Возвращает НОВЫЙ srs_state (не мутирует вход) после ответа качества
     `quality`. SM-2: easiness корректируется по score 0-5, интервал растёт как
     interval * easiness при score >= 3, сбрасывается на 1 день при score < 3."""
+    last_exercise_type = str(srs_state.get("_last_exercise_type") or "")
+    srs_state = normalize_state(srs_state)
     score = _QUALITY_SCORE.get(quality, 0)
     easiness = float(srs_state.get("srs_easiness", _DEFAULT_EASINESS))
     interval = int(srs_state.get("srs_interval_days", 0))
@@ -83,7 +119,7 @@ def schedule_next_review(srs_state: dict, quality: str) -> dict:
     history = list(srs_state.get("srs_history", []))
     history.append({
         "ts": datetime.now(config.TZ).isoformat(),
-        "exercise_type": srs_state.get("_last_exercise_type", ""),
+        "exercise_type": last_exercise_type,
         "result": quality,
     })
     history = history[-_HISTORY_LIMIT:]
@@ -110,10 +146,5 @@ def record_answer(srs_state: dict, exercise_type: str, quality: str) -> dict:
 
 def is_due(srs_state: dict, today=None) -> bool:
     today = today or datetime.now(config.TZ).date()
-    due_at = srs_state.get("srs_due_at")
-    if not due_at:
-        return True
-    try:
-        return datetime.fromisoformat(due_at).date() <= today
-    except ValueError:
-        return True
+    due_at = normalize_state(srs_state)["srs_due_at"]
+    return datetime.fromisoformat(due_at).date() <= today

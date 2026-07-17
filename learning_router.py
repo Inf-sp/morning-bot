@@ -50,7 +50,7 @@ async def handle_action(bot, cid, q, act, run_with_status):
         await learning.send_train_lang_select(bot, cid)
     elif act in ("train_nl", "train_en"):
         await run_with_status(lambda _s: trainer.start(
-            bot, cid, learning.active_language(cid)))
+            bot, cid, act.rsplit("_", 1)[-1]))
     elif act == "train_progress":
         await run_with_status(lambda _s: trainer.send_progress(bot, cid))
     elif act in ("proverb", "proverb_nl", "proverb_en"):

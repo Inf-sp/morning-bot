@@ -29,6 +29,31 @@ class DictionaryRepository:
         return [entry for entry in self.all()
                 if entry_language(entry) == code and entry_term(entry) and entry_translation(entry)]
 
+    def repair_training_state(self, language):
+        """Локально чинит контракт тренажёра без сети и AI-вызова."""
+        code = language_code(language)
+
+        def update(entries):
+            changed = False
+            for index, entry in enumerate(entries):
+                if not isinstance(entry, dict) or entry_language(entry) != code:
+                    continue
+                normalized = {**entry, **srs.normalize_state(entry)}
+                examples = entry.get("examples")
+                normalized["examples"] = (
+                    [dict(example) for example in examples if isinstance(example, dict)]
+                    if isinstance(examples, list) else []
+                )
+                for key in ("forms", "alt_translations"):
+                    value = entry.get(key)
+                    normalized[key] = list(value) if isinstance(value, list) else []
+                if normalized != entry:
+                    entries[index] = normalized
+                    changed = True
+            return entries, changed
+
+        return self.records.mutate(update)
+
     def correction_for(self, entry):
         return PHRASE_CORRECTIONS.get(normalize_key(entry_term(entry)))
 
@@ -66,10 +91,7 @@ class DictionaryRepository:
             for index, entry in enumerate(entries):
                 if entry_language(entry) != language or entry_term(entry) != term:
                     continue
-                state = ({key: entry.get(key) for key in (
-                    "srs_level", "srs_easiness", "srs_interval_days", "srs_due_at",
-                    "srs_history", "srs_last_exercise_type")}
-                    if "srs_due_at" in entry else srs.default_srs_state())
+                state = srs.normalize_state(entry)
                 updated = {**entry, **srs.record_answer(state, exercise_type, quality)}
                 entries[index] = updated
                 return entries, updated

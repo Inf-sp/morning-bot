@@ -2,6 +2,7 @@ import random
 from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
+import srs
 import store
 import trainer_engine
 from learning_dictionary import DictionaryRepository, entry_language, entry_term, entry_translation
@@ -114,7 +115,7 @@ def _daily_focus_text(entry, kind):
     """'Сегодня в фокусе' на главном экране — вытекает из SRS-уровня материала
     дня (0-1: узнать перевод; 2-3: вспомнить без вариантов; 4-5: применить
     самостоятельно), без AI-вызова — правило по уже посчитанному уровню."""
-    level = int(entry.get("srs_level") or 0)
+    level = srs.normalize_state(entry)["srs_level"]
     if level <= 1:
         return "вспомнить перевод до открытия спойлера."
     if kind == "word":
@@ -201,15 +202,16 @@ def build_progress_screen(cid):
     lang_code = _code(language)
     entries = _train_full_entries(cid, language)
     total = len(entries)
-    confident = sum(1 for e in entries if int(e.get("srs_level") or 0) >= 4)
-    due_count = sum(1 for e in entries if int(e.get("srs_level") or 0) <= 1)
+    states = [srs.normalize_state(entry) for entry in entries]
+    confident = sum(1 for state in states if state["srs_level"] >= 4)
+    due_count = sum(1 for state in states if srs.is_due(state))
 
     no_hint_answers = 0
     total_answers = 0
     by_exercise_ok = {}
     by_exercise_total = {}
-    for e in entries:
-        for h in (e.get("srs_history") or []):
+    for state in states:
+        for h in state["srs_history"]:
             total_answers += 1
             quality = h.get("result", "")
             ex_type = h.get("exercise_type", "")

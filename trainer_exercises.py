@@ -39,7 +39,9 @@ def _first_translation(entry):
 
 def _example(entry):
     examples = entry.get("examples") or []
-    return examples[0] if examples else {}
+    if not isinstance(examples, list):
+        return {}
+    return next((example for example in examples if isinstance(example, dict)), {})
 
 
 def _tokens(text):
@@ -111,7 +113,7 @@ def _find_error(entry, _other_entries, rng):
     text = str(example.get("text") or "").strip()
     tokens = text.split()
     droppable = {"de", "het", "een", "the", "a", "an"}
-    indices = [i for i, token in enumerate(tokens)
+    indices = [i for i, token in enumerate(tokens[:6])
                if token.lower().strip(".,!?") in droppable]
     if len(tokens) < 3 or not indices:
         return None
@@ -146,8 +148,11 @@ def _fill_gap(entry, other_entries, rng):
 
 
 def _translate_context(entry, _other_entries, _rng):
+    alternatives = entry.get("alt_translations") or []
+    if not isinstance(alternatives, list):
+        alternatives = []
     return {"ru": _first_translation(entry), "correct": _cap(entry_term(entry)),
-            "alt": list(entry.get("alt_translations") or []),
+            "alt": alternatives,
             "situation": entry.get("situation_type") or ""}
 
 

@@ -41,7 +41,10 @@ def _learning():
 
 
 def _new_session():
-    return {"consolidated": [], "returning": [], "no_hint_count": 0, "total": 0}
+    return {
+        "consolidated": [], "returning": [], "no_hint_count": 0, "total": 0,
+        "max_exercises": trainer_engine.DEFAULT_QUEUE_SIZE,
+    }
 
 
 def _keyboard(rows):
@@ -111,6 +114,7 @@ async def start(bot, cid, language, mode=None):
     lang_code = language if language in ("nl", "en") else ("nl" if language == "нидерландский" else "en")
     repository = DictionaryRepository(cid)
     repository.apply_known_corrections(lang_code)
+    repository.repair_training_state(lang_code)
     if not repository.training_entries(lang_code):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(
             "📖 Открыть словарь", callback_data=f"a_dictlang_{lang_code}_from_menu")]])
@@ -120,8 +124,6 @@ async def start(bot, cid, language, mode=None):
             reply_markup=kb,
         )
         return
-    import learning_dictionary as dictionary
-    await dictionary.migrate_dict_entries_for_srs(cid, lang_code)
     queue = trainer_engine.build_training_queue(repository.training_entries(lang_code))
     if not queue:
         await bot.send_message(chat_id=cid, text="Не получилось собрать тренировку. Попробуй ещё раз.")
@@ -134,6 +136,11 @@ async def _render_next(bot, cid):
     state = trainer_session.get(cid)
     if not state:
         await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново.")
+        return
+    if state["session"]["total"] >= state["session"].get(
+        "max_exercises", trainer_engine.DEFAULT_QUEUE_SIZE,
+    ):
+        await _finish(bot, cid, state)
         return
     queue = state["queue"]
     while state["queue_idx"] < len(queue):
@@ -254,8 +261,7 @@ def _reinsert_failed(state, data):
                   if entry_term(item["entry"]) == data["term"]), None)
     if entry is None:
         return
-    choices = [kind for kind in trainer_engine.ALL_EXERCISES if kind != data["exercise_type"]]
-    kind = random.choice(choices) if choices else data["exercise_type"]
+    kind = trainer_engine.select_exercise_type(entry, avoid=data["exercise_type"])
     position = min(len(state["queue"]), state["queue_idx"] + random.randint(2, 4))
     state["queue"].insert(position, {"entry": entry, "exercise_type": kind})
 

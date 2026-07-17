@@ -146,7 +146,10 @@ def pairing_text(data) -> str:
     return "; ".join(values)
 
 
-def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallback=None):
+def food_card(
+    data, label="Рецепт дня", meal=None, cuisine_emoji_fallback=None,
+    show_leading_emoji=True,
+):
     """Карточка рецепта. Не пишется в БД как HTML: живёт в store.last_recipe/last_answer
     только до рестарта, а в заметки (NOTES_KEY) попадает через save_fav, который берёт
     entities напрямую из уже отправленного сообщения — MessageBuilder тут ничем не хуже HTML.
@@ -176,18 +179,17 @@ def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallba
         chef_tip += "."
 
     b = MessageBuilder()
-    meal_emoji = MEAL_EMOJI.get(meal, ui_label("food", "").strip())
-    header = f"{meal_emoji} {label}"
+    meal_emoji = (
+        MEAL_EMOJI.get(meal, ui_label("food", "").strip())
+        if show_leading_emoji else ""
+    )
+    header = f"{meal_emoji} {label}".strip()
     if cuisine_label:
-        header += f" • {cuisine_emoji} {cuisine_label}".rstrip()
+        header += f" · {cuisine_emoji} {cuisine_label}".rstrip()
     b.section(header)
     if name:
         b.spacer()
         b.bold(name)
-    servings = " ".join(str(data.get("servings") or "").split())
-    if servings:
-        b.newline()
-        b.line(f"👤 {servings}")
     if ingredients:
         b.spacer()
         b.labeled_line("Ингредиенты", ingredients)

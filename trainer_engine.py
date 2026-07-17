@@ -42,17 +42,12 @@ def _entry_kind(entry):
 
 
 def _srs_state(entry):
-    if "srs_due_at" not in entry:
-        return srs.default_srs_state()
-    return {key: entry.get(key) for key in (
-        "srs_level", "srs_easiness", "srs_interval_days", "srs_due_at",
-        "srs_history", "srs_last_exercise_type",
-    )}
+    return srs.normalize_state(entry)
 
 
 def select_exercise_type(entry, avoid="", rng=random):
     """Выбирает доступный формат по уровню и типу материала."""
-    level = int(entry.get("srs_level") or 0)
+    level = _srs_state(entry)["srs_level"]
     kind = _entry_kind(entry)
     last = entry.get("srs_last_exercise_type") or ""
 
@@ -82,7 +77,7 @@ def select_exercise_type(entry, avoid="", rng=random):
 
 def build_training_queue(entries, today=None, queue_size=DEFAULT_QUEUE_SIZE, rng=random):
     """Собирает очередь: повторение, сложные места и новый материал."""
-    entries = list(entries or [])
+    entries = [{**entry, **_srs_state(entry)} for entry in (entries or []) if isinstance(entry, dict)]
     if not entries:
         return []
     today = today or date.today()
