@@ -87,7 +87,45 @@ def _color_penalty(items):
     return -10 * (len(bright) - 1)
 
 
-def score_outfit(items, weather_ctx, wardrobe_history, prefs_text):
+def outfit_style_score(items, style):
+    """Насколько конкретный комплект соответствует одному из шести UI-стилей."""
+    style = str(style or "").casefold()
+    facts = " ".join(
+        " ".join(str(item.get(key) or "") for key in ("name", "subcategory", "style", "fit", "material"))
+        for item in items
+    ).casefold()
+    colors = [str(color).casefold() for item in items for color in (item.get("colors") or [])]
+    accessories = sum(item.get("zone") == "Аксессуары" for item in items)
+    neutral = sum(_is_neutral_color(color) for color in colors)
+
+    profiles = {
+        "минимализм": ("minimal", "лаконич", "прост", "прям"),
+        "скандинавский": ("scandi", "свобод", "лён", "лен", "хлоп", "шерст", "кардиган"),
+        "повседневный": ("casual", "рубаш", "прямые брюки", "чинос", "лофер", "кеды"),
+        "городской": ("street", "оверсайз", "худи", "футбол", "широк", "карго", "кеды", "кроссов"),
+        "классический": ("formal", "classic", "класс", "рубаш", "пиджак", "пальто", "лофер"),
+        "спортивный": ("sport", "спортив", "худи", "джоггер", "кроссов", "функцион"),
+    }
+    score = sum(2 for marker in profiles.get(style, ()) if marker in facts)
+    if style == "минимализм":
+        score += neutral
+        score -= max(accessories - 1, 0) * 2
+    elif style == "скандинавский":
+        score += sum(any(marker in color for marker in ("беж", "сер", "бел", "олив", "корич")) for color in colors)
+    elif style in ("повседневный", "классический") and any(marker in facts for marker in ("sport", "спортив", "джоггер")):
+        score -= 3
+    return score
+
+
+def choose_outfit_style(items, selected_styles):
+    """Главный стиль комплекта; при равенстве сохраняет порядок настроек."""
+    selected = [style for style in (selected_styles or []) if str(style).strip()]
+    if not selected:
+        return ""
+    return max(selected, key=lambda style: outfit_style_score(items, style))
+
+
+def score_outfit(items, weather_ctx, wardrobe_history, prefs_text, selected_styles=None):
     """Скоринг одной комбинации вещей (одна вещь на зону, максимум 5 вещей).
     Возвращает float — выше лучше."""
     score = 0.0
@@ -97,13 +135,13 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text):
         if tr and tmax is not None and tr[0] <= tmax <= tr[1]:
             score += 5
         if it.get("zone") == "Аксессуары":
-            # У аксессуаров обычно нет temp_range (не привязаны к погоде) — без
-            # небольшого бонуса они никогда не выигрывают у варианта "без аксессуара"
-            # при равном score и не попадают в образ вовсе.
-            score += 2
+            # Аксессуар не добавляется автоматически: он должен получить пользу
+            # от погоды или соответствия выбранному стилю.
             if (weather_ctx.get("hot") or weather_ctx.get("sunny")) and _is_sunglasses(it):
                 score += 5
     score += _color_penalty(items)
+    if selected_styles:
+        score += 2 * max(outfit_style_score(items, style) for style in selected_styles)
     prefs_low = str(prefs_text or "").lower()
     for it in items:
         colors = [str(color).lower() for color in (it.get("colors") or [])]
@@ -161,7 +199,8 @@ def _top_candidates(items, limit=3):
     return items[:limit]
 
 
-def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=None):
+def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=None,
+                     selected_styles=None):
     """Собирает кандидатов, перебирает ограниченные комбинации (топ-3 на зону),
     возвращает лучший набор вещей (list[item]) или None, если нет кандидатов хотя
     бы на одну обязательную зону (Верх/Низ/Обувь)."""
@@ -188,7 +227,9 @@ def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item
         min_changes = 2 if any(len(combo) >= 4 for combo in combos) else 1
         combos = [combo for combo in combos
                   if len(previous_item_ids - {it.get("id") for it in combo}) >= min_changes]
-    scored = [(score_outfit(combo, weather_ctx, wardrobe_history, prefs_text), combo) for combo in combos]
+    scored = [(
+        score_outfit(combo, weather_ctx, wardrobe_history, prefs_text, selected_styles), combo,
+    ) for combo in combos]
     if not scored:
         return None
     scored.sort(key=lambda x: x[0], reverse=True)
@@ -199,7 +240,7 @@ def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item
         rescored = [(score_outfit(combo, weather_ctx, [
             e for e in wardrobe_history
             if e.get("date", "") >= (datetime.now(config.TZ) - timedelta(days=3)).date().isoformat()
-        ], prefs_text), combo) for _s, combo in scored]
+        ], prefs_text, selected_styles), combo) for _s, combo in scored]
         rescored.sort(key=lambda x: x[0], reverse=True)
         best_score, best_combo = rescored[0]
     return best_combo

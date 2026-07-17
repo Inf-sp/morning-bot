@@ -1,11 +1,11 @@
 import re
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
 from .balance import finish_dot
 from .builder import MessageBuilder, MessageSpec
-from .constants import LANGUAGE_EMOJI, choose_label, ui_label
-from .food import compact_step_lines, pairing_text
+from .constants import CUISINE_EMOJI, LANGUAGE_EMOJI, choose_label, ui_label
+from .food import CUISINE_RU, pairing_text
 
 UI_MYDAY = ui_label("myday", "").strip()
 UI_WARDROBE = ui_label("wardrobe", "").strip()
@@ -134,7 +134,6 @@ def learning_menu(home: dict):
     title = "Английский" if code == "en" else "Нидерландский"
 
     b = MessageBuilder()
-    b.text_line(f"{UI_LEARNING} ")
     b.bold(f"Обучение · {title} {flag}")
     b.newline()
     b.spacer()
@@ -142,27 +141,30 @@ def learning_menu(home: dict):
     if not home.get("has_material"):
         b.line("В словаре пока нет слов с переводом — начни с тренажёра, он поможет добавить первые.")
     else:
-        b.bold("Конструкция дня:")
-        b.text_line(" ")
-        b.italic(home["term"])
-        b.text_line(f" → {finish_dot(home['translation'])}")
+        kind = home.get("kind") or "phrase"
+        material_label = {
+            "word": "Слово дня",
+            "phrase": "Фраза дня",
+            "construction": "Конструкция дня",
+            "rule": "Правило дня",
+        }.get(kind, "Фраза дня")
+        b.label(material_label, home["term"], lowercase=False)
+        if kind != "rule" and home.get("translation"):
+            b.text_line(" → ")
+            b.add(finish_dot(home["translation"]), MessageEntity.SPOILER)
         b.newline()
-        b.line("Сегодня тренажёр поможет запомнить перевод и пример. Новые типы заданий откроются после закрепления слов.")
 
     progress = home.get("progress") or {}
     b.spacer()
     b.bold("Прогресс:")
-    b.text_line(" Слов и фраз ")
-    b.bold(str(progress.get("total", 0)))
-    b.text_line(" изучаю · ")
-    b.bold(str(progress.get("due_count", 0)))
-    b.text_line(" повторить · ")
-    b.bold(f"{progress.get('no_hint_pct', 0)}%")
-    b.text_line(" без подсказок")
     b.newline()
+    b.bullet(f"В изучении {progress.get('total', 0)} слов и фраз")
+    b.bullet(f"На повторении {progress.get('due_count', 0)} слов и фраз")
+    b.bullet(f"Правильно без подсказок — {progress.get('no_hint_pct', 0)}%")
     b.spacer()
-    b.bold("Следующая цель:")
-    b.text_line(" Перевод и понимание → самостоятельное вспоминание.")
+    focus = home.get("focus") or "добавить первые слова в тренажёре."
+    b.text_line("💡 ")
+    b.label("Фокус", focus)
 
     return b.build_stripped(reply_markup=ikb([
         [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
@@ -207,41 +209,46 @@ def food_menu(idea=None):
     """Главный экран Готовки: один полный рецепт из холодильника."""
     idea = idea or {}
     b = MessageBuilder()
-    b.section(f"{UI_FOOD} Готовка · Идея на сегодня")
-
-    reason = _cooking_sentence(idea.get("reason"))
-    if reason:
-        b.spacer()
-        b.italic(reason)
-        b.newline()
+    cuisine_code = str(idea.get("cuisine") or "").strip().lower()
+    cuisine_flag = CUISINE_EMOJI.get(cuisine_code, "")
+    cuisine_name = CUISINE_RU.get(cuisine_code, "")
+    is_flag = len(cuisine_flag) == 2 and all(0x1F1E6 <= ord(char) <= 0x1F1FF for char in cuisine_flag)
+    header = "Готовка · Блюдо на сегодня"
+    if cuisine_name and is_flag:
+        header += f" · {cuisine_flag} {cuisine_name}"
+    b.section(header)
 
     name = _cooking_text(idea.get("name"))
     if name:
         b.spacer()
         b.bold(name)
-
-    servings = _cooking_text(idea.get("servings"))
-    if servings:
+        minutes = idea.get("minutes")
+        servings = _cooking_text(idea.get("servings"))
+        details = []
+        if minutes:
+            details.append(f"{int(minutes)} мин")
+        if servings:
+            details.append(servings)
+        if details:
+            b.text_line(f" · {' · '.join(details)}")
         b.newline()
-        b.line(f"👤 {servings}")
 
     ingredients = [_cooking_text(item) for item in (idea.get("ingredients") or [])]
     ingredients = [item for item in ingredients if item]
     if ingredients:
         b.spacer()
-        b.bold("Ингредиенты:")
-        b.newline()
-        b.line(", ".join(ingredients))
+        b.labeled_line("Ингредиенты", ", ".join(ingredients))
 
-    missing = [_cooking_text(item) for item in (idea.get("missing_ingredients") or [])]
-    missing = [item for item in missing if item]
-    if missing:
-        b.spacer()
-        b.bold("Не хватает:")
-        b.newline()
-        b.line(", ".join(missing))
-
-    steps = compact_step_lines(idea.get("steps") or [])
+    steps = []
+    for raw_step in (idea.get("steps") or [])[:5]:
+        step = raw_step if isinstance(raw_step, dict) else {"text": raw_step}
+        text = _cooking_text(step.get("text"))
+        minutes = step.get("minutes")
+        if text and minutes and not re.search(r"\d+(?:\s*[–-]\s*\d+)?\s*мин", text, re.I):
+            text = f"{text.rstrip('.!?…')} — {int(minutes)} мин"
+        text = _cooking_sentence(text)
+        if text:
+            steps.append(text)
     if steps:
         b.spacer()
         b.bold("Приготовление:")
@@ -255,7 +262,8 @@ def food_menu(idea=None):
     })
     if pairing:
         b.spacer()
-        b.line(f"К блюду подойдет: {pairing}")
+        pairing = _cooking_sentence(pairing.replace("; ", " или "))
+        b.labeled_line("К блюду подойдет", pairing, lowercase=False)
 
     tip = _cooking_sentence(idea.get("tip"))
     if tip:

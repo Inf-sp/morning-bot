@@ -373,16 +373,33 @@ def _home_string_list(value) -> list[str]:
     return result
 
 
+_HOME_QUANTITY = (
+    r"\d+(?:[.,]\d+)?(?:\s*[–-]\s*\d+(?:[.,]\d+)?)?\s*"
+    r"(?:г|кг|мл|л|шт\.?|зубчик(?:а|ов)?|ст\.\s*л\.|ч\.\s*л\.|стакан(?:а|ов)?|упаковк(?:а|и|ок))"
+)
+
+
 def _home_natural_ingredient(value) -> str:
     text = " ".join(str(value or "").lower().replace("ё", "е").split()).strip(" -•.,")
+    quantity = ""
+    prefix = re.fullmatch(rf"({_HOME_QUANTITY})\s+(.+)", text, re.I)
+    suffix = re.fullmatch(rf"(.+?)\s+({_HOME_QUANTITY})", text, re.I)
+    if prefix:
+        quantity, text = prefix.group(1), prefix.group(2)
+    elif suffix:
+        text, quantity = suffix.group(1), suffix.group(2)
+    if re.search(r"\bшт$", quantity, re.I):
+        quantity += "."
     natural = _HOME_NATURAL_INGREDIENTS.get(text, text)
     # Возвращаем принятую в модели холодильника форму, затем ещё раз исправляем
     # порядок слов: clean_name знает больше пользовательских вариантов.
     natural = _fridge_clean_name(natural) or natural
-    return _HOME_NATURAL_INGREDIENTS.get(natural.replace("ё", "е"), natural)
+    natural = _HOME_NATURAL_INGREDIENTS.get(natural.replace("ё", "е"), natural)
+    return f"{natural} {quantity}".strip()
 
 
 def _home_semantic_ingredient_key(value) -> str:
+    value = re.sub(rf"(?:^|\s){_HOME_QUANTITY}(?:\s|$)", " ", str(value or ""), flags=re.I)
     natural = _home_natural_ingredient(value).replace("ё", "е")
     for index, group in enumerate(_HOME_SYNONYM_GROUPS):
         normalized_group = {_home_natural_ingredient(item).replace("ё", "е") for item in group}
@@ -500,7 +517,7 @@ def _home_steps(value) -> list[dict]:
         if not text or _HOME_FORMAL_IMPERATIVE_RE.search(text) or not (minutes or has_time):
             continue
         result.append({"text": text, "minutes": minutes})
-    while len(result) > 4:
+    while len(result) > 5:
         pair_index = min(
             range(len(result) - 1),
             key=lambda index: len((result[index]["text"] + " " + result[index + 1]["text"]).split()),
@@ -510,19 +527,7 @@ def _home_steps(value) -> list[dict]:
             "text": f"{first['text'].rstrip('.!?…')}. {second['text']}",
             "minutes": (first.get("minutes") or 0) + (second.get("minutes") or 0) or None,
         }]
-    if len(result) == 4:
-        pairs = [
-            (len((result[index]["text"] + " " + result[index + 1]["text"]).split()), index)
-            for index in range(3)
-        ]
-        word_count, pair_index = min(pairs)
-        if word_count <= 24:
-            first, second = result[pair_index:pair_index + 2]
-            result[pair_index:pair_index + 2] = [{
-                "text": f"{first['text'].rstrip('.!?…')}. {second['text']}",
-                "minutes": (first.get("minutes") or 0) + (second.get("minutes") or 0) or None,
-            }]
-    return result if 2 <= len(result) <= 4 else []
+    return result if 3 <= len(result) <= 5 else []
 
 
 def _normalize_home_idea(data, context: dict) -> dict:
@@ -532,8 +537,18 @@ def _normalize_home_idea(data, context: dict) -> dict:
     has_fridge = bool(context.get("has_fridge"))
 
     name = " ".join(str(data.get("name") or "").split()).strip()
+    selected_cuisines = set(context.get("cuisine_codes") or [])
+    cuisine = str(data.get("cuisine") or "").strip().lower()
+    if not selected_cuisines or cuisine not in selected_cuisines:
+        cuisine = ""
     reason = _home_human_reason(data.get("reason"), context)
     tip = _home_useful_tip(data.get("tip"))
+    pairing_wine = " ".join(str(data.get("pairing_wine") or "").split())[:80]
+    pairing_drink = " ".join(str(data.get("pairing_drink") or "").split())[:100]
+    if pairing_wine and not re.search(r"[а-яё]", pairing_wine, re.I):
+        pairing_wine = ""
+    if pairing_drink and not re.search(r"[а-яё]", pairing_drink, re.I):
+        pairing_drink = ""
     ingredients = [_home_natural_ingredient(item) for item in _home_string_list(data.get("ingredients"))]
     steps = _home_steps(data.get("steps"))
     ingredient_keys = {_home_semantic_ingredient_key(item) for item in ingredients}
@@ -578,6 +593,7 @@ def _normalize_home_idea(data, context: dict) -> dict:
         "spoonacular_source_name": str(data.get("spoonacular_source_name") or ""),
         "reason": reason,
         "name": name,
+        "cuisine": cuisine,
         "minutes": _home_minutes(data.get("minutes")),
         "ingredients": ingredients,
         "steps": steps,
@@ -585,8 +601,8 @@ def _normalize_home_idea(data, context: dict) -> dict:
         "missing": missing,
         "substitution": substitution,
         "tip": tip,
-        "pairing_wine": " ".join(str(data.get("pairing_wine") or "").split())[:80],
-        "pairing_drink": " ".join(str(data.get("pairing_drink") or "").split())[:100],
+        "pairing_wine": pairing_wine,
+        "pairing_drink": pairing_drink,
         "missing_ingredients": _home_string_list(data.get("missing_ingredients")),
         "image": str(data.get("image") or "").strip(),
         "servings": str(data.get("servings") or "").strip(),
@@ -599,6 +615,10 @@ def _home_idea_complete(idea) -> bool:
         return False
     required = ("name", "minutes", "ingredients", "steps")
     if not all(idea.get(field) for field in required):
+        return False
+    visible_texts = [idea.get("name"), *(idea.get("ingredients") or [])]
+    visible_texts.extend(step.get("text") for step in (idea.get("steps") or []))
+    if not all(re.search(r"[а-яё]", str(text or ""), re.I) for text in visible_texts):
         return False
     if idea.get("code_fallback"):
         return True
@@ -618,15 +638,18 @@ def _home_idea_context(cid, now=None) -> dict:
         raw_memory_prefs = [raw_memory_prefs]
     memory_prefs = [str(item).strip() for item in raw_memory_prefs if str(item).strip()][:20]
     meal = _home_meal_for_hour(now.hour)
+    import settings as cooking_settings
+    cuisine_codes = cooking_settings.cuisines(cid)
     signature_data = {
         "date": now.date().isoformat(),
-        "home_copy_version": 5,
+        "home_copy_version": 6,
         "meal": meal,
         "available": available,
         "unavailable": unavailable,
         "diet_prefs": diet_prefs,
         "memory_prefs": memory_prefs,
         "cuisines": _cuisine_context(cid),
+        "cuisine_codes": cuisine_codes,
     }
     signature = hashlib.sha256(
         json.dumps(signature_data, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -656,6 +679,7 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
     restrictions = context.get("diet_prefs") or "не указаны"
     memory_prefs = "; ".join(context.get("memory_prefs") or []) or "не указаны"
     cuisines = context.get("cuisines") or "не указаны"
+    cuisine_codes = context.get("cuisine_codes") or []
     source_block = _themealdb_prompt_block(sources)
     return (
         f"Сейчас нужен {meal}. Составь одну короткую идею полноценного блюда на сегодня.\n"
@@ -665,14 +689,18 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
         f"Предпочтительные кухни: {secure.wrap_untrusted(cuisines, 'кухни')}.\n"
         f"{source_block}"
         "Правила:\n"
+        "• Все пользовательские поля пиши только по-русски.\n"
         "• Предложи ровно одно понятное блюдо, без рекламного названия.\n"
+        "• cuisine — один машиночитаемый код кухни из предпочтений пользователя: "
+        f"{', '.join(cuisine_codes) or 'пустая строка'}. Если кухня блюда не определяется, верни пустую строку.\n"
         "• Все названия ингредиентов должны звучать естественно по-русски: «соевый соус», а не «соус сои».\n"
         "• Никогда не используй и не предлагай заменой исключённые продукты или аллергены.\n"
         "• Если список «В наличии» не пуст, используй только эти продукты, воду и базовые масло, соль и перец. "
         "Не добавляй другие покупки.\n"
         "• ingredients — полный список всего, что используется в блюде, включая масло, соль и перец, если они нужны. "
-        "Для продуктов из холодильника сохраняй точное написание из входного списка.\n"
-        "• steps — обычно ровно 3 коротких шага; для очень простого блюда можно 2, для сложного максимум 4. "
+        "Для продуктов из холодильника сохраняй точное написание из входного списка. Количество пиши компактно после "
+        "названия продукта: «креветки 250 г», «лук 1 шт.».\n"
+        "• steps — от 3 до 5 коротких шагов. "
         "Объединяй логически связанные действия. Каждый шаг начинается с глагола на «ты», содержит не больше "
         "1–2 коротких предложений и не повторяет ингредиенты без необходимости. В text не пиши время шага; "
         "minutes оставь только отдельным техническим полем, сумма равна общему minutes.\n"
@@ -686,11 +714,12 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
         "• tip — один конкретный приём именно для этого блюда с понятной техникой или результатом. "
         "Запрещены общие советы вроде «добавь чеснок и лук для аромата».\n"
         "• pairing_wine — одно сочетание только из pairing_wines выбранного рецепта; если список пуст, верни пустую строку.\n"
-        "• pairing_drink — один конкретный безалкогольный напиток, подходящий к блюду; без пояснений и общих слов.\n"
+        "• pairing_drink — один конкретный безалкогольный напиток, подходящий к блюду; без пояснений и общих слов. "
+        "Все сочетания пиши по-русски, не используй английские названия вроде white wine.\n"
         "• Во всём тексте обращайся только на «ты»: «приготовь», «обжарь», «добавь». "
         "Не используй формы «приготовьте», «обжарьте», «добавьте».\n"
         "• Никаких эмодзи, общих вступлений, текста о настройках и нескольких советов.\n"
-        'JSON без markdown: {"source_recipe_id":"ID выбранного источника или пустая строка","reason":"одно предложение","name":"Название блюда","minutes":20,'
+        'JSON без markdown: {"source_recipe_id":"ID выбранного источника или пустая строка","reason":"одно предложение","name":"Название блюда","cuisine":"italian","minutes":20,"servings":"1 порц.",'
         '"ingredients":["все продукты блюда"],'
         '"steps":[{"text":"Нарежь начинку","minutes":3},{"text":"Взбей яйца и вылей на сковороду","minutes":4},{"text":"Добавь начинку и сложи омлет","minutes":5}],'
         '"use_first":[],"missing":[],"substitution":null,'

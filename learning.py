@@ -55,11 +55,11 @@ def _save_daily_material(cid, today, lang, entry):
 
 
 def daily_material_type(entry):
-    """'rule' — устойчивая конструкция, 'phrase' — многословный term без
-    конструкции, 'word' — одно слово. Определяет заголовок карточки материала
-    дня ("Слово дня"/"Фраза дня"/"Правило дня")."""
-    if str(entry.get("construction") or "").strip():
+    """Пользовательский тип материала для короткой карточки дня."""
+    if str(entry.get("kind") or "").strip().casefold() == "rule":
         return "rule"
+    if str(entry.get("construction") or "").strip():
+        return "construction"
     term = entry_term(entry)
     return "phrase" if " " in term.strip() else "word"
 
@@ -110,16 +110,20 @@ def select_daily_material(cid):
     return _save_daily_material(cid, today, lang, entry)
 
 
-def _daily_focus_text(entry):
+def _daily_focus_text(entry, kind):
     """'Сегодня в фокусе' на главном экране — вытекает из SRS-уровня материала
     дня (0-1: узнать перевод; 2-3: вспомнить без вариантов; 4-5: применить
     самостоятельно), без AI-вызова — правило по уже посчитанному уровню."""
     level = int(entry.get("srs_level") or 0)
     if level <= 1:
-        return "узнать перевод и запомнить пример."
-    if level <= 3:
-        return "вспомнить слово без вариантов и применить его в предложении."
-    return "использовать это в предложении самостоятельно, без подсказок."
+        return "вспомнить перевод до открытия спойлера."
+    if kind == "word":
+        return "использовать новое слово в своём предложении."
+    if kind == "rule":
+        return "применить правило в одном своём предложении."
+    if kind == "phrase":
+        return "вспомнить фразу без подсказки."
+    return "вспомнить конструкцию без подсказки."
 
 
 def build_learning_home(cid):
@@ -141,13 +145,13 @@ def build_learning_home(cid):
     return {
         "has_material": True,
         "lang_code": lang_code,
-        "kind": kind,  # "word" | "phrase" | "rule"
-        "term": _cap(entry_term(entry)),
+        "kind": kind,  # "word" | "phrase" | "construction" | "rule"
+        "term": _cap(entry.get("rule") or entry_term(entry)) if kind == "rule" else _cap(entry_term(entry)),
         "translation": entry_translation(entry).replace(";", ","),
         "example_text": str(example.get("text") or "").strip(),
         "example_translation": str(example.get("translation") or "").strip(),
         "note": str(entry.get("breakdown") or "").strip(),
-        "focus": _daily_focus_text(entry),
+        "focus": _daily_focus_text(entry, kind),
         "progress": progress,
     }
 

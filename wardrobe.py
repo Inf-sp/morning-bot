@@ -26,6 +26,7 @@ from wardrobe_model import (
 from wardrobe_outfit import (
     build_outfit_reasons,
     build_style_tip,
+    choose_outfit_style,
     pick_best_outfit,
     save_outfit_feedback,
     validate_outfit_copy,
@@ -36,7 +37,7 @@ from wardrobe_migration import migrate_item_attrs
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
-COPY_VALIDATOR_VERSION = 4
+COPY_VALIDATOR_VERSION = 5
 
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
@@ -68,16 +69,16 @@ def _weather_decision(weather_ctx):
     if has_rain and strong_wind:
         return "Прохладно, ветрено и возможен дождь."
     if has_rain:
-        return "Возможен дождь — нужна закрытая обувь и защита сверху."
+        return "Возможен дождь — лучше выбрать закрытую обувь."
     if strong_wind and hot:
         return "Тепло, но ветрено — пригодится лёгкий слой."
     if strong_wind:
-        return "Прохладно и ветрено — нужен верхний слой."
+        return "Прохладно и ветрено — нужен дополнительный слой."
     if hot:
-        return "Жарко и сухо — нужен лёгкий образ."
+        return "Жарко и сухо — выбирай лёгкие ткани."
     if warm:
         return "Тепло и сухо — достаточно лёгких слоёв."
-    return "Прохладно — нужен тёплый верхний слой."
+    return "Прохладно — нужен дополнительный слой."
 
 
 def build_weather_context(wdata, day_str, tmax, tmin, wind_ms, rain_prob_day, rain_mm_day, weathercode):
@@ -362,10 +363,12 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, q=N
 
     w = await migrate_item_attrs(cid, w)
     style_block = _settings.wardrobe_prefs_context(cid)
+    selected_styles = _settings.wardrobe_styles(cid)
     wardrobe_history = store.get_wardrobe_history(cid)
     best = pick_best_outfit(
         w, weather_ctx, wardrobe_history, style_block,
         previous_item_ids=previous_item_ids,
+        selected_styles=selected_styles,
     )
     if not best:
         no_text, no_kb = _no_outfit_screen(result_kb, alternative=bool(previous_item_ids))
@@ -393,6 +396,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, q=N
         gap_note or "ничего добавлять не нужно",
     )
     look_data = {
+        "primary_style": choose_outfit_style(best_sorted, selected_styles),
         "weather_intro": _weather_decision(weather_ctx),
         "items": [{"name": public_item_name(it)} for it in validated_copy["items"]],
         "style_tip": (

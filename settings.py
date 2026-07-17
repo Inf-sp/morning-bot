@@ -49,12 +49,12 @@ CUISINE_OPTIONS = [
 ]
 
 STYLES = [
-    "минимализм",
-    "скандинавский",
-    "smart casual",
-    "streetwear",
-    "классический",
-    "спортивный",
+    "Минимализм",
+    "Скандинавский",
+    "Повседневный",
+    "Городской",
+    "Классический",
+    "Спортивный",
 ]
 
 FIT_OPTIONS = [
@@ -549,9 +549,17 @@ def _normalize_wardrobe_styles(cur):
         cur = [cur] if cur else []
     if isinstance(cur, list):
         aliases = {
-            "скандинавский стиль": "скандинавский",
-            "streetwear / городской": "streetwear",
-            "классика": "классический",
+            "минимализм": "Минимализм",
+            "скандинавский": "Скандинавский",
+            "скандинавский стиль": "Скандинавский",
+            "smart casual": "Повседневный",
+            "повседневный": "Повседневный",
+            "streetwear": "Городской",
+            "streetwear / городской": "Городской",
+            "городской": "Городской",
+            "классика": "Классический",
+            "классический": "Классический",
+            "спортивный": "Спортивный",
         }
         return [aliases.get(s, s) for s in cur if aliases.get(s, s) in STYLES]
     return []
@@ -570,6 +578,7 @@ async def set_style(bot, cid, i, q=None):
         if chosen in selected:
             selected = [s for s in selected if s != chosen]
             set_(cid, "style", selected)
+            store.clear_wardrobe_daylook(cid)
         elif len(selected) >= STYLE_LIMIT:
             if q is not None:
                 try:
@@ -581,6 +590,7 @@ async def set_style(bot, cid, i, q=None):
         else:
             selected.append(chosen)
             set_(cid, "style", selected)
+            store.clear_wardrobe_daylook(cid)
     await send_wardrobe_style(bot, cid, q=q)
 
 

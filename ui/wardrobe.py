@@ -74,17 +74,20 @@ def render_wardrobe_message(look_data):
     """Образ на сегодня: погодное решение, вещи и один практический совет.
     Без повторяющих объяснений и итогового подтверждения готовности образа.
 
-    look_data: {weather_intro, items[{name}], style_tip}
+    look_data: {primary_style, weather_intro, items[{name}], style_tip}
     """
     look_data = look_data or {}
     b = MessageBuilder()
-    b.section("👟 Гардероб · Образ на сегодня")
+    header = "Гардероб · Образ на сегодня"
+    primary_style = _clean_text(look_data.get("primary_style"))
+    if primary_style:
+        header += f" · 👕 {primary_style}"
+    b.section(header)
 
     intro = _finish_dot(look_data.get("weather_intro"))
     if intro:
         b.spacer()
-        b.italic(intro)
-        b.newline()
+        b.line(intro)
 
     items = [_upper_first(_clean_text(_item_display(it))) for it in (look_data.get("items") or [])]
     items = [it for it in items if it]
