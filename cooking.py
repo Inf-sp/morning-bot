@@ -10,7 +10,7 @@ import util
 import verify
 from ui import balance as balance_ui
 from ui import food as food_ui
-from ui.constants import ui_label
+from ui.constants import save_toggle_label, ui_label
 import menu
 from response_delivery import (
     answer_keyboard as _ans_kb,
@@ -56,16 +56,22 @@ def _food_card(d, label="Рецепт дня"):
 def _finish_dot(value):
     return balance_ui.finish_dot(value)
 
-def _recipe_kb():
+def _recipe_kb(cid=None, recipe=None):
     """Единая клавиатура карточки рецепта для всех 4 категорий (§6.2 спеки).
 
     «Ещё рецепт» (as_food) и «Назад» (as_food_back) работают в рамках активной
     категории (balance.get_active_meal) — см. handle_callback. «Назад» — отдельный
     callback, а не общий m_close, чтобы не задевать другие разделы, которые тоже
     используют m_close для закрытия карточки без возврата в конкретное меню."""
+    name = str((recipe or {}).get("name") or "").strip().casefold()
+    saved = bool(name) and any(
+        str(item.get("name") or "").strip().casefold() == name
+        for item in store.get_list(config.MY_RECIPES_KEY, cid)
+        if isinstance(item, dict)
+    )
     return _kb([
         [("✨ Ещё рецепт", "as_food")],
-        [("❤️ Сохранить", "as_recipe_save")],
+        [(save_toggle_label(saved), "as_recipe_save")],
         [("⬅️ Назад", "as_food_back"), ("#️⃣ Меню", "m_menu")],
     ])
 
@@ -106,7 +112,7 @@ async def send_recipe(bot, cid, constraint="обычное блюдо", status=N
     card = _recipe_card(d)
     store.last_source[str(cid)] = "Питание · Рецепт"
     store.last_answer[str(cid)] = card.text
-    await status.replace(card.text, entities=card.entities, reply_markup=_recipe_kb())
+    await status.replace(card.text, entities=card.entities, reply_markup=_recipe_kb(cid, d))
 
 
 # ---------- Готовка: единая навигация по категориям (§6 спеки) ----------
@@ -138,7 +144,7 @@ async def _send_queue_card(bot, cid, meal, d, status=None):
     label = food_ui.MEAL_LABEL.get(meal, "Рецепт")
     card = food_ui.food_card(d, label=label, meal=meal, cuisine_emoji_fallback=RECIPE_CUISINE_EMOJI_FALLBACK)
     store.last_answer[str(cid)] = card.text
-    kb = _recipe_kb()
+    kb = _recipe_kb(cid, d)
     _persist_current_queue_recipe(cid, d)
     _log.info("_send_queue_card: meal=%s cid=%s status_mode=%s text_len=%s",
               meal, cid, getattr(status, "mode", None), len(card.text or ""))
@@ -369,7 +375,7 @@ async def handle_callback(bot, cid, q, data):
             await fridge_flow.send_fridge(bot, cid, q)
         return True
     if data == "as_recipe_save":
-        await saved_recipes.save_my_recipe(bot, cid)
+        await saved_recipes.save_my_recipe(bot, cid, q)
         return True
     if data == "as_recipe_clean":
         import cleanup

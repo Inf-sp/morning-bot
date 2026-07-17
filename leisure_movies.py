@@ -1,5 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from ui.constants import COUNTRY_EMOJI, ui_label
+from ui.constants import COUNTRY_EMOJI, save_toggle_label, ui_label
 import asyncio
 import logging
 import re
@@ -101,7 +101,7 @@ def _clip(text, limit=450):
 def _movie_card(it, tm):
     return leisure_ui.movie_card(it, tm)
 
-def _movie_kb(i, category=None):
+def _movie_kb(i, category=None, saved=False):
     """Клавиатура карточки кино — всегда 4 кнопки действия + Назад, без строки
     «По жанру/По настроению» (выбор происходит на приветственном экране раздела,
     см. send_movie_home).
@@ -112,7 +112,7 @@ def _movie_kb(i, category=None):
     rows = [
         [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"movie_love_{i}"),
-         InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data=f"reco_{i}")],
+         InlineKeyboardButton(save_toggle_label(saved), callback_data=f"reco_{i}")],
     ]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
@@ -261,11 +261,15 @@ def _pick_good_movie(items, used_titles):
     return None, None
 
 async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None):
+    import saved_items
     it = it if isinstance(it, dict) else {"title": str(it)}
     if tm == "__lookup__":
         tm = _tmdb_lookup(it.get("title", ""), it.get("title_en", "")) if config.TMDB_API_KEY else None
     title, msg = _movie_card(it, tm)
-    kb = _movie_kb(i, category=category)
+    kb = _movie_kb(
+        i, category=category,
+        saved=saved_items.is_note_saved(cid, it.get("title", "")),
+    )
     if tm and tm.get("poster"):
         try:
             await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=msg.text, caption_entities=msg.entities, reply_markup=kb)
@@ -820,28 +824,30 @@ async def movie_love(bot, cid, i):
         await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — в любимые (Кино). Вот ещё вариант.")
     await _advance_movie(bot, cid)
 
-async def add_reco(bot, cid, i):
-    """Сохраняет текущую рекомендацию кино/книги и показывает следующую."""
-    from datetime import datetime
+async def add_reco(bot, cid, i, q=None):
+    """Переключает сохранение текущей рекомендации кино или книги."""
+    import saved_items
     rec = store.last_recos.get(str(cid))
     if not (rec and i < len(rec["items"])):
         return
     title = rec["items"][i]
     kind = rec["kind"]
     folder = "Кино" if kind == "movie" else "Книги"
+    saved = saved_items.toggle_note(cid, title, source=folder)
     if kind != "movie":
-        _add_unique(config.READLIST_KEY, cid, title)
-    if not _note_fav_exists(cid, title):
-        store.add_to_list(config.NOTES_KEY, cid, {
-            "date": datetime.now(config.TZ).strftime("%d.%m"),
-            "text": title, "source": folder, "bucket": "fav",
-        })
-    await bot.send_message(
-        chat_id=cid,
-        text=f"{ui_label('save', 'Сохранено')} «{folder}»: {title}. Вот ещё вариант",
-    )
-    if kind == "movie":
-        await _advance_movie(bot, cid)
-        return
-    import leisure_books
-    await leisure_books.advance_after_save(bot, cid, rec)
+        items = store.get_list(config.READLIST_KEY, cid)
+        target = str(title).strip().casefold()
+        if saved:
+            existing = {
+                str(item.get("value") if isinstance(item, dict) else item).strip().casefold()
+                for item in items
+            }
+            if target not in existing:
+                store.set_list(config.READLIST_KEY, cid, [*items, title])
+        else:
+            items = [
+                item for item in items
+                if str(item.get("value") if isinstance(item, dict) else item).strip().casefold() != target
+            ]
+            store.set_list(config.READLIST_KEY, cid, items)
+    await saved_items.update_save_button(q, f"reco_{i}", saved)

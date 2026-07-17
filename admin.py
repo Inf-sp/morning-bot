@@ -534,6 +534,14 @@ def _compact_log_row(entry):
     return f"{_hhmm(entry.get('ts', 0))} · {section} · {action} · {error} · {location}"
 
 
+def _monitor_log_text(entry):
+    text = str(entry.get("text") or "")
+    spec = service_monitor.SPEC_BY_KEY.get(str(entry.get("service") or ""))
+    if spec and not text.startswith(f"{spec.label}:"):
+        return f"{spec.label}: {text}"
+    return text
+
+
 async def clear_logs(bot, cid, q=None):
     tracking.clear_errors()
     service_monitor.clear_history()
@@ -549,7 +557,7 @@ async def send_logs(bot, cid, q=None):
     ] + [
         (
             int(entry.get("ts") or 0),
-            f"{_hhmm(entry.get('ts', 0))} · Система · {entry.get('text', '')}",
+            f"{_hhmm(entry.get('ts', 0))} · Система · {_monitor_log_text(entry)}",
         )
         for entry in monitor_events
     ]

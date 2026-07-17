@@ -255,7 +255,7 @@ async def handle(update, context, remove_reply_keyboard):
             elif act == "trav_fav":
                 await _inline_status(lambda _s: travel.travel_fav(bot, cid))
             elif act == "trav_save":
-                await _inline_status(lambda _s: travel.save_plan(bot, cid))
+                await travel.save_plan(bot, cid, q)
             elif act == "trav_facts":
                 await travel.facts_start(bot, cid)
             elif act == "trav_facts_more":
@@ -374,7 +374,7 @@ async def handle(update, context, remove_reply_keyboard):
         await _inline_status(lambda _s: leisure_music.listen_love(bot, cid))
         return
     if data.startswith("reco_"):
-        await _inline_status(lambda _s: leisure_movies.add_reco(bot, cid, int(data.split("_")[1])))
+        await leisure_movies.add_reco(bot, cid, int(data.split("_")[1]), q)
         return
     if data.startswith("movie_no_"):
         await _inline_status(lambda _s: leisure_movies.movie_dislike(bot, cid, int(data.split("_")[-1])))
@@ -383,7 +383,7 @@ async def handle(update, context, remove_reply_keyboard):
         await _inline_status(lambda _s: leisure_books.book_dislike(bot, cid, int(data.split("_")[-1])))
         return
     if data.startswith("listen_"):
-        await _inline_status(lambda _s: leisure_music.add_listen(bot, cid, int(data.split("_")[1])))
+        await leisure_music.add_listen(bot, cid, int(data.split("_")[1]), q)
         return
     # Совместимость со старыми сообщениями дневника тревог.
     if data == "worry_clearall":

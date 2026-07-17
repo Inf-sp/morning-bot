@@ -10,13 +10,13 @@ def _compact_line(b, emoji, label, content):
     b.spacer()
 
 
-def _lower_word_translation(value):
-    """Перевод после стрелки продолжается со строчной буквы: slim → худой."""
+def _split_word_translation(value):
+    """Разделяет иностранную фразу и перевод для отдельного spoiler-entity."""
     value = str(value or "")
     if "→" not in value:
-        return value
+        return lower_initial(value.strip()), ""
     term, translation = value.split("→", 1)
-    return f"{term.rstrip()} → {lower_initial(translation.strip())}"
+    return lower_initial(term.strip()), lower_initial(translation.strip())
 
 
 def day_summary(
@@ -48,7 +48,16 @@ def day_summary(
     if word_line:
         word_label = "Нидерландский" if word_lang == "nl" else "Английский"
         word_flag = "🇳🇱" if word_lang == "nl" else "🇬🇧"
-        _compact_line(b, word_flag, word_label, _lower_word_translation(word_line))
+        term, translation = _split_word_translation(word_line)
+        b.text_line(f"{word_flag} ")
+        b.label(word_label)
+        if term:
+            b.text_line(f" {term}")
+        if translation:
+            b.text_line(" → ")
+            b.add(translation, MessageEntity.SPOILER)
+        b.newline()
+        b.spacer()
 
     if lifehack:
         b.text_line("🦉")

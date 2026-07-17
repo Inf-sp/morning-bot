@@ -2,6 +2,7 @@
 
 import asyncio
 import random
+from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -10,7 +11,7 @@ import google_books
 import recommendation_stoplist
 import store
 from ui import leisure as leisure_ui
-from ui.constants import ui_label
+from ui.constants import save_toggle_label
 
 
 def _item_text(item):
@@ -28,6 +29,24 @@ def _add_unique(key, cid, value):
     items = store.get_list(key, cid)
     if value and value.lower() not in {_item_text(item).lower() for item in items}:
         store.set_list(key, cid, [*items, value])
+
+
+def _cached_book(cid):
+    entry = (store._load(config.BOOK_RECO_CACHE_KEY) or {}).get(str(cid)) or {}
+    item = entry.get("item")
+    today = datetime.now(config.TZ).date().isoformat()
+    return dict(item) if entry.get("date") == today and isinstance(item, dict) else None
+
+
+def _cache_book(cid, item):
+    today = datetime.now(config.TZ).date().isoformat()
+
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        data[str(cid)] = {"date": today, "item": dict(item or {})}
+        return data, None
+
+    store.mutate_kv(config.BOOK_RECO_CACHE_KEY, mutate)
 
 
 async def _ask_collect(bot, cid, kind):
@@ -54,29 +73,34 @@ def _book_cover(title, title_en=""):
 def _book_text(it):
     return leisure_ui.book_text(it)
 
-def _book_kb(i):
+def _book_kb(i, saved=False):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
-         InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data=f"reco_{i}")],
+         InlineKeyboardButton(save_toggle_label(saved), callback_data=f"reco_{i}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
-async def _send_book_card(bot, cid, it, i):
-    try:
-        it = await asyncio.to_thread(google_books.enrich_book, it)
-    except Exception:
+async def _send_book_card(bot, cid, it, i, *, enrich=True):
+    import saved_items
+    if enrich:
+        try:
+            it = await asyncio.to_thread(google_books.enrich_book, it)
+        except Exception:
+            it = dict(it or {})
+    else:
         it = dict(it or {})
     msg = _book_text(it)
-    kb = _book_kb(i)
+    kb = _book_kb(i, saved_items.is_note_saved(cid, it.get("title", "")))
     cover = it.get("cover_url") or _book_cover(it.get("title", ""), it.get("title_en", ""))
     if cover:
         try:
             await bot.send_photo(chat_id=cid, photo=cover, caption=msg.text, caption_entities=msg.entities, reply_markup=kb)
-            return
+            return it
         except Exception:
             pass
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    return it
 
 _FALLBACK_BOOKS = [
     {"title": "Мастер и Маргарита", "title_en": "The Master and Margarita", "year": "1967",
@@ -148,6 +172,14 @@ async def send_books_reco(bot, cid):
     if not _ensure_books(cid):
         await _ask_collect(bot, cid, "books")
         return
+    cached = _cached_book(cid)
+    if cached:
+        title = cached.get("title", "")
+        store.last_recos[str(cid)] = {"kind": "book", "items": [title]}
+        store.last_source[str(cid)] = "Досуг · Книги"
+        store.last_answer[str(cid)] = title
+        await _send_book_card(bot, cid, cached, 0, enrich=False)
+        return
     items = []
     for _ in range(2):
         try:
@@ -161,7 +193,8 @@ async def send_books_reco(bot, cid):
     store.last_recos[str(cid)] = {"kind": "book", "items": [it.get("title", "")]}
     store.last_source[str(cid)] = "Досуг · Книги"
     store.last_answer[str(cid)] = it.get("title", "")
-    await _send_book_card(bot, cid, it, 0)
+    prepared = await _send_book_card(bot, cid, it, 0)
+    _cache_book(cid, prepared)
 
 async def book_dislike(bot, cid, i):
     rec = store.last_recos.get(str(cid))
@@ -179,7 +212,8 @@ async def book_dislike(bot, cid, i):
     rec["items"].append(it.get("title", ""))
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1
-    await _send_book_card(bot, cid, it, ni)
+    prepared = await _send_book_card(bot, cid, it, ni)
+    _cache_book(cid, prepared)
 
 async def _advance_book(bot, cid):
     """Загрузить следующую рекомендацию книги и показать карточку."""
@@ -193,7 +227,8 @@ async def _advance_book(bot, cid):
     rec["items"].append(it.get("title", ""))
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1
-    await _send_book_card(bot, cid, it, ni)
+    prepared = await _send_book_card(bot, cid, it, ni)
+    _cache_book(cid, prepared)
 
 async def book_love(bot, cid, i):
     """Книга — в любимые (Мои книги), затем следующая рекомендация."""
@@ -203,18 +238,3 @@ async def book_love(bot, cid, i):
         _add_unique(config.BOOKS_KEY, cid, title)
         await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — в любимые (Мои книги). Вот ещё вариант.")
     await _advance_book(bot, cid)
-
-
-async def advance_after_save(bot, cid, rec):
-    """Показывает следующую книгу после сохранения текущей рекомендации."""
-    try:
-        data = await asyncio.to_thread(content_recommend, rec["kind"], str(cid))
-        items = data.get("items", []) if isinstance(data, dict) else []
-    except Exception:
-        items = []
-    if not items:
-        return
-    item = _pick_good_book(items, cid, extra_skip=rec["items"])
-    rec["items"].append(item.get("title", ""))
-    store.last_recos[str(cid)] = rec
-    await _send_book_card(bot, cid, item, len(rec["items"]) - 1)

@@ -228,19 +228,19 @@ def trips_home():
 
 def later_home_empty():
     b = MessageBuilder()
-    b.section("⭐️ Сохранить")
+    b.section("💾 Сохранить")
     b.line(
         "Сюда попадают временные закладки из ответов: кино, книги, музыка, "
         "поездки, еда, гардероб и всё прочее."
     )
     b.spacer()
-    b.line("Пока пусто — сохраняй интересное кнопкой «⭐️ Сохранить» под ответами.")
+    b.line("Пока пусто — сохраняй интересное кнопкой «💾 Сохранить» под ответами.")
     return b.build_stripped()
 
 
 def later_home():
     b = MessageBuilder()
-    b.section("⭐️ Сохранить")
+    b.section("💾 Сохранить")
     b.line(
         "Сюда попадают временные закладки из ответов: кино, книги, музыка, "
         "поездки, еда, гардероб и всё прочее."
@@ -252,7 +252,7 @@ def later_home():
 
 def later_group(label, desc):
     b = MessageBuilder()
-    b.section(f"⭐️ Сохранить · {label}")
+    b.section(f"💾 Сохранить · {label}")
     b.text_line(f"Здесь лежат временные закладки: {desc}.\n")
     b.line("Открой карточку, чтобы увидеть её в исходном виде или удалить.")
     return b.build_stripped()

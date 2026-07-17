@@ -303,7 +303,7 @@ def my_recipes_empty():
     b = MessageBuilder()
     b.section(ui_label("recipes", "Мои рецепты"))
     b.spacer()
-    b.line("Пусто. Сохраняй рецепты кнопкой «❤️ Сохранить рецепт» под любым рецептом.")
+    b.line("Пусто. Сохраняй рецепты кнопкой «💾 Сохранить» под любым рецептом.")
     return b.build_stripped()
 
 

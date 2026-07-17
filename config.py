@@ -143,6 +143,7 @@ READLIST_KEY = "readlist.json"
 FAVCOUNTRIES_KEY = "favcountries.json"
 COUNTRIES_KEY = "mycountries.json"
 BOOKS_KEY = "mybooks.json"
+BOOK_RECO_CACHE_KEY = "book_reco_cache.json"  # {cid: {date, item}} — текущая карточка книги на день
 MOVIE_BLACKLIST_KEY = "movie_blacklist.json"
 BOOK_BLACKLIST_KEY = "book_blacklist.json"
 MUSIC_DISLIKE_KEY = "music_dislike.json"

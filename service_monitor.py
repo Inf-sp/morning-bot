@@ -53,7 +53,7 @@ SPECS = (
     ServiceSpec("tavily", "Tavily", ("Поиск", "Поездка", "Концерты"), ("firecrawl",)),
     ServiceSpec("firecrawl", "Firecrawl", ("Поиск",), (), 300),
     ServiceSpec("tmdb", "TMDB", ("Кино",), ()),
-    ServiceSpec("google_books", "Google Books", ("Книги",), ()),
+    ServiceSpec("google_books", "Google Books", ("Книги",), (), 86400),
     ServiceSpec("languagetool", "LanguageTool", ("Обучение",), ("gemini",)),
     ServiceSpec("spoonacular", "Spoonacular", ("Готовка",), ("themealdb",), 3600),
     ServiceSpec("themealdb", "TheMealDB", ("Готовка",), ()),
@@ -132,7 +132,66 @@ def _load() -> dict:
         return _template()
 
 
-def _friendly_error(error="", status_code=None) -> tuple[str, str]:
+def google_error_details(response) -> str:
+    """Compact Google API error fields without storing the full response body."""
+    try:
+        payload = response.json() if response.content else {}
+    except (TypeError, ValueError):
+        return f"HTTP {getattr(response, 'status_code', 0) or '?'}"
+    error = payload.get("error") if isinstance(payload, dict) else {}
+    if not isinstance(error, dict):
+        return f"HTTP {getattr(response, 'status_code', 0) or '?'}"
+    values = [error.get("code"), error.get("status"), error.get("message")]
+    for item in error.get("errors") or []:
+        if isinstance(item, dict):
+            values.extend((item.get("reason"), item.get("message")))
+    text = " | ".join(str(value).strip() for value in values if str(value or "").strip())
+    return text or f"HTTP {getattr(response, 'status_code', 0) or '?'}"
+
+
+def _google_books_error(error="", status_code=None) -> tuple[str, str]:
+    raw = str(error or "").strip()
+    low = raw.casefold().replace("_", " ")
+    code = int(status_code or 0)
+    if "not configured" in low:
+        return "auth", "API-ключ не настроен"
+    if code == 429:
+        return "rate_limit", "слишком много запросов"
+    if code == 403 and any(marker in low for marker in (
+        "quota exceeded", "quotaexceeded", "daily limit", "dailylimitexceeded",
+        "rate limit exceeded", "ratelimitexceeded", "resource exhausted",
+    )):
+        return "quota", "дневной лимит исчерпан"
+    if any(marker in low for marker in (
+        "invalid api key", "api key invalid", "api key not valid", "keyinvalid",
+        "bad api key",
+    )):
+        return "auth", "неверный API-ключ"
+    if code == 403 and any(marker in low for marker in (
+        "accessnotconfigured", "api not enabled", "has not been used",
+        "is disabled", "service disabled",
+    )):
+        return "api_disabled", "API не включён"
+    if code == 403 or any(marker in low for marker in (
+        "request denied", "permission denied", "access denied",
+    )):
+        return "access_denied", "доступ запрещён"
+    if 500 <= code <= 599:
+        return "temporary", "сервис Google недоступен"
+    if any(marker in low for marker in (
+        "timeout", "timed out", "connection", "network", "dns", "name resolution",
+    )):
+        return "network", "нет соединения"
+    if code == 400:
+        return "request", "ошибка запроса"
+    if "invalid json" in low:
+        return "response", "некорректный ответ Google"
+    return "unknown", "не удалось проверить доступ"
+
+
+def _friendly_error(error="", status_code=None, service="") -> tuple[str, str]:
+    if service == "google_books":
+        return _google_books_error(error, status_code)
     raw = str(error or "").strip()
     low = raw.casefold().replace("_", " ")
     code = int(status_code or 0)
@@ -196,6 +255,7 @@ def record_result(service: str, ok: bool, *, status_code=None, error="", headers
         old_status = state["status"]
         old_fallback = state.get("fallback") or ""
         old_error = state.get("last_error") or ""
+        old_error_type = state.get("error_type") or ""
         state["last_check"] = now
         if remaining is not None and total is not None:
             try:
@@ -220,16 +280,28 @@ def record_result(service: str, ok: bool, *, status_code=None, error="", headers
                 )
                 _append_history(data, service, message, now)
             if old_fallback:
-                _append_history(data, service, "резерв отключён.", now)
+                _append_history(
+                    data, service,
+                    f"{SPEC_BY_KEY[service].label}: резерв отключён.", now,
+                )
         else:
-            kind, friendly = _friendly_error(error, status_code)
-            state["error_type"], state["last_error"] = kind, friendly
-            has_fallback = bool(state.get("fallback"))
-            # A transient failure is yellow while a route can still recover.  A
-            # hard failure without an active/available reserve is red.
-            state["status"] = WARNING if has_fallback or kind in ("quota", "timeout", "temporary", "unknown") else DOWN
-            if old_status != state["status"] or old_error != friendly:
-                _append_history(data, service, f"{SPEC_BY_KEY[service].label}: {friendly}.", now)
+            kind, friendly = _friendly_error(error, status_code, service)
+            already_unavailable = (
+                old_status == DOWN
+                and not old_fallback
+                and old_error == "резерв недоступен"
+                and old_error_type == "fallback"
+            )
+            if not already_unavailable:
+                state["error_type"], state["last_error"] = kind, friendly
+                has_fallback = bool(state.get("fallback"))
+                # A transient failure is yellow while a route can still recover.  A
+                # hard failure without an active/available reserve is red.
+                state["status"] = WARNING if has_fallback or kind in (
+                    "quota", "rate_limit", "timeout", "temporary", "unknown",
+                ) else DOWN
+                if old_status != state["status"] or old_error != friendly:
+                    _append_history(data, service, f"{SPEC_BY_KEY[service].label}: {friendly}.", now)
             # A reserve that has just failed is no longer a real reserve. Any
             # primary pointing to it becomes red until another candidate is
             # checked and selected.
@@ -289,9 +361,11 @@ def activate_fallback(service: str, target: str, *, reason="") -> bool:
             return data, None
         state["fallback"] = target
         state["status"] = WARNING
+        if state.get("error_type") == "fallback":
+            state["last_error"] = "основной сервис недоступен"
         _append_history(
             data, service,
-            f"переключение на {SPEC_BY_KEY[target].label}.", now,
+            f"{SPEC_BY_KEY[service].label}: переключение на {SPEC_BY_KEY[target].label}.", now,
         )
         changed["value"] = True
         return data, None
@@ -354,7 +428,9 @@ def format_row(service: str, state: dict | None = None) -> str:
     spec = SPEC_BY_KEY[service]
     state = state or get_state(service)
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
-    parts = [f"{_DOT[status]} {spec.label}", spec.category, _status_detail(state)]
+    parts = [f"{_DOT[status]} {spec.label}", spec.category]
+    if service != "google_books" or status != OK:
+        parts.append(_status_detail(state))
     fallback = str(state.get("fallback") or "")
     if fallback and fallback in SPEC_BY_KEY:
         parts.append(SPEC_BY_KEY[fallback].label)
@@ -388,7 +464,7 @@ def _probe_request(service: str):
         "tavily": ("GET", "https://api.tavily.com/usage", {"headers": {"Authorization": f"Bearer {config.TAVILY_API_KEY}"}}),
         "firecrawl": ("GET", "https://api.firecrawl.dev/v2/team/credit-usage", {"headers": {"Authorization": f"Bearer {config.FIRECRAWL_API_KEY}"}}),
         "tmdb": ("GET", "https://api.themoviedb.org/3/configuration", {"params": {"api_key": config.TMDB_API_KEY}}),
-        "google_books": ("GET", "https://www.googleapis.com/books/v1/volumes", {"params": {"q": "test", "maxResults": 1, "key": config.GOOGLE_BOOKS_API_KEY}}),
+        "google_books": ("GET", "https://www.googleapis.com/books/v1/volumes", {"params": {"q": "1984", "maxResults": 1, "printType": "books", "projection": "lite", "key": config.GOOGLE_BOOKS_API_KEY}}),
         "languagetool": ("POST", f"{config.LANGUAGETOOL_API_URL}/check", {"data": {"text": "Dit is goed.", "language": "nl-NL"}}),
         "spoonacular": ("GET", "https://api.spoonacular.com/food/ingredients/search", {"params": {"query": "apple", "number": 1, "apiKey": config.SPOONACULAR_API_KEY}}),
         "themealdb": ("GET", f"https://www.themealdb.com/api/json/v1/{config.THEMEALDB_API_KEY}/lookup.php", {"params": {"i": "52772"}}),
@@ -419,6 +495,13 @@ def probe(service: str) -> bool:
         method, url, kwargs = _probe_request(service)
         response = requests.request(method, url, **kwargs)
         ok = 200 <= response.status_code < 300
+        error = ""
+        if not ok:
+            error = (
+                google_error_details(response)
+                if service == "google_books"
+                else f"HTTP {response.status_code}"
+            )
         remaining = total = None
         if service == "firecrawl" and ok:
             payload = response.json() if response.content else {}
@@ -441,7 +524,7 @@ def probe(service: str) -> bool:
                 total, remaining = int(limit), max(0, int(limit) - int(used))
         record_result(
             service, ok, status_code=response.status_code,
-            error="" if ok else f"HTTP {response.status_code}", headers=response.headers,
+            error=error, headers=response.headers,
             quota_remaining=remaining, quota_total=total,
         )
         return ok
@@ -505,6 +588,13 @@ def record_unavailable_fallback(service: str) -> None:
     def mutate(data):
         data = _normalise(data)
         state = data["services"][service]
+        if (
+            state.get("status") == DOWN
+            and not state.get("fallback")
+            and state.get("last_error") == "резерв недоступен"
+            and state.get("error_type") == "fallback"
+        ):
+            return data, None
         state["status"] = DOWN
         state["fallback"] = ""
         state["last_error"] = "резерв недоступен"

@@ -12,7 +12,8 @@ from ui.constants import delete_label
 _food_card = lambda data, label="Рецепт": food_ui.food_card(data, label=label)
 
 # ---------- База рецептов ----------
-async def save_my_recipe(bot, cid):
+async def save_my_recipe(bot, cid, q=None):
+    import saved_items
     cid_s = str(cid)
     d = store.last_recipe.get(cid_s)
     if not d or not d.get("name"):
@@ -20,11 +21,18 @@ async def save_my_recipe(bot, cid):
     saved = store.get_list(config.MY_RECIPES_KEY, cid_s)
     names_lower = [r.get("name", "").lower() for r in saved]
     if d["name"].lower() in names_lower:
-        await bot.send_message(chat_id=cid, text=f"«{util.esc(d['name'])}» уже есть в твоих рецептах."); return
-    store.add_to_list(config.MY_RECIPES_KEY, cid_s, d)
-    if d.get("cuisine"):
-        bump_cuisine_weight(cid, d["cuisine"], 1)  # обучение на действиях пользователя (§12/§4.4 спеки)
-    await bot.send_message(chat_id=cid, text=f"❤️ «{util.esc(d['name'])}» сохранён в базе рецептов.")
+        index = names_lower.index(d["name"].lower())
+        saved.pop(index)
+        store.set_list(config.MY_RECIPES_KEY, cid_s, saved)
+        if d.get("cuisine"):
+            bump_cuisine_weight(cid, d["cuisine"], -1)
+        is_saved = False
+    else:
+        store.add_to_list(config.MY_RECIPES_KEY, cid_s, d)
+        if d.get("cuisine"):
+            bump_cuisine_weight(cid, d["cuisine"], 1)
+        is_saved = True
+    await saved_items.update_save_button(q, "as_recipe_save", is_saved)
 
 
 async def send_my_recipes(bot, cid, back="as_notes"):

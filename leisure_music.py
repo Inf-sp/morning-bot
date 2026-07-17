@@ -12,7 +12,7 @@ import research
 import settings
 import store
 from ui import leisure as leisure_ui
-from ui.constants import ui_label
+from ui.constants import save_toggle_label, ui_label
 
 _log = logging.getLogger(__name__)
 
@@ -21,13 +21,6 @@ def _add_unique(key, cid, value):
     items = store.get_list(key, cid)
     if value and value.lower() not in {_item_text(item).lower() for item in items}:
         store.set_list(key, cid, [*items, value])
-
-
-def _note_fav_exists(cid, text):
-    target = str(text or "").strip().lower()
-    return any(str(note.get("text") or "").strip().lower() == target
-               for note in store.get_list(config.NOTES_KEY, cid)
-               if isinstance(note, dict))
 
 
 async def _ask_collect(bot, cid, kind):
@@ -71,11 +64,11 @@ async def listen_love(bot, cid):
         await bot.send_message(chat_id=cid, text=f"❤️ «{artist}» — в любимые (Мои музыканты). Вот ещё вариант.")
     await send_listen(bot, cid)
 
-def _listen_kb():
+def _listen_kb(saved=False):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data="a_listen_no")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love"),
-         InlineKeyboardButton(ui_label("save", "Сохранить"), callback_data="listen_0")],
+         InlineKeyboardButton(save_toggle_label(saved), callback_data="listen_0")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
@@ -143,6 +136,7 @@ def _language_music_context(cid):
 
 
 async def send_listen(bot, cid):
+    import saved_items
     _log.info("send_listen: start cid=%s", cid)
     arts_raw = _ensure_artists(cid)
     if not arts_raw:
@@ -239,15 +233,15 @@ async def send_listen(bot, cid):
         raise
     store.last_answer[str(cid)] = leisure_ui.plain_from_html(msg.text)
     _log.info("send_listen: sending card cid=%s artist=%r", cid, artist)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_listen_kb())
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities,
+        reply_markup=_listen_kb(saved_items.is_note_saved(cid, artist)),
+    )
 
-async def add_listen(bot, cid, i):
-    from datetime import datetime
+async def add_listen(bot, cid, i, q=None):
+    import saved_items
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
         title = rec["items"][0]
-        if not _note_fav_exists(cid, title):
-            store.add_to_list(config.NOTES_KEY, cid,
-                              {"date": datetime.now(config.TZ).strftime("%d.%m"), "text": title, "source": "Музыка", "bucket": "fav"})
-        await bot.send_message(chat_id=cid, text=f"⭐️ В закладках «Музыка»: {title}. Вот ещё вариант.")
-    await send_listen(bot, cid)
+        saved = saved_items.toggle_note(cid, title, source="Музыка")
+        await saved_items.update_save_button(q, "listen_0", saved)

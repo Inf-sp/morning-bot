@@ -11,7 +11,7 @@ import recommendation_stoplist
 import store
 import util
 from ui import settings as settings_ui
-from ui.constants import choose_label, delete_label, ui_label
+from ui.constants import choose_label, delete_label, save_toggle_label, ui_label
 
 _log = logging.getLogger(__name__)
 # ===== СОХРАНЕНИЯ / ЛЮБИМЫЕ (notes.py) =====
@@ -21,6 +21,67 @@ def _mark_transient_edit(bot, cid, message):
     marker = getattr(bot, "mark_transient_message", None)
     if marker is not None:
         marker(cid, getattr(message, "message_id", None))
+
+
+def _saved_note_index(notes, text, bucket="fav"):
+    target = " ".join(str(text or "").split()).casefold()
+    for index, note in enumerate(notes):
+        if not isinstance(note, dict) or _note_bucket(note) != bucket:
+            continue
+        current = " ".join(str(note.get("text") or "").split()).casefold()
+        if current == target:
+            return index
+    return None
+
+
+def is_note_saved(cid, text, bucket="fav"):
+    return _saved_note_index(store.get_list(config.NOTES_KEY, cid), text, bucket) is not None
+
+
+def toggle_note(cid, text, *, source="Прочее", bucket="fav", entities=None, extra=None):
+    notes = store.get_list(config.NOTES_KEY, cid)
+    index = _saved_note_index(notes, text, bucket)
+    if index is not None:
+        notes.pop(index)
+        store.set_list(config.NOTES_KEY, cid, notes)
+        return False
+    note = {
+        "date": datetime.now(config.TZ).strftime("%d.%m"),
+        "text": text,
+        "source": source,
+        "bucket": bucket,
+    }
+    if entities:
+        note["entities"] = entities
+    if extra:
+        note.update(extra)
+    store.set_list(config.NOTES_KEY, cid, [*notes, note])
+    return True
+
+
+async def update_save_button(q, callback_data, saved):
+    message = getattr(q, "message", None) if q is not None else None
+    markup = getattr(message, "reply_markup", None)
+    if message is None or markup is None:
+        return
+    rows = []
+    changed = False
+    for row in markup.inline_keyboard:
+        next_row = []
+        for button in row:
+            if button.callback_data == callback_data:
+                button = InlineKeyboardButton(
+                    save_toggle_label(saved), callback_data=callback_data,
+                )
+                changed = True
+            next_row.append(button)
+        rows.append(next_row)
+    if changed:
+        try:
+            await message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(rows))
+        except Exception:
+            pass
+
 
 async def save_fav(bot, cid, q=None):
     # Берём оригинальный текст сообщения прямо из callback — entities уже структурированы
@@ -36,13 +97,10 @@ async def save_fav(bot, cid, q=None):
         msg = settings_ui.nothing_to_save()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities); return
     source = store.last_source.get(str(cid), "Прочее")
-    store.add_to_list(config.NOTES_KEY, cid, {
-        "date": datetime.now(config.TZ).strftime("%d.%m"),
-        "text": txt, "entities": util.entities_to_json(txt_entities),
-        "source": source, "bucket": "fav",
-    })
-    msg = settings_ui.saved_to_later()
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+    saved = toggle_note(
+        cid, txt, source=source, entities=util.entities_to_json(txt_entities),
+    )
+    await update_save_button(q, "as_fav", saved)
 
 def _note_type(source):
     s = (source or "").lower()

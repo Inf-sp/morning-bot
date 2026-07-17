@@ -10,7 +10,7 @@ import time
 import uuid
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from ui.constants import ui_label
+from ui.constants import save_toggle_label, ui_label
 
 import ai
 import config
@@ -214,6 +214,7 @@ async def travel_fav(bot, cid):
 
 
 async def send_plan(bot, cid):
+    import saved_items
     """Подробный план поездки по текущей предложенной стране."""
     d = store.last_recipe.get(str(cid)) or {}
     country = d.get("country") or store.suggested_countries.get(str(cid), "")
@@ -263,26 +264,27 @@ async def send_plan(bot, cid):
     }
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
-        [InlineKeyboardButton(ui_label("save", "Сохранить маршрут"), callback_data="a_trav_save")],
+        [InlineKeyboardButton(
+            save_toggle_label(saved_items.is_note_saved(cid, msg.text, "plan")),
+            callback_data="a_trav_save",
+        )],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-async def save_plan(bot, cid):
-    from datetime import datetime
+async def save_plan(bot, cid, q=None):
+    import saved_items
     d = store.last_recipe.get(str(cid)) or {}
     plan = d.get("plan_text", "")
     country = d.get("country") or store.suggested_countries.get(str(cid), "план")
     if not plan:
         await bot.send_message(chat_id=cid, text="Сначала собери план поездки."); return
-    store.add_to_list(config.NOTES_KEY, cid, {
-        "date": datetime.now(config.TZ).strftime("%d.%m"),
-        "text": plan, "entities": d.get("plan_entities", []),
-        "source": "План поездки", "bucket": "plan", "country": country,
-    })
-    await bot.send_message(chat_id=cid, text=f"{ui_label('save', 'Маршрут')} ({country}) сохранён в «Мои данные» → «Поездки».")
-    await send_go(bot, cid)
+    saved = saved_items.toggle_note(
+        cid, plan, source="План поездки", bucket="plan",
+        entities=d.get("plan_entities", []), extra={"country": country},
+    )
+    await saved_items.update_save_button(q, "a_trav_save", saved)
 
 
 # ================= 10 ФАКТОВ О СТРАНЕ =================

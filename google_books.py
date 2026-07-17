@@ -11,6 +11,7 @@ import requests
 
 import api_usage
 import config
+import service_monitor
 import util
 
 
@@ -116,7 +117,7 @@ def _search_items(query: str) -> list[dict]:
     if response.status_code != 200:
         api_usage.record_request(
             "google_books", ok=False, status_code=response.status_code,
-            error=f"HTTP {response.status_code}", latency_ms=latency_ms,
+            error=service_monitor.google_error_details(response), latency_ms=latency_ms,
             headers=response.headers,
         )
         return []
