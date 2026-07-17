@@ -20,7 +20,10 @@ import trainer_engine
 import trainer_exercises
 import trainer_grading
 import trainer_session
-from learning_dictionary import DictionaryRepository, entry_language, entry_term, entry_translation
+from learning_dictionary import (
+    DictionaryRepository, _dict_entry_message, entry_language, entry_term,
+    entry_translation,
+)
 from trainer_engine import (
     EXERCISE_BUILD_SENTENCE,
     EXERCISE_CHOOSE_NATURAL,
@@ -33,6 +36,7 @@ from trainer_engine import (
     EXERCISE_TRANSLATE_CONTEXT,
 )
 from ui import learning as learning_ui
+from ui.constants import delete_label
 
 
 def _learning():
@@ -59,9 +63,23 @@ def _nav_row():
 
 
 def _options(data):
-    options = [data["correct"], *(data.get("wrong") or [])]
+    options = []
+    seen = set()
+    for value in [data["correct"], *(data.get("wrong") or [])]:
+        option = str(value or "").strip().lower()
+        if option and option.casefold() not in seen:
+            options.append(option)
+            seen.add(option.casefold())
+        if len(options) == 3:
+            break
     random.shuffle(options)
     return options
+
+
+def _correct_option_id(data, options):
+    expected = str(data.get("correct") or "").strip().casefold()
+    return next(index for index, option in enumerate(options)
+                if str(option).strip().casefold() == expected)
 
 
 async def _generate_situation(entry, language):
@@ -176,7 +194,7 @@ async def _send_exercise(bot, cid, data):
             question=f"Что значит: {data['term']}?",
             options=[str(option)[:100] for option in options[:10]],
             type="quiz",
-            correct_option_id=options.index(data["correct"]),
+            correct_option_id=_correct_option_id(data, options),
             is_anonymous=False,
             reply_markup=_keyboard([_nav_row()]),
         )
@@ -241,7 +259,8 @@ async def _apply_result(bot, cid, state, grade, message):
     if data.get("_answered"):
         return
     data["_answered"] = True
-    DictionaryRepository(cid).record_answer(
+    repository = DictionaryRepository(cid)
+    updated_entry = repository.record_answer(
         data["lang"], data["term"], data["exercise_type"], grade.quality)
     session = state["session"]
     session["total"] += 1
@@ -252,8 +271,85 @@ async def _apply_result(bot, cid, state, grade, message):
     if not grade.correct:
         session["returning"].append(data["term"])
         _reinsert_failed(state, data)
-    kb = _keyboard([[("🔄 Следующее задание", "ex_next")], _nav_row()])
-    await bot.send_message(chat_id=cid, text=message.text, entities=message.entities, reply_markup=kb)
+    entry = updated_entry or next((item for item in repository.all()
+                                   if entry_language(item) == data["lang"]
+                                   and entry_term(item).casefold() == data["term"].casefold()), {})
+    result = _dict_entry_message(
+        entry or {"lang": data["lang"], "term": data["term"], "translation": data.get("ru", "")},
+        status="trainer_correct" if grade.correct else "trainer_incorrect",
+    )
+    data["_result_correct"] = bool(grade.correct)
+    kb = _keyboard([
+        [("🔄 Следующее задание", "ex_next")],
+        [(delete_label("Удалить из обучения"), "ex_delete")],
+        _nav_row(),
+    ])
+    await bot.send_message(chat_id=cid, text=result.text, entities=result.entities, reply_markup=kb)
+
+
+async def confirm_delete_current(bot, cid):
+    state = trainer_session.get(cid)
+    if not state or not state.get("current"):
+        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново.")
+        return
+    term = state["current"].get("term", "")
+    await bot.send_message(
+        chat_id=cid,
+        text=f"Точно удалить «{term}» из обучения?",
+        reply_markup=_keyboard([
+            [(delete_label("Да, удалить"), "ex_delete_yes")],
+            [("⬅️ Назад", "ex_delete_cancel"), ("#️⃣ Меню", "m_menu")],
+        ]),
+        transient=True,
+    )
+
+
+async def show_current_result(bot, cid):
+    state = trainer_session.get(cid)
+    data = state.get("current") if state else None
+    if not data or "_result_correct" not in data:
+        await _render_next(bot, cid)
+        return
+    repository = DictionaryRepository(cid)
+    entry = next((item for item in repository.all()
+                  if entry_language(item) == data["lang"]
+                  and entry_term(item).casefold() == data["term"].casefold()), None)
+    if not entry:
+        await _render_next(bot, cid)
+        return
+    result = _dict_entry_message(
+        entry, status="trainer_correct" if data["_result_correct"] else "trainer_incorrect")
+    kb = _keyboard([
+        [("🔄 Следующее задание", "ex_next")],
+        [(delete_label("Удалить из обучения"), "ex_delete")],
+        _nav_row(),
+    ])
+    await bot.send_message(chat_id=cid, text=result.text, entities=result.entities,
+                           reply_markup=kb, transient=True)
+
+
+async def delete_current(bot, cid):
+    state = trainer_session.get(cid)
+    if not state or not state.get("current"):
+        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново.")
+        return
+    data = state["current"]
+    removed = DictionaryRepository(cid).delete_training_entry(data["lang"], data["term"])
+    old_queue = state["queue"]
+    old_index = state["queue_idx"]
+    removed_before = sum(
+        entry_term(item["entry"]).casefold() == data["term"].casefold()
+        for item in old_queue[:old_index]
+    )
+    state["queue"] = [item for item in old_queue
+                      if entry_term(item["entry"]).casefold() != data["term"].casefold()]
+    state["queue_idx"] = max(0, old_index - removed_before)
+    await bot.send_message(
+        chat_id=cid,
+        text=(f"✅ «{data['term']}» удалено из обучения."
+              if removed else "Этой записи уже нет в обучении."),
+    )
+    await _render_next(bot, cid)
 
 
 def _reinsert_failed(state, data):

@@ -98,3 +98,18 @@ class DictionaryRepository:
             return entries, None
 
         return self.records.mutate(update)
+
+    def delete_training_entry(self, language, term):
+        """Удаляет ровно текущую учебную запись и возвращает её при успехе."""
+        def update(entries):
+            kept = []
+            removed = None
+            for entry in entries:
+                if (removed is None and entry_language(entry) == language
+                        and entry_term(entry).casefold() == str(term).casefold()):
+                    removed = entry
+                    continue
+                kept.append(entry)
+            return kept, removed
+
+        return self.records.mutate(update)

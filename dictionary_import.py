@@ -247,7 +247,13 @@ def _dict_entry_message(entry, status="added"):
     term = _cap(term)
     translation = _entry_translation(entry)
 
-    if status == "duplicate":
+    if status == "trainer_correct":
+        title = "Верно"
+        emoji = "✅"
+    elif status == "trainer_incorrect":
+        title = "Почти"
+        emoji = "📝"
+    elif status == "duplicate":
         title = f"Уже есть в {_lang_loc_title(entry.get('lang'))} словаре"
         emoji = "📚"
     else:
@@ -280,6 +286,9 @@ def _dict_entry_message(entry, status="added"):
         b.bold("Полезно:")
         b.text_line(f" {example_text} → {example_ru}")
         b.newline()
+    if status == "trainer_incorrect":
+        b.spacer()
+        b.line("Это вернётся позже в тренировке.")
     return b.build_stripped()
 
 

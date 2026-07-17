@@ -49,7 +49,7 @@ def _tokens(text):
         r"[\wÀ-ÖØ-öø-ÿ'-]+", str(text or ""), flags=re.UNICODE)]
 
 
-def clean_options(correct, candidates, needed=3):
+def clean_options(correct, candidates, needed=2):
     result = []
     seen = {str(correct).lower()}
     for candidate in candidates:
@@ -67,7 +67,7 @@ def clean_options(correct, candidates, needed=3):
 
 def _wrong_terms(entry, other_entries, rng):
     own_term = entry_term(entry)
-    pool = [_cap(entry_term(other)) for other in other_entries
+    pool = [entry_term(other).lower() for other in other_entries
             if entry_term(other) and entry_term(other) != own_term]
     rng.shuffle(pool)
     return pool
@@ -131,7 +131,7 @@ def _find_error(entry, _other_entries, rng):
 def _choose_natural(entry, other_entries, rng):
     correct = _cap(entry_term(entry))
     wrong = clean_options(correct, _wrong_terms(entry, other_entries, rng))
-    return {"ru": _first_translation(entry), "correct": correct, "wrong": wrong} if len(wrong) >= 3 else None
+    return {"ru": _first_translation(entry), "correct": correct, "wrong": wrong} if len(wrong) >= 2 else None
 
 
 def _fill_gap(entry, other_entries, rng):
@@ -161,7 +161,7 @@ def _conversation(entry, other_entries, rng, situation, dialogue=False):
         return None
     correct = _cap(entry_term(entry))
     wrong = clean_options(correct, _wrong_terms(entry, other_entries, rng))
-    if len(wrong) < 3:
+    if len(wrong) < 2:
         return None
     key = "line" if dialogue else "situation"
     ru_key = "line_ru" if dialogue else "situation_ru"
