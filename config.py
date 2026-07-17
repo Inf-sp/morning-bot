@@ -22,6 +22,8 @@ WEATHER_FREE_DAILY_LIMIT = _env_int("WEATHER_FREE_DAILY_LIMIT", 1000)
 WEATHER_HARD_DAILY_LIMIT = _env_int("WEATHER_HARD_DAILY_LIMIT", WEATHER_FREE_DAILY_LIMIT)
 WEATHER_WARNING_LIMIT = _env_int("WEATHER_WARNING_LIMIT", int(WEATHER_HARD_DAILY_LIMIT * 0.7))
 WEATHER_CRITICAL_LIMIT = _env_int("WEATHER_CRITICAL_LIMIT", int(WEATHER_HARD_DAILY_LIMIT * 0.9))
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+GEMINI_DAILY_LIMIT = _env_int("GEMINI_DAILY_LIMIT", 0)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 COHERE_API_KEY = os.environ.get("COHERE_API_KEY", "")
 COHERE_MODEL = os.environ.get("COHERE_MODEL", "command-a-plus-05-2026")
@@ -73,17 +75,12 @@ API_QUOTAS = {
     "openweather": [
         {"mode": "fixed", "unit": "requests", "period": "day", "limit": WEATHER_FREE_DAILY_LIMIT},
     ],
-    "pexels": [
-        {"mode": "fixed", "unit": "requests", "period": "hour", "limit": 200},
-        {"mode": "fixed", "unit": "requests", "period": "month", "limit": 20_000},
-    ],
     "gemini": [
-        {"mode": "fixed", "unit": "requests", "period": "minute", "limit": 5},
-        {"mode": "fixed", "unit": "tokens", "period": "minute", "limit": 250_000},
-        {"mode": "fixed", "unit": "requests", "period": "day", "limit": 20},
+        {"mode": "local", "unit": "requests", "period": "day"},
+        {"mode": "local", "unit": "tokens", "period": "day"},
     ],
     "tavily": [
-        {"mode": "fixed", "unit": "credits", "period": "month", "limit": 1000},
+        {"mode": "local", "unit": "credits", "period": "month"},
     ],
     "telegram": [
         {"mode": "local", "unit": "messages", "period": "day"},
@@ -92,15 +89,9 @@ API_QUOTAS = {
         {"mode": "local", "unit": "requests", "period": "day"},
     ],
     "groq": [
-        {"mode": "local", "unit": "requests", "period": "day", "limit": 1000},
-    ],
-    "cohere": [
         {"mode": "local", "unit": "requests", "period": "day"},
     ],
     "github_models": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
-    "google_books": [
         {"mode": "local", "unit": "requests", "period": "day"},
     ],
     "languagetool": [
@@ -121,7 +112,7 @@ API_QUOTAS = {
     ],
     "ticketmaster": [
         {"mode": "headers", "unit": "requests", "period": "day", "enabled": False},
-        {"mode": "local", "unit": "requests", "period": "day", "limit": 5000},
+        {"mode": "local", "unit": "requests", "period": "day"},
     ],
     "zeroentropy": [
         {"mode": "local", "unit": "tokens", "period": "day"},

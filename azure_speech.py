@@ -157,6 +157,8 @@ def synthesize(word: str, example: str = "") -> bytes:
         raise AzureSpeechError("empty_audio", status=200)
 
     api_usage.record_request(
-        "azure_speech", ok=True, status_code=200, latency_ms=latency_ms,
+        "azure_speech", ok=True, status_code=200,
+        units={"characters": len(str(word or "")) + len(str(example or ""))},
+        latency_ms=latency_ms,
     )
     return response.content

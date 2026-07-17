@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import time
 import unicodedata
 from difflib import SequenceMatcher
 
@@ -91,9 +90,9 @@ def _search_items(query: str) -> list[dict]:
     cache_key = _norm(query)
     cached = util.ttl_get("google_books", cache_key, _CACHE_TTL)
     if isinstance(cached, list):
-        api_usage.record_cache_hit("google_books")
         return cached
-    started = time.time()
+    if not api_usage.google_books_requests()["allowed"]:
+        return []
     try:
         response = requests.get(
             _BASE_URL,
@@ -108,30 +107,27 @@ def _search_items(query: str) -> list[dict]:
             timeout=10,
         )
     except requests.exceptions.Timeout:
-        api_usage.record_request("google_books", ok=False, error="timeout")
+        service_monitor.record_result("google_books", False, error="timeout")
         return []
     except requests.exceptions.RequestException:
-        api_usage.record_request("google_books", ok=False, error="network_error")
+        service_monitor.record_result("google_books", False, error="network_error")
         return []
-    latency_ms = int((time.time() - started) * 1000)
+    finally:
+        api_usage.google_books_requests(consume=True)
     if response.status_code != 200:
-        api_usage.record_request(
+        service_monitor.record_result(
             "google_books", ok=False, status_code=response.status_code,
-            error=service_monitor.google_error_details(response), latency_ms=latency_ms,
-            headers=response.headers,
+            error=service_monitor.google_error_details(response), headers=response.headers,
         )
         return []
     try:
         items = response.json().get("items") or []
     except (TypeError, ValueError):
-        api_usage.record_request(
-            "google_books", ok=False, error="invalid_json", latency_ms=latency_ms,
-            headers=response.headers,
+        service_monitor.record_result(
+            "google_books", ok=False, error="invalid_json", headers=response.headers,
         )
         return []
-    api_usage.record_request(
-        "google_books", ok=True, latency_ms=latency_ms, headers=response.headers,
-    )
+    service_monitor.record_result("google_books", True, headers=response.headers)
     util.ttl_set("google_books", cache_key, items)
     return items
 

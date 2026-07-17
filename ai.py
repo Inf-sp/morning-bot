@@ -300,6 +300,14 @@ def _gemini_cooldown_error():
     )
 
 
+def _cohere_limit_error():
+    if api_usage.cohere_requests()["allowed"]:
+        return None
+    return LLMProviderError(
+        "cohere", "cohere monthly limit exhausted", error_type="quota",
+    )
+
+
 def get_gemini_rate_limit_stats(period_days=1) -> dict:
     return api_usage.gemini_state(period_days)
 
@@ -338,25 +346,48 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
 
 def _post(url, headers, payload, timeout, name):
     service = {"cf": "cloudflare"}.get(name, name)
+    cohere_request = service == "cohere"
+    gemini_request = service == "gemini"
+    if cohere_request:
+        limit_error = _cohere_limit_error()
+        if limit_error is not None:
+            raise limit_error
     t0 = time.time()
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=timeout)
     except requests.exceptions.Timeout as e:
-        api_usage.record_request(service, ok=False, error="timeout")
+        if cohere_request:
+            service_monitor.record_result(service, False, error="timeout")
+        else:
+            api_usage.record_request(service, ok=False, error="timeout")
         raise LLMProviderError(name, f"{name} timeout", temporary=True, error_type=type(e).__name__) from e
     except requests.exceptions.ConnectionError as e:
-        api_usage.record_request(service, ok=False, error="network_error")
+        if cohere_request:
+            service_monitor.record_result(service, False, error="network_error")
+        else:
+            api_usage.record_request(service, ok=False, error="network_error")
         raise LLMProviderError(name, f"{name} network error", temporary=True, error_type=type(e).__name__) from e
+    finally:
+        if cohere_request:
+            api_usage.cohere_requests(consume=True)
+        elif gemini_request:
+            api_usage.gemini_requests(consume=True)
     if r.status_code != 200:
         # тело ошибки в логи (видно причину), но без секретов
         body = secure.redact((r.text or "")[:300])
         temporary = _is_temporary_status(r.status_code)
         limit_scope = ""
         cooldown_until = None
-        api_usage.record_request(service, ok=False, status_code=r.status_code,
-                                 error=f"HTTP {r.status_code}",
-                                 latency_ms=int((time.time() - t0) * 1000),
-                                 headers=r.headers)
+        if cohere_request:
+            service_monitor.record_result(
+                service, False, status_code=r.status_code,
+                error=f"HTTP {r.status_code}", headers=r.headers,
+            )
+        else:
+            api_usage.record_request(service, ok=False, status_code=r.status_code,
+                                     error=f"HTTP {r.status_code}",
+                                     latency_ms=int((time.time() - t0) * 1000),
+                                     headers=r.headers)
         retry_after = None
         try:
             retry_after = int(r.headers.get("Retry-After") or 0) or None
@@ -378,7 +409,9 @@ def _post(url, headers, payload, timeout, name):
                                error_type="rate_limit" if limit_scope else "http_error",
                                retry_after=retry_after, limit_scope=limit_scope,
                                cooldown_until=cooldown_until)
-    if service != "gemini":
+    if cohere_request:
+        service_monitor.record_result(service, True, headers=r.headers)
+    elif service != "gemini":
         api_usage.record_request(service, ok=True, latency_ms=int((time.time() - t0) * 1000),
                                  headers=r.headers)
     return r
@@ -416,7 +449,7 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
                     time.sleep(wait)
                 t0 = time.time()
                 r = _post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={config.GEMINI_API_KEY}",
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
                     {}, payload, 30, "gemini")
             data = r.json()
             usage = data.get("usageMetadata") or data.get("usage_metadata") or {}
@@ -544,7 +577,7 @@ def _gemini_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
         },
     }
     r = _post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={config.GEMINI_API_KEY}",
+        f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
         {}, payload, 40, "gemini",
     )
     data = r.json()
@@ -707,7 +740,23 @@ def _reorder_for_monitor(order):
     return tuple(result)
 
 
+def _reorder_for_cohere_limit(order, *, cohere_primary=False):
+    """При месячном лимите ставит GitHub Models сразу после пропущенного Cohere."""
+    if "cohere" not in order or api_usage.cohere_requests()["allowed"]:
+        return order
+    result = [name for name in order if name != "github_models"]
+    if cohere_primary:
+        result.remove("cohere")
+        result.insert(0, "cohere")
+    result.insert(result.index("cohere") + 1, "github_models")
+    return tuple(result)
+
+
 def _provider_is_unavailable(name):
+    if name == "cohere":
+        limit_error = _cohere_limit_error()
+        if limit_error is not None:
+            return limit_error
     if name == "gemini":
         rate_limit = _gemini_cooldown_error()
         if rate_limit is not None:
@@ -841,6 +890,7 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
     policy = _coerce_policy(fallback_allowed, privacy_level, response_mode, fallback_policy,
                             allow_personal_openrouter)
     order = _resolve(tier, order, route=route, module=module)
+    cohere_primary = bool(order and order[0] == "cohere")
     pre_gemini_unavailable = _gemini_cooldown_error() if "gemini" in order else None
     order = _reorder_for_cooldown(_reorder_for_monitor(order))
     cache_ttl = _cache_ttl(module, response_mode)
@@ -853,6 +903,7 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
         # исправлен на записи) - не отдаём его снова на TTL модуля (до 30 дней),
         # чистим и генерируем заново.
         _cache_delete(cache_key)
+    order = _reorder_for_cohere_limit(order, cohere_primary=cohere_primary)
     calls = {
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature, response_mode),
         "cohere": lambda: _gen_cohere(prompt, max_tokens, temperature, response_mode),
@@ -872,7 +923,11 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
             continue
         unavailable = _provider_is_unavailable(name)
         if unavailable is not None:
-            failed_providers.append(name)
+            local_cohere_limit = (
+                name == "cohere" and getattr(unavailable, "error_type", "") == "quota"
+            )
+            if not local_cohere_limit:
+                failed_providers.append(name)
             errs.append(f"{name}:{unavailable}")
             if _is_temporary_exception(unavailable):
                 temporary_errs.append((name, unavailable))
@@ -1101,7 +1156,7 @@ def _chat(provider, history, system):
         if cooling is not None:
             raise cooling
         contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in history]
-        r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={config.GEMINI_API_KEY}",
+        r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
             {}, {"system_instruction": {"parts": [{"text": system}]}, "contents": contents,
                  "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, "gemini")
         return r.json()["candidates"][0]["content"]["parts"][0]["text"]

@@ -37,10 +37,79 @@ SERVICE_LABELS = {
 }
 
 SERVICE_ICONS = SERVICE_LABELS
+GOOGLE_BOOKS_DAILY_LIMIT = 1000
+COHERE_MONTHLY_LIMIT = 1000
 
 
 def _now():
     return datetime.now(config.TZ)
+
+
+def _local_request_counter(period_key, used_key, period, limit, consume):
+    def mut(data):
+        data = data if isinstance(data, dict) else {}
+        if data.get(period_key) != period:
+            data[period_key] = period
+            data[used_key] = 0
+        try:
+            used = max(0, int(data.get(used_key) or 0))
+        except (TypeError, ValueError):
+            used = 0
+        data[used_key] = used
+        allowed = limit is None or used < limit
+        if consume and allowed:
+            used += 1
+            data[used_key] = used
+        remaining = max(limit - used, 0) if limit is not None else None
+        return data, {"used": used, "remaining": remaining, "allowed": allowed}
+
+    try:
+        return store.mutate_kv(config.API_USAGE_KEY, mut)
+    except Exception:
+        return {"used": 0, "remaining": limit, "allowed": True}
+
+
+def google_books_requests(*, consume=False) -> dict:
+    """Два локальных поля дневного лимита Google Books в общем KV состояния."""
+    return _local_request_counter(
+        "google_books_requests_date", "google_books_requests_used",
+        _now().date().isoformat(), GOOGLE_BOOKS_DAILY_LIMIT, consume,
+    )
+
+
+def cohere_requests(*, consume=False) -> dict:
+    """Два локальных поля месячного Trial-лимита Cohere в общем KV состояния."""
+    return _local_request_counter(
+        "cohere_requests_month", "cohere_requests_used",
+        _now().strftime("%Y-%m"), COHERE_MONTHLY_LIMIT, consume,
+    )
+
+
+def gemini_requests(model="", *, consume=False) -> dict:
+    """Дневной локальный счётчик конкретной модели Gemini."""
+    model = str(model or config.GEMINI_MODEL).strip().casefold()
+    slug = "".join(char if char.isalnum() else "_" for char in model).strip("_")
+    return _local_request_counter(
+        f"gemini_{slug}_requests_date", f"gemini_{slug}_requests_used",
+        _now().date().isoformat(), int(config.GEMINI_DAILY_LIMIT or 0) or None, consume,
+    )
+
+
+def service_usage(service: str) -> dict:
+    """Фактический расход и последние rate-limit-заголовки без сетевых проверок."""
+    try:
+        data = store._load(config.API_USAGE_KEY)
+        svc = ((data.get("services") or {}).get(service) or {}) if isinstance(data, dict) else {}
+    except Exception:
+        svc = {}
+    return {
+        "requests_today": _count(svc, "day", "requests"),
+        "messages_today": _count(svc, "day", "messages"),
+        "characters_today": _count(svc, "day", "characters"),
+        "tokens_today": _count(svc, "day", "tokens"),
+        "credits_month": _count(svc, "month", "credits"),
+        "headers": dict(svc.get("last_headers") or {}),
+    }
 
 
 def _bucket(period: str, dt=None) -> str:
@@ -135,7 +204,9 @@ def record_request(service: str, ok: bool = True, *, units: dict | None = None,
         if headers:
             svc["last_headers"] = {
                 k: str(v)[:80] for k, v in headers.items()
-                if str(k).lower().startswith(("x-ratelimit", "ratelimit", "retry-after"))
+                if str(k).lower().startswith((
+                    "x-ratelimit", "ratelimit", "retry-after", "x-api-quota",
+                ))
             }
         _prune(svc, now_ts)
         return data, True

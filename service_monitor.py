@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import requests
 
+import api_usage
 import config
 import store
 
@@ -43,7 +44,7 @@ class ServiceSpec:
 # Fallbacks are directed.  In particular, Firecrawl never points back to
 # Tavily, so a failed search cannot bounce forever between the two providers.
 SPECS = (
-    ServiceSpec("cohere", "Cohere", ("Обучение", "Ассистент"), ("gemini", "github_models")),
+    ServiceSpec("cohere", "Cohere", ("Обучение", "Ассистент"), ("github_models", "gemini")),
     ServiceSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"), ("github_models", "groq", "openrouter")),
     ServiceSpec("github_models", "GitHub Models", ("Готовка", "Обучение", "Ассистент"), ("openrouter",)),
     ServiceSpec("groq", "Groq", ("Готовка", "Обучение", "Ассистент"), ("github_models", "openrouter")),
@@ -216,8 +217,8 @@ def _quota_from_headers(headers) -> tuple[int | None, int | None]:
     values = {str(k).casefold(): v for k, v in dict(headers or {}).items()}
     pairs = (
         ("x-ratelimit-remaining", "x-ratelimit-limit"),
+        ("x-ratelimit-remaining-requests", "x-ratelimit-limit-requests"),
         ("ratelimit-remaining", "ratelimit-limit"),
-        ("x-api-quota-left", "x-api-quota-request"),
     )
     for remaining_key, total_key in pairs:
         try:
@@ -227,6 +228,13 @@ def _quota_from_headers(headers) -> tuple[int | None, int | None]:
             continue
         if total >= 0 and 0 <= remaining <= total:
             return remaining, total
+    try:
+        remaining = int(float(values["x-api-quota-left"]))
+        used = int(float(values["x-api-quota-used"]))
+        if remaining >= 0 and used >= 0:
+            return remaining, remaining + used
+    except (KeyError, TypeError, ValueError):
+        pass
     return None, None
 
 
@@ -408,34 +416,100 @@ def _number(value) -> str:
     return f"{int(value):,}".replace(",", " ")
 
 
-def _status_detail(state: dict) -> str:
+def _confirmed_quota(service: str, state: dict) -> tuple[int | None, int | None]:
     remaining, total = state.get("quota_remaining"), state.get("quota_total")
     if remaining is not None and total is not None:
-        remaining = int(remaining)
+        return int(remaining), int(total)
+    usage = api_usage.service_usage(service)
+    header_remaining, header_total = _quota_from_headers(usage.get("headers"))
+    if header_remaining is not None and header_total is not None:
+        return header_remaining, header_total
+    if service == "openweather" and config.WEATHER_HARD_DAILY_LIMIT > 0:
+        used = int(usage["requests_today"])
+        total = int(config.WEATHER_HARD_DAILY_LIMIT)
+        return max(total - used, 0), total
+    if service == "gemini" and config.GEMINI_DAILY_LIMIT > 0:
+        model_usage = api_usage.gemini_requests(config.GEMINI_MODEL)
+        used = int(model_usage["used"])
+        total = int(config.GEMINI_DAILY_LIMIT)
+        return max(total - used, 0), total
+    return None, None
+
+
+def _usage_detail(service: str) -> str:
+    usage = api_usage.service_usage(service)
+    requests_today = int(usage["requests_today"])
+    if service == "telegram":
+        return "до 30 сообщений/с"
+    if service in ("themealdb", "restcountries"):
+        return "без дневной квоты"
+    if service == "languagetool":
+        return f"{_number(requests_today)} проверок сегодня"
+    if service == "gemini":
+        model_usage = api_usage.gemini_requests(config.GEMINI_MODEL)
+        return f"{_number(model_usage['used'])} запросов сегодня · {config.GEMINI_MODEL}"
+    if service == "azure_speech" and usage["characters_today"]:
+        return f"{_number(usage['characters_today'])} символов сегодня"
+    if service == "database":
+        return "подключено"
+    if service == "tavily" and usage["credits_month"]:
+        return f"{_number(usage['credits_month'])} кредитов в этом месяце"
+    return f"{_number(requests_today)} запросов сегодня"
+
+
+def _status_detail(service: str, state: dict) -> str:
+    if (
+        state.get("status") not in (OK, UNKNOWN)
+        and state.get("error_type") not in ("quota", "rate_limit")
+    ):
+        return str(state.get("last_error") or "сервис не ответил")
+    remaining, total = _confirmed_quota(service, state)
+    if remaining is not None and total is not None:
         if remaining <= 0:
             return "лимит исчерпан"
-        if remaining == 1:
-            return "остался 1 запрос"
-        return f"осталось {_number(remaining)} из {_number(total)}"
-    if state.get("status") == UNKNOWN:
-        return "лимит неизвестен"
-    if state.get("status") != OK:
-        return str(state.get("last_error") or "не удалось определить статус")
-    return "лимит неизвестен"
+        return f"{_number(remaining)} из {_number(total)}"
+    if state.get("status") not in (OK, UNKNOWN):
+        return str(state.get("last_error") or "сервис не ответил")
+    return _usage_detail(service)
 
 
 def format_row(service: str, state: dict | None = None) -> str:
     spec = SPEC_BY_KEY[service]
     state = state or get_state(service)
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
-    parts = [f"{_DOT[status]} {spec.label}", spec.category]
-    if service != "google_books" or status != OK:
-        parts.append(_status_detail(state))
+    if service == "cohere":
+        usage = api_usage.cohere_requests()
+        available = int(usage["remaining"])
+        if available <= 0:
+            return "🟡 Cohere · Везде · лимит исчерпан · используется GitHub Models"
+        if not _configured(service):
+            return "🔴 Cohere · Везде · API-ключ не настроен"
+        if status in (WARNING, DOWN):
+            return " · ".join([
+                f"{_DOT[status]} {spec.label}", spec.category, _status_detail(service, state),
+            ])
+        dot = _DOT[WARNING if available <= 200 else OK]
+        return f"{dot} Cohere · Везде · {_number(available)} из 1 000"
+    if service == "google_books":
+        usage = api_usage.google_books_requests()
+        remaining = int(usage["remaining"])
+        if remaining <= 0:
+            return "🔴 Google Books · Книги · лимит исчерпан · используется Open Library"
+        if not _configured(service):
+            return "🔴 Google Books · Книги · API-ключ не настроен"
+        if status in (WARNING, DOWN):
+            return " · ".join([
+                f"{_DOT[status]} {spec.label}", spec.category, _status_detail(service, state),
+            ])
+        dot = _DOT[WARNING if remaining <= 200 else OK]
+        return f"{dot} Google Books · Книги · {_number(remaining)} из 1 000"
+    remaining, total = _confirmed_quota(service, state)
+    if status in (OK, UNKNOWN) and total and remaining is not None and remaining <= total * 0.2:
+        status = WARNING
+    parts = [f"{_DOT[status]} {spec.label}", spec.category, _status_detail(service, state)]
     fallback = str(state.get("fallback") or "")
     if fallback and fallback in SPEC_BY_KEY:
         parts.append(SPEC_BY_KEY[fallback].label)
-    elif status == DOWN and spec.fallbacks:
-        parts[-1] = "резерв недоступен"
     return " · ".join(parts)
 
 
@@ -493,7 +567,17 @@ def probe(service: str) -> bool:
         return False
     try:
         method, url, kwargs = _probe_request(service)
-        response = requests.request(method, url, **kwargs)
+        if service == "cohere" and not api_usage.cohere_requests()["allowed"]:
+            return False
+        if service == "google_books" and not api_usage.google_books_requests()["allowed"]:
+            return False
+        try:
+            response = requests.request(method, url, **kwargs)
+        finally:
+            if service == "cohere":
+                api_usage.cohere_requests(consume=True)
+            elif service == "google_books":
+                api_usage.google_books_requests(consume=True)
         ok = 200 <= response.status_code < 300
         error = ""
         if not ok:
@@ -562,6 +646,8 @@ def check_all(*, force=False) -> None:
     # A reserve is checked before selection and is shown only after its own
     # successful probe. Actual request routers also call activate_fallback.
     for spec in SPECS:
+        if spec.key == "cohere" and not api_usage.cohere_requests()["allowed"]:
+            continue
         state = get_state(spec.key)
         needs_fallback = results.get(spec.key) is False or state.get("error_type") == "quota"
         if not needs_fallback:
