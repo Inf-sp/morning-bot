@@ -100,6 +100,8 @@ UI_EMOJI = {
 }
 
 CUISINE_EMOJI = {
+    "european": "🇪🇺",
+    "international": "🌍",
     "asian": "🥢",
     "russian": "🇷🇺",
     "italian": "🇮🇹",

@@ -192,13 +192,19 @@ def _source_recipe_card(source) -> dict:
     minutes = _home_minutes(source.get("ready_minutes"))
     servings = source.get("servings")
     wines = [str(item).strip() for item in source.get("pairing_wines") or [] if str(item).strip()]
+    steps = _source_instruction_steps(source)
+    cuisine = _resolve_home_cuisine(
+        source.get("area") or source.get("cuisine"),
+        source.get("name"), ingredients, steps,
+    )
     card = {
         "source_recipe_id": str(source.get("id") or ""),
         "name": " ".join(str(source.get("name") or "").split()),
+        "cuisine": cuisine,
         "time": f"{minutes} мин" if minutes else "",
         "servings": f"{servings} порц." if servings else "",
         "ingredients": ", ".join(ingredients),
-        "steps": _source_instruction_steps(source),
+        "steps": steps,
         "missing_ingredients": [
             " ".join(str(item).split()) for item in source.get("missed_ingredients") or []
             if str(item).strip()
@@ -530,6 +536,37 @@ def _home_steps(value) -> list[dict]:
     return result if 3 <= len(result) <= 5 else []
 
 
+_EUROPEAN_CUISINE_ALIASES = {
+    "british", "dutch", "belgian", "polish", "portuguese", "swedish",
+    "danish", "norwegian", "finnish", "austrian", "swiss", "irish",
+    "czech", "hungarian", "romanian", "balkan", "ukrainian",
+}
+_EUROPEAN_INGREDIENT_MARKERS = (
+    "сливоч", "пармезан", "моцарел", "картоф", "лук-порей", "бекон",
+    "ветчин", "сметан", "оливков", "тимьян", "розмарин",
+)
+_EUROPEAN_TECHNIQUE_MARKERS = ("запек", "туш", "гратен", "пассер", "обжар")
+
+
+def _resolve_home_cuisine(raw_cuisine, name, ingredients, steps) -> str:
+    """Сохраняет реальную кухню и ставит европейский fallback только уверенно."""
+    cuisine = str(raw_cuisine or "").strip().lower()
+    if cuisine in RECIPE_CUISINE_CODES:
+        return cuisine
+    if cuisine in _EUROPEAN_CUISINE_ALIASES:
+        return "european"
+    text = " ".join([
+        str(name or ""),
+        *[str(item or "") for item in ingredients],
+        *[str(item.get("text", "") if isinstance(item, dict) else item) for item in steps],
+    ]).casefold()
+    ingredient_hits = sum(marker in text for marker in _EUROPEAN_INGREDIENT_MARKERS)
+    technique_hit = any(marker in text for marker in _EUROPEAN_TECHNIQUE_MARKERS)
+    if ingredient_hits >= 2 and technique_hit:
+        return "european"
+    return "international"
+
+
 def _normalize_home_idea(data, context: dict) -> dict:
     """Нормализует AI-ответ и структурно скрывает недостоверные блоки."""
     data = data if isinstance(data, dict) else {}
@@ -537,10 +574,6 @@ def _normalize_home_idea(data, context: dict) -> dict:
     has_fridge = bool(context.get("has_fridge"))
 
     name = " ".join(str(data.get("name") or "").split()).strip()
-    selected_cuisines = set(context.get("cuisine_codes") or [])
-    cuisine = str(data.get("cuisine") or "").strip().lower()
-    if not selected_cuisines or cuisine not in selected_cuisines:
-        cuisine = ""
     reason = _home_human_reason(data.get("reason"), context)
     tip = _home_useful_tip(data.get("tip"))
     pairing_wine = " ".join(str(data.get("pairing_wine") or "").split())[:80]
@@ -551,6 +584,7 @@ def _normalize_home_idea(data, context: dict) -> dict:
         pairing_drink = ""
     ingredients = [_home_natural_ingredient(item) for item in _home_string_list(data.get("ingredients"))]
     steps = _home_steps(data.get("steps"))
+    cuisine = _resolve_home_cuisine(data.get("cuisine"), name, ingredients, steps)
     ingredient_keys = {_home_semantic_ingredient_key(item) for item in ingredients}
     use_first = _home_exact_fridge_names(data.get("use_first"), available) if has_fridge else []
     use_first = [item for item in use_first if _home_semantic_ingredient_key(item) in ingredient_keys]
@@ -642,7 +676,7 @@ def _home_idea_context(cid, now=None) -> dict:
     cuisine_codes = cooking_settings.cuisines(cid)
     signature_data = {
         "date": now.date().isoformat(),
-        "home_copy_version": 6,
+        "home_copy_version": 7,
         "meal": meal,
         "available": available,
         "unavailable": unavailable,
@@ -691,8 +725,11 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
         "Правила:\n"
         "• Все пользовательские поля пиши только по-русски.\n"
         "• Предложи ровно одно понятное блюдо, без рекламного названия.\n"
-        "• cuisine — один машиночитаемый код кухни из предпочтений пользователя: "
-        f"{', '.join(cuisine_codes) or 'пустая строка'}. Если кухня блюда не определяется, верни пустую строку.\n"
+        "• cuisine — обязательный машиночитаемый код реальной кухни блюда, даже если этой кухни нет "
+        "в предпочтениях пользователя. Используй один из кодов: "
+        f"{', '.join(RECIPE_CUISINE_CODES)}. Если точную страну определить нельзя, но состав и техника "
+        "действительно типичны для Европы, верни european; иначе international. Не выдавай европейскую "
+        "кухню только из-за доступных продуктов.\n"
         "• Все названия ингредиентов должны звучать естественно по-русски: «соевый соус», а не «соус сои».\n"
         "• Никогда не используй и не предлагай заменой исключённые продукты или аллергены.\n"
         "• Если список «В наличии» не пуст, используй только эти продукты, воду и базовые масло, соль и перец. "
@@ -1118,6 +1155,7 @@ def _fallback_leftovers_recipe(ingredients):
 # нераспознанный, поэтому список ниже не является жёстким enum для валидации,
 # а служит только подсказкой модели в промпте.
 RECIPE_CUISINE_CODES = (
+    "european", "international",
     "asian", "russian", "italian", "mediterranean", "mexican", "french",
     "japanese", "korean", "chinese", "thai", "vietnamese", "indian",
     "turkish", "greek", "spanish", "german", "american", "georgian",

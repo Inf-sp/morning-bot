@@ -100,10 +100,10 @@ _SCREENS = {
     "m_balance": (
         UI_HEALTH,
         "Здоровье",
-        "Здоровье и эмоции. Разберу симптом, поддержу и помогу разгрузить голову.",
+        "",
         [
             [(ui_label("doctor", "Спросить врача"), "as_doctor")],
-            [("⚡ Мотивация", "as_motiv"), (ui_label("worry_diary", "Мысли"), "as_daycheck")],
+            [(ui_label("worry_diary", "Мысли"), "as_daycheck")],
             [(choose_label("Выбрать принципы"), "as_health_principles")],
             [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
         ],
@@ -174,6 +174,23 @@ def learning_menu(home: dict):
     ]))
 
 
+def health_menu(focus: dict):
+    b = MessageBuilder()
+    b.bold("⚡️ Фокус на сегодня · Здоровье")
+    b.newline()
+    b.spacer()
+    b.labeled_line("Настрой", focus.get("phrase", ""), lowercase=False)
+    b.spacer()
+    b.bold("Что сделать:")
+    b.newline()
+    for step in focus.get("steps", ()):
+        b.line(f"- {step}")
+    b.spacer()
+    b.text_line("💡 ")
+    b.labeled_line("Полезно", focus.get("tip", ""))
+    return b.build_stripped(reply_markup=ikb(_SCREENS["m_balance"][3]))
+
+
 def menu_screen(key):
     if key not in _SCREENS:
         return MessageSpec(text="Выбери раздел через /menu.")
@@ -209,12 +226,10 @@ def food_menu(idea=None):
     idea = idea or {}
     b = MessageBuilder()
     cuisine_code = str(idea.get("cuisine") or "").strip().lower()
-    cuisine_flag = CUISINE_EMOJI.get(cuisine_code, "")
-    cuisine_name = CUISINE_RU.get(cuisine_code, "")
-    is_flag = len(cuisine_flag) == 2 and all(0x1F1E6 <= ord(char) <= 0x1F1FF for char in cuisine_flag)
+    cuisine_flag = CUISINE_EMOJI.get(cuisine_code, CUISINE_EMOJI["international"])
+    cuisine_name = CUISINE_RU.get(cuisine_code, CUISINE_RU["international"])
     header = "Блюдо на сегодня"
-    if cuisine_name and is_flag:
-        header = f"{cuisine_flag} {header} · {cuisine_name}"
+    header = f"{cuisine_flag} {header} · {cuisine_name}"
     b.section(header)
 
     name = _cooking_text(idea.get("name"))

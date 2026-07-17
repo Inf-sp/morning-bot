@@ -23,7 +23,7 @@ SKILLS = {s.name: s for s in (
           entrypoints=("плановый запуск", "☀️ Мой день"),
           memory=("SETTINGS_FILE", "WARDROBE_FILE", "DICT_KEY", "PROFILE_KEY"),
           fallback="⚠️ Не удалось собрать сводку дня. Попробуй ещё раз."),
-    Skill("adhd_unstuck", "Личная мотивация / состояние", "card",
+    Skill("adhd_unstuck", "Фокус на сегодня / состояние", "card",
           entrypoints=("as_motiv", "role_state", "chat_retry", "ans_short", "ans_deep"),
           memory=("last_action", "last_surface"),
           fallback="⚠️ Не получилось сгенерировать. Попробуй ещё раз."),

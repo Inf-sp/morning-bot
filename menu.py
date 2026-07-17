@@ -50,6 +50,9 @@ def menu_screen(key, cid=None):
         import learning
         home = learning.build_learning_home(cid) if cid is not None else {"has_material": False, "lang_code": "nl"}
         msg = menu_ui.learning_menu(home)
+    elif key == "m_balance":
+        import balance
+        msg = menu_ui.health_menu(balance.health_focus(cid))
     else:
         msg = menu_ui.menu_screen(key)
     return msg.text, msg.entities, msg.reply_markup

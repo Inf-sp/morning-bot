@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+import hashlib
 import html
 import logging
 import re
@@ -10,7 +11,6 @@ import store
 _log = logging.getLogger(__name__)
 import ai
 import rerank
-import util
 import verify
 import secure
 from ui import balance as balance_ui
@@ -24,7 +24,6 @@ from response_delivery import (
     back_keyboard as _back_kb,
     build_entity_card as _build_entity_card,
     clean_card_text as _clean_card_text,
-    keyboard as _kb,
     send_response as _send,
 )
 
@@ -53,11 +52,6 @@ def health_principles(cid):
     if not isinstance(saved, list):
         return []
     return [key for key in saved if key in _HEALTH_PRINCIPLE_LABELS]
-
-
-def health_principle_labels(cid):
-    selected = set(health_principles(cid))
-    return [label for key, label in HEALTH_PRINCIPLES if key in selected]
 
 
 def _mark_transient_edit(bot, cid, message):
@@ -110,82 +104,69 @@ async def toggle_health_principle(bot, cid, key, q=None):
     settings.set_(cid, "health_principles", selected)
     await send_health_principles(bot, cid, q=q)
 
-# ---------- СДВГ / Следующий шаг ----------
-def _gen_motiv(cid):
-    import random
-    selected_principles = health_principle_labels(cid)
-    active_principle = random.choice(selected_principles) if selected_principles else ""
-    angles = ["физическое действие", "ограничение", "мини-ритуал", "перезагрузку", "один микрошаг"]
-    angle = random.choice(angles)
-    principle_ctx = f"Актуальный принцип пользователя: «{active_principle}»\n" if active_principle else ""
-    basis = "на основе этого принципа" if active_principle else "для спокойного старта"
-    prompt = (
-        f"{principle_ctx}"
-        f"Предложи {angle} {basis}. "
-        "Без философии и клише. Конкретно, коротко, на русском. "
-        "Верни JSON (без markdown):\n"
-        '{"steps":["конкретное действие или ограничение","ещё одно если нужно"],'
-        '"why":"1-2 предложения: зачем это работает прямо сейчас",'
-        '"now":"одно самое первое конкретное действие прямо сейчас, 3-6 слов, без вступления"}'
-    )
-    try:
-        d = ai.llm_json(prompt, 300, tier="smart")
-        steps = [str(s).strip() for s in (d.get("steps") or []) if str(s).strip()]
-        why = str(d.get("why", "")).strip()
-        now = str(d.get("now", "")).strip()
-    except Exception:
-        fallbacks = {
-            "Сон и восстановление": (
-                "Убери экран за 30 минут до сна",
-                "Короткий спокойный переход помогает телу переключиться на отдых",
-            ),
-            "Движение каждый день": (
-                "Пройди один круг по комнате",
-                "Небольшое движение помогает начать без долгой подготовки",
-            ),
-            "Регулярное питание": (
-                "Запланируй время следующего приёма пищи",
-                "Конкретное время снижает шанс пропустить еду в занятом дне",
-            ),
-            "Меньше перегруза": (
-                "Убери одну необязательную задачу",
-                "Один снятый пункт сразу освобождает внимание для главного",
-            ),
-            "Меньше экрана": (
-                "Положи телефон вне руки на 10 минут",
-                "Короткая дистанция от экрана уменьшает число автоматических отвлечений",
-            ),
-            "Больше свежего воздуха": (
-                "Выйди на улицу на пять минут",
-                "Короткая смена обстановки помогает перезагрузить внимание",
-            ),
-        }
-        action, why = fallbacks.get(
-            active_principle,
-            ("Сделай один маленький шаг без подготовки",
-             "Конкретное действие снижает внутренний шум и помогает начать"),
-        )
-        steps = [action]
-        now = ""
-    principle_full = active_principle if active_principle else "Один шаг лучше идеального плана."
-    final = f"Сейчас: {now}" if now else "Сделай первый шаг сейчас, без подготовки."
-    return _build_entity_card(
-        "Мотивация",
-        principle_full,
-        why,
-        steps,
-        final,
-        bullet_label="Что сделать:",
-        emoji="⚡",
-    )
+# ---------- Фокус на сегодня ----------
+_FOCUS_PHRASES = (
+    *(('emotion', text) for text in (
+        "Это раздражение, не угроза.", "Пауза - победа.", "Чужие эмоции - не моя ответственность.",
+        "Остановись. Выдохни. Потом действуй.", "Это состояние пройдёт.",
+        "Представь, что все чудаки.", "Нежелательная мысль → «Отмена» три раза.",
+    )),
+    *(('action', text) for text in (
+        "Сейчас не вся жизнь. Сейчас один шаг.", "Мне не нужно идеально. Мне нужно начать.",
+        "Я не ленивый. Мой мозг так работает.", "Я делаю лучшее из возможного сегодня.",
+        "От чего наполняешься - то и монетизируй.", "Риск важнее идеала.",
+        "Скука - мой криптонит. Создаю интерес сам.", "Скромности мало. Мир продвигает видимых.",
+        "Требовать своих прав - здоровое, не наглость.", "Сделано лучше идеального. Закрой и выложи.",
+        "Застрял - уменьши шаг, не бросай задачу.", "Действие гасит тревогу быстрее, чем анализ.",
+        "Дискомфорт нового = вход в индустрию, а не стоп.",
+    )),
+    *(('values', text) for text in (
+        "Не пропускай зло дальше себя.", "Фокус на хорошем, благодарность за мелочи.",
+        "Уважай границы, говори открыто.",
+        "Любовь важна, но не единственное. Цени поддержку, создавай воспоминания.",
+        "Родители - взрослые. Ты не отвечаешь за их чувства.", "Не все споры стоят нервов.",
+        "Перемены открывают возможности.", "Окружение влияет - ищи своё, не терпи.",
+        "Книги - радость и рост.", "Путешествия важнее материального.",
+        "Избавляйся от лишнего, освобождай место новому.",
+        "Баланс работа / отдых / движение - необходим.", "Переключайся, но не убегай.",
+    )),
+)
+
+_FOCUS_GUIDANCE = {
+    "emotion": (
+        ("Назови чувство одним словом и сделай три спокойных выдоха.",
+         "Отложи ответ на пять минут, если эмоция ещё сильная."),
+        "Короткая пауза отделяет чувство от действия и помогает ответить спокойнее.",
+    ),
+    "action": (
+        ("Выбери не больше трёх задач на сегодня.",
+         "Начни с одной задачи, которую можно сделать за 5–10 минут."),
+        "Короткий список снижает перегрузку и помогает быстрее перейти от мыслей к действию.",
+    ),
+    "values": (
+        ("Выбери одно решение, которое сегодня поддержит эту мысль.",
+         "Сделай небольшой конкретный шаг до конца дня."),
+        "Связь принципа с одним действием помогает не оставлять важное только намерением.",
+    ),
+}
+
+
+def health_focus(cid):
+    day = datetime.now(TZ).strftime("%Y-%m-%d")
+    digest = hashlib.sha256(f"{cid}:{day}".encode()).digest()
+    kind, phrase = _FOCUS_PHRASES[int.from_bytes(digest[:4], "big") % len(_FOCUS_PHRASES)]
+    steps, tip = _FOCUS_GUIDANCE[kind]
+    return {"phrase": phrase, "steps": steps, "tip": tip}
+
+
+async def send_health_focus(bot, cid):
+    text, entities, kb = menu.menu_screen("m_balance", cid)
+    await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb, transient=True)
 
 
 async def send_motiv_push(bot, cid):
-    """09:00 — плановая мотивация (без 'Секунду...')."""
-    out, entities = _gen_motiv(cid)
-    store.last_source[str(cid)] = "Баланс · Мотивация"
-    store.last_answer[str(cid)] = out
-    await bot.send_message(chat_id=cid, text=out, entities=entities)
+    """Совместимость старого действия ассистента: открывает новый экран Здоровья."""
+    await send_health_focus(bot, cid)
 
 
 # ---------- роли ----------
@@ -358,9 +339,6 @@ async def save_worries(bot, cid, text):
     await thoughts.capture(bot, cid, text)
 
 
-_MOTIV_KB = _kb([[("✨ Ещё мотивации", "as_motiv")], [("⬅️ Назад", "m_balance"), ("#️⃣ Меню", "m_menu")]])
-
-
 # ---------- роутер кнопок Баланса ----------
 async def handle_callback(bot, cid, q, data):
     if data == "as_health_principles":
@@ -372,19 +350,9 @@ async def handle_callback(bot, cid, q, data):
     # мысли
     if data == "as_daycheck":
         await send_daycheck(bot, cid); return
-    # мотивация
+    # Совместимость со старыми сообщениями с кнопкой «Мотивация».
     if data == "as_motiv":
-        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["health"])
-        try:
-            out, entities = _gen_motiv(cid)
-        except Exception as e:
-            await status.stop(delete=False)
-            await verify.safe_error(bot, cid, e); return
-        store.last_source[str(cid)] = "Баланс · Мотивация"
-        store.last_answer[str(cid)] = out
-        store.last_surface[str(cid)] = "card"
-        await bot.send_message(chat_id=cid, text=out, entities=entities, reply_markup=_MOTIV_KB)
-        await status.stop(delete=False)
+        await send_health_focus(bot, cid)
         return
     # врач
     if data == "as_doctor":

@@ -252,7 +252,7 @@ async def _apply_result(bot, cid, state, grade, message):
     if not grade.correct:
         session["returning"].append(data["term"])
         _reinsert_failed(state, data)
-    kb = _keyboard([[("Следующее задание", "ex_next")], _nav_row()])
+    kb = _keyboard([[("🔄 Следующее задание", "ex_next")], _nav_row()])
     await bot.send_message(chat_id=cid, text=message.text, entities=message.entities, reply_markup=kb)
 
 
