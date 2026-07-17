@@ -245,3 +245,5 @@ async def add_listen(bot, cid, i, q=None):
         title = rec["items"][0]
         saved = saved_items.toggle_note(cid, title, source="Музыка")
         await saved_items.update_save_button(q, "listen_0", saved)
+        if saved:
+            await send_listen(bot, cid)

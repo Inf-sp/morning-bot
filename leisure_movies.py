@@ -851,3 +851,10 @@ async def add_reco(bot, cid, i, q=None):
             ]
             store.set_list(config.READLIST_KEY, cid, items)
     await saved_items.update_save_button(q, f"reco_{i}", saved)
+    if not saved:
+        return
+    if kind == "movie":
+        await _advance_movie(bot, cid)
+    else:
+        import leisure_books
+        await leisure_books._advance_book(bot, cid)
