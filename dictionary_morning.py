@@ -7,12 +7,12 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 import learning_dictionary as dictionary
+from dictionary_model import normalize_term_case
 from ui import learning as learning_ui
 from ui.constants import delete_label
 
 _code = dictionary._code
 _flag = lambda language: "🇳🇱" if _code(language) == "nl" else "🇬🇧"
-_cap = dictionary._cap
 _ensure_dict = dictionary._ensure_dict
 _dict_lang = dictionary._dict_lang
 _entry_term = dictionary._entry_term
@@ -53,7 +53,7 @@ def _build_morning_word(cid, language):
     del_row = []
     lines = []
     for w in chosen:
-        term = _cap(_entry_term(w))
+        term = normalize_term_case(_entry_term(w), dictionary._kind_of(_entry_term(w)))
         ru = _entry_translation(w)
         lines.append((term, ru))
         try:

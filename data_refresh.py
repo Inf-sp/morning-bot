@@ -67,6 +67,13 @@ async def refresh_user_database(cid):
     stoplist_items = recommendation_stoplist.migrate_legacy(cid)
 
     language_result = await learning_data_quality.refresh_dictionary(cid)
+    try:
+        import learning
+        import myday
+        learning.reset_daily_material_cache(cid)
+        myday.reset_day_cache(cid)
+    except Exception as error:
+        _log.warning("daily learning cache reset failed cid=%s: %r", cid, error)
 
     try:
         import leisure_concerts

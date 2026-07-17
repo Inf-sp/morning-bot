@@ -3,6 +3,9 @@
 import re
 
 
+_LEADING_ARTICLE_RE = re.compile(r"^(?:de|het|een|the|a|an)\s+", re.I)
+
+
 PHRASE_CORRECTIONS = {
     "waar wacht je op": {
         "term": "Waar wacht je op?",
@@ -39,6 +42,20 @@ def entry_language(entry):
 def normalize_key(text):
     return " ".join(re.findall(
         r"[\wÀ-ÖØ-öø-ÿ'-]+", str(text or "").lower(), re.UNICODE))
+
+
+def is_dictionary_word(term, kind=""):
+    """True для одиночной словарной единицы, включая вариант с артиклем."""
+    if str(kind or "").strip().casefold() in {"word", "слово"}:
+        return True
+    text = _LEADING_ARTICLE_RE.sub("", " ".join(str(term or "").split()))
+    return len(text.split()) <= 1
+
+
+def normalize_term_case(term, kind=""):
+    """Одиночные слова — строчными; регистр фраз и предложений не меняется."""
+    text = " ".join(str(term or "").split()).strip()
+    return text.lower() if text and is_dictionary_word(text, kind) else text
 
 
 def normalize_entry(entry, *, language=None):

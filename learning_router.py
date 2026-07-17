@@ -108,6 +108,8 @@ async def handle_action(bot, cid, q, act, run_with_status):
     elif act.startswith("dictseedlvl_"):
         _, lang, level = act.split("_", 2)
         await dictionary_seed.seed_set_level(bot, cid, lang, level, q=q)
+    elif act in ("dictlang_nl_keep", "dictlang_en_keep"):
+        await dictionary.send_dict_lang(bot, cid, act.split("_")[1])
     elif act in ("dictlang_nl", "dictlang_en"):
         await dictionary.send_dict_lang(bot, cid, act.rsplit("_", 1)[-1], q=q)
     elif act.startswith(("dictlang_nl_from_", "dictlang_en_from_")):

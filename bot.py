@@ -700,6 +700,16 @@ class _MenuCleanupBot(ExtBot):
             store.transient_message[key] = message_id
             store.set_persisted_transient_message_id(key, message_id)
 
+    def mark_persistent_inline_message(self, chat_id, message_id):
+        """Не снимает кнопки с полезной карточки при следующих сообщениях бота."""
+        key = str(chat_id)
+        if message_id and store.last_inline_message.get(key) == message_id:
+            store.last_inline_message.pop(key, None)
+        if message_id and store.transient_message.get(key) == message_id:
+            store.transient_message.pop(key, None)
+        if message_id:
+            store.clear_persisted_transient_message_id(key, message_id)
+
     async def _delete_transient(self, chat_id):
         key = str(chat_id)
         runtime_id = store.transient_message.pop(key, None)
@@ -736,8 +746,9 @@ class _MenuCleanupBot(ExtBot):
         except Exception:
             pass
 
-    def _post_send(self, chat_id, msg, transient=False):
-        if isinstance(getattr(msg, "reply_markup", None), InlineKeyboardMarkup):
+    def _post_send(self, chat_id, msg, transient=False, persistent_inline=False):
+        if (not persistent_inline
+                and isinstance(getattr(msg, "reply_markup", None), InlineKeyboardMarkup)):
             store.last_inline_message[str(chat_id)] = msg.message_id
         if transient:
             self.mark_transient_message(chat_id, msg.message_id)
@@ -745,12 +756,14 @@ class _MenuCleanupBot(ExtBot):
     async def send_message(self, chat_id, *args, **kwargs):
         transient = kwargs.pop("transient", False)
         preserve_previous_inline = kwargs.pop("preserve_previous_inline", False)
+        persistent_inline = kwargs.pop("persistent_inline", False)
         send = super().send_message(chat_id, *args, **kwargs)
         if preserve_previous_inline:
             msg = await send
         else:
             msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
-        self._post_send(chat_id, msg, transient=transient)
+        self._post_send(
+            chat_id, msg, transient=transient, persistent_inline=persistent_inline)
         return msg
 
     async def send_photo(self, chat_id, *args, **kwargs):

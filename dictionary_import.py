@@ -15,10 +15,18 @@ import ai
 import config
 import secure
 import store
+import util
 import verify
 import learning_dictionary as dictionary
 import learning_data_quality
-from dictionary_model import entry_language, entry_term, entry_translation, normalize_entry, normalize_key
+from dictionary_model import (
+    entry_language,
+    entry_term,
+    entry_translation,
+    normalize_entry,
+    normalize_key,
+    normalize_term_case,
+)
 from ui import dictionary as dict_ui
 from ui.constants import delete_label
 from ui.navigation import back_menu_keyboard
@@ -44,6 +52,18 @@ _DICT_QUESTION_PAYLOAD_RE = dictionary._DICT_QUESTION_PAYLOAD_RE
 def _dictionary_nav(cid, lang=None, back=None):
     code = lang if lang in ("nl", "en") else _active_language_code(cid)
     return back_menu_keyboard(back or f"a_dictlang_{code}")
+
+
+def _dict_check_stages(lang):
+    code = lang if lang in ("nl", "en") else "nl"
+    flag = "🇳🇱" if code == "nl" else "🇬🇧"
+    title = "нидерландского" if code == "nl" else "английского"
+    return (
+        (0, f"⏳ {flag} Проверяю слово для {title} словаря..."),
+        (3, f"🔍 {flag} Проверяю форму и перевод..."),
+        (8, f"🧩 {flag} Добавляю пример и формы..."),
+        (15, f"✨ {flag} Почти готово..."),
+    )
 
 
 _DICT_PAYLOAD_PREFIX_RE = dictionary._DICT_PAYLOAD_PREFIX_RE
@@ -252,9 +272,11 @@ def _dict_entry_message(entry, status="added"):
     term = entry.get("term") or ""
     if entry.get("article") and not term.lower().startswith(entry["article"].lower() + " "):
         term = f"{entry['article']} {term}"
-    term = _cap(term)
+    term = normalize_term_case(term, _kind_of(term))
     translation = _entry_translation(entry)
 
+    lang = entry.get("lang") if entry.get("lang") in ("nl", "en") else "nl"
+    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     if status == "trainer_correct":
         title = "Верно"
         emoji = "✅"
@@ -262,12 +284,17 @@ def _dict_entry_message(entry, status="added"):
         title = "Почти"
         emoji = "📝"
     elif status == "duplicate":
-        title = f"Уже есть в {_lang_loc_title(entry.get('lang'))} словаре"
-        emoji = "📚"
+        title = f"Уже есть в {_lang_loc_title(lang)} словаре!"
+        emoji = flag
+    elif status == "added":
+        title = f"Добавлено в {_lang_title(lang)} словарь!"
+        emoji = flag
+    elif status == "updated":
+        title = f"Обновлено в {_lang_loc_title(lang)} словаре!"
+        emoji = flag
     else:
-        titles = {"updated": "Обновлено", "found": "Найдено"}
-        title = titles.get(status, "Добавлено")
-        emoji = "✅" if status in ("added", "updated") else "📚"
+        title = "Найдено" if status == "found" else "Добавлено"
+        emoji = "📚"
     b.text_line(f"{emoji} ")
     b.bold(title)
     b.newline()
@@ -938,9 +965,10 @@ def _dict_tts_row(entry):
 
 def _dict_saved_kb(entry, term_key):
     lang = entry["lang"]
-    return InlineKeyboardMarkup(_dict_tts_row(entry) + [
+    return InlineKeyboardMarkup([
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
-        [InlineKeyboardButton("📋 Мой словарь", callback_data=f"a_dictlang_{lang}")],
+    ] + _dict_tts_row(entry) + [
+        [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
          InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
@@ -948,9 +976,10 @@ def _dict_saved_kb(entry, term_key):
 
 def _dict_duplicate_kb(entry, term_key):
     lang = entry["lang"]
-    return InlineKeyboardMarkup(_dict_tts_row(entry) + [
+    return InlineKeyboardMarkup([
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
-        [InlineKeyboardButton("📋 Мой словарь", callback_data=f"a_dictlang_{lang}")],
+    ] + _dict_tts_row(entry) + [
+        [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
          InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
@@ -974,12 +1003,20 @@ def _overwrite_dict_entry_fields(cid, lang, term, fields):
 async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text=""):
     """Сохраняет запись в словарь сразу, без ожидания кнопки "Добавить" - если разбор
     ошибся, запись можно удалить одной кнопкой, а не потерять, забыв подтвердить."""
+    check_lang = lang if lang in ("nl", "en") else _active_language_code(cid)
+    status_message = await util.StatusManager.start(
+        bot, cid, stages=_dict_check_stages(check_lang))
+    failed = False
     try:
         entry = await _normalize_dict_entry_full(payload, lang, source_text=source_text)
         if entry:
             entry = await _enrich_dutch_verb(entry, cid)
             entry = await learning_data_quality.check_new_entry(entry)
     except Exception:
+        failed = True
+        entry = None
+    await status_message.stop()
+    if failed:
         await bot.send_message(
             chat_id=cid, text="⚠️ Не получилось разобрать слово. Попробуй ещё раз.",
             reply_markup=_dictionary_nav(cid, lang))
@@ -996,10 +1033,14 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
     term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
     if status == "duplicate":
         kb = _dict_duplicate_kb(saved, term_key)
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+        await bot.send_message(
+            chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
+            persistent_inline=True)
         return
     kb = _dict_saved_kb(saved, term_key)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
+        persistent_inline=True)
 
 
 async def retry_pending_dict_add(bot, cid):
@@ -1045,7 +1086,9 @@ async def retry_pending_dict_add(bot, cid):
     msg = _dict_entry_message(updated, status="updated")
     term_key = _dict_item_key(updated["lang"], "", _entry_term(updated))[2]
     kb = _dict_saved_kb(updated, term_key)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
+        persistent_inline=True)
 
 
 async def cancel_pending_dict_add(bot, cid):
@@ -1070,6 +1113,7 @@ async def confirm_pending_dict_add(bot, cid):
         text=msg.text,
         entities=msg.entities,
         reply_markup=_dict_saved_kb(saved, term_key),
+        persistent_inline=True,
     )
 
 
@@ -1275,6 +1319,7 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
                 text=msg.text,
                 entities=msg.entities,
                 reply_markup=_dict_saved_kb(saved, term_key),
+                persistent_inline=True,
             )
     else:
         terms = ", ".join(e.get("term", "") for e in added_entries[:10])

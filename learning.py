@@ -6,6 +6,7 @@ import srs
 import store
 import trainer_engine
 from learning_dictionary import DictionaryRepository, entry_language, entry_term, entry_translation
+from dictionary_model import normalize_term_case
 from trainer_engine import (
     EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL_FREE,
     EXERCISE_BUILD_SENTENCE, EXERCISE_FIND_ERROR,
@@ -141,13 +142,19 @@ def build_learning_home(cid):
             "progress": progress,
         }
     kind = daily_material_type(entry)
+    raw_term = entry.get("rule") or entry_term(entry)
+    display_term = (
+        _cap(raw_term) if kind == "rule"
+        else normalize_term_case(raw_term, kind) if kind == "word"
+        else _cap(raw_term)
+    )
     examples = entry.get("examples") or []
     example = examples[0] if examples else {}
     return {
         "has_material": True,
         "lang_code": lang_code,
         "kind": kind,  # "word" | "phrase" | "construction" | "rule"
-        "term": _cap(entry.get("rule") or entry_term(entry)) if kind == "rule" else _cap(entry_term(entry)),
+        "term": display_term,
         "translation": entry_translation(entry).replace(";", ","),
         "example_text": str(example.get("text") or "").strip(),
         "example_translation": str(example.get("translation") or "").strip(),
@@ -161,6 +168,14 @@ def warm_home_cache(cid):
     """Фиксирует материал дня; AI и сеть для этого не используются."""
     select_daily_material(cid)
     return True
+
+
+def reset_daily_material_cache(cid):
+    """Сбрасывает материал дня после ручной нормализации словаря."""
+    _DAILY_MATERIAL_CACHE.pop(str(cid), None)
+    profile = store.get_profile(cid)
+    if profile.pop("learning_daily_material", None) is not None:
+        store.set_profile(cid, profile)
 
 
 # ================= ЕДИНЫЙ ТРЕНАЖЁР =================

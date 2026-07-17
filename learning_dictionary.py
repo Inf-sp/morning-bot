@@ -22,6 +22,7 @@ from dictionary_model import (
     language_code as _code,
     normalize_entry,
     normalize_key,
+    normalize_term_case,
 )
 from dictionary_repository import DictionaryRepository
 from ui import dictionary as dict_ui
@@ -48,17 +49,22 @@ def _cap(s):
     return s[:1].upper() + s[1:] if s else s
 
 def migrate_dict_caps():
-    """Разовая миграция: приводит уже сохранённые слова словаря к виду с заглавной буквы."""
+    """Совместимая миграция: приводит legacy-слова к актуальному строчному виду."""
     data = store._load(config.DICT_KEY)
     changed = False
     for cid, words in (data or {}).items():
         if not isinstance(words, list):
             continue
         for w in words:
-            if isinstance(w, dict) and w.get("word"):
-                capped = _cap(w["word"])
-                if capped != w["word"]:
-                    w["word"] = capped
+            if not isinstance(w, dict):
+                continue
+            for field in ("term", "word", "base_form"):
+                value = w.get(field)
+                if not value:
+                    continue
+                normalized = normalize_term_case(value, w.get("kind", ""))
+                if normalized != value:
+                    w[field] = normalized
                     changed = True
     if changed:
         store._save(config.DICT_KEY, data)
@@ -169,6 +175,8 @@ def _normalize_dutch_phrase(term):
 
 def _normalize_dict_term(lang, kind, term):
     term = re.sub(r"\s+", " ", (term or "").strip())
+    if kind == "word":
+        return normalize_term_case(term, kind), ""
     if lang == "nl" and kind == "phrase":
         return _normalize_dutch_phrase(term)
     return term, ""
@@ -341,16 +349,29 @@ async def migrate_dict_entries_for_srs(cid, lang):
                 words[idx].setdefault(k, v)
     store.set_list(config.DICT_KEY, cid, words)
 
-async def _show_screen(bot, cid, text, entities=None, reply_markup=None, q=None):
+async def _show_screen(
+    bot, cid, text, entities=None, reply_markup=None, q=None, persistent_inline=False,
+):
     """Навигация внутри словаря: редактирует текущее сообщение, если есть callback
     query, иначе (первый вход, текстовая команда) шлёт новое."""
     if q is not None:
         try:
             await q.message.edit_text(text, entities=entities, reply_markup=reply_markup)
+            if persistent_inline:
+                marker = getattr(bot, "mark_persistent_inline_message", None)
+                if marker is not None:
+                    marker(cid, getattr(q.message, "message_id", None))
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=reply_markup)
+    extra = {"persistent_inline": True} if persistent_inline else {}
+    await bot.send_message(
+        chat_id=cid,
+        text=text,
+        entities=entities,
+        reply_markup=reply_markup,
+        **extra,
+    )
 
 
 _DICT_ORIGIN_TO_BACK = {
@@ -415,7 +436,7 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
     for item in chunk:
         term_key = _dict_item_key(lang, "", _entry_term(item))[2]
         word_buttons.append(InlineKeyboardButton(
-            _cap(_entry_term(item))[:20],
+            normalize_term_case(_entry_term(item), _kind_of(_entry_term(item)))[:20],
             callback_data=f"a_dictview_{lang}_{page}_{term_key}",
         ))
     word_rows = [word_buttons[i:i + 2] for i in range(0, len(word_buttons), 2)]
@@ -455,8 +476,10 @@ def _dict_tts_row(entry):
 
 def _dict_search_kb(entry, term_key):
     lang = _dict_lang(entry)
-    return InlineKeyboardMarkup(_dict_tts_row(entry) + [
+    return InlineKeyboardMarkup([
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
+    ] + _dict_tts_row(entry) + [
+        [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
@@ -496,8 +519,9 @@ async def handle_dict_search(bot, cid, lang, query):
         match = await _refresh_dict_entry(cid, match)
     msg = _dict_entry_message(match, status="found")
     term_key = _dict_item_key(lang, "", _entry_term(match))[2]
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                            reply_markup=_dict_search_kb(match, term_key))
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities,
+        reply_markup=_dict_search_kb(match, term_key), persistent_inline=True)
 
 
 async def confirm_delete_dict_entry(bot, cid, lang, term_key, q=None):
@@ -546,8 +570,10 @@ def _dict_lang_entries(cid, lang):
 
 def _dict_entry_view_kb(entry, page, term_key):
     lang = _dict_lang(entry)
-    return InlineKeyboardMarkup(_dict_tts_row(entry) + [
+    return InlineKeyboardMarkup([
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictviewdel_{lang}_{page}_{term_key}")],
+    ] + _dict_tts_row(entry) + [
+        [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}_{page}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
@@ -562,7 +588,9 @@ async def send_dict_entry_view(bot, cid, lang, page, term_key, q=None):
     if _entry_needs_ai_refresh(match):
         match = await _refresh_dict_entry(cid, match)
     msg = _dict_entry_message(match, status="found")
-    await _show_screen(bot, cid, msg.text, msg.entities, _dict_entry_view_kb(match, page, term_key), q=q)
+    await _show_screen(
+        bot, cid, msg.text, msg.entities, _dict_entry_view_kb(match, page, term_key),
+        q=q, persistent_inline=True)
 
 
 async def del_word(bot, cid, i):
@@ -570,7 +598,8 @@ async def del_word(bot, cid, i):
     removed = ""
     if i < len(words):
         removed_item = words.pop(i)
-        removed = _cap(_entry_term(removed_item))
+        removed = normalize_term_case(
+            _entry_term(removed_item), _kind_of(_entry_term(removed_item)))
         store.set_list(config.DICT_KEY, cid, words)
     import settings as _s
     lang = _code(_s.study_lang(cid))

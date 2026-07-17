@@ -5,7 +5,7 @@ UI_EMOJI = {
     "books": "📖",
     "music": "🎧",
     "concerts": "🎫",
-    "wardrobe": "🧶",
+    "wardrobe": "🧵",
     "food": "🥣",
     "recipes": "🍽",
     "version": "🚀",

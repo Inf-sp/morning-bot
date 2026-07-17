@@ -13,7 +13,7 @@ import config
 import language_tool
 import storage_driver
 import store
-from dictionary_model import entry_language, entry_term, entry_translation
+from dictionary_model import entry_language, entry_term, entry_translation, normalize_term_case
 
 _SPACE_RE = re.compile(r"\s+")
 _DOUBLE_PUNCT_RE = re.compile(r"([.!?])\1+")
@@ -37,12 +37,15 @@ def _sentence(value) -> str:
     return text
 
 
-def _normalize_term(value) -> str:
+def _normalize_term(value, kind="") -> str:
     term = _clean(value)
     if term.endswith(".") and len(term.split()) <= 3:
         term = term[:-1].rstrip()
-    if term and (len(term.split()) <= 3 or term.isupper()):
-        term = term[:1].lower() + term[1:]
+    normalized_case = normalize_term_case(term, kind)
+    if normalized_case != term:
+        term = normalized_case
+    elif term.isupper():
+        term = term.lower()
     return term
 
 
@@ -77,12 +80,12 @@ def normalize_entry(raw) -> tuple[dict, bool]:
     """Migrate legacy field names and deterministic formatting only."""
     source = dict(raw) if isinstance(raw, dict) else {"term": str(raw or "")}
     before = dict(source)
-    term = _normalize_term(entry_term(source))
+    term = _normalize_term(entry_term(source), source.get("kind", ""))
     article = _clean(source.get("article")).casefold()
     article_match = _ARTICLE_RE.match(term)
     if article_match:
         article = article or article_match.group(1).casefold()
-        term = _normalize_term(term[article_match.end():])
+        term = _normalize_term(term[article_match.end():], "word")
     if article not in ("de", "het", "een"):
         article = ""
 
