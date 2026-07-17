@@ -147,7 +147,10 @@ def learning_menu(home: dict):
             "construction": "Конструкция дня",
             "rule": "Правило дня",
         }.get(kind, "Фраза дня")
-        b.label(material_label, home["term"], lowercase=False)
+        if kind == "construction":
+            b.text_line(home["term"])
+        else:
+            b.label(material_label, home["term"], lowercase=False)
         if kind != "rule" and home.get("translation"):
             b.text_line(" → ")
             b.add(finish_dot(home["translation"]), MessageEntity.SPOILER)
@@ -179,7 +182,7 @@ def health_menu(focus: dict):
     b.bold("⚡️ Фокус на сегодня · Здоровье")
     b.newline()
     b.spacer()
-    b.labeled_line("Настрой", focus.get("phrase", ""), lowercase=False)
+    b.line(focus.get("phrase", ""))
     b.spacer()
     b.bold("Что сделать:")
     b.newline()

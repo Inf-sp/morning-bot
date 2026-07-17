@@ -91,4 +91,4 @@ async def send_food_menu(bot, cid, status=None, refresh=False):
     except Exception as error:
         if owns_status:
             await status.stop(delete=True)
-        await verify.safe_error(bot, cid, error)
+        await verify.safe_error(bot, cid, error, back="m_menu")

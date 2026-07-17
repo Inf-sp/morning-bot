@@ -354,7 +354,7 @@ _HOME_FORMAL_IMPERATIVE_RE = re.compile(r"\b[а-яё]+(?:йте|ите)\b", re.I
 
 def _home_meal_for_hour(hour: int) -> str:
     """Тип блюда для главного экрана по локальному времени пользователя/бота."""
-    if 5 <= hour < 12:
+    if 6 <= hour < 12:
         return "breakfast"
     if 12 <= hour < 18:
         return "lunch"
@@ -578,6 +578,8 @@ def _normalize_home_idea(data, context: dict) -> dict:
     tip = _home_useful_tip(data.get("tip"))
     pairing_wine = " ".join(str(data.get("pairing_wine") or "").split())[:80]
     pairing_drink = " ".join(str(data.get("pairing_drink") or "").split())[:100]
+    if context.get("meal") == "breakfast":
+        pairing_wine = ""
     if pairing_wine and not re.search(r"[а-яё]", pairing_wine, re.I):
         pairing_wine = ""
     if pairing_drink and not re.search(r"[а-яё]", pairing_drink, re.I):
@@ -676,7 +678,7 @@ def _home_idea_context(cid, now=None) -> dict:
     cuisine_codes = cooking_settings.cuisines(cid)
     signature_data = {
         "date": now.date().isoformat(),
-        "home_copy_version": 7,
+        "home_copy_version": 8,
         "meal": meal,
         "available": available,
         "unavailable": unavailable,
@@ -750,7 +752,8 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
         "При пустом холодильнике формулировка нейтральная.\n"
         "• tip — один конкретный приём именно для этого блюда с понятной техникой или результатом. "
         "Запрещены общие советы вроде «добавь чеснок и лук для аромата».\n"
-        "• pairing_wine — одно сочетание только из pairing_wines выбранного рецепта; если список пуст, верни пустую строку.\n"
+        "• Для завтрака pairing_wine всегда пустой. Для обеда и ужина — одно сочетание только из "
+        "pairing_wines выбранного рецепта; если список пуст, верни пустую строку.\n"
         "• pairing_drink — один конкретный безалкогольный напиток, подходящий к блюду; без пояснений и общих слов. "
         "Все сочетания пиши по-русски, не используй английские названия вроде white wine.\n"
         "• Во всём тексте обращайся только на «ты»: «приготовь», «обжарь», «добавь». "
@@ -866,6 +869,8 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
                 break
     if not _home_idea_complete(idea):
         idea = _home_local_idea(context)
+    if context["meal"] == "breakfast":
+        idea = {**idea, "pairing_wine": ""}
     if not _home_idea_complete(idea):
         raise ValueError("Неполный рецепт для главного экрана Готовки")
     # За время AI-запроса профиль мог измениться в другом сценарии. Перечитываем его,

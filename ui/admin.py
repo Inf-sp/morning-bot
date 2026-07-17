@@ -58,22 +58,15 @@ def deploy_report(version, title, release_notes):
 
 # ================= ДОМ =================
 
-def home(system_dot, system_text, system_line, notif_line, users_line, data_line,
-         logs_line, updated_at, stale=False):
+def home(status_dot, status_text, updated_at, stale=False):
     b = MessageBuilder()
     b.bold(ui_label("admin", "Админ"))
     b.newline()
     b.spacer()
-    b.line(f"{system_dot} {system_text}")
-    b.spacer()
-    b.line(f"📊 Система · {system_line}")
-    b.line(f"🔔 Уведомления · {notif_line}")
-    b.line(f"👨🏻‍💻 Пользователи · {users_line}")
-    b.line(f"🗄 Данные · {data_line}")
-    b.line(f"⚠️ Ошибки · {logs_line}")
-    b.spacer()
-    suffix = " · данные устарели" if stale else ""
-    b.line(f"Обновлено в {updated_at}{suffix}")
+    if stale:
+        b.line(f"{status_dot} Состояние неизвестно · данные от {updated_at}")
+    else:
+        b.line(f"{status_dot} {status_text} · обновлено в {updated_at}")
     return b.build_stripped()
 
 

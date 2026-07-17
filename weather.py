@@ -669,7 +669,7 @@ async def set_city_text(bot, cid, name, show_brief=True):
             except Exception:
                 pass
     except Exception as e:
-        await verify.safe_error(bot, cid, e)
+        await verify.safe_error(bot, cid, e, back="m_myday")
 
 async def location_handler(update, context):
     cid = update.effective_chat.id

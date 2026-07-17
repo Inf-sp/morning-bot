@@ -452,7 +452,7 @@ def _word_of_day(cid):
     ru = dictionary.entry_translation(entry).replace(";", ",")
     return f"{_cap(term)} → {_cap(ru)}.", lang
 
-_DAY_CACHE_VERSION = 3
+_DAY_CACHE_VERSION = 5
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
@@ -549,6 +549,10 @@ def _build_day_text(cid):
     weekday_name = _WEEKDAY_SHORT[now.weekday()]
     is_weekend = now.weekday() >= 5
     word_line, word_lang = _word_of_day(cid)
+    import balance
+    import wardrobe
+    mood = balance.health_focus(cid).get("phrase", "")
+    outfit_items = wardrobe.get_cached_outfit_items(cid)
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     _hack_cat, hack_text = daily_lifehack(
@@ -571,6 +575,8 @@ def _build_day_text(cid):
         humidity_line=f"{hum_title} · {hum_line}" if hum_title else "",
         word_line=word_line,
         word_lang=word_lang,
+        mood=mood,
+        outfit_items=outfit_items,
         lifehack=hack_text,
         quote_text=quote_text,
         quote_author=quote_author,
@@ -622,7 +628,7 @@ async def send_plany(bot, cid, force=False, show_loading=True):
         try:
             text, entities = await asyncio.to_thread(_build_day_text, cid)
         except Exception as e:
-            await verify.safe_error(bot, cid, e); return
+            await verify.safe_error(bot, cid, e, back="m_myday"); return
         cache = _save_day_cache(cid, today, text, entities, _time.time())
     cached = cache
     await bot.send_message(

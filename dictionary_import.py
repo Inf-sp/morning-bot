@@ -21,6 +21,7 @@ import learning_data_quality
 from dictionary_model import entry_language, entry_term, entry_translation, normalize_entry, normalize_key
 from ui import dictionary as dict_ui
 from ui.constants import delete_label
+from ui.navigation import back_menu_keyboard
 
 _log = logging.getLogger(__name__)
 _cap = dictionary._cap
@@ -38,6 +39,13 @@ _DICT_LEADING_RE = dictionary._DICT_LEADING_RE
 _DICT_LANG_RE = dictionary._DICT_LANG_RE
 _DICT_KIND_RE = dictionary._DICT_KIND_RE
 _DICT_QUESTION_PAYLOAD_RE = dictionary._DICT_QUESTION_PAYLOAD_RE
+
+
+def _dictionary_nav(cid, lang=None, back=None):
+    code = lang if lang in ("nl", "en") else _active_language_code(cid)
+    return back_menu_keyboard(back or f"a_dictlang_{code}")
+
+
 _DICT_PAYLOAD_PREFIX_RE = dictionary._DICT_PAYLOAD_PREFIX_RE
 _DICT_EMPTY_PAYLOAD = dictionary._DICT_EMPTY_PAYLOAD
 _DICT_LEADING_ADD_VERB_RE = dictionary._DICT_LEADING_ADD_VERB_RE
@@ -972,12 +980,15 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
             entry = await _enrich_dutch_verb(entry, cid)
             entry = await learning_data_quality.check_new_entry(entry)
     except Exception:
-        await bot.send_message(chat_id=cid, text="⚠️ Не получилось разобрать слово. Попробуй ещё раз.")
+        await bot.send_message(
+            chat_id=cid, text="⚠️ Не получилось разобрать слово. Попробуй ещё раз.",
+            reply_markup=_dictionary_nav(cid, lang))
         return
     if not entry:
         await bot.send_message(
             chat_id=cid,
             text="Не уверена в форме или переводе. Пришли так: de kater → похмелье.",
+            reply_markup=_dictionary_nav(cid, lang),
         )
         return
     status, saved = _save_normalized_dict_entry(cid, entry)
@@ -995,7 +1006,9 @@ async def retry_pending_dict_add(bot, cid):
     """Совместимость со старыми сообщениями, где ещё была смена перевода."""
     entry = store.dict_pending_add.get(str(cid))
     if not entry:
-        await bot.send_message(chat_id=cid, text="Уточнение устарело. Пришли слово ещё раз.")
+        await bot.send_message(
+            chat_id=cid, text="Уточнение устарело. Пришли слово ещё раз.",
+            reply_markup=_dictionary_nav(cid))
         return
     seen = entry.get("_seen_translations") or [entry.get("translation", "")]
     try:
@@ -1007,11 +1020,17 @@ async def retry_pending_dict_add(bot, cid):
             new_entry = await _enrich_dutch_verb(new_entry, cid)
             new_entry = await learning_data_quality.check_new_entry(new_entry)
     except Exception:
-        await bot.send_message(chat_id=cid, text="⚠️ Не получилось получить другой вариант. Попробуй ещё раз.")
+        await bot.send_message(
+            chat_id=cid, text="⚠️ Не получилось получить другой вариант. Попробуй ещё раз.",
+            reply_markup=_dictionary_nav(cid, entry.get("lang")))
         return
     if not new_entry or new_entry["translation"] in seen:
         term_key = _dict_item_key(entry["lang"], "", _entry_term(entry))[2]
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelok_{entry['lang']}_{term_key}")]])
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelok_{entry['lang']}_{term_key}")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{entry['lang']}"),
+             InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        ])
         await bot.send_message(chat_id=cid, text="Больше вариантов перевода не нашлось.", reply_markup=kb)
         return
     updated = _overwrite_dict_entry_fields(cid, entry["lang"], entry["term"], {
@@ -1031,13 +1050,16 @@ async def retry_pending_dict_add(bot, cid):
 
 async def cancel_pending_dict_add(bot, cid):
     store.dict_pending_add.pop(str(cid), None)
-    await bot.send_message(chat_id=cid, text="Отменено.")
+    await bot.send_message(
+        chat_id=cid, text="Отменено.", reply_markup=_dictionary_nav(cid))
 
 
 async def confirm_pending_dict_add(bot, cid):
     entry = store.dict_pending_add.pop(str(cid), None)
     if not entry:
-        await bot.send_message(chat_id=cid, text="Уточнение устарело. Пришли слово ещё раз.")
+        await bot.send_message(
+            chat_id=cid, text="Уточнение устарело. Пришли слово ещё раз.",
+            reply_markup=_dictionary_nav(cid))
         return
     entry = await learning_data_quality.check_new_entry(entry)
     status, saved = _save_normalized_dict_entry(cid, entry)
@@ -1123,10 +1145,12 @@ async def _extract_dict_topics(text, lang="nl"):
     return out
 
 
-def _dict_batch_preview_kb():
+def _dict_batch_preview_kb(lang):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Добавить всё", callback_data="a_dictbatch_add")],
         [InlineKeyboardButton("❌ Не добавлять", callback_data="a_dictbatch_cancel")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
+         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 
@@ -1138,6 +1162,7 @@ async def offer_dict_topics_from_text(bot, cid, text, lang="nl"):
         await bot.send_message(
             chat_id=cid,
             text="Не нашла в тексте ничего подходящего для словаря.",
+            reply_markup=_dictionary_nav(cid, lang),
         )
         return
     store.dict_pending_batch[str(cid)] = {"lang": lang, "items": topics, "source_text": text}
@@ -1145,14 +1170,16 @@ async def offer_dict_topics_from_text(bot, cid, text, lang="nl"):
     await bot.send_message(
         chat_id=cid,
         text=f"📚 Добавить в словарь?\n\n{lines}",
-        reply_markup=_dict_batch_preview_kb(),
+        reply_markup=_dict_batch_preview_kb(lang),
     )
 
 
 async def confirm_dict_batch(bot, cid):
     pending = store.dict_pending_batch.pop(str(cid), None)
     if not pending:
-        await bot.send_message(chat_id=cid, text="Подборка устарела. Пришли текст ещё раз.")
+        await bot.send_message(
+            chat_id=cid, text="Подборка устарела. Пришли текст ещё раз.",
+            reply_markup=_dictionary_nav(cid))
         return
     lang = pending.get("lang", "nl")
     text = "\n".join(it["term"] for it in pending.get("items") or [])
@@ -1161,7 +1188,8 @@ async def confirm_dict_batch(bot, cid):
 
 async def cancel_dict_batch(bot, cid):
     store.dict_pending_batch.pop(str(cid), None)
-    await bot.send_message(chat_id=cid, text="Хорошо, не добавляю.")
+    await bot.send_message(
+        chat_id=cid, text="Хорошо, не добавляю.", reply_markup=_dictionary_nav(cid))
 
 
 async def _offer_manual_batch_preview(bot, cid, lines, lang):
@@ -1173,7 +1201,7 @@ async def _offer_manual_batch_preview(bot, cid, lines, lang):
     await bot.send_message(
         chat_id=cid,
         text=f"📚 Добавить в словарь?\n\n{preview}",
-        reply_markup=_dict_batch_preview_kb(),
+        reply_markup=_dict_batch_preview_kb(lang),
     )
 
 
@@ -1189,7 +1217,9 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
     lines = [_strip_leading_add_verb(x) for x in re.split(r"[\n;]+", text or "")]
     lines = [x for x in lines if x]
     if not lines:
-        await bot.send_message(chat_id=cid, text="Не удалось распознать слова. Попробуй ещё раз.")
+        await bot.send_message(
+            chat_id=cid, text="Не удалось распознать слова. Попробуй ещё раз.",
+            reply_markup=_dictionary_nav(cid, lang))
         return
     if not detailed_confirmation and _looks_like_free_text(lines):
         await offer_dict_topics_from_text(bot, cid, text, lang)
@@ -1223,13 +1253,18 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
 
     if not added_entries:
         if duplicate_entries:
-            await bot.send_message(chat_id=cid, text="Эти слова или фразы уже есть в словаре."); return
+            await bot.send_message(
+                chat_id=cid, text="Эти слова или фразы уже есть в словаре.",
+                reply_markup=_dictionary_nav(cid, lang)); return
         if unrecognized_lines:
             await bot.send_message(chat_id=cid,
                 text="Не уверена в форме или переводе: " + ", ".join(unrecognized_lines[:10]) +
-                     ". Пришли так: de kater → похмелье.")
+                     ". Пришли так: de kater → похмелье.",
+                reply_markup=_dictionary_nav(cid, lang))
             return
-        await bot.send_message(chat_id=cid, text="Не удалось распознать слова. Попробуй ещё раз."); return
+        await bot.send_message(
+            chat_id=cid, text="Не удалось распознать слова. Попробуй ещё раз.",
+            reply_markup=_dictionary_nav(cid, lang)); return
 
     if len(added_entries) <= _BATCH_CARD_LIMIT:
         for saved in added_entries:
@@ -1248,7 +1283,8 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
             text=f"📚 Добавлено {len(added_entries)}: {terms}{more}")
     if unrecognized_lines:
         await bot.send_message(chat_id=cid,
-            text="⚠️ Не удалось распознать: " + ", ".join(unrecognized_lines[:10]))
+            text="⚠️ Не удалось распознать: " + ", ".join(unrecognized_lines[:10]),
+            reply_markup=_dictionary_nav(cid, lang))
     await send_dict_lang(bot, cid, lang)
 
 

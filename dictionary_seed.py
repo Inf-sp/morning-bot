@@ -17,6 +17,7 @@ from dictionary_seed_ui import (
     render_text as _seed_render_text,
     level_keyboard as _seed_level_keyboard,
 )
+from ui.navigation import back_menu_keyboard
 
 _DICT_SEED_LIMIT = 30
 _dict_item_key = dictionary._dict_item_key
@@ -142,11 +143,14 @@ async def seed_start(bot, cid, lang=None, kind="word", q=None):
         )
         if q is not None:
             try:
-                await q.message.edit_text(text)
+                await q.message.edit_text(
+                    text, reply_markup=back_menu_keyboard(f"a_dictlang_{code}"))
                 return
             except Exception:
                 pass
-        await bot.send_message(chat_id=cid, text=text)
+        await bot.send_message(
+            chat_id=cid, text=text,
+            reply_markup=back_menu_keyboard(f"a_dictlang_{code}"))
         return
     st = {
         "lang": code,
@@ -235,10 +239,14 @@ async def seed_set_level(bot, cid, lang, level, q=None):
 async def seed_add_selected(bot, cid, q=None):
     st = _seed_state_get(cid)
     if not st:
-        await bot.send_message(chat_id=cid, text="Подборка устарела. Открой словарь заново.")
+        await bot.send_message(
+            chat_id=cid, text="Подборка устарела. Открой словарь заново.",
+            reply_markup=back_menu_keyboard("m_learn"))
         return
     if st.get("confirmed"):
-        await bot.send_message(chat_id=cid, text="Эта подборка уже обработана.")
+        await bot.send_message(
+            chat_id=cid, text="Эта подборка уже обработана.",
+            reply_markup=back_menu_keyboard("m_learn"))
         return
     st["confirmed"] = True
     _seed_state_set(cid, st)
@@ -275,7 +283,7 @@ async def seed_add_selected(bot, cid, q=None):
         ])
     else:
         text = "Ничего не отмечено — словарь не изменился."
-        kb = None
+        kb = back_menu_keyboard(f"a_dictlang_{lang}")
     if q is not None:
         try:
             await q.message.edit_text(text, reply_markup=kb)

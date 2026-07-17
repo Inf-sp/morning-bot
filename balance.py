@@ -270,7 +270,7 @@ async def _send_doctor_card(bot, cid, data, kb=None):
 
 async def doctor_answer(bot, cid, symptoms):
     if secure.is_dangerous_med(symptoms):
-        await verify.safe_send(bot, cid, secure.CRISIS_MSG, surface="health")
+        await verify.safe_send(bot, cid, secure.CRISIS_MSG, surface="health", back="m_balance")
         return
     await bot.send_chat_action(chat_id=cid, action="typing")
     safe_symptoms = secure.wrap_untrusted(symptoms, "симптомы пользователя")
@@ -311,13 +311,13 @@ async def handle_role(bot, cid, role, text):
     if role == "doctor":
         await doctor_answer(bot, cid, text); return
     if secure.is_dangerous_med(text):
-        await verify.safe_send(bot, cid, secure.CRISIS_MSG, surface="health"); return
+        await verify.safe_send(bot, cid, secure.CRISIS_MSG, surface="health", back="m_balance"); return
     await bot.send_chat_action(chat_id=cid, action="typing")
     try:
         route = "gemini"
         out = await ai.allm(_role_system(role) + "\n\nЗапрос пользователя:\n" + text, 1500, 0.7, route=route)
     except Exception as e:
-        await verify.safe_error(bot, cid, e); return
+        await verify.safe_error(bot, cid, e, back="m_balance"); return
     store.last_action[str(cid)] = ("role", role, text)
     cont = ("✨ Ещё совет", "chat_retry") if role == "state" else ("Продолжить", "chat_retry")
     await _send(bot, cid, out, kb=_ans_kb(*cont), surface="chat" if role == "state" else "card")
@@ -376,7 +376,7 @@ async def retry(bot, cid, status=None):
     try:
         answer = await ai.achat_chain(nudge, cid)
     except Exception as e:
-        await verify.safe_error(bot, cid, e); return
+        await verify.safe_error(bot, cid, e, back="m_balance"); return
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
     await _send(bot, cid, answer, surface="chat")
@@ -399,5 +399,5 @@ async def reword(bot, cid, mode):
     try:
         out = await ai.allm(prompt, 1200, 0.6, tier=tier)
     except Exception as e:
-        await verify.safe_error(bot, cid, e); return
+        await verify.safe_error(bot, cid, e, back="m_balance"); return
     await _send(bot, cid, out, surface=surface)

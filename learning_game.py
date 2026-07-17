@@ -7,6 +7,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import ai
 import secure
 import store
+from ui.navigation import back_menu_keyboard
 
 
 LEVEL_LABELS = {"simple": "Простой", "medium": "Средний", "hard": "Сложный"}
@@ -237,10 +238,14 @@ async def send_game(bot, cid):
             if cand.get("answer"):
                 recent = recent + [cand.get("answer", "")] + list(cand.get("aliases") or [])
         if not d:
-            await bot.send_message(chat_id=cid, text="Не смог загадать новое без повтора. Попробуй ещё раз через минуту.")
+            await bot.send_message(
+                chat_id=cid,
+                text="Не смог загадать новое без повтора. Попробуй ещё раз через минуту.",
+                reply_markup=back_menu_keyboard("m_learn"),
+            )
             return
     except Exception as e:
-        await verify.safe_error(bot, cid, e); return
+        await verify.safe_error(bot, cid, e, back="m_learn"); return
     _remember_game_answer(cid, d)
     hints = [_dot(h) for h in [d.get("hint"), d.get("hint2")] if (h or "").strip()]
     store.game_state[str(cid)] = {"answer": d.get("answer", ""), "aliases": d.get("aliases", []),
@@ -334,4 +339,3 @@ async def game_reveal(bot, cid, q):
     except Exception:
         pass
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-

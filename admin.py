@@ -230,19 +230,9 @@ def _mark_logs_viewed(cid, errors):
         _log.warning("failed to save log cursor for admin %s", cid, exc_info=True)
 
 
-def _users_summary_line(stats):
-    line = f"всего {stats['total']}"
-    if stats["active_today"]:
-        line += f" · активны сегодня {stats['active_today']}"
-    if stats["new_today"]:
-        line += f" · новых {stats['new_today']}"
-    return line
-
-
 # ================= ДОМ =================
 
 async def send_home(bot, cid, q=None):
-    stats = _user_stats()
     states = service_monitor.states()
     system = _system_summary(states)
     notif = _notification_stats(cid)
@@ -262,50 +252,23 @@ async def send_home(bot, cid, q=None):
         telegram.get("status") in (service_monitor.WARNING, service_monitor.UNKNOWN),
         logs["count"], stale,
     ))
-    if critical:
+    if stale:
+        dot, status_text = ui.UNKNOWN, "Состояние неизвестно"
+    elif critical:
         dot, status_text = ui.BAD, "Требуется внимание"
     elif limited:
         dot, status_text = ui.WARN, "Работает с ограничениями"
     else:
         dot, status_text = ui.OK, "Всё работает"
 
-    if telegram_down:
-        notif_line = "отправка недоступна"
-    elif notif["sent_today"]:
-        notif_line = f"отправлено {notif['sent_today']} сегодня"
-        if notif["errors_today"]:
-            noun = _plural(notif["errors_today"], "не доставлено", "не доставлены", "не доставлены")
-            notif_line += f" · {notif['errors_today']} {noun}"
-        else:
-            notif_line += " · ошибок нет"
-    elif notif["errors_today"]:
-        noun = _plural(notif["errors_today"], "не доставлено", "не доставлены", "не доставлены")
-        notif_line = f"{notif['errors_today']} {noun}"
-    else:
-        notif_line = "сегодня не отправлялись"
-
-    users_line = _users_summary_line(stats)
-
-    if logs["critical"]:
-        count = logs["critical"]
-        noun = _plural(count, "критическая ошибка", "критические ошибки", "критических ошибок")
-        logs_line = f"{count} {noun}"
-    elif logs["count"]:
-        count = logs["count"]
-        noun = _plural(count, "новая ошибка", "новые ошибки", "новых ошибок")
-        logs_line = f"{count} {noun}"
-    else:
-        logs_line = "новых ошибок нет"
-
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🛠 Система", callback_data="adm_api_ai")],
-        [InlineKeyboardButton(ui_label("users", "Пользователи"), callback_data="adm_users")],
+        [InlineKeyboardButton("🛠 Система", callback_data="adm_api_ai"),
+         InlineKeyboardButton(ui_label("users", "Пользователи"), callback_data="adm_users")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
     msg = ui.home(
-        system_dot=dot, system_text=status_text, system_line=system["line"],
-        notif_line=notif_line, users_line=users_line, data_line=database["line"],
-        logs_line=logs_line, updated_at=_updated_at(latest_check or time.time()), stale=stale,
+        status_dot=dot, status_text=status_text,
+        updated_at=_updated_at(latest_check or time.time()), stale=stale,
     )
     await _show(bot, cid, msg, kb, q)
 

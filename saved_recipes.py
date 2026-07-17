@@ -8,6 +8,7 @@ import util
 from recipe_state import bump_cuisine_weight
 from ui import food as food_ui
 from ui.constants import delete_label
+from ui.navigation import back_menu_keyboard
 
 _food_card = lambda data, label="Рецепт": food_ui.food_card(data, label=label)
 
@@ -58,7 +59,9 @@ async def send_my_recipe_full(bot, cid, idx):
     cid_s = str(cid)
     recipes = store.get_list(config.MY_RECIPES_KEY, cid_s)
     if idx >= len(recipes):
-        await bot.send_message(chat_id=cid, text="Рецепт не найден."); return
+        await bot.send_message(
+            chat_id=cid, text="Рецепт не найден.",
+            reply_markup=back_menu_keyboard("as_my_recipes")); return
     d = recipes[idx]
     store.last_recipe[cid_s] = d
     card = _food_card(d, label="Рецепт")

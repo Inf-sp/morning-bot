@@ -84,7 +84,8 @@ def _apply_graders(text, surface, rain_real):
 
 
 # ================= БЕЗОПАСНАЯ ОТПРАВКА / ОШИБКИ =================
-async def safe_send(bot, cid, text, *, surface="card", rain_real=None, reply_markup=None):
+async def safe_send(bot, cid, text, *, surface="card", rain_real=None, reply_markup=None,
+                    back="m_menu"):
     """Прогоняет грейдеры под surface, чистит markdown->HTML и шлёт с откатом на plain."""
     import util
     text = (text or "").strip() or "Пусто, попробуй ещё раз."
@@ -96,6 +97,9 @@ async def safe_send(bot, cid, text, *, surface="card", rain_real=None, reply_mar
     # Telegram Bot API 2026 supports long bot messages with client-side "Show More".
     # Keep a safety margin below the documented 32768 chars.
     chunks = [html[i:i + 32000] for i in range(0, len(html), 32000)] or [html]
+    if reply_markup is None:
+        from ui.navigation import back_menu_keyboard
+        reply_markup = back_menu_keyboard(back)
     for i, c in enumerate(chunks):
         markup = reply_markup if i == len(chunks) - 1 else None
         try:
@@ -122,7 +126,7 @@ def _origin_module(exc) -> str:
     return ""
 
 
-async def safe_error(bot, cid, exc, *, skill=None):
+async def safe_error(bot, cid, exc, *, skill=None, back="m_menu"):
     """Полную ошибку - в логи, пользователю - нейтральный текст. Никогда не показываем str(exc)."""
     import traceback
     _log.error("[error] %r", exc, exc_info=True)
@@ -149,9 +153,14 @@ async def safe_error(bot, cid, exc, *, skill=None):
     else:
         out = "⚠️ Что-то пошло не так. Попробуй ещё раз через минуту."
     try:
-        await bot.send_message(chat_id=cid, text=out)
+        from ui.navigation import back_menu_keyboard
+        await bot.send_message(
+            chat_id=cid, text=out, reply_markup=back_menu_keyboard(back))
     except Exception:
-        pass
+        try:
+            await bot.send_message(chat_id=cid, text=out)
+        except Exception:
+            pass
 
 
 # ================= АУДИТ CALLBACK'ОВ (advisory eval) =================

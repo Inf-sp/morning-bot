@@ -16,6 +16,7 @@ import secure
 import store
 import util
 from ui import leisure as leisure_ui
+from ui.navigation import back_menu_keyboard
 
 _log = logging.getLogger(__name__)
 
@@ -728,11 +729,16 @@ async def find_concerts(bot, cid, mode="home"):
     if not config.TICKETMASTER_API_KEY:
         await bot.send_message(chat_id=cid,
             text="Поиск мероприятий требует бесплатный ключ Ticketmaster.\n"
-                 "Заведи его на developer.ticketmaster.com и добавь на Railway переменную TICKETMASTER_API_KEY.")
+                 "Заведи его на developer.ticketmaster.com и добавь на Railway переменную TICKETMASTER_API_KEY.",
+            reply_markup=back_menu_keyboard("m_leisure"))
         return
     artists = _ensure_artists(cid)
     if not artists:
-        await bot.send_message(chat_id=cid, text="Не удалось загрузить артистов. Добавь их в настройках.")
+        await bot.send_message(
+            chat_id=cid,
+            text="Не удалось загрузить артистов. Добавь их в настройках.",
+            reply_markup=back_menu_keyboard("m_leisure"),
+        )
         return
     s = store.get_settings(cid)
     home_cc = (s.get("cc") or "NL").upper()

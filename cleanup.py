@@ -23,6 +23,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import recommendation_stoplist
 import store
+from fridge_model import _CAT_BTN_LABEL, _CAT_ORDER, _fridge_migrate
 from util import esc
 from ui.constants import choose_label, delete_label, ui_label
 
@@ -152,6 +153,7 @@ def _is_view_ctx(ctx):
             or ctx.startswith("lv_") or ctx.startswith("lvls_")
             or ctx.startswith("hid_")
             or ctx.startswith("d_") or ctx in ("wl", "rl")
+            or ctx.startswith("fridge_cat_")
             or ctx in ("fridge", "recipes", "diary"))
 
 
@@ -167,6 +169,8 @@ def _primary_action(ctx):
     cfg = _collection_cfg(ctx)
     if cfg and cfg.get("actions"):
         return cfg["actions"][0]
+    if ctx.startswith("fridge_cat_"):
+        return {"id": "remove", "label": "Удалить продукты", "confirm": True}
     return None
 
 
@@ -199,6 +203,8 @@ def _view_store_key(ctx):
     if ctx == "rl":
         return config.READLIST_KEY
     if ctx == "fridge":
+        return config.FRIDGE_KEY
+    if ctx.startswith("fridge_cat_"):
         return config.FRIDGE_KEY
     if ctx == "recipes":
         return config.MY_RECIPES_KEY
@@ -417,7 +423,7 @@ def _action_label(ctx):
         return "Удалить вещи"
     if ctx == "recipes":
         return "Удалить рецепты"
-    if ctx == "fridge":
+    if ctx == "fridge" or ctx.startswith("fridge_cat_"):
         return "Удалить продукты"
     if ctx in ("wl", "rl"):
         return "Убрать из просмотренного"
@@ -568,6 +574,25 @@ def _cleanup_delete(cid, ctx):
 def _view_items(ctx, cid):
     """(заголовок, items=[(full_id, label)], back_callback) для view-контекста —
     id стабильны (store.ensure_list_ids), не позиционные индексы."""
+    if ctx.startswith("fridge_cat_"):
+        try:
+            category_index = int(ctx.rsplit("_", 1)[-1])
+            if not 0 <= category_index < len(_CAT_ORDER):
+                raise IndexError
+            category = _CAT_ORDER[category_index]
+        except (ValueError, IndexError):
+            return "Продукты", [], "as_fridge"
+        raw = store.get_list(config.FRIDGE_KEY, cid)
+        migrated = _fridge_migrate(raw)
+        if migrated != raw:
+            store.set_list(config.FRIDGE_KEY, cid, migrated)
+        records = store.ensure_list_ids(config.FRIDGE_KEY, cid)
+        items = [
+            (record["id"], _view_label(record))
+            for record in records
+            if record.get("cat") == category
+        ]
+        return _CAT_BTN_LABEL[category], items, f"as_fridge_cat_{category_index}_0"
     cfg = _collection_cfg(ctx)
     if cfg:
         records = _collection_records(cfg, cid)

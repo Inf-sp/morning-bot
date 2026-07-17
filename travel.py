@@ -174,7 +174,7 @@ async def send_go(bot, cid):
         if d is None:
             d = cand
     except Exception as e:
-        await verify.safe_error(bot, cid, e); return
+        await verify.safe_error(bot, cid, e, back="m_travel"); return
     facts = await asyncio.to_thread(research.country_facts, d.get("country", ""))
     if facts.get("cc"):
         d["flag"] = util.flag_from_cc(facts["cc"]) or d.get("flag", "")
@@ -250,7 +250,7 @@ async def send_plan(bot, cid):
     try:
         p = await ai.allm_json(prompt, 1100, tier="leisure", module="travel")
     except Exception as e:
-        await verify.safe_error(bot, cid, e); return
+        await verify.safe_error(bot, cid, e, back="m_travel"); return
     if facts.get("cc"):
         p["flag"] = util.flag_from_cc(facts["cc"]) or p.get("flag", "")
     if rfact:
@@ -539,7 +539,7 @@ async def _run_facts_flow(bot, cid, country_info, more):
     try:
         facts, sources, reason = await _generate_facts_batch(name_for_search, avoid_titles)
     except Exception as e:
-        await verify.safe_error(bot, cid, e)
+        await verify.safe_error(bot, cid, e, back="m_travel")
         return
     if not facts:
         if reason == "search_failed":

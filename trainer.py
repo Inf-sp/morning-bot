@@ -37,6 +37,7 @@ from trainer_engine import (
 )
 from ui import learning as learning_ui
 from ui.constants import delete_label
+from ui.navigation import back_menu_keyboard
 
 
 def _learning():
@@ -134,8 +135,11 @@ async def start(bot, cid, language, mode=None):
     repository.apply_known_corrections(lang_code)
     repository.repair_training_state(lang_code)
     if not repository.training_entries(lang_code):
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(
-            "📖 Открыть словарь", callback_data=f"a_dictlang_{lang_code}_from_menu")]])
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📖 Открыть словарь", callback_data=f"a_dictlang_{lang_code}_from_menu")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"),
+             InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        ])
         await bot.send_message(
             chat_id=cid,
             text=f"{'🇳🇱' if lang_code == 'nl' else '🇬🇧'} В словаре нет слов или фраз с переводом. Добавь записи через словарь.",
@@ -144,7 +148,9 @@ async def start(bot, cid, language, mode=None):
         return
     queue = trainer_engine.build_training_queue(repository.training_entries(lang_code))
     if not queue:
-        await bot.send_message(chat_id=cid, text="Не получилось собрать тренировку. Попробуй ещё раз.")
+        await bot.send_message(
+            chat_id=cid, text="Не получилось собрать тренировку. Попробуй ещё раз.",
+            reply_markup=back_menu_keyboard("m_learn"))
         return
     trainer_session.start(cid, language, queue, _new_session())
     await _render_next(bot, cid)
@@ -153,7 +159,9 @@ async def start(bot, cid, language, mode=None):
 async def _render_next(bot, cid):
     state = trainer_session.get(cid)
     if not state:
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново.")
+        await bot.send_message(
+            chat_id=cid, text="Тренажёр устарел, открой заново.",
+            reply_markup=back_menu_keyboard("m_learn"))
         return
     if state["session"]["total"] >= state["session"].get(
         "max_exercises", trainer_engine.DEFAULT_QUEUE_SIZE,
@@ -290,7 +298,9 @@ async def _apply_result(bot, cid, state, grade, message):
 async def confirm_delete_current(bot, cid):
     state = trainer_session.get(cid)
     if not state or not state.get("current"):
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново.")
+        await bot.send_message(
+            chat_id=cid, text="Тренажёр устарел, открой заново.",
+            reply_markup=back_menu_keyboard("m_learn"))
         return
     term = state["current"].get("term", "")
     await bot.send_message(
@@ -331,7 +341,9 @@ async def show_current_result(bot, cid):
 async def delete_current(bot, cid):
     state = trainer_session.get(cid)
     if not state or not state.get("current"):
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново.")
+        await bot.send_message(
+            chat_id=cid, text="Тренажёр устарел, открой заново.",
+            reply_markup=back_menu_keyboard("m_learn"))
         return
     data = state["current"]
     removed = DictionaryRepository(cid).delete_training_entry(data["lang"], data["term"])
@@ -365,7 +377,9 @@ def _reinsert_failed(state, data):
 async def pick_option(bot, cid, index):
     state = trainer_session.get(cid)
     if not state or not state.get("current"):
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново.")
+        await bot.send_message(
+            chat_id=cid, text="Тренажёр устарел, открой заново.",
+            reply_markup=back_menu_keyboard("m_learn"))
         return
     data = state["current"]
     options = data.get("_options") or []
@@ -393,7 +407,9 @@ async def request_text_answer(bot, cid):
 async def give_up(bot, cid):
     state = trainer_session.get(cid)
     if not state or not state.get("current"):
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново.")
+        await bot.send_message(
+            chat_id=cid, text="Тренажёр устарел, открой заново.",
+            reply_markup=back_menu_keyboard("m_learn"))
         return
     data = state["current"]
     grade = trainer_grading.GradeResult(False, trainer_grading.AnswerQuality.NOT_REMEMBERED)
@@ -577,7 +593,9 @@ async def reset_tokens(bot, cid):
 async def next_exercise(bot, cid):
     state = trainer_session.get(cid)
     if not state:
-        await bot.send_message(chat_id=cid, text="Тренажёр устарел, открой заново.")
+        await bot.send_message(
+            chat_id=cid, text="Тренажёр устарел, открой заново.",
+            reply_markup=back_menu_keyboard("m_learn"))
         return
     if state.get("current") and state["current"].get("_answered"):
         state["current"] = None

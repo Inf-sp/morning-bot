@@ -18,6 +18,7 @@ import movie_engine
 import recommendation_stoplist
 import verify
 from ui import leisure as leisure_ui
+from ui.navigation import back_menu_keyboard
 from leisure_collection import (
     _ask_collect,
     _ensure_books,
@@ -297,7 +298,9 @@ async def send_recos(bot, cid, kind):
         # Фолбэк — LLM-подбор (старый путь).
         it, tm = await _llm_movie_pick(cid, _movie_used(cid))
     if not it:
-        await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
+        await bot.send_message(
+            chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
+            reply_markup=back_menu_keyboard("m_leisure")); return
     disp = _display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
     store.last_recos[str(cid)] = {"kind": kind, "items": [disp]}
@@ -536,7 +539,9 @@ async def _advance_movie(bot, cid):
             used = _movie_used(cid) | {str(x).lower() for x in rec["items"]}
             it, tm = await _llm_movie_pick(cid, used)
     if not it:
-        await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
+        await bot.send_message(
+            chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
+            reply_markup=back_menu_keyboard("m_leisure")); return
     disp = _display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
     rec["items"].append(disp)
@@ -698,7 +703,7 @@ async def send_movie_by_genre(bot, cid, genre_id):
             _discover_pick, cid, [genre_id], _movie_prefs(cid),
             require_genre_ids=[genre_id], reason=reason)
     except Exception as e:
-        await verify.safe_error(bot, cid, e)
+        await verify.safe_error(bot, cid, e, back="m_leisure")
         return
     if not it:
         await bot.send_message(chat_id=cid, text="В этом жанре пока не нашёл нового. Попробуй другой.",
@@ -723,7 +728,7 @@ async def send_movie_by_mood(bot, cid, mood_key):
             _discover_pick, cid, genre_ids, _movie_prefs(cid), keywords=keywords,
             require_any_genre_ids=genre_ids, reason=reason)
     except Exception as e:
-        await verify.safe_error(bot, cid, e)
+        await verify.safe_error(bot, cid, e, back="m_leisure")
         return
     if not it:
         await bot.send_message(chat_id=cid, text="Под это настроение пока не нашёл нового. Попробуй другое.",

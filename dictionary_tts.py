@@ -14,6 +14,7 @@ import secure
 import storage_driver
 import store
 from dictionary_model import entry_language, entry_term
+from ui.navigation import back_menu_keyboard
 
 _log = logging.getLogger(__name__)
 _locks: dict[str, asyncio.Lock] = {}
@@ -98,6 +99,7 @@ async def _send_error(bot, cid) -> None:
     await bot.send_message(
         chat_id=cid,
         text="Не удалось загрузить произношение. Попробуй ещё раз.",
+        reply_markup=back_menu_keyboard("m_learn"),
         preserve_previous_inline=True,
     )
 

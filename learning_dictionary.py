@@ -27,6 +27,7 @@ from dictionary_repository import DictionaryRepository
 from ui import dictionary as dict_ui
 from ui import learning as learning_ui
 from ui.constants import delete_label
+from ui.navigation import back_menu_keyboard
 
 _HERE = Path(__file__).parent
 _log = logging.getLogger(__name__)
@@ -421,7 +422,7 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
     nav_rows = []
     if total_pages > 1:
         next_page = page + 1 if page < total_pages - 1 else 0
-        nav_rows.append([InlineKeyboardButton("Следующее слово", callback_data=f"a_dicteditpage_{lang}_{next_page}")])
+        nav_rows.append([InlineKeyboardButton("🔄 Далее", callback_data=f"a_dicteditpage_{lang}_{next_page}")])
     rows = word_rows + nav_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]]
     text = (
         f"{flag} Показаны {start + 1}–{start + len(chunk)} из {len(entries)}. "
@@ -435,6 +436,8 @@ def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("📚 Мой словарь", callback_data=f"a_dictlang_{lang}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
+         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 
@@ -463,7 +466,11 @@ async def handle_dict_search(bot, cid, lang, query):
     """Ищет по подстроке термина в словаре, показывает карточку с кнопкой удаления."""
     query_norm = re.sub(r"\s+", " ", (query or "").strip()).casefold()
     if not query_norm:
-        await bot.send_message(chat_id=cid, text="Пришли слово или часть фразы для поиска.")
+        await bot.send_message(
+            chat_id=cid,
+            text="Пришли слово или часть фразы для поиска.",
+            reply_markup=back_menu_keyboard(f"a_dictedit_{lang}"),
+        )
         return
     words = _ensure_dict(cid)
     match = None
@@ -480,6 +487,8 @@ async def handle_dict_search(bot, cid, lang, query):
             text="Не нашла в словаре. Попробуй другое слово или посмотри весь список.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("📋 Мои слова и фразы", callback_data=f"a_dictedit_{lang}")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
+                 InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
             ]),
         )
         return
@@ -494,10 +503,11 @@ async def handle_dict_search(bot, cid, lang, query):
 async def confirm_delete_dict_entry(bot, cid, lang, term_key, q=None):
     await _show_screen(
         bot, cid, "Точно удалить это из словаря?", None,
-        InlineKeyboardMarkup([[
-            InlineKeyboardButton(delete_label("Да, удалить"), callback_data=f"a_dictdelok_{lang}_{term_key}"),
-            InlineKeyboardButton("Отмена", callback_data=f"a_dictlang_{lang}"),
-        ]]),
+        InlineKeyboardMarkup([
+            [InlineKeyboardButton(delete_label("Да, удалить"), callback_data=f"a_dictdelok_{lang}_{term_key}")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
+             InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        ]),
         q=q,
     )
 
@@ -517,7 +527,7 @@ async def del_dict_entry_by_term(bot, cid, lang, term_key, page=None, q=None):
     if page is not None:
         await _show_screen(
             bot, cid, msg.text, msg.entities,
-            InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к списку", callback_data=f"a_dictedit_{lang}_{page}")]]),
+            back_menu_keyboard(f"a_dictedit_{lang}_{page}"),
             q=q,
         )
         return

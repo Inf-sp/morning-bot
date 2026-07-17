@@ -11,6 +11,7 @@ import verify
 from ui import balance as balance_ui
 from ui import food as food_ui
 from ui.constants import save_toggle_label, ui_label
+from ui.navigation import back_menu_keyboard
 import menu
 from response_delivery import (
     answer_keyboard as _ans_kb,
@@ -106,7 +107,7 @@ async def send_recipe(bot, cid, constraint="обычное блюдо", status=N
         d = await asyncio.to_thread(_gen_recipe, constraint, cid=cid)
     except Exception as e:
         await status.stop(delete=True)
-        await verify.safe_error(bot, cid, e); return
+        await verify.safe_error(bot, cid, e, back="m_food"); return
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe", constraint)
     card = _recipe_card(d)
@@ -129,7 +130,8 @@ _MEAL_GUARD = {
         "Это ЗАВТРАК: лёгкие блюда, которые едят с утра (каша, омлет, тосты, сырники, "
         "йогурт с добавками, блинчики, творог). ЗАПРЕЩЕНО предлагать блюда для обеда/ужина "
         "(жаркое, гриль из мяса, стейк, наваристые супы, плов) — даже если сезонная "
-        "подсказка выше советует лёгкие летние блюда, это НЕ повод предложить гриль на завтрак."
+        "подсказка выше советует лёгкие летние блюда, это НЕ повод предложить гриль на завтрак. "
+        "Не рекомендуй к завтраку вино или другой алкоголь."
     ),
     "lunch": "Это ОБЕД: основное блюдо сытнее завтрака — суп, горячее с гарниром, боул.",
     "dinner": "Это УЖИН: сытное, но не тяжёлое перед сном блюдо.",
@@ -138,6 +140,8 @@ _MEAL_GUARD = {
 
 async def _send_queue_card(bot, cid, meal, d, status=None):
     """Отправляет карточку ОДНОГО показываемого рецепта без фото."""
+    if meal == "breakfast":
+        d = {**d, "pairing_wine": ""}
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe_queue", meal)
     store.last_source[str(cid)] = "Питание · Рецепт"
@@ -199,16 +203,22 @@ async def enter_meal(bot, cid, meal, ingredients=None, status=None):
             items = await _generate_and_store_queue(cid, meal, ingredients)
         except Exception as e:
             await status.stop(delete=True)
-            await verify.safe_error(bot, cid, e); return
+            await verify.safe_error(bot, cid, e, back="m_food"); return
         if not items:
-            await status.replace("Не получилось придумать рецепты, попробуй ещё раз.")
+            await status.replace(
+                "Не получилось придумать рецепты, попробуй ещё раз.",
+                reply_markup=back_menu_keyboard("m_food"))
             return
     d = queue_next(cid)
     if d is None:
         if status is not None:
-            await status.replace("Не получилось придумать рецепты, попробуй ещё раз.")
+            await status.replace(
+                "Не получилось придумать рецепты, попробуй ещё раз.",
+                reply_markup=back_menu_keyboard("m_food"))
         else:
-            await bot.send_message(chat_id=cid, text="Не получилось придумать рецепты, попробуй ещё раз.")
+            await bot.send_message(
+                chat_id=cid, text="Не получилось придумать рецепты, попробуй ещё раз.",
+                reply_markup=back_menu_keyboard("m_food"))
         return
     await _send_queue_card(bot, cid, meal, d, status=status)
 
@@ -245,13 +255,17 @@ async def show_next_recipe(bot, cid, status=None):
             items = await _generate_and_store_queue(cid, meal, ingredients)
         except Exception as e:
             await status.stop(delete=True)
-            await verify.safe_error(bot, cid, e); return
+            await verify.safe_error(bot, cid, e, back="m_food"); return
         if not items:
-            await status.replace("Не получилось придумать рецепты, попробуй ещё раз.")
+            await status.replace(
+                "Не получилось придумать рецепты, попробуй ещё раз.",
+                reply_markup=back_menu_keyboard("m_food"))
             return
         d = queue_next(cid)
         if d is None:
-            await status.replace("Не получилось придумать рецепты, попробуй ещё раз.")
+            await status.replace(
+                "Не получилось придумать рецепты, попробуй ещё раз.",
+                reply_markup=back_menu_keyboard("m_food"))
             return
     await _send_queue_card(bot, cid, meal, d, status=status)
 
@@ -271,7 +285,7 @@ async def send_recipe_featured(bot, cid, status=None):
         d = await asyncio.to_thread(_gen_recipe, "любое блюдо под вкус пользователя", cid=cid)
     except Exception as e:
         await status.stop(delete=True)
-        await verify.safe_error(bot, cid, e); return
+        await verify.safe_error(bot, cid, e, back="m_food"); return
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe", "featured")
     card = _recipe_card(d)
@@ -287,7 +301,7 @@ async def send_leftovers(bot, cid, ingredients, status=None):
         d = await asyncio.to_thread(_gen_leftovers_recipe, ingredients, cid)
     except Exception as e:
         await status.stop(delete=True)
-        await verify.safe_error(bot, cid, e); return
+        await verify.safe_error(bot, cid, e, back="m_food"); return
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("leftovers", ingredients)
     _leftover_remember(cid, d.get("name", ""))
@@ -307,7 +321,7 @@ async def handle_callback(bot, cid, q, data):
         try:
             await show_next_recipe(bot, cid, status=status)
         except Exception as error:
-            await verify.safe_error(bot, cid, error)
+            await verify.safe_error(bot, cid, error, back="m_food")
         finally:
             await status.stop(delete=False)
         return True
@@ -363,13 +377,21 @@ async def handle_callback(bot, cid, q, data):
             else:
                 await enter_meal(bot, cid, "fridge", ", ".join(available), status=status)
         except Exception as error:
-            await verify.safe_error(bot, cid, error)
+            await verify.safe_error(bot, cid, error, back="m_food")
         finally:
             await status.stop(delete=False)
         return True
-    if data == "as_fridge_clean":
+    if data.startswith("as_fridge_clean_"):
         import cleanup
-        await cleanup.open_cleanup(bot, cid, "fridge")
+        try:
+            category = int(data.rsplit("_", 1)[-1])
+        except (ValueError, IndexError):
+            await fridge_flow.send_fridge(bot, cid, q)
+        else:
+            if 0 <= category < len(fridge_flow._CAT_ORDER):
+                await cleanup.open_cleanup(bot, cid, f"fridge_cat_{category}")
+            else:
+                await fridge_flow.send_fridge(bot, cid, q)
         return True
     if data.startswith(("as_fridge_tgl_", "as_fridge_del_")):
         parts = data.split("_")

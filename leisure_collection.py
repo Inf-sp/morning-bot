@@ -8,6 +8,7 @@ import recommendation_stoplist
 import research
 import store
 from ui.constants import ui_label
+from ui.navigation import back_menu_keyboard
 
 # ===== КОНТЕНТ (content.py) =====
 
@@ -36,7 +37,11 @@ _COLLECT_HINTS = {
 async def _ask_collect(bot, cid, kind: str):
     """Показывает экран сбора предпочтений и ставит pending_input."""
     store.pending_input[str(cid)] = f"collect_{kind}"
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("Пропустить", callback_data="m_leisure")]])
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Пропустить", callback_data="m_leisure")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
+         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+    ])
     await bot.send_message(chat_id=cid, text=_COLLECT_HINTS[kind], parse_mode="HTML", reply_markup=kb)
 
 async def collect_done(bot, cid, kind: str, text: str):
@@ -46,7 +51,9 @@ async def collect_done(bot, cid, kind: str, text: str):
     # Разбиваем по запятым, переносам, точкам с запятой
     items = [x.strip() for x in re.split(r"[,;\n]+", raw) if x.strip()]
     if not items:
-        await bot.send_message(chat_id=cid, text="Не смог разобрать список — попробуй ещё раз.")
+        await bot.send_message(
+            chat_id=cid, text="Не смог разобрать список — попробуй ещё раз.",
+            reply_markup=back_menu_keyboard("m_leisure"))
         return
     key_map = {"artists": config.ARTISTS_KEY, "movies": config.WATCHLIST_KEY, "books": config.BOOKS_KEY}
     key = key_map.get(kind)

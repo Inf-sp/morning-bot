@@ -72,8 +72,6 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
             f"{label} · {on_cnt}",
             callback_data=f"as_fridge_cat_{ci}_0",
         )])
-    if items:
-        rows.append([InlineKeyboardButton(delete_label("Удалить продукты"), callback_data="as_fridge_clean")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
 
     kb = InlineKeyboardMarkup(rows)
@@ -123,6 +121,11 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
             InlineKeyboardButton(f"Страница {page + 1} из {pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"as_fridge_cat_{cat_idx}_{(page+1) % pages}"),
         ])
+    if cat_items:
+        rows.append([InlineKeyboardButton(
+            delete_label("Удалить продукты"),
+            callback_data=f"as_fridge_clean_{cat_idx}",
+        )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_fridge_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
 
     kb = InlineKeyboardMarkup(rows)

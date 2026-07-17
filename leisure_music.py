@@ -13,6 +13,7 @@ import settings
 import store
 from ui import leisure as leisure_ui
 from ui.constants import save_toggle_label, ui_label
+from ui.navigation import back_menu_keyboard
 
 _log = logging.getLogger(__name__)
 
@@ -221,7 +222,9 @@ async def send_listen(bot, cid):
         data = cand
     if not data or not data.get("artist"):
         _log.info("send_listen: no data after retries cid=%s data=%r", cid, data)
-        await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз."); return
+        await bot.send_message(
+            chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
+            reply_markup=back_menu_keyboard("m_leisure")); return
     artist = data.get("artist", "")
     store.last_recos[str(cid)] = {"kind": "listen", "items": [artist]}
     store.last_source[str(cid)] = "Досуг · Музыка"

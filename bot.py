@@ -524,8 +524,8 @@ async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
     """
     for cid in access.get_allowed_cids():
         steps = (
-            ("myday", lambda: myday.warm_day_cache(cid)),
             ("wardrobe", lambda: wardrobe.warm_home_cache(cid)),
+            ("myday", lambda: myday.warm_day_cache(cid)),
             ("cooking", lambda: asyncio.to_thread(recipe_generation.warm_cooking_home_ideas, cid)),
             ("learning", lambda: asyncio.to_thread(learning.warm_home_cache, cid)),
             ("travel", lambda: travel.warm_home_cache(cid)),

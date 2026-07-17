@@ -134,6 +134,18 @@ def _get_cached_look(cid):
         return None
     return cached
 
+
+def get_cached_outfit_items(cid):
+    """Названия вещей из актуального образа дня для других пользовательских карточек."""
+    cached = _get_cached_look(cid)
+    if not cached:
+        return []
+    return [
+        _clean_text(_item_name(item))
+        for item in (cached.get("look_data") or {}).get("items", [])
+        if _clean_text(_item_name(item))
+    ]
+
 def _item_name(it):
     return it.get("name") if isinstance(it, dict) else it
 
@@ -148,6 +160,11 @@ def _save_cached_look(cid, item_ids, look_data):
         "look_data": look_data,
         "text": text,
     })
+    try:
+        import myday
+        myday.reset_day_cache(cid)
+    except Exception as e:
+        _log.warning("wardrobe: myday cache reset failed: %s", e)
 
 
 # ---------- главный экран раздела (панель состояния) ----------
@@ -475,7 +492,7 @@ async def add_item(bot, cid, text):
     try:
         items = await _parse_items(text)
     except Exception as e:
-        await verify.safe_error(bot, cid, e); return
+        await verify.safe_error(bot, cid, e, back="m_wardrobe"); return
     if not items:
         await bot.send_message(chat_id=cid, text="Не удалось распознать вещь. Опиши её одним сообщением.", reply_markup=_back_kb())
         return
@@ -506,7 +523,7 @@ JSON: {{"items":[{{"zone":"","subcategory":"","name":"","color":"","color_second
         items = [item for item in items if item]
     except Exception as e:
         store.pending_input[str(cid)] = "wardrobe_add"
-        await verify.safe_error(bot, cid, e)
+        await verify.safe_error(bot, cid, e, back="m_wardrobe")
         return
     if not items:
         store.pending_input[str(cid)] = "wardrobe_add"
@@ -552,9 +569,13 @@ async def edit_item_text(bot, cid, text):
     try:
         parsed = await _parse_items(text)
     except Exception as e:
-        await verify.safe_error(bot, cid, e); return
+        await verify.safe_error(bot, cid, e, back="m_wardrobe"); return
     if not parsed or not _replace_item(cid, item_id, parsed[0]):
-        await bot.send_message(chat_id=cid, text="Не удалось изменить вещь. Открой карточку и попробуй ещё раз.")
+        await bot.send_message(
+            chat_id=cid,
+            text="Не удалось изменить вещь. Открой карточку и попробуй ещё раз.",
+            reply_markup=_back_kb(),
+        )
         return
     await send_item_card(bot, cid, item_id)
 
@@ -564,9 +585,11 @@ async def edit_add_preview(bot, cid, text):
     try:
         parsed = await _parse_items(text)
     except Exception as e:
-        await verify.safe_error(bot, cid, e); return
+        await verify.safe_error(bot, cid, e, back="m_wardrobe"); return
     if not parsed:
-        await bot.send_message(chat_id=cid, text="Не удалось распознать исправление.")
+        await bot.send_message(
+            chat_id=cid, text="Не удалось распознать исправление.",
+            reply_markup=_back_kb())
         return
     saved = store.add_wardrobe_items(cid, parsed)
     await _show_added_items(bot, cid, saved)
@@ -790,7 +813,7 @@ async def check_purchase(bot, cid, text):
     try:
         d = await ai.allm_json(prompt, 600, tier="smart", module="wardrobe")
     except Exception as e:
-        await verify.safe_error(bot, cid, e); return
+        await verify.safe_error(bot, cid, e, back="m_wardrobe"); return
     text_out, entities = _build_purchase_message(_normalize_purchase_check(d, wardrobe=w))
     store.last_source[str(cid)] = "Гардероб · Покупка"
     store.last_answer[str(cid)] = text_out
@@ -817,7 +840,7 @@ async def handle_callback(bot, cid, q, data):
                 previous_item_ids=previous.get("item_ids") or [],
             )
         except Exception as e:
-            await verify.safe_error(bot, cid, e)
+            await verify.safe_error(bot, cid, e, back="m_wardrobe")
         finally:
             await status.stop(delete=False)
         return

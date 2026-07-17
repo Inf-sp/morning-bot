@@ -28,6 +28,8 @@ def day_summary(
     humidity_line="",
     word_line="",
     word_lang="nl",
+    mood="",
+    outfit_items=None,
     lifehack="",
     quote_text="",
     quote_author="",
@@ -56,6 +58,21 @@ def day_summary(
             b.text_line(" → ")
             b.add(translation, MessageEntity.SPOILER)
         b.newline()
+        b.spacer()
+
+    if mood:
+        b.text_line("⚡️ ")
+        b.labeled_line("Настрой", finish_dot(mood), lowercase=False)
+        b.spacer()
+
+    outfit = ", ".join(
+        lower_initial(str(item).strip())
+        for item in (outfit_items or [])
+        if str(item).strip()
+    )
+    if outfit:
+        b.text_line("👕 ")
+        b.labeled_line("Надень", finish_dot(outfit), lowercase=False)
         b.spacer()
 
     if lifehack:
