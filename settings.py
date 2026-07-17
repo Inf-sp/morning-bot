@@ -259,8 +259,58 @@ class _NoKbBot:
         return orig
 
 
-async def send_scheduled_notification(bot, cid, kind):
-    """Отправить ровно то уведомление, которое уходит из планового уведомления."""
+class _NotificationTrackingBot:
+    """Count actual notification sends and failed delivery attempts."""
+
+    _SEND_METHODS = {
+        "send_message", "send_photo", "send_document", "send_animation",
+        "send_audio", "send_video", "send_voice", "send_poll", "send_location",
+        "send_media_group",
+    }
+
+    def __init__(self, bot, kind):
+        self._bot = bot
+        self._kind = kind
+        self.failed = False
+
+    def _record_failure(self, error):
+        if self.failed:
+            return
+        self.failed = True
+        import api_usage
+        import tracking
+        api_usage.record_request(
+            "telegram", ok=False, units={"requests": 0, "failures": 1},
+            error=type(error).__name__,
+        )
+        tracking.log_error(
+            "broadcast", str(error), kind=f"notif:{self._kind}", exc=error,
+            section="Уведомления", action="не отправлено уведомление",
+            service="Telegram",
+        )
+
+    def __getattr__(self, name):
+        original = getattr(self._bot, name)
+        if name not in self._SEND_METHODS:
+            return original
+
+        async def tracked_send(*args, **kwargs):
+            try:
+                result = await original(*args, **kwargs)
+            except Exception as error:
+                self._record_failure(error)
+                raise
+            import api_usage
+            amount = len(result) if name == "send_media_group" and isinstance(result, (list, tuple)) else 1
+            api_usage.record_request(
+                "telegram", ok=True, units={"requests": 0, "messages": amount},
+            )
+            return result
+
+        return tracked_send
+
+
+async def _send_scheduled_notification(bot, cid, kind):
     if kind == "morning_brief":
         import myday as _m
         # force=False: если пользователь уже открывал «Мой день» сегодня, уведомление
@@ -290,6 +340,18 @@ async def send_scheduled_notification(bot, cid, kind):
     elif kind == "evening_weather":
         import weather as _w
         await _w.send_weather(_NoKbBot(bot), cid, "tomorrow_plain")
+
+
+async def send_scheduled_notification(bot, cid, kind):
+    """Send a scheduled notification and record only real sends/failures."""
+    tracked_bot = _NotificationTrackingBot(bot, kind)
+    try:
+        return await _send_scheduled_notification(tracked_bot, cid, kind)
+    except Exception as error:
+        # Generation may fail before the first Telegram method is reached. It is
+        # still one notification that the user did not receive.
+        tracked_bot._record_failure(error)
+        raise
 
 
 async def _run_notif_test(bot, cid, kind) -> bool:

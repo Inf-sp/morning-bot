@@ -23,6 +23,8 @@ from ui import admin as ui
 _log = logging.getLogger(__name__)
 
 DAY = 86400
+STALE_AFTER = 15 * 60
+DB_SLOW_MS = 500
 
 
 def _back(target="set_admin"):
@@ -46,8 +48,9 @@ def _hhmm(ts) -> str:
         return "—"
 
 
-def _updated_at() -> str:
-    return datetime.now(config.TZ).strftime("%H:%M")
+def _updated_at(ts=None) -> str:
+    moment = datetime.now(config.TZ) if ts is None else datetime.fromtimestamp(ts, config.TZ)
+    return moment.strftime("%H:%M")
 
 
 def _num(n) -> str:
@@ -74,41 +77,235 @@ def _snapshot_service(snapshot, service):
     return {}
 
 
-def _store_health_line():
+def _plural(n, one, few, many):
+    n = abs(int(n))
+    if n % 10 == 1 and n % 100 != 11:
+        return one
+    if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
+        return few
+    return many
+
+
+def _system_summary(states):
+    """Aggregate saved monitoring by user impact, without naming providers."""
+    restricted = []
+    unknown = []
+    unavailable_functions = set()
+    fallback_unavailable = False
+    for state in states:
+        service = state.get("service")
+        if service in ("database", "telegram"):
+            continue
+        status = state.get("status")
+        fallback = str(state.get("fallback") or "")
+        if fallback or status == service_monitor.WARNING:
+            restricted.append(service)
+            continue
+        if status == service_monitor.UNKNOWN:
+            unknown.append(service)
+            continue
+        if status == service_monitor.DOWN:
+            spec = service_monitor.SPEC_BY_KEY.get(service)
+            if spec:
+                unavailable_functions.update(spec.sections)
+            fallback_unavailable = fallback_unavailable or state.get("error_type") == "fallback"
+
+    if unavailable_functions:
+        count = len(unavailable_functions)
+        noun = _plural(count, "функция недоступна", "функции недоступны", "функций недоступны")
+        line = f"{count} {noun}"
+    elif restricted:
+        count = len(restricted)
+        noun = _plural(count, "сервис ограничен", "сервиса ограничены", "сервисов ограничены")
+        line = f"{count} {noun}"
+        if any(
+            str(state.get("fallback") or "")
+            for state in states if state.get("service") in restricted
+        ):
+            line += " · резерв включён"
+    elif unknown:
+        count = len(unknown)
+        if count == 1:
+            line = "статус сервиса не получен"
+        else:
+            noun = _plural(count, "сервиса", "сервисов", "сервисов")
+            line = f"статус {count} {noun} не получен"
+    else:
+        line = "без ограничений"
+    return {
+        "line": line,
+        "restricted": len(restricted),
+        "unknown": len(unknown),
+        "unavailable_functions": len(unavailable_functions),
+        "fallback_unavailable": fallback_unavailable,
+    }
+
+
+def _database_health():
+    """Run one cheap PostgreSQL query; storage fallback is not a healthy DB."""
+    previous = service_monitor.get_state("database")
+    started = time.monotonic()
     try:
-        store._load("__health__")
-    except Exception as e:
-        return f"{ui.BAD} Данные · {str(e)[:42]}"
-    return f"{ui.OK} Данные · работает"
+        connection = store._db()
+        if connection is None:
+            raise ConnectionError("database connection is not configured")
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        latency_ms = round((time.monotonic() - started) * 1000)
+    except Exception as error:
+        service_monitor.record_result("database", False, error=type(error).__name__)
+        return {"line": "подключение потеряно", "kind": "lost", "latency_ms": None}
+
+    service_monitor.record_result("database", True)
+    if latency_ms >= DB_SLOW_MS:
+        return {"line": "медленный ответ", "kind": "slow", "latency_ms": latency_ms}
+    was_lost = bool(
+        previous.get("last_check")
+        and previous.get("status") in (service_monitor.DOWN, service_monitor.WARNING)
+        and previous.get("last_error")
+    )
+    return {
+        "line": "подключение восстановлено" if was_lost else "подключение стабильно",
+        "kind": "restored" if was_lost else "stable",
+        "latency_ms": latency_ms,
+    }
 
 
-def _bad_services(snapshot):
-    return [s for s in snapshot.get("services", []) if s.get("status") == "bad"]
+def _error_signature(entry):
+    return (
+        str(entry.get("source") or ""), str(entry.get("kind") or ""),
+        str(entry.get("file") or ""), str(entry.get("error") or entry.get("msg") or "")[:240],
+    )
+
+
+def _admin_state():
+    try:
+        return store._load(config.ADMIN_STATE_KEY) or {}
+    except Exception:
+        return {}
+
+
+def _new_log_errors(cid):
+    cutoff = time.time() - DAY
+    errors = [
+        entry for entry in reversed(tracking.get_errors(limit=200))
+        if int(entry.get("ts") or 0) >= cutoff
+    ]
+    cursor = (_admin_state().get("log_cursors") or {}).get(str(cid)) or {}
+    cursor_id = str(cursor.get("id") or "")
+    if cursor_id:
+        index = next((i for i, entry in enumerate(errors) if str(entry.get("id") or "") == cursor_id), None)
+        unseen = errors[index + 1:] if index is not None else [
+            entry for entry in errors if int(entry.get("ts") or 0) > int(cursor.get("ts") or 0)
+        ]
+    else:
+        viewed_at = int(cursor.get("ts") or 0)
+        unseen = [entry for entry in errors if int(entry.get("ts") or 0) > viewed_at]
+
+    counts = {}
+    for entry in errors:
+        signature = _error_signature(entry)
+        counts[signature] = counts.get(signature, 0) + 1
+    critical = [
+        entry for entry in unseen
+        if str(entry.get("severity") or "").casefold() == "critical"
+        or "critical" in str(entry.get("kind") or "").casefold()
+        or counts.get(_error_signature(entry), 0) >= 3
+    ]
+    return {"entries": unseen, "count": len(unseen), "critical": len(critical)}
+
+
+def _mark_logs_viewed(cid, errors):
+    newest = errors[0] if errors else {}
+    marker = {"ts": int(newest.get("ts") or time.time()), "id": str(newest.get("id") or "")}
+
+    def mutate(state):
+        state.setdefault("log_cursors", {})[str(cid)] = marker
+        return state, None
+
+    try:
+        store.mutate_kv(config.ADMIN_STATE_KEY, mutate)
+    except Exception:
+        _log.warning("failed to save log cursor for admin %s", cid, exc_info=True)
+
+
+def _users_summary_line(stats):
+    line = f"всего {stats['total']}"
+    if stats["active_today"]:
+        line += f" · активны сегодня {stats['active_today']}"
+    if stats["new_today"]:
+        line += f" · новых {stats['new_today']}"
+    return line
 
 
 # ================= ДОМ =================
 
 async def send_home(bot, cid, q=None):
     stats = _user_stats()
-    snapshot = api_usage.snapshot()
-    bad = _bad_services(snapshot)
+    states = service_monitor.states()
+    system = _system_summary(states)
     notif = _notification_stats(cid)
-    notif_bad = notif["errors_today"] > 0
-    dot, txt = (ui.BAD, "Есть проблема") if (bad or notif_bad) else (ui.OK, "Всё работает")
-    api_line = f"{len(bad)} недоступно" if bad else "OK · лимиты в норме"
+    database = _database_health()
+    logs = _new_log_errors(cid)
+    telegram = next((state for state in states if state.get("service") == "telegram"), {})
+    telegram_down = telegram.get("status") == service_monitor.DOWN
+    latest_check = max((int(state.get("last_check") or 0) for state in states), default=0)
+    stale = not latest_check or time.time() - latest_check > STALE_AFTER
+
+    critical = any((
+        system["unavailable_functions"], system["fallback_unavailable"],
+        database["kind"] == "lost", telegram_down, notif["errors_today"], logs["critical"],
+    ))
+    limited = any((
+        system["restricted"], system["unknown"], database["kind"] in ("slow", "restored"),
+        telegram.get("status") in (service_monitor.WARNING, service_monitor.UNKNOWN),
+        logs["count"], stale,
+    ))
+    if critical:
+        dot, status_text = ui.BAD, "Требуется внимание"
+    elif limited:
+        dot, status_text = ui.WARN, "Работает с ограничениями"
+    else:
+        dot, status_text = ui.OK, "Всё работает"
+
+    if telegram_down:
+        notif_line = "отправка недоступна"
+    elif notif["sent_today"]:
+        notif_line = f"отправлено {notif['sent_today']} сегодня"
+        if notif["errors_today"]:
+            noun = _plural(notif["errors_today"], "не доставлено", "не доставлены", "не доставлены")
+            notif_line += f" · {notif['errors_today']} {noun}"
+        else:
+            notif_line += " · ошибок нет"
+    elif notif["errors_today"]:
+        noun = _plural(notif["errors_today"], "не доставлено", "не доставлены", "не доставлены")
+        notif_line = f"{notif['errors_today']} {noun}"
+    else:
+        notif_line = "сегодня не отправлялись"
+
+    users_line = _users_summary_line(stats)
+
+    if logs["critical"]:
+        count = logs["critical"]
+        noun = _plural(count, "критическая ошибка", "критические ошибки", "критических ошибок")
+        logs_line = f"{count} {noun}"
+    elif logs["count"]:
+        count = logs["count"]
+        noun = _plural(count, "новая ошибка", "новые ошибки", "новых ошибок")
+        logs_line = f"{count} {noun}"
+    else:
+        logs_line = "новых ошибок нет"
+
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🛠 Система", callback_data="adm_api_ai")],
         [InlineKeyboardButton(ui_label("users", "Пользователи"), callback_data="adm_users")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
     msg = ui.home(
-        system_dot=dot,
-        system_text=txt,
-        system_line=api_line,
-        notif_line=f"OK · ошибок {notif['errors_today']}" if not notif_bad else f"ошибок {notif['errors_today']}",
-        users_line=f"{stats['total']} · активны {stats['active_7d']} · новых {stats['new_7d']}",
-        data_line="OK" if _store_health_line().startswith(ui.OK) else "ошибка",
-        updated_at=_updated_at(),
+        system_dot=dot, system_text=status_text, system_line=system["line"],
+        notif_line=notif_line, users_line=users_line, data_line=database["line"],
+        logs_line=logs_line, updated_at=_updated_at(latest_check or time.time()), stale=stale,
     )
     await _show(bot, cid, msg, kb, q)
 
@@ -119,12 +316,19 @@ def _user_stats():
     from settings import notif_on, NOTIF_TYPES
     cids = access.get_allowed_cids()
     with_notifications = sum(1 for c in cids if any(notif_on(c, k) for k, _ in NOTIF_TYPES))
-    cutoff = time.time() - 7 * DAY
+    now = datetime.now(config.TZ)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
     activities = tracking._all()
-    new_7d = sum(1 for r in activities.values() if r.get("first_ts", 0) >= cutoff)
+    allowed = {str(cid) for cid in cids}
+    new_today = sum(
+        1 for user_cid, record in activities.items()
+        if str(user_cid) in allowed and float(record.get("first_ts") or 0) >= today_start
+    )
     return {
         "total": len(cids),
-        "new_7d": new_7d,
+        "new_today": new_today,
+        "active_today": tracking.active_today_count(cids),
+        "new_7d": sum(1 for r in activities.values() if r.get("first_ts", 0) >= time.time() - 7 * DAY),
         "active_7d": tracking.active_count(7),
         "with_notifications": with_notifications,
         "admins": sum(1 for c in cids if access.is_owner(c)),
@@ -257,6 +461,7 @@ def _notification_stats(cid):
     snapshot = api_usage.snapshot()
     telegram = _snapshot_service(snapshot, "telegram")
     sent_today = int(telegram.get("day_messages") or 0)
+    failed_today = int(telegram.get("day_failures") or 0)
     cutoff = time.time() - DAY
     errors = [
         e for e in tracking.get_errors(limit=200)
@@ -265,7 +470,7 @@ def _notification_stats(cid):
     ]
     return {
         "sent_today": sent_today,
-        "errors_today": len(errors),
+        "errors_today": max(failed_today, len(errors)),
         "active_types": active_types,
     }
 
@@ -357,3 +562,4 @@ async def send_logs(bot, cid, q=None):
     kb = InlineKeyboardMarkup(buttons)
     msg = ui.logs(rows, len(combined), _updated_at())
     await _show(bot, cid, msg, kb, q)
+    _mark_logs_viewed(cid, errors)

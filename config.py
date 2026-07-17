@@ -188,6 +188,7 @@ ALLOWED_CIDS_KEY = "allowed_cids.json"    # список разрешённых 
 PENDING_INVITES_KEY = "pending_invites.json"  # одноразовые инвайт-коды {code: ts}
 ERROR_LOG_KEY = "error_log.json"   # rolling-лог ошибок для админ-экрана «Логи» {log: [{ts, source, kind, msg}]}
 ACTIVITY_KEY = "activity.json"     # last_seen + счётчики и состояние напоминания после неактивности
+ADMIN_STATE_KEY = "admin_state.json"  # per-admin cursors and compact dashboard state
 DEPLOY_REPORT_KEY = "deploy_report.json"  # служебное состояние деплой-уведомлений
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}

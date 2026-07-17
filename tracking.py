@@ -14,7 +14,7 @@ import sys
 import time
 import traceback as traceback_module
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 import config
 import store
@@ -69,7 +69,7 @@ _FALLBACK_BY_SERVICE = {
 
 
 def _today() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return datetime.now(config.TZ).strftime("%Y-%m-%d")
 
 
 # ================= ОШИБКИ =================
@@ -305,6 +305,17 @@ def active_count(days: int = 1) -> int:
     """Сколько пользователей были активны за последние `days` суток."""
     cutoff = time.time() - days * DAY
     return sum(1 for r in _all().values() if r.get("last_ts", 0) >= cutoff)
+
+
+def active_today_count(cids=None, *, now=None) -> int:
+    """Users with at least one action since local midnight."""
+    current = datetime.now(config.TZ) if now is None else datetime.fromtimestamp(now, config.TZ)
+    start = current.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    allowed = {str(cid) for cid in cids} if cids is not None else None
+    return sum(
+        1 for cid, record in _all().items()
+        if (allowed is None or str(cid) in allowed) and float(record.get("last_ts") or 0) >= start
+    )
 
 
 # ================= ФОРМАТИРОВАНИЕ (единый компонент для 3 мест) =================

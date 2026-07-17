@@ -400,6 +400,7 @@ def snapshot():
             "quotas": quotas,
             "day_requests": _count(svc, "day", "requests"),
             "day_messages": _count(svc, "day", "messages"),
+            "day_failures": _count(svc, "day", "failures"),
             "day_tokens": _count(svc, "day", "tokens"),
             "month_credits": _count(svc, "month", "credits"),
             "cache_hits": _count(svc, "day", "cache_hits"),

@@ -5,6 +5,8 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import admin
+import api_usage
+import settings
 import tracking
 from ui import admin as admin_ui
 
@@ -84,3 +86,103 @@ def test_logs_have_only_clear_and_navigation_rows(monkeypatch):
     labels = [[button.text for button in row] for row in bot.sent[0]["reply_markup"].inline_keyboard]
     assert labels == [["❌ Очистить логи"], ["⬅️ Назад", "#️⃣ Меню"]]
     assert all("Скопировать" not in button for row in labels for button in row)
+
+
+def test_admin_home_ui_uses_compact_exact_lines_without_ok():
+    message = admin_ui.home(
+        system_dot="🟡", system_text="Работает с ограничениями",
+        system_line="3 сервиса ограничены · резерв включён",
+        notif_line="отправлено 12 сегодня · ошибок нет",
+        users_line="всего 4 · активны сегодня 2",
+        data_line="подключение стабильно", logs_line="2 новые ошибки",
+        updated_at="10:23", stale=False,
+    )
+
+    assert message.text == (
+        "🛠️ Админ\n\n"
+        "🟡 Работает с ограничениями\n\n"
+        "📊 Система · 3 сервиса ограничены · резерв включён\n"
+        "🔔 Уведомления · отправлено 12 сегодня · ошибок нет\n"
+        "👨🏻‍💻 Пользователи · всего 4 · активны сегодня 2\n"
+        "🗄 Данные · подключение стабильно\n"
+        "⚠️ Логи · 2 новые ошибки\n\n"
+        "Обновлено в 10:23"
+    )
+    assert "OK" not in message.text
+
+
+def test_system_summary_counts_user_impact_and_not_replaced_api():
+    states = [
+        {"service": "gemini", "status": "warning", "fallback": "github_models"},
+        {"service": "openweather", "status": "warning", "fallback": ""},
+        {"service": "telegram", "status": "down", "fallback": ""},
+        {"service": "database", "status": "down", "fallback": ""},
+    ]
+
+    summary = admin._system_summary(states)
+
+    assert summary["line"] == "2 сервиса ограничены · резерв включён"
+    assert summary["unavailable_functions"] == 0
+
+
+def test_system_summary_deduplicates_unavailable_functions():
+    states = [
+        {"service": "gemini", "status": "down", "fallback": "", "error_type": "fallback"},
+        {"service": "github_models", "status": "down", "fallback": "", "error_type": "auth"},
+    ]
+
+    summary = admin._system_summary(states)
+
+    assert summary["line"] == "3 функции недоступны"
+    assert summary["fallback_unavailable"] is True
+
+
+def test_zero_user_metrics_are_hidden_from_home_line():
+    assert admin._users_summary_line({"total": 4, "active_today": 0, "new_today": 0}) == "всего 4"
+
+
+def test_log_cursor_hides_errors_after_logs_open(monkeypatch):
+    now = 1_700_000_000
+    errors = [
+        {"id": "new", "ts": now, "source": "app", "kind": "ValueError"},
+        {"id": "old", "ts": now - 1, "source": "app", "kind": "TypeError"},
+    ]
+    state = {}
+    monkeypatch.setattr(admin.time, "time", lambda: now)
+    monkeypatch.setattr(tracking, "get_errors", lambda limit=200: errors)
+    monkeypatch.setattr(admin.store, "_load", lambda _key: state)
+
+    def mutate(_key, fn):
+        value, result = fn(state)
+        if value is not state:
+            state.clear()
+            state.update(value)
+        return result
+
+    monkeypatch.setattr(admin.store, "mutate_kv", mutate)
+
+    assert admin._new_log_errors("42")["count"] == 2
+    admin._mark_logs_viewed("42", errors)
+    assert admin._new_log_errors("42")["count"] == 0
+
+
+class _FailingBot:
+    async def send_message(self, **_kwargs):
+        raise RuntimeError("Telegram failed")
+
+
+def test_notification_tracking_records_failed_delivery(monkeypatch):
+    requests = []
+    errors = []
+    monkeypatch.setattr(api_usage, "record_request", lambda *args, **kwargs: requests.append((args, kwargs)))
+    monkeypatch.setattr(tracking, "log_error", lambda *args, **kwargs: errors.append((args, kwargs)))
+    bot = settings._NotificationTrackingBot(_FailingBot(), "daily_words")
+
+    try:
+        asyncio.run(bot.send_message(chat_id="42", text="test"))
+    except RuntimeError:
+        pass
+
+    assert requests[0][1]["units"] == {"requests": 0, "failures": 1}
+    assert errors[0][0][0] == "broadcast"
+    assert errors[0][1]["kind"] == "notif:daily_words"
