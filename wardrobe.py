@@ -155,7 +155,7 @@ def build_wardrobe_keyboard():
     return _kb([
         [("✨ Другой образ", "w_look")],
         [("🧐 Проверить покупку", "w_check")],
-        [("👕 Мой шкаф", "w_closet")],
+        [("✂️ Мой шкаф", "w_closet")],
         [(choose_label("Выбрать стили"), "set_wardrobe_style")],
         [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
     ])
@@ -280,7 +280,7 @@ def _empty_wardrobe_screen():
     kb = InlineKeyboardMarkup([[
         InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add"),
     ], [
-        InlineKeyboardButton("👕 Мой шкаф", callback_data="w_closet"),
+        InlineKeyboardButton("✂️ Мой шкаф", callback_data="w_closet"),
     ], [
         InlineKeyboardButton(choose_label("Выбрать стили"), callback_data="set_wardrobe_style"),
     ], [
@@ -288,7 +288,7 @@ def _empty_wardrobe_screen():
         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
     ]])
     text = (
-        "<b>👟 Гардероб · Образ на сегодня</b>\n\n"
+        "<b>👕 Образ на сегодня</b>\n\n"
         "Чтобы собрать образ из твоих вещей, сначала добавь их в шкаф."
     )
     return text, kb

@@ -148,7 +148,7 @@ def pairing_text(data) -> str:
 
 def food_card(
     data, label="Рецепт дня", meal=None, cuisine_emoji_fallback=None,
-    show_leading_emoji=True,
+    show_leading_emoji=True, show_cuisine_emoji=True,
 ):
     """Карточка рецепта. Не пишется в БД как HTML: живёт в store.last_recipe/last_answer
     только до рестарта, а в заметки (NOTES_KEY) попадает через save_fav, который берёт
@@ -185,7 +185,8 @@ def food_card(
     )
     header = f"{meal_emoji} {label}".strip()
     if cuisine_label:
-        header += f" · {cuisine_emoji} {cuisine_label}".rstrip()
+        cuisine_part = f"{cuisine_emoji} {cuisine_label}" if show_cuisine_emoji else cuisine_label
+        header += f" · {cuisine_part}".rstrip()
     b.section(header)
     if name:
         b.spacer()

@@ -78,10 +78,10 @@ def render_wardrobe_message(look_data):
     """
     look_data = look_data or {}
     b = MessageBuilder()
-    header = "Гардероб · Образ на сегодня"
+    header = "👕 Образ на сегодня"
     primary_style = _clean_text(look_data.get("primary_style"))
     if primary_style:
-        header += f" · 👕 {primary_style}"
+        header += f" · {primary_style}"
     b.section(header)
 
     intro = _finish_dot(look_data.get("weather_intro"))

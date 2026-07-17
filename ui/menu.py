@@ -134,7 +134,7 @@ def learning_menu(home: dict):
     title = "Английский" if code == "en" else "Нидерландский"
 
     b = MessageBuilder()
-    b.bold(f"Обучение · {title} {flag}")
+    b.bold(f"{flag} Изучаем сегодня · {title}")
     b.newline()
     b.spacer()
 
@@ -213,24 +213,15 @@ def food_menu(idea=None):
     cuisine_flag = CUISINE_EMOJI.get(cuisine_code, "")
     cuisine_name = CUISINE_RU.get(cuisine_code, "")
     is_flag = len(cuisine_flag) == 2 and all(0x1F1E6 <= ord(char) <= 0x1F1FF for char in cuisine_flag)
-    header = "Готовка · Блюдо на сегодня"
+    header = "Блюдо на сегодня"
     if cuisine_name and is_flag:
-        header += f" · {cuisine_flag} {cuisine_name}"
+        header = f"{cuisine_flag} {header} · {cuisine_name}"
     b.section(header)
 
     name = _cooking_text(idea.get("name"))
     if name:
         b.spacer()
         b.bold(name)
-        minutes = idea.get("minutes")
-        servings = _cooking_text(idea.get("servings"))
-        details = []
-        if minutes:
-            details.append(f"{int(minutes)} мин")
-        if servings:
-            details.append(servings)
-        if details:
-            b.text_line(f" · {' · '.join(details)}")
         b.newline()
 
     ingredients = [_cooking_text(item) for item in (idea.get("ingredients") or [])]
