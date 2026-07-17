@@ -83,7 +83,7 @@ def day_forecast(header, main_lines, alert="", fact_title="", fact=""):
 
 def week_forecast(rng, city, overview, days, advice):
     b = MessageBuilder()
-    b.bold(f"Ближайшая неделя · {rng} · {city} 📍")
+    b.bold(f"На неделю · {rng} · {city} 📍")
     b.newline()
     b.spacer()
     b.line(overview)

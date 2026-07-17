@@ -219,6 +219,7 @@ def record_request(service: str, ok: bool = True, *, units: dict | None = None,
         import service_monitor
         service_monitor.record_result(
             service, ok, status_code=status_code, error=error, headers=headers,
+            latency_ms=latency_ms,
         )
     except Exception:
         # Usage accounting must never make a product request fail.

@@ -22,7 +22,7 @@ NOTIF_TYPES = [
     ("weekend_events",  "Куда сходить"),
     ("daily_words",     "Слова и фразы дня"),
     ("checkin_day",     "Мысли днём"),
-    ("evening_weather", "Погода на завтра"),
+    ("evening_weather", "Прогноз на завтра"),
     ("checkin_eve",     "Закрыть день"),
     ("weather_warn",    "Погодное предупреждение"),
 ]
@@ -168,8 +168,8 @@ def _notif_label(kind: str, label: str) -> str:
         "weather_warn": "08:45",
         "daily_words": "11:00",
         "checkin_day": "14:00",
-        "evening_weather": "19:00",
-        "checkin_eve": "20:00",
+        "evening_weather": "20:30",
+        "checkin_eve": "21:00",
     }
     if kind in times:
         return f"{label} (ежедневно в {times[kind]})"
@@ -395,8 +395,8 @@ _ADMIN_NOTIFICATION_META = {
     "weekend_events":  ("пт 10:00", "🎧 Ближайшие события"),
     "daily_words":     ("11:00", "📚 Слова и фразы дня"),
     "checkin_day":     ("14:00", "😮‍💨 Есть что выгрузить?"),
-    "evening_weather": ("19:00", "🌦️ Погода на завтра"),
-    "checkin_eve":     ("20:00", "😌 Закроем день"),
+    "evening_weather": ("20:30", "🌦️ Прогноз на завтра"),
+    "checkin_eve":     ("21:00", "😌 Закроем день"),
     "weather_warn":    ("08:45, если есть повод", "⚠️ Погодное предупреждение"),
 }
 

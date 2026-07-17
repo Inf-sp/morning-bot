@@ -148,9 +148,20 @@ def log_error(source: str, msg: str, kind: str = "", *, section: str = "",
         else:
             trace = error_text
         service_name = _safe_text(service or _service_for(f"{kind} {raw_message}", file_name), 80)
+        entry_id = uuid.uuid4().hex[:12]
+        response = getattr(exc, "response", None)
+        status_code = getattr(response, "status_code", None)
         entry = {
             "ts": int(time.time()),
-            "id": uuid.uuid4().hex[:12],
+            "id": entry_id,
+            "event_type": "error",
+            "incident_id": entry_id,
+            "status_code": int(status_code) if status_code else None,
+            "exception_type": error_type,
+            "message": _safe_text(raw_message, 1000),
+            "latency_ms": None,
+            "started_at": int(time.time()),
+            "recovered_at": None,
             "source": (source or "app")[:20],
             "kind": (kind or "")[:40],
             "msg": _safe_text(raw_message, 1000),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 import unicodedata
 from difflib import SequenceMatcher
 
@@ -93,6 +94,7 @@ def _search_items(query: str) -> list[dict]:
         return cached
     if not api_usage.google_books_requests()["allowed"]:
         return []
+    started = time.monotonic()
     try:
         response = requests.get(
             _BASE_URL,
@@ -106,11 +108,19 @@ def _search_items(query: str) -> list[dict]:
             },
             timeout=10,
         )
-    except requests.exceptions.Timeout:
-        service_monitor.record_result("google_books", False, error="timeout")
+    except requests.exceptions.Timeout as exc:
+        service_monitor.record_result(
+            "google_books", False, error="timeout",
+            exception_type=type(exc).__name__,
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
         return []
-    except requests.exceptions.RequestException:
-        service_monitor.record_result("google_books", False, error="network_error")
+    except requests.exceptions.RequestException as exc:
+        service_monitor.record_result(
+            "google_books", False, error="network_error",
+            exception_type=type(exc).__name__,
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
         return []
     finally:
         api_usage.google_books_requests(consume=True)
@@ -118,6 +128,7 @@ def _search_items(query: str) -> list[dict]:
         service_monitor.record_result(
             "google_books", ok=False, status_code=response.status_code,
             error=service_monitor.google_error_details(response), headers=response.headers,
+            latency_ms=int((time.monotonic() - started) * 1000),
         )
         return []
     try:
@@ -125,9 +136,13 @@ def _search_items(query: str) -> list[dict]:
     except (TypeError, ValueError):
         service_monitor.record_result(
             "google_books", ok=False, error="invalid_json", headers=response.headers,
+            latency_ms=int((time.monotonic() - started) * 1000),
         )
         return []
-    service_monitor.record_result("google_books", True, headers=response.headers)
+    service_monitor.record_result(
+        "google_books", True, headers=response.headers,
+        latency_ms=int((time.monotonic() - started) * 1000),
+    )
     util.ttl_set("google_books", cache_key, items)
     return items
 

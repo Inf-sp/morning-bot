@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
@@ -107,6 +108,8 @@ def _blank(service: str) -> dict:
         "last_success": None,
         "last_error": "",
         "error_type": "",
+        "incident_id": "",
+        "incident_started_at": None,
     }
 
 
@@ -196,6 +199,8 @@ def _friendly_error(error="", status_code=None, service="") -> tuple[str, str]:
     raw = str(error or "").strip()
     low = raw.casefold().replace("_", " ")
     code = int(status_code or 0)
+    if service == "spoonacular" and code == 402:
+        return "quota", "дневной лимит исчерпан"
     if code == 429 or any(x in low for x in ("rate limit", "too many requests")):
         return "quota", "лимит исчерпан"
     if any(x in low for x in ("quota exceeded", "quota exhausted")):
@@ -238,17 +243,51 @@ def _quota_from_headers(headers) -> tuple[int | None, int | None]:
     return None, None
 
 
-def _append_history(data: dict, service: str, text: str, now: int) -> None:
+def _append_history(
+    data: dict, service: str, text: str, now: int, *, event_type="status",
+    incident_id="", status_code=None, exception_type="", message="",
+    latency_ms=None, started_at=None, recovered_at=None, fallback_target="",
+) -> None:
     history = data.setdefault("history", [])
     last = history[-1] if history else {}
-    if last.get("service") == service and last.get("text") == text:
+    if (
+        last.get("service") == service
+        and last.get("event_type") == event_type
+        and last.get("incident_id") == incident_id
+        and last.get("text") == text
+    ):
         return
-    history.append({"ts": now, "service": service, "text": text})
+    history.append({
+        "ts": now,
+        "service": service,
+        "text": text,
+        "event_type": event_type,
+        "incident_id": incident_id,
+        "status_code": int(status_code) if status_code else None,
+        "exception_type": str(exception_type or "")[:80],
+        "message": str(message or "")[:240],
+        "latency_ms": int(latency_ms) if latency_ms is not None else None,
+        "started_at": int(started_at or now),
+        "recovered_at": int(recovered_at) if recovered_at else None,
+        "fallback_target": str(fallback_target or "")[:40],
+    })
     data["history"] = history[-_HISTORY_LIMIT:]
 
 
-def record_result(service: str, ok: bool, *, status_code=None, error="", headers=None,
-                  quota_remaining=None, quota_total=None, checked_at=None) -> None:
+def _update_incident(data: dict, incident_id: str, **values) -> None:
+    if not incident_id:
+        return
+    for event in reversed(data.get("history") or []):
+        if event.get("event_type") == "error" and event.get("incident_id") == incident_id:
+            event.update({key: value for key, value in values.items() if value is not None})
+            return
+
+
+def record_result(
+    service: str, ok: bool, *, status_code=None, error="", headers=None,
+    quota_remaining=None, quota_total=None, checked_at=None, latency_ms=None,
+    exception_type="",
+) -> None:
     """Record a real API result or a probe using the common state transition."""
     if service not in SPEC_BY_KEY:
         return
@@ -264,6 +303,8 @@ def record_result(service: str, ok: bool, *, status_code=None, error="", headers
         old_fallback = state.get("fallback") or ""
         old_error = state.get("last_error") or ""
         old_error_type = state.get("error_type") or ""
+        incident_id = str(state.get("incident_id") or "")
+        incident_started_at = int(state.get("incident_started_at") or now)
         state["last_check"] = now
         if remaining is not None and total is not None:
             try:
@@ -281,16 +322,39 @@ def record_result(service: str, ok: bool, *, status_code=None, error="", headers
                 "error_type": "quota" if quota_empty else "",
                 "fallback": "",
             })
-            if old_status != state["status"]:
-                message = (
-                    f"{SPEC_BY_KEY[service].label}: лимит исчерпан."
-                    if quota_empty else f"{SPEC_BY_KEY[service].label} работает."
+            if quota_empty:
+                if not incident_id:
+                    incident_id = f"{service}-{now}-{uuid.uuid4().hex[:8]}"
+                    incident_started_at = now
+                    _append_history(
+                        data, service, f"{SPEC_BY_KEY[service].label}: лимит исчерпан.", now,
+                        event_type="error", incident_id=incident_id,
+                        message="лимит исчерпан", latency_ms=latency_ms,
+                        started_at=incident_started_at,
+                    )
+                state["incident_id"] = incident_id
+                state["incident_started_at"] = incident_started_at
+            elif incident_id:
+                _append_history(
+                    data, service, f"{SPEC_BY_KEY[service].label} восстановлен.", now,
+                    event_type="recovery", incident_id=incident_id,
+                    started_at=incident_started_at, recovered_at=now,
                 )
-                _append_history(data, service, message, now)
-            if old_fallback:
+                _update_incident(data, incident_id, recovered_at=now)
+                if old_fallback:
+                    _append_history(
+                        data, service,
+                        f"{SPEC_BY_KEY[service].label}: резерв отключён.", now,
+                        event_type="system", incident_id=incident_id,
+                        started_at=incident_started_at, recovered_at=now,
+                    )
+                state["incident_id"] = ""
+                state["incident_started_at"] = None
+            elif old_status != state["status"]:
                 _append_history(
                     data, service,
-                    f"{SPEC_BY_KEY[service].label}: резерв отключён.", now,
+                    f"{SPEC_BY_KEY[service].label} работает.", now,
+                    event_type="status",
                 )
         else:
             kind, friendly = _friendly_error(error, status_code, service)
@@ -308,8 +372,18 @@ def record_result(service: str, ok: bool, *, status_code=None, error="", headers
                 state["status"] = WARNING if has_fallback or kind in (
                     "quota", "rate_limit", "timeout", "temporary", "unknown",
                 ) else DOWN
-                if old_status != state["status"] or old_error != friendly:
-                    _append_history(data, service, f"{SPEC_BY_KEY[service].label}: {friendly}.", now)
+                if not incident_id:
+                    incident_id = f"{service}-{now}-{uuid.uuid4().hex[:8]}"
+                    incident_started_at = now
+                    state["incident_id"] = incident_id
+                    state["incident_started_at"] = incident_started_at
+                    _append_history(
+                        data, service, f"{SPEC_BY_KEY[service].label}: {friendly}.", now,
+                        event_type="error", incident_id=incident_id,
+                        status_code=status_code, exception_type=exception_type,
+                        message=str(error or friendly), latency_ms=latency_ms,
+                        started_at=incident_started_at,
+                    )
             # A reserve that has just failed is no longer a real reserve. Any
             # primary pointing to it becomes red until another candidate is
             # checked and selected.
@@ -320,9 +394,12 @@ def record_result(service: str, ok: bool, *, status_code=None, error="", headers
                 source_state["status"] = DOWN
                 source_state["last_error"] = "резерв недоступен"
                 source_state["error_type"] = "fallback"
+                source_incident = str(source_state.get("incident_id") or "")
                 _append_history(
                     data, source,
                     f"{SPEC_BY_KEY[source].label}: резерв недоступен.", now,
+                    event_type="system", incident_id=source_incident,
+                    started_at=source_state.get("incident_started_at") or now,
                 )
         return data, None
 
@@ -371,10 +448,15 @@ def activate_fallback(service: str, target: str, *, reason="") -> bool:
         state["status"] = WARNING
         if state.get("error_type") == "fallback":
             state["last_error"] = "основной сервис недоступен"
+        incident_id = str(state.get("incident_id") or "")
         _append_history(
             data, service,
             f"{SPEC_BY_KEY[service].label}: переключение на {SPEC_BY_KEY[target].label}.", now,
+            event_type="fallback", incident_id=incident_id,
+            started_at=state.get("incident_started_at") or now,
+            fallback_target=target,
         )
+        _update_incident(data, incident_id, fallback_target=target)
         changed["value"] = True
         return data, None
 
@@ -554,13 +636,18 @@ def _probe_request(service: str):
 
 
 def probe(service: str) -> bool:
+    started = time.monotonic()
     if service == "database":
         try:
             store._load("__service_monitor_health__")
         except Exception as exc:
-            record_result(service, False, error=type(exc).__name__)
+            record_result(
+                service, False, error=str(exc) or type(exc).__name__,
+                exception_type=type(exc).__name__,
+                latency_ms=int((time.monotonic() - started) * 1000),
+            )
             return False
-        record_result(service, True)
+        record_result(service, True, latency_ms=int((time.monotonic() - started) * 1000))
         return True
     if not _configured(service):
         record_result(service, False, status_code=401, error="not configured")
@@ -610,14 +697,25 @@ def probe(service: str) -> bool:
             service, ok, status_code=response.status_code,
             error=error, headers=response.headers,
             quota_remaining=remaining, quota_total=total,
+            latency_ms=int((time.monotonic() - started) * 1000),
         )
         return ok
-    except requests.Timeout:
-        record_result(service, False, error="timeout")
-    except requests.ConnectionError:
-        record_result(service, False, error="network error")
+    except requests.Timeout as exc:
+        record_result(
+            service, False, error="timeout", exception_type=type(exc).__name__,
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
+    except requests.ConnectionError as exc:
+        record_result(
+            service, False, error="network error", exception_type=type(exc).__name__,
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
     except Exception as exc:
-        record_result(service, False, error=type(exc).__name__)
+        record_result(
+            service, False, error=str(exc) or type(exc).__name__,
+            exception_type=type(exc).__name__,
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
     return False
 
 
@@ -627,8 +725,13 @@ def check_all(*, force=False) -> None:
     results = {}
     due = []
     for spec in SPECS:
-        last = int((current.get(spec.key) or {}).get("last_check") or 0)
-        if not force and last and now - last < spec.probe_every:
+        state = current.get(spec.key) or {}
+        last = int(state.get("last_check") or 0)
+        retryable_failure = state.get("error_type") in (
+            "temporary", "timeout", "network", "unknown", "response",
+        )
+        probe_every = min(spec.probe_every, 300) if retryable_failure else spec.probe_every
+        if not force and last and now - last < probe_every:
             continue
         due.append(spec.key)
     # One slow provider must not delay all other statuses past the five-minute
@@ -685,7 +788,11 @@ def record_unavailable_fallback(service: str) -> None:
         state["fallback"] = ""
         state["last_error"] = "резерв недоступен"
         state["error_type"] = "fallback"
-        _append_history(data, service, f"{SPEC_BY_KEY[service].label}: резерв недоступен.", now)
+        _append_history(
+            data, service, f"{SPEC_BY_KEY[service].label}: резерв недоступен.", now,
+            event_type="system", incident_id=state.get("incident_id") or "",
+            started_at=state.get("incident_started_at") or now,
+        )
         return data, None
     store.mutate_kv(config.SERVICE_MONITOR_KEY, mutate)
 

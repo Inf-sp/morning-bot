@@ -70,7 +70,7 @@ def home(system_dot, system_text, system_line, notif_line, users_line, data_line
     b.line(f"🔔 Уведомления · {notif_line}")
     b.line(f"👨🏻‍💻 Пользователи · {users_line}")
     b.line(f"🗄 Данные · {data_line}")
-    b.line(f"⚠️ Логи · {logs_line}")
+    b.line(f"⚠️ Ошибки · {logs_line}")
     b.spacer()
     suffix = " · данные устарели" if stale else ""
     b.line(f"Обновлено в {updated_at}{suffix}")
@@ -194,7 +194,7 @@ def api_ai(rows, updated_at):
 
 def logs(rows, errors_24h, updated_at):
     b = MessageBuilder()
-    b.bold("⚠️ Логи")
+    b.bold("⚠️ Ошибки")
     b.newline()
     b.spacer()
     if not rows:

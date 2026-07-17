@@ -483,7 +483,7 @@ async def send_api_ai(bot, cid, q=None):
     rows = service_monitor.rows()
 
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⚠️ Логи", callback_data="adm_logs")],
+        [InlineKeyboardButton("⚠️ Ошибки", callback_data="adm_logs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
     msg = ui.api_ai(rows, service_monitor.last_check_time())
@@ -534,12 +534,34 @@ def _compact_log_row(entry):
     return f"{_hhmm(entry.get('ts', 0))} · {section} · {action} · {error} · {location}"
 
 
-def _monitor_log_text(entry):
-    text = str(entry.get("text") or "")
-    spec = service_monitor.SPEC_BY_KEY.get(str(entry.get("service") or ""))
-    if spec and not text.startswith(f"{spec.label}:"):
-        return f"{spec.label}: {text}"
-    return text
+def _monitor_error_row(entry):
+    service = str(entry.get("service") or "")
+    spec = service_monitor.SPEC_BY_KEY.get(service)
+    label = spec.label if spec else service or "Сервис"
+    message = str(entry.get("text") or entry.get("message") or "Ошибка").strip().rstrip(".")
+    if message.startswith(f"{label}:"):
+        message = message.split(":", 1)[1].strip()
+    details = []
+    status_code = entry.get("status_code")
+    if status_code:
+        details.append(f"HTTP {status_code}")
+    exception_type = str(entry.get("exception_type") or "")
+    if exception_type:
+        details.append(exception_type)
+    latency_ms = entry.get("latency_ms")
+    if latency_ms is not None:
+        details.append(f"{int(latency_ms)} мс")
+    fallback = str(entry.get("fallback_target") or "")
+    fallback_spec = service_monitor.SPEC_BY_KEY.get(fallback)
+    if fallback_spec:
+        details.append(f"резерв {fallback_spec.label}")
+    recovered_at = int(entry.get("recovered_at") or 0)
+    started_at = int(entry.get("started_at") or entry.get("ts") or 0)
+    if recovered_at:
+        duration = max(0, recovered_at - started_at)
+        details.append(f"восстановлен за {max(1, round(duration / 60))} мин")
+    suffix = f" · {' · '.join(details)}" if details else ""
+    return f"{_hhmm(entry.get('ts', 0))} · Система · {label}: {message}{suffix}"
 
 
 async def clear_logs(bot, cid, q=None):
@@ -551,21 +573,23 @@ async def clear_logs(bot, cid, q=None):
 async def send_logs(bot, cid, q=None):
     cutoff = time.time() - DAY
     errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
-    monitor_events = [e for e in service_monitor.history(limit=200) if e.get("ts", 0) >= cutoff]
+    monitor_errors = [
+        entry for entry in service_monitor.history(limit=200)
+        if entry.get("ts", 0) >= cutoff and entry.get("event_type") == "error"
+    ]
     combined = [
         (int(entry.get("ts") or 0), _compact_log_row(entry)) for entry in errors
     ] + [
         (
-            int(entry.get("ts") or 0),
-            f"{_hhmm(entry.get('ts', 0))} · Система · {_monitor_log_text(entry)}",
+            int(entry.get("ts") or 0), _monitor_error_row(entry),
         )
-        for entry in monitor_events
+        for entry in monitor_errors
     ]
     combined.sort(key=lambda item: item[0], reverse=True)
     rows = [row for _ts, row in combined[:5]]
     buttons = []
     if combined:
-        buttons.append([InlineKeyboardButton(delete_label("Очистить логи"), callback_data="adm_logs_clear")])
+        buttons.append([InlineKeyboardButton(delete_label("Очистить ошибки"), callback_data="adm_logs_clear")])
     buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_system"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(buttons)
     msg = ui.logs(rows, len(combined), _updated_at())

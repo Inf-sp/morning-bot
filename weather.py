@@ -96,15 +96,23 @@ def rain_text(rain, rain_mm=None, when=""):
     return ""
 
 
-def _weather_main_lines(icon, tmax, rain, rain_mm, rain_when, wind_ms):
+def _weather_main_lines(
+    icon, tmax, rain, rain_mm, rain_when, wind_ms, *, plain_wind=False,
+):
     rain_part = rain_text(rain, rain_mm, rain_when)
     wemoji, wword = wind_scale(wind_ms)
-    wind_str = f"{wemoji} {wword} {wind_ms:.0f} м/с" if wind_ms >= 8 else f"💨 Ветер {wind_ms:.0f} м/с"
+    if plain_wind:
+        classification = wword.lower()
+        if classification.endswith(" ветер"):
+            classification = classification[:-6]
+        wind_str = f"Ветер {wind_ms:.0f} м/с · {classification}"
+    else:
+        wind_str = f"{wemoji} {wword} {wind_ms:.0f} м/с" if wind_ms >= 8 else f"💨 Ветер {wind_ms:.0f} м/с"
 
     first = f"{icon} До {tmax:+.0f}°C"
     if rain_part:
         first += f" • {rain_part}"
-    if wind_ms >= 8:
+    if wind_ms >= 8 and not plain_wind:
         return [first, "", wind_str]
     return [f"{first} • {wind_str}"]
 
@@ -174,8 +182,8 @@ def _week_icon(code, temp, rain, wind_ms=0, rain_mm=None):
 
 
 def _week_overview(days):
-    """Короткий итог только из суточных данных погодного API."""
-    low = min(day["tmin"] for day in days)
+    """Короткий итог по дневной погоде без ночных минимумов."""
+    low = min(day["tmax"] for day in days)
     high = max(day["tmax"] for day in days)
     wet = sum(day["rain_real"] for day in days)
     clear = sum(day["code"] in (0, 1) and not day["rain_real"] for day in days)
@@ -460,8 +468,10 @@ async def send_weather(bot, cid, mode="today"):
     if mode == "tomorrow_plain":
         day = 1
         dt = now + timedelta(days=1)
-        flag = __import__("util").flag_from_cc(s.get("cc", "")) or ""
-        header = f"Погода на завтра • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} • {s['city']} {flag}"
+        header = (
+            f"Завтра · {_WEEKDAY_SHORT[dt.weekday()]}, "
+            f"{dt.day} {_MONTHS[dt.month-1]} · {s['city']} 📍"
+        )
         code = d["weathercode"][day]
         tmax = d["temperature_2m_max"][day]
         rain = d["precipitation_probability_max"][day] or 0
@@ -474,7 +484,9 @@ async def send_weather(bot, cid, mode="today"):
         desc = DESC.get(code, "")
         cc = s.get("cc", "")
         alert = storm_alert(wind_ms, code, rain, rain_mm, cc=cc)
-        main_lines = _weather_main_lines(icon, tmax, rain, rain_mm, rain_when, wind_ms)
+        main_lines = _weather_main_lines(
+            icon, tmax, rain, rain_mm, rain_when, wind_ms, plain_wind=True,
+        )
         fact = ""
         if alert:
             pass
