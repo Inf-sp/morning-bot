@@ -385,9 +385,9 @@ _PER_USER_KEYS = {
     config.RECOMMENDATION_STOPLIST_KEY,
     config.NOTES_KEY, config.DICT_KEY, config.LANGUAGE_REVIEW_KEY,
     config.DATA_REFRESH_BACKUP_KEY,
-    config.LAGOM_KEY, config.DIARY_KEY, config.LIFEHACK_KEY,
+    config.LEGACY_LAGOM_KEY, config.DIARY_KEY, config.LIFEHACK_KEY,
     config.FRIDGE_KEY, config.MY_RECIPES_KEY, config.LEFTOVER_RECIPES_SEEN_KEY, config.QUOTE_AUTHORS_KEY,
-    config.MOTIV_LAGOM_SEEN_KEY, config.CONCERTS_CACHE_KEY, config.TRAVEL_FACTS_SEEN_KEY,
+    config.LEGACY_MOTIV_LAGOM_SEEN_KEY, config.CONCERTS_CACHE_KEY, config.TRAVEL_FACTS_SEEN_KEY,
 }
 
 def purge_user(cid):
@@ -457,9 +457,8 @@ def _bump_list_revision(key, chat_id):
 def ensure_list_ids_via(getter, setter, key, chat_id):
     """Как ensure_list_ids, но читает/пишет коллекцию через произвольные
     getter(chat_id)/setter(chat_id, items) вместо get_list/set_list — нужно для
-    коллекций, хранящихся не отдельным KV-ключом, а полем внутри профиля
-    (например memory.get_lagom/set_lagom). `key` используется только как имя
-    слота revision, не как storage-ключ."""
+    коллекций, хранящихся не отдельным KV-ключом, а через предметный репозиторий.
+    `key` используется только как имя слота revision, не как storage-ключ."""
     items = getter(chat_id)
     changed = False
     out = []

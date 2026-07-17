@@ -77,14 +77,6 @@ def wardrobe_item_input():
     return b.build()
 
 
-def lagom_input():
-    b = MessageBuilder()
-    b.text_line("Напиши установку или принцип — добавлю в здоровье.")
-    b.blank()
-    b.italic("Например: «Меньше экрана, больше природы»")
-    return b.build()
-
-
 def style_custom_input():
     b = MessageBuilder()
     b.text_line("Опиши свой стиль — как хочешь выглядеть, что нравится, что нет.")
@@ -151,23 +143,6 @@ def mydata_section(title, hint=""):
     b = MessageBuilder().section(title)
     if hint:
         b.line(hint)
-    return b.build_stripped()
-
-
-def lagom_home(items):
-    b = MessageBuilder()
-    b.section(ui_label("lagom", "Мой лагом"))
-    b.text_line("Лагом (швед. ")
-    b.italic("lagom")
-    b.line(
-        " — «в самый раз») — твой личный свод принципов: "
-        "что важно, как хочешь жить, что даёт энергию, а что забирает."
-    )
-    b.line("Бот использует их в мотивации — чтобы советы звучали именно про тебя, а не общими словами.")
-    b.section(ui_label("examples", "Примеры:"))
-    b.line(" «Меньше, но лучше» · «Физическая активность каждый день» · «Не сравниваю себя с другими»")
-    if not items:
-        b.line("Пока пусто — добавь первый принцип.")
     return b.build_stripped()
 
 

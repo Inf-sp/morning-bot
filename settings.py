@@ -11,7 +11,7 @@ import saved_items
 import cooking
 import util
 from ui import settings as settings_ui
-from ui.constants import choose_label, cuisine_label, delete_label, ui_label
+from ui.constants import choose_label, cuisine_label, ui_label
 
 _log = logging.getLogger(__name__)
 
@@ -844,31 +844,6 @@ async def send_wardrobe_prefs(bot, cid, back="set_priorities", q=None):
     await send_wardrobe_style(bot, cid, q=q)
 
 
-# --- Страны ---
-async def send_lagom(bot, cid, back="m_balance", q=None):
-    import memory
-    items = memory.get_lagom(cid)
-    rows = [[InlineKeyboardButton("🆕 Добавить принцип", callback_data="setadd_lagom")]]
-    if items:
-        rows.append([InlineKeyboardButton(delete_label("Удалить принципы"), callback_data="set_lagom_clean")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
-    msg = settings_ui.lagom_home(items)
-    kb = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            _mark_transient_edit(bot, cid, q.message)
-            return
-        except Exception:
-            pass
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
-        reply_markup=kb,
-        transient=True,
-    )
-
 async def handle_callback(bot, cid, data, q=None):
     if data == "set_home":
         await send_home(bot, cid)
@@ -984,15 +959,9 @@ async def handle_callback(bot, cid, data, q=None):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_g"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]])
         msg = settings_ui.wardrobe_item_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-    elif data == "set_lagom":
-        await send_lagom(bot, cid, back="m_balance", q=q)
-    elif data == "setadd_lagom":
-        store.pending_input[cid] = "setadd_lagom"
-        msg = settings_ui.lagom_input()
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
-    elif data == "set_lagom_clean":
-        from cleanup import open_cleanup
-        await open_cleanup(bot, cid, "lagom")
+    elif data in ("set_lagom", "setadd_lagom", "set_lagom_clean"):
+        # Совместимость со старыми сообщениями после удаления раздела.
+        await q.answer("Раздел «Лагом» удалён")
     elif data == "set_countries":
         _log.info("legacy callback used: %s", data)
         await saved_items.send_love_section(bot, cid, "countries")

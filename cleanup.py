@@ -14,9 +14,7 @@ cfg_* (не мигрирует, пока не решена его судьба):
            hid_<key> (скрытое/чёрный список — действие только убирает из
            чёрного списка, не трогает fav_key, чтобы не превращать «вернуть в
            рекомендации» в скрытый сигнал «мне нравится»),
-           fridge/recipes/lagom/diary (холодильник/рецепты/Здоровье/История
-           самочувствия — lagom хранится не отдельным KV-ключом, а полем
-           внутри профиля пользователя, см. store.ensure_list_ids_via).
+           fridge/recipes/diary (холодильник/рецепты/История самочувствия).
 """
 import secrets
 import time
@@ -43,10 +41,6 @@ _HIDDEN_STORE_KEYS = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK
                       "artists": config.MUSIC_DISLIKE_KEY, "countries": config.TRAVEL_DISLIKE_KEY}
 _SEEN_STORE_KEYS = {"movies": config.MOVIE_SEEN_KEY, "books": config.BOOK_SEEN_KEY,
                     "artists": config.MUSIC_SEEN_KEY}
-
-# lagom хранится не отдельным KV-ключом, а полем внутри профиля пользователя.
-_LAGOM_REVISION_SLOT = "profile.lagom"
-
 
 def _collection(id, owner, title, storage_key, item_type, back, actions,
                 note_group=None, add_button=None):
@@ -130,9 +124,6 @@ COLLECTIONS = {
     "fridge_items": _collection(
         "fridge_items", "food", ui_label("products", "Продукты"), config.FRIDGE_KEY, "product",
         "as_fridge", [{"id": "remove", "label": "Удалить продукты", "confirm": True}]),
-    "health_lagom": _collection(
-        "health_lagom", "health", ui_label("health", "Принципы здоровья"), _LAGOM_REVISION_SLOT, "principle",
-        "set_lagom", [{"id": "remove", "label": "Удалить принципы", "confirm": True}]),
 }
 
 _COLLECTION_ALIASES = {
@@ -152,7 +143,6 @@ _COLLECTION_ALIASES = {
     "rl": "books_saved",
     "recipes": "recipes_saved",
     "fridge": "fridge_items",
-    "lagom": "health_lagom",
 }
 
 
@@ -162,7 +152,7 @@ def _is_view_ctx(ctx):
             or ctx.startswith("lv_") or ctx.startswith("lvls_")
             or ctx.startswith("hid_")
             or ctx.startswith("d_") or ctx in ("wl", "rl")
-            or ctx in ("fridge", "recipes", "lagom", "diary"))
+            or ctx in ("fridge", "recipes", "diary"))
 
 
 def _canonical_ctx(ctx):
@@ -190,8 +180,7 @@ def _action_by_id(ctx, action_id):
 
 
 def _view_store_key(ctx):
-    """Storage-ключ коллекции для view-контекста. lagom возвращает фиксированный
-    revision-слот вместо реального storage-ключа — см. _LAGOM_REVISION_SLOT."""
+    """Storage-ключ коллекции для view-контекста."""
     cfg = _collection_cfg(ctx)
     if cfg:
         return cfg["storage_key"]
@@ -213,8 +202,6 @@ def _view_store_key(ctx):
         return config.FRIDGE_KEY
     if ctx == "recipes":
         return config.MY_RECIPES_KEY
-    if ctx == "lagom":
-        return _LAGOM_REVISION_SLOT
     return None
 
 
@@ -264,9 +251,6 @@ def _note_in_group(note, group):
 
 
 def _collection_records(cfg, cid):
-    if cfg["id"] == "health_lagom":
-        import memory
-        return store.ensure_list_ids_via(memory.get_lagom, memory.set_lagom, _LAGOM_REVISION_SLOT, cid)
     records = store.ensure_list_ids(cfg["storage_key"], cid)
     if cfg.get("note_group"):
         records = [
@@ -414,10 +398,6 @@ def _ctx_items(cid, ctx):
         recipes = store.get_list(config.MY_RECIPES_KEY, cid)
         items = [(i, r.get("name", f"Рецепт {i+1}")) for i, r in enumerate(recipes)]
         return ui_label("recipes", "Чистка: рецепты"), items, "as_my_recipes"
-    if ctx == "lagom":
-        import memory
-        items = [(i, it) for i, it in enumerate(memory.get_lagom(cid))]
-        return "Чистка: Здоровье", items, "set_lagom"
     return "Чистка", [], "m_learn"
 
 
@@ -445,8 +425,6 @@ def _action_label(ctx):
         return "Удалить битые записи"
     if ctx.startswith("d_"):
         return "Удалить из словаря"
-    if ctx == "lagom":
-        return "Удалить принципы"
     if ctx == "diary":
         return "Удалить записи"
     return "Применить действие"
@@ -584,9 +562,6 @@ def _cleanup_delete(cid, ctx):
         store.set_list(config.FRIDGE_KEY, cid, [it for i, it in enumerate(store.get_list(config.FRIDGE_KEY, cid)) if i not in sel])
     elif ctx == "recipes":
         store.set_list(config.MY_RECIPES_KEY, cid, [r for i, r in enumerate(store.get_list(config.MY_RECIPES_KEY, cid)) if i not in sel])
-    elif ctx == "lagom":
-        import memory
-        memory.set_lagom(cid, [it for i, it in enumerate(memory.get_lagom(cid)) if i not in sel])
     store.list_sel[f"{cid}:{ctx}"] = set()
 
 
@@ -667,11 +642,6 @@ def _view_items(ctx, cid):
         records = store.ensure_list_ids(config.MY_RECIPES_KEY, cid)
         items = [(r["id"], r.get("name", "Рецепт")) for r in records]
         return ui_label("recipes", "Чистка: рецепты"), items, "as_my_recipes"
-    if ctx == "lagom":
-        import memory
-        records = store.ensure_list_ids_via(memory.get_lagom, memory.set_lagom, _LAGOM_REVISION_SLOT, cid)
-        items = [(r["id"], _view_label(r)) for r in records]
-        return "Чистка: Здоровье", items, "set_lagom"
     return "Чистка", [], "m_learn"
 
 
@@ -680,12 +650,6 @@ def _view_delete(ctx, cid, ids):
     if not ids:
         return 0
     cfg = _collection_cfg(ctx)
-    if cfg and cfg["id"] == "health_lagom":
-        import memory
-        return store.remove_from_list_by_ids_via(memory.get_lagom, memory.set_lagom, _LAGOM_REVISION_SLOT, cid, ids)
-    if ctx == "lagom":
-        import memory
-        return store.remove_from_list_by_ids_via(memory.get_lagom, memory.set_lagom, _LAGOM_REVISION_SLOT, cid, ids)
     store_key = _view_store_key(ctx)
     if not store_key:
         return 0

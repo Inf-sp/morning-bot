@@ -154,7 +154,7 @@ DICT_KEY = "dict.json"
 TTS_CACHE_KEY = "tts_cache.json"
 LANGUAGE_REVIEW_KEY = "language_review.json"
 DATA_REFRESH_BACKUP_KEY = "data_refresh_backups.json"
-LAGOM_KEY = "lagom.json"
+LEGACY_LAGOM_KEY = "lagom.json"  # только для удаления старых пользовательских данных
 PROFILE_KEY = "profile.json"   # память пользователя: фокус, фидбек гардероба, наблюдения
 LIFEHACK_KEY = "lifehacks_seen.json"       # anti-repeat для fallback lifehacks.json
 LIFEHACK_POOL_KEY = "myday_lifehack_pool.json"  # недельный AI-пул базы знаний {cid: {...}}
@@ -166,7 +166,7 @@ RECIPE_QUEUE_KEY = "recipe_queue.json"        # {cid: {"meal":..., "items":[...]
 RECIPE_HISTORY_KEY = "recipe_history.json"    # {cid: [последние 100 названий]} — общая anti-repeat история
 CUISINE_WEIGHTS_KEY = "cuisine_weights.json"  # {cid: {"italian": 3, "japanese": -1, ...}} — обучение по действиям
 QUOTE_AUTHORS_KEY = "quote_authors_seen.json"
-MOTIV_LAGOM_SEEN_KEY = "motiv_lagom_seen.json"
+LEGACY_MOTIV_LAGOM_SEEN_KEY = "motiv_lagom_seen.json"  # только для purge_user
 CONCERTS_CACHE_KEY = "concerts_cache.json"  # {cid: {"ts": epoch, "cc": "NL", "events": [...]}}, прогревается перед пятничной афишей
 SEEN_CONCERTS_KEY = "seen_concerts.json"  # {cid: [concert_id, ...]} — для уведомления о новых концертах любимых артистов
 ARTIST_EXTERNAL_EVENTS_KEY = "artist_external_events.json"  # глобальный кэш внешнего поиска концертов (Tavily+Firecrawl) по нормализованному имени артиста, TTL 7 дней: {artist_key: {"ts": epoch, "events": [...]}}
@@ -201,15 +201,6 @@ VISITED = ", ".join(_load_json("countries.json", []))
 _PROMPTS = _load_json("prompts.json", {})
 STYLE_PROFILE = _PROMPTS.get("style_profile", "")
 CONTENT_TASTE = _PROMPTS.get("content_taste", "")
-
-
-def _load_lagom_items():
-    return _load_json("lagom.json", [])
-
-_LAGOM_ITEMS = _load_lagom_items()
-
-LAGOM = ("Лагом-установки пользователя (используй как ориентир тона и ценностей):\n"
-         + "\n".join(f"• {it}" for it in _LAGOM_ITEMS)) if _LAGOM_ITEMS else ""
 
 
 def place_hint(city="", country="", cc=""):

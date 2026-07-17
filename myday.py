@@ -17,17 +17,12 @@ import learning
 import learning_dictionary as dictionary
 import dictionary_seed
 import research
-import memory
 import util
 from util import esc, _WEEKDAY_SHORT, _MONTHS
 import verify
 from ui import myday as myday_ui
 
 TZ = config.TZ
-
-def ensure_lagom(cid):
-    """Список Лагом-принципов пользователя — делегирует в memory.get_lagom."""
-    return memory.get_lagom(cid)
 
 def _strip_quotes(s):
     """Убирает внешние кавычки (« » \" \" \" ') с краёв, чтобы не задваивать обёртку."""

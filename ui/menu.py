@@ -104,7 +104,6 @@ _SCREENS = {
         [
             [(ui_label("doctor", "Спросить врача"), "as_doctor")],
             [("⚡ Мотивация", "as_motiv"), (ui_label("worry_diary", "Мысли"), "as_daycheck")],
-            [("Мой лагом", "set_lagom")],
             [(choose_label("Выбрать принципы"), "as_health_principles")],
             [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
         ],

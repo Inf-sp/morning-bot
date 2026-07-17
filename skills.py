@@ -21,7 +21,7 @@ class Skill:
 SKILLS = {s.name: s for s in (
     Skill("morning_brief", "Мой день", "weather",
           entrypoints=("плановый запуск", "☀️ Мой день"),
-          memory=("SETTINGS_FILE", "WARDROBE_FILE", "DICT_KEY", "LAGOM_KEY", "PROFILE_KEY"),
+          memory=("SETTINGS_FILE", "WARDROBE_FILE", "DICT_KEY", "PROFILE_KEY"),
           fallback="⚠️ Не удалось собрать сводку дня. Попробуй ещё раз."),
     Skill("adhd_unstuck", "Личная мотивация / состояние", "card",
           entrypoints=("as_motiv", "role_state", "chat_retry", "ans_short", "ans_deep"),

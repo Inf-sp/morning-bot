@@ -111,41 +111,10 @@ async def toggle_health_principle(bot, cid, key, q=None):
     await send_health_principles(bot, cid, q=q)
 
 # ---------- СДВГ / Следующий шаг ----------
-def _lagom_text(item) -> str:
-    """Текст принципа: элемент может быть строкой (старый формат) или
-    {"id":..., "value": строка} (после захода в удаление, см. store.ensure_list_ids_via)."""
-    if isinstance(item, dict):
-        return str(item.get("value", "")).strip()
-    return str(item or "").strip()
-
-
-def _pick_lagom(cid) -> str:
-    """Берёт один неиспользованный Лагом-принцип, при исчерпании — сбрасывает счётчик."""
-    import memory
-    items = memory.get_lagom(cid)
-    if not items:
-        return ""
-    seen = store.get_list(config.MOTIV_LAGOM_SEEN_KEY, cid)
-    unused = [i for i in range(len(items)) if i not in seen]
-    if not unused:
-        seen = []
-        unused = list(range(len(items)))
-        store.set_list(config.MOTIV_LAGOM_SEEN_KEY, cid, [])
-    import random
-    idx = random.choice(unused)
-    seen.append(idx)
-    store.set_list(config.MOTIV_LAGOM_SEEN_KEY, cid, seen)
-    return _lagom_text(items[idx])
-
 def _gen_motiv(cid):
     import random
     selected_principles = health_principle_labels(cid)
-    import memory
-    has_lagom = bool(memory.get_lagom(cid))
-    if selected_principles and (not has_lagom or random.choice((True, False))):
-        active_principle = random.choice(selected_principles)
-    else:
-        active_principle = _pick_lagom(cid)
+    active_principle = random.choice(selected_principles) if selected_principles else ""
     angles = ["физическое действие", "ограничение", "мини-ритуал", "перезагрузку", "один микрошаг"]
     angle = random.choice(angles)
     principle_ctx = f"Актуальный принцип пользователя: «{active_principle}»\n" if active_principle else ""
@@ -198,11 +167,11 @@ def _gen_motiv(cid):
         )
         steps = [action]
         now = ""
-    lagom_full = active_principle if active_principle else "Один шаг лучше идеального плана."
+    principle_full = active_principle if active_principle else "Один шаг лучше идеального плана."
     final = f"Сейчас: {now}" if now else "Сделай первый шаг сейчас, без подготовки."
     return _build_entity_card(
         "Мотивация",
-        lagom_full,
+        principle_full,
         why,
         steps,
         final,

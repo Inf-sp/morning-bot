@@ -61,7 +61,6 @@ UI_EMOJI = {
     "cuisines": "🍽",
     "clothing_style": "👟",
     "personal_data": "🌀",
-    "lagom": "🌿",
     "examples": "💬",
     "sections": "📂",
     "translation": "🤖",

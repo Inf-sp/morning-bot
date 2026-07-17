@@ -134,20 +134,8 @@ async def handle(update, context, remove_reply_keyboard):
                 ci = -1
             await fridge.fridge_add_done(bot, cid, text, ci); return
         if kind == "setadd_lagom":
-            import memory
-            from util import esc
-            added = memory.add_lagom_batch(cid, text)
-            n = len(added)
-            if n == 0:
-                await bot.send_message(chat_id=cid, text="Эти принципы уже есть в Лагом.")
-            else:
-                label = "принцип" if n == 1 else ("принципа" if 2 <= n <= 4 else "принципов")
-                preview = "\n".join(f"• {esc(it)}" for it in added[:10])
-                suffix = f"\n<i>...и ещё {n - 10}</i>" if n > 10 else ""
-                await bot.send_message(chat_id=cid,
-                    text=f"✅ Добавлено {n} {label}:\n\n{preview}{suffix}",
-                    parse_mode="HTML")
-            await settings.send_lagom(bot, cid); return
+            await bot.send_message(chat_id=cid, text="Раздел «Лагом» удалён.")
+            return
         if kind.startswith("collect_"):
             import leisure_collection
             await leisure_collection.collect_done(bot, cid, kind[len("collect_"):], text); return

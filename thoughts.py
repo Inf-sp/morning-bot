@@ -78,6 +78,13 @@ def _today():
     return _now().strftime("%Y-%m-%d")
 
 
+def _navigation_row():
+    return [
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_balance"),
+        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+    ]
+
+
 def _normalize_record(item):
     item = dict(item or {})
     changed = False
@@ -230,7 +237,8 @@ async def send_home(bot, cid, *, cleared=False):
     rows = []
     if opened and not cleared:
         rows.append([InlineKeyboardButton("🧐 Разобрать мысли", callback_data="thought_review")])
-    kb = InlineKeyboardMarkup(rows) if rows else None
+    rows.append(_navigation_row())
+    kb = InlineKeyboardMarkup(rows)
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,
         reply_markup=kb, transient=True)
@@ -402,6 +410,7 @@ def _review_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🕒 Оставить на потом", callback_data="thought_review_later")],
         [InlineKeyboardButton("❌ Удалить мысли", callback_data="thought_review_clear")],
+        _navigation_row(),
     ])
 
 
@@ -516,9 +525,10 @@ async def capture(bot, cid, text, *, split_commas=False):
     if medical:
         settings.set_(cid, "_thoughts_safety_date", _today())
         msg = thoughts_ui.medical()
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Спросить врача", callback_data="as_doctor")
-        ]])
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Спросить врача", callback_data="as_doctor")],
+            _navigation_row(),
+        ])
         await bot.send_message(
             chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
@@ -574,7 +584,10 @@ async def _confirm_clear_review(bot, cid, q):
     msg = thoughts_ui.clear_confirmation()
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(delete_label("Да, очистить"), callback_data="thought_review_clear_yes")],
-        [InlineKeyboardButton("↩️ Отмена", callback_data="thought_review_clear_cancel")],
+        [
+            InlineKeyboardButton("⬅️ Назад", callback_data="thought_review_clear_cancel"),
+            InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+        ],
     ])
     try:
         await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)

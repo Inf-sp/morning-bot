@@ -43,7 +43,6 @@ import weather
 import verify
 import secure
 import service_monitor
-import memory
 import onboard
 import firstvisit
 import tracking
@@ -641,11 +640,6 @@ async def post_init(app):
             logging.info("Movies seed: applied")
     except Exception:
         logging.exception("Movies seed failed")
-    try:
-        if memory.seed_owner_lagom():
-            logging.info("Owner lagom seed: applied")
-    except Exception:
-        logging.exception("Owner lagom seed failed")
     try:
         unhandled = verify.audit_callbacks()
         if unhandled:
