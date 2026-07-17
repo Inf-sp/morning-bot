@@ -201,7 +201,6 @@ async def book_dislike(bot, cid, i):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         recommendation_stoplist.add(cid, "book", title, "hidden")
-        await bot.send_message(chat_id=cid, text=f"Понял, «{title}» исключил. Вот другая книга.")
     try:
         data = await asyncio.to_thread(content_recommend, "book", str(cid))
         items = data.get("items", [])
@@ -236,5 +235,4 @@ async def book_love(bot, cid, i):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         _add_unique(config.BOOKS_KEY, cid, title)
-        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — в любимые (Мои книги). Вот ещё вариант.")
     await _advance_book(bot, cid)

@@ -61,7 +61,6 @@ async def listen_love(bot, cid):
         artist = rec["items"][0]
         _add_unique(config.ARTISTS_KEY, cid, artist)
         _kick_off_new_artist_concert_check(cid, [artist])
-        await bot.send_message(chat_id=cid, text=f"❤️ «{artist}» — в любимые (Мои музыканты). Вот ещё вариант.")
     await send_listen(bot, cid)
 
 def _listen_kb(saved=False):

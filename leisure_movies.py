@@ -508,7 +508,6 @@ async def movie_dislike(bot, cid, i):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         recommendation_stoplist.add(cid, "movie", title, "hidden")
-        await bot.send_message(chat_id=cid, text=f"Понял, больше не буду рекомендовать «{title}». Вот другой вариант.")
     await _advance_movie(bot, cid)
 
 async def _advance_movie(bot, cid):
@@ -821,7 +820,6 @@ async def movie_love(bot, cid, i):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         _add_unique(config.WATCHLIST_KEY, cid, title)
-        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — в любимые (Кино). Вот ещё вариант.")
     await _advance_movie(bot, cid)
 
 async def add_reco(bot, cid, i, q=None):
