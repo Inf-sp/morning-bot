@@ -190,9 +190,7 @@ def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallba
         b.line(f"👤 {servings}")
     if ingredients:
         b.spacer()
-        b.bold("Ингредиенты:")
-        b.newline()
-        b.line(ingredients)
+        b.labeled_line("Ингредиенты", ingredients)
     missing = data.get("missing_ingredients") or []
     if isinstance(missing, str):
         missing = [missing]
@@ -211,7 +209,7 @@ def food_card(data, label="Рецепт дня", meal=None, cuisine_emoji_fallba
     pairing = pairing_text(data)
     if pairing:
         b.spacer()
-        b.line(f"К блюду подойдет: {pairing}")
+        b.labeled_line("К блюду подойдёт", pairing, lowercase=False)
     if chef_tip:
         b.spacer()
         b.bold("Совет шефа:")

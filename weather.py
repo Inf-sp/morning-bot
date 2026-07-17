@@ -156,6 +156,82 @@ def weather_icon(code, temp, rain, wind_ms=0, rain_mm=None):
     return "☁️"
 
 
+def _week_icon(code, temp, rain, wind_ms=0, rain_mm=None):
+    """Одна иконка преобладающей погоды дня без составных эмодзи."""
+    if code in (95, 96, 99):
+        return "🌩️"
+    if code in (71, 73, 75, 77, 85, 86):
+        return "❄️"
+    if _rain_real(rain, rain_mm):
+        return "🌧️"
+    if code == 0:
+        return "☀️"
+    if code in (1, 2):
+        return "🌤️"
+    if code in (45, 48):
+        return "🌫️"
+    return "☁️"
+
+
+def _week_overview(days):
+    """Короткий итог только из суточных данных погодного API."""
+    low = min(day["tmin"] for day in days)
+    high = max(day["tmax"] for day in days)
+    wet = sum(day["rain_real"] for day in days)
+    clear = sum(day["code"] in (0, 1) and not day["rain_real"] for day in days)
+    cloudy = sum(day["code"] in (3, 45, 48) for day in days)
+    snow = sum(day["code"] in SNOW_CODES for day in days)
+    max_wind = max(day["wind"] for day in days)
+    avg_wind = sum(day["wind"] for day in days) / len(days)
+
+    if snow:
+        icon, description = "❄️", "Временами снег"
+    elif wet >= 4:
+        icon, description = "🌧️", "Часто дождь"
+    elif wet >= 2:
+        icon, description = "🌦️", "Переменная облачность, временами дождь"
+    elif clear >= 5:
+        icon, description = "☀️", "В основном ясно"
+    elif clear >= 3:
+        icon, description = "🌤️", "В основном малооблачно"
+    elif cloudy >= 4:
+        icon, description = "☁️", "В основном облачно"
+    else:
+        icon, description = "🌤️", "Переменная облачность"
+
+    if max_wind >= 11:
+        description += ", сильный ветер"
+    elif max_wind >= 8:
+        description += ", временами ветрено"
+    elif avg_wind >= 5:
+        description += ", умеренный ветер"
+    return f"{icon} {low:+.0f}…{high:.0f}°C · {description}"
+
+
+def _week_advice(days):
+    """Одно практическое предложение, привязанное к реальному прогнозу."""
+    strong_wind = [day for day in days if day["wind"] >= STRONG_WIND_MS]
+    rainy = [day for day in days if day["rain_real"]]
+    outdoor = [day for day in days if not day["rain_real"] and day["wind"] < STRONG_WIND_MS]
+
+    if strong_wind and all(day in strong_wind for day in days[-2:]):
+        return "В конце недели ожидается усиление ветра"
+    if len(strong_wind) >= 3:
+        return "Для велосипеда выбирай дни без сильного ветра"
+    if len(rainy) >= 4:
+        return "Для прогулок выбирай сухие окна между дождями"
+    if rainy and len(outdoor) >= 2:
+        best = sorted(outdoor, key=lambda day: (-day["tmax"], day["wind"]))[:2]
+        labels = " и ".join(day["name"] for day in sorted(best, key=lambda day: day["index"]))
+        return f"Лучшие дни для отдыха на улице — {labels}"
+    if min(day["tmin"] for day in days) <= 12:
+        return "Возьми лёгкую куртку — утром и вечером будет прохладно"
+    if len(outdoor) >= 5:
+        return "Можно спокойно планировать прогулки, велосипед и поездки"
+    hottest = max(days, key=lambda day: day["tmax"])
+    return f"Самый тёплый день — {hottest['name']}"
+
+
 # ---------- периоды по часам ----------
 def _periods(data, day_str, key, threshold):
     try:
@@ -421,16 +497,9 @@ async def send_weather(bot, cid, mode="today"):
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
         return
 
-    # week/week_plain: компактный формат — одна строка на день/группу
+    # week/week_plain: семь фактических дневных строк без группировки и повторов
     week_plain = mode == "week_plain"
     _SKIP = 1
-    d1 = now + timedelta(days=_SKIP)
-    d2 = now + timedelta(days=_SKIP + 6)
-    if d1.month == d2.month:
-        rng = f"{d1.day}–{d2.day} {_MONTHS[d1.month-1]}"
-    else:
-        rng = f"{d1.day} {_MONTHS[d1.month-1]} – {d2.day} {_MONTHS[d2.month-1]}"
-    flag = __import__("util").flag_from_cc(s.get("cc", ""))
 
     # Сбор данных для 7 дней
     day_data = []
@@ -438,90 +507,43 @@ async def send_weather(bot, cid, mode="today"):
         idx = _SKIP + i
         if idx >= len(d["weathercode"]):
             break
-        dt_i = now + timedelta(days=idx)
+        day_str = d["time"][idx]
+        dt_i = datetime.fromisoformat(day_str)
         code = d["weathercode"][idx]
-        tmax = d["temperature_2m_max"][idx] or 0
+        tmax = d["temperature_2m_max"][idx]
+        tmin = d["temperature_2m_min"][idx]
+        if tmax is None or tmin is None:
+            continue
         rain = d["precipitation_probability_max"][idx] or 0
         rain_mm = (d.get("precipitation_sum") or [None] * 10)[idx]
-        day_str = d["time"][idx]
         wind_max = d["windspeed_10m_max"][idx] or 0
-        rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
-        rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
         day_data.append({
+            "index": i,
             "abbrev": _WEEKDAY_SHORT[dt_i.weekday()],
-            "icon": weather_icon(code, tmax, rain, wind_max, rain_mm),
+            "name": _WEEKDAYS[dt_i.weekday()].lower(),
+            "date": dt_i,
+            "icon": _week_icon(code, tmax, rain, wind_max, rain_mm),
             "tmax": tmax,
+            "tmin": tmin,
             "code": code,
             "rain": rain,
             "rain_mm": rain_mm,
-            "rain_when": rain_when,
             "rain_real": _rain_real(rain, rain_mm),
             "wind": wind_max,
         })
 
-    # LLM: компактные описания дней (с группировкой) + итог — один вызов
-    ordered_abbrevs = [dd["abbrev"] for dd in day_data]
-    abbrev_to_idx = {a: i for i, a in enumerate(ordered_abbrevs)}
-
-    prompt_lines = [
-        f"{dd['abbrev']}: {DESC.get(dd['code'], 'ясно')}, до {dd['tmax']:+.0f}°C"
-        + (f", дождь {dd['rain']:.0f}%{dd['rain_when']}" if dd["rain_real"] else "")
-        + f", ветер {dd['wind']:.0f} м/с"
-        for dd in day_data
-    ]
-    groups = []
-    summary = ""
-    try:
-        llm_result = await ai.allm_json(
-            f"Погода на неделю в {s['city']}:\n" + "\n".join(prompt_lines) + "\n\n"
-            "Верни JSON:\n"
-            '{"groups":[{"abbrevs":["Пн"],"desc":"дождь утром и ночью"},'
-            '{"abbrevs":["Вт","Ср"],"desc":"облачно"}],"summary":"1-2 предложения"}\n\n'
-            "Правила: desc — 3-7 слов, суть без цифр; "
-            "объединять ТОЛЬКО идущие подряд дни (Ср-Чт-Пт — можно, Пн-Сб через пропуск — нельзя); "
-            "все 7 дней должны войти в группы; "
-            "summary — 1-2 предложения без слова «зонт», без markdown.",
-            300, tier="cheap", module="weather"
-        )
-        groups = llm_result.get("groups", [])
-        summary = (llm_result.get("summary") or "").strip()
-    except Exception:
-        groups = [{"abbrevs": [dd["abbrev"]], "desc": DESC.get(dd["code"], "")} for dd in day_data]
-
-    # Валидация: разбиваем группу на одиночные дни если дни не идут подряд
-    def _split_if_gaps(grp):
-        abbrevs = [a for a in (grp.get("abbrevs") or []) if a in abbrev_to_idx]
-        if len(abbrevs) <= 1:
-            return [grp] if abbrevs else []
-        idxs = [abbrev_to_idx[a] for a in abbrevs]
-        if all(idxs[i + 1] == idxs[i] + 1 for i in range(len(idxs) - 1)):
-            return [grp]
-        return [{"abbrevs": [a], "desc": grp.get("desc", "")} for a in abbrevs]
-
-    validated = []
-    for grp in groups:
-        validated.extend(_split_if_gaps(grp))
-    groups = validated
-
-    abbrev_map = {dd["abbrev"]: dd for dd in day_data}
-
-    ui_groups = []
-    for grp in groups:
-        abbrevs = grp.get("abbrevs") or []
-        desc = (grp.get("desc") or "").strip()
-        grp_days = [abbrev_map[a] for a in abbrevs if a in abbrev_map]
-        if not grp_days or not desc:
-            continue
-        rep = max(grp_days, key=lambda x: x["rain"])
-        icon = rep["icon"]
-        tmaxes = [gd["tmax"] for gd in grp_days]
-        tmin_g, tmax_g = min(tmaxes), max(tmaxes)
-        temp_str = f"+{tmin_g:.0f}…{tmax_g:.0f}°C" if tmax_g - tmin_g > 1 else f"до {tmax_g:+.0f}°C"
-        day_label = abbrevs[0] if len(abbrevs) == 1 else f"{abbrevs[0]}-{abbrevs[-1]}"
-        ui_groups.append({"icon": icon, "label": day_label, "desc": desc, "temp": temp_str})
+    if len(day_data) != 7:
+        raise ValueError("weather API returned incomplete weekly forecast")
+    d1, d2 = day_data[0]["date"], day_data[-1]["date"]
+    if d1.month == d2.month:
+        rng = f"{d1.day}–{d2.day} {_MONTHS[d1.month-1]}"
+    else:
+        rng = f"{d1.day} {_MONTHS[d1.month-1]} – {d2.day} {_MONTHS[d2.month-1]}"
+    overview = _week_overview(day_data)
+    advice = _week_advice(day_data)
 
     kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]])
-    msg = weather_ui.week_forecast(rng, s["city"], flag, ui_groups, summary)
+    msg = weather_ui.week_forecast(rng, s["city"], overview, day_data, advice)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 

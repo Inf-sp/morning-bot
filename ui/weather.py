@@ -81,15 +81,17 @@ def day_forecast(header, main_lines, alert="", fact_title="", fact=""):
     return b.build_stripped()
 
 
-def week_forecast(rng, city, flag, groups, summary=""):
+def week_forecast(rng, city, overview, days, advice):
     b = MessageBuilder()
-    b.section(f"{ui_label('week', 'Ближайшая неделя')} • {rng} • {city} {flag}")
+    b.bold(f"Ближайшая неделя · {rng} · {city} 📍")
     b.newline()
-    for group in groups:
-        b.line(f"{group['icon']} {group['label']} — {group['desc']}, {group['temp']}")
-    if summary:
-        b.warning("Метео-итог", emoji="🌡️")
-        b.line(_finish_sentence(cap_sentence(summary)))
+    b.spacer()
+    b.line(overview)
+    b.spacer()
+    for day in days:
+        b.line(f"{day['abbrev']} · {day['icon']} {day['tmax']:+.0f}°")
+    b.spacer()
+    b.line(f"💡 {_finish_sentence(cap_sentence(advice))}")
     return b.build_stripped()
 
 

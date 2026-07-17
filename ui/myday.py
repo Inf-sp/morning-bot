@@ -34,8 +34,7 @@ def day_summary(
 ):
     """Сводка дня: заголовок, затем по одной строке на блок с пустой строкой между ними."""
     b = MessageBuilder()
-    b.bold("Мой день")
-    b.text_line(f" · {header} · {city}{' 📍' if city else ''}")
+    b.bold(f"Мой день · {header} · {city}{' 📍' if city else ''}")
     b.newline()
     b.spacer()
 
