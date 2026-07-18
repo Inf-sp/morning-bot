@@ -1,501 +1,32 @@
-"""Unified, persistent service health monitoring.
+"""Background provider probes and compact admin rendering.
 
-The admin UI deliberately knows nothing about individual providers.  Every
-external call and every background probe is reduced to the same state model;
-this module also owns fallback selection and status history.
+Authoritative catalog, health transitions and fallback state live in
+``provider_runtime``. This module only adapts probes and usage data to it.
 """
 from __future__ import annotations
 
-import logging
 import time
-import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
 from datetime import datetime
 import requests
 
 import api_usage
 import config
+import provider_runtime
 import store
 
-_log = logging.getLogger(__name__)
-
-UNKNOWN = "unknown"
-OK = "ok"
-WARNING = "warning"
-DOWN = "down"
-_DOT = {UNKNOWN: "⚪", OK: "🟢", WARNING: "🟡", DOWN: "🔴"}
-_HISTORY_LIMIT = 300
-
-
-@dataclass(frozen=True)
-class ServiceSpec:
-    key: str
-    label: str
-    sections: tuple[str, ...]
-    fallbacks: tuple[str, ...] = ()
-    probe_every: int = 300
-
-    @property
-    def category(self) -> str:
-        sections = tuple(dict.fromkeys(self.sections))
-        return sections[0] if len(sections) == 1 else "Везде"
-
-
-# Fallbacks are directed.  In particular, Firecrawl never points back to
-# Tavily, so a failed search cannot bounce forever between the two providers.
-SPECS = (
-    ServiceSpec("cohere", "Cohere", ("Обучение", "Ассистент"), ("github_models", "gemini")),
-    ServiceSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"), ("github_models", "groq", "openrouter")),
-    ServiceSpec("github_models", "GitHub Models", ("Готовка", "Обучение", "Ассистент"), ("openrouter",)),
-    ServiceSpec("groq", "Groq", ("Готовка", "Обучение", "Ассистент"), ("github_models", "openrouter")),
-    ServiceSpec("openrouter", "OpenRouter", ("Готовка",), ()),
-    ServiceSpec("cloudflare", "Cloudflare AI", ("Ассистент",), ("github_models",)),
-    ServiceSpec("openweather", "OpenWeather", ("Мой день", "Гардероб"), ()),
-    ServiceSpec("tavily", "Tavily", ("Поиск", "Поездка", "Концерты"), ("firecrawl",)),
-    ServiceSpec("firecrawl", "Firecrawl", ("Поиск",), (), 300),
-    ServiceSpec("tmdb", "TMDB", ("Кино",), ()),
-    ServiceSpec("google_books", "Google Books", ("Книги",), (), 86400),
-    ServiceSpec("languagetool", "LanguageTool", ("Обучение",), ("gemini",)),
-    ServiceSpec("spoonacular", "Spoonacular", ("Готовка",), ("themealdb",), 3600),
-    ServiceSpec("themealdb", "TheMealDB", ("Готовка",), ()),
-    ServiceSpec("azure_speech", "Azure Speech", ("Озвучка",), ()),
-    ServiceSpec("ticketmaster", "Ticketmaster", ("Концерты",), ("tavily",)),
-    ServiceSpec("zeroentropy", "ZeroEntropy", ("Здоровье",), (), 3600),
-    ServiceSpec("pexels", "Pexels", ("Изображения",), ()),
-    ServiceSpec("restcountries", "REST Countries", ("Поездка",), ("tavily",)),
-    ServiceSpec("telegram", "Telegram", ("Мой день", "Готовка", "Обучение"), ()),
-    ServiceSpec("database", "PostgreSQL", ("Мой день", "Готовка", "Обучение"), ()),
-)
-SPEC_BY_KEY = {spec.key: spec for spec in SPECS}
-_AI_SERVICES = {"cohere", "gemini", "github_models", "groq", "openrouter", "cloudflare"}
-
-
-def _configured(service: str) -> bool:
-    values = {
-        "cohere": config.COHERE_API_KEY,
-        "gemini": config.GEMINI_API_KEY,
-        "github_models": config.GITHUB_MODELS_TOKEN,
-        "groq": config.GROQ_API_KEY,
-        "openrouter": config.OPENROUTER_API_KEY,
-        "cloudflare": config.CF_API_TOKEN and config.CF_ACCOUNT_ID,
-        "openweather": config.WEATHER_API_KEY,
-        "tavily": config.TAVILY_API_KEY,
-        "firecrawl": config.FIRECRAWL_API_KEY,
-        "tmdb": config.TMDB_API_KEY,
-        "google_books": config.GOOGLE_BOOKS_API_KEY,
-        "languagetool": config.LANGUAGETOOL_API_URL,
-        "spoonacular": config.SPOONACULAR_API_KEY,
-        "themealdb": config.THEMEALDB_API_KEY,
-        "azure_speech": config.AZURE_SPEECH_KEY and config.AZURE_SPEECH_REGION,
-        "ticketmaster": config.TICKETMASTER_API_KEY,
-        "zeroentropy": config.ZEROENTROPY_API_KEY,
-        "pexels": config.PEXELS_API_KEY,
-        "restcountries": config.RESTCOUNTRIES_API_KEY,
-        "telegram": config.TELEGRAM_TOKEN,
-        "database": config.DATABASE_URL,
-    }
-    return bool(values.get(service))
-
-
-def _blank(service: str) -> dict:
-    return {
-        "status": UNKNOWN,
-        "quota_remaining": None,
-        "quota_total": None,
-        "fallback": "",
-        "last_check": None,
-        "last_success": None,
-        "last_error": "",
-        "error_type": "",
-        "incident_id": "",
-        "incident_started_at": None,
-    }
-
-
-def _template() -> dict:
-    return {"services": {spec.key: _blank(spec.key) for spec in SPECS}, "history": []}
-
-
-def _normalise(data) -> dict:
-    if not isinstance(data, dict):
-        data = _template()
-    services = data.setdefault("services", {})
-    for spec in SPECS:
-        current = services.setdefault(spec.key, {})
-        for key, value in _blank(spec.key).items():
-            current.setdefault(key, value)
-    data.setdefault("history", [])
-    return data
-
-
-def _load() -> dict:
-    try:
-        return _normalise(store._load(config.SERVICE_MONITOR_KEY))
-    except Exception:
-        return _template()
-
-
-def google_error_details(response) -> str:
-    """Compact Google API error fields without storing the full response body."""
-    try:
-        payload = response.json() if response.content else {}
-    except (TypeError, ValueError):
-        return f"HTTP {getattr(response, 'status_code', 0) or '?'}"
-    error = payload.get("error") if isinstance(payload, dict) else {}
-    if not isinstance(error, dict):
-        return f"HTTP {getattr(response, 'status_code', 0) or '?'}"
-    values = [error.get("code"), error.get("status"), error.get("message")]
-    for item in error.get("errors") or []:
-        if isinstance(item, dict):
-            values.extend((item.get("reason"), item.get("message")))
-    text = " | ".join(str(value).strip() for value in values if str(value or "").strip())
-    return text or f"HTTP {getattr(response, 'status_code', 0) or '?'}"
-
-
-def _google_books_error(error="", status_code=None) -> tuple[str, str]:
-    raw = str(error or "").strip()
-    low = raw.casefold().replace("_", " ")
-    code = int(status_code or 0)
-    if "not configured" in low:
-        return "auth", "API-ключ не настроен"
-    if code == 429:
-        return "rate_limit", "слишком много запросов"
-    if code == 403 and any(marker in low for marker in (
-        "quota exceeded", "quotaexceeded", "daily limit", "dailylimitexceeded",
-        "rate limit exceeded", "ratelimitexceeded", "resource exhausted",
-    )):
-        return "quota", "дневной лимит исчерпан"
-    if any(marker in low for marker in (
-        "invalid api key", "api key invalid", "api key not valid", "keyinvalid",
-        "bad api key",
-    )):
-        return "auth", "неверный API-ключ"
-    if code == 403 and any(marker in low for marker in (
-        "accessnotconfigured", "api not enabled", "has not been used",
-        "is disabled", "service disabled",
-    )):
-        return "api_disabled", "API не включён"
-    if code == 403 or any(marker in low for marker in (
-        "request denied", "permission denied", "access denied",
-    )):
-        return "access_denied", "доступ запрещён"
-    if 500 <= code <= 599:
-        return "temporary", "сервис Google недоступен"
-    if any(marker in low for marker in (
-        "timeout", "timed out", "connection", "network", "dns", "name resolution",
-    )):
-        return "network", "нет соединения"
-    if code == 400:
-        return "request", "ошибка запроса"
-    if "invalid json" in low:
-        return "response", "некорректный ответ Google"
-    return "unknown", "не удалось проверить доступ"
-
-
-def _friendly_error(error="", status_code=None, service="") -> tuple[str, str]:
-    if service == "google_books":
-        return _google_books_error(error, status_code)
-    raw = str(error or "").strip()
-    low = raw.casefold().replace("_", " ")
-    code = int(status_code or 0)
-    if service == "spoonacular" and code == 402:
-        return "quota", "дневной лимит исчерпан"
-    if service == "tavily" and code == 432:
-        return "quota", "лимит тарифа исчерпан"
-    if code == 429 or any(x in low for x in ("rate limit", "too many requests")):
-        return "quota", "лимит исчерпан"
-    if any(x in low for x in ("quota exceeded", "quota exhausted")):
-        return "quota", "лимит исчерпан"
-    if code in (401, 403) or any(x in low for x in ("unauthorized", "forbidden", "invalid api key")):
-        return "auth", "ошибка авторизации"
-    if code in (408, 504) or any(x in low for x in ("timeout", "timed out")):
-        return "timeout", "сервис не ответил"
-    if any(x in low for x in ("connection", "network", "dns", "name resolution")):
-        return "network", "ошибка сети"
-    if code >= 500:
-        return "temporary", "временная ошибка"
-    if code >= 400:
-        return "unknown", "не удалось определить статус"
-    return "unknown", "не удалось определить статус"
-
-
-def _quota_from_headers(headers) -> tuple[int | None, int | None]:
-    values = {str(k).casefold(): v for k, v in dict(headers or {}).items()}
-    pairs = (
-        ("x-ratelimit-remaining", "x-ratelimit-limit"),
-        ("x-ratelimit-remaining-requests", "x-ratelimit-limit-requests"),
-        ("ratelimit-remaining", "ratelimit-limit"),
-    )
-    for remaining_key, total_key in pairs:
-        try:
-            remaining = int(float(values[remaining_key]))
-            total = int(float(values[total_key]))
-        except (KeyError, TypeError, ValueError):
-            continue
-        if total >= 0 and 0 <= remaining <= total:
-            return remaining, total
-    try:
-        remaining = int(float(values["x-api-quota-left"]))
-        used = int(float(values["x-api-quota-used"]))
-        if remaining >= 0 and used >= 0:
-            return remaining, remaining + used
-    except (KeyError, TypeError, ValueError):
-        pass
-    return None, None
-
-
-def _append_history(
-    data: dict, service: str, text: str, now: int, *, event_type="status",
-    incident_id="", status_code=None, exception_type="", message="",
-    latency_ms=None, started_at=None, recovered_at=None, fallback_target="",
-) -> None:
-    history = data.setdefault("history", [])
-    last = history[-1] if history else {}
-    if (
-        last.get("service") == service
-        and last.get("event_type") == event_type
-        and last.get("incident_id") == incident_id
-        and last.get("text") == text
-    ):
-        return
-    history.append({
-        "ts": now,
-        "service": service,
-        "text": text,
-        "event_type": event_type,
-        "incident_id": incident_id,
-        "status_code": int(status_code) if status_code else None,
-        "exception_type": str(exception_type or "")[:80],
-        "message": str(message or "")[:240],
-        "latency_ms": int(latency_ms) if latency_ms is not None else None,
-        "started_at": int(started_at or now),
-        "recovered_at": int(recovered_at) if recovered_at else None,
-        "fallback_target": str(fallback_target or "")[:40],
-    })
-    data["history"] = history[-_HISTORY_LIMIT:]
-
-
-def _update_incident(data: dict, incident_id: str, **values) -> None:
-    if not incident_id:
-        return
-    for event in reversed(data.get("history") or []):
-        if event.get("event_type") == "error" and event.get("incident_id") == incident_id:
-            event.update({key: value for key, value in values.items() if value is not None})
-            return
-
-
-def record_result(
-    service: str, ok: bool, *, status_code=None, error="", headers=None,
-    quota_remaining=None, quota_total=None, checked_at=None, latency_ms=None,
-    exception_type="", allow_quota_recovery=True,
-) -> None:
-    """Record a real API result or a probe using the common state transition."""
-    if service not in SPEC_BY_KEY:
-        return
-    now = int(checked_at or time.time())
-    header_remaining, header_total = _quota_from_headers(headers)
-    remaining = quota_remaining if quota_remaining is not None else header_remaining
-    total = quota_total if quota_total is not None else header_total
-
-    def mutate(data):
-        data = _normalise(data)
-        state = data["services"][service]
-        old_status = state["status"]
-        old_fallback = state.get("fallback") or ""
-        old_error = state.get("last_error") or ""
-        old_error_type = state.get("error_type") or ""
-        incident_id = str(state.get("incident_id") or "")
-        incident_started_at = int(state.get("incident_started_at") or now)
-        state["last_check"] = now
-        if ok and not allow_quota_recovery and old_error_type in ("quota", "rate_limit"):
-            return data, None
-        if remaining is not None and total is not None:
-            try:
-                remaining_i, total_i = int(remaining), int(total)
-                if total_i >= 0 and 0 <= remaining_i <= total_i:
-                    state["quota_remaining"], state["quota_total"] = remaining_i, total_i
-            except (TypeError, ValueError):
-                pass
-        if ok:
-            quota_empty = state.get("quota_remaining") == 0 and state.get("quota_total") is not None
-            state.update({
-                "status": WARNING if quota_empty else OK,
-                "last_success": now,
-                "last_error": "лимит исчерпан" if quota_empty else "",
-                "error_type": "quota" if quota_empty else "",
-                "fallback": "",
-            })
-            if quota_empty:
-                if not incident_id:
-                    incident_id = f"{service}-{now}-{uuid.uuid4().hex[:8]}"
-                    incident_started_at = now
-                    _append_history(
-                        data, service, f"{SPEC_BY_KEY[service].label}: лимит исчерпан.", now,
-                        event_type="error", incident_id=incident_id,
-                        message="лимит исчерпан", latency_ms=latency_ms,
-                        started_at=incident_started_at,
-                    )
-                state["incident_id"] = incident_id
-                state["incident_started_at"] = incident_started_at
-            elif incident_id:
-                _append_history(
-                    data, service, f"{SPEC_BY_KEY[service].label} восстановлен.", now,
-                    event_type="recovery", incident_id=incident_id,
-                    started_at=incident_started_at, recovered_at=now,
-                )
-                _update_incident(data, incident_id, recovered_at=now)
-                if old_fallback:
-                    _append_history(
-                        data, service,
-                        f"{SPEC_BY_KEY[service].label}: резерв отключён.", now,
-                        event_type="system", incident_id=incident_id,
-                        started_at=incident_started_at, recovered_at=now,
-                    )
-                state["incident_id"] = ""
-                state["incident_started_at"] = None
-            elif old_status != state["status"]:
-                _append_history(
-                    data, service,
-                    f"{SPEC_BY_KEY[service].label} работает.", now,
-                    event_type="status",
-                )
-        else:
-            kind, friendly = _friendly_error(error, status_code, service)
-            already_unavailable = (
-                old_status == DOWN
-                and not old_fallback
-                and old_error == "резерв недоступен"
-                and old_error_type == "fallback"
-            )
-            if not already_unavailable:
-                state["error_type"], state["last_error"] = kind, friendly
-                has_fallback = bool(state.get("fallback"))
-                # A transient failure is yellow while a route can still recover.  A
-                # hard failure without an active/available reserve is red.
-                state["status"] = WARNING if has_fallback or kind in (
-                    "quota", "rate_limit", "timeout", "temporary", "unknown",
-                ) else DOWN
-                if not incident_id:
-                    incident_id = f"{service}-{now}-{uuid.uuid4().hex[:8]}"
-                    incident_started_at = now
-                    state["incident_id"] = incident_id
-                    state["incident_started_at"] = incident_started_at
-                    _append_history(
-                        data, service, f"{SPEC_BY_KEY[service].label}: {friendly}.", now,
-                        event_type="error", incident_id=incident_id,
-                        status_code=status_code, exception_type=exception_type,
-                        message=str(error or friendly), latency_ms=latency_ms,
-                        started_at=incident_started_at,
-                    )
-            # A reserve that has just failed is no longer a real reserve. Any
-            # primary pointing to it becomes red until another candidate is
-            # checked and selected.
-            for source, source_state in data["services"].items():
-                if source_state.get("fallback") != service:
-                    continue
-                source_state["fallback"] = ""
-                source_state["status"] = DOWN
-                source_state["last_error"] = "резерв недоступен"
-                source_state["error_type"] = "fallback"
-                source_incident = str(source_state.get("incident_id") or "")
-                _append_history(
-                    data, source,
-                    f"{SPEC_BY_KEY[source].label}: резерв недоступен.", now,
-                    event_type="system", incident_id=source_incident,
-                    started_at=source_state.get("incident_started_at") or now,
-                )
-        return data, None
-
-    try:
-        store.mutate_kv(config.SERVICE_MONITOR_KEY, mutate)
-    except Exception:
-        _log.exception("service monitor state write failed for %s", service)
-
-
-def _would_cycle(source: str, target: str, services: dict) -> bool:
-    seen = {source}
-    current = target
-    while current:
-        if current in seen:
-            return True
-        seen.add(current)
-        current = str((services.get(current) or {}).get("fallback") or "")
-    return False
-
-
-def activate_fallback(service: str, target: str, *, reason="") -> bool:
-    """Persist only a fallback that has actually answered successfully."""
-    if service not in SPEC_BY_KEY or target not in SPEC_BY_KEY:
-        return False
-    if target not in SPEC_BY_KEY[service].fallbacks and not (
-        service in _AI_SERVICES and target in _AI_SERVICES
-    ):
-        return False
-    changed = {"value": False}
-    now = int(time.time())
-
-    def mutate(data):
-        data = _normalise(data)
-        states = data["services"]
-        target_state = states[target]
-        # A successful request just recorded by the caller is the proof that
-        # switching is real. Stale or unchecked reserves are never advertised.
-        if target_state.get("status") != OK or not target_state.get("last_success"):
-            return data, None
-        if _would_cycle(service, target, states):
-            return data, None
-        state = states[service]
-        if state.get("fallback") == target:
-            return data, None
-        state["fallback"] = target
-        state["status"] = WARNING
-        if state.get("error_type") == "fallback":
-            state["last_error"] = "основной сервис недоступен"
-        incident_id = str(state.get("incident_id") or "")
-        _append_history(
-            data, service,
-            f"{SPEC_BY_KEY[service].label}: переключение на {SPEC_BY_KEY[target].label}.", now,
-            event_type="fallback", incident_id=incident_id,
-            started_at=state.get("incident_started_at") or now,
-            fallback_target=target,
-        )
-        _update_incident(data, incident_id, fallback_target=target)
-        changed["value"] = True
-        return data, None
-
-    try:
-        store.mutate_kv(config.SERVICE_MONITOR_KEY, mutate)
-    except Exception:
-        return False
-    return changed["value"]
-
-
-def selected_service(service: str) -> str:
-    state = get_state(service)
-    fallback = str(state.get("fallback") or "")
-    return fallback if fallback in SPEC_BY_KEY else service
-
-
-def get_state(service: str) -> dict:
-    return dict((_load().get("services") or {}).get(service) or _blank(service))
-
-
-def states() -> list[dict]:
-    data = _load().get("services") or {}
-    return [{"service": spec.key, **dict(data.get(spec.key) or _blank(spec.key))} for spec in SPECS]
-
-
-def history(limit=50) -> list[dict]:
-    return list(reversed((_load().get("history") or [])[-max(0, int(limit)):]))
-
-
-def clear_history() -> None:
-    def mutate(data):
-        data = _normalise(data)
-        data["history"] = []
-        return data, None
-    store.mutate_kv(config.SERVICE_MONITOR_KEY, mutate)
+ServiceSpec = provider_runtime.ProviderSpec
+SPECS = provider_runtime.SPECS
+SPEC_BY_KEY = provider_runtime.SPEC_BY_KEY
+UNKNOWN = provider_runtime.UNKNOWN
+OK = provider_runtime.OK
+WARNING = provider_runtime.WARNING
+DOWN = provider_runtime.DOWN
+_DOT = provider_runtime.DOT
+_configured = provider_runtime.is_configured
+_blank = provider_runtime.blank_state
+_load = provider_runtime.load_state
+_quota_from_headers = provider_runtime.quota_from_headers
 
 
 def _number(value) -> str:
@@ -561,7 +92,7 @@ def _status_detail(service: str, state: dict) -> str:
 
 def format_row(service: str, state: dict | None = None) -> str:
     spec = SPEC_BY_KEY[service]
-    state = state or get_state(service)
+    state = state or provider_runtime.get_state(service)
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
     if service == "cohere":
         usage = api_usage.cohere_requests()
@@ -605,7 +136,7 @@ def rows() -> list[str]:
 
 
 def last_check_time() -> str:
-    checks = [int(row.get("last_check") or 0) for row in states()]
+    checks = [int(row.get("last_check") or 0) for row in provider_runtime.states()]
     ts = max(checks, default=0)
     return datetime.fromtimestamp(ts, config.TZ).strftime("%H:%M") if ts else "—"
 
@@ -645,16 +176,20 @@ def probe(service: str) -> bool:
         try:
             store._load("__service_monitor_health__")
         except Exception as exc:
-            record_result(
+            provider_runtime.record_result(
                 service, False, error=str(exc) or type(exc).__name__,
                 exception_type=type(exc).__name__,
                 latency_ms=int((time.monotonic() - started) * 1000),
             )
             return False
-        record_result(service, True, latency_ms=int((time.monotonic() - started) * 1000))
+        provider_runtime.record_result(
+            service, True, latency_ms=int((time.monotonic() - started) * 1000),
+        )
         return True
     if not _configured(service):
-        record_result(service, False, status_code=401, error="not configured")
+        provider_runtime.record_result(
+            service, False, status_code=401, error="not configured",
+        )
         return False
     try:
         method, url, kwargs = _probe_request(service)
@@ -673,7 +208,7 @@ def probe(service: str) -> bool:
         error = ""
         if not ok:
             error = (
-                google_error_details(response)
+                provider_runtime.google_error_details(response)
                 if service == "google_books"
                 else f"HTTP {response.status_code}"
             )
@@ -697,7 +232,7 @@ def probe(service: str) -> bool:
             used, limit = payload.get("usage"), payload.get("limit")
             if limit is not None and used is not None:
                 total, remaining = int(limit), max(0, int(limit) - int(used))
-        record_result(
+        provider_runtime.record_result(
             service, ok, status_code=response.status_code,
             error=error, headers=response.headers,
             quota_remaining=remaining, quota_total=total,
@@ -706,17 +241,17 @@ def probe(service: str) -> bool:
         )
         return ok
     except requests.Timeout as exc:
-        record_result(
+        provider_runtime.record_result(
             service, False, error="timeout", exception_type=type(exc).__name__,
             latency_ms=int((time.monotonic() - started) * 1000),
         )
     except requests.ConnectionError as exc:
-        record_result(
+        provider_runtime.record_result(
             service, False, error="network error", exception_type=type(exc).__name__,
             latency_ms=int((time.monotonic() - started) * 1000),
         )
     except Exception as exc:
-        record_result(
+        provider_runtime.record_result(
             service, False, error=str(exc) or type(exc).__name__,
             exception_type=type(exc).__name__,
             latency_ms=int((time.monotonic() - started) * 1000),
@@ -749,14 +284,16 @@ def check_all(*, force=False) -> None:
                 try:
                     results[service] = bool(future.result())
                 except Exception as exc:
-                    record_result(service, False, error=type(exc).__name__)
+                    provider_runtime.record_result(
+                        service, False, error=type(exc).__name__,
+                    )
                     results[service] = False
     # A reserve is checked before selection and is shown only after its own
     # successful probe. Actual request routers also call activate_fallback.
     for spec in SPECS:
         if spec.key == "cohere" and not api_usage.cohere_requests()["allowed"]:
             continue
-        state = get_state(spec.key)
+        state = provider_runtime.get_state(spec.key)
         needs_fallback = results.get(spec.key) is False or state.get("error_type") == "quota"
         if not needs_fallback:
             continue
@@ -766,68 +303,17 @@ def check_all(*, force=False) -> None:
                 fallback_ok = probe(fallback)
                 results[fallback] = fallback_ok
             if fallback_ok is True:
-                activate_fallback(spec.key, fallback, reason="monitor")
+                provider_runtime.activate_fallback(
+                    spec.key, fallback, reason="monitor",
+                )
                 break
         else:
             if spec.fallbacks:
-                state = get_state(spec.key)
+                state = provider_runtime.get_state(spec.key)
                 if state.get("status") != UNKNOWN:
-                    record_unavailable_fallback(spec.key)
-
-
-def record_unavailable_fallback(service: str) -> None:
-    if service not in SPEC_BY_KEY:
-        return
-    now = int(time.time())
-    def mutate(data):
-        data = _normalise(data)
-        state = data["services"][service]
-        if (
-            state.get("status") == DOWN
-            and not state.get("fallback")
-            and state.get("last_error") == "резерв недоступен"
-            and state.get("error_type") == "fallback"
-        ):
-            return data, None
-        state["status"] = DOWN
-        state["fallback"] = ""
-        state["last_error"] = "резерв недоступен"
-        state["error_type"] = "fallback"
-        _append_history(
-            data, service, f"{SPEC_BY_KEY[service].label}: резерв недоступен.", now,
-            event_type="system", incident_id=state.get("incident_id") or "",
-            started_at=state.get("incident_started_at") or now,
-        )
-        return data, None
-    store.mutate_kv(config.SERVICE_MONITOR_KEY, mutate)
+                    provider_runtime.record_unavailable_fallback(spec.key)
 
 
 async def monitoring_job(_context) -> None:
     import asyncio
     await asyncio.to_thread(check_all)
-
-
-def validate_fallback_graph() -> list[str]:
-    errors, visiting, visited = [], set(), set()
-
-    def visit(service):
-        if service in visiting:
-            errors.append(f"{service}: fallback cycle")
-            return
-        if service in visited:
-            return
-        visiting.add(service)
-        for target in SPEC_BY_KEY[service].fallbacks:
-            if target not in SPEC_BY_KEY:
-                errors.append(f"{service}: unknown fallback {target}")
-                continue
-            visit(target)
-        visiting.remove(service)
-        visited.add(service)
-
-    for spec in SPECS:
-        visit(spec.key)
-    return errors
-
-
-assert not validate_fallback_graph(), validate_fallback_graph()

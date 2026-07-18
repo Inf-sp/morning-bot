@@ -14,6 +14,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import access
 import api_usage
 import config
+import provider_runtime
 import service_monitor
 from ui.constants import delete_label, ui_label
 import store
@@ -93,14 +94,14 @@ def _system_summary(states):
             continue
         status = state.get("status")
         fallback = str(state.get("fallback") or "")
-        if fallback or status == service_monitor.WARNING:
+        if fallback or status == provider_runtime.WARNING:
             restricted.append(service)
             continue
-        if status == service_monitor.UNKNOWN:
+        if status == provider_runtime.UNKNOWN:
             unknown.append(service)
             continue
-        if status == service_monitor.DOWN:
-            spec = service_monitor.SPEC_BY_KEY.get(service)
+        if status == provider_runtime.DOWN:
+            spec = provider_runtime.SPEC_BY_KEY.get(service)
             if spec:
                 unavailable_functions.update(spec.sections)
             fallback_unavailable = fallback_unavailable or state.get("error_type") == "fallback"
@@ -138,7 +139,7 @@ def _system_summary(states):
 
 def _database_health():
     """Run one cheap PostgreSQL query; storage fallback is not a healthy DB."""
-    previous = service_monitor.get_state("database")
+    previous = provider_runtime.get_state("database")
     started = time.monotonic()
     try:
         connection = store._db()
@@ -149,15 +150,15 @@ def _database_health():
             cursor.fetchone()
         latency_ms = round((time.monotonic() - started) * 1000)
     except Exception as error:
-        service_monitor.record_result("database", False, error=type(error).__name__)
+        provider_runtime.record_result("database", False, error=type(error).__name__)
         return {"line": "подключение потеряно", "kind": "lost", "latency_ms": None}
 
-    service_monitor.record_result("database", True)
+    provider_runtime.record_result("database", True)
     if latency_ms >= DB_SLOW_MS:
         return {"line": "медленный ответ", "kind": "slow", "latency_ms": latency_ms}
     was_lost = bool(
         previous.get("last_check")
-        and previous.get("status") in (service_monitor.DOWN, service_monitor.WARNING)
+        and previous.get("status") in (provider_runtime.DOWN, provider_runtime.WARNING)
         and previous.get("last_error")
     )
     return {
@@ -228,13 +229,13 @@ def _mark_logs_viewed(cid, errors):
 # ================= ДОМ =================
 
 async def send_home(bot, cid, q=None):
-    states = service_monitor.states()
+    states = provider_runtime.states()
     system = _system_summary(states)
     notif = _notification_stats(cid)
     database = _database_health()
     logs = _new_log_errors(cid)
     telegram = next((state for state in states if state.get("service") == "telegram"), {})
-    telegram_down = telegram.get("status") == service_monitor.DOWN
+    telegram_down = telegram.get("status") == provider_runtime.DOWN
     latest_check = max((int(state.get("last_check") or 0) for state in states), default=0)
     stale = not latest_check or time.time() - latest_check > STALE_AFTER
 
@@ -244,7 +245,7 @@ async def send_home(bot, cid, q=None):
     ))
     limited = any((
         system["restricted"], system["unknown"], database["kind"] in ("slow", "restored"),
-        telegram.get("status") in (service_monitor.WARNING, service_monitor.UNKNOWN),
+        telegram.get("status") in (provider_runtime.WARNING, provider_runtime.UNKNOWN),
         logs["count"], stale,
     ))
     if stale:
@@ -498,7 +499,7 @@ def _compact_log_row(entry):
 
 def _monitor_error_row(entry):
     service = str(entry.get("service") or "")
-    spec = service_monitor.SPEC_BY_KEY.get(service)
+    spec = provider_runtime.SPEC_BY_KEY.get(service)
     label = spec.label if spec else service or "Сервис"
     message = str(entry.get("text") or entry.get("message") or "Ошибка").strip().rstrip(".")
     if message.startswith(f"{label}:"):
@@ -514,7 +515,7 @@ def _monitor_error_row(entry):
     if latency_ms is not None:
         details.append(f"{int(latency_ms)} мс")
     fallback = str(entry.get("fallback_target") or "")
-    fallback_spec = service_monitor.SPEC_BY_KEY.get(fallback)
+    fallback_spec = provider_runtime.SPEC_BY_KEY.get(fallback)
     if fallback_spec:
         details.append(f"резерв {fallback_spec.label}")
     recovered_at = int(entry.get("recovered_at") or 0)
@@ -528,7 +529,7 @@ def _monitor_error_row(entry):
 
 async def clear_logs(bot, cid, q=None):
     tracking.clear_errors()
-    service_monitor.clear_history()
+    provider_runtime.clear_history()
     await send_logs(bot, cid, q)
 
 
@@ -536,7 +537,7 @@ async def send_logs(bot, cid, q=None):
     cutoff = time.time() - DAY
     errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
     monitor_errors = [
-        entry for entry in service_monitor.history(limit=200)
+        entry for entry in provider_runtime.history(limit=200)
         if entry.get("ts", 0) >= cutoff and entry.get("event_type") == "error"
     ]
     combined = [

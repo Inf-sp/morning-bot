@@ -11,7 +11,7 @@ import requests
 
 import api_usage
 import config
-import service_monitor
+import provider_runtime
 import util
 
 
@@ -119,14 +119,14 @@ def _search_items(query: str) -> list[dict]:
             timeout=timeout,
         )
     except requests.exceptions.Timeout as exc:
-        service_monitor.record_result(
+        provider_runtime.record_result(
             "google_books", False, error="timeout",
             exception_type=type(exc).__name__,
             latency_ms=int((time.monotonic() - started) * 1000),
         )
         return []
     except requests.exceptions.RequestException as exc:
-        service_monitor.record_result(
+        provider_runtime.record_result(
             "google_books", False, error="network_error",
             exception_type=type(exc).__name__,
             latency_ms=int((time.monotonic() - started) * 1000),
@@ -135,21 +135,21 @@ def _search_items(query: str) -> list[dict]:
     finally:
         api_usage.google_books_requests(consume=True)
     if response.status_code != 200:
-        service_monitor.record_result(
+        provider_runtime.record_result(
             "google_books", ok=False, status_code=response.status_code,
-            error=service_monitor.google_error_details(response), headers=response.headers,
+            error=provider_runtime.google_error_details(response), headers=response.headers,
             latency_ms=int((time.monotonic() - started) * 1000),
         )
         return []
     try:
         items = response.json().get("items") or []
     except (TypeError, ValueError):
-        service_monitor.record_result(
+        provider_runtime.record_result(
             "google_books", ok=False, error="invalid_json", headers=response.headers,
             latency_ms=int((time.monotonic() - started) * 1000),
         )
         return []
-    service_monitor.record_result(
+    provider_runtime.record_result(
         "google_books", True, headers=response.headers,
         latency_ms=int((time.monotonic() - started) * 1000),
     )

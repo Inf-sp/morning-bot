@@ -229,6 +229,7 @@ def audit_architecture(root=None):
         "leisure_collection.py",
         "leisure_music.py", "leisure_concerts.py", "saved_items.py",
         "storage_driver.py", "runtime_state.py", "repositories.py",
+        "provider_runtime.py",
         "response_delivery.py", "retry_flow.py",
         "fridge.py",
         "fridge_model.py",
@@ -285,6 +286,7 @@ def audit_architecture(root=None):
         "wardrobe_outfit.py": {"telegram", "ai"},
         "weather_provider.py": {"telegram", "ai"},
         "response_delivery.py": {"ai"},
+        "provider_runtime.py": {"ai", "api_usage", "requests", "service_monitor", "telegram"},
     }
     for name, denied in boundary_rules.items():
         path = os.path.join(root, name)
@@ -346,6 +348,12 @@ def audit_architecture(root=None):
             "def _fridge_migrate(", "def _fridge_split_input(",
         ],
         "bot.py": ["async def _answer_callback_impl(", "async def _text_router_impl("],
+        "service_monitor.py": [
+            "class ServiceSpec", "class ProviderSpec", "def record_result(",
+            "def activate_fallback(", "def get_state(", "def history(",
+        ],
+        "api_usage.py": ["def _configured(", "import service_monitor", "service_monitor."],
+        "ai.py": ["import service_monitor", "service_monitor."],
     }
     for name, forbidden_fragments in ownership_rules.items():
         path = os.path.join(root, name)
@@ -355,6 +363,12 @@ def audit_architecture(root=None):
         for fragment in forbidden_fragments:
             if fragment in source:
                 findings.append(f"{name}: still owns {fragment[:-1]}")
+
+    runtime_path = os.path.join(root, "provider_runtime.py")
+    if os.path.exists(runtime_path):
+        source = open(runtime_path, encoding="utf-8").read()
+        if "class ProviderSpec" not in source:
+            findings.append("provider_runtime.py: ProviderSpec missing")
     return findings
 
 

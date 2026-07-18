@@ -15,6 +15,7 @@ _log = logging.getLogger(__name__)
 import util
 import config
 import api_usage
+import provider_runtime
 
 _WIKI_UA = {"User-Agent": "morning-bot/1.0"}
 
@@ -632,14 +633,13 @@ def firecrawl_snippet(query: str, max_chars: int = 1200) -> str:
 
 def web_search(query: str, max_results: int = 5) -> list:
     """Web search through Tavily with a one-way Firecrawl fallback."""
-    import service_monitor
     out, seen = [], set()
-    preferred = service_monitor.selected_service("tavily")
+    preferred = provider_runtime.selected_provider("tavily")
     providers = (firecrawl_search,) if preferred == "firecrawl" else (tavily_search, firecrawl_search)
     for provider in providers:
         rows = provider(query, max_results=max_results)
         if provider is firecrawl_search and rows:
-            service_monitor.activate_fallback("tavily", "firecrawl", reason="request")
+            provider_runtime.activate_fallback("tavily", "firecrawl", reason="request")
         for item in rows:
             url = (item.get("url") or "").strip()
             if not url or url in seen:

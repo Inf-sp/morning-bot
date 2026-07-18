@@ -14,7 +14,7 @@ import base64
 from typing import Literal
 import api_usage
 import config
-import service_monitor
+import provider_runtime
 import store
 import secure
 
@@ -423,13 +423,13 @@ def _post(url, headers, payload, timeout, name):
         r = requests.post(url, headers=headers, json=payload, timeout=timeout)
     except requests.exceptions.Timeout as e:
         if cohere_request:
-            service_monitor.record_result(service, False, error="timeout")
+            provider_runtime.record_result(service, False, error="timeout")
         else:
             api_usage.record_request(service, ok=False, error="timeout")
         raise LLMProviderError(name, f"{name} timeout", temporary=True, error_type=type(e).__name__) from e
     except requests.exceptions.ConnectionError as e:
         if cohere_request:
-            service_monitor.record_result(service, False, error="network_error")
+            provider_runtime.record_result(service, False, error="network_error")
         else:
             api_usage.record_request(service, ok=False, error="network_error")
         raise LLMProviderError(name, f"{name} network error", temporary=True, error_type=type(e).__name__) from e
@@ -445,7 +445,7 @@ def _post(url, headers, payload, timeout, name):
         limit_scope = ""
         cooldown_until = None
         if cohere_request:
-            service_monitor.record_result(
+            provider_runtime.record_result(
                 service, False, status_code=r.status_code,
                 error=f"HTTP {r.status_code}", headers=r.headers,
             )
@@ -476,7 +476,7 @@ def _post(url, headers, payload, timeout, name):
                                retry_after=retry_after, limit_scope=limit_scope,
                                cooldown_until=cooldown_until)
     if cohere_request:
-        service_monitor.record_result(service, True, headers=r.headers)
+        provider_runtime.record_result(service, True, headers=r.headers)
     elif service != "gemini":
         api_usage.record_request(service, ok=True, latency_ms=int((time.time() - t0) * 1000),
                                  headers=r.headers)
@@ -808,7 +808,7 @@ def _reorder_for_monitor(order):
     result = list(order)
     if not result:
         return tuple(result)
-    selected = _provider_name(service_monitor.selected_service(_monitor_name(result[0])))
+    selected = _provider_name(provider_runtime.selected_provider(_monitor_name(result[0])))
     if selected in result and selected != result[0]:
         result.remove(selected)
         result.insert(0, selected)
@@ -1024,7 +1024,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             out = _as_text(calls[name]())
             if out and out.strip():
                 for failed in failed_providers:
-                    service_monitor.activate_fallback(
+                    provider_runtime.activate_fallback(
                         _monitor_name(failed), _monitor_name(name), reason="request",
                     )
                 ms = int((time.time() - t0) * 1000)
@@ -1066,7 +1066,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                                               response_mode=policy.response_mode)
         if out:
             if origin in calls:
-                service_monitor.activate_fallback(
+                provider_runtime.activate_fallback(
                     _monitor_name(origin), "openrouter", reason=reason,
                 )
             if origin == "gemini" and getattr(err, "error_type", "") == "rate_limit":
@@ -1344,7 +1344,7 @@ def _chat_chain_impl(history, cid=None):
             out = _as_text(_chat(p, history, system))
             if out and out.strip():
                 for failed in failed_providers:
-                    service_monitor.activate_fallback(
+                    provider_runtime.activate_fallback(
                         _monitor_name(failed), _monitor_name(p), reason="request",
                     )
                 if p != "gemini" and gemini_rate_limit_err is not None:

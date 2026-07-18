@@ -11,31 +11,13 @@ from datetime import datetime, timedelta
 import requests
 
 import config
+import provider_runtime
 import store
 
 SERVICE_LABELS = {
-    "openweather": "OpenWeather",
-    "gemini": "Gemini",
-    "pexels": "Pexels",
-    "tavily": "Tavily",
-    "firecrawl": "Firecrawl",
-    "cloudflare": "Cloudflare",
-    "groq": "Groq",
-    "cohere": "Cohere",
-    "github_models": "GitHub Models",
-    "openrouter": "OpenRouter",
-    "google_books": "Google Books",
-    "languagetool": "LanguageTool",
-    "spoonacular": "Spoonacular",
-    "themealdb": "TheMealDB",
-    "azure_speech": "Azure Speech",
-    "telegram": "Telegram",
-    "tmdb": "TMDB",
-    "ticketmaster": "Ticketmaster",
-    "zeroentropy": "ZeroEntropy",
-    "restcountries": "REST Countries",
+    key: label for key, label in provider_runtime.LABELS.items()
+    if key != "database"
 }
-
 SERVICE_ICONS = SERVICE_LABELS
 GOOGLE_BOOKS_DAILY_LIMIT = 1000
 COHERE_MONTHLY_LIMIT = 1000
@@ -216,8 +198,7 @@ def record_request(service: str, ok: bool = True, *, units: dict | None = None,
     except Exception:
         pass
     try:
-        import service_monitor
-        service_monitor.record_result(
+        provider_runtime.record_result(
             service, ok, status_code=status_code, error=error, headers=headers,
             latency_ms=latency_ms,
         )
@@ -258,8 +239,7 @@ def set_gemini_rate_limit(*, limit_scope: str = "", retry_after: int | None = No
     except Exception:
         pass
     try:
-        import service_monitor
-        service_monitor.record_result(
+        provider_runtime.record_result(
             "gemini", False, status_code=429, error=message or f"quota {scope}",
         )
     except Exception:
@@ -287,8 +267,7 @@ def record_gemini_fallback(*, target: str = "local", reason: str = "") -> None:
     except Exception:
         pass
     try:
-        import service_monitor
-        service_monitor.activate_fallback("gemini", target, reason=reason)
+        provider_runtime.activate_fallback("gemini", target, reason=reason)
     except Exception:
         pass
 
@@ -355,31 +334,6 @@ def record_cache_hit(service: str) -> None:
         store.mutate_kv(config.API_USAGE_KEY, mut)
     except Exception:
         pass
-
-
-def _configured(service: str) -> bool:
-    return {
-        "openweather": bool(config.WEATHER_API_KEY),
-        "gemini": bool(config.GEMINI_API_KEY),
-        "pexels": bool(config.PEXELS_API_KEY),
-        "tavily": bool(config.TAVILY_API_KEY),
-        "firecrawl": bool(config.FIRECRAWL_API_KEY),
-        "cloudflare": bool(config.CF_API_TOKEN and config.CF_ACCOUNT_ID),
-        "groq": bool(config.GROQ_API_KEY),
-        "cohere": bool(config.COHERE_API_KEY),
-        "github_models": bool(config.GITHUB_MODELS_TOKEN),
-        "openrouter": bool(config.OPENROUTER_API_KEY),
-        "google_books": bool(config.GOOGLE_BOOKS_API_KEY),
-        "languagetool": bool(config.LANGUAGETOOL_API_URL),
-        "spoonacular": bool(config.SPOONACULAR_API_KEY),
-        "themealdb": bool(config.THEMEALDB_API_KEY),
-        "azure_speech": bool(config.AZURE_SPEECH_KEY and config.AZURE_SPEECH_REGION),
-        "telegram": bool(config.TELEGRAM_TOKEN),
-        "tmdb": bool(config.TMDB_API_KEY),
-        "ticketmaster": bool(config.TICKETMASTER_API_KEY),
-        "zeroentropy": bool(config.ZEROENTROPY_API_KEY),
-        "restcountries": bool(config.RESTCOUNTRIES_API_KEY),
-    }.get(service, False)
 
 
 def _recent_rate_limit(svc: dict) -> bool:
@@ -456,7 +410,7 @@ def snapshot():
     out = []
     for service in SERVICE_LABELS:
         svc = services.get(service) or {}
-        if not _configured(service):
+        if not provider_runtime.is_configured(service):
             continue
         if not _is_used_today_or_configured_with_recent(svc) and not svc.get("last_request_at"):
             continue

@@ -240,7 +240,9 @@ Railway запускает бот командой `python bot.py` из `railway
 | `fridge.py` | продукты, категории и сценарии холодильника |
 | `recipe_generation.py` | источники, выбор и адаптация рецептов |
 | `thoughts.py` | сценарий внешней памяти «Мысли» |
-| `service_monitor.py` | единое состояние внешних сервисов и резервов |
+| `provider_runtime.py` | единый каталог, состояние провайдеров и граф резервов |
+| `api_usage.py` | фактический расход API и локальные лимиты |
+| `service_monitor.py` | фоновые проверки и строки состояния для админки |
 | `saved_items.py` | сохранённое, любимое, планы и коллекции |
 | `storage_driver.py` | PostgreSQL KV и in-memory fallback |
 | `repositories.py` | предметные репозитории поверх KV |
