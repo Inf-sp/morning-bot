@@ -201,6 +201,8 @@ def _friendly_error(error="", status_code=None, service="") -> tuple[str, str]:
     code = int(status_code or 0)
     if service == "spoonacular" and code == 402:
         return "quota", "дневной лимит исчерпан"
+    if service == "tavily" and code == 432:
+        return "quota", "лимит тарифа исчерпан"
     if code == 429 or any(x in low for x in ("rate limit", "too many requests")):
         return "quota", "лимит исчерпан"
     if any(x in low for x in ("quota exceeded", "quota exhausted")):
@@ -286,7 +288,7 @@ def _update_incident(data: dict, incident_id: str, **values) -> None:
 def record_result(
     service: str, ok: bool, *, status_code=None, error="", headers=None,
     quota_remaining=None, quota_total=None, checked_at=None, latency_ms=None,
-    exception_type="",
+    exception_type="", allow_quota_recovery=True,
 ) -> None:
     """Record a real API result or a probe using the common state transition."""
     if service not in SPEC_BY_KEY:
@@ -306,6 +308,8 @@ def record_result(
         incident_id = str(state.get("incident_id") or "")
         incident_started_at = int(state.get("incident_started_at") or now)
         state["last_check"] = now
+        if ok and not allow_quota_recovery and old_error_type in ("quota", "rate_limit"):
+            return data, None
         if remaining is not None and total is not None:
             try:
                 remaining_i, total_i = int(remaining), int(total)
@@ -698,6 +702,7 @@ def probe(service: str) -> bool:
             error=error, headers=response.headers,
             quota_remaining=remaining, quota_total=total,
             latency_ms=int((time.monotonic() - started) * 1000),
+            allow_quota_recovery=False,
         )
         return ok
     except requests.Timeout as exc:

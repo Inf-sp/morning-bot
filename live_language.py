@@ -1,5 +1,6 @@
 """Живой язык: ежедневная естественная фраза и примеры употребления."""
 
+import random
 import re
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
@@ -7,6 +8,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 import ai
 import secure
 import store
+from ui import learning as learning_ui
 
 
 def _code(language):
@@ -361,4 +363,3 @@ async def send_proverb(bot, cid, language=None, with_kb=True):
 async def send_proverb_both(bot, cid, with_kb=True, language=None):
     """Compatibility wrapper: live language uses the single active learning language."""
     await send_proverb(bot, cid, language or active_language(cid), with_kb=with_kb)
-

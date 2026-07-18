@@ -325,8 +325,13 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
         import tracking
         state = api_usage.gemini_state(1)
         scope = (getattr(err, "limit_scope", "") or state.get("cooldown_scope") or "").upper()
-        seconds = getattr(err, "retry_after", None) or state.get("cooldown_seconds") or 0
         cooldown_until = int(getattr(err, "cooldown_until", None) or state.get("cooldown_until") or 0)
+        if scope == "RPD":
+            seconds = state.get("cooldown_seconds") or max(
+                0, cooldown_until - int(time.time()),
+            )
+        else:
+            seconds = getattr(err, "retry_after", None) or state.get("cooldown_seconds") or 0
         dedup_token = f"{kind or 'gemini_rate_limit'}:{scope or 'limit'}:{cooldown_until}:{bool(fallback)}"
         if not api_usage.should_log_gemini_limit(dedup_token):
             return
@@ -338,7 +343,7 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
             second += " · повтор после cooldown"
         tracking.log_error(
             "llm", f"{first}\n{second}", kind=kind or "gemini_rate_limit",
-            section="Разные категории", action="не сформирован ответ",
+            section="Разные категории", action="сработал лимит провайдера",
             service="Gemini", fallback="автоматический резерв" if fallback else "",
         )
     except Exception:

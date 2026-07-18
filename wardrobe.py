@@ -171,8 +171,7 @@ def _save_cached_look(cid, item_ids, look_data):
 def build_wardrobe_keyboard():
     return _kb([
         [("✨ Другой образ", "w_look")],
-        [("🧐 Проверить покупку", "w_check")],
-        [("✂️ Мой шкаф", "w_closet")],
+        [("🧐 Покупка", "w_check"), ("✂️ Мой шкаф", "w_closet")],
         [(choose_label("Выбрать стили"), "set_wardrobe_style")],
         [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
     ])
