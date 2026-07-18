@@ -19,6 +19,16 @@ def test_system_ui_has_no_last_raw_error_block():
     assert message.text.endswith("Обновлено в 21:44")
 
 
+def test_system_latency_row_shows_p95_and_slow_actions(monkeypatch):
+    now = admin.time.time()
+    monkeypatch.setattr(admin.tracking, "get_action_latencies", lambda limit=500: [
+        {"ts": now, "duration_ms": 1200, "budget_ms": 10000},
+        {"ts": now, "duration_ms": 16000, "budget_ms": 15000},
+    ])
+
+    assert admin._latency_status_row() == "🟡 Ответы · 95% до 16.0 с · медленных 1"
+
+
 def test_tracking_keeps_diagnostic_context_and_redacts_secrets(monkeypatch):
     state = {"log": []}
     monkeypatch.setattr(tracking.store, "_load", lambda _key: state)

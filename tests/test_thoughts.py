@@ -11,7 +11,6 @@ import secure
 import settings
 import saved_items
 import thoughts
-import thoughts_knowledge
 
 
 class FakeRepo:
@@ -234,27 +233,6 @@ def test_legacy_inbox_opens_new_home_without_clear_all(monkeypatch):
     assert labels == ["🧐 Разобрать мысли"]
     assert "статист" not in bot.sent[0]["text"].casefold()
     assert "очист" not in " ".join(labels).casefold()
-
-
-def test_knowledge_base_contains_only_allowed_source_families():
-    allowed = ("NICE", "NHS", "Mastering", "The Adult ADHD Tool Kit", "Russell Barkley", "113")
-    assert thoughts_knowledge.GUIDANCE
-    assert all(item["source"].startswith(allowed) for item in thoughts_knowledge.GUIDANCE)
-
-
-def test_zeroentropy_reranks_the_closed_knowledge_base(monkeypatch):
-    calls = []
-    monkeypatch.setattr(thoughts_knowledge.config, "ZEROENTROPY_API_KEY", "test-key")
-
-    def fake_rerank(query, documents, top_n):
-        calls.append((query, list(documents), top_n))
-        return [(documents[-1], 0.9)]
-
-    monkeypatch.setattr(thoughts_knowledge.rerank, "rerank", fake_rerank)
-    result = thoughts_knowledge.retrieve("Не успеваю закончить работу", "practical_problem")
-
-    assert result == [calls[0][1][-1]]
-    assert all("NICE" in doc or "ADHD" in doc or "NHS" in doc or "Barkley" in doc for doc in calls[0][1])
 
 
 def test_thought_notifications_are_on_by_default_and_evening_is_at_20(monkeypatch):

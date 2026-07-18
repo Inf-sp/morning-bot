@@ -7,8 +7,7 @@ from telegram.error import TimedOut
 from telegram.request import HTTPXRequest
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
                           ContextTypes, CallbackQueryHandler, PollAnswerHandler, ExtBot)
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime
 
 import config
 import store
@@ -35,6 +34,7 @@ import cleanup
 import settings
 import saved_items
 import leisure_movies
+import leisure_collection
 import leisure_concerts
 import leisure_music
 import leisure_books
@@ -47,7 +47,13 @@ import onboard
 import firstvisit
 import tracking
 import util
-from ui import admin as admin_ui
+from deploy_report import (
+    build_deploy_report_message,
+    get_app_version,
+    load_release_notes,
+    load_release_title,
+    maybe_send_admin_deploy_notification,
+)
 from util import ack_loading as _ack
 from util import clear_loading as _unack
 
@@ -56,9 +62,6 @@ CHAT_ID = config.CHAT_ID
 
 
 
-_ROOT = Path(__file__).parent
-_DEFAULT_DEPLOY_NOTE = "Бот получил небольшие внутренние улучшения."
-_DEFAULT_DEPLOY_TITLE = "Обновление"
 _WORRY_PROMPT_WINDOW_S = 1800  # окно, в течение которого свободный текст ещё считается ответом на "Дневную разгрузку"
 
 
@@ -106,186 +109,6 @@ def _looks_like_command(text: str) -> bool:
     "Дневной разгрузки"."""
     t = (text or "").strip()
     return t.startswith("/")
-
-
-def _normalize_app_version(version: str) -> str:
-    version = str(version or "").strip()
-    if version.lower().startswith("v") and len(version) > 1:
-        return version[1:].strip()
-    return version
-
-
-def get_app_version() -> str:
-    return _normalize_app_version(config.APP_VERSION or config._read_text_file("VERSION"))
-
-
-def _release_heading(line: str) -> tuple[str, str] | None:
-    line = line.strip()
-    if not line.startswith("## "):
-        return None
-    title = line[3:].strip()
-    version = title.split()[0] if title else ""
-    release_title = ""
-    for separator in (" · ", " - ", " — "):
-        if separator in title:
-            release_title = title.split(separator, 1)[1].strip()
-            break
-    return _normalize_app_version(version), release_title
-
-
-def _clean_release_note_line(line: str) -> str:
-    line = line.strip()
-    if line.startswith("- ") or line.startswith("* "):
-        line = line[2:].strip()
-    plain_line = line.strip("*_ ").casefold()
-    if plain_line in {
-        "бот развёрнут и работает ✅",
-        "готово к развёртыванию ✅",
-    }:
-        return ""
-    return line
-
-
-def load_release_notes() -> tuple[list[str], str]:
-    version = get_app_version()
-    if not version:
-        return [], "empty"
-
-    path = _ROOT / "RELEASE_NOTES.md"
-    if not path.exists():
-        return [], "missing"
-
-    current_lines = []
-    in_current_section = False
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        heading = _release_heading(raw_line)
-        if heading is not None:
-            if in_current_section:
-                break
-            heading_version, _ = heading
-            in_current_section = heading_version == version
-            continue
-        if in_current_section:
-            line = _clean_release_note_line(raw_line)
-            if line:
-                current_lines.append(line)
-
-    if not current_lines:
-        return [], "fallback"
-    return current_lines, "file"
-
-
-def load_release_title(version, release_notes) -> str:
-    version = _normalize_app_version(version)
-    path = _ROOT / "RELEASE_NOTES.md"
-    if path.exists() and version:
-        for raw_line in path.read_text(encoding="utf-8").splitlines():
-            heading = _release_heading(raw_line)
-            if not heading:
-                continue
-            heading_version, heading_title = heading
-            if heading_version == version and heading_title:
-                return heading_title
-
-    text = " ".join(str(note) for note in (release_notes or [])).lower()
-    if not text:
-        return _DEFAULT_DEPLOY_TITLE
-    if any(word in text for word in ("история", "релиз", "релизов", "обновлен", "обновлений")):
-        return "Чистые обновления"
-    if "новост" in text:
-        return "Умнее новости"
-    if "эмодз" in text or "ui-словар" in text or "централизованные значки" in text:
-        return "Единый UI-стиль"
-    if "рецепт" in text:
-        return "Быстрее рецепты"
-    if "гардероб" in text:
-        return "Аккуратнее гардероб"
-    if "уведом" in text:
-        return "Тише уведомления"
-    if "обуч" in text or "словар" in text:
-        return "Лучше обучение"
-    return _DEFAULT_DEPLOY_TITLE
-
-
-def build_deploy_report_message(version, release_notes, check_list=None):
-    clean_notes = []
-    for note in release_notes or []:
-        line = _clean_release_note_line(str(note))
-        if line:
-            clean_notes.append(line)
-    if not clean_notes:
-        clean_notes = [_DEFAULT_DEPLOY_NOTE]
-    title = load_release_title(version, clean_notes)
-    return admin_ui.deploy_report(_normalize_app_version(version), title, clean_notes)
-
-
-async def maybe_send_admin_deploy_notification(bot):
-    version = get_app_version()
-    deploy_key = version
-    started_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    sent_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    release_notes, release_notes_source = load_release_notes()
-
-    if not config.ADMIN_CHAT_ID:
-        logging.warning(
-            "Deploy report skipped: admin chat id is not configured app_version=%s deploy_key=%s release_notes_source=%s railway_environment=%s railway_service=%s started_at=%s result=skipped",
-            version,
-            deploy_key,
-            release_notes_source,
-            config.RAILWAY_ENVIRONMENT,
-            config.RAILWAY_SERVICE_NAME,
-            started_at,
-        )
-        return
-
-    if not version:
-        logging.warning(
-            "Deploy report skipped: APP_VERSION is not configured release_notes_source=%s railway_environment=%s railway_service=%s started_at=%s result=skipped",
-            release_notes_source,
-            config.RAILWAY_ENVIRONMENT,
-            config.RAILWAY_SERVICE_NAME,
-            started_at,
-        )
-        return
-
-    last_notified_version = store.get_last_admin_deploy_notified_version()
-    if last_notified_version == version:
-        logging.info(
-            "Deploy report skipped: already sent for app_version=%s deploy_key=%s release_notes_source=%s railway_environment=%s railway_service=%s started_at=%s result=skipped",
-            version,
-            deploy_key,
-            release_notes_source,
-            config.RAILWAY_ENVIRONMENT,
-            config.RAILWAY_SERVICE_NAME,
-            started_at,
-        )
-        return
-
-    msg = build_deploy_report_message(version, release_notes)
-    try:
-        await bot.send_message(chat_id=config.ADMIN_CHAT_ID, text=msg.text, entities=msg.entities)
-        store.set_last_admin_deploy_notified_version(version, sent_at)
-        logging.info(
-            "Deploy report sent: version=%s deploy_key=%s release_notes_source=%s railway_environment=%s railway_service=%s admin_chat_id=%s sent_at=%s result=sent",
-            version,
-            deploy_key,
-            release_notes_source,
-            config.RAILWAY_ENVIRONMENT,
-            config.RAILWAY_SERVICE_NAME,
-            config.ADMIN_CHAT_ID,
-            sent_at,
-        )
-    except Exception:
-        logging.exception(
-            "Deploy report failed: version=%s deploy_key=%s release_notes_source=%s railway_environment=%s railway_service=%s admin_chat_id=%s started_at=%s result=failed",
-            version,
-            deploy_key,
-            release_notes_source,
-            config.RAILWAY_ENVIRONMENT,
-            config.RAILWAY_SERVICE_NAME,
-            config.ADMIN_CHAT_ID,
-            started_at,
-        )
 
 
 async def _remove_reply_kb_once(bot, cid):
@@ -347,18 +170,28 @@ async def answer_callback(update, context):
     q = update.callback_query
     cid = str(q.message.chat_id)
     bot = context.bot
+    data = str(getattr(q, "data", "") or "")
+    topic = bot_callbacks._status_topic(data) or "Меню"
+    budget = 15 if topic in {"wardrobe", "food", "leisure", "travel"} else 10
+    trace = tracking.start_action(cid, topic, data or "callback", budget_seconds=budget)
+    ok = True
     marker = getattr(bot, "mark_transient_message", None)
     if marker and menu.is_main_menu_markup(getattr(q.message, "reply_markup", None)):
         marker(cid, q.message.message_id)
     if access.is_allowed(cid):
         tracking.touch(cid)
     answer_task = asyncio.create_task(q.answer())
+    answer_task.add_done_callback(
+        lambda task: tracking.mark_first_feedback(trace)
+        if not task.cancelled() and task.exception() is None else None
+    )
     # Даём answerCallbackQuery начать отправку до любого синхронного чтения БД
     # внутри обработчика (особенно перед Azure Speech TTS).
     await asyncio.sleep(0)
     try:
         await bot_callbacks.handle(update, context, _remove_reply_kb_once)
     except Exception as e:
+        ok = False
         # Страховка: необработанное исключение в ветке диспетчера без собственного
         # try/except иначе оставляло пользователя с "зависшей" кнопкой и без ответа.
         await verify.safe_error(bot, cid, e)
@@ -367,6 +200,7 @@ async def answer_callback(update, context):
             await answer_task
         except Exception:
             pass
+        tracking.finish_action(trace, ok=ok)
 
 
 
@@ -374,12 +208,17 @@ async def answer_callback(update, context):
 async def text_router(update, context):
     cid = str(update.effective_chat.id)
     bot = context.bot
+    trace = tracking.start_action(cid, "Ассистент", "text", budget_seconds=10)
+    ok = True
     try:
         await bot_text.handle(update, context, _remove_reply_kb_once)
     except Exception as e:
+        ok = False
         # Без этой страховки необработанное исключение внутри любой ветки роутера
         # (тренажёр, добавление в словарь и т.д.) оставляло пользователя без ответа.
         await verify.safe_error(bot, cid, e)
+    finally:
+        tracking.finish_action(trace, ok=ok)
 
 
 async def message_activity_handler(update, _context):
@@ -523,6 +362,9 @@ async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
     не отправляется; при открытии раздела бот читает уже готовый кэш.
     """
     for cid in access.get_allowed_cids():
+        if tracking.has_active_actions():
+            logging.info("home cache warm skipped: user action active")
+            return
         steps = (
             ("wardrobe", lambda: wardrobe.warm_home_cache(cid)),
             ("myday", lambda: myday.warm_day_cache(cid)),
@@ -533,6 +375,10 @@ async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
         )
         warmed = []
         for name, call in steps:
+            if tracking.has_active_actions():
+                logging.info("home cache warm paused cid=%s before=%s", cid, name)
+                break
+            await asyncio.sleep(0)
             try:
                 result = await call()
                 if isinstance(result, dict):
@@ -621,25 +467,8 @@ async def job_inactivity_reminders(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_inactivity_reminders failed for cid=%s", cid)
 
 
-async def post_init(app):
-    initialized = tracking.initialize_inactivity_tracking(access.get_allowed_cids())
-    if initialized:
-        logging.info("Inactivity reminders: initialized %s users", initialized)
-    try:
-        if dictionary.migrate_dict_caps():
-            logging.info("Dict caps migration: applied")
-    except Exception:
-        logging.exception("Dict caps migration failed")
-    try:
-        if leisure_movies.dedupe_lists():
-            logging.info("Dedupe lists: applied")
-    except Exception:
-        logging.exception("Dedupe lists failed")
-    try:
-        if leisure_movies.seed_movies_from_content():
-            logging.info("Movies seed: applied")
-    except Exception:
-        logging.exception("Movies seed failed")
+def _run_startup_audits():
+    """Проверить исходники после готовности polling, не задерживая запуск."""
     try:
         unhandled = verify.audit_callbacks()
         if unhandled:
@@ -680,6 +509,34 @@ async def post_init(app):
             logging.info("Secrets scan: OK")
     except Exception:
         logging.exception("Secrets scan failed")
+
+
+async def job_startup_audits(context: ContextTypes.DEFAULT_TYPE):
+    if tracking.has_active_actions():
+        context.application.job_queue.run_once(job_startup_audits, when=30)
+        return
+    await asyncio.to_thread(_run_startup_audits)
+
+
+async def post_init(app):
+    initialized = tracking.initialize_inactivity_tracking(access.get_allowed_cids())
+    if initialized:
+        logging.info("Inactivity reminders: initialized %s users", initialized)
+    try:
+        if dictionary.migrate_dict_caps():
+            logging.info("Dict caps migration: applied")
+    except Exception:
+        logging.exception("Dict caps migration failed")
+    try:
+        if leisure_collection.dedupe_lists():
+            logging.info("Dedupe lists: applied")
+    except Exception:
+        logging.exception("Dedupe lists failed")
+    try:
+        if leisure_collection.seed_movies_from_content():
+            logging.info("Movies seed: applied")
+    except Exception:
+        logging.exception("Movies seed failed")
     from telegram import BotCommand
     await app.bot.set_my_commands([
         BotCommand("menu", "меню"),
@@ -746,6 +603,14 @@ class _MenuCleanupBot(ExtBot):
         except Exception:
             pass
 
+    @staticmethod
+    def _mark_send_done(task):
+        try:
+            task.result()
+        except Exception:
+            return
+        tracking.mark_first_feedback()
+
     def _post_send(self, chat_id, msg, transient=False, persistent_inline=False):
         if (not persistent_inline
                 and isinstance(getattr(msg, "reply_markup", None), InlineKeyboardMarkup)):
@@ -757,7 +622,8 @@ class _MenuCleanupBot(ExtBot):
         transient = kwargs.pop("transient", False)
         preserve_previous_inline = kwargs.pop("preserve_previous_inline", False)
         persistent_inline = kwargs.pop("persistent_inline", False)
-        send = super().send_message(chat_id, *args, **kwargs)
+        send = asyncio.create_task(super().send_message(chat_id, *args, **kwargs))
+        send.add_done_callback(self._mark_send_done)
         if preserve_previous_inline:
             msg = await send
         else:
@@ -767,19 +633,22 @@ class _MenuCleanupBot(ExtBot):
         return msg
 
     async def send_photo(self, chat_id, *args, **kwargs):
-        send = super().send_photo(chat_id, *args, **kwargs)
+        send = asyncio.create_task(super().send_photo(chat_id, *args, **kwargs))
+        send.add_done_callback(self._mark_send_done)
         msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
         self._post_send(chat_id, msg)
         return msg
 
     async def send_document(self, chat_id, *args, **kwargs):
-        send = super().send_document(chat_id, *args, **kwargs)
+        send = asyncio.create_task(super().send_document(chat_id, *args, **kwargs))
+        send.add_done_callback(self._mark_send_done)
         msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
         self._post_send(chat_id, msg)
         return msg
 
     async def send_poll(self, chat_id, *args, **kwargs):
-        send = super().send_poll(chat_id, *args, **kwargs)
+        send = asyncio.create_task(super().send_poll(chat_id, *args, **kwargs))
+        send.add_done_callback(self._mark_send_done)
         msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
         self._post_send(chat_id, msg)
         return msg
@@ -829,6 +698,7 @@ def main():
     jq = app.job_queue
     def _t(hm):
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
+    jq.run_once(job_startup_audits, when=2)                                    # диагностика после готовности polling
     jq.run_once(job_warm_home_pages, when=5)                                   # заполнить отсутствующий кэш после запуска
     jq.run_once(service_monitor.monitoring_job, when=10)                       # первая независимая проверка сервисов
     jq.run_repeating(service_monitor.monitoring_job, interval=300, first=310)  # затем каждые 5 минут

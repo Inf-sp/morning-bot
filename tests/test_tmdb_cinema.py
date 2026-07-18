@@ -25,6 +25,33 @@ def _movie(movie_id, title, release_date, popularity=10, vote_count=100):
     )
 
 
+def test_get_calls_tmdb_and_returns_json(monkeypatch):
+    seen = {}
+
+    class Response:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {"results": [{"id": 7}]}
+
+    def fake_get(url, *, params, timeout):
+        seen.update(url=url, params=params, timeout=timeout)
+        return Response()
+
+    monkeypatch.setattr(tmdb.config, "TMDB_API_KEY", "test-key")
+    monkeypatch.setattr(tmdb.requests, "get", fake_get)
+    monkeypatch.setattr(tmdb.api_usage, "record_request", lambda *_args, **_kwargs: None)
+
+    result = tmdb._get("/search/multi", {"query": "Arrival"}, timeout=3)
+
+    assert result == {"results": [{"id": 7}]}
+    assert seen["url"].endswith("/search/multi")
+    assert seen["params"]["api_key"] == "test-key"
+    assert seen["params"]["query"] == "Arrival"
+    assert seen["timeout"] == 3
+
+
 def test_now_playing_requires_current_nl_theatrical_release(monkeypatch):
     today = date.today()
     candidates = [

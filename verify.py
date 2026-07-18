@@ -1,6 +1,6 @@
 """Verification-слой: грейдеры качества ответов + безопасная отправка и обработка ошибок.
 
-Грейдеры привязаны к surface скилла (см. skills.py):
+Грейдеры привязаны к типу пользовательской поверхности:
   chat    - свободный диалог: html + не больше 1 эмодзи
   health  - медразбор: html + обязательный дисклеймер (эмодзи-маркеры разрешены)
   card    - карточки/советы с эмодзи-заголовками: только html
@@ -333,7 +333,6 @@ def audit_architecture(root=None):
     ownership_rules = {
         "balance.py": ("def enter_meal(", "def send_fridge(", "import cooking", "from cooking import"),
         "settings.py": ("def send_notes(", "def handle_notes_callback("),
-        "leisure.py": ("def send_movie_home(", "def send_listen(", "def find_concerts("),
         "leisure_movies.py": ("def content_recommend(", "def collect_done(", "def dedupe_lists("),
         "store.py": ("def db(", "def load(", "def mutate("),
         "cooking.py": [

@@ -14,6 +14,8 @@ Endpoint'ы:
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 
+import requests
+
 import config
 import api_usage
 import util
@@ -64,18 +66,80 @@ def _get(path, params, timeout=12, language=None):
     """GET к TMDb, возвращает json или None (без исключений наружу)."""
     if not config.TMDB_API_KEY:
         return None
-    import requests
-    p = {"api_key": config.TMDB_API_KEY, "language": language or _LANG}
-    p.update(params or {})
     try:
-        r = requests.get(f"{_BASE}{path}", params=p, timeout=timeout)
-        api_usage.record_request("tmdb", ok=200 <= r.status_code < 300, status_code=r.status_code,
-                                 error="" if 200 <= r.status_code < 300 else f"HTTP {r.status_code}",
-                                 headers=r.headers)
-        return r.json()
-    except Exception as e:
-        api_usage.record_request("tmdb", ok=False, error=type(e).__name__)
+        import tracking
+        remaining = tracking.remaining_action_seconds()
+        if remaining is not None:
+            if remaining <= 0.2:
+                return None
+            timeout = min(float(timeout), remaining)
+    except Exception:
+        pass
+    request_params = {"api_key": config.TMDB_API_KEY, "language": language or _LANG}
+    request_params.update(params or {})
+    try:
+        response = requests.get(
+            f"{_BASE}{path}", params=request_params, timeout=timeout,
+        )
+        ok = 200 <= response.status_code < 300
+        api_usage.record_request(
+            "tmdb", ok=ok, status_code=response.status_code,
+            error="" if ok else f"HTTP {response.status_code}",
+            headers=response.headers,
+        )
+        return response.json()
+    except Exception as exc:
+        api_usage.record_request("tmdb", ok=False, error=type(exc).__name__)
         return None
+
+
+def lookup_title(title, title_en=""):
+    """Нормализовать название в данные карточки через TMDb с суточным кэшем."""
+    if not config.TMDB_API_KEY:
+        return None
+    cache_key = f"{title_en}|{title}".strip().lower()
+    cached = util.ttl_get("tmdb_lookup", cache_key, 86400)
+    if cached is not None:
+        return cached
+    for query in (value for value in (title_en, title) if value):
+        data = _get(
+            "/search/multi",
+            {"query": query, "include_adult": "false"},
+            language="ru-RU",
+        ) or {}
+        candidates = [
+            item for item in data.get("results", [])
+            if item.get("media_type") in ("movie", "tv")
+            and not item.get("adult")
+            and not any(part in (item.get("title") or item.get("name") or "").lower()
+                        for part in _BAD)
+        ]
+        if not candidates:
+            continue
+        item = candidates[0]
+        kind = item.get("media_type")
+        overview = item.get("overview", "")
+        if not overview:
+            details = _get(f"/{kind}/{item.get('id')}", {}, timeout=10, language="ru-RU") or {}
+            overview = details.get("overview", "")
+        value = {
+            "name": item.get("title") or item.get("name") or query,
+            "name_en": item.get("original_title") or item.get("original_name") or "",
+            "year": _year(item),
+            "rating": item.get("vote_average") or 0,
+            "vote_count": int(item.get("vote_count") or 0),
+            "popularity": item.get("popularity") or 0,
+            "genres": ", ".join(
+                GENRES[genre_id] for genre_id in (item.get("genre_ids") or [])[:3]
+                if genre_id in GENRES
+            ),
+            "kind": kind,
+            "poster": _poster(item.get("poster_path")),
+            "url": f"https://www.themoviedb.org/{kind}/{item.get('id')}",
+            "overview": overview,
+        }
+        return util.ttl_set("tmdb_lookup", cache_key, value)
+    return util.ttl_set("tmdb_lookup", cache_key, None)
 
 
 def _poster(path):

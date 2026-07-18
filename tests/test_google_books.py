@@ -49,8 +49,10 @@ def test_find_volume_uses_key_and_picks_matching_book(monkeypatch):
     monkeypatch.setattr(google_books.util, "ttl_get", lambda *_args: None)
     monkeypatch.setattr(google_books.util, "ttl_set", lambda *_args: None)
     monkeypatch.setattr(
-        google_books.api_usage, "record_request",
-        lambda service, **kwargs: usage.append((service, kwargs)),
+        google_books.api_usage, "google_books_requests",
+        lambda *, consume=False: usage.append(consume) or {
+            "used": int(consume), "remaining": 1000 - int(consume), "allowed": True,
+        },
     )
 
     def fake_get(url, params, timeout):
@@ -73,8 +75,7 @@ def test_find_volume_uses_key_and_picks_matching_book(monkeypatch):
     assert captured["params"]["printType"] == "books"
     assert captured["params"]["maxResults"] == 8
     assert captured["timeout"] == 10
-    assert usage[-1][0] == "google_books"
-    assert usage[-1][1]["ok"] is True
+    assert usage == [False, True]
 
 
 def test_enrich_book_keeps_editorial_metadata_and_adds_google_fields(monkeypatch):

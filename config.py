@@ -179,6 +179,7 @@ TRAVEL_HOME_FACTS_KEY = "travel_home_facts.json"    # {cid: {"week": iso_week, "
 ALLOWED_CIDS_KEY = "allowed_cids.json"    # список разрешённых chat_id (мульти-юзер)
 PENDING_INVITES_KEY = "pending_invites.json"  # одноразовые инвайт-коды {code: ts}
 ERROR_LOG_KEY = "error_log.json"   # rolling-лог ошибок для админ-экрана «Ошибки» {log: [{ts, source, kind, msg}]}
+ACTION_LATENCY_KEY = "action_latency.json"  # задержка действий без текста запросов и ответов
 ACTIVITY_KEY = "activity.json"     # last_seen + счётчики и состояние напоминания после неактивности
 ADMIN_STATE_KEY = "admin_state.json"  # per-admin cursors and compact dashboard state
 DEPLOY_REPORT_KEY = "deploy_report.json"  # служебное состояние деплой-уведомлений

@@ -959,27 +959,10 @@ async def handle_callback(bot, cid, data, q=None):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_g"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]])
         msg = settings_ui.wardrobe_item_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-    elif data in ("set_lagom", "setadd_lagom", "set_lagom_clean"):
-        # Совместимость со старыми сообщениями после удаления раздела.
-        await q.answer("Раздел «Лагом» удалён")
-    elif data == "set_countries":
-        _log.info("legacy callback used: %s", data)
-        await saved_items.send_love_section(bot, cid, "countries")
-    elif data == "set_artists":
-        _log.info("legacy callback used: %s", data)
-        await saved_items.send_love_section(bot, cid, "artists")
-    elif data == "set_books":
-        _log.info("legacy callback used: %s", data)
-        await saved_items.send_love_section(bot, cid, "books")
-    elif data == "set_stylecustom":
-        store.pending_input[cid] = "styleinput"
-        msg = settings_ui.style_custom_input()
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     elif data == "adm_home":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
-    elif data in ("adm_check_all", "adm_system", "adm_system_check", "adm_diag", "adm_diag_api",
-                  "adm_diag_llm", "adm_diag_news", "adm_api_ai", "adm_api_ai_check"):
+    elif data in ("adm_system", "adm_api_ai"):
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))
     elif data == "adm_logs":
@@ -988,14 +971,6 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "adm_logs_clear":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.clear_logs(b, c, q))
-    elif data.startswith("adm_log_copy_"):
-        # Совместимость со старыми сообщениями: кнопка копирования удалена.
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))
-    elif data in ("adm_notif", "adm_notif_check"):
-        # Compat-редирект: раздел "Уведомления" в админке удалён (ручные тесты не нужны).
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
     elif data == "adm_users":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_users(b, c, q))
@@ -1016,56 +991,9 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "adm_invite_create":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.create_invite(b, c, q))
-    elif data in ("adm_welcome", "adm_welcome_preview", "adm_welcome_edit"):
+    elif data in ("adm_welcome_preview", "adm_welcome_edit"):
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_welcome(b, c, q))
-    elif data == "adm_tests" or data.startswith("adm_test_"):
-        # Compat-редирект: ручные тесты уведомлений удалены.
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
-    elif data == "set_admin":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
-    elif data == "set_admin_users":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_users(b, c, q))
-    elif data in ("set_admin_llm", "set_admin_news", "set_admin_llmcheck", "set_admin_llmhistory"):
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))
-    elif data in ("set_admin_broadcast", "set_admin_broadcast_test_pick") or data.startswith("set_admin_broadcast_test_"):
-        # Compat-редирект: ручные тесты уведомлений удалены.
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
-    elif data in ("set_admin_issues", "set_admin_check_all") or data.startswith("set_admin_issue_"):
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))
-    elif data == "set_admin_api_diagnostics":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))
-    elif data == "set_admin_cache_clear":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.clear_cache(b, c, q))
-    elif data == "set_admin_invite":
-        import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_invite(b, c, q))
-    elif data.startswith("set_admin_revoke_"):
-        target = data[len("set_admin_revoke_"):]
-        async def _do_revoke(b, c):
-            import access as _acc
-            _acc.revoke_user(target)
-            store.purge_user(target)
-            import admin as _adm
-            await _adm.send_users(b, c, q)
-        await _admin_guard(bot, cid, _do_revoke)
-    elif data.startswith("set_admin_"):
-        # устаревшие или неизвестные callback-и из уже отправленных сообщений —
-        # безопасный fallback вместо silent fail или traceback; авторизация уже
-        # проверена _admin_guard-ом до захода в эту ветку.
-        async def _do_fallback(b, c):
-            _log.warning("unknown/legacy admin callback: %s", data)
-            await b.send_message(chat_id=c, text="Панель обновлена. Открываю актуальное меню.")
-            await send_admin(b, c)
-        await _admin_guard(bot, cid, _do_fallback)
 
 
 # ===== АДМИНИСТРАТОР =====

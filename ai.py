@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import inspect
 import logging
 import re
@@ -19,6 +20,12 @@ import secure
 
 _log = logging.getLogger(__name__)
 _GEMINI_RATE_LOCK = threading.Lock()
+_ACTIVE_DEADLINE = contextvars.ContextVar("ai_deadline", default=None)
+STANDARD_BUDGET_SECONDS = 10.0
+COMPLEX_BUDGET_SECONDS = 15.0
+_COMPLEX_MODULE_PREFIXES = (
+    "food", "cooking", "recipe", "wardrobe", "travel", "leisure",
+)
 
 # ---------- Cost logger ----------
 _COST_MAX = 500  # максимум записей в rolling-буфере
@@ -62,6 +69,59 @@ class LLMProviderError(Exception):
         self.retry_after = retry_after
         self.limit_scope = limit_scope
         self.cooldown_until = cooldown_until
+
+
+def _budget_for_module(module: str) -> float:
+    module = str(module or "").casefold()
+    if module.startswith(_COMPLEX_MODULE_PREFIXES):
+        return COMPLEX_BUDGET_SECONDS
+    return STANDARD_BUDGET_SECONDS
+
+
+def _remaining_seconds() -> float | None:
+    deadline = _ACTIVE_DEADLINE.get()
+    if deadline is None:
+        return None
+    return max(0.0, float(deadline) - time.monotonic())
+
+
+def _deadline_error() -> LLMProviderError:
+    return LLMProviderError(
+        "chain", "response deadline exceeded", temporary=True,
+        error_type="deadline",
+    )
+
+
+def _bounded_timeout(timeout) -> float:
+    remaining = _remaining_seconds()
+    if remaining is None:
+        return float(timeout)
+    if remaining <= 0.2:
+        raise _deadline_error()
+    return max(0.2, min(float(timeout), remaining))
+
+
+def _run_with_deadline(module, budget_seconds, call):
+    if _ACTIVE_DEADLINE.get() is not None:
+        remaining = _remaining_seconds()
+        if remaining is not None and remaining <= 0.2:
+            raise _deadline_error()
+        return call()
+    budget = float(budget_seconds or _budget_for_module(module))
+    try:
+        import tracking
+        action_remaining = tracking.remaining_action_seconds()
+        if action_remaining is not None:
+            budget = min(budget, action_remaining)
+    except Exception:
+        pass
+    if budget <= 0.2:
+        raise _deadline_error()
+    token = _ACTIVE_DEADLINE.set(time.monotonic() + budget)
+    try:
+        return call()
+    finally:
+        _ACTIVE_DEADLINE.reset(token)
 
 
 def _is_temporary_status(status_code):
@@ -358,6 +418,7 @@ def _post(url, headers, payload, timeout, name):
         if limit_error is not None:
             raise limit_error
     t0 = time.time()
+    timeout = _bounded_timeout(timeout)
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=timeout)
     except requests.exceptions.Timeout as e:
@@ -600,7 +661,13 @@ def _gemini_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
 
 
 async def allm_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
-    return await asyncio.to_thread(_gemini_image_json, image_bytes, mime_type, prompt, max_tokens)
+    return await asyncio.to_thread(
+        lambda: _run_with_deadline(
+            "wardrobe",
+            COMPLEX_BUDGET_SECONDS,
+            lambda: _gemini_image_json(image_bytes, mime_type, prompt, max_tokens),
+        )
+    )
 
 def _looks_bad_fallback_text(text: str, response_mode: ResponseMode = "plain_text") -> bool:
     s = (text or "").strip()
@@ -621,7 +688,10 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
     if not config.OPENROUTER_API_KEY:
         return None
     token_cap = 5000 if response_mode == "json" else 700
-    timeout = 30 if response_mode == "json" else 12
+    try:
+        timeout = _bounded_timeout(30 if response_mode == "json" else 12)
+    except LLMProviderError:
+        return None
     t0 = time.time()
     status_code = None
     try:
@@ -773,6 +843,8 @@ def _provider_is_unavailable(name):
 def _friendly(errs):
     joined = "; ".join(errs)
     _log.warning("LLM chain failed: %s", secure.redact(joined))
+    if "deadline" in joined.lower():
+        return "⏳ Не успел подготовить ответ вовремя. Попробуй ещё раз."
     if "429" in joined or "Too Many Requests" in joined or "rate" in joined.lower():
         return "⏳ ИИ временно перегружен — подожди минуту и попробуй снова."
     return "⚠️ ИИ временно недоступен — попробуй снова через пару минут."
@@ -885,10 +957,10 @@ def _caller_module() -> str:
                 return m
     return ""
 
-def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module="", route=None,
-        fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
-        response_mode: ResponseMode = "plain_text", fallback_policy=None,
-        allow_personal_openrouter=False):
+def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module="", route=None,
+              fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
+              response_mode: ResponseMode = "plain_text", fallback_policy=None,
+              allow_personal_openrouter=False):
     if not module:
         module = _caller_module()
     policy = _coerce_policy(fallback_allowed, privacy_level, response_mode, fallback_policy,
@@ -902,6 +974,11 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
     cached = _cache_get(cache_key, cache_ttl)
     if cached:
         if _is_cacheable_response(cached, response_mode):
+            try:
+                import tracking
+                tracking.annotate_action(cache_hit=True)
+            except Exception:
+                pass
             return cached
         # Ранее закэширован ответ, который не парсится как JSON (баг, уже
         # исправлен на записи) - не отдаём его снова на TTL модуля (до 30 дней),
@@ -923,6 +1000,10 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
     rate_limit_logged = False
     failed_providers = []
     for name in order:
+        remaining = _remaining_seconds()
+        if remaining is not None and remaining <= 0:
+            errs.append("chain:deadline")
+            break
         if name == "openrouter":
             continue
         unavailable = _provider_is_unavailable(name)
@@ -954,6 +1035,14 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
                 _log_cost(name, name, prompt, out, module, ms=ms, ok=True)
                 if _is_cacheable_response(out, response_mode):
                     _cache_set(cache_key, out)
+                try:
+                    import tracking
+                    tracking.annotate_action(
+                        provider=name,
+                        fallback="provider" if failed_providers else "",
+                    )
+                except Exception:
+                    pass
                 return out
         except Exception as e:
             failed_providers.append(name)
@@ -963,7 +1052,9 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
                 temporary_errs.append((name, e))
             if name == "gemini" and getattr(e, "error_type", "") == "rate_limit":
                 gemini_rate_limit_err = e
-    if policy.openrouter_allowed and (temporary_errs or "openrouter" in order):
+    remaining = _remaining_seconds()
+    if (policy.openrouter_allowed and (remaining is None or remaining > 0.2)
+            and (temporary_errs or "openrouter" in order)):
         if temporary_errs:
             origin, err = temporary_errs[0]
             reason = getattr(err, "error_type", type(err).__name__)
@@ -985,6 +1076,11 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
             _log_cost("openrouter_fallback", config.OPENROUTER_MODEL, "", out, module, ok=True)
             if _is_cacheable_response(out, response_mode):
                 _cache_set(cache_key, out)
+            try:
+                import tracking
+                tracking.annotate_action(provider="openrouter", fallback="provider")
+            except Exception:
+                pass
             return out
         if origin == "gemini" and getattr(err, "error_type", "") == "rate_limit":
             api_usage.record_gemini_fallback(target="local", reason="openrouter_failed")
@@ -997,6 +1093,11 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
     _friendly_msg = _friendly(errs)
     try:
         import tracking
+        tracking.annotate_action(fallback="local")
+    except Exception:
+        pass
+    try:
+        import tracking
         if gemini_rate_limit_err is None:
             tracking.log_error(
                 "llm", "; ".join(errs)[:1000] or _friendly_msg,
@@ -1006,6 +1107,22 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
     except Exception:
         pass
     raise Exception(_friendly_msg)
+
+
+def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module="", route=None,
+        fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
+        response_mode: ResponseMode = "plain_text", fallback_policy=None,
+        allow_personal_openrouter=False, budget_seconds=None):
+    resolved_module = module or _caller_module()
+    return _run_with_deadline(
+        resolved_module,
+        budget_seconds,
+        lambda: _llm_impl(
+            prompt, max_tokens, temperature, order, tier, resolved_module, route,
+            fallback_allowed, privacy_level, response_mode, fallback_policy,
+            allow_personal_openrouter,
+        ),
+    )
 
 def _repair_inner_quotes(raw):
     """Чинит неэкранированные двойные кавычки внутри строковых значений JSON.
@@ -1078,9 +1195,9 @@ def _parse_json_response(raw):
     raise ValueError("json_parse_failed")
 
 
-def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
-             fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
-             allow_personal_openrouter=False, fallback_policy=None):
+def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
+                   fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
+                   allow_personal_openrouter=False, fallback_policy=None):
     if not module:
         module = _caller_module()
     raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
@@ -1117,6 +1234,21 @@ def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=No
         except Exception:
             pass
     raise Exception("Не удалось разобрать ответ ИИ (JSON). Попробуй ещё раз.")
+
+
+def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
+             fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
+             allow_personal_openrouter=False, fallback_policy=None, budget_seconds=None):
+    resolved_module = module or _caller_module()
+    return _run_with_deadline(
+        resolved_module,
+        budget_seconds,
+        lambda: _llm_json_impl(
+            prompt, max_tokens, order, tier, resolved_module, route,
+            fallback_allowed, privacy_level, allow_personal_openrouter,
+            fallback_policy,
+        ),
+    )
 
 CHAT_SYSTEM = """Ты помощник. Отвечай как обычный собеседник в чате, а не как документ.
 
@@ -1190,13 +1322,17 @@ def _chat(provider, history, system):
             {"messages": [{"role": "system", "content": system}] + history, "max_tokens": 700}, 40, "cf")
         return _as_text(r.json().get("result", {}).get("response"))
 
-def chat_chain(history, cid=None):
+def _chat_chain_impl(history, cid=None):
     system = _chat_system(cid)
     errs = []
     prompt_len = sum(len(m.get("content", "")) for m in history)
     gemini_rate_limit_err = _gemini_cooldown_error() if "gemini" in CHAT_ORDER else None
     failed_providers = []
     for p in _reorder_for_cooldown(_reorder_for_monitor(CHAT_ORDER)):
+        remaining = _remaining_seconds()
+        if remaining is not None and remaining <= 0:
+            errs.append("chain:deadline")
+            break
         unavailable = _provider_is_unavailable(p)
         if unavailable is not None:
             failed_providers.append(p)
@@ -1215,6 +1351,14 @@ def chat_chain(history, cid=None):
                     api_usage.record_gemini_fallback(target=p, reason="cooldown")
                     _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
                 _log_cost(p, p, "c" * prompt_len, out, "assistant")
+                try:
+                    import tracking
+                    tracking.annotate_action(
+                        provider=p,
+                        fallback="provider" if failed_providers else "",
+                    )
+                except Exception:
+                    pass
                 return out
         except Exception as e:
             failed_providers.append(p)
@@ -1225,27 +1369,42 @@ def chat_chain(history, cid=None):
     if gemini_rate_limit_err is not None:
         api_usage.record_gemini_fallback(target="local", reason="chat_failed")
         _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
+    try:
+        import tracking
+        tracking.annotate_action(fallback="local")
+    except Exception:
+        pass
     raise Exception(_friendly(errs))
+
+
+def chat_chain(history, cid=None, budget_seconds=None):
+    return _run_with_deadline(
+        "assistant",
+        budget_seconds,
+        lambda: _chat_chain_impl(history, cid),
+    )
 
 
 # --- async-обёртки для вызова из async-обработчиков без блокировки event loop ---
 async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, route=None, module="",
                fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
                response_mode: ResponseMode = "plain_text", fallback_policy=None,
-               allow_personal_openrouter=False):
+               allow_personal_openrouter=False, budget_seconds=None):
     return await asyncio.to_thread(
         llm, prompt, max_tokens, temperature, order, tier, module, route,
         fallback_allowed, privacy_level, response_mode, fallback_policy,
-        allow_personal_openrouter,
+        allow_personal_openrouter, budget_seconds,
     )
 
 async def allm_json(prompt, max_tokens=1200, order=None, tier=None, route=None, module="",
                     fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
-                    allow_personal_openrouter=False, fallback_policy=None):
+                    allow_personal_openrouter=False, fallback_policy=None,
+                    budget_seconds=None):
     return await asyncio.to_thread(
         llm_json, prompt, max_tokens, order, tier, module, route,
         fallback_allowed, privacy_level, allow_personal_openrouter, fallback_policy,
+        budget_seconds,
     )
 
-async def achat_chain(history, cid=None):
-    return await asyncio.to_thread(chat_chain, history, cid)
+async def achat_chain(history, cid=None, budget_seconds=STANDARD_BUDGET_SECONDS):
+    return await asyncio.to_thread(chat_chain, history, cid, budget_seconds)

@@ -10,6 +10,7 @@ import config
 import google_books
 import recommendation_stoplist
 import store
+import tracking
 from ui import leisure as leisure_ui
 from ui.constants import save_toggle_label
 
@@ -59,10 +60,16 @@ def content_recommend(kind, cid):
     return leisure_collection.content_recommend(kind, cid)
 def _book_cover(title, title_en=""):
     import requests
+    timeout = 4.0
+    remaining = tracking.remaining_action_seconds()
+    if remaining is not None:
+        if remaining <= 0.2:
+            return None
+        timeout = min(timeout, remaining)
     for q in [t for t in (title_en, title) if t]:
         try:
             r = requests.get("https://openlibrary.org/search.json",
-                             params={"title": q, "limit": 1}, timeout=10)
+                             params={"title": q, "limit": 1}, timeout=timeout)
             docs = r.json().get("docs", [])
             if docs and docs[0].get("cover_i"):
                 return f"https://covers.openlibrary.org/b/id/{docs[0]['cover_i']}-L.jpg"
@@ -85,14 +92,32 @@ async def _send_book_card(bot, cid, it, i, *, enrich=True):
     import saved_items
     if enrich:
         try:
-            it = await asyncio.to_thread(google_books.enrich_book, it)
+            remaining = tracking.remaining_action_seconds()
+            timeout = min(8.0, remaining - 0.5) if remaining is not None else 8.0
+            if timeout <= 0.2:
+                raise asyncio.TimeoutError
+            it = await asyncio.wait_for(
+                asyncio.to_thread(google_books.enrich_book, it), timeout=timeout)
         except Exception:
             it = dict(it or {})
     else:
         it = dict(it or {})
     msg = _book_text(it)
     kb = _book_kb(i, saved_items.is_note_saved(cid, it.get("title", "")))
-    cover = it.get("cover_url") or _book_cover(it.get("title", ""), it.get("title_en", ""))
+    cover = it.get("cover_url")
+    if not cover:
+        try:
+            remaining = tracking.remaining_action_seconds()
+            timeout = min(4.5, remaining - 0.5) if remaining is not None else 4.5
+            if timeout <= 0.2:
+                raise asyncio.TimeoutError
+            cover = await asyncio.wait_for(
+                asyncio.to_thread(
+                    _book_cover, it.get("title", ""), it.get("title_en", "")),
+                timeout=timeout,
+            )
+        except Exception:
+            cover = None
     if cover:
         try:
             await bot.send_photo(chat_id=cid, photo=cover, caption=msg.text, caption_entities=msg.entities, reply_markup=kb)

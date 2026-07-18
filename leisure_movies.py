@@ -4,100 +4,29 @@ import asyncio
 import logging
 import re
 import random
-import time
 import config
-import api_usage
 
 _log = logging.getLogger(__name__)
 import store
 import ai
-import util
 import settings
 import tmdb
 import movie_engine
 import recommendation_stoplist
 import verify
+import tracking
 from ui import leisure as leisure_ui
 from ui.navigation import back_menu_keyboard
 from leisure_collection import (
     _ask_collect,
-    _ensure_books,
-    _norm,
-    collect_done,
     content_recommend,
-    dedupe_lists,
-    seed_movies_from_content,
 )
-
-
-_TMDB_GENRES = {28:"боевик",12:"приключения",16:"анимация",35:"комедия",80:"криминал",99:"документальный",
-    18:"драма",10751:"семейный",14:"фэнтези",36:"история",27:"ужасы",10402:"музыка",9648:"детектив",
-    10749:"мелодрама",878:"фантастика",10770:"телефильм",53:"триллер",10752:"военный",37:"вестерн",
-    10759:"боевик",10762:"детское",10763:"новости",10764:"реалити",10765:"фантастика",10766:"мыло",
-    10767:"ток-шоу",10768:"военное"}
-
-def _tmdb_lookup(title, title_en=""):
-    if not config.TMDB_API_KEY:
-        return None
-    cache_key = f"{title_en}|{title}".strip().lower()
-    cached = util.ttl_get("tmdb_lookup", cache_key, 86400)
-    if cached is not None:
-        return cached
-    import requests
-    for q in [t for t in (title_en, title) if t]:
-        try:
-            r = requests.get("https://api.themoviedb.org/3/search/multi",
-                params={"api_key": config.TMDB_API_KEY, "query": q, "include_adult": "false",
-                        "language": "ru-RU"}, timeout=12)
-            results = [x for x in r.json().get("results", []) if x.get("media_type") in ("movie", "tv")]
-            if not results:
-                continue
-            def _ok(x):
-                nm = (x.get("title") or x.get("name") or "").lower()
-                return nm and not x.get("adult") and not any(b in nm for b in _BAD_TMDB)
-            good = [x for x in results if _ok(x)]
-            if not good:
-                continue
-            x = good[0]
-            date = x.get("release_date") or x.get("first_air_date") or ""
-            kind = "movie" if x.get("media_type") == "movie" else "tv"
-            poster = x.get("poster_path")
-            genres = ", ".join(_TMDB_GENRES.get(g, "") for g in (x.get("genre_ids") or [])[:3] if _TMDB_GENRES.get(g))
-            overview = x.get("overview", "")
-            if not overview:
-                try:
-                    rid = requests.get(f"https://api.themoviedb.org/3/{kind}/{x.get('id')}",
-                        params={"api_key": config.TMDB_API_KEY, "language": "ru-RU"}, timeout=10)
-                    overview = rid.json().get("overview", "")
-                except Exception:
-                    pass
-            return util.ttl_set("tmdb_lookup", cache_key, {
-                "name": x.get("title") or x.get("name") or q,
-                "name_en": x.get("original_title") or x.get("original_name") or "",
-                "year": date[:4] if date else "", "rating": x.get("vote_average") or 0,
-                "vote_count": int(x.get("vote_count") or 0),
-                "popularity": x.get("popularity") or 0,
-                "genres": genres, "kind": kind,
-                "poster": (f"https://image.tmdb.org/t/p/w500{poster}" if poster else None),
-                "url": f"https://www.themoviedb.org/{kind}/{x.get('id')}",
-                "overview": overview,
-            })
-        except Exception:
-            continue
-    return util.ttl_set("tmdb_lookup", cache_key, None)
 
 def _display_title(it, tm):
     """Название, которое реально показано пользователю (TMDb если есть, иначе от LLM)."""
     name = (tm.get("name") if tm else "") or it.get("title", "")
     year = (tm.get("year") if tm else "") or ""
     return f"{name} ({year})" if year else name
-
-_BAD_TMDB = ("making of", "behind the scenes", "bonus", "featurette",
-             "the making", "deleted scenes", "trailer", "teaser")
-
-def _clip(text, limit=450):
-    """Аккуратно обрезает описание по концу предложения/слова, без обрыва на полуслове."""
-    return leisure_ui.clip(text, limit=limit)
 
 def _movie_card(it, tm):
     return leisure_ui.movie_card(it, tm)
@@ -249,7 +178,7 @@ def _pick_good_movie(items, used_titles):
             continue
         if it.get("title", "").lower() in used:
             continue
-        tm = _tmdb_lookup(it.get("title", ""), it.get("title_en", "")) if config.TMDB_API_KEY else None
+        tm = tmdb.lookup_title(it.get("title", ""), it.get("title_en", "")) if config.TMDB_API_KEY else None
         disp = _display_title(it, tm).lower()
         if disp in used:
             continue
@@ -265,7 +194,18 @@ async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None):
     import saved_items
     it = it if isinstance(it, dict) else {"title": str(it)}
     if tm == "__lookup__":
-        tm = _tmdb_lookup(it.get("title", ""), it.get("title_en", "")) if config.TMDB_API_KEY else None
+        try:
+            remaining = tracking.remaining_action_seconds()
+            timeout = min(5.0, remaining - 0.5) if remaining is not None else 5.0
+            if timeout <= 0.2:
+                raise asyncio.TimeoutError
+            tm = await asyncio.wait_for(
+                asyncio.to_thread(
+                    tmdb.lookup_title, it.get("title", ""), it.get("title_en", "")),
+                timeout=timeout,
+            ) if config.TMDB_API_KEY else None
+        except Exception:
+            tm = None
     title, msg = _movie_card(it, tm)
     kb = _movie_kb(
         i, category=category,
@@ -498,12 +438,28 @@ async def _llm_movie_pick(cid, used):
         items = _fallback_movie_items(cid)
     if not items:
         return None, None
-    picked = await asyncio.to_thread(_pick_good_movie, items, used)
+    remaining = tracking.remaining_action_seconds()
+    timeout = min(5.0, remaining - 0.5) if remaining is not None else 5.0
+    if timeout <= 0.2:
+        return items[0], None
+    try:
+        picked = await asyncio.wait_for(
+            asyncio.to_thread(_pick_good_movie, items, used), timeout=timeout)
+    except Exception:
+        return items[0], None
     if picked[0] is not None:
         return picked
     fallbacks = _fallback_movie_items(cid)
     if fallbacks != items:
-        return await asyncio.to_thread(_pick_good_movie, fallbacks, used)
+        remaining = tracking.remaining_action_seconds()
+        timeout = min(5.0, remaining - 0.5) if remaining is not None else 5.0
+        if timeout <= 0.2:
+            return fallbacks[0], None
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(_pick_good_movie, fallbacks, used), timeout=timeout)
+        except Exception:
+            return fallbacks[0], None
     return None, None
 
 async def movie_dislike(bot, cid, i):

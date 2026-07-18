@@ -94,6 +94,16 @@ def _search_items(query: str) -> list[dict]:
         return cached
     if not api_usage.google_books_requests()["allowed"]:
         return []
+    timeout = 10.0
+    try:
+        import tracking
+        remaining = tracking.remaining_action_seconds()
+        if remaining is not None:
+            if remaining <= 0.2:
+                return []
+            timeout = min(timeout, remaining)
+    except Exception:
+        pass
     started = time.monotonic()
     try:
         response = requests.get(
@@ -106,7 +116,7 @@ def _search_items(query: str) -> list[dict]:
                 "printType": "books",
                 "projection": "lite",
             },
-            timeout=10,
+            timeout=timeout,
         )
     except requests.exceptions.Timeout as exc:
         service_monitor.record_result(

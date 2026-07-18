@@ -9,7 +9,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import ai
 import config
-import leisure
+import leisure_concerts
 import research
 
 
@@ -37,8 +37,8 @@ def main():
     assert removed_provider not in ai._resolve("smart", None, route=removed_provider)
 
     event_client = "_event" + "brite_events"
-    assert not hasattr(leisure, event_client)
-    assert not hasattr(leisure, event_client + "_many")
+    assert not hasattr(leisure_concerts, event_client)
+    assert not hasattr(leisure_concerts, event_client + "_many")
 
     calls = []
 

@@ -1,30 +1,150 @@
 """Слой трекинга для админ-панели (§9 docs/admin.md).
 
-Два дешёвых rolling-примитива поверх KV-store, плюс агрегаты для UI:
+Три дешёвых rolling-примитива поверх KV-store, плюс агрегаты для UI:
 
 - errors   — лог ошибок для экрана «Логи» {ts, source, kind, msg}
 - activity — last_seen + счётчик на пользователя {cid: {last_ts, count, days}}
+- latency  — первый отклик и полная длительность действия без текста сообщений
 
 Все записи best-effort: трекинг НИКОГДА не должен ломать основной поток бота,
 поэтому каждая точка входа обёрнута в try/except с молчаливым проглатыванием.
 """
+import contextvars
 import inspect
 import os
 import sys
+import threading
 import time
 import traceback as traceback_module
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
 
 import config
 import store
 
 _ERR_MAX = 200          # rolling-буфер ошибок
+_LATENCY_MAX = 500      # действия без текста запросов и ответов
 _ACT_DAYS_MAX = 40      # сколько последних дат активности хранить на юзера
 DAY = 86400
 _TOUCH_THROTTLE_SECONDS = 60
 INACTIVITY_REMINDER_SECONDS = 72 * 3600
 _last_touch = {}
+_current_action = contextvars.ContextVar("current_action", default=None)
+_active_action_ids = set()
+_active_action_lock = threading.Lock()
+
+
+@dataclass
+class ActionTrace:
+    cid: str
+    section: str
+    action: str
+    budget_seconds: float | None = None
+    started: float = field(default_factory=time.monotonic)
+    first_feedback: float | None = None
+    provider: str = ""
+    cache_hit: bool = False
+    fallback: str = ""
+    finished: bool = False
+    trace_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+
+
+def start_action(cid, section, action, *, budget_seconds=None) -> ActionTrace:
+    """Начать измерение действия, не сохраняя текст пользователя."""
+    trace = ActionTrace(
+        cid=str(cid),
+        section=_safe_text(section, 40),
+        action=_safe_text(action, 100),
+        budget_seconds=float(budget_seconds) if budget_seconds else None,
+        started=time.monotonic(),
+    )
+    with _active_action_lock:
+        _active_action_ids.add(trace.trace_id)
+    _current_action.set(trace)
+    return trace
+
+
+def current_action() -> ActionTrace | None:
+    return _current_action.get()
+
+
+def remaining_action_seconds(trace=None) -> float | None:
+    trace = trace or current_action()
+    if trace is None or trace.budget_seconds is None:
+        return None
+    return max(0.0, trace.budget_seconds - (time.monotonic() - trace.started))
+
+
+def has_active_actions() -> bool:
+    with _active_action_lock:
+        return bool(_active_action_ids)
+
+
+def mark_first_feedback(trace=None) -> None:
+    trace = trace or current_action()
+    if trace is not None and trace.first_feedback is None:
+        trace.first_feedback = time.monotonic()
+
+
+def annotate_action(*, provider="", cache_hit=None, fallback="") -> None:
+    trace = current_action()
+    if trace is None:
+        return
+    if provider:
+        trace.provider = _safe_text(provider, 40)
+    if cache_hit is not None:
+        trace.cache_hit = bool(cache_hit)
+    if fallback:
+        trace.fallback = _safe_text(fallback, 80)
+
+
+def finish_action(trace=None, *, ok=True) -> None:
+    """Завершить измерение best-effort и сохранить технические поля."""
+    trace = trace or current_action()
+    if trace is None or trace.finished:
+        return
+    trace.finished = True
+    finished = time.monotonic()
+    try:
+        entry = {
+            "ts": int(time.time()),
+            "cid": trace.cid,
+            "section": trace.section,
+            "action": trace.action,
+            "first_feedback_ms": (
+                int((trace.first_feedback - trace.started) * 1000)
+                if trace.first_feedback is not None else None
+            ),
+            "duration_ms": int((finished - trace.started) * 1000),
+            "budget_ms": (
+                int(trace.budget_seconds * 1000)
+                if trace.budget_seconds is not None else None
+            ),
+            "provider": trace.provider,
+            "cache_hit": trace.cache_hit,
+            "fallback": trace.fallback,
+            "ok": bool(ok),
+        }
+        data = store._load(config.ACTION_LATENCY_KEY) or {}
+        log = data.get("log", [])
+        log.append(entry)
+        store._save(config.ACTION_LATENCY_KEY, {"log": log[-_LATENCY_MAX:]})
+    except Exception:
+        pass
+    finally:
+        with _active_action_lock:
+            _active_action_ids.discard(trace.trace_id)
+        if current_action() is trace:
+            _current_action.set(None)
+
+
+def get_action_latencies(limit=100) -> list:
+    try:
+        rows = (store._load(config.ACTION_LATENCY_KEY) or {}).get("log", [])
+        return list(rows[-max(1, int(limit)):])
+    except Exception:
+        return []
 
 _SECTION_BY_MODULE = {
     "myday": "Мой день", "weather": "Мой день", "weather_provider": "Мой день",
