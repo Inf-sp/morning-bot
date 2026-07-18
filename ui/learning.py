@@ -1,73 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
-from .builder import MessageBuilder, MessageSpec, u16_len
+from .builder import MessageBuilder, MessageSpec
 from .constants import choose_label, ui_label
-
-
-def _as_list(value):
-    if isinstance(value, list):
-        return [str(x).strip() for x in value if str(x).strip()]
-    if isinstance(value, str) and value.strip():
-        return [value.strip()]
-    return []
-
-
-def _cap_first(text):
-    text = (text or "").strip()
-    return text[:1].upper() + text[1:] if text else text
-
-
-def _split_example(value):
-    if isinstance(value, list):
-        value = value[0] if value else ""
-    value = str(value or "").strip()
-    if "→" in value:
-        left, right = value.split("→", 1)
-        return left.strip(), right.strip()
-    return value, ""
-
-
-def _strip_final_punctuation(text):
-    return (text or "").strip().rstrip(".!?。！？").strip()
-
-
-def proverb_card(flag, original, analogs=None, meaning="", examples=None, example_ru=""):
-    b = MessageBuilder()
-    b.section("💭 Живой язык")
-    b.spacer()
-
-    if original:
-        offset = u16_len(b.text)
-        b.text_line(original)
-        length = u16_len(original)
-        b._entities.append(MessageEntity(MessageEntity.BOLD, offset, length))
-        b._entities.append(MessageEntity(MessageEntity.BLOCKQUOTE, offset, length))
-
-    analogs = _as_list(analogs)
-    if analogs:
-        main_analog = _strip_final_punctuation(_cap_first(analogs[0]))
-        b.spacer()
-        b.bold("Перевод:")
-        b.italic(f" «{main_analog}».")
-        b.newline()
-
-    meaning = str(meaning or "").strip()
-    if meaning:
-        b.section("Когда это говорят?")
-        b.line(meaning)
-
-    example, parsed_example_ru = _split_example(examples)
-    example_ru = str(example_ru or parsed_example_ru or "").strip()
-    if example:
-        b.spacer()
-        b.bold("Пример из жизни:")
-        example_line = f" {example} → {example_ru}" if example_ru else f" {example}"
-        b.text_line(example_line)
-        b.newline()
-
-    msg = b.build()
-    msg.text = msg.text.rstrip()
-    return msg
 
 
 # ================= ТРЕНАЖЁР: 9 ФОРМАТОВ ЗАДАНИЙ =================
@@ -392,10 +326,6 @@ def morning_words(flag, words=None, empty_hint=False):
     return msg
 
 
-def game_start():
-    return MessageSpec(text="🕵️ Игра-детектив. На каком языке играем?")
-
-
 def game_card(ui, clues):
     b = MessageBuilder()
     b.section(f"🕵️ {ui['title']}")
@@ -444,5 +374,5 @@ def learning_settings(active_language, active_level):
     b.bold(active_level)
     b.newline()
     b.spacer()
-    b.text_line("Эти настройки влияют на тренажёры, «Живой язык» и обучающие уведомления.")
+    b.text_line("Эти настройки влияют на карточку обучения, тренажёры и уведомления.")
     return b.build()

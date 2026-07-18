@@ -10,7 +10,6 @@ import dictionary_import
 import dictionary_seed
 import learning_game as game
 import learning_settings as learning_preferences
-import live_language
 import store
 import trainer
 import util
@@ -59,9 +58,6 @@ async def handle_action(bot, cid, q, act, run_with_status):
             bot, cid, act.rsplit("_", 1)[-1]))
     elif act == "train_progress":
         await run_with_status(lambda _s: trainer.send_progress(bot, cid))
-    elif act in ("proverb", "proverb_nl", "proverb_en"):
-        language = act.rsplit("_", 1)[-1] if act in ("proverb_nl", "proverb_en") else None
-        await run_with_status(lambda _s: live_language.send_proverb(bot, cid, language))
     elif act == "dict":
         await dictionary.send_dict(bot, cid, q=q)
     elif act == "dictconfirm_add":
@@ -152,7 +148,7 @@ async def handle_action(bot, cid, q, act, run_with_status):
         else:
             await dictionary.send_dict_manage(bot, cid, rest, q=q)
     elif act == "game":
-        await game.game_start(bot, cid)
+        await game.start(bot, cid)
     elif act == "levels":
         await learning_preferences.send_levels(bot, cid, back="m_learn")
     else:

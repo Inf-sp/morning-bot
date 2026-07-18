@@ -14,7 +14,6 @@ UI_EMOJI = {
     "learning": "📚",
     "dictionary": "🗂️",
     "phrases": "🧩",
-    "live_language": "💭",
     "word_trainer": "🧠",
     "game": "🕵️",
     "travel": "✈️",

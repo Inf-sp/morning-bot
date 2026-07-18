@@ -2,6 +2,7 @@ import random
 from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
+import live_language
 import srs
 import store
 import trainer_engine
@@ -113,14 +114,13 @@ def select_daily_material(cid):
 
 
 def _daily_focus_text(entry, kind):
-    """'Сегодня в фокусе' на главном экране — вытекает из SRS-уровня материала
-    дня (0-1: узнать перевод; 2-3: вспомнить без вариантов; 4-5: применить
-    самостоятельно), без AI-вызова — правило по уже посчитанному уровню."""
+    """Для слова сначала предлагает вспомнить перевод; для остальных типов
+    использует уже посчитанный SRS-уровень без AI-вызова."""
+    if kind == "word":
+        return "сначала вспомни перевод, потом проверь себя."
     level = srs.normalize_state(entry)["srs_level"]
     if level <= 1:
         return "вспомнить перевод до открытия спойлера."
-    if kind == "word":
-        return "использовать новое слово в своём предложении."
     if kind == "rule":
         return "применить правило в одном своём предложении."
     if kind == "phrase":
@@ -135,10 +135,12 @@ def build_learning_home(cid):
     entry = select_daily_material(cid)
     lang_code = _active_language_code(cid)
     progress = build_progress_screen(cid)
+    phrase = live_language.daily_phrase(lang_code)
     if not entry:
         return {
             "has_material": False,
             "lang_code": lang_code,
+            "live_language": phrase,
             "progress": progress,
         }
     kind = daily_material_type(entry)
@@ -160,6 +162,7 @@ def build_learning_home(cid):
         "example_translation": str(example.get("translation") or "").strip(),
         "note": str(entry.get("breakdown") or "").strip(),
         "focus": _daily_focus_text(entry, kind),
+        "live_language": phrase,
         "progress": progress,
     }
 

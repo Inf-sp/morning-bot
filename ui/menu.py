@@ -156,13 +156,23 @@ def learning_menu(home: dict):
             b.add(finish_dot(home["translation"]), MessageEntity.SPOILER)
         b.newline()
 
+    phrase = home.get("live_language") or {}
+    if phrase.get("text") and phrase.get("translation"):
+        b.spacer()
+        b.bold("Живой язык:")
+        b.text_line(f" {phrase['text']} → {phrase['translation']}")
+        b.newline()
+        if phrase.get("meaning"):
+            b.bold("Когда говорят?")
+            b.text_line(f" {phrase['meaning']}")
+            b.newline()
+
     progress = home.get("progress") or {}
     b.spacer()
     b.bold("Прогресс:")
     b.newline()
     b.bullet(f"В изучении {progress.get('total', 0)} слов и фраз")
-    b.bullet(f"На повторении {progress.get('due_count', 0)} слов и фраз")
-    b.bullet(f"Правильно без подсказок — {progress.get('no_hint_pct', 0)}%")
+    b.bullet(f"Без подсказок — {progress.get('no_hint_pct', 0)}%")
     b.spacer()
     focus = home.get("focus") or "добавить первые слова в тренажёре."
     b.text_line("💡 ")
@@ -170,8 +180,10 @@ def learning_menu(home: dict):
 
     return b.build_stripped(reply_markup=ikb([
         [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
-        [(ui_label("live_language", "Живой язык"), f"a_proverb_{code}"), (ui_label("game", "Игра-детектив"), f"gamelang_{code}")],
-        [("📖 Мой словарь", f"a_dictlang_{code}_from_menu")],
+        [
+            (ui_label("game", "Игра-детектив"), "a_game"),
+            ("📖 Мой словарь", f"a_dictlang_{code}_from_menu"),
+        ],
         [(choose_label("Выбрать язык"), "set_learning")],
         [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
     ]))

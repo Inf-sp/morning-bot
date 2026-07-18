@@ -39,9 +39,9 @@ _STATUS_TOPIC_PREFIXES = (
     ("w_", "wardrobe"),
     ("m_food", "food"), ("as_food", "food"), ("as_fridge", "food"), ("as_recipe", "food"), ("as_my_recipe", "food"),
     ("a_recipe_", "food"), ("food_", "food"),
-    ("a_dict", "learning"), ("a_train", "learning"), ("a_tr_", "learning"), ("a_proverb", "learning"),
+    ("a_dict", "learning"), ("a_train", "learning"), ("a_tr_", "learning"),
     ("ex_", "learning"), ("again_tr_", "learning"), ("game", "learning"),
-    ("gamelang_", "learning"), ("gamediff_", "learning"),
+    ("a_game", "learning"), ("gamediff_", "learning"),
     ("movie_", "leisure"), ("book_", "leisure"), ("listen", "leisure"), ("reco_", "leisure"), ("a_concerts", "leisure"),
     ("m_travel", "travel"), ("a_trav_", "travel"),
     ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("as_health_", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
@@ -300,17 +300,16 @@ async def handle(update, context, remove_reply_keyboard):
         await learning_router.handle_callback(bot, cid, data, _inline_status)
         return
     # Игра
-    if data.startswith("gamelang_"):
-        lang = {"ru": "русский", "en": "английский", "nl": "нидерландский"}[data.split("_")[1]]
-        store.game_config[cid] = {"lang": lang, "difficulty": "med"}
-        await learning_game.ask_difficulty(bot, cid, lang)
-        return
     if data.startswith("gamediff_"):
         diff = data.split("_")[1]
         cfg = store.game_config.get(cid, {"lang": "русский"})
         cfg["difficulty"] = diff
         store.game_config[cid] = cfg
         await _inline_status(lambda _s: learning_game.send_game(bot, cid))
+        try:
+            await q.message.delete()
+        except Exception as e:
+            _log.info("game difficulty prompt delete failed cid=%s: %r", cid, e)
         return
     if data == "noop":
         return
@@ -334,9 +333,6 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data == "game_reveal":
         await learning_game.game_reveal(bot, cid, q)
-        return
-    if data == "game_change":
-        await learning_game.game_start(bot, cid)
         return
     # Развлечения / путешествия
     if data == "movie_prefs":

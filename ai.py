@@ -821,7 +821,6 @@ MODULE_POLICY = {
     "learning_game": GRAMMAR_ORDER,
     "learning_dictionary": GRAMMAR_ORDER,
     "dictionary_import": GRAMMAR_ORDER,
-    "live_language": GRAMMAR_ORDER,
     "trainer": GRAMMAR_ORDER,
     "health": GRAMMAR_ORDER,
     "balance": GRAMMAR_ORDER,
