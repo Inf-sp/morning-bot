@@ -29,6 +29,13 @@ COHERE_API_KEY = os.environ.get("COHERE_API_KEY", "")
 COHERE_MODEL = os.environ.get("COHERE_MODEL", "command-a-plus-05-2026")
 GITHUB_MODELS_TOKEN = os.environ.get("GITHUB_MODELS_TOKEN", "")
 GITHUB_MODELS_MODEL = os.environ.get("GITHUB_MODELS_MODEL", "openai/gpt-4.1-mini")
+KIMI_API_KEY = os.environ.get("KIMI_API_KEY", "").strip()
+KIMI_MODEL = os.environ.get("KIMI_MODEL", "kimi-k2.5").strip() or "kimi-k2.5"
+KIMI_BASE_URL = os.environ.get("KIMI_BASE_URL", "https://api.moonshot.ai/v1").strip().rstrip("/")
+KIMI_MAX_CONCURRENCY = _env_int("KIMI_MAX_CONCURRENCY", 3)
+KIMI_RPM_LIMIT = _env_int("KIMI_RPM_LIMIT", 20)
+KIMI_TPM_LIMIT = _env_int("KIMI_TPM_LIMIT", 500_000)
+KIMI_TPD_LIMIT = _env_int("KIMI_TPD_LIMIT", 1_500_000)
 GOOGLE_BOOKS_API_KEY = os.environ.get("GOOGLE_BOOKS_API_KEY", "")
 LANGUAGETOOL_API_URL = os.environ.get(
     "LANGUAGETOOL_API_URL", "https://api.languagetool.org/v2",
@@ -93,6 +100,11 @@ API_QUOTAS = {
     ],
     "github_models": [
         {"mode": "local", "unit": "requests", "period": "day"},
+    ],
+    "kimi": [
+        {"mode": "local", "unit": "requests", "period": "minute", "limit": KIMI_RPM_LIMIT},
+        {"mode": "local", "unit": "tokens", "period": "minute", "limit": KIMI_TPM_LIMIT},
+        {"mode": "local", "unit": "tokens", "period": "day", "limit": KIMI_TPD_LIMIT},
     ],
     "languagetool": [
         {"mode": "local", "unit": "requests", "period": "day"},

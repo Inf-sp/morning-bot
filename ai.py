@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 import hashlib
 import base64
+from collections import deque
+from contextlib import contextmanager
 from typing import Literal
 import api_usage
 import config
@@ -20,6 +22,10 @@ import secure
 
 _log = logging.getLogger(__name__)
 _GEMINI_RATE_LOCK = threading.Lock()
+_KIMI_SEMAPHORE = threading.BoundedSemaphore(max(1, config.KIMI_MAX_CONCURRENCY))
+_KIMI_RATE_LOCK = threading.Lock()
+_KIMI_MINUTE_USAGE = deque()
+_KIMI_IN_FLIGHT_TOKENS = 0
 _ACTIVE_DEADLINE = contextvars.ContextVar("ai_deadline", default=None)
 STANDARD_BUDGET_SECONDS = 10.0
 COMPLEX_BUDGET_SECONDS = 15.0
@@ -581,6 +587,104 @@ def _gen_cohere(prompt, max_tokens, temperature, response_mode: ResponseMode = "
     raise LLMProviderError("cohere", "empty cohere response", error_type="empty_response")
 
 
+@contextmanager
+def _kimi_capacity(estimated_tokens: int):
+    """Local Tier0 guard; Moonshot remains authoritative for account limits."""
+    global _KIMI_IN_FLIGHT_TOKENS
+    wait_for = min(_remaining_seconds() or 10.0, 10.0)
+    if not _KIMI_SEMAPHORE.acquire(timeout=max(0.1, wait_for)):
+        provider_runtime.record_result(
+            "kimi", False, status_code=429, error="concurrency limit",
+        )
+        raise LLMProviderError(
+            "kimi", "Kimi concurrency limit", temporary=True,
+            error_type="rate_limit", retry_after=1, limit_scope="concurrency",
+        )
+    reserved = False
+    try:
+        now = time.monotonic()
+        with _KIMI_RATE_LOCK:
+            while _KIMI_MINUTE_USAGE and now - _KIMI_MINUTE_USAGE[0][0] >= 60:
+                _KIMI_MINUTE_USAGE.popleft()
+            minute_requests = len(_KIMI_MINUTE_USAGE)
+            minute_tokens = sum(tokens for _, tokens in _KIMI_MINUTE_USAGE)
+            day_tokens = int(api_usage.service_usage("kimi")["tokens_today"])
+            if minute_requests >= config.KIMI_RPM_LIMIT:
+                retry_after = max(1, int(60 - (now - _KIMI_MINUTE_USAGE[0][0])))
+                provider_runtime.record_result(
+                    "kimi", False, status_code=429, error="RPM limit",
+                )
+                raise LLMProviderError(
+                    "kimi", "Kimi RPM limit", status_code=429, temporary=True,
+                    error_type="rate_limit", retry_after=retry_after, limit_scope="RPM",
+                )
+            if minute_tokens + estimated_tokens > config.KIMI_TPM_LIMIT:
+                provider_runtime.record_result(
+                    "kimi", False, status_code=429, error="TPM limit",
+                )
+                raise LLMProviderError(
+                    "kimi", "Kimi TPM limit", status_code=429, temporary=True,
+                    error_type="rate_limit", retry_after=60, limit_scope="TPM",
+                )
+            if day_tokens + _KIMI_IN_FLIGHT_TOKENS + estimated_tokens > config.KIMI_TPD_LIMIT:
+                provider_runtime.record_result(
+                    "kimi", False, status_code=429, error="TPD limit",
+                )
+                raise LLMProviderError(
+                    "kimi", "Kimi TPD limit", status_code=429,
+                    error_type="quota", limit_scope="TPD",
+                )
+            _KIMI_MINUTE_USAGE.append((now, estimated_tokens))
+            _KIMI_IN_FLIGHT_TOKENS += estimated_tokens
+            reserved = True
+        yield
+    finally:
+        if reserved:
+            with _KIMI_RATE_LOCK:
+                _KIMI_IN_FLIGHT_TOKENS = max(0, _KIMI_IN_FLIGHT_TOKENS - estimated_tokens)
+        _KIMI_SEMAPHORE.release()
+
+
+def _kimi_completion(messages, max_tokens, temperature,
+                     response_mode: ResponseMode = "plain_text"):
+    if not config.KIMI_API_KEY:
+        raise LLMProviderError("kimi", "no Kimi key", error_type="credentials")
+    prompt_chars = sum(len(str(message.get("content") or "")) for message in messages)
+    estimated_tokens = max(1, prompt_chars // 4) + int(max_tokens or 1200)
+    payload = {
+        "model": config.KIMI_MODEL,
+        "messages": messages,
+        "max_tokens": int(max_tokens or 1200),
+        "temperature": min(max(float(0.3 if temperature is None else temperature), 0.0), 1.0),
+    }
+    if response_mode == "json":
+        payload["response_format"] = {"type": "json_object"}
+    with _kimi_capacity(estimated_tokens):
+        response = _post(
+            f"{config.KIMI_BASE_URL}/chat/completions",
+            {
+                "Authorization": f"Bearer {config.KIMI_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            payload, 30, "kimi",
+        )
+        data = response.json()
+        choices = data.get("choices") or []
+        content = ((choices[0].get("message") or {}).get("content") or "").strip() if choices else ""
+        if not content:
+            raise LLMProviderError("kimi", "empty Kimi response", error_type="empty_response")
+        usage = data.get("usage") or {}
+        tokens = int(usage.get("total_tokens") or max(1, (prompt_chars + len(content)) // 4))
+        api_usage.record_request("kimi", ok=True, units={"requests": 0, "tokens": tokens})
+        return content
+
+
+def _gen_kimi(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text"):
+    return _kimi_completion(
+        [{"role": "user", "content": prompt}], max_tokens, temperature, response_mode,
+    )
+
+
 def _gen_github_models(prompt, max_tokens, temperature,
                        response_mode: ResponseMode = "plain_text"):
     """GitHub Models Chat Completions как универсальный резервный провайдер."""
@@ -849,25 +953,26 @@ def _friendly(errs):
         return "⏳ ИИ временно перегружен — подожди минуту и попробуй снова."
     return "⚠️ ИИ временно недоступен — попробуй снова через пару минут."
 
-DEFAULT_ORDER  = ("gemini", "cohere", "github_models", "groq", "cf")
+DEFAULT_ORDER  = ("gemini", "cohere", "kimi", "github_models", "groq", "cf")
 # Чат: Gemini первым — лучше поддерживает диалог, свободный и живой стиль
-CHAT_ORDER     = ("gemini", "github_models", "groq", "cf")
+CHAT_ORDER     = ("gemini", "kimi", "github_models", "groq", "cf")
 # Грамматика/быстрые задачи: Cohere первым — языки и structured output;
-# Gemini, GitHub Models, Groq и Cloudflare остаются автоматическим резервом.
-GRAMMAR_ORDER  = ("cohere", "gemini", "github_models", "groq", "cf")
+# Kimi, Gemini, GitHub Models, Groq и Cloudflare остаются автоматическим резервом.
+GRAMMAR_ORDER  = ("cohere", "kimi", "gemini", "github_models", "groq", "cf")
 # Досуг/рекомендации: Gemini первым — богатое знание культуры, кино, музыки, путешествий
-LEISURE_ORDER  = ("gemini", "cohere", "github_models", "groq", "cf")
+LEISURE_ORDER  = ("gemini", "kimi", "cohere", "github_models", "groq", "cf")
 # Готовка: отдельная продуктовая цепочка. OpenRouter вызывается последним через
 # контролируемый fallback policy, затем вызывающий код строит карточку без AI.
 FOOD_ORDER     = ("gemini", "groq", "github_models", "openrouter")
 
 # Явные пресеты: позволяют приоритизировать конкретный провайдер, не меняя код вызова по всему проекту.
 PROVIDER_ORDER = {
-    "cf": ("cf", "cohere", "gemini", "github_models", "groq"),
-    "groq": ("groq", "cohere", "gemini", "github_models", "cf"),
-    "github_models": ("github_models", "gemini", "cohere", "groq", "cf"),
-    "cohere": ("cohere", "gemini", "github_models", "groq", "cf"),
-    "gemini": ("gemini", "cohere", "github_models", "groq", "cf"),
+    "cf": ("cf", "cohere", "gemini", "kimi", "github_models", "groq"),
+    "groq": ("groq", "cohere", "gemini", "kimi", "github_models", "cf"),
+    "github_models": ("github_models", "gemini", "cohere", "kimi", "groq", "cf"),
+    "kimi": ("kimi", "gemini", "cohere", "github_models", "groq", "cf"),
+    "cohere": ("cohere", "kimi", "gemini", "github_models", "groq", "cf"),
+    "gemini": ("gemini", "kimi", "cohere", "github_models", "groq", "cf"),
 }
 
 # --- тиры: маршрутизация по задаче ---
@@ -988,6 +1093,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
     calls = {
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature, response_mode),
         "cohere": lambda: _gen_cohere(prompt, max_tokens, temperature, response_mode),
+        "kimi": lambda: _gen_kimi(prompt, max_tokens, temperature, response_mode),
         "github_models": lambda: _gen_github_models(
             prompt, max_tokens, temperature, response_mode,
         ),
@@ -1306,6 +1412,11 @@ def _chat(provider, history, system):
             "github_models",
         )
         return r.json()["choices"][0]["message"]["content"]
+    if provider == "kimi":
+        return _kimi_completion(
+            [{"role": "system", "content": system}] + history,
+            700, 0.8,
+        )
     if provider == "groq":
         if not config.GROQ_API_KEY:
             raise Exception("no groq")

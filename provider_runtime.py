@@ -40,8 +40,9 @@ class ProviderSpec:
 # Fallbacks are directed. Firecrawl never points back to Tavily, so a failed
 # search cannot bounce forever between the two providers.
 SPECS = (
-    ProviderSpec("cohere", "Cohere", ("Обучение", "Ассистент"), ("github_models", "gemini")),
-    ProviderSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"), ("github_models", "groq", "openrouter")),
+    ProviderSpec("cohere", "Cohere", ("Обучение", "Ассистент"), ("kimi", "github_models", "gemini")),
+    ProviderSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"), ("kimi", "github_models", "groq", "openrouter")),
+    ProviderSpec("kimi", "Kimi", ("Обучение", "Досуг", "Ассистент"), ("github_models", "groq", "openrouter")),
     ProviderSpec("github_models", "GitHub Models", ("Готовка", "Обучение", "Ассистент"), ("openrouter",)),
     ProviderSpec("groq", "Groq", ("Готовка", "Обучение", "Ассистент"), ("github_models", "openrouter")),
     ProviderSpec("openrouter", "OpenRouter", ("Готовка",), ()),
@@ -64,13 +65,14 @@ SPECS = (
 )
 SPEC_BY_KEY = {spec.key: spec for spec in SPECS}
 LABELS = {spec.key: spec.label for spec in SPECS}
-AI_PROVIDERS = {"cohere", "gemini", "github_models", "groq", "openrouter", "cloudflare"}
+AI_PROVIDERS = {"cohere", "gemini", "kimi", "github_models", "groq", "openrouter", "cloudflare"}
 
 
 def is_configured(provider: str) -> bool:
     values = {
         "cohere": config.COHERE_API_KEY,
         "gemini": config.GEMINI_API_KEY,
+        "kimi": config.KIMI_API_KEY,
         "github_models": config.GITHUB_MODELS_TOKEN,
         "groq": config.GROQ_API_KEY,
         "openrouter": config.OPENROUTER_API_KEY,

@@ -517,9 +517,14 @@ def _build_day_text(cid):
         day_str = d["time"][0]
         code = d["weathercode"][0]
         tmax = d["temperature_2m_max"][0]
-        rain = d["precipitation_probability_max"][0] or 0
-        rain_mm = (d.get("precipitation_sum") or [None])[0] if d.get("precipitation_sum") else None
+        rain_day = d["precipitation_probability_max"][0] or 0
+        rain_mm_day = (d.get("precipitation_sum") or [None])[0] if d.get("precipitation_sum") else None
         wind_ms = d["windspeed_10m_max"][0] or 0
+        daytime = weather.daytime_outfit_weather(
+            data, day_str, tmax, wind_ms, rain_day, rain_mm_day, code,
+        )
+        rain = daytime["rain_prob"]
+        rain_mm = daytime["rain_mm"]
         icon = weather.weather_icon(code, tmax, rain, wind_ms, rain_mm)
         rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
         rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
