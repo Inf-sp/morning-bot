@@ -9,7 +9,6 @@ train_state = {}
 train_polls = {}
 dict_pending_add = {}
 dict_pending_batch = {}
-trav_facts_state = {}
 pending_input = {}
 last_inline_message = {}
 transient_message = {}

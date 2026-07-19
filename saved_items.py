@@ -528,7 +528,6 @@ async def send_bucket(bot, cid, bucket):
 
 LOVE_SECTIONS = [
     (ui_label("cinema", "Кино"), "movies"),
-    ("🧳 Посещённые страны", "countries"),
     (ui_label("music", "Мои музыканты"), "artists"),
     (ui_label("books", "Мои книги"), "books"),
     (ui_label("recipes", "Рецепты"), "recipes"),
@@ -568,6 +567,10 @@ _LOVE_ADD_LABEL = {
 }
 
 async def send_love_section(bot, cid, key):
+    if key == "countries":
+        import travel
+        await travel.send_countries(bot, cid)
+        return
     if key == "recipes":
         import cooking
         import saved_recipes
@@ -591,6 +594,10 @@ def _love_key_of(key):
             "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
 
 async def love_add_start(bot, cid, key, origin="base"):
+    if key == "countries":
+        import travel
+        await travel.send_country_add_prompt(bot, cid)
+        return
     prefix = "loveaddls" if origin == "leisure" else "loveadd"
     store.pending_input[str(cid)] = f"{prefix}_{key}"
     name = {"movies": "фильм или сериал", "countries": "страну",

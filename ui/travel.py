@@ -2,7 +2,7 @@ from .builder import MessageBuilder
 from .constants import ui_label
 
 
-def _pluralize_countries(n):
+def plural_countries(n):
     n = abs(int(n))
     if n % 10 == 1 and n % 100 != 11:
         return "страна"
@@ -11,181 +11,117 @@ def _pluralize_countries(n):
     return "стран"
 
 
-def home_screen(visited_count, plan_count, facts=None):
-    """Главный экран раздела «Поездки»: сколько стран посещено/в планах и несколько
-    фактов о посещённых странах пользователя. Тот же паттерн, что у Гардероба и Кино."""
+def visited_summary(n):
+    verb = "Посещена" if abs(int(n)) % 10 == 1 and abs(int(n)) % 100 != 11 else "Посещено"
+    return f"{verb} {n} {plural_countries(n)}"
+
+
+def home_screen(idea, visited_count, plan_count):
     b = MessageBuilder()
-    b.text_line("✈️ ")
-    b.bold("Поездки")
+    b.text_line(f"{idea['emoji']} ")
+    b.bold(f"Поездка на сегодня · {idea['transport_title']}")
     b.newline()
     b.spacer()
-    b.line("Подбираю страны и направления под твой вкус — и помогаю собрать план поездки.")
-
+    b.line(idea["intro"])
     b.spacer()
-    if visited_count <= 0 and plan_count <= 0:
-        b.line("Пока пусто — начни с подбора новой страны.")
-    else:
-        if visited_count > 0:
-            b.line(f"🧳 Посещено {visited_count} {_pluralize_countries(visited_count)}")
-        if plan_count > 0:
-            b.line(f"{ui_label('routes', 'Маршрутов')} {plan_count}")
+    b.bold(f"{idea['from']} → {idea['to']}")
+    b.newline()
+    b.spacer()
+    b.bold("Маршрут:")
+    b.newline()
+    for item in idea.get("route", [])[:3]:
+        b.bullet(str(item).replace(" = ", " → "))
+    b.spacer()
+    b.line(f"• {visited_summary(visited_count)}")
+    if plan_count:
+        b.line(f"• Сохранено маршрутов: {plan_count}")
+    if idea.get("summary"):
+        b.line(f"• {idea['summary']}")
+    b.spacer()
+    b.line(f"💡 Полезно: {idea['tip']}")
+    return b.build_stripped()
 
-    facts = facts or []
-    if facts:
+
+def countries_screen(count, page, pages):
+    b = MessageBuilder()
+    b.title("🗺️ Мои страны")
+    b.line(visited_summary(count))
+    if not count:
         b.spacer()
-        b.bold("Знаешь ли ты?")
-        b.newline()
-        for fact in facts:
-            b.spacer()
-            b.bold(fact["title"])
-            b.newline()
-            b.line(fact["text"])
+        b.line("Пока здесь пусто. Добавь страну, в которой уже был.")
+    elif pages > 1:
+        b.spacer()
+        b.line(f"Страница {page + 1} / {pages}")
+    return b.build_stripped()
 
+
+def visited_country_card(data):
+    b = MessageBuilder()
+    b.text_line(f"{data.get('flag', '')} ")
+    b.bold(data.get("country_name", ""))
+    b.newline()
+    for key, label in (
+        ("description", ""),
+        ("highlight", "✨ Чем запоминается"),
+        ("languages", "👩🏻‍🏫 Языки"),
+        ("currency", "💰 Валюта"),
+        ("main_nuance", "⚠️ Главный нюанс"),
+        ("fact", "🔍 Факт"),
+    ):
+        value = data.get(key)
+        if not value:
+            continue
+        if isinstance(value, list):
+            value = ", ".join(value)
+        b.spacer()
+        if label:
+            b.labeled_line(label, str(value))
+        else:
+            b.line(str(value))
     return b.build_stripped()
 
 
 def country_card(data):
-    """Составная карточка (условные блоки) -> MessageBuilder."""
     b = MessageBuilder()
     b.text_line(f"{data.get('flag', '')} ")
     b.bold(data.get("country", ""))
     b.newline()
     if data.get("about"):
-        b.spacer()
-        b.line(data["about"])
+        b.spacer(); b.line(data["about"])
     if data.get("for_what"):
-        b.spacer()
-        b.labeled_line(ui_label("reason", "Ради чего ехать:"), data["for_what"])
+        b.spacer(); b.labeled_line("✨ Ради чего ехать", data["for_what"])
     if data.get("langs"):
-        b.spacer()
-        b.labeled_line(ui_label("spoken_language", "Язык:"), data["langs"])
+        b.spacer(); b.labeled_line("👩🏻‍🏫 Языки", data["langs"])
     if data.get("note"):
-        b.spacer()
-        b.text_line("⚠️ ")
-        b.labeled_line("Главный нюанс", data["note"])
+        b.spacer(); b.labeled_line("⚠️ Главный нюанс", data["note"])
     if data.get("fact"):
-        b.spacer()
-        b.text_line("🔍 ")
-        b.labeled_line(ui_label("interesting", "Факт:"), data["fact"])
+        b.spacer(); b.labeled_line("🔍 Факт", data["fact"])
     return b.build_stripped()
 
 
 def travel_plan(plan, fallback_country):
-    """Текст плана путешествия персистируется как (text, entities) в NOTES_KEY (bucket='plan')
-    и режется на chunks через util.chunk_text_with_entities в settings.plan_view — компоненты
-    подходят так же, как для остальных карточек этого файла."""
     country = plan.get("title", fallback_country)
     b = MessageBuilder()
-    b.text_line(f"{plan.get('flag', '')} ")
-    b.bold(country)
-    b.newline()
+    b.text_line(f"{plan.get('flag', '')} "); b.bold(country); b.newline()
     if plan.get("about"):
-        b.spacer()
-        b.line(plan["about"])
-    if plan.get("why"):
-        b.spacer()
-        b.bold(ui_label("recommendation", "Почему тебе подойдёт"))
-        b.newline()
-        for w in plan["why"]:
-            b.bullet(str(w))
+        b.spacer(); b.line(plan["about"])
+    for key, title in (("why", "Почему тебе подойдёт"), ("budget", "Бюджет"), ("spots", "Не пропусти")):
+        if plan.get(key):
+            b.spacer(); b.bold(title); b.newline()
+            for item in plan[key]: b.bullet(str(item))
     if plan.get("best_time"):
-        b.spacer()
-        b.bold(ui_label("best_time", "Лучшее время"))
-        b.newline()
-        b.line(plan["best_time"])
-    if plan.get("budget"):
-        b.spacer()
-        b.bold(ui_label("budget", "Бюджет"))
-        b.newline()
-        for item in plan["budget"]:
-            b.bullet(str(item))
-    if plan.get("spots"):
-        b.spacer()
-        b.bold(ui_label("dont_miss", "Не пропусти"))
-        b.newline()
-        for spot in plan["spots"]:
-            b.bullet(str(spot))
+        b.spacer(); b.labeled_line("Лучшее время", plan["best_time"])
     if plan.get("lgbt"):
-        b.spacer()
-        b.bold(ui_label("lgbtq", "LGBTQ+"))
-        b.newline()
-        b.line(plan["lgbt"])
+        b.spacer(); b.labeled_line("LGBTQ+", plan["lgbt"])
     if plan.get("fact"):
-        b.spacer()
-        b.bold(ui_label("interesting", "Интересный факт"))
-        b.newline()
-        b.line(plan["fact"])
+        b.spacer(); b.labeled_line("🔍 Факт", plan["fact"])
     return b.build_stripped()
 
 
-# ================= ИНТЕРЕСНЫЕ ФАКТЫ О СТРАНЕ =================
-
-def facts_prompt_screen():
+def transport_screen(current):
     b = MessageBuilder()
-    b.text_line("🧭 ")
-    b.bold("О какой стране рассказать?")
-    b.newline()
+    b.title("*️⃣ Выбрать транспорт")
+    b.line("Можно выбрать несколько вариантов.")
     b.spacer()
-    b.line("Напиши название страны на русском, английском или нидерландском.")
-    b.spacer()
-    b.labeled_line("Пример")
-    b.quote("Япония")
-    return b.build_stripped()
-
-
-def facts_card(country_name, facts):
-    """Факты списком: жирное короткое название, с новой строки сам факт, без
-    канцеляризмов и без списка источников (см. docs/travel.md, «Интересные факты»)."""
-    b = MessageBuilder()
-    b.text_line("🧭 ")
-    b.bold(f"Интересные факты о {country_name}")
-    b.newline()
-    b.spacer()
-    for fact in facts:
-        b.bold(fact["title"])
-        b.newline()
-        b.line(fact["text"])
-        b.spacer()
-    return b.build_stripped()
-
-
-def facts_not_found_screen():
-    b = MessageBuilder()
-    b.text_line("🌍 ")
-    b.bold("Не нашёл такую страну")
-    b.newline()
-    b.spacer()
-    b.line("Проверь название или напиши его по-другому.")
-    b.spacer()
-    b.line("Например: Япония, Japan или Nederland.")
-    return b.build_stripped()
-
-
-def facts_search_unavailable_screen():
-    b = MessageBuilder()
-    b.text_line("⚠️ ")
-    b.bold("Не удалось найти факты")
-    b.newline()
-    b.spacer()
-    b.line("Сервис поиска сейчас недоступен. Попробуй ещё раз позже.")
-    return b.build_stripped()
-
-
-def facts_exhausted_screen():
-    b = MessageBuilder()
-    b.text_line("🧭 ")
-    b.bold("Больше сильных фактов не нашлось")
-    b.newline()
-    b.spacer()
-    b.line("Я уже показал самые интересные и хорошо подтверждённые факты об этой стране.")
-    return b.build_stripped()
-
-
-def facts_not_found_for_country_screen():
-    b = MessageBuilder()
-    b.text_line("🧭 ")
-    b.bold("Не нашлось сильных фактов")
-    b.newline()
-    b.spacer()
-    b.line("Не получилось найти достаточно подтверждённых фактов об этой стране. Попробуй ещё раз или выбери другую страну.")
+    b.labeled_line("Сейчас", current or "не выбран")
     return b.build_stripped()

@@ -113,8 +113,8 @@ async def handle(update, context, remove_reply_keyboard):
             await onboard.handle_city(bot, cid, text); return
         if kind == "setcity":
             await weather.set_city_text(bot, cid, text); return
-        if kind == "trav_facts_country":
-            await travel.handle_facts_country_input(bot, cid, text); return
+        if kind == "trav_country_add":
+            await travel.add_visited_country(bot, cid, text); return
         if kind.startswith("dictadd_smart_"):
             await dictionary_import.add_smart_batch(bot, cid, text, kind.split("_")[2]); return
         if kind.startswith("dictadd_"):

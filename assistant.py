@@ -147,6 +147,10 @@ async def try_add_love_from_chat(bot, cid, text):
     if not detected:
         return False
     store_key, folder_label, title = detected
+    if store_key == "countries":
+        import travel
+        await travel.add_visited_country(bot, cid, title)
+        return True
     key_map = {
         "movies": config.WATCHLIST_KEY,
         "books": config.BOOKS_KEY,

@@ -387,7 +387,7 @@ _PER_USER_KEYS = {
     config.DATA_REFRESH_BACKUP_KEY,
     config.LEGACY_LAGOM_KEY, config.DIARY_KEY, config.LIFEHACK_KEY,
     config.FRIDGE_KEY, config.MY_RECIPES_KEY, config.LEFTOVER_RECIPES_SEEN_KEY, config.QUOTE_AUTHORS_KEY,
-    config.LEGACY_MOTIV_LAGOM_SEEN_KEY, config.CONCERTS_CACHE_KEY, config.TRAVEL_FACTS_SEEN_KEY,
+    config.LEGACY_MOTIV_LAGOM_SEEN_KEY, config.CONCERTS_CACHE_KEY,
 }
 
 def purge_user(cid):
@@ -414,7 +414,6 @@ train_state = runtime_state.train_state
 train_polls = runtime_state.train_polls
 dict_pending_add = runtime_state.dict_pending_add
 dict_pending_batch = runtime_state.dict_pending_batch
-trav_facts_state = runtime_state.trav_facts_state
 pending_input = runtime_state.pending_input
 last_inline_message = runtime_state.last_inline_message
 transient_message = runtime_state.transient_message

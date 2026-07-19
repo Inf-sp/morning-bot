@@ -256,12 +256,12 @@ async def handle(update, context, remove_reply_keyboard):
                 await _inline_status(lambda _s: travel.travel_fav(bot, cid))
             elif act == "trav_save":
                 await travel.save_plan(bot, cid, q)
-            elif act == "trav_facts":
-                await travel.facts_start(bot, cid)
-            elif act == "trav_facts_more":
-                await _inline_status(lambda _s: travel.facts_more(bot, cid))
-            elif act == "trav_facts_new":
-                await travel.facts_new_country(bot, cid)
+            elif act.startswith("trav_countries") or act.startswith("trav_country_"):
+                await travel.handle_country_callback(bot, cid, q, act)
+            elif act == "trav_transport":
+                await travel.send_transport_settings(bot, cid, q)
+            elif act.startswith("trav_mode_"):
+                await travel.toggle_transport(bot, cid, act[len("trav_mode_"):], q)
             elif act == "watch":
                 await _ack(q); await leisure_movies.send_movie_home(bot, cid, q)
             elif act == "read":
