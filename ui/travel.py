@@ -39,7 +39,7 @@ def home_screen(idea, visited_count):
 
 def countries_screen(count, page, pages):
     b = MessageBuilder()
-    b.title("🗺️ Мои страны")
+    b.title("🧳 Мои страны")
     b.line(f"{count} {plural_countries(count)} уже в твоей истории путешествий.")
     if not count:
         b.spacer()
@@ -85,12 +85,8 @@ def country_card(data):
         b.spacer(); b.line(data["about"])
     if data.get("for_what"):
         b.spacer(); b.labeled_line("✨ Ради чего ехать", data["for_what"])
-    if data.get("langs"):
-        b.spacer(); b.labeled_line("👩🏻‍🏫 Языки", data["langs"])
     if data.get("note"):
-        b.spacer(); b.labeled_line("⚠️ Главный нюанс", data["note"])
-    if data.get("fact"):
-        b.spacer(); b.labeled_line("🔍 Факт", data["fact"])
+        b.spacer(); b.labeled_line("⚠️ Учти", data["note"])
     return b.build_stripped()
 
 
@@ -100,16 +96,20 @@ def travel_plan(plan, fallback_country):
     b.text_line(f"{plan.get('flag', '')} "); b.bold(country); b.newline()
     if plan.get("about"):
         b.spacer(); b.line(plan["about"])
-    for key, title in (("why", "Почему тебе подойдёт"), ("budget", "Бюджет"), ("spots", "Не пропусти")):
+    for key, title in (("why", "✨ Почему тебе подойдёт"), ("spots", "📍 Не пропусти")):
         if plan.get(key):
             b.spacer(); b.bold(title); b.newline()
             for item in plan[key]: b.bullet(str(item))
     if plan.get("best_time"):
-        b.spacer(); b.labeled_line("Лучшее время", plan["best_time"])
+        b.spacer(); b.labeled_line("☀️ Когда ехать", plan["best_time"])
+    if plan.get("budget"):
+        b.spacer(); b.labeled_line("💶 Бюджет", plan["budget"])
+    if plan.get("languages"):
+        b.spacer(); b.labeled_line("👩🏻‍🏫 Язык", ", ".join(plan["languages"]))
     if plan.get("lgbt"):
-        b.spacer(); b.labeled_line("LGBTQ+", plan["lgbt"])
+        b.spacer(); b.labeled_line("🏳️‍🌈 LGBTQ+", plan["lgbt"])
     if plan.get("fact"):
-        b.spacer(); b.labeled_line("🔍 Факт", plan["fact"])
+        b.spacer(); b.labeled_line("🔍 Факт", plan["fact"], lowercase=False)
     return b.build_stripped()
 
 

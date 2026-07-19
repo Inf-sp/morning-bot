@@ -9,6 +9,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
 import config
+import memory
 import recommendation_stoplist
 import research
 import settings
@@ -138,7 +139,7 @@ def _home_idea(cid):
 def _home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🌍 Подобрать страну", callback_data="a_trav_go")],
-        [InlineKeyboardButton("🗺️ Мои страны", callback_data="a_trav_countries_0")],
+        [InlineKeyboardButton("🧳 Мои страны", callback_data="a_trav_countries_0")],
         [InlineKeyboardButton(choose_label("Выбрать транспорт"), callback_data="a_trav_transport")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
@@ -464,16 +465,21 @@ def travel_suggest_one(cid):
     visited = [_country_name(code) for code in _visited_codes(cid)]
     blocked = recommendation_stoplist.values(cid, "country")
     skip = ", ".join(visited + blocked + _plan_countries(cid))
-    prompt = f"""Не предлагай: {skip}. Предложи ровно одну новую страну.
+    prompt = f"""Не предлагай: {skip}. Предложи ровно одну новую страну для путешествия.
 Предпочтительный транспорт: {_transport_context(cid)} — учитывай доступность этим способом.
-Верни JSON: {{"flag":"флаг","country":"страна","about":"1-2 строки","for_what":"1 строка",
-"langs":"языки по-русски","note":"главный нюанс"}}."""
+Это короткое превью, а не статья. Пиши естественно, конкретно и без рекламы.
+Верни только JSON: {{"flag":"флаг","country":"страна по-русски",
+"about":"ровно 1 короткое предложение о характере путешествия",
+"for_what":"1 короткая причина выбрать страну",
+"note":"1 действительно важный практический нюанс поездки"}}.
+Не добавляй языки, бюджет, LGBTQ+, факты, статистику и список мест.
+Не повторяй одну мысль в разных полях. Не пиши «главный нюанс» внутри note."""
     return ai.llm_json(prompt, 700, tier="leisure", module="travel")
 
 
 def _travel_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🗺 Собрать маршрут", callback_data="a_trav_plan")],
+        [InlineKeyboardButton("🗺️ Показать подробности", callback_data="a_trav_plan")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="a_trav_fav"), InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
@@ -496,9 +502,13 @@ async def send_go(bot, cid):
         await verify.safe_error(bot, cid, exc, back="m_travel"); return
     facts = await asyncio.to_thread(research.country_facts, d.get("country", ""))
     if facts.get("cc"): d["flag"] = util.flag_from_cc(facts["cc"]) or d.get("flag", "")
-    if facts.get("languages"): d["langs"] = ", ".join(_normalize_languages(facts["languages"]))
-    fact = await asyncio.to_thread(research.wiki_fact, d.get("country", ""))
-    if fact: d["fact"] = fact
+    d = {
+        "flag": d.get("flag", ""),
+        "country": str(d.get("country") or "").strip(),
+        "about": _short_text(d.get("about"), 220),
+        "for_what": _short_text(d.get("for_what"), 150),
+        "note": _short_text(d.get("note"), 170),
+    }
     photo = await asyncio.to_thread(_recommendation_photo, d.get("country", ""), facts)
     if photo:
         d["photo"] = photo
@@ -544,6 +554,24 @@ async def travel_fav(bot, cid):
     await send_go(bot, cid)
 
 
+def _short_text(value, limit):
+    text = " ".join(str(value or "").split()).strip()
+    return text[:limit].rstrip(" ,;:")
+
+
+def _short_list(values, count, limit=130):
+    if isinstance(values, str):
+        values = [values]
+    result = []
+    for value in values or []:
+        text = _short_text(value, limit)
+        if text and text.casefold() not in {item.casefold() for item in result}:
+            result.append(text)
+        if len(result) == count:
+            break
+    return result
+
+
 async def send_plan(bot, cid):
     import saved_items
     data = store.last_recipe.get(str(cid)) or {}
@@ -553,34 +581,78 @@ async def send_plan(bot, cid):
     home = store.get_settings(cid).get("city", "дом")
     facts = await asyncio.to_thread(research.country_facts, country)
     fact_block = research.facts_block(facts)
-    wiki_fact = await asyncio.to_thread(research.wiki_fact, country)
+    wiki_sources = await asyncio.to_thread(research.wiki_sentences, country)
     web_data = await asyncio.to_thread(
-        research.web_snippet, f"{country} туризм путешествие достопримечательности", 900,
+        research.web_snippet,
+        f"{country} official travel advice regional climate LGBTQ travel attractions 2026",
+        1600,
     )
-    prompt = f"""Подробный план поездки в {country} из {home}.
-Основной транспорт: {_transport_context(cid)}. Не предлагай другой, если маршрут нормально строится выбранным.
-Проверенные факты: {fact_block}. Свежая туристическая информация: {web_data}.
-Бюджет и сроки помечай как ориентир. Верни компактный JSON на русском:
-{{"flag":"эмодзи","title":"страна/регион","about":"1-2 строки","why":["3 пункта"],
-"best_time":"1-2 строки","budget":["3 ориентира"],"spots":["3 места"],
-"lgbt":"1 строка о дружелюбности и безопасности","fact":"1 факт"}}."""
+    profile = memory.profile_hints(cid) or "Предпочтения пользователя пока не сохранены."
+    preview = {
+        key: data.get(key) for key in ("about", "for_what", "note") if data.get(key)
+    }
+    prompt = f"""Собери подробную практическую карточку путешествия в {country} из {home}.
+Предпочтительный транспорт: {_transport_context(cid)}.
+Персональный контекст: {profile}
+Проверенные стабильные данные: {fact_block or 'нет структурированных данных'}.
+Свежие поисковые фрагменты: {web_data or 'нет свежих фрагментов'}.
+Фрагменты Wikipedia для географического или культурного факта: {' '.join(wiki_sources[:3]) or 'нет'}.
+В превью уже было: {preview}. Не повторяй эти формулировки и мысли.
+
+Верни только JSON на русском:
+{{"flag":"эмодзи","title":"название страны","about":"1-2 коротких предложения о характере поездки и соответствии пользователю",
+"why":["ровно 2 конкретные персональные причины"],
+"spots":["ровно 3 главных места или региона"],
+"best_time":"короткая практическая рекомендация с различиями по регионам, если климат неоднороден",
+"languages":["основные языки по-русски"],
+"lgbt":"1 нейтральная конкретная практическая строка для путешественника",
+"fact":"1 связанный с путешествием факт о географии, культуре или природе"}}.
+
+Не пиши бюджет: он будет добавлен отдельно без выдуманных сумм.
+Не используй рекламный стиль, случайную статистику, политику или религию.
+Не пиши шаблон «соблюдайте местные обычаи». Изменяемые сведения бери только из свежих фрагментов.
+Каждый блок должен быть коротким, конкретным и без тавтологии."""
     try:
         plan = await ai.allm_json(prompt, 1100, tier="leisure", module="travel")
     except Exception as exc:
         await verify.safe_error(bot, cid, exc, back="m_travel"); return
     if facts.get("cc"):
         plan["flag"] = util.flag_from_cc(facts["cc"]) or plan.get("flag", "")
-    if wiki_fact:
-        plan["fact"] = wiki_fact
+    plan = {
+        "flag": plan.get("flag") or data.get("flag", ""),
+        "title": country,
+        "about": _short_text(plan.get("about"), 140),
+        "why": _short_list(plan.get("why"), 2, 65),
+        "spots": _short_list(plan.get("spots"), 3, 45),
+        "best_time": _short_text(plan.get("best_time"), 100),
+        "budget": f"Стоимость зависит от дат, длительности поездки, дороги из {home} и маршрута внутри страны.",
+        "languages": _normalize_languages(facts.get("languages")) or _short_list(plan.get("languages"), 3, 30),
+        "lgbt": _short_text(plan.get("lgbt"), 90) if web_data else "Актуальные данные не найдены — проверь рекомендации перед поездкой.",
+        "fact": _short_text(plan.get("fact"), 90),
+        "photo": data.get("photo"),
+    }
     msg = travel_ui.travel_plan(plan, country)
     store.last_answer[str(cid)] = msg.text
-    store.last_source[str(cid)] = "Поездки · План"
-    store.last_recipe[str(cid)] = {**data, "plan_text": msg.text, "plan_entities": util.entities_to_json(msg.entities)}
+    store.last_source[str(cid)] = "Поездки · Страна"
+    store.last_recipe[str(cid)] = {
+        **data, "plan_text": msg.text,
+        "plan_entities": util.entities_to_json(msg.entities), "details": plan,
+    }
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
         [InlineKeyboardButton(save_toggle_label(saved_items.is_note_saved(cid, msg.text, "plan")), callback_data="a_trav_save")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
+    photo = plan.get("photo") or {}
+    if photo.get("url"):
+        try:
+            await bot.send_photo(
+                chat_id=cid, photo=photo["url"], caption=msg.text,
+                caption_entities=msg.entities, reply_markup=kb,
+            )
+            return
+        except Exception as exc:
+            _log.warning("travel details photo delivery failed: %s", type(exc).__name__)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
@@ -589,8 +661,8 @@ async def save_plan(bot, cid, q=None):
     data = store.last_recipe.get(str(cid)) or {}
     plan = data.get("plan_text", "")
     if not plan:
-        await bot.send_message(chat_id=cid, text="Сначала собери план поездки."); return
-    saved = saved_items.toggle_note(cid, plan, source="План поездки", bucket="plan",
+        await bot.send_message(chat_id=cid, text="Сначала открой подробности страны."); return
+    saved = saved_items.toggle_note(cid, plan, source="Карточка страны", bucket="plan",
                                     entities=data.get("plan_entities", []),
                                     extra={"country": data.get("country", "")})
     await saved_items.update_save_button(q, "a_trav_save", saved)
