@@ -1,5 +1,4 @@
 from .builder import MessageBuilder
-from .constants import ui_label
 
 
 def plural_countries(n):
@@ -16,7 +15,7 @@ def visited_summary(n):
     return f"{verb} {n} {plural_countries(n)}"
 
 
-def home_screen(idea, visited_count, plan_count):
+def home_screen(idea, visited_count):
     b = MessageBuilder()
     b.text_line(f"{idea['emoji']} ")
     b.bold(f"Поездка на сегодня · {idea['transport_title']}")
@@ -32,11 +31,7 @@ def home_screen(idea, visited_count, plan_count):
     for item in idea.get("route", [])[:3]:
         b.bullet(str(item).replace(" = ", " → "))
     b.spacer()
-    b.line(f"• {visited_summary(visited_count)}")
-    if plan_count:
-        b.line(f"• Сохранено маршрутов: {plan_count}")
-    if idea.get("summary"):
-        b.line(f"• {idea['summary']}")
+    b.line(f"Прогресс: посещено {visited_count} {plural_countries(visited_count)}")
     b.spacer()
     b.line(f"💡 Полезно: {idea['tip']}")
     return b.build_stripped()
@@ -45,13 +40,13 @@ def home_screen(idea, visited_count, plan_count):
 def countries_screen(count, page, pages):
     b = MessageBuilder()
     b.title("🗺️ Мои страны")
-    b.line(visited_summary(count))
+    b.line(f"{count} {plural_countries(count)} уже в твоей истории путешествий.")
     if not count:
         b.spacer()
         b.line("Пока здесь пусто. Добавь страну, в которой уже был.")
-    elif pages > 1:
+    else:
         b.spacer()
-        b.line(f"Страница {page + 1} / {pages}")
+        b.line("Выбери страну, чтобы посмотреть её карточку или удалить из списка.")
     return b.build_stripped()
 
 

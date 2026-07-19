@@ -274,6 +274,18 @@ def cc_of(name):
     """ISO-2 код по названию страны (ru/en) или '' если неизвестно."""
     return _COUNTRY_CC.get((name or "").strip().lower(), "")
 
+
+def country_name_from_cc(cc):
+    """Русское название страны по ISO-2 без сетевого запроса."""
+    code = str(cc or "").strip().upper()
+    special = {"AE": "ОАЭ", "US": "США"}
+    if code in special:
+        return special[code]
+    for name, value in _COUNTRY_CC.items():
+        if value == code and re.search(r"[а-яё]", name, re.I):
+            return name.capitalize()
+    return ""
+
 def country_flag(name):
     """Эмодзи флага по названию страны - офлайн, без LLM. Неизвестное -> ''."""
     from ui.constants import COUNTRY_EMOJI

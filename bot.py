@@ -280,13 +280,17 @@ async def notes_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
     await saved_items.send_notes(context.bot, update.effective_chat.id)
 
-async def setup_command(update, context):
+async def settings_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
     await saved_items.send_notes(context.bot, update.effective_chat.id)
 
 async def admin_command(update, context):
-    store.pending_input.pop(str(update.effective_chat.id), None)
-    await settings.send_admin(context.bot, update.effective_chat.id)
+    cid = update.effective_chat.id
+    if not access.is_owner(cid):
+        await settings.send_admin(context.bot, cid)
+        return
+    store.pending_input.pop(str(cid), None)
+    await settings.send_admin(context.bot, cid)
 
 async def menu_command(update, context):
     cid = str(update.effective_chat.id)
@@ -537,11 +541,19 @@ async def post_init(app):
             logging.info("Movies seed: applied")
     except Exception:
         logging.exception("Movies seed failed")
-    from telegram import BotCommand
-    await app.bot.set_my_commands([
-        BotCommand("menu", "меню"),
-        BotCommand("admin", "администратор"),
-    ])
+    from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeDefault
+    common_commands = [
+        BotCommand("menu", "Главное меню"),
+        BotCommand("settings", "Настройки"),
+    ]
+    await app.bot.set_my_commands(common_commands, scope=BotCommandScopeDefault())
+    if config.CHAT_ID:
+        admin_chat_id = int(config.CHAT_ID) if str(config.CHAT_ID).lstrip("-").isdigit() else config.CHAT_ID
+        await app.bot.set_my_commands([
+            BotCommand("menu", "Главное меню"),
+            BotCommand("settings", "Настройки"),
+            BotCommand("admin", "Админ"),
+        ], scope=BotCommandScopeChat(chat_id=admin_chat_id))
     await maybe_send_admin_deploy_notification(app.bot)
 
 
@@ -683,7 +695,8 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", menu_command))
     app.add_handler(CommandHandler("notes", notes_command))
-    app.add_handler(CommandHandler("setup", setup_command))
+    app.add_handler(CommandHandler("settings", settings_command))
+    app.add_handler(CommandHandler("setup", settings_command))
     app.add_handler(CommandHandler("admin", admin_command))
     app.add_handler(CommandHandler("admin_debug_api", admin_debug_api_command))
     app.add_handler(CommandHandler("admin_debug_llm", admin_debug_llm_command))
