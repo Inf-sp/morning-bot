@@ -181,3 +181,64 @@ def test_database_refresh_persists_fridge_in_category_order(monkeypatch):
     assert result["stoplist_items"] == 1
     assert state[config.MOVIE_SEEN_KEY] == []
     assert state[config.RECOMMENDATION_STOPLIST_KEY][0]["category"] == "Не рекомендовать"
+
+
+def test_database_refresh_rebuilds_formatted_daily_caches(monkeypatch):
+    calls = []
+    monkeypatch.setattr(data_refresh, "_collection_keys", lambda: [])
+    monkeypatch.setattr(data_refresh, "_clear_legacy_backups", lambda *_args: 0)
+    monkeypatch.setattr(data_refresh.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(data_refresh.store, "load_wardrobe", lambda *_args: {})
+    monkeypatch.setattr(data_refresh, "migration_count", lambda *_args: 0)
+    monkeypatch.setattr(data_refresh.recommendation_stoplist, "migrate_legacy", lambda *_args: 0)
+
+    async def unchanged_wardrobe(_cid, wardrobe):
+        return wardrobe
+
+    async def unchanged_dictionary(_cid):
+        return {"fixed": 0, "duplicates": 0, "review": 0, "checked": 0}
+
+    async def concerts(_cid):
+        return {"status": "ok", "artists": 0, "events": 0}
+
+    async def warm(name):
+        calls.append(name)
+        return True
+
+    monkeypatch.setattr(data_refresh, "migrate_item_attrs", unchanged_wardrobe)
+    monkeypatch.setattr(data_refresh.learning_data_quality, "refresh_dictionary", unchanged_dictionary)
+    monkeypatch.setattr("leisure_concerts.refresh_concerts_cache", concerts)
+    monkeypatch.setattr("learning.reset_daily_material_cache", lambda _cid: calls.append("learning_reset"))
+    monkeypatch.setattr("learning.warm_home_cache", lambda _cid: calls.append("learning_warm") or True)
+    monkeypatch.setattr("store.clear_wardrobe_daylook", lambda _cid: calls.append("wardrobe_reset"))
+    monkeypatch.setattr("wardrobe.warm_home_cache", lambda _cid: warm("wardrobe_warm"))
+    monkeypatch.setattr("myday.reset_day_cache", lambda _cid: calls.append("myday_reset"))
+    monkeypatch.setattr("myday.warm_day_cache", lambda _cid: warm("myday_warm"))
+
+    result = asyncio.run(data_refresh.refresh_user_database("cache-refresh"))
+
+    assert calls == [
+        "learning_reset", "learning_warm",
+        "wardrobe_reset", "wardrobe_warm",
+        "myday_reset", "myday_warm",
+    ]
+    assert result["cache_refreshed"] == 3
+    assert result["cache_failed"] == 0
+
+
+def test_database_refresh_removes_legacy_backups_without_creating_new_versions(monkeypatch):
+    state = {"42": [{"id": "old-1"}, {"id": "old-2"}], "other": [{"id": "keep"}]}
+
+    def mutate(key, callback):
+        assert key == config.DATA_REFRESH_BACKUP_KEY
+        updated, result = callback(dict(state))
+        state.clear()
+        state.update(updated)
+        return result
+
+    monkeypatch.setattr(data_refresh.store, "mutate_kv", mutate)
+
+    removed = data_refresh._clear_legacy_backups("42")
+
+    assert removed == 2
+    assert state == {"other": [{"id": "keep"}]}

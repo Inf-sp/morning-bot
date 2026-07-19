@@ -160,34 +160,6 @@ def test_refresh_merges_exact_duplicates_and_preserves_translations(monkeypatch)
     assert state == after_first
 
 
-def test_manual_refresh_backup_keeps_pre_change_collections(monkeypatch):
-    captured = {}
-    monkeypatch.setattr(
-        learning_data_quality.store,
-        "get_list",
-        lambda key, cid: [{"term": "old value"}] if key == config.DICT_KEY else [],
-    )
-    monkeypatch.setattr(
-        learning_data_quality.store, "load_wardrobe",
-        lambda cid: {"tops": ["white shirt"]},
-    )
-
-    def mutate(key, callback):
-        data, result = callback({})
-        captured["key"] = key
-        captured["data"] = data
-        return result
-
-    monkeypatch.setattr(learning_data_quality.storage_driver, "mutate", mutate)
-    backup_id = learning_data_quality.create_backup("42", [config.DICT_KEY])
-
-    backup = captured["data"]["42"][0]
-    assert captured["key"] == config.DATA_REFRESH_BACKUP_KEY
-    assert backup["id"] == backup_id
-    assert backup["collections"][config.DICT_KEY] == [{"term": "old value"}]
-    assert backup["wardrobe"] == {"tops": ["white shirt"]}
-
-
 def test_confirmed_review_applies_full_sentence_not_fragment(monkeypatch):
     entries = [{
         "id": "entry-1",

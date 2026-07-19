@@ -1,5 +1,6 @@
 """Ручное обновление пользовательской базы до текущих схем."""
 
+import asyncio
 import logging
 import uuid
 
@@ -12,6 +13,54 @@ from fridge_model import _fridge_migrate
 from wardrobe_migration import migrate_item_attrs, migration_count
 
 _log = logging.getLogger(__name__)
+
+
+def _clear_legacy_backups(cid):
+    """Удаляет старые копии прежнего сценария; новые больше не создаются."""
+    cid = str(cid)
+
+    def change(data):
+        removed = len(data.get(cid, [])) if isinstance(data.get(cid), list) else int(cid in data)
+        data.pop(cid, None)
+        return data, removed
+
+    return store.mutate_kv(config.DATA_REFRESH_BACKUP_KEY, change)
+
+
+async def _refresh_daily_caches(cid):
+    """Удаляет сохранённый UI старого формата и сразу собирает текущие карточки."""
+    refreshed = 0
+    failed = 0
+
+    try:
+        import learning
+        learning.reset_daily_material_cache(cid)
+        await asyncio.to_thread(learning.warm_home_cache, cid)
+        refreshed += 1
+    except Exception as error:
+        failed += 1
+        _log.warning("learning cache refresh failed cid=%s: %r", cid, error)
+
+    try:
+        import wardrobe
+        store.clear_wardrobe_daylook(cid)
+        await wardrobe.warm_home_cache(cid)
+        refreshed += 1
+    except Exception as error:
+        failed += 1
+        _log.warning("wardrobe cache refresh failed cid=%s: %r", cid, error)
+
+    # «Мой день» собирается последним: он использует материал обучения и образ.
+    try:
+        import myday
+        myday.reset_day_cache(cid)
+        await myday.warm_day_cache(cid)
+        refreshed += 1
+    except Exception as error:
+        failed += 1
+        _log.warning("myday cache refresh failed cid=%s: %r", cid, error)
+
+    return {"refreshed": refreshed, "failed": failed}
 
 
 def _collection_keys():
@@ -30,7 +79,7 @@ def _collection_keys():
 async def refresh_user_database(cid):
     """Обновляет коллекции, Гардероб и концертную подборку пользователя."""
     collection_keys = _collection_keys()
-    backup_id = learning_data_quality.create_backup(cid, collection_keys)
+    backups_removed = _clear_legacy_backups(cid)
     collection_items = 0
     changed_items = 0
     for key in collection_keys:
@@ -67,13 +116,7 @@ async def refresh_user_database(cid):
     stoplist_items = recommendation_stoplist.migrate_legacy(cid)
 
     language_result = await learning_data_quality.refresh_dictionary(cid)
-    try:
-        import learning
-        import myday
-        learning.reset_daily_material_cache(cid)
-        myday.reset_day_cache(cid)
-    except Exception as error:
-        _log.warning("daily learning cache reset failed cid=%s: %r", cid, error)
+    cache_result = await _refresh_daily_caches(cid)
 
     try:
         import leisure_concerts
@@ -94,7 +137,7 @@ async def refresh_user_database(cid):
     review_total = min(max(0, checked_total - duplicate_total), review_total_raw)
     fixed_total = min(max(0, checked_total - duplicate_total - review_total), fixed_total_raw)
     return {
-        "backup_id": backup_id,
+        "backups_removed": backups_removed,
         "checked": checked_total,
         "fixed": fixed_total,
         "duplicates": duplicate_total,
@@ -112,4 +155,6 @@ async def refresh_user_database(cid):
         "concerts_status": concerts.get("status", "failed"),
         "concerts_artists": concerts.get("artists", 0),
         "concerts_events": concerts.get("events", 0),
+        "cache_refreshed": cache_result["refreshed"],
+        "cache_failed": cache_result["failed"],
     }

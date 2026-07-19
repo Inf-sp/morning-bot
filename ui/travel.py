@@ -31,7 +31,8 @@ def home_screen(idea, visited_count):
     for item in idea.get("route", [])[:3]:
         b.bullet(str(item).replace(" = ", " → "))
     b.spacer()
-    b.line(f"Прогресс: посещено {visited_count} {plural_countries(visited_count)}")
+    b.bold("Прогресс:")
+    b.line(f" посещено {visited_count} {plural_countries(visited_count)}")
     b.spacer()
     b.line(f"💡 Полезно: {idea['tip']}")
     return b.build_stripped()

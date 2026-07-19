@@ -7,11 +7,9 @@ import copy
 import re
 import unicodedata
 import uuid
-from datetime import datetime
 
 import config
 import language_tool
-import storage_driver
 import store
 from dictionary_model import entry_language, entry_term, entry_translation, normalize_term_case
 
@@ -399,24 +397,6 @@ async def refresh_dictionary(cid) -> dict:
         "pending": len(pending_entry_ids),
         "unchanged": max(0, len(raw_entries) - fixed_records - duplicate_count - len(review_entry_ids | pending_entry_ids)),
     }
-
-
-def create_backup(cid, keys) -> str:
-    backup_id = uuid.uuid4().hex
-    snapshot = {
-        "id": backup_id,
-        "createdAt": datetime.now(config.TZ).isoformat(),
-        "collections": {key: store.get_list(key, cid) for key in sorted(set(keys))},
-        "wardrobe": store.load_wardrobe(cid),
-    }
-
-    def mutate(data):
-        backups = list(data.get(str(cid), []))
-        backups.append(snapshot)
-        data[str(cid)] = backups[-3:]
-        return data, backup_id
-
-    return storage_driver.mutate(config.DATA_REFRESH_BACKUP_KEY, mutate)
 
 
 def review_items(cid) -> list[dict]:

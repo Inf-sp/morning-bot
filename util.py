@@ -258,6 +258,7 @@ _COUNTRY_CC = {
     "сша": "US", "америка": "US", "usa": "US", "united states": "US", "us": "US",
     "канада": "CA", "canada": "CA", "мексика": "MX", "mexico": "MX",
     "бразилия": "BR", "brazil": "BR", "аргентина": "AR", "argentina": "AR",
+    "чили": "CL", "chile": "CL",
     "япония": "JP", "japan": "JP", "китай": "CN", "china": "CN",
     "южная корея": "KR", "корея": "KR", "south korea": "KR", "korea": "KR",
     "таиланд": "TH", "thailand": "TH", "вьетнам": "VN", "vietnam": "VN",

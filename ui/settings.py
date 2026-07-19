@@ -114,9 +114,16 @@ def settings_home():
 
 def database_refresh_result(result):
     result = result or {}
+    cache_lines = ""
+    if result.get("cache_refreshed") is not None:
+        cache_lines += f"\nКэши экранов обновлены: {result.get('cache_refreshed', 0)}"
+    if result.get("cache_failed"):
+        cache_lines += f"\nНе удалось обновить: {result['cache_failed']}"
     if not any(result.get(key) for key in ("fixed", "duplicates", "review")):
         return MessageSpec(
-            text="✅ База в порядке\nВсе записи уже соответствуют актуальному формату.",
+            text=("✅ База в порядке\n"
+                  "Все записи уже соответствуют актуальному формату."
+                  f"{cache_lines}"),
         )
     return MessageSpec(text=(
         "✅ База обновлена\n"
@@ -125,6 +132,7 @@ def database_refresh_result(result):
         f"Объединено дубликатов: {result.get('duplicates', 0)}\n"
         f"Требуют проверки: {result.get('review', 0)}\n"
         f"Без изменений: {result.get('unchanged', 0)}"
+        f"{cache_lines}"
     ))
 
 

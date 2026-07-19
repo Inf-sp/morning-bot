@@ -138,7 +138,7 @@ def _home_idea(cid):
 
 def _home_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🌍 Подобрать страну", callback_data="a_trav_go")],
+        [InlineKeyboardButton("✨ Подобрать страну", callback_data="a_trav_go")],
         [InlineKeyboardButton("🧳 Мои страны", callback_data="a_trav_countries_0")],
         [InlineKeyboardButton(choose_label("Выбрать транспорт"), callback_data="a_trav_transport")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
@@ -281,11 +281,15 @@ def _countries_kb(cid, page):
                                     callback_data=f"a_trav_country_{code}_{page}") for code in shown]
     rows = [[InlineKeyboardButton("🆕 Добавить страну", callback_data="a_trav_country_add")]]
     rows.extend(buttons[i:i + 2] for i in range(0, len(buttons), 2))
-    nav = []
-    if page > 0: nav.append(InlineKeyboardButton("‹", callback_data=f"a_trav_countries_{page - 1}"))
-    nav.append(InlineKeyboardButton(f"{page + 1} / {pages}", callback_data="noop"))
-    if page < pages - 1: nav.append(InlineKeyboardButton("›", callback_data=f"a_trav_countries_{page + 1}"))
-    rows.append(nav)
+    previous_page = (page - 1) % pages
+    next_page = (page + 1) % pages
+    previous_callback = "noop" if pages == 1 else f"a_trav_countries_{previous_page}"
+    next_callback = "noop" if pages == 1 else f"a_trav_countries_{next_page}"
+    rows.append([
+        InlineKeyboardButton("◀️", callback_data=previous_callback),
+        InlineKeyboardButton(f"{page + 1} / {pages}", callback_data="noop"),
+        InlineKeyboardButton("▶️", callback_data=next_callback),
+    ])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows), page, pages
 
@@ -477,33 +481,82 @@ def travel_suggest_one(cid):
     return ai.llm_json(prompt, 700, tier="leisure", module="travel")
 
 
-def _travel_kb():
+def _travel_kb(cid, text):
+    import saved_items
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗺️ Показать подробности", callback_data="a_trav_plan")],
-        [InlineKeyboardButton("❤️ В любимые", callback_data="a_trav_fav"), InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
+        [InlineKeyboardButton(
+            save_toggle_label(saved_items.is_note_saved(cid, text, "plan")),
+            callback_data="a_trav_save",
+        ), InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 
+def _is_country_flag(value):
+    chars = list(str(value or "").strip())
+    return len(chars) == 2 and all(0x1F1E6 <= ord(char) <= 0x1F1FF for char in chars)
+
+
+def _resolve_country_flag(country, proposed, facts):
+    code = str((facts or {}).get("cc") or util.cc_of(country) or "").upper()
+    if not code:
+        lookup = research.restcountries_lookup(country)
+        code = str((lookup or {}).get("iso") or "").upper()
+    flag = util.flag_from_cc(code)
+    if flag:
+        return flag, {**(facts or {}), "cc": code}
+    # При недоступном справочнике принимается только настоящий флаг из двух
+    # regional-indicator symbols. Любой декоративный эмодзи от AI отбрасывается.
+    return (str(proposed).strip() if _is_country_flag(proposed) else ""), (facts or {})
+
+
+def _resolve_country_code(country):
+    code = str(util.cc_of(country) or "").upper()
+    if code:
+        return code
+    lookup = research.restcountries_lookup(country)
+    return str((lookup or {}).get("iso") or "").upper()
+
+
 async def send_go(bot, cid):
+    visited_codes = set(_visited_codes(cid))
     skip_set = {name.strip().casefold() for name in (
-        [_country_name(code) for code in _visited_codes(cid)]
+        [_country_name(code) for code in visited_codes]
         + recommendation_stoplist.values(cid, "country") + _plan_countries(cid)
     ) if name.strip()}
     data = None
     try:
-        for _ in range(3):
+        for _ in range(5):
             candidate = await asyncio.to_thread(travel_suggest_one, cid)
-            if str(candidate.get("country") or "").strip().casefold() not in skip_set:
+            candidate_name = str(candidate.get("country") or "").strip()
+            candidate_code = await asyncio.to_thread(_resolve_country_code, candidate_name)
+            if candidate_code in visited_codes:
+                _log.info("travel recommendation rejected as visited: %s/%s", candidate_name, candidate_code)
+                continue
+            if candidate_name.casefold() not in skip_set:
                 data = candidate
                 break
-        d = data or candidate
     except Exception as exc:
         await verify.safe_error(bot, cid, exc, back="m_travel"); return
+    if not data:
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✨ Попробовать ещё", callback_data="a_trav_go")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        ])
+        await bot.send_message(
+            chat_id=cid,
+            text="Не удалось подобрать новую страну без повторов. Попробуй ещё раз.",
+            reply_markup=kb,
+        )
+        return
+    d = data
     facts = await asyncio.to_thread(research.country_facts, d.get("country", ""))
-    if facts.get("cc"): d["flag"] = util.flag_from_cc(facts["cc"]) or d.get("flag", "")
+    flag, facts = await asyncio.to_thread(
+        _resolve_country_flag, d.get("country", ""), d.get("flag", ""), facts,
+    )
     d = {
-        "flag": d.get("flag", ""),
+        "flag": flag,
         "country": str(d.get("country") or "").strip(),
         "about": _short_text(d.get("about"), 220),
         "for_what": _short_text(d.get("for_what"), 150),
@@ -516,12 +569,16 @@ async def send_go(bot, cid):
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", msg.text)
     store.last_source[str(cid)] = "Поездки"
     store.suggested_countries[str(cid)] = d.get("country", "")
-    store.last_recipe[str(cid)] = d
+    store.last_recipe[str(cid)] = {
+        **d, "preview_text": msg.text,
+        "preview_entities": util.entities_to_json(msg.entities),
+    }
+    kb = _travel_kb(cid, msg.text)
     if photo:
         try:
             await bot.send_photo(
                 chat_id=cid, photo=photo["url"], caption=msg.text,
-                caption_entities=msg.entities, reply_markup=_travel_kb(),
+                caption_entities=msg.entities, reply_markup=kb,
             )
             return
         except Exception as exc:
@@ -529,7 +586,7 @@ async def send_go(bot, cid):
             text_data = {**d, "photo": None}
             msg = travel_ui.country_card(text_data)
             store.last_answer[str(cid)] = msg.text
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_travel_kb())
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 async def travel_dislike(bot, cid):
@@ -659,10 +716,15 @@ async def send_plan(bot, cid):
 async def save_plan(bot, cid, q=None):
     import saved_items
     data = store.last_recipe.get(str(cid)) or {}
-    plan = data.get("plan_text", "")
-    if not plan:
+    text = data.get("plan_text") or data.get("preview_text") or ""
+    if not text:
         await bot.send_message(chat_id=cid, text="Сначала открой подробности страны."); return
-    saved = saved_items.toggle_note(cid, plan, source="Карточка страны", bucket="plan",
-                                    entities=data.get("plan_entities", []),
-                                    extra={"country": data.get("country", "")})
+    is_details = bool(data.get("plan_text"))
+    saved = saved_items.toggle_note(
+        cid, text,
+        source="Карточка страны" if is_details else "Рекомендация страны",
+        bucket="plan",
+        entities=data.get("plan_entities" if is_details else "preview_entities", []),
+        extra={"country": data.get("country", "")},
+    )
     await saved_items.update_save_button(q, "a_trav_save", saved)
