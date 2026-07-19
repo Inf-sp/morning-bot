@@ -77,20 +77,6 @@ def visited_country_card(data):
     return b.build_stripped()
 
 
-def country_card(data):
-    b = MessageBuilder()
-    b.text_line(f"{data.get('flag', '')} ")
-    b.bold(data.get("country", ""))
-    b.newline()
-    if data.get("about"):
-        b.spacer(); b.line(data["about"])
-    if data.get("for_what"):
-        b.spacer(); b.labeled_line("✨ Ради чего ехать", data["for_what"])
-    if data.get("note"):
-        b.spacer(); b.labeled_line("⚠️ Учти", data["note"])
-    return b.build_stripped()
-
-
 def travel_plan(plan, fallback_country):
     country = plan.get("title", fallback_country)
     b = MessageBuilder()

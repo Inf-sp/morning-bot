@@ -508,6 +508,27 @@ def _monitor_error_row(entry):
     return f"{_hhmm(entry.get('ts', 0))} · Система · {label}: {message}{suffix}"
 
 
+def _collapse_monitor_errors(entries, window_seconds=600):
+    """Сворачивает одинаковые сбои фоновой проверки в один видимый инцидент."""
+    groups = []
+    for entry in sorted(entries, key=lambda item: int(item.get("ts") or 0), reverse=True):
+        key = (
+            str(entry.get("service") or ""),
+            str(entry.get("text") or entry.get("message") or "").strip().casefold(),
+            int(entry.get("status_code") or 0),
+            str(entry.get("exception_type") or ""),
+            str(entry.get("fallback_target") or ""),
+        )
+        ts = int(entry.get("ts") or 0)
+        match = next((group for group in groups
+                      if group["key"] == key and group["latest_ts"] - ts <= window_seconds), None)
+        if match is None:
+            groups.append({"key": key, "latest_ts": ts, "entry": entry, "count": 1})
+        else:
+            match["count"] += 1
+    return [(group["entry"], group["count"]) for group in groups]
+
+
 async def clear_logs(bot, cid, q=None):
     tracking.clear_errors()
     provider_runtime.clear_history()
@@ -525,17 +546,18 @@ async def send_logs(bot, cid, q=None):
         (int(entry.get("ts") or 0), _compact_log_row(entry)) for entry in errors
     ] + [
         (
-            int(entry.get("ts") or 0), _monitor_error_row(entry),
+            int(entry.get("ts") or 0),
+            _monitor_error_row(entry) + (f" · повторилось {count} раз" if count > 1 else ""),
         )
-        for entry in monitor_errors
+        for entry, count in _collapse_monitor_errors(monitor_errors)
     ]
     combined.sort(key=lambda item: item[0], reverse=True)
-    rows = [row for _ts, row in combined[:5]]
+    rows = [row for _ts, row in combined]
     buttons = []
     if combined:
         buttons.append([InlineKeyboardButton(delete_label("Очистить ошибки"), callback_data="adm_logs_clear")])
     buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_system"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(buttons)
-    msg = ui.logs(rows, len(combined), _updated_at())
+    msg = ui.logs(rows, len(rows), _updated_at())
     await _show(bot, cid, msg, kb, q)
     _mark_logs_viewed(cid, errors)

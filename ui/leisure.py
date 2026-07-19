@@ -335,6 +335,8 @@ def concerts_list(place_label, events, empty_hint=""):
         b.spacer()
         b.bold(ev.get("artist", ""))
         b.newline()
+        if ev.get("context"):
+            b.labeled_line("Формат", ev["context"], lowercase=False)
         if ev.get("place"):
             place = f"{ev.get('flag', '')} {ev['place']}".strip()
             b.labeled_line("Место", place, lowercase=False)
@@ -439,9 +441,10 @@ def _group_concerts(events) -> list[dict]:
         title = str(event.get("title", "")).strip()
         place = str(event.get("place", "")).strip()
         day = _parse_event_date(event.get("date"))
-        key = (title, place)
+        context = str(event.get("context", "")).strip()
+        key = (title, place, context)
         if key not in groups:
-            groups[key] = {"title": title, "place": place, "dates": []}
+            groups[key] = {"title": title, "place": place, "context": context, "dates": []}
             order.append(key)
         if day:
             groups[key]["dates"].append(day)
@@ -484,6 +487,8 @@ def _movie_genre_text(genre: str | None) -> str:
 def _concert_card(b: MessageBuilder, event: dict) -> None:
     b.bold(event.get("title", ""))
     b.newline()
+    if event.get("context"):
+        b.labeled_line("Формат", event["context"], lowercase=False)
     if event.get("place"):
         b.labeled_line("Место", event["place"], lowercase=False)
     date_text = _format_dates([d for d in event.get("dates", []) if isinstance(d, date)])

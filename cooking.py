@@ -45,6 +45,8 @@ from recipe_generation import (
     _gen_leftovers_recipe_batch,
     _gen_recipe,
     _gen_recipe_batch,
+    _normalize_queue_recipe,
+    _queue_recipe_presentable,
     _season_hint,
 )
 from fridge_model import _fridge_available
@@ -191,6 +193,17 @@ async def _generate_and_store_queue(cid, meal, ingredients=None):
     return items
 
 
+def _next_presentable_queue_recipe(cid):
+    """Пропускает повреждённые карточки, уже сохранённые в старой очереди."""
+    while True:
+        item = queue_next(cid)
+        if item is None:
+            return None
+        item = _normalize_queue_recipe(item)
+        if _queue_recipe_presentable(item):
+            return item
+
+
 async def enter_meal(bot, cid, meal, ingredients=None, status=None):
     """Явный вход в категорию из меню «Готовка» (§6.1): фиксирует active_meal,
     генерирует очередь при необходимости и показывает первый рецепт."""
@@ -209,7 +222,7 @@ async def enter_meal(bot, cid, meal, ingredients=None, status=None):
                 "Не получилось придумать рецепты, попробуй ещё раз.",
                 reply_markup=back_menu_keyboard("m_food"))
             return
-    d = queue_next(cid)
+    d = _next_presentable_queue_recipe(cid)
     if d is None:
         if status is not None:
             await status.replace(
@@ -247,7 +260,7 @@ async def show_next_recipe(bot, cid, status=None):
     prev_cuisine = prev.get("cuisine")
     if prev_cuisine:
         bump_cuisine_weight(cid, prev_cuisine, -1)
-    d = queue_next(cid)
+    d = _next_presentable_queue_recipe(cid)
     if d is None:
         if status is None:
             status = await util.StatusManager.start(bot, cid)
@@ -261,7 +274,7 @@ async def show_next_recipe(bot, cid, status=None):
                 "Не получилось придумать рецепты, попробуй ещё раз.",
                 reply_markup=back_menu_keyboard("m_food"))
             return
-        d = queue_next(cid)
+        d = _next_presentable_queue_recipe(cid)
         if d is None:
             await status.replace(
                 "Не получилось придумать рецепты, попробуй ещё раз.",

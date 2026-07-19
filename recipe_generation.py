@@ -1225,6 +1225,8 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
         f"{guard_line}"
         f"{source_block}"
         "Правила для каждого рецепта:\n"
+        "• Все пользовательские поля пиши только по-русски: название, ингредиенты, шаги и совет. "
+        "Полностью переводи названия продуктов и единицы измерения из источника.\n"
         "• Каждый продукт из ингредиентов обязан появиться в шагах приготовления.\n"
         "• Не меняй технику без веской причины: начал на сковороде — не гони в духовку. Минимум посуды.\n"
         "• Сумма minutes по шагам должна строго равняться полю time.\n"
@@ -1252,6 +1254,46 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
         '"steps":[{"text":"Глагол + действие + конкретика","minutes":2},{"text":"шаг 2","minutes":4}],'
         '"chef_tip":"неочевидный совет именно для этого блюда"'
         "}, ... ещё " + str(n - 1) + " таких объектов]}"
+    )
+
+
+def _normalize_queue_recipe(item) -> dict:
+    """Приводит рецепт очереди к единому русскому и неформальному UI-формату."""
+    result = dict(item or {})
+    result["name"] = " ".join(str(result.get("name") or "").split()).strip()
+    ingredients = result.get("ingredients") or ""
+    if isinstance(ingredients, list):
+        ingredients = ", ".join(str(value) for value in ingredients if str(value).strip())
+    result["ingredients"] = " ".join(str(ingredients).split()).strip(" ,")
+    steps = result.get("steps") or []
+    if isinstance(steps, str):
+        steps = [steps]
+    result["steps"] = [
+        {**step, "text": _home_normalize_voice(step.get("text", ""))}
+        if isinstance(step, dict) else _home_normalize_voice(step)
+        for step in steps if str(step.get("text", "") if isinstance(step, dict) else step).strip()
+    ]
+    result["chef_tip"] = _home_useful_tip(result.get("chef_tip"))
+    return result
+
+
+def _queue_recipe_presentable(item) -> bool:
+    """Не выпускает в Telegram сырой или оборванный ответ внешнего источника."""
+    item = item if isinstance(item, dict) else {}
+    name = str(item.get("name") or "")
+    ingredients = str(item.get("ingredients") or "")
+    steps = item.get("steps") or []
+    if not name or not ingredients or not (2 <= len(steps) <= 4):
+        return False
+    # Английское слово длиной от трёх букв означает, что источник не переведён
+    # либо JSON оборвался посреди названия продукта (например "400 мл Cocon").
+    if re.search(r"[A-Za-z]{3,}", f"{name} {ingredients}"):
+        return False
+    if not re.search(r"[а-яё]", name, re.I) or not re.search(r"[а-яё]", ingredients, re.I):
+        return False
+    return all(
+        re.search(r"[а-яё]", str(step.get("text", "") if isinstance(step, dict) else step), re.I)
+        for step in steps
     )
 
 
@@ -1292,9 +1334,9 @@ def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history
             fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
         )
     except Exception as error:
-        _log.warning("recipe batch LLM chain unavailable, using source cards: %s", type(error).__name__)
-        source_cards = [_source_recipe_card(source) for source in sources[:n]]
-        source_cards = [card for card in source_cards if card.get("name") and card.get("steps")]
+        _log.warning("recipe batch LLM chain unavailable, using safe fallback: %s", type(error).__name__)
+        source_cards = [_normalize_queue_recipe(_source_recipe_card(source)) for source in sources[:n]]
+        source_cards = [card for card in source_cards if _queue_recipe_presentable(card)]
         return source_cards or [_fallback_recipe()]
     items = result.get("recipes") if isinstance(result, dict) else None
     if not isinstance(items, list):
@@ -1302,10 +1344,11 @@ def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history
         # (например, при очень коротком max_tokens/шумном ответе) — не роняем вызывающий
         # код, просто отдаём то, что похоже на единственный рецепт.
         items = [result] if isinstance(result, dict) and result.get("name") else []
-    items = [it for it in items if isinstance(it, dict) and it.get("name")][:n]
+    items = [_normalize_queue_recipe(it) for it in items if isinstance(it, dict) and it.get("name")]
+    items = [item for item in items if _queue_recipe_presentable(item)][:n]
     if not items and sources:
-        source_cards = [_source_recipe_card(source) for source in sources[:n]]
-        source_cards = [card for card in source_cards if card.get("name") and card.get("steps")]
+        source_cards = [_normalize_queue_recipe(_source_recipe_card(source)) for source in sources[:n]]
+        source_cards = [card for card in source_cards if _queue_recipe_presentable(card)]
         return source_cards or [_fallback_recipe()]
     if not items:
         return [_fallback_recipe()]

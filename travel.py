@@ -465,32 +465,14 @@ async def toggle_transport(bot, cid, key, q=None):
     await send_transport_settings(bot, cid, q)
 
 
-def travel_suggest_one(cid):
+def travel_suggest_one(cid, excluded=None):
     visited = [_country_name(code) for code in _visited_codes(cid)]
     blocked = recommendation_stoplist.values(cid, "country")
-    skip = ", ".join(visited + blocked + _plan_countries(cid))
+    skip = ", ".join(visited + blocked + _plan_countries(cid) + list(excluded or []))
     prompt = f"""Не предлагай: {skip}. Предложи ровно одну новую страну для путешествия.
 Предпочтительный транспорт: {_transport_context(cid)} — учитывай доступность этим способом.
-Это короткое превью, а не статья. Пиши естественно, конкретно и без рекламы.
-Верни только JSON: {{"flag":"флаг","country":"страна по-русски",
-"about":"ровно 1 короткое предложение о характере путешествия",
-"for_what":"1 короткая причина выбрать страну",
-"note":"1 действительно важный практический нюанс поездки"}}.
-Не добавляй языки, бюджет, LGBTQ+, факты, статистику и список мест.
-Не повторяй одну мысль в разных полях. Не пиши «главный нюанс» внутри note."""
-    return ai.llm_json(prompt, 700, tier="leisure", module="travel")
-
-
-def _travel_kb(cid, text):
-    import saved_items
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🗺️ Показать подробности", callback_data="a_trav_plan")],
-        [InlineKeyboardButton(
-            save_toggle_label(saved_items.is_note_saved(cid, text, "plan")),
-            callback_data="a_trav_save",
-        ), InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
-    ])
+Верни только JSON: {{"country":"название страны по-русски"}}."""
+    return ai.llm_json(prompt, 250, tier="leisure", module="travel")
 
 
 def _is_country_flag(value):
@@ -526,17 +508,22 @@ async def send_go(bot, cid):
         + recommendation_stoplist.values(cid, "country") + _plan_countries(cid)
     ) if name.strip()}
     data = None
+    rejected = []
     try:
         for _ in range(5):
-            candidate = await asyncio.to_thread(travel_suggest_one, cid)
+            candidate = await asyncio.to_thread(travel_suggest_one, cid, rejected)
             candidate_name = str(candidate.get("country") or "").strip()
             candidate_code = await asyncio.to_thread(_resolve_country_code, candidate_name)
             if candidate_code in visited_codes:
                 _log.info("travel recommendation rejected as visited: %s/%s", candidate_name, candidate_code)
+                if candidate_name and candidate_name not in rejected:
+                    rejected.append(candidate_name)
                 continue
             if candidate_name.casefold() not in skip_set:
                 data = candidate
                 break
+            if candidate_name and candidate_name not in rejected:
+                rejected.append(candidate_name)
     except Exception as exc:
         await verify.safe_error(bot, cid, exc, back="m_travel"); return
     if not data:
@@ -550,43 +537,20 @@ async def send_go(bot, cid):
             reply_markup=kb,
         )
         return
-    d = data
-    facts = await asyncio.to_thread(research.country_facts, d.get("country", ""))
+    country = str(data.get("country") or "").strip()
     flag, facts = await asyncio.to_thread(
-        _resolve_country_flag, d.get("country", ""), d.get("flag", ""), facts,
+        _resolve_country_flag, country, "", {},
     )
-    d = {
+    data = {
         "flag": flag,
-        "country": str(d.get("country") or "").strip(),
-        "about": _short_text(d.get("about"), 220),
-        "for_what": _short_text(d.get("for_what"), 150),
-        "note": _short_text(d.get("note"), 170),
+        "country": country,
     }
-    photo = await asyncio.to_thread(_recommendation_photo, d.get("country", ""), facts)
+    photo = await asyncio.to_thread(_recommendation_photo, country, facts)
     if photo:
-        d["photo"] = photo
-    msg = travel_ui.country_card(d)
-    store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", msg.text)
-    store.last_source[str(cid)] = "Поездки"
-    store.suggested_countries[str(cid)] = d.get("country", "")
-    store.last_recipe[str(cid)] = {
-        **d, "preview_text": msg.text,
-        "preview_entities": util.entities_to_json(msg.entities),
-    }
-    kb = _travel_kb(cid, msg.text)
-    if photo:
-        try:
-            await bot.send_photo(
-                chat_id=cid, photo=photo["url"], caption=msg.text,
-                caption_entities=msg.entities, reply_markup=kb,
-            )
-            return
-        except Exception as exc:
-            _log.warning("travel country photo delivery failed: %s", type(exc).__name__)
-            text_data = {**d, "photo": None}
-            msg = travel_ui.country_card(text_data)
-            store.last_answer[str(cid)] = msg.text
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+        data["photo"] = photo
+    store.suggested_countries[str(cid)] = country
+    store.last_recipe[str(cid)] = data
+    await send_plan(bot, cid)
 
 
 async def travel_dislike(bot, cid):
@@ -645,16 +609,12 @@ async def send_plan(bot, cid):
         1600,
     )
     profile = memory.profile_hints(cid) or "Предпочтения пользователя пока не сохранены."
-    preview = {
-        key: data.get(key) for key in ("about", "for_what", "note") if data.get(key)
-    }
     prompt = f"""Собери подробную практическую карточку путешествия в {country} из {home}.
 Предпочтительный транспорт: {_transport_context(cid)}.
 Персональный контекст: {profile}
 Проверенные стабильные данные: {fact_block or 'нет структурированных данных'}.
 Свежие поисковые фрагменты: {web_data or 'нет свежих фрагментов'}.
 Фрагменты Wikipedia для географического или культурного факта: {' '.join(wiki_sources[:3]) or 'нет'}.
-В превью уже было: {preview}. Не повторяй эти формулировки и мысли.
 
 Верни только JSON на русском:
 {{"flag":"эмодзи","title":"название страны","about":"1-2 коротких предложения о характере поездки и соответствии пользователю",
@@ -668,7 +628,7 @@ async def send_plan(bot, cid):
 Не пиши бюджет: он будет добавлен отдельно без выдуманных сумм.
 Не используй рекламный стиль, случайную статистику, политику или религию.
 Не пиши шаблон «соблюдайте местные обычаи». Изменяемые сведения бери только из свежих фрагментов.
-Каждый блок должен быть коротким, конкретным и без тавтологии."""
+Каждый блок должен быть коротким, конкретным, без тавтологии и повторов между блоками."""
     try:
         plan = await ai.allm_json(prompt, 1100, tier="leisure", module="travel")
     except Exception as exc:
@@ -696,7 +656,7 @@ async def send_plan(bot, cid):
         "plan_entities": util.entities_to_json(msg.entities), "details": plan,
     }
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Заменить", callback_data="a_trav_no")],
+        [InlineKeyboardButton("✨ Заменить страну", callback_data="a_trav_no")],
         [InlineKeyboardButton(save_toggle_label(saved_items.is_note_saved(cid, msg.text, "plan")), callback_data="a_trav_save")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
@@ -716,15 +676,14 @@ async def send_plan(bot, cid):
 async def save_plan(bot, cid, q=None):
     import saved_items
     data = store.last_recipe.get(str(cid)) or {}
-    text = data.get("plan_text") or data.get("preview_text") or ""
+    text = data.get("plan_text") or ""
     if not text:
-        await bot.send_message(chat_id=cid, text="Сначала открой подробности страны."); return
-    is_details = bool(data.get("plan_text"))
+        await bot.send_message(chat_id=cid, text="Сначала подбери страну."); return
     saved = saved_items.toggle_note(
         cid, text,
-        source="Карточка страны" if is_details else "Рекомендация страны",
+        source="Карточка страны",
         bucket="plan",
-        entities=data.get("plan_entities" if is_details else "preview_entities", []),
+        entities=data.get("plan_entities", []),
         extra={"country": data.get("country", "")},
     )
     await saved_items.update_save_button(q, "a_trav_save", saved)

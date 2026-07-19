@@ -94,11 +94,6 @@ _STEP_TIME_RE = re.compile(
     re.IGNORECASE,
 )
 
-_PAIRING_EMOJI_RE = re.compile(
-    r"[\U0001F000-\U0001FAFF\U00002600-\U000027BF\ufe0f\u200d]+"
-)
-
-
 def _step_text(step) -> str:
     """Оставляет действие шага без отдельного времени и служебной детализации."""
     text = str(step.get("text", "") if isinstance(step, dict) else step).strip()
@@ -132,20 +127,6 @@ def compact_step_lines(steps) -> list[str]:
         if word_count <= 24:
             lines[pair_index:pair_index + 2] = [f"{lines[pair_index]} {lines[pair_index + 1]}"]
     return lines
-
-
-def pairing_text(data) -> str:
-    """Объединяет все подходящие напитки в одну строку без подзаголовков."""
-    values = []
-    seen = set()
-    for key in ("pairing_wine", "pairing_drink"):
-        value = " ".join(str((data or {}).get(key) or "").split())
-        value = " ".join(_PAIRING_EMOJI_RE.sub("", value).split())
-        folded = value.casefold()
-        if value and folded not in seen:
-            values.append(value)
-            seen.add(folded)
-    return "; ".join(values)
 
 
 def food_card(
@@ -211,15 +192,9 @@ def food_card(
         b.newline()
         for step in steps:
             b.bullet(step)
-    pairing = pairing_text(data)
-    if pairing:
-        b.spacer()
-        b.labeled_line("К блюду подойдёт", pairing, lowercase=False)
     if chef_tip:
         b.spacer()
-        b.bold("Совет шефа:")
-        b.newline()
-        b.line(chef_tip)
+        b.labeled_line("💡 Полезно", chef_tip, lowercase=False)
     b.spacer()
     b.bold("😋 Приятного аппетита!")
     return b.build_stripped()

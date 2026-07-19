@@ -55,7 +55,7 @@ SPECS = (
     ProviderSpec("spoonacular", "Spoonacular", ("Готовка",), ("themealdb",), 3600),
     ProviderSpec("themealdb", "TheMealDB", ("Готовка",), ()),
     ProviderSpec("azure_speech", "Azure Speech", ("Озвучка",), ()),
-    ProviderSpec("ticketmaster", "Ticketmaster", ("Концерты",), ("firecrawl",)),
+    ProviderSpec("ticketmaster", "Ticketmaster", ("Концерты",), ("firecrawl",), 3600),
     ProviderSpec("zeroentropy", "ZeroEntropy", ("Здоровье",), (), 3600),
     ProviderSpec("pexels", "Pexels", ("Поездка",), ("unsplash",)),
     ProviderSpec("unsplash", "Unsplash", ("Поездка",), ()),

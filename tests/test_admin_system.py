@@ -93,8 +93,36 @@ def test_logs_have_only_clear_and_navigation_rows(monkeypatch):
     asyncio.run(admin.send_logs(bot, "42"))
 
     labels = [[button.text for button in row] for row in bot.sent[0]["reply_markup"].inline_keyboard]
-    assert labels == [["❌ Очистить логи"], ["⬅️ Назад", "#️⃣ Меню"]]
+    assert labels == [["❌ Очистить ошибки"], ["⬅️ Назад", "#️⃣ Меню"]]
     assert all("Скопировать" not in button for row in labels for button in row)
+
+
+def test_logs_collapse_duplicate_monitor_incidents_and_show_all_unique_rows(monkeypatch):
+    now = 1_784_466_000
+    app_errors = [{
+        "id": f"app-{index}", "ts": now - 100 - index,
+        "source": "app", "section": "Система", "action": f"действие {index}",
+        "error": f"ValueError: ошибка {index}", "file": "bot.py", "line": 10 + index,
+    } for index in range(13)]
+    ticketmaster = [{
+        "ts": now - index, "service": "ticketmaster", "event_type": "error",
+        "incident_id": f"ticketmaster-{index}",
+        "text": "Ticketmaster: лимит исчерпан.", "status_code": 429,
+        "started_at": now - 60 - index, "recovered_at": now,
+    } for index in range(5)]
+    monkeypatch.setattr(admin.time, "time", lambda: now)
+    monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: app_errors)
+    monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: ticketmaster)
+    monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
+    bot = _Bot()
+
+    asyncio.run(admin.send_logs(bot, "42"))
+
+    text = bot.sent[0]["text"]
+    assert text.count("Ticketmaster: лимит исчерпан") == 1
+    assert "повторилось 5 раз" in text
+    assert "действие 12" in text
+    assert "Ещё записей" not in text
 
 
 def test_admin_home_ui_uses_compact_exact_lines_without_ok():

@@ -141,6 +141,7 @@ async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3,
 # промоутеры и часть европейских туров туда не попадают. Раз в 7 дней на артиста
 # добираем события через веб-поиск (см. find_concerts/refresh_concerts_cache).
 _ARTIST_EXTERNAL_TTL = 7 * 86400
+_ARTIST_EXTERNAL_CACHE_VERSION = 2
 _EXTERNAL_SEARCH_INFLIGHT = {}
 
 _EXTERNAL_SOURCE_PRIORITY = {
@@ -196,7 +197,7 @@ def _artist_cache_key(artist: str, cc: str) -> str:
 def _external_events_cache_get(artist: str, cc: str):
     data = store._load(config.ARTIST_EXTERNAL_EVENTS_KEY) or {}
     entry = data.get(_artist_cache_key(artist, cc))
-    if not entry:
+    if not entry or entry.get("version") != _ARTIST_EXTERNAL_CACHE_VERSION:
         return None
     if time.time() - int(entry.get("ts") or 0) > _ARTIST_EXTERNAL_TTL:
         return None
@@ -205,7 +206,11 @@ def _external_events_cache_get(artist: str, cc: str):
 
 def _external_events_cache_set(artist: str, cc: str, events: list):
     data = store._load(config.ARTIST_EXTERNAL_EVENTS_KEY) or {}
-    data[_artist_cache_key(artist, cc)] = {"ts": int(time.time()), "events": events}
+    data[_artist_cache_key(artist, cc)] = {
+        "version": _ARTIST_EXTERNAL_CACHE_VERSION,
+        "ts": int(time.time()),
+        "events": events,
+    }
     store._save(config.ARTIST_EXTERNAL_EVENTS_KEY, data)
 
 
@@ -301,8 +306,11 @@ async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
 Верни JSON (без markdown):
 {{"events": [{{"artist": "{artist}", "date": "YYYY-MM-DD", "time": "HH:MM или пусто",
 "venue": "название площадки", "city": "город", "country_cc": "двухбуквенный код страны",
+"event_type": "own или festival", "festival_name": "название фестиваля или пусто",
 "event_url": "ссылка на страницу события", "ticket_url": "ссылка на билеты или пусто",
-"source_url": "URL страницы-источника, откуда взято событие"}}]}}"""
+"source_url": "URL страницы-источника, откуда взято событие"}}]}}.
+Ставь event_type=festival и заполняй festival_name только если название фестиваля прямо указано
+в материале. Иначе ставь own и оставляй festival_name пустым."""
     try:
         d = await ai.allm_json(prompt, 1500, module="leisure_concerts", route=None)
     except Exception as e:
@@ -337,6 +345,8 @@ async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
             "country_cc": country_cc,
             "event_url": str(e.get("event_url") or source_url).strip(),
             "ticket_url": str(e.get("ticket_url") or "").strip(),
+            "event_type": "festival" if e.get("event_type") == "festival" and e.get("festival_name") else "own",
+            "festival_name": str(e.get("festival_name") or "").strip(),
             "source": _classify_external_source(source_url, artist),
         })
     return events
@@ -378,9 +388,11 @@ def _external_event_to_tm_shape(ev: dict) -> dict:
     city = ev.get("city", "")
     venue = ev.get("venue", "")
     source = ev.get("source", "other")
+    event_type = ev.get("event_type") or "own"
+    festival_name = str(ev.get("festival_name") or "").strip()
     return {
         "id": f"ext:{source}:{artist.lower()}:{date}:{city.lower()}",
-        "name": f"{artist} — {venue}".strip(" —"),
+        "name": festival_name if event_type == "festival" and festival_name else f"{artist} — {venue}".strip(" —"),
         "url": ev.get("ticket_url") or ev.get("event_url") or "",
         "dates": {"start": {"localDate": date, "localTime": ev.get("time", "")}},
         "_embedded": {
@@ -393,6 +405,8 @@ def _external_event_to_tm_shape(ev: dict) -> dict:
         "_artist": artist,
         "_source": source,
         "_event_url": ev.get("event_url", ""),
+        "_event_type": event_type,
+        "_festival_name": festival_name,
     }
 
 
@@ -477,6 +491,36 @@ def _concert_min_price(e):
     currency = (ranges[0].get("currency") or "").upper()
     amount = int(best) if best == int(best) else round(best, 2)
     return f"от {amount} {currency}".strip()
+
+
+_FESTIVAL_MARKERS = (
+    "festival", " fest", "fest ", "pinkpop", "lowlands", "paaspop",
+    "down the rabbit hole", "best kept secret", "roadburn", "defqon",
+    "mysteryland", "north sea jazz", "zwarte cross",
+)
+
+
+def _concert_context(e):
+    """Возвращает пользовательский формат события без догадок через AI."""
+    explicit_type = str(e.get("_event_type") or "").strip().lower()
+    explicit_name = " ".join(str(e.get("_festival_name") or "").split()).strip()
+    if explicit_type == "festival" and explicit_name:
+        return f"Фестиваль · {explicit_name}"
+
+    artist = " ".join(str(e.get("_artist") or "").split()).strip()
+    event_name = " ".join(str(e.get("name") or "").split()).strip()
+    event_low = event_name.casefold()
+    artist_low = artist.casefold()
+    attractions = [
+        " ".join(str(item.get("name") or "").split()).strip()
+        for item in (e.get("_embedded", {}).get("attractions") or [])
+        if str(item.get("name") or "").strip()
+    ]
+    is_named_festival = any(marker in f" {event_low} " for marker in _FESTIVAL_MARKERS)
+    is_umbrella_event = bool(event_name and artist and artist_low not in event_low and len(attractions) > 1)
+    if is_named_festival or is_umbrella_event:
+        return f"Фестиваль · {event_name}"
+    return "Собственный концерт"
 
 def _concert_place_name(name, cc=""):
     cc = (cc or "").upper()
@@ -670,6 +714,7 @@ async def _build_new_concerts_msg(cid):
         source = e.get("_source", "ticketmaster")
         rows_data.append({
             "artist": e.get("_artist", ""),
+            "context": _concert_context(e),
             "flag": flag,
             "place": city,
             "genre": _concert_genre(e),
@@ -790,6 +835,7 @@ async def find_concerts(bot, cid, mode="home"):
         source = e.get("_source", "ticketmaster")
         rows_data.append({
             "artist": artist,
+            "context": _concert_context(e),
             "flag": flag,
             "place": place,
             "genre": _concert_genre(e),
@@ -845,6 +891,7 @@ async def _build_weekly_events_msg(cid):
                     "title": artist,
                     "place": venue_str,
                     "date": date_str,
+                    "context": _concert_context(e),
                 })
 
     # --- Кинопремьеры ---

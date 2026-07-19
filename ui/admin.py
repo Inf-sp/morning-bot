@@ -192,8 +192,6 @@ def logs(rows, errors_24h, updated_at):
     else:
         for row in rows:
             b.line(row)
-        if errors_24h > len(rows):
-            b.line(f"Ещё записей: {errors_24h - len(rows)}")
     b.spacer()
     b.line(f"Обновлено в {updated_at}")
     return b.build_stripped()

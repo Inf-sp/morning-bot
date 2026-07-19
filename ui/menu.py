@@ -5,7 +5,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 from .balance import finish_dot
 from .builder import MessageBuilder, MessageSpec
 from .constants import CUISINE_EMOJI, LANGUAGE_EMOJI, choose_label, ui_label
-from .food import CUISINE_RU, pairing_text
+from .food import CUISINE_RU
 
 UI_MYDAY = ui_label("myday", "").strip()
 UI_WARDROBE = ui_label("wardrobe", "").strip()
@@ -275,15 +275,6 @@ def food_menu(idea=None):
         b.newline()
         for step in steps:
             b.bullet(step)
-
-    pairing = pairing_text({
-        "pairing_wine": _cooking_text(idea.get("pairing_wine")),
-        "pairing_drink": _cooking_text(idea.get("pairing_drink")),
-    })
-    if pairing:
-        b.spacer()
-        pairing = _cooking_sentence(pairing.replace("; ", " или "))
-        b.labeled_line("К блюду подойдет", pairing, lowercase=False)
 
     tip = _cooking_sentence(idea.get("tip"))
     if tip:
