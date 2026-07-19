@@ -579,9 +579,9 @@ def tavily_search(query: str, max_results: int = 5, include_domains=None) -> lis
         return []
 
 
-def tavily_snippet(query: str, max_chars: int = 1200) -> str:
-    """Top-3 Tavily сниппета, склеенные для LLM-промпта. Пустая строка если ключа нет."""
-    results = tavily_search(query, max_results=3)
+def web_snippet(query: str, max_chars: int = 1200) -> str:
+    """Top-3 snippets from Firecrawl with Tavily only as fallback."""
+    results = web_search(query, max_results=3)
     parts, total = [], 0
     for r in results:
         chunk = (r.get("content") or "").strip()
@@ -591,15 +591,20 @@ def tavily_snippet(query: str, max_chars: int = 1200) -> str:
     return "\n---\n".join(parts)
 
 
+def tavily_snippet(query: str, max_chars: int = 1200) -> str:
+    """Совместимость старых вызовов; новый код использует ``web_snippet``."""
+    return web_snippet(query, max_chars)
+
+
 def firecrawl_search(query: str, max_results: int = 5) -> list:
-    """Поиск через Firecrawl — второй независимый источник рядом с Tavily.
+    """Основной внешний поиск; Tavily подключается выше только как резерв.
     Возвращает list[{title, url, content}] или [] при ошибке/нет ключа."""
     if not config.FIRECRAWL_API_KEY:
         return []
     try:
         r = requests.post(
             "https://api.firecrawl.dev/v1/search",
-            json={"query": query, "limit": max_results, "sources": [{"type": "web"}]},
+            json={"query": query, "limit": max_results},
             headers={"Authorization": f"Bearer {config.FIRECRAWL_API_KEY}"},
             timeout=18,
         )
@@ -635,17 +640,24 @@ def firecrawl_snippet(query: str, max_chars: int = 1200) -> str:
 
 
 
-def web_search(query: str, max_results: int = 5) -> list:
-    """Web search through Tavily with a one-way Firecrawl fallback."""
+def web_search(query: str, max_results: int = 5, include_domains=None) -> list:
+    """Web search through Firecrawl with Tavily only as a quota-aware fallback."""
     out, seen = [], set()
-    preferred = provider_runtime.selected_provider("tavily")
-    providers = (firecrawl_search,) if preferred == "firecrawl" else (tavily_search, firecrawl_search)
+    domains = tuple(str(value).strip().casefold() for value in (include_domains or []) if str(value).strip())
+    providers = (firecrawl_search, tavily_search)
     for provider in providers:
-        rows = provider(query, max_results=max_results)
-        if provider is firecrawl_search and rows:
-            provider_runtime.activate_fallback("tavily", "firecrawl", reason="request")
+        rows = (provider(query, max_results=max_results, include_domains=domains)
+                if provider is tavily_search else provider(query, max_results=max_results))
         for item in rows:
             url = (item.get("url") or "").strip()
+            if domains:
+                try:
+                    from urllib.parse import urlparse
+                    host = (urlparse(url).hostname or "").casefold()
+                except Exception:
+                    host = ""
+                if not any(host == domain or host.endswith("." + domain) for domain in domains):
+                    continue
             if not url or url in seen:
                 continue
             seen.add(url)
@@ -653,5 +665,7 @@ def web_search(query: str, max_results: int = 5) -> list:
             if len(out) >= max_results:
                 return out
         if out:
+            if provider is tavily_search:
+                provider_runtime.activate_fallback("firecrawl", "tavily", reason="request")
             return out
     return out

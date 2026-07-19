@@ -160,7 +160,7 @@ async def send_listen(bot, cid):
     web_block = ""
     try:
         web = await asyncio.to_thread(
-            research.tavily_snippet,
+            research.web_snippet,
             " ".join(part for part in (
                 "modern popular currently active music artists",
                 language_context["search"],
@@ -170,7 +170,7 @@ async def send_listen(bot, cid):
             500,
         )
     except Exception as e:
-        _log.error("send_listen: tavily_snippet failed cid=%s: %r", cid, e, exc_info=True)
+        _log.error("send_listen: web_snippet failed cid=%s: %r", cid, e, exc_info=True)
         web = ""
     if web:
         web_block = (

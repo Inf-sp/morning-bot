@@ -240,7 +240,7 @@ async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
     ]
     try:
         results_batches = await asyncio.gather(
-            *[asyncio.to_thread(research.tavily_search, q, 5) for q in queries],
+            *[asyncio.to_thread(research.web_search, q, 5) for q in queries],
             return_exceptions=True,
         )
     except Exception as e:

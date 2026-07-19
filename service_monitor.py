@@ -50,10 +50,6 @@ def _confirmed_quota(service: str, state: dict) -> tuple[int | None, int | None]
         used = int(model_usage["used"])
         total = int(config.GEMINI_DAILY_LIMIT)
         return max(total - used, 0), total
-    if service == "kimi" and config.KIMI_TPD_LIMIT > 0:
-        used = int(usage["tokens_today"])
-        total = int(config.KIMI_TPD_LIMIT)
-        return max(total - used, 0), total
     return None, None
 
 
@@ -69,8 +65,6 @@ def _usage_detail(service: str) -> str:
     if service == "gemini":
         model_usage = api_usage.gemini_requests(config.GEMINI_MODEL)
         return f"{_number(model_usage['used'])} запросов сегодня · {config.GEMINI_MODEL}"
-    if service == "kimi":
-        return f"{_number(usage['tokens_today'])} токенов сегодня · {config.KIMI_MODEL}"
     if service == "azure_speech" and usage["characters_today"]:
         return f"{_number(usage['characters_today'])} символов сегодня"
     if service == "database":
@@ -154,7 +148,6 @@ def _probe_request(service: str):
         "gemini": ("GET", "https://generativelanguage.googleapis.com/v1beta/models", {"params": {"key": config.GEMINI_API_KEY, "pageSize": 1}}),
         "cohere": ("GET", "https://api.cohere.com/v1/models", {"headers": {"Authorization": f"Bearer {config.COHERE_API_KEY}"}, "params": {"page_size": 1}}),
         "github_models": ("GET", "https://models.github.ai/catalog/models", {"headers": {"Authorization": f"Bearer {config.GITHUB_MODELS_TOKEN}"}}),
-        "kimi": ("GET", f"{config.KIMI_BASE_URL}/models", {"headers": {"Authorization": f"Bearer {config.KIMI_API_KEY}"}}),
         "groq": ("GET", "https://api.groq.com/openai/v1/models", {"headers": {"Authorization": f"Bearer {config.GROQ_API_KEY}"}}),
         "openrouter": ("GET", "https://openrouter.ai/api/v1/key", {"headers": {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}"}}),
         "cloudflare": ("GET", f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/models/search", {"headers": {"Authorization": f"Bearer {config.CF_API_TOKEN}"}, "params": {"per_page": 1}}),

@@ -1,4 +1,4 @@
-"""Источник-ориентированный разбор лекарств: DailyMed → Tavily → Kimi → Gemini."""
+"""Источник-ориентированный разбор лекарств: DailyMed → Firecrawl/Tavily → Gemini/Groq."""
 import asyncio
 import logging
 import re
@@ -167,7 +167,7 @@ drug_other. Дозировка и форма не входят в generic_name.
 Сообщение: {secure.wrap_untrusted(text, 'запрос пользователя')}
 JSON: {{"generic_name":"","brand_name":"","dose":"","release_form":"","intent":"drug_other"}}"""
     try:
-        data = await ai.allm_json(prompt, 350, order=("kimi",), module="medicine",
+        data = await ai.allm_json(prompt, 350, order=("cohere", "gemini"), module="medicine",
                                   privacy_level="sensitive", budget_seconds=8)
     except Exception:
         return local
@@ -310,11 +310,11 @@ def _official_url(url):
     return known or government
 
 
-def _tavily_context(drug_name, question, intent="drug_other"):
+def _official_search_context(drug_name, question, intent="drug_other"):
     intent_query = intent.removeprefix("drug_").replace("_", " ")
     query = (f"{drug_name} {intent_query} {question} official medicine label "
              "site:dailymed.nlm.nih.gov OR site:fda.gov OR site:nhs.uk OR site:ema.europa.eu")
-    rows = research.tavily_search(query, max_results=6)
+    rows = research.web_search(query, max_results=6, include_domains=_OFFICIAL_DOMAINS)
     context, sources = [], []
     for row in rows:
         if not _official_url(row.get("url")):
@@ -334,21 +334,21 @@ def _fallback_reason(exc):
         return "limit"
     if "timeout" in text or "deadline" in text or "timed out" in text:
         return "timeout"
-    if not config.KIMI_API_KEY or "unavailable" in text or "not configured" in text:
+    if "unavailable" in text or "not configured" in text:
         return "unavailable"
     return "api_error"
 
 
 async def _format_with_ai(prompt):
     try:
-        data = await ai.allm_json(prompt, 850, order=("kimi",), module="medicine",
-                                  privacy_level="sensitive", budget_seconds=10)
-        return data, "kimi", ""
-    except Exception as exc:
-        reason = _fallback_reason(exc)
         data = await ai.allm_json(prompt, 850, order=("gemini",), module="medicine",
                                   privacy_level="sensitive", budget_seconds=10)
-        return data, "gemini_fallback", reason
+        return data, "gemini", ""
+    except Exception as exc:
+        reason = _fallback_reason(exc)
+        data = await ai.allm_json(prompt, 850, order=("groq",), module="medicine",
+                                  privacy_level="sensitive", budget_seconds=10)
+        return data, "groq_fallback", reason
 
 
 def _normalize_result(data, question, normalized):
@@ -436,11 +436,11 @@ async def answer(bot, cid, question):
     if not context:
         search_name = generic_name or brand_name or normalized.get("raw_name") or ""
         snippets, _urls = await asyncio.to_thread(
-            _tavily_context, search_name, question, intent,
+            _official_search_context, search_name, question, intent,
         )
         context = snippets
         if snippets:
-            medicine_source, source_name = "tavily", "официальные медицинские источники"
+            medicine_source, source_name = "official_search", "официальные медицинские источники"
     drug_name = (entry or {}).get("drug_name") or generic_name or brand_name or normalized.get("raw_name")
     drug_form = normalized.get("release_form") or (entry or {}).get("drug_form") or ""
     normalized["display_name"] = _display_drug_name(normalized, entry)

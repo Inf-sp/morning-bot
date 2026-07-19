@@ -37,42 +37,40 @@ class ProviderSpec:
         return sections[0] if len(sections) == 1 else "Везде"
 
 
-# Fallbacks are directed. Firecrawl never points back to Tavily, so a failed
-# search cannot bounce forever between the two providers.
+# Fallbacks are directed. Tavily is reserve-only while its monthly quota is
+# exhausted; search never bounces back from Tavily to Firecrawl.
 SPECS = (
-    ProviderSpec("cohere", "Cohere", ("Обучение", "Ассистент"), ("kimi", "github_models", "gemini")),
-    ProviderSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"), ("kimi", "github_models", "groq", "openrouter")),
-    ProviderSpec("kimi", "Kimi", ("Обучение", "Досуг", "Ассистент"), ("github_models", "groq", "openrouter")),
+    ProviderSpec("cohere", "Cohere", ("Обучение", "Ассистент"), ("github_models", "gemini")),
+    ProviderSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"), ("github_models", "groq", "openrouter")),
     ProviderSpec("github_models", "GitHub Models", ("Готовка", "Обучение", "Ассистент"), ("openrouter",)),
     ProviderSpec("groq", "Groq", ("Готовка", "Обучение", "Ассистент"), ("github_models", "openrouter")),
     ProviderSpec("openrouter", "OpenRouter", ("Готовка",), ()),
     ProviderSpec("cloudflare", "Cloudflare AI", ("Ассистент",), ("github_models",)),
     ProviderSpec("openweather", "OpenWeather", ("Мой день", "Гардероб"), ()),
-    ProviderSpec("tavily", "Tavily", ("Поиск", "Поездка", "Концерты"), ("firecrawl",)),
-    ProviderSpec("firecrawl", "Firecrawl", ("Поиск",), (), 300),
+    ProviderSpec("firecrawl", "Firecrawl", ("Поиск", "Поездка", "Концерты"), ("tavily",), 300),
+    ProviderSpec("tavily", "Tavily", ("Поиск",), ()),
     ProviderSpec("tmdb", "TMDB", ("Кино",), ()),
     ProviderSpec("google_books", "Google Books", ("Книги",), (), 86400),
     ProviderSpec("languagetool", "LanguageTool", ("Обучение",), ("gemini",)),
     ProviderSpec("spoonacular", "Spoonacular", ("Готовка",), ("themealdb",), 3600),
     ProviderSpec("themealdb", "TheMealDB", ("Готовка",), ()),
     ProviderSpec("azure_speech", "Azure Speech", ("Озвучка",), ()),
-    ProviderSpec("ticketmaster", "Ticketmaster", ("Концерты",), ("tavily",)),
+    ProviderSpec("ticketmaster", "Ticketmaster", ("Концерты",), ("firecrawl",)),
     ProviderSpec("zeroentropy", "ZeroEntropy", ("Здоровье",), (), 3600),
     ProviderSpec("pexels", "Pexels", ("Изображения",), ()),
-    ProviderSpec("restcountries", "REST Countries", ("Поездка",), ("tavily",)),
+    ProviderSpec("restcountries", "REST Countries", ("Поездка",), ("firecrawl",)),
     ProviderSpec("telegram", "Telegram", ("Мой день", "Готовка", "Обучение"), ()),
     ProviderSpec("database", "PostgreSQL", ("Мой день", "Готовка", "Обучение"), ()),
 )
 SPEC_BY_KEY = {spec.key: spec for spec in SPECS}
 LABELS = {spec.key: spec.label for spec in SPECS}
-AI_PROVIDERS = {"cohere", "gemini", "kimi", "github_models", "groq", "openrouter", "cloudflare"}
+AI_PROVIDERS = {"cohere", "gemini", "github_models", "groq", "openrouter", "cloudflare"}
 
 
 def is_configured(provider: str) -> bool:
     values = {
         "cohere": config.COHERE_API_KEY,
         "gemini": config.GEMINI_API_KEY,
-        "kimi": config.KIMI_API_KEY,
         "github_models": config.GITHUB_MODELS_TOKEN,
         "groq": config.GROQ_API_KEY,
         "openrouter": config.OPENROUTER_API_KEY,

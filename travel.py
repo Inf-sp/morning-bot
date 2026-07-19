@@ -509,7 +509,7 @@ async def send_plan(bot, cid):
     fact_block = research.facts_block(facts)
     wiki_fact = await asyncio.to_thread(research.wiki_fact, country)
     web_data = await asyncio.to_thread(
-        research.tavily_snippet, f"{country} туризм путешествие достопримечательности", 900,
+        research.web_snippet, f"{country} туризм путешествие достопримечательности", 900,
     )
     prompt = f"""Подробный план поездки в {country} из {home}.
 Основной транспорт: {_transport_context(cid)}. Не предлагай другой, если маршрут нормально строится выбранным.

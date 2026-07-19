@@ -1,4 +1,4 @@
-"""Короткая консультация по здоровью: risk → optional sources → Gemini → Kimi."""
+"""Короткая консультация по здоровью: risk → optional sources → Gemini → Groq."""
 import asyncio
 import logging
 import re
@@ -86,7 +86,7 @@ def _medical_context(text, netherlands):
             domain for domain in domains if not domain.endswith(".nl")
         ]
     query = f"{text} Thuisarts Netherlands medical guidance" if netherlands else text
-    rows = research.tavily_search(query, max_results=3, include_domains=domains)
+    rows = research.web_search(query, max_results=3, include_domains=domains)
     snippets = []
     for row in rows:
         if not _official_url(row.get("url")):
@@ -129,9 +129,9 @@ async def _ask_ai(prompt):
         return result, "gemini", ""
     except Exception as exc:
         reason = _fallback_reason(exc)
-        result = await ai.allm_json(prompt, 900, order=("kimi",), module="doctor",
+        result = await ai.allm_json(prompt, 900, order=("groq",), module="doctor",
                                     privacy_level="sensitive", budget_seconds=10)
-        return result, "kimi_fallback", reason
+        return result, "groq_fallback", reason
 
 
 def _normalize(data):

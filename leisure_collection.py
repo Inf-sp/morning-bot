@@ -163,7 +163,7 @@ def content_recommend(kind, cid):
         avoid = ("\nНЕ рекомендуй то, что уже отмечено или не понравилось: " + ", ".join(skip[:80])) if skip else ""
         anchors = ", ".join(loved_titles[:25])
         web_block = ""
-        web = research.tavily_snippet(
+        web = research.web_snippet(
             f"лучшие фильмы сериалы 2024 2025 драма артхаус триллер похожие {anchors[:80]}",
             max_chars=700,
         )
@@ -188,7 +188,7 @@ JSON: {{"items": [{{"title": "название (год)", "title_en": "ориг�
     skip = my_books_titles + read_titles + blocked
     avoid = ("\nНЕ рекомендуй уже прочитанное/в закладках/отклонённое: " + ", ".join(skip[:80])) if skip else ""
     web_block = ""
-    web = research.tavily_snippet(
+    web = research.web_snippet(
         f"лучшие книги 2023 2024 2025 литература {anchors[:80]}",
         max_chars=700,
     )

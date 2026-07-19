@@ -777,7 +777,7 @@ async def check_purchase(bot, cid, text):
     w = store.load_wardrobe(cid)
     web_block = ""
     web_data = await asyncio.to_thread(
-        research.tavily_snippet,
+        research.web_snippet,
         f"{text} отзывы обзор стоит ли покупать",
         900,
     )

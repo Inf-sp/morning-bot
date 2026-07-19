@@ -17,6 +17,7 @@ import util
 
 _BASE_URL = "https://www.googleapis.com/books/v1/volumes"
 _CACHE_TTL = 24 * 60 * 60
+_TRANSIENT_STATUSES = {429, 500, 502, 503, 504}
 
 
 def _norm(value: str) -> str:
@@ -105,35 +106,51 @@ def _search_items(query: str) -> list[dict]:
     except Exception:
         pass
     started = time.monotonic()
-    try:
-        response = requests.get(
-            _BASE_URL,
-            params={
-                "q": query,
-                "key": config.GOOGLE_BOOKS_API_KEY,
-                "maxResults": 8,
-                "orderBy": "relevance",
-                "printType": "books",
-                "projection": "lite",
-            },
-            timeout=timeout,
-        )
-    except requests.exceptions.Timeout as exc:
-        provider_runtime.record_result(
-            "google_books", False, error="timeout",
-            exception_type=type(exc).__name__,
-            latency_ms=int((time.monotonic() - started) * 1000),
-        )
+    response = None
+    for attempt in range(2):
+        try:
+            response = requests.get(
+                _BASE_URL,
+                params={
+                    "q": query,
+                    "key": config.GOOGLE_BOOKS_API_KEY,
+                    "maxResults": 8,
+                    "orderBy": "relevance",
+                    "printType": "books",
+                    "projection": "lite",
+                },
+                timeout=timeout,
+            )
+        except requests.exceptions.Timeout as exc:
+            if attempt == 0:
+                continue
+            provider_runtime.record_result(
+                "google_books", False, error="timeout",
+                exception_type=type(exc).__name__,
+                latency_ms=int((time.monotonic() - started) * 1000),
+            )
+            return []
+        except requests.exceptions.RequestException as exc:
+            if attempt == 0:
+                continue
+            provider_runtime.record_result(
+                "google_books", False, error="network_error",
+                exception_type=type(exc).__name__,
+                latency_ms=int((time.monotonic() - started) * 1000),
+            )
+            return []
+        finally:
+            api_usage.google_books_requests(consume=True)
+        if response.status_code not in _TRANSIENT_STATUSES or attempt == 1:
+            break
+        retry_after = response.headers.get("Retry-After") if response.headers else None
+        try:
+            delay = min(1.0, max(0.0, float(retry_after)))
+        except (TypeError, ValueError):
+            delay = 0.2
+        time.sleep(delay)
+    if response is None:
         return []
-    except requests.exceptions.RequestException as exc:
-        provider_runtime.record_result(
-            "google_books", False, error="network_error",
-            exception_type=type(exc).__name__,
-            latency_ms=int((time.monotonic() - started) * 1000),
-        )
-        return []
-    finally:
-        api_usage.google_books_requests(consume=True)
     if response.status_code != 200:
         provider_runtime.record_result(
             "google_books", ok=False, status_code=response.status_code,
