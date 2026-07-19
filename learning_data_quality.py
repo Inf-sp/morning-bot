@@ -21,6 +21,27 @@ _ARTICLE_RE = re.compile(r"^(de|het|een)\s+", re.I)
 _BATCH_SIZE = 10
 _MAX_CONCURRENCY = 2
 
+_NL_FIXED_PREPOSITIONS = {
+    "aan", "achter", "bij", "in", "met", "naar", "om", "onder", "op",
+    "over", "tegen", "tot", "uit", "van", "voor",
+}
+_NL_VERB_WITH_PREPOSITION_RE = re.compile(
+    r"^((?:[a-zà-öø-ÿĳ]+en|gaan|staan|zien|doen|zijn))\s+("
+    + "|".join(sorted(_NL_FIXED_PREPOSITIONS)) + r")$",
+    re.I,
+)
+_NL_LOCAL_FIXED_VERBS = {
+    ("wennen", "aan"): {
+        "past_singular": "wende",
+        "past_participle": "gewend",
+        "auxiliary": "hebben",
+        "perfect_form": "heeft gewend",
+        "verb_type": "weak",
+        "example_nl": "Ik moet wennen aan het nieuwe bed.",
+        "example_ru": "Мне нужно привыкнуть к новой кровати.",
+    },
+}
+
 
 def _clean(value) -> str:
     text = unicodedata.normalize("NFC", str(value or ""))
@@ -52,6 +73,76 @@ def _normalize_lang(value) -> str:
     if value in ("en", "en-us", "en-gb", "english", "английский"):
         return "en"
     return "nl"
+
+
+def dutch_verb_with_preposition(term) -> tuple[str, str] | None:
+    """Распознаёт учебную форму `инфинитив + фиксированный предлог`."""
+    match = _NL_VERB_WITH_PREPOSITION_RE.fullmatch(_clean(term).casefold())
+    return (match.group(1), match.group(2)) if match else None
+
+
+def known_dutch_fixed_verb(infinitive, preposition) -> dict:
+    """Локально проверенные формы для конструкций, где ошибка особенно критична."""
+    return dict(_NL_LOCAL_FIXED_VERBS.get(
+        (_clean(infinitive).casefold(), _clean(preposition).casefold()),
+        {},
+    ))
+
+
+def _safe_fixed_verb_example(text, infinitive, preposition) -> bool:
+    text = _clean(text).casefold()
+    modal = r"(?:moet|wil|kan|mag|zal|gaat|probeer|probeert)"
+    return bool(re.search(
+        rf"\b{modal}\s+{re.escape(infinitive)}\s+{re.escape(preposition)}\b",
+        text,
+    ))
+
+
+def normalize_dutch_grammar(entry: dict) -> tuple[dict, bool]:
+    """Исправляет надёжно определяемую грамматику до LanguageTool и сохранения."""
+    normalized = dict(entry or {})
+    if entry_language(normalized) != "nl":
+        return normalized, False
+    structure = dutch_verb_with_preposition(entry_term(normalized))
+    if not structure:
+        return normalized, False
+    before = copy.deepcopy(normalized)
+    infinitive, preposition = structure
+    normalized.update({
+        "term": f"{infinitive} {preposition}",
+        "article": "",
+        "pos": "глагол",
+        "breakdown": f"глагол + предлог {preposition}",
+        "construction": f"{infinitive} {preposition}",
+        "infinitive": infinitive,
+    })
+
+    local = _NL_LOCAL_FIXED_VERBS.get(structure)
+    if local:
+        normalized.update(local)
+        normalized.update({
+            "forms": [local["past_singular"], local["perfect_form"]],
+            "examples": [{
+                "text": local["example_nl"],
+                "translation": local["example_ru"],
+            }],
+            "analysis_confidence": 1.0,
+            "analysis_provider": "local_grammar",
+        })
+        normalized.pop("verb_analysis_failed", None)
+    else:
+        examples = [
+            example for example in normalized.get("examples") or []
+            if isinstance(example, dict) and _safe_fixed_verb_example(
+                example.get("text", ""), infinitive, preposition,
+            )
+        ]
+        normalized["examples"] = examples
+        if not _safe_fixed_verb_example(
+                normalized.get("example_nl", ""), infinitive, preposition):
+            normalized.pop("example_nl", None)
+            normalized.pop("example_ru", None)
+    return normalized, normalized != before
 
 
 def _normalize_examples(raw_examples) -> list[dict]:
@@ -139,7 +230,8 @@ def normalize_entry(raw) -> tuple[dict, bool]:
     for key in list(normalized):
         if normalized[key] is None or normalized[key] == "" or normalized[key] == []:
             normalized.pop(key, None)
-    return normalized, normalized != before
+    normalized, grammar_changed = normalize_dutch_grammar(normalized)
+    return normalized, grammar_changed or normalized != before
 
 
 def _language_code(entry) -> str:
@@ -331,6 +423,19 @@ async def refresh_dictionary(cid) -> dict:
     for raw in raw_entries:
         entry, changed = normalize_entry(raw)
         if entry.get("term"):
+            pos = str(entry.get("pos") or "").casefold()
+            breakdown = str(entry.get("breakdown") or "").casefold()
+            if (entry_language(entry) == "nl"
+                    and (pos in {"глагол", "verb", "werkwoord"}
+                         or "глагол" in breakdown or "werkwoord" in breakdown
+                         or dutch_verb_with_preposition(entry_term(entry)))):
+                try:
+                    import dictionary_import
+                    refreshed = await dictionary_import._enrich_dutch_verb(entry, cid, force=True)
+                    changed = changed or refreshed != entry
+                    entry = refreshed
+                except Exception:
+                    entry["verb_analysis_failed"] = True
             normalized.append(entry)
             normalized_changed.append(changed)
 

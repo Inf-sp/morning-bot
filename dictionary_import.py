@@ -234,6 +234,9 @@ def _verb_card_example(entry):
 
 
 def _render_dutch_verb_card(b, entry):
+    if entry.get("breakdown"):
+        b.spacer()
+        b.labeled_line("Разбор", entry["breakdown"])
     if entry.get("verb_analysis_failed"):
         b.spacer()
         b.line("Не удалось получить формы глагола.")
@@ -380,12 +383,13 @@ def _extract_srs_fields(d):
     }
 
 
-def _verb_analysis_prompt(word):
+def _verb_analysis_prompt(word, fixed_preposition=""):
     request = {
         "word": word,
         "source_language": "nl",
         "target_language": "ru",
         "context": "Dutch language learning, CEFR A1-B1",
+        "fixed_preposition": fixed_preposition,
     }
     return (
         "Ты проверяешь нидерландские слова для приложения по изучению языка.\n\n"
@@ -395,6 +399,8 @@ def _verb_analysis_prompt(word):
         "или zijn; готовую форму perfectum в третьем лице единственного числа; тип weak, "
         "strong или irregular; короткий естественный пример A1-B1 и точный перевод. "
         "Не добавляй объяснений и Markdown, не используй редкие или устаревшие значения. "
+        "Если передан fixed_preposition, анализируй сам глагол, сохрани предлог в переводе и "
+        "используй в примере безопасную конструкцию Ik moet + infinitive + fixed_preposition. "
         "Если поле неизвестно, верни null.\n\n"
         "Верни строго JSON без дополнительных ключей:\n"
         '{"is_verb":true,"infinitive":"...","translations":["..."],'
@@ -444,7 +450,7 @@ def _example_contains_verb(example, forms):
     )
 
 
-def _validate_verb_analysis(data):
+def _validate_verb_analysis(data, expected_infinitive="", fixed_preposition=""):
     if not isinstance(data, dict) or set(data) != _VERB_RESPONSE_KEYS:
         return None, "schema_keys"
     if data.get("is_verb") is not True:
@@ -466,6 +472,8 @@ def _validate_verb_analysis(data):
     verb_type = data.get("verb_type")
     if not infinitive or not _DUTCH_FORM_RE.fullmatch(infinitive):
         return None, "infinitive_invalid"
+    if expected_infinitive and infinitive.casefold() != expected_infinitive.casefold():
+        return None, "infinitive_mismatch"
     for value in (past_singular, past_participle, perfect_form):
         if value is not None and not _DUTCH_FORM_RE.fullmatch(value):
             return None, "form_invalid"
@@ -473,6 +481,17 @@ def _validate_verb_analysis(data):
         return None, "auxiliary_invalid"
     if verb_type not in ("weak", "strong", "irregular", None):
         return None, "verb_type_invalid"
+    known = learning_data_quality.known_dutch_fixed_verb(
+        expected_infinitive or infinitive, fixed_preposition,
+    )
+    if known and any((
+        past_singular != known["past_singular"],
+        past_participle != known["past_participle"],
+        auxiliary != known["auxiliary"],
+        perfect_form != known["perfect_form"],
+        verb_type != known["verb_type"],
+    )):
+        return None, "known_conjugation_mismatch"
     if perfect_form is not None:
         perfect_lower = perfect_form.casefold()
         if not (perfect_lower.startswith("heeft ") or perfect_lower.startswith("is ")):
@@ -494,6 +513,9 @@ def _validate_verb_analysis(data):
                 or not _example_contains_verb(
                     example_nl, (infinitive, past_singular, past_participle, perfect_form))):
             return None, "example_invalid"
+        if fixed_preposition and not learning_data_quality._safe_fixed_verb_example(
+                example_nl, infinitive, fixed_preposition):
+            return None, "fixed_preposition_example_invalid"
 
     confidence = data.get("confidence")
     if confidence is None:
@@ -521,8 +543,8 @@ def _validate_verb_analysis(data):
     }, ""
 
 
-async def _request_verb_analysis(word):
-    prompt = _verb_analysis_prompt(word)
+async def _request_verb_analysis(word, fixed_preposition=""):
+    prompt = _verb_analysis_prompt(word, fixed_preposition)
     for attempt in range(2):
         try:
             return await asyncio.wait_for(
@@ -551,17 +573,25 @@ def _cached_verb_entry(cid, term):
     return None
 
 
-async def _enrich_dutch_verb(entry, cid=None):
+async def _enrich_dutch_verb(entry, cid=None, force=False):
     entry = dict(entry)
     if not _is_dutch_verb_entry(entry):
         return entry
+    entry, _ = learning_data_quality.normalize_dutch_grammar(entry)
     entry["term"] = re.sub(r"\s+", " ", str(entry.get("term") or "")).strip().casefold()
     entry["article"] = ""
+    original_term = entry["term"]
+    fixed_structure = learning_data_quality.dutch_verb_with_preposition(original_term)
+    analysis_term = fixed_structure[0] if fixed_structure else original_term
+    fixed_preposition = fixed_structure[1] if fixed_structure else ""
 
-    cached = _cached_verb_entry(cid, entry["term"])
+    if entry.get("analysis_provider") == "local_grammar":
+        return entry
+
+    cached = None if force else _cached_verb_entry(cid, original_term)
     if cached:
         entry.update(_verb_analysis_fields(cached))
-        entry["term"] = cached.get("infinitive") or _entry_term(cached) or entry["term"]
+        entry["term"] = original_term
         entry["translation"] = _entry_translation(cached) or entry.get("translation", "")
         entry["examples"] = cached.get("examples") or entry.get("examples", [])
         entry["forms"] = cached.get("forms") or entry.get("forms", [])
@@ -569,8 +599,10 @@ async def _enrich_dutch_verb(entry, cid=None):
 
     raw = None
     try:
-        raw = await _request_verb_analysis(entry["term"])
-        analysis, error_type = _validate_verb_analysis(raw)
+        raw = await _request_verb_analysis(analysis_term, fixed_preposition)
+        analysis, error_type = _validate_verb_analysis(
+            raw, expected_infinitive=analysis_term, fixed_preposition=fixed_preposition,
+        )
         if not analysis:
             _log_verb_analysis_error(
                 cid, entry["term"], error_type, response=repr(raw))
@@ -585,9 +617,10 @@ async def _enrich_dutch_verb(entry, cid=None):
         return entry
 
     entry.update({
-        "term": analysis["infinitive"],
+        "term": original_term,
         "infinitive": analysis["infinitive"],
-        "translation": ", ".join(analysis["translations"]),
+        "translation": (entry.get("translation") if fixed_structure
+                        else ", ".join(analysis["translations"])),
         "past_singular": analysis["past_singular"],
         "past_participle": analysis["past_participle"],
         "auxiliary": analysis["auxiliary"],
@@ -599,6 +632,9 @@ async def _enrich_dutch_verb(entry, cid=None):
         "analysis_provider": "app_llm",
         "analysis_updated_at": datetime.now(config.TZ).isoformat(),
         "pos": "глагол",
+        "breakdown": (f"глагол + предлог {fixed_preposition}"
+                      if fixed_preposition else entry.get("breakdown", "глагол")),
+        "construction": original_term if fixed_structure else entry.get("construction", ""),
         "forms": [value for value in (
             analysis["past_singular"], analysis["perfect_form"]
         ) if value],
@@ -669,6 +705,9 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
 - term: правильная учебная форма (без перевода).
   - Нидерландские существительные — с артиклем de/het.
   - Глаголы — в инфинитиве; английские глаголы словарной формой — с to.
+  - Нидерландский глагол с фиксированным предлогом (например "wennen aan") остаётся
+    целой учебной записью, pos="глагол", breakdown="глагол + предлог aan".
+    Для примера предпочитай безопасную форму "Ik moet + инфинитив + предлог".
   - Прилагательные — в базовой форме.
   - Устойчивые выражения — целиком в базовой форме.
   - Фразы/предложения — естественно и грамматически правильно, без изменения смысла.
@@ -754,7 +793,7 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
     if article and "глагол" in breakdown.lower():
         # У глаголов нет артикля de/het — модель иногда всё равно его возвращает.
         article = ""
-    return {
+    entry = {
         "lang": lang,
         "term": term[:120],
         "article": article,
@@ -769,6 +808,8 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
         "reason": str(d.get("reason") or "").strip(),
         **_extract_srs_fields(d),
     }
+    entry, _ = learning_data_quality.normalize_dutch_grammar(entry)
+    return entry
 
 
 _SRS_FIELD_KEYS = (
@@ -965,23 +1006,25 @@ def _dict_tts_row(entry):
     return []
 
 
-def _dict_saved_kb(entry, term_key):
+def _dict_saved_kb(entry, term_key, show_dictionary=True):
     lang = entry["lang"]
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
-    ] + _dict_tts_row(entry) + [
+    ] + _dict_tts_row(entry) + ([
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
+    ] if show_dictionary else []) + [
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
          InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
 
-def _dict_duplicate_kb(entry, term_key):
+def _dict_duplicate_kb(entry, term_key, show_dictionary=True):
     lang = entry["lang"]
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
-    ] + _dict_tts_row(entry) + [
+    ] + _dict_tts_row(entry) + ([
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
+    ] if show_dictionary else []) + [
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
          InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
@@ -1034,12 +1077,12 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
     msg = _dict_entry_message(saved, status=status)
     term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
     if status == "duplicate":
-        kb = _dict_duplicate_kb(saved, term_key)
+        kb = _dict_duplicate_kb(saved, term_key, show_dictionary=False)
         await bot.send_message(
             chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
             persistent_inline=True)
         return
-    kb = _dict_saved_kb(saved, term_key)
+    kb = _dict_saved_kb(saved, term_key, show_dictionary=False)
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
         persistent_inline=True)
@@ -1087,7 +1130,7 @@ async def retry_pending_dict_add(bot, cid):
     store.dict_pending_add[str(cid)] = updated
     msg = _dict_entry_message(updated, status="updated")
     term_key = _dict_item_key(updated["lang"], "", _entry_term(updated))[2]
-    kb = _dict_saved_kb(updated, term_key)
+    kb = _dict_saved_kb(updated, term_key, show_dictionary=False)
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
         persistent_inline=True)
@@ -1114,7 +1157,7 @@ async def confirm_pending_dict_add(bot, cid):
         chat_id=cid,
         text=msg.text,
         entities=msg.entities,
-        reply_markup=_dict_saved_kb(saved, term_key),
+        reply_markup=_dict_saved_kb(saved, term_key, show_dictionary=False),
         persistent_inline=True,
     )
 
