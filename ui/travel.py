@@ -83,20 +83,19 @@ def travel_plan(plan, fallback_country):
     b.text_line(f"{plan.get('flag', '')} "); b.bold(country); b.newline()
     if plan.get("about"):
         b.spacer(); b.line(plan["about"])
-    for key, title in (("why", "✨ Почему тебе подойдёт"), ("spots", "📍 Не пропусти")):
-        if plan.get(key):
-            b.spacer(); b.bold(title); b.newline()
-            for item in plan[key]: b.bullet(str(item))
+    if plan.get("fit"):
+        b.spacer(); b.labeled_line("✨ Тебе подойдёт", plan["fit"])
+    if plan.get("spots"):
+        b.spacer(); b.bold("📍 Не пропусти"); b.newline()
+        for item in plan["spots"]: b.bullet(str(item))
     if plan.get("best_time"):
         b.spacer(); b.labeled_line("☀️ Когда ехать", plan["best_time"])
     if plan.get("budget"):
         b.spacer(); b.labeled_line("💶 Бюджет", plan["budget"])
     if plan.get("languages"):
-        b.spacer(); b.labeled_line("👩🏻‍🏫 Язык", ", ".join(plan["languages"]))
+        b.spacer(); b.labeled_line("👩🏻‍🏫 Языки", " · ".join(plan["languages"]))
     if plan.get("lgbt"):
         b.spacer(); b.labeled_line("🏳️‍🌈 LGBTQ+", plan["lgbt"])
-    if plan.get("fact"):
-        b.spacer(); b.labeled_line("🔍 Факт", plan["fact"], lowercase=False)
     return b.build_stripped()
 
 

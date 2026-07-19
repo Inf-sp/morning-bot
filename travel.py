@@ -138,7 +138,7 @@ def _home_idea(cid):
 
 def _home_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать страну", callback_data="a_trav_go")],
+        [InlineKeyboardButton("✨ Подобрать новую страну", callback_data="a_trav_go")],
         [InlineKeyboardButton("🧳 Мои страны", callback_data="a_trav_countries_0")],
         [InlineKeyboardButton(choose_label("Выбрать транспорт"), callback_data="a_trav_transport")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
@@ -575,22 +575,33 @@ async def travel_fav(bot, cid):
     await send_go(bot, cid)
 
 
-def _short_text(value, limit):
-    text = " ".join(str(value or "").split()).strip()
-    return text[:limit].rstrip(" ,;:")
+def _card_text(value):
+    """Очищает строку карточки, не обрезая предложение посередине."""
+    return " ".join(str(value or "").split()).strip(" ,;:")
 
 
-def _short_list(values, count, limit=130):
+def _card_list(values, count):
     if isinstance(values, str):
         values = [values]
     result = []
     for value in values or []:
-        text = _short_text(value, limit)
+        text = _card_text(value)
         if text and text.casefold() not in {item.casefold() for item in result}:
             result.append(text)
         if len(result) == count:
             break
     return result
+
+
+def _budget_line(level, reason):
+    aliases = {
+        "low": "низкий", "низкий": "низкий",
+        "medium": "средний", "средний": "средний",
+        "high": "высокий", "высокий": "высокий",
+    }
+    normalized = aliases.get(_card_text(level).casefold(), "")
+    reason = _card_text(reason).strip(". ")
+    return f"{normalized} — {reason}" if normalized and reason else ""
 
 
 async def send_plan(bot, cid):
@@ -602,10 +613,9 @@ async def send_plan(bot, cid):
     home = store.get_settings(cid).get("city", "дом")
     facts = await asyncio.to_thread(research.country_facts, country)
     fact_block = research.facts_block(facts)
-    wiki_sources = await asyncio.to_thread(research.wiki_sentences, country)
     web_data = await asyncio.to_thread(
         research.web_snippet,
-        f"{country} official travel advice regional climate LGBTQ travel attractions 2026",
+        f"{country} official travel advice climate travel costs LGBTQ attractions 2026",
         1600,
     )
     profile = memory.profile_hints(cid) or "Предпочтения пользователя пока не сохранены."
@@ -614,23 +624,27 @@ async def send_plan(bot, cid):
 Персональный контекст: {profile}
 Проверенные стабильные данные: {fact_block or 'нет структурированных данных'}.
 Свежие поисковые фрагменты: {web_data or 'нет свежих фрагментов'}.
-Фрагменты Wikipedia для географического или культурного факта: {' '.join(wiki_sources[:3]) or 'нет'}.
 
 Верни только JSON на русском:
-{{"flag":"эмодзи","title":"название страны","about":"1-2 коротких предложения о характере поездки и соответствии пользователю",
-"why":["ровно 2 конкретные персональные причины"],
-"spots":["ровно 3 главных места или региона"],
-"best_time":"короткая практическая рекомендация с различиями по регионам, если климат неоднороден",
-"languages":["основные языки по-русски"],
-"lgbt":"1 нейтральная конкретная практическая строка для путешественника",
-"fact":"1 связанный с путешествием факт о географии, культуре или природе"}}.
+{{"flag":"эмодзи","title":"название страны",
+"about":"ровно 1 короткое предложение с главной причиной поехать",
+"fit":"ровно 1 короткое персональное предложение, почему поездка подходит пользователю",
+"spots":["ровно 3 конкретных места, маршрута или уникальных активности"],
+"best_time":"конкретные месяцы или сезон — короткая причина",
+"budget_level":"низкий, средний или высокий",
+"budget_reason":"одна главная причина стоимости без числовых сумм",
+"languages":["основные полезные путешественнику языки по-русски"],
+"lgbt":"1 короткая практическая оценка законов и реальной общественной среды"}}.
 
-Не пиши бюджет: он будет добавлен отдельно без выдуманных сумм.
-Не используй рекламный стиль, случайную статистику, политику или религию.
-Не пиши шаблон «соблюдайте местные обычаи». Изменяемые сведения бери только из свежих фрагментов.
-Каждый блок должен быть коротким, конкретным, без тавтологии и повторов между блоками."""
+Не добавляй факт, статистику, рекламные формулировки и длинные юридические пояснения.
+Не повторяй название страны без необходимости. Не дублируй места из spots в fit.
+В fit не делай список и не повторяй несколько раз слова о транспорте.
+Каждый spot — одна короткая строка, не общая рекомендация. Не придумывай суммы бюджета.
+Не пиши шаблоны «богатая культура и красивая природа», «стоимость зависит от дат» и
+«соблюдайте местные обычаи». Не повторяй информацию и слова между блоками.
+Все значения должны быть законченными, короткими и без обрезанных предложений."""
     try:
-        plan = await ai.allm_json(prompt, 1100, tier="leisure", module="travel")
+        plan = await ai.allm_json(prompt, 900, tier="leisure", module="travel")
     except Exception as exc:
         await verify.safe_error(bot, cid, exc, back="m_travel"); return
     if facts.get("cc"):
@@ -638,14 +652,13 @@ async def send_plan(bot, cid):
     plan = {
         "flag": plan.get("flag") or data.get("flag", ""),
         "title": country,
-        "about": _short_text(plan.get("about"), 140),
-        "why": _short_list(plan.get("why"), 2, 65),
-        "spots": _short_list(plan.get("spots"), 3, 45),
-        "best_time": _short_text(plan.get("best_time"), 100),
-        "budget": f"Стоимость зависит от дат, длительности поездки, дороги из {home} и маршрута внутри страны.",
-        "languages": _normalize_languages(facts.get("languages")) or _short_list(plan.get("languages"), 3, 30),
-        "lgbt": _short_text(plan.get("lgbt"), 90) if web_data else "Актуальные данные не найдены — проверь рекомендации перед поездкой.",
-        "fact": _short_text(plan.get("fact"), 90),
+        "about": _card_text(plan.get("about")),
+        "fit": _card_text(plan.get("fit")),
+        "spots": _card_list(plan.get("spots"), 3),
+        "best_time": _card_text(plan.get("best_time")),
+        "budget": _budget_line(plan.get("budget_level"), plan.get("budget_reason")),
+        "languages": (_normalize_languages(facts.get("languages")) or _card_list(plan.get("languages"), 3))[:3],
+        "lgbt": _card_text(plan.get("lgbt")) if web_data else "Актуальную ситуацию лучше проверить перед поездкой",
         "photo": data.get("photo"),
     }
     msg = travel_ui.travel_plan(plan, country)
