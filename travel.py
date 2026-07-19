@@ -13,6 +13,7 @@ import recommendation_stoplist
 import research
 import settings
 import store
+import travel_photos
 import util
 import verify
 from ui import travel as travel_ui
@@ -179,6 +180,35 @@ def _save_cached_card(code, card, *, replace=True):
     return store.mutate_kv(config.TRAVEL_COUNTRY_CARDS_KEY, change)
 
 
+def _save_country_photo(code, country_name, photo):
+    if not code or not photo:
+        return photo
+    def change(data):
+        current = data.get(code) if isinstance(data.get(code), dict) else {}
+        data[code] = {**current, "country_code": code,
+                      "country_name": current.get("country_name") or country_name,
+                      "photo": photo}
+        return data, photo
+    return store.mutate_kv(config.TRAVEL_COUNTRY_CARDS_KEY, change)
+
+
+def _recommendation_photo(country, facts=None):
+    facts = facts or {}
+    code = str(facts.get("cc") or util.cc_of(country) or "").upper()
+    cached = (_card_cache().get(code) or {}).get("photo") if code else None
+    if isinstance(cached, dict) and cached.get("url"):
+        return cached
+    lookup = research.restcountries_lookup(country)
+    if lookup:
+        code = str(lookup.get("iso") or code).upper()
+        cached = (_card_cache().get(code) or {}).get("photo") if code else None
+        if isinstance(cached, dict) and cached.get("url"):
+            return cached
+    search_name = (lookup or {}).get("name_en") or country
+    photo = travel_photos.country_cover(search_name)
+    return _save_country_photo(code, country, photo) if photo else None
+
+
 def _stub_card(code, name, flag=""):
     return {"country_code": code, "country_name": name, "flag": flag or util.flag_from_cc(code),
             "content_version": 0}
@@ -323,6 +353,7 @@ def _build_country_card_unlocked(code):
             "currency": currency or generated.get("currency", ""),
             "main_nuance": generated.get("main_nuance") or "условия поездки зависят от сезона и региона.",
             "fact": wiki or generated.get("fact") or "У страны есть несколько исторически сложившихся регионов.",
+            "photo": old.get("photo"),
             "content_version": _CARD_CONTENT_VERSION, "generated_at": old.get("generated_at") or now, "updated_at": now}
     return _save_cached_card(relation_code, card)
 
@@ -468,11 +499,26 @@ async def send_go(bot, cid):
     if facts.get("languages"): d["langs"] = ", ".join(_normalize_languages(facts["languages"]))
     fact = await asyncio.to_thread(research.wiki_fact, d.get("country", ""))
     if fact: d["fact"] = fact
+    photo = await asyncio.to_thread(_recommendation_photo, d.get("country", ""), facts)
+    if photo:
+        d["photo"] = photo
     msg = travel_ui.country_card(d)
     store.last_answer[str(cid)] = re.sub(r"<[^>]+>", "", msg.text)
     store.last_source[str(cid)] = "Поездки"
     store.suggested_countries[str(cid)] = d.get("country", "")
     store.last_recipe[str(cid)] = d
+    if photo:
+        try:
+            await bot.send_photo(
+                chat_id=cid, photo=photo["url"], caption=msg.text,
+                caption_entities=msg.entities, reply_markup=_travel_kb(),
+            )
+            return
+        except Exception as exc:
+            _log.warning("travel country photo delivery failed: %s", type(exc).__name__)
+            text_data = {**d, "photo": None}
+            msg = travel_ui.country_card(text_data)
+            store.last_answer[str(cid)] = msg.text
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_travel_kb())
 
 

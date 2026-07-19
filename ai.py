@@ -559,6 +559,13 @@ def _gen_cohere(prompt, max_tokens, temperature, response_mode: ResponseMode = "
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": int(max_tokens or 1200),
         "temperature": min(max(cohere_temperature, 0.0), 1.0),
+        # Command A+ currently rejects disabled reasoning, while the default
+        # reasoning can consume the whole short-answer budget. Keep a small,
+        # bounded thinking slice and leave the rest for the actual response.
+        "thinking": {
+            "type": "enabled",
+            "token_budget": min(64, max(20, int(max_tokens or 1200) // 5)),
+        },
     }
     if response_mode == "json":
         payload["response_format"] = {"type": "json_object"}
@@ -671,7 +678,7 @@ async def allm_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
 
 def _looks_bad_fallback_text(text: str, response_mode: ResponseMode = "plain_text") -> bool:
     s = (text or "").strip()
-    if len(s) < (2 if response_mode == "json" else 20):
+    if len(s) < 2:
         return True
     low = s.lower()
     if response_mode != "json" and low.startswith(("{", "[", "```")):
@@ -684,7 +691,7 @@ def _looks_bad_fallback_text(text: str, response_mode: ResponseMode = "plain_tex
 
 
 def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_provider, reason,
-                                    response_mode: ResponseMode = "plain_text"):
+                                    response_mode: ResponseMode = "plain_text", _retry=False):
     if not config.OPENROUTER_API_KEY:
         return None
     token_cap = 5000 if response_mode == "json" else 700
@@ -716,12 +723,24 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
                 "openrouter", ok=False, status_code=r.status_code,
                 error=f"HTTP {r.status_code}", headers=r.headers,
             )
+            if not _retry and (r.status_code == 429 or r.status_code >= 500):
+                time.sleep(0.3)
+                return _openrouter_plain_text_fallback(
+                    prompt, max_tokens, temperature, origin_provider, reason,
+                    response_mode=response_mode, _retry=True,
+                )
             _log_openrouter_fallback(origin_provider, reason, False, status_code,
                                      int((time.time() - t0) * 1000))
             return None
         text = _as_text(r.json()["choices"][0]["message"]["content"])
         if not text or _looks_bad_fallback_text(text, response_mode=response_mode):
             api_usage.record_request("openrouter", ok=False, error="invalid response")
+            if not _retry:
+                time.sleep(0.3)
+                return _openrouter_plain_text_fallback(
+                    prompt, max_tokens, temperature, origin_provider, reason,
+                    response_mode=response_mode, _retry=True,
+                )
             _log_openrouter_fallback(origin_provider, "bad_output", False, status_code,
                                      int((time.time() - t0) * 1000))
             return None
@@ -732,6 +751,14 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
     except Exception as e:
         err_type = type(e).__name__
         api_usage.record_request("openrouter", ok=False, error=err_type)
+        if not _retry and isinstance(e, (
+            requests.exceptions.Timeout, requests.exceptions.ConnectionError,
+        )):
+            time.sleep(0.3)
+            return _openrouter_plain_text_fallback(
+                prompt, max_tokens, temperature, origin_provider, reason,
+                response_mode=response_mode, _retry=True,
+            )
         _log_openrouter_fallback(origin_provider, err_type, False, status_code,
                                  int((time.time() - t0) * 1000))
         return None

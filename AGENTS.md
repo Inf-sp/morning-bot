@@ -248,6 +248,7 @@ Railway запускает бот командой `python bot.py` из `railway
 | `repositories.py` | предметные репозитории поверх KV |
 | `runtime_state.py` | временное состояние процесса |
 | `travel.py` | поездки и маршруты |
+| `travel_photos.py` | туристические фотографии Pexels и резерв Unsplash |
 | `balance.py` | здоровье, самочувствие, лагом |
 | `settings.py` | пользовательские настройки |
 | `admin.py` | админка |

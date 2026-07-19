@@ -107,7 +107,8 @@ def _search_items(query: str) -> list[dict]:
         pass
     started = time.monotonic()
     response = None
-    for attempt in range(2):
+    max_attempts = 3
+    for attempt in range(max_attempts):
         try:
             response = requests.get(
                 _BASE_URL,
@@ -122,7 +123,8 @@ def _search_items(query: str) -> list[dict]:
                 timeout=timeout,
             )
         except requests.exceptions.Timeout as exc:
-            if attempt == 0:
+            if attempt < max_attempts - 1:
+                time.sleep(0.2 * (attempt + 1))
                 continue
             provider_runtime.record_result(
                 "google_books", False, error="timeout",
@@ -131,7 +133,8 @@ def _search_items(query: str) -> list[dict]:
             )
             return []
         except requests.exceptions.RequestException as exc:
-            if attempt == 0:
+            if attempt < max_attempts - 1:
+                time.sleep(0.2 * (attempt + 1))
                 continue
             provider_runtime.record_result(
                 "google_books", False, error="network_error",
@@ -141,13 +144,13 @@ def _search_items(query: str) -> list[dict]:
             return []
         finally:
             api_usage.google_books_requests(consume=True)
-        if response.status_code not in _TRANSIENT_STATUSES or attempt == 1:
+        if response.status_code not in _TRANSIENT_STATUSES or attempt == max_attempts - 1:
             break
         retry_after = response.headers.get("Retry-After") if response.headers else None
         try:
             delay = min(1.0, max(0.0, float(retry_after)))
         except (TypeError, ValueError):
-            delay = 0.2
+            delay = 0.2 * (attempt + 1)
         time.sleep(delay)
     if response is None:
         return []

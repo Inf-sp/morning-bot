@@ -157,6 +157,7 @@ _SECTION_BY_MODULE = {
     "tmdb": "Кино", "leisure_books": "Книги", "google_books": "Книги",
     "leisure_music": "Музыка", "leisure_concerts": "Концерты",
     "azure_speech": "Озвучка", "dictionary_tts": "Озвучка", "travel": "Поездка",
+    "travel_photos": "Поездка",
     "balance": "Здоровье", "thoughts": "Здоровье", "settings": "Настройки",
     "menu": "Меню", "bot_callbacks": "Меню", "bot": "Бот",
 }
@@ -165,7 +166,7 @@ _SERVICE_NAMES = (
     "azure speech", "language tool", "languagetool", "spoonacular", "themealdb",
     "openweather", "ticketmaster", "google books", "rest countries", "firecrawl",
     "openrouter", "github models", "cloudflare", "zeroentropy", "cohere", "gemini",
-    "groq", "tavily", "telegram", "tmdb", "pexels",
+    "groq", "tavily", "telegram", "tmdb", "pexels", "unsplash",
 )
 
 _SERVICE_BY_MODULE = {
@@ -176,6 +177,7 @@ _SERVICE_BY_MODULE = {
     "leisure_movies": "TMDB", "google_books": "Google Books",
     "leisure_books": "Google Books", "leisure_concerts": "Ticketmaster",
     "rerank": "ZeroEntropy", "research": "Tavily", "ai": "несколько AI-сервисов",
+    "travel_photos": "Pexels",
 }
 
 _FALLBACK_BY_SERVICE = {

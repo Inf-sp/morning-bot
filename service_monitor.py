@@ -163,6 +163,7 @@ def _probe_request(service: str):
         "ticketmaster": ("GET", "https://app.ticketmaster.com/discovery/v2/events.json", {"params": {"apikey": config.TICKETMASTER_API_KEY, "size": 1}}),
         "zeroentropy": ("POST", "https://api.zeroentropy.dev/v1/models/rerank", {"headers": {"Authorization": f"Bearer {config.ZEROENTROPY_API_KEY}", "Content-Type": "application/json"}, "json": {"model": "zerank-2", "query": "test", "documents": ["test"], "top_n": 1, "latency": "fast"}}),
         "pexels": ("GET", "https://api.pexels.com/v1/curated", {"headers": {"Authorization": config.PEXELS_API_KEY}, "params": {"per_page": 1}}),
+        "unsplash": ("GET", "https://api.unsplash.com/photos", {"headers": {"Authorization": f"Client-ID {config.UNSPLASH_ACCESS_KEY}", "Accept-Version": "v1"}, "params": {"per_page": 1}}),
         "restcountries": ("GET", "https://api.restcountries.com/countries/v5", {"headers": {"Authorization": f"Bearer {config.RESTCOUNTRIES_API_KEY}"}, "params": {"q": "Netherlands"}}),
         "telegram": ("GET", f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/getMe", {}),
     }
