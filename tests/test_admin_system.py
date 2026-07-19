@@ -19,19 +19,11 @@ def test_error_time_uses_configured_timezone_not_server_timezone():
 def test_system_ui_has_no_last_raw_error_block():
     message = admin_ui.api_ai(["🟢 Cohere · Обучение · 3 из 1 000"], "21:44")
 
-    assert message.text.startswith("🛠 Система\n\nАвтоматический резерв: включён")
+    assert message.text.startswith("🛠 Система\n\n🟢 Cohere · Обучение · 3 из 1 000")
+    assert "Автоматический резерв" not in message.text
+    assert "95%" not in message.text
     assert "Последняя ошибка" not in message.text
     assert message.text.endswith("Обновлено в 21:44")
-
-
-def test_system_latency_row_shows_p95_and_slow_actions(monkeypatch):
-    now = admin.time.time()
-    monkeypatch.setattr(admin.tracking, "get_action_latencies", lambda limit=500: [
-        {"ts": now, "duration_ms": 1200, "budget_ms": 10000},
-        {"ts": now, "duration_ms": 16000, "budget_ms": 15000},
-    ])
-
-    assert admin._latency_status_row() == "🟡 Ответы · 95% до 16.0 с · медленных 1"
 
 
 def test_tracking_keeps_diagnostic_context_and_redacts_secrets(monkeypatch):
@@ -80,8 +72,10 @@ def test_system_screen_has_logs_on_separate_row(monkeypatch):
     asyncio.run(admin.send_api_ai(bot, "42"))
 
     markup = bot.sent[0]["reply_markup"].inline_keyboard
-    assert [button.text for button in markup[0]] == ["⚠️ Логи"]
+    assert [button.text for button in markup[0]] == ["⚠️ Ошибки"]
     assert [button.text for button in markup[-1]] == ["⬅️ Назад", "#️⃣ Меню"]
+    assert "Ответы · 95%" not in bot.sent[0]["text"]
+    assert "Автоматический резерв" not in bot.sent[0]["text"]
     assert "Последняя ошибка" not in bot.sent[0]["text"]
 
 

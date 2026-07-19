@@ -436,29 +436,10 @@ def _notification_stats(cid):
 
 # ================= API И AI (единый экран, § docs/admin.md) =================
 
-def _latency_status_row():
-    cutoff = time.time() - DAY
-    rows = [
-        row for row in tracking.get_action_latencies(limit=500)
-        if int(row.get("ts") or 0) >= cutoff and row.get("duration_ms") is not None
-    ]
-    if not rows:
-        return "⚪ Ответы · данных пока нет"
-    durations = sorted(int(row["duration_ms"]) for row in rows)
-    p95_index = max(0, min(len(durations) - 1, round((len(durations) - 1) * 0.95)))
-    p95_ms = durations[p95_index]
-    slow = sum(
-        1 for row in rows
-        if row.get("budget_ms") and int(row["duration_ms"]) > int(row["budget_ms"])
-    )
-    dot = "🟢" if slow == 0 else "🟡"
-    seconds = max(0.1, p95_ms / 1000)
-    return f"{dot} Ответы · 95% до {seconds:.1f} с · медленных {slow}"
-
 async def send_api_ai(bot, cid, q=None):
     # This screen never calls providers. The independent monitor has already
     # classified errors, selected real fallbacks and prepared display rows.
-    rows = [_latency_status_row(), *service_monitor.rows()]
+    rows = service_monitor.rows()
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("⚠️ Ошибки", callback_data="adm_logs")],

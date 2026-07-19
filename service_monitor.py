@@ -64,7 +64,7 @@ def _usage_detail(service: str) -> str:
         return f"{_number(requests_today)} проверок сегодня"
     if service == "gemini":
         model_usage = api_usage.gemini_requests(config.GEMINI_MODEL)
-        return f"{_number(model_usage['used'])} запросов сегодня · {config.GEMINI_MODEL}"
+        return f"{_number(model_usage['used'])} запросов сегодня"
     if service == "azure_speech" and usage["characters_today"]:
         return f"{_number(usage['characters_today'])} символов сегодня"
     if service == "database":

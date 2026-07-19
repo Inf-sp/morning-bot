@@ -171,13 +171,10 @@ def welcome_admin():
 
 
 def api_ai(rows, updated_at):
-    """Компактный экран сервисов без технических ошибок и лишних секций."""
+    """Компактный экран актуального состояния подключённых сервисов."""
     b = MessageBuilder()
     b.bold("🛠 Система")
     b.newline()
-    b.spacer()
-    b.labeled_line("Автоматический резерв", "включён")
-    b.spacer()
     for line in rows:
         b.line(str(line))
     b.spacer()

@@ -68,6 +68,20 @@ def test_exhausted_quota_is_yellow(monkeypatch):
     )
 
 
+def test_gemini_usage_does_not_expose_internal_model_name(monkeypatch):
+    _memory_store(monkeypatch)
+    monkeypatch.setattr(
+        service_monitor.api_usage,
+        "gemini_requests",
+        lambda _model: {"used": 28},
+    )
+
+    row = service_monitor._usage_detail("gemini")
+
+    assert row == "28 запросов сегодня"
+    assert "gemini-" not in row
+
+
 def test_fallback_is_hidden_until_target_really_succeeds(monkeypatch):
     _memory_store(monkeypatch)
     provider_runtime.record_result("tavily", False, status_code=429)
