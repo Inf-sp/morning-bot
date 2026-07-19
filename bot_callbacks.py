@@ -78,15 +78,15 @@ async def handle(update, context, remove_reply_keyboard):
     if not access.is_allowed(cid):
         await bot.send_message(chat_id=cid, text="❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
+    # Любое действие кнопкой означает, что пользователь начал новый сценарий.
+    # Исключение — явная кнопка входа в режим выгрузки мыслей.
+    if data != "thought_capture":
+        balance.thoughts.cancel_capture(cid)
     pending_kind = store.pending_input.get(cid)
-    if data.startswith("m_") and pending_kind in (
-        "worry", "thought", "thought_reminder", "role_doctor", "role_medicine"
-    ):
+    if data.startswith("m_") and pending_kind in ("role_doctor", "role_medicine"):
         store.pending_input.pop(cid, None)
         if pending_kind == "role_doctor":
             store.doctor_context.pop(cid, None)
-        settings.set_(cid, "_thoughts_prompt_ts", 0)
-        settings.set_(cid, "_worry_prompt_ts", 0)
     # Онбординг новых пользователей
     if data.startswith("ob_"):
         await onboard.handle_callback(bot, cid, q, data)

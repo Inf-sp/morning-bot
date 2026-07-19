@@ -226,6 +226,9 @@ async def message_activity_handler(update, _context):
     cid = getattr(getattr(update, "effective_chat", None), "id", None)
     if cid is not None and access.is_allowed(cid):
         tracking.touch(cid)
+        text = str(getattr(getattr(update, "message", None), "text", "") or "").strip()
+        if text.startswith("/"):
+            balance.thoughts.cancel_capture(str(cid))
 
 
 

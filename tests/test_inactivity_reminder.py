@@ -216,6 +216,25 @@ def test_any_allowed_message_and_callback_count_as_activity(monkeypatch):
     assert touched == ["user-message", "user-callback"]
 
 
+def test_command_cancels_waiting_thought_capture(monkeypatch):
+    cancelled = []
+    monkeypatch.setattr(bot.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot.tracking, "touch", lambda _cid: None)
+    monkeypatch.setattr(
+        bot.balance.thoughts,
+        "cancel_capture",
+        lambda cid: cancelled.append(str(cid)),
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id="user-command"),
+        message=SimpleNamespace(text="/menu"),
+    )
+
+    asyncio.run(bot.message_activity_handler(update, None))
+
+    assert cancelled == ["user-command"]
+
+
 def test_job_sends_reminder_and_marks_cycle(monkeypatch):
     sent = []
     marked = []

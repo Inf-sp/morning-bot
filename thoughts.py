@@ -21,6 +21,8 @@ THOUGHT_TYPES = {
     "medical", "crisis", "unknown",
 }
 OPEN_STATUSES = {"open", "later"}
+CAPTURE_PENDING_KINDS = {"worry", "thought", "thought_reminder"}
+_CAPTURE_STATE_KEY = "_thoughts_capture_state"
 _CRISIS_EXTRA_RE = re.compile(
     r"(?i)(причинить вред (?:себе|другим|кому)|(?:хочу|могу|собираюсь|намерен|намерена).{0,20}"
     r"(?:убить|ударить|навредить|причинить вред)|убить (?:себя|его|е[её]|кого)|"
@@ -36,6 +38,40 @@ _PRACTICAL_RE = re.compile(
     r"(?i)(нужно|надо|должен|сделать|закончить|подготов|экзамен|работ|задач|позвон|"
     r"отправить|купить|записаться|убрать|разобрать|не успева)"
 )
+
+
+def capture_state(cid):
+    value = settings.get(str(cid), _CAPTURE_STATE_KEY, {})
+    return value if isinstance(value, dict) else {}
+
+
+def capture_waiting(cid):
+    return capture_state(cid).get("status") in ("implicit_wait", "explicit_wait")
+
+
+def activate_capture(cid, *, source, explicit=False):
+    cid = str(cid)
+    state = {
+        "status": "explicit_wait" if explicit else "implicit_wait",
+        "source": str(source or "manual"),
+        "activated_at": _now().isoformat(),
+    }
+    settings.set_(cid, _CAPTURE_STATE_KEY, state)
+    current = store.pending_input.get(cid)
+    if current is None or current in CAPTURE_PENDING_KINDS:
+        store.pending_input[cid] = "thought" if source == "manual" else "thought_reminder"
+    settings.set_(cid, "_thoughts_prompt_ts", _now().timestamp())
+    settings.set_(cid, "_thoughts_capture_mode", source)
+    return state
+
+
+def cancel_capture(cid, *, clear_pending=True):
+    cid = str(cid)
+    settings.set_(cid, _CAPTURE_STATE_KEY, {"status": "idle"})
+    settings.set_(cid, "_thoughts_prompt_ts", 0)
+    settings.set_(cid, "_worry_prompt_ts", 0)
+    if clear_pending and store.pending_input.get(cid) in CAPTURE_PENDING_KINDS:
+        store.pending_input.pop(cid, None)
 _ANXIOUS_RE = re.compile(
     r"(?i)(кажется|боюсь|вдруг|наверно|наверное|а если|точно всё|всё сделал неправильно|"
     r"ничего не успею|катастроф|случится)"
@@ -227,11 +263,11 @@ async def classify(text):
     }
 
 
-async def send_home(bot, cid, *, cleared=False):
+async def send_home(
+    bot, cid, *, cleared=False, capture_source="manual", explicit=False,
+    wait_for_input=True,
+):
     cid = str(cid)
-    store.pending_input[cid] = "thought"
-    settings.set_(cid, "_thoughts_prompt_ts", _now().timestamp())
-    settings.set_(cid, "_thoughts_capture_mode", "manual")
     opened = open_records(cid)
     msg = thoughts_ui.cleared_home() if cleared else thoughts_ui.home(opened)
     rows = []
@@ -242,6 +278,8 @@ async def send_home(bot, cid, *, cleared=False):
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,
         reply_markup=kb, transient=True)
+    if wait_for_input:
+        activate_capture(cid, source=capture_source, explicit=explicit)
 
 
 async def send_inbox(bot, cid):
@@ -506,6 +544,7 @@ async def capture(bot, cid, text, *, split_commas=False):
         "requires_safety_response": False,
     } for value in values]
     _repo(cid).mutate(lambda items: (items + new_records, None))
+    cancel_capture(cid)
     settings.set_(cid, "_thoughts_last_added_at", now.timestamp())
     settings.set_(cid, "_worry_prompt_ts", 0)
 
@@ -532,7 +571,7 @@ async def capture(bot, cid, text, *, split_commas=False):
         await bot.send_message(
             chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
-    await send_home(bot, cid)
+    await send_home(bot, cid, wait_for_input=False)
 
 
 async def review_next(bot, cid):
@@ -632,6 +671,10 @@ async def _clear_review(bot, cid, q):
 
 async def handle_callback(bot, cid, q, data):
     cid = str(cid)
+    if data == "thought_capture":
+        await _dismiss_message(bot, cid, q)
+        await send_home(bot, cid, capture_source="reminder", explicit=True)
+        return True
     if data == "thought_list":
         await send_inbox(bot, cid); return True
     if data == "thought_review":
@@ -646,7 +689,7 @@ async def handle_callback(bot, cid, q, data):
         await _clear_review(bot, cid, q); return True
     if data == "thought_calm":
         settings.set_(cid, "_thoughts_calm_date", _today())
-        store.pending_input.pop(cid, None)
+        cancel_capture(cid)
         await _dismiss_message(bot, cid, q); return True
     if data == "thought_tomorrow":
         tomorrow = (_now() + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -679,16 +722,15 @@ async def send_day_reminder(bot, cid):
             return False
     except (TypeError, ValueError):
         pass
-    store.pending_input[cid] = "thought_reminder"
-    settings.set_(cid, "_thoughts_prompt_ts", now.timestamp())
-    settings.set_(cid, "_thoughts_capture_mode", "reminder")
     msg = thoughts_ui.day_reminder()
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("Всё спокойно", callback_data="thought_calm")
-    ]])
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✍️ Выгрузить тревоги", callback_data="thought_capture")],
+        [InlineKeyboardButton("Всё спокойно", callback_data="thought_calm")],
+    ])
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,
         reply_markup=kb, transient=True)
+    activate_capture(cid, source="reminder")
     return True
 
 

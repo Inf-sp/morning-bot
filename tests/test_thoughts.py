@@ -7,6 +7,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import config
+import bot_text
 import secure
 import settings
 import saved_items
@@ -139,7 +140,7 @@ def test_crisis_and_medical_have_priority_without_model(monkeypatch):
 
 
 def test_capture_cleans_lightly_and_keeps_one_message_as_one_thought(monkeypatch):
-    repo, _settings, _fixed_now = _setup_state(monkeypatch)
+    repo, settings_state, _fixed_now = _setup_state(monkeypatch)
     bot = FakeBot()
 
     async def classify(_text):
@@ -165,6 +166,8 @@ def test_capture_cleans_lightly_and_keeps_one_message_as_one_thought(monkeypatch
     assert bot.sent[0]["text"].startswith("😮‍💨 Мысли")
     assert "• Нужно подготовиться к экзамену, купить ручку" in bot.sent[0]["text"]
     assert bot.sent[0]["transient"] is True
+    assert settings_state[("42", "_thoughts_capture_state")] == {"status": "idle"}
+    assert thoughts.capture_waiting("42") is False
 
 
 def test_crisis_capture_uses_direct_netherlands_protocol(monkeypatch):
@@ -181,7 +184,7 @@ def test_crisis_capture_uses_direct_netherlands_protocol(monkeypatch):
     assert settings_state[("42", "_thoughts_safety_date")] == "2026-07-16"
 
 
-def test_day_reminder_skips_recent_entry_then_sends_one_button(monkeypatch):
+def test_day_reminder_skips_recent_entry_then_opens_optional_capture(monkeypatch):
     _repo, settings_state, fixed_now = _setup_state(monkeypatch)
     bot = FakeBot()
     monkeypatch.setattr(thoughts.settings, "notif_on", lambda _cid, _kind: True)
@@ -193,7 +196,88 @@ def test_day_reminder_skips_recent_entry_then_sends_one_button(monkeypatch):
     settings_state[("42", "_thoughts_last_added_at")] = fixed_now.timestamp() - 3 * 60 * 60
     assert asyncio.run(thoughts.send_day_reminder(bot, "42")) is True
     assert bot.sent[0]["text"].startswith("😮‍💨 Есть что выгрузить?")
-    assert _button_count(bot.sent[0]["reply_markup"]) == 1
+    labels = [
+        button.text
+        for row in bot.sent[0]["reply_markup"].inline_keyboard
+        for button in row
+    ]
+    assert labels == ["✍️ Выгрузить тревоги", "Всё спокойно"]
+    assert thoughts.capture_waiting("42") is True
+    assert settings_state[("42", "_thoughts_capture_state")]["status"] == "implicit_wait"
+
+
+def test_direct_text_after_reminder_routes_to_thought_capture(monkeypatch):
+    cid = "thought-reminder-direct-text"
+    captured = []
+
+    async def no_match(*_args, **_kwargs):
+        return False
+
+    async def capture(_bot, routed_cid, text):
+        captured.append((routed_cid, text))
+
+    async def fail_chat(*_args, **_kwargs):
+        raise AssertionError("free chat must not handle an active thought capture")
+
+    monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
+    monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", no_match)
+    monkeypatch.setattr(bot_text.fridge, "try_add_fridge_from_chat", no_match)
+    monkeypatch.setattr(bot_text.assistant, "try_add_love_from_chat", no_match)
+    monkeypatch.setattr(bot_text.assistant, "chat_reply", fail_chat)
+    monkeypatch.setattr(bot_text.balance.thoughts, "capture_waiting", lambda _cid: True)
+    monkeypatch.setattr(bot_text.balance.thoughts, "capture", capture)
+    bot_text.store.pending_input[cid] = "thought_reminder"
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=cid),
+        message=SimpleNamespace(text="Завтра встреча с психологом\nНужно переложить ламинат"),
+    )
+
+    asyncio.run(bot_text.handle(
+        update,
+        SimpleNamespace(bot=SimpleNamespace()),
+        lambda _bot, _cid: asyncio.sleep(0),
+    ))
+
+    assert captured == [(cid, "Завтра встреча с психологом\nНужно переложить ламинат")]
+
+
+def test_specialized_pending_has_priority_over_thought_capture(monkeypatch):
+    cid = "trainer-over-thoughts"
+    routed = []
+    cancelled = []
+
+    async def no_match(*_args, **_kwargs):
+        return False
+
+    async def trainer_answer(_bot, routed_cid, text):
+        routed.append((routed_cid, text))
+        return True
+
+    monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
+    monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", no_match)
+    monkeypatch.setattr(bot_text.balance.thoughts, "capture_waiting", lambda _cid: True)
+    monkeypatch.setattr(
+        bot_text.balance.thoughts,
+        "cancel_capture",
+        lambda routed_cid, **kwargs: cancelled.append((routed_cid, kwargs)),
+    )
+    monkeypatch.setattr(bot_text.trainer, "handle_text", trainer_answer)
+    bot_text.store.pending_input[cid] = bot_text.trainer_session.PENDING_ANSWER
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=cid),
+        message=SimpleNamespace(text="ging"),
+    )
+
+    asyncio.run(bot_text.handle(
+        update,
+        SimpleNamespace(bot=SimpleNamespace()),
+        lambda _bot, _cid: asyncio.sleep(0),
+    ))
+
+    assert routed == [(cid, "ging")]
+    assert cancelled == [(cid, {"clear_pending": False})]
 
 
 def test_evening_close_only_sends_when_open_records_exist(monkeypatch):

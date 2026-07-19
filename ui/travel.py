@@ -91,10 +91,6 @@ def country_card(data):
         b.spacer(); b.labeled_line("⚠️ Главный нюанс", data["note"])
     if data.get("fact"):
         b.spacer(); b.labeled_line("🔍 Факт", data["fact"])
-    photo = data.get("photo") or {}
-    if photo.get("photographer"):
-        source = "Pexels" if photo.get("provider") == "pexels" else "Unsplash"
-        b.spacer(); b.line(f"📷 {photo['photographer']} · {source}")
     return b.build_stripped()
 
 
