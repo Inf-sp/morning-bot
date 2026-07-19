@@ -39,7 +39,7 @@ async def _show(bot, cid, msg, reply_markup=None, q=None):
 
 def _hhmm(ts) -> str:
     try:
-        return datetime.fromtimestamp(ts).strftime("%H:%M")
+        return datetime.fromtimestamp(ts, config.TZ).strftime("%H:%M")
     except Exception:
         return "—"
 

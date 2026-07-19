@@ -11,6 +11,11 @@ import tracking
 from ui import admin as admin_ui
 
 
+def test_error_time_uses_configured_timezone_not_server_timezone():
+    # 2026-07-19 12:34 UTC is 14:34 in Europe/Amsterdam.
+    assert admin._hhmm(1_784_464_440) == "14:34"
+
+
 def test_system_ui_has_no_last_raw_error_block():
     message = admin_ui.api_ai(["🟢 Cohere · Обучение · 3 из 1 000"], "21:44")
 
