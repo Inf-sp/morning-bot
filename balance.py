@@ -1,16 +1,12 @@
-import asyncio
 from datetime import datetime
 import hashlib
-import html
 import logging
-import re
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 
 _log = logging.getLogger(__name__)
 import ai
-import rerank
 import verify
 import secure
 from ui import balance as balance_ui
@@ -21,20 +17,10 @@ import menu
 import thoughts
 from response_delivery import (
     answer_keyboard as _ans_kb,
-    back_keyboard as _back_kb,
-    build_entity_card as _build_entity_card,
-    clean_card_text as _clean_card_text,
     send_response as _send,
 )
 
 TZ = config.TZ
-
-DOCTOR_INTRO = (
-    f"{ui_label('doctor', 'Врач')}\n\n"
-    "Дам общую справочную информацию о здоровье и лекарствах. Это не диагноз и не назначение — "
-    "при тревожных симптомах обратись к специалисту.\n\n"
-    "Опиши, что беспокоит, или спроси про лекарство."
-)
 
 HEALTH_PRINCIPLES = (
     ("sleep", "Сон и восстановление"),
@@ -175,141 +161,15 @@ def _role_system(role):
         return ("Ты спокойный помощник по состоянию, фокусу и мотивации ( психотерапевт). "
                 "Выслушай, разложи ситуацию на 1-3 конкретных шага, поддержи коротко. Без воды, с эмодзи. "
         )
-    if role == "doctor":
-        return ("Ты помощник по здоровью. Это справочная информация, не диагноз. "
-                "Не пиши так, будто ставишь диагноз — только вероятные причины, явно связанные "
-                "с описанными признаками. Не добавляй советы без причины (например, не советуй "
-                "измерить давление, если это не связано с симптомом) — каждый пункт должен "
-                "объясняться конкретным признаком из описания. "
-                "Отвечай кратко и верни строго валидный JSON без markdown:\n"
-                "{\"title\":\"Разбор симптомов\","
-                "\"summary\":\"1 короткое предложение: основная жалоба\","
-                "\"causes\":\"1-2 предложения: вероятные причины, каждая связана с конкретным "
-                "признаком из описания, без слова 'диагноз'\","
-                "\"bullets\":[\"конкретное действие, оправданное симптомом\", \"...до 4\"],"
-                "\"urgent\":\"признаки, при которых нужна экстренная помощь прямо сейчас (сильная "
-                "внезапная боль, нарушение речи/зрения, слабость, онемение, спутанность сознания, "
-                "судороги, высокая температура с ригидностью шеи, боль после травмы) — только если "
-                "они уместны для этих симптомов, иначе пусто\","
-                "\"plan\":\"когда стоит записаться к врачу в обычном порядке (повторяется, "
-                "усиливается, стало необычным) — только если уместно, иначе пусто\","
-                "\"final\":\"короткий итог ТОЛЬКО если он даёт одно чёткое решение и не повторяет "
-                "предыдущие блоки, иначе пустая строка\"}")
     return "Ты полезный ассистент."
 
-_MED_RE = ("лекарств", "таблет", "препарат", "доз", "мг ", " мг", "метилфенидат", "ибупрофен",
-           "парацетамол", "антибиотик", "капл", "сироп", "мазь", "витамин", "пилюл", "concerta",
-           "ritalin", "риталин", "медикамент", "побочк", "побочн", "как принимать")
-
-def _is_med_question(text):
-    t = (text or "").lower()
-    return any(k in t for k in _MED_RE)
-
-def _med_system():
-    return ("Ты помощник по лекарствам. Это справочная информация, не назначение. "
-            "Не подбирай дозировку и схему. Верни строго валидный JSON без markdown:\n"
-            "{\"title\":\"Разбор лекарства\","
-            "\"summary\":\"1 короткое предложение: о каком препарате вопрос\","
-            "\"quote\":\"1-2 предложения: зачем применяют и что важно знать\","
-            "\"bullets\":[\"частая побочка или риск\", \"когда обратиться к врачу\", \"что уточнить у врача\"],"
-            "\"final\":\"короткий безопасный итог с точкой\"}")
-
-def _doctor_candidates(symptoms):
-    data = ai.llm_json(
-        f"Пользователь описал: {symptoms}\nДай 6 коротких справочных тезисов (общая информация о возможных "
-        "причинах/состояниях при таких симптомах; НЕ диагноз). JSON: {\"items\": [\"тезис\", ...]}", 900, tier="cheap")
-    return [x for x in data.get("items", []) if isinstance(x, str) and x.strip()]
-
-def _fallback_health_card(title, user_text):
-    return {
-        "title": title,
-        "summary": f"Запрос: {_clean_card_text(user_text)[:160]}",
-        "quote": "По описанию нельзя оценить заочно, но можно дать общие ориентиры.",
-        "bullets": [
-            "Следи за усилением симптомов, температурой, дыханием, болью и общим состоянием",
-            "Не начинай лекарства и дозировки без инструкции врача или фармацевта",
-        ],
-        "final": "Это справочная информация, не диагноз и не назначение.",
-    }
-
-def _fallback_doctor_card(user_text):
-    return {
-        "title": "Разбор симптомов",
-        "summary": f"Запрос: {_clean_card_text(user_text)[:160]}",
-        "causes": "По описанию нельзя оценить заочно, но можно дать общие ориентиры.",
-        "bullets": [
-            "Следи за усилением симптомов, температурой, дыханием, болью и общим состоянием",
-        ],
-        "urgent": "Состояние быстро ухудшается или симптомы выраженные.",
-        "final": "",
-    }
-
-async def _send_health_card(bot, cid, data, kb=None):
-    text, entities = _build_entity_card(
-        data.get("title") or "Разбор симптомов",
-        data.get("summary") or "",
-        data.get("quote") or "",
-        data.get("bullets") or [],
-        data.get("final") or "Это справочная информация, не диагноз и не назначение.",
-        bullet_label=data.get("bullet_label") or "Рекомендации:",
-    )
-    store.last_answer[str(cid)] = text
-    store.last_source.setdefault(str(cid), "Здоровье")
-    store.last_surface[str(cid)] = "health"
-    await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb)
-
-async def _send_doctor_card(bot, cid, data, kb=None):
-    """Разбор симптомов — отдельный формат от лекарств: возможные причины
-    связаны с признаками, срочный/плановый сценарий разделены (см. ui/balance.py doctor_card)."""
-    msg = balance_ui.doctor_card(data)
-    text, entities = msg.text, msg.entities
-    store.last_answer[str(cid)] = text
-    store.last_source.setdefault(str(cid), "Здоровье")
-    store.last_surface[str(cid)] = "health"
-    await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb)
-
-async def doctor_answer(bot, cid, symptoms):
-    if secure.is_dangerous_med(symptoms):
-        await verify.safe_send(bot, cid, secure.CRISIS_MSG, surface="health", back="m_balance")
-        return
-    await bot.send_chat_action(chat_id=cid, action="typing")
-    safe_symptoms = secure.wrap_untrusted(symptoms, "симптомы пользователя")
-    if _is_med_question(symptoms):
-        prompt = f"{_med_system()}\n\nВопрос про лекарство: {safe_symptoms}"
-        try:
-            d = await ai.allm_json(prompt, 900, route="gemini", module="health")
-        except Exception as e:
-            _log.warning("doctor medicine AI failed, using fallback: %r", e, exc_info=True)
-            d = _fallback_health_card("Разбор лекарства", symptoms)
-        store.last_source[str(cid)] = "Здоровье · Лекарство"
-        store.last_action[str(cid)] = ("role", "doctor", symptoms)
-        await _send_health_card(bot, cid, d, kb=_ans_kb(None, None, depth=False))
-        return
-    passages = []
-    try:
-        cands = await asyncio.to_thread(_doctor_candidates, symptoms)
-        ranked = rerank.rerank(symptoms, cands, top_n=3)
-        passages = [t for t, _ in ranked]
-    except Exception:
-        passages = []
-    base = _role_system("doctor")
-    if passages:
-        ctx = "\n".join(f"- {p}" for p in passages)
-        prompt = f"{base}\n\nНаиболее релевантные тезисы (по симптомам):\n{ctx}\n\nСимптомы: {safe_symptoms}"
-    else:
-        prompt = f"{base}\n\nСимптомы: {safe_symptoms}"
-    try:
-        d = await ai.allm_json(prompt, 900, route="gemini", module="health")
-    except Exception as e:
-        _log.warning("doctor symptoms AI failed, using fallback: %r", e, exc_info=True)
-        d = _fallback_doctor_card(symptoms)
-    store.last_source[str(cid)] = "Здоровье · Врач"
-    store.last_action[str(cid)] = ("role", "doctor", symptoms)
-    await _send_doctor_card(bot, cid, d, kb=_ans_kb(None, None, depth=False))
-
 async def handle_role(bot, cid, role, text):
+    if role == "medicine":
+        import medicine
+        await medicine.answer(bot, cid, text); return
     if role == "doctor":
-        await doctor_answer(bot, cid, text); return
+        import doctor
+        await doctor.answer(bot, cid, text); return
     if secure.is_dangerous_med(text):
         await verify.safe_send(bot, cid, secure.CRISIS_MSG, surface="health", back="m_balance"); return
     await bot.send_chat_action(chat_id=cid, action="typing")
@@ -355,9 +215,12 @@ async def handle_callback(bot, cid, q, data):
         await send_health_focus(bot, cid)
         return
     # врач
+    if data == "as_medicine":
+        import medicine
+        await medicine.send_prompt(bot, cid); return
     if data == "as_doctor":
-        store.pending_input[str(cid)] = "role_doctor"
-        await bot.send_message(chat_id=cid, text=DOCTOR_INTRO, reply_markup=_back_kb()); return
+        import doctor
+        await doctor.send_prompt(bot, cid); return
 
 
 

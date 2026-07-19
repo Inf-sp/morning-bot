@@ -94,6 +94,9 @@ async def handle(update, context, remove_reply_keyboard):
                 return
         if kind in ("role_doctor", "role_state"):
             await balance.handle_role(bot, cid, kind.split("_")[1], text); return
+        if kind == "role_medicine":
+            import medicine
+            await medicine.answer(bot, cid, text); return
         if kind == "wardrobe_add":
             await wardrobe.add_item(bot, cid, text); return
         if kind == "wardrobe_add_set":

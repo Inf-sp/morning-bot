@@ -478,7 +478,11 @@ def audit_navigation_contracts(root=None):
 
     balance_source = source("balance.py")
     doctor_branch = balance_source.partition('if data == "as_doctor":')[2].partition("return")[0]
-    if '"role_doctor"' not in doctor_branch or "_back_kb()" not in doctor_branch:
+    if "doctor.send_prompt" in doctor_branch:
+        doctor_source = source("doctor.py")
+        if '"role_doctor"' not in doctor_source or "_back_keyboard()" not in doctor_source:
+            findings.append("doctor prompt must set pending input and show navigation")
+    elif '"role_doctor"' not in doctor_branch or "_back_kb()" not in doctor_branch:
         findings.append("doctor prompt must set pending input and show navigation")
 
     trainer_source = source("trainer.py")

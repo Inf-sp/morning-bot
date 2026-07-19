@@ -407,6 +407,7 @@ def purge_user(cid):
 # Совместимые ссылки: владельцем временных состояний является runtime_state.py.
 challenge_state = runtime_state.challenge_state
 chat_history = runtime_state.chat_history
+doctor_context = runtime_state.doctor_context
 add_wardrobe_mode = runtime_state.add_wardrobe_mode
 game_state = runtime_state.game_state
 game_config = runtime_state.game_config

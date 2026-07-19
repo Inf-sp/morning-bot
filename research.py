@@ -537,26 +537,30 @@ def gemini_search_facts_multi(city: str, country: str, cc: str = "",
 
 _TV_CACHE: dict = {}    # query -> (ts, results)
 _TV_TTL = 86400         # 24h — запросы дорогие, кешируем на сутки
-def tavily_search(query: str, max_results: int = 5) -> list:
+def tavily_search(query: str, max_results: int = 5, include_domains=None) -> list:
     """Поиск через Tavily. Возвращает list[{title, url, content}] или [] при ошибке/нет ключа."""
     if not config.TAVILY_API_KEY:
         return []
-    key = f"{query}:{max_results}"
+    domains = tuple(str(x).strip().casefold() for x in (include_domains or []) if str(x).strip())
+    key = f"{query}:{max_results}:{','.join(domains)}"
     cached = _TV_CACHE.get(key)
     if cached and time.time() - cached[0] < _TV_TTL:
         return cached[1]
     try:
+        payload = {
+            "api_key": config.TAVILY_API_KEY,
+            "query": query,
+            "max_results": max_results,
+            "search_depth": "basic",
+            "include_answer": False,
+            "include_raw_content": False,
+            "include_images": False,
+        }
+        if domains:
+            payload["include_domains"] = list(domains)
         r = requests.post(
             "https://api.tavily.com/search",
-            json={
-                "api_key": config.TAVILY_API_KEY,
-                "query": query,
-                "max_results": max_results,
-                "search_depth": "basic",
-                "include_answer": False,
-                "include_raw_content": False,
-                "include_images": False,
-            },
+            json=payload,
             timeout=15,
         )
         ok = 200 <= r.status_code < 300

@@ -78,10 +78,13 @@ async def handle(update, context, remove_reply_keyboard):
     if not access.is_allowed(cid):
         await bot.send_message(chat_id=cid, text="❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
-    if data.startswith("m_") and store.pending_input.get(cid) in (
-        "worry", "thought", "thought_reminder"
+    pending_kind = store.pending_input.get(cid)
+    if data.startswith("m_") and pending_kind in (
+        "worry", "thought", "thought_reminder", "role_doctor", "role_medicine"
     ):
         store.pending_input.pop(cid, None)
+        if pending_kind == "role_doctor":
+            store.doctor_context.pop(cid, None)
         settings.set_(cid, "_thoughts_prompt_ts", 0)
         settings.set_(cid, "_worry_prompt_ts", 0)
     # Онбординг новых пользователей
@@ -108,7 +111,7 @@ async def handle(update, context, remove_reply_keyboard):
     if data.startswith("as_"):
         if data.startswith(("as_food", "as_fridge", "as_recipe", "as_my_recipe")):
             await cooking.handle_callback(bot, cid, q, data)
-        elif data.startswith(("as_daycheck", "as_motiv", "as_doctor", "as_health_")):
+        elif data.startswith(("as_daycheck", "as_motiv", "as_doctor", "as_medicine", "as_health_")):
             await balance.handle_callback(bot, cid, q, data)
         else:
             await saved_items.handle_notes_callback(bot, cid, q, data)
