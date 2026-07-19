@@ -391,16 +391,30 @@ def audit_trainer_contracts():
     }
     error_entry = {**base, "examples": [{
         "text": "Ik vergelijk de boeken.", "translation": "Я сравниваю книги."}]}
+    gap_entry = {
+        "term": "binnenzetten", "translation": "заносить внутрь", "lang": "nl",
+        "pos": "глагол", "examples": [{
+            "text": "Ik moet de bloemen binnenzetten.",
+            "translation": "Мне нужно занести цветы внутрь.",
+        }],
+    }
     others = [
         base,
         {"term": "de tafel", "translation": "стол", "lang": "nl"},
         {"term": "het huis", "translation": "дом", "lang": "nl"},
         {"term": "goedemorgen", "translation": "доброе утро", "lang": "nl"},
         {"term": "tot straks", "translation": "до скорого", "lang": "nl"},
+        {"term": "meenemen", "translation": "брать с собой", "lang": "nl", "pos": "глагол"},
+        {"term": "vervangen", "translation": "заменять", "lang": "nl", "pos": "глагол"},
     ]
     situation = {"line": "Welke boeken kies je?", "line_ru": "Какие книги ты выбираешь?"}
     for kind in engine.ALL_EXERCISES:
-        entry = error_entry if kind == engine.EXERCISE_FIND_ERROR else base
+        if kind == engine.EXERCISE_FIND_ERROR:
+            entry = error_entry
+        elif kind == engine.EXERCISE_FILL_GAP:
+            entry = gap_entry
+        else:
+            entry = base
         if not exercises.build_exercise(
                 entry, others, kind, situation=situation, rng=random.Random(7)):
             findings.append(f"exercise cannot build: {kind}")

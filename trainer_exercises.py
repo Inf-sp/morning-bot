@@ -76,12 +76,63 @@ def _wrong_terms(entry, other_entries, rng):
 def _blank_from_example(term, example_text):
     bare = re.sub(r"^(de|het|een|to|the|a|an)\s+", "", term.strip(), flags=re.I)
     for candidate in (term.strip(), bare.strip()):
-        if candidate:
+        if candidate and 1 <= len(_tokens(candidate)) <= 3 and len(candidate) <= 32:
             pattern = re.compile(re.escape(candidate), re.I)
             match = pattern.search(example_text)
             if match:
                 return pattern.sub("____", example_text, count=1), match.group(0)
     return "", ""
+
+
+def _grammar_shape(value, lang):
+    tokens = _tokens(value)
+    if len(tokens) != 1:
+        return (len(tokens), "phrase")
+    word = tokens[0]
+    if lang == "nl":
+        if word.endswith("en"):
+            form = "infinitive"
+        elif word.endswith("t"):
+            form = "finite_t"
+        elif word.endswith("d"):
+            form = "finite_d"
+        else:
+            form = "base"
+    elif word.endswith("ing"):
+        form = "ing"
+    elif word.endswith("ed"):
+        form = "past"
+    elif word.endswith("s"):
+        form = "finite_s"
+    else:
+        form = "base"
+    return (1, form)
+
+
+def _gap_wrong_terms(entry, correct, other_entries, rng):
+    """Only plausible options with the same POS, length and surface form."""
+    pos = str(entry.get("pos") or "").strip().casefold()
+    if not pos:
+        return []
+    lang = str(entry.get("lang") or "nl").strip().casefold()
+    shape = _grammar_shape(correct, lang)
+    pool = []
+    for other in other_entries:
+        if str(other.get("pos") or "").strip().casefold() != pos:
+            continue
+        forms = other.get("forms") or []
+        if not isinstance(forms, list):
+            forms = []
+        term = entry_term(other)
+        bare = re.sub(r"^(de|het|een|to|the|a|an)\s+", "", term, flags=re.I)
+        values = [term, bare, *forms]
+        for value in values:
+            value = str(value or "").strip()
+            if (1 <= len(_tokens(value)) <= 3 and len(value) <= 32
+                    and _grammar_shape(value, lang) == shape):
+                pool.append(value)
+    rng.shuffle(pool)
+    return clean_options(correct, pool)
 
 
 def _choose_translation(entry, other_entries, rng):
@@ -139,11 +190,17 @@ def _fill_gap(entry, other_entries, rng):
     blank, correct = _blank_from_example(entry_term(entry), str(example.get("text") or ""))
     if not blank:
         return None
-    wrong = clean_options(correct, _wrong_terms(entry, other_entries, rng))
-    if not wrong:
+    wrong = _gap_wrong_terms(entry, correct, other_entries, rng)
+    if len(wrong) < 2:
+        return None
+    translation = str(example.get("translation") or entry_translation(entry)).strip()
+    hint = _first_translation(entry)
+    if not hint or len(hint) > 60:
         return None
     return {"blank_phrase": blank, "correct": correct, "wrong": wrong,
-            "ru": str(example.get("translation") or entry_translation(entry)).strip(),
+            "hint": hint,
+            "result_sentence": blank.replace("____", correct, 1),
+            "ru": translation,
             "note": entry.get("breakdown") or ""}
 
 

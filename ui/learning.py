@@ -70,12 +70,12 @@ def exercise_choose_natural(data):
 
 def exercise_fill_gap(data):
     b = MessageBuilder()
-    b.section("✏️ Заполни пропуск")
+    b.section("✏️ Что пропущено?")
     b.spacer()
     b.quote(data["blank_phrase"])
-    if data.get("ru"):
+    if data.get("hint"):
         b.spacer()
-        _q(b, "Перевод", data["ru"])
+        _q(b, "Подсказка", data["hint"])
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
@@ -171,6 +171,31 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
     english = str(data.get("english") or "").strip()
     note = str(data.get("note") or "").strip()
     is_sentence = data.get("exercise_type") in _SENTENCE_CONTEXT_FORMATS
+
+    if data.get("exercise_type") == "fill_gap":
+        b = MessageBuilder()
+        b.section("✅ Верно" if is_correct else "Почти")
+        b.spacer()
+        _bold_translation_line(b, "Правильно", correct, str(data.get("hint") or "").strip())
+        sentence = str(data.get("result_sentence") or "").strip()
+        if sentence:
+            b.spacer()
+            b.quote(sentence)
+            b.newline()
+        if ru:
+            b.line(f"→ {ru}")
+        if note:
+            b.spacer()
+            b.text_line("💡 ")
+            b.line(note)
+        if not is_correct:
+            b.spacer()
+            b.line("Это вернётся позже в тренировке.")
+        if language_report is not None:
+            _add_language_tool_report(b, language_report)
+        msg = b.build()
+        msg.text = msg.text.rstrip("\n")
+        return msg
 
     if is_sentence and correct and not correct.endswith((".", "!", "?")):
         correct += "."
