@@ -368,6 +368,11 @@ def _build_quote_context(cid):
 
 def _fetch_quote(cid=None):
     """Персонализированная цитата дня с anti-repeat по авторам."""
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    if cid:
+        cached = store.get_profile(cid).get("myday_quote_cache") or {}
+        if cached.get("date") == today and isinstance(cached.get("data"), dict):
+            return cached["data"]
     ctx = _build_quote_context(cid) if cid else {
         "movies": [], "books": [], "artists": [], "focus": "", "seen_authors": []
     }
@@ -419,6 +424,10 @@ def _fetch_quote(cid=None):
         seen = store.get_list(config.QUOTE_AUTHORS_KEY, cid)
         if src not in seen:
             store.set_list(config.QUOTE_AUTHORS_KEY, cid, seen + [src])
+    if cid:
+        profile = store.get_profile(cid)
+        profile["myday_quote_cache"] = {"date": today, "data": d}
+        store.set_profile(cid, profile)
 
     return d
 
@@ -452,7 +461,7 @@ def _word_of_day(cid):
     ru = dictionary.entry_translation(entry).replace(";", ",")
     return f"{_cap(term)} → {_cap(ru)}.", lang
 
-_DAY_CACHE_VERSION = 6
+_DAY_CACHE_VERSION = 7
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
@@ -502,16 +511,22 @@ def _day_menu_kb():
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
     ])
 
-def _build_day_text(cid):
+def _build_day_text(cid, *, refresh_current=False):
     s = store.get_settings(cid)
     try:
         data = weather.fetch_weather(s["lat"], s["lon"], 2)
+        if refresh_current:
+            current = weather.fetch_current_conditions(s["lat"], s["lon"])
+            if current:
+                data = {**data, "current": current}
         weather_error = None
     except Exception as e:
         _log.warning("myday: fetch_weather failed: %s", e)
         data = None
         weather_error = e
 
+    current_code = None
+    current_precipitation = ""
     if data and (data.get("daily") or {}).get("time"):
         d = data["daily"]
         day_str = d["time"][0]
@@ -525,7 +540,10 @@ def _build_day_text(cid):
         )
         rain = daytime["rain_prob"]
         rain_mm = daytime["rain_mm"]
-        icon = weather.weather_icon(code, tmax, rain, wind_ms, rain_mm)
+        current_code = (data.get("current") or {}).get("weathercode")
+        current_precipitation = weather.current_precipitation_text(current_code)
+        display_code = current_code if current_precipitation else code
+        icon = weather.weather_icon(display_code, tmax, rain, wind_ms, rain_mm)
         rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
         rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
         # ветер: показываем всегда, в одной строке с температурой и дождём, без эмодзи
@@ -535,6 +553,10 @@ def _build_day_text(cid):
         wind_part = f"{wword} до {wind_ms:.0f} м/с{wind_when}"
         weather_icon = icon
         rain_part = weather.rain_text(rain, rain_mm, rain_when)
+        if current_precipitation:
+            rain_part = current_precipitation
+            if rain and rain_when:
+                rain_part += f" · вероятность {rain:.0f}%{rain_when}"
         weather_line = f"до {tmax:+.0f}°C" + (f" · {rain_part}" if rain_part else "") + f" · {wind_part}"
         hum_title, hum_line = weather.humidity_phrase(data, day_str, tmax, s.get("cc", ""))
     else:
@@ -561,7 +583,8 @@ def _build_day_text(cid):
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     _hack_cat, hack_text = daily_lifehack(
-        cid, rain=rain >= 40, hot=(tmax is not None and tmax >= 24), is_weekend=is_weekend)
+        cid, rain=(rain >= 40 or bool(current_precipitation)),
+        hot=(tmax is not None and tmax >= 24), is_weekend=is_weekend)
     try:
         q_data = _fetch_quote(cid)
     except Exception as e:
@@ -588,7 +611,11 @@ def _build_day_text(cid):
     )
     text = msg.text
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя
-    _, _uw = verify.grade_umbrella(text, weather._rain_real(rain, rain_mm))
+    _, _uw = verify.grade_umbrella(
+        text,
+        weather._rain_real(rain, rain_mm)
+        or current_code in weather.RAIN_WEATHER_CODES,
+    )
     for w in _uw:
         _log.warning("[verify] weather: %s", w)
     return text, msg.entities
@@ -631,7 +658,9 @@ async def send_plany(bot, cid, force=False, show_loading=True):
         except Exception:
             pass
         try:
-            text, entities = await asyncio.to_thread(_build_day_text, cid)
+            text, entities = await asyncio.to_thread(
+                _build_day_text, cid, refresh_current=force,
+            )
         except Exception as e:
             await verify.safe_error(bot, cid, e, back="m_myday"); return
         cache = _save_day_cache(cid, today, text, entities, _time.time())

@@ -17,6 +17,8 @@ TZ = config.TZ
 _WX_CACHE = {}          # (lat2, lon2, days) -> (ts, json)
 _WX_TTL = 3 * 3600      # сек: обновляем прогноз раз в 3 часа вместо 12
 _WX_STALE_TTL = 24 * 3600
+_CURRENT_CACHE = {}     # (lat2, lon2) -> (ts, current conditions)
+_CURRENT_TTL = 10 * 60
 
 
 def _owm_weathercode(weather_id):
@@ -457,4 +459,29 @@ def fetch_current_temp(lat, lon):
     except Exception:
         return None
 
+
+def fetch_current_conditions(lat, lon):
+    """Current conditions for an explicit screen open, cached for 10 minutes."""
+    key = (round(float(lat), 2), round(float(lon), 2))
+    cached = _CURRENT_CACHE.get(key)
+    if cached and time.time() - cached[0] < _CURRENT_TTL:
+        return deepcopy(cached[1])
+    try:
+        if not config.WEATHER_API_KEY:
+            return None
+        payload = _onecall_get("current", lat, lon, timeout=15)
+        items = _first_data_item(payload)
+        if not items:
+            return None
+        current = items[0]
+        weather_id = ((current.get("weather") or [{}])[0] or {}).get("id")
+        result = {
+            "temperature_2m": current.get("temp"),
+            "apparent_temperature": current.get("feels_like"),
+            "weathercode": _owm_weathercode(weather_id),
+        }
+        _CURRENT_CACHE[key] = (time.time(), result)
+        return deepcopy(result)
+    except Exception:
+        return None
 

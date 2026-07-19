@@ -20,6 +20,7 @@ import weather_provider as _provider
 
 fetch_weather = _provider.fetch_weather
 fetch_current_temp = _provider.fetch_current_temp
+fetch_current_conditions = _provider.fetch_current_conditions
 get_weather_usage = _provider.get_weather_usage
 WeatherDailyLimitExceeded = _provider.WeatherDailyLimitExceeded
 WEATHER_LIMIT_FALLBACK = _provider.WEATHER_LIMIT_FALLBACK
@@ -54,6 +55,23 @@ DAYTIME_END_H = 22
 DESC = {0: "ясно", 1: "малооблачно", 2: "переменно облачно", 3: "пасмурно", 45: "туман", 48: "туман",
         51: "морось", 53: "морось", 55: "морось", 61: "дождь", 63: "дождь", 65: "сильный дождь",
         71: "снег", 73: "снег", 75: "сильный снег", 80: "ливень", 81: "ливень", 95: "гроза"}
+RAIN_WEATHER_CODES = {51, 53, 55, 61, 63, 65, 80, 81, 82}
+
+
+def current_precipitation_text(code):
+    if code in (51, 53, 55):
+        return "Морось сейчас"
+    if code in (61, 63):
+        return "Дождь сейчас"
+    if code == 65:
+        return "Сильный дождь сейчас"
+    if code in (80, 81, 82):
+        return "Ливень сейчас"
+    if code in (95, 96, 99):
+        return "Гроза сейчас"
+    if code in (71, 73, 75, 77, 85, 86):
+        return "Снег сейчас"
+    return ""
 
 
 # Кеш прогноза: один общий ответ OpenWeatherMap на myday/wardrobe/weather в пределах TTL.
@@ -150,7 +168,7 @@ def weather_icon(code, temp, rain, wind_ms=0, rain_mm=None):
         return "🌩️"
     if code in (71, 73, 75, 77, 85, 86):
         return "❄️"
-    wet = _rain_real(rain, rain_mm)
+    wet = code in RAIN_WEATHER_CODES or _rain_real(rain, rain_mm)
     if temp is not None and temp > 30 and wet:
         return "☀️🌧️"
     if wet:

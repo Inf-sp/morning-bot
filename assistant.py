@@ -204,7 +204,7 @@ async def _run_intent(bot, cid, action):
         await bot.send_message(chat_id=cid, text="🍽 <b>Что готовим?</b>",
                                parse_mode="HTML", reply_markup=kb)
     elif action == "day_plan":
-        await myday.send_plany(no_kb_bot, cid)
+        await myday.send_plany(no_kb_bot, cid, force=True)
     elif action == "fridge":
         await fridge.send_fridge_recipe(no_kb_bot, cid)
     elif action == "movie":

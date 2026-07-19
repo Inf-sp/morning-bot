@@ -198,7 +198,7 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "m_travel":
         await travel.send_home(bot, cid, q); return
     if data == "m_myday":
-        await myday.send_plany(bot, cid); return
+        await myday.send_plany(bot, cid, force=True); return
     if data == "m_menu":
         text, entities, kb = menu.main_menu_screen(cid)
         # Главное меню открывается отдельным сообщением: полезная карточка
@@ -238,7 +238,7 @@ async def handle(update, context, remove_reply_keyboard):
         act = data[2:]
         try:
             if act == "plany":
-                await _inline_status(lambda _s: myday.send_plany(bot, cid))
+                await _inline_status(lambda _s: myday.send_plany(bot, cid, force=True))
             elif await learning_router.handle_action(bot, cid, q, act, _inline_status):
                 pass
             elif act == "w_week":
