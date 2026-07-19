@@ -86,13 +86,27 @@ class DictionaryRepository:
             self.save_all(entries)
         return changed
 
-    def record_answer(self, language, term, exercise_type, quality):
+    def record_answer(self, language, term, exercise_type, quality, form_focus=""):
         def update(entries):
             for index, entry in enumerate(entries):
                 if entry_language(entry) != language or entry_term(entry) != term:
                     continue
                 state = srs.normalize_state(entry)
                 updated = {**entry, **srs.record_answer(state, exercise_type, quality)}
+                if exercise_type == "verb_form" and form_focus in ("past", "participle"):
+                    progress = entry.get("verb_forms_progress") or {}
+                    progress = dict(progress) if isinstance(progress, dict) else {}
+                    try:
+                        current = max(0, min(5, int(progress.get(form_focus) or 0)))
+                    except (TypeError, ValueError):
+                        current = 0
+                    if quality == srs.NOT_REMEMBERED:
+                        current = max(0, current - 1)
+                    else:
+                        current = min(5, current + 1)
+                    progress.setdefault("infinitive", 5)
+                    progress[form_focus] = current
+                    updated["verb_forms_progress"] = progress
                 entries[index] = updated
                 return entries, updated
             return entries, None

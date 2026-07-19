@@ -19,6 +19,7 @@ EXERCISE_FILL_GAP = "fill_gap"
 EXERCISE_TRANSLATE_CONTEXT = "translate_context"
 EXERCISE_CHOOSE_REACTION = "choose_reaction"
 EXERCISE_CONTINUE_DIALOGUE = "continue_dialogue"
+EXERCISE_VERB_FORM = "verb_form"
 
 ALL_EXERCISES = (
     EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL_FREE,
@@ -26,9 +27,17 @@ ALL_EXERCISES = (
     EXERCISE_CHOOSE_NATURAL, EXERCISE_FILL_GAP,
     EXERCISE_TRANSLATE_CONTEXT, EXERCISE_CHOOSE_REACTION,
     EXERCISE_CONTINUE_DIALOGUE,
+    EXERCISE_VERB_FORM,
 )
 
 DEFAULT_QUEUE_SIZE = 12
+MAX_VERB_FORM_EXERCISES = 2
+
+
+def _has_verb_forms(entry):
+    return all(str(entry.get(key) or "").strip() for key in (
+        "infinitive", "past_singular", "past_participle",
+    ))
 
 
 def _entry_term(entry):
@@ -120,4 +129,22 @@ def build_training_queue(entries, today=None, queue_size=DEFAULT_QUEUE_SIZE, rng
         exercise_type = select_exercise_type(entry, avoid=previous_type, rng=rng)
         queue.append({"entry": entry, "exercise_type": exercise_type})
         previous_type = exercise_type
+
+    # Формы глагола — дополнительный формат поверх обычной SRS-очереди, а не
+    # отдельный источник материала. За сессию заменяем им не более двух
+    # обычных заданий и никогда не ставим два таких задания рядом.
+    verb_indices = [
+        index for index, item in enumerate(queue)
+        if _has_verb_forms(item["entry"])
+    ]
+    rng.shuffle(verb_indices)
+    selected = []
+    for index in verb_indices:
+        if any(abs(index - other) <= 1 for other in selected):
+            continue
+        selected.append(index)
+        if len(selected) >= MAX_VERB_FORM_EXERCISES:
+            break
+    for index in selected:
+        queue[index]["exercise_type"] = EXERCISE_VERB_FORM
     return queue

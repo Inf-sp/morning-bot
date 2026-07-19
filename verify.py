@@ -398,6 +398,11 @@ def audit_trainer_contracts():
             "translation": "Мне нужно занести цветы внутрь.",
         }],
     }
+    verb_entry = {
+        "term": "gaan", "translation": "идти", "lang": "nl", "pos": "глагол",
+        "infinitive": "gaan", "past_singular": "ging",
+        "past_participle": "gegaan", "auxiliary": "zijn",
+    }
     others = [
         base,
         {"term": "de tafel", "translation": "стол", "lang": "nl"},
@@ -413,6 +418,8 @@ def audit_trainer_contracts():
             entry = error_entry
         elif kind == engine.EXERCISE_FILL_GAP:
             entry = gap_entry
+        elif kind == engine.EXERCISE_VERB_FORM:
+            entry = verb_entry
         else:
             entry = base
         if not exercises.build_exercise(

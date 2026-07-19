@@ -17,6 +17,7 @@ from trainer_engine import (
     EXERCISE_FIND_ERROR,
     EXERCISE_RECALL_FREE,
     EXERCISE_TRANSLATE_CONTEXT,
+    EXERCISE_VERB_FORM,
 )
 
 
@@ -213,6 +214,57 @@ def _translate_context(entry, _other_entries, _rng):
             "situation": entry.get("situation_type") or ""}
 
 
+def _verb_progress(entry):
+    value = entry.get("verb_forms_progress") or {}
+    return value if isinstance(value, dict) else {}
+
+
+def _verb_form(entry, _other_entries, rng):
+    infinitive = str(entry.get("infinitive") or "").strip().lower()
+    past = str(entry.get("past_singular") or "").strip().lower()
+    participle = str(entry.get("past_participle") or "").strip().lower()
+    if not all((infinitive, past, participle)):
+        return None
+    level = int(entry.get("srs_level") or 0)
+    progress = _verb_progress(entry)
+    focus = min(
+        ("past", "participle"),
+        key=lambda key: int(progress.get(key) or 0),
+    )
+    correct = past if focus == "past" else participle
+    if level <= 1:
+        return {
+            "mode": "choice", "prompt": f"{infinitive} → ?", "correct": correct,
+            "wrong": [value for value in (infinitive, participle if focus == "past" else past)
+                      if value != correct],
+            "form_focus": focus,
+        }
+    if level <= 3 and rng.choice((True, False)):
+        correct_row = f"{infinitive} → {past} → {participle}"
+        wrong = [
+            f"{infinitive} → {infinitive} → {participle}",
+            f"{infinitive} → {past} → {infinitive}",
+        ]
+        return {
+            "mode": "choice", "prompt": "Выбери правильный ряд",
+            "correct": correct_row, "wrong": wrong, "form_focus": focus,
+        }
+    auxiliary = str(entry.get("auxiliary") or "hebben").strip().lower()
+    if focus == "participle":
+        finite_aux = "ben" if auxiliary == "zijn" else "heb"
+        sentence = f"Ik {finite_aux} gisteren naar Amsterdam ____."
+    else:
+        sentence = "Ik ____ gisteren naar Amsterdam."
+    return {
+        "mode": "write" if level >= 4 else "choice",
+        "prompt": sentence,
+        "correct": correct,
+        "wrong": [value for value in (infinitive, participle if focus == "past" else past)
+                  if value != correct],
+        "form_focus": focus,
+    }
+
+
 def _conversation(entry, other_entries, rng, situation, dialogue=False):
     if not situation or not situation.get("line"):
         return None
@@ -234,11 +286,12 @@ _BUILDERS = {
     EXERCISE_CHOOSE_NATURAL: _choose_natural,
     EXERCISE_FILL_GAP: _fill_gap,
     EXERCISE_TRANSLATE_CONTEXT: _translate_context,
+    EXERCISE_VERB_FORM: _verb_form,
 }
 
 
 def build_exercise(entry, other_entries, exercise_type, *, situation=None, rng=None):
-    """Возвращает полные данные одного из девяти форматов или ``None``."""
+    """Возвращает полные данные одного из десяти форматов или ``None``."""
     rng = rng or random
     if exercise_type == EXERCISE_CHOOSE_REACTION:
         data = _conversation(entry, other_entries, rng, situation, dialogue=False)

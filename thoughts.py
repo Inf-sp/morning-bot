@@ -526,7 +526,7 @@ async def capture(bot, cid, text, *, split_commas=False):
         settings.set_(cid, "_thoughts_safety_date", _today())
         msg = thoughts_ui.medical()
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Спросить врача", callback_data="as_doctor")],
+            [InlineKeyboardButton("👩🏻‍⚕️ Врач", callback_data="as_doctor")],
             _navigation_row(),
         ])
         await bot.send_message(

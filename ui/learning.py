@@ -118,6 +118,19 @@ def exercise_continue_dialogue(data):
     return msg
 
 
+def exercise_verb_form(data):
+    b = MessageBuilder()
+    b.section("🔤 Формы глагола")
+    b.spacer()
+    if data.get("prompt") == "Выбери правильный ряд":
+        b.line(data["prompt"])
+    else:
+        b.quote(data.get("prompt") or "")
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
 _SENTENCE_CONTEXT_FORMATS = {"fill_gap", "find_error", "build_sentence"}
 
 

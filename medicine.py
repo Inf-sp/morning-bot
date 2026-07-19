@@ -34,25 +34,48 @@ _STOPWORDS = {
     "позже", "раньше", "вместе", "едой", "еды", "после", "до", "мне", "я", "у",
     "какие", "побочные", "эффекты", "пропустил", "пропустила", "сегодня", "завтра",
 }
+_RELEASE_FORM_RE = re.compile(
+    r"\b(?:XR|XL|CR|ER|SR|MR|LA|retard|extended[- ]release|prolonged[- ]release|"
+    r"пролонгированн\w*|таблетк\w*|капсул\w*|раствор\w*|суспензи\w*|пластыр\w*)\b",
+    re.I,
+)
 _MEDICINE_MARKERS = (
     "лекарств", "таблет", "препарат", "доз", "мг ", " мг", "метилфенидат", "ибупрофен",
     "парацетамол", "антибиотик", "капл", "сироп", "мазь", "витамин", "пилюл", "concerta",
     "ritalin", "риталин", "медикамент", "побочк", "побочн", "как принимать",
     "с едой", "пропустил", "пропустила", "совмест", "взаимодейств", "противопоказ",
 )
-_DAILYMED_ALIASES = (
-    ("метилфенид", "methylphenidate"), ("ибупроф", "ibuprofen"),
-    ("парацетам", "acetaminophen"), ("амоксиц", "amoxicillin"),
-    ("омепраз", "omeprazole"), ("сертралин", "sertraline"),
-    ("концерт", "Concerta"), ("риталин", "Ritalin"),
+_DRUG_ALIASES = (
+    (("метилфенид", "methylphenid"), "methylphenidate", ""),
+    (("concerta", "концерт"), "methylphenidate", "Concerta"),
+    (("medikinet", "медикинет"), "methylphenidate", "Medikinet"),
+    (("ritalin", "риталин"), "methylphenidate", "Ritalin"),
+    (("ибупроф", "ibuprofen"), "ibuprofen", ""),
+    (("парацетам", "acetaminophen", "paracetamol"), "acetaminophen", ""),
+    (("амоксиц", "amoxicillin"), "amoxicillin", ""),
+    (("омепраз", "omeprazole"), "omeprazole", ""),
+    (("сертралин", "sertraline"), "sertraline", ""),
 )
-_INTENT_RULES = (
-    (("вместе", "совмест", "взаимодейств", "сочет"), ("DRUG INTERACTIONS",)),
-    (("побоч", "реакц", "опасн"), ("WARNINGS AND PRECAUTIONS", "ADVERSE REACTIONS")),
-    (("нельзя", "противопоказ"), ("CONTRAINDICATIONS",)),
-    (("пропуст", "позже", "когда", "едой", "принимать", "доз"),
-     ("DOSAGE AND ADMINISTRATION", "PATIENT INFORMATION", "MEDICATION GUIDE")),
+_INTENT_MARKERS = (
+    ("drug_missed_dose", ("пропуст", "забыл принять", "missed dose")),
+    ("drug_interactions", ("алкогол", "вместе", "совмест", "взаимодейств", "сочет")),
+    ("drug_side_effects", ("побоч", "реакц", "опасн", "side effect")),
+    ("drug_contraindications", ("нельзя", "противопоказ", "contraindicat")),
+    ("drug_food", ("с едой", "натощак", "до еды", "после еды", "food")),
+    ("drug_timing", ("во сколько", "вместо", "позже", "раньше", "время при", "когда принять")),
+    ("drug_dosage", ("сколько", "дозиров", "увелич", "уменьш", "дозу", "dose")),
 )
+_INTENT_SECTIONS = {
+    "drug_overview": ("DESCRIPTION", "INDICATIONS AND USAGE", "CLINICAL PHARMACOLOGY"),
+    "drug_timing": ("DOSAGE AND ADMINISTRATION", "PATIENT INFORMATION", "MEDICATION GUIDE"),
+    "drug_dosage": ("DOSAGE AND ADMINISTRATION",),
+    "drug_food": ("DOSAGE AND ADMINISTRATION", "PATIENT INFORMATION", "MEDICATION GUIDE"),
+    "drug_missed_dose": ("PATIENT INFORMATION", "MEDICATION GUIDE", "DOSAGE AND ADMINISTRATION"),
+    "drug_side_effects": ("ADVERSE REACTIONS", "WARNINGS AND PRECAUTIONS"),
+    "drug_interactions": ("DRUG INTERACTIONS",),
+    "drug_contraindications": ("CONTRAINDICATIONS",),
+    "drug_other": ("PATIENT INFORMATION", "MEDICATION GUIDE", "DESCRIPTION"),
+}
 _OFFICIAL_DOMAINS = (
     "dailymed.nlm.nih.gov", "fda.gov", "nhs.uk", "ema.europa.eu", "ec.europa.eu",
     "cbg-meb.nl", "government.nl", "gov.uk",
@@ -75,7 +98,7 @@ async def send_prompt(bot, cid):
 def is_medicine_question(text):
     lowered = (text or "").casefold()
     return (any(marker in lowered for marker in _MEDICINE_MARKERS)
-            or any(stem in lowered for stem, _target in _DAILYMED_ALIASES))
+            or any(stem in lowered for stems, _generic, _brand in _DRUG_ALIASES for stem in stems))
 
 
 def _is_emergency(text):
@@ -92,7 +115,76 @@ def _extract_drug_query(text):
 
 def _dailymed_name(name):
     lowered = (name or "").casefold()
-    return next((target for stem, target in _DAILYMED_ALIASES if stem in lowered), name)
+    return next((generic for stems, generic, _brand in _DRUG_ALIASES
+                 if any(stem in lowered for stem in stems)), name)
+
+
+def _intent(text, *, has_question=False):
+    lowered = (text or "").casefold()
+    for intent, markers in _INTENT_MARKERS:
+        if any(marker in lowered for marker in markers):
+            return intent
+    return "drug_other" if has_question else "drug_overview"
+
+
+def _local_normalization(text):
+    dosage = re.search(r"\b\d+(?:[.,]\d+)?\s*(?:mg|мг|mcg|мкг|ml|мл)\b", text or "", re.I)
+    release = _RELEASE_FORM_RE.search(text or "")
+    cleaned = text or ""
+    if dosage:
+        cleaned = cleaned.replace(dosage.group(0), " ")
+    if release:
+        cleaned = cleaned.replace(release.group(0), " ")
+    lowered = cleaned.casefold()
+    matched = next(((generic, brand) for stems, generic, brand in _DRUG_ALIASES
+                    if any(stem in lowered for stem in stems)), None)
+    generic, brand = matched or ("", "")
+    raw_name, _unused_dose = _extract_drug_query(cleaned)
+    question_words = re.search(
+        r"(?:\?|\b(?:можно|что|как|когда|сколько|будет|принять|принимать|совместим)\b)",
+        cleaned, re.I,
+    )
+    return {
+        "generic_name": generic,
+        "brand_name": brand,
+        "raw_name": brand or raw_name,
+        "dose": dosage.group(0) if dosage else "",
+        "release_form": release.group(0) if release else "",
+        "intent": _intent(text, has_question=bool(question_words)),
+    }
+
+
+async def _normalize_drug_request(text):
+    local = _local_normalization(text)
+    if local["generic_name"]:
+        return local
+    prompt = f"""Нормализуй название лекарства из пользовательского сообщения.
+Не отвечай на медицинский вопрос. Верни только JSON с полями generic_name
+(международное английское название), brand_name, dose, release_form и intent.
+intent — один из: drug_overview, drug_timing, drug_dosage, drug_food,
+drug_missed_dose, drug_side_effects, drug_interactions, drug_contraindications,
+drug_other. Дозировка и форма не входят в generic_name.
+Сообщение: {secure.wrap_untrusted(text, 'запрос пользователя')}
+JSON: {{"generic_name":"","brand_name":"","dose":"","release_form":"","intent":"drug_other"}}"""
+    try:
+        data = await ai.allm_json(prompt, 350, order=("kimi",), module="medicine",
+                                  privacy_level="sensitive", budget_seconds=8)
+    except Exception:
+        return local
+    if not isinstance(data, dict):
+        return local
+    generic = re.sub(r"[^A-Za-z0-9 '\-]", "", str(data.get("generic_name") or "")).strip()
+    intent = str(data.get("intent") or local["intent"])
+    if intent not in _INTENT_SECTIONS:
+        intent = local["intent"]
+    return {
+        "generic_name": generic,
+        "brand_name": str(data.get("brand_name") or "").strip()[:80],
+        "raw_name": local["raw_name"],
+        "dose": str(data.get("dose") or local["dose"]).strip()[:40],
+        "release_form": str(data.get("release_form") or local["release_form"]).strip()[:80],
+        "intent": intent,
+    }
 
 
 def _cache_load():
@@ -197,17 +289,13 @@ def _fetch_dailymed(name):
     return entry
 
 
-def _wanted_titles(question):
-    lowered = (question or "").casefold()
-    for markers, titles in _INTENT_RULES:
-        if any(marker in lowered for marker in markers):
-            return titles
-    return ("DOSAGE AND ADMINISTRATION", "PATIENT INFORMATION")
+def _wanted_titles(intent):
+    return _INTENT_SECTIONS.get(intent, _INTENT_SECTIONS["drug_other"])
 
 
-def _relevant_sections(entry, question):
+def _relevant_sections(entry, intent):
     selected = []
-    for wanted in _wanted_titles(question):
+    for wanted in _wanted_titles(intent):
         for title, body in (entry.get("sections") or {}).items():
             if wanted in title and body:
                 selected.append({"title": title.title(), "text": body[:2200]})
@@ -222,8 +310,9 @@ def _official_url(url):
     return known or government
 
 
-def _tavily_context(drug_name, question):
-    query = (f"{drug_name} {question} official medicine label "
+def _tavily_context(drug_name, question, intent="drug_other"):
+    intent_query = intent.removeprefix("drug_").replace("_", " ")
+    query = (f"{drug_name} {intent_query} {question} official medicine label "
              "site:dailymed.nlm.nih.gov OR site:fda.gov OR site:nhs.uk OR site:ema.europa.eu")
     rows = research.tavily_search(query, max_results=6)
     context, sources = [], []
@@ -262,14 +351,41 @@ async def _format_with_ai(prompt):
         return data, "gemini_fallback", reason
 
 
-def _normalize_result(data, question):
+def _normalize_result(data, question, normalized):
+    data = data if isinstance(data, dict) else {}
     details = data.get("details") if isinstance(data.get("details"), list) else []
     result = {"query": str(data.get("query") or question)[:120],
-              "answer": str(data.get("answer") or "Недостаточно официальных данных для прямого ответа.")[:360],
+              "answer": str(data.get("answer") or "Не удалось безопасно сформировать краткий ответ.")[:360],
               "details": [str(x)[:110] for x in details[:2]],
               "important": str(data.get("important") or "")[:140],
-              "disclaimer": str(data.get("disclaimer") or "")[:160]}
+              "disclaimer": str(data.get("disclaimer") or "")[:160],
+              "drug_name": str(data.get("drug_name") or normalized.get("display_name") or "")[:100],
+              "dose": str(normalized.get("dose") or "")[:40]}
     return result
+
+
+def _display_drug_name(normalized, entry=None):
+    brand = str(normalized.get("brand_name") or "").strip()
+    raw = str(normalized.get("raw_name") or "").strip()
+    generic = str(normalized.get("generic_name") or "").strip()
+    value = brand or raw or (entry or {}).get("drug_name") or generic or "Лекарство"
+    return value[:1].upper() + value[1:] if value else "Лекарство"
+
+
+def _source_fallback(normalized, entry, *, identified=False):
+    display = normalized.get("display_name") or _display_drug_name(normalized, entry)
+    intent = normalized.get("intent")
+    if identified and intent == "drug_overview":
+        generic = normalized.get("generic_name") or display
+        answer = f"Действующее вещество — {generic}. Точные правила приёма зависят от лекарственной формы."
+        important = "Укажи название с упаковки и форму препарата, чтобы уточнить правила приёма."
+    else:
+        answer = "Не удалось найти надёжную информацию об этом препарате."
+        important = "Проверь название на упаковке и попробуй ещё раз."
+    return {
+        "query": display, "drug_name": display, "dose": normalized.get("dose") or "",
+        "answer": answer, "details": [], "important": important, "disclaimer": "",
+    }
 
 
 def _audit(**entry):
@@ -292,27 +408,44 @@ async def answer(bot, cid, question):
                source_found=False, emergency=True)
         return
     await bot.send_chat_action(chat_id=cid, action="typing")
-    drug_query, dosage = _extract_drug_query(question)
-    lookup_name = _dailymed_name(drug_query)
-    entry = await asyncio.to_thread(_fetch_dailymed, lookup_name) if lookup_name else None
-    sections = _relevant_sections(entry, question) if entry else []
+    normalized = await _normalize_drug_request(question)
+    generic_name = normalized.get("generic_name") or ""
+    brand_name = normalized.get("brand_name") or ""
+    intent = normalized.get("intent") or "drug_other"
+
+    # Для бренда сначала пробуем найти именно его инструкцию: форма выпуска в
+    # ней точнее. Если бренд не найден, повторяем поиск по действующему веществу.
+    lookup_names = []
+    for value in (brand_name, generic_name, normalized.get("raw_name")):
+        value = str(value or "").strip()
+        if value and value.casefold() not in {item.casefold() for item in lookup_names}:
+            lookup_names.append(value)
+    entry = None
+    used_lookup = ""
+    for lookup_name in lookup_names:
+        entry = await asyncio.to_thread(_fetch_dailymed, lookup_name)
+        if entry:
+            used_lookup = lookup_name
+            break
+    sections = _relevant_sections(entry, intent) if entry else []
     if sum(len(item.get("text", "")) for item in sections) < 200:
         sections = []
     medicine_source = "dailymed" if sections else ""
     source_name = "DailyMed"
     context = [f"{item['title']}: {item['text']}" for item in sections]
     if not context:
-        snippets, _urls = await asyncio.to_thread(_tavily_context, lookup_name, question)
+        search_name = generic_name or brand_name or normalized.get("raw_name") or ""
+        snippets, _urls = await asyncio.to_thread(
+            _tavily_context, search_name, question, intent,
+        )
         context = snippets
         if snippets:
             medicine_source, source_name = "tavily", "официальные медицинские источники"
-    drug_name = (entry or {}).get("drug_name") or drug_query
-    drug_form = (entry or {}).get("drug_form") or ""
+    drug_name = (entry or {}).get("drug_name") or generic_name or brand_name or normalized.get("raw_name")
+    drug_form = normalized.get("release_form") or (entry or {}).get("drug_form") or ""
+    normalized["display_name"] = _display_drug_name(normalized, entry)
     if not context:
-        result = {"query": question[:180],
-                  "answer": "Не нашёл достаточно данных в официальных источниках, поэтому не буду угадывать.",
-                  "details": [], "important": "Уточни точное название препарата и форму с упаковки.",
-                  "disclaimer": ""}
+        result = _source_fallback(normalized, entry, identified=bool(entry or generic_name))
         provider, fallback_reason = "none", ""
     else:
         source_context = "\n\n".join(context)[:5200]
@@ -320,27 +453,34 @@ async def answer(bot, cid, question):
 Отвечай ТОЛЬКО по контексту ниже. Не добавляй дозировки, интервалы, противопоказания,
 взаимодействия или правила пропуска дозы, которых нет в контексте. Если не хватает формы
 или дозировки — прямо скажи, что уточнить. Обычно 300-700 символов, максимум 3 абзаца.
+Дай максимально короткий прямой ответ. Используй только подтверждённые данные.
+Если неизвестна форма препарата, сначала дай информацию, одинаковую для всех форм,
+затем одним предложением укажи, что нужно уточнить. Недостаток деталей не означает,
+что нужно полностью отказаться от ответа.
 Исходный вопрос: {secure.wrap_untrusted(question, 'вопрос пользователя')}
-Найденный препарат: {drug_name}. Форма: {drug_form or 'не определена'}. Дозировка из вопроса: {dosage or 'не указана'}.
+Intent: {intent}. Generic name: {generic_name or 'не определено'}.
+Brand name: {brand_name or 'не указан'}. Найденный препарат: {drug_name}.
+Форма: {drug_form or 'не определена'}. Дозировка: {normalized.get('dose') or 'не указана'}.
 Источник: {source_name}.
 Релевантные выдержки:
 {secure.wrap_untrusted(source_context, 'официальные выдержки')}
-Верни JSON: {{"query":"кратко сформулированный запрос","answer":"прямой ответ без вступления",
+Верни JSON: {{"drug_name":"краткое название на языке пользователя","query":"кратко сформулированный запрос","answer":"прямой ответ без вступления",
 "details":["0-2 важных уточнения"],"important":"важный нюанс или пусто",
 "disclaimer":"только если требуется: не менять назначенную схему без врача/фармацевта, иначе пусто"}}."""
         try:
             raw, provider, fallback_reason = await _format_with_ai(prompt)
-            result = _normalize_result(raw, question)
+            result = _normalize_result(raw, question, normalized)
         except Exception as exc:
             _log.warning("medicine AI chain failed: %r", exc)
-            result = {"query": question[:180],
+            result = {"query": question[:180], "drug_name": normalized["display_name"],
+                      "dose": normalized.get("dose") or "",
                       "answer": "Официальные данные найдены, но сейчас не удалось безопасно сформировать краткий ответ.",
                       "details": [], "important": "Попробуй ещё раз позже или уточни у фармацевта.",
                       "disclaimer": ""}
             provider, fallback_reason = "none", _fallback_reason(exc)
     _audit(medicine_source=medicine_source or "none", ai_provider=provider,
            drug_name=drug_name or "", drug_form=drug_form, source_found=bool(context),
-           fallback_reason=fallback_reason)
+           fallback_reason=fallback_reason, intent=intent, lookup_name=used_lookup)
     msg = medicine_ui.medicine_card(result)
     store.last_answer[str(cid)] = msg.text
     store.last_source[str(cid)] = "Здоровье · Лекарство"

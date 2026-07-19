@@ -102,8 +102,7 @@ _SCREENS = {
         "Здоровье",
         "",
         [
-            [("💊 Разбор лекарства", "as_medicine")],
-            [(ui_label("doctor", "Спросить врача"), "as_doctor")],
+            [(ui_label("doctor", "Врач"), "as_doctor"), ("💊 Лекарства", "as_medicine")],
             [(ui_label("worry_diary", "Мысли"), "as_daycheck")],
             [(choose_label("Выбрать принципы"), "as_health_principles")],
             [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],

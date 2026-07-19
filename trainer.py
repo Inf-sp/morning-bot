@@ -34,6 +34,7 @@ from trainer_engine import (
     EXERCISE_FIND_ERROR,
     EXERCISE_RECALL_FREE,
     EXERCISE_TRANSLATE_CONTEXT,
+    EXERCISE_VERB_FORM,
 )
 from ui import learning as learning_ui
 from ui.constants import delete_label
@@ -210,12 +211,14 @@ async def _send_exercise(bot, cid, data):
             trainer_session.register_poll(cid, message.poll.id)
         return
     if kind in (EXERCISE_CHOOSE_NATURAL, EXERCISE_FILL_GAP,
-                EXERCISE_CHOOSE_REACTION, EXERCISE_CONTINUE_DIALOGUE):
+                EXERCISE_CHOOSE_REACTION, EXERCISE_CONTINUE_DIALOGUE) or (
+                    kind == EXERCISE_VERB_FORM and data.get("mode") == "choice"):
         renderers = {
             EXERCISE_CHOOSE_NATURAL: learning_ui.exercise_choose_natural,
             EXERCISE_FILL_GAP: learning_ui.exercise_fill_gap,
             EXERCISE_CHOOSE_REACTION: learning_ui.exercise_choose_reaction,
             EXERCISE_CONTINUE_DIALOGUE: learning_ui.exercise_continue_dialogue,
+            EXERCISE_VERB_FORM: learning_ui.exercise_verb_form,
         }
         options = _options(data)
         data["_options"] = options
@@ -235,6 +238,9 @@ async def _send_exercise(bot, cid, data):
         rows.extend([[("🫪 Не помню", "ex_giveup")], _nav_row()])
     elif kind == EXERCISE_TRANSLATE_CONTEXT:
         message = learning_ui.exercise_translate_context(data)
+        rows = [[("✍️ Написать", "ex_answer")], [("Показать ответ", "ex_giveup")], _nav_row()]
+    elif kind == EXERCISE_VERB_FORM:
+        message = learning_ui.exercise_verb_form(data)
         rows = [[("✍️ Написать", "ex_answer")], [("Показать ответ", "ex_giveup")], _nav_row()]
     elif kind == EXERCISE_BUILD_SENTENCE:
         data.setdefault("_picked", [])
@@ -269,7 +275,8 @@ async def _apply_result(bot, cid, state, grade, message):
     data["_answered"] = True
     repository = DictionaryRepository(cid)
     updated_entry = repository.record_answer(
-        data["lang"], data["term"], data["exercise_type"], grade.quality)
+        data["lang"], data["term"], data["exercise_type"], grade.quality,
+        form_focus=data.get("form_focus", ""))
     session = state["session"]
     session["total"] += 1
     if grade.quality in (srs.RECALLED_FREE, srs.USED_IN_SENTENCE, srs.CONFIDENT_NO_HINT):
@@ -423,7 +430,9 @@ async def handle_text(bot, cid, text):
     store.pending_input.pop(str(cid), None)
     data = state["current"]
     language_report = None
-    if data.get("lang") == "nl":
+    if data.get("exercise_type") == EXERCISE_VERB_FORM:
+        grade = trainer_grading.grade_free_text(data, text)
+    elif data.get("lang") == "nl":
         grade, language_report = await _grade_dutch_written(data, text)
     elif data["exercise_type"] == EXERCISE_TRANSLATE_CONTEXT:
         grade = await _grade_context(data, text)
