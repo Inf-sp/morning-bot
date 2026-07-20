@@ -219,7 +219,33 @@ def test_dictionary_pagination_button_uses_edit_navigation(monkeypatch):
     keyboard = bot.sent[-1]["reply_markup"]
     next_button = next(
         button for row in keyboard.inline_keyboard for button in row
-        if button.text == "🔄 Далее"
+        if button.text == "▶️"
     )
 
     assert next_button.callback_data == "a_dictedit_nl_1"
+
+
+def test_dictionary_view_callback_stays_within_telegram_limit_for_long_term(monkeypatch):
+    cid = "dictionary-long-term"
+    long_term = "this_is_a_very_long_dictionary_term_that_would_exceed_the_telegram_callback_limit"
+    entries = [{"lang": "nl", "term": long_term, "translation": "x"}]
+
+    monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda _cid, _lang: entries)
+
+    class Bot:
+        def __init__(self):
+            self.sent = []
+
+        async def send_message(self, **kwargs):
+            self.sent.append(kwargs)
+
+    bot = Bot()
+    asyncio.run(learning_dictionary.send_dict_manage(bot, cid, "nl", page=0))
+
+    keyboard = bot.sent[-1]["reply_markup"]
+    view_button = next(
+        button for row in keyboard.inline_keyboard for button in row
+        if button.text == long_term[:20]
+    )
+
+    assert len(view_button.callback_data.encode("utf-8")) <= 64

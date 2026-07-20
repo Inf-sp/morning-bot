@@ -221,6 +221,16 @@ def _dict_item_key(lang, kind, word):
     from dictionary_import import _dict_item_key as implementation
     return implementation(lang, kind, word)
 
+
+def _dict_button_key(lang, kind, word):
+    from dictionary_import import _dict_button_key as implementation
+    return implementation(lang, kind, word)
+
+
+def _dict_entry_matches_key(item, lang, term_key):
+    from dictionary_import import _dict_entry_matches_key as implementation
+    return implementation(item, lang, term_key)
+
 _DICT_ADD_VERB_RE = re.compile(
     r"\b(добавь|добавить|занеси|запиши|сохрани|сохранить|запомни|запомнить|внеси|закинь|"
     r"add|save|remember)\b", re.I)
@@ -437,15 +447,16 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
     word_buttons = []
     for item in chunk:
         term_key = _dict_item_key(lang, "", _entry_term(item))[2]
+        button_key = _dict_button_key(lang, "", term_key)
         word_buttons.append(InlineKeyboardButton(
             normalize_term_case(_entry_term(item), _kind_of(_entry_term(item)))[:20],
-            callback_data=f"a_dictview_{lang}_{page}_{term_key}",
+            callback_data=f"a_dictview_{lang}_{page}_{button_key}",
         ))
     word_rows = [word_buttons[i:i + 2] for i in range(0, len(word_buttons), 2)]
     nav_rows = []
     if total_pages > 1:
         next_page = page + 1 if page < total_pages - 1 else 0
-        nav_rows.append([InlineKeyboardButton("🔄 Далее", callback_data=f"a_dictedit_{lang}_{next_page}")])
+        nav_rows.append([InlineKeyboardButton("▶️", callback_data=f"a_dictedit_{lang}_{next_page}")])
     rows = word_rows + nav_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]]
     text = (
         f"{flag} Показаны {start + 1}–{start + len(chunk)} из {len(entries)}. "
@@ -478,8 +489,9 @@ def _dict_tts_row(entry):
 
 def _dict_search_kb(entry, term_key):
     lang = _dict_lang(entry)
+    action_key = _dict_button_key(lang, "", term_key)
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
+        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{action_key}")],
     ] + _dict_tts_row(entry) + [
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
@@ -543,7 +555,7 @@ async def del_dict_entry_by_term(bot, cid, lang, term_key, page=None, q=None):
     removed = ""
     kept = []
     for item in words:
-        if _dict_lang(item) == lang and _dict_item_key(lang, "", _entry_term(item))[2] == term_key and not removed:
+        if _dict_lang(item) == lang and _dict_entry_matches_key(item, lang, term_key) and not removed:
             removed = _entry_term(item)
             continue
         kept.append(item)
@@ -572,8 +584,9 @@ def _dict_lang_entries(cid, lang):
 
 def _dict_entry_view_kb(entry, page, term_key):
     lang = _dict_lang(entry)
+    action_key = _dict_button_key(lang, "", _entry_term(entry))
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictviewdel_{lang}_{page}_{term_key}")],
+        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictviewdel_{lang}_{page}_{action_key}")],
     ] + _dict_tts_row(entry) + [
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}_{page}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
@@ -583,7 +596,7 @@ def _dict_entry_view_kb(entry, page, term_key):
 async def send_dict_entry_view(bot, cid, lang, page, term_key, q=None):
     """Карточка слова из списка — тот же вид, что при добавлении, плюс удаление."""
     entries = _dict_lang_entries(cid, lang)
-    match = next((w for w in entries if _dict_item_key(lang, "", _entry_term(w))[2] == term_key), None)
+    match = next((w for w in entries if _dict_entry_matches_key(w, lang, term_key)), None)
     if not match:
         await send_dict_lang(bot, cid, lang, page=page, q=q)
         return

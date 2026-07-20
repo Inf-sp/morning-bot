@@ -1,6 +1,7 @@
 """Добавление, нормализация и пакетный импорт словарных записей."""
 
 import asyncio
+import hashlib
 import json
 import logging
 import random
@@ -1027,8 +1028,9 @@ def _dict_tts_row(entry):
 
 def _dict_saved_kb(entry, term_key, show_dictionary=True):
     lang = entry["lang"]
+    action_key = _dict_button_key(lang, "", term_key)
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
+        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{action_key}")],
     ] + _dict_tts_row(entry) + ([
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
     ] if show_dictionary else []) + [
@@ -1039,8 +1041,9 @@ def _dict_saved_kb(entry, term_key, show_dictionary=True):
 
 def _dict_duplicate_kb(entry, term_key, show_dictionary=True):
     lang = entry["lang"]
+    action_key = _dict_button_key(lang, "", term_key)
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{term_key}")],
+        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{action_key}")],
     ] + _dict_tts_row(entry) + ([
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
     ] if show_dictionary else []) + [
@@ -1184,6 +1187,22 @@ async def confirm_pending_dict_add(bot, cid):
 def _dict_item_key(lang, kind, word):
     normalized = re.sub(r"\s+", " ", (word or "").strip()).casefold()
     return lang, kind, normalized
+
+
+def _dict_button_key(lang, kind, word):
+    normalized = re.sub(r"\s+", " ", (word or "").strip()).casefold()
+    if not normalized:
+        return ""
+    if len(normalized) <= 24:
+        return normalized
+    return hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:12]
+
+
+def _dict_entry_matches_key(item, lang, term_key):
+    if not isinstance(item, dict):
+        return False
+    actual_key = _dict_item_key(lang, "", _entry_term(item))[2]
+    return term_key in {actual_key, _dict_button_key(lang, "", actual_key)}
 
 _CYRILLIC_RE = re.compile(r"[а-яА-ЯёЁ]")
 _PLACEHOLDER_RU_RE = re.compile(r"^\??\.?\.?\.?\??$")

@@ -63,7 +63,7 @@ def render_keyboard(state):
     if page > 0:
         navigation.append(InlineKeyboardButton("◀️", callback_data=f"a_dictseed_page_{page - 1}"))
     if page < total_pages - 1:
-        navigation.append(InlineKeyboardButton("▶️ Далее", callback_data=f"a_dictseed_page_{page + 1}"))
+        navigation.append(InlineKeyboardButton("▶️", callback_data=f"a_dictseed_page_{page + 1}"))
     if navigation:
         rows.append(navigation)
     label = LEVEL_LABELS.get(state.get("level"), "Средний")
