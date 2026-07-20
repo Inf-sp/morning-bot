@@ -109,6 +109,22 @@ def _dict_lang_hint_explicit(text):
     return None
 
 
+def _dict_lang_hint_from_payload(text):
+    """Подсказка языка по самому payload, когда в тексте нет явного указания.
+    Английский word-only payload без признаков нидерландского идёт в английский словарь.
+    """
+    payload = (text or "").strip()
+    if not payload:
+        return None
+    if re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ]", payload) and not _CYRILLIC_RE.search(payload):
+        if _DUTCH_ARTICLE_RE.search(payload):
+            return "nl"
+        if re.search(r"\b(?:de|het|een|the|a|an)\b", payload, re.I):
+            return None
+        return "en"
+    return None
+
+
 _DUTCH_ARTICLE_RE = re.compile(r"\b(de|het)\s+\w+", re.I)
 
 
@@ -123,6 +139,9 @@ def _dict_lang_hint(text, cid=None):
     explicit = _dict_lang_hint_explicit(text)
     if explicit:
         return explicit
+    payload_hint = _dict_lang_hint_from_payload(text)
+    if payload_hint is not None:
+        return payload_hint
     if _DUTCH_ARTICLE_RE.search(text or ""):
         return "nl"
     if cid is not None:

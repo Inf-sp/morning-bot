@@ -130,6 +130,20 @@ def test_new_dictionary_entry_gets_stable_word_id(monkeypatch):
     assert stored[0]["id"] == saved["id"]
 
 
+def test_english_chat_command_defaults_to_english_dictionary():
+    payload, lang = dictionary_import._extract_chat_dict_add("Add suspicious", "42")
+
+    assert payload == "suspicious"
+    assert lang == "en"
+
+
+def test_russian_chat_command_keeps_dutch_default():
+    payload, lang = dictionary_import._extract_chat_dict_add("Добавь suspicious", "42")
+
+    assert payload == "suspicious"
+    assert lang == "nl"
+
+
 def test_saved_word_actions_include_delete_and_dictionary():
     keyboard = dictionary_import._dict_saved_kb(
         {"id": "abc123", "lang": "nl"}, "zekerheid",
