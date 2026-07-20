@@ -15,6 +15,7 @@ WARDROBE_OUTERWEAR_MAX_TEMP = 20
 NEUTRAL_COLORS = ("бел", "чёрн", "черн", "сер", "беж", "сини", "деним", "джинс")
 SAFE_NEUTRAL_STYLE_TIP = "Слегка заправь верх спереди, чтобы силуэт выглядел собраннее."
 _SUNGLASSES_MARKERS = ("солнцезащит", "солнечн", "очки от солнца", "sunglasses")
+_RAINCOAT_MARKERS = ("дождевик", "raincoat")
 
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
@@ -44,6 +45,11 @@ def _is_sunglasses(item):
     return item.get("zone") == "Аксессуары" and any(marker in facts for marker in _SUNGLASSES_MARKERS)
 
 
+def _is_raincoat(item):
+    facts = f"{item.get('name', '')} {item.get('subcategory', '')}".casefold()
+    return item.get("zone") == "Верхняя одежда" and any(marker in facts for marker in _RAINCOAT_MARKERS)
+
+
 def select_outfit_candidates(w, weather_ctx):
     """Жёсткая фильтрация кандидатов по зонам (не скоринг). Возвращает
     {zone: [item, ...]} — зона «Верхняя одежда» опциональна по погоде и может
@@ -55,6 +61,8 @@ def select_outfit_candidates(w, weather_ctx):
         items = [it for _s, items in (w.get("zones", {}).get(zone, {}) or {}).items() for it in items]
         items = [it for it in items if not _temp_conflicts(it, weather_ctx)]
         if zone == "Верхняя одежда":
+            if not weather_ctx.get("has_rain"):
+                items = [it for it in items if not _is_raincoat(it)]
             too_warm_for_outer = (weather_ctx.get("tmax") or 0) > WARDROBE_OUTERWEAR_MAX_TEMP
             outerwear_needed = weather_ctx.get("has_rain") or weather_ctx.get("strong_wind") or not too_warm_for_outer
             if not outerwear_needed:

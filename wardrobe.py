@@ -37,7 +37,7 @@ from wardrobe_migration import migrate_item_attrs
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
-COPY_VALIDATOR_VERSION = 5
+COPY_VALIDATOR_VERSION = 6
 
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
