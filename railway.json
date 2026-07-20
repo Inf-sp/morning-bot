@@ -5,8 +5,8 @@
   },
   "deploy": {
     "startCommand": "python bot.py",
-    "overlapSeconds": "0",
-    "drainingSeconds": "20",
+    "overlapSeconds": 0,
+    "drainingSeconds": 20,
     "restartPolicyType": "ON_FAILURE"
   }
 }
