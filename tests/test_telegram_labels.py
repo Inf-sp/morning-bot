@@ -4,6 +4,7 @@ from ui import balance as balance_ui
 from ui import menu as menu_ui
 from ui.assistant import assistant_answer
 from ui.builder import MessageBuilder
+from ui.myday import day_summary
 from ui.constants import delete_label
 from ui.wardrobe import render_wardrobe_message
 from util import tg_html
@@ -38,18 +39,24 @@ def test_wardrobe_card_uses_current_outfit_labels():
         "Полезно:",
     ]
     assert "Надень:\n• Белая рубашка\n• Синие брюки" in message.text
-    assert "💡 Полезно: подверни рукава рубашки." in message.text
+    assert "💡 Полезно: Подверни рукава рубашки." in message.text
+
+
+def test_day_summary_lifehack_keeps_capital_letter_after_label():
+    message = day_summary("Пн, 20 июля", "Алкмар", lifehack="проверь расписание утром")
+
+    assert "Лайфхак: Проверь расписание утром" in message.text
 
 
 def test_free_text_formatter_applies_same_rule_to_plain_and_markdown_labels():
-    assert tg_html("Надень: Белую рубашку.") == "<b>Надень:</b> белую рубашку."
-    assert tg_html("**Как носить:** Подверни рукава.") == "<b>Как носить:</b> подверни рукава."
+    assert tg_html("Надень: Белую рубашку.") == "<b>Надень:</b> Белую рубашку."
+    assert tg_html("**Как носить:** Подверни рукава.") == "<b>Как носить:</b> Подверни рукава."
 
 
 def test_assistant_card_bolds_inline_label():
     message = assistant_answer("Образ\nПочему работает: Светлый верх поддерживает обувь.")
 
-    assert "Почему работает: светлый верх" in message.text
+    assert "Почему работает: Светлый верх" in message.text
     assert _bold_fragments(message) == ["Образ", "Почему работает:"]
 
 

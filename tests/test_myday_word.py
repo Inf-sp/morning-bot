@@ -10,5 +10,5 @@ def test_day_summary_lowercases_translation_after_arrow():
         word_lang="nl",
     )
 
-    assert "🇳🇱 Нидерландский: slim → худой, умный." in message.text
+    assert "🇳🇱 Нидерландский: Slim → Худой, умный." in message.text
     assert "→ Худой" not in message.text

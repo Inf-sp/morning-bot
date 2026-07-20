@@ -2,6 +2,7 @@ from telegram import MessageEntity
 
 from .balance import finish_dot
 from .builder import MessageBuilder, lower_initial
+from util import cap_sentence
 
 
 def _compact_line(b, emoji, label, content):
@@ -77,7 +78,7 @@ def day_summary(
 
     if lifehack:
         b.text_line("🦉")
-        b.labeled_line("Лайфхак", finish_dot(lifehack))
+        b.labeled_line("Лайфхак", cap_sentence(finish_dot(lifehack)), lowercase=False)
         b.spacer()
 
     if quote_text:
