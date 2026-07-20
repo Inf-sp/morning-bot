@@ -803,8 +803,7 @@ def main():
             identity["pid"], identity["hostname"], identity["deployment"],
         )
         lease.release()
-    if conflict:
-        raise SystemExit(1)
+    
 
 
 if __name__ == "__main__":
