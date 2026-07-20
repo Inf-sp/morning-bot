@@ -6,6 +6,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import dictionary_import
+import learning_dictionary
 import learning_router
 import bot_text
 
@@ -183,3 +184,28 @@ def test_done_removes_buttons_but_keeps_saved_word_card():
     assert handled is True
     assert edits == [{"reply_markup": None}]
     assert cid not in dictionary_import.store.last_inline_message
+
+
+def test_dictionary_pagination_button_uses_edit_navigation(monkeypatch):
+    cid = "dictionary-pagination"
+    entries = [{"lang": "nl", "term": f"word{i}", "translation": "x"} for i in range(11)]
+
+    monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda _cid, _lang: entries)
+
+    class Bot:
+        def __init__(self):
+            self.sent = []
+
+        async def send_message(self, **kwargs):
+            self.sent.append(kwargs)
+
+    bot = Bot()
+    asyncio.run(learning_dictionary.send_dict_manage(bot, cid, "nl", page=0))
+
+    keyboard = bot.sent[-1]["reply_markup"]
+    next_button = next(
+        button for row in keyboard.inline_keyboard for button in row
+        if button.text == "🔄 Далее"
+    )
+
+    assert next_button.callback_data == "a_dictedit_nl_1"

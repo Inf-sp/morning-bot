@@ -445,7 +445,7 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
     nav_rows = []
     if total_pages > 1:
         next_page = page + 1 if page < total_pages - 1 else 0
-        nav_rows.append([InlineKeyboardButton("🔄 Далее", callback_data=f"a_dicteditpage_{lang}_{next_page}")])
+        nav_rows.append([InlineKeyboardButton("🔄 Далее", callback_data=f"a_dictedit_{lang}_{next_page}")])
     rows = word_rows + nav_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]]
     text = (
         f"{flag} Показаны {start + 1}–{start + len(chunk)} из {len(entries)}. "
