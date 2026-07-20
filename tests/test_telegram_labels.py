@@ -48,6 +48,18 @@ def test_day_summary_lifehack_keeps_capital_letter_after_label():
     assert "Лайфхак: Проверь расписание утром" in message.text
 
 
+def test_day_summary_outfit_keeps_capital_letter_after_label():
+    message = day_summary("Пн, 20 июля", "Алкмар", outfit_items=["светло-серая рубашка", "чёрные брюки"])
+
+    assert "Надень: Светло-серая рубашка, чёрные брюки" in message.text
+
+
+def test_day_summary_word_keeps_capital_letter_after_label():
+    message = day_summary("Пн, 20 июля", "Алкмар", word_line="tijd → время")
+
+    assert "Нидерландский: Tijd → Время" in message.text
+
+
 def test_free_text_formatter_applies_same_rule_to_plain_and_markdown_labels():
     assert tg_html("Надень: Белую рубашку.") == "<b>Надень:</b> Белую рубашку."
     assert tg_html("**Как носить:** Подверни рукава.") == "<b>Как носить:</b> Подверни рукава."

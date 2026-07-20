@@ -15,9 +15,9 @@ def _split_word_translation(value):
     """Разделяет иностранную фразу и перевод для отдельного spoiler-entity."""
     value = str(value or "")
     if "→" not in value:
-        return lower_initial(value.strip()), ""
+        return cap_sentence(value.strip()), ""
     term, translation = value.split("→", 1)
-    return lower_initial(term.strip()), lower_initial(translation.strip())
+    return cap_sentence(term.strip()), cap_sentence(translation.strip())
 
 
 def day_summary(
@@ -67,10 +67,11 @@ def day_summary(
         b.spacer()
 
     outfit = ", ".join(
-        lower_initial(str(item).strip())
+        str(item).strip()
         for item in (outfit_items or [])
         if str(item).strip()
     )
+    outfit = cap_sentence(outfit)
     if outfit:
         b.text_line("👕 ")
         b.labeled_line("Надень", finish_dot(outfit), lowercase=False)
