@@ -1,13 +1,13 @@
 import asyncio
 import logging
+from datetime import datetime
 
 _log = logging.getLogger(__name__)
 from telegram import InlineKeyboardMarkup, ReplyKeyboardRemove
-from telegram.error import TimedOut
+from telegram.error import Conflict, TimedOut
 from telegram.request import HTTPXRequest
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
                           ContextTypes, CallbackQueryHandler, PollAnswerHandler, ExtBot)
-from datetime import datetime
 
 import config
 import store
@@ -43,6 +43,7 @@ import weather
 import verify
 import secure
 import service_monitor
+from process_guard import PollingLease, process_identity
 import onboard
 import firstvisit
 import tracking
@@ -59,6 +60,7 @@ from util import clear_loading as _unack
 
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID
+_PROCESS_STARTED_AT = datetime.now(TZ).isoformat()
 
 
 
@@ -520,7 +522,12 @@ def _run_startup_audits():
 
 async def job_startup_audits(context: ContextTypes.DEFAULT_TYPE):
     if tracking.has_active_actions():
-        context.application.job_queue.run_once(job_startup_audits, when=30)
+        context.application.job_queue.run_once(
+            job_startup_audits,
+            when=30,
+            name="startup_audits_once",
+            job_kwargs={"id": "startup_audits_once", "replace_existing": True},
+        )
         return
     await asyncio.to_thread(_run_startup_audits)
 
@@ -558,6 +565,24 @@ async def post_init(app):
             BotCommand("admin", "Админ"),
         ], scope=BotCommandScopeChat(chat_id=admin_chat_id))
     await maybe_send_admin_deploy_notification(app.bot)
+
+
+async def global_error_handler(update, context):
+    error = context.error
+    identity = process_identity(_PROCESS_STARTED_AT)
+    if isinstance(error, Conflict):
+        context.application.bot_data["polling_conflict"] = True
+        _log.critical(
+            "Telegram polling conflict; stopping this process pid=%s hostname=%s deployment=%s",
+            identity["pid"], identity["hostname"], identity["deployment"],
+        )
+        context.application.stop_running()
+        return
+    _log.error(
+        "Unhandled Telegram error pid=%s hostname=%s",
+        identity["pid"], identity["hostname"],
+        exc_info=(type(error), error, error.__traceback__),
+    )
 
 
 class _MenuCleanupBot(ExtBot):
@@ -669,11 +694,14 @@ class _MenuCleanupBot(ExtBot):
         return msg
 
 
-def main():
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    # HTTPX пишет полный Telegram URL вместе с bot token — не допускаем токен в логах.
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
+def _job_options(job_id):
+    return {
+        "name": job_id,
+        "job_kwargs": {"id": job_id, "replace_existing": True},
+    }
+
+
+def _build_application():
     request = _RetryingHTTPXRequest(
         connection_pool_size=16,
         connect_timeout=7,
@@ -694,6 +722,7 @@ def main():
         get_updates_request=updates_request,
     )
     app = Application.builder().bot(bot).post_init(post_init).build()
+    app.add_error_handler(global_error_handler)
     app.add_handler(MessageHandler(filters.ALL, message_activity_handler), group=-1)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", menu_command))
@@ -714,24 +743,68 @@ def main():
     jq = app.job_queue
     def _t(hm):
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
-    jq.run_once(job_startup_audits, when=2)                                    # диагностика после готовности polling
-    jq.run_once(job_warm_home_pages, when=5)                                   # заполнить отсутствующий кэш после запуска
-    jq.run_once(service_monitor.monitoring_job, when=10)                       # первая независимая проверка сервисов
-    jq.run_repeating(service_monitor.monitoring_job, interval=300, first=310)  # затем каждые 5 минут
-    jq.run_daily(job_warm_home_pages, time=_t("08:00"), days=tuple(range(7)))    # главные экраны без сообщений
-    jq.run_daily(job_warm_weather_cache, time=_t("08:10"), days=tuple(range(7)))   # страховочный прогрев погоды перед брифом
-    jq.run_daily(job_morning_brief,   time=_t("08:30"), days=tuple(range(7)))   # Утро: Мой день + погода + мотивация
-    jq.run_daily(job_weather_warn,    time=_t("08:45"), days=tuple(range(7)))   # экстренное предупреждение, если нужно
-    jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(4,))      # пт, прогрев кэша концертов
-    jq.run_daily(job_weekend_events,  time=_t("10:00"), days=(4,))             # пт, «Куда сходить»
-    jq.run_daily(job_daily_words,     time=_t("11:00"), days=tuple(range(7)))  # «Слова и фразы дня»
-    jq.run_daily(job_checkin_day,     time=_t("14:00"), days=tuple(range(7)))
-    jq.run_daily(job_evening_weather, time=_t("20:30"), days=tuple(range(7)))  # «Прогноз на завтра»
-    jq.run_daily(job_checkin_evening, time=_t("21:00"), days=tuple(range(7)))
-    jq.run_daily(job_inactivity_reminders, time=_t("09:00"), days=tuple(range(7)))
+    jq.run_once(job_startup_audits, when=2, **_job_options("startup_audits_once"))
+    jq.run_once(job_warm_home_pages, when=5, **_job_options("warm_home_pages_startup"))
+    jq.run_once(service_monitor.monitoring_job, when=10, **_job_options("monitoring_startup"))
+    jq.run_repeating(
+        service_monitor.monitoring_job,
+        interval=300,
+        first=310,
+        **_job_options("monitoring_repeating"),
+    )
+    jq.run_daily(
+        job_warm_home_pages,
+        time=_t("08:00"),
+        days=tuple(range(7)),
+        **_job_options("warm_home_pages_daily"),
+    )
+    jq.run_daily(job_warm_weather_cache, time=_t("08:10"), days=tuple(range(7)), **_job_options("warm_weather_cache_daily"))
+    jq.run_daily(job_morning_brief, time=_t("08:30"), days=tuple(range(7)), **_job_options("morning_brief_daily"))
+    jq.run_daily(job_weather_warn, time=_t("08:45"), days=tuple(range(7)), **_job_options("weather_warn_daily"))
+    jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(4,), **_job_options("concerts_cache_weekly"))
+    jq.run_daily(job_weekend_events, time=_t("10:00"), days=(4,), **_job_options("weekend_events_weekly"))
+    jq.run_daily(job_daily_words, time=_t("11:00"), days=tuple(range(7)), **_job_options("daily_words"))
+    jq.run_daily(job_checkin_day, time=_t("14:00"), days=tuple(range(7)), **_job_options("checkin_day_daily"))
+    jq.run_daily(job_evening_weather, time=_t("20:30"), days=tuple(range(7)), **_job_options("evening_weather_daily"))
+    jq.run_daily(job_checkin_evening, time=_t("21:00"), days=tuple(range(7)), **_job_options("checkin_evening_daily"))
+    jq.run_daily(job_inactivity_reminders, time=_t("09:00"), days=tuple(range(7)), **_job_options("inactivity_reminders_daily"))
+    _log.info("Scheduler configured jobs=%s", len(jq.jobs()))
+    return app
 
-    logging.info("Bot started via polling")
-    app.run_polling(drop_pending_updates=True)
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # HTTPX пишет полный Telegram URL вместе с bot token — не допускаем токен в логах.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    identity = process_identity(_PROCESS_STARTED_AT)
+    version = get_app_version()
+    _log.info(
+        "Process starting pid=%s hostname=%s started_at=%s version=%s deployment=%s replica=%s",
+        identity["pid"], identity["hostname"], identity["started_at"], version,
+        identity["deployment"], identity["replica"],
+    )
+    lease = PollingLease()
+    if not lease.acquire():
+        raise SystemExit("Polling lease was not acquired")
+    app = None
+    conflict = False
+    try:
+        app = _build_application()
+        _log.info(
+            "Polling starting pid=%s hostname=%s deployment=%s application=%s",
+            identity["pid"], identity["hostname"], identity["deployment"], id(app),
+        )
+        app.run_polling(drop_pending_updates=True, bootstrap_retries=0)
+        conflict = bool(app.bot_data.get("polling_conflict"))
+    finally:
+        _log.info(
+            "Process stopping pid=%s hostname=%s deployment=%s",
+            identity["pid"], identity["hostname"], identity["deployment"],
+        )
+        lease.release()
+    if conflict:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
