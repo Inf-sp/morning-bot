@@ -44,7 +44,7 @@ def _build_morning_word(cid, language):
     if not review_pool:
         msg = learning_ui.morning_words(flag, empty_hint=True)
         return msg, []
-    chosen = _entries_review_sorted(review_pool)[:5]
+    chosen = _entries_review_sorted(review_pool)[:3]
     if not chosen:
         msg = learning_ui.morning_words(flag, empty_hint=True)
         return msg, []
@@ -72,7 +72,7 @@ def _build_morning_word(cid, language):
 
 
 async def send_morning_word(bot, cid, language=None, with_kb=True):
-    """11:00 — до пяти ранее изученных слов и фраз для повторения."""
+    """11:00 — до трех ранее изученных слов и фраз для повторения."""
     import settings
     language = language or settings.study_lang(cid)
     msg, del_row = _build_morning_word(cid, language)
