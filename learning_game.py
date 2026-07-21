@@ -293,7 +293,9 @@ async def _send_game_result(bot, cid, st, ui, kb):
     photo = None
     if query:
         try:
-            photo = travel_photos.find_photo(query)
+            photo = travel_photos.find_photo(f"{query} illustration")
+            if not photo:
+                photo = travel_photos.find_photo(f"{query} drawing")
         except Exception:
             pass
     if photo and isinstance(photo, dict) and photo.get("url"):
