@@ -40,9 +40,9 @@ def _movie_kb(i, category=None, saved=False):
     на карточке всегда ведёт в общее меню Досуга.
     """
     rows = [
-        [InlineKeyboardButton("✨ Заменить", callback_data=f"movie_no_{i}")],
+        [InlineKeyboardButton("✨ Другое кино", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"movie_love_{i}"),
-         InlineKeyboardButton(save_toggle_label(saved), callback_data=f"reco_{i}")],
+         InlineKeyboardButton(save_toggle_label(saved, "Смотреть позже"), callback_data=f"reco_{i}")],
     ]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
@@ -252,10 +252,11 @@ async def send_recos(bot, cid, kind):
 def _movie_home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать кино", callback_data="movie_reco")],
-        [InlineKeyboardButton("👻 По жанру", callback_data="movie_genre_menu"),
-         InlineKeyboardButton("🫥 По настроению", callback_data="movie_mood_menu")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
+         InlineKeyboardButton("🌙 По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("❤️ Моё кино", callback_data="watchlist"),
-         InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
+         InlineKeyboardButton("💾 Смотреть позже", callback_data="movie_saved")],
+        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 

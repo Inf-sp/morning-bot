@@ -181,8 +181,8 @@ def ui_label(key, text):
     return f"{emoji} {text}" if emoji else text
 
 
-def save_toggle_label(saved):
-    return "✅ Сохранено" if saved else ui_label("save", "Сохранить")
+def save_toggle_label(saved, unsaved="Сохранить"):
+    return "✅ Сохранено" if saved else f"💾 {unsaved}"
 
 
 def delete_label(text):

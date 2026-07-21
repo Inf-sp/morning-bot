@@ -770,6 +770,27 @@ def _neighbor_ccs(cc: str) -> list:
     return list(_NEIGHBOR_CC.get((cc or "").upper(), []))
 
 
+async def send_concerts_home(bot, cid, q=None):
+    settings = store.get_settings(cid)
+    country = settings.get("country") or "Нидерланды"
+    text = "🎫 Концерты\n\nБлижайшие концерты любимых исполнителей в выбранной стране."
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔥 Ближайшие", callback_data="a_concerts_nearby")],
+        [InlineKeyboardButton("❤️ Любимые артисты", callback_data="artist_favorites")],
+        [InlineKeyboardButton("🔍 Найти артиста", callback_data="a_concerts_search")],
+        [InlineKeyboardButton(f"🌍 {country}", callback_data="a_concerts_pick")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
 async def find_concerts(bot, cid, mode="home"):
     if not config.TICKETMASTER_API_KEY:
         await bot.send_message(chat_id=cid,

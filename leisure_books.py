@@ -82,11 +82,44 @@ def _book_text(it):
 
 def _book_kb(i, saved=False):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Заменить", callback_data=f"book_no_{i}")],
+        [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
-         InlineKeyboardButton(save_toggle_label(saved), callback_data=f"reco_{i}")],
+         InlineKeyboardButton(save_toggle_label(saved, "Почитать позже"), callback_data=f"reco_{i}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
+
+
+def books_home_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Подобрать книгу", callback_data="a_read")],
+        [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites")],
+        [InlineKeyboardButton("💾 Почитать позже", callback_data="book_saved")],
+        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="book_prefs")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+
+
+async def send_books_home(bot, cid, q=None):
+    text = "📖 Книги\n\nПодберу книгу для чтения — даже если пока не знаю твой вкус."
+    kb = books_home_keyboard()
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+async def send_book_preferences(bot, cid, q=None):
+    text = "🎚️ Предпочтения книг\n\nЖанры и формат книги можно настроить здесь."
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_read"),
+                                InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
+    if q is not None:
+        await q.message.edit_text(text, reply_markup=kb)
+    else:
+        await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 async def _send_book_card(bot, cid, it, i, *, enrich=True):
     import saved_items
@@ -194,9 +227,6 @@ def _pick_good_book(items, cid, extra_skip=()):
     return _fallback_book(cid, extra_skip=extra_skip)
 
 async def send_books_reco(bot, cid):
-    if not _ensure_books(cid):
-        await _ask_collect(bot, cid, "books")
-        return
     cached = _cached_book(cid)
     if cached:
         title = cached.get("title", "")

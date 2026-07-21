@@ -116,7 +116,7 @@ _SCREENS = {
             "Предпочтения и сохранённое — внутри разделов.",
         ],
         [
-            [(ui_label("concerts", "Концерты"), "a_concerts_find"), (ui_label("leisure", "Кино"), "a_watch")],
+            [(ui_label("concerts", "Концерты"), "a_concerts_find"), ("🎬 Кино", "a_watch")],
             [(ui_label("music", "Музыка"), "a_listen"), (ui_label("books", "Книги"), "a_read")],
             [("#️⃣ Главная", "m_menu")],
         ],

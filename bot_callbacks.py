@@ -268,7 +268,9 @@ async def handle(update, context, remove_reply_keyboard):
             elif act == "watch":
                 await _ack(q); await leisure_movies.send_movie_home(bot, cid, q)
             elif act == "read":
-                await _inline_status(lambda _s: leisure_movies.send_recos(bot, cid, "book"))
+                await _ack(q); await leisure_books.send_books_home(bot, cid, q)
+            elif act == "readlist":
+                await cleanup.open_collection(bot, cid, "books_saved", back="a_read")
             elif act == "watchlist":
                 await cleanup.open_collection(bot, cid, "cinema_favorites", back="a_watch")
             elif act == "readlist":
@@ -278,6 +280,10 @@ async def handle(update, context, remove_reply_keyboard):
             elif act == "readclean":
                 await cleanup.open_collection(bot, cid, "books_saved", back="a_read")
             elif act == "concerts_find":
+                await leisure_concerts.send_concerts_home(bot, cid, q)
+            elif act == "concerts_nearby":
+                await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, "home"))
+            elif act == "artist_concerts":
                 await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, "home"))
             elif act == "concerts_pick":
                 await leisure_concerts.concert_pick_country(bot, cid)
@@ -286,7 +292,7 @@ async def handle(update, context, remove_reply_keyboard):
                          "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
                 await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, act.split("_")[1]))
             elif act == "listen":
-                await _inline_status(lambda _s: leisure_music.send_listen(bot, cid))
+                await _ack(q); await leisure_music.send_music_home(bot, cid, q)
             elif act == "listen_no":
                 await _inline_status(lambda _s: leisure_music.listen_dislike(bot, cid))
             elif act in ("food_breakfast", "recipe_breakfast"):
@@ -341,6 +347,27 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "movie_prefs":
         await _ack(q)
         await leisure_movies.send_movie_prefs(bot, cid, q)
+        return
+    if data == "movie_saved":
+        await cleanup.open_collection(bot, cid, "cinema_saved", back="a_watch")
+        return
+    if data == "book_favorites":
+        await cleanup.open_collection(bot, cid, "books_favorites", back="a_read")
+        return
+    if data == "book_saved":
+        await cleanup.open_collection(bot, cid, "books_saved", back="a_read")
+        return
+    if data == "book_prefs":
+        await leisure_books.send_book_preferences(bot, cid, q)
+        return
+    if data == "artist_favorites":
+        await cleanup.open_collection(bot, cid, "music_favorite_artists", back="a_listen")
+        return
+    if data == "artist_saved":
+        await cleanup.open_collection(bot, cid, "music_saved", back="a_listen")
+        return
+    if data == "music_prefs":
+        await leisure_music.send_music_preferences(bot, cid, q)
         return
     if data.startswith("mpref_"):
         await _ack(q)

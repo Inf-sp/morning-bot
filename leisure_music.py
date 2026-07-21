@@ -66,11 +66,45 @@ async def listen_love(bot, cid):
 
 def _listen_kb(saved=False):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Заменить", callback_data="a_listen_no")],
+        [InlineKeyboardButton("✨ Другой артист", callback_data="a_listen_no")],
         [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love"),
-         InlineKeyboardButton(save_toggle_label(saved), callback_data="listen_0")],
+         InlineKeyboardButton(save_toggle_label(saved, "Послушать позже"), callback_data="listen_0")],
+        [InlineKeyboardButton("🎫 Концерты", callback_data="artist_concerts")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
+
+
+def music_home_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Подобрать музыку", callback_data="a_listen")],
+        [InlineKeyboardButton("❤️ Мои артисты", callback_data="artist_favorites")],
+        [InlineKeyboardButton("💾 Послушать позже", callback_data="artist_saved")],
+        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="music_prefs")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+
+
+async def send_music_home(bot, cid, q=None):
+    text = "🎧 Музыка\n\nПодберу исполнителя под твой вкус."
+    kb = music_home_keyboard()
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+async def send_music_preferences(bot, cid, q=None):
+    text = "🎚️ Предпочтения музыки\n\nЖанры, новое и знакомое, популярное и музыка на изучаемом языке."
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_listen"),
+                                InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
+    if q is not None:
+        await q.message.edit_text(text, reply_markup=kb)
+    else:
+        await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 async def listen_dislike(bot, cid):
     rec = store.last_recos.get(str(cid))
@@ -139,15 +173,7 @@ async def send_listen(bot, cid):
     import saved_items
     _log.info("send_listen: start cid=%s", cid)
     arts_raw = _ensure_artists(cid)
-    if not arts_raw:
-        _log.info("send_listen: no artists cid=%s", cid)
-        await _ask_collect(bot, cid, "artists")
-        return
     arts = [_item_text(a) for a in arts_raw if _item_text(a)]
-    if not arts:
-        _log.info("send_listen: no artists after normalize cid=%s", cid)
-        await _ask_collect(bot, cid, "artists")
-        return
     anchors = ", ".join(arts[:25])
     language_context = _language_music_context(cid)
     blocked = recommendation_stoplist.values(cid, "artist")
