@@ -24,7 +24,7 @@ _ACTIVE_DEADLINE = contextvars.ContextVar("ai_deadline", default=None)
 STANDARD_BUDGET_SECONDS = 10.0
 COMPLEX_BUDGET_SECONDS = 15.0
 _COMPLEX_MODULE_PREFIXES = (
-    "assistant", "food", "cooking", "recipe", "wardrobe", "travel", "leisure",
+    "assistant", "food", "cooking", "recipe", "wardrobe", "travel", "leisure", "learning",
 )
 
 # ---------- Cost logger ----------
