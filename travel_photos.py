@@ -19,26 +19,34 @@ _BLOCKED = re.compile(
 )
 
 
-def _score(*, width, height, description, position):
+def _score(*, width, height, description, position, strict=True):
     try:
         width, height = int(width or 0), int(height or 0)
     except (TypeError, ValueError):
         return None
-    if width <= height or width < 1200 or height < 600 or _BLOCKED.search(description or ""):
-        return None
-    ratio = width / max(height, 1)
-    return min(width * height, 30_000_000) - abs(ratio - 1.75) * 1_000_000 - position * 20_000
+    if strict:
+        if width <= height or width < 1200 or height < 600 or _BLOCKED.search(description or ""):
+            return None
+        ratio = width / max(height, 1)
+        return min(width * height, 30_000_000) - abs(ratio - 1.75) * 1_000_000 - position * 20_000
+    else:
+        if width <= 0 or height <= 0:
+            return None
+        return min(width * height, 30_000_000) - position * 20_000
 
 
-def _pexels(query):
+def _pexels(query, strict=True):
     if not config.PEXELS_API_KEY:
         return None
     started = time.monotonic()
     try:
+        params = {"query": query, "size": "large", "per_page": 15, "locale": "en-US"}
+        if strict:
+            params["orientation"] = "landscape"
         response = requests.get(
             "https://api.pexels.com/v1/search",
             headers={"Authorization": config.PEXELS_API_KEY},
-            params={"query": query, "orientation": "landscape", "size": "large", "per_page": 15, "locale": "en-US"},
+            params=params,
             timeout=12,
         )
         ok = response.status_code == 200
@@ -59,9 +67,9 @@ def _pexels(query):
             if not isinstance(photo, dict):
                 continue
             score = _score(width=photo.get("width"), height=photo.get("height"),
-                           description=photo.get("alt"), position=position)
+                           description=photo.get("alt"), position=position, strict=strict)
             src = photo.get("src") or {}
-            url = src.get("landscape") or src.get("large2x") or src.get("large")
+            url = src.get("landscape") or src.get("large2x") or src.get("large") or src.get("original")
             if score is not None and url:
                 candidates.append((score, photo, url))
         if not candidates:
@@ -79,15 +87,18 @@ def _pexels(query):
         return None
 
 
-def _unsplash(query):
+def _unsplash(query, strict=True):
     if not config.UNSPLASH_ACCESS_KEY:
         return None
     started = time.monotonic()
     try:
+        params = {"query": query, "content_filter": "high", "per_page": 15}
+        if strict:
+            params["orientation"] = "landscape"
         response = requests.get(
             "https://api.unsplash.com/search/photos",
             headers={"Authorization": f"Client-ID {config.UNSPLASH_ACCESS_KEY}", "Accept-Version": "v1"},
-            params={"query": query, "orientation": "landscape", "content_filter": "high", "per_page": 15},
+            params=params,
             timeout=12,
         )
         ok = response.status_code == 200
@@ -109,8 +120,8 @@ def _unsplash(query):
                 continue
             description = photo.get("alt_description") or photo.get("description") or ""
             score = _score(width=photo.get("width"), height=photo.get("height"),
-                           description=description, position=position)
-            url = (photo.get("urls") or {}).get("regular") or (photo.get("urls") or {}).get("full")
+                           description=description, position=position, strict=strict)
+            url = (photo.get("urls") or {}).get("regular") or (photo.get("urls") or {}).get("full") or (photo.get("urls") or {}).get("small")
             if score is not None and url:
                 candidates.append((score, photo, url, description))
         if not candidates:
@@ -136,4 +147,12 @@ def country_cover(country):
     if not name:
         return None
     query = f"{name} scenic travel landscape"
-    return _pexels(query) or _unsplash(query)
+    return _pexels(query, strict=True) or _unsplash(query, strict=True)
+
+
+def find_photo(query):
+    """Find a photo for the detective game or general query without strict layout constraints."""
+    name = " ".join(str(query or "").split()).strip()
+    if not name:
+        return None
+    return _pexels(name, strict=False) or _unsplash(name, strict=False)

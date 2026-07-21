@@ -267,6 +267,50 @@ def _fuzzy(a, b):
         return diff <= 3
     return False
 
+
+def _get_english_query(st, lang):
+    answer = st.get("answer", "")
+    aliases = st.get("aliases", [])
+    latin_candidates = []
+    for name in [answer] + aliases:
+        name_str = str(name).strip()
+        if name_str and not any(ord(c) >= 0x0400 and ord(c) <= 0x04FF for c in name_str):
+            latin_candidates.append(name_str)
+    if not latin_candidates:
+        return answer
+    if lang == "нидерландский" and len(latin_candidates) > 1:
+        for cand in latin_candidates:
+            if cand.lower() != answer.lower():
+                return cand
+    return latin_candidates[0]
+
+
+async def _send_game_result(bot, cid, st, ui, kb):
+    import travel_photos
+    body = st.get("explain") or st.get("quote", "")
+    msg = learning_ui.game_found(ui, st.get("answer", ""), body)
+    query = _get_english_query(st, store.game_config.get(str(cid), {}).get("lang", "русский"))
+    photo = None
+    if query:
+        try:
+            photo = travel_photos.find_photo(query)
+        except Exception:
+            pass
+    if photo and isinstance(photo, dict) and photo.get("url"):
+        try:
+            await bot.send_photo(
+                chat_id=cid,
+                photo=photo["url"],
+                caption=msg.text,
+                caption_entities=msg.entities,
+                reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
 async def game_answer(bot, cid, text):
     st = store.game_state.get(str(cid))
     if not st:
@@ -288,9 +332,7 @@ async def game_answer(bot, cid, text):
             [InlineKeyboardButton(ui["back"], callback_data="m_learn"),
              InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
         ])
-        body = st.get("explain") or st.get("quote", "")
-        msg = learning_ui.game_found(ui, st["answer"], body)
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+        await _send_game_result(bot, cid, st, ui, kb)
         return True
     st["tries"] = st.get("tries", 0) + 1
     if st["tries"] >= 2:
@@ -324,8 +366,6 @@ async def game_reveal(bot, cid, q):
     if not st:
         return
     _remember_game_answer(cid, st)
-    body = st.get("explain") or st.get("quote", "")
-    msg = learning_ui.game_found(ui, st.get("answer", ""), body)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["again"], callback_data="game_again")],
         [InlineKeyboardButton(ui["back"], callback_data="m_learn"),
@@ -335,4 +375,4 @@ async def game_reveal(bot, cid, q):
         await q.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await _send_game_result(bot, cid, st, ui, kb)
