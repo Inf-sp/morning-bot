@@ -153,12 +153,12 @@ def country_cover(country):
 def find_illustration(query):
     """Find a beautiful photo for the detective game result.
 
-    Uses Pexels first and falls back to Unsplash if needed.
+    Uses Unsplash first and falls back to Pexels if needed.
     """
     name = " ".join(str(query or "").split()).strip()
     if not name:
         return None
-    return _pexels(name, strict=False) or _unsplash(name, strict=False)
+    return _unsplash(name, strict=False) or _pexels(name, strict=False)
 
 
 def find_photo(query):
