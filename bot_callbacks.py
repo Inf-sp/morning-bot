@@ -305,9 +305,9 @@ async def handle(update, context, remove_reply_keyboard):
     # Игра
     if data.startswith("gamediff_"):
         diff = data.split("_")[1]
-        cfg = store.game_config.get(cid, {"lang": "русский"})
+        cfg = store.game_config.get(str(cid), {"lang": "русский"})
         cfg["difficulty"] = diff
-        store.game_config[cid] = cfg
+        store.game_config[str(cid)] = cfg
         await _inline_status(lambda _s: learning_game.send_game(bot, cid))
         try:
             await q.message.delete()

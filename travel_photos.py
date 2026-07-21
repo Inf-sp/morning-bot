@@ -150,9 +150,59 @@ def country_cover(country):
     return _pexels(query, strict=True) or _unsplash(query, strict=True)
 
 
-def find_photo(query):
-    """Find a photo for the detective game or general query without strict layout constraints."""
+def _pixabay(query):
+    """Fetch illustration/vector image from Pixabay using image_type=illustration."""
+    if not config.PIXABAY_API_KEY:
+        return None
+    try:
+        response = requests.get(
+            "https://pixabay.com/api/",
+            params={
+                "key": config.PIXABAY_API_KEY,
+                "q": query,
+                "image_type": "illustration",
+                "safesearch": "true",
+                "per_page": 10,
+                "min_width": 400,
+                "min_height": 400,
+            },
+            timeout=10,
+        )
+        if response.status_code != 200:
+            return None
+        hits = response.json().get("hits") or []
+        # prefer larger images
+        best = max(hits, key=lambda h: h.get("imageWidth", 0) * h.get("imageHeight", 0), default=None)
+        if not best:
+            return None
+        url = best.get("largeImageURL") or best.get("webformatURL")
+        if not url:
+            return None
+        return {
+            "provider": "pixabay",
+            "url": url,
+            "alt": best.get("tags", ""),
+            "width": best.get("imageWidth", 0),
+            "height": best.get("imageHeight", 0),
+            "query": query,
+        }
+    except Exception:
+        return None
+
+
+def find_illustration(query):
+    """Find a beautiful illustration/drawing for the detective game result.
+
+    Uses Pixabay (image_type=illustration) as primary source — returns actual
+    drawings and vector art. Falls back to Pexels/Unsplash only if Pixabay
+    has no key or returns nothing.
+    """
     name = " ".join(str(query or "").split()).strip()
     if not name:
         return None
-    return _pexels(name, strict=False) or _unsplash(name, strict=False)
+    return _pixabay(name) or _pexels(name, strict=False) or _unsplash(name, strict=False)
+
+
+def find_photo(query):
+    """Alias: find_illustration for the detective game."""
+    return find_illustration(query)
