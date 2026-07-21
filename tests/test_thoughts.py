@@ -508,8 +508,8 @@ def test_clear_requires_confirmation_then_closes_only_current_list(monkeypatch):
     confirmation_labels = [
         button.text for row in q.message.reply_markup.inline_keyboard for button in row
     ]
-    assert confirmation_labels == ["❌ Очистить", "⬅️ Назад", "#️⃣ Главная"]
-    assert [len(row) for row in q.message.reply_markup.inline_keyboard] == [1, 2]
+    assert confirmation_labels == ["❌ Очистить", "Отмена", "⬅️ Назад", "#️⃣ Главная"]
+    assert [len(row) for row in q.message.reply_markup.inline_keyboard] == [1, 1, 2]
     assert next(item for item in repo.items if item["id"] == "current")["status"] == "open"
 
     asyncio.run(thoughts.handle_callback(bot, "42", q, "thought_review_clear_yes"))

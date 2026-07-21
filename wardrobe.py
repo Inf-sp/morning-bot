@@ -168,9 +168,9 @@ def _save_cached_look(cid, item_ids, look_data):
 
 
 # ---------- главный экран раздела (панель состояния) ----------
-def build_wardrobe_keyboard():
+def build_wardrobe_keyboard(has_result=True):
     return _kb([
-        [("✨ Подобрать образ", "w_look")],
+        [("✨ Другой образ" if has_result else "✨ Подобрать образ", "w_look")],
         [("🧐 Оценить покупку", "w_check"), ("👕 Мой шкаф", "w_closet")],
         [("🎚️ Предпочтения", "set_wardrobe_style")],
         [("#️⃣ Главная", "m_menu")],
@@ -293,7 +293,7 @@ def _build_weather_rules(cid, w, flags):
 
 # ---------- генерация лука по погоде ----------
 def _empty_wardrobe_screen():
-    kb = build_wardrobe_keyboard()
+    kb = build_wardrobe_keyboard(has_result=False)
     text = (
         "<b>👕 Образ на сегодня</b>\n\n"
         "Чтобы собрать образ из твоих вещей, сначала добавь их в шкаф."

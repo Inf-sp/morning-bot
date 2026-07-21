@@ -273,6 +273,7 @@ async def export_notes(bot, cid):
                             caption="📤 Готово. Текст можно сохранить на ваше устройство.")
 
 async def send_notes(bot, cid):
+    import settings as settings_module
     rows = [
         [InlineKeyboardButton("📍 Город", callback_data="set_city")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
@@ -280,7 +281,10 @@ async def send_notes(bot, cid):
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
-    msg = settings_ui.settings_home()
+    city = store.get_settings(cid).get("city") or ""
+    notification_kinds = [item.key for item in settings_module.get_notification_options()]
+    notifications_on = any(settings_module.notif_on(cid, kind) for kind in notification_kinds)
+    msg = settings_ui.settings_home(city, notifications_on)
     await bot.send_message(chat_id=cid, entities=msg.entities,
         text=msg.text,
         reply_markup=InlineKeyboardMarkup(rows), transient=True)

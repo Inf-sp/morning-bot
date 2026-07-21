@@ -19,7 +19,6 @@ from fridge_model import (
     _fridge_split_input,
 )
 from ui import food as food_ui
-from ui.constants import delete_label
 
 send_leftovers = cooking.send_leftovers
 
@@ -123,7 +122,7 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
         ])
     if cat_items:
         rows.append([InlineKeyboardButton(
-            delete_label("Удалить продукты"),
+            "✏️ Изменить",
             callback_data=f"as_fridge_clean_{cat_idx}",
         )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_fridge_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])

@@ -53,6 +53,11 @@ def menu_screen(key, cid=None):
     elif key == "m_balance":
         import balance
         msg = menu_ui.health_menu(balance.health_focus(cid))
+    elif key == "m_leisure":
+        import store
+        source = store.last_source.get(str(cid), "") if cid is not None else ""
+        answer = store.last_answer.get(str(cid), "") if cid is not None else ""
+        msg = menu_ui.leisure_menu(source, answer)
     else:
         msg = menu_ui.menu_screen(key)
     return msg.text, msg.entities, msg.reply_markup

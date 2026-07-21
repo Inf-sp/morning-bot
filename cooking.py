@@ -92,7 +92,7 @@ def _fridge_recipe_kb():
     через enter_meal/show_next_recipe). «Заменить» переиспользует as_fridge_cook,
     который теперь тоже заводит активную категорию fridge и общую очередь."""
     return _kb([
-        [("✨ Заменить", "as_fridge_cook")],
+        [("✨ Другой рецепт", "as_fridge_cook")],
         [("⬅️ Назад", "m_food"), ("#️⃣ Главная", "m_menu")],
     ])
 
@@ -402,7 +402,7 @@ async def handle_callback(bot, cid, q, data):
             await fridge_flow.send_fridge(bot, cid, q)
         else:
             if 0 <= category < len(fridge_flow._CAT_ORDER):
-                await cleanup.open_cleanup(bot, cid, f"fridge_cat_{category}")
+                await cleanup.open_view(bot, cid, f"fridge_cat_{category}")
             else:
                 await fridge_flow.send_fridge(bot, cid, q)
         return True

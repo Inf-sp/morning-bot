@@ -138,8 +138,8 @@ def _home_idea(cid):
 
 def _home_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Куда поехать", callback_data="a_trav_go")],
-        [InlineKeyboardButton("🧳 Поездки", callback_data="a_trav_countries_0")],
+        [InlineKeyboardButton("✨ Другая поездка", callback_data="a_trav_go")],
+        [InlineKeyboardButton("🧳 Мои поездки", callback_data="a_trav_countries_0")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="a_trav_transport")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

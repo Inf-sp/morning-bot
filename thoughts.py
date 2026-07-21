@@ -623,8 +623,9 @@ async def _confirm_clear_review(bot, cid, q):
     msg = thoughts_ui.clear_confirmation()
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(delete_label("Очистить"), callback_data="thought_review_clear_yes")],
+        [InlineKeyboardButton("Отмена", callback_data="thought_review_clear_cancel")],
         [
-            InlineKeyboardButton("⬅️ Назад", callback_data="thought_review_clear_cancel"),
+            InlineKeyboardButton("⬅️ Назад", callback_data="as_daycheck"),
             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
         ],
     ])

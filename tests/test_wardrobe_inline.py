@@ -125,6 +125,6 @@ def test_purchase_check_does_not_invent_zero_compatibility():
 
 def test_purchase_action_sits_directly_below_other_outfit():
     assert _labels(wardrobe.build_wardrobe_keyboard())[:2] == [
-        ["✨ Подобрать образ"],
+        ["✨ Другой образ"],
         ["🧐 Оценить покупку", "👕 Мой шкаф"],
     ]

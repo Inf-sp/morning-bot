@@ -110,7 +110,7 @@ def test_fridge_category_uses_status_dots_without_delete(monkeypatch):
     assert "✅ — есть в наличии  □ — закончилось" in message["text"]
     rows = _labels(message["reply_markup"])
     assert rows[:2] == [["✅ курица"], ["□ лосось"]]
-    assert rows[-2] == ["❌ Удалить продукты"]
+    assert rows[-2] == ["✏️ Изменить"]
     assert rows[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 

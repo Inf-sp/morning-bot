@@ -90,7 +90,7 @@ _SCREENS = {
         "Гардероб",
         "Одежда без хаоса. Подберу образ, помогу разобрать шкаф и выбрать, что стоит докупить. Чем полнее гардероб, тем точнее рекомендации.",
         [
-            [("✨ Подобрать образ", "w_look")],
+            [("✨ Другой образ", "w_look")],
             [("🧐 Оценить покупку", "w_check")],
             [("👕 Мой шкаф", "w_closet")],
             [("🎚️ Предпочтения", "set_wardrobe_style")],
@@ -123,6 +123,26 @@ _SCREENS = {
         False,
     ),
 }
+
+
+def leisure_menu(source="", answer=""):
+    rows = _SCREENS["m_leisure"][3]
+    source = str(source or "")
+    answer = " ".join(str(answer or "").split()).strip()
+    category = source.rsplit("·", 1)[-1].strip() if source.startswith("Досуг") else ""
+    if category and answer:
+        b = MessageBuilder()
+        b.section(f"🍿 Досуг на сегодня · {category}")
+        b.spacer()
+        b.line(answer[:280] + ("…" if len(answer) > 280 else ""))
+        return b.build_stripped(reply_markup=ikb(rows))
+    b = MessageBuilder()
+    b.section("🍿 Досуг")
+    b.spacer()
+    b.line("Что выбрать сегодня?")
+    b.spacer()
+    b.line("Могу подобрать кино, музыку или книгу, а ещё проверить концерты любимых артистов.")
+    return b.build_stripped(reply_markup=ikb(rows))
 
 
 def learning_menu(home: dict):
@@ -282,7 +302,7 @@ def food_menu(idea=None):
         b.labeled_line("Полезно", tip)
 
     rows = [
-        [("✨ Подобрать рецепт", "m_food_next")],
+        [("✨ Другой рецепт", "m_food_next")],
         [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
         [("🧊 Мой холодильник", "as_fridge_home")],
         [("🎚️ Предпочтения", "set_cuisines")],

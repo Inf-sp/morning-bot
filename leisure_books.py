@@ -80,10 +80,10 @@ def _book_cover(title, title_en=""):
 def _book_text(it):
     return leisure_ui.book_text(it)
 
-def _book_kb(i, saved=False):
+def _book_kb(i, saved=False, favorite=False):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_no_{i}")],
-        [InlineKeyboardButton("❤️ В любимые", callback_data=f"book_love_{i}"),
+        [InlineKeyboardButton("❤️ В любимых" if favorite else "❤️ В любимые", callback_data=f"book_love_{i}"),
          InlineKeyboardButton(save_toggle_label(saved, "Почитать позже"), callback_data=f"reco_{i}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -284,10 +284,13 @@ async def _advance_book(bot, cid):
     prepared = await _send_book_card(bot, cid, it, ni)
     _cache_book(cid, prepared)
 
-async def book_love(bot, cid, i):
-    """Книга — в любимые (Мои книги), затем следующая рекомендация."""
+async def book_love(bot, cid, i, q=None):
+    """Добавляет книгу в любимые без дублей и отражает состояние на карточке."""
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         _add_unique(config.BOOKS_KEY, cid, title)
-    await _advance_book(bot, cid)
+        if q is not None:
+            import saved_items
+            await q.message.edit_reply_markup(
+                reply_markup=_book_kb(i, saved=saved_items.is_note_saved(cid, title), favorite=True))

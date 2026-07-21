@@ -55,19 +55,22 @@ def _kick_off_new_artist_concert_check(cid, artist_names):
     asyncio.create_task(_run())
 
 
-async def listen_love(bot, cid):
-    """Артист - в любимые (Мои музыканты), затем следующая рекомендация."""
+async def listen_love(bot, cid, q=None):
+    """Добавляет артиста в любимые без дублей и отражает состояние на карточке."""
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
         artist = rec["items"][0]
         _add_unique(config.ARTISTS_KEY, cid, artist)
         _kick_off_new_artist_concert_check(cid, [artist])
-    await send_listen(bot, cid)
+        if q is not None:
+            import saved_items
+            await q.message.edit_reply_markup(
+                reply_markup=_listen_kb(saved_items.is_note_saved(cid, artist), favorite=True))
 
-def _listen_kb(saved=False):
+def _listen_kb(saved=False, favorite=False):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другой артист", callback_data="a_listen_no")],
-        [InlineKeyboardButton("❤️ В любимые", callback_data="listen_love"),
+        [InlineKeyboardButton("❤️ В любимых" if favorite else "❤️ В любимые", callback_data="listen_love"),
          InlineKeyboardButton(save_toggle_label(saved, "Послушать позже"), callback_data="listen_0")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="artist_concerts")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

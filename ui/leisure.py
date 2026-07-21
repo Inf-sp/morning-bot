@@ -32,27 +32,41 @@ def movie_home_screen(genre_labels, country_label=None, now_playing=None):
     """Главный экран раздела «Кино»: как искать и что сейчас в прокате. Тот же
     визуальный паттерн, что у Гардероба (home_screen)."""
     b = MessageBuilder()
-    b.text_line("🍿 ")
-    b.bold("Что посмотреть")
+    b.text_line("🎬 ")
+    b.bold("Кино")
     b.newline()
     b.spacer()
-    b.line("Выбери, как искать, или посмотри фильмы, которые сейчас идут в кинотеатрах Нидерландов.")
-
     if now_playing:
         b.spacer()
-        b.text_line("🎬 ")
+        b.text_line("🎟️ ")
         b.bold(f"Сейчас в кино · {country_label}")
         b.newline()
-        b.line("Только подтверждённый кинотеатральный прокат. До 8 популярных фильмов.")
-        for item in now_playing:
+        for item in now_playing[:5]:
             _format_movie_row(b, item)
+        if len(now_playing) > 5:
+            b.line(f"Ещё {len(now_playing) - 5} фильма в прокате")
     elif country_label:
         b.spacer()
-        b.text_line("🎬 ")
+        b.text_line("🎟️ ")
         b.bold(f"Сейчас в кино · {country_label}")
         b.newline()
         b.line("Пока не удалось подтвердить актуальные кинотеатральные показы.")
 
+    return b.build_stripped()
+
+
+def movie_now_playing_screen(country_label, now_playing):
+    b = MessageBuilder()
+    b.text_line("🎟️ ")
+    b.bold(f"Сейчас в кино · {country_label}")
+    b.newline()
+    if now_playing:
+        b.spacer()
+        for item in now_playing:
+            _format_movie_row(b, item)
+    else:
+        b.spacer()
+        b.line("Пока не удалось подтвердить актуальные показы.")
     return b.build_stripped()
 
 
@@ -335,15 +349,18 @@ def concerts_list(place_label, events, empty_hint=""):
         b.spacer()
         b.bold(ev.get("artist", ""))
         b.newline()
+        date_place = " · ".join(x for x in (ev.get("date"), ev.get("place")) if x)
+        if ev.get("flag"):
+            date_place = f"{date_place} {ev['flag']}".strip()
+        if date_place:
+            b.line(date_place)
         if ev.get("context"):
-            b.labeled_line("Формат", ev["context"], lowercase=False)
-        if ev.get("place"):
-            place = f"{ev.get('flag', '')} {ev['place']}".strip()
-            b.labeled_line("Место", place, lowercase=False)
+            context = str(ev["context"])
+            if context.startswith("Фестиваль · "):
+                context = context.removeprefix("Фестиваль · ") + " · Фестиваль"
+            b.line(context)
         if ev.get("price"):
-            b.labeled_line("Цена", ev["price"], lowercase=False)
-        if ev.get("date"):
-            b.labeled_line("Дата", ev["date"], lowercase=False)
+            b.line(ev["price"])
         if ev.get("verification") == "confirmed":
             b.line("✅ Подтверждён")
         elif ev.get("verification") == "review":

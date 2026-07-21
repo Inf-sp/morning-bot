@@ -280,9 +280,11 @@ async def handle(update, context, remove_reply_keyboard):
             elif act == "readclean":
                 await cleanup.open_collection(bot, cid, "books_saved", back="a_read")
             elif act == "concerts_find":
-                await leisure_concerts.send_concerts_home(bot, cid, q)
+                await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, "home"))
             elif act == "concerts_nearby":
                 await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, "home"))
+            elif act == "concerts_search":
+                await leisure_concerts.prompt_artist_search(bot, cid)
             elif act == "artist_concerts":
                 await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, "home"))
             elif act == "concerts_pick":
@@ -382,6 +384,10 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "movie_reco":
         await _inline_status(lambda _s: leisure_movies.send_recos(bot, cid, "movie"))
         return
+    if data == "movie_now_playing":
+        await _ack(q)
+        await leisure_movies.send_movie_now_playing(bot, cid, q)
+        return
     if data == "movie_genre_menu":
         await _ack(q)
         await leisure_movies.send_movie_genre_menu(bot, cid, q)
@@ -397,13 +403,13 @@ async def handle(update, context, remove_reply_keyboard):
         await _inline_status(lambda _s: leisure_movies.send_movie_by_mood(bot, cid, data[len("movie_mood_"):]))
         return
     if data.startswith("movie_love_"):
-        await _inline_status(lambda _s: leisure_movies.movie_love(bot, cid, int(data.split("_")[-1])))
+        await _inline_status(lambda _s: leisure_movies.movie_love(bot, cid, int(data.split("_")[-1]), q))
         return
     if data.startswith("book_love_"):
-        await _inline_status(lambda _s: leisure_books.book_love(bot, cid, int(data.split("_")[-1])))
+        await _inline_status(lambda _s: leisure_books.book_love(bot, cid, int(data.split("_")[-1]), q))
         return
     if data == "listen_love":
-        await _inline_status(lambda _s: leisure_music.listen_love(bot, cid))
+        await _inline_status(lambda _s: leisure_music.listen_love(bot, cid, q))
         return
     if data.startswith("reco_"):
         await leisure_movies.add_reco(bot, cid, int(data.split("_")[1]), q)

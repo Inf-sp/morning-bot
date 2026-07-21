@@ -24,6 +24,7 @@ def test_movie_home_uses_clear_recommendation_labels():
     labels = _labels(leisure_movies._movie_home_kb())
     assert labels == [
         ["✨ Подобрать кино"],
+        ["🎟️ Весь прокат"],
         ["🎭 По жанру", "🌙 По настроению"],
         ["❤️ Моё кино", "💾 Смотреть позже"],
         ["🎚️ Предпочтения"],

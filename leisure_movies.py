@@ -31,7 +31,7 @@ def _display_title(it, tm):
 def _movie_card(it, tm):
     return leisure_ui.movie_card(it, tm)
 
-def _movie_kb(i, category=None, saved=False):
+def _movie_kb(i, category=None, saved=False, favorite=False):
     """Клавиатура карточки кино — всегда 4 кнопки действия + Назад, без строки
     «По жанру/По настроению» (выбор происходит на приветственном экране раздела,
     см. send_movie_home).
@@ -41,7 +41,7 @@ def _movie_kb(i, category=None, saved=False):
     """
     rows = [
         [InlineKeyboardButton("✨ Другое кино", callback_data=f"movie_no_{i}")],
-        [InlineKeyboardButton("❤️ В любимые", callback_data=f"movie_love_{i}"),
+        [InlineKeyboardButton("❤️ В любимых" if favorite else "❤️ В любимые", callback_data=f"movie_love_{i}"),
          InlineKeyboardButton(save_toggle_label(saved, "Смотреть позже"), callback_data=f"reco_{i}")],
     ]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
@@ -252,6 +252,7 @@ async def send_recos(bot, cid, kind):
 def _movie_home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать кино", callback_data="movie_reco")],
+        [InlineKeyboardButton("🎟️ Весь прокат", callback_data="movie_now_playing")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("🌙 По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("❤️ Моё кино", callback_data="watchlist"),
@@ -305,11 +306,33 @@ async def send_movie_home(bot, cid, q=None):
     if config.TMDB_API_KEY:
         try:
             now_playing = await asyncio.to_thread(
-                tmdb.get_now_playing, cc, _movie_service_language(cid), 8)
+                tmdb.get_now_playing, cc, _movie_service_language(cid), 10)
         except Exception:
             now_playing = []
     msg = leisure_ui.movie_home_screen(genre_labels, country_label, now_playing)
     kb = _movie_home_kb()
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def send_movie_now_playing(bot, cid, q=None):
+    s = store.get_settings(cid)
+    cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
+    country_label = _movie_country_label(s.get("country"), cc)
+    now_playing = []
+    if config.TMDB_API_KEY:
+        try:
+            now_playing = await asyncio.to_thread(
+                tmdb.get_now_playing, cc, _movie_service_language(cid), 20)
+        except Exception:
+            now_playing = []
+    msg = leisure_ui.movie_now_playing_screen(country_label, now_playing)
+    kb = back_menu_keyboard("a_watch")
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
@@ -777,13 +800,16 @@ def _discover_pick(cid, genre_ids, prefs, keywords=None,
     return None, None
 
 
-async def movie_love(bot, cid, i):
-    """Фильм/сериал — в любимые (watchlist), затем следующая рекомендация."""
+async def movie_love(bot, cid, i, q=None):
+    """Добавляет фильм в любимые без дублей и отражает состояние на карточке."""
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         _add_unique(config.WATCHLIST_KEY, cid, title)
-    await _advance_movie(bot, cid)
+        if q is not None:
+            import saved_items
+            await q.message.edit_reply_markup(
+                reply_markup=_movie_kb(i, saved=saved_items.is_note_saved(cid, title), favorite=True))
 
 async def add_reco(bot, cid, i, q=None):
     """Переключает сохранение текущей рекомендации кино или книги."""

@@ -123,6 +123,9 @@ async def handle(update, context, remove_reply_keyboard):
             await weather.set_city_text(bot, cid, text); return
         if kind == "trav_country_add":
             await travel.add_visited_country(bot, cid, text); return
+        if kind == "concert_artist_search":
+            import leisure_concerts
+            await leisure_concerts.find_artist_concerts(bot, cid, text); return
         if kind and kind.startswith("dictadd_smart_"):
             await dictionary_import.add_smart_batch(bot, cid, text, kind.split("_")[2]); return
         if kind and kind.startswith("dictadd_"):

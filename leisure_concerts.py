@@ -520,7 +520,7 @@ def _concert_context(e):
     is_umbrella_event = bool(event_name and artist and artist_low not in event_low and len(attractions) > 1)
     if is_named_festival or is_umbrella_event:
         return f"Фестиваль · {event_name}"
-    return "Собственный концерт"
+    return "Сольный концерт"
 
 def _concert_place_name(name, cc=""):
     cc = (cc or "").upper()
@@ -791,21 +791,25 @@ async def send_concerts_home(bot, cid, q=None):
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
-async def find_concerts(bot, cid, mode="home"):
-    if not config.TICKETMASTER_API_KEY:
-        await bot.send_message(chat_id=cid,
-            text="Поиск мероприятий требует бесплатный ключ Ticketmaster.\n"
-                 "Заведи его на developer.ticketmaster.com и добавь на Railway переменную TICKETMASTER_API_KEY.",
-            reply_markup=back_menu_keyboard("m_leisure"))
+async def prompt_artist_search(bot, cid):
+    store.pending_input[str(cid)] = "concert_artist_search"
+    await bot.send_message(
+        chat_id=cid,
+        text="🔍 Найти артиста\n\nНапиши имя исполнителя — проверю концерты на ближайший год.",
+        reply_markup=back_menu_keyboard("a_concerts_find"),
+        transient=True,
+    )
+
+
+async def find_artist_concerts(bot, cid, artist):
+    artist = " ".join(str(artist or "").split()).strip()[:100]
+    if not artist:
+        await prompt_artist_search(bot, cid)
         return
-    artists = _ensure_artists(cid)
-    if not artists:
-        await bot.send_message(
-            chat_id=cid,
-            text="Не удалось загрузить артистов. Добавь их в настройках.",
-            reply_markup=back_menu_keyboard("m_leisure"),
-        )
-        return
+    await find_concerts(bot, cid, "home", artists_override=[artist])
+
+
+async def find_concerts(bot, cid, mode="home", artists_override=None):
     s = store.get_settings(cid)
     home_cc = (s.get("cc") or "NL").upper()
     home_flag = util.flag_from_cc(home_cc)
@@ -814,7 +818,38 @@ async def find_concerts(bot, cid, mode="home"):
         cc, flag, cname = _CONCERT_CC_MAP[mode]
     else:
         cc, flag, cname = home_cc, home_flag, home_name
-    cname_place = _concert_place_name(cname, cc)
+    artists = list(artists_override or _ensure_artists(cid))
+
+    rows = []
+    if artists:
+        rows.append([InlineKeyboardButton("❤️ Любимые артисты", callback_data="artist_favorites")])
+    else:
+        rows.append([InlineKeyboardButton("🔍 Найти артиста", callback_data="a_concerts_search")])
+        rows.append([InlineKeyboardButton("🆕 Добавить артиста", callback_data="as_loveadd_artists")])
+    if artists:
+        rows.append([InlineKeyboardButton("🔍 Найти артиста", callback_data="a_concerts_search")])
+    rows.append([InlineKeyboardButton(f"🌍 {cname}", callback_data="a_concerts_pick")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    kb = InlineKeyboardMarkup(rows)
+
+    if not artists and not artists_override:
+        await bot.send_message(
+            chat_id=cid,
+            text=(f"🎫 Концерты · {cname}\n\nЛюбимых артистов пока нет.\n\n"
+                  "Можно найти концерт вручную или добавить исполнителя, чтобы я проверял его будущие выступления."),
+            reply_markup=kb,
+        )
+        return
+
+    if not config.TICKETMASTER_API_KEY:
+        await bot.send_message(
+            chat_id=cid,
+            text=(f"🎫 Концерты · {cname}\n\nПока не удалось проверить ближайшие концерты. "
+                  "Попробуй поискать артиста или выбери другую страну."),
+            reply_markup=kb,
+        )
+        return
 
     from util import _MONTHS
     from datetime import datetime
@@ -824,12 +859,6 @@ async def find_concerts(bot, cid, mode="home"):
         events = await _fetch_concerts(artists, cc, cname)
         _concerts_cache_set(cid, cc, events)
 
-    rows = [
-        [InlineKeyboardButton("🌍 Сменить страну", callback_data="a_concerts_pick")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ]
-    kb = InlineKeyboardMarkup(rows)
-
     def _fmt_date(ds):
         try:
             y, m, dd = ds.split("-")
@@ -837,7 +866,7 @@ async def find_concerts(bot, cid, mode="home"):
         except Exception:
             return ds
 
-    place_label = f"Концерты в {cname_place}"
+    place_label = f"Концерты · {cname}"
     today_str = datetime.now(config.TZ).date().isoformat()
     seen_artist_events = set()
     rows_data = []
@@ -866,7 +895,16 @@ async def find_concerts(bot, cid, mode="home"):
             "verification": "confirmed" if source in ("official_site", "venue", "ticketmaster") else "review",
         })
 
-    msg = leisure_ui.concerts_list(place_label, rows_data)
+    empty_hint = (
+        f"Пока не нашёл концертов {artists[0]} в этой стране.\n\nМожно сменить страну или поискать другого исполнителя."
+        if artists_override else
+        "Пока не нашёл ближайших концертов любимых артистов.\n\nМожно поискать другого исполнителя или сменить страну."
+    )
+    msg = leisure_ui.concerts_list(
+        place_label,
+        rows_data,
+        empty_hint=empty_hint,
+    )
     store.last_source[str(cid)] = "Досуг · Концерты"
     store.last_answer[str(cid)] = msg.text
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
