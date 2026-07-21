@@ -92,8 +92,7 @@ def test_fridge_home_has_available_counts_and_delete_before_navigation(monkeypat
         ["Бакалея · 0"],
         ["Специи и соусы · 0"],
         ["Заморозка · 0"],
-        ["❌ Удалить продукты"],
-        ["⬅️ Назад", "#️⃣ Меню"],
+        ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
@@ -108,11 +107,11 @@ def test_fridge_category_uses_status_dots_without_delete(monkeypatch):
 
     message = bot.messages[-1]
     assert message["text"].startswith("Мясо и рыба · 2 продукта · 1 в наличии")
-    assert "🟢 — есть в наличии  🔴 — закончилось" in message["text"]
+    assert "✅ — есть в наличии  □ — закончилось" in message["text"]
     rows = _labels(message["reply_markup"])
-    assert rows[:2] == [["🟢 курица"], ["🔴 лосось"]]
-    assert all("Удалить" not in label for row in rows for label in row)
-    assert rows[-1] == ["⬅️ Назад", "#️⃣ Меню"]
+    assert rows[:2] == [["✅ курица"], ["□ лосось"]]
+    assert rows[-2] == ["❌ Удалить продукты"]
+    assert rows[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 
 def test_unknown_product_requires_one_of_six_categories(monkeypatch):

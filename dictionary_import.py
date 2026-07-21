@@ -1035,7 +1035,7 @@ def _dict_saved_kb(entry, term_key, show_dictionary=True):
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
     ] if show_dictionary else []) + [
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
-         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
@@ -1048,7 +1048,7 @@ def _dict_duplicate_kb(entry, term_key, show_dictionary=True):
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
     ] if show_dictionary else []) + [
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
-         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
@@ -1137,7 +1137,7 @@ async def retry_pending_dict_add(bot, cid):
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelok_{entry['lang']}_{term_key}")],
             [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{entry['lang']}"),
-             InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
         ])
         await bot.send_message(chat_id=cid, text="Больше вариантов перевода не нашлось.", reply_markup=kb)
         return
@@ -1274,10 +1274,10 @@ async def _extract_dict_topics(text, lang="nl"):
 
 def _dict_batch_preview_kb(lang):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🆕 Добавить всё", callback_data="a_dictbatch_add")],
+        [InlineKeyboardButton("🆕 Добавить выбранные", callback_data="a_dictbatch_add")],
         [InlineKeyboardButton("❌ Не добавлять", callback_data="a_dictbatch_cancel")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 

@@ -117,7 +117,7 @@ def _today():
 def _navigation_row():
     return [
         InlineKeyboardButton("⬅️ Назад", callback_data="m_balance"),
-        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ]
 
 
@@ -447,7 +447,7 @@ async def _build_review(items):
 def _review_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🕒 Оставить на потом", callback_data="thought_review_later")],
-        [InlineKeyboardButton("❌ Удалить мысли", callback_data="thought_review_clear")],
+        [InlineKeyboardButton("❌ Очистить записи", callback_data="thought_review_clear")],
         _navigation_row(),
     ])
 
@@ -622,10 +622,10 @@ async def _leave_review_for_later(bot, cid, q):
 async def _confirm_clear_review(bot, cid, q):
     msg = thoughts_ui.clear_confirmation()
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(delete_label("Да, очистить"), callback_data="thought_review_clear_yes")],
+        [InlineKeyboardButton(delete_label("Очистить"), callback_data="thought_review_clear_yes")],
         [
             InlineKeyboardButton("⬅️ Назад", callback_data="thought_review_clear_cancel"),
-            InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
         ],
     ])
     try:

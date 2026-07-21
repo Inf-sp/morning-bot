@@ -101,7 +101,7 @@ def travel_plan(plan, fallback_country):
 
 def transport_screen(current):
     b = MessageBuilder()
-    b.title("*️⃣ Выбрать транспорт")
+    b.title("🎚️ Предпочтения")
     b.line("Можно выбрать несколько вариантов.")
     b.spacer()
     b.labeled_line("Сейчас", current or "не выбран")

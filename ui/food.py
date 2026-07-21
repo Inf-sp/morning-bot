@@ -223,7 +223,7 @@ def fridge_category(label, total, available):
     b.bold(label)
     b.text_line(
         f" · {total} {_products_label(total)} · {available} в наличии\n\n"
-        "🟢 — есть в наличии  🔴 — закончилось\n"
+        "✅ — есть в наличии  □ — закончилось\n"
         "Нажми продукт, чтобы изменить статус."
     )
     return b.build()

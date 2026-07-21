@@ -497,7 +497,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
         page_ids = {i for i, _ in chunk}
         page_label = "✅ Снять выбор на странице" if page_ids <= sel else choose_label("Выбрать все на странице")
         rows.append([InlineKeyboardButton(page_label, callback_data=f"cla_{ctx}_{page}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
     if q is not None:
@@ -754,6 +754,7 @@ async def open_view(bot, cid, ctx, back=None):
         "back": back or default_back,
         "created_at": time.time(),
         "confirming": False,
+        "editing": False,
     }
     await _render_view(bot, cid, view_id)
 
@@ -794,7 +795,7 @@ async def _render_view(bot, cid, view_id, q=None):
         label, callback_data = add_button
         rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
     for full_id, lbl in chunk:
-        mark = "✅" if full_id in sel else "□"
+        mark = (("✅" if full_id in sel else "□") + " ") if view.get("editing") else ""
         rows.append([InlineKeyboardButton(f"{mark} {lbl[:36]}", callback_data=f"clt:{view_id}:{short_of[full_id]}")])
     if pages > 1:
         rows.append([
@@ -802,20 +803,24 @@ async def _render_view(bot, cid, view_id, q=None):
             InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"clp:{view_id}:{(page + 1) % pages}"),
         ])
-    if _has_select_all_collection_button(ctx) and total > len(chunk) and all_ids != sel:
+    if view.get("editing") and _has_select_all_collection_button(ctx) and total > len(chunk) and all_ids != sel:
         rows.append([InlineKeyboardButton(delete_label(f"Удалить все {total}"), callback_data=f"clx:{view_id}")])
-    if sel:
+    if view.get("editing") and sel:
         actions = (_collection_cfg(ctx) or {}).get("actions") or [{"id": "remove", "label": _action_label(ctx)}]
         for action in actions:
             action_label = _button_action_label(action["label"], action.get("id"))
             rows.append([InlineKeyboardButton(f"{action_label} ({len(sel)})",
                                               callback_data=f"clact:{view_id}:{action['id']}")])
-    if len(chunk) >= 2:
+    if view.get("editing") and len(chunk) >= 2:
         page_ids = {i for i, _ in chunk}
         page_label = "✅ Снять выбор на странице" if page_ids <= sel else choose_label("Выбрать все на странице")
         rows.append([InlineKeyboardButton(page_label, callback_data=f"cla:{view_id}:{page}")])
+    rows.append([InlineKeyboardButton(
+        "Готово" if view.get("editing") else "✏️ Изменить",
+        callback_data=f"cledit:{view_id}:{0 if view.get('editing') else 1}",
+    )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=view["back"]),
-                 InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
     if q is not None:
@@ -838,7 +843,7 @@ async def _render_confirm(bot, cid, view_id, action_id="remove", q=None):
     text = f"{label} ({n})? Это действие нельзя отменить."
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"{label} ({n})", callback_data=f"clactc:{view_id}:{action_id}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"clcancel:{view_id}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"clcancel:{view_id}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     if q is not None:
         try:
@@ -888,12 +893,20 @@ async def handle_view_callback(bot, cid, data, q=None):
         await _send_view_stale_message(bot, cid, q)
         return
     if op == "clt":
+        if not view.get("editing"):
+            return
         short_id = rest[0]
         _, items, _ = _view_items(ctx, cid)
         matches = [i for i, _ in items if i.startswith(short_id)]
         if matches:
             full_id = matches[0]
             view["selected_ids"].symmetric_difference_update({full_id})
+        await _render_view(bot, cid, view_id, q=q)
+        return
+    if op == "cledit":
+        view["editing"] = bool(int(rest[0]))
+        if not view["editing"]:
+            view["selected_ids"].clear()
         await _render_view(bot, cid, view_id, q=q)
         return
     if op == "clp":

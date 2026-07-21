@@ -85,7 +85,7 @@ _OFFICIAL_DOMAINS = (
 def _back_keyboard():
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("⬅️ Назад", callback_data="m_balance"),
-        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ]])
 
 

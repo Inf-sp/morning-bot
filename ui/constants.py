@@ -1,5 +1,5 @@
 UI_EMOJI = {
-    "myday": "🌡️",
+    "myday": "☀️",
     "leisure": "🍿",
     "cinema": "🎬",
     "books": "📖",
@@ -57,6 +57,7 @@ UI_EMOJI = {
     "profile": "👤",
     "broadcasts": "🔔",
     "personalization": "🎛️",
+    "preferences": "🎚️",
     "cuisines": "🍽",
     "clothing_style": "👟",
     "personal_data": "🌀",
@@ -97,6 +98,13 @@ UI_EMOJI = {
     "thinking": "🤔", "disguise": "🥸", "compass": "🧭", "luggage": "🧳",
     "mood": "🫥", "give_up": "🫪", "atmosphere": "🌫️",
 }
+
+# Общие подписи навигации и рекомендаций. Новые экраны используют их вместо
+# локальных вариантов, чтобы подписи не расходились между разделами.
+HOME_LABEL = "#️⃣ Главная"
+BACK_LABEL = "⬅️ Назад"
+PREFERENCES_LABEL = "🎚️ Предпочтения"
+SETTINGS_LABEL = "🎚️ Настройки"
 
 CUISINE_EMOJI = {
     "european": "🇪🇺",

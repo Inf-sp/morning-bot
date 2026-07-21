@@ -251,7 +251,7 @@ async def send_game(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["hint"], callback_data="game_hint"),
          InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     clues = "\n".join(f"• {c.strip()}" for c in d.get("clues", "").split("\n") if c.strip())
     msg = learning_ui.game_card(ui, clues)
@@ -330,7 +330,7 @@ async def game_answer(bot, cid, text):
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton(ui["again"], callback_data="game_again")],
             [InlineKeyboardButton(ui["back"], callback_data="m_learn"),
-             InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
         ])
         await _send_game_result(bot, cid, st, ui, kb)
         return True
@@ -369,7 +369,7 @@ async def game_reveal(bot, cid, q):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["again"], callback_data="game_again")],
         [InlineKeyboardButton(ui["back"], callback_data="m_learn"),
-         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     try:
         await q.message.edit_reply_markup(reply_markup=None)

@@ -316,7 +316,7 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data == "noop":
         return
-    if data.startswith(("clt:", "clp:", "cla:", "clx:", "cld:", "cldc:", "clact:", "clactc:", "clcancel:")):
+    if data.startswith(("clt:", "clp:", "cla:", "clx:", "cld:", "cldc:", "clact:", "clactc:", "clcancel:", "cledit:")):
         # PR3a view-режим (стабильный id + revision) — двоеточие как разделитель
         # отличает его от старого позиционного формата ниже (символ подчёркивания).
         # clx:/cldc:/clcancel: — «Удалить все N» и confirm-экран (PR4, P2-2).

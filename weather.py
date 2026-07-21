@@ -437,7 +437,7 @@ async def send_weather(bot, cid, mode="today"):
             periods.append({"label": label, "line": line})
         joke = _joke_outfit(s["city"], d["temperature_2m_max"][0], d["precipitation_probability_max"][0] or 0,
                             d["windspeed_10m_max"][0] or 0, DESC.get(d["weathercode"][0], ""), "сегодня")
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
         msg = weather_ui.full_forecast(header, periods, joke)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
@@ -478,7 +478,7 @@ async def send_weather(bot, cid, mode="today"):
                     fact = mf
         else:
             fact = _world_fact()
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
         msg = weather_ui.day_forecast(header, main_lines, alert=alert, fact_title=fact_title, fact=fact)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
@@ -572,7 +572,7 @@ async def send_weather(bot, cid, mode="today"):
     overview = _week_overview(day_data)
     advice = _week_advice(day_data)
 
-    kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]])
+    kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
     msg = weather_ui.week_forecast(rng, s["city"], overview, day_data, advice)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 

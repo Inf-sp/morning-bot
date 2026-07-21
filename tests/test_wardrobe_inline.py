@@ -25,10 +25,10 @@ def test_send_home_includes_inline_keyboard():
 
     assert bot.message["reply_markup"] is not None
     assert _labels(bot.message["reply_markup"]) == [
-        ["🆕 Добавить вещь"],
-        ["👕 Мой шкаф"],
-        ["*️⃣ Выбрать стили"],
-        ["⬅️ Назад", "#️⃣ Меню"],
+        ["✨ Подобрать образ"],
+        ["🧐 Оценить покупку", "👕 Мой шкаф"],
+        ["🎚️ Предпочтения"],
+        ["#️⃣ Главная"],
     ]
 
 
@@ -125,6 +125,6 @@ def test_purchase_check_does_not_invent_zero_compatibility():
 
 def test_purchase_action_sits_directly_below_other_outfit():
     assert _labels(wardrobe.build_wardrobe_keyboard())[:2] == [
-        ["✨ Другой образ"],
-        ["🧐 Проверить покупку"],
+        ["✨ Подобрать образ"],
+        ["🧐 Оценить покупку", "👕 Мой шкаф"],
     ]

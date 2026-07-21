@@ -90,11 +90,11 @@ _SCREENS = {
         "Гардероб",
         "Одежда без хаоса. Подберу образ, помогу разобрать шкаф и выбрать, что стоит докупить. Чем полнее гардероб, тем точнее рекомендации.",
         [
-            [(ui_label("recommendation", "Образ на сегодня"), "w_look")],
-            [(ui_label("assessment", "Проверить покупку"), "w_check")],
-            [("✂️ Разбор шкафа", "w_improve")],
-            [(choose_label("Выбрать стили"), "set_wardrobe_style")],
-            [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
+            [("✨ Подобрать образ", "w_look")],
+            [("🧐 Оценить покупку", "w_check")],
+            [("👕 Мой шкаф", "w_closet")],
+            [("🎚️ Предпочтения", "set_wardrobe_style")],
+            [("#️⃣ Главная", "m_menu")],
         ],
     ),
     "m_balance": (
@@ -104,8 +104,8 @@ _SCREENS = {
         [
             [(ui_label("doctor", "Врач"), "as_doctor"), ("💊 Лекарства", "as_medicine")],
             [(ui_label("worry_diary", "Мысли"), "as_daycheck")],
-            [(choose_label("Выбрать принципы"), "as_health_principles")],
-            [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
+            [("🎚️ Предпочтения", "as_health_principles")],
+            [("#️⃣ Главная", "m_menu")],
         ],
     ),
     "m_leisure": (
@@ -113,13 +113,12 @@ _SCREENS = {
         "Досуг",
         [
             "Фильмы, музыка и книги - под твой вкус.",
-            "Предпочтения и сохранённое - в настройках.",
+            "Предпочтения и сохранённое — внутри разделов.",
         ],
         [
             [(ui_label("concerts", "Концерты"), "a_concerts_find"), (ui_label("leisure", "Кино"), "a_watch")],
             [(ui_label("music", "Музыка"), "a_listen"), (ui_label("books", "Книги"), "a_read")],
-            [(ui_label("settings", "Настройки досуга"), "set_mydata_leisure")],
-            [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
+            [("#️⃣ Главная", "m_menu")],
         ],
         False,
     ),
@@ -181,11 +180,11 @@ def learning_menu(home: dict):
     return b.build_stripped(reply_markup=ikb([
         [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
         [
-            (ui_label("game", "Игра-детектив"), "a_game"),
+            (ui_label("game", "Детектив"), "a_game"),
             ("📖 Мой словарь", f"a_dictlang_{code}_from_menu"),
         ],
-        [(choose_label("Выбрать язык"), "set_learning")],
-        [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
+        [("🎚️ Настройки", "set_learning")],
+        [("#️⃣ Главная", "m_menu")],
     ]))
 
 
@@ -283,10 +282,10 @@ def food_menu(idea=None):
         b.labeled_line("Полезно", tip)
 
     rows = [
-        [("✨ Другой рецепт", "m_food_next")],
+        [("✨ Подобрать рецепт", "m_food_next")],
         [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
         [("🧊 Мой холодильник", "as_fridge_home")],
-        [(choose_label("Выбрать кухни"), "set_cuisines")],
-        [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
+        [("🎚️ Предпочтения", "set_cuisines")],
+        [("#️⃣ Главная", "m_menu")],
     ]
     return b.build_stripped(reply_markup=ikb(rows))

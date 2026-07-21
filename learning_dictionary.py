@@ -404,7 +404,7 @@ async def send_dict(bot, cid, back="m_notes", q=None):
     rows = [
         [InlineKeyboardButton(f"🇳🇱 Нидерландский ({nl_total})", callback_data=f"a_dictlang_nl_from_{origin}")],
         [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data=f"a_dictlang_en_from_{origin}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
 
@@ -416,9 +416,9 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     rows = [
         [InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")],
-        [InlineKeyboardButton("🔍 Найти в словаре", callback_data=f"a_dictsearch_{lang}")],
-        [InlineKeyboardButton("✨ Сгенерировать набор слов", callback_data=f"a_dictseed_start_{lang}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("🔍 Найти", callback_data=f"a_dictsearch_{lang}")],
+        [InlineKeyboardButton("✨ Подобрать слова", callback_data=f"a_dictseed_start_{lang}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     text = f"{flag} Мой словарь · {count} слов и фраз"
     await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
@@ -436,7 +436,7 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
         "Я сам приведу в правильную форму, переведу и разберу."
     )
     if not entries:
-        rows = [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]]
+        rows = [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]]
         text = f"{flag} Словарь {lang_title} языка пока пуст.\n\n{add_hint}"
         await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
         return
@@ -457,7 +457,7 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
     if total_pages > 1:
         next_page = page + 1 if page < total_pages - 1 else 0
         nav_rows.append([InlineKeyboardButton("▶️", callback_data=f"a_dictedit_{lang}_{next_page}")])
-    rows = word_rows + nav_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]]
+    rows = word_rows + nav_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]]
     text = (
         f"{flag} Показаны {start + 1}–{start + len(chunk)} из {len(entries)}. "
         "Нажми на слово, чтобы посмотреть перевод, пример и удалить его.\n\n"
@@ -471,13 +471,13 @@ def _dict_manage_kb(lang: str):
         [InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("📚 Мой словарь", callback_data=f"a_dictlang_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
 async def send_dict_search_prompt(bot, cid, lang, q=None):
     store.pending_input[str(cid)] = f"dictsearch_{lang}"
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
     await _show_screen(bot, cid, "🔍 Введи слово или фразу для поиска.", None, kb, q=q)
 
 
@@ -495,7 +495,7 @@ def _dict_search_kb(entry, term_key):
     ] + _dict_tts_row(entry) + [
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
@@ -525,7 +525,7 @@ async def handle_dict_search(bot, cid, lang, query):
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("📋 Мои слова и фразы", callback_data=f"a_dictedit_{lang}")],
                 [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-                 InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
             ]),
         )
         return
@@ -542,9 +542,9 @@ async def confirm_delete_dict_entry(bot, cid, lang, term_key, q=None):
     await _show_screen(
         bot, cid, "Точно удалить это из словаря?", None,
         InlineKeyboardMarkup([
-            [InlineKeyboardButton(delete_label("Да, удалить"), callback_data=f"a_dictdelok_{lang}_{term_key}")],
+            [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelok_{lang}_{term_key}")],
             [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-             InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
         ]),
         q=q,
     )
@@ -589,7 +589,7 @@ def _dict_entry_view_kb(entry, page, term_key):
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictviewdel_{lang}_{page}_{action_key}")],
     ] + _dict_tts_row(entry) + [
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}_{page}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}_{page}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 

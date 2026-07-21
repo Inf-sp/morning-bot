@@ -234,7 +234,7 @@ def test_language_review_has_no_skip_button(monkeypatch):
         for row in bot.message["reply_markup"].inline_keyboard
         for button in row
     ]
-    assert labels == ["✅ Заменить", "❌ Удалить запись", "⬅️ Назад", "#️⃣ Меню"]
+    assert labels == ["✅ Заменить", "❌ Удалить запись", "⬅️ Назад", "#️⃣ Главная"]
 
 
 def test_database_in_order_summary_is_short():

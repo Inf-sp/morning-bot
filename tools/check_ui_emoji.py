@@ -197,7 +197,7 @@ def main():
             print(f"{rel}:{lineno}: add button must start with 🆕: {line}")
     if bad_menu:
         for rel, lineno, line in bad_menu:
-            print(f"{rel}:{lineno}: main menu button must be exactly #️⃣ Меню: {line}")
+            print(f"{rel}:{lineno}: main menu button must be exactly #️⃣ Главная: {line}")
     if bad_assessment:
         for rel, lineno, line in bad_assessment:
             print(f"{rel}:{lineno}: wardrobe assessment must use 🧐: {line}")

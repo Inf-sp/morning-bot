@@ -104,7 +104,7 @@ async def send_seed_intro(bot, cid, lang=None):
     )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Добавить свои слова", callback_data=f"a_dictadd_smart_{code}")],
-        [InlineKeyboardButton("✨ Наполнить словарь", callback_data=f"a_dictseed_start_{code}")],
+        [InlineKeyboardButton("✨ Подобрать слова", callback_data=f"a_dictseed_start_{code}")],
     ])
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
@@ -121,7 +121,7 @@ async def offer_seed_for_level_change(bot, cid, language, level):
         "Я покажу список, а вы отметите те, которые хотите добавить."
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"🆕 Добавить слова ({level_label})", callback_data=f"a_dictseed_start_{code}")],
+        [InlineKeyboardButton(f"🆕 Добавить выбранные ({level_label})", callback_data=f"a_dictseed_start_{code}")],
         [InlineKeyboardButton("Позже", callback_data="a_dictseed_later")],
     ])
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
@@ -279,7 +279,7 @@ async def seed_add_selected(bot, cid, q=None):
         text = f"✅ Добавлено {len(added)} {noun}: {terms}{more}"
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("🎯 Начать обучение", callback_data=f"a_train_{lang}")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
         ])
     else:
         text = "Ничего не отмечено — словарь не изменился."

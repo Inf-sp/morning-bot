@@ -44,9 +44,9 @@ def learning_settings_kb(active_lang, active_level, back="set_home"):
         mark = "✅ " if level == active_level else ""
         row.append(InlineKeyboardButton(f"{mark}{LEVEL_LABELS[level]}", callback_data=f"set_learning_level_{level}"))
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"📚 Язык: {_language_display(active_lang)}", callback_data="toggle_learning_language")],
+        [InlineKeyboardButton("🇳🇱 Нидерландский" if _code(active_lang) == "nl" else "🇬🇧 Английский", callback_data="toggle_learning_language")],
         row,
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 

@@ -259,8 +259,8 @@ async def send_home(bot, cid, q=None):
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🛠 Система", callback_data="adm_api_ai"),
-         InlineKeyboardButton(ui_label("users", "Пользователи"), callback_data="adm_users")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+         InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.home(
         status_dot=dot, status_text=status_text,
@@ -332,7 +332,7 @@ async def send_users(bot, cid, q=None):
     ]
     if _removable_users():
         rows.append([InlineKeyboardButton(delete_label("Удалить пользователя"), callback_data="adm_user_del")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     msg = ui.users(stats, users_list[:_USERS_LIST_LIMIT], len(users_list), _updated_at())
     await _show(bot, cid, msg, InlineKeyboardMarkup(rows), q)
 
@@ -343,7 +343,7 @@ async def send_user_delete_list(bot, cid, q=None):
         [InlineKeyboardButton(f"{name} · {last_seen}", callback_data=f"adm_user_delconfirm_{u_cid}")]
         for u_cid, name, last_seen in removable
     ]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     msg = ui.user_delete_list(removable)
     await _show(bot, cid, msg, InlineKeyboardMarkup(rows), q)
 
@@ -370,7 +370,7 @@ async def do_user_delete(bot, cid, target_cid, q=None):
 async def send_invite(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Создать", callback_data="adm_invite_create")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.invite_prompt()
     await _show(bot, cid, msg, kb, q)
@@ -381,7 +381,7 @@ async def create_invite(bot, cid, q=None):
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={code}"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.invite_created(link)
     if q is not None and getattr(q, "message", None) is not None:
@@ -408,7 +408,7 @@ async def send_welcome(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✏️ Изменить", callback_data="adm_welcome_edit"),
          InlineKeyboardButton("Предпросмотр", callback_data="adm_welcome_preview")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.welcome_admin()
     await _show(bot, cid, msg, kb, q)
@@ -443,7 +443,7 @@ async def send_api_ai(bot, cid, q=None):
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("⚠️ Ошибки", callback_data="adm_logs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.api_ai(rows, service_monitor.last_check_time())
     await _show(bot, cid, msg, kb, q)
@@ -556,7 +556,7 @@ async def send_logs(bot, cid, q=None):
     buttons = []
     if combined:
         buttons.append([InlineKeyboardButton(delete_label("Очистить ошибки"), callback_data="adm_logs_clear")])
-    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_system"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_system"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(buttons)
     msg = ui.logs(rows, len(rows), _updated_at())
     await _show(bot, cid, msg, kb, q)

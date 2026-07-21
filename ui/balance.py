@@ -121,7 +121,7 @@ def worries_saved(count):
 
 def health_principles(selected_count):
     b = MessageBuilder()
-    b.section(choose_label("Выбрать принципы"))
+    b.section("🎚️ Предпочтения")
     b.line("Выбери, что важно поддерживать сейчас.")
     b.spacer()
     if selected_count:

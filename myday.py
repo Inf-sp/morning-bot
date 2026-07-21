@@ -508,7 +508,7 @@ def _save_day_cache(cid, today, text, entities, ts):
 def _day_menu_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 def _build_day_text(cid, *, refresh_current=False):

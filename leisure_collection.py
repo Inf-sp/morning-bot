@@ -40,7 +40,7 @@ async def _ask_collect(bot, cid, kind: str):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Пропустить", callback_data="m_leisure")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     await bot.send_message(chat_id=cid, text=_COLLECT_HINTS[kind], parse_mode="HTML", reply_markup=kb)
 

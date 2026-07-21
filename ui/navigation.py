@@ -6,5 +6,5 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 def back_menu_keyboard(back="m_menu"):
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("⬅️ Назад", callback_data=back),
-        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ]])

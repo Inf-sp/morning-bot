@@ -25,8 +25,8 @@ def test_inactivity_reminder_has_exact_copy_and_main_menu():
         "Выбери раздел или просто напиши, что нужно."
     )
     assert _labels(message.reply_markup) == [
-        ["🌡️ Мой день"],
-        ["👟 Гардероб", "🥣 Готовка"],
+        ["☀️ Мой день"],
+        ["🧵 Гардероб", "🥣 Готовка"],
         ["📚 Обучение", "🚑 Здоровье"],
         ["✈️ Поездки", "🍿 Досуг"],
         ["🎚️ Настройки"],
@@ -47,7 +47,7 @@ def test_menu_command_sends_transient_main_menu():
     assert len(sent) == 1
     assert sent[0]["transient"] is True
     assert sent[0]["text"].startswith("👋🏻 Привет! Я DM")
-    assert _labels(sent[0]["reply_markup"])[0] == ["🌡️ Мой день"]
+    assert _labels(sent[0]["reply_markup"])[0] == ["☀️ Мой день"]
 
 
 def test_main_menu_markup_is_recognized_for_legacy_cleanup():
@@ -102,7 +102,7 @@ def test_onboarding_finish_sends_transient_menu(monkeypatch):
 
     assert len(sent) == 1
     assert sent[0]["transient"] is True
-    assert _labels(sent[0]["reply_markup"])[0] == ["🌡️ Мой день"]
+    assert _labels(sent[0]["reply_markup"])[0] == ["☀️ Мой день"]
 
 
 def test_transient_navigation_message_is_deleted_before_next_message():

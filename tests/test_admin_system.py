@@ -73,7 +73,7 @@ def test_system_screen_has_logs_on_separate_row(monkeypatch):
 
     markup = bot.sent[0]["reply_markup"].inline_keyboard
     assert [button.text for button in markup[0]] == ["⚠️ Ошибки"]
-    assert [button.text for button in markup[-1]] == ["⬅️ Назад", "#️⃣ Меню"]
+    assert [button.text for button in markup[-1]] == ["⬅️ Назад", "#️⃣ Главная"]
     assert "Ответы · 95%" not in bot.sent[0]["text"]
     assert "Автоматический резерв" not in bot.sent[0]["text"]
     assert "Последняя ошибка" not in bot.sent[0]["text"]
@@ -93,7 +93,7 @@ def test_logs_have_only_clear_and_navigation_rows(monkeypatch):
     asyncio.run(admin.send_logs(bot, "42"))
 
     labels = [[button.text for button in row] for row in bot.sent[0]["reply_markup"].inline_keyboard]
-    assert labels == [["❌ Очистить ошибки"], ["⬅️ Назад", "#️⃣ Меню"]]
+    assert labels == [["❌ Очистить ошибки"], ["⬅️ Назад", "#️⃣ Главная"]]
     assert all("Скопировать" not in button for row in labels for button in row)
 
 

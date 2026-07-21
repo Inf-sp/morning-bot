@@ -194,7 +194,7 @@ async def refresh_database(bot, cid, q=None):
         rows.append([InlineKeyboardButton("🔎 Проверить изменения", callback_data="set_refresh_review")])
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
-        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -214,7 +214,7 @@ async def send_language_review(bot, cid, q=None):
         msg = settings_ui.mydata_section("✅ Проверка завершена", "Сомнительных изменений больше нет.")
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
-            InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
         ]])
     else:
         current = items[0]
@@ -225,7 +225,7 @@ async def send_language_review(bot, cid, q=None):
         rows.append([InlineKeyboardButton("❌ Удалить запись", callback_data="set_refresh_review_delete")])
         rows.append([
             InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
-            InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
         ])
         kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -391,13 +391,13 @@ class NotificationOption:
 
 
 _ADMIN_NOTIFICATION_META = {
-    "morning_brief":   ("08:30", "☀️ Мой день"),
-    "weekend_events":  ("пт 10:00", "🎧 Ближайшие события"),
-    "daily_words":     ("11:00", "📚 Слова и фразы дня"),
-    "checkin_day":     ("14:00", "😮‍💨 Есть что выгрузить?"),
-    "evening_weather": ("20:30", "🌦️ Прогноз на завтра"),
-    "checkin_eve":     ("21:00", "😌 Закроем день"),
-    "weather_warn":    ("08:45, если есть повод", "⚠️ Погодное предупреждение"),
+    "morning_brief":   ("08:30", "☀️ Утро"),
+    "weekend_events":  ("пт 10:00", "🎧 События"),
+    "daily_words":     ("11:00", "📚 Обучение"),
+    "checkin_day":     ("14:00", "😮‍💨 Мысли"),
+    "evening_weather": ("20:30", "🌦️ Погода"),
+    "checkin_eve":     ("21:00", "🌙 Вечер"),
+    "weather_warn":    ("08:45, если есть повод", "⚠️ Погодные предупреждения"),
 }
 
 
@@ -452,7 +452,7 @@ async def send_notif(bot, cid, q=None):
         rows.append([InlineKeyboardButton(f"{mark} {opt.button_label}", callback_data=f"set_notiftgl_{opt.key}")])
     if any(notif_on(cid, kind) for kind, _ in NOTIF_TYPES):
         rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     msg = settings_ui.notifications()
     text = msg.text
     kb = InlineKeyboardMarkup(rows)
@@ -486,7 +486,7 @@ async def send_personalization(bot, cid, q=None):
     → «*️⃣ Выбрать язык», «Досуг» → «Настройки досуга», «Готовка» → «*️⃣ Выбрать кухни»).
     Экран оставлен как compat-редирект на главные Настройки."""
     rows = [
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     msg = settings_ui.personalization()
     kb = InlineKeyboardMarkup(rows)
@@ -509,7 +509,7 @@ def _cuisines_kb(cid):
         for key, label in CUISINE_OPTIONS
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_food"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_food"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -661,7 +661,7 @@ def _multi_pick_kb(selected, options, prefix, back):
     buttons = [InlineKeyboardButton(("✅ " if v in selected else "") + v, callback_data=f"{prefix}_{i}")
                for i, v in enumerate(options)]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -770,8 +770,8 @@ async def send_wardrobe_settings_hub(bot, cid, q=None):
     )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("👕 Мой гардероб", callback_data="set_wardrobe_g")],
-        [InlineKeyboardButton(choose_label("Выбрать стили"), callback_data="set_wardrobe_style")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="set_wardrobe_style")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     if q is not None:
         try:
@@ -817,7 +817,7 @@ def _wardrobe_style_kb(cid, state=None):
     )
                      for i, value in enumerate(STYLE_AVOID_OPTIONS)]
     rows.extend(avoid_buttons[i:i + 2] for i in range(0, len(avoid_buttons), 2))
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -956,7 +956,7 @@ async def handle_callback(bot, cid, data, q=None):
         await wardrobe.send_wardrobe_zones(bot, cid, q=q)
     elif data == "set_ward_add":
         store.pending_input[cid] = "wardrobe_add_set"
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_g"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_g"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
         msg = settings_ui.wardrobe_item_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
     elif data == "adm_home":

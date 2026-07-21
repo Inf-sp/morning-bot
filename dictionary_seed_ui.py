@@ -81,5 +81,5 @@ def level_keyboard(code, current):
     return InlineKeyboardMarkup([
         row,
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictseed_start_{code}"),
-         InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

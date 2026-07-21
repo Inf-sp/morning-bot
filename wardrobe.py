@@ -45,11 +45,11 @@ def _kb(rows):
 def closet_kb():
     return _kb([
         [("🆕 Добавить вещь", "w_add")],
-        [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Меню", "m_menu")],
+        [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")],
     ])
 
 def _back_kb():
-    return _kb([[("⬅️ Назад", "m_wardrobe"), ("#️⃣ Меню", "m_menu")]])
+    return _kb([[("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")]])
 
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
@@ -170,10 +170,10 @@ def _save_cached_look(cid, item_ids, look_data):
 # ---------- главный экран раздела (панель состояния) ----------
 def build_wardrobe_keyboard():
     return _kb([
-        [("✨ Другой образ", "w_look")],
-        [("🧐 Покупка", "w_check"), ("✂️ Мой шкаф", "w_closet")],
-        [(choose_label("Выбрать стили"), "set_wardrobe_style")],
-        [("⬅️ Назад", "m_menu"), ("#️⃣ Меню", "m_menu")],
+        [("✨ Подобрать образ", "w_look")],
+        [("🧐 Оценить покупку", "w_check"), ("👕 Мой шкаф", "w_closet")],
+        [("🎚️ Предпочтения", "set_wardrobe_style")],
+        [("#️⃣ Главная", "m_menu")],
     ])
 
 
@@ -293,16 +293,7 @@ def _build_weather_rules(cid, w, flags):
 
 # ---------- генерация лука по погоде ----------
 def _empty_wardrobe_screen():
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add"),
-    ], [
-        InlineKeyboardButton("✂️ Мой шкаф", callback_data="w_closet"),
-    ], [
-        InlineKeyboardButton(choose_label("Выбрать стили"), callback_data="set_wardrobe_style"),
-    ], [
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"),
-        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
-    ]])
+    kb = build_wardrobe_keyboard()
     text = (
         "<b>👕 Образ на сегодня</b>\n\n"
         "Чтобы собрать образ из твоих вещей, сначала добавь их в шкаф."
@@ -484,7 +475,7 @@ async def _show_added_items(bot, cid, items):
     else:
         rows = [[(delete_label(f"Удалить: {public_item_name(item)[:28]}"), f"w_delete_{item['id']}")]
                 for item in items]
-    rows.append([("⬅️ Назад", "w_closet"), ("#️⃣ Меню", "m_menu")])
+    rows.append([("⬅️ Назад", "w_closet"), ("#️⃣ Главная", "m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_kb(rows))
 
 async def add_item(bot, cid, text):
@@ -613,12 +604,12 @@ async def handle_wardrobe_search(bot, cid, query):
     if not matches:
         await bot.send_message(
             chat_id=cid, text="Ничего не нашлось. Попробуй цвет, бренд или категорию.",
-            reply_markup=_kb([[("⬅️ Назад", "w_closet"), ("#️⃣ Меню", "m_menu")]]),
+            reply_markup=_kb([[("⬅️ Назад", "w_closet"), ("#️⃣ Главная", "m_menu")]]),
         )
         return
     msg = wardrobe_ui.search_results(query, matches)
     rows = [[(str(item.get("name") or "Вещь")[:48], f"w_item_{item.get('id')}")] for item in matches[:10]]
-    rows.append([("⬅️ Назад", "w_closet"), ("#️⃣ Меню", "m_menu")])
+    rows.append([("⬅️ Назад", "w_closet"), ("#️⃣ Главная", "m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_kb(rows))
 
 # ---------- шкаф, категории и карточки вещей ----------
@@ -640,7 +631,7 @@ async def send_wardrobe_zones(bot, cid, q=None):
             f"{public_zone_name(zone)} · {counts[zone]}",
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
         )])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     msg = wardrobe_ui.wardrobe_home_screen(total)
     kb = InlineKeyboardMarkup(rows)
     # Экран шкафа служебный. Отправляем его отдельно, чтобы карточка образа,
@@ -659,7 +650,7 @@ async def send_category(bot, cid, zone_slug, q=None):
     msg = wardrobe_ui.category_screen(public_zone_name(zone), items)
     rows = [[InlineKeyboardButton(str(item.get("name") or "Вещь")[:48], callback_data=f"w_item_{item.get('id')}")]
             for item in items]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
@@ -680,7 +671,7 @@ async def send_item_card(bot, cid, item_id, q=None):
     zone_slug = ZONE_SLUG.get(zone, "oth")
     kb = _kb([
         [(delete_label("Удалить"), f"w_delete_{item_id}")],
-        [("⬅️ Назад", f"w_cat_{zone_slug}"), ("#️⃣ Меню", "m_menu")],
+        [("⬅️ Назад", f"w_cat_{zone_slug}"), ("#️⃣ Главная", "m_menu")],
     ])
     if q is not None:
         try:
@@ -699,7 +690,7 @@ async def send_delete_confirmation(bot, cid, item_id, q=None):
     msg = wardrobe_ui.delete_confirmation(item)
     kb = _kb([
         [(delete_label("Удалить"), f"w_deleteok_{item_id}"), ("Отмена", f"w_item_{item_id}")],
-        [("⬅️ Назад", f"w_item_{item_id}"), ("#️⃣ Меню", "m_menu")],
+        [("⬅️ Назад", f"w_item_{item_id}"), ("#️⃣ Главная", "m_menu")],
     ])
     if q is not None:
         try:
@@ -817,7 +808,7 @@ async def check_purchase(bot, cid, text):
     store.last_source[str(cid)] = "Гардероб · Покупка"
     store.last_answer[str(cid)] = text_out
     await bot.send_message(chat_id=cid, text=text_out, entities=entities,
-        reply_markup=_kb([[("⬅️ Назад", "m_wardrobe"), ("#️⃣ Меню", "m_menu")]]))
+        reply_markup=_kb([[("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")]]))
 
 
 # ---------- добавление файлом (старый режим, оставлен) ----------

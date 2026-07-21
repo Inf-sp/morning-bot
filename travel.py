@@ -138,10 +138,10 @@ def _home_idea(cid):
 
 def _home_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать новую страну", callback_data="a_trav_go")],
-        [InlineKeyboardButton("🧳 Мои страны", callback_data="a_trav_countries_0")],
-        [InlineKeyboardButton(choose_label("Выбрать транспорт"), callback_data="a_trav_transport")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("✨ Куда поехать", callback_data="a_trav_go")],
+        [InlineKeyboardButton("🧳 Поездки", callback_data="a_trav_countries_0")],
+        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="a_trav_transport")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
@@ -290,7 +290,7 @@ def _countries_kb(cid, page):
         InlineKeyboardButton(f"{page + 1} / {pages}", callback_data="noop"),
         InlineKeyboardButton("▶️", callback_data=next_callback),
     ])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows), page, pages
 
 
@@ -370,7 +370,7 @@ async def send_country_card(bot, cid, code, page=0, q=None):
     msg = travel_ui.visited_country_card(card)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(delete_label("Удалить страну"), callback_data=f"a_trav_country_del_{code}_{page}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_trav_countries_{page}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_trav_countries_{page}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     if q is not None:
         try:
@@ -385,7 +385,7 @@ async def _confirm_country_delete(bot, cid, code, page, q):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_trav_country_yes_{code}_{page}"),
          InlineKeyboardButton("Отмена", callback_data=f"a_trav_country_{code}_{page}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_trav_country_{code}_{page}"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_trav_country_{code}_{page}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     await q.message.edit_text(text, reply_markup=kb)
 
@@ -432,7 +432,7 @@ async def send_country_add_prompt(bot, cid):
     store.pending_input[str(cid)] = "trav_country_add"
     kb = InlineKeyboardMarkup([[
         InlineKeyboardButton("⬅️ Назад", callback_data="a_trav_countries_0"),
-        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ]])
     await bot.send_message(chat_id=cid, text="Напиши название страны, в которой уже был.", reply_markup=kb)
 
@@ -442,7 +442,7 @@ async def send_transport_settings(bot, cid, q=None):
     rows = [[InlineKeyboardButton(("✅ " if key in selected else "") + f"{emoji} {label}",
                                   callback_data=f"a_trav_mode_{key}")]
             for key, emoji, label, _ in _TRANSPORTS]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     msg = travel_ui.transport_screen(", ".join(_TRANSPORT_BY_KEY[k][2] for k in selected_transports(cid)))
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -529,7 +529,7 @@ async def send_go(bot, cid):
     if not data:
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("✨ Попробовать ещё", callback_data="a_trav_go")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
         ])
         await bot.send_message(
             chat_id=cid,
@@ -669,9 +669,9 @@ async def send_plan(bot, cid):
         "plan_entities": util.entities_to_json(msg.entities), "details": plan,
     }
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Заменить страну", callback_data="a_trav_no")],
+        [InlineKeyboardButton("✨ Другая страна", callback_data="a_trav_no")],
         [InlineKeyboardButton(save_toggle_label(saved_items.is_note_saved(cid, msg.text, "plan")), callback_data="a_trav_save")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     photo = plan.get("photo") or {}
     if photo.get("url"):

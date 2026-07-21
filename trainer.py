@@ -61,7 +61,7 @@ def _keyboard(rows):
 
 
 def _nav_row():
-    return [("⬅️ Назад", "m_learn"), ("#️⃣ Меню", "m_menu")]
+    return [("⬅️ Назад", "m_learn"), ("#️⃣ Главная", "m_menu")]
 
 
 def _options(data):
@@ -139,7 +139,7 @@ async def start(bot, cid, language, mode=None):
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("📖 Открыть словарь", callback_data=f"a_dictlang_{lang_code}_from_menu")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"),
-             InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")],
+             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
         ])
         await bot.send_message(
             chat_id=cid,
@@ -314,8 +314,8 @@ async def confirm_delete_current(bot, cid):
         chat_id=cid,
         text=f"Точно удалить «{term}» из обучения?",
         reply_markup=_keyboard([
-            [(delete_label("Да, удалить"), "ex_delete_yes")],
-            [("⬅️ Назад", "ex_delete_cancel"), ("#️⃣ Меню", "m_menu")],
+            [(delete_label("Удалить"), "ex_delete_yes")],
+            [("⬅️ Назад", "ex_delete_cancel"), ("#️⃣ Главная", "m_menu")],
         ]),
         transient=True,
     )

@@ -72,7 +72,7 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
             f"{label} · {on_cnt}",
             callback_data=f"as_fridge_cat_{ci}_0",
         )])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
 
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -109,7 +109,7 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
     # Один продукт в строку: названия должны читаться полностью.
     rows = []
     for gi, it in chunk:
-        mark = "🟢" if it.get("on", True) else "🔴"
+        mark = "✅" if it.get("on", True) else "□"
         name_short = it["name"][:40]
         rows.append([
             InlineKeyboardButton(f"{mark} {name_short}", callback_data=f"as_fridge_tgl_{gi}_{cat_idx}_{page}")
@@ -118,7 +118,7 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
     if pages > 1:
         rows.append([
             InlineKeyboardButton("◀️", callback_data=f"as_fridge_cat_{cat_idx}_{(page-1) % pages}"),
-            InlineKeyboardButton(f"Страница {page + 1} из {pages}", callback_data="noop"),
+            InlineKeyboardButton(f"{page + 1} / {pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"as_fridge_cat_{cat_idx}_{(page+1) % pages}"),
         ])
     if cat_items:
@@ -126,7 +126,7 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
             delete_label("Удалить продукты"),
             callback_data=f"as_fridge_clean_{cat_idx}",
         )])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_fridge_home"), InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_fridge_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
 
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -202,7 +202,7 @@ async def send_fridge_category_choice(bot, cid, q=None):
     ]
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data="as_fridge_home"),
-        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     kb = InlineKeyboardMarkup(rows)
     if q is not None:

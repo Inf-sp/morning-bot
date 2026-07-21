@@ -58,7 +58,7 @@ async def send_health_principles(bot, cid, q=None):
     rows = [[button] for button in buttons]
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data="m_balance"),
-        InlineKeyboardButton("#️⃣ Меню", callback_data="m_menu"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     msg = balance_ui.health_principles(len(selected))
     kb = InlineKeyboardMarkup(rows)

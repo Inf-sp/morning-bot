@@ -48,7 +48,7 @@ def review(summary, analysis, next_step):
 
 def clear_confirmation():
     b = MessageBuilder()
-    b.section("Очистить разобранные мысли?")
+    b.section("Очистить все записи?")
     return b.build_stripped()
 
 

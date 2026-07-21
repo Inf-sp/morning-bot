@@ -402,7 +402,7 @@ def game_hint(ui, hint):
 
 def learning_settings(active_language, active_level):
     b = MessageBuilder()
-    b.section(choose_label("Выбрать язык"))
+    b.section("🎚️ Настройки")
     b.spacer()
     b.labeled_line("Активный язык")
     b.bold(active_language)
