@@ -150,32 +150,103 @@ def country_cover(country):
     return _pexels(query, strict=True) or _unsplash(query, strict=True)
 
 
+def _normalize_pixabay_query(text: str) -> str:
+    if not text:
+        return ""
+    text = text.lower().strip()
+    noise_words = {
+        "detective", "mystery", "scene", "room", "background", "cinematic",
+        "dramatic", "story", "clue", "crime", "illustration", "image",
+        "picture", "ai", "generated",
+    }
+    words = re.findall(r"[a-zA-Z0-9'-]+", text)
+    words = [w for w in words if w not in noise_words]
+    return " ".join(words[:4])
+
+
+def _score_pixabay_hit(hit: dict, query: str) -> float:
+    tags = {
+        tag.strip().lower()
+        for tag in str(hit.get("tags", "")).split(",")
+        if tag.strip()
+    }
+    query_words = set(query.lower().split())
+    score = 0.0
+    for word in query_words:
+        if word in tags:
+            score += 5
+        if any(word in tag for tag in tags):
+            score += 2
+    score += min(int(hit.get("likes", 0)), 100) * 0.02
+    crowded_tags = {
+        "people", "group", "crowd", "city", "landscape", "interior",
+        "room", "background", "fantasy", "collage", "concept", "scene",
+    }
+    score -= len(tags & crowded_tags) * 4
+    return score
+
+
 def _pixabay(query):
     """Fetch illustration/vector image from Pixabay using image_type=illustration."""
     if not config.PIXABAY_API_KEY:
+        return None
+    normalized = _normalize_pixabay_query(query)
+    if not normalized:
         return None
     try:
         response = requests.get(
             "https://pixabay.com/api/",
             params={
                 "key": config.PIXABAY_API_KEY,
-                "q": query,
-              "lang": "en",
-              "image_type": "illustration",
-              "editors_choice": "true",
-              "safesearch": "true",
-              "order": "popular",
-              "per_page": 20,
+                "q": normalized,
+                "lang": "en",
+                "image_type": "illustration",
+                "editors_choice": "true",
+                "safesearch": "true",
+                "order": "popular",
+                "per_page": 30,
+                "min_width": 600,
+                "min_height": 600,
             },
             timeout=10,
         )
         if response.status_code != 200:
             return None
         hits = response.json().get("hits") or []
-        # prefer larger images
-        best = max(hits, key=lambda h: h.get("imageWidth", 0) * h.get("imageHeight", 0), default=None)
-        if not best:
+        if not hits:
+            params = response.request.params if hasattr(response.request, 'params') else {
+                "key": config.PIXABAY_API_KEY,
+                "q": normalized,
+                "lang": "en",
+                "image_type": "illustration",
+                "editors_choice": "false",
+                "safesearch": "true",
+                "order": "popular",
+                "per_page": 30,
+                "min_width": 600,
+                "min_height": 600,
+            }
+            response = requests.get(
+                "https://pixabay.com/api/",
+                params=params,
+                timeout=10,
+            )
+            if response.status_code != 200:
+                return None
+            hits = response.json().get("hits") or []
+        if not hits:
             return None
+        hits = [hit for hit in hits if hit.get("imageWidth", 0) >= 600 and hit.get("imageHeight", 0) >= 600]
+        if not hits:
+            return None
+        hits.sort(
+            key=lambda hit: (
+                _score_pixabay_hit(hit, normalized),
+                hit.get("imageWidth", 0) * hit.get("imageHeight", 0),
+            ),
+            reverse=True,
+        )
+        best = hits[0]
         url = best.get("largeImageURL") or best.get("webformatURL")
         if not url:
             return None
@@ -185,7 +256,7 @@ def _pixabay(query):
             "alt": best.get("tags", ""),
             "width": best.get("imageWidth", 0),
             "height": best.get("imageHeight", 0),
-            "query": query,
+            "query": normalized,
         }
     except Exception:
         return None
