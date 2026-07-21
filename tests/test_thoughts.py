@@ -201,7 +201,7 @@ def test_day_reminder_skips_recent_entry_then_opens_optional_capture(monkeypatch
         for row in bot.sent[0]["reply_markup"].inline_keyboard
         for button in row
     ]
-    assert labels == ["✍️ Выгрузить тревоги", "Всё спокойно"]
+    assert labels == ["✍️ Выгрузить тревоги", "😌 Всё спокойно"]
     assert thoughts.capture_waiting("42") is True
     assert settings_state[("42", "_thoughts_capture_state")]["status"] == "implicit_wait"
 

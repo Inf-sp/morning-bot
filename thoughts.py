@@ -725,7 +725,7 @@ async def send_day_reminder(bot, cid):
     msg = thoughts_ui.day_reminder()
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✍️ Выгрузить тревоги", callback_data="thought_capture")],
-        [InlineKeyboardButton("Всё спокойно", callback_data="thought_calm")],
+        [InlineKeyboardButton("😌 Всё спокойно", callback_data="thought_calm")],
     ])
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,
