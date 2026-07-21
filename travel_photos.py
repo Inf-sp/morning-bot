@@ -160,11 +160,12 @@ def _pixabay(query):
             params={
                 "key": config.PIXABAY_API_KEY,
                 "q": query,
-                "image_type": "illustration",
-                "safesearch": "true",
-                "per_page": 10,
-                "min_width": 400,
-                "min_height": 400,
+              "lang": "en",
+              "image_type": "illustration",
+              "editors_choice": "true",
+              "safesearch": "true",
+              "order": "popular",
+              "per_page": 20,
             },
             timeout=10,
         )
