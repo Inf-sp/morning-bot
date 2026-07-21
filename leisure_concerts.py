@@ -589,7 +589,7 @@ async def _fetch_concerts(artists, cc, cname):
     from datetime import datetime, timedelta
     now = datetime.now(config.TZ)
     date_from = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    date_to = (now + timedelta(days=182)).strftime("%Y-%m-%dT%H:%M:%SZ")  # ~6 месяцев
+    date_to = (now + timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ")  # 1 год вперёд
 
     tm_events = await _ticketmaster_events_many(artists, cc, start_dt=date_from, end_dt=date_to, size=10, limit=40)
     external_batches = await asyncio.gather(

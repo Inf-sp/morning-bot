@@ -76,7 +76,7 @@ def _listen_kb(saved=False):
 
 def music_home_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать музыку", callback_data="a_listen")],
+        [InlineKeyboardButton("✨ Подобрать музыку", callback_data="music_reco")],
         [InlineKeyboardButton("❤️ Мои артисты", callback_data="artist_favorites")],
         [InlineKeyboardButton("💾 Послушать позже", callback_data="artist_saved")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="music_prefs")],

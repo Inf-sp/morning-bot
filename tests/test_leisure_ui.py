@@ -40,6 +40,8 @@ def test_book_and_music_home_follow_same_model():
         ["✨ Подобрать музыку"], ["❤️ Мои артисты"],
         ["💾 Послушать позже"], ["🎚️ Предпочтения"],
     ]
+    assert leisure_books.books_home_keyboard().inline_keyboard[0][0].callback_data == "book_reco"
+    assert leisure_music.music_home_keyboard().inline_keyboard[0][0].callback_data == "music_reco"
 
 
 def test_recommendation_cards_use_content_specific_next_labels():

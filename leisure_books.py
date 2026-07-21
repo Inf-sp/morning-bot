@@ -91,7 +91,7 @@ def _book_kb(i, saved=False):
 
 def books_home_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать книгу", callback_data="a_read")],
+        [InlineKeyboardButton("✨ Подобрать книгу", callback_data="book_reco")],
         [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites")],
         [InlineKeyboardButton("💾 Почитать позже", callback_data="book_saved")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="book_prefs")],

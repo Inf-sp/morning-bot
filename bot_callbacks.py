@@ -348,6 +348,12 @@ async def handle(update, context, remove_reply_keyboard):
         await _ack(q)
         await leisure_movies.send_movie_prefs(bot, cid, q)
         return
+    if data == "book_reco":
+        await _inline_status(lambda _s: leisure_books.send_books_reco(bot, cid))
+        return
+    if data == "music_reco":
+        await _inline_status(lambda _s: leisure_music.send_listen(bot, cid))
+        return
     if data == "movie_saved":
         await cleanup.open_collection(bot, cid, "cinema_saved", back="a_watch")
         return
