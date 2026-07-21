@@ -138,6 +138,18 @@ def _is_temporary_exception(exc):
         requests.exceptions.ConnectionError,
     ))
 
+_TIMEOUT_CAPS = {
+    "gemini": 6.0,
+    "cohere": 5.0,
+    "github_models": 5.0,
+    "groq": 5.0,
+    "cf": 4.0,
+}
+
+
+def _timeout_cap(name: str):
+    return _TIMEOUT_CAPS.get(name)
+
 
 def _log_cost(provider: str, model: str, prompt: str, result: str, module: str = "", ms: int = 0, ok: bool = True):
     """Добавить запись о LLM-вызове в rolling-буфер (хранится в store).
@@ -409,7 +421,7 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
     except Exception:
         pass
 
-def _post(url, headers, payload, timeout, name):
+def _post(url, headers, payload, timeout, name, timeout_cap=None):
     service = {"cf": "cloudflare"}.get(name, name)
     cohere_request = service == "cohere"
     gemini_request = service == "gemini"
@@ -417,6 +429,10 @@ def _post(url, headers, payload, timeout, name):
         limit_error = _cohere_limit_error()
         if limit_error is not None:
             raise limit_error
+    if timeout_cap is None:
+        timeout_cap = _timeout_cap(name)
+    if timeout_cap is not None:
+        timeout = min(float(timeout), float(timeout_cap))
     t0 = time.time()
     timeout = _bounded_timeout(timeout)
     try:
@@ -516,7 +532,7 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
                 t0 = time.time()
                 r = _post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
-                    {}, payload, 30, "gemini")
+                    {}, payload, 30, "gemini", timeout_cap=6)
             data = r.json()
             usage = data.get("usageMetadata") or data.get("usage_metadata") or {}
             input_tokens = int(usage.get("promptTokenCount") or usage.get("prompt_token_count") or 0)
@@ -535,16 +551,19 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
             return data["candidates"][0]["content"]["parts"][0]["text"]
         except LLMProviderError as e:
             last_err = e
+            retry_seconds = min(max(int(e.retry_after or 5), 1), 10)
             short_retry = (
                 e.status_code == 429
                 and attempt == 0
                 and (e.limit_scope or "").upper() != "RPD"
                 and e.retry_after is not None
-                and int(e.retry_after or 0) <= 10
+                and retry_seconds <= 10
             )
             if short_retry:
-                time.sleep(min(max(int(e.retry_after or 5), 1), 60))
-                continue
+                remaining = _remaining_seconds()
+                if remaining is None or remaining > retry_seconds + 5:
+                    time.sleep(retry_seconds)
+                    continue
             raise
     raise last_err
 
@@ -579,6 +598,7 @@ def _gen_cohere(prompt, max_tokens, temperature, response_mode: ResponseMode = "
         payload,
         30,
         "cohere",
+        timeout_cap=5,
     )
     data = r.json()
     content = (data.get("message") or {}).get("content") or []
@@ -615,6 +635,7 @@ def _gen_github_models(prompt, max_tokens, temperature,
         payload,
         30,
         "github_models",
+        timeout_cap=5,
     )
     data = r.json()
     choices = data.get("choices") or []
@@ -651,7 +672,7 @@ def _gemini_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
     }
     r = _post(
         f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
-        {}, payload, 40, "gemini",
+        {}, payload, 40, "gemini", timeout_cap=40,
     )
     data = r.json()
     usage = data.get("usageMetadata") or {}
@@ -777,7 +798,7 @@ def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "pl
     r = _post("https://api.groq.com/openai/v1/chat/completions",
         {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"},
         payload,
-        40, "groq")
+        40, "groq", timeout_cap=5)
     return r.json()["choices"][0]["message"]["content"]
 
 def _gen_cf(prompt, max_tokens):
@@ -786,7 +807,7 @@ def _gen_cf(prompt, max_tokens):
     r = _post(f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.1-8b-instruct",
         {"Authorization": f"Bearer {config.CF_API_TOKEN}", "Content-Type": "application/json"},
         {"messages": [{"role": "user", "content": prompt}], "max_tokens": max_tokens},
-        40, "cf")
+        40, "cf", timeout_cap=4)
     return _as_text(r.json().get("result", {}).get("response"))
 
 # ---------- circuit breaker для временных сбоев ----------
@@ -1308,7 +1329,7 @@ def _chat(provider, history, system):
         contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in history]
         r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
             {}, {"system_instruction": {"parts": [{"text": system}]}, "contents": contents,
-                 "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, "gemini")
+                 "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, "gemini", timeout_cap=6)
         return r.json()["candidates"][0]["content"]["parts"][0]["text"]
     if provider == "github_models":
         if not config.GITHUB_MODELS_TOKEN:
@@ -1331,6 +1352,7 @@ def _chat(provider, history, system):
             },
             30,
             "github_models",
+            timeout_cap=5,
         )
         return r.json()["choices"][0]["message"]["content"]
     if provider == "groq":
@@ -1339,14 +1361,14 @@ def _chat(provider, history, system):
         r = _post("https://api.groq.com/openai/v1/chat/completions",
             {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"},
             {"model": "llama-3.3-70b-versatile", "messages": [{"role": "system", "content": system}] + history,
-             "max_tokens": 700, "temperature": 0.8}, 40, "groq")
+             "max_tokens": 700, "temperature": 0.8}, 40, "groq", timeout_cap=5)
         return r.json()["choices"][0]["message"]["content"]
     if provider == "cf":
         if not (config.CF_API_TOKEN and config.CF_ACCOUNT_ID):
             raise Exception("no cf")
         r = _post(f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.1-8b-instruct",
             {"Authorization": f"Bearer {config.CF_API_TOKEN}", "Content-Type": "application/json"},
-            {"messages": [{"role": "system", "content": system}] + history, "max_tokens": 700}, 40, "cf")
+            {"messages": [{"role": "system", "content": system}] + history, "max_tokens": 700}, 40, "cf", timeout_cap=4)
         return _as_text(r.json().get("result", {}).get("response"))
 
 def _chat_chain_impl(history, cid=None):
