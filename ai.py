@@ -24,7 +24,7 @@ _ACTIVE_DEADLINE = contextvars.ContextVar("ai_deadline", default=None)
 STANDARD_BUDGET_SECONDS = 10.0
 COMPLEX_BUDGET_SECONDS = 15.0
 _COMPLEX_MODULE_PREFIXES = (
-    "food", "cooking", "recipe", "wardrobe", "travel", "leisure",
+    "assistant", "food", "cooking", "recipe", "wardrobe", "travel", "leisure",
 )
 
 # ---------- Cost logger ----------
@@ -1433,5 +1433,5 @@ async def allm_json(prompt, max_tokens=1200, order=None, tier=None, route=None, 
         budget_seconds,
     )
 
-async def achat_chain(history, cid=None, budget_seconds=STANDARD_BUDGET_SECONDS):
+async def achat_chain(history, cid=None, budget_seconds=COMPLEX_BUDGET_SECONDS):
     return await asyncio.to_thread(chat_chain, history, cid, budget_seconds)
