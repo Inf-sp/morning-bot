@@ -258,8 +258,8 @@ async def chat_reply(bot, cid, text):
 
     # Явные вопросы о здоровье сразу идут в медицинский сценарий.
     if _looks_medical(text):
-        import balance
-        await balance.doctor_answer(bot, cid, text)
+        import doctor
+        await doctor.answer(bot, cid, text)
         return
 
     await bot.send_chat_action(chat_id=cid, action="typing")

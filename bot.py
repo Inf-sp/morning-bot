@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from urllib.parse import urlparse
 from datetime import datetime
 
 _log = logging.getLogger(__name__)
@@ -74,15 +75,63 @@ class _RetryingHTTPXRequest(HTTPXRequest):
     поэтому sendMessage не может продублироваться.
     """
 
-    async def do_request(self, *args, **kwargs):
+    @staticmethod
+    def _request_label(url: str, request_data=None):
+        path = urlparse(url).path.rstrip("/")
+        endpoint = path.rsplit("/", 1)[-1] if path else ""
+        if endpoint.startswith("bot") and "/" in path:
+            endpoint = path.rsplit("/", 1)[-1]
+        operation = endpoint or "telegram_api"
+        chat_id = None
+        update_type = ""
         try:
+            params = getattr(request_data, "parameters", None) or {}
+            chat_id = params.get("chat_id") or params.get("chatId")
+            if "callback_query_id" in params:
+                update_type = "callback_query"
+            elif "message_id" in params and "chat_id" in params:
+                update_type = "message_edit"
+            elif endpoint == "getUpdates":
+                update_type = "polling"
+            elif endpoint == "answerCallbackQuery":
+                update_type = "callback_query"
+            elif endpoint == "sendMessage":
+                update_type = "message"
+            elif endpoint == "editMessageText":
+                update_type = "edit_message"
+            elif endpoint == "sendPhoto":
+                update_type = "photo"
+            elif endpoint == "sendDocument":
+                update_type = "document"
+            elif endpoint == "sendPoll":
+                update_type = "poll"
+        except Exception:
+            pass
+        return operation, chat_id, update_type
+
+    async def do_request(self, *args, **kwargs):
+        url = args[0] if args else ""
+        request_data = args[2] if len(args) > 2 else kwargs.get("request_data")
+        operation, chat_id, update_type = self._request_label(url, request_data)
+        attempts = 0
+        try:
+            attempts += 1
             return await super().do_request(*args, **kwargs)
         except TimedOut as error:
             cause = error.__cause__
-            if type(cause).__name__ != "ConnectTimeout":
+            timeout_type = "connect" if type(cause).__name__ == "ConnectTimeout" else "read/write/pool"
+            _log.warning(
+                "Telegram timeout operation=%s chat_id=%s update_type=%s timeout_type=%s attempts=%s",
+                operation, chat_id, update_type, timeout_type, attempts,
+            )
+            if timeout_type != "connect":
                 raise
-            _log.warning("Telegram connect timeout; retrying request once")
             await asyncio.sleep(0.25)
+            attempts += 1
+            _log.warning(
+                "Telegram timeout operation=%s chat_id=%s update_type=%s timeout_type=%s attempts=%s retry=1",
+                operation, chat_id, update_type, timeout_type, attempts,
+            )
             return await super().do_request(*args, **kwargs)
 
 # callback-префикс -> тема для тематических фраз ожидания (util.StatusManager.TOPIC_STAGES)

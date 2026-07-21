@@ -224,6 +224,16 @@ def _friendly_error(error="", status_code=None, provider="") -> tuple[str, str]:
     raw = str(error or "").strip()
     low = raw.casefold().replace("_", " ")
     code = int(status_code or 0)
+    if provider == "restcountries":
+        if code == 429 or any(value in low for value in ("rate limit", "too many requests", "quota")):
+            return "quota", "лимит исчерпан"
+        if any(value in low for value in ("invalid api key", "api key", "bearer", "token", "unauthorized")):
+            return "auth", "ошибка авторизации"
+        if code == 403:
+            return "access_denied", "доступ запрещён"
+        if 500 <= code <= 599:
+            return "temporary", "временная ошибка"
+        return "unknown", "не удалось определить статус"
     if provider == "spoonacular" and code == 402:
         return "quota", "дневной лимит исчерпан"
     if provider == "tavily" and code == 432:

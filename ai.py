@@ -332,6 +332,39 @@ def _parse_retry_seconds(headers=None, body="") -> int | None:
     return int(m.group(1)) if m else None
 
 
+def _provider_model_name(provider: str) -> str:
+    provider = (provider or "").strip()
+    if provider == "gemini":
+        return config.GEMINI_MODEL
+    if provider == "cohere":
+        return config.COHERE_MODEL
+    if provider == "github_models":
+        return config.GITHUB_MODELS_MODEL
+    if provider == "groq":
+        return "llama-3.3-70b-versatile"
+    if provider == "cf":
+        return "cloudflare-cf-model"
+    return ""
+
+
+def _json_preview(raw: str, limit: int = 320) -> str:
+    text = secure.redact(str(raw or "")).strip()
+    return text[:limit]
+
+
+def _extract_json_text(raw: str) -> str:
+    text = (raw or "").strip()
+    if not text:
+        return text
+    fence = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.S | re.I)
+    if fence:
+        return fence.group(1).strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I).strip()
+        text = re.sub(r"\s*```$", "", text).strip()
+    return text
+
+
 def _next_local_day_seconds() -> int:
     now = datetime.now(config.TZ)
     tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=5, second=0, microsecond=0)
@@ -1218,29 +1251,29 @@ def _repair_inner_quotes(raw):
 
 
 def _parse_json_response(raw):
-    raw = re.sub(r"```(json)?", "", raw or "").strip()
-    m = re.search(r"\{.*\}", raw, re.S)
-    if m:
-        raw = m.group(0)
-    # пытаемся распарсить в несколько шагов, от мягкого к агрессивному
-    for attempt in (
+    raw = _extract_json_text(raw)
+    if not raw:
+        raise ValueError("json_parse_failed:empty")
+    attempts = (
         lambda s: json.loads(s, strict=False),
         lambda s: json.loads(re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', s), strict=False),
         lambda s: json.loads(_repair_inner_quotes(s), strict=False),
         lambda s: json.JSONDecoder(strict=False).raw_decode(s)[0],
         lambda s: json.JSONDecoder(strict=False).raw_decode(_repair_inner_quotes(s))[0],
-    ):
+    )
+    errors = []
+    for attempt in attempts:
         try:
             parsed = attempt(raw)
-        except Exception:
+        except Exception as exc:
+            errors.append(type(exc).__name__)
             continue
-        # Вызывающие ждут JSON-объект (dict). Модель иногда отдаёт строку/массив/число -
-        # не отдаём такое наружу, иначе p["..."] / p.get(...) падают вне try у вызывающего.
         if isinstance(parsed, dict):
             return parsed
         if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
             return parsed[0]
-    raise ValueError("json_parse_failed")
+        errors.append(type(parsed).__name__)
+    raise ValueError(f"json_parse_failed:{errors[-1] if errors else 'unknown'}")
 
 
 def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
@@ -1248,6 +1281,7 @@ def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", ro
                    allow_personal_openrouter=False, fallback_policy=None):
     if not module:
         module = _caller_module()
+    expected_format = "JSON object"
     raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
                        "Внутри строковых значений НЕ используй двойные кавычки - "
                        "вместо них используй « » или одинарные.", max_tokens, 0.7, order, tier, module, route,
@@ -1255,8 +1289,8 @@ def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", ro
               fallback_policy=fallback_policy, allow_personal_openrouter=allow_personal_openrouter)
     try:
         return _parse_json_response(raw)
-    except ValueError:
-        pass
+    except ValueError as exc:
+        parse_error = exc
 
     repair_prompt = (
         "Преобразуй ответ ИИ ниже в один валидный JSON-объект без markdown и пояснений. "
@@ -1272,12 +1306,22 @@ def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", ro
                        response_mode="json", fallback_policy=fallback_policy,
                        allow_personal_openrouter=allow_personal_openrouter)
         return _parse_json_response(repaired)
-    except Exception:
+    except Exception as exc:
         try:
+            provider = (tuple(order or ()) or ("llm",))[0]
             import tracking
             tracking.log_error(
-                "llm", "Не удалось разобрать JSON", kind="json-parse",
-                action="не обработан ответ сервиса", fallback="безопасный шаблон",
+                "llm",
+                (
+                    f"Не удалось разобрать JSON: {type(parse_error).__name__ if 'parse_error' in locals() else type(exc).__name__}; "
+                    f"provider={provider}; model={_provider_model_name(provider)}; expected={expected_format}; "
+                    f"response={_json_preview(raw)}"
+                ),
+                kind="json-parse",
+                action="не обработан ответ сервиса",
+                service=provider.title().replace("_", " "),
+                fallback="безопасный шаблон",
+                exc=exc,
             )
         except Exception:
             pass
