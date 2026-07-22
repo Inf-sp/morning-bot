@@ -242,4 +242,4 @@ def build_exercise(entry, other_entries, exercise_type, *, situation=None, rng=N
     if data is None:
         return None
     return {**data, "exercise_type": exercise_type, "term": entry_term(entry),
-            "lang": entry.get("lang", "nl")}
+            "lang": entry.get("lang", "nl"), "entry": dict(entry)}

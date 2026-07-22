@@ -162,8 +162,8 @@ def test_language_tool_card_is_formatted_by_code():
     )
 
     assert "Твой ответ: Ik gaat naar huis." in message.text
-    assert "Лучше: Ik ga naar huis." in message.text
     assert "Почему: После ik используется форма ga." in message.text
+    assert "Ik ga naar huis. → Я иду домой." in message.text
     assert "SUBJECT_VERB_AGREEMENT" not in message.text
 
 

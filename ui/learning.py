@@ -127,80 +127,120 @@ def _add_language_tool_report(b, report, explanation="", *, show_unavailable=Fal
 
 
 def exercise_result(data, is_correct, chosen="", language_report=None):
-    """Общий результат после ответа — единая структура для всех форматов
-    (см. docs/word-trainer.md, 'Поведение после ошибки'): короткое подтверждение
-    или короткое объяснение причины, без сухого 'Неверно. Правильный ответ: X.'
-
-    Для форматов с целым предложением (fill_gap/find_error/build_sentence) ru —
-    перевод ВСЕЙ фразы, а не отдельного слова, поэтому строится как отдельная
-    строка полным предложением, а не 'слово → перевод'."""
-    correct = str(data.get("result_correct") or data.get("correct") or data.get("correct_text") or "").strip()
-    ru = str(data.get("ru") or "").strip()
-    english = str(data.get("english") or "").strip()
-    note = str(data.get("note") or "").strip()
-    is_sentence = data.get("exercise_type") in _SENTENCE_CONTEXT_FORMATS
-
+    """Единая карточка результата из уже сохранённой словарной записи."""
+    entry = data.get("entry") if isinstance(data.get("entry"), dict) else {}
     forgot = chosen == "__forgot__"
-
-    if data.get("exercise_type") == "fill_gap":
-        b = MessageBuilder()
-        b.section("✅ Верно" if is_correct else ("📝 Ответ" if forgot else "❌ Ошибка"))
-        b.spacer()
-        _bold_translation_line(b, "Правильно", correct, str(data.get("hint") or "").strip())
-        sentence = str(data.get("result_sentence") or "").strip()
-        if sentence:
-            b.spacer()
-            b.quote(sentence)
-            b.newline()
-        if ru:
-            b.line(f"→ {ru}")
-        if note:
-            b.spacer()
-            b.text_line("💡 ")
-            b.line(note)
-        if not is_correct:
-            b.spacer()
-            b.line("🔁 Вернётся позже в другом задании.")
-        if language_report is not None:
-            _add_language_tool_report(b, language_report)
-        msg = b.build()
-        msg.text = msg.text.rstrip("\n")
-        return msg
-
-    if is_sentence and correct and not correct.endswith((".", "!", "?")):
-        correct += "."
-
+    is_close = (not is_correct and not forgot
+                and data.get("exercise_type") == "translate_context"
+                and bool((language_report or {}).get("issues")))
     b = MessageBuilder()
-    if is_correct:
-        b.section("✅ Верно")
+    b.section("✅ Верно" if is_correct else ("📝 Ответ" if forgot else ("🟡 Почти" if is_close else "❌ Ошибка")))
+    if is_close and chosen:
         b.spacer()
-        _bold_translation_line(b, "Правильно", correct, ru)
-    else:
-        is_free = data.get("exercise_type") == "translate_context"
-        b.section("📝 Ответ" if forgot else ("🟡 Почти" if is_free and language_report else "❌ Ошибка"))
+        b.labeled_line("Твой ответ", chosen, lowercase=False)
+    if is_close:
+        reason = str((language_report or {}).get("explanation") or "").strip()
+        if reason:
+            b.labeled_line("Почему", reason, lowercase=False)
+    if data.get("bad_translation"):
         b.spacer()
-        _bold_translation_line(b, "Правильно", correct, ru)
-        if english:
-            b.spacer()
-            _bold_translation_line(b, "По-английски", english)
-        if note:
-            b.spacer()
-            _q(b, "Разбор", note)
-        b.spacer()
-        b.line("🔁 Вернётся позже в другом задании.")
-        if data.get("bad_translation"):
-            b.spacer()
-            b.text_line("Фраза ")
-            b.bold(f"«{data['bad_translation']}»")
-            b.text_line(" по-русски неграмотна. Предлог ")
-            b.bold(f"«{data['unneeded_preposition']}»")
-            b.text_line(" здесь не нужен.")
-            b.newline()
-    if language_report is not None:
-        _add_language_tool_report(b, language_report)
+        b.line("По-русски предлог «на» здесь не нужен.")
+    _render_trainer_entry_card(b, entry, data)
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
+
+
+def _trainer_term(entry, data):
+    term = str(entry.get("term") or entry.get("word") or data.get("term")
+               or data.get("result_correct") or data.get("correct") or "").strip()
+    article = str(entry.get("article") or "").strip()
+    if article and not term.casefold().startswith(article.casefold() + " "):
+        term = f"{article} {term}"
+    return term[:1].upper() + term[1:] if term else ""
+
+
+def _trainer_breakdown(entry):
+    raw = str(entry.get("breakdown") or "").strip().casefold()
+    pos = str(entry.get("pos") or "").strip().casefold()
+    if entry.get("construction") or "глагол + предлог" in raw:
+        return "глагольная конструкция"
+    if "разговор" in raw:
+        return "разговорная фраза"
+    is_verb = pos in {"глагол", "verb", "werkwoord"} or "глагол" in raw or "werkwoord" in raw
+    if is_verb:
+        verb_type = str(entry.get("verb_type") or "").strip().casefold()
+        if verb_type == "strong":
+            return "сильный глагол"
+        if verb_type == "weak":
+            return "слабый глагол"
+        if verb_type == "irregular":
+            return "неправильный глагол"
+        return "глагол"
+    is_noun = pos in {"существительное", "noun", "zelfstandig naamwoord"} or "существительн" in raw
+    if is_noun:
+        article = str(entry.get("article") or "").strip().casefold()
+        return f"существительное · {article}-слово" if article in {"de", "het"} else "существительное"
+    mapping = {
+        "adj": "прилагательное", "adjective": "прилагательное", "прилагательное": "прилагательное",
+        "adverb": "наречие", "наречие": "наречие", "preposition": "предлог", "предлог": "предлог",
+        "phrase": "выражение", "фраза": "выражение", "expression": "выражение",
+    }
+    return mapping.get(pos) or (raw.replace(",", " · ") if raw else "выражение")
+
+
+def _verified_verb_forms(entry):
+    try:
+        confidence = float(entry.get("analysis_confidence") or 0)
+    except (TypeError, ValueError):
+        confidence = 0
+    forms = [str(entry.get(key) or "").strip() for key in ("infinitive", "past_singular", "perfect_form")]
+    return forms if confidence >= 0.75 and all(forms) else []
+
+
+def _trainer_example(entry):
+    examples = entry.get("examples") or []
+    if isinstance(examples, list):
+        for example in examples:
+            if not isinstance(example, dict):
+                continue
+            text = str(example.get("text") or "").strip()
+            translation = str(example.get("translation") or "").strip()
+            if text and translation:
+                return text, translation
+    text = str(entry.get("example_nl") or "").strip()
+    translation = str(entry.get("example_ru") or "").strip()
+    return (text, translation) if text and translation else ("", "")
+
+
+def _render_trainer_entry_card(b, entry, data):
+    term = _trainer_term(entry, data)
+    translation = str(entry.get("translation") or entry.get("ru") or data.get("ru") or "").strip()
+    if term or translation:
+        b.spacer()
+        b.bold(term)
+        if translation:
+            b.text_line(f" → {translation[:1].upper() + translation[1:]}")
+        b.newline()
+    breakdown = _trainer_breakdown(entry)
+    if breakdown:
+        b.spacer()
+        b.labeled_line("Разбор", breakdown, lowercase=False)
+    plural = str(entry.get("plural") or "").strip()
+    if plural and breakdown.startswith("существительное"):
+        if not plural.casefold().startswith("de "):
+            plural = f"de {plural}"
+        b.labeled_line("Множественное число", plural, lowercase=False)
+    forms = _verified_verb_forms(entry)
+    if forms:
+        b.labeled_line("Формы", " · ".join(forms), lowercase=False)
+    example, example_translation = _trainer_example(entry)
+    if example and example_translation:
+        b.spacer()
+        b.text_line("💡 ")
+        b.bold("Полезно:")
+        b.text_line(f" {example} → {example_translation}")
+        b.newline()
 
 
 def progress_screen(data):
