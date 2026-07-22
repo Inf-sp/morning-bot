@@ -196,7 +196,9 @@ async def handle(update, context, remove_reply_keyboard):
         await firstvisit.show_prompt(bot, cid, _FV_SECTION[data])
         await _unack(q); return
     if data == "m_leisure":
-        await _inline_status(lambda _s: leisure_home.send_home(bot, cid, q))
+        # send_home сам редактирует исходное сообщение и ставит финальную
+        # клавиатуру; inline-статус не должен менять её.
+        await leisure_home.send_home(bot, cid, q)
         return
     if data == "m_wardrobe":
         # Образ — полезный результат, поэтому открываем его отдельным сообщением,

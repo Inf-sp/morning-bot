@@ -120,9 +120,10 @@ class StatusManager:
             return False
         try:
             if self.mode == "inline":
-                from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-                kb = InlineKeyboardMarkup([[InlineKeyboardButton(text, callback_data="noop")]])
-                await self.message.edit_reply_markup(reply_markup=kb)
+                # Inline-статус не должен трогать клавиатуру сообщения: временная
+                # noop-кнопка ломала финальные меню, а последующая очистка могла
+                # удалить уже установленную рабочую клавиатуру.
+                return True
             else:
                 await self.message.edit_text(text, **kwargs)
             return True
@@ -131,41 +132,13 @@ class StatusManager:
 
     async def stop(self, delete=True):
         await self._cancel()
-        if self.mode == "inline" and self.message is not None:
-            await self._clear_inline_markup()
-        elif delete and self.message is not None:
+        if self.mode != "inline" and delete and self.message is not None:
             _log.info("StatusManager.stop: deleting message_id=%s cid=%s",
                       getattr(self.message, "message_id", None), self.cid)
             try:
                 await self.message.delete()
             except Exception as e:
                 _log.warning("StatusManager.stop: delete failed: %r", e)
-
-    async def _clear_inline_markup(self):
-        self._inline_cleared = True
-        ok = False
-        try:
-            await self.message.edit_reply_markup(reply_markup=None)
-            ok = True
-        except Exception as e:
-            _log.info("StatusManager._clear_inline_markup: edit_reply_markup via message failed: %r", e)
-        if ok or self.bot is None:
-            return
-        chat_id = self.cid
-        if chat_id is None:
-            chat = getattr(self.message, "chat", None)
-            chat_id = getattr(chat, "id", None) or getattr(self.message, "chat_id", None)
-        message_id = getattr(self.message, "message_id", None)
-        if chat_id is not None and message_id is not None:
-            try:
-                await self.bot.edit_message_reply_markup(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    reply_markup=None,
-                )
-            except Exception as e:
-                _log.warning("StatusManager._clear_inline_markup: edit via bot failed chat_id=%s message_id=%s: %r",
-                            chat_id, message_id, e)
 
     async def replace(self, text, **kwargs):
         await self._cancel()
