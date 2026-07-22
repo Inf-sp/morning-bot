@@ -509,7 +509,9 @@ def _dict_search_kb(entry, term_key):
     word_id = str(entry.get("id") or "")
     delete_row = ([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelid_{word_id}")]]
                   if word_id else [])
-    return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + [
+    move_row = ([[InlineKeyboardButton("↔️ В другой словарь", callback_data=f"a_dictmoveid_{word_id}")]]
+                if word_id else [])
+    return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + move_row + [
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -588,6 +590,60 @@ async def confirm_delete_dict_entry_by_id(bot, cid, word_id, q=None):
     )
 
 
+async def confirm_move_dict_entry_by_id(bot, cid, word_id, q=None):
+    entry = _entry_by_id(cid, word_id)
+    if not entry:
+        await send_dict(bot, cid, q=q)
+        return
+    source_lang = _dict_lang(entry)
+    target_lang = "en" if source_lang == "nl" else "nl"
+    term = _entry_term(entry)
+    article = str(entry.get("article") or "").strip()
+    display = f"{article} {term}" if article and not term.casefold().startswith(article.casefold() + " ") else term
+    target_title = "английский" if target_lang == "en" else "нидерландский"
+    await _show_screen(
+        bot, cid, f"Переместить «{display[:1].upper() + display[1:]}» в {target_title} словарь?", None,
+        InlineKeyboardMarkup([
+            [InlineKeyboardButton("↔️ Переместить", callback_data=f"a_dictmoveok_{word_id}_{target_lang}")],
+            [InlineKeyboardButton("Отмена", callback_data=f"a_dictlang_{source_lang}")],
+        ]), q=q,
+    )
+
+
+async def move_dict_entry_by_id(bot, cid, word_id, target_lang, q=None):
+    if target_lang not in ("nl", "en"):
+        return
+    words = store.get_list(config.DICT_KEY, cid)
+    entry = next((item for item in words if str(item.get("id") or "") == str(word_id)), None)
+    if not entry:
+        await send_dict(bot, cid, q=q)
+        return
+    source_lang = _dict_lang(entry)
+    if source_lang == target_lang:
+        return
+    loose = _dict_loose_text(target_lang, _entry_term(entry))
+    duplicate = next((item for item in words
+                      if item is not entry and _dict_lang(item) == target_lang
+                      and _dict_loose_text(target_lang, _entry_term(item)) == loose), None)
+    if duplicate:
+        await _show_screen(
+            bot, cid, "Такая запись уже есть в другом словаре.", None,
+            _dict_manage_kb(target_lang), q=q,
+        )
+        return
+    updated = dict(entry)
+    updated["lang"] = target_lang
+    updated["updated_at"] = datetime.now(config.TZ).isoformat()
+    words[words.index(entry)] = updated
+    store.set_list(config.DICT_KEY, cid, words)
+    from dictionary_import import _dict_entry_message, _dict_saved_kb
+    msg = _dict_entry_message(updated, status="updated")
+    await _show_screen(
+        bot, cid, msg.text, msg.entities,
+        _dict_saved_kb(updated, show_dictionary=True), q=q, persistent_inline=True,
+    )
+
+
 async def del_dict_entry_by_id(bot, cid, word_id, page=None, q=None):
     words = store.get_list(config.DICT_KEY, cid)
     removed = next((item for item in words if str(item.get("id") or "") == str(word_id)), None)
@@ -638,7 +694,9 @@ def _dict_entry_view_kb(entry, page, term_key):
     word_id = str(entry.get("id") or "")
     delete_row = ([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictviewdelid_{page}_{word_id}")]]
                   if word_id else [])
-    return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + [
+    move_row = ([[InlineKeyboardButton("↔️ В другой словарь", callback_data=f"a_dictmoveid_{word_id}")]]
+                if word_id else [])
+    return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + move_row + [
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}_{page}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

@@ -127,6 +127,9 @@ def _dict_lang_hint_from_payload(text):
     if re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ]", payload) and not _CYRILLIC_RE.search(payload):
         if _DUTCH_ARTICLE_RE.search(payload):
             return "nl"
+        words = {word.casefold() for word in re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ]+", payload)}
+        if words & _DUTCH_WORD_HINTS:
+            return "nl"
         if re.search(r"\b(?:de|het|een|the|a|an)\b", payload, re.I):
             return None
         return "en"
@@ -134,6 +137,10 @@ def _dict_lang_hint_from_payload(text):
 
 
 _DUTCH_ARTICLE_RE = re.compile(r"\b(de|het)\s+\w+", re.I)
+_DUTCH_WORD_HINTS = {
+    "liever", "vanwege", "bewonderen", "tegoed", "walging", "gevolg",
+    "afdeling", "twijfelen", "twijfelt", "wennen", "omgaan",
+}
 
 
 def _dict_lang_hint(text, cid=None):
@@ -1039,7 +1046,9 @@ def _dict_saved_kb(entry, term_key=None, show_dictionary=True):
     word_id = str(entry.get("id") or "")
     delete_row = ([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelid_{word_id}")]]
                   if word_id else [])
-    return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + ([
+    move_row = ([[InlineKeyboardButton("↔️ В другой словарь", callback_data=f"a_dictmoveid_{word_id}")]]
+                if word_id else [])
+    return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + move_row + ([
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
     ] if show_dictionary else []) + [
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),

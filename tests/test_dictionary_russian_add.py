@@ -190,10 +190,17 @@ def test_english_chat_command_defaults_to_english_dictionary():
 
 
 def test_english_add_command_extracts_only_the_word():
-    for command in ("Add walging", "Add word walging", "Add to dictionary walging"):
+    for command in ("Add suspicious", "Add word suspicious", "Add to dictionary suspicious"):
         payload, lang = dictionary_import._extract_chat_dict_add(command, "42")
-        assert payload == "walging"
+        assert payload == "suspicious"
         assert lang == "en"
+
+
+def test_add_dutch_word_does_not_default_to_english():
+    payload, lang = dictionary_import._extract_chat_dict_add("Add liever", "42")
+
+    assert payload == "liever"
+    assert lang == "nl"
 
 
 def test_russian_chat_command_keeps_dutch_default():
@@ -212,10 +219,12 @@ def test_saved_word_actions_include_delete_and_dictionary():
     assert keyboard.inline_keyboard[0][0].callback_data == "tts_word:abc123"
     assert len(keyboard.inline_keyboard[0][0].callback_data.encode("utf-8")) <= 64
     assert keyboard.inline_keyboard[1][0].callback_data == "a_dictdelid_abc123"
-    assert keyboard.inline_keyboard[2][0].text == "📖 Мой словарь"
-    assert keyboard.inline_keyboard[2][0].callback_data == "a_dictlang_nl_keep"
+    assert keyboard.inline_keyboard[2][0].text == "↔️ В другой словарь"
+    assert keyboard.inline_keyboard[2][0].callback_data == "a_dictmoveid_abc123"
+    assert keyboard.inline_keyboard[3][0].text == "📖 Мой словарь"
+    assert keyboard.inline_keyboard[3][0].callback_data == "a_dictlang_nl_keep"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
-        "🔊 Прослушать", "❌ Удалить", "📖 Мой словарь", "⬅️ Назад", "#️⃣ Главная",
+        "🔊 Прослушать", "❌ Удалить", "↔️ В другой словарь", "📖 Мой словарь", "⬅️ Назад", "#️⃣ Главная",
     ]
 
 
@@ -225,10 +234,12 @@ def test_duplicate_word_actions_include_dictionary():
     )
 
     assert keyboard.inline_keyboard[0][0].callback_data == "a_dictdelid_def456"
-    assert keyboard.inline_keyboard[1][0].text == "📖 Мой словарь"
-    assert keyboard.inline_keyboard[1][0].callback_data == "a_dictlang_en_keep"
+    assert keyboard.inline_keyboard[1][0].text == "↔️ В другой словарь"
+    assert keyboard.inline_keyboard[1][0].callback_data == "a_dictmoveid_def456"
+    assert keyboard.inline_keyboard[2][0].text == "📖 Мой словарь"
+    assert keyboard.inline_keyboard[2][0].callback_data == "a_dictlang_en_keep"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
-        "❌ Удалить", "📖 Мой словарь", "⬅️ Назад", "#️⃣ Главная",
+        "❌ Удалить", "↔️ В другой словарь", "📖 Мой словарь", "⬅️ Назад", "#️⃣ Главная",
     ]
 
 

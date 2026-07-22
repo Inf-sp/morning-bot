@@ -529,6 +529,18 @@ def _collapse_monitor_errors(entries, window_seconds=600):
     return [(group["entry"], group["count"]) for group in groups]
 
 
+def _collapse_app_errors(entries):
+    """Группирует одинаковые ошибки за TTL, сохраняя последнюю точную запись."""
+    groups = {}
+    for entry in sorted(entries, key=lambda item: int(item.get("ts") or 0), reverse=True):
+        key = _error_signature(entry)
+        if key not in groups:
+            groups[key] = [entry, 1]
+        else:
+            groups[key][1] += 1
+    return [(entry, count) for entry, count in groups.values()]
+
+
 async def clear_logs(bot, cid, q=None):
     tracking.clear_errors()
     provider_runtime.clear_history()
@@ -543,7 +555,9 @@ async def send_logs(bot, cid, q=None):
         if entry.get("ts", 0) >= cutoff and entry.get("event_type") == "error"
     ]
     combined = [
-        (int(entry.get("ts") or 0), _compact_log_row(entry)) for entry in errors
+        (int(entry.get("ts") or 0), _compact_log_row(entry)
+         + (f" · повторилось {count} раз" if count > 1 else ""))
+        for entry, count in _collapse_app_errors(errors)
     ] + [
         (
             int(entry.get("ts") or 0),
@@ -552,7 +566,17 @@ async def send_logs(bot, cid, q=None):
         for entry, count in _collapse_monitor_errors(monitor_errors)
     ]
     combined.sort(key=lambda item: item[0], reverse=True)
-    rows = [row for _ts, row in combined]
+    rows = []
+    text_size = 0
+    for _ts, row in combined[:40]:
+        next_size = text_size + len(row) + 1
+        if rows and next_size > 3500:
+            break
+        rows.append(row)
+        text_size = next_size
+    hidden_count = max(0, len(combined) - len(rows))
+    if hidden_count:
+        rows.append(f"… ещё {hidden_count} ошибок скрыто")
     buttons = []
     if combined:
         buttons.append([InlineKeyboardButton(delete_label("Очистить ошибки"), callback_data="adm_logs_clear")])

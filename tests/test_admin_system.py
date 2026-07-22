@@ -125,6 +125,47 @@ def test_logs_collapse_duplicate_monitor_incidents_and_show_all_unique_rows(monk
     assert "Ещё записей" not in text
 
 
+def test_logs_collapse_duplicate_app_errors_and_keep_exact_message(monkeypatch):
+    now = 1_784_466_000
+    errors = [
+        {"id": str(index), "ts": now - index, "source": "app", "kind": "ValueError",
+         "error": "ValueError: exact failure", "file": "bot.py", "line": 42}
+        for index in range(80)
+    ]
+    monkeypatch.setattr(admin.time, "time", lambda: now)
+    monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: errors)
+    monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [])
+    monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
+    bot = _Bot()
+
+    asyncio.run(admin.send_logs(bot, "42"))
+
+    text = bot.sent[0]["text"]
+    assert text.count("exact failure") == 1
+    assert "повторилось 80 раз" in text
+    assert len(text) < 4096
+
+
+def test_logs_limit_total_message_size_for_many_unique_errors(monkeypatch):
+    now = 1_784_466_000
+    errors = [
+        {"id": str(index), "ts": now - index, "source": "app", "kind": "Error",
+         "error": f"Error: unique failure {index} " + ("x" * 220),
+         "file": "bot.py", "line": index}
+        for index in range(80)
+    ]
+    monkeypatch.setattr(admin.time, "time", lambda: now)
+    monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: errors)
+    monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [])
+    monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
+    bot = _Bot()
+
+    asyncio.run(admin.send_logs(bot, "42"))
+
+    assert len(bot.sent[0]["text"]) < 4096
+    assert "ошибок скрыто" in bot.sent[0]["text"]
+
+
 def test_admin_home_ui_uses_compact_exact_lines_without_ok():
     message = admin_ui.home(
         system_dot="🟡", system_text="Работает с ограничениями",

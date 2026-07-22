@@ -24,6 +24,7 @@ import config
 import store
 
 _ERR_MAX = 200          # rolling-буфер ошибок
+ERROR_TTL_SECONDS = 12 * 3600
 _LATENCY_MAX = 500      # действия без текста запросов и ответов
 _ACT_DAYS_MAX = 40      # сколько последних дат активности хранить на юзера
 DAY = 86400
@@ -298,7 +299,9 @@ def log_error(source: str, msg: str, kind: str = "", *, section: str = "",
             "fallback": _safe_text(fallback or _FALLBACK_BY_SERVICE.get(service_name, ""), 80),
             "version": _safe_text(getattr(config, "APP_VERSION", ""), 40),
         }
-        buf = store._load(config.ERROR_LOG_KEY).get("log", [])
+        cutoff = int(time.time()) - ERROR_TTL_SECONDS
+        buf = [item for item in store._load(config.ERROR_LOG_KEY).get("log", [])
+               if int(item.get("ts") or 0) >= cutoff]
         buf.append(entry)
         store._save(config.ERROR_LOG_KEY, {"log": buf[-_ERR_MAX:]})
     except Exception:
@@ -311,6 +314,14 @@ def get_errors(source: str = None, limit: int = 20) -> list:
         buf = store._load(config.ERROR_LOG_KEY).get("log", [])
     except Exception:
         return []
+    cutoff = int(time.time()) - ERROR_TTL_SECONDS
+    fresh = [e for e in buf if int(e.get("ts") or 0) >= cutoff]
+    if len(fresh) != len(buf):
+        try:
+            store._save(config.ERROR_LOG_KEY, {"log": fresh[-_ERR_MAX:]})
+        except Exception:
+            pass
+    buf = fresh
     if source:
         buf = [e for e in buf if e.get("source") == source]
     return list(reversed(buf[-limit:]))
