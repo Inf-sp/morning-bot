@@ -4,6 +4,7 @@ import asyncio
 import logging
 import re
 import random
+from datetime import datetime
 import config
 
 _log = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ import movie_engine
 import recommendation_stoplist
 import verify
 import tracking
+import local_cinema
 from ui import leisure as leisure_ui
 from ui.navigation import back_menu_keyboard
 from leisure_collection import (
@@ -41,8 +43,12 @@ def _movie_kb(i, category=None, saved=False, favorite=False):
     """
     rows = [
         [InlineKeyboardButton("✨ Другое кино", callback_data=f"movie_no_{i}")],
-        [InlineKeyboardButton("❤️ В любимых" if favorite else "❤️ В любимые", callback_data=f"movie_love_{i}"),
+        [InlineKeyboardButton("🎟️ Сейчас в кино", callback_data="movie_now_playing")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
+         InlineKeyboardButton("🌙 По настроению", callback_data="movie_mood_menu")],
+        [InlineKeyboardButton("❤️ Моё кино", callback_data="a_watchlist"),
          InlineKeyboardButton(save_toggle_label(saved, "Смотреть позже"), callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
     ]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
@@ -227,11 +233,32 @@ async def send_recos(bot, cid, kind):
         import leisure_books
         await leisure_books.send_books_reco(bot, cid)
         return
-    # Пустой список фильмов — предлагаем собрать
+    # Даже без любимых открытие раздела должно дать современную качественную
+    # рекомендацию; вкус просто начнёт уточняться после первых сохранений.
     seen = store.get_list(config.WATCHLIST_KEY, cid)
     if not seen:
-        await _ask_collect(bot, cid, "movies")
-        return
+        candidates = await asyncio.to_thread(
+            tmdb.discover, "movie", None, 6.5, datetime.now(config.TZ).year - 1)
+        excluded = movie_engine._excluded_norms(cid)
+        candidates = [movie for movie in candidates
+                      if movie_engine._norm(movie.get("name")) not in excluded
+                      and int(movie.get("vote_count") or 0) >= movie_engine.MIN_VOTE_COUNT]
+        candidates.sort(key=lambda movie: (
+            -(float(movie.get("rating") or 0)),
+            -int(movie.get("vote_count") or 0),
+            -(float(movie.get("popularity") or 0)),
+        ))
+        tm = candidates[0] if candidates else None
+        it = {"title": (tm or {}).get("name", ""),
+              "hook": "Свежий фильм с хорошими оценками — можно начать с него."} if tm else None
+        if it:
+            disp = _display_title(it, tm)
+            movie_engine.mark_shown(cid, disp)
+            store.last_recos[str(cid)] = {"kind": kind, "items": [disp]}
+            store.last_source[str(cid)] = "Досуг · Кино"
+            store.last_answer[str(cid)] = disp
+            await _send_movie_card(bot, cid, it, 0, tm=tm)
+            return
     # Основной путь — TMDb-движок (Recommendations + Similar по любимым).
     it, tm = await _tmdb_engine_pick(cid)
     if it is None:
@@ -251,8 +278,8 @@ async def send_recos(bot, cid, kind):
 
 def _movie_home_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать кино", callback_data="movie_reco")],
-        [InlineKeyboardButton("🎟️ Весь прокат", callback_data="movie_now_playing")],
+        [InlineKeyboardButton("✨ Другое кино", callback_data="movie_reco")],
+        [InlineKeyboardButton("🎟️ Сейчас в кино", callback_data="movie_now_playing")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("🌙 По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("❤️ Моё кино", callback_data="a_watchlist"),
@@ -292,46 +319,60 @@ def _movie_service_language(_cid=None):
     return "nl-NL"
 
 
-async def send_movie_home(bot, cid, q=None):
-    """Приветственный экран раздела «Кино» (тот же паттерн, что у Гардероба):
-    сколько уже в любимых + какие жанры выбраны в предпочтениях + что сейчас в прокате,
-    снизу — вход в обычную рекомендацию по любимым, по жанру или по настроению."""
-    selected = {int(x) for x in (settings.get(cid, "movie_genres", []) or []) if str(x).isdigit()}
-    genre_labels = [label for label, gid in _GENRE_ALL if gid in selected]
+def _movie_city(cid):
+    return str(store.get_settings(cid).get("city") or config.DEFAULT_CITY.get("name") or "").strip()
 
-    s = store.get_settings(cid)
-    cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
-    country_label = _movie_country_label(s.get("country"), cc)
-    now_playing = []
-    if config.TMDB_API_KEY:
-        try:
-            now_playing = await asyncio.to_thread(
-                tmdb.get_now_playing, cc, _movie_service_language(cid), 10)
-        except Exception:
-            now_playing = []
-    msg = leisure_ui.movie_home_screen(genre_labels, country_label, now_playing)
-    kb = _movie_home_kb()
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+def _local_movie_score(item, prefs):
+    """Качество и вкус ранжируют только уже подтверждённые городские сеансы."""
+    rating = float(item.get("rating") or 0)
+    votes = int(item.get("vote_count") or 0)
+    popularity = float(item.get("popularity") or 0)
+    genre_ids = set(item.get("genre_ids") or [])
+    preferred = set(prefs.get("genres") or [])
+    score = rating * 12 + min(votes, 2000) ** 0.5 + min(popularity, 100) * 0.15
+    if preferred.intersection(genre_ids):
+        score += 18
+    return score
+
+
+async def get_local_now_playing(cid, *, limit=20, refresh=False):
+    """Локальная афиша → TMDB metadata → полезная сортировка.
+
+    Не используем национальный ``now_playing`` как запасной вариант: без местной
+    афиши нельзя утверждать, что фильм идёт в городе пользователя.
+    """
+    city = _movie_city(cid)
+    listed = await asyncio.to_thread(local_cinema.get_city_movies, cid, city, refresh=refresh)
+    prefs = _movie_prefs(cid)
+    items = []
+    for local in listed[:30]:
+        meta = await asyncio.to_thread(tmdb.search_id, local.title, "movie") if config.TMDB_API_KEY else None
+        if meta:
+            year = int(meta.get("year") or 0)
+            # Старая картина не становится новинкой только из-за повторного показа.
+            if year and year < datetime.now(config.TZ).year - 1:
+                continue
+            item = dict(meta)
+            item["title"] = item.get("name") or local.title
+            item["genres"] = [tmdb.GENRES.get(g, "") for g in item.get("genre_ids") or [] if tmdb.GENRES.get(g)]
+        else:
+            item = {"title": local.title, "genres": list(local.genres), "rating": None,
+                    "vote_count": 0, "popularity": 0, "genre_ids": []}
+        items.append(item)
+    items.sort(key=lambda item: _local_movie_score(item, prefs), reverse=True)
+    return items[:max(1, int(limit or 20))]
+
+
+async def send_movie_home(bot, cid, q=None):
+    """Открытие Кино сразу даёт персональный фильм, а не второй экран афиши."""
+    await send_recos(bot, cid, "movie")
 
 
 async def send_movie_now_playing(bot, cid, q=None):
-    s = store.get_settings(cid)
-    cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
-    country_label = _movie_country_label(s.get("country"), cc)
-    now_playing = []
-    if config.TMDB_API_KEY:
-        try:
-            now_playing = await asyncio.to_thread(
-                tmdb.get_now_playing, cc, _movie_service_language(cid), 20)
-        except Exception:
-            now_playing = []
-    msg = leisure_ui.movie_now_playing_screen(country_label, now_playing)
+    city = _movie_city(cid)
+    now_playing = await get_local_now_playing(cid, limit=30)
+    msg = leisure_ui.movie_now_playing_screen(city, now_playing)
     kb = back_menu_keyboard("a_watch")
     if q is not None:
         try:
@@ -344,11 +385,7 @@ async def send_movie_now_playing(bot, cid, q=None):
 
 async def warm_movie_home_cache(cid):
     """Прогревает данные текущего проката, не отправляя экран в Telegram."""
-    if not config.TMDB_API_KEY:
-        return False
-    s = store.get_settings(cid)
-    cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
-    await asyncio.to_thread(tmdb.get_now_playing, cc, _movie_service_language(cid), 8)
+    await get_local_now_playing(cid, limit=3)
     return True
 
 

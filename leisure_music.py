@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -16,6 +17,29 @@ from ui.constants import save_toggle_label, ui_label
 from ui.navigation import back_menu_keyboard
 
 _log = logging.getLogger(__name__)
+
+
+def _cached_artist(cid):
+    entry = (store._load(config.MUSIC_RECO_CACHE_KEY) or {}).get(str(cid)) or {}
+    item = entry.get("item")
+    today = datetime.now(config.TZ).date().isoformat()
+    return dict(item) if entry.get("date") == today and isinstance(item, dict) else None
+
+
+def _cache_artist(cid, item):
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        data[str(cid)] = {"date": datetime.now(config.TZ).date().isoformat(), "item": dict(item or {})}
+        return data, None
+    store.mutate_kv(config.MUSIC_RECO_CACHE_KEY, mutate)
+
+
+def _invalidate_artist(cid):
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        data.pop(str(cid), None)
+        return data, None
+    store.mutate_kv(config.MUSIC_RECO_CACHE_KEY, mutate)
 
 
 def _add_unique(key, cid, value):
@@ -61,6 +85,7 @@ async def listen_love(bot, cid, q=None):
     if rec and rec.get("kind") == "listen" and rec["items"]:
         artist = rec["items"][0]
         _add_unique(config.ARTISTS_KEY, cid, artist)
+        _invalidate_artist(cid)
         _kick_off_new_artist_concert_check(cid, [artist])
         if q is not None:
             import saved_items
@@ -70,9 +95,10 @@ async def listen_love(bot, cid, q=None):
 def _listen_kb(saved=False, favorite=False):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другой артист", callback_data="a_listen_no")],
-        [InlineKeyboardButton("❤️ В любимых" if favorite else "❤️ В любимые", callback_data="listen_love"),
-         InlineKeyboardButton(save_toggle_label(saved, "Послушать позже"), callback_data="listen_0")],
+        [InlineKeyboardButton("❤️ Мои артисты", callback_data="artist_favorites")],
+        [InlineKeyboardButton(save_toggle_label(saved, "Послушать позже"), callback_data="listen_0")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="a_artist_concerts")],
+        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="music_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -89,15 +115,7 @@ def music_home_keyboard():
 
 
 async def send_music_home(bot, cid, q=None):
-    text = "🎧 Музыка\n\nПодберу исполнителя под твой вкус."
-    kb = music_home_keyboard()
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    await send_listen(bot, cid)
 
 
 async def send_music_preferences(bot, cid, q=None):
@@ -113,6 +131,7 @@ async def listen_dislike(bot, cid):
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
         recommendation_stoplist.add(cid, "artist", rec["items"][0], "hidden")
+    _invalidate_artist(cid)
     await send_listen(bot, cid)
 
 def _item_text(item):
@@ -175,6 +194,16 @@ def _language_music_context(cid):
 async def send_listen(bot, cid):
     import saved_items
     _log.info("send_listen: start cid=%s", cid)
+    cached = _cached_artist(cid)
+    if cached:
+        artist = str(cached.get("artist") or "")
+        if artist:
+            store.last_recos[str(cid)] = {"kind": "listen", "items": [artist]}
+            store.last_source[str(cid)] = "Досуг · Музыка"
+            msg = leisure_ui.artist_card(cached)
+            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                                   reply_markup=_listen_kb(saved=False))
+            return
     arts_raw = _ensure_artists(cid)
     arts = [_item_text(a) for a in arts_raw if _item_text(a)]
     anchors = ", ".join(arts[:25])
@@ -255,6 +284,7 @@ async def send_listen(bot, cid):
             chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
             reply_markup=back_menu_keyboard("m_leisure")); return
     artist = data.get("artist", "")
+    _cache_artist(cid, data)
     store.last_recos[str(cid)] = {"kind": "listen", "items": [artist]}
     store.last_source[str(cid)] = "Досуг · Музыка"
     try:
@@ -277,4 +307,5 @@ async def add_listen(bot, cid, i, q=None):
         saved = saved_items.toggle_note(cid, title, source="Музыка")
         await saved_items.update_save_button(q, "listen_0", saved)
         if saved:
+            _invalidate_artist(cid)
             await send_listen(bot, cid)

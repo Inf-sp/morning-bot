@@ -251,6 +251,7 @@ def normalize(x, kind=None):
         "name": _display_name(localized, original),
         "name_en": original,
         "year": _year(x),
+        "release_date": x.get("release_date") or x.get("first_air_date") or "",
         "rating": x.get("vote_average") or 0,
         "vote_count": int(x.get("vote_count") or 0),
         "popularity": _float_or_none(x.get("popularity")) or 0,

@@ -15,6 +15,7 @@ import learning_settings
 import learning_router
 import leisure_books
 import leisure_concerts
+import leisure_home
 import leisure_movies
 import leisure_music
 import memory
@@ -194,6 +195,9 @@ async def handle(update, context, remove_reply_keyboard):
         await _ack(q)
         await firstvisit.show_prompt(bot, cid, _FV_SECTION[data])
         await _unack(q); return
+    if data == "m_leisure":
+        await _inline_status(lambda _s: leisure_home.send_home(bot, cid, q))
+        return
     if data == "m_wardrobe":
         # Образ — полезный результат, поэтому открываем его отдельным сообщением,
         # а временное главное меню после этого удаляется автоматически.
@@ -216,7 +220,7 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data.startswith("m_"):
         text, entities, kb = menu.menu_screen(data, cid)
-        if data in ("m_balance", "m_leisure"):
+        if data == "m_balance":
             await bot.send_message(
                 chat_id=cid,
                 text=text,

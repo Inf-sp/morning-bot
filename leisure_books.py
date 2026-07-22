@@ -83,8 +83,9 @@ def _book_text(it):
 def _book_kb(i, saved=False, favorite=False):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_no_{i}")],
-        [InlineKeyboardButton("❤️ В любимых" if favorite else "❤️ В любимые", callback_data=f"book_love_{i}"),
-         InlineKeyboardButton(save_toggle_label(saved, "Почитать позже"), callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites")],
+        [InlineKeyboardButton(save_toggle_label(saved, "Почитать позже"), callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="book_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -101,15 +102,7 @@ def books_home_keyboard():
 
 
 async def send_books_home(bot, cid, q=None):
-    text = "📖 Книги\n\nПодберу книгу для чтения — даже если пока не знаю твой вкус."
-    kb = books_home_keyboard()
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    await send_books_reco(bot, cid)
 
 
 async def send_book_preferences(bot, cid, q=None):

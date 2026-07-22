@@ -10,6 +10,7 @@ Similar по каждому любимому (anchor), фильтруются и
 """
 import re
 import math
+from datetime import date, timedelta
 
 import config
 import recommendation_stoplist
@@ -185,6 +186,14 @@ def filter_candidates(cid, pool, min_rating):
             continue
         if (c.get("rating") or 0) < min_rating:
             continue
+        if c.get("kind") == "movie":
+            raw_date = str(c.get("release_date") or "")[:10]
+            try:
+                released = date.fromisoformat(raw_date)
+            except ValueError:
+                continue
+            if released < date.today() - timedelta(days=365):
+                continue
         out.append(c)
     return out
 
