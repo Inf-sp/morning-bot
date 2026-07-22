@@ -16,19 +16,19 @@ class TrainerSession(TypedDict):
     lang: str
     queue: list[dict[str, Any]]
     queue_idx: int
-    session: dict[str, Any]
     current: dict[str, Any] | None
     last_exercise_type: str
+    short_failures: dict[str, int]
 
 
-def start(cid, language, queue, session) -> TrainerSession:
+def start(cid, language, queue) -> TrainerSession:
     state: TrainerSession = {
         "lang": language,
         "queue": queue,
         "queue_idx": 0,
-        "session": session,
         "current": None,
         "last_exercise_type": "",
+        "short_failures": {},
     }
     store.train_state[str(cid)] = state
     return state

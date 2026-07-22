@@ -9,11 +9,10 @@ import trainer_engine
 from learning_dictionary import DictionaryRepository, entry_language, entry_term, entry_translation
 from dictionary_model import normalize_term_case
 from trainer_engine import (
-    EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL_FREE,
+    EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL,
     EXERCISE_BUILD_SENTENCE, EXERCISE_FIND_ERROR,
-    EXERCISE_CHOOSE_NATURAL, EXERCISE_FILL_GAP,
+    EXERCISE_FILL_GAP,
     EXERCISE_TRANSLATE_CONTEXT, EXERCISE_CHOOSE_REACTION,
-    EXERCISE_CONTINUE_DIALOGUE,
 )
 from ui import learning as learning_ui
 
@@ -264,14 +263,12 @@ def build_progress_screen(cid):
 
 _EXERCISE_LABELS = {
     EXERCISE_CHOOSE_TRANSLATION: "перевод и понимание",
-    EXERCISE_RECALL_FREE: "самостоятельное вспоминание",
+    EXERCISE_RECALL: "вспоминание слова",
     EXERCISE_BUILD_SENTENCE: "порядок слов в предложении",
     EXERCISE_FIND_ERROR: "поиск ошибок",
-    EXERCISE_CHOOSE_NATURAL: "естественность формулировок",
     EXERCISE_FILL_GAP: "грамматику в контексте",
     EXERCISE_TRANSLATE_CONTEXT: "перевод в контексте",
     EXERCISE_CHOOSE_REACTION: "реакции в разговоре",
-    EXERCISE_CONTINUE_DIALOGUE: "поддержание диалога",
 }
 
 

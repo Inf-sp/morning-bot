@@ -9,15 +9,12 @@ import re
 
 from trainer_engine import (
     EXERCISE_BUILD_SENTENCE,
-    EXERCISE_CHOOSE_NATURAL,
     EXERCISE_CHOOSE_REACTION,
     EXERCISE_CHOOSE_TRANSLATION,
-    EXERCISE_CONTINUE_DIALOGUE,
     EXERCISE_FILL_GAP,
     EXERCISE_FIND_ERROR,
-    EXERCISE_RECALL_FREE,
+    EXERCISE_RECALL,
     EXERCISE_TRANSLATE_CONTEXT,
-    EXERCISE_VERB_FORM,
 )
 
 
@@ -141,13 +138,13 @@ def _choose_translation(entry, other_entries, rng):
     pool = [_first_translation(other) for other in other_entries
             if entry_term(other) != entry_term(entry)]
     wrong = clean_options(correct, pool)
-    return {"term": _cap(entry_term(entry)), "correct": correct, "wrong": wrong} if wrong else None
+    return {"term": entry_term(entry), "correct": correct, "wrong": wrong} if wrong else None
 
 
-def _recall_free(entry, _other_entries, _rng):
-    correct = _cap(entry_term(entry))
-    hint = entry.get("construction") or entry.get("pos") or f"Начинается на «{correct[:1]}»"
-    return {"ru": _first_translation(entry), "correct": correct, "hint": hint}
+def _recall(entry, other_entries, rng):
+    correct = entry_term(entry)
+    wrong = clean_options(correct, _wrong_terms(entry, other_entries, rng))
+    return {"ru": _first_translation(entry), "correct": correct, "wrong": wrong} if len(wrong) >= 2 else None
 
 
 def _build_sentence(entry, _other_entries, rng):
@@ -160,30 +157,29 @@ def _build_sentence(entry, _other_entries, rng):
             "tokens": tokens, "shuffled": shuffled}
 
 
-def _find_error(entry, _other_entries, rng):
+def _find_error(entry, _other_entries, _rng):
     example = _example(entry)
     text = str(example.get("text") or "").strip()
     tokens = text.split()
-    droppable = {"de", "het", "een", "the", "a", "an"}
-    indices = [i for i, token in enumerate(tokens[:6])
-               if token.lower().strip(".,!?") in droppable]
-    if len(tokens) < 3 or not indices:
+    # Строим только настоящую ошибку: у нидерландского прилагательного после
+    # een перед de-существительным убираем обязательное окончание -e.
+    error_idx = next((i for i in range(1, min(len(tokens) - 1, 6))
+                      if tokens[i - 1].casefold() == "een"
+                      and tokens[i].casefold().rstrip(".,!?").endswith("e")), None)
+    if error_idx is None:
         return None
-    drop_idx = rng.choice(indices)
-    broken = tokens[:drop_idx] + tokens[drop_idx + 1:]
+    correct_word = tokens[error_idx]
+    punctuation = correct_word[len(correct_word.rstrip(".,!?")):]
+    wrong_word = correct_word.rstrip(".,!?")[:-1] + punctuation
+    broken = list(tokens)
+    broken[error_idx] = wrong_word
     return {
         "tokens": broken,
-        "broken_idx": min(drop_idx, len(broken) - 1),
+        "broken_idx": error_idx,
         "correct_text": text,
         "ru": str(example.get("translation") or entry_translation(entry)).split(";")[0].strip(),
-        "note": entry.get("breakdown") or f"пропущен артикль «{tokens[drop_idx]}»",
+        "note": entry.get("breakdown") or f"правильно: «{correct_word}»",
     }
-
-
-def _choose_natural(entry, other_entries, rng):
-    correct = _cap(entry_term(entry))
-    wrong = clean_options(correct, _wrong_terms(entry, other_entries, rng))
-    return {"ru": _first_translation(entry), "correct": correct, "wrong": wrong} if len(wrong) >= 2 else None
 
 
 def _fill_gap(entry, other_entries, rng):
@@ -214,89 +210,32 @@ def _translate_context(entry, _other_entries, _rng):
             "situation": entry.get("situation_type") or ""}
 
 
-def _verb_progress(entry):
-    value = entry.get("verb_forms_progress") or {}
-    return value if isinstance(value, dict) else {}
-
-
-def _verb_form(entry, _other_entries, rng):
-    infinitive = str(entry.get("infinitive") or "").strip().lower()
-    past = str(entry.get("past_singular") or "").strip().lower()
-    participle = str(entry.get("past_participle") or "").strip().lower()
-    if not all((infinitive, past, participle)):
-        return None
-    level = int(entry.get("srs_level") or 0)
-    progress = _verb_progress(entry)
-    focus = min(
-        ("past", "participle"),
-        key=lambda key: int(progress.get(key) or 0),
-    )
-    correct = past if focus == "past" else participle
-    if level <= 1:
-        return {
-            "mode": "choice", "prompt": f"{infinitive} → ?", "correct": correct,
-            "wrong": [value for value in (infinitive, participle if focus == "past" else past)
-                      if value != correct],
-            "form_focus": focus,
-        }
-    if level <= 3 and rng.choice((True, False)):
-        correct_row = f"{infinitive} → {past} → {participle}"
-        wrong = [
-            f"{infinitive} → {infinitive} → {participle}",
-            f"{infinitive} → {past} → {infinitive}",
-        ]
-        return {
-            "mode": "choice", "prompt": "Выбери правильный ряд",
-            "correct": correct_row, "wrong": wrong, "form_focus": focus,
-        }
-    auxiliary = str(entry.get("auxiliary") or "hebben").strip().lower()
-    if focus == "participle":
-        finite_aux = "ben" if auxiliary == "zijn" else "heb"
-        sentence = f"Ik {finite_aux} gisteren naar Amsterdam ____."
-    else:
-        sentence = "Ik ____ gisteren naar Amsterdam."
-    return {
-        "mode": "write" if level >= 4 else "choice",
-        "prompt": sentence,
-        "correct": correct,
-        "wrong": [value for value in (infinitive, participle if focus == "past" else past)
-                  if value != correct],
-        "form_focus": focus,
-    }
-
-
-def _conversation(entry, other_entries, rng, situation, dialogue=False):
+def _conversation(entry, other_entries, rng, situation):
     if not situation or not situation.get("line"):
         return None
     correct = _cap(entry_term(entry))
     wrong = clean_options(correct, _wrong_terms(entry, other_entries, rng))
     if len(wrong) < 2:
         return None
-    key = "line" if dialogue else "situation"
-    ru_key = "line_ru" if dialogue else "situation_ru"
-    return {key: situation["line"], ru_key: situation.get("line_ru", ""),
+    return {"situation": situation["line"], "situation_ru": situation.get("line_ru", ""),
             "correct": correct, "wrong": wrong}
 
 
 _BUILDERS = {
     EXERCISE_CHOOSE_TRANSLATION: _choose_translation,
-    EXERCISE_RECALL_FREE: _recall_free,
+    EXERCISE_RECALL: _recall,
     EXERCISE_BUILD_SENTENCE: _build_sentence,
     EXERCISE_FIND_ERROR: _find_error,
-    EXERCISE_CHOOSE_NATURAL: _choose_natural,
     EXERCISE_FILL_GAP: _fill_gap,
     EXERCISE_TRANSLATE_CONTEXT: _translate_context,
-    EXERCISE_VERB_FORM: _verb_form,
 }
 
 
 def build_exercise(entry, other_entries, exercise_type, *, situation=None, rng=None):
-    """Возвращает полные данные одного из десяти форматов или ``None``."""
+    """Возвращает полные данные одного из семи форматов или ``None``."""
     rng = rng or random
     if exercise_type == EXERCISE_CHOOSE_REACTION:
-        data = _conversation(entry, other_entries, rng, situation, dialogue=False)
-    elif exercise_type == EXERCISE_CONTINUE_DIALOGUE:
-        data = _conversation(entry, other_entries, rng, situation, dialogue=True)
+        data = _conversation(entry, other_entries, rng, situation)
     else:
         builder = _BUILDERS.get(exercise_type)
         data = builder(entry, other_entries, rng) if builder else None

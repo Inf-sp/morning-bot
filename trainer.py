@@ -14,43 +14,28 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import ai
 import language_tool
 import secure
-import srs
 import store
 import trainer_engine
 import trainer_exercises
 import trainer_grading
 import trainer_session
-from learning_dictionary import (
-    DictionaryRepository, _dict_entry_message, entry_language, entry_term,
-    entry_translation,
-)
+from learning_dictionary import DictionaryRepository, entry_language, entry_term, entry_translation
 from trainer_engine import (
     EXERCISE_BUILD_SENTENCE,
-    EXERCISE_CHOOSE_NATURAL,
     EXERCISE_CHOOSE_REACTION,
     EXERCISE_CHOOSE_TRANSLATION,
-    EXERCISE_CONTINUE_DIALOGUE,
     EXERCISE_FILL_GAP,
     EXERCISE_FIND_ERROR,
-    EXERCISE_RECALL_FREE,
+    EXERCISE_RECALL,
     EXERCISE_TRANSLATE_CONTEXT,
-    EXERCISE_VERB_FORM,
 )
 from ui import learning as learning_ui
-from ui.constants import delete_label
 from ui.navigation import back_menu_keyboard
 
 
 def _learning():
     import learning
     return learning
-
-
-def _new_session():
-    return {
-        "consolidated": [], "returning": [], "no_hint_count": 0, "total": 0,
-        "max_exercises": trainer_engine.DEFAULT_QUEUE_SIZE,
-    }
 
 
 def _keyboard(rows):
@@ -109,7 +94,7 @@ async def _build_exercise(cid, item):
     language = "английский" if entry_language(entry) == "en" else "нидерландский"
     other_entries = repository.training_entries(entry_language(entry))
     situation = None
-    if exercise_type in (EXERCISE_CHOOSE_REACTION, EXERCISE_CONTINUE_DIALOGUE):
+    if exercise_type == EXERCISE_CHOOSE_REACTION:
         situation = await _generate_situation(entry, language)
     data = trainer_exercises.build_exercise(
         entry, other_entries, exercise_type, situation=situation)
@@ -153,7 +138,7 @@ async def start(bot, cid, language, mode=None):
             chat_id=cid, text="Не получилось собрать тренировку. Попробуй ещё раз.",
             reply_markup=back_menu_keyboard("m_learn"))
         return
-    trainer_session.start(cid, language, queue, _new_session())
+    trainer_session.start(cid, lang_code, queue)
     await _render_next(bot, cid)
 
 
@@ -164,12 +149,11 @@ async def _render_next(bot, cid):
             chat_id=cid, text="Тренажёр устарел, открой заново.",
             reply_markup=back_menu_keyboard("m_learn"))
         return
-    if state["session"]["total"] >= state["session"].get(
-        "max_exercises", trainer_engine.DEFAULT_QUEUE_SIZE,
-    ):
-        await _finish(bot, cid, state)
-        return
     queue = state["queue"]
+    if state["queue_idx"] >= len(queue):
+        repository = DictionaryRepository(cid)
+        queue.extend(trainer_engine.build_training_queue(
+            repository.training_entries(state["lang"])))
     while state["queue_idx"] < len(queue):
         item = queue[state["queue_idx"]]
         state["queue_idx"] += 1
@@ -178,11 +162,17 @@ async def _render_next(bot, cid):
             item = {"entry": item["entry"], "exercise_type": trainer_engine.select_exercise_type(
                 item["entry"], avoid=state.get("last_exercise_type", ""))}
         data = await _build_exercise(cid, item)
-        if data is None and int(item["entry"].get("srs_level") or 0) <= 1:
-            fallback = next(kind for kind in (
-                EXERCISE_RECALL_FREE, EXERCISE_CHOOSE_TRANSLATION)
-                if kind != state.get("last_exercise_type"))
-            data = await _build_exercise(cid, {"entry": item["entry"], "exercise_type": fallback})
+        if data is None:
+            for fallback in (
+                EXERCISE_TRANSLATE_CONTEXT, EXERCISE_BUILD_SENTENCE,
+                EXERCISE_FILL_GAP, EXERCISE_RECALL, EXERCISE_CHOOSE_TRANSLATION,
+            ):
+                if fallback in (item["exercise_type"], state.get("last_exercise_type")):
+                    continue
+                data = await _build_exercise(
+                    cid, {"entry": item["entry"], "exercise_type": fallback})
+                if data is not None:
+                    break
         if data is None:
             continue
         data["hint_shown"] = False
@@ -190,17 +180,21 @@ async def _render_next(bot, cid):
         state["last_exercise_type"] = data["exercise_type"]
         await _send_exercise(bot, cid, data)
         return
-    await _finish(bot, cid, state)
+    await bot.send_message(
+        chat_id=cid, text="Сейчас нет подходящего задания. Попробуй позже.",
+        reply_markup=back_menu_keyboard("m_learn"))
 
 
 async def _send_exercise(bot, cid, data):
     kind = data["exercise_type"]
-    if kind == EXERCISE_CHOOSE_TRANSLATION:
+    if kind in (EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL):
         options = _options(data)
         data["_options"] = options
         message = await bot.send_poll(
             chat_id=cid,
-            question=f"Что значит: {data['term']}?",
+            question=(f"🎯 Выбери перевод\n\nЧто значит {data['term']}?"
+                      if kind == EXERCISE_CHOOSE_TRANSLATION
+                      else f"🧠 Вспомни\n\nКак сказать: {data['ru']}?"),
             options=[str(option)[:100] for option in options[:10]],
             type="quiz",
             correct_option_id=_correct_option_id(data, options),
@@ -210,15 +204,10 @@ async def _send_exercise(bot, cid, data):
         if getattr(message, "poll", None):
             trainer_session.register_poll(cid, message.poll.id)
         return
-    if kind in (EXERCISE_CHOOSE_NATURAL, EXERCISE_FILL_GAP,
-                EXERCISE_CHOOSE_REACTION, EXERCISE_CONTINUE_DIALOGUE) or (
-                    kind == EXERCISE_VERB_FORM and data.get("mode") == "choice"):
+    if kind in (EXERCISE_FILL_GAP, EXERCISE_CHOOSE_REACTION):
         renderers = {
-            EXERCISE_CHOOSE_NATURAL: learning_ui.exercise_choose_natural,
             EXERCISE_FILL_GAP: learning_ui.exercise_fill_gap,
             EXERCISE_CHOOSE_REACTION: learning_ui.exercise_choose_reaction,
-            EXERCISE_CONTINUE_DIALOGUE: learning_ui.exercise_continue_dialogue,
-            EXERCISE_VERB_FORM: learning_ui.exercise_verb_form,
         }
         options = _options(data)
         data["_options"] = options
@@ -228,19 +217,8 @@ async def _send_exercise(bot, cid, data):
         await bot.send_message(chat_id=cid, text=message.text, entities=message.entities,
                                reply_markup=_keyboard(rows))
         return
-    if kind == EXERCISE_RECALL_FREE:
-        message = learning_ui.exercise_recall_free(data, hint_shown=data.get("hint_shown"))
-        rows = []
-        if data.get("hint") and not data.get("hint_shown"):
-            rows.append([("💡 Подсказка", "ex_hint"), ("✍️ Написать", "ex_answer")])
-        else:
-            rows.append([("✍️ Написать", "ex_answer")])
-        rows.extend([[("🫪 Не помню", "ex_giveup")], _nav_row()])
-    elif kind == EXERCISE_TRANSLATE_CONTEXT:
+    if kind == EXERCISE_TRANSLATE_CONTEXT:
         message = learning_ui.exercise_translate_context(data)
-        rows = [[("✍️ Написать", "ex_answer")], [("Показать ответ", "ex_giveup")], _nav_row()]
-    elif kind == EXERCISE_VERB_FORM:
-        message = learning_ui.exercise_verb_form(data)
         rows = [[("✍️ Написать", "ex_answer")], [("Показать ответ", "ex_giveup")], _nav_row()]
     elif kind == EXERCISE_BUILD_SENTENCE:
         data.setdefault("_picked", [])
@@ -274,110 +252,29 @@ async def _apply_result(bot, cid, state, grade, message):
         return
     data["_answered"] = True
     repository = DictionaryRepository(cid)
-    updated_entry = repository.record_answer(
+    repository.record_answer(
         data["lang"], data["term"], data["exercise_type"], grade.quality,
         form_focus=data.get("form_focus", ""))
-    session = state["session"]
-    session["total"] += 1
-    if grade.quality in (srs.RECALLED_FREE, srs.USED_IN_SENTENCE, srs.CONFIDENT_NO_HINT):
-        session["no_hint_count"] += 1
-    if grade.correct and grade.quality in (srs.USED_IN_SENTENCE, srs.CONFIDENT_NO_HINT):
-        session["consolidated"].append(data["term"])
     if not grade.correct:
-        session["returning"].append(data["term"])
         _reinsert_failed(state, data)
-    entry = updated_entry or next((item for item in repository.all()
-                                   if entry_language(item) == data["lang"]
-                                   and entry_term(item).casefold() == data["term"].casefold()), {})
-    result = _dict_entry_message(
-        entry or {"lang": data["lang"], "term": data["term"], "translation": data.get("ru", "")},
-        status="trainer_correct" if grade.correct else "trainer_incorrect",
-    )
     data["_result_correct"] = bool(grade.correct)
-    kb = _keyboard([
-        [("🔄 Следующее задание", "ex_next")],
-        [(delete_label("Удалить из обучения"), "ex_delete")],
-        _nav_row(),
-    ])
-    await bot.send_message(chat_id=cid, text=result.text, entities=result.entities, reply_markup=kb)
-
-
-async def confirm_delete_current(bot, cid):
-    state = trainer_session.get(cid)
-    if not state or not state.get("current"):
-        await bot.send_message(
-            chat_id=cid, text="Тренажёр устарел, открой заново.",
-            reply_markup=back_menu_keyboard("m_learn"))
-        return
-    term = state["current"].get("term", "")
-    await bot.send_message(
-        chat_id=cid,
-        text=f"Точно удалить «{term}» из обучения?",
-        reply_markup=_keyboard([
-            [(delete_label("Удалить"), "ex_delete_yes")],
-            [("⬅️ Назад", "ex_delete_cancel"), ("#️⃣ Главная", "m_menu")],
-        ]),
-        transient=True,
-    )
-
-
-async def show_current_result(bot, cid):
-    state = trainer_session.get(cid)
-    data = state.get("current") if state else None
-    if not data or "_result_correct" not in data:
-        await _render_next(bot, cid)
-        return
-    repository = DictionaryRepository(cid)
-    entry = next((item for item in repository.all()
-                  if entry_language(item) == data["lang"]
-                  and entry_term(item).casefold() == data["term"].casefold()), None)
-    if not entry:
-        await _render_next(bot, cid)
-        return
-    result = _dict_entry_message(
-        entry, status="trainer_correct" if data["_result_correct"] else "trainer_incorrect")
-    kb = _keyboard([
-        [("🔄 Следующее задание", "ex_next")],
-        [(delete_label("Удалить из обучения"), "ex_delete")],
-        _nav_row(),
-    ])
-    await bot.send_message(chat_id=cid, text=result.text, entities=result.entities,
-                           reply_markup=kb, transient=True)
-
-
-async def delete_current(bot, cid):
-    state = trainer_session.get(cid)
-    if not state or not state.get("current"):
-        await bot.send_message(
-            chat_id=cid, text="Тренажёр устарел, открой заново.",
-            reply_markup=back_menu_keyboard("m_learn"))
-        return
-    data = state["current"]
-    removed = DictionaryRepository(cid).delete_training_entry(data["lang"], data["term"])
-    old_queue = state["queue"]
-    old_index = state["queue_idx"]
-    removed_before = sum(
-        entry_term(item["entry"]).casefold() == data["term"].casefold()
-        for item in old_queue[:old_index]
-    )
-    state["queue"] = [item for item in old_queue
-                      if entry_term(item["entry"]).casefold() != data["term"].casefold()]
-    state["queue_idx"] = max(0, old_index - removed_before)
-    await bot.send_message(
-        chat_id=cid,
-        text=(f"✅ «{data['term']}» удалено из обучения."
-              if removed else "Этой записи уже нет в обучении."),
-    )
-    await _render_next(bot, cid)
+    data["_result_message"] = message
+    kb = _keyboard([[("✨ Другое задание", "ex_next")], _nav_row()])
+    await bot.send_message(chat_id=cid, text=message.text, entities=message.entities, reply_markup=kb)
 
 
 def _reinsert_failed(state, data):
+    term_key = str(data["term"]).casefold()
+    failures = state.setdefault("short_failures", {})
+    failures[term_key] = failures.get(term_key, 0) + 1
+    if failures[term_key] > 2:
+        return
     entry = next((item["entry"] for item in state["queue"]
                   if entry_term(item["entry"]) == data["term"]), None)
     if entry is None:
         return
     kind = trainer_engine.select_exercise_type(entry, avoid=data["exercise_type"])
-    position = min(len(state["queue"]), state["queue_idx"] + random.randint(2, 4))
+    position = min(len(state["queue"]), state["queue_idx"] + random.randint(3, 5))
     state["queue"].insert(position, {"entry": entry, "exercise_type": kind})
 
 
@@ -394,13 +291,6 @@ async def pick_option(bot, cid, index):
     message = learning_ui.exercise_result(
         data, grade.correct, chosen=options[index] if index < len(options) else "")
     await _apply_result(bot, cid, state, grade, message)
-
-
-async def show_hint(bot, cid):
-    state = trainer_session.get(cid)
-    if state and state.get("current"):
-        state["current"]["hint_shown"] = True
-        await _send_exercise(bot, cid, state["current"])
 
 
 async def request_text_answer(bot, cid):
@@ -430,9 +320,7 @@ async def handle_text(bot, cid, text):
     store.pending_input.pop(str(cid), None)
     data = state["current"]
     language_report = None
-    if data.get("exercise_type") == EXERCISE_VERB_FORM:
-        grade = trainer_grading.grade_free_text(data, text)
-    elif data.get("lang") == "nl":
+    if data.get("lang") == "nl":
         grade, language_report = await _grade_dutch_written(data, text)
     elif data["exercise_type"] == EXERCISE_TRANSLATE_CONTEXT:
         grade = await _grade_context(data, text)
@@ -613,13 +501,6 @@ async def next_exercise(bot, cid):
 
 def cancel(cid):
     trainer_session.finish(cid)
-
-
-async def _finish(bot, cid, state):
-    trainer_session.finish(cid)
-    message = learning_ui.training_result(state["session"])
-    await bot.send_message(chat_id=cid, text=message.text, entities=message.entities,
-                           reply_markup=_keyboard([_nav_row()]))
 
 
 async def send_progress(bot, cid):

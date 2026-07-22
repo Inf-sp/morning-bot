@@ -64,8 +64,10 @@ def grade_sentence(data, chosen_tokens):
     if sorted(token.lower() for token in chosen_tokens) != sorted(token.lower() for token in expected):
         return GradeResult(False, AnswerQuality.NOT_REMEMBERED)
     exact = [token.lower() for token in chosen_tokens] == [token.lower() for token in expected]
-    quality = AnswerQuality.RECALLED_FREE if exact else AnswerQuality.USED_IN_SENTENCE
-    return GradeResult(True, quality)
+    return GradeResult(
+        exact,
+        AnswerQuality.USED_IN_SENTENCE if exact else AnswerQuality.NOT_REMEMBERED,
+    )
 
 
 def grade_error_position(data, token_idx):

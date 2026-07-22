@@ -390,18 +390,13 @@ def audit_trainer_contracts():
                       "translation": "Я сравниваю эти книги."}],
     }
     error_entry = {**base, "examples": [{
-        "text": "Ik vergelijk de boeken.", "translation": "Я сравниваю книги."}]}
+        "text": "Ik woon in een rustige buurt.", "translation": "Я живу в спокойном районе."}]}
     gap_entry = {
         "term": "binnenzetten", "translation": "заносить внутрь", "lang": "nl",
         "pos": "глагол", "examples": [{
             "text": "Ik moet de bloemen binnenzetten.",
             "translation": "Мне нужно занести цветы внутрь.",
         }],
-    }
-    verb_entry = {
-        "term": "gaan", "translation": "идти", "lang": "nl", "pos": "глагол",
-        "infinitive": "gaan", "past_singular": "ging",
-        "past_participle": "gegaan", "auxiliary": "zijn",
     }
     others = [
         base,
@@ -418,8 +413,6 @@ def audit_trainer_contracts():
             entry = error_entry
         elif kind == engine.EXERCISE_FILL_GAP:
             entry = gap_entry
-        elif kind == engine.EXERCISE_VERB_FORM:
-            entry = verb_entry
         else:
             entry = base
         if not exercises.build_exercise(
@@ -436,12 +429,12 @@ def audit_trainer_contracts():
         findings.append("free-text grading contract failed")
     else:
         state = srs.record_answer(
-            srs.default_srs_state(), engine.EXERCISE_RECALL_FREE, grade.quality)
+            srs.default_srs_state(), engine.EXERCISE_RECALL, grade.quality)
         if state["srs_history"][-1]["result"] != "recalled_free":
             findings.append("grading → SRS contract failed")
 
     cid = "__architecture_session_audit__"
-    trainer_session.start(cid, "nl", queue[:1], {"total": 0})
+    trainer_session.start(cid, "nl", queue[:1])
     session = trainer_session.get(cid)
     if not session or session.get("queue_idx") != 0:
         findings.append("trainer session start contract failed")

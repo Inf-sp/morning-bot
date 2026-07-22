@@ -19,17 +19,9 @@ async def handle_callback(bot, cid, data, run_with_status):
     """Callback-и заданий тренажёра с префиксом ex_."""
     if data == "ex_next":
         await run_with_status(lambda _s: trainer.next_exercise(bot, cid))
-    elif data == "ex_delete":
-        await trainer.confirm_delete_current(bot, cid)
-    elif data == "ex_delete_yes":
-        await trainer.delete_current(bot, cid)
-    elif data == "ex_delete_cancel":
-        await trainer.show_current_result(bot, cid)
     elif data.startswith("ex_pick_"):
         await run_with_status(lambda _s: trainer.pick_option(
             bot, cid, int(data[len("ex_pick_"):])))
-    elif data == "ex_hint":
-        await trainer.show_hint(bot, cid)
     elif data == "ex_answer":
         await trainer.request_text_answer(bot, cid)
     elif data == "ex_giveup":

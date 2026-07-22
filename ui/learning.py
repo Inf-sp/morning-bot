@@ -4,7 +4,7 @@ from .builder import MessageBuilder, MessageSpec
 from .constants import choose_label, ui_label
 
 
-# ================= ТРЕНАЖЁР: 9 ФОРМАТОВ ЗАДАНИЙ =================
+# ================= ТРЕНАЖЁР: 7 ФОРМАТОВ ЗАДАНИЙ =================
 # Единый формат по всему тренажёру (см. docs/word-trainer.md): "**Название:**
 # текст" одной строкой, переводы через →, без отдельной строки "Перевод:".
 
@@ -21,26 +21,9 @@ def exercise_choose_translation_question(term):
     return f"Что значит: {term}?"
 
 
-def exercise_recall_free(data, hint_shown=False):
-    b = MessageBuilder()
-    b.section("🧠 Вспомни")
-    b.spacer()
-    language = "по-английски" if str(data.get("lang") or "nl") == "en" else "по-нидерландски"
-    b.line(f"Как сказать {language}:")
-    b.spacer()
-    b.bold(data["ru"])
-    b.newline()
-    if hint_shown and data.get("hint"):
-        b.spacer()
-        _q(b, "Подсказка", data["hint"])
-    msg = b.build()
-    msg.text = msg.text.rstrip("\n")
-    return msg
-
-
 def exercise_build_sentence(data):
     b = MessageBuilder()
-    b.section("🧩 Собери предложение")
+    b.section("🧩 Собери фразу")
     b.spacer()
     b.bold(data["ru"])
     b.newline()
@@ -57,7 +40,7 @@ def exercise_build_sentence(data):
 
 def exercise_find_error(data):
     b = MessageBuilder()
-    b.section("🔍 Где ошибка")
+    b.section("🔍 Найди ошибку")
     b.spacer()
     _q(b, "Фраза", " ".join(data["tokens"]))
     msg = b.build()
@@ -65,19 +48,9 @@ def exercise_find_error(data):
     return msg
 
 
-def exercise_choose_natural(data):
-    b = MessageBuilder()
-    b.section("💬 Выбери естественный вариант")
-    b.spacer()
-    _q(b, "Перевод", data["ru"])
-    msg = b.build()
-    msg.text = msg.text.rstrip("\n")
-    return msg
-
-
 def exercise_fill_gap(data):
     b = MessageBuilder()
-    b.section("✏️ Что пропущено?")
+    b.section("✏️ Вставь слово")
     b.spacer()
     b.quote(data["blank_phrase"])
     if data.get("hint"):
@@ -90,7 +63,7 @@ def exercise_fill_gap(data):
 
 def exercise_translate_context(data):
     b = MessageBuilder()
-    b.section("🗣 Переведи в контексте")
+    b.section("🗣 Скажи в ситуации")
     b.spacer()
     if data.get("situation"):
         _q(b, "Ситуация", data["situation"])
@@ -108,31 +81,6 @@ def exercise_choose_reaction(data):
     _q(b, "Тебе говорят", data["situation"])
     if data.get("situation_ru"):
         b.line(data["situation_ru"])
-    msg = b.build()
-    msg.text = msg.text.rstrip("\n")
-    return msg
-
-
-def exercise_continue_dialogue(data):
-    b = MessageBuilder()
-    b.section("💬 Продолжи диалог")
-    b.spacer()
-    _q(b, "Собеседник", data["line"])
-    if data.get("line_ru"):
-        b.line(data["line_ru"])
-    msg = b.build()
-    msg.text = msg.text.rstrip("\n")
-    return msg
-
-
-def exercise_verb_form(data):
-    b = MessageBuilder()
-    b.section("🔤 Формы глагола")
-    b.spacer()
-    if data.get("prompt") == "Выбери правильный ряд":
-        b.line(data["prompt"])
-    else:
-        b.quote(data.get("prompt") or "")
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
@@ -196,7 +144,7 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
 
     if data.get("exercise_type") == "fill_gap":
         b = MessageBuilder()
-        b.section("✅ Верно" if is_correct else ("📝 Ответ" if forgot else "🟡 Почти"))
+        b.section("✅ Верно" if is_correct else ("📝 Ответ" if forgot else "❌ Ошибка"))
         b.spacer()
         _bold_translation_line(b, "Правильно", correct, str(data.get("hint") or "").strip())
         sentence = str(data.get("result_sentence") or "").strip()
@@ -212,7 +160,7 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
             b.line(note)
         if not is_correct:
             b.spacer()
-            b.line("🔁 Вернётся ещё раз позже в этой тренировке.")
+            b.line("🔁 Вернётся позже в другом задании.")
         if language_report is not None:
             _add_language_tool_report(b, language_report)
         msg = b.build()
@@ -228,7 +176,8 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
         b.spacer()
         _bold_translation_line(b, "Правильно", correct, ru)
     else:
-        b.section("📝 Ответ" if forgot else "🟡 Почти")
+        is_free = data.get("exercise_type") == "translate_context"
+        b.section("📝 Ответ" if forgot else ("🟡 Почти" if is_free and language_report else "❌ Ошибка"))
         b.spacer()
         _bold_translation_line(b, "Правильно", correct, ru)
         if english:
@@ -238,7 +187,7 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
             b.spacer()
             _q(b, "Разбор", note)
         b.spacer()
-        b.line("🔁 Вернётся ещё раз позже в этой тренировке.")
+        b.line("🔁 Вернётся позже в другом задании.")
         if data.get("bad_translation"):
             b.spacer()
             b.text_line("Фраза ")
@@ -249,24 +198,6 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
             b.newline()
     if language_report is not None:
         _add_language_tool_report(b, language_report)
-    msg = b.build()
-    msg.text = msg.text.rstrip("\n")
-    return msg
-
-
-def training_result(session):
-    """Компактный итог тренировки (см. ТЗ 'Завершение тренировки') — без
-    процента правильных ответов как главной метрики и без таблиц."""
-    b = MessageBuilder()
-    b.section("✅ Готово")
-    b.spacer()
-    consolidated = list(dict.fromkeys(session.get("consolidated") or []))
-    returning = list(dict.fromkeys(session.get("returning") or []))
-    if consolidated:
-        _q(b, "Закреплено", " · ".join(consolidated[:6]))
-    if returning:
-        _q(b, "Вернём позже", " · ".join(returning[:6]))
-    _q(b, "Без подсказок", f"{session.get('no_hint_count', 0)} ответов")
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg

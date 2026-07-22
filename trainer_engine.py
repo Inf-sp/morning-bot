@@ -11,33 +11,21 @@ import srs
 
 
 EXERCISE_CHOOSE_TRANSLATION = "choose_translation"
-EXERCISE_RECALL_FREE = "recall_free"
+EXERCISE_RECALL = "recall"
 EXERCISE_BUILD_SENTENCE = "build_sentence"
 EXERCISE_FIND_ERROR = "find_error"
-EXERCISE_CHOOSE_NATURAL = "choose_natural"
 EXERCISE_FILL_GAP = "fill_gap"
 EXERCISE_TRANSLATE_CONTEXT = "translate_context"
 EXERCISE_CHOOSE_REACTION = "choose_reaction"
-EXERCISE_CONTINUE_DIALOGUE = "continue_dialogue"
-EXERCISE_VERB_FORM = "verb_form"
 
 ALL_EXERCISES = (
-    EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL_FREE,
+    EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL,
     EXERCISE_BUILD_SENTENCE, EXERCISE_FIND_ERROR,
-    EXERCISE_CHOOSE_NATURAL, EXERCISE_FILL_GAP,
+    EXERCISE_FILL_GAP,
     EXERCISE_TRANSLATE_CONTEXT, EXERCISE_CHOOSE_REACTION,
-    EXERCISE_CONTINUE_DIALOGUE,
-    EXERCISE_VERB_FORM,
 )
 
-DEFAULT_QUEUE_SIZE = 12
-MAX_VERB_FORM_EXERCISES = 2
-
-
-def _has_verb_forms(entry):
-    return all(str(entry.get(key) or "").strip() for key in (
-        "infinitive", "past_singular", "past_participle",
-    ))
+QUEUE_BATCH_SIZE = 10
 
 
 def _entry_term(entry):
@@ -60,12 +48,16 @@ def select_exercise_type(entry, avoid="", rng=random):
     kind = _entry_kind(entry)
     last = entry.get("srs_last_exercise_type") or ""
 
-    if level <= 1:
-        candidates = [EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL_FREE]
+    if level <= 0:
+        candidates = [EXERCISE_CHOOSE_TRANSLATION]
+        if entry.get("examples"):
+            candidates.append(EXERCISE_FILL_GAP)
+    elif level == 1:
+        candidates = [EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL]
         if entry.get("examples"):
             candidates.append(EXERCISE_FILL_GAP)
     elif level <= 3:
-        candidates = [EXERCISE_RECALL_FREE, EXERCISE_FILL_GAP]
+        candidates = [EXERCISE_RECALL, EXERCISE_FILL_GAP]
         if kind == "phrase" and len(_entry_term(entry).split()) >= 3:
             candidates.append(EXERCISE_BUILD_SENTENCE)
         if entry.get("situation_type"):
@@ -73,18 +65,21 @@ def select_exercise_type(entry, avoid="", rng=random):
         if kind == "rule":
             candidates.append(EXERCISE_FIND_ERROR)
     else:
-        candidates = [EXERCISE_TRANSLATE_CONTEXT, EXERCISE_RECALL_FREE]
+        candidates = [EXERCISE_TRANSLATE_CONTEXT]
         if entry.get("situation_type"):
-            candidates.append(EXERCISE_CONTINUE_DIALOGUE)
-        if kind == "phrase":
-            candidates.append(EXERCISE_CHOOSE_NATURAL)
+            candidates.append(EXERCISE_CHOOSE_REACTION)
+        if kind == "phrase" and len(_entry_term(entry).split()) >= 3:
+            candidates.append(EXERCISE_BUILD_SENTENCE)
+        candidates.append(EXERCISE_FIND_ERROR)
+        if rng.random() < 0.15:
+            candidates.append(rng.choice((EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL)))
 
     filtered = [item for item in candidates if item != last and item != avoid]
     filtered = filtered or [item for item in candidates if item != last] or candidates
     return rng.choice(filtered)
 
 
-def build_training_queue(entries, today=None, queue_size=DEFAULT_QUEUE_SIZE, rng=random):
+def build_training_queue(entries, today=None, queue_size=QUEUE_BATCH_SIZE, rng=random):
     """Собирает очередь: повторение, сложные места и новый материал."""
     entries = [{**entry, **_srs_state(entry)} for entry in (entries or []) if isinstance(entry, dict)]
     if not entries:
@@ -130,21 +125,4 @@ def build_training_queue(entries, today=None, queue_size=DEFAULT_QUEUE_SIZE, rng
         queue.append({"entry": entry, "exercise_type": exercise_type})
         previous_type = exercise_type
 
-    # Формы глагола — дополнительный формат поверх обычной SRS-очереди, а не
-    # отдельный источник материала. За сессию заменяем им не более двух
-    # обычных заданий и никогда не ставим два таких задания рядом.
-    verb_indices = [
-        index for index, item in enumerate(queue)
-        if _has_verb_forms(item["entry"])
-    ]
-    rng.shuffle(verb_indices)
-    selected = []
-    for index in verb_indices:
-        if any(abs(index - other) <= 1 for other in selected):
-            continue
-        selected.append(index)
-        if len(selected) >= MAX_VERB_FORM_EXERCISES:
-            break
-    for index in selected:
-        queue[index]["exercise_type"] = EXERCISE_VERB_FORM
     return queue
