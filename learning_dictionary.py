@@ -15,6 +15,7 @@ import srs
 import store
 import verify
 from dictionary_model import (
+    CANONICAL_ENTRY_OVERRIDES,
     PHRASE_CORRECTIONS,
     entry_language,
     entry_term,
@@ -49,7 +50,7 @@ def _cap(s):
     return s[:1].upper() + s[1:] if s else s
 
 def migrate_dict_caps():
-    """Совместимая миграция: приводит legacy-слова к актуальному строчному виду."""
+    """Совместимая миграция регистра и известных канонических записей."""
     data = store._load(config.DICT_KEY)
     changed = False
     for cid, words in (data or {}).items():
@@ -66,6 +67,16 @@ def migrate_dict_caps():
                 if normalized != value:
                     w[field] = normalized
                     changed = True
+            override = CANONICAL_ENTRY_OVERRIDES.get(normalize_key(_entry_term(w)))
+            if override:
+                for field in ("term", "word", "base_form"):
+                    if w.get(field) and w[field] != override[0]:
+                        w[field] = override[0]
+                        changed = True
+                for field in ("translation", "ru"):
+                    if w.get(field) and w[field] != override[1]:
+                        w[field] = override[1]
+                        changed = True
     if changed:
         store._save(config.DICT_KEY, data)
     return changed

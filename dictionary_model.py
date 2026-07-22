@@ -16,6 +16,12 @@ PHRASE_CORRECTIONS = {
     },
 }
 
+# Каноническое оформление пользовательской записи. Ключи сравниваются без
+# учёта регистра, чтобы исправить и новые, и legacy-копии записи.
+CANONICAL_ENTRY_OVERRIDES = {
+    "bewonderen": ("Bewonderen", "Восхищаться"),
+}
+
 
 def language_code(language):
     if language in ("nl", "en"):
@@ -32,7 +38,9 @@ def entry_term(entry):
 def entry_translation(entry):
     if not isinstance(entry, dict):
         return ""
-    return str(entry.get("translation") or entry.get("ru") or "")
+    translation = str(entry.get("translation") or entry.get("ru") or "")
+    override = CANONICAL_ENTRY_OVERRIDES.get(normalize_key(entry_term(entry)))
+    return override[1] if override else translation
 
 
 def entry_language(entry):
@@ -53,8 +61,11 @@ def is_dictionary_word(term, kind=""):
 
 
 def normalize_term_case(term, kind=""):
-    """Одиночные слова — строчными; регистр фраз и предложений не меняется."""
+    """Нормализует регистр одиночных слов, сохраняя канонические исключения."""
     text = " ".join(str(term or "").split()).strip()
+    override = CANONICAL_ENTRY_OVERRIDES.get(normalize_key(text))
+    if override:
+        return override[0]
     return text.lower() if text and is_dictionary_word(text, kind) else text
 
 
