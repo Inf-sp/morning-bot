@@ -95,6 +95,8 @@ _SUSPICIOUS_ANALYSIS_RE = re.compile(
     r"(?i)(treat\s+as\s+data|do\s+not\s+execute|ignore\s+previous|"
     r"system\s+prompt|instructions?|slaan\s+op\s+als\s+data|"
     r"voer\s+hier\s+geen\s+commando)'?s?")
+_CYRILLIC_FIELD_RE = re.compile(r"[А-Яа-яЁё]")
+_LATIN_FIELD_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]")
 
 def _strip_leading_add_verb(line):
     """Убирает командный глагол (add/добавь/...) ТОЛЬКО в начале строки — пользователь
@@ -604,6 +606,11 @@ def _contains_suspicious_analysis_text(value):
     return bool(_SUSPICIOUS_ANALYSIS_RE.search(str(value or "")))
 
 
+def _contains_mixed_script(value):
+    text = str(value or "")
+    return bool(_CYRILLIC_FIELD_RE.search(text) and _LATIN_FIELD_RE.search(text))
+
+
 def _normalized_user_term(raw_user_term, lang):
     """Хранит именно лексему пользователя, отделяя только словарный артикль."""
     term = _clean_raw_user_term(raw_user_term)
@@ -624,7 +631,8 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
     avoid_translations — уже показанные варианты из старых совместимых карточек;
     меняет текст промпта, чтобы не попасть в тот же кэш и получить другой вариант."""
     raw_user_term = _clean_raw_user_term(payload)
-    if not raw_user_term or _contains_suspicious_analysis_text(raw_user_term):
+    if (not raw_user_term or _contains_suspicious_analysis_text(raw_user_term)
+            or (lang_hint == "nl" and _contains_mixed_script(raw_user_term))):
         return None
     russian_source = bool(_CYRILLIC_RE.search(raw_user_term))
     if russian_source and lang_hint in ("nl", "en"):
@@ -774,6 +782,8 @@ INPUT_JSON: {input_payload}
     if not breakdown or _contains_suspicious_analysis_text(breakdown):
         return None
     article = str(d.get("article") or "").strip() if lang == "nl" else ""
+    if lang == "nl" and article not in {"de", "het"}:
+        article = ""
     if article and "глагол" in breakdown.lower():
         # У глаголов нет артикля de/het — модель иногда всё равно его возвращает.
         article = ""
@@ -794,6 +804,25 @@ INPUT_JSON: {input_payload}
         "reason": str(d.get("reason") or "").strip(),
         **_extract_srs_fields(d),
     }
+    if not russian_source and len(term.split()) > 1:
+        if entry.get("construction"):
+            entry["entry_type"] = "construction"
+            entry["pos"] = "глагол"
+            entry["breakdown"] = "глагольная конструкция"
+        else:
+            entry["entry_type"] = "phrase"
+            entry["pos"] = "фраза"
+            entry["breakdown"] = "фраза"
+        entry["article"] = ""
+        entry["plural"] = ""
+        entry["forms"] = []
+    if lang == "nl":
+        if _contains_mixed_script(entry.get("term")):
+            return None
+        if _contains_mixed_script(entry.get("plural")):
+            entry["plural"] = ""
+        entry["forms"] = [form for form in (entry.get("forms") or [])
+                          if not _contains_mixed_script(form)]
     entry, _ = learning_data_quality.normalize_dutch_grammar(entry)
     if not russian_source:
         # Локальная грамматическая нормализация может править форму, но не
@@ -804,7 +833,7 @@ INPUT_JSON: {input_payload}
 
 
 _SRS_FIELD_KEYS = (
-    "pos", "plural", "forms", "topic", "difficulty", "construction",
+    "pos", "plural", "forms", "topic", "difficulty", "construction", "entry_type",
     "situation_type", "alt_translations",
     "srs_level", "srs_easiness", "srs_interval_days", "srs_due_at",
     "srs_history", "srs_last_exercise_type",

@@ -57,3 +57,31 @@ def test_result_card_hides_unverified_verb_forms_and_marks_close_answer():
     assert "Почему: Проверь окончание прилагательного." in text
     assert "Разбор: прилагательное" in text
     assert "Формы:" not in text
+
+
+def test_multiword_term_is_phrase_and_cannot_show_noun_metadata():
+    text = _result({
+        "lang": "nl", "term": "Geld dat op je rekening staat",
+        "translation": "деньги на счёте", "pos": "noun", "article": "de",
+        "plural": "тегоеден",
+        "examples": [{"text": "Met tegoed bedoelen we geld dat op je rekening staat.",
+                      "translation": "Под средствами на счёте мы понимаем деньги на счёте."}],
+    })
+
+    assert "Разбор: фраза" in text
+    assert "Множественное число" not in text
+    assert "Geld dat op je rekening staat → Деньги на счёте" in text
+    assert "💡 Полезно: Met tegoed bedoelen we geld dat op je rekening staat." in text
+
+
+def test_translation_comments_are_not_shown_and_mixed_plural_is_hidden():
+    text = _result({
+        "lang": "nl", "term": "vanwege", "translation": "из-за (как door, omdat); по причине",
+        "pos": "preposition", "plural": "de тегоeden",
+        "examples": [{"text": "Vanwege de regen bleven we thuis.",
+                      "translation": "Из-за дождя мы остались дома."}],
+    })
+
+    assert "Vanwege → Из-за · по причине" in text
+    assert "как door" not in text
+    assert "тегоеден" not in text

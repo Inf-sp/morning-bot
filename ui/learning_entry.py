@@ -3,6 +3,15 @@
 import re
 
 
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
+_LATIN_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]")
+
+
+def _mixed_script(value):
+    text = str(value or "")
+    return bool(_CYRILLIC_RE.search(text) and _LATIN_RE.search(text))
+
+
 def _term(entry, fallback=None):
     term = str(entry.get("term") or entry.get("word") or fallback or "").strip()
     article = str(entry.get("article") or "").strip()
@@ -14,6 +23,10 @@ def _term(entry, fallback=None):
 def _breakdown(entry):
     raw = str(entry.get("breakdown") or "").strip().casefold()
     pos = str(entry.get("pos") or "").strip().casefold()
+    term = str(entry.get("term") or entry.get("word") or "").strip()
+    entry_type = str(entry.get("entry_type") or entry.get("kind") or "").strip().casefold()
+    if len(term.split()) > 1 and not entry.get("construction") and entry_type not in {"construction", "expression", "разговорная фраза"}:
+        return "разговорная фраза" if "разговор" in raw else "фраза"
     if entry.get("construction") or "глагол + предлог" in raw:
         return "глагольная конструкция"
     if "разговор" in raw:
@@ -39,7 +52,7 @@ def _verified_forms(entry):
     except (TypeError, ValueError):
         confidence = 0
     forms = [str(entry.get(key) or "").strip() for key in ("infinitive", "past_singular", "perfect_form")]
-    return forms if confidence >= 0.75 and all(forms) else []
+    return forms if confidence >= 0.75 and all(forms) and not any(_mixed_script(form) for form in forms) else []
 
 
 def _example(entry, term):
@@ -58,7 +71,7 @@ def _example(entry, term):
             word in words or (len(word) > 4 and any(candidate.startswith(word[:-2]) for candidate in words))
             for word in bare
         )
-        if text and translation and related:
+        if text and translation and related and not _mixed_script(text):
             return text, translation
     return "", ""
 
@@ -67,6 +80,8 @@ def render_learning_entry(builder, entry, *, fallback_term="", fallback_translat
     """Рендерит термин, нужную грамматику и связанный пример без заголовка."""
     term = _term(entry, fallback_term)
     translation = str(entry.get("translation") or entry.get("ru") or fallback_translation or "").strip()
+    translation = re.sub(r"\s*\([^)]*\)", "", translation).strip()
+    translation = re.sub(r"\s*;\s*", " · ", translation)
     if term or translation:
         builder.spacer()
         builder.bold(term)
@@ -78,6 +93,8 @@ def render_learning_entry(builder, entry, *, fallback_term="", fallback_translat
         builder.spacer()
         builder.labeled_line("Разбор", breakdown, lowercase=False)
     plural = str(entry.get("plural") or "").strip()
+    if _mixed_script(plural):
+        plural = ""
     if plural and breakdown.startswith("существительное"):
         if not plural.casefold().startswith("de "):
             plural = f"de {plural}"

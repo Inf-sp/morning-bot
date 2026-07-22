@@ -90,6 +90,14 @@ async def _generate_situation(entry, language):
 async def _build_exercise(cid, item):
     repository = DictionaryRepository(cid)
     entry = item["entry"]
+    if not (entry.get("examples") or (entry.get("example_nl") and entry.get("example_ru"))):
+        # Старые записи без примера донасыщаются существующим механизмом один
+        # раз при подготовке материала; результат задания сам AI не вызывает.
+        from dictionary_import import _refresh_dict_entry
+        refreshed = await _refresh_dict_entry(cid, entry)
+        if refreshed:
+            entry = refreshed
+            item["entry"] = entry
     exercise_type = item["exercise_type"]
     language = "английский" if entry_language(entry) == "en" else "нидерландский"
     other_entries = repository.training_entries(entry_language(entry))
