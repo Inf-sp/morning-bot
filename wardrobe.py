@@ -869,7 +869,10 @@ async def handle_callback(bot, cid, q, data):
         await send_wardrobe_zones(bot, cid, q=q); return
     if data.startswith("w_delete_"):
         await send_delete_confirmation(bot, cid, data[len("w_delete_"):], q=q); return
-    if data == "w_del" or data.startswith(("w_del_", "w_delz_", "w_delsc_")):
+    if data == "w_del":
+        # Сначала показываем категории: редактирование идёт внутри выбранной категории.
+        await send_wardrobe_zones(bot, cid, q=q); return
+    if data.startswith(("w_del_", "w_delz_", "w_delsc_")):
         await send_wardrobe_zones(bot, cid, q=q); return
     if data == "w_improve":
         await send_home(bot, cid, q=q); return
