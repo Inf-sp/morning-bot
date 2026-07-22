@@ -191,13 +191,15 @@ def _language_music_context(cid):
     }
 
 
-async def send_listen(bot, cid):
+async def send_listen(bot, cid, *, preview=False):
     import saved_items
     _log.info("send_listen: start cid=%s", cid)
     cached = _cached_artist(cid)
     if cached:
         artist = str(cached.get("artist") or "")
         if artist:
+            if preview:
+                return cached
             store.last_recos[str(cid)] = {"kind": "listen", "items": [artist]}
             store.last_source[str(cid)] = "Досуг · Музыка"
             msg = leisure_ui.artist_card(cached)
@@ -218,7 +220,7 @@ async def send_listen(bot, cid):
     web_block = ""
     try:
         web = await asyncio.to_thread(
-            research.web_snippet,
+            research.tavily_snippet,
             " ".join(part for part in (
                 "modern popular currently active music artists",
                 language_context["search"],
@@ -280,11 +282,15 @@ async def send_listen(bot, cid):
         data = cand
     if not data or not data.get("artist"):
         _log.info("send_listen: no data after retries cid=%s data=%r", cid, data)
+        if preview:
+            return None
         await bot.send_message(
             chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
             reply_markup=back_menu_keyboard("m_leisure")); return
     artist = data.get("artist", "")
     _cache_artist(cid, data)
+    if preview:
+        return data
     store.last_recos[str(cid)] = {"kind": "listen", "items": [artist]}
     store.last_source[str(cid)] = "Досуг · Музыка"
     try:

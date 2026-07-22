@@ -184,15 +184,18 @@ def probe(service: str) -> bool:
                 service, False, error=str(exc) or type(exc).__name__,
                 exception_type=type(exc).__name__,
                 latency_ms=int((time.monotonic() - started) * 1000),
+                record_history=False,
             )
             return False
         provider_runtime.record_result(
             service, True, latency_ms=int((time.monotonic() - started) * 1000),
+            record_history=False,
         )
         return True
     if not _configured(service):
         provider_runtime.record_result(
             service, False, status_code=401, error="not configured",
+            record_history=False,
         )
         return False
     try:
@@ -242,23 +245,27 @@ def probe(service: str) -> bool:
             quota_remaining=remaining, quota_total=total,
             latency_ms=int((time.monotonic() - started) * 1000),
             allow_quota_recovery=False,
+            record_history=False,
         )
         return ok
     except requests.Timeout as exc:
         provider_runtime.record_result(
             service, False, error="timeout", exception_type=type(exc).__name__,
             latency_ms=int((time.monotonic() - started) * 1000),
+            record_history=False,
         )
     except requests.ConnectionError as exc:
         provider_runtime.record_result(
             service, False, error="network error", exception_type=type(exc).__name__,
             latency_ms=int((time.monotonic() - started) * 1000),
+            record_history=False,
         )
     except Exception as exc:
         provider_runtime.record_result(
             service, False, error=str(exc) or type(exc).__name__,
             exception_type=type(exc).__name__,
             latency_ms=int((time.monotonic() - started) * 1000),
+            record_history=False,
         )
     return False
 
@@ -274,7 +281,9 @@ def check_all(*, force=False) -> None:
         retryable_failure = state.get("error_type") in (
             "temporary", "timeout", "network", "unknown", "response",
         )
-        probe_every = min(spec.probe_every, 300) if retryable_failure else spec.probe_every
+        # Недоступный внешний сервис не должен получать новый тяжёлый probe каждые
+        # пять минут: это создаёт шум в админке и съедает лимиты именно во время сбоя.
+        probe_every = min(spec.probe_every, 1800) if retryable_failure else spec.probe_every
         if not force and last and now - last < probe_every:
             continue
         due.append(spec.key)
@@ -290,6 +299,7 @@ def check_all(*, force=False) -> None:
                 except Exception as exc:
                     provider_runtime.record_result(
                         service, False, error=type(exc).__name__,
+                        record_history=False,
                     )
                     results[service] = False
     # A reserve is checked before selection and is shown only after its own

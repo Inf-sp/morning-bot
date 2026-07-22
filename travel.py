@@ -41,6 +41,7 @@ _LANG_RU = {
     "French": "французский", "Italian": "итальянский", "Romansh": "ретороманский",
     "Spanish": "испанский", "Portuguese": "португальский", "Polish": "польский",
     "Danish": "датский", "Swedish": "шведский", "Japanese": "японский",
+    "Icelandic": "исландский",
 }
 _CURRENCY_RU = {
     "EUR": "евро · EUR", "CHF": "швейцарский франк · CHF", "GBP": "фунт стерлингов · GBP",
@@ -59,6 +60,41 @@ def selected_transports(cid):
 
 def _transport_context(cid):
     return ", ".join(_TRANSPORT_BY_KEY[key][2] for key in selected_transports(cid))
+
+
+_TRAVEL_INTERESTS = (
+    (("природ", "ландшафт", "горы", "лес", "озер", "озёр"), "природа"),
+    (("поход", "хайкинг", "треккинг"), "походы"),
+    (("город", "урбан", "архитект"), "города и архитектура"),
+    (("ед", "ресторан", "кухн"), "еда"),
+    (("культур", "музе", "истори"), "культура"),
+    (("пляж", "море", "побереж"), "пляжи"),
+    (("поезд", "железнодорож"), "поезда"),
+    (("lgbt", "лгбт", "квир"), "LGBTQ+ комфорт"),
+)
+_CARD_CLICHES = (
+    "уникальн", "впечатляющ", "незабываем", "удивительн", "страна предлагает",
+    "подходит пользовател", "различные виды транспорта", "комбинаци", "самолёт", "паром",
+)
+
+
+def _travel_interests(cid):
+    """Один-два реальных интереса без транспорта как универсального аргумента."""
+    text = " ".join(str(item) for item in memory.get_preferences(cid)).casefold()
+    found = []
+    for markers, label in _TRAVEL_INTERESTS:
+        if any(marker in text for marker in markers) and label not in found:
+            found.append(label)
+        if len(found) == 2:
+            break
+    return found
+
+
+def _editorial_line(value, *, allow_empty=True):
+    text = _card_text(value)
+    if any(marker in text.casefold() for marker in _CARD_CLICHES):
+        return "" if allow_empty else text
+    return text[:1].upper() + text[1:] if text else ""
 
 
 def _fallback_idea(cid):
@@ -469,8 +505,10 @@ def travel_suggest_one(cid, excluded=None):
     visited = [_country_name(code) for code in _visited_codes(cid)]
     blocked = recommendation_stoplist.values(cid, "country")
     skip = ", ".join(visited + blocked + _plan_countries(cid) + list(excluded or []))
+    interests = " · ".join(_travel_interests(cid)) or "без явных предпочтений"
     prompt = f"""Не предлагай: {skip}. Предложи ровно одну новую страну для путешествия.
-Предпочтительный транспорт: {_transport_context(cid)} — учитывай доступность этим способом.
+Сильные интересы путешественника: {interests}. Не выбирай страну из-за самолёта,
+парома или велосипеда: транспорт сам по себе не является причиной рекомендации.
 Верни только JSON: {{"country":"название страны по-русски"}}."""
     return ai.llm_json(prompt, 250, tier="leisure", module="travel")
 
@@ -604,6 +642,41 @@ def _budget_line(level, reason):
     return f"{normalized} — {reason}" if normalized and reason else ""
 
 
+def _fallback_fit(interests):
+    if not interests:
+        return ""
+    forms = {
+        "природа": "природой", "походы": "походами", "города и архитектура": "городами и архитектурой",
+        "еда": "едой", "культура": "культурой", "пляжи": "пляжами", "поезда": "поездами",
+        "LGBTQ+ комфорт": "LGBTQ+ комфортом",
+    }
+    values = [forms.get(value, value) for value in interests]
+    return "если хочется поездки с " + " и ".join(values)
+
+
+def _plan_from_sources(country, generated, facts, travel_facts, interests, photo):
+    """Собирает карточку: факты побеждают редакторский текст модели."""
+    generated = generated if isinstance(generated, dict) else {}
+    source_languages = travel_facts.get("languages") or _normalize_languages(facts.get("languages"))
+    return {
+        "flag": util.flag_from_cc(facts.get("cc") or "") or generated.get("flag", ""),
+        "title": country,
+        "about": travel_facts.get("about") or _editorial_line(generated.get("about")),
+        "fit": _editorial_line(generated.get("fit")) or _fallback_fit(interests),
+        "spots": _card_list(travel_facts.get("spots") or generated.get("spots"), 3),
+        "best_time": travel_facts.get("best_time") or _card_text(generated.get("best_time")),
+        "budget": travel_facts.get("budget") or _budget_line(
+            generated.get("budget_level"), generated.get("budget_reason"),
+        ),
+        "languages": _card_list(source_languages or generated.get("languages"), 3),
+        # Оценка не берётся из LLM. Пока для страны нет проверенного профиля,
+        # честно сообщаем об ограничении, а не выдаём предположение за факт.
+        "lgbt": travel_facts.get("lgbt")
+            or "нужна осторожность — в карточке нет свежих проверенных данных",
+        "photo": photo,
+    }
+
+
 async def send_plan(bot, cid):
     import saved_items
     data = store.last_recipe.get(str(cid)) or {}
@@ -612,35 +685,41 @@ async def send_plan(bot, cid):
         await bot.send_message(chat_id=cid, text="Сначала выбери страну в Поездках."); return
     home = store.get_settings(cid).get("city", "дом")
     facts = await asyncio.to_thread(research.country_facts, country)
+    travel_facts = await asyncio.to_thread(research.country_travel_facts, country)
     fact_block = research.facts_block(facts)
+    interests = _travel_interests(cid)
+    interests_text = " · ".join(interests) or "нет сохранённых сильных интересов"
     web_data = await asyncio.to_thread(
         research.web_snippet,
-        f"{country} official travel advice climate travel costs LGBTQ attractions 2026",
+        f"{country} official travel advice climate travel costs attractions 2026",
         1600,
     )
-    profile = memory.profile_hints(cid) or "Предпочтения пользователя пока не сохранены."
     prompt = f"""Собери подробную практическую карточку путешествия в {country} из {home}.
-Предпочтительный транспорт: {_transport_context(cid)}.
-Персональный контекст: {profile}
+Сильные интересы путешественника: {interests_text}. Выбери только один или два
+действительно релевантных интереса. Не используй транспорт, самолёт или паром как
+причину выбрать страну. Велосипед упоминай только если он прямо есть в фактах ниже.
 Проверенные стабильные данные: {fact_block or 'нет структурированных данных'}.
+Проверенные практические данные: {travel_facts or 'нет данных в каталоге'}.
 Свежие поисковые фрагменты: {web_data or 'нет свежих фрагментов'}.
 
 Верни только JSON на русском:
 {{"flag":"эмодзи","title":"название страны",
 "about":"ровно 1 короткое предложение с главной причиной поехать",
-"fit":"ровно 1 короткое предложение от второго лица, почему страна подходит под сохранённые предпочтения",
+"fit":"ровно 1 короткое предложение: если хочется ...",
 "spots":["ровно 3 конкретных места, маршрута или уникальных активности"],
 "best_time":"конкретные месяцы или сезон — короткая причина",
 "budget_level":"низкий, средний или высокий",
 "budget_reason":"одна главная причина стоимости без числовых сумм",
-"languages":["основные полезные путешественнику языки по-русски"],
-"lgbt":"1 короткая практическая оценка законов и реальной общественной среды"}}.
+"languages":["основные полезные путешественнику языки по-русски"]
+}}.
 
-Не добавляй факт, статистику, рекламные формулировки и длинные юридические пояснения.
+Модель пишет только редакторский текст по переданным фактам: не придумывай языки,
+законы, LGBTQ+-безопасность, сезон, бюджет или транспорт. Не добавляй факт,
+статистику, рекламные формулировки и длинные юридические пояснения.
 Никогда не пиши «пользователь», «поездка подходит пользователю», «уникальное сочетание» или
 «отношение терпимое». Обращайся напрямую: «тебе подойдёт» не повторяй внутри значения fit.
 Не повторяй название страны без необходимости. Не дублируй места из spots в fit.
-В fit не делай список и не повторяй несколько раз слова о транспорте.
+В fit не делай список. Не упоминай самолёт, паром или велосипед без прямого факта.
 Каждый spot — одна короткая строка, не общая рекомендация. Не придумывай суммы бюджета.
 Не пиши шаблоны «богатая культура и красивая природа», «стоимость зависит от дат» и
 «соблюдайте местные обычаи». Не повторяй информацию и слова между блоками.
@@ -649,20 +728,9 @@ async def send_plan(bot, cid):
         plan = await ai.allm_json(prompt, 900, tier="leisure", module="travel")
     except Exception as exc:
         await verify.safe_error(bot, cid, exc, back="m_travel"); return
-    if facts.get("cc"):
-        plan["flag"] = util.flag_from_cc(facts["cc"]) or plan.get("flag", "")
-    plan = {
-        "flag": plan.get("flag") or data.get("flag", ""),
-        "title": country,
-        "about": _card_text(plan.get("about")),
-        "fit": _card_text(plan.get("fit")),
-        "spots": _card_list(plan.get("spots"), 3),
-        "best_time": _card_text(plan.get("best_time")),
-        "budget": _budget_line(plan.get("budget_level"), plan.get("budget_reason")),
-        "languages": (_normalize_languages(facts.get("languages")) or _card_list(plan.get("languages"), 3))[:3],
-        "lgbt": _card_text(plan.get("lgbt")) if web_data else "Актуальную ситуацию лучше проверить перед поездкой",
-        "photo": data.get("photo"),
-    }
+    plan = _plan_from_sources(country, plan, facts, travel_facts, interests, data.get("photo"))
+    if not plan["flag"]:
+        plan["flag"] = data.get("flag", "")
     msg = travel_ui.travel_plan(plan, country)
     store.last_answer[str(cid)] = msg.text
     store.last_source[str(cid)] = "Поездки · Страна"

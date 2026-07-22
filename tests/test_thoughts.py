@@ -550,6 +550,7 @@ def test_full_history_delete_is_absent_from_settings_and_legacy_callbacks_are_sa
     asyncio.run(saved_items.send_notes(bot, "42"))
     labels = [button.text for row in bot.sent[0]["reply_markup"].inline_keyboard for button in row]
     assert "❌ Удалить историю мыслей" not in labels
+    assert "🔄 Обновление данных" not in labels
 
     deleted = []
     monkeypatch.setattr(settings.store, "set_list", lambda *args: deleted.append(args))
@@ -558,4 +559,17 @@ def test_full_history_delete_is_absent_from_settings_and_legacy_callbacks_are_sa
     asyncio.run(settings.handle_callback(bot, "42", "set_thought_history_delete_yes", q=q))
 
     assert deleted == []
+    assert bot.sent[-1]["text"].startswith("🎚️ Настройки")
+
+
+def test_stale_database_refresh_button_returns_to_settings_without_processing(monkeypatch):
+    bot = FakeBot()
+
+    async def fail_refresh(*_args, **_kwargs):
+        raise AssertionError("legacy refresh must not run")
+
+    monkeypatch.setattr(settings, "refresh_database", fail_refresh)
+
+    asyncio.run(settings.handle_callback(bot, "42", "set_refresh_data"))
+
     assert bot.sent[-1]["text"].startswith("🎚️ Настройки")

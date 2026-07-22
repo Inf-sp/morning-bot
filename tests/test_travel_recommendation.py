@@ -5,6 +5,8 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import travel
+import research
+from ui import travel as travel_ui
 
 
 class FakeBot:
@@ -44,3 +46,67 @@ def test_rejected_visited_country_changes_next_generation_request(monkeypatch):
     assert attempts == [[], ["Чили"]]
     assert selected == ["Япония"]
     assert bot.sent == []
+
+
+def test_iceland_card_uses_verified_travel_fields_not_model_claims():
+    facts = research.country_facts("Исландия")
+    travel_facts = research.country_travel_facts("Исландия")
+    plan = travel._plan_from_sources(
+        "Исландия",
+        {
+            "about": "Уникальное сочетание природы.",
+            "fit": "Можно путешествовать самолётом и велосипедом.",
+            "spots": ["Случайное место"],
+            "best_time": "всегда",
+            "budget_level": "low",
+            "budget_reason": "дёшево",
+            "languages": ["русский"],
+            "lgbt": "высокий риск — выдуманное утверждение",
+        },
+        facts, travel_facts, ["природа", "походы"], None,
+    )
+
+    assert plan["about"] == "Вулканы, ледники, горячие источники и дороги через почти незаселённые пейзажи."
+    assert plan["fit"] == "если хочется поездки с природой и походами"
+    assert plan["spots"] == [
+        "Золотое кольцо — Гюдльфосс, Гейсир и Тингведлир",
+        "Южное побережье и ледниковую лагуну Йёкюльсаурлоун",
+        "Рейкьявик и геотермальные бассейны",
+    ]
+    assert plan["best_time"].startswith("июнь–август —")
+    assert plan["budget"] == "высокий — особенно жильё, рестораны и транспорт"
+    assert plan["languages"] == ["исландский", "английский"]
+    assert plan["lgbt"].startswith("очень комфортно —")
+
+    text = travel_ui.travel_plan(plan, "Исландия").text
+    assert "📍 Не пропусти" in text
+    assert "👩🏻‍🏫 Языки: исландский · английский" in text
+    assert "Самолётом" not in text
+
+
+def test_unverified_lgbt_model_text_is_not_shown_as_a_fact():
+    plan = travel._plan_from_sources(
+        "Тестовая страна", {"lgbt": "очень комфортно — модель так сказала"},
+        {"cc": "ZZ", "languages": ["English"]}, {}, [], None,
+    )
+
+    assert plan["lgbt"] == "нужна осторожность — в карточке нет свежих проверенных данных"
+
+
+def test_country_suggestion_prompt_does_not_make_transport_the_reason(monkeypatch):
+    captured = {}
+
+    def fake_llm(prompt, *_args, **_kwargs):
+        captured["prompt"] = prompt
+        return {"country": "Исландия"}
+
+    monkeypatch.setattr(travel.ai, "llm_json", fake_llm)
+    monkeypatch.setattr(travel, "_visited_codes", lambda _cid: [])
+    monkeypatch.setattr(travel.recommendation_stoplist, "values", lambda *_args: [])
+    monkeypatch.setattr(travel, "_plan_countries", lambda _cid: [])
+    monkeypatch.setattr(travel.memory, "get_preferences", lambda _cid: ["Люблю природу и походы"])
+
+    travel.travel_suggest_one("42")
+
+    assert "Предпочтительный транспорт" not in captured["prompt"]
+    assert "самолёта" in captured["prompt"]

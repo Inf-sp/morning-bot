@@ -225,6 +225,34 @@ def test_database_refresh_rebuilds_formatted_daily_caches(monkeypatch):
     assert result["cache_failed"] == 0
 
 
+def test_database_refresh_does_not_trigger_external_concert_search(monkeypatch):
+    monkeypatch.setattr(data_refresh, "_collection_keys", lambda: [])
+    monkeypatch.setattr(data_refresh, "_clear_legacy_backups", lambda *_args: 0)
+    monkeypatch.setattr(data_refresh.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(data_refresh.store, "load_wardrobe", lambda *_args: {})
+    monkeypatch.setattr(data_refresh, "migration_count", lambda *_args: 0)
+    monkeypatch.setattr(data_refresh.recommendation_stoplist, "migrate_legacy", lambda *_args: 0)
+
+    async def unchanged_wardrobe(_cid, wardrobe):
+        return wardrobe
+
+    async def unchanged_dictionary(_cid):
+        return {"fixed": 0, "duplicates": 0, "review": 0, "checked": 0}
+
+    async def caches(_cid):
+        return {"refreshed": 0, "failed": 0}
+
+    monkeypatch.setattr(data_refresh, "migrate_item_attrs", unchanged_wardrobe)
+    monkeypatch.setattr(data_refresh.learning_data_quality, "refresh_dictionary", unchanged_dictionary)
+    monkeypatch.setattr(data_refresh, "_refresh_daily_caches", caches)
+    monkeypatch.setattr(
+        "leisure_concerts.refresh_concerts_cache",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("concert refresh must be explicit")),
+    )
+
+    asyncio.run(data_refresh.refresh_user_database("no-concerts"))
+
+
 def test_database_refresh_removes_legacy_backups_without_creating_new_versions(monkeypatch):
     state = {"42": [{"id": "old-1"}, {"id": "old-2"}], "other": [{"id": "keep"}]}
 

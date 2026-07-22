@@ -2,6 +2,7 @@
 
 import re
 
+from dictionary_model import display_term
 
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 _LATIN_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]")
@@ -14,10 +15,7 @@ def _mixed_script(value):
 
 def _term(entry, fallback=None):
     term = str(entry.get("term") or entry.get("word") or fallback or "").strip()
-    article = str(entry.get("article") or "").strip()
-    if article and not term.casefold().startswith(article.casefold() + " "):
-        term = f"{article} {term}"
-    return term[:1].upper() + term[1:] if term else ""
+    return display_term(term, entry.get("article") or "")
 
 
 def _breakdown(entry):

@@ -1,3 +1,5 @@
+from dictionary_model import display_term
+
 from .builder import MessageBuilder
 
 
@@ -21,13 +23,10 @@ def dict_deleted(removed=None):
     b = MessageBuilder()
     b.section("✅ Удалено")
     entry = removed if isinstance(removed, dict) else {"term": str(removed or "")}
-    term = str(entry.get("term") or "").strip()
-    article = str(entry.get("article") or "").strip()
-    if article and not term.casefold().startswith(article.casefold() + " "):
-        term = f"{article} {term}"
+    term = display_term(entry.get("term") or "", entry.get("article") or "")
     if term:
         b.spacer()
-        b.bold(term[:1].upper() + term[1:])
+        b.bold(term)
         translation = str(entry.get("translation") or entry.get("ru") or "").strip()
         if translation:
             b.text_line(f" → {translation[:1].upper() + translation[1:]}")

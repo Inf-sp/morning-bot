@@ -40,21 +40,21 @@ class ProviderSpec:
 # Fallbacks are directed. Tavily is reserve-only while its monthly quota is
 # exhausted; search never bounces back from Tavily to Firecrawl.
 SPECS = (
-    ProviderSpec("cohere", "Cohere", ("Обучение", "Ассистент"), ("github_models", "gemini")),
-    ProviderSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"), ("github_models", "groq", "openrouter")),
-    ProviderSpec("github_models", "GitHub Models", ("Готовка", "Обучение", "Ассистент"), ("openrouter",)),
-    ProviderSpec("groq", "Groq", ("Готовка", "Обучение", "Ассистент"), ("github_models", "openrouter")),
-    ProviderSpec("openrouter", "OpenRouter", ("Готовка",), ()),
-    ProviderSpec("cloudflare", "Cloudflare AI", ("Ассистент",), ("github_models",)),
+    ProviderSpec("cohere", "Cohere", ("Обучение", "Ассистент"), ("github_models", "gemini"), 3600),
+    ProviderSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"), ("github_models", "groq", "openrouter"), 3600),
+    ProviderSpec("github_models", "GitHub Models", ("Готовка", "Обучение", "Ассистент"), ("openrouter",), 3600),
+    ProviderSpec("groq", "Groq", ("Готовка", "Обучение", "Ассистент"), ("github_models", "openrouter"), 3600),
+    ProviderSpec("openrouter", "OpenRouter", ("Готовка",), (), 3600),
+    ProviderSpec("cloudflare", "Cloudflare AI", ("Ассистент",), ("github_models",), 3600),
     ProviderSpec("openweather", "OpenWeather", ("Мой день", "Гардероб"), ()),
-    ProviderSpec("firecrawl", "Firecrawl", ("Поиск", "Поездка", "Концерты"), ("tavily",), 300),
+    ProviderSpec("firecrawl", "Firecrawl", ("Поиск", "Поездка", "Концерты"), ("tavily",), 900),
     ProviderSpec("tavily", "Tavily", ("Поиск",), ()),
     ProviderSpec("tmdb", "TMDB", ("Кино",), ()),
     ProviderSpec("google_books", "Google Books", ("Книги",), (), 86400),
-    ProviderSpec("languagetool", "LanguageTool", ("Обучение",), ("gemini",)),
+    ProviderSpec("languagetool", "LanguageTool", ("Обучение",), ("gemini",), 3600),
     ProviderSpec("spoonacular", "Spoonacular", ("Готовка",), ("themealdb",), 3600),
     ProviderSpec("themealdb", "TheMealDB", ("Готовка",), ()),
-    ProviderSpec("azure_speech", "Azure Speech", ("Озвучка",), ()),
+    ProviderSpec("azure_speech", "Azure Speech", ("Озвучка",), (), 3600),
     ProviderSpec("ticketmaster", "Ticketmaster", ("Концерты",), ("firecrawl",), 3600),
     ProviderSpec("zeroentropy", "ZeroEntropy", ("Здоровье",), (), 3600),
     ProviderSpec("pexels", "Pexels", ("Поездка",), ("unsplash",)),
@@ -298,9 +298,14 @@ def _update_incident(data: dict, incident_id: str, **values) -> None:
 def record_result(
     provider: str, ok: bool, *, status_code=None, error="", headers=None,
     quota_remaining=None, quota_total=None, checked_at=None, latency_ms=None,
-    exception_type="", allow_quota_recovery=True,
+    exception_type="", allow_quota_recovery=True, record_history=True,
 ) -> None:
-    """Record a real request or probe through one health transition."""
+    """Record a real request or probe through one health transition.
+
+    Passive monitor probes update the live state, but should not be presented
+    as product errors in the developer log. Real feature requests retain the
+    default history recording.
+    """
     if provider not in SPEC_BY_KEY:
         return
     now = int(checked_at or time.time())
@@ -310,6 +315,11 @@ def record_result(
 
     def mutate(data):
         data = normalise_state(data)
+
+        def append_history(*args, **kwargs):
+            if record_history:
+                _append_history(*args, **kwargs)
+
         state = data["services"][provider]
         old_status = state["status"]
         old_fallback = state.get("fallback") or ""
@@ -340,7 +350,7 @@ def record_result(
                 if not incident_id:
                     incident_id = f"{provider}-{now}-{uuid.uuid4().hex[:8]}"
                     incident_started_at = now
-                    _append_history(
+                    append_history(
                         data, provider, f"{SPEC_BY_KEY[provider].label}: лимит исчерпан.", now,
                         event_type="error", incident_id=incident_id,
                         message="лимит исчерпан", latency_ms=latency_ms,
@@ -349,14 +359,14 @@ def record_result(
                 state["incident_id"] = incident_id
                 state["incident_started_at"] = incident_started_at
             elif incident_id:
-                _append_history(
+                append_history(
                     data, provider, f"{SPEC_BY_KEY[provider].label} восстановлен.", now,
                     event_type="recovery", incident_id=incident_id,
                     started_at=incident_started_at, recovered_at=now,
                 )
                 _update_incident(data, incident_id, recovered_at=now)
                 if old_fallback:
-                    _append_history(
+                    append_history(
                         data, provider, f"{SPEC_BY_KEY[provider].label}: резерв отключён.", now,
                         event_type="system", incident_id=incident_id,
                         started_at=incident_started_at, recovered_at=now,
@@ -364,7 +374,7 @@ def record_result(
                 state["incident_id"] = ""
                 state["incident_started_at"] = None
             elif old_status != state["status"]:
-                _append_history(
+                append_history(
                     data, provider, f"{SPEC_BY_KEY[provider].label} работает.", now,
                     event_type="status",
                 )
@@ -387,7 +397,7 @@ def record_result(
                     incident_started_at = now
                     state["incident_id"] = incident_id
                     state["incident_started_at"] = incident_started_at
-                    _append_history(
+                    append_history(
                         data, provider, f"{SPEC_BY_KEY[provider].label}: {friendly}.", now,
                         event_type="error", incident_id=incident_id,
                         status_code=status_code, exception_type=exception_type,
@@ -402,7 +412,7 @@ def record_result(
                 source_state["last_error"] = "резерв недоступен"
                 source_state["error_type"] = "fallback"
                 source_incident = str(source_state.get("incident_id") or "")
-                _append_history(
+                append_history(
                     data, source, f"{SPEC_BY_KEY[source].label}: резерв недоступен.", now,
                     event_type="system", incident_id=source_incident,
                     started_at=source_state.get("incident_started_at") or now,

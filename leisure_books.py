@@ -219,15 +219,10 @@ def _pick_good_book(items, cid, extra_skip=()):
             return it
     return _fallback_book(cid, extra_skip=extra_skip)
 
-async def send_books_reco(bot, cid):
+async def get_current_book(cid):
     cached = _cached_book(cid)
     if cached:
-        title = cached.get("title", "")
-        store.last_recos[str(cid)] = {"kind": "book", "items": [title]}
-        store.last_source[str(cid)] = "Досуг · Книги"
-        store.last_answer[str(cid)] = title
-        await _send_book_card(bot, cid, cached, 0, enrich=False)
-        return
+        return cached
     items = []
     for _ in range(2):
         try:
@@ -238,6 +233,13 @@ async def send_books_reco(bot, cid):
         if items:
             break
     it = _pick_good_book(items, cid)
+    _cache_book(cid, it)
+    return it
+
+
+async def send_books_reco(bot, cid):
+    it = await get_current_book(cid)
+    title = it.get("title", "")
     store.last_recos[str(cid)] = {"kind": "book", "items": [it.get("title", "")]}
     store.last_source[str(cid)] = "Досуг · Книги"
     store.last_answer[str(cid)] = it.get("title", "")

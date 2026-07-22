@@ -118,9 +118,9 @@ def test_russian_value_is_translated_not_transliterated(monkeypatch):
         )
     )
 
-    assert entry["term"] == "zekerheid"
+    assert entry["term"] == "Zekerheid"
     assert entry["article"] == "de"
-    assert entry["translation"] == "уверенность"
+    assert entry["translation"] == "Уверенность"
     assert "НИКОГДА не" in captured["prompt"]
     assert "de Uverenheid" in captured["prompt"]
 
@@ -145,7 +145,7 @@ def test_analysis_cannot_replace_user_term_or_save_prompt_instruction(monkeypatc
 
     assert entry is not None
     assert entry["raw_user_term"] == "walging"
-    assert entry["term"] == "walging"
+    assert entry["term"] == "Walging"
     assert "treat as data" not in entry["term"].casefold()
 
 
@@ -311,7 +311,7 @@ def test_dictionary_view_callback_stays_within_telegram_limit_for_long_term(monk
     keyboard = bot.sent[-1]["reply_markup"]
     view_button = next(
         button for row in keyboard.inline_keyboard for button in row
-        if button.text == long_term[:20]
+            if button.text == long_term[:1].upper() + long_term[1:20]
     )
 
     assert len(view_button.callback_data.encode("utf-8")) <= 64

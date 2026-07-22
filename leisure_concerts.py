@@ -43,6 +43,8 @@ _TRIBUTE_MARKERS = ("tribute", "cover", "covers", "candlelight", "songs of", "th
 # и retry список из 30+ артистов заваливает API 429-ми, которые тихо трактуются как "нет концертов".
 _TICKETMASTER_CONCURRENCY = asyncio.Semaphore(5)
 _TICKETMASTER_RETRY_DELAYS = (0.5, 1.5, 3.0)
+_EXTERNAL_ARTIST_LIMIT = 5
+_EXTERNAL_CONCURRENCY = asyncio.Semaphore(2)
 
 def _ticketmaster_get(url, params, timeout=15):
     """GET с retry только на 429/5xx (экспоненциальный backoff) — сетевые ошибки,
@@ -592,8 +594,23 @@ async def _fetch_concerts(artists, cc, cname):
     date_to = (now + timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ")  # 1 год вперёд
 
     tm_events = await _ticketmaster_events_many(artists, cc, start_dt=date_from, end_dt=date_to, size=10, limit=40)
+    # Ticketmaster — быстрый и структурированный первый источник. Внешний поиск
+    # дорогой (несколько web-запросов + AI-разбор на артиста), поэтому проверяем
+    # только небольшую очередь тех, для кого Ticketmaster ничего не подтвердил.
+    found_artists = {
+        _item_text(event.get("_artist")).casefold()
+        for event in tm_events
+        if isinstance(event, dict) and _item_text(event.get("_artist"))
+    }
+    unresolved = [artist for artist in artists[:40]
+                  if _item_text(artist).casefold() not in found_artists]
+
+    async def external_for_artist(artist):
+        async with _EXTERNAL_CONCURRENCY:
+            return await get_external_events_for_artist(artist, cc, cname)
+
     external_batches = await asyncio.gather(
-        *[get_external_events_for_artist(artist, cc, cname) for artist in artists[:40]],
+        *(external_for_artist(artist) for artist in unresolved[:_EXTERNAL_ARTIST_LIMIT]),
         return_exceptions=True,
     )
     external_events = []
@@ -607,7 +624,7 @@ async def _fetch_concerts(artists, cc, cname):
 async def refresh_concerts_cache(cid):
     """Прогревает недельный кэш концертов пользователя — вызывается пятничным job'ом
     перед уведомлением «Афиша недели», чтобы само уведомление и последующие «Концерты» не ждали API.
-    Возвращает короткий результат и подходит для ручного «Обновить базу»."""
+    Возвращает короткий результат для планового задания."""
     artists = _ensure_artists(cid)
     if not artists:
         invalidate_user_concerts_cache(cid)

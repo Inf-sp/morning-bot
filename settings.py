@@ -184,7 +184,7 @@ async def refresh_database(bot, cid, q=None):
 
     if q is not None:
         try:
-            await q.message.edit_text("🔄 Обновляю базу и физические свойства вещей…")
+            await q.message.edit_text("🔄 Обновляю данные…")
         except Exception:
             pass
     result = await data_refresh.refresh_user_database(cid)
@@ -874,18 +874,13 @@ async def handle_callback(bot, cid, data, q=None):
         await menu.send_food_menu(bot, cid)
     elif data == "set_notif":
         await send_notif(bot, cid, q)
-    elif data == "set_refresh_data":
-        await refresh_database(bot, cid, q)
-    elif data == "set_refresh_review":
-        await send_language_review(bot, cid, q)
-    elif data == "set_refresh_review_apply":
-        await resolve_language_review(bot, cid, "apply", q)
-    elif data == "set_refresh_review_delete":
-        await resolve_language_review(bot, cid, "delete", q)
-    elif data == "set_refresh_review_skip":
-        # Старые сообщения могли сохранить удалённую кнопку. Она больше не
-        # снимает запись с проверки и просто открывает актуальную карточку.
-        await send_language_review(bot, cid, q)
+    elif data in (
+        "set_refresh_data", "set_refresh_review", "set_refresh_review_apply",
+        "set_refresh_review_delete", "set_refresh_review_skip",
+    ):
+        # Кнопка ручного обновления базы удалена. Старые сообщения безопасно
+        # возвращают к актуальным настройкам и не запускают сетевую обработку.
+        await send_home(bot, cid)
     elif data in ("set_thought_history_delete", "set_thought_history_delete_yes"):
         # Старые сообщения могли сохранить удалённую кнопку. Массовое удаление
         # истории мыслей больше недоступно из интерфейса.

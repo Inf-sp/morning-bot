@@ -250,6 +250,29 @@ _COUNTRY_FACTS = {
     "US": {"capital": "Washington, D.C.", "languages": ["English"], "region": "Americas", "currency": "USD"},
     "CA": {"capital": "Ottawa", "languages": ["English", "French"], "region": "Americas", "currency": "CAD"},
     "JP": {"capital": "Tokyo", "languages": ["Japanese"], "region": "Asia", "currency": "JPY"},
+    "IS": {"capital": "Reykjavík", "languages": ["Icelandic", "English"], "region": "Europe", "currency": "ISK"},
+}
+
+# Короткие сведения, подтверждённые источниками, а не моделью. Каталог можно
+# расширять без изменения рендера карточки. Источники нужны именно для
+# практических полей путешественника; редакторский текст формируется отдельно.
+_COUNTRY_TRAVEL_FACTS = {
+    "IS": {
+        "about": "Вулканы, ледники, горячие источники и дороги через почти незаселённые пейзажи.",
+        "spots": [
+            "Золотое кольцо — Гюдльфосс, Гейсир и Тингведлир",
+            "Южное побережье и ледниковую лагуну Йёкюльсаурлоун",
+            "Рейкьявик и геотермальные бассейны",
+        ],
+        "best_time": "июнь–август — длинный световой день и удобнее всего путешествовать по стране",
+        "budget": "высокий — особенно жильё, рестораны и транспорт",
+        "languages": ["исландский", "английский"],
+        "lgbt": "очень комфортно — широкая защита от дискриминации и свободная атмосфера в Рейкьявике",
+        "sources": [
+            "https://www.visiticeland.com/article/practical-information1/",
+            "https://www.ilga-europe.org/report/rainbow-map-2026/",
+        ],
+    },
 }
 
 def country_facts(name):
@@ -266,6 +289,14 @@ def country_facts(name):
     out = {"cc": (cc or "").upper(), **facts} if cc or facts else {}
     _CF_CACHE[key] = (time.time(), out)
     return out
+
+
+def country_travel_facts(name):
+    """Проверяемые практические поля карточки страны, если они есть в каталоге."""
+    code = str(country_facts(name).get("cc") or util.cc_of(name) or "").upper()
+    facts = _COUNTRY_TRAVEL_FACTS.get(code) or {}
+    return {key: (list(value) if isinstance(value, list) else value)
+            for key, value in facts.items()}
 
 def facts_block(d):
     """Строка-граундинг для промпта из фактов о стране."""

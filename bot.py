@@ -588,6 +588,11 @@ async def post_init(app):
     try:
         if dictionary.migrate_dict_caps():
             logging.info("Dict caps migration: applied")
+            # Сохранённые карточки дня могли содержать старый регистр. После
+            # миграции строим их заново из единого словаря без AI-вызова.
+            for cid in access.get_allowed_cids():
+                learning.reset_daily_material_cache(cid)
+                myday.reset_day_cache(cid)
     except Exception:
         logging.exception("Dict caps migration failed")
     try:
@@ -683,14 +688,6 @@ class _MenuCleanupBot(ExtBot):
 
     async def _pre_send(self, chat_id):
         await self._delete_transient(chat_id)
-        msg_id = store.last_inline_message.get(str(chat_id))
-        if not msg_id:
-            return
-        store.last_inline_message.pop(str(chat_id), None)
-        try:
-            await self.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=None)
-        except Exception:
-            pass
 
     @staticmethod
     def _mark_send_done(task):
@@ -707,7 +704,7 @@ class _MenuCleanupBot(ExtBot):
         if transient:
             self.mark_transient_message(chat_id, msg.message_id)
 
-    async def send_message(self, chat_id, *args, **kwargs):
+    async def _send_message_once(self, chat_id, *args, **kwargs):
         transient = kwargs.pop("transient", False)
         preserve_previous_inline = kwargs.pop("preserve_previous_inline", False)
         persistent_inline = kwargs.pop("persistent_inline", False)
@@ -720,6 +717,35 @@ class _MenuCleanupBot(ExtBot):
         self._post_send(
             chat_id, msg, transient=transient, persistent_inline=persistent_inline)
         return msg
+
+    async def send_message(self, chat_id, *args, **kwargs):
+        """Безопасная единая отправка: Telegram не принимает текст длиннее 4096.
+
+        Большинство экранов вызывают ``bot.send_message`` напрямую, поэтому
+        защита здесь покрывает и AI-ответы, и редкие длинные служебные карточки.
+        Для HTML оставляем специальным доставщикам их разметочное разбиение.
+        """
+        text = kwargs.get("text") if "text" in kwargs else (args[0] if args else "")
+        if (isinstance(text, str) and not kwargs.get("parse_mode")
+                and len(text.encode("utf-16-le")) // 2 > 4000):
+            entities = kwargs.get("entities")
+            chunks = util.chunk_text_with_entities(text, entities, 4000)
+            tail_args = args[1:] if args else ()
+            last = None
+            for index, (chunk_text, chunk_entities) in enumerate(chunks):
+                part = dict(kwargs)
+                part["text"] = chunk_text
+                if chunk_entities:
+                    part["entities"] = chunk_entities
+                else:
+                    part.pop("entities", None)
+                if index < len(chunks) - 1:
+                    part.pop("reply_markup", None)
+                    part.pop("transient", None)
+                    part.pop("persistent_inline", None)
+                last = await self._send_message_once(chat_id, *tail_args, **part)
+            return last
+        return await self._send_message_once(chat_id, *args, **kwargs)
 
     async def send_photo(self, chat_id, *args, **kwargs):
         send = asyncio.create_task(super().send_photo(chat_id, *args, **kwargs))

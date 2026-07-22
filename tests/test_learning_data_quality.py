@@ -50,8 +50,8 @@ def test_legacy_entry_normalization_is_deterministic():
 
     assert changed is True
     assert normalized["article"] == "de"
-    assert normalized["term"] == "afspraak"
-    assert normalized["translation"] == "договорённость"
+    assert normalized["term"] == "Afspraak"
+    assert normalized["translation"] == "Договорённость"
     assert normalized["examples"] == [{
         "text": "Ik heb morgen een afspraak!",
         "translation": "У меня завтра встреча.",
@@ -80,7 +80,7 @@ def test_new_dutch_entry_checks_foreign_fields_but_never_translation(monkeypatch
         }],
     }))
 
-    assert checked["term"] == "vervangen"
+    assert checked["term"] == "Vervangen"
     sent_text = " ".join(text for text, _language in calls)
     assert "заменять" not in sent_text
     assert "Я хочу" not in sent_text
@@ -156,7 +156,7 @@ def test_refresh_merges_exact_duplicates_and_preserves_translations(monkeypatch)
     assert second["duplicates"] == 0
     assert second["fixed"] == 0
     assert len(state) == 1
-    assert state[0]["translation"] == "заменять; менять"
+    assert state[0]["translation"] == "Заменять; Менять"
     assert state == after_first
 
 

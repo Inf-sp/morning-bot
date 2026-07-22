@@ -77,7 +77,7 @@ def _collection_keys():
 
 
 async def refresh_user_database(cid):
-    """Обновляет коллекции, Гардероб и концертную подборку пользователя."""
+    """Обновляет локальные данные и кэши без внешнего массового поиска."""
     collection_keys = _collection_keys()
     backups_removed = _clear_legacy_backups(cid)
     collection_items = 0
@@ -118,12 +118,7 @@ async def refresh_user_database(cid):
     language_result = await learning_data_quality.refresh_dictionary(cid)
     cache_result = await _refresh_daily_caches(cid)
 
-    try:
-        import leisure_concerts
-        concerts = await leisure_concerts.refresh_concerts_cache(cid)
-    except Exception as error:
-        _log.warning("manual concert refresh failed cid=%s: %r", cid, error, exc_info=True)
-        concerts = {"status": "failed", "artists": 0, "events": 0}
+    concerts = {"status": "not_requested", "artists": 0, "events": 0}
     fixed_total_raw = (
         changed_items + max(0, wardrobe_pending - wardrobe_remaining)
         + fridge_changed + int(language_result.get("fixed") or 0)

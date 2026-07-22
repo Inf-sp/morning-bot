@@ -11,7 +11,10 @@ import uuid
 import config
 import language_tool
 import store
-from dictionary_model import entry_language, entry_term, entry_translation, normalize_term_case
+from dictionary_model import (
+    entry_language, entry_term, entry_translation, normalize_term_case,
+    normalize_translation_case,
+)
 
 _SPACE_RE = re.compile(r"\s+")
 _DOUBLE_PUNCT_RE = re.compile(r"([.!?])\1+")
@@ -182,7 +185,7 @@ def normalize_entry(raw) -> tuple[dict, bool]:
     normalized["id"] = str(source.get("id") or uuid.uuid4().hex)
     normalized["lang"] = _normalize_lang(source.get("lang") or source.get("language"))
     normalized["term"] = term
-    normalized["translation"] = _clean(entry_translation(source))
+    normalized["translation"] = normalize_translation_case(_clean(entry_translation(source)))
     normalized["examples"] = _normalize_examples(source.get("examples"))
     if article:
         normalized["article"] = article
@@ -242,7 +245,11 @@ def _targets(entry) -> list[dict]:
     targets = []
     term = str(entry.get("term") or "")
     if term:
-        targets.append({"field": "term", "text": term, "safe": True})
+        # Регистр словаря — это оформление, а не часть проверки орфографии.
+        # Проверяем одиночную лексему в обычной форме, затем возвращаем ей
+        # единый вид с заглавной буквы перед сохранением.
+        check_term = term.lower() if len(term.split()) == 1 else term
+        targets.append({"field": "term", "text": check_term, "safe": True})
         article = str(entry.get("article") or "")
         if article:
             targets.append({"field": "article_term", "text": f"{article} {term}", "safe": False})
@@ -360,6 +367,7 @@ async def check_entry(entry: dict, *, semaphore=None) -> tuple[dict, dict, list[
         checked["language_review_required"] = True
     else:
         checked.pop("language_review_required", None)
+    checked, _ = normalize_entry(checked)
     return checked, stats, reviews
 
 

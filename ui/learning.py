@@ -1,5 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
+from dictionary_model import display_term
 from .builder import MessageBuilder, MessageSpec
 from .constants import choose_label, ui_label
 from .learning_entry import render_learning_entry
@@ -155,10 +156,7 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
 def _trainer_term(entry, data):
     term = str(entry.get("term") or entry.get("word") or data.get("term")
                or data.get("result_correct") or data.get("correct") or "").strip()
-    article = str(entry.get("article") or "").strip()
-    if article and not term.casefold().startswith(article.casefold() + " "):
-        term = f"{article} {term}"
-    return term[:1].upper() + term[1:] if term else ""
+    return display_term(term, entry.get("article") or "")
 
 
 def _trainer_breakdown(entry):

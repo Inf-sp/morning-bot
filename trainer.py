@@ -11,6 +11,7 @@ import random
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from dictionary_model import capitalize_initial
 import ai
 import language_tool
 import secure
@@ -53,7 +54,7 @@ def _options(data):
     options = []
     seen = set()
     for value in [data["correct"], *(data.get("wrong") or [])]:
-        option = str(value or "").strip().lower()
+        option = capitalize_initial(value)
         if option and option.casefold() not in seen:
             options.append(option)
             seen.add(option.casefold())

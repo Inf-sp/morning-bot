@@ -277,7 +277,6 @@ async def send_notes(bot, cid):
     rows = [
         [InlineKeyboardButton("📍 Город", callback_data="set_city")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
-        [InlineKeyboardButton("🔄 Обновление данных", callback_data="set_refresh_data")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]

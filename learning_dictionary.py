@@ -20,6 +20,8 @@ from dictionary_model import (
     entry_language,
     entry_term,
     entry_translation,
+    display_term,
+    normalize_translation_case,
     language_code as _code,
     normalize_entry,
     normalize_key,
@@ -56,15 +58,25 @@ def migrate_dict_caps():
     for cid, words in (data or {}).items():
         if not isinstance(words, list):
             continue
-        for w in words:
+        for index, w in enumerate(words):
             if not isinstance(w, dict):
+                normalized = normalize_term_case(w)
+                if normalized != w:
+                    words[index] = normalized
+                    changed = True
                 continue
-            for field in ("term", "word", "base_form"):
+            for field in ("term", "word", "base_form", "normalized_term"):
                 value = w.get(field)
                 if not value:
                     continue
                 normalized = normalize_term_case(value, w.get("kind", ""))
                 if normalized != value:
+                    w[field] = normalized
+                    changed = True
+            for field in ("translation", "ru"):
+                value = w.get(field)
+                normalized = normalize_translation_case(value)
+                if value and normalized != value:
                     w[field] = normalized
                     changed = True
             override = CANONICAL_ENTRY_OVERRIDES.get(normalize_key(_entry_term(w)))
@@ -577,10 +589,9 @@ async def confirm_delete_dict_entry_by_id(bot, cid, word_id, q=None):
         await send_dict(bot, cid, q=q)
         return
     term = _entry_term(entry)
-    article = str(entry.get("article") or "").strip()
-    display = f"{article} {term}" if article and not term.casefold().startswith(article.casefold() + " ") else term
+    display = display_term(term, entry.get("article") or "")
     await _show_screen(
-        bot, cid, f"Удалить «{display[:1].upper() + display[1:]}» из словаря?", None,
+        bot, cid, f"Удалить «{display}» из словаря?", None,
         InlineKeyboardMarkup([
             [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelokid_{word_id}")],
             [InlineKeyboardButton("Отмена", callback_data=f"a_dictlang_{_dict_lang(entry)}")],
@@ -596,11 +607,10 @@ async def confirm_move_dict_entry_by_id(bot, cid, word_id, q=None):
     source_lang = _dict_lang(entry)
     target_lang = "en" if source_lang == "nl" else "nl"
     term = _entry_term(entry)
-    article = str(entry.get("article") or "").strip()
-    display = f"{article} {term}" if article and not term.casefold().startswith(article.casefold() + " ") else term
+    display = display_term(term, entry.get("article") or "")
     target_title = "английский" if target_lang == "en" else "нидерландский"
     await _show_screen(
-        bot, cid, f"Переместить «{display[:1].upper() + display[1:]}» в {target_title} словарь?", None,
+        bot, cid, f"Переместить «{display}» в {target_title} словарь?", None,
         InlineKeyboardMarkup([
             [InlineKeyboardButton("↔️ Переместить", callback_data=f"a_dictmoveok_{word_id}_{target_lang}")],
             [InlineKeyboardButton("Отмена", callback_data=f"a_dictlang_{source_lang}")],
