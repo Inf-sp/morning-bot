@@ -2,6 +2,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
 from .builder import MessageBuilder, MessageSpec
 from .constants import choose_label, ui_label
+from .learning_entry import render_learning_entry
 
 
 # ================= ТРЕНАЖЁР: 7 ФОРМАТОВ ЗАДАНИЙ =================
@@ -214,33 +215,11 @@ def _trainer_example(entry):
 
 
 def _render_trainer_entry_card(b, entry, data):
-    term = _trainer_term(entry, data)
-    translation = str(entry.get("translation") or entry.get("ru") or data.get("ru") or "").strip()
-    if term or translation:
-        b.spacer()
-        b.bold(term)
-        if translation:
-            b.text_line(f" → {translation[:1].upper() + translation[1:]}")
-        b.newline()
-    breakdown = _trainer_breakdown(entry)
-    if breakdown:
-        b.spacer()
-        b.labeled_line("Разбор", breakdown, lowercase=False)
-    plural = str(entry.get("plural") or "").strip()
-    if plural and breakdown.startswith("существительное"):
-        if not plural.casefold().startswith("de "):
-            plural = f"de {plural}"
-        b.labeled_line("Множественное число", plural, lowercase=False)
-    forms = _verified_verb_forms(entry)
-    if forms:
-        b.labeled_line("Формы", " · ".join(forms), lowercase=False)
-    example, example_translation = _trainer_example(entry)
-    if example and example_translation:
-        b.spacer()
-        b.text_line("💡 ")
-        b.bold("Полезно:")
-        b.text_line(f" {example} → {example_translation}")
-        b.newline()
+    render_learning_entry(
+        b, entry,
+        fallback_term=(data.get("term") or data.get("result_correct") or data.get("correct") or ""),
+        fallback_translation=data.get("ru") or "",
+    )
 
 
 def progress_screen(data):

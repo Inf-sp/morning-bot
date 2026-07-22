@@ -246,6 +246,7 @@ _DICT_ADD_VERB_RE = re.compile(
     r"\b(добавь|добавить|занеси|запиши|сохрани|сохранить|запомни|запомнить|внеси|закинь|"
     r"add|save|remember)\b", re.I)
 _DICT_WORD_RE = re.compile(r"\b(?:в\s+)?(?:мой\s+)?(?:словар[ьяьею]*|обучени[еяю]|тренировк[ауиах]*)\b", re.I)
+_DICT_EN_WORD_RE = re.compile(r"\b(?:to\s+(?:my\s+|the\s+)?)?(?:dictionary|vocabulary|learning|training)\b", re.I)
 _DICT_LEADING_RE = re.compile(r"^\s*в\s+(?:мой\s+)?словар[ьяьею]*\b", re.I)
 _DICT_LANG_RE = re.compile(
     r"\b(?:на\s+)?("
@@ -265,6 +266,8 @@ _DICT_EMPTY_PAYLOAD = {"", "в", "на", "для", "туда", "это", "эту
 _DICT_LEADING_ADD_VERB_RE = re.compile(
     r"^\s*(добавь|добавить|занеси|запиши|сохрани|сохранить|запомни|запомнить|внеси|закинь|"
     r"add|save|remember)\s+", re.I)
+_DICT_LEADING_EN_ADD_RE = re.compile(
+    r"^\s*add\s+(?:(?:a|the|this)\s+)?(?:word|phrase|expression)\s+", re.I)
 
 
 def _w_field(w, *keys):
@@ -461,11 +464,10 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
     chunk = entries[start:start + _DICT_LIST_PAGE_SIZE]
     word_buttons = []
     for item in chunk:
-        term_key = _dict_item_key(lang, "", _entry_term(item))[2]
-        button_key = _dict_button_key(lang, "", term_key)
+        word_id = str(item.get("id") or "")
         word_buttons.append(InlineKeyboardButton(
             normalize_term_case(_entry_term(item), _kind_of(_entry_term(item)))[:20],
-            callback_data=f"a_dictview_{lang}_{page}_{button_key}",
+            callback_data=f"a_dictviewid_{page}_{word_id}",
         ))
     word_rows = [word_buttons[i:i + 2] for i in range(0, len(word_buttons), 2)]
     nav_rows = []
@@ -504,10 +506,10 @@ def _dict_tts_row(entry):
 
 def _dict_search_kb(entry, term_key):
     lang = _dict_lang(entry)
-    action_key = _dict_button_key(lang, "", term_key)
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdel_{lang}_{action_key}")],
-    ] + _dict_tts_row(entry) + [
+    word_id = str(entry.get("id") or "")
+    delete_row = ([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelid_{word_id}")]]
+                  if word_id else [])
+    return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + [
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -565,18 +567,52 @@ async def confirm_delete_dict_entry(bot, cid, lang, term_key, q=None):
     )
 
 
+def _entry_by_id(cid, word_id):
+    return next((item for item in _ensure_dict(cid) if str(item.get("id") or "") == str(word_id)), None)
+
+
+async def confirm_delete_dict_entry_by_id(bot, cid, word_id, q=None):
+    entry = _entry_by_id(cid, word_id)
+    if not entry:
+        await send_dict(bot, cid, q=q)
+        return
+    term = _entry_term(entry)
+    article = str(entry.get("article") or "").strip()
+    display = f"{article} {term}" if article and not term.casefold().startswith(article.casefold() + " ") else term
+    await _show_screen(
+        bot, cid, f"Удалить «{display[:1].upper() + display[1:]}» из словаря?", None,
+        InlineKeyboardMarkup([
+            [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelokid_{word_id}")],
+            [InlineKeyboardButton("Отмена", callback_data=f"a_dictlang_{_dict_lang(entry)}")],
+        ]), q=q,
+    )
+
+
+async def del_dict_entry_by_id(bot, cid, word_id, page=None, q=None):
+    words = store.get_list(config.DICT_KEY, cid)
+    removed = next((item for item in words if str(item.get("id") or "") == str(word_id)), None)
+    if removed:
+        store.set_list(config.DICT_KEY, cid, [item for item in words if item is not removed])
+    msg = dict_ui.dict_deleted(removed)
+    lang = _dict_lang(removed) if removed else _active_language_code(cid)
+    if page is not None:
+        await _show_screen(bot, cid, msg.text, msg.entities, back_menu_keyboard(f"a_dictedit_{lang}_{page}"), q=q)
+        return
+    await _show_screen(bot, cid, msg.text, msg.entities, _dict_manage_kb(lang), q=q)
+
+
 async def del_dict_entry_by_term(bot, cid, lang, term_key, page=None, q=None):
     words = store.get_list(config.DICT_KEY, cid)
-    removed = ""
+    removed = None
     kept = []
     for item in words:
-        if _dict_lang(item) == lang and _dict_entry_matches_key(item, lang, term_key) and not removed:
-            removed = _entry_term(item)
+        if _dict_lang(item) == lang and _dict_entry_matches_key(item, lang, term_key) and removed is None:
+            removed = item
             continue
         kept.append(item)
     if removed:
         store.set_list(config.DICT_KEY, cid, kept)
-    msg = dict_ui.dict_deleted(removed or "")
+    msg = dict_ui.dict_deleted(removed)
     if page is not None:
         await _show_screen(
             bot, cid, msg.text, msg.entities,
@@ -599,10 +635,10 @@ def _dict_lang_entries(cid, lang):
 
 def _dict_entry_view_kb(entry, page, term_key):
     lang = _dict_lang(entry)
-    action_key = _dict_button_key(lang, "", _entry_term(entry))
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictviewdel_{lang}_{page}_{action_key}")],
-    ] + _dict_tts_row(entry) + [
+    word_id = str(entry.get("id") or "")
+    delete_row = ([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictviewdelid_{page}_{word_id}")]]
+                  if word_id else [])
+    return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + [
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}_{page}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -620,6 +656,19 @@ async def send_dict_entry_view(bot, cid, lang, page, term_key, q=None):
     msg = _dict_entry_message(match, status="found")
     await _show_screen(
         bot, cid, msg.text, msg.entities, _dict_entry_view_kb(match, page, term_key),
+        q=q, persistent_inline=True)
+
+
+async def send_dict_entry_view_by_id(bot, cid, page, word_id, q=None):
+    match = _entry_by_id(cid, word_id)
+    if not match:
+        await send_dict_manage(bot, cid, _active_language_code(cid), page=page, q=q)
+        return
+    if _entry_needs_ai_refresh(match):
+        match = await _refresh_dict_entry(cid, match)
+    msg = _dict_entry_message(match, status="found")
+    await _show_screen(
+        bot, cid, msg.text, msg.entities, _dict_entry_view_kb(match, page, ""),
         q=q, persistent_inline=True)
 
 

@@ -116,6 +116,12 @@ async def handle_action(bot, cid, q, act, run_with_status):
             "Я сам приведу в правильную форму, переведу и разберу."))
     elif act.startswith("dictsearch_"):
         await dictionary.send_dict_search_prompt(bot, cid, act.split("_")[1], q=q)
+    elif act.startswith("dictviewdelid_"):
+        _, page, word_id = act.split("_", 2)
+        await dictionary.del_dict_entry_by_id(bot, cid, word_id, page=int(page), q=q)
+    elif act.startswith("dictviewid_"):
+        _, page, word_id = act.split("_", 2)
+        await dictionary.send_dict_entry_view_by_id(bot, cid, int(page), word_id, q=q)
     elif act.startswith("dictviewdel_"):
         _, lang, page, term_key = act.split("_", 3)
         await dictionary.del_dict_entry_by_term(
@@ -123,6 +129,10 @@ async def handle_action(bot, cid, q, act, run_with_status):
     elif act.startswith("dictview_"):
         _, lang, page, term_key = act.split("_", 3)
         await dictionary.send_dict_entry_view(bot, cid, lang, int(page), term_key, q=q)
+    elif act.startswith("dictdelokid_"):
+        await dictionary.del_dict_entry_by_id(bot, cid, act[len("dictdelokid_"):], q=q)
+    elif act.startswith("dictdelid_"):
+        await dictionary.confirm_delete_dict_entry_by_id(bot, cid, act[len("dictdelid_"):], q=q)
     elif act.startswith("dictdelok_"):
         _, lang, term_key = act.split("_", 2)
         await dictionary.del_dict_entry_by_term(bot, cid, lang, term_key, q=q)

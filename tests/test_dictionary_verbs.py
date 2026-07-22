@@ -53,15 +53,11 @@ def test_strong_verb_is_enriched_and_rendered_compactly(monkeypatch):
     assert entry["past_singular"] == "verving"
     assert entry["perfect_form"] == "heeft vervangen"
     assert entry["analysis_provider"] == "app_llm"
-    assert message.text == (
-        "✅ Добавлено\n\n"
-        "Vervangen → заменять, менять\n\n"
-        "Формы: vervangen · verving · heeft vervangen\n"
-        "Тип: сильный глагол\n\n"
-        "💡 Пример: Ik ga mijn oude telefoon vervangen → "
-        "Я собираюсь заменить свой старый телефон."
-    )
-    assert "Разбор:" not in message.text
+    assert "🇳🇱 Добавлено" in message.text
+    assert "Vervangen → Заменять, менять" in message.text
+    assert "Разбор: сильный глагол" in message.text
+    assert "Формы: vervangen · verving · heeft vervangen" in message.text
+    assert "💡 Полезно: Ik ga mijn oude telefoon vervangen. → Я собираюсь заменить свой старый телефон." in message.text
     assert "auxiliary" not in message.text
     assert "confidence" not in message.text
 
@@ -84,8 +80,8 @@ def test_weak_verb_example_with_conjugated_stem_passes_validation(monkeypatch):
     text = dictionary_import._dict_entry_message(entry).text
 
     assert "Формы: werken · werkte · heeft gewerkt" in text
-    assert "Тип: слабый глагол" in text
-    assert "💡 Пример: Ik werk vandaag thuis → Сегодня я работаю дома." in text
+    assert "Разбор: слабый глагол" in text
+    assert "💡 Полезно: Ik werk vandaag thuis. → Сегодня я работаю дома." in text
 
 
 def test_verb_with_zijn_uses_is_perfect_form(monkeypatch):
@@ -117,9 +113,8 @@ def test_low_confidence_hides_forms_and_type_but_keeps_valid_example(monkeypatch
     entry = asyncio.run(dictionary_import._enrich_dutch_verb(_base_entry(), "42"))
     text = dictionary_import._dict_entry_message(entry).text
 
-    assert "Формы: не удалось проверить" in text
-    assert "Тип:" not in text
-    assert "💡 Пример:" in text
+    assert "Формы:" not in text
+    assert "💡 Полезно:" in text
 
 
 def test_missing_main_form_uses_unverified_forms_without_null(monkeypatch):
@@ -130,7 +125,7 @@ def test_missing_main_form_uses_unverified_forms_without_null(monkeypatch):
     entry = asyncio.run(dictionary_import._enrich_dutch_verb(_base_entry(), "42"))
     text = dictionary_import._dict_entry_message(entry).text
 
-    assert "Формы: не удалось проверить" in text
+    assert "Формы:" not in text
     assert "null" not in text.casefold()
     assert "None" not in text
 
@@ -145,7 +140,7 @@ def test_invalid_analysis_falls_back_and_logs_without_blocking(caplog, monkeypat
     text = dictionary_import._dict_entry_message(entry).text
 
     assert entry["verb_analysis_failed"] is True
-    assert "Не удалось получить формы глагола." in text
+    assert "Не удалось получить формы глагола." not in text
     assert "Формы:" not in text
     assert "operation=dutch_verb_analysis" in caplog.text
     assert "user-42" in caplog.text
@@ -244,9 +239,9 @@ def test_analysis_failure_still_saves_word_and_shows_safe_fallback(monkeypatch):
 
     assert saved[0]["term"] == "vervangen"
     assert saved[0]["verb_analysis_failed"] is True
-    assert sent[0]["text"].startswith("✅ Добавлено")
-    assert "Не удалось получить формы глагола." in sent[0]["text"]
-    assert "provider unavailable" not in sent[0]["text"]
+    assert sent[-1]["text"].startswith("🇳🇱 Добавлено")
+    assert "Не удалось получить формы глагола." not in sent[-1]["text"]
+    assert "provider unavailable" not in sent[-1]["text"]
 
 
 def test_non_verb_keeps_existing_flow_without_verb_request(monkeypatch):
