@@ -420,7 +420,7 @@ async def give_up(bot, cid):
         return
     data = state["current"]
     grade = trainer_grading.GradeResult(False, trainer_grading.AnswerQuality.NOT_REMEMBERED)
-    await _apply_result(bot, cid, state, grade, learning_ui.exercise_result(data, False, chosen=""))
+    await _apply_result(bot, cid, state, grade, learning_ui.exercise_result(data, False, chosen="__forgot__"))
 
 
 async def handle_text(bot, cid, text):

@@ -178,7 +178,7 @@ def api_ai(rows, updated_at):
     for line in rows:
         b.line(str(line))
     b.spacer()
-    b.line(f"Обновлено в {updated_at}")
+    b.line(f"Обновлено: {updated_at}")
     return b.build_stripped()
 
 

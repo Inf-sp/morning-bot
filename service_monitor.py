@@ -84,7 +84,7 @@ def _status_detail(service: str, state: dict) -> str:
     if remaining is not None and total is not None:
         if remaining <= 0:
             return "лимит исчерпан"
-        return f"{_number(remaining)} из {_number(total)}"
+        return f"{_number(remaining)} / {_number(total)}"
     if state.get("status") not in (OK, UNKNOWN):
         return str(state.get("last_error") or "сервис не ответил")
     return _usage_detail(service)
@@ -98,20 +98,20 @@ def format_row(service: str, state: dict | None = None) -> str:
         usage = api_usage.cohere_requests()
         available = int(usage["remaining"])
         if available <= 0:
-            return "🟡 Cohere · Везде · лимит исчерпан · используется GitHub Models"
+            return "🟡 Cohere · лимит исчерпан → GitHub Models"
         if not _configured(service):
-            return "🔴 Cohere · Везде · API-ключ не настроен"
+            return "🔴 Cohere · API-ключ не настроен"
         if status in (WARNING, DOWN):
             return " · ".join([
                 f"{_DOT[status]} {spec.label}", spec.category, _status_detail(service, state),
             ])
         dot = _DOT[WARNING if available <= 200 else OK]
-        return f"{dot} Cohere · Везде · {_number(available)} из 1 000"
+        return f"{dot} Cohere · {_number(available)} / 1 000"
     if service == "google_books":
         usage = api_usage.google_books_requests()
         remaining = int(usage["remaining"])
         if remaining <= 0:
-            return "🔴 Google Books · Книги · лимит исчерпан · используется Open Library"
+            return "🔴 Google Books · Книги · лимит исчерпан → Open Library"
         if not _configured(service):
             return "🔴 Google Books · Книги · API-ключ не настроен"
         if status in (WARNING, DOWN):
@@ -119,14 +119,17 @@ def format_row(service: str, state: dict | None = None) -> str:
                 f"{_DOT[status]} {spec.label}", spec.category, _status_detail(service, state),
             ])
         dot = _DOT[WARNING if remaining <= 200 else OK]
-        return f"{dot} Google Books · Книги · {_number(remaining)} из 1 000"
+        return f"{dot} Google Books · Книги · {_number(remaining)} / 1 000"
     remaining, total = _confirmed_quota(service, state)
     if status in (OK, UNKNOWN) and total and remaining is not None and remaining <= total * 0.2:
         status = WARNING
-    parts = [f"{_DOT[status]} {spec.label}", spec.category, _status_detail(service, state)]
+    parts = [f"{_DOT[status]} {spec.label}"]
+    if spec.category and spec.category != "Везде":
+        parts.append(spec.category)
+    parts.append(_status_detail(service, state))
     fallback = str(state.get("fallback") or "")
     if fallback and fallback in SPEC_BY_KEY:
-        parts.append(SPEC_BY_KEY[fallback].label)
+        parts[-1] = f"{parts[-1]} → {SPEC_BY_KEY[fallback].label}"
     return " · ".join(parts)
 
 

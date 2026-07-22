@@ -41,6 +41,9 @@ CUISINE_RU = {
     "spanish": "Испанская кухня",
     "german": "Немецкая кухня",
     "american": "Американская кухня",
+    "canadian": "Канадская кухня",
+    "british": "Британская кухня",
+    "dutch": "Нидерландская кухня",
     "georgian": "Грузинская кухня",
 }
 
@@ -212,9 +215,9 @@ def _products_label(count):
 def fridge_home(available):
     b = MessageBuilder()
     b.bold(ui_label("products", "Мой холодильник"))
-    b.text_line(f" · {available} {_products_label(available)} в наличии")
+    b.text_line(f" · {available} {_products_label(available)}")
     b.spacer()
-    b.labeled_line("Выбери категорию")
+    b.line("Выбери категорию:")
     return b.build_stripped()
 
 
@@ -222,9 +225,8 @@ def fridge_category(label, total, available):
     b = MessageBuilder()
     b.bold(label)
     b.text_line(
-        f" · {total} {_products_label(total)} · {available} в наличии\n\n"
-        "✅ — есть в наличии  □ — закончилось\n"
-        "Нажми продукт, чтобы изменить статус."
+        f" · {total} {_products_label(total)}\n\n"
+        "Нажми продукт, чтобы изменить наличие."
     )
     return b.build()
 

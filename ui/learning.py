@@ -25,7 +25,11 @@ def exercise_recall_free(data, hint_shown=False):
     b = MessageBuilder()
     b.section("🧠 Вспомни")
     b.spacer()
-    _q(b, "Как сказать", data["ru"])
+    language = "по-английски" if str(data.get("lang") or "nl") == "en" else "по-нидерландски"
+    b.line(f"Как сказать {language}:")
+    b.spacer()
+    b.bold(data["ru"])
+    b.newline()
     if hint_shown and data.get("hint"):
         b.spacer()
         _q(b, "Подсказка", data["hint"])
@@ -38,7 +42,10 @@ def exercise_build_sentence(data):
     b = MessageBuilder()
     b.section("🧩 Собери предложение")
     b.spacer()
-    _q(b, "Перевод", data["ru"])
+    b.bold(data["ru"])
+    b.newline()
+    b.spacer()
+    b.line("Собери фразу:")
     picked = data.get("_picked") or []
     if picked:
         b.spacer()
@@ -185,9 +192,11 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
     note = str(data.get("note") or "").strip()
     is_sentence = data.get("exercise_type") in _SENTENCE_CONTEXT_FORMATS
 
+    forgot = chosen == "__forgot__"
+
     if data.get("exercise_type") == "fill_gap":
         b = MessageBuilder()
-        b.section("✅ Верно" if is_correct else "Почти")
+        b.section("✅ Верно" if is_correct else ("📝 Ответ" if forgot else "🟡 Почти"))
         b.spacer()
         _bold_translation_line(b, "Правильно", correct, str(data.get("hint") or "").strip())
         sentence = str(data.get("result_sentence") or "").strip()
@@ -203,7 +212,7 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
             b.line(note)
         if not is_correct:
             b.spacer()
-            b.line("Это вернётся позже в тренировке.")
+            b.line("🔁 Вернётся ещё раз позже в этой тренировке.")
         if language_report is not None:
             _add_language_tool_report(b, language_report)
         msg = b.build()
@@ -219,7 +228,7 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
         b.spacer()
         _bold_translation_line(b, "Правильно", correct, ru)
     else:
-        b.section("Почти")
+        b.section("📝 Ответ" if forgot else "🟡 Почти")
         b.spacer()
         _bold_translation_line(b, "Правильно", correct, ru)
         if english:
@@ -229,7 +238,7 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
             b.spacer()
             _q(b, "Разбор", note)
         b.spacer()
-        b.line("Это вернётся позже в тренировке.")
+        b.line("🔁 Вернётся ещё раз позже в этой тренировке.")
         if data.get("bad_translation"):
             b.spacer()
             b.text_line("Фраза ")
@@ -379,13 +388,14 @@ def game_found(ui, answer, body=""):
     b = MessageBuilder()
     b.section(ui["found"])
     b.spacer()
-    b.text_line(f"{ui['answer']}:\n")
     b.bold(answer)
     if body:
         b.spacer()
-        b.bold(ui.get("analyse", "Анализ:"))
+        b.bold("Почему:")
         b.newline()
-        b.text_line(body)
+        points = [part.strip(" •-\n") for part in str(body).replace("\n", ". ").split(".") if part.strip()]
+        for point in points[:3]:
+            b.bullet(point)
     return b.build()
 
 

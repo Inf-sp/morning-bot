@@ -418,9 +418,13 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
         [InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("🔍 Найти", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("✨ Подобрать слова", callback_data=f"a_dictseed_start_{lang}")],
+        [InlineKeyboardButton("📋 Все слова", callback_data=f"a_dictedit_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
-    text = f"{flag} Мой словарь · {count} слов и фраз"
+    if count:
+        text = f"{flag} Мой словарь · {count} слов и фраз"
+    else:
+        text = f"{flag} Мой словарь\n\nПока здесь нет слов."
     await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
 
 

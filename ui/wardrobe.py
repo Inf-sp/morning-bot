@@ -160,18 +160,28 @@ def purchase_check_card(data):
     """
     data = data or {}
     b = MessageBuilder()
-    b.section("🧐 Проверка покупки")
+    b.section("🧐 Оценка покупки")
 
     verdict = _clean_text(data.get("verdict"))
     if verdict:
         b.spacer()
-        b.labeled_line("Вердикт", _finish_dot(verdict))
+        verdict_labels = {
+            "брать": "Брать",
+            "можно брать": "Можно брать",
+            "скорее не брать": "Скорее не брать",
+            "не брать": "Не брать",
+        }
+        b.bold(verdict_labels.get(verdict.casefold(), _upper_first(verdict).rstrip(".")))
+        b.newline()
 
     fits_count = data.get("fits_count")
     if isinstance(fits_count, int) and not isinstance(fits_count, bool) and fits_count >= 0:
-        b.labeled_line("Подойдёт", f"к {fits_count} {_pluralize_dative_items(fits_count)} из шкафа")
+        if fits_count == 0:
+            b.labeled_line("Сочетается", "ни с одной вещью из текущего шкафа")
+        else:
+            b.labeled_line("Сочетается", f"примерно с {fits_count} {_pluralize_dative_items(fits_count)}")
     elif fits_count == "недостаточно данных":
-        b.labeled_line("Подойдёт", "недостаточно данных")
+        b.labeled_line("Сочетается", "недостаточно данных")
 
     duplicates = _clean_text(data.get("duplicates"))
     if duplicates:
@@ -182,6 +192,7 @@ def purchase_check_card(data):
         b.labeled_line("Закрывает пробел", _finish_dot(closes_gap))
 
     why = _finish_dot(data.get("why"))
+    why = why.replace("пользователя", "").replace("запретах", "предпочтениях")
     if why:
         b.spacer()
         b.labeled_line("Почему", why)
@@ -211,7 +222,7 @@ def zone_picker_screen():
 def wardrobe_home_screen(total):
     b = MessageBuilder()
     b.section(f"👕 Мой шкаф · {total} {_pluralize_items(total)}")
-    b.line("Выбери категорию.")
+    b.line("Выбери категорию:")
     return b.build_stripped()
 
 
@@ -224,11 +235,11 @@ def subcat_picker_screen(zone):
 
 def category_screen(zone, items):
     b = MessageBuilder()
-    b.section(f"{_clean_text(zone)} · {len(items)}")
+    b.section(f"👕 {_clean_text(zone)} · {len(items)} {_pluralize_items(len(items))}")
     if items:
         b.spacer()
         for index, item in enumerate(items, 1):
-            b.line(f"{index}. {_clean_text(_item_display(item))}")
+            b.line(f"• {_clean_text(_item_display(item))}")
     return b.build_stripped()
 
 

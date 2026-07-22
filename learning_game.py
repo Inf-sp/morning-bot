@@ -65,12 +65,12 @@ GAME_UI = {
         "diff_q": "Choose difficulty:",
         "easy": "Easy",
         "hard": "Hard",
-        "title": "Detective Game",
+        "title": "Детектив",
         "who": "Who am I?",
-        "hint": "💡 Hint",
-        "reveal": "😞 Give up",
+        "hint": "💡 Подсказка",
+        "reveal": "😞 Сдаюсь",
         "suspect": "Suspect:",
-        "found": "✅ Case solved!",
+        "found": "✅ Дело раскрыто!",
         "answer": "Answer",
         "analyse": "Analysis:",
         "again": "✨ Again",
@@ -83,12 +83,12 @@ GAME_UI = {
         "diff_q": "Kies de moeilijkheidsgraad:",
         "easy": "Makkelijk",
         "hard": "Moeilijk",
-        "title": "Detectivespel",
+        "title": "Детектив",
         "who": "Wie ben ik?",
-        "hint": "💡 Hint",
-        "reveal": "😞 Opgeven",
+        "hint": "💡 Подсказка",
+        "reveal": "😞 Сдаюсь",
         "suspect": "Verdachte:",
-        "found": "✅ Zaak opgelost!",
+        "found": "✅ Дело раскрыто!",
         "answer": "Antwoord",
         "analyse": "Analyse:",
         "again": "✨ Nog een",
@@ -290,6 +290,8 @@ async def _send_game_result(bot, cid, st, ui, kb):
     body = st.get("explain") or st.get("quote", "")
     msg = learning_ui.game_found(ui, st.get("answer", ""), body)
     query = _get_english_query(st, store.game_config.get(str(cid), {}).get("lang", "русский"))
+    if query:
+        query = f"{query} single subject close-up isolated"
     photo = None
     if query:
         try:

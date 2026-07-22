@@ -396,6 +396,9 @@ async def handle_callback(bot, cid, q, data):
         return True
     if data.startswith("as_fridge_clean_"):
         import cleanup
+        if data == "as_fridge_clean_all":
+            await cleanup.open_view(bot, cid, "fridge")
+            return True
         try:
             category = int(data.rsplit("_", 1)[-1])
         except (ValueError, IndexError):
