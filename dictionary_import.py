@@ -1046,9 +1046,7 @@ def _dict_saved_kb(entry, term_key=None, show_dictionary=True):
     word_id = str(entry.get("id") or "")
     delete_row = ([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelid_{word_id}")]]
                   if word_id else [])
-    move_row = ([[InlineKeyboardButton("↔️ В другой словарь", callback_data=f"a_dictmoveid_{word_id}")]]
-                if word_id else [])
-    return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + move_row + ([
+    return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + ([
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
     ] if show_dictionary else []) + [
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),

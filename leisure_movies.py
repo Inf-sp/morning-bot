@@ -255,7 +255,7 @@ def _movie_home_kb():
         [InlineKeyboardButton("🎟️ Весь прокат", callback_data="movie_now_playing")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("🌙 По настроению", callback_data="movie_mood_menu")],
-        [InlineKeyboardButton("❤️ Моё кино", callback_data="watchlist"),
+        [InlineKeyboardButton("❤️ Моё кино", callback_data="a_watchlist"),
          InlineKeyboardButton("💾 Смотреть позже", callback_data="movie_saved")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

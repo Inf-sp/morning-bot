@@ -72,7 +72,7 @@ def _listen_kb(saved=False, favorite=False):
         [InlineKeyboardButton("✨ Другой артист", callback_data="a_listen_no")],
         [InlineKeyboardButton("❤️ В любимых" if favorite else "❤️ В любимые", callback_data="listen_love"),
          InlineKeyboardButton(save_toggle_label(saved, "Послушать позже"), callback_data="listen_0")],
-        [InlineKeyboardButton("🎫 Концерты", callback_data="artist_concerts")],
+        [InlineKeyboardButton("🎫 Концерты", callback_data="a_artist_concerts")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
