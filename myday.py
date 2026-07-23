@@ -67,7 +67,7 @@ _LIFEHACK_ACTION_RE = re.compile(
     r"перенес|замен|прот|сфотограф|подпиш|оберн|нажм|покат|встан|посмотр|разлож|"
     r"нареж|вымой|остав|сним|удали|проветр|заряд|запиши|отлож|настро|полив|полей|"
     r"перестав|замороз|размороз|убир|купи|надень|возьми|прикреп|открой|создай|"
-    r"выбери|смеш|обжар|отвар|запек|накрой|слож|обнов)\w*",
+    r"выбери|смеш|обжар|отвар|запек|накрой|слож|обнов|представ)\w*",
     re.IGNORECASE,
 )
 _LIFEHACK_RESULT_RE = re.compile(
@@ -168,45 +168,116 @@ def _pool_ensure_fresh(store_key: str, cid: str, pool_id: str, generate_fn) -> N
 
 _LIFEHACK_CATEGORIES = (
     "дом", "кухня", "гардероб", "продуктивность", "технологии",
-    "фотография", "жизнь в Нидерландах", "растения", "домашние животные",
+    "фотография", "жизнь в Нидерландах", "растения", "домашние животные", "язык",
 )
 
 _LIFEHACK_CATEGORY_EMOJI = {
     "дом": "🏠", "кухня": "🍽", "гардероб": "👕", "продуктивность": "⚡",
     "технологии": "💻", "фотография": "📷", "жизнь в нидерландах": "🇳🇱",
-    "растения": "🌿", "домашние животные": "🐾",
+    "растения": "🌿", "домашние животные": "🐾", "язык": "🇳🇱",
 }
 
 
-def _lifehack_fallback(cid, rain=False, hot=False, is_weekend=False):
-    """Аварийный путь, если AI недоступен при генерации недельного пула: lifehacks.json."""
+_LIFEHACK_CHAT_CATEGORIES = (
+    (re.compile(r"\b(?:de|het|артикл|нидерланд|голланд|перевод|язык|слово)\b", re.I), "Язык", "🇳🇱"),
+    (re.compile(r"\b(?:готов|рецепт|кухн|продукт|хранен|суп|мяс|овощ|фрукт)\w*", re.I), "Еда и кухня", "🍎"),
+    (re.compile(r"\b(?:одежд|обув|рубаш|брюк|гардероб|надет|носить)\w*", re.I), "Гардероб", "👕"),
+    (re.compile(r"\b(?:телефон|компьютер|парол|приложен|заряд|технолог)\w*", re.I), "Технологии", "💻"),
+    (re.compile(r"\b(?:задач|врем|план|работ|продуктив|уведомлен)\w*", re.I), "Продуктивность", "🧠"),
+    (re.compile(r"\b(?:город|парков|велосипед|дорог|счётчик)\w*", re.I), "Город", "🚲"),
+)
+
+
+def _lifehack_category(text):
+    for pattern, category, emoji in _LIFEHACK_CHAT_CATEGORIES:
+        if pattern.search(text or ""):
+            return category, emoji
+    return "Быт и дом", "🏠"
+
+
+def _load_lifehack_catalog():
     try:
         with open(_HERE / "lifehacks.json", encoding="utf-8") as f:
-            cats = json.load(f)
+            catalog = json.load(f)
     except Exception:
-        return "", ""
-    all_tips = [
-        (cat["emoji"], cat["cat"], f"{ci}:{ti}", tip["text"], tip.get("tags", []))
-        for ci, cat in enumerate(cats)
-        for ti, tip in enumerate(cat["tips"])
-        if cat.get("cat", "").strip().lower() not in {"здоровье", "деньги"}
-        and _lifehack_useful(tip["text"])
-    ]
-    if not all_tips:
-        return "", ""
+        return []
+    return catalog if isinstance(catalog, list) else []
+
+
+def add_lifehack_to_file(text):
+    """Добавляет проверенный пользовательский лайфхак в общий локальный каталог."""
+    text = " ".join(str(text or "").split()).strip(" \t\n\r•-–—")
+    if not _lifehack_useful(text):
+        return None
+    category, emoji = _lifehack_category(text)
+    catalog = _load_lifehack_catalog()
+    for group in catalog:
+        if str(group.get("cat", "")).casefold() == category.casefold():
+            tips = group.setdefault("tips", [])
+            if any(str(item.get("text", "")).casefold() == text.casefold() for item in tips):
+                return {"duplicate": True, "category": f"{emoji} {category}"}
+            tips.append({"text": text, "tags": []})
+            break
+    else:
+        catalog.append({"cat": category, "emoji": emoji, "tips": [{"text": text, "tags": []}]})
+    try:
+        (_HERE / "lifehacks.json").write_text(
+            json.dumps(catalog, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        return None
+    return {"duplicate": False, "category": f"{emoji} {category}"}
+
+
+def _local_lifehack_candidates(cid, rain=False, hot=False, is_weekend=False):
+    """Возвращает ещё не показанные записи из lifehacks.json с погодным приоритетом."""
+    all_items = []
+    for ci, group in enumerate(_load_lifehack_catalog()):
+        category = str(group.get("cat", "")).strip()
+        if category.casefold() in {"здоровье", "деньги"}:
+            continue
+        emoji = str(group.get("emoji") or "💡")
+        for ti, tip in enumerate(group.get("tips") or []):
+            text = str((tip or {}).get("text") or "").strip()
+            if _lifehack_useful(text):
+                all_items.append({
+                    "id": f"local:{ci}:{ti}",
+                    "text": text,
+                    "category": category,
+                    "emoji": emoji,
+                    "tags": list((tip or {}).get("tags") or []),
+                })
+    if not all_items:
+        return []
     cid = str(cid)
     seen = set(store.get_list(config.LIFEHACK_KEY, cid))
     ctx_tags = (["rain"] if rain else []) + (["hot"] if hot else []) + ([] if is_weekend else ["work"])
-    contextual = [t for t in all_tips if t[4] and any(g in t[4] for g in ctx_tags) and t[2] not in seen]
-    unseen = [t for t in all_tips if t[2] not in seen]
-    pool = contextual or unseen
-    if not pool:
+    unseen = [item for item in all_items if item["id"] not in seen]
+    contextual = [item for item in unseen if any(tag in item["tags"] for tag in ctx_tags)]
+    candidates = contextual or unseen
+    if not candidates:
         store.set_list(config.LIFEHACK_KEY, cid, [])
-        pool = all_tips
-    tip = random.choice(pool)
-    new_seen = list(seen | {tip[2]})
-    store.set_list(config.LIFEHACK_KEY, cid, new_seen)
-    return f"{tip[0]} {tip[1]}", tip[3]
+        candidates = all_items
+    return candidates
+
+
+def _mark_local_lifehack_seen(cid, item):
+    seen = list(store.get_list(config.LIFEHACK_KEY, cid))
+    if item["id"] not in seen:
+        seen.append(item["id"])
+    store.set_list(config.LIFEHACK_KEY, cid, seen)
+
+
+def _lifehack_fallback(cid, rain=False, hot=False, is_weekend=False):
+    """Аварийный путь из lifehacks.json, если AI-пул не дал совет."""
+    candidates = _local_lifehack_candidates(cid, rain=rain, hot=hot, is_weekend=is_weekend)
+    if not candidates:
+        return "", ""
+    tip = random.choice(candidates)
+    _mark_local_lifehack_seen(cid, tip)
+    category = str(tip["category"] or "Совет")
+    return f"{tip['emoji']} {category[:1].upper() + category[1:]}", tip["text"]
 
 
 def _generate_lifehack_pool(cid):
@@ -265,35 +336,54 @@ def _generate_lifehack_pool(cid):
 
 
 def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
-    """Совет из недельного AI-пула по 9 персональным категориям (§ CLAUDE.md).
-    Если AI недоступен при первой генерации пула за неделю - lifehacks.json."""
+    """Смешанный совет из недельного AI-пула и локального lifehacks.json."""
     cid = str(cid)
     _pool_ensure_fresh(config.LIFEHACK_POOL_KEY, cid, "default", lambda: _generate_lifehack_pool(cid))
     bucket = _pool_get(config.LIFEHACK_POOL_KEY, cid, "default")
     items = bucket.get("items") or []
-    if items:
-        # контекстный приоритет среди непоказанных: дождь/жара -> гардероб, иначе любой
-        ctx_cat = "гардероб" if (rain or hot) else ""
-        unshown = [i for i in items if not i.get("shown_at") and _lifehack_useful(i.get("text"))]
-        preferred = [i for i in unshown if ctx_cat and i.get("category") == ctx_cat]
-        candidates = preferred or unshown
-        if candidates:
-            target_id = candidates[0]["id"]
+    local_candidates = _local_lifehack_candidates(
+        cid, rain=rain, hot=hot, is_weekend=is_weekend,
+    )
+    # Контекстный приоритет среди непоказанных: дождь/жара -> гардероб, иначе любой.
+    ctx_cat = "гардероб" if (rain or hot) else ""
+    ai_unshown = [i for i in items if not i.get("shown_at") and _lifehack_useful(i.get("text"))]
+    ai_preferred = [i for i in ai_unshown if ctx_cat and i.get("category") == ctx_cat]
+    ai_candidates = ai_preferred or ai_unshown
 
-            def mut(data):
-                b = data.setdefault(cid, {}).setdefault("default", {})
-                for it in b.get("items") or []:
-                    if it.get("id") == target_id:
-                        it["shown_at"] = int(datetime.now(TZ).timestamp())
-                        break
-                return data, True
+    # Локальные записи должны регулярно попадать в выдачу даже при рабочем AI.
+    # Доля локальной базы — около трети, а при пустом AI-пуле она становится полной.
+    use_local = bool(local_candidates) and (
+        not ai_candidates or random.random() < 0.35
+    )
+    if use_local:
+        chosen = random.choice(local_candidates)
+        _mark_local_lifehack_seen(cid, chosen)
+        category = str(chosen["category"] or "Совет")
+        return f"{chosen['emoji']} {category[:1].upper() + category[1:]}", chosen["text"]
 
-            store.mutate_kv(config.LIFEHACK_POOL_KEY, mut)
-            chosen = next(i for i in items if i["id"] == target_id)
-            cat = chosen.get("category") or ""
-            emoji = _LIFEHACK_CATEGORY_EMOJI.get(cat, "💡")
-            label = cat.capitalize() if cat else "Совет"
-            return f"{emoji} {label}", chosen["text"]
+    if ai_candidates:
+        chosen = ai_candidates[0]
+        target_id = chosen["id"]
+
+        def mut(data):
+            b = data.setdefault(cid, {}).setdefault("default", {})
+            for it in b.get("items") or []:
+                if it.get("id") == target_id:
+                    it["shown_at"] = int(datetime.now(TZ).timestamp())
+                    break
+            return data, True
+
+        store.mutate_kv(config.LIFEHACK_POOL_KEY, mut)
+        cat = str(chosen.get("category") or "").casefold()
+        emoji = _LIFEHACK_CATEGORY_EMOJI.get(cat, "💡")
+        label = str(chosen.get("category") or "Совет").capitalize()
+        return f"{emoji} {label}", chosen["text"]
+
+    if local_candidates:
+        chosen = random.choice(local_candidates)
+        _mark_local_lifehack_seen(cid, chosen)
+        category = str(chosen["category"] or "Совет")
+        return f"{chosen['emoji']} {category[:1].upper() + category[1:]}", chosen["text"]
     return _lifehack_fallback(cid, rain=rain, hot=hot, is_weekend=is_weekend)
 
 

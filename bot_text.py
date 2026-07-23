@@ -70,6 +70,11 @@ async def handle(update, context, remove_reply_keyboard):
             balance.thoughts.cancel_capture(cid, clear_pending=False)
             return
 
+    # Команда добавления лайфхака сильнее пассивного ожидания ответа в разделе.
+    if await assistant.try_add_lifehack_from_chat(bot, cid, text):
+        balance.thoughts.cancel_capture(cid)
+        return
+
     pending_kind = store.pending_input.get(cid)
     thought_waiting = balance.thoughts.capture_waiting(cid)
 

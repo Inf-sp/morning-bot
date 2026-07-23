@@ -7,6 +7,7 @@ import ai
 import util
 import verify
 import research
+import myday
 from ui import assistant as assistant_ui
 
 _MED_WORDS = ("боль", "болит", "симптом", "врач", "горло", "кашель", "тошнот", "давлен",
@@ -121,6 +122,11 @@ _LOVE_CATEGORY_KEY_RE = re.compile(
     re.I,
 )
 
+_LIFEHACK_ADD_RE = re.compile(
+    r"^\s*добав(?:ь|ить)\s+лайфхак\b(?P<payload>[\s\S]*)$",
+    re.IGNORECASE,
+)
+
 
 def _detect_love_add(text: str):
     """«Добавь в любимые фильм X» -> (store_key, folder_label, title) | None.
@@ -173,6 +179,53 @@ async def try_add_love_from_chat(bot, cid, text):
         return True
     _store.add_to_list(key_map[store_key], cid, title)
     await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — добавил в любимые ({folder_label}).")
+    return True
+
+
+def _extract_lifehack_payload(text):
+    match = _LIFEHACK_ADD_RE.match(text or "")
+    if not match:
+        return None
+    return re.sub(r"\s+", " ", match.group("payload") or "").strip(" \t\n\r:;,.-–—")
+
+
+async def try_add_lifehack_from_chat(bot, cid, text):
+    """Сохраняет «Добавь лайфхак» из одного сообщения или двух шагов."""
+    payload = _extract_lifehack_payload(text)
+    pending = store.pending_input.get(str(cid)) == "lifehack_add"
+    if payload is None and not pending:
+        return False
+    if payload is None:
+        payload = ""
+    if not payload and pending:
+        payload = (text or "").strip()
+    if not payload:
+        store.pending_input[str(cid)] = "lifehack_add"
+        await bot.send_message(
+            chat_id=cid,
+            text="Напиши текст лайфхака одним сообщением.",
+        )
+        return True
+
+    store.pending_input.pop(str(cid), None)
+    result = myday.add_lifehack_to_file(payload)
+    if not result:
+        await bot.send_message(
+            chat_id=cid,
+            text="Не смог сохранить лайфхак: нужен конкретный совет с действием и результатом.",
+        )
+        return True
+    if result.get("duplicate"):
+        await bot.send_message(chat_id=cid, text="Такой лайфхак уже есть в базе.")
+        return True
+    await bot.send_message(
+        chat_id=cid,
+        text=(
+            "✅ Лайфхак сохранён\n\n"
+            f"Категория: {result['category']}\n"
+            "Будет появляться в разделе «Полезное» в «Мой день»."
+        ),
+    )
     return True
 
 
