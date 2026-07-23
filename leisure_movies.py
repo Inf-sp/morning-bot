@@ -46,7 +46,7 @@ def _movie_kb(i, category=None, saved=False, favorite=False):
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("🌙 По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("❤️ Моё кино", callback_data="a_watchlist"),
-         InlineKeyboardButton(save_toggle_label(saved, "Смотреть позже"), callback_data=f"reco_{i}")],
+         InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
     ]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
@@ -281,7 +281,7 @@ def _movie_home_kb():
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("🌙 По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("❤️ Моё кино", callback_data="a_watchlist"),
-         InlineKeyboardButton("💾 Смотреть позже", callback_data="movie_saved")],
+         InlineKeyboardButton("💾 Сохранить", callback_data="movie_saved")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

@@ -296,9 +296,8 @@ def book_text(item):
     if item.get("quote"):
         quote = str(item["quote"]).strip().strip("«»\"")
         b.spacer()
-        b.bold(ui_label("quote", "Цитата"))
+        b.add(f"💭 «{quote}»", MessageEntity.ITALIC)
         b.newline()
-        b.line(f"«{quote}»")
     return b.build_stripped()
 
 

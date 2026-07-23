@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
 import leisure_concerts
 import leisure_books
 import leisure_movies
 import leisure_music
+import myday
 import store
 from ui import leisure as leisure_ui
 from ui.builder import MessageBuilder
+from util import esc
 
 
 def _keyboard():
@@ -83,6 +85,17 @@ async def send_home(bot, cid, q=None):
         b.section("🎟️ Сейчас в кино")
         for movie in now_playing:
             leisure_ui._format_movie_row(b, movie)
+    try:
+        quote_data = myday._fetch_quote(cid)
+    except Exception:
+        quote_data = {}
+    quote = myday._clip_quote(myday._strip_quotes(quote_data.get("quote", "")))
+    if quote and myday._quote_valid(quote):
+        author = esc(quote_data.get("src", "")).strip()
+        quote_line = f"«{esc(quote)}»" + (f" — по {author}" if author else "")
+        b.spacer()
+        b.add(f"💭 {quote_line}", MessageEntity.ITALIC)
+        b.newline()
     msg = b.build_stripped(reply_markup=_keyboard())
     if q is not None:
         try:

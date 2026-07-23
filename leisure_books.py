@@ -36,7 +36,12 @@ def _cached_book(cid):
     entry = (store._load(config.BOOK_RECO_CACHE_KEY) or {}).get(str(cid)) or {}
     item = entry.get("item")
     today = datetime.now(config.TZ).date().isoformat()
-    return dict(item) if entry.get("date") == today and isinstance(item, dict) else None
+    if entry.get("date") != today or not isinstance(item, dict):
+        return None
+    title = _item_text(item)
+    if not title or title.casefold() in _book_used(cid):
+        return None
+    return dict(item)
 
 
 def _cache_book(cid, item):
@@ -83,8 +88,8 @@ def _book_text(it):
 def _book_kb(i, saved=False, favorite=False):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_no_{i}")],
-        [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites")],
-        [InlineKeyboardButton(save_toggle_label(saved, "Почитать позже"), callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites"),
+         InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="book_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -93,8 +98,8 @@ def _book_kb(i, saved=False, favorite=False):
 def books_home_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать книгу", callback_data="book_reco")],
-        [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites")],
-        [InlineKeyboardButton("💾 Почитать позже", callback_data="book_saved")],
+        [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites"),
+         InlineKeyboardButton("💾 Сохранить", callback_data="book_saved")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="book_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -200,7 +205,9 @@ def _book_used(cid):
     used = set()
     for key in (config.BOOKS_KEY, config.READLIST_KEY):
         for x in store.get_list(key, cid):
-            used.add((x if isinstance(x, str) else str(x)).strip().lower())
+            title = _item_text(x)
+            if title:
+                used.add(title.casefold())
     used.update(value.strip().lower() for value in recommendation_stoplist.values(cid, "book"))
     return used
 
