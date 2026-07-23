@@ -79,6 +79,11 @@ def _example(entry, term):
     return "", ""
 
 
+def _without_terminal_period(value):
+    """Карточка уже визуально завершена: точка в конце примера лишняя."""
+    return str(value or "").strip().rstrip(". ")
+
+
 def render_learning_entry(builder, entry, *, fallback_term="", fallback_translation=""):
     """Рендерит термин, нужную грамматику и связанный пример без заголовка."""
     term = _term(entry, fallback_term)
@@ -110,5 +115,7 @@ def render_learning_entry(builder, entry, *, fallback_term="", fallback_translat
         builder.spacer()
         builder.text_line("💡 ")
         builder.bold("Полезно:")
-        builder.text_line(f" {example} → {example_translation}")
+        builder.text_line(
+            f" {_without_terminal_period(example)} → {_without_terminal_period(example_translation)}"
+        )
         builder.newline()

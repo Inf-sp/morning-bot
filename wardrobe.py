@@ -458,7 +458,7 @@ async def _parse_items(text):
         'JSON: {"items": [{"zone":"","subcategory":"","name":"","color":"","color_secondary":"",'
         '"material":"","length":"","warmth":"обычные","fit":"","season":[],"rain_ok":false,"wind_ok":false,'
         '"occasions":[],"style":""}]}',
-        1100, tier="cheap", module="wardrobe")
+        1100, tier="cheap", module="wardrobe_utility")
     raw_items = parsed.get("items") or []
     source_text = text if len(raw_items) == 1 else ""
     norm = [normalize_parsed_item({**item, "_source_text": source_text}) for item in raw_items]

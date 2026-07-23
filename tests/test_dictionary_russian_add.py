@@ -158,10 +158,10 @@ def test_dictionary_card_renders_normalized_noun_with_related_example():
     }, status="added")
 
     assert message.text == (
-        "🇳🇱 Добавлено\n\n"
+        "🇳🇱 Добавлено в нидерландский словарь\n\n"
         "De walging → Отвращение\n\n"
         "Разбор: существительное · de-слово\n\n"
-        "💡 Полезно: Ze keek met walging naar het eten. → Она с отвращением посмотрела на еду."
+        "💡 Полезно: Ze keek met walging naar het eten → Она с отвращением посмотрела на еду"
     )
 
 
@@ -182,18 +182,25 @@ def test_new_dictionary_entry_gets_stable_word_id(monkeypatch):
     assert stored[0]["id"] == saved["id"]
 
 
-def test_english_chat_command_defaults_to_english_dictionary():
+def test_bare_english_command_leaves_language_to_analyser():
     payload, lang = dictionary_import._extract_chat_dict_add("Add suspicious", "42")
 
     assert payload == "suspicious"
-    assert lang == "en"
+    assert lang is None
 
 
-def test_english_add_command_extracts_only_the_word():
+def test_dutch_word_hint_selects_dutch_dictionary_even_after_add_command():
+    payload, lang = dictionary_import._extract_chat_dict_add("Add ongeveer", "42")
+
+    assert payload == "ongeveer"
+    assert lang == "nl"
+
+
+def test_english_add_command_extracts_only_the_word_without_forcing_dictionary():
     for command in ("Add suspicious", "Add word suspicious", "Add to dictionary suspicious"):
         payload, lang = dictionary_import._extract_chat_dict_add(command, "42")
         assert payload == "suspicious"
-        assert lang == "en"
+        assert lang is None
 
 
 def test_add_dutch_word_does_not_default_to_english():

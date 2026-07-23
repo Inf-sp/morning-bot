@@ -21,7 +21,7 @@ def test_result_card_uses_article_plural_and_saved_example():
     assert "Het gevolg → Последствие" in text
     assert "Разбор: существительное · het-слово" in text
     assert "Множественное число: de gevolgen" in text
-    assert "💡 Полезно: Dat kan ernstige gevolgen hebben. → Это может иметь серьёзные последствия." in text
+    assert "💡 Полезно: Dat kan ernstige gevolgen hebben → Это может иметь серьёзные последствия" in text
 
 
 def test_result_card_shows_only_verified_verb_forms():
@@ -71,7 +71,7 @@ def test_multiword_term_is_phrase_and_cannot_show_noun_metadata():
     assert "Разбор: фраза" in text
     assert "Множественное число" not in text
     assert "Geld dat op je rekening staat → Деньги на счёте" in text
-    assert "💡 Полезно: Met tegoed bedoelen we geld dat op je rekening staat." in text
+    assert "💡 Полезно: Met tegoed bedoelen we geld dat op je rekening staat →" in text
 
 
 def test_translation_comments_are_not_shown_and_mixed_plural_is_hidden():

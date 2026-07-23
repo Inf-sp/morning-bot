@@ -119,9 +119,7 @@ def _dict_lang_hint_explicit(text):
 
 
 def _dict_lang_hint_from_payload(text):
-    """Подсказка языка по самому payload, когда в тексте нет явного указания.
-    Английский word-only payload без признаков нидерландского идёт в английский словарь.
-    """
+    """Подсказка языка только при надёжном признаке в самом payload."""
     payload = (text or "").strip()
     if not payload:
         return None
@@ -133,14 +131,14 @@ def _dict_lang_hint_from_payload(text):
             return "nl"
         if re.search(r"\b(?:de|het|een|the|a|an)\b", payload, re.I):
             return None
-        return "en"
+        return None
     return None
 
 
 _DUTCH_ARTICLE_RE = re.compile(r"\b(de|het)\s+\w+", re.I)
 _DUTCH_WORD_HINTS = {
     "liever", "vanwege", "bewonderen", "tegoed", "walging", "gevolg",
-    "afdeling", "twijfelen", "twijfelt", "wennen", "omgaan",
+    "afdeling", "ongeveer", "twijfelen", "twijfelt", "wennen", "omgaan",
 }
 
 
@@ -160,6 +158,10 @@ def _dict_lang_hint(text, cid=None):
         return payload_hint
     if _DUTCH_ARTICLE_RE.search(text or ""):
         return "nl"
+    # A bare Latin word is not reliably English. Let the dictionary analyser
+    # identify it instead of forcing the currently active language.
+    if re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ]", text or "") and not _CYRILLIC_RE.search(text or ""):
+        return None
     if cid is not None:
         try:
             return _active_language_code(cid)
@@ -272,9 +274,13 @@ def _dict_entry_message(entry, status="added"):
     b = MessageBuilder()
     lang = entry.get("lang") if entry.get("lang") in ("nl", "en") else "nl"
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+    dictionary_accusative = "нидерландский" if lang == "nl" else "английский"
+    dictionary_prepositional = "нидерландском" if lang == "nl" else "английском"
     titles = {
-        "added": "Добавлено", "updated": "Обновлено", "found": "Найдено",
-        "duplicate": "Уже в словаре",
+        "added": f"Добавлено в {dictionary_accusative} словарь",
+        "updated": f"Обновлено в {dictionary_prepositional} словаре",
+        "found": f"Найдено в {dictionary_prepositional} словаре",
+        "duplicate": f"Уже в {dictionary_prepositional} словаре",
     }
     emoji = flag if status in titles else "📖"
     b.text_line(f"{emoji} ")
@@ -500,20 +506,14 @@ def _validate_verb_analysis(data, expected_infinitive="", fixed_preposition=""):
 
 async def _request_verb_analysis(word, fixed_preposition=""):
     prompt = _verb_analysis_prompt(word, fixed_preposition)
-    for attempt in range(2):
-        try:
-            return await asyncio.wait_for(
-                ai.allm_json(
-                    prompt, 700, order=("cohere", "gemini", "github_models"),
-                    module="learning_dict_add",
-                    fallback_allowed=True, privacy_level="public",
-                ),
-                timeout=10,
-            )
-        except asyncio.TimeoutError:
-            if attempt == 0:
-                continue
-            raise
+    return await asyncio.wait_for(
+        ai.allm_json(
+            prompt, 700, order=("cohere", "groq", "github_models"),
+            module="learning_dict_add",
+            fallback_allowed=True, privacy_level="public",
+        ),
+        timeout=10,
+    )
 
 
 def _cached_verb_entry(cid, term):

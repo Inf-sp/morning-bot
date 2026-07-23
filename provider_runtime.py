@@ -102,6 +102,7 @@ def blank_state(_provider: str = "") -> dict:
         "quota_remaining": None,
         "quota_total": None,
         "fallback": "",
+        "fallback_reason": "",
         "last_check": None,
         "last_success": None,
         "last_error": "",
@@ -345,6 +346,7 @@ def record_result(
                 "last_error": "лимит исчерпан" if quota_empty else "",
                 "error_type": "quota" if quota_empty else "",
                 "fallback": "",
+                "fallback_reason": "",
             })
             if quota_empty:
                 if not incident_id:
@@ -408,6 +410,7 @@ def record_result(
                 if source_state.get("fallback") != provider:
                     continue
                 source_state["fallback"] = ""
+                source_state["fallback_reason"] = ""
                 source_state["status"] = DOWN
                 source_state["last_error"] = "резерв недоступен"
                 source_state["error_type"] = "fallback"
@@ -436,7 +439,7 @@ def _would_cycle(source: str, target: str, providers: dict) -> bool:
     return False
 
 
-def activate_fallback(provider: str, target: str, *, reason="") -> bool:
+def activate_fallback(provider: str, target: str, *, reason="request") -> bool:
     """Persist only a fallback that has actually answered successfully."""
     if provider not in SPEC_BY_KEY or target not in SPEC_BY_KEY:
         return False
@@ -459,6 +462,7 @@ def activate_fallback(provider: str, target: str, *, reason="") -> bool:
         if state.get("fallback") == target:
             return data, None
         state["fallback"] = target
+        state["fallback_reason"] = str(reason or "")[:40]
         state["status"] = WARNING
         if state.get("error_type") == "fallback":
             state["last_error"] = "основной сервис недоступен"
@@ -484,7 +488,9 @@ def activate_fallback(provider: str, target: str, *, reason="") -> bool:
 def selected_provider(provider: str) -> str:
     state = get_state(provider)
     fallback = str(state.get("fallback") or "")
-    return fallback if fallback in SPEC_BY_KEY else provider
+    # Passive monitor probes inform the admin screen only. Routing changes
+    # after a reserve has answered a real user request.
+    return fallback if fallback in SPEC_BY_KEY and state.get("fallback_reason") == "request" else provider
 
 
 def get_state(provider: str) -> dict:
@@ -529,6 +535,7 @@ def record_unavailable_fallback(provider: str) -> None:
             return data, None
         state["status"] = DOWN
         state["fallback"] = ""
+        state["fallback_reason"] = ""
         state["last_error"] = "резерв недоступен"
         state["error_type"] = "fallback"
         _append_history(

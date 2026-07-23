@@ -57,12 +57,12 @@ def test_github_models_chat_payload_and_json_mode(monkeypatch):
 
 def test_github_models_is_common_fallback_in_all_routes():
     assert ai._resolve(None, None, module="learning")[:3] == (
-        "cohere", "gemini", "github_models",
+        "groq", "github_models", "cohere",
     )
     assert ai._resolve(None, None, module="food") == (
-        "gemini", "groq", "github_models", "openrouter",
+        "gemini", "github_models", "groq", "openrouter",
     )
-    assert ai.CHAT_ORDER[:2] == ("gemini", "github_models")
+    assert ai.CHAT_ORDER[:2] == ("groq", "github_models")
 
 
 def test_food_tries_openrouter_after_three_unavailable_providers(monkeypatch):
@@ -92,7 +92,7 @@ def test_food_tries_openrouter_after_three_unavailable_providers(monkeypatch):
     )
 
     assert result == {"ok": True}
-    assert calls == ["gemini", "groq", "github_models", "openrouter"]
+    assert calls == ["gemini", "github_models", "groq", "openrouter"]
 
 
 def test_github_models_supports_chat_history(monkeypatch):

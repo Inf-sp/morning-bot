@@ -248,7 +248,7 @@ def _generate_lifehack_pool(cid):
         'Верни JSON: {"tips": [{"category": "одна из категорий выше", "text": "совет"}]}'
     )
     try:
-        d = ai.llm_json(prompt, 1800, tier="cheap", module="myday")
+        d = ai.llm_json(prompt, 1800, tier="cheap", module="myday_utility")
     except Exception as e:
         _log.warning("myday: lifehack pool generation failed: %s", e)
         return []
@@ -412,10 +412,7 @@ def _fetch_quote(cid=None):
         "Только кириллица, никаких латинских букв в тексте цитаты."
     )
 
-    # tier="cheap" ставит groq первым (GRAMMAR_ORDER) - он хуже держит требование
-    # "только кириллица" и стабильно ронял цитату через _quote_valid. Gemini
-    # (smart) справляется надёжнее с этим требованием к языку.
-    d = ai.llm_json(prompt, 200, tier="smart", module="myday")
+    d = ai.llm_json(prompt, 200, tier="cheap", module="myday_utility")
     if not isinstance(d, dict):
         return {}
 

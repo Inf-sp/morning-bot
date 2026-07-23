@@ -302,30 +302,8 @@ def check_all(*, force=False) -> None:
                         record_history=False,
                     )
                     results[service] = False
-    # A reserve is checked before selection and is shown only after its own
-    # successful probe. Actual request routers also call activate_fallback.
-    for spec in SPECS:
-        if spec.key == "cohere" and not api_usage.cohere_requests()["allowed"]:
-            continue
-        state = provider_runtime.get_state(spec.key)
-        needs_fallback = results.get(spec.key) is False or state.get("error_type") == "quota"
-        if not needs_fallback:
-            continue
-        for fallback in spec.fallbacks:
-            fallback_ok = results.get(fallback)
-            if fallback_ok is None:
-                fallback_ok = probe(fallback)
-                results[fallback] = fallback_ok
-            if fallback_ok is True:
-                provider_runtime.activate_fallback(
-                    spec.key, fallback, reason="monitor",
-                )
-                break
-        else:
-            if spec.fallbacks:
-                state = provider_runtime.get_state(spec.key)
-                if state.get("status") != UNKNOWN:
-                    provider_runtime.record_unavailable_fallback(spec.key)
+    # Probe results are diagnostic only. A reserve becomes selected only after
+    # it has answered a real feature request in the AI router.
 
 
 async def monitoring_job(_context) -> None:

@@ -376,7 +376,7 @@ def _build_country_card_unlocked(code):
 "languages":["языки по-русски"],"currency":"название валюты · код",
 "main_nuance":"1 практичный нюанс","fact":"1 проверяемый исторический или общественный факт"}}."""
     try:
-        generated = ai.llm_json(prompt, 650, tier="cheap", module="travel")
+        generated = ai.llm_json(prompt, 650, tier="cheap", module="travel_utility")
     except Exception as exc:
         _log.warning("country card generation failed for %s: %r", code, exc)
         generated = {}
@@ -510,7 +510,7 @@ def travel_suggest_one(cid, excluded=None):
 Сильные интересы путешественника: {interests}. Не выбирай страну из-за самолёта,
 парома или велосипеда: транспорт сам по себе не является причиной рекомендации.
 Верни только JSON: {{"country":"название страны по-русски"}}."""
-    return ai.llm_json(prompt, 250, tier="leisure", module="travel")
+    return ai.llm_json(prompt, 250, tier="cheap", module="travel_utility")
 
 
 def _is_country_flag(value):

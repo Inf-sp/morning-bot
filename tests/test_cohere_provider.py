@@ -81,27 +81,27 @@ def test_cohere_preserves_zero_temperature(monkeypatch):
 
 
 def test_module_routing_splits_cohere_and_gemini_categories():
-    assert ai._resolve(None, None, module="learning")[0] == "cohere"
-    assert ai._resolve(None, None, module="learning_dict_add")[0] == "cohere"
-    assert ai._resolve(None, None, module="learning_game")[0] == "cohere"
-    assert ai._resolve(None, None, module="thoughts")[0] == "cohere"
-    assert ai._resolve(None, None, module="health")[0] == "cohere"
+    assert ai._resolve(None, None, module="learning")[0] == "groq"
+    assert ai._resolve(None, None, module="learning_dict_add")[0] == "groq"
+    assert ai._resolve(None, None, module="learning_game")[0] == "groq"
+    assert ai._resolve(None, None, module="thoughts")[0] == "groq"
+    assert ai._resolve(None, None, module="health")[0] == "groq"
     assert ai._resolve(None, None, module="food") == (
-        "gemini", "groq", "github_models", "openrouter",
+        "gemini", "github_models", "groq", "openrouter",
     )
     assert ai._resolve("cheap", None, module="recipe_generation") == (
-        "gemini", "groq", "github_models", "openrouter",
+        "gemini", "github_models", "groq", "openrouter",
     )
-    assert ai._resolve(None, None, module="wardrobe")[:2] == ("gemini", "cohere")
-    assert ai._resolve(None, None, module="leisure")[:2] == ("gemini", "cohere")
-    assert ai._resolve("cheap", None, module="leisure_movies")[:2] == ("gemini", "cohere")
-    assert ai._resolve("cheap", None)[0] == "cohere"
+    assert ai._resolve(None, None, module="wardrobe")[:2] == ("gemini", "github_models")
+    assert ai._resolve(None, None, module="leisure")[:2] == ("gemini", "github_models")
+    assert ai._resolve("cheap", None, module="leisure_movies")[:2] == ("gemini", "github_models")
+    assert ai._resolve("cheap", None)[0] == "groq"
 
 
-def test_missing_cohere_key_falls_back_to_gemini(monkeypatch):
+def test_missing_cohere_key_does_not_fall_back_to_gemini(monkeypatch):
     calls = []
     monkeypatch.setattr(ai.config, "COHERE_API_KEY", "")
-    monkeypatch.setattr(ai, "_gen_gemini", lambda *_args, **_kwargs: calls.append("gemini") or "готово")
+    monkeypatch.setattr(ai, "_gen_groq", lambda *_args, **_kwargs: calls.append("groq") or "готово")
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_log_cost", lambda *_args, **_kwargs: None)
@@ -110,7 +110,7 @@ def test_missing_cohere_key_falls_back_to_gemini(monkeypatch):
     result = ai.llm("Классифицируй", module="learning")
 
     assert result == "готово"
-    assert calls == ["gemini"]
+    assert calls == ["groq"]
 
 
 def test_cohere_key_is_redacted_from_logs(monkeypatch):

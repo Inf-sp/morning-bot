@@ -242,9 +242,9 @@ def _cache_ttl(module: str, response_mode: ResponseMode) -> int:
 
 
 def _cache_key(provider_order, prompt, max_tokens, temperature, module, response_mode):
+    """Cache a semantic answer, independently from the current reserve chain."""
     raw = json.dumps({
-        "order": list(provider_order or []),
-        "prompt": prompt,
+        "prompt": re.sub(r"\s+", " ", str(prompt or "")).strip(),
         "max_tokens": max_tokens,
         "temperature": temperature,
         "module": module or "",
@@ -555,50 +555,30 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
         generation_config["responseMimeType"] = "application/json"
     payload = {"contents": [{"parts": [{"text": prompt}]}],
                "generationConfig": generation_config}
-    last_err = None
-    for attempt in range(2):
-        try:
-            with _GEMINI_RATE_LOCK:
-                wait = api_usage.seconds_until_gemini_slot(limit=4, window=60)
-                if wait > 0:
-                    time.sleep(wait)
-                t0 = time.time()
-                r = _post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
-                    {}, payload, 30, "gemini", timeout_cap=6)
-            data = r.json()
-            usage = data.get("usageMetadata") or data.get("usage_metadata") or {}
-            input_tokens = int(usage.get("promptTokenCount") or usage.get("prompt_token_count") or 0)
-            output_tokens = int(usage.get("candidatesTokenCount") or usage.get("candidates_token_count") or 0)
-            api_usage.record_request(
-                "gemini",
-                ok=True,
-                units={
-                    "tokens": input_tokens + output_tokens,
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                },
-                latency_ms=int((time.time() - t0) * 1000),
-                headers=r.headers,
-            )
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        except LLMProviderError as e:
-            last_err = e
-            retry_seconds = min(max(int(e.retry_after or 5), 1), 10)
-            short_retry = (
-                e.status_code == 429
-                and attempt == 0
-                and (e.limit_scope or "").upper() != "RPD"
-                and e.retry_after is not None
-                and retry_seconds <= 10
-            )
-            if short_retry:
-                remaining = _remaining_seconds()
-                if remaining is None or remaining > retry_seconds + 5:
-                    time.sleep(retry_seconds)
-                    continue
-            raise
-    raise last_err
+    with _GEMINI_RATE_LOCK:
+        wait = api_usage.seconds_until_gemini_slot(limit=4, window=60)
+        if wait > 0:
+            time.sleep(wait)
+        t0 = time.time()
+        r = _post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
+            {}, payload, 30, "gemini", timeout_cap=6)
+    data = r.json()
+    usage = data.get("usageMetadata") or data.get("usage_metadata") or {}
+    input_tokens = int(usage.get("promptTokenCount") or usage.get("prompt_token_count") or 0)
+    output_tokens = int(usage.get("candidatesTokenCount") or usage.get("candidates_token_count") or 0)
+    api_usage.record_request(
+        "gemini",
+        ok=True,
+        units={
+            "tokens": input_tokens + output_tokens,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+        },
+        latency_ms=int((time.time() - t0) * 1000),
+        headers=r.headers,
+    )
+    return data["candidates"][0]["content"]["parts"][0]["text"]
 
 
 def _gen_cohere(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text"):
@@ -688,6 +668,10 @@ def _gemini_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
     """
     if not config.GEMINI_API_KEY:
         raise LLMProviderError("gemini", "no gemini key", error_type="credentials")
+    if not _reserve_gemini_for_action():
+        raise LLMProviderError(
+            "gemini", "gemini action budget exhausted", error_type="action_budget",
+        )
     payload = {
         "contents": [{"parts": [
             {"inlineData": {
@@ -855,7 +839,8 @@ def _mark_cooldown(name, err):
     провайдер не исключается навсегда: после паузы он автоматически проверяется
     следующим обычным запросом.
     """
-    if not _is_temporary_exception(err):
+    if (not _is_temporary_exception(err)
+            or getattr(err, "error_type", "") == "deadline"):
         return
     status = getattr(err, "status_code", None)
     seconds = _RATE_LIMIT_COOLDOWN_SEC if status == 429 else _OUTAGE_COOLDOWN_SEC
@@ -930,31 +915,38 @@ def _friendly(errs):
         return "⏳ ИИ временно перегружен — подожди минуту и попробуй снова."
     return "⚠️ ИИ временно недоступен — попробуй снова через пару минут."
 
-DEFAULT_ORDER  = ("gemini", "cohere", "github_models", "groq", "cf")
-# Чат: Gemini первым — лучше поддерживает диалог, свободный и живой стиль
-CHAT_ORDER     = ("gemini", "github_models", "groq", "cf")
-# Грамматика/быстрые задачи: Cohere первым — языки и structured output;
-# Gemini, GitHub Models, Groq и Cloudflare остаются автоматическим резервом.
-GRAMMAR_ORDER  = ("cohere", "gemini", "github_models", "groq", "cf")
-# Досуг/рекомендации: Gemini первым — богатое знание культуры, кино, музыки, путешествий
-LEISURE_ORDER  = ("gemini", "cohere", "github_models", "groq", "cf")
-# Готовка: отдельная продуктовая цепочка. OpenRouter вызывается последним через
-# контролируемый fallback policy, затем вызывающий код строит карточку без AI.
-FOOD_ORDER     = ("gemini", "groq", "github_models", "openrouter")
+
+def _reserve_gemini_for_action() -> bool:
+    """Gemini may produce at most one response for one user action."""
+    try:
+        import tracking
+        return tracking.consume_provider_budget("gemini", limit=1)
+    except Exception:
+        return True
+
+# Разбор, классификация и короткий structured output не расходуют Gemini.
+UTILITY_ORDER = ("groq", "github_models", "cohere", "openrouter")
+# Gemini остаётся только для одной финальной пользовательской карточки.
+PREMIUM_ORDER = ("gemini", "github_models", "groq", "openrouter")
+DEFAULT_ORDER = UTILITY_ORDER
+CHAT_ORDER = ("groq", "github_models", "cohere", "cf")
+GRAMMAR_ORDER = UTILITY_ORDER
+LEISURE_ORDER = PREMIUM_ORDER
+FOOD_ORDER = PREMIUM_ORDER
 
 # Явные пресеты: позволяют приоритизировать конкретный провайдер, не меняя код вызова по всему проекту.
 PROVIDER_ORDER = {
-    "cf": ("cf", "cohere", "gemini", "github_models", "groq"),
-    "groq": ("groq", "cohere", "gemini", "github_models", "cf"),
-    "github_models": ("github_models", "gemini", "cohere", "groq", "cf"),
-    "cohere": ("cohere", "gemini", "github_models", "groq", "cf"),
-    "gemini": ("gemini", "cohere", "github_models", "groq", "cf"),
+    "cf": ("cf", "groq", "github_models", "cohere"),
+    "groq": ("groq", "github_models", "cohere", "openrouter"),
+    "github_models": ("github_models", "groq", "cohere", "openrouter"),
+    "cohere": ("cohere", "groq", "github_models", "openrouter"),
+    "gemini": PREMIUM_ORDER,
 }
 
 # --- тиры: маршрутизация по задаче ---
-# cheap  → Cohere первым (грамматика, переводы, классификация, строгий JSON)
-# smart  → Gemini первым (чат, рецепты, гардероб, мотивация — требуют рассуждений)
-# leisure → Gemini первым (досуг, путешествия, рекомендации — требуют знания мира)
+# cheap  → utility-маршрут для грамматики, переводов и строгого JSON
+# smart  → utility-маршрут по умолчанию
+# leisure → premium-маршрут для финальных рекомендаций
 TIERS = {
     "cheap":   (GRAMMAR_ORDER, None),
     "smart":   (DEFAULT_ORDER, None),
@@ -985,7 +977,6 @@ MODULE_POLICY = {
     "wardrobe": LEISURE_ORDER,
     "wardrobe_copy": LEISURE_ORDER,
     "wardrobe_migration": LEISURE_ORDER,
-    "assistant": LEISURE_ORDER,
     "travel": LEISURE_ORDER,
     "travel_facts10": LEISURE_ORDER,
     "leisure": LEISURE_ORDER,
@@ -994,7 +985,7 @@ MODULE_POLICY = {
     "leisure_concerts": LEISURE_ORDER,
     "leisure_collection": LEISURE_ORDER,
     "myday": LEISURE_ORDER,
-    "firstvisit": LEISURE_ORDER,
+    "firstvisit": UTILITY_ORDER,
     "weather": LEISURE_ORDER,
 }
 
@@ -1047,9 +1038,15 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
     policy = _coerce_policy(fallback_allowed, privacy_level, response_mode, fallback_policy,
                             allow_personal_openrouter)
     order = _resolve(tier, order, route=route, module=module)
+    try:
+        import tracking
+        tracking.annotate_ai_route(
+            requested_tier="premium" if order and order[0] == "gemini" else "utility",
+            primary=order[0] if order else "",
+        )
+    except Exception:
+        pass
     cohere_primary = bool(order and order[0] == "cohere")
-    pre_gemini_unavailable = _gemini_cooldown_error() if "gemini" in order else None
-    order = _reorder_for_cooldown(_reorder_for_monitor(order))
     cache_ttl = _cache_ttl(module, response_mode)
     cache_key = _cache_key(order, prompt, max_tokens, temperature, module, response_mode)
     cached = _cache_get(cache_key, cache_ttl)
@@ -1057,7 +1054,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         if _is_cacheable_response(cached, response_mode):
             try:
                 import tracking
-                tracking.annotate_action(cache_hit=True)
+                tracking.annotate_action(provider="cache", cache_hit=True)
             except Exception:
                 pass
             return cached
@@ -1065,6 +1062,8 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         # исправлен на записи) - не отдаём его снова на TTL модуля (до 30 дней),
         # чистим и генерируем заново.
         _cache_delete(cache_key)
+    pre_gemini_unavailable = _gemini_cooldown_error() if "gemini" in order else None
+    order = _reorder_for_cooldown(_reorder_for_monitor(order))
     order = _reorder_for_cohere_limit(order, cohere_primary=cohere_primary)
     calls = {
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature, response_mode),
@@ -1087,8 +1086,19 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             break
         if name == "openrouter":
             continue
+        if name == "gemini":
+            if not _reserve_gemini_for_action():
+                errs.append("gemini: action budget exhausted")
+                continue
         unavailable = _provider_is_unavailable(name)
         if unavailable is not None:
+            try:
+                import tracking
+                tracking.record_ai_failure(
+                    name, str(getattr(unavailable, "status_code", "") or getattr(unavailable, "error_type", "")),
+                )
+            except Exception:
+                pass
             local_cohere_limit = (
                 name == "cohere" and getattr(unavailable, "error_type", "") == "quota"
             )
@@ -1126,6 +1136,13 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                     pass
                 return out
         except Exception as e:
+            try:
+                import tracking
+                tracking.record_ai_failure(
+                    name, str(getattr(e, "status_code", "") or getattr(e, "error_type", "") or type(e).__name__),
+                )
+            except Exception:
+                pass
             failed_providers.append(name)
             _mark_cooldown(name, e)
             errs.append(f"{name}:{e}")
@@ -1367,6 +1384,8 @@ def _chat_system(cid=None):
 
 def _chat(provider, history, system):
     if provider == "gemini":
+        if not _reserve_gemini_for_action():
+            raise LLMProviderError("gemini", "gemini action budget exhausted", error_type="action_budget")
         cooling = _gemini_cooldown_error()
         if cooling is not None:
             raise cooling
@@ -1375,6 +1394,27 @@ def _chat(provider, history, system):
             {}, {"system_instruction": {"parts": [{"text": system}]}, "contents": contents,
                  "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, "gemini", timeout_cap=6)
         return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+    if provider == "cohere":
+        if not config.COHERE_API_KEY:
+            raise LLMProviderError("cohere", "no cohere key", error_type="credentials")
+        r = _post(
+            "https://api.cohere.com/v2/chat",
+            {
+                "Authorization": f"Bearer {config.COHERE_API_KEY}",
+                "Content-Type": "application/json",
+                "X-Client-Name": "morning-bot",
+            },
+            {
+                "model": config.COHERE_MODEL,
+                "messages": [{"role": "system", "content": system}] + history,
+                "max_tokens": 700,
+                "temperature": 0.8,
+            },
+            30,
+            "cohere",
+            timeout_cap=5,
+        )
+        return r.json()["message"]["content"][0]["text"]
     if provider == "github_models":
         if not config.GITHUB_MODELS_TOKEN:
             raise LLMProviderError(

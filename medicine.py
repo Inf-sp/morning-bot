@@ -167,7 +167,7 @@ drug_other. Дозировка и форма не входят в generic_name.
 Сообщение: {secure.wrap_untrusted(text, 'запрос пользователя')}
 JSON: {{"generic_name":"","brand_name":"","dose":"","release_form":"","intent":"drug_other"}}"""
     try:
-        data = await ai.allm_json(prompt, 350, order=("cohere", "gemini"), module="medicine",
+        data = await ai.allm_json(prompt, 350, order=("cohere", "groq", "github_models"), module="medicine",
                                   privacy_level="sensitive", budget_seconds=8)
     except Exception:
         return local
@@ -341,14 +341,12 @@ def _fallback_reason(exc):
 
 async def _format_with_ai(prompt):
     try:
-        data = await ai.allm_json(prompt, 850, order=("gemini",), module="medicine",
+        data = await ai.allm_json(prompt, 850, module="medicine",
                                   privacy_level="sensitive", budget_seconds=10)
-        return data, "gemini", ""
+        return data, "utility", ""
     except Exception as exc:
         reason = _fallback_reason(exc)
-        data = await ai.allm_json(prompt, 850, order=("groq",), module="medicine",
-                                  privacy_level="sensitive", budget_seconds=10)
-        return data, "groq_fallback", reason
+        return {}, "utility_fallback", reason
 
 
 def _normalize_result(data, question, normalized):

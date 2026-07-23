@@ -47,6 +47,12 @@ class ActionTrace:
     provider: str = ""
     cache_hit: bool = False
     fallback: str = ""
+    provider_calls: dict[str, int] = field(default_factory=dict)
+    provider_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    requested_tier: str = ""
+    primary: str = ""
+    primary_status: str = ""
+    served_by: str = ""
     finished: bool = False
     trace_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
@@ -94,10 +100,42 @@ def annotate_action(*, provider="", cache_hit=None, fallback="") -> None:
         return
     if provider:
         trace.provider = _safe_text(provider, 40)
+        trace.served_by = trace.provider
     if cache_hit is not None:
         trace.cache_hit = bool(cache_hit)
     if fallback:
         trace.fallback = _safe_text(fallback, 80)
+
+
+def annotate_ai_route(*, requested_tier="", primary="") -> None:
+    trace = current_action()
+    if trace is None:
+        return
+    trace.requested_tier = _safe_text(requested_tier, 20)
+    trace.primary = _safe_text(primary, 40)
+
+
+def record_ai_failure(provider="", status="") -> None:
+    trace = current_action()
+    if trace is None or trace.primary != _safe_text(provider, 40):
+        return
+    if trace.primary_status:
+        return
+    trace.primary_status = _safe_text(status, 80)
+
+
+def consume_provider_budget(provider: str, *, limit: int) -> bool:
+    """Reserve one provider call within the current user action."""
+    trace = current_action()
+    if trace is None:
+        return True
+    name = _safe_text(provider, 40)
+    with trace.provider_lock:
+        used = int(trace.provider_calls.get(name) or 0)
+        if used >= max(0, int(limit)):
+            return False
+        trace.provider_calls[name] = used + 1
+        return True
 
 
 def finish_action(trace=None, *, ok=True) -> None:
@@ -123,6 +161,11 @@ def finish_action(trace=None, *, ok=True) -> None:
                 if trace.budget_seconds is not None else None
             ),
             "provider": trace.provider,
+            "requested_tier": trace.requested_tier,
+            "primary": trace.primary,
+            "primary_status": trace.primary_status,
+            "served_by": trace.served_by or trace.provider,
+            "gemini_calls": int(trace.provider_calls.get("gemini") or 0),
             "cache_hit": trace.cache_hit,
             "fallback": trace.fallback,
             "ok": bool(ok),

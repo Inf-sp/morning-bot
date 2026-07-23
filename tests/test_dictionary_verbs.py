@@ -57,7 +57,7 @@ def test_strong_verb_is_enriched_and_rendered_compactly(monkeypatch):
     assert "Vervangen → Заменять, менять" in message.text
     assert "Разбор: сильный глагол" in message.text
     assert "Формы: vervangen · verving · heeft vervangen" in message.text
-    assert "💡 Полезно: Ik ga mijn oude telefoon vervangen. → Я собираюсь заменить свой старый телефон." in message.text
+    assert "💡 Полезно: Ik ga mijn oude telefoon vervangen → Я собираюсь заменить свой старый телефон" in message.text
     assert "auxiliary" not in message.text
     assert "confidence" not in message.text
 
@@ -81,7 +81,7 @@ def test_weak_verb_example_with_conjugated_stem_passes_validation(monkeypatch):
 
     assert "Формы: werken · werkte · heeft gewerkt" in text
     assert "Разбор: слабый глагол" in text
-    assert "💡 Полезно: Ik werk vandaag thuis. → Сегодня я работаю дома." in text
+    assert "💡 Полезно: Ik werk vandaag thuis → Сегодня я работаю дома" in text
 
 
 def test_verb_with_zijn_uses_is_perfect_form(monkeypatch):
@@ -174,21 +174,23 @@ def test_cached_analysis_is_reused_without_new_request(monkeypatch):
     assert entry["analysis_updated_at"] == "2026-07-16T12:00:00+02:00"
 
 
-def test_request_uses_cohere_gemini_public_fallback_and_retries_timeout(monkeypatch):
+def test_request_uses_utility_route_without_retrying_timeout(monkeypatch):
     calls = []
 
     async def fake_allm_json(prompt, *_args, **kwargs):
         calls.append((prompt, kwargs))
-        if len(calls) == 1:
-            raise asyncio.TimeoutError
-        return _analysis()
+        raise asyncio.TimeoutError
 
     monkeypatch.setattr(dictionary_import.ai, "allm_json", fake_allm_json)
-    result = asyncio.run(dictionary_import._request_verb_analysis("vervangen"))
+    try:
+        asyncio.run(dictionary_import._request_verb_analysis("vervangen"))
+    except asyncio.TimeoutError:
+        pass
+    else:
+        raise AssertionError("timeout must not trigger a second AI request")
 
-    assert result["is_verb"] is True
-    assert len(calls) == 2
-    assert calls[0][1]["order"] == ("cohere", "gemini", "github_models")
+    assert len(calls) == 1
+    assert calls[0][1]["order"] == ("cohere", "groq", "github_models")
     assert calls[0][1]["fallback_allowed"] is True
     assert calls[0][1]["privacy_level"] == "public"
     assert '"word": "vervangen"' in calls[0][0]

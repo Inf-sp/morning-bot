@@ -16,11 +16,17 @@ import util
 import config
 import api_usage
 import provider_runtime
+import tracking
 
 _WIKI_UA = {"User-Agent": "morning-bot/1.0"}
 
 _CF_CACHE = {}          # name.lower() -> (ts, dict)
 _CF_TTL = 86400         # факты о стране стабильны - сутки
+
+
+def _grounded_gemini_allowed() -> bool:
+    """Grounding is optional research, never the Gemini call of a user action."""
+    return tracking.current_action() is None
 
 
 
@@ -433,7 +439,7 @@ def gemini_search_fact(city: str, country: str, cc: str = "",
     Промпт на английском для точного поиска, cc исключает путаницу городов.
     Ответ запрашиваем на русском. Валидирует что ответ — факт, а не мета-объяснение.
     """
-    if not config.GEMINI_API_KEY:
+    if not config.GEMINI_API_KEY or not _grounded_gemini_allowed():
         return ""
     place = f"{city}, {country}" if country else city
     cache_key = place.lower()
@@ -520,7 +526,7 @@ def gemini_search_facts_multi(city: str, country: str, cc: str = "",
 
     Возвращает список строк (факты на русском).
     """
-    if not config.GEMINI_API_KEY:
+    if not config.GEMINI_API_KEY or not _grounded_gemini_allowed():
         return []
     avoid = avoid or []
     place = f"{city}, {country}" if country else city

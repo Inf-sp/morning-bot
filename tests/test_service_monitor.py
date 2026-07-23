@@ -128,7 +128,7 @@ def test_failed_active_fallback_is_removed_immediately(monkeypatch):
     assert service_monitor.format_row("tavily").endswith("· резерв недоступен")
 
 
-def test_background_rechecks_fallback_before_selecting_it(monkeypatch):
+def test_background_probe_does_not_select_a_fallback(monkeypatch):
     _memory_store(monkeypatch)
     calls = []
 
@@ -146,7 +146,16 @@ def test_background_rechecks_fallback_before_selecting_it(monkeypatch):
     service_monitor.check_all(force=True)
 
     assert calls.count("firecrawl") == 1
-    assert provider_runtime.get_state("tavily")["fallback"] == "firecrawl"
+    assert provider_runtime.get_state("tavily")["fallback"] == ""
+
+
+def test_monitor_fallback_is_not_used_by_request_router(monkeypatch):
+    _memory_store(monkeypatch)
+    provider_runtime.record_result("gemini", False, error="timeout")
+    provider_runtime.record_result("github_models", True)
+
+    assert provider_runtime.activate_fallback("gemini", "github_models", reason="monitor")
+    assert provider_runtime.selected_provider("gemini") == "gemini"
 
 
 def test_passive_language_and_speech_probes_are_not_run_every_five_minutes():

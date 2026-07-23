@@ -124,14 +124,12 @@ def _fallback_reason(exc):
 
 async def _ask_ai(prompt):
     try:
-        result = await ai.allm_json(prompt, 900, order=("gemini",), module="doctor",
+        result = await ai.allm_json(prompt, 900, module="doctor",
                                     privacy_level="sensitive", budget_seconds=10)
-        return result, "gemini", ""
+        return result, "utility", ""
     except Exception as exc:
         reason = _fallback_reason(exc)
-        result = await ai.allm_json(prompt, 900, order=("groq",), module="doctor",
-                                    privacy_level="sensitive", budget_seconds=10)
-        return result, "groq_fallback", reason
+        return {}, "utility_fallback", reason
 
 
 def _normalize(data):
