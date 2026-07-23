@@ -127,7 +127,17 @@ def _generate_home_idea(cid):
 "route":["ровно 3 практичных пункта"],"tip":"короткий полезный совет"}}.
 Не используй знак =, только стрелку → там, где нужна связь."""
     try:
-        raw = ai.llm_json(prompt, 650, tier="leisure", module="travel")
+        raw = ai.llm_json(
+            prompt, 650, tier="leisure", module="travel",
+            cache_context={
+                "scenario": "travel_home_idea",
+                "city": city,
+                "transports": sorted(modes),
+                "previous_destination": previous.get("to", ""),
+                "language": "ru",
+                "schema_version": 1,
+            },
+        )
     except Exception as exc:
         _log.warning("travel home idea failed: %r", exc)
         return _fallback_idea(cid)
@@ -725,7 +735,21 @@ async def send_plan(bot, cid):
 «соблюдайте местные обычаи». Не повторяй информацию и слова между блоками.
 Все значения должны быть законченными, короткими и без обрезанных предложений."""
     try:
-        plan = await ai.allm_json(prompt, 900, tier="leisure", module="travel")
+        plan = await ai.allm_json(
+            prompt, 900, tier="leisure", module="travel",
+            cache_context={
+                "scenario": "travel_country_plan",
+                "country": facts.get("cc") or country,
+                "origin": home,
+                "language": "ru",
+                "interests": interests,
+                "facts": facts,
+                "travel_facts": travel_facts,
+                "web_facts": web_data,
+                "profile_version": 1,
+                "schema_version": _CARD_CONTENT_VERSION,
+            },
+        )
     except Exception as exc:
         await verify.safe_error(bot, cid, exc, back="m_travel"); return
     plan = _plan_from_sources(country, plan, facts, travel_facts, interests, data.get("photo"))

@@ -97,6 +97,11 @@ _INTENT_MAP = [
     (("заметк", "сохран", "запомни это", "мои заметки", "база"), "notes"),
 ]
 
+_RECIPE_INGREDIENT_RE = re.compile(
+    r"\bприготовить\s+(?:из|с)\s+([^?!.…]+)", re.IGNORECASE,
+)
+_GENERIC_RECIPE_INGREDIENTS = {"этого", "того", "них", "холодильника", "продуктов"}
+
 _LOVE_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|сохранить|закинь)\b", re.I)
 _LOVE_WORD_RE = re.compile(r"\bв\s+(?:мои\s+|мой\s+)?любим(?:ые|ое|ых|ый|ую)\b", re.I)
 
@@ -177,6 +182,17 @@ def _detect_intent(text: str):
     return None
 
 
+def _recipe_ingredients_from_chat(text: str):
+    """Return an explicitly named ingredient for a direct recipe card."""
+    matched = _RECIPE_INGREDIENT_RE.search(text or "")
+    if not matched:
+        return None
+    ingredients = re.sub(r"\s+", " ", matched.group(1)).strip(" ,;:—-.")
+    if not ingredients or ingredients.casefold() in _GENERIC_RECIPE_INGREDIENTS:
+        return None
+    return ingredients[:160]
+
+
 def _looks_medical(text: str) -> bool:
     t = text.lower()
     if any(kw in t for kw in _MEDICINE_WORDS):
@@ -188,7 +204,7 @@ def _looks_medical(text: str) -> bool:
     return any(kw in t for kw in _MED_WORDS)
 
 
-async def _run_intent(bot, cid, action):
+async def _run_intent(bot, cid, action, recipe_ingredients=None):
     import balance, cooking, leisure_movies, wardrobe, myday, settings, travel
     import fridge
     import leisure_concerts
@@ -199,7 +215,9 @@ async def _run_intent(bot, cid, action):
     # Ответы ассистента на свободный текст не должны нести кнопку «⬅️ Назад» -
     # пользователь не открывал раздел через меню, и вести её было бы некуда.
     no_kb_bot = settings._NoKbBot(bot)
-    if action == "meal_picker":
+    if action == "meal_recipe":
+        await cooking.send_recipe(bot, cid, f"блюдо из {recipe_ingredients}")
+    elif action == "meal_picker":
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("🥐 Завтрак", callback_data="a_recipe_breakfast"),
             InlineKeyboardButton("🥗 Обед",    callback_data="a_recipe_lunch"),
@@ -265,9 +283,10 @@ async def chat_reply(bot, cid, text):
     await bot.send_chat_action(chat_id=cid, action="typing")
 
     # Intent-роутинг — сразу запускаем нужную функцию
-    intent = _detect_intent(text)
+    recipe_ingredients = _recipe_ingredients_from_chat(text)
+    intent = "meal_recipe" if recipe_ingredients else _detect_intent(text)
     if intent:
-        await _run_intent(bot, cid, intent)
+        await _run_intent(bot, cid, intent, recipe_ingredients)
         store.last_surface[str(cid)] = "chat"
         return
 

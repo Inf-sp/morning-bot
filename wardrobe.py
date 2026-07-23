@@ -803,7 +803,19 @@ async def check_purchase(bot, cid, text):
 
 Если гардероб пустой, fits_count должен быть 0, а вывод не должен притворяться точным."""
     try:
-        d = await ai.allm_json(prompt, 600, tier="smart", module="wardrobe")
+        d = await ai.allm_json(
+            prompt, 600, tier="smart", module="wardrobe",
+            cache_context={
+                "scenario": "wardrobe_purchase_check",
+                "item": text,
+                "wardrobe": w,
+                "preferences": prefs,
+                "web_facts": web_data,
+                "language": "ru",
+                "profile_version": 1,
+                "schema_version": 1,
+            },
+        )
     except Exception as e:
         await verify.safe_error(bot, cid, e, back="m_wardrobe"); return
     text_out, entities = _build_purchase_message(_normalize_purchase_check(d, wardrobe=w))

@@ -226,6 +226,7 @@ _AI_CACHE_TTLS = {
     "food": 24 * 3600,
     "leisure": 18 * 3600,
     "travel": 18 * 3600,
+    "wardrobe": 18 * 3600,
     "learning_explain": 14 * 86400,
     "learning_dict_add": 30 * 86400,
     "deploy": 10 * 365 * 86400,
@@ -241,10 +242,38 @@ def _cache_ttl(module: str, response_mode: ResponseMode) -> int:
     return 0
 
 
-def _cache_key(provider_order, prompt, max_tokens, temperature, module, response_mode):
-    """Cache a semantic answer, independently from the current reserve chain."""
+def _normalise_cache_context(value):
+    """Make structured cache input stable without storing its raw values."""
+    if isinstance(value, str):
+        return re.sub(r"\s+", " ", value).strip()
+    if isinstance(value, dict):
+        return {
+            str(key): _normalise_cache_context(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_normalise_cache_context(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        return sorted(
+            (_normalise_cache_context(item) for item in value),
+            key=lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True),
+        )
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return re.sub(r"\s+", " ", str(value)).strip()
+
+
+def _cache_key(provider_order, prompt, max_tokens, temperature, module, response_mode,
+               cache_context=None):
+    """Cache a semantic answer, independently from the current reserve chain.
+
+    Personal recommendation flows pass a structured context.  It deliberately
+    replaces the rendered prompt, so copy edits and provider order do not create
+    a second expensive request for the same scenario.
+    """
     raw = json.dumps({
-        "prompt": re.sub(r"\s+", " ", str(prompt or "")).strip(),
+        "context": _normalise_cache_context(cache_context) if cache_context is not None else None,
+        "prompt": "" if cache_context is not None else re.sub(r"\s+", " ", str(prompt or "")).strip(),
         "max_tokens": max_tokens,
         "temperature": temperature,
         "module": module or "",
@@ -1032,7 +1061,7 @@ def _caller_module() -> str:
 def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module="", route=None,
               fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
               response_mode: ResponseMode = "plain_text", fallback_policy=None,
-              allow_personal_openrouter=False):
+              allow_personal_openrouter=False, cache_context=None):
     if not module:
         module = _caller_module()
     policy = _coerce_policy(fallback_allowed, privacy_level, response_mode, fallback_policy,
@@ -1048,7 +1077,10 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         pass
     cohere_primary = bool(order and order[0] == "cohere")
     cache_ttl = _cache_ttl(module, response_mode)
-    cache_key = _cache_key(order, prompt, max_tokens, temperature, module, response_mode)
+    cache_key = _cache_key(
+        order, prompt, max_tokens, temperature, module, response_mode,
+        cache_context=cache_context,
+    )
     cached = _cache_get(cache_key, cache_ttl)
     if cached:
         if _is_cacheable_response(cached, response_mode):
@@ -1210,7 +1242,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
 def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module="", route=None,
         fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
         response_mode: ResponseMode = "plain_text", fallback_policy=None,
-        allow_personal_openrouter=False, budget_seconds=None):
+        allow_personal_openrouter=False, budget_seconds=None, cache_context=None):
     resolved_module = module or _caller_module()
     return _run_with_deadline(
         resolved_module,
@@ -1218,7 +1250,7 @@ def llm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module=
         lambda: _llm_impl(
             prompt, max_tokens, temperature, order, tier, resolved_module, route,
             fallback_allowed, privacy_level, response_mode, fallback_policy,
-            allow_personal_openrouter,
+            allow_personal_openrouter, cache_context,
         ),
     )
 
@@ -1295,7 +1327,7 @@ def _parse_json_response(raw):
 
 def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
                    fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
-                   allow_personal_openrouter=False, fallback_policy=None):
+                   allow_personal_openrouter=False, fallback_policy=None, cache_context=None):
     if not module:
         module = _caller_module()
     expected_format = "JSON object"
@@ -1303,7 +1335,8 @@ def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", ro
                        "Внутри строковых значений НЕ используй двойные кавычки - "
                        "вместо них используй « » или одинарные.", max_tokens, 0.7, order, tier, module, route,
               fallback_allowed=fallback_allowed, privacy_level=privacy_level, response_mode="json",
-              fallback_policy=fallback_policy, allow_personal_openrouter=allow_personal_openrouter)
+              fallback_policy=fallback_policy, allow_personal_openrouter=allow_personal_openrouter,
+              cache_context=cache_context)
     try:
         return _parse_json_response(raw)
     except ValueError as exc:
@@ -1347,7 +1380,8 @@ def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", ro
 
 def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
              fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
-             allow_personal_openrouter=False, fallback_policy=None, budget_seconds=None):
+             allow_personal_openrouter=False, fallback_policy=None, budget_seconds=None,
+             cache_context=None):
     resolved_module = module or _caller_module()
     return _run_with_deadline(
         resolved_module,
@@ -1355,7 +1389,7 @@ def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=No
         lambda: _llm_json_impl(
             prompt, max_tokens, order, tier, resolved_module, route,
             fallback_allowed, privacy_level, allow_personal_openrouter,
-            fallback_policy,
+            fallback_policy, cache_context,
         ),
     )
 
@@ -1522,21 +1556,21 @@ def chat_chain(history, cid=None, budget_seconds=None):
 async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, route=None, module="",
                fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
                response_mode: ResponseMode = "plain_text", fallback_policy=None,
-               allow_personal_openrouter=False, budget_seconds=None):
+               allow_personal_openrouter=False, budget_seconds=None, cache_context=None):
     return await asyncio.to_thread(
         llm, prompt, max_tokens, temperature, order, tier, module, route,
         fallback_allowed, privacy_level, response_mode, fallback_policy,
-        allow_personal_openrouter, budget_seconds,
+        allow_personal_openrouter, budget_seconds, cache_context,
     )
 
 async def allm_json(prompt, max_tokens=1200, order=None, tier=None, route=None, module="",
                     fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
                     allow_personal_openrouter=False, fallback_policy=None,
-                    budget_seconds=None):
+                    budget_seconds=None, cache_context=None):
     return await asyncio.to_thread(
         llm_json, prompt, max_tokens, order, tier, module, route,
         fallback_allowed, privacy_level, allow_personal_openrouter, fallback_policy,
-        budget_seconds,
+        budget_seconds, cache_context,
     )
 
 async def achat_chain(history, cid=None, budget_seconds=COMPLEX_BUDGET_SECONDS):

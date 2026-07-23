@@ -48,6 +48,32 @@ def test_cache_key_ignores_action_id_and_prompt_whitespace():
     assert compact == formatted == first_action_key == second_action_key
 
 
+def test_structured_cache_key_uses_scenario_not_prompt_text():
+    context = {
+        "scenario": "travel_country",
+        "country": "IS",
+        "language": "ru",
+        "profile_version": 4,
+        "schema_version": 2,
+    }
+
+    direct = ai._cache_key(
+        ("gemini",), "Исландия", 300, 0.2, "travel", "json",
+        cache_context=context,
+    )
+    requested = ai._cache_key(
+        ("github_models",), "Расскажи про Исландию", 300, 0.2, "travel", "json",
+        cache_context=dict(reversed(list(context.items()))),
+    )
+    other_country = ai._cache_key(
+        ("gemini",), "Исландия", 300, 0.2, "travel", "json",
+        cache_context={**context, "country": "FI"},
+    )
+
+    assert direct == requested
+    assert direct != other_country
+
+
 def test_utility_routes_do_not_start_with_gemini():
     for module in (
         "learning", "learning_trainer", "learning_dict_add", "health", "trainer",
@@ -59,6 +85,11 @@ def test_utility_routes_do_not_start_with_gemini():
 def test_final_card_routes_keep_gemini_as_the_single_premium_primary():
     for module in ("travel", "food", "wardrobe"):
         assert ai._resolve(None, None, module=module)[0] == "gemini"
+
+
+def test_all_premium_recommendations_have_a_cache_ttl():
+    for module in ("travel", "food", "wardrobe"):
+        assert ai._cache_ttl(module, "json") > 0
 
 
 def test_cache_hit_does_not_check_gemini_cooldown(monkeypatch):

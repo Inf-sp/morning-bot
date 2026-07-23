@@ -841,6 +841,21 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
             result = ai.llm_json(
                 prompt, 1100, tier="cheap", module="food",
                 fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
+                cache_context={
+                    "scenario": "food_home_idea",
+                    "meal": context["meal"],
+                    "available": context.get("available") or [],
+                    "unavailable": context.get("unavailable") or [],
+                    "diet_prefs": context.get("diet_prefs") or "",
+                    "preferences": context.get("memory_prefs") or [],
+                    "cuisines": context.get("cuisine_codes") or [],
+                    "sources": sources,
+                    "previous_recipe": previous_name,
+                    "attempt": attempt,
+                    "language": "ru",
+                    "profile_version": context["signature"],
+                    "schema_version": 8,
+                },
             )
         except Exception as error:
             _log.warning("home recipe LLM chain unavailable, using source card: %s", type(error).__name__)
@@ -943,7 +958,18 @@ def _gen_recipe(constraint, cid=None):
             '"ingredients":"список через запятую",'
             '"steps":["Глагол + действие + конкретика","шаг 2","шаг 3"]}',
             900, tier="cheap", module="food",
-            fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True)
+            fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
+            cache_context={
+                "scenario": "food_recipe",
+                "constraint": constraint,
+                "cuisine_preferences": context,
+                "saved_recipe_preferences": pref,
+                "avoid": avoid,
+                "sources": sources,
+                "language": "ru",
+                "profile_version": 1,
+                "schema_version": 1,
+            })
     except Exception as error:
         _log.warning("recipe LLM chain unavailable, using source card: %s", type(error).__name__)
         return _source_fallback_card(sources) or _fallback_recipe()
@@ -989,7 +1015,17 @@ def _gen_leftovers_recipe(ingredients, cid=None):
             '"ingredients":"список использованных продуктов через запятую",'
             '"steps":["шаг 1 (до 15 слов)","шаг 2","шаг 3"]}',
             500, tier="cheap", module="food",
-            fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True)
+            fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
+            cache_context={
+                "scenario": "food_leftovers_recipe",
+                "ingredients": ingredients,
+                "cuisine_preferences": context,
+                "avoid": avoid,
+                "sources": sources,
+                "language": "ru",
+                "profile_version": 1,
+                "schema_version": 1,
+            })
     except Exception as error:
         _log.warning("leftovers LLM chain unavailable, using source card: %s", type(error).__name__)
         source_card = _source_fallback_card(sources)
@@ -1332,6 +1368,20 @@ def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history
         result = ai.llm_json(
             prompt, RECIPE_BATCH_MAX_TOKENS, tier="cheap", module="food",
             fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
+            cache_context={
+                "scenario": "food_recipe_batch",
+                "constraint": constraint,
+                "source_ingredients": source_ingredients,
+                "cuisine_weights": cuisine_weights or {},
+                "recent_history": recent_history or [],
+                "season_hint": season_hint,
+                "meal_guard": meal_guard,
+                "count": n,
+                "sources": sources,
+                "language": "ru",
+                "profile_version": 1,
+                "schema_version": 1,
+            },
         )
     except Exception as error:
         _log.warning("recipe batch LLM chain unavailable, using safe fallback: %s", type(error).__name__)
