@@ -11,6 +11,7 @@ from ui.constants import COUNTRY_EMOJI
 import ai
 import api_usage
 import config
+import provider_runtime
 import research
 import secure
 import store
@@ -39,17 +40,33 @@ _TRIBUTE_MARKERS = ("tribute", "cover", "covers", "candlelight", "songs of", "th
                     "performed by", "celebrating", "by candle", "symphonic", "reimagined",
                     "someone like", "a tribute", "in the style of", "plays the music", "experience:")
 
-# Ticketmaster на бесплатном тарифе держит ~5 запросов/сек — без ограничения параллелизма
-# и retry список из 30+ артистов заваливает API 429-ми, которые тихо трактуются как "нет концертов".
-_TICKETMASTER_CONCURRENCY = asyncio.Semaphore(5)
+# Ticketmaster ограничивает запросы глобально. Один последовательный поток здесь
+# намеренный: он позволяет остановить весь batch сразу после первого 429, прежде
+# чем очередные артисты превратят ограничение в storm запросов.
+_TICKETMASTER_CONCURRENCY = asyncio.Semaphore(1)
 _TICKETMASTER_RETRY_DELAYS = (0.5, 1.5, 3.0)
 _EXTERNAL_ARTIST_LIMIT = 5
 _EXTERNAL_CONCURRENCY = asyncio.Semaphore(2)
 
+
+class TicketmasterRateLimitError(RuntimeError):
+    """Ticketmaster rejected the request and all queued work must stop."""
+
+
+def _ticketmaster_cooldown_remaining() -> int:
+    return provider_runtime.cooldown_remaining("ticketmaster")
+
+
 def _ticketmaster_get(url, params, timeout=15):
-    """GET с retry только на 429/5xx (экспоненциальный backoff) — сетевые ошибки,
-    таймауты и прочие сбои не ретраим, чтобы не блокировать поток попытками, которые не помогут."""
+    """GET с retry на 5xx, но никогда на 429.
+
+    Cooldown сохраняется в общем runtime-state, поэтому следующие задачи и
+    реплики Railway видят rate limit до начала сетевого запроса.
+    """
     import requests
+    remaining = _ticketmaster_cooldown_remaining()
+    if remaining:
+        raise TicketmasterRateLimitError(f"ticketmaster cooldown {remaining}s")
     delays = (0,) + _TICKETMASTER_RETRY_DELAYS
     for i, delay in enumerate(delays):
         if delay:
@@ -64,7 +81,11 @@ def _ticketmaster_get(url, params, timeout=15):
                                  status_code=status,
                                  error="" if 200 <= int(status or 0) < 300 else f"HTTP {status}",
                                  headers=r.headers)
-        if status == 429 or (isinstance(status, int) and status >= 500):
+        if status == 429:
+            # record_request persists Retry-After as the shared cooldown.
+            # Retrying a rate-limited request only wastes the remaining quota.
+            raise TicketmasterRateLimitError("ticketmaster HTTP 429")
+        if isinstance(status, int) and status >= 500:
             if i == len(delays) - 1:
                 r.raise_for_status()
             continue
@@ -92,6 +113,8 @@ def _ticketmaster_events_for_artist(artist, cc, start_dt="", end_dt="", size=3):
         params["endDateTime"] = end_dt
     try:
         r = _ticketmaster_get("https://app.ticketmaster.com/discovery/v2/events.json", params)
+    except TicketmasterRateLimitError:
+        raise
     except Exception as e:
         _log.warning("ticketmaster events failed for artist=%s: %s", artist, e)
         return []
@@ -118,11 +141,21 @@ async def _ticketmaster_fetch_throttled(fn, *args):
         return await asyncio.to_thread(fn, *args)
 
 async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3, limit=40):
-    tasks = [
-        _ticketmaster_fetch_throttled(_ticketmaster_events_for_artist, artist, cc, start_dt, end_dt, size)
-        for artist in artists[:limit]
-    ]
-    batches = await asyncio.gather(*tasks, return_exceptions=True)
+    batches = []
+    for artist in artists[:limit]:
+        if _ticketmaster_cooldown_remaining():
+            break
+        try:
+            batch = await _ticketmaster_fetch_throttled(
+                _ticketmaster_events_for_artist, artist, cc, start_dt, end_dt, size,
+            )
+        except TicketmasterRateLimitError:
+            # Do not start the rest of this batch once the shared cooldown is
+            # known. Already completed artist results remain useful.
+            break
+        except Exception:
+            continue
+        batches.append(batch)
     found, seen_pairs = {}, set()
     for batch in batches:
         if isinstance(batch, Exception):
@@ -788,24 +821,8 @@ def _neighbor_ccs(cc: str) -> list:
 
 
 async def send_concerts_home(bot, cid, q=None):
-    settings = store.get_settings(cid)
-    country = settings.get("country") or "Нидерланды"
-    text = "🎫 Концерты\n\nБлижайшие концерты любимых исполнителей в выбранной стране."
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔥 Ближайшие", callback_data="a_concerts_nearby")],
-        [InlineKeyboardButton("❤️ Любимые артисты", callback_data="artist_favorites")],
-        [InlineKeyboardButton("🔍 Найти артиста", callback_data="a_concerts_search")],
-        [InlineKeyboardButton(f"🌍 {country}", callback_data="a_concerts_pick")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    """Open the actual nearest-events result, not a second introductory screen."""
+    await find_concerts(bot, cid, "home")
 
 
 async def prompt_artist_search(bot, cid):

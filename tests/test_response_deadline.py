@@ -65,6 +65,83 @@ def test_chain_does_not_start_another_provider_after_deadline(monkeypatch):
     assert calls == ["gemini"]
 
 
+def test_free_chat_gives_openrouter_its_reserved_remaining_budget(monkeypatch):
+    clock = {"now": 0.0}
+    calls = []
+
+    monkeypatch.setattr(ai.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_mark_cooldown", lambda *_args: None)
+    monkeypatch.setattr(ai, "_log_cost", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ai.provider_runtime, "activate_fallback", lambda *_args, **_kwargs: None)
+
+    def provider(provider, _history, _system, timeout_cap=None):
+        calls.append((provider, timeout_cap))
+        if provider == "groq":
+            clock["now"] = 3.0
+            raise ai.LLMProviderError(provider, "groq timeout", temporary=True)
+        if provider == "github_models":
+            clock["now"] = 6.0
+            raise ai.LLMProviderError(provider, "github timeout", temporary=True)
+        return "Ответ OpenRouter"
+
+    monkeypatch.setattr(ai, "_chat", provider)
+
+    result = ai.chat_chain([{"role": "user", "content": "test"}])
+
+    assert result == "Ответ OpenRouter"
+    assert calls == [
+        ("groq", 3.0),
+        ("github_models", 3.0),
+        ("openrouter", 4.0),
+    ]
+
+
+def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
+    clock = {"now": 0.0}
+    calls = []
+
+    monkeypatch.setattr(ai.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_mark_cooldown", lambda *_args: None)
+
+    def slow_provider(provider, *_args, **_kwargs):
+        calls.append(provider)
+        clock["now"] = 10.0
+        raise ai.LLMProviderError(provider, "timeout", temporary=True)
+
+    monkeypatch.setattr(ai, "_chat", slow_provider)
+
+    with pytest.raises(Exception, match="вовремя"):
+        ai.chat_chain([{"role": "user", "content": "test"}])
+
+    assert calls == ["groq"]
+
+
+def test_free_chat_route_is_utility_without_gemini():
+    assert ai.CHAT_ORDER == ("groq", "github_models", "openrouter")
+    assert "gemini" not in ai.CHAT_ORDER
+    assert ai.FREE_CHAT_TIER == "utility"
+
+
+def test_free_chat_route_log_identifies_deployment_and_serving_provider(monkeypatch):
+    records = []
+    monkeypatch.setattr(ai._log, "info", lambda message, *args: records.append(message % args))
+    monkeypatch.setattr(ai.config, "APP_VERSION", "1.16.236")
+    monkeypatch.setattr(ai.config, "RAILWAY_DEPLOYMENT_ID", "deployment-42")
+    monkeypatch.setattr(ai.config, "RAILWAY_REPLICA_ID", "replica-2")
+
+    ai._log_free_chat_route(served_by="openrouter", outcome="success")
+
+    line = records[0]
+    assert "scenario=assistant/free_chat" in line
+    assert "tier=utility" in line
+    assert "provider_chain=groq,github_models,openrouter" in line
+    assert "served_by=openrouter" in line
+    assert "version=1.16.236" in line
+    assert "deployment=deployment-42" in line
+
+
 def test_action_latency_keeps_only_technical_metadata(monkeypatch):
     memory = {}
     clock = {"now": 10.0}

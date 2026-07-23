@@ -6,6 +6,7 @@ import re
 import json
 import time
 import threading
+import os
 import requests
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -23,6 +24,16 @@ _GEMINI_RATE_LOCK = threading.Lock()
 _ACTIVE_DEADLINE = contextvars.ContextVar("ai_deadline", default=None)
 STANDARD_BUDGET_SECONDS = 10.0
 COMPLEX_BUDGET_SECONDS = 15.0
+FREE_CHAT_BUDGET_SECONDS = 10.0
+FREE_CHAT_ROUTE_VERSION = "free-chat-utility-v2"
+FREE_CHAT_SCENARIO = "assistant/free_chat"
+FREE_CHAT_TIER = "utility"
+_FREE_CHAT_PROVIDER_TIMEOUTS = {
+    "groq": 3.0,
+    "github_models": 3.0,
+    "openrouter": 4.0,
+}
+_MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS = 1.0
 _COMPLEX_MODULE_PREFIXES = (
     "assistant", "food", "cooking", "recipe", "wardrobe", "travel", "leisure", "learning",
 )
@@ -958,7 +969,8 @@ UTILITY_ORDER = ("groq", "github_models", "cohere", "openrouter")
 # Gemini остаётся только для одной финальной пользовательской карточки.
 PREMIUM_ORDER = ("gemini", "github_models", "groq", "openrouter")
 DEFAULT_ORDER = UTILITY_ORDER
-CHAT_ORDER = ("groq", "github_models", "cohere", "cf")
+# Свободный чат — отдельный utility-маршрут: Gemini намеренно отсутствует.
+CHAT_ORDER = ("groq", "github_models", "openrouter")
 GRAMMAR_ORDER = UTILITY_ORDER
 LEISURE_ORDER = PREMIUM_ORDER
 FOOD_ORDER = PREMIUM_ORDER
@@ -1416,7 +1428,12 @@ CHAT_SYSTEM = """Ты помощник. Отвечай как обычный с�
 def _chat_system(cid=None):
     return CHAT_SYSTEM
 
-def _chat(provider, history, system):
+def _chat(provider, history, system, timeout_cap=None):
+    def bounded_cap(default):
+        if timeout_cap is None:
+            return default
+        return min(float(default), float(timeout_cap))
+
     if provider == "gemini":
         if not _reserve_gemini_for_action():
             raise LLMProviderError("gemini", "gemini action budget exhausted", error_type="action_budget")
@@ -1426,7 +1443,7 @@ def _chat(provider, history, system):
         contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in history]
         r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
             {}, {"system_instruction": {"parts": [{"text": system}]}, "contents": contents,
-                 "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, "gemini", timeout_cap=6)
+                 "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, "gemini", timeout_cap=bounded_cap(6))
         return r.json()["candidates"][0]["content"]["parts"][0]["text"]
     if provider == "cohere":
         if not config.COHERE_API_KEY:
@@ -1446,7 +1463,7 @@ def _chat(provider, history, system):
             },
             30,
             "cohere",
-            timeout_cap=5,
+            timeout_cap=bounded_cap(5),
         )
         return r.json()["message"]["content"][0]["text"]
     if provider == "github_models":
@@ -1470,7 +1487,7 @@ def _chat(provider, history, system):
             },
             30,
             "github_models",
-            timeout_cap=5,
+            timeout_cap=bounded_cap(5),
         )
         return r.json()["choices"][0]["message"]["content"]
     if provider == "groq":
@@ -1479,44 +1496,72 @@ def _chat(provider, history, system):
         r = _post("https://api.groq.com/openai/v1/chat/completions",
             {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"},
             {"model": "llama-3.3-70b-versatile", "messages": [{"role": "system", "content": system}] + history,
-             "max_tokens": 700, "temperature": 0.8}, 40, "groq", timeout_cap=5)
+             "max_tokens": 700, "temperature": 0.8}, 40, "groq", timeout_cap=bounded_cap(5))
+        return r.json()["choices"][0]["message"]["content"]
+    if provider == "openrouter":
+        if not config.OPENROUTER_API_KEY:
+            raise LLMProviderError("openrouter", "no OpenRouter key", error_type="credentials")
+        r = _post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}", "Content-Type": "application/json"},
+            {"model": config.OPENROUTER_MODEL,
+             "messages": [{"role": "system", "content": system}] + history,
+             "max_tokens": 700, "temperature": 0.8},
+            40,
+            "openrouter",
+            timeout_cap=bounded_cap(4),
+        )
         return r.json()["choices"][0]["message"]["content"]
     if provider == "cf":
         if not (config.CF_API_TOKEN and config.CF_ACCOUNT_ID):
             raise Exception("no cf")
         r = _post(f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.1-8b-instruct",
             {"Authorization": f"Bearer {config.CF_API_TOKEN}", "Content-Type": "application/json"},
-            {"messages": [{"role": "system", "content": system}] + history, "max_tokens": 700}, 40, "cf", timeout_cap=4)
+            {"messages": [{"role": "system", "content": system}] + history, "max_tokens": 700}, 40, "cf", timeout_cap=bounded_cap(4))
         return _as_text(r.json().get("result", {}).get("response"))
+
+
+def _log_free_chat_route(*, served_by="", outcome=""):
+    _log.info(
+        "AI route scenario=%s tier=%s provider_chain=%s served_by=%s version=%s deployment=%s replica=%s pid=%s route_version=%s outcome=%s",
+        FREE_CHAT_SCENARIO, FREE_CHAT_TIER, ",".join(CHAT_ORDER), served_by or "-",
+        config.APP_VERSION or "-", config.RAILWAY_DEPLOYMENT_ID or "local",
+        getattr(config, "RAILWAY_REPLICA_ID", "") or "local", os.getpid(),
+        FREE_CHAT_ROUTE_VERSION, outcome or "-",
+    )
+
 
 def _chat_chain_impl(history, cid=None):
     system = _chat_system(cid)
     errs = []
     prompt_len = sum(len(m.get("content", "")) for m in history)
-    gemini_rate_limit_err = _gemini_cooldown_error() if "gemini" in CHAT_ORDER else None
     failed_providers = []
-    for p in _reorder_for_cooldown(_reorder_for_monitor(CHAT_ORDER)):
+    try:
+        import tracking
+        tracking.annotate_ai_route(requested_tier=FREE_CHAT_TIER, primary=CHAT_ORDER[0])
+    except Exception:
+        pass
+    for p in CHAT_ORDER:
         remaining = _remaining_seconds()
-        if remaining is not None and remaining <= 0:
+        if remaining is not None and remaining < _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS:
             errs.append("chain:deadline")
             break
         unavailable = _provider_is_unavailable(p)
         if unavailable is not None:
             failed_providers.append(p)
             errs.append(f"{p}:{unavailable}")
-            if p == "gemini" and getattr(unavailable, "error_type", "") == "rate_limit":
-                gemini_rate_limit_err = unavailable
             continue
         try:
-            out = _as_text(_chat(p, history, system))
+            attempt_timeout = min(
+                _FREE_CHAT_PROVIDER_TIMEOUTS[p],
+                remaining if remaining is not None else _FREE_CHAT_PROVIDER_TIMEOUTS[p],
+            )
+            out = _as_text(_chat(p, history, system, timeout_cap=attempt_timeout))
             if out and out.strip():
                 for failed in failed_providers:
                     provider_runtime.activate_fallback(
                         _monitor_name(failed), _monitor_name(p), reason="request",
                     )
-                if p != "gemini" and gemini_rate_limit_err is not None:
-                    api_usage.record_gemini_fallback(target=p, reason="cooldown")
-                    _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
                 _log_cost(p, p, "c" * prompt_len, out, "assistant")
                 try:
                     import tracking
@@ -1526,28 +1571,25 @@ def _chat_chain_impl(history, cid=None):
                     )
                 except Exception:
                     pass
+                _log_free_chat_route(served_by=p, outcome="success")
                 return out
         except Exception as e:
             failed_providers.append(p)
             _mark_cooldown(p, e)
             errs.append(f"{p}:{e}")
-            if p == "gemini" and getattr(e, "error_type", "") == "rate_limit":
-                gemini_rate_limit_err = e
-    if gemini_rate_limit_err is not None:
-        api_usage.record_gemini_fallback(target="local", reason="chat_failed")
-        _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
     try:
         import tracking
         tracking.annotate_action(fallback="local")
     except Exception:
         pass
+    _log_free_chat_route(outcome="failed")
     raise Exception(_friendly(errs))
 
 
 def chat_chain(history, cid=None, budget_seconds=None):
     return _run_with_deadline(
         "assistant",
-        budget_seconds,
+        budget_seconds or FREE_CHAT_BUDGET_SECONDS,
         lambda: _chat_chain_impl(history, cid),
     )
 
@@ -1573,5 +1615,5 @@ async def allm_json(prompt, max_tokens=1200, order=None, tier=None, route=None, 
         budget_seconds, cache_context,
     )
 
-async def achat_chain(history, cid=None, budget_seconds=COMPLEX_BUDGET_SECONDS):
+async def achat_chain(history, cid=None, budget_seconds=FREE_CHAT_BUDGET_SECONDS):
     return await asyncio.to_thread(chat_chain, history, cid, budget_seconds)

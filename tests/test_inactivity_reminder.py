@@ -105,7 +105,7 @@ def test_onboarding_finish_sends_transient_menu(monkeypatch):
     assert _labels(sent[0]["reply_markup"])[0] == ["☀️ Мой день"]
 
 
-def test_transient_navigation_message_is_deleted_before_next_message():
+def test_transient_navigation_message_keeps_its_keyboard_before_next_message():
     deleted = []
     cid = "transient-user"
     bot.store.transient_message[cid] = 42
@@ -120,12 +120,12 @@ def test_transient_navigation_message_is_deleted_before_next_message():
 
     asyncio.run(bot._MenuCleanupBot._delete_transient(Cleanup(), cid))
 
-    assert deleted == [{"chat_id": cid, "message_id": 42}]
+    assert deleted == []
     assert cid not in bot.store.transient_message
     assert cid not in bot.store.last_inline_message
 
 
-def test_transient_message_survives_restart_and_is_then_deleted():
+def test_transient_message_survives_restart_without_being_deleted():
     deleted = []
     cid = "persisted-transient-user"
     bot.store.transient_message.pop(cid, None)
@@ -140,7 +140,7 @@ def test_transient_message_survives_restart_and_is_then_deleted():
 
     asyncio.run(bot._MenuCleanupBot._delete_transient(Cleanup(), cid))
 
-    assert deleted == [{"chat_id": cid, "message_id": 91}]
+    assert deleted == []
     assert bot.store.get_persisted_transient_message_id(cid) is None
 
 

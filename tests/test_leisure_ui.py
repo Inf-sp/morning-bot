@@ -52,7 +52,7 @@ def test_recommendation_cards_use_content_specific_next_labels():
     assert _labels(leisure_music._listen_kb())[0] == ["✨ Другой артист"]
 
 
-def test_leisure_home_is_a_compact_cross_category_showcase(monkeypatch):
+def test_leisure_home_shows_one_primary_recommendation(monkeypatch):
     class Bot:
         sent = []
 
@@ -66,20 +66,17 @@ def test_leisure_home_is_a_compact_cross_category_showcase(monkeypatch):
             {"title": "Des preuves d'amour", "rating": 7.7, "vote_count": 100},
         ]
 
-    async def artist(*_args, **_kwargs):
-        return {"artist": "Jungle", "tracks": ["Volcano"], "desc": "Соул и электро-фанк."}
-
-    async def book(*_args, **_kwargs):
-        return {"author": "Автор", "title": "Название", "year": "2026"}
-
-    async def concerts(*_args, **_kwargs):
-        return []
+    async def unexpected(*_args, **_kwargs):
+        raise AssertionError("home must not build several recommendations")
 
     monkeypatch.setattr(leisure_home.store, "get_settings", lambda *_args: {"city": "Алкмар"})
     monkeypatch.setattr(leisure_home.leisure_movies, "get_local_now_playing", movies)
-    monkeypatch.setattr(leisure_home.leisure_music, "send_listen", artist)
-    monkeypatch.setattr(leisure_home.leisure_books, "get_current_book", book)
-    monkeypatch.setattr(leisure_home.leisure_concerts, "_fetch_favorite_events", concerts)
+    monkeypatch.setattr(leisure_home.leisure_music, "_cached_artist", lambda *_args: None)
+    monkeypatch.setattr(leisure_home.leisure_books, "_cached_book", lambda *_args: None)
+    monkeypatch.setattr(leisure_home.leisure_concerts, "_concerts_cache_get", lambda *_args: None)
+    monkeypatch.setattr(leisure_home.leisure_music, "send_listen", unexpected)
+    monkeypatch.setattr(leisure_home.leisure_books, "get_current_book", unexpected)
+    monkeypatch.setattr(leisure_home.leisure_concerts, "_fetch_favorite_events", unexpected)
     bot = Bot()
 
     import asyncio
@@ -87,9 +84,10 @@ def test_leisure_home_is_a_compact_cross_category_showcase(monkeypatch):
 
     text = bot.sent[0]["text"]
     assert "🎬 В кино сегодня" in text
-    assert "Ещё в кино:" in text
-    assert "🎧 Послушать" in text and "Jungle · Volcano" in text
-    assert "📖 Почитать" in text and "Автор · «Название»" in text
+    assert "Одиссея" in text
+    assert "Ещё в кино:" not in text
+    assert "🎧 Послушать" not in text
+    assert "📖 Почитать" not in text
     assert "🎫 В этом месяце" not in text
     assert _labels(bot.sent[0]["reply_markup"]) == [
         ["🎫 Концерты", "🎬 Кино"], ["🎧 Музыка", "📖 Книги"], ["#️⃣ Главная"],

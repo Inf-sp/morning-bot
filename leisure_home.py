@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -26,7 +25,7 @@ def _keyboard():
     ])
 
 
-def _month_concert(events):
+def _next_concert(events):
     today = datetime.now().date()
     candidates = []
     for event in events or []:
@@ -35,7 +34,7 @@ def _month_concert(events):
             event_date = datetime.strptime(raw, "%Y-%m-%d").date()
         except ValueError:
             continue
-        if event_date < today or (event_date.year, event_date.month) != (today.year, today.month):
+        if event_date < today:
             continue
         venue = (event.get("_embedded", {}).get("venues") or [{}])[0]
         city = str((venue.get("city") or {}).get("name") or "").strip()
@@ -46,50 +45,32 @@ def _month_concert(events):
 async def send_home(bot, cid, q=None):
     settings = store.get_settings(cid)
     city = str(settings.get("city") or leisure_movies._movie_city(cid) or "твой город").strip()
-    movies, artist, book, events = await asyncio.gather(
-        leisure_movies.get_local_now_playing(cid, limit=3),
-        leisure_music.send_listen(None, cid, preview=True),
-        leisure_books.get_current_book(cid),
-        leisure_concerts._fetch_favorite_events(cid),
-    )
-    concert = _month_concert(events)
+    cc = str(settings.get("cc") or "NL").upper()
+    concert = _next_concert(leisure_concerts._concerts_cache_get(cid, cc) or [])
+    artist = leisure_music._cached_artist(cid)
+    book = leisure_books._cached_book(cid)
+    movies = []
+    if not concert and not artist and not book:
+        movies = await leisure_movies.get_local_now_playing(cid, limit=1)
 
     b = MessageBuilder()
     b.section(f"🍿 Досуг · {city}")
     b.spacer()
-    b.bold("🎬 В кино сегодня")
-    b.newline()
-    if movies:
-        main_movie, *other_movies = movies
-        rating = leisure_ui._format_rating(main_movie.get("rating")) if int(main_movie.get("vote_count") or 0) >= 25 else None
-        title = str(main_movie.get("title") or "")
-        b.line(f"{rating} · {title}" if rating else title)
-        genre = leisure_ui._primary_genre(main_movie)
-        if genre:
-            b.line(genre)
-        if other_movies:
-            b.spacer()
-            b.bold("Ещё в кино:")
-            b.newline()
-            for movie in other_movies[:2]:
-                title = str(movie.get("title") or "")
-                rating = leisure_ui._format_rating(movie.get("rating")) if int(movie.get("vote_count") or 0) >= 25 else None
-                b.line(f"• {title}" + (f" · {rating.removeprefix('⭐ ')}" if rating else ""))
-    else:
-        b.spacer()
-        b.line(f"Сегодня не нашёл подтверждённых сеансов в {city}.")
-    if artist and artist.get("artist"):
-        b.spacer()
+    if concert:
+        event_date, artist_name, venue_city = concert
+        b.bold("🎫 Ближайшее событие")
+        b.newline()
+        b.line(f"{artist_name} · {event_date.day} {leisure_ui._MONTHS_RU[event_date.month]} · {venue_city}")
+    elif artist and artist.get("artist"):
         b.bold("🎧 Послушать")
         b.newline()
         tracks = artist.get("tracks") or []
-        entry = str(tracks[0]).split(" - ", 1)[0].strip() if tracks else ""
-        b.line(f"{artist['artist']} · {entry}" if entry else str(artist["artist"]))
+        track = str(tracks[0]).split(" - ", 1)[0].strip() if tracks else ""
+        b.line(f"{artist['artist']} · {track}" if track else str(artist["artist"]))
         description = str(artist.get("desc") or "").split(".", 1)[0].strip()
         if description:
             b.line(description)
-    if book and book.get("title"):
-        b.spacer()
+    elif book and book.get("title"):
         b.bold("📖 Почитать")
         b.newline()
         author = str(book.get("author") or "").strip()
@@ -97,12 +78,18 @@ async def send_home(bot, cid, q=None):
         b.line(f"{author} · «{title}»" if author else f"«{title}»")
         year = str(book.get("year") or "").strip()
         b.line(f"Новая книга {year}" if year else "Новая книга")
-    if concert:
-        event_date, artist, venue_city = concert
-        b.spacer()
-        b.bold("🎫 В этом месяце")
+    elif movies:
+        movie = movies[0]
+        b.bold("🎬 В кино сегодня")
         b.newline()
-        b.line(f"{artist} · {event_date.day} {leisure_ui._MONTHS_RU[event_date.month]} · {venue_city}")
+        rating = leisure_ui._format_rating(movie.get("rating")) if int(movie.get("vote_count") or 0) >= 25 else None
+        title = str(movie.get("title") or "")
+        b.line(f"{rating} · {title}" if rating else title)
+        genre = leisure_ui._primary_genre(movie)
+        if genre:
+            b.line(genre)
+    else:
+        b.line("Выбери кино, музыку, книгу или концерты — подберу что-то на сегодня.")
     msg = b.build_stripped(reply_markup=_keyboard())
     if q is not None:
         try:

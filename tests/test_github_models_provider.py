@@ -27,7 +27,7 @@ def test_github_models_chat_payload_and_json_mode(monkeypatch):
     monkeypatch.setattr(ai.config, "GITHUB_MODELS_TOKEN", "github-models-secret")
     monkeypatch.setattr(ai.config, "GITHUB_MODELS_MODEL", "openai/gpt-4.1-mini")
 
-    def fake_post(url, headers, payload, timeout, name):
+    def fake_post(url, headers, payload, timeout, name, **_kwargs):
         captured.update({
             "url": url,
             "headers": headers,
@@ -99,7 +99,7 @@ def test_github_models_supports_chat_history(monkeypatch):
     captured = {}
     monkeypatch.setattr(ai.config, "GITHUB_MODELS_TOKEN", "github-models-secret")
 
-    def fake_post(url, headers, payload, timeout, name):
+    def fake_post(url, headers, payload, timeout, name, **_kwargs):
         captured.update({
             "url": url,
             "headers": headers,

@@ -11,6 +11,7 @@ from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
                           ContextTypes, CallbackQueryHandler, PollAnswerHandler, ExtBot)
 
 import config
+import ai
 import store
 import trainer_session
 import access
@@ -640,16 +641,13 @@ async def global_error_handler(update, context):
 
 
 class _MenuCleanupBot(ExtBot):
-    """Bot, который перед каждой отправкой снимает инлайн-кнопки с предыдущего
-    сообщения этого чата. Временные экраны навигации при следующей отправке
-    удаляются целиком, а полезные результаты остаются в истории без кнопок."""
+    """Telegram delivery wrapper that keeps previously sent inline controls usable."""
 
     def mark_transient_message(self, chat_id, message_id):
-        """Помечает служебный экран для удаления, сохраняя id между рестартами."""
-        if message_id:
-            key = str(chat_id)
-            store.transient_message[key] = message_id
-            store.set_persisted_transient_message_id(key, message_id)
+        """Compatibility hook: temporary screens now remain available in chat."""
+        key = str(chat_id)
+        store.transient_message.pop(key, None)
+        store.clear_persisted_transient_message_id(key)
 
     def mark_persistent_inline_message(self, chat_id, message_id):
         """Не снимает кнопки с полезной карточки при следующих сообщениях бота."""
@@ -662,29 +660,11 @@ class _MenuCleanupBot(ExtBot):
             store.clear_persisted_transient_message_id(key, message_id)
 
     async def _delete_transient(self, chat_id):
+        """Forget legacy cleanup markers without deleting a message or its buttons."""
         key = str(chat_id)
-        runtime_id = store.transient_message.pop(key, None)
-        persisted_id = store.get_persisted_transient_message_id(key)
-        message_ids = list(dict.fromkeys(
-            msg_id for msg_id in (runtime_id, persisted_id) if msg_id
-        ))
-        for msg_id in message_ids:
-            if store.last_inline_message.get(key) == msg_id:
-                store.last_inline_message.pop(key, None)
-            cleaned = False
-            try:
-                await self.delete_message(chat_id=chat_id, message_id=msg_id)
-                cleaned = True
-            except Exception:
-                # Если Telegram уже не разрешает удаление, хотя бы выключаем кнопки.
-                try:
-                    await self.edit_message_reply_markup(
-                        chat_id=chat_id, message_id=msg_id, reply_markup=None)
-                    cleaned = True
-                except Exception:
-                    pass
-            if cleaned:
-                store.clear_persisted_transient_message_id(key, msg_id)
+        store.transient_message.pop(key, None)
+        store.last_inline_message.pop(key, None)
+        store.clear_persisted_transient_message_id(key)
 
     async def _pre_send(self, chat_id):
         await self._delete_transient(chat_id)
@@ -855,9 +835,10 @@ def main():
     identity = process_identity(_PROCESS_STARTED_AT)
     version = get_app_version()
     _log.info(
-        "Process starting pid=%s hostname=%s started_at=%s version=%s deployment=%s replica=%s",
-        identity["pid"], identity["hostname"], identity["started_at"], version,
-        identity["deployment"], identity["replica"],
+        "Process starting version=%s deployment=%s replica=%s pid=%s ai_route_version=%s hostname=%s started_at=%s",
+        version, identity["deployment"], identity["replica"], identity["pid"],
+        ai.FREE_CHAT_ROUTE_VERSION,
+        identity["hostname"], identity["started_at"],
     )
     lease = PollingLease()
     if not lease.acquire():

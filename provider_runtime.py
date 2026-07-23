@@ -109,6 +109,8 @@ def blank_state(_provider: str = "") -> dict:
         "error_type": "",
         "incident_id": "",
         "incident_started_at": None,
+        "cooldown_until": None,
+        "last_real_success": None,
     }
 
 
@@ -158,6 +160,24 @@ def quota_from_headers(headers) -> tuple[int | None, int | None]:
     except (KeyError, TypeError, ValueError):
         pass
     return None, None
+
+
+def _retry_after_seconds(headers) -> int:
+    try:
+        return max(0, int((headers or {}).get("Retry-After") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def cooldown_remaining(provider: str, now: int | None = None) -> int:
+    """Seconds left in a persisted provider cooldown.
+
+    This state is shared through the store, so requests from another task or
+    Railway replica do not keep hitting a service after a 429 was observed.
+    """
+    state = get_state(provider)
+    current = int(now or time.time())
+    return max(0, int(state.get("cooldown_until") or 0) - current)
 
 
 def google_error_details(response) -> str:
@@ -300,6 +320,7 @@ def record_result(
     provider: str, ok: bool, *, status_code=None, error="", headers=None,
     quota_remaining=None, quota_total=None, checked_at=None, latency_ms=None,
     exception_type="", allow_quota_recovery=True, record_history=True,
+    real_request: bool | None = None,
 ) -> None:
     """Record a real request or probe through one health transition.
 
@@ -310,6 +331,10 @@ def record_result(
     if provider not in SPEC_BY_KEY:
         return
     now = int(checked_at or time.time())
+    if real_request is None:
+        # Health probes must not silently clear a rate-limit incident. Product
+        # requests keep the default real_request=True.
+        real_request = bool(record_history)
     header_remaining, header_total = quota_from_headers(headers)
     remaining = quota_remaining if quota_remaining is not None else header_remaining
     total = quota_total if quota_total is not None else header_total
@@ -339,6 +364,11 @@ def record_result(
             except (TypeError, ValueError):
                 pass
         if ok:
+            if (provider == "ticketmaster" and not real_request
+                    and old_error_type == "rate_limit"):
+                # A background probe only proves that this one probe worked;
+                # the concert flow is restored by its next successful request.
+                return data, None
             quota_empty = state.get("quota_remaining") == 0 and state.get("quota_total") is not None
             state.update({
                 "status": WARNING if quota_empty else OK,
@@ -348,6 +378,9 @@ def record_result(
                 "fallback": "",
                 "fallback_reason": "",
             })
+            if real_request:
+                state["last_real_success"] = now
+                state["cooldown_until"] = None
             if quota_empty:
                 if not incident_id:
                     incident_id = f"{provider}-{now}-{uuid.uuid4().hex[:8]}"
@@ -382,6 +415,13 @@ def record_result(
                 )
         else:
             kind, friendly = _friendly_error(error, status_code, provider)
+            if provider == "ticketmaster" and status_code == 429:
+                kind, friendly = "rate_limit", "слишком много запросов"
+                retry_after = _retry_after_seconds(headers)
+                state["cooldown_until"] = max(
+                    int(state.get("cooldown_until") or 0),
+                    now + max(60, retry_after),
+                )
             already_unavailable = (
                 old_status == DOWN
                 and not old_fallback

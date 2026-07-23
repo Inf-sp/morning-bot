@@ -69,6 +69,7 @@ APP_VERSION = os.environ.get("APP_VERSION", "").strip() or _read_text_file("VERS
 RAILWAY_DEPLOYMENT_ID = os.environ.get("RAILWAY_DEPLOYMENT_ID", "").strip()
 RAILWAY_ENVIRONMENT = os.environ.get("RAILWAY_ENVIRONMENT", "").strip()
 RAILWAY_SERVICE_NAME = os.environ.get("RAILWAY_SERVICE_NAME", "").strip()
+RAILWAY_REPLICA_ID = os.environ.get("RAILWAY_REPLICA_ID", "").strip()
 
 API_USAGE_KEY = "api_usage.json"
 SERVICE_MONITOR_KEY = "service_monitor.json"
