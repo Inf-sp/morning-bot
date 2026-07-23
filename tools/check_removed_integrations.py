@@ -42,12 +42,17 @@ def main():
 
     calls = []
 
-    def fake_tavily(query, max_results=5):
+    def fake_tavily(query, max_results=5, **_kwargs):
         calls.append(("tavily", query, max_results))
         return [{"title": "x", "url": "https://ticketmaster.example/x", "content": "x"}]
 
-    with patch.object(research, "tavily_search", fake_tavily):
-        result = research.web_search("test", max_results=1)
+    with patch.object(research, "firecrawl_search", lambda *_args, **_kwargs: []), \
+         patch.object(research, "tavily_search", fake_tavily):
+        assert research.web_search("test", max_results=1) == []
+        result = research.web_search(
+            "test", max_results=1, scenario="explicit_research",
+            allow_tavily=True, search_priority="tavily",
+        )
     assert result and calls == [("tavily", "test", 1)]
     assert not hasattr(research, "serp" + "api_search")
 

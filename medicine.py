@@ -314,7 +314,10 @@ def _official_search_context(drug_name, question, intent="drug_other"):
     intent_query = intent.removeprefix("drug_").replace("_", " ")
     query = (f"{drug_name} {intent_query} {question} official medicine label "
              "site:dailymed.nlm.nih.gov OR site:fda.gov OR site:nhs.uk OR site:ema.europa.eu")
-    rows = research.web_search(query, max_results=6, include_domains=_OFFICIAL_DOMAINS)
+    rows = research.web_search(
+        query, max_results=6, include_domains=_OFFICIAL_DOMAINS,
+        scenario="medicine_official", allow_tavily=True, search_priority="tavily",
+    )
     context, sources = [], []
     for row in rows:
         if not _official_url(row.get("url")):

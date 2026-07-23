@@ -75,6 +75,17 @@ def _usage_detail(service: str) -> str:
 
 
 def _status_detail(service: str, state: dict) -> str:
+    if service == "tavily" and provider_runtime.tavily_monthly_quota_exhausted():
+        reset_at = int(provider_runtime.get_state("tavily").get("quota_reset_at") or 0)
+        until = provider_runtime.reset_date_label(reset_at)
+        remaining, total = _confirmed_quota(service, state)
+        usage = f"{_number(total)} из {_number(total)} · " if total else ""
+        return f"месячный лимит исчерпан · {usage}до {until}"
+    if service == "tavily":
+        budget = api_usage.tavily_budget()
+        mode = " · экономный режим" if budget["mode"] == "economy" else ""
+        return (f"{_number(budget['used'])} из {_number(budget['total'])}"
+                f"{mode} · ≈ {budget['daily_budget']} в день")
     if (
         state.get("status") not in (OK, UNKNOWN)
         and state.get("error_type") not in ("quota", "rate_limit")
@@ -175,6 +186,8 @@ def _probe_request(service: str):
 
 def probe(service: str) -> bool:
     started = time.monotonic()
+    if service == "tavily" and provider_runtime.tavily_monthly_quota_exhausted():
+        return False
     if service == "database":
         try:
             store._load("__service_monitor_health__")
@@ -275,6 +288,8 @@ def check_all(*, force=False) -> None:
     results = {}
     due = []
     for spec in SPECS:
+        if spec.key == "tavily" and provider_runtime.tavily_monthly_quota_exhausted(now):
+            continue
         state = current.get(spec.key) or {}
         last = int(state.get("last_check") or 0)
         retryable_failure = state.get("error_type") in (

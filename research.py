@@ -527,22 +527,58 @@ def gemini_search_facts_multi(city: str, country: str, cc: str = "",
 # ================= TAVILY =================
 
 _TV_CACHE: dict = {}    # query -> (ts, results)
-_TV_TTL = 86400         # 24h — запросы дорогие, кешируем на сутки
-def tavily_search(query: str, max_results: int = 5, include_domains=None) -> list:
+_TAVILY_SCENARIOS = {
+    "medicine_official": {"ttl": 3 * 86400, "economy": True, "advanced": False},
+    "explicit_research": {"ttl": 24 * 3600, "economy": True, "advanced": False},
+    "explicit_research_advanced": {"ttl": 24 * 3600, "economy": True, "advanced": True},
+    "travel_current": {"ttl": 24 * 3600, "economy": False, "advanced": False},
+    "concert_specific": {"ttl": 12 * 3600, "economy": False, "advanced": False},
+}
+_EXPLICIT_RESEARCH_RE = re.compile(
+    r"\b(?:найди\s+(?:актуальн|источник)|что\s+сейчас\s+известно|проверь\s+в\s+интернете|"
+    r"какие\s+новые|что\s+изменил|найди\s+источники)\b", re.I,
+)
+
+
+def requires_explicit_web_search(text: str) -> bool:
+    return bool(_EXPLICIT_RESEARCH_RE.search(str(text or "")))
+
+
+def _tavily_allowed(scenario: str, *, search_depth: str = "basic") -> bool:
+    policy = _TAVILY_SCENARIOS.get(str(scenario or ""))
+    if (not policy or search_depth not in ("basic", "advanced")
+            or (search_depth == "advanced" and not policy["advanced"])):
+        api_usage.record_tavily_event(scenario, "skipped_policy")
+        return False
+    budget = api_usage.tavily_budget()
+    if budget["mode"] == "blocked" or provider_runtime.tavily_monthly_quota_exhausted():
+        api_usage.record_tavily_event(scenario, "skipped_quota")
+        return False
+    if budget["mode"] == "economy" and not policy["economy"]:
+        api_usage.record_tavily_event(scenario, "skipped_policy")
+        return False
+    return True
+
+
+def tavily_search(query: str, max_results: int = 5, include_domains=None, *,
+                  scenario: str = "", search_depth: str = "basic") -> list:
     """Поиск через Tavily. Возвращает list[{title, url, content}] или [] при ошибке/нет ключа."""
-    if not config.TAVILY_API_KEY:
+    if not config.TAVILY_API_KEY or not _tavily_allowed(scenario, search_depth=search_depth):
         return []
     domains = tuple(str(x).strip().casefold() for x in (include_domains or []) if str(x).strip())
-    key = f"{query}:{max_results}:{','.join(domains)}"
+    ttl = _TAVILY_SCENARIOS[scenario]["ttl"]
+    normalized_query = re.sub(r"\s+", " ", str(query or "").casefold()).strip()
+    key = f"{normalized_query}:{max_results}:{','.join(domains)}:{search_depth}"
     cached = _TV_CACHE.get(key)
-    if cached and time.time() - cached[0] < _TV_TTL:
+    if cached and time.time() - cached[0] < ttl:
+        api_usage.record_tavily_event(scenario, "cache_hits")
         return cached[1]
     try:
         payload = {
             "api_key": config.TAVILY_API_KEY,
             "query": query,
             "max_results": max_results,
-            "search_depth": "basic",
+            "search_depth": search_depth,
             "include_answer": False,
             "include_raw_content": False,
             "include_images": False,
@@ -555,14 +591,16 @@ def tavily_search(query: str, max_results: int = 5, include_domains=None) -> lis
             timeout=15,
         )
         ok = 200 <= r.status_code < 300
+        error = "" if ok else f"HTTP {r.status_code} {r.text[:240]}"
         api_usage.record_request("tavily", ok=ok, status_code=r.status_code,
                                  units={"credits": 1} if ok else {},
-                                 error="" if ok else f"HTTP {r.status_code}")
+                                 error=error)
         if not ok:
             _log.warning("tavily_search failed: HTTP %s", r.status_code)
             return []
         results = r.json().get("results", [])
         _TV_CACHE[key] = (time.time(), results)
+        api_usage.record_tavily_event(scenario, search_depth, credits=1)
         return results
     except Exception as e:
         api_usage.record_request("tavily", ok=False, error=type(e).__name__)
@@ -570,9 +608,11 @@ def tavily_search(query: str, max_results: int = 5, include_domains=None) -> lis
         return []
 
 
-def web_snippet(query: str, max_chars: int = 1200) -> str:
-    """Top-3 snippets from Firecrawl with Tavily only as fallback."""
-    results = web_search(query, max_results=3)
+def web_snippet(query: str, max_chars: int = 1200, *, scenario: str = "", allow_tavily=False,
+                search_priority: str = "firecrawl") -> str:
+    """Top snippets for an explicitly declared web-search scenario."""
+    results = web_search(query, max_results=3, scenario=scenario, allow_tavily=allow_tavily,
+                         search_priority=search_priority)
     parts, total = [], 0
     for r in results:
         chunk = (r.get("content") or "").strip()
@@ -583,7 +623,7 @@ def web_snippet(query: str, max_chars: int = 1200) -> str:
 
 
 def tavily_snippet(query: str, max_chars: int = 1200) -> str:
-    """Совместимость старых вызовов; новый код использует ``web_snippet``."""
+    """Совместимость: больше не включает Tavily без явного сценария."""
     return web_snippet(query, max_chars)
 
 
@@ -631,13 +671,21 @@ def firecrawl_snippet(query: str, max_chars: int = 1200) -> str:
 
 
 
-def web_search(query: str, max_results: int = 5, include_domains=None) -> list:
-    """Web search through Firecrawl with Tavily only as a quota-aware fallback."""
+def web_search(query: str, max_results: int = 5, include_domains=None, *, scenario: str = "",
+               allow_tavily: bool = False, search_priority: str = "firecrawl") -> list:
+    """Search only through an explicitly chosen provider policy.
+
+    Tavily is not a universal fallback: callers must opt in with one of the
+    current-information scenarios above.
+    """
     out, seen = [], set()
     domains = tuple(str(value).strip().casefold() for value in (include_domains or []) if str(value).strip())
-    providers = (firecrawl_search, tavily_search)
+    tavily_enabled = bool(allow_tavily and _tavily_allowed(scenario))
+    providers = ((tavily_search, firecrawl_search) if search_priority == "tavily" and tavily_enabled
+                 else ((firecrawl_search, tavily_search) if tavily_enabled else (firecrawl_search,)))
     for provider in providers:
-        rows = (provider(query, max_results=max_results, include_domains=domains)
+        rows = (provider(query, max_results=max_results, include_domains=domains,
+                         scenario=scenario)
                 if provider is tavily_search else provider(query, max_results=max_results))
         for item in rows:
             url = (item.get("url") or "").strip()

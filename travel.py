@@ -699,18 +699,12 @@ async def send_plan(bot, cid):
     fact_block = research.facts_block(facts)
     interests = _travel_interests(cid)
     interests_text = " · ".join(interests) or "нет сохранённых сильных интересов"
-    web_data = await asyncio.to_thread(
-        research.web_snippet,
-        f"{country} official travel advice climate travel costs attractions 2026",
-        1600,
-    )
     prompt = f"""Собери подробную практическую карточку путешествия в {country} из {home}.
 Сильные интересы путешественника: {interests_text}. Выбери только один или два
 действительно релевантных интереса. Не используй транспорт, самолёт или паром как
 причину выбрать страну. Велосипед упоминай только если он прямо есть в фактах ниже.
 Проверенные стабильные данные: {fact_block or 'нет структурированных данных'}.
 Проверенные практические данные: {travel_facts or 'нет данных в каталоге'}.
-Свежие поисковые фрагменты: {web_data or 'нет свежих фрагментов'}.
 
 Верни только JSON на русском:
 {{"flag":"эмодзи","title":"название страны",

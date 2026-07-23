@@ -9,6 +9,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 import config
 import store
@@ -21,6 +22,12 @@ WARNING = "warning"
 DOWN = "down"
 DOT = {UNKNOWN: "⚪", OK: "🟢", WARNING: "🟡", DOWN: "🔴"}
 HISTORY_LIMIT = 300
+RATE_LIMIT_COOLDOWN = "rate_limit_cooldown"
+MONTHLY_QUOTA_EXHAUSTED = "monthly_quota_exhausted"
+_RU_MONTHS_GENITIVE = (
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)
 
 
 @dataclass(frozen=True)
@@ -108,6 +115,8 @@ def blank_state(_provider: str = "") -> dict:
         "incident_id": "",
         "incident_started_at": None,
         "cooldown_until": None,
+        "quota_state": "",
+        "quota_reset_at": None,
         "last_real_success": None,
     }
 
@@ -176,6 +185,127 @@ def cooldown_remaining(provider: str, now: int | None = None) -> int:
     state = get_state(provider)
     current = int(now or time.time())
     return max(0, int(state.get("cooldown_until") or 0) - current)
+
+
+def _next_month_reset_at(now: int) -> int:
+    current = datetime.fromtimestamp(now, config.TZ)
+    year, month = current.year, current.month + 1
+    if month == 13:
+        year, month = year + 1, 1
+    return int(datetime(year, month, 1, tzinfo=config.TZ).timestamp())
+
+
+def reset_date_label(reset_at: int | None) -> str:
+    if not reset_at:
+        return "следующего месяца"
+    value = datetime.fromtimestamp(int(reset_at), config.TZ)
+    return f"{value.day} {_RU_MONTHS_GENITIVE[value.month - 1]}"
+
+
+def tavily_monthly_quota_exhausted(now: int | None = None) -> bool:
+    """True only while Tavily's confirmed calendar-month quota is blocked.
+
+    The state lives in the shared store, so a request on another Railway replica
+    also skips Tavily without making a network request. The first real request
+    after the reset is deliberately left to verify the new month.
+    """
+    current = int(now or time.time())
+    active = {"value": False}
+
+    def mutate(data):
+        data = normalise_state(data)
+        state = data["services"]["tavily"]
+        reset_at = int(state.get("quota_reset_at") or 0)
+        # Older monitor snapshots already containing 0/N are a confirmed
+        # monthly exhaustion signal for Tavily and are migrated lazily.
+        if (state.get("quota_state") != MONTHLY_QUOTA_EXHAUSTED
+                and state.get("quota_remaining") == 0
+                and state.get("quota_total") is not None):
+            state["quota_state"] = MONTHLY_QUOTA_EXHAUSTED
+            state["quota_reset_at"] = _next_month_reset_at(current)
+            state["status"] = WARNING
+            state["last_error"] = "месячный лимит исчерпан"
+            state["error_type"] = "quota"
+            reset_at = int(state["quota_reset_at"])
+        if state.get("quota_state") == MONTHLY_QUOTA_EXHAUSTED and reset_at > current:
+            active["value"] = True
+            return data, None
+        if state.get("quota_state") == MONTHLY_QUOTA_EXHAUSTED:
+            # Reset is calendar based; do not create a probe or a misleading
+            # "recovered" event. The next real fallback request verifies it.
+            state["quota_state"] = ""
+            state["quota_reset_at"] = None
+            state["quota_remaining"] = None
+            state["quota_total"] = None
+            state["cooldown_until"] = None
+            if state.get("error_type") == "quota":
+                state["status"] = UNKNOWN
+                state["last_error"] = ""
+                state["error_type"] = ""
+                state["incident_id"] = ""
+                state["incident_started_at"] = None
+        return data, None
+
+    try:
+        store.mutate_kv(config.SERVICE_MONITOR_KEY, mutate)
+    except Exception:
+        return False
+    return active["value"]
+
+
+def _is_tavily_monthly_quota_error(status_code=None, error="") -> bool:
+    code = int(status_code or 0)
+    text = str(error or "").casefold()
+    if code == 432:
+        return True
+    return code == 429 and any(marker in text for marker in (
+        "monthly", "month", "credit", "plan limit", "pay as you go", "quota exhausted",
+    ))
+
+
+def mark_tavily_monthly_quota_exhausted(*, checked_at=None, quota_total=None,
+                                        status_code=None, error="", latency_ms=None,
+                                        record_history=True) -> None:
+    """Persist one Tavily monthly-quota incident until next calendar month."""
+    now = int(checked_at or time.time())
+
+    def mutate(data):
+        data = normalise_state(data)
+        state = data["services"]["tavily"]
+        incident_id = str(state.get("incident_id") or "")
+        started_at = int(state.get("incident_started_at") or now)
+        if not incident_id:
+            incident_id = f"tavily-{now}-{uuid.uuid4().hex[:8]}"
+            started_at = now
+        state.update({
+            "status": WARNING,
+            "quota_remaining": 0,
+            "quota_total": int(quota_total) if quota_total is not None else state.get("quota_total"),
+            "last_check": now,
+            "last_error": "месячный лимит исчерпан",
+            "error_type": "quota",
+            "fallback": "",
+            "fallback_reason": "",
+            "cooldown_until": None,
+            "quota_state": MONTHLY_QUOTA_EXHAUSTED,
+            "quota_reset_at": _next_month_reset_at(now),
+            "incident_id": incident_id,
+            "incident_started_at": started_at,
+        })
+        if record_history:
+            until = reset_date_label(state["quota_reset_at"])
+            _append_history(
+                data, "tavily", f"Tavily: месячный лимит исчерпан до {until}.", now,
+                event_type="error", incident_id=incident_id, status_code=status_code,
+                message=str(error or "месячный лимит исчерпан"), latency_ms=latency_ms,
+                started_at=started_at,
+            )
+        return data, None
+
+    try:
+        store.mutate_kv(config.SERVICE_MONITOR_KEY, mutate)
+    except Exception:
+        _log.exception("provider state write failed for tavily monthly quota")
 
 
 def google_error_details(response) -> str:
@@ -326,6 +456,15 @@ def record_result(
     header_remaining, header_total = quota_from_headers(headers)
     remaining = quota_remaining if quota_remaining is not None else header_remaining
     total = quota_total if quota_total is not None else header_total
+    if provider == "tavily" and (
+        _is_tavily_monthly_quota_error(status_code, error)
+        or (ok and remaining == 0 and total is not None)
+    ):
+        mark_tavily_monthly_quota_exhausted(
+            checked_at=now, quota_total=total, status_code=status_code, error=error,
+            latency_ms=latency_ms, record_history=record_history,
+        )
+        return
 
     def mutate(data):
         data = normalise_state(data)
@@ -403,6 +542,13 @@ def record_result(
                 )
         else:
             kind, friendly = _friendly_error(error, status_code, provider)
+            if provider == "tavily" and status_code == 429:
+                kind, friendly = "rate_limit", "слишком много запросов"
+                retry_after = _retry_after_seconds(headers)
+                state["quota_state"] = RATE_LIMIT_COOLDOWN
+                state["cooldown_until"] = max(
+                    int(state.get("cooldown_until") or 0), now + max(60, retry_after),
+                )
             if provider == "ticketmaster" and status_code == 429:
                 kind, friendly = "rate_limit", "слишком много запросов"
                 retry_after = _retry_after_seconds(headers)

@@ -9,7 +9,6 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import ai
 import config
 import recommendation_stoplist
-import research
 import settings
 import store
 from ui import leisure as leisure_ui
@@ -217,25 +216,6 @@ async def send_listen(bot, cid, *, preview=False):
     known = (set(a.lower() for a in arts) | set(b.lower() for b in booked)
              | set(value.lower() for value in blocked))
     avoid_all = ", ".join(list(arts) + booked + blocked)[:600]
-    web_block = ""
-    try:
-        web = await asyncio.to_thread(
-            research.tavily_snippet,
-            " ".join(part for part in (
-                "modern popular currently active music artists",
-                language_context["search"],
-                f"similar to {anchors[:100]}",
-                "real songs albums",
-            ) if part),
-            500,
-        )
-    except Exception as e:
-        _log.error("send_listen: web_snippet failed cid=%s: %r", cid, e, exc_info=True)
-        web = ""
-    if web:
-        web_block = (
-            f"\nАктуальные данные из сети (используй для реальных названий треков и альбомов):\n{web}\n"
-        )
     data = None
     rejected = []
     for attempt in range(3):
@@ -253,7 +233,6 @@ async def send_listen(bot, cid, *, preview=False):
                 f"Любимые исполнители пользователя (его вкус): {anchors}.\n"
                 f"Дополнительные предпочтения: {language_context['prompt'] or 'не указаны'}.\n"
                 f"НЕ предлагай никого из этого списка (уже в закладках/любимых/отклонены): {avoid_this_try}.\n"
-                f"{web_block}"
                 "Предложи РОВНО ОДНОГО НОВОГО исполнителя, максимально близкого по вкусу "
                 "пользователя. Предпочитай современных активных артистов с выразительной, мелодичной, "
                 "качественно спродюсированной музыкой. Исполнитель должен быть заметным, популярным или "

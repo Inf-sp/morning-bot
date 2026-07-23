@@ -273,16 +273,12 @@ async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
     from datetime import datetime
     import research
     year = time.strftime('%Y')
-    queries = [
-        f'{artist} official tour dates {cname} {year}',
-        f'{artist} Netherlands {year} ' + " ".join(f"site:{domain}" for domain in _NL_VENUE_DOMAINS),
-        f'{artist} concert {cname} {year}',
-    ]
+    query = f'{artist} official tour dates {cname} {year}'
     try:
-        results_batches = await asyncio.gather(
-            *[asyncio.to_thread(research.web_search, q, 5) for q in queries],
-            return_exceptions=True,
-        )
+        results_batches = [await asyncio.to_thread(
+            research.web_search, query, 5, scenario="concert_specific",
+            allow_tavily=True, search_priority="tavily",
+        )]
     except Exception as e:
         _log.warning("concerts external: tavily failed for artist=%s: %r", artist, e)
         return []
@@ -616,26 +612,24 @@ def invalidate_user_concerts_cache(cid):
     return True
 
 
-async def _fetch_concerts(artists, cc, cname):
-    """Живой запрос к Ticketmaster + внешний поиск (Tavily/Firecrawl/AI, кэш 7 дней
-    на артиста) без кэша — общая часть для find_concerts/send_weekly_events и для
-    job'а прогрева кэша по воскресеньям. Ticketmaster — основной источник, но не
-    полный: внешний поиск добирает события, которых там нет."""
+async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False):
+    """Ticketmaster для обычной афиши; web-search только для явного поиска артиста."""
     from datetime import datetime, timedelta
     now = datetime.now(config.TZ)
     date_from = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     date_to = (now + timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ")  # 1 год вперёд
 
     tm_events = await _ticketmaster_events_many(artists, cc, start_dt=date_from, end_dt=date_to, size=10, limit=40)
-    # Ticketmaster — быстрый и структурированный первый источник. Внешний поиск
-    # дорогой (несколько web-запросов + AI-разбор на артиста), поэтому проверяем
-    # только небольшую очередь тех, для кого Ticketmaster ничего не подтвердил.
+    if not explicit_artist_search:
+        return filter_concert_events(tm_events, cc)
+
+    # В ручном поиске одного артиста web-search — редкий последний fallback.
     found_artists = {
         _item_text(event.get("_artist")).casefold()
         for event in tm_events
         if isinstance(event, dict) and _item_text(event.get("_artist"))
     }
-    unresolved = [artist for artist in artists[:40]
+    unresolved = [artist for artist in artists[:1]
                   if _item_text(artist).casefold() not in found_artists]
 
     async def external_for_artist(artist):
@@ -890,7 +884,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
 
     events = _concerts_cache_get(cid, cc)
     if events is None:
-        events = await _fetch_concerts(artists, cc, cname)
+        events = await _fetch_concerts(artists, cc, cname, explicit_artist_search=bool(artists_override))
         _concerts_cache_set(cid, cc, events)
 
     def _fmt_date(ds):

@@ -21,6 +21,8 @@ SERVICE_LABELS = {
 SERVICE_ICONS = SERVICE_LABELS
 GOOGLE_BOOKS_DAILY_LIMIT = 1000
 COHERE_MONTHLY_LIMIT = 1000
+TAVILY_MONTHLY_LIMIT = 1000
+TAVILY_SOFT_LIMIT = 900
 
 
 def _now():
@@ -92,6 +94,66 @@ def service_usage(service: str) -> dict:
         "credits_month": _count(svc, "month", "credits"),
         "headers": dict(svc.get("last_headers") or {}),
     }
+
+
+def tavily_budget() -> dict:
+    """Local monthly budget view; never makes a Tavily network request."""
+    usage = service_usage("tavily")
+    used = int(usage["credits_month"])
+    try:
+        state = provider_runtime.get_state("tavily")
+        total = int(state.get("quota_total") or TAVILY_MONTHLY_LIMIT)
+        remaining = state.get("quota_remaining")
+        if remaining is not None:
+            used = max(used, max(0, total - int(remaining)))
+    except (TypeError, ValueError):
+        total = TAVILY_MONTHLY_LIMIT
+    total = max(1, total)
+    remaining = max(0, total - used)
+    now = _now()
+    next_month = (now.replace(day=28) + timedelta(days=4)).replace(day=1)
+    remaining_days = max(1, (next_month.date() - now.date()).days)
+    return {
+        "used": used,
+        "total": total,
+        "remaining": remaining,
+        "mode": "blocked" if used >= total else ("economy" if used >= TAVILY_SOFT_LIMIT else "normal"),
+        "daily_budget": remaining // remaining_days,
+    }
+
+
+def record_tavily_event(scenario: str, event: str, *, credits: int = 0) -> None:
+    """Scenario-level Tavily accounting for budget diagnostics, without PII."""
+    scenario = "".join(char if char.isalnum() or char == "_" else "_" for char in str(scenario or "generic"))[:48]
+    event = str(event or "request")[:32]
+    month = _now().strftime("%Y-%m")
+
+    def mut(data):
+        data = data or _template()
+        svc = _service(data, "tavily")
+        stats = svc.setdefault("scenario_stats", {})
+        row = stats.setdefault(month, {}).setdefault(scenario, {"requests": 0, "credits_used": 0, "cache_hits": 0, "skipped_policy": 0, "skipped_quota": 0, "basic_calls": 0, "advanced_calls": 0})
+        if event in ("basic", "advanced"):
+            row["requests"] += 1
+            row["credits_used"] += max(0, int(credits or 0))
+            row[f"{event}_calls"] += 1
+        elif event in row:
+            row[event] += 1
+        return data, None
+
+    try:
+        store.mutate_kv(config.API_USAGE_KEY, mut)
+    except Exception:
+        pass
+
+
+def tavily_scenario_stats() -> dict:
+    try:
+        data = store._load(config.API_USAGE_KEY) or {}
+        svc = ((data.get("services") or {}).get("tavily") or {})
+        return dict((svc.get("scenario_stats") or {}).get(_now().strftime("%Y-%m"), {}))
+    except Exception:
+        return {}
 
 
 def _bucket(period: str, dt=None) -> str:

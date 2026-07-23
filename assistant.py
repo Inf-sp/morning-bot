@@ -1,3 +1,4 @@
+import asyncio
 import re
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -5,6 +6,7 @@ import store
 import ai
 import util
 import verify
+import research
 from ui import assistant as assistant_ui
 
 _MED_WORDS = ("боль", "болит", "симптом", "врач", "горло", "кашель", "тошнот", "давлен",
@@ -292,7 +294,17 @@ async def chat_reply(bot, cid, text):
 
     # Фолбэк - LLM-ответ без прикрепленного главного меню
     hist = store.chat_history.get(str(cid), [])
-    hist.append({"role": "user", "content": text})
+    prompt_text = text
+    if research.requires_explicit_web_search(text):
+        rows = await asyncio.to_thread(
+            research.web_search, text, 3, scenario="explicit_research",
+            allow_tavily=True, search_priority="tavily",
+        )
+        sources = [" ".join(str(row.get("content") or "").split())[:700] for row in rows]
+        sources = [source for source in sources if source]
+        if sources:
+            prompt_text += "\n\nСвежие фрагменты из открытых источников:\n" + "\n---\n".join(sources)
+    hist.append({"role": "user", "content": prompt_text})
     hist = hist[-10:]
     status = await util.StatusManager.start(bot, cid)
     try:

@@ -86,7 +86,10 @@ def _medical_context(text, netherlands):
             domain for domain in domains if not domain.endswith(".nl")
         ]
     query = f"{text} Thuisarts Netherlands medical guidance" if netherlands else text
-    rows = research.web_search(query, max_results=3, include_domains=domains)
+    rows = research.web_search(
+        query, max_results=3, include_domains=domains,
+        scenario="medicine_official", allow_tavily=True, search_priority="tavily",
+    )
     snippets = []
     for row in rows:
         if not _official_url(row.get("url")):

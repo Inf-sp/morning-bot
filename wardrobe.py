@@ -10,7 +10,6 @@ import weather
 import util
 import verify
 import secure
-import research
 import settings as _settings
 from ui import wardrobe as wardrobe_ui
 from ui.constants import choose_label, delete_label, ui_label
@@ -768,24 +767,12 @@ def _normalize_purchase_check(data, wardrobe=None):
 
 async def check_purchase(bot, cid, text):
     w = store.load_wardrobe(cid)
-    web_block = ""
-    web_data = await asyncio.to_thread(
-        research.web_snippet,
-        f"{text} отзывы обзор стоит ли покупать",
-        900,
-    )
-    if web_data:
-        web_block = (
-            "\nАктуальная информация о товаре из сети (используй как дополнительный контекст):\n"
-            + secure.wrap_untrusted(web_data, "web") + "\n"
-        )
     prefs = _settings.wardrobe_prefs_context(cid)
     prefs_ctx = f"{prefs}\n" if prefs else ""
     prompt = f"""Ты честный стилист-аналитик. Пользователь думает купить: {text}
 {prefs_ctx}
 Гардероб пользователя:
 {store.wardrobe_to_text(w)}
-{web_block}
 Ответь на один вопрос: есть ли смысл добавлять эту вещь в гардероб пользователя?
 
 Правила:
