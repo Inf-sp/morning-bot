@@ -509,8 +509,12 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
         ))
     rows.extend(word_buttons[i:i + 2] for i in range(0, len(word_buttons), 2))
     if total_pages > 1:
+        previous_page = page - 1 if page > 0 else total_pages - 1
         next_page = page + 1 if page < total_pages - 1 else 0
-        rows.append([InlineKeyboardButton("▶️", callback_data=f"a_dictlang_{lang}_{next_page}")])
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"a_dictlang_{lang}_{previous_page}"),
+            InlineKeyboardButton("▶️", callback_data=f"a_dictlang_{lang}_{next_page}"),
+        ])
     rows.append([InlineKeyboardButton("✨ Подобрать слова", callback_data=f"a_dictseed_start_{lang}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     if entries:
