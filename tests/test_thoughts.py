@@ -229,7 +229,7 @@ def test_direct_text_after_reminder_routes_to_thought_capture(monkeypatch):
     monkeypatch.setattr(bot_text.fridge, "try_add_fridge_from_chat", no_match)
     monkeypatch.setattr(bot_text.assistant, "try_add_love_from_chat", no_match)
     monkeypatch.setattr(bot_text.assistant, "chat_reply", fail_chat)
-    monkeypatch.setattr(bot_text.balance.thoughts, "capture_waiting", lambda _cid: True)
+    monkeypatch.setattr(bot_text.balance.thoughts, "claim_capture", lambda _cid: True)
     monkeypatch.setattr(bot_text.balance.thoughts, "capture", capture)
     bot_text.store.pending_input[cid] = "thought_reminder"
     update = SimpleNamespace(
@@ -242,9 +242,18 @@ def test_direct_text_after_reminder_routes_to_thought_capture(monkeypatch):
         SimpleNamespace(bot=SimpleNamespace()),
         lambda _bot, _cid: asyncio.sleep(0),
     ))
-
     assert captured == [(cid, "Завтра встреча с психологом\nНужно переложить ламинат")]
 
+
+def test_capture_can_be_claimed_only_once(monkeypatch):
+    _setup_state(monkeypatch)
+    cid = "thought-race"
+    thoughts.activate_capture(cid, source="reminder")
+
+    assert thoughts.claim_capture(cid) is True
+    assert thoughts.claim_capture(cid) is False
+    assert thoughts.capture_waiting(cid) is False
+    assert cid not in bot_text.store.pending_input
 
 def test_specialized_pending_has_priority_over_thought_capture(monkeypatch):
     cid = "trainer-over-thoughts"

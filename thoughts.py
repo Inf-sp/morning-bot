@@ -49,6 +49,24 @@ def capture_waiting(cid):
     return capture_state(cid).get("status") in ("implicit_wait", "explicit_wait")
 
 
+def claim_capture(cid):
+    """Забрать одно входящее сообщение из режима ожидания.
+
+    Проверка и смена состояния происходят без await. Это не даёт двум
+    одновременно обрабатываемым сообщениям записаться как две мысли, пока
+    первое ещё ждёт классификацию.
+    """
+    cid = str(cid)
+    state = capture_state(cid)
+    if state.get("status") not in ("implicit_wait", "explicit_wait"):
+        return False
+    state = {**state, "status": "processing"}
+    settings.set_(cid, _CAPTURE_STATE_KEY, state)
+    if store.pending_input.get(cid) in CAPTURE_PENDING_KINDS:
+        store.pending_input.pop(cid, None)
+    return True
+
+
 def activate_capture(cid, *, source, explicit=False):
     cid = str(cid)
     state = {

@@ -166,7 +166,8 @@ async def handle(update, context, remove_reply_keyboard):
 
     # Персистентное ожидание мыслей идёт после всех специализированных workflow.
     # Время хранится только как метаданные и не определяет принадлежность текста.
-    if balance.thoughts.capture_waiting(cid) and not _looks_like_command(text):
+    if (not _looks_like_command(text)
+            and balance.thoughts.claim_capture(cid)):
         _log.info("thought: routed via capture state for cid=%s", cid)
         await balance.thoughts.capture(bot, cid, text)
         return
