@@ -166,6 +166,7 @@ def normalize_parsed_item(raw):
         colors = [value for value in (color, color_secondary) if value]
     item = {
         "zone": zone, "subcategory": subcategory, "name": name,
+        "brand": (str(raw["brand"]).strip() or None) if raw.get("brand") else None,
         "color": color,
         "color_secondary": color_secondary,
         "colors": colors,

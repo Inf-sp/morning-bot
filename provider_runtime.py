@@ -59,7 +59,6 @@ SPECS = (
     ProviderSpec("zeroentropy", "ZeroEntropy", ("Здоровье",), (), 3600),
     ProviderSpec("pexels", "Pexels", ("Поездка",), ("unsplash",)),
     ProviderSpec("unsplash", "Unsplash", ("Поездка",), ()),
-    ProviderSpec("restcountries", "REST Countries", ("Поездка",), ("firecrawl",)),
     ProviderSpec("telegram", "Telegram", ("Мой день", "Готовка", "Обучение"), ()),
     ProviderSpec("database", "PostgreSQL", ("Мой день", "Готовка", "Обучение"), ()),
 )
@@ -89,7 +88,6 @@ def is_configured(provider: str) -> bool:
         "zeroentropy": config.ZEROENTROPY_API_KEY,
         "pexels": config.PEXELS_API_KEY,
         "unsplash": config.UNSPLASH_ACCESS_KEY,
-        "restcountries": config.RESTCOUNTRIES_API_KEY,
         "telegram": config.TELEGRAM_TOKEN,
         "database": config.DATABASE_URL,
     }
@@ -245,16 +243,6 @@ def _friendly_error(error="", status_code=None, provider="") -> tuple[str, str]:
     raw = str(error or "").strip()
     low = raw.casefold().replace("_", " ")
     code = int(status_code or 0)
-    if provider == "restcountries":
-        if code == 429 or any(value in low for value in ("rate limit", "too many requests", "quota")):
-            return "quota", "лимит исчерпан"
-        if any(value in low for value in ("invalid api key", "api key", "bearer", "token", "unauthorized")):
-            return "auth", "ошибка авторизации"
-        if code == 403:
-            return "access_denied", "доступ запрещён"
-        if 500 <= code <= 599:
-            return "temporary", "временная ошибка"
-        return "unknown", "не удалось определить статус"
     if provider == "spoonacular" and code == 402:
         return "quota", "дневной лимит исчерпан"
     if provider == "tavily" and code == 432:

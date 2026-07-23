@@ -288,6 +288,80 @@ def add_preview(item, remaining=0):
     return b.build_stripped()
 
 
+def _success_item_title(item):
+    name = _upper_first(_clean_text((item or {}).get("name")) or "Вещь")
+    brand = _clean_text((item or {}).get("brand"))
+    if brand and brand.casefold() not in name.casefold():
+        return f"{name} {brand}"
+    return name
+
+
+def _success_item_details(item):
+    """Короткие свойства для подтверждения сохранения, без словарных полей."""
+    item = item or {}
+    title = _success_item_title(item).casefold()
+    details = []
+
+    def add(value, *, is_color=False):
+        value = _clean_text(value)
+        color_stem = value.casefold()
+        if is_color:
+            for ending in ("ыми", "ими", "ого", "ему", "ому", "ые", "ие", "ый", "ий", "ая", "яя", "ое", "ее"):
+                if color_stem.endswith(ending):
+                    color_stem = color_stem[:-len(ending)]
+                    break
+        already_in_title = value.casefold() in title or (is_color and len(color_stem) >= 3 and color_stem in title)
+        if value and not already_in_title and value.casefold() not in {
+            detail.casefold() for detail in details
+        }:
+            details.append(value)
+
+    # Цвет обычно уже часть естественного названия. Если нет — он остаётся полезной
+    # характеристикой, но не повторяется.
+    add(item.get("color"), is_color=True)
+    add(item.get("length"))
+    add(item.get("material"))
+    fit = _clean_text(item.get("fit"))
+    add({
+        "свободная": "свободный крой",
+        "прямая": "прямой крой",
+        "приталенная": "приталенный крой",
+    }.get(fit.casefold(), fit))
+
+    warmth = _clean_text(item.get("warmth"))
+    if warmth and warmth != "обычные":
+        add("лёгкая ткань" if warmth == "лёгкие" and item.get("zone") == "Верх" else warmth)
+    if item.get("rain_ok"):
+        add("защита от дождя")
+    if item.get("wind_ok"):
+        add("защита от ветра")
+    return details[:3]
+
+
+def add_success(item):
+    """Подтверждение после фактического сохранения одной вещи в шкаф."""
+    b = MessageBuilder()
+    b.line("✅ Вещь добавлена в «Мой шкаф»")
+    b.spacer()
+    b.bold(_success_item_title(item))
+    details = _success_item_details(item)
+    if details:
+        b.text_line(" · " + " · ".join(details))
+    return b.build_stripped()
+
+
+def add_batch_success(items):
+    b = MessageBuilder()
+    b.line("✅ Вещи добавлены в «Мой шкаф»")
+    for item in items or []:
+        b.spacer()
+        b.bold(_success_item_title(item))
+        details = _success_item_details(item)
+        if details:
+            b.text_line(" · " + " · ".join(details))
+    return b.build_stripped()
+
+
 def add_batch_preview(items):
     b = MessageBuilder().section("Добавлены вещи")
     for item in items or []:

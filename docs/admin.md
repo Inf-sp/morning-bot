@@ -111,7 +111,7 @@ Groq, Cloudflare и OpenRouter в зависимости от раздела. П
 
 Примеры полезных строк: Gemini показывает число запросов сегодня и модель,
 LanguageTool — число проверок сегодня, Azure Speech — число символов сегодня,
-Telegram — предел `до 30 сообщений/с`, а TheMealDB и REST Countries —
+Telegram — предел `до 30 сообщений/с`, а TheMealDB —
 `без дневной квоты`. Groq, GitHub Models, OpenRouter, Spoonacular и другие API
 используют квоту из ответа или rate-limit-заголовков, когда сервис её сообщает.
 Ответ Spoonacular `402` показывается как исчерпанный дневной лимит, а не как

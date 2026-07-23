@@ -50,7 +50,6 @@ TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 FIRECRAWL_API_KEY = os.environ.get("FIRECRAWL_API_KEY", "")
-RESTCOUNTRIES_API_KEY = os.environ.get("RESTCOUNTRIES_API_KEY", "")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID") or CHAT_ID

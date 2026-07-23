@@ -455,7 +455,7 @@ async def _parse_items(text):
         "fit (свободная/прямая/приталенная или пусто), season (массив сезонов), rain_ok, wind_ok, "
         "occasions (массив подходящих случаев), style (Casual/Formal/Sport/Streetwear и т.п. или пусто). "
         "Сохраняй бренд, если он указан.\n"
-        'JSON: {"items": [{"zone":"","subcategory":"","name":"","color":"","color_secondary":"",'
+        'JSON: {"items": [{"zone":"","subcategory":"","name":"","brand":"","color":"","color_secondary":"",'
         '"material":"","length":"","warmth":"обычные","fit":"","season":[],"rain_ok":false,"wind_ok":false,'
         '"occasions":[],"style":""}]}',
         1100, tier="cheap", module="wardrobe_utility")
@@ -469,7 +469,7 @@ async def _show_added_items(bot, cid, items):
     if not items:
         await bot.send_message(chat_id=cid, text="Такая вещь уже есть в шкафу.", reply_markup=closet_kb())
         return
-    msg = wardrobe_ui.add_preview(items[0]) if len(items) == 1 else wardrobe_ui.add_batch_preview(items)
+    msg = wardrobe_ui.add_success(items[0]) if len(items) == 1 else wardrobe_ui.add_batch_success(items)
     if len(items) == 1:
         rows = [[(delete_label("Удалить"), f"w_delete_{items[0]['id']}")]]
     else:
@@ -500,11 +500,11 @@ async def add_item_photo(bot, cid, image_bytes, mime_type="image/jpeg", caption=
             mime_type,
             f"""Распознай только предметы одежды и аксессуары на фото. Подпись пользователя: {secure.wrap_untrusted(caption, 'подпись')}
 Зоны и подкатегории: {_ZONES_DESC}
-Для каждого отчётливо видимого предмета верни zone, subcategory, name, color, color_secondary,
+Для каждого отчётливо видимого предмета верни zone, subcategory, name, brand, color, color_secondary,
 material, length, warmth (строго лёгкие/обычные/тёплые), fit, season, rain_ok, wind_ok,
 occasions и style. Физические свойства храни полями, не добавляй их в name.
 Не выдумывай бренд и невидимые физические свойства.
-JSON: {{"items":[{{"zone":"","subcategory":"","name":"","color":"","color_secondary":"","material":"","length":"","warmth":"обычные","fit":"","season":[],"rain_ok":false,"wind_ok":false,"occasions":[],"style":""}}]}}""",
+JSON: {{"items":[{{"zone":"","subcategory":"","name":"","brand":"","color":"","color_secondary":"","material":"","length":"","warmth":"обычные","fit":"","season":[],"rain_ok":false,"wind_ok":false,"occasions":[],"style":""}}]}}""",
             max_tokens=1100,
         )
         raw_items = parsed.get("items") or []

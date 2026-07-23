@@ -17,6 +17,7 @@ import config
 import api_usage
 import provider_runtime
 import tracking
+import country_catalog
 
 _WIKI_UA = {"User-Agent": "morning-bot/1.0"}
 
@@ -281,20 +282,18 @@ _COUNTRY_TRAVEL_FACTS = {
     },
 }
 
-def country_facts(name):
-    """Проверенные факты о стране -> {cc, capital, languages, region, currency} или {}."""
-    name = (name or "").strip()
-    if not name:
+def country_facts(name, *, allow_fallback=True):
+    """Проверенные факты из local dataset; редкий miss дополняется best-effort fallback."""
+    row = country_catalog.country_data(name, allow_fallback=allow_fallback)
+    if not row:
         return {}
-    key = name.lower()
-    hit = _CF_CACHE.get(key)
-    if hit and (time.time() - hit[0]) < _CF_TTL:
-        return hit[1]
-    cc = util.cc_of(name)
-    facts = dict(_COUNTRY_FACTS.get((cc or "").upper(), {}))
-    out = {"cc": (cc or "").upper(), **facts} if cc or facts else {}
-    _CF_CACHE[key] = (time.time(), out)
-    return out
+    currencies = row.get("currencies") or []
+    currency = currencies[0].get("code", "") if isinstance(currencies[0], dict) else str(currencies[0])
+    return {
+        "cc": row.get("country_code", ""), "capital": row.get("capital", ""),
+        "languages": list(row.get("languages") or []), "region": row.get("region", ""),
+        "currency": currency,
+    }
 
 
 def country_travel_facts(name):
@@ -324,61 +323,16 @@ def grounded(d):
     return bool(d and (d.get("capital") or d.get("languages")))
 
 
-# ================= REST COUNTRIES (определение страны по свободному тексту) =================
-_RC_CACHE: dict = {}   # query.lower() -> (ts, dict|None)
-_RC_TTL = 30 * 86400    # страны не меняются - кэш на 30 дней, как подборки фактов
-
-
-def restcountries_lookup(query):
-    """Определяет страну по свободному тексту (ru/en/nl/сокращения) через
-    REST Countries API (api.restcountries.com/countries/v5). Возвращает
-    {iso, name_ru, name_en, official} или None, если не найдена/сервис недоступен.
-    Требует config.RESTCOUNTRIES_API_KEY (Bearer-токен, задаётся в Railway)."""
-    query = (query or "").strip()
-    if not query or not config.RESTCOUNTRIES_API_KEY:
+def country_lookup(query, *, allow_fallback=True):
+    """Resolve a country through the local dataset; remote fallback is optional."""
+    row = country_catalog.country_data(query, allow_fallback=allow_fallback)
+    if not row:
         return None
-    key = query.lower()
-    cached = _RC_CACHE.get(key)
-    if cached and time.time() - cached[0] < _RC_TTL:
-        return cached[1]
-    try:
-        r = requests.get(
-            "https://api.restcountries.com/countries/v5",
-            params={"q": query},
-            headers={"Authorization": f"Bearer {config.RESTCOUNTRIES_API_KEY}"},
-            timeout=8,
-        )
-        ok = 200 <= r.status_code < 300
-        api_usage.record_request("restcountries", ok=ok, status_code=r.status_code,
-                                 error="" if ok else f"HTTP {r.status_code}")
-        if not ok:
-            _log.warning("restcountries_lookup failed: HTTP %s", r.status_code)
-            _RC_CACHE[key] = (time.time(), None)
-            return None
-        objects = ((r.json() or {}).get("data") or {}).get("objects") or []
-        if not objects:
-            _RC_CACHE[key] = (time.time(), None)
-            return None
-        names = objects[0].get("names") or {}
-        codes = objects[0].get("codes") or {}
-        translations = names.get("translations") or {}
-        iso = (codes.get("alpha_2") or "").upper()
-        if not iso:
-            _RC_CACHE[key] = (time.time(), None)
-            return None
-        out = {
-            "iso": iso,
-            "official": names.get("official") or names.get("common") or "",
-            "name_en": names.get("common") or names.get("official") or "",
-            "name_ru": (translations.get("rus") or {}).get("common") or names.get("common") or "",
-            "name_nl": (translations.get("nld") or {}).get("common") or names.get("common") or "",
-        }
-        _RC_CACHE[key] = (time.time(), out)
-        return out
-    except Exception as e:
-        api_usage.record_request("restcountries", ok=False, error=type(e).__name__)
-        _log.warning("restcountries_lookup failed: %s", str(e)[:120])
-        return None
+    return {
+        "iso": row.get("country_code", ""), "official": row.get("official_name", ""),
+        "name_ru": row.get("name", ""), "name_en": row.get("name", ""),
+        "name_nl": row.get("name", ""),
+    }
 
 
 # ================= NL WORLD RECORDS =================

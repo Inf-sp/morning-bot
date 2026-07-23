@@ -245,7 +245,7 @@ def _recommendation_photo(country, facts=None):
     cached = (_card_cache().get(code) or {}).get("photo") if code else None
     if isinstance(cached, dict) and cached.get("url"):
         return cached
-    lookup = research.restcountries_lookup(country)
+    lookup = research.country_lookup(country)
     if lookup:
         code = str(lookup.get("iso") or code).upper()
         cached = (_card_cache().get(code) or {}).get("photo") if code else None
@@ -372,7 +372,7 @@ def _build_country_card_unlocked(code):
     if old.get("content_version") == _CARD_CONTENT_VERSION:
         return old
     name = old.get("country_name") or code
-    lookup = research.restcountries_lookup(name)
+    lookup = research.country_lookup(name)
     if lookup and lookup.get("iso"):
         code = lookup["iso"]
         name = lookup.get("name_ru") or name
@@ -459,7 +459,7 @@ async def add_visited_country(bot, cid, text):
     code = util.cc_of(name).upper()
     lookup = None
     if not code:
-        lookup = await asyncio.to_thread(research.restcountries_lookup, name)
+        lookup = await asyncio.to_thread(research.country_lookup, name)
         code = str((lookup or {}).get("iso") or "").upper()
     if not code:
         store.pending_input[str(cid)] = "trav_country_add"
@@ -531,7 +531,7 @@ def _is_country_flag(value):
 def _resolve_country_flag(country, proposed, facts):
     code = str((facts or {}).get("cc") or util.cc_of(country) or "").upper()
     if not code:
-        lookup = research.restcountries_lookup(country)
+        lookup = research.country_lookup(country)
         code = str((lookup or {}).get("iso") or "").upper()
     flag = util.flag_from_cc(code)
     if flag:
@@ -545,7 +545,7 @@ def _resolve_country_code(country):
     code = str(util.cc_of(country) or "").upper()
     if code:
         return code
-    lookup = research.restcountries_lookup(country)
+    lookup = research.country_lookup(country)
     return str((lookup or {}).get("iso") or "").upper()
 
 
@@ -612,7 +612,7 @@ async def travel_fav(bot, cid):
     if country:
         code = util.cc_of(country).upper()
         if not code:
-            lookup = await asyncio.to_thread(research.restcountries_lookup, country)
+            lookup = await asyncio.to_thread(research.country_lookup, country)
             code = (lookup or {}).get("iso", "")
         if code:
             codes = _visited_codes(cid)
