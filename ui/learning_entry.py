@@ -15,7 +15,12 @@ def _mixed_script(value):
 
 def _term(entry, fallback=None):
     term = str(entry.get("term") or entry.get("word") or fallback or "").strip()
-    return display_term(term, entry.get("article") or "")
+    article = entry.get("article") or ""
+    # A legacy record can carry a noun article even though the actual term is
+    # a multi-word phrase.  Never prepend that article to a phrase card.
+    if len(term.split()) > 1:
+        article = ""
+    return display_term(term, article)
 
 
 def _breakdown(entry):

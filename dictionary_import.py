@@ -1414,8 +1414,10 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
     else:
         terms = ", ".join(e.get("term", "") for e in added_entries[:10])
         more = f" и ещё {len(added_entries) - 10}" if len(added_entries) > 10 else ""
+        batch_lang = added_entries[0].get("lang") if added_entries else lang
+        batch_flag = "🇬🇧" if batch_lang == "en" else "🇳🇱"
         await bot.send_message(chat_id=cid,
-            text=f"📚 Добавлено {len(added_entries)}: {terms}{more}")
+            text=f"{batch_flag} Добавлено {len(added_entries)}: {terms}{more}")
     if unrecognized_lines:
         await bot.send_message(chat_id=cid,
             text="⚠️ Не удалось распознать: " + ", ".join(unrecognized_lines[:10]),

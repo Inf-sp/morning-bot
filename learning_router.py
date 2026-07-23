@@ -100,6 +100,12 @@ async def handle_action(bot, cid, q, act, run_with_status):
         await dictionary.send_dict_lang(bot, cid, act.split("_")[1])
     elif act in ("dictlang_nl", "dictlang_en"):
         await dictionary.send_dict_lang(bot, cid, act.rsplit("_", 1)[-1], q=q)
+    elif ((act.startswith("dictlang_nl_") and act.rsplit("_", 1)[-1].isdigit())
+          or (act.startswith("dictlang_en_") and act.rsplit("_", 1)[-1].isdigit())):
+        lang = "nl" if act.startswith("dictlang_nl_") else "en"
+        suffix = act[len(f"dictlang_{lang}_"):]
+        if suffix.isdigit():
+            await dictionary.send_dict_lang(bot, cid, lang, page=int(suffix), q=q)
     elif act.startswith(("dictlang_nl_from_", "dictlang_en_from_")):
         lang = "nl" if act.startswith("dictlang_nl_") else "en"
         origin = act[len(f"dictlang_{lang}_from_"):]

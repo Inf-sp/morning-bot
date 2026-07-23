@@ -65,6 +65,19 @@ def migrate_dict_caps():
                     words[index] = normalized
                     changed = True
                 continue
+            original = dict(w)
+            normalized_entry = normalize_entry(w)
+            # Keep every legacy field that may be read by older callers, while
+            # making the canonical fields agree with the same display value.
+            for field in ("term", "word", "base_form", "normalized_term"):
+                if w.get(field):
+                    value = normalize_term_case(w[field], w.get("kind", ""))
+                    if value != w[field]:
+                        w[field] = value
+                        changed = True
+            if normalized_entry.get("term") and w.get("term") != normalized_entry["term"]:
+                w["term"] = normalized_entry["term"]
+                changed = True
             for field in ("term", "word", "base_form", "normalized_term"):
                 value = w.get(field)
                 if not value:
@@ -92,6 +105,45 @@ def migrate_dict_caps():
     if changed:
         store._save(config.DICT_KEY, data)
     return changed
+
+
+def normalize_user_dictionary(cid):
+    """Локально приводит весь словарь пользователя к единой схеме.
+
+    Это намеренно не вызывает AI и выполняется также при открытии словаря:
+    старые записи не зависят от перезапуска приложения. Одинаковые записи
+    внутри одного языка схлопываются, чтобы пользователь видел один словарь,
+    а не несколько legacy-копий.
+    """
+    words = store.get_list(config.DICT_KEY, cid)
+    changed = False
+    result = []
+    seen = set()
+    for item in words:
+        if not isinstance(item, dict):
+            item = normalize_entry(item)
+        else:
+            item = normalize_entry(item)
+        lang = "en" if entry_language(item) == "en" else "nl"
+        item["lang"] = lang
+        correction = PHRASE_CORRECTIONS.get(normalize_key(entry_term(item)))
+        if correction:
+            item["term"] = correction["term"]
+            item["translation"] = correction["translation"]
+        key = (lang, normalize_key(entry_term(item)), normalize_key(entry_translation(item)))
+        if key in seen:
+            changed = True
+            continue
+        seen.add(key)
+        result.append(item)
+        if item != next((old for old in words if old is item), item):
+            changed = True
+    # Compare structurally; the identity check above cannot detect copied dicts.
+    if result != words:
+        changed = True
+    if changed:
+        store.set_list(config.DICT_KEY, cid, result)
+    return result
 
 def _kind_of(term):
     """Слово или фраза: считаем по термину без ведущего артикля (de/het/een/the/a/an)."""
@@ -290,6 +342,7 @@ def _w_field(w, *keys):
 
 def _ensure_dict(cid):
     """Возвращает словарь пользователя (без авто-сида)."""
+    normalize_user_dictionary(cid)
     return store.ensure_list_ids(config.DICT_KEY, cid)
 
 
@@ -435,20 +488,33 @@ async def send_dict(bot, cid, back="m_notes", q=None):
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
 
 async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
-    """Главный экран словаря — короткое меню без списка слов: сначала Добавить,
-    затем Найти/Сгенерировать; список слов доступен из сценария добавления. «⬅️ Назад» ведёт туда,
-    откуда открыли словарь (раздел «Обучение»)."""
-    count = len(_dict_lang_entries(cid, lang))
+    """Главный экран языкового словаря: добавление и сразу список слов."""
+    entries = _dict_lang_entries(cid, lang)
+    total_pages = max(1, (len(entries) + _DICT_LIST_PAGE_SIZE - 1) // _DICT_LIST_PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * _DICT_LIST_PAGE_SIZE
+    chunk = entries[start:start + _DICT_LIST_PAGE_SIZE]
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     rows = [
         [InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")],
-        [InlineKeyboardButton("🔍 Найти", callback_data=f"a_dictsearch_{lang}")],
-        [InlineKeyboardButton("✨ Подобрать слова", callback_data=f"a_dictseed_start_{lang}")],
-        [InlineKeyboardButton("📋 Все слова", callback_data=f"a_dictedit_{lang}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
-    if count:
-        text = f"{flag} Мой словарь · {count} слов и фраз"
+    word_buttons = []
+    for item in chunk:
+        word_id = str(item.get("id") or "")
+        if not word_id:
+            continue
+        word_buttons.append(InlineKeyboardButton(
+            display_term(_entry_term(item), item.get("article") or "")[:24],
+            callback_data=f"a_dictviewid_{page}_{word_id}",
+        ))
+    rows.extend(word_buttons[i:i + 2] for i in range(0, len(word_buttons), 2))
+    if total_pages > 1:
+        next_page = page + 1 if page < total_pages - 1 else 0
+        rows.append([InlineKeyboardButton("▶️", callback_data=f"a_dictlang_{lang}_{next_page}")])
+    rows.append([InlineKeyboardButton("✨ Подобрать слова", callback_data=f"a_dictseed_start_{lang}")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    if entries:
+        text = f"{flag} Мой словарь · {len(entries)} слов и фраз"
     else:
         text = f"{flag} Мой словарь\n\nПока здесь нет слов."
     await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
@@ -498,7 +564,7 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
 def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")],
-        [InlineKeyboardButton("📚 Мой словарь", callback_data=f"a_dictlang_{lang}")],
+        [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -653,7 +719,7 @@ async def move_dict_entry_by_id(bot, cid, word_id, target_lang, q=None):
 
 
 async def del_dict_entry_by_id(bot, cid, word_id, page=None, q=None):
-    words = store.get_list(config.DICT_KEY, cid)
+    words = normalize_user_dictionary(cid)
     removed = next((item for item in words if str(item.get("id") or "") == str(word_id)), None)
     if removed:
         store.set_list(config.DICT_KEY, cid, [item for item in words if item is not removed])
@@ -666,7 +732,7 @@ async def del_dict_entry_by_id(bot, cid, word_id, page=None, q=None):
 
 
 async def del_dict_entry_by_term(bot, cid, lang, term_key, page=None, q=None):
-    words = store.get_list(config.DICT_KEY, cid)
+    words = normalize_user_dictionary(cid)
     removed = None
     kept = []
     for item in words:
@@ -726,7 +792,7 @@ async def send_dict_entry_view(bot, cid, lang, page, term_key, q=None):
 async def send_dict_entry_view_by_id(bot, cid, page, word_id, q=None):
     match = _entry_by_id(cid, word_id)
     if not match:
-        await send_dict_manage(bot, cid, _active_language_code(cid), page=page, q=q)
+        await send_dict_lang(bot, cid, _active_language_code(cid), page=page, q=q)
         return
     if _entry_needs_ai_refresh(match):
         match = await _refresh_dict_entry(cid, match)
@@ -737,15 +803,16 @@ async def send_dict_entry_view_by_id(bot, cid, page, word_id, q=None):
 
 
 async def del_word(bot, cid, i):
-    words = store.get_list(config.DICT_KEY, cid)
+    words = normalize_user_dictionary(cid)
     removed = ""
+    removed_lang = None
     if i < len(words):
         removed_item = words.pop(i)
         removed = normalize_term_case(
             _entry_term(removed_item), _kind_of(_entry_term(removed_item)))
+        removed_lang = _dict_lang(removed_item)
         store.set_list(config.DICT_KEY, cid, words)
-    import settings as _s
-    lang = _code(_s.study_lang(cid))
+    lang = removed_lang or _active_language_code(cid)
     msg = dict_ui.dict_deleted(removed or "")
     await bot.send_message(
         chat_id=cid,

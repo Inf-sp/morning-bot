@@ -447,7 +447,7 @@ async def _build_review(items):
 def _review_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🕒 Оставить на потом", callback_data="thought_review_later")],
-        [InlineKeyboardButton("❌ Очистить записи", callback_data="thought_review_clear")],
+        [InlineKeyboardButton(delete_label("Очистить записи"), callback_data="thought_review_clear")],
         _navigation_row(),
     ])
 

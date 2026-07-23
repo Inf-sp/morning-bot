@@ -101,10 +101,15 @@ def normalize_term_case(term, kind=""):
 def normalize_entry(entry, *, language=None):
     """Возвращает единую схему поверх legacy term/word/base_form и ru."""
     source = dict(entry) if isinstance(entry, dict) else {"term": str(entry)}
-    source["term"] = entry_term(source)
+    raw_term = entry_term(source)
+    source["term"] = normalize_term_case(raw_term, source.get("kind", ""))
     source["translation"] = normalize_translation_case(entry_translation(source))
     source["lang"] = language or entry_language(source)
     source.setdefault("kind", "phrase" if " " in source["term"].strip() else "word")
+    # Legacy AI records sometimes marked a whole construction as a noun and
+    # attached ``de/het``.  An article belongs only to a single noun entry.
+    if not is_dictionary_word(source["term"], source.get("kind", "")):
+        source.pop("article", None)
     source.setdefault("examples", [])
     source.setdefault("srs_history", [])
     return source

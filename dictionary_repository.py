@@ -9,6 +9,7 @@ from dictionary_model import (
     entry_translation,
     language_code,
     normalize_key,
+    normalize_entry,
 )
 from repositories import UserListRepository
 
@@ -19,7 +20,21 @@ class DictionaryRepository:
         self.records = UserListRepository(config.DICT_KEY, self.cid)
 
     def all(self):
-        return self.records.all()
+        entries = self.records.all()
+        normalized = []
+        seen = set()
+        for entry in entries:
+            item = normalize_entry(entry)
+            lang = "en" if entry_language(item) == "en" else "nl"
+            item["lang"] = lang
+            key = (lang, normalize_key(entry_term(item)), normalize_key(entry_translation(item)))
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(item)
+        if normalized != entries:
+            self.records.save(normalized)
+        return normalized
 
     def save_all(self, entries):
         self.records.save(entries)

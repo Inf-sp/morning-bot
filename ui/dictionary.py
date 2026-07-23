@@ -7,7 +7,7 @@ def dict_overview(nl_total, en_total):
     """Короткая карточка-меню (заголовок + одна строка счётчиков)."""
     total = nl_total + en_total
     b = MessageBuilder()
-    b.section("🗂️ Мой словарь")
+    b.section("📖 Мой словарь")
     b.spacer()
     b.labeled_line("Всего", f"{total} (🇳🇱 {nl_total} · 🇬🇧 {en_total})", lowercase=False)
     b.spacer()
