@@ -229,6 +229,31 @@ async def try_add_lifehack_from_chat(bot, cid, text):
     return True
 
 
+async def try_edit_lifehack_from_chat(bot, cid, text):
+    """Обрабатывает текст после выбора «Изменить» в настройках лайфхаков."""
+    pending = store.pending_input.get(str(cid), "")
+    prefix = "lifehack_edit_"
+    if not pending.startswith(prefix):
+        return False
+    record_id = pending[len(prefix):]
+    store.pending_input.pop(str(cid), None)
+    result = myday.update_lifehack(record_id, text)
+    if not result:
+        await bot.send_message(
+            chat_id=cid,
+            text="Не смог обновить лайфхак: нужен конкретный совет с действием и результатом.",
+        )
+        return True
+    if result.get("duplicate"):
+        await bot.send_message(chat_id=cid, text="Такой лайфхак уже есть в базе.")
+        return True
+    await bot.send_message(
+        chat_id=cid,
+        text=f"✅ Лайфхак обновлён\n\nКатегория: {result['category']}",
+    )
+    return True
+
+
 def _detect_intent(text: str):
     t = text.lower()
     for keywords, action in _INTENT_MAP:

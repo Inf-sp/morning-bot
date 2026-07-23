@@ -7,6 +7,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import assistant
+import bot_text
 import config
 import myday
 
@@ -36,9 +37,10 @@ def test_chat_command_adds_dutch_article_lifehack_to_json(tmp_path, monkeypatch)
     assert asyncio.run(assistant.try_add_lifehack_from_chat(bot, "42", text)) is True
 
     saved = json.loads(path.read_text(encoding="utf-8"))
-    language = next(item for item in saved if item["cat"] == "Язык")
-    assert language["emoji"] == "🇳🇱"
-    assert language["tips"][0]["text"].startswith("DE — синий")
+    language = next(item for item in saved if item["category"] == "язык")
+    assert language["source"] == "user"
+    assert language["tags"] == ["язык"]
+    assert language["text"].startswith("DE — синий")
     assert bot.sent[0]["text"] == (
         "✅ Лайфхак сохранён\n\n"
         "Категория: 🇳🇱 Язык\n"
@@ -88,3 +90,33 @@ def test_lifehack_command_can_collect_text_in_second_message(monkeypatch):
     ) is True
     assert saved == ["DE — синий, HET — оранжевый."]
     assert bot.sent[-1]["text"].startswith("✅ Лайфхак сохранён")
+
+
+def test_chat_router_prioritizes_lifehack_command_over_dictionary(monkeypatch):
+    routed = []
+
+    async def fake_lifehack(_bot, cid, text):
+        routed.append((cid, text))
+        return True
+
+    async def fail_dictionary(*_args, **_kwargs):
+        raise AssertionError("lifehack command must bypass dictionary routing")
+
+    async def remove_keyboard(_bot, _cid):
+        return None
+
+    monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
+    monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", fail_dictionary)
+    monkeypatch.setattr(bot_text.assistant, "try_add_lifehack_from_chat", fake_lifehack)
+    monkeypatch.setattr(bot_text.balance.thoughts, "cancel_capture", lambda *_args, **_kwargs: None)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id="lifehack-router"),
+        message=SimpleNamespace(text="Добавь лайфхак\nDE — синий, HET — оранжевый."),
+    )
+    context = SimpleNamespace(bot=FakeBot())
+
+    asyncio.run(bot_text.handle(update, context, remove_keyboard))
+
+    assert routed == [("lifehack-router", "Добавь лайфхак\nDE — синий, HET — оранжевый.")]

@@ -1,10 +1,12 @@
 import asyncio
+from difflib import SequenceMatcher
 import json
 import logging
 import re
 from datetime import datetime
 from pathlib import Path
 import random
+import uuid
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 
@@ -17,6 +19,7 @@ import learning
 import learning_dictionary as dictionary
 import dictionary_seed
 import research
+import secure
 import util
 from util import esc, _WEEKDAY_SHORT, _MONTHS
 import verify
@@ -167,87 +170,278 @@ def _pool_ensure_fresh(store_key: str, cid: str, pool_id: str, generate_fn) -> N
 
 
 _LIFEHACK_CATEGORIES = (
-    "дом", "кухня", "гардероб", "продуктивность", "технологии",
-    "фотография", "жизнь в Нидерландах", "растения", "домашние животные", "язык",
+    "язык", "кухня", "путешествия", "технологии", "продуктивность", "деньги",
+    "дом", "растения", "фото", "спорт", "здоровье", "разное",
 )
 
 _LIFEHACK_CATEGORY_EMOJI = {
-    "дом": "🏠", "кухня": "🍽", "гардероб": "👕", "продуктивность": "⚡",
-    "технологии": "💻", "фотография": "📷", "жизнь в нидерландах": "🇳🇱",
-    "растения": "🌿", "домашние животные": "🐾", "язык": "🇳🇱",
+    "язык": "🇳🇱", "кухня": "🍳", "путешествия": "🧳", "технологии": "💻",
+    "продуктивность": "🧠", "деньги": "💰", "дом": "🏠", "растения": "🌱",
+    "фото": "📸", "спорт": "🎾", "здоровье": "❤️", "разное": "✨",
+}
+
+_LIFEHACK_CATEGORY_LABELS = {
+    "язык": "🇳🇱 Язык", "кухня": "🍳 Кухня", "путешествия": "🧳 Путешествия",
+    "технологии": "💻 Технологии", "продуктивность": "🧠 Продуктивность",
+    "деньги": "💰 Деньги", "дом": "🏠 Дом", "растения": "🌱 Растения",
+    "фото": "📸 Фото", "спорт": "🎾 Спорт", "здоровье": "❤️ Здоровье",
+    "разное": "✨ Разное",
+}
+
+_LIFEHACK_CATEGORY_ALIASES = {
+    "быт и дом": "дом", "дом": "дом", "еда и кухня": "кухня", "кухня": "кухня",
+    "гардероб": "разное", "продуктивность": "продуктивность", "технологии": "технологии",
+    "фотография": "фото", "фото": "фото", "жизнь в нидерландах": "путешествия",
+    "город": "путешествия", "путешествия": "путешествия", "растения": "растения",
+    "домашние животные": "разное", "язык": "язык", "деньги": "деньги",
+    "здоровье": "здоровье", "спорт": "спорт", "разное": "разное",
 }
 
 
 _LIFEHACK_CHAT_CATEGORIES = (
-    (re.compile(r"\b(?:de|het|артикл|нидерланд|голланд|перевод|язык|слово)\b", re.I), "Язык", "🇳🇱"),
-    (re.compile(r"\b(?:готов|рецепт|кухн|продукт|хранен|суп|мяс|овощ|фрукт)\w*", re.I), "Еда и кухня", "🍎"),
-    (re.compile(r"\b(?:одежд|обув|рубаш|брюк|гардероб|надет|носить)\w*", re.I), "Гардероб", "👕"),
-    (re.compile(r"\b(?:телефон|компьютер|парол|приложен|заряд|технолог)\w*", re.I), "Технологии", "💻"),
-    (re.compile(r"\b(?:задач|врем|план|работ|продуктив|уведомлен)\w*", re.I), "Продуктивность", "🧠"),
-    (re.compile(r"\b(?:город|парков|велосипед|дорог|счётчик)\w*", re.I), "Город", "🚲"),
+    (re.compile(r"\b(?:de|het|артикл|нидерланд|голланд|перевод|язык|слово)\b", re.I), "язык"),
+    (re.compile(r"\b(?:готов|рецепт|кухн|продукт|хранен|суп|мяс|овощ|фрукт)\w*", re.I), "кухня"),
+    (re.compile(r"\b(?:поезд|путеш|отел|билет|маршрут|границ)\w*", re.I), "путешествия"),
+    (re.compile(r"\b(?:телефон|компьютер|парол|приложен|заряд|технолог)\w*", re.I), "технологии"),
+    (re.compile(r"\b(?:задач|врем|план|работ|продуктив|уведомлен)\w*", re.I), "продуктивность"),
+    (re.compile(r"\b(?:деньг|покуп|подписк|цен|бюджет)\w*", re.I), "деньги"),
+    (re.compile(r"\b(?:растен|цвет|полив|фото|сним|спорт|трениров|одежд|обув|дом|уборк)\w*", re.I), "разное"),
 )
 
 
 def _lifehack_category(text):
-    for pattern, category, emoji in _LIFEHACK_CHAT_CATEGORIES:
+    for pattern, category in _LIFEHACK_CHAT_CATEGORIES:
         if pattern.search(text or ""):
-            return category, emoji
-    return "Быт и дом", "🏠"
+            return category
+    return "разное"
+
+
+def _canonical_lifehack_category(value):
+    value = " ".join(str(value or "").casefold().split())
+    for category, label in _LIFEHACK_CATEGORY_LABELS.items():
+        if value == label.casefold():
+            return category
+    return _LIFEHACK_CATEGORY_ALIASES.get(value, value if value in _LIFEHACK_CATEGORIES else "разное")
+
+
+def _lifehack_category_label(category):
+    category = _canonical_lifehack_category(category)
+    return _LIFEHACK_CATEGORY_LABELS.get(category, _LIFEHACK_CATEGORY_LABELS["разное"])
+
+
+def _clean_lifehack_text(text):
+    return " ".join(str(text or "").replace("\n", " ").split()).strip(" \t\r•-–—")
+
+
+def _clean_lifehack_tags(tags, category):
+    if isinstance(tags, str):
+        tags = re.split(r"[,;]", tags)
+    result = []
+    for tag in tags or []:
+        tag = " ".join(str(tag or "").casefold().split()).strip("# ")
+        if tag and len(tag) <= 24 and tag not in result:
+            result.append(tag)
+    if category and category not in result:
+        result.insert(0, category)
+    return result[:4]
+
+
+def _lifehack_record(text, category, tags=None, *, source="user", record_id=None,
+                     created_at=None, shown_count=0, last_shown=None,
+                     favorite=False, enabled=True):
+    category = _canonical_lifehack_category(category)
+    return {
+        "id": str(record_id or f"lh_{uuid.uuid4().hex}"),
+        "text": _clean_lifehack_text(text),
+        "category": category,
+        "tags": _clean_lifehack_tags(tags, category),
+        "source": source if source in {"user", "ai"} else "user",
+        "created_at": created_at or datetime.now(TZ).isoformat(),
+        "shown_count": max(0, int(shown_count or 0)),
+        "last_shown": last_shown,
+        "favorite": bool(favorite),
+        "enabled": bool(enabled),
+    }
+
+
+def _normalize_lifehack_with_ai(text):
+    category = _lifehack_category(text)
+    fallback = (_clean_lifehack_text(text), category, _clean_lifehack_tags([], category))
+    prompt = (
+        "Приведи пользовательский лайфхак к единому стилю базы знаний. "
+        "Убери воду, исправь ошибки, сократи до 1–2 коротких предложений, "
+        "не добавляй новые факты и не меняй смысл. Выбери одну категорию и 1–3 коротких тега. "
+        "Категории: язык, кухня, путешествия, технологии, продуктивность, деньги, дом, "
+        "растения, фото, спорт, здоровье, разное. "
+        'Верни только JSON: {"text":"...","category":"...","tags":["..."]}.\n'
+        f"Исходный текст: {secure.wrap_untrusted(text, 'лайфхак пользователя')}"
+    )
+    try:
+        data = ai.llm_json(prompt, 360, tier="cheap", module="myday_utility")
+    except Exception:
+        return fallback
+    normalized = _clean_lifehack_text(data.get("text") if isinstance(data, dict) else "")
+    chosen = _canonical_lifehack_category(data.get("category") if isinstance(data, dict) else "")
+    tags = _clean_lifehack_tags(data.get("tags") if isinstance(data, dict) else [], chosen)
+    if not normalized or not _lifehack_useful(normalized):
+        return fallback
+    return normalized, chosen, tags
 
 
 def _load_lifehack_catalog():
+    """Читает новый список записей и прозрачно мигрирует старые группы tips."""
     try:
         with open(_HERE / "lifehacks.json", encoding="utf-8") as f:
-            catalog = json.load(f)
+            raw = json.load(f)
     except Exception:
         return []
-    return catalog if isinstance(catalog, list) else []
+    if isinstance(raw, dict):
+        raw = raw.get("items") or []
+    if not isinstance(raw, list):
+        return []
+    records = []
+    for index, item in enumerate(raw):
+        if isinstance(item, dict) and "tips" in item:
+            category = _canonical_lifehack_category(item.get("cat"))
+            for tip_index, tip in enumerate(item.get("tips") or []):
+                tip = tip if isinstance(tip, dict) else {"text": tip}
+                record = _lifehack_record(
+                    tip.get("text", ""), category, tip.get("tags", []),
+                    source="user", record_id=f"legacy_{index}_{tip_index}",
+                )
+                if record["text"]:
+                    records.append(record)
+            continue
+        if not isinstance(item, dict):
+            continue
+        record = _lifehack_record(
+            item.get("text", ""), item.get("category", "разное"), item.get("tags", []),
+            source=item.get("source", "user"), record_id=item.get("id") or f"lh_{index}",
+            created_at=item.get("created_at"), shown_count=item.get("shown_count", 0),
+            last_shown=item.get("last_shown"), favorite=item.get("favorite", False),
+            enabled=item.get("enabled", True),
+        )
+        if record["text"]:
+            records.append(record)
+    return records
+
+
+def _save_lifehack_catalog(records):
+    (_HERE / "lifehacks.json").write_text(
+        json.dumps(records, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+    )
+
+
+def lifehack_records(*, include_disabled=True):
+    records = _load_lifehack_catalog()
+    return records if include_disabled else [item for item in records if item["enabled"]]
+
+
+def _lifehack_near_duplicate(text, records):
+    key = _clean_lifehack_text(text).casefold()
+    for item in records:
+        other = _clean_lifehack_text(item.get("text", "")).casefold()
+        if key == other or SequenceMatcher(None, key, other).ratio() >= 0.86:
+            return item
+    return None
+
+
+def _store_ai_lifehacks(items):
+    """Сохраняет валидный AI-пул в каталоге, чтобы им можно было управлять в настройках."""
+    if not items:
+        return
+    records = _load_lifehack_catalog()
+    changed = False
+    for text, extra in items:
+        if _lifehack_near_duplicate(text, records):
+            continue
+        category = _canonical_lifehack_category((extra or {}).get("category"))
+        records.append(_lifehack_record(text, category, [category], source="ai"))
+        changed = True
+    if changed:
+        try:
+            _save_lifehack_catalog(records)
+        except OSError:
+            _log.warning("myday: cannot store AI lifehacks", exc_info=True)
 
 
 def add_lifehack_to_file(text):
-    """Добавляет проверенный пользовательский лайфхак в общий локальный каталог."""
-    text = " ".join(str(text or "").split()).strip(" \t\n\r•-–—")
-    if not _lifehack_useful(text):
+    """Нормализует и добавляет пользовательский лайфхак в общий каталог."""
+    raw_text = _clean_lifehack_text(text)
+    if not _lifehack_useful(raw_text):
         return None
-    category, emoji = _lifehack_category(text)
-    catalog = _load_lifehack_catalog()
-    for group in catalog:
-        if str(group.get("cat", "")).casefold() == category.casefold():
-            tips = group.setdefault("tips", [])
-            if any(str(item.get("text", "")).casefold() == text.casefold() for item in tips):
-                return {"duplicate": True, "category": f"{emoji} {category}"}
-            tips.append({"text": text, "tags": []})
-            break
-    else:
-        catalog.append({"cat": category, "emoji": emoji, "tips": [{"text": text, "tags": []}]})
+    normalized, category, tags = _normalize_lifehack_with_ai(raw_text)
+    if not _lifehack_useful(normalized):
+        return None
+    records = _load_lifehack_catalog()
+    duplicate = _lifehack_near_duplicate(normalized, records)
+    if duplicate:
+        return {"duplicate": True, "category": _lifehack_category_label(duplicate["category"])}
+    records.append(_lifehack_record(normalized, category, tags, source="user"))
     try:
-        (_HERE / "lifehacks.json").write_text(
-            json.dumps(catalog, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        _save_lifehack_catalog(records)
     except OSError:
         return None
-    return {"duplicate": False, "category": f"{emoji} {category}"}
+    return {"duplicate": False, "category": _lifehack_category_label(category)}
+
+
+def update_lifehack(record_id, text):
+    """Нормализует и обновляет запись каталога, сохраняя её статистику."""
+    raw_text = _clean_lifehack_text(text)
+    if not _lifehack_useful(raw_text):
+        return None
+    normalized, category, tags = _normalize_lifehack_with_ai(raw_text)
+    if not _lifehack_useful(normalized):
+        return None
+    records = _load_lifehack_catalog()
+    current = next((item for item in records if item.get("id") == str(record_id)), None)
+    if current is None:
+        return None
+    duplicate = _lifehack_near_duplicate(
+        normalized, [item for item in records if item.get("id") != str(record_id)]
+    )
+    if duplicate:
+        return {"duplicate": True, "category": _lifehack_category_label(duplicate["category"])}
+    current.update({
+        "text": normalized,
+        "category": category,
+        "tags": tags,
+        "source": "user",
+        "enabled": True,
+    })
+    try:
+        _save_lifehack_catalog(records)
+    except OSError:
+        return None
+    return {"duplicate": False, "category": _lifehack_category_label(category)}
+
+
+def delete_lifehack(record_id):
+    records = _load_lifehack_catalog()
+    remaining = [item for item in records if item.get("id") != str(record_id)]
+    if len(remaining) == len(records):
+        return False
+    try:
+        _save_lifehack_catalog(remaining)
+    except OSError:
+        return False
+    return True
 
 
 def _local_lifehack_candidates(cid, rain=False, hot=False, is_weekend=False):
     """Возвращает ещё не показанные записи из lifehacks.json с погодным приоритетом."""
     all_items = []
-    for ci, group in enumerate(_load_lifehack_catalog()):
-        category = str(group.get("cat", "")).strip()
-        if category.casefold() in {"здоровье", "деньги"}:
+    for item in lifehack_records(include_disabled=False):
+        category = _canonical_lifehack_category(item.get("category"))
+        if category in {"здоровье", "деньги"}:
             continue
-        emoji = str(group.get("emoji") or "💡")
-        for ti, tip in enumerate(group.get("tips") or []):
-            text = str((tip or {}).get("text") or "").strip()
-            if _lifehack_useful(text):
-                all_items.append({
-                    "id": f"local:{ci}:{ti}",
-                    "text": text,
-                    "category": category,
-                    "emoji": emoji,
-                    "tags": list((tip or {}).get("tags") or []),
-                })
+        text = str(item.get("text") or "").strip()
+        if _lifehack_useful(text):
+            all_items.append({
+                **item,
+                "category": category,
+                "emoji": _LIFEHACK_CATEGORY_EMOJI.get(category, "💡"),
+            })
     if not all_items:
         return []
     cid = str(cid)
@@ -259,7 +453,8 @@ def _local_lifehack_candidates(cid, rain=False, hot=False, is_weekend=False):
     if not candidates:
         store.set_list(config.LIFEHACK_KEY, cid, [])
         candidates = all_items
-    return candidates
+    oldest = min(item.get("last_shown") or "" for item in candidates)
+    return [item for item in candidates if (item.get("last_shown") or "") == oldest]
 
 
 def _mark_local_lifehack_seen(cid, item):
@@ -267,6 +462,16 @@ def _mark_local_lifehack_seen(cid, item):
     if item["id"] not in seen:
         seen.append(item["id"])
     store.set_list(config.LIFEHACK_KEY, cid, seen)
+    records = _load_lifehack_catalog()
+    for record in records:
+        if record.get("id") == item.get("id"):
+            record["shown_count"] = int(record.get("shown_count") or 0) + 1
+            record["last_shown"] = datetime.now(TZ).isoformat()
+            try:
+                _save_lifehack_catalog(records)
+            except OSError:
+                _log.warning("myday: cannot update lifehack statistics", exc_info=True)
+            break
 
 
 def _lifehack_fallback(cid, rain=False, hot=False, is_weekend=False):
@@ -276,8 +481,7 @@ def _lifehack_fallback(cid, rain=False, hot=False, is_weekend=False):
         return "", ""
     tip = random.choice(candidates)
     _mark_local_lifehack_seen(cid, tip)
-    category = str(tip["category"] or "Совет")
-    return f"{tip['emoji']} {category[:1].upper() + category[1:]}", tip["text"]
+    return _lifehack_category_label(tip["category"]), tip["text"]
 
 
 def _generate_lifehack_pool(cid):
@@ -292,7 +496,7 @@ def _generate_lifehack_pool(cid):
     cats_str = ", ".join(_LIFEHACK_CATEGORIES)
     nl_snippet = research.firecrawl_snippet("жизнь в Нидерландах советы быт бюрократия велосипед", 900)
     nl_ground_block = (
-        f"Для категории 'жизнь в Нидерландах' используй как источник этот реальный веб-контент "
+        f"Для категории 'путешествия' используй как источник этот реальный веб-контент "
         f"(не противоречь ему, не выдумывай факты про NL, если он есть):\n{nl_snippet}\n"
         if nl_snippet else ""
     )
@@ -327,11 +531,10 @@ def _generate_lifehack_pool(cid):
     out = []
     for t in tips or []:
         text = str((t or {}).get("text") or "").strip()
-        cat = str((t or {}).get("category") or "").strip().lower()
-        if cat not in [c.lower() for c in _LIFEHACK_CATEGORIES]:
-            cat = ""
+        cat = _canonical_lifehack_category((t or {}).get("category"))
         if _lifehack_useful(text):
             out.append((text, {"category": cat}))
+    _store_ai_lifehacks(out)
     return out
 
 
@@ -345,7 +548,7 @@ def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
         cid, rain=rain, hot=hot, is_weekend=is_weekend,
     )
     # Контекстный приоритет среди непоказанных: дождь/жара -> гардероб, иначе любой.
-    ctx_cat = "гардероб" if (rain or hot) else ""
+    ctx_cat = "дом" if (rain or hot) else ""
     ai_unshown = [i for i in items if not i.get("shown_at") and _lifehack_useful(i.get("text"))]
     ai_preferred = [i for i in ai_unshown if ctx_cat and i.get("category") == ctx_cat]
     ai_candidates = ai_preferred or ai_unshown
@@ -358,11 +561,10 @@ def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
     if use_local:
         chosen = random.choice(local_candidates)
         _mark_local_lifehack_seen(cid, chosen)
-        category = str(chosen["category"] or "Совет")
-        return f"{chosen['emoji']} {category[:1].upper() + category[1:]}", chosen["text"]
+        return _lifehack_category_label(chosen["category"]), chosen["text"]
 
     if ai_candidates:
-        chosen = ai_candidates[0]
+        chosen = random.choice(ai_candidates)
         target_id = chosen["id"]
 
         def mut(data):
@@ -374,16 +576,13 @@ def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
             return data, True
 
         store.mutate_kv(config.LIFEHACK_POOL_KEY, mut)
-        cat = str(chosen.get("category") or "").casefold()
-        emoji = _LIFEHACK_CATEGORY_EMOJI.get(cat, "💡")
-        label = str(chosen.get("category") or "Совет").capitalize()
-        return f"{emoji} {label}", chosen["text"]
+        cat = _canonical_lifehack_category(chosen.get("category"))
+        return _lifehack_category_label(cat), chosen["text"]
 
     if local_candidates:
         chosen = random.choice(local_candidates)
         _mark_local_lifehack_seen(cid, chosen)
-        category = str(chosen["category"] or "Совет")
-        return f"{chosen['emoji']} {category[:1].upper() + category[1:]}", chosen["text"]
+        return _lifehack_category_label(chosen["category"]), chosen["text"]
     return _lifehack_fallback(cid, rain=rain, hot=hot, is_weekend=is_weekend)
 
 

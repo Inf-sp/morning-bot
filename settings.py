@@ -180,6 +180,105 @@ async def send_home(bot, cid):
     await saved_items.send_notes(bot, cid)
 
 
+async def send_lifehacks(bot, cid, q=None):
+    import myday
+
+    records = myday.lifehack_records()
+    msg = settings_ui.lifehacks_home(len(records))
+    rows = [
+        [InlineKeyboardButton("🆕 Добавить", callback_data="set_lh_add")],
+        [InlineKeyboardButton("✏️ Изменить", callback_data="set_lh_edit")],
+        [InlineKeyboardButton("❌ Удалить", callback_data="set_lh_delete")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ]
+    markup = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=markup, transient=True)
+
+
+def _lifehack_selection_rows(records, prefix):
+    rows = []
+    for item in records[:50]:
+        record_id = str(item.get("id") or "")
+        if not record_id:
+            continue
+        text = " ".join(str(item.get("text") or "").split())
+        label = text[:42] + ("…" if len(text) > 42 else "")
+        rows.append([InlineKeyboardButton(label, callback_data=f"{prefix}{record_id}")])
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data="set_lifehacks"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ])
+    return rows
+
+
+async def send_lifehack_edit_list(bot, cid, q=None):
+    import myday
+
+    records = myday.lifehack_records(include_disabled=False)
+    msg = settings_ui.lifehacks_list("✏️ Изменить", records)
+    markup = InlineKeyboardMarkup(_lifehack_selection_rows(records, "set_lh_edit_"))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=markup, transient=True)
+
+
+async def send_lifehack_delete_list(bot, cid, q=None):
+    import myday
+
+    records = myday.lifehack_records(include_disabled=False)
+    msg = settings_ui.lifehacks_list("❌ Удалить", records)
+    markup = InlineKeyboardMarkup(_lifehack_selection_rows(records, "set_lh_delete_"))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=markup, transient=True)
+
+
+async def start_lifehack_add(bot, cid):
+    store.pending_input[str(cid)] = "lifehack_add"
+    await bot.send_message(chat_id=cid, text="Напиши текст лайфхака одним сообщением.")
+
+
+async def start_lifehack_edit(bot, cid, record_id):
+    import myday
+
+    record = next((item for item in myday.lifehack_records() if item.get("id") == record_id), None)
+    if record is None:
+        await send_lifehacks(bot, cid)
+        return
+    store.pending_input[str(cid)] = f"lifehack_edit_{record_id}"
+    msg = settings_ui.lifehack_edit_input(record.get("text", ""))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+
+
+async def confirm_lifehack_delete(bot, cid, record_id):
+    import myday
+
+    record = next((item for item in myday.lifehack_records() if item.get("id") == record_id), None)
+    if record is None:
+        await send_lifehacks(bot, cid)
+        return
+    msg = settings_ui.lifehack_delete_confirm(record.get("text", ""))
+    rows = [[
+        InlineKeyboardButton("❌ Удалить", callback_data=f"set_lh_delete_yes_{record_id}"),
+        InlineKeyboardButton("Отмена", callback_data="set_lifehacks"),
+    ]]
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=InlineKeyboardMarkup(rows), transient=True)
+
+
+async def delete_lifehack(bot, cid, record_id):
+    import myday
+
+    myday.delete_lifehack(record_id)
+    await send_lifehacks(bot, cid)
+
+
 async def send_lagom(bot, cid, q=None):
     values = [str(item).strip() for item in (memory.get_lagom(cid) or []) if str(item).strip()]
     text = "🎚️ Принципы\n\n" + ("\n".join(f"• {item}" for item in values)
@@ -869,6 +968,20 @@ async def send_wardrobe_prefs(bot, cid, back="set_priorities", q=None):
 async def handle_callback(bot, cid, data, q=None):
     if data == "set_home":
         await send_home(bot, cid)
+    elif data == "set_lifehacks":
+        await send_lifehacks(bot, cid, q)
+    elif data == "set_lh_add":
+        await start_lifehack_add(bot, cid)
+    elif data == "set_lh_edit":
+        await send_lifehack_edit_list(bot, cid, q)
+    elif data == "set_lh_delete":
+        await send_lifehack_delete_list(bot, cid, q)
+    elif data.startswith("set_lh_edit_"):
+        await start_lifehack_edit(bot, cid, data[len("set_lh_edit_"):])
+    elif data.startswith("set_lh_delete_yes_"):
+        await delete_lifehack(bot, cid, data[len("set_lh_delete_yes_"):])
+    elif data.startswith("set_lh_delete_"):
+        await confirm_lifehack_delete(bot, cid, data[len("set_lh_delete_"):])
     elif data == "set_mydata_leisure":
         await saved_items.send_mydata_leisure(bot, cid)
     elif data == "set_mydata_leisure_p":

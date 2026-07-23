@@ -53,6 +53,15 @@ async def handle(update, context, remove_reply_keyboard):
         await wardrobe.ingest(bot, cid, text)
         return
 
+    # Команда добавления лайфхака должна быть раньше словаря: в тексте могут
+    # встречаться «de», «het», «слово» и «перевод», но это всё ещё один лайфхак.
+    if await assistant.try_add_lifehack_from_chat(bot, cid, text):
+        balance.thoughts.cancel_capture(cid)
+        return
+    if await assistant.try_edit_lifehack_from_chat(bot, cid, text):
+        balance.thoughts.cancel_capture(cid)
+        return
+
     # Явная команда словаря сильнее открытого режима ожидания любого раздела.
     # Например, «Добавить *twijfelt*» из экрана «Мысли» должна попасть в словарь,
     # а не сохраниться как мысль. После успешной команды старый pending сбрасываем.
@@ -69,11 +78,6 @@ async def handle(update, context, remove_reply_keyboard):
         if await learning_game.game_answer(bot, cid, text):
             balance.thoughts.cancel_capture(cid, clear_pending=False)
             return
-
-    # Команда добавления лайфхака сильнее пассивного ожидания ответа в разделе.
-    if await assistant.try_add_lifehack_from_chat(bot, cid, text):
-        balance.thoughts.cancel_capture(cid)
-        return
 
     pending_kind = store.pending_input.get(cid)
     thought_waiting = balance.thoughts.capture_waiting(cid)

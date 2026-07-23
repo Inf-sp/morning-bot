@@ -116,6 +116,41 @@ def settings_home(city="", notifications_on=True):
     return b.build_stripped()
 
 
+def lifehacks_home(total):
+    b = MessageBuilder()
+    b.section("💡 Лайфхаки")
+    b.line(f"Всего: {total}")
+    return b.build_stripped()
+
+
+def lifehacks_list(title, records):
+    b = MessageBuilder()
+    b.section(title)
+    if not records:
+        b.line("Записей пока нет.")
+    else:
+        for item in records:
+            category = str(item.get("category") or "разное").capitalize()
+            text = " ".join(str(item.get("text") or "").split())
+            b.labeled_line(category, text[:180], lowercase=False)
+    return b.build_stripped()
+
+
+def lifehack_edit_input(text):
+    b = MessageBuilder()
+    b.section("✏️ Изменить лайфхак")
+    b.labeled_line("Сейчас", text, lowercase=False)
+    b.line("Напиши новую формулировку одним сообщением.")
+    return b.build_stripped()
+
+
+def lifehack_delete_confirm(text):
+    b = MessageBuilder()
+    b.section("❌ Удалить лайфхак?")
+    b.line(text)
+    return b.build_stripped()
+
+
 def database_refresh_result(result):
     result = result or {}
     cache_lines = ""

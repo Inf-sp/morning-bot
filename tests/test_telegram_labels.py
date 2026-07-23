@@ -45,7 +45,7 @@ def test_wardrobe_card_uses_current_outfit_labels():
 def test_day_summary_lifehack_keeps_capital_letter_after_label():
     message = day_summary("Пн, 20 июля", "Алкмар", lifehack="проверь расписание утром")
 
-    assert "Лайфхак: Проверь расписание утром" in message.text
+    assert "Полезное: Проверь расписание утром" in message.text
 
 
 def test_day_summary_outfit_keeps_capital_letter_after_label():

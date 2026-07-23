@@ -78,8 +78,7 @@ def day_summary(
         b.spacer()
 
     if lifehack:
-        b.text_line("🦉")
-        b.labeled_line("Лайфхак", cap_sentence(finish_dot(lifehack)), lowercase=False)
+        b.labeled_line("Полезное", cap_sentence(finish_dot(lifehack)), lowercase=False)
         b.spacer()
 
     if quote_text:
