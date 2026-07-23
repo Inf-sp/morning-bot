@@ -92,7 +92,7 @@ def assistant_answer(answer: str):
             b.label(
                 label,
                 content or None,
-                lowercase=label.casefold() not in _CASE_SENSITIVE_LABELS,
+                lowercase=False,
             )
         else:
             b.add(normalized)

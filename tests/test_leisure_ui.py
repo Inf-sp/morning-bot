@@ -14,11 +14,12 @@ def _labels(markup):
     return [[button.text for button in row] for row in markup.inline_keyboard]
 
 
-def test_leisure_home_contains_only_four_sections_and_home():
+def test_leisure_home_contains_three_sections_in_one_column_and_home():
     rows = _SCREENS["m_leisure"][3]
     assert [label for row in rows for label, _ in row] == [
-        "🎫 Концерты", "🎬 Кино", "🎧 Музыка", "📖 Книги", "#️⃣ Главная"
+        "🎬 Кино", "🎧 Музыка", "📖 Книги", "#️⃣ Главная"
     ]
+    assert all(len(row) == 1 for row in rows)
 
 
 def test_movie_home_uses_clear_recommendation_labels():
@@ -38,8 +39,8 @@ def test_book_and_music_home_follow_same_model():
         ["💾 Почитать позже"], ["🎚️ Предпочтения"],
     ]
     assert _labels(leisure_music.music_home_keyboard())[:4] == [
-        ["✨ Подобрать музыку"], ["❤️ Мои артисты"],
-        ["💾 Послушать позже"], ["🎚️ Предпочтения"],
+        ["✨ Подобрать музыку"], ["❤️ Мои артисты", "💾 Послушать позже"],
+        ["🎫 Концерты"], ["🎚️ Предпочтения"],
     ]
     assert leisure_books.books_home_keyboard().inline_keyboard[0][0].callback_data == "book_reco"
     assert leisure_music.music_home_keyboard().inline_keyboard[0][0].callback_data == "music_reco"
@@ -49,6 +50,7 @@ def test_recommendation_cards_use_content_specific_next_labels():
     assert _labels(leisure_movies._movie_kb(0))[0] == ["✨ Другое кино"]
     assert _labels(leisure_books._book_kb(0))[0] == ["✨ Другая книга"]
     assert _labels(leisure_music._listen_kb())[0] == ["✨ Другой артист"]
+    assert _labels(leisure_music._listen_kb())[1] == ["❤️ Мои артисты", "💾 Послушать позже"]
 
 
 def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):
@@ -91,5 +93,5 @@ def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):
     assert "📖 Почитать" not in text
     assert "🎫 В этом месяце" not in text
     assert _labels(bot.sent[0]["reply_markup"]) == [
-        ["🎫 Концерты", "🎬 Кино"], ["🎧 Музыка", "📖 Книги"], ["#️⃣ Главная"],
+        ["🎬 Кино"], ["🎧 Музыка"], ["📖 Книги"], ["#️⃣ Главная"],
     ]

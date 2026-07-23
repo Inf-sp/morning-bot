@@ -620,16 +620,13 @@ async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False):
     date_to = (now + timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ")  # 1 год вперёд
 
     tm_events = await _ticketmaster_events_many(artists, cc, start_dt=date_from, end_dt=date_to, size=10, limit=40)
-    if not explicit_artist_search:
-        return filter_concert_events(tm_events, cc)
-
-    # В ручном поиске одного артиста web-search — редкий последний fallback.
+    # External search is a bounded last fallback for unresolved artists.
     found_artists = {
         _item_text(event.get("_artist")).casefold()
         for event in tm_events
         if isinstance(event, dict) and _item_text(event.get("_artist"))
     }
-    unresolved = [artist for artist in artists[:1]
+    unresolved = [artist for artist in artists
                   if _item_text(artist).casefold() not in found_artists]
 
     async def external_for_artist(artist):
@@ -849,13 +846,8 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
     artists = list(artists_override or _ensure_artists(cid))
 
     rows = []
-    if artists:
-        rows.append([InlineKeyboardButton("❤️ Любимые артисты", callback_data="artist_favorites")])
-    else:
-        rows.append([InlineKeyboardButton("🔍 Найти артиста", callback_data="a_concerts_search")])
+    if not artists:
         rows.append([InlineKeyboardButton("🆕 Добавить артиста", callback_data="as_loveadd_artists")])
-    if artists:
-        rows.append([InlineKeyboardButton("🔍 Найти артиста", callback_data="a_concerts_search")])
     rows.append([InlineKeyboardButton(f"🌍 {cname}", callback_data="a_concerts_pick")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
@@ -865,7 +857,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
         await bot.send_message(
             chat_id=cid,
             text=(f"🎫 Концерты · {cname}\n\nЛюбимых артистов пока нет.\n\n"
-                  "Можно найти концерт вручную или добавить исполнителя, чтобы я проверял его будущие выступления."),
+                  "Добавь исполнителя, чтобы я проверял его будущие выступления."),
             reply_markup=kb,
         )
         return

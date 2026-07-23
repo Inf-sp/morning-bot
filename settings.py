@@ -10,8 +10,9 @@ import learning_settings as learning_preferences
 import saved_items
 import cooking
 import util
+import memory
 from ui import settings as settings_ui
-from ui.constants import choose_label, cuisine_label, ui_label
+from ui.constants import choose_label, cuisine_label, delete_label, ui_label
 
 _log = logging.getLogger(__name__)
 
@@ -177,6 +178,27 @@ def _notif_label(kind: str, label: str) -> str:
 
 async def send_home(bot, cid):
     await saved_items.send_notes(bot, cid)
+
+
+async def send_lagom(bot, cid, q=None):
+    values = [str(item).strip() for item in (memory.get_lagom(cid) or []) if str(item).strip()]
+    text = "🎚️ Принципы\n\n" + ("\n".join(f"• {item}" for item in values)
+                                  if values else "Пока пусто.")
+    rows = [[InlineKeyboardButton("🆕 Добавить принцип", callback_data="setadd_lagom")]]
+    if values:
+        rows.append([InlineKeyboardButton(delete_label("Очистить"), callback_data="set_clear_lagom")])
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ])
+    markup = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=markup)
 
 
 async def refresh_database(bot, cid, q=None):

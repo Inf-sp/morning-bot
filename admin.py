@@ -295,6 +295,19 @@ def _user_stats():
     }
 
 
+def _users_summary_line(stats):
+    """Compact user count for the admin home screen."""
+    stats = stats or {}
+    parts = [f"всего {int(stats.get('total') or 0)}"]
+    active = int(stats.get("active_today") or 0)
+    new = int(stats.get("new_today") or 0)
+    if active:
+        parts.append(f"активны сегодня {active}")
+    if new:
+        parts.append(f"новых сегодня {new}")
+    return " · ".join(parts)
+
+
 _USERS_LIST_LIMIT = 15
 
 

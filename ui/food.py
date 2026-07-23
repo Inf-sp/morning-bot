@@ -180,6 +180,9 @@ def food_card(
     if ingredients:
         b.spacer()
         b.labeled_line("Ингредиенты", ingredients)
+    servings = str(data.get("servings") or "").strip()
+    if servings:
+        b.text_line(f"👤 {servings}")
     missing = data.get("missing_ingredients") or []
     if isinstance(missing, str):
         missing = [missing]
@@ -195,6 +198,14 @@ def food_card(
         b.newline()
         for step in steps:
             b.bullet(step)
+    pairings = []
+    for key in ("pairing_wine", "pairing_drink"):
+        value = re.sub(r"^[^\wА-Яа-яЁё]+", "", str(data.get(key) or "").strip())
+        if value:
+            pairings.append(value)
+    if pairings:
+        b.spacer()
+        b.labeled_line("К блюду подойдет", "; ".join(pairings), lowercase=False)
     if chef_tip:
         b.spacer()
         b.labeled_line("💡 Полезно", chef_tip, lowercase=False)
@@ -215,7 +226,7 @@ def _products_label(count):
 def fridge_home(available):
     b = MessageBuilder()
     b.bold(ui_label("products", "Мой холодильник"))
-    b.text_line(f" · {available} {_products_label(available)}")
+    b.text_line(f" · {available} {_products_label(available)} в наличии")
     b.spacer()
     b.line("Выбери категорию:")
     return b.build_stripped()
@@ -225,8 +236,9 @@ def fridge_category(label, total, available):
     b = MessageBuilder()
     b.bold(label)
     b.text_line(
-        f" · {total} {_products_label(total)}\n\n"
-        "Нажми продукт, чтобы изменить наличие."
+        f" · {total} {_products_label(total)} · {available} в наличии\n\n"
+        "Нажми продукт, чтобы изменить наличие.\n\n"
+        "✅ — есть в наличии  □ — закончилось"
     )
     return b.build()
 

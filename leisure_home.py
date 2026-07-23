@@ -17,10 +17,9 @@ from ui.builder import MessageBuilder
 
 def _keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find"),
-         InlineKeyboardButton("🎬 Кино", callback_data="a_watch")],
-        [InlineKeyboardButton("🎧 Музыка", callback_data="a_listen"),
-         InlineKeyboardButton("📖 Книги", callback_data="a_read")],
+        [InlineKeyboardButton("🎬 Кино", callback_data="a_watch")],
+        [InlineKeyboardButton("🎧 Музыка", callback_data="a_listen")],
+        [InlineKeyboardButton("📖 Книги", callback_data="a_read")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -79,7 +78,7 @@ async def send_home(bot, cid, q=None):
     elif now_playing:
         b.line("Три фильма, которые сейчас идут в кино.")
     else:
-        b.line("Выбери кино, музыку, книгу или концерты — подберу что-то на сегодня.")
+        b.line("Выбери кино, музыку или книгу — подберу что-то на сегодня.")
     if now_playing:
         b.section("🎟️ Сейчас в кино")
         for movie in now_playing:

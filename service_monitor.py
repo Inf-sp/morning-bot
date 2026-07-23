@@ -75,6 +75,8 @@ def _usage_detail(service: str) -> str:
 
 
 def _status_detail(service: str, state: dict) -> str:
+    if state.get("error_type") == "fallback":
+        return str(state.get("last_error") or "резерв недоступен")
     if service == "tavily" and provider_runtime.tavily_monthly_quota_exhausted():
         reset_at = int(provider_runtime.get_state("tavily").get("quota_reset_at") or 0)
         until = provider_runtime.reset_date_label(reset_at)
@@ -95,7 +97,7 @@ def _status_detail(service: str, state: dict) -> str:
     if remaining is not None and total is not None:
         if remaining <= 0:
             return "лимит исчерпан"
-        return f"{_number(remaining)} / {_number(total)}"
+        return f"{_number(remaining)} из {_number(total)}"
     if state.get("status") not in (OK, UNKNOWN):
         return str(state.get("last_error") or "сервис не ответил")
     return _usage_detail(service)
@@ -135,7 +137,7 @@ def format_row(service: str, state: dict | None = None) -> str:
     if status in (OK, UNKNOWN) and total and remaining is not None and remaining <= total * 0.2:
         status = WARNING
     parts = [f"{_DOT[status]} {spec.label}"]
-    if spec.category and spec.category != "Везде":
+    if spec.category:
         parts.append(spec.category)
     parts.append(_status_detail(service, state))
     fallback = str(state.get("fallback") or "")

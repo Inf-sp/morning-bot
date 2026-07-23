@@ -116,8 +116,9 @@ _SCREENS = {
             "Предпочтения и сохранённое — внутри разделов.",
         ],
         [
-            [(ui_label("concerts", "Концерты"), "a_concerts_find"), ("🎬 Кино", "a_watch")],
-            [(ui_label("music", "Музыка"), "a_listen"), (ui_label("books", "Книги"), "a_read")],
+            [("🎬 Кино", "a_watch")],
+            [(ui_label("music", "Музыка"), "a_listen")],
+            [(ui_label("books", "Книги"), "a_read")],
             [("#️⃣ Главная", "m_menu")],
         ],
         False,
@@ -141,7 +142,7 @@ def leisure_menu(source="", answer=""):
     b.spacer()
     b.line("Что выбрать сегодня?")
     b.spacer()
-    b.line("Могу подобрать кино, музыку или книгу, а ещё проверить концерты любимых артистов.")
+    b.line("Могу подобрать кино, музыку или книгу.")
     return b.build_stripped(reply_markup=ikb(rows))
 
 
@@ -262,8 +263,7 @@ def food_menu(idea=None):
     cuisine_code = str(idea.get("cuisine") or "").strip().lower()
     cuisine_flag = CUISINE_EMOJI.get(cuisine_code, CUISINE_EMOJI["international"])
     cuisine_name = CUISINE_RU.get(cuisine_code, CUISINE_RU["international"])
-    header = "Блюдо на сегодня"
-    header = f"{cuisine_flag} {header} · {cuisine_name}"
+    header = "🥣 Готовка · Идея на сегодня"
     b.section(header)
 
     name = _cooking_text(idea.get("name"))
@@ -277,6 +277,18 @@ def food_menu(idea=None):
     if ingredients:
         b.spacer()
         b.labeled_line("Ингредиенты", ", ".join(ingredients))
+    servings = str(idea.get("servings") or "").strip()
+    if servings:
+        b.text_line(f"👤 {servings}")
+    missing = idea.get("missing_ingredients") or idea.get("missing") or []
+    if isinstance(missing, str):
+        missing = [missing]
+    missing = [str(item).strip() for item in missing if str(item).strip()]
+    if missing:
+        b.spacer()
+        b.bold("Не хватает:")
+        b.newline()
+        b.line(", ".join(missing))
 
     steps = []
     for raw_step in (idea.get("steps") or [])[:5]:
@@ -294,6 +306,14 @@ def food_menu(idea=None):
         b.newline()
         for step in steps:
             b.bullet(step)
+    pairings = []
+    for key in ("pairing_wine", "pairing_drink"):
+        value = re.sub(r"^[^\wА-Яа-яЁё]+", "", str(idea.get(key) or "").strip())
+        if value:
+            pairings.append(value)
+    if pairings:
+        b.spacer()
+        b.labeled_line("К блюду подойдет", "; ".join(pairings), lowercase=False)
 
     tip = _cooking_sentence(idea.get("tip"))
     if tip:

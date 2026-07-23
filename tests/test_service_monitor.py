@@ -91,7 +91,7 @@ def test_fallback_is_hidden_until_target_really_succeeds(monkeypatch):
 
     provider_runtime.record_result("firecrawl", True)
     assert provider_runtime.activate_fallback("tavily", "firecrawl") is True
-    assert service_monitor.format_row("tavily").endswith("· Firecrawl")
+    assert service_monitor.format_row("tavily").endswith("→ Firecrawl")
 
 
 def test_fallback_graph_has_no_cycles():

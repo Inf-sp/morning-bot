@@ -651,7 +651,6 @@ def _gen_cohere(prompt, max_tokens, temperature, response_mode: ResponseMode = "
         payload,
         30,
         "cohere",
-        timeout_cap=5,
     )
     data = r.json()
     content = (data.get("message") or {}).get("content") or []

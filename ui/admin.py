@@ -58,11 +58,36 @@ def deploy_report(version, title, release_notes):
 
 # ================= ДОМ =================
 
-def home(status_dot, status_text, updated_at, stale=False):
+def home(status_dot=None, status_text=None, updated_at=None, stale=False,
+         *, system_dot=None, system_text=None, system_line=None,
+         notif_line=None, users_line=None, data_line=None, logs_line=None):
+    """Render the admin home screen.
+
+    The compact metric form is used by the current screen.  The older
+    ``status_*`` form remains supported for callers that only have a health
+    status available.
+    """
     b = MessageBuilder()
     b.bold(ui_label("admin", "Админ"))
     b.newline()
     b.spacer()
+    if system_dot is not None or system_text is not None:
+        dot = system_dot if system_dot is not None else status_dot
+        text = system_text if system_text is not None else status_text
+        b.line(f"{dot} {text}")
+        b.spacer()
+        for emoji, label, value in (
+            ("📊", "Система", system_line),
+            ("🔔", "Уведомления", notif_line),
+            ("👨🏻‍💻", "Пользователи", users_line),
+            ("🗄", "Данные", data_line),
+            ("⚠️", "Логи", logs_line),
+        ):
+            if value:
+                b.line(f"{emoji} {label} · {value}")
+        b.spacer()
+        b.line(f"Обновлено в {updated_at}")
+        return b.build_stripped()
     if stale:
         b.line(f"{status_dot} Состояние неизвестно · данные от {updated_at}")
     else:
@@ -178,7 +203,7 @@ def api_ai(rows, updated_at):
     for line in rows:
         b.line(str(line))
     b.spacer()
-    b.line(f"Обновлено: {updated_at}")
+    b.line(f"Обновлено в {updated_at}")
     return b.build_stripped()
 
 

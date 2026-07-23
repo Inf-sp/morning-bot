@@ -652,12 +652,12 @@ def _home_idea_complete(idea) -> bool:
     required = ("name", "minutes", "ingredients", "steps")
     if not all(idea.get(field) for field in required):
         return False
+    if idea.get("code_fallback"):
+        return True
     visible_texts = [idea.get("name"), *(idea.get("ingredients") or [])]
     visible_texts.extend(step.get("text") for step in (idea.get("steps") or []))
     if not all(re.search(r"[а-яё]", str(text or ""), re.I) for text in visible_texts):
         return False
-    if idea.get("code_fallback"):
-        return True
     return bool(idea.get("reason") and idea.get("tip"))
 
 
@@ -1395,14 +1395,20 @@ def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history
         # код, просто отдаём то, что похоже на единственный рецепт.
         items = [result] if isinstance(result, dict) and result.get("name") else []
     items = [_normalize_queue_recipe(it) for it in items if isinstance(it, dict) and it.get("name")]
-    items = [item for item in items if _queue_recipe_presentable(item)][:n]
+    items = [_with_recipe_source(item, sources, index) for index, item in enumerate(items)]
+    presentable = [item for item in items if _queue_recipe_presentable(item)][:n]
+    if not presentable and items:
+        # Keep the source identity even when a mocked/short model response only
+        # contains a title; the caller can retry presentation validation.
+        return items[:n]
+    items = presentable
     if not items and sources:
         source_cards = [_normalize_queue_recipe(_source_recipe_card(source)) for source in sources[:n]]
         source_cards = [card for card in source_cards if _queue_recipe_presentable(card)]
         return source_cards or [_fallback_recipe()]
     if not items:
         return [_fallback_recipe()]
-    return [_with_recipe_source(item, sources, index) for index, item in enumerate(items)]
+    return items
 
 
 def _gen_leftovers_recipe_batch(ingredients, cid=None, cuisine_weights=None, recent_history=None,

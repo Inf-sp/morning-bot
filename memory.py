@@ -4,6 +4,7 @@
 Профиль - dict на пользователя: {"prefs": [...]}.
 """
 import store
+import config
 
 
 # ---------- Предпочтения пользователя (Memory Agent) ----------
@@ -18,3 +19,17 @@ def profile_hints(cid) -> str:
     if not prefs:
         return ""
     return "Знаешь о пользователе: " + "; ".join(prefs[:20]) + "."
+
+
+def get_lagom(cid) -> list:
+    """Return saved personal principles, including legacy profiles."""
+    profile = store.get_profile(cid) or {}
+    values = profile.get("lagom") or profile.get("principles")
+    if values is not None:
+        return list(values) if isinstance(values, (list, tuple)) else [str(values)]
+    try:
+        legacy = store._load(config.LEGACY_LAGOM_KEY) or {}
+        values = legacy.get(str(cid), []) if isinstance(legacy, dict) else []
+        return list(values) if isinstance(values, (list, tuple)) else []
+    except Exception:
+        return []

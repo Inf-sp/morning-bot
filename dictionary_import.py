@@ -1279,13 +1279,15 @@ async def _extract_dict_topics(text, lang="nl"):
     return out
 
 
-def _dict_batch_preview_kb(lang):
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🆕 Добавить выбранные", callback_data="a_dictbatch_add")],
+def _dict_batch_preview_kb(lang=None):
+    rows = [
+        [InlineKeyboardButton("🆕 Добавить всё", callback_data="a_dictbatch_add")],
         [InlineKeyboardButton("❌ Не добавлять", callback_data="a_dictbatch_cancel")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
+    ]
+    if lang is not None:
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
+                     InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    return InlineKeyboardMarkup(rows)
 
 
 async def offer_dict_topics_from_text(bot, cid, text, lang="nl"):

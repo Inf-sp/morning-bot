@@ -39,7 +39,7 @@ def test_wardrobe_card_uses_current_outfit_labels():
         "Полезно:",
     ]
     assert "Надень:\n• Белая рубашка\n• Синие брюки" in message.text
-    assert "💡 Полезно: Подверни рукава рубашки." in message.text
+    assert "💡 Полезно: подверни рукава рубашки." in message.text
 
 
 def test_day_summary_lifehack_keeps_capital_letter_after_label():

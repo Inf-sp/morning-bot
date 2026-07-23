@@ -78,7 +78,7 @@ def render_wardrobe_message(look_data):
     """
     look_data = look_data or {}
     b = MessageBuilder()
-    header = "👕 Образ на сегодня"
+    header = "👟 Гардероб · Образ на сегодня"
     primary_style = _clean_text(look_data.get("primary_style"))
     if primary_style:
         header += f" · {primary_style}"
@@ -87,7 +87,7 @@ def render_wardrobe_message(look_data):
     intro = _finish_dot(look_data.get("weather_intro"))
     if intro:
         b.spacer()
-        b.line(intro)
+        b.italic(intro)
 
     items = [_upper_first(_clean_text(_item_display(it))) for it in (look_data.get("items") or [])]
     items = [it for it in items if it]
@@ -160,28 +160,28 @@ def purchase_check_card(data):
     """
     data = data or {}
     b = MessageBuilder()
-    b.section("🧐 Оценка покупки")
+    b.section("🧐 Проверка покупки")
 
     verdict = _clean_text(data.get("verdict"))
     if verdict:
-        b.spacer()
         verdict_labels = {
             "брать": "Брать",
             "можно брать": "Можно брать",
             "скорее не брать": "Скорее не брать",
             "не брать": "Не брать",
         }
-        b.bold(verdict_labels.get(verdict.casefold(), _upper_first(verdict).rstrip(".")))
-        b.newline()
+        verdict_text = verdict_labels.get(verdict.casefold(), _upper_first(verdict).rstrip("."))
+        b.spacer()
+        b.labeled_line("Вердикт", _finish_dot(verdict_text), lowercase=True)
 
     fits_count = data.get("fits_count")
     if isinstance(fits_count, int) and not isinstance(fits_count, bool) and fits_count >= 0:
         if fits_count == 0:
-            b.labeled_line("Сочетается", "ни с одной вещью из текущего шкафа")
+            b.labeled_line("Подойдёт", "ни с одной вещью из текущего шкафа")
         else:
-            b.labeled_line("Сочетается", f"примерно с {fits_count} {_pluralize_dative_items(fits_count)}")
+            b.labeled_line("Подойдёт", f"к {fits_count} {_pluralize_dative_items(fits_count)} из шкафа")
     elif fits_count == "недостаточно данных":
-        b.labeled_line("Сочетается", "недостаточно данных")
+        b.labeled_line("Подойдёт", "недостаточно данных")
 
     duplicates = _clean_text(data.get("duplicates"))
     if duplicates:

@@ -379,7 +379,7 @@ async def _explain_dutch_review(text, report, *, expected="", task="") -> dict:
     )
     try:
         result = await ai.allm_json(
-            prompt, 350, order=("groq", "github_models", "cohere"), module="learning_trainer",
+            prompt, 350, order=("groq", "gemini"), module="learning_trainer",
         )
     except Exception:
         return {}

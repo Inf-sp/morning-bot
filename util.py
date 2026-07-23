@@ -308,8 +308,6 @@ def _format_plain_label_line(line: str) -> str:
     if not first_alpha.isupper():
         return line
     body = match.group("body").strip()
-    if label.casefold() not in _CASE_SENSITIVE_LABELS:
-        body = _lower_plain_initial(body)
     return f'{match.group("indent")}<b>{label}:</b> {body}'
 
 
@@ -360,7 +358,8 @@ def tg_html(text: str | None) -> str:
 
     # 5) вернуть спрятанные теги
     t = re.sub(r"\x00(\d+)\x00", lambda m: saved[int(m.group(1))], t)
-    t = "\n".join(_lower_html_label_content(line) for line in t.split("\n"))
+    # Preserve capitalization in free text and proper names.  MessageBuilder
+    # handles intentional lowercasing for generated UI labels explicitly.
 
     # 6) убрать лишние пустые строки (макс одна подряд)
     t = re.sub(r"\n{3,}", "\n\n", t).strip()

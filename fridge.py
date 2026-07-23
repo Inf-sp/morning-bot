@@ -71,8 +71,6 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
             f"{label} · {on_cnt}",
             callback_data=f"as_fridge_cat_{ci}_0",
         )])
-    if items:
-        rows.append([InlineKeyboardButton("✏️ Изменить", callback_data="as_fridge_clean_all")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
 
     kb = InlineKeyboardMarkup(rows)
