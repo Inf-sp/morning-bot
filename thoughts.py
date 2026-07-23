@@ -283,14 +283,18 @@ async def classify(text):
 
 async def send_home(
     bot, cid, *, cleared=False, capture_source="manual", explicit=False,
-    wait_for_input=True,
+    wait_for_input=True, auto_review=True,
 ):
     cid = str(cid)
     opened = open_records(cid)
+    # Открытие вкладки с уже записанными мыслями сразу ведёт к полезному
+    # результату. Явный вход из напоминания «Выгрузить тревоги» остаётся
+    # исключением: он должен дать возможность добавить новую запись.
+    if opened and not cleared and not explicit and auto_review:
+        await review_all(bot, cid)
+        return
     msg = thoughts_ui.cleared_home() if cleared else thoughts_ui.home(opened)
     rows = []
-    if opened and not cleared:
-        rows.append([InlineKeyboardButton("🧐 Разобрать мысли", callback_data="thought_review")])
     rows.append(_navigation_row())
     kb = InlineKeyboardMarkup(rows)
     await bot.send_message(
@@ -347,21 +351,14 @@ def _fallback_review(items):
         item for item in items
         if item.get("type") == "practical_problem" and item not in decisions
     ]
-    categories = []
-    if practical:
-        categories.append("дела, которые требуют действия")
-    if anxious:
-        categories.append("тревожное ощущение срочности")
-    if decisions:
-        categories.append("уже принятые решения")
-    summary = "Смешались " + ", ".join(categories or ["разные мысли, которым нужен порядок"]) + "."
+    summary = "Есть задачи и предположения — отделим факты от того, что пока неизвестно."
     analysis = []
     if decisions:
         ref = _short_reference(decisions[0].get("text", ""))
         analysis.append(f"«{ref}» уже решено — повторно принимать это решение не нужно.")
     if anxious:
         ref = _short_reference(anxious[0].get("text", ""))
-        analysis.append(f"В «{ref}» чувствуется срочность, но конкретный срок пока не указан.")
+        analysis.append(f"«{ref}» пока предположение, а не подтверждённый факт; конкретный срок не указан.")
     if practical:
         ref = _short_reference(practical[0].get("text", ""))
         analysis.append(f"Реального действия сейчас требует «{ref}».")
@@ -415,9 +412,10 @@ async def _build_review(items):
     kinds = ", ".join(item.get("type", "unknown") for item in items)
     now = _now()
     prompt = (
-        "Профессионально и кратко разбери текущие мысли пользователя с учётом их конкретного содержания. "
-        "Раздели тревоги и уже принятые решения, покажи, что реально требует действия, и сними ложное "
-        "ощущение срочности без утверждения, что тревога необоснованна. Не повторяй исходные мысли полностью. "
+        "Профессионально и бережно разбери текущие мысли пользователя с учётом их конкретного содержания. "
+        "Раздели факты, тревожные предположения и уже принятые решения; покажи, что реально требует действия, "
+        "и снизь ощущение срочности, не обесценивая переживание. Если подтверждения нет, прямо назови мысль "
+        "предположением, а не фактом. Не повторяй исходные мысли полностью. "
         "Предложи ровно один конкретный следующий шаг. Не давай универсальных советов: «записать мысль», "
         "«сменить обстановку», «вернуться к текущему делу», «выбрать действие на 5–15 минут», "
         "«отложить мысль до отдельного времени». Не предлагай снова записывать уже записанные мысли. "
@@ -634,7 +632,7 @@ async def _leave_review_for_later(bot, cid, q):
     settings.set_(cid, "_thoughts_evening_closed_date", _today())
     await _dismiss_message(bot, cid, q)
     settings.set_(cid, "_thoughts_review_cache", {})
-    await send_home(bot, cid)
+    await send_home(bot, cid, auto_review=False)
 
 
 async def _confirm_clear_review(bot, cid, q):
@@ -764,7 +762,6 @@ async def send_evening_close(bot, cid):
         return False
     msg = thoughts_ui.evening(len(opened))
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🧐 Разобрать мысли", callback_data="thought_review"),
         InlineKeyboardButton("Оставить до завтра", callback_data="thought_tomorrow"),
     ]])
     await bot.send_message(

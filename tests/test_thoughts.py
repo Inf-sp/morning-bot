@@ -109,23 +109,31 @@ def test_empty_home_has_no_review_button(monkeypatch):
     assert _labels(message["reply_markup"]) == [["⬅️ Назад", "#️⃣ Главная"]]
 
 
-def test_home_shows_active_thoughts_and_review_button(monkeypatch):
+def test_opening_thoughts_immediately_shows_review_with_clear_button(monkeypatch):
     repo, _settings, fixed_now = _setup_state(monkeypatch)
     repo.items = [
         {"id": "1", "text": "Кажется, я не успею закончить всё сегодня.", "status": "open", "date": "2026-07-16"},
         {"id": "2", "text": "Нужно купить фильтры для фонтана.", "status": "open", "date": "2026-07-16"},
         {"id": "3", "text": "Не забыть ответить на сообщение.", "status": "open", "date": "2026-07-16"},
     ]
+    async def fake_model(*_args, **_kwargs):
+        return {
+            "summary": "Есть задачи и предположения — отделим факты от неизвестного.",
+            "analysis": ["Это пока предположение, а не подтверждённый факт."],
+            "next_step": "Купи фильтры для фонтана.",
+        }
+
+    monkeypatch.setattr(thoughts.ai, "allm_json", fake_model)
     bot = FakeBot()
 
     asyncio.run(thoughts.send_home(bot, "42"))
 
     text = bot.sent[0]["text"]
-    assert "Сейчас в голове:\n• Кажется, я не успею" in text
-    assert "• Нужно купить фильтры для фонтана." in text
-    assert "Сегодня записано" not in text
+    assert text.startswith("🧐 Разбор мыслей")
+    assert "Сейчас в голове:" not in text
     labels = [button.text for row in bot.sent[0]["reply_markup"].inline_keyboard for button in row]
-    assert labels == ["🧐 Разобрать мысли", "⬅️ Назад", "#️⃣ Главная"]
+    assert "🧐 Разобрать мысли" not in labels
+    assert "❌ Очистить записи" in labels
 
 
 def test_crisis_and_medical_have_priority_without_model(monkeypatch):
@@ -167,9 +175,9 @@ def test_capture_cleans_lightly_and_keeps_one_message_as_one_thought(monkeypatch
     assert repo.items[0]["type"] == "practical_problem"
     assert repo.items[0]["confidence"] == 0.87
     assert repo.items[0]["can_be_actioned"] is True
-    assert bot.sent[0]["text"].startswith("😮‍💨 Мысли")
-    assert "• Нужно подготовиться к экзамену, купить ручку" in bot.sent[0]["text"]
-    assert bot.sent[0]["transient"] is True
+    assert bot.sent[0]["text"].startswith("🧐 Разбор мыслей")
+    assert "Нужно подготовиться к экзамену, купить ручку" in bot.sent[0]["text"]
+    assert bot.sent[0].get("transient") is not True
     assert settings_state[("42", "_thoughts_capture_state")] == {"status": "idle"}
     assert thoughts.capture_waiting("42") is False
 
@@ -307,7 +315,8 @@ def test_evening_close_only_sends_when_open_records_exist(monkeypatch):
         "Осталось записей: 1\n"
         "Разберём или оставим до завтра?"
     )
-    assert _button_count(bot.sent[0]["reply_markup"]) == 2
+    assert _button_count(bot.sent[0]["reply_markup"]) == 1
+    assert bot.sent[0]["reply_markup"].inline_keyboard[0][0].text == "Оставить до завтра"
 
 
 def test_legacy_inbox_opens_new_home_without_clear_all(monkeypatch):
@@ -327,9 +336,9 @@ def test_legacy_inbox_opens_new_home_without_clear_all(monkeypatch):
         for row in bot.sent[0]["reply_markup"].inline_keyboard
         for button in row
     ]
-    assert labels == ["🧐 Разобрать мысли", "⬅️ Назад", "#️⃣ Главная"]
+    assert labels == ["🕒 Оставить на потом", "❌ Очистить записи", "⬅️ Назад", "#️⃣ Главная"]
     assert "статист" not in bot.sent[0]["text"].casefold()
-    assert "очист" not in " ".join(labels).casefold()
+    assert "❌ Очистить записи" in labels
 
 
 def test_thought_notifications_are_on_by_default_and_evening_is_at_20(monkeypatch):
@@ -356,7 +365,7 @@ def test_legacy_clear_all_button_no_longer_deletes_records(monkeypatch):
     asyncio.run(balance.worry_clear_all(bot, "42"))
 
     assert len(repo.items) == 1
-    assert bot.sent[0]["text"].startswith("😮‍💨 Мысли")
+    assert bot.sent[0]["text"].startswith("🧐 Разбор мыслей")
 
 
 def test_batch_review_is_short_and_has_only_allowed_buttons(monkeypatch):
@@ -491,7 +500,7 @@ def test_leave_for_later_saves_review_and_returns_to_thoughts(monkeypatch):
     assert bot.sent[0]["text"].startswith("😮‍💨 Мысли")
     assert "• Купить фильтры" in bot.sent[0]["text"]
     labels = [button.text for row in bot.sent[0]["reply_markup"].inline_keyboard for button in row]
-    assert labels == ["🧐 Разобрать мысли", "⬅️ Назад", "#️⃣ Главная"]
+    assert labels == ["⬅️ Назад", "#️⃣ Главная"]
 
 
 def test_clear_requires_confirmation_then_closes_only_current_list(monkeypatch):
@@ -550,8 +559,8 @@ def test_stale_clear_callback_never_deletes_without_cached_review(monkeypatch):
     asyncio.run(thoughts.handle_callback(bot, "42", q, "thought_review_clear_yes"))
 
     assert [item["id"] for item in repo.items] == ["new"]
-    assert bot.sent[0]["text"].startswith("😮‍💨 Мысли")
-    assert "• Новая мысль" in bot.sent[0]["text"]
+    assert bot.sent[0]["text"].startswith("🧐 Разбор мыслей")
+    assert "Новая мысль" in bot.sent[0]["text"]
 
 
 def test_full_history_delete_is_absent_from_settings_and_legacy_callbacks_are_safe(monkeypatch):
