@@ -25,7 +25,6 @@ def test_movie_home_uses_clear_recommendation_labels():
     labels = _labels(leisure_movies._movie_home_kb())
     assert labels == [
         ["✨ Другое кино"],
-        ["🎟️ Сейчас в кино"],
         ["🎭 По жанру", "🌙 По настроению"],
         ["❤️ Моё кино", "💾 Смотреть позже"],
         ["🎚️ Предпочтения"],
@@ -52,7 +51,7 @@ def test_recommendation_cards_use_content_specific_next_labels():
     assert _labels(leisure_music._listen_kb())[0] == ["✨ Другой артист"]
 
 
-def test_leisure_home_shows_one_primary_recommendation(monkeypatch):
+def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):
     class Bot:
         sent = []
 
@@ -83,9 +82,11 @@ def test_leisure_home_shows_one_primary_recommendation(monkeypatch):
     asyncio.run(leisure_home.send_home(bot, "42"))
 
     text = bot.sent[0]["text"]
-    assert "🎬 В кино сегодня" in text
+    assert "Три фильма, которые сейчас идут в кино." in text
+    assert "🎟️ Сейчас в кино" in text
     assert "Одиссея" in text
-    assert "Ещё в кино:" not in text
+    assert "Приглашение" in text
+    assert "Des preuves d'amour" in text
     assert "🎧 Послушать" not in text
     assert "📖 Почитать" not in text
     assert "🎫 В этом месяце" not in text

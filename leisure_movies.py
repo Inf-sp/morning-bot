@@ -43,7 +43,6 @@ def _movie_kb(i, category=None, saved=False, favorite=False):
     """
     rows = [
         [InlineKeyboardButton("✨ Другое кино", callback_data=f"movie_no_{i}")],
-        [InlineKeyboardButton("🎟️ Сейчас в кино", callback_data="movie_now_playing")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("🌙 По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("❤️ Моё кино", callback_data="a_watchlist"),
@@ -279,7 +278,6 @@ async def send_recos(bot, cid, kind):
 def _movie_home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другое кино", callback_data="movie_reco")],
-        [InlineKeyboardButton("🎟️ Сейчас в кино", callback_data="movie_now_playing")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("🌙 По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("❤️ Моё кино", callback_data="a_watchlist"),

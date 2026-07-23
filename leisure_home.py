@@ -49,9 +49,7 @@ async def send_home(bot, cid, q=None):
     concert = _next_concert(leisure_concerts._concerts_cache_get(cid, cc) or [])
     artist = leisure_music._cached_artist(cid)
     book = leisure_books._cached_book(cid)
-    movies = []
-    if not concert and not artist and not book:
-        movies = await leisure_movies.get_local_now_playing(cid, limit=1)
+    now_playing = await leisure_movies.get_local_now_playing(cid, limit=3)
 
     b = MessageBuilder()
     b.section(f"🍿 Досуг · {city}")
@@ -78,18 +76,14 @@ async def send_home(bot, cid, q=None):
         b.line(f"{author} · «{title}»" if author else f"«{title}»")
         year = str(book.get("year") or "").strip()
         b.line(f"Новая книга {year}" if year else "Новая книга")
-    elif movies:
-        movie = movies[0]
-        b.bold("🎬 В кино сегодня")
-        b.newline()
-        rating = leisure_ui._format_rating(movie.get("rating")) if int(movie.get("vote_count") or 0) >= 25 else None
-        title = str(movie.get("title") or "")
-        b.line(f"{rating} · {title}" if rating else title)
-        genre = leisure_ui._primary_genre(movie)
-        if genre:
-            b.line(genre)
+    elif now_playing:
+        b.line("Три фильма, которые сейчас идут в кино.")
     else:
         b.line("Выбери кино, музыку, книгу или концерты — подберу что-то на сегодня.")
+    if now_playing:
+        b.section("🎟️ Сейчас в кино")
+        for movie in now_playing:
+            leisure_ui._format_movie_row(b, movie)
     msg = b.build_stripped(reply_markup=_keyboard())
     if q is not None:
         try:
