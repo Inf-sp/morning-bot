@@ -113,12 +113,13 @@ _SCREENS = {
         "Досуг",
         [
             "Фильмы, музыка и книги - под твой вкус.",
-            "Предпочтения и сохранённое — внутри разделов.",
+            "Общие предпочтения и сохранённое — здесь.",
         ],
         [
             [("🎬 Кино", "a_watch")],
             [(ui_label("music", "Музыка"), "a_listen")],
             [(ui_label("books", "Книги"), "a_read")],
+            [("💾 Сохранённое", "leisure_saved"), ("🎚️ Предпочтения", "leisure_prefs")],
             [("#️⃣ Главная", "m_menu")],
         ],
         False,
@@ -263,8 +264,7 @@ def food_menu(idea=None):
     cuisine_code = str(idea.get("cuisine") or "").strip().lower()
     cuisine_flag = CUISINE_EMOJI.get(cuisine_code, CUISINE_EMOJI["international"])
     cuisine_name = CUISINE_RU.get(cuisine_code, CUISINE_RU["international"])
-    header = f"🥣 Готовка · {cuisine_flag} {cuisine_name} · Идея на сегодня"
-    b.section(header)
+    b.section(f"{cuisine_flag} Готовим сегодня · {cuisine_name}")
 
     name = _cooking_text(idea.get("name"))
     if name:

@@ -48,7 +48,6 @@ async def send_my_recipes(bot, cid, back="as_notes"):
         for i, r in enumerate(recipes):
             name = r.get("name", f"Рецепт {i+1}")[:30]
             rows.append([InlineKeyboardButton(f"📖 {name}", callback_data=f"as_my_recipe_{i}")])
-        rows.insert(0, [InlineKeyboardButton(delete_label("Удалить"), callback_data="as_recipe_clean")])
         rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
         kb = InlineKeyboardMarkup(rows)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,

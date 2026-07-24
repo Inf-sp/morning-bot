@@ -59,7 +59,7 @@ UI_EMOJI = {
     "personalization": "🎛️",
     "preferences": "🎚️",
     "cuisines": "🍽",
-    "clothing_style": "👟",
+    "clothing_style": "🧵",
     "personal_data": "🌀",
     "examples": "💬",
     "sections": "📂",

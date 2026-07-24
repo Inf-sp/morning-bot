@@ -20,9 +20,9 @@ def _labels(markup):
 def test_leisure_home_contains_three_sections_in_one_column_and_home():
     rows = _SCREENS["m_leisure"][3]
     assert [label for row in rows for label, _ in row] == [
-        "🎬 Кино", "🎧 Музыка", "📖 Книги", "#️⃣ Главная"
+        "🎬 Кино", "🎧 Музыка", "📖 Книги", "💾 Сохранённое", "🎚️ Предпочтения", "#️⃣ Главная"
     ]
-    assert all(len(row) == 1 for row in rows)
+    assert [len(row) for row in rows] == [1, 1, 1, 2, 1]
 
 
 def test_movie_home_uses_clear_recommendation_labels():
@@ -31,7 +31,6 @@ def test_movie_home_uses_clear_recommendation_labels():
         ["✨ Другое кино"],
         ["🎭 По жанру", "🌙 По настроению"],
         ["❤️ Моё кино", "💾 Сохранить"],
-        ["💾 Сохранённое", "🎚️ Предпочтения"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
@@ -39,12 +38,11 @@ def test_movie_home_uses_clear_recommendation_labels():
 def test_book_and_music_home_follow_same_model():
     assert _labels(leisure_books.books_home_keyboard())[:4] == [
         ["✨ Подобрать книгу"], ["❤️ Мои книги", "💾 Сохранить"],
-        ["💾 Сохранённое", "🎚️ Предпочтения"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert _labels(leisure_music.music_home_keyboard())[:5] == [
         ["✨ Подобрать музыку"], ["❤️ Мои артисты", "💾 Сохранить"],
-        ["💾 Сохранённое", "🎚️ Предпочтения"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert leisure_books.books_home_keyboard().inline_keyboard[0][0].callback_data == "book_reco"
     assert leisure_music.music_home_keyboard().inline_keyboard[0][0].callback_data == "music_reco"
@@ -149,7 +147,10 @@ def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):
 
     text = bot.sent[0]["text"]
     assert "Три фильма, которые сейчас идут в кино." in text
-    assert "🎟️ Сейчас в кино" in text
+    assert "🍿 Развлечения на сегодня · Алкмар" in text
+    assert "🎫 Событие" not in text
+    assert "🎟️ Идёт в кино" in text
+    assert "🎟️ Сейчас в кино" not in text
     assert "Одиссея" in text
     assert "Приглашение" in text
     assert "Des preuves d'amour" in text
@@ -162,5 +163,6 @@ def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):
     assert "📖 Почитать" not in text
     assert "🎫 В этом месяце" not in text
     assert _labels(bot.sent[0]["reply_markup"]) == [
-        ["🎬 Кино"], ["🎧 Музыка"], ["📖 Книги"], ["#️⃣ Главная"],
+        ["🎬 Кино"], ["🎧 Музыка"], ["📖 Книги"],
+        ["💾 Сохранённое", "🎚️ Предпочтения"], ["#️⃣ Главная"],
     ]

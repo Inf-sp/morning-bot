@@ -73,7 +73,7 @@ async def handle(update, context, remove_reply_keyboard):
             await verify.safe_error(bot, cid, e)
             return None
         finally:
-            await status.stop(delete=False)
+            await status.stop(delete=True)
             _log.info("_inline_status: done data=%s cid=%s", data, cid)
 
     if not access.is_allowed(cid):
@@ -352,6 +352,30 @@ async def handle(update, context, remove_reply_keyboard):
         await learning_game.game_reveal(bot, cid, q)
         return
     # Развлечения / путешествия
+    if data == "leisure_saved":
+        await leisure_home.send_saved(bot, cid, q)
+        return
+    if data == "leisure_prefs":
+        await leisure_home.send_preferences(bot, cid, q)
+        return
+    if data == "leisure_saved_movie":
+        await cleanup.open_collection(bot, cid, "cinema_saved", back="leisure_saved")
+        return
+    if data == "leisure_saved_books":
+        await cleanup.open_collection(bot, cid, "books_saved", back="leisure_saved")
+        return
+    if data == "leisure_saved_music":
+        await cleanup.open_collection(bot, cid, "music_saved", back="leisure_saved")
+        return
+    if data == "leisure_prefs_movie":
+        await _inline_status(lambda _s: leisure_movies.send_movie_prefs(bot, cid, q))
+        return
+    if data == "leisure_prefs_books":
+        await _inline_status(lambda _s: leisure_books.send_book_preferences(bot, cid, q))
+        return
+    if data == "leisure_prefs_music":
+        await _inline_status(lambda _s: leisure_music.send_music_preferences(bot, cid, q))
+        return
     if data == "movie_prefs":
         await _inline_status(lambda _s: leisure_movies.send_movie_prefs(bot, cid, q))
         return

@@ -836,7 +836,7 @@ async def handle_callback(bot, cid, q, data):
         except Exception as e:
             await verify.safe_error(bot, cid, e, back="m_wardrobe")
         finally:
-            await status.stop(delete=False)
+            await status.stop(delete=True)
         return
     if data in ("w_closet", "w_del_g"):
         await send_wardrobe_zones(bot, cid, q=q); return

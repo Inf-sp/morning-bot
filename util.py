@@ -80,6 +80,8 @@ class StatusManager:
         self.mode = mode
         self.stages = stages or self.STAGES
         self._inline_cleared = False
+        self._inline_replaced = False
+        self._finalized = False
         self._task = None
         self._stopped = asyncio.Event()
 
@@ -97,7 +99,7 @@ class StatusManager:
     @classmethod
     async def start_inline(cls, q, bot=None, cid=None, text=None, stages=None):
         manager = cls(bot, cid=cid, message=q.message, mode="inline", stages=stages)
-        await manager._edit(text or manager.stages[0][1])
+        manager._inline_replaced = await manager._edit(text or manager.stages[0][1])
         manager._task = asyncio.create_task(manager._run())
         return manager
 
@@ -133,6 +135,12 @@ class StatusManager:
 
     async def stop(self, delete=True):
         await self._cancel()
+        if (self.mode == "inline" and delete and self._inline_replaced
+                and not self._finalized and self.message is not None):
+            try:
+                await self.message.delete()
+            except Exception as e:
+                _log.warning("StatusManager.stop: inline status delete failed: %r", e)
         if self.mode != "inline" and delete and self.message is not None:
             _log.debug("StatusManager.stop: deleting message_id=%s cid=%s",
                       getattr(self.message, "message_id", None), self.cid)
@@ -145,11 +153,13 @@ class StatusManager:
         await self._cancel()
         if self.mode == "inline":
             if await self._edit(text, **kwargs):
+                self._finalized = True
                 return True
             if self.cid is not None and self.bot is not None:
                 _log.debug("StatusManager.replace(inline): sending fallback message cid=%s text_len=%s",
                            self.cid, len(text or ""))
                 await self.bot.send_message(chat_id=self.cid, text=text, **kwargs)
+                self._finalized = True
                 return True
             _log.warning("StatusManager.replace(inline): no cid/bot, cid=%s bot=%s", self.cid, self.bot is not None)
             return False

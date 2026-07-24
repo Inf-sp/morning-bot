@@ -22,8 +22,50 @@ def _keyboard():
         [InlineKeyboardButton("🎬 Кино", callback_data="a_watch")],
         [InlineKeyboardButton("🎧 Музыка", callback_data="a_listen")],
         [InlineKeyboardButton("📖 Книги", callback_data="a_read")],
+        [InlineKeyboardButton("💾 Сохранённое", callback_data="leisure_saved"),
+         InlineKeyboardButton("🎚️ Предпочтения", callback_data="leisure_prefs")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
+
+
+def _leisure_category_keyboard(callback_prefix):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎬 Кино", callback_data=f"{callback_prefix}_movie")],
+        [InlineKeyboardButton("🎧 Музыка", callback_data=f"{callback_prefix}_music")],
+        [InlineKeyboardButton("📖 Книги", callback_data=f"{callback_prefix}_books")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+
+
+async def send_saved(bot, cid, q=None):
+    b = MessageBuilder()
+    b.section("💾 Сохранённое · Досуг")
+    b.spacer()
+    b.line("Выбери категорию сохранённых фильмов, книг или музыки.")
+    msg = b.build_stripped(reply_markup=_leisure_category_keyboard("leisure_saved"))
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+
+
+async def send_preferences(bot, cid, q=None):
+    b = MessageBuilder()
+    b.section("🎚️ Предпочтения · Досуг")
+    b.spacer()
+    b.line("Выбери категорию, для которой хочешь изменить предпочтения.")
+    msg = b.build_stripped(reply_markup=_leisure_category_keyboard("leisure_prefs"))
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
 
 
 def _next_concert(events):
@@ -53,12 +95,12 @@ async def send_home(bot, cid, q=None):
     now_playing = await leisure_movies.get_local_now_playing(cid, limit=3)
 
     b = MessageBuilder()
-    b.section(f"🍿 Досуг · {city}")
+    b.section(f"🍿 Развлечения на сегодня · {city}")
     b.spacer()
     if concert:
         event_date, event, venue_city = concert
         artist_name = str(event.get("_artist") or event.get("name") or "").strip()
-        b.bold("🎫 Ближайшее событие")
+        b.bold("🎫 Событие")
         b.newline()
         b.line(f"{artist_name} · {event_date.day} {leisure_ui._MONTHS_RU[event_date.month]} · {venue_city}")
         context = leisure_concerts._concert_context(event)
@@ -89,7 +131,7 @@ async def send_home(bot, cid, q=None):
     else:
         b.line("Выбери кино, музыку или книгу — подберу что-то на сегодня.")
     if now_playing:
-        b.section("🎟️ Сейчас в кино")
+        b.section("🎟️ Идёт в кино")
         for movie in now_playing:
             leisure_ui._format_movie_row(b, movie, with_description=True)
     try:

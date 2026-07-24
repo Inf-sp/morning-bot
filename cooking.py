@@ -159,7 +159,7 @@ async def _send_queue_card(bot, cid, meal, d, status=None):
     _log.info("_send_queue_card: meal=%s cid=%s status_mode=%s text_len=%s",
               meal, cid, getattr(status, "mode", None), len(card.text or ""))
     if status is not None:
-        await status.stop(delete=False)
+        await status.stop(delete=True)
     try:
         msg = await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=kb)
     except Exception as e:
@@ -335,7 +335,7 @@ async def handle_callback(bot, cid, q, data):
         except Exception as error:
             await verify.safe_error(bot, cid, error, back="m_food")
         finally:
-            await status.stop(delete=False)
+            await status.stop(delete=True)
         return True
     if data == "as_food_back":
         await back_to_food_menu(bot, cid)
@@ -391,7 +391,7 @@ async def handle_callback(bot, cid, q, data):
         except Exception as error:
             await verify.safe_error(bot, cid, error, back="m_food")
         finally:
-            await status.stop(delete=False)
+            await status.stop(delete=True)
         return True
     if data.startswith("as_fridge_clean_"):
         import cleanup

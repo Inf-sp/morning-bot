@@ -40,14 +40,14 @@ def home_screen(idea, visited_count):
 
 def countries_screen(count, page, pages):
     b = MessageBuilder()
-    b.title("🧳 Мои страны")
-    b.line(f"{count} {plural_countries(count)} уже в твоей истории путешествий.")
+    b.title("💾 Сохранённые страны")
+    b.line(f"{count} {plural_countries(count)} сохранено для твоей истории путешествий.")
     if not count:
         b.spacer()
-        b.line("Пока здесь пусто. Добавь страну, в которой уже был.")
+        b.line("Пока здесь пусто. Сохраняй страны кнопкой «💾 Сохранить» в карточке поездки.")
     else:
         b.spacer()
-        b.line("Выбери страну, чтобы посмотреть её карточку или удалить из списка.")
+        b.line("Выбери страну, чтобы посмотреть её карточку или убрать из сохранённых.")
     return b.build_stripped()
 
 

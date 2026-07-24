@@ -47,6 +47,64 @@ def _tokens(text):
         r"[\wÀ-ÖØ-öø-ÿ'-]+", str(text or ""), flags=re.UNICODE)]
 
 
+_POS_ALIASES = {
+    "noun": "noun", "сущ": "noun", "существительное": "noun", "substantief": "noun",
+    "verb": "verb", "глагол": "verb", "werkwoord": "verb",
+    "adjective": "adjective", "adj": "adjective", "прилагательное": "adjective", "bijvoeglijk naamwoord": "adjective",
+    "adverb": "adverb", "наречие": "adverb", "bijwoord": "adverb",
+    "preposition": "preposition", "предлог": "preposition", "voorzetsel": "preposition",
+    "pronoun": "pronoun", "местоимение": "pronoun", "voornaamwoord": "pronoun",
+    "conjunction": "conjunction", "союз": "conjunction", "voegwoord": "conjunction",
+}
+
+
+def _entry_pos(entry):
+    raw = " ".join(str(entry.get("pos") or "").casefold().split())
+    if raw in _POS_ALIASES:
+        return _POS_ALIASES[raw]
+    if raw.startswith("сущ"):
+        return "noun"
+    if raw.startswith("глаг"):
+        return "verb"
+    if raw.startswith("прилаг"):
+        return "adjective"
+    if entry.get("article"):
+        return "noun"
+    if entry.get("construction"):
+        return "rule"
+    return ""
+
+
+def _value_kind(value):
+    return "phrase" if len(_tokens(value)) > 1 else "word"
+
+
+def _compatible_term(entry, candidate):
+    """Отвлекающий вариант должен совпадать по типу материала и форме."""
+    term = entry_term(entry)
+    other_term = entry_term(candidate)
+    if not term or not other_term or _value_kind(term) != _value_kind(other_term):
+        return False
+    pos = _entry_pos(entry)
+    other_pos = _entry_pos(candidate)
+    if pos and other_pos != pos:
+        return False
+    if pos == "verb":
+        lang = str(entry.get("lang") or "nl").casefold()
+        if _grammar_shape(term, lang) != _grammar_shape(other_term, lang):
+            return False
+    return True
+
+
+def _compatible_translation(entry, candidate):
+    correct = _first_translation(entry)
+    alternative = _first_translation(candidate)
+    if not correct or not alternative or _value_kind(correct) != _value_kind(alternative):
+        return False
+    pos = _entry_pos(entry)
+    return not pos or _entry_pos(candidate) == pos
+
+
 def clean_options(correct, candidates, needed=2):
     result = []
     seen = {str(correct).lower()}
@@ -54,6 +112,7 @@ def clean_options(correct, candidates, needed=2):
         candidate = str(candidate or "").strip()
         lowered = candidate.lower()
         junk = (not candidate or "____" in candidate or len(candidate) > 100
+                or not any(char.isalpha() for char in candidate)
                 or bool(set(_tokens(lowered)) & {"todo", "n/a", "none", "null"}))
         if not junk and lowered not in seen:
             result.append(candidate)
@@ -64,9 +123,10 @@ def clean_options(correct, candidates, needed=2):
 
 
 def _wrong_terms(entry, other_entries, rng):
-    own_term = entry_term(entry)
-    pool = [entry_term(other).lower() for other in other_entries
-            if entry_term(other) and entry_term(other) != own_term]
+    own_term = entry_term(entry).casefold()
+    pool = [entry_term(other) for other in other_entries
+            if entry_term(other) and entry_term(other).casefold() != own_term
+            and _compatible_term(entry, other)]
     rng.shuffle(pool)
     return pool
 
@@ -109,14 +169,14 @@ def _grammar_shape(value, lang):
 
 def _gap_wrong_terms(entry, correct, other_entries, rng):
     """Only plausible options with the same POS, length and surface form."""
-    pos = str(entry.get("pos") or "").strip().casefold()
+    pos = _entry_pos(entry)
     if not pos:
         return []
     lang = str(entry.get("lang") or "nl").strip().casefold()
     shape = _grammar_shape(correct, lang)
     pool = []
     for other in other_entries:
-        if str(other.get("pos") or "").strip().casefold() != pos:
+        if _entry_pos(other) != pos:
             continue
         forms = other.get("forms") or []
         if not isinstance(forms, list):
@@ -136,7 +196,9 @@ def _gap_wrong_terms(entry, correct, other_entries, rng):
 def _choose_translation(entry, other_entries, rng):
     correct = _first_translation(entry)
     pool = [_first_translation(other) for other in other_entries
-            if entry_term(other) != entry_term(entry)]
+            if entry_term(other).casefold() != entry_term(entry).casefold()
+            and _compatible_translation(entry, other)]
+    rng.shuffle(pool)
     wrong = clean_options(correct, pool)
     return {"term": entry_term(entry), "correct": correct, "wrong": wrong} if len(wrong) >= 2 else None
 
@@ -149,10 +211,15 @@ def _recall(entry, other_entries, rng):
 
 def _build_sentence(entry, _other_entries, rng):
     tokens = entry_term(entry).split()
-    if len(tokens) < 3:
+    if len(tokens) < 3 or len({token.casefold() for token in tokens}) < 2:
         return None
     shuffled = list(tokens)
-    rng.shuffle(shuffled)
+    for _ in range(5):
+        rng.shuffle(shuffled)
+        if shuffled != tokens:
+            break
+    else:
+        return None
     return {"ru": _first_translation(entry), "correct": _cap(entry_term(entry)),
             "tokens": tokens, "shuffled": shuffled}
 

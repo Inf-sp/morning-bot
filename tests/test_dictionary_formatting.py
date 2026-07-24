@@ -71,8 +71,8 @@ def test_translation_exercise_keeps_full_answer_and_three_options():
         "lang": "nl",
     }
     other = [
-        {"term": "Ondersteunen", "translation": "Поддерживать", "lang": "nl"},
-        {"term": "Uitleggen", "translation": "Объяснять", "lang": "nl"},
+        {"term": "Ik steun je", "translation": "Я тебя поддерживаю", "lang": "nl"},
+        {"term": "Ik leg het uit", "translation": "Я это объясняю", "lang": "nl"},
     ]
 
     data = trainer_exercises.build_exercise(
@@ -81,3 +81,37 @@ def test_translation_exercise_keeps_full_answer_and_three_options():
 
     assert data["correct"] == "Я думаю, это глупо"
     assert len(data["wrong"]) == 2
+
+
+def test_recall_rejects_distractors_with_a_different_part_of_speech():
+    entry = {
+        "term": "Begeleiding", "translation": "Сопровождение",
+        "lang": "nl", "pos": "noun",
+    }
+    unrelated_shapes = [
+        {"term": "Voldoende", "translation": "Достаточный", "lang": "nl", "pos": "adjective"},
+        {"term": "Ontspannen", "translation": "Расслабляться", "lang": "nl", "pos": "verb"},
+    ]
+
+    data = trainer_exercises.build_exercise(
+        entry, unrelated_shapes, trainer_engine.EXERCISE_RECALL,
+    )
+
+    assert data is None
+
+
+def test_translation_exercise_rejects_single_word_distractors_for_a_phrase():
+    entry = {
+        "term": "Ik vind het stom", "translation": "Я думаю, это глупо",
+        "lang": "nl",
+    }
+    word_entries = [
+        {"term": "Ondersteunen", "translation": "Поддерживать", "lang": "nl"},
+        {"term": "Uitleggen", "translation": "Объяснять", "lang": "nl"},
+    ]
+
+    data = trainer_exercises.build_exercise(
+        entry, word_entries, trainer_engine.EXERCISE_CHOOSE_TRANSLATION,
+    )
+
+    assert data is None

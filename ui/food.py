@@ -172,8 +172,10 @@ def food_card(
     header = f"{meal_emoji} {label}".strip()
     if cuisine_label:
         cuisine_part = f"{cuisine_emoji} {cuisine_label}" if show_cuisine_emoji else cuisine_label
-        header += f" · {cuisine_part}".rstrip()
     b.section(header)
+    if cuisine_label:
+        b.spacer()
+        b.line(cuisine_part)
     if name:
         b.spacer()
         b.bold(name)
@@ -290,8 +292,7 @@ def my_recipes_empty():
 
 def my_recipes_list(recipes):
     b = MessageBuilder()
-    b.bold(ui_label("recipes", "Мои рецепты"))
-    b.text_line(f" — {len(recipes)}")
+    b.section(ui_label("recipes", "Мои рецепты"))
     b.spacer()
     for recipe in recipes:
         b.bullet(recipe.get("name", "?"))
