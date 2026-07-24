@@ -153,6 +153,8 @@ def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):
     assert "Des preuves d'amour" in text
     assert "Одиссей возвращается домой после долгой войны" in text
     assert "Таинственное приглашение на ужин" in text
+    assert "Одиссея · ⭐ 7.9 · Приключения · Одиссей возвращается домой после долгой войны" in text
+    assert "испытаниями.\n\n• Приглашение" in text
     assert "💭 «Не откладывай жизнь на потом.» — по Сенека" in text
     assert "🎧 Послушать" not in text
     assert "📖 Почитать" not in text

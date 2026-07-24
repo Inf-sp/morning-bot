@@ -81,9 +81,11 @@ def _primary_genre(movie) -> str | None:
     if isinstance(genres, list):
         if not genres:
             return None
-        return _movie_genre_text(genres[0])
+        value = _movie_genre_text(genres[0])
+        return value[:1].upper() + value[1:] if value else None
     genre = _item_value(movie, "genre")
-    return _movie_genre_text(genre) if genre else None
+    value = _movie_genre_text(genre) if genre else None
+    return value[:1].upper() + value[1:] if value else None
 
 
 def _format_rating(rating: float | None) -> str | None:
@@ -102,22 +104,24 @@ def _format_movie_row(b: MessageBuilder, movie, *, with_description=False) -> No
         return
     b.text_line("• ")
     b.bold(title)
-    genre = _primary_genre(movie)
-    if genre:
-        b.text_line(f" · {genre}")
     # Рейтинг с несколькими голосами выглядит убедительно, но вводит в заблуждение.
     # Для свежего проката показываем его только после минимальной выборки.
     vote_count = int(_item_value(movie, "vote_count", 0) or 0)
     rating = _format_rating(_item_value(movie, "rating")) if vote_count >= 25 else None
     if rating:
         b.text_line(f" · {rating}")
-    b.newline()
+    genre = _primary_genre(movie)
+    if genre:
+        b.text_line(f" · {genre}")
     if with_description:
         overview = clip(str(_item_value(movie, "overview", "") or ""), limit=180)
         if overview:
             if overview[-1] not in ".!?…":
                 overview += "."
-            b.line(f"  {overview}")
+            b.text_line(f" · {overview}")
+    b.newline()
+    if with_description:
+        b.newline()
 
 
 def movie_card(item, tm):

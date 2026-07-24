@@ -39,7 +39,7 @@ def _next_concert(events):
             continue
         venue = (event.get("_embedded", {}).get("venues") or [{}])[0]
         city = str((venue.get("city") or {}).get("name") or "").strip()
-        candidates.append((event_date, str(event.get("_artist") or event.get("name") or "").strip(), city))
+        candidates.append((event_date, event, city))
     return min(candidates, default=None, key=lambda item: item[0])
 
 
@@ -56,10 +56,17 @@ async def send_home(bot, cid, q=None):
     b.section(f"🍿 Досуг · {city}")
     b.spacer()
     if concert:
-        event_date, artist_name, venue_city = concert
+        event_date, event, venue_city = concert
+        artist_name = str(event.get("_artist") or event.get("name") or "").strip()
         b.bold("🎫 Ближайшее событие")
         b.newline()
         b.line(f"{artist_name} · {event_date.day} {leisure_ui._MONTHS_RU[event_date.month]} · {venue_city}")
+        context = leisure_concerts._concert_context(event)
+        genre = leisure_concerts._concert_genre(event)
+        price = leisure_concerts._concert_min_price(event)
+        details = " · ".join(value for value in (context, genre, price) if value)
+        if details:
+            b.line(details)
     elif artist and artist.get("artist"):
         b.bold("🎧 Послушать")
         b.newline()
