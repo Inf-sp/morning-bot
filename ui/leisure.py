@@ -96,7 +96,7 @@ def _format_rating(rating: float | None) -> str | None:
     return f"⭐ {value:.1f}"
 
 
-def _format_movie_row(b: MessageBuilder, movie) -> None:
+def _format_movie_row(b: MessageBuilder, movie, *, with_description=False) -> None:
     title = str(_item_value(movie, "title", "") or "").strip()
     if not title:
         return
@@ -112,6 +112,12 @@ def _format_movie_row(b: MessageBuilder, movie) -> None:
     if rating:
         b.text_line(f" · {rating}")
     b.newline()
+    if with_description:
+        overview = clip(str(_item_value(movie, "overview", "") or ""), limit=180)
+        if overview:
+            if overview[-1] not in ".!?…":
+                overview += "."
+            b.line(f"  {overview}")
 
 
 def movie_card(item, tm):

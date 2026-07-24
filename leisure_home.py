@@ -84,7 +84,7 @@ async def send_home(bot, cid, q=None):
     if now_playing:
         b.section("🎟️ Сейчас в кино")
         for movie in now_playing:
-            leisure_ui._format_movie_row(b, movie)
+            leisure_ui._format_movie_row(b, movie, with_description=True)
     try:
         quote_data = myday._fetch_quote(cid)
     except Exception:

@@ -353,8 +353,9 @@ async def handle(update, context, remove_reply_keyboard):
         return
     # Развлечения / путешествия
     if data == "movie_prefs":
-        await _ack(q)
-        await leisure_movies.send_movie_prefs(bot, cid, q)
+        # Старые сообщения могут содержать эту кнопку после обновления бота.
+        # Предпочтения убраны: возвращаем пользователя в рабочий подбор кино.
+        await _inline_status(lambda _s: leisure_movies.send_recos(bot, cid, "movie"))
         return
     if data == "book_reco":
         await _inline_status(lambda _s: leisure_books.send_books_reco(bot, cid))
@@ -372,7 +373,7 @@ async def handle(update, context, remove_reply_keyboard):
         await cleanup.open_collection(bot, cid, "books_saved", back="a_read")
         return
     if data == "book_prefs":
-        await leisure_books.send_book_preferences(bot, cid, q)
+        await _inline_status(lambda _s: leisure_books.send_books_reco(bot, cid))
         return
     if data == "artist_favorites":
         await cleanup.open_collection(bot, cid, "music_favorite_artists", back="a_listen")
@@ -381,7 +382,7 @@ async def handle(update, context, remove_reply_keyboard):
         await cleanup.open_collection(bot, cid, "music_saved", back="a_listen")
         return
     if data == "music_prefs":
-        await leisure_music.send_music_preferences(bot, cid, q)
+        await _inline_status(lambda _s: leisure_music.send_listen(bot, cid))
         return
     if data.startswith("mpref_"):
         await _ack(q)

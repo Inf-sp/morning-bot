@@ -38,6 +38,10 @@ _PRACTICAL_RE = re.compile(
     r"(?i)(нужно|надо|должен|сделать|закончить|подготов|экзамен|работ|задач|позвон|"
     r"отправить|купить|записаться|убрать|разобрать|не успева)"
 )
+_EXPLICIT_ACTION_RE = re.compile(
+    r"(?i)^\s*(?:мне\s+)?(?:нужно|надо|не\s+забыть|сделать|закончить|подготовить|"
+    r"позвонить|отправить|купить|записаться|убрать|разобрать)\b"
+)
 
 
 def capture_state(cid):
@@ -271,6 +275,16 @@ async def classify(text):
         confidence = min(1.0, max(0.0, float(data.get("confidence", 0.5))))
     except (TypeError, ValueError):
         confidence = 0.5
+    # «Кажется, успею», «боюсь не успеть» и похожие фразы описывают тревогу
+    # о сроках, а не задачу. Слово «задачи» само по себе не делает запись
+    # практической: нужен явный глагол действия в начале мысли.
+    if (
+        _ANXIOUS_RE.search(text)
+        and not _EXPLICIT_ACTION_RE.search(text)
+        and kind not in ("crisis", "medical")
+    ):
+        kind = "anxious_prediction"
+        confidence = max(confidence, 0.8)
     return {
         "type": kind,
         "confidence": confidence,
@@ -341,24 +355,38 @@ def _imperative_from_thought(value):
         if match:
             return template.format(match.group(1).strip(" ."))
     reference = _short_reference(text, 10)
-    return f"Сейчас доведи до конкретного результата только это дело: «{reference}»."
+    return f"Разбей «{reference}» на один видимый шаг до 10 минут."
 
 
 def _fallback_review(items):
     decisions = [item for item in items if _DECISION_RE.search(item.get("text", ""))]
-    anxious = [item for item in items if item.get("type") == "anxious_prediction"]
+    anxious = [
+        item for item in items
+        if item.get("type") == "anxious_prediction"
+        or (_ANXIOUS_RE.search(item.get("text", "")) and not _EXPLICIT_ACTION_RE.search(item.get("text", "")))
+    ]
     practical = [
         item for item in items
-        if item.get("type") == "practical_problem" and item not in decisions
+        if item.get("type") == "practical_problem"
+        and item not in decisions
+        and item not in anxious
+        and _EXPLICIT_ACTION_RE.search(item.get("text", ""))
     ]
-    summary = "Есть задачи и предположения — отделим факты от того, что пока неизвестно."
+    summary = (
+        "Срочность пока не подтверждена."
+        if anxious and not practical and not decisions
+        else "Есть задачи и предположения — отделим факты от того, что пока неизвестно."
+    )
     analysis = []
     if decisions:
         ref = _short_reference(decisions[0].get("text", ""))
         analysis.append(f"«{ref}» уже решено — повторно принимать это решение не нужно.")
     if anxious:
-        ref = _short_reference(anxious[0].get("text", ""))
-        analysis.append(f"«{ref}» пока предположение, а не подтверждённый факт; конкретный срок не указан.")
+        if practical:
+            ref = _short_reference(anxious[0].get("text", ""))
+            analysis.append(f"«{ref}» пока предположение, а не подтверждённый факт; конкретный срок не указан.")
+        else:
+            analysis.append("Это тревожное предположение, а не факт.")
     if practical:
         ref = _short_reference(practical[0].get("text", ""))
         analysis.append(f"Реального действия сейчас требует «{ref}».")
@@ -371,8 +399,7 @@ def _fallback_review(items):
         next_step = f"Следуй уже принятому решению: «{_short_reference(decisions[0].get('text', ''), 10)}»."
     else:
         next_step = (
-            f"Проверь реальный срок для «{_short_reference(items[0].get('text', ''), 8)}», "
-            "прежде чем считать это срочным."
+            "Проверь дедлайн и выбери один ближайший шаг."
         )
     return {
         "summary": summary,
@@ -388,6 +415,25 @@ def _review_has_banned_advice(data):
         str(data.get("next_step", "")),
     ]).casefold()
     return any(value in combined for value in _BANNED_REVIEW_ADVICE)
+
+
+def _review_has_repetition(data):
+    """Не показываем один и тот же вывод в summary, analysis и next_step."""
+    values = [str(data.get("summary", ""))]
+    values.extend(str(value) for value in data.get("analysis", []))
+    values.append(str(data.get("next_step", "")))
+    meaningful = []
+    for value in values:
+        words = {
+            word[:6] for word in re.findall(r"[а-яёa-z0-9]+", value.casefold())
+            if len(word) >= 5 and word not in _GENERIC_STEP_WORDS
+        }
+        meaningful.append(words)
+    return any(
+        len(meaningful[left] & meaningful[right]) >= 3
+        for left in range(len(meaningful))
+        for right in range(left + 1, len(meaningful))
+    )
 
 
 def _content_stems(value):
@@ -408,14 +454,35 @@ def _step_is_content_specific(next_step, items):
 
 async def _build_review(items):
     fallback = _fallback_review(items)
+    anxious_only = any(
+        _ANXIOUS_RE.search(item.get("text", ""))
+        and not _EXPLICIT_ACTION_RE.search(item.get("text", ""))
+        for item in items
+    ) and not any(
+        _EXPLICIT_ACTION_RE.search(item.get("text", ""))
+        and not _ANXIOUS_RE.search(item.get("text", ""))
+        for item in items
+    )
+    # Для одной тревоги о сроках правила надёжнее генерации: не превращаем
+    # её в команду «срочно всё закончить» из-за случайного ответа модели.
+    if anxious_only and not any(_DECISION_RE.search(item.get("text", "")) for item in items):
+        return fallback
     combined = "\n".join(f"- {item.get('text', '')}" for item in items)
     kinds = ", ".join(item.get("type", "unknown") for item in items)
     now = _now()
     prompt = (
-        "Профессионально и бережно разбери текущие мысли пользователя с учётом их конкретного содержания. "
-        "Раздели факты, тревожные предположения и уже принятые решения; покажи, что реально требует действия, "
-        "и снизь ощущение срочности, не обесценивая переживание. Если подтверждения нет, прямо назови мысль "
-        "предположением, а не фактом. Не повторяй исходные мысли полностью. "
+        "Бережно и очень ясно разбери текущие мысли пользователя, как практичный CBT-инструмент для взрослого "
+        "с СДВГ и тревожностью. Сначала отдели факт от прогноза и снизь ложную срочность, затем выбери только "
+        "один следующий шаг. Не ставь диагноз, не оценивай характер и не требуй собраться. "
+        "Если есть решаемая задача, вынеси её наружу и назови один видимый шаг, который можно начать примерно "
+        "за 5–10 минут; не предлагай закончить весь проект. Если есть только тревожный прогноз, не придумывай "
+        "задачу: назови отсутствие подтверждённого срока или факта и предложи проверить один реальный параметр. "
+        "Если подтверждения нет, прямо назови мысль предположением, а не фактом. Не повторяй исходные мысли полностью. "
+        "Фраза с «кажется», «боюсь», «вдруг», «успею/не успею» остаётся тревожным предположением, "
+        "даже если в ней есть слова «задачи» или «дела». Практической задачей считай только запись "
+        "с явным действием вроде «нужно купить», «надо позвонить» или «не забыть отправить». "
+        "Не повторяй одну мысль в summary, analysis и next_step: каждый блок должен добавлять новую информацию. "
+        "Пиши коротко, чтобы человеку с СДВГ и тревожностью было легко быстро понять вывод. "
         "Предложи ровно один конкретный следующий шаг. Не давай универсальных советов: «записать мысль», "
         "«сменить обстановку», «вернуться к текущему делу», «выбрать действие на 5–15 минут», "
         "«отложить мысль до отдельного времени». Не предлагай снова записывать уже записанные мысли. "
@@ -452,6 +519,7 @@ async def _build_review(items):
             or " и " in result["next_step"].casefold()
             or not _step_is_content_specific(result["next_step"], items)
             or _review_has_banned_advice(result)
+            or _review_has_repetition(result)
         )
         if invalid:
             return fallback

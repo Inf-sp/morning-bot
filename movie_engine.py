@@ -10,7 +10,7 @@ Similar по каждому любимому (anchor), фильтруются и
 """
 import re
 import math
-from datetime import date, timedelta
+from datetime import date
 
 import config
 import recommendation_stoplist
@@ -18,7 +18,7 @@ import store
 import tmdb
 
 # Стартовый порог рейтинга и ступени понижения при пустом результате.
-RATING_STEPS = (7.0, 6.8, 6.5)
+RATING_STEPS = (7.0,)
 # Сколько последних показанных помнить (кольцевой список).
 SHOWN_LIMIT = 40
 # Сколько любимых брать как anchors для сбора кандидатов.
@@ -186,14 +186,13 @@ def filter_candidates(cid, pool, min_rating):
             continue
         if (c.get("rating") or 0) < min_rating:
             continue
-        if c.get("kind") == "movie":
-            raw_date = str(c.get("release_date") or "")[:10]
-            try:
-                released = date.fromisoformat(raw_date)
-            except ValueError:
-                continue
-            if released < date.today() - timedelta(days=365):
-                continue
+        raw_date = str(c.get("release_date") or "")[:10]
+        try:
+            released = date.fromisoformat(raw_date)
+        except ValueError:
+            continue
+        if released < date(2000, 1, 1):
+            continue
         out.append(c)
     return out
 
@@ -242,7 +241,10 @@ def recommend(cid, prefs=None, limit=10):
     pool = collect_candidates(taste)
     if not pool:
         return [], taste
-    start = (prefs or {}).get("min_rating") or RATING_STEPS[0]
+    start = max(
+        RATING_STEPS[0],
+        float((prefs or {}).get("min_rating") or RATING_STEPS[0]),
+    )
     steps = [r for r in RATING_STEPS if r <= start] or [RATING_STEPS[-1]]
     if start not in steps:
         steps = [start] + steps

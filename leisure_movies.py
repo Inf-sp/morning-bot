@@ -47,7 +47,6 @@ def _movie_kb(i, category=None, saved=False, favorite=False):
          InlineKeyboardButton("🌙 По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("❤️ Моё кино", callback_data="a_watchlist"),
          InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
-        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
     ]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
@@ -237,7 +236,7 @@ async def send_recos(bot, cid, kind):
     seen = store.get_list(config.WATCHLIST_KEY, cid)
     if not seen:
         candidates = await asyncio.to_thread(
-            tmdb.discover, "movie", None, 6.5, datetime.now(config.TZ).year - 1)
+            tmdb.discover, "movie", None, MIN_TMDB_RATING, 2000)
         excluded = movie_engine._excluded_norms(cid)
         candidates = [movie for movie in candidates
                       if movie_engine._norm(movie.get("name")) not in excluded
@@ -282,7 +281,6 @@ def _movie_home_kb():
          InlineKeyboardButton("🌙 По настроению", callback_data="movie_mood_menu")],
         [InlineKeyboardButton("❤️ Моё кино", callback_data="a_watchlist"),
          InlineKeyboardButton("💾 Сохранить", callback_data="movie_saved")],
-        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -813,7 +811,10 @@ def _discover_pick(cid, genre_ids, prefs, keywords=None,
     не проходит гейт (пограничный случай неполных данных TMDb), пробуем следующего.
     reason — источник рекомендации для карточки (genre/mood), а не anchor-«понравился».
     """
-    min_rating = (prefs or {}).get("min_rating") or movie_engine.RATING_STEPS[0]
+    min_rating = max(
+        movie_engine.RATING_STEPS[0],
+        float((prefs or {}).get("min_rating") or movie_engine.RATING_STEPS[0]),
+    )
     taste = movie_engine.taste_profile(cid, resolve_details=False)
     excluded = movie_engine._excluded_norms(cid)
     steps = [r for r in movie_engine.RATING_STEPS if r <= min_rating] or [movie_engine.RATING_STEPS[-1]]
@@ -823,7 +824,10 @@ def _discover_pick(cid, genre_ids, prefs, keywords=None,
         for mr in steps:
             pool = {}
             for kind in ("movie", "tv"):
-                for c in tmdb.discover(kind, genre_ids=genre_ids, min_rating=mr, keywords=kw):
+                for c in tmdb.discover(
+                    kind, genre_ids=genre_ids, min_rating=mr,
+                    year_gte=2000, keywords=kw,
+                ):
                     if not c.get("id") or movie_engine._norm(c.get("name")) in excluded:
                         continue
                     if not _passes_genre_gate(c, require_genre_ids, require_any_genre_ids):

@@ -90,7 +90,6 @@ def _book_kb(i, saved=False, favorite=False):
         [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites"),
          InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
-        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="book_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -100,7 +99,6 @@ def books_home_keyboard():
         [InlineKeyboardButton("✨ Подобрать книгу", callback_data="book_reco")],
         [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites"),
          InlineKeyboardButton("💾 Сохранить", callback_data="book_saved")],
-        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="book_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

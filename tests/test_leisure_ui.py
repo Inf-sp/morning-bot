@@ -31,7 +31,6 @@ def test_movie_home_uses_clear_recommendation_labels():
         ["✨ Другое кино"],
         ["🎭 По жанру", "🌙 По настроению"],
         ["❤️ Моё кино", "💾 Сохранить"],
-        ["🎚️ Предпочтения"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
@@ -39,11 +38,11 @@ def test_movie_home_uses_clear_recommendation_labels():
 def test_book_and_music_home_follow_same_model():
     assert _labels(leisure_books.books_home_keyboard())[:4] == [
         ["✨ Подобрать книгу"], ["❤️ Мои книги", "💾 Сохранить"],
-        ["🎚️ Предпочтения"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert _labels(leisure_music.music_home_keyboard())[:4] == [
         ["✨ Подобрать музыку"], ["❤️ Мои артисты", "💾 Сохранить"],
-        ["🎫 Концерты"], ["🎚️ Предпочтения"],
+        ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert leisure_books.books_home_keyboard().inline_keyboard[0][0].callback_data == "book_reco"
     assert leisure_music.music_home_keyboard().inline_keyboard[0][0].callback_data == "music_reco"
@@ -117,9 +116,12 @@ def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):
 
     async def movies(*_args, **_kwargs):
         return [
-            {"title": "Одиссея", "rating": 7.9, "vote_count": 100, "genres": ["приключения"]},
-            {"title": "Приглашение", "rating": 7.8, "vote_count": 100},
-            {"title": "Des preuves d'amour", "rating": 7.7, "vote_count": 100},
+            {"title": "Одиссея", "rating": 7.9, "vote_count": 100, "genres": ["приключения"],
+             "overview": "Одиссей возвращается домой после долгой войны и сталкивается с новыми испытаниями."},
+            {"title": "Приглашение", "rating": 7.8, "vote_count": 100,
+             "overview": "Таинственное приглашение на ужин превращает обычный вечер в тревожную загадку."},
+            {"title": "Des preuves d'amour", "rating": 7.7, "vote_count": 100,
+             "overview": "История любви, которой приходится пройти через неожиданные испытания."},
         ]
 
     async def unexpected(*_args, **_kwargs):
@@ -149,6 +151,8 @@ def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):
     assert "Одиссея" in text
     assert "Приглашение" in text
     assert "Des preuves d'amour" in text
+    assert "Одиссей возвращается домой после долгой войны" in text
+    assert "Таинственное приглашение на ужин" in text
     assert "💭 «Не откладывай жизнь на потом.» — по Сенека" in text
     assert "🎧 Послушать" not in text
     assert "📖 Почитать" not in text
