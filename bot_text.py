@@ -1,6 +1,7 @@
 """Маршрутизация входящих текстовых сообщений."""
 
 import logging
+import re
 
 import access
 import assistant
@@ -29,6 +30,19 @@ import wardrobe
 import weather
 
 _log = logging.getLogger(__name__)
+
+
+_THOUGHT_CAPTURE_INTENT_RE = re.compile(
+    r"(?i)(тревож|боюсь|кажется|вдруг|пережива|паник|страшно|не могу успеть|"
+    r"не успею|много тревог|мысль|мысли)"
+)
+
+
+def _should_capture_thought_during_onboarding(text):
+    """Не отдаёт явную тревожную запись в старый шаг города/имени."""
+    return bool(_THOUGHT_CAPTURE_INTENT_RE.search(str(text or "")))
+
+
 def _looks_like_command(text):
     return str(text or "").strip().startswith("/")
 
@@ -81,6 +95,19 @@ async def handle(update, context, remove_reply_keyboard):
 
     pending_kind = store.pending_input.get(cid)
     thought_waiting = balance.thoughts.capture_waiting(cid)
+
+    # Открытый экран «Мысли» имеет приоритет над забытым шагом онбординга.
+    # Иначе фраза вроде «много тревожности» может попасть в поле города и
+    # оставить у пользователя пустой список мыслей.
+    if (
+        thought_waiting
+        and pending_kind in ("onboard_name", "onboard_city")
+        and _should_capture_thought_during_onboarding(text)
+        and balance.thoughts.claim_capture(cid)
+    ):
+        _log.info("thought: onboarding input overridden by explicit thought intent for cid=%s", cid)
+        await balance.thoughts.capture(bot, cid, text)
+        return
 
     # Явные текстовые действия сильнее пассивного ожидания ответа на напоминание.
     # Активный специализированный workflow при этом остаётся первым.
