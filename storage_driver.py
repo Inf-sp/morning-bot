@@ -169,15 +169,15 @@ def mutate(key, mutator):
             return result
 
     try:
-        import psycopg2
-
-        # Для mutate используется отдельное соединение.
-        # Оно не связано с глобальным autocommit-соединением,
-        # которое используется load/save/delete.
-        connection = psycopg2.connect(config.DATABASE_URL)
-
-        try:
-            with connection:
+        # Короткие KV-мутации используют уже открытое соединение текущего
+        # процесса. Advisory lock по-прежнему координирует несколько процессов,
+        # а локальная блокировка не допускает параллельных транзакций на нём.
+        with _connection_lock:
+            connection = db()
+            if connection is None:
+                raise RuntimeError("PostgreSQL connection unavailable")
+            connection.autocommit = False
+            try:
                 with connection.cursor() as cursor:
                     # Транзакционная advisory-блокировка гарантирует,
                     # что один KV-ключ не изменяется одновременно
@@ -196,7 +196,6 @@ def mutate(key, mutator):
 
                     row = cursor.fetchone()
                     current = row[0] if row else {}
-
                     new_value, result = mutator(
                         current if isinstance(current, dict) else {}
                     )
@@ -205,22 +204,18 @@ def mutate(key, mutator):
                         "INSERT INTO kv (key, value) VALUES (%s, %s) "
                         "ON CONFLICT (key) "
                         "DO UPDATE SET value = EXCLUDED.value",
-                        (
-                            key,
-                            json.dumps(
-                                new_value,
-                                ensure_ascii=False,
-                            ),
-                        ),
+                        (key, json.dumps(new_value, ensure_ascii=False)),
                     )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+            finally:
+                if not connection.closed:
+                    connection.autocommit = True
 
-            # На этом этапе транзакция уже успешно закоммичена.
             _cache_set(key, new_value)
-
             return result
-
-        finally:
-            connection.close()
 
     except Exception as error:
         _log.exception(

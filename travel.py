@@ -433,7 +433,10 @@ async def _confirm_country_delete(bot, cid, code, page, q):
          InlineKeyboardButton("Отмена", callback_data=f"a_trav_country_{code}_{page}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_trav_country_{code}_{page}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
-    await q.message.edit_text(text, reply_markup=kb)
+    try:
+        await q.message.edit_text(text, reply_markup=kb)
+    except Exception:
+        await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
 async def handle_country_callback(bot, cid, q, act):
@@ -739,7 +742,7 @@ async def send_plan(bot, cid):
                 "interests": interests,
                 "facts": facts,
                 "travel_facts": travel_facts,
-                "web_facts": web_data,
+                "web_facts": travel_facts,
                 "profile_version": 1,
                 "schema_version": _CARD_CONTENT_VERSION,
             },

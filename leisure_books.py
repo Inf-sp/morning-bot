@@ -115,9 +115,12 @@ async def send_book_preferences(bot, cid, q=None):
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_read"),
                                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
     if q is not None:
-        await q.message.edit_text(text, reply_markup=kb)
-    else:
-        await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+        try:
+            await q.message.edit_text(text, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 async def _send_book_card(bot, cid, it, i, *, enrich=True):
     import saved_items

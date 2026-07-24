@@ -36,7 +36,10 @@ class ProviderSpec:
     label: str
     sections: tuple[str, ...]
     fallbacks: tuple[str, ...] = ()
-    probe_every: int = 300
+    # Фоновые probes — диагностические, а не пользовательский трафик.
+    # Часовой интервал сохраняет актуальность админского экрана без
+    # постоянного опроса внешних сервисов.
+    probe_every: int = 3600
 
     @property
     def category(self) -> str:

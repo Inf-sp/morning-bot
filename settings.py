@@ -183,15 +183,24 @@ async def send_home(bot, cid):
 async def send_lifehacks(bot, cid, q=None):
     import myday
 
-    records = myday.lifehack_records()
-    msg = settings_ui.lifehacks_home(len(records))
+    records = myday.lifehack_records(include_disabled=False)
+    page = 0
+    total_pages = max(1, (len(records) + 4) // 5)
+    chunk = records[page * 5:page * 5 + 5]
+    msg = settings_ui.lifehacks_home(len(records), chunk, page, total_pages)
     rows = [
         [InlineKeyboardButton("🆕 Добавить", callback_data="set_lh_add")],
-        [InlineKeyboardButton("✏️ Изменить", callback_data="set_lh_edit")],
         [InlineKeyboardButton("❌ Удалить", callback_data="set_lh_delete")],
+    ]
+    if total_pages > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"set_lh_page_{total_pages - 1}"),
+            InlineKeyboardButton("▶️", callback_data="set_lh_page_1"),
+        ])
+    rows.extend([
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ]
+    ])
     markup = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
@@ -203,7 +212,37 @@ async def send_lifehacks(bot, cid, q=None):
                            reply_markup=markup, transient=True)
 
 
-def _lifehack_selection_rows(records, prefix):
+async def send_lifehack_page(bot, cid, page, q=None):
+    import myday
+
+    records = myday.lifehack_records(include_disabled=False)
+    total_pages = max(1, (len(records) + 4) // 5)
+    page = max(0, min(int(page), total_pages - 1))
+    chunk = records[page * 5:page * 5 + 5]
+    msg = settings_ui.lifehacks_home(len(records), chunk, page, total_pages)
+    rows = [
+        [InlineKeyboardButton("🆕 Добавить", callback_data="set_lh_add")],
+        [InlineKeyboardButton("❌ Удалить", callback_data=f"set_lh_delete_page_{page}")],
+    ]
+    if total_pages > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"set_lh_page_{(page - 1) % total_pages}"),
+            InlineKeyboardButton("▶️", callback_data=f"set_lh_page_{(page + 1) % total_pages}"),
+        ])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    markup = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=markup, transient=True)
+
+
+def _lifehack_selection_rows(records, prefix, page=0, total_pages=1, action="delete"):
     rows = []
     for item in records[:50]:
         record_id = str(item.get("id") or "")
@@ -212,6 +251,12 @@ def _lifehack_selection_rows(records, prefix):
         text = " ".join(str(item.get("text") or "").split())
         label = text[:42] + ("…" if len(text) > 42 else "")
         rows.append([InlineKeyboardButton(label, callback_data=f"{prefix}{record_id}")])
+    if total_pages > 1:
+        callback_prefix = "set_lh_edit_page_" if action == "edit" else "set_lh_delete_page_"
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"{callback_prefix}{(page - 1) % total_pages}"),
+            InlineKeyboardButton("▶️", callback_data=f"{callback_prefix}{(page + 1) % total_pages}"),
+        ])
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data="set_lifehacks"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
@@ -219,22 +264,28 @@ def _lifehack_selection_rows(records, prefix):
     return rows
 
 
-async def send_lifehack_edit_list(bot, cid, q=None):
+async def send_lifehack_edit_list(bot, cid, q=None, page=0):
     import myday
 
     records = myday.lifehack_records(include_disabled=False)
-    msg = settings_ui.lifehacks_list("✏️ Изменить", records)
-    markup = InlineKeyboardMarkup(_lifehack_selection_rows(records, "set_lh_edit_"))
+    total_pages = max(1, (len(records) + 4) // 5)
+    page = max(0, min(int(page), total_pages - 1))
+    chunk = records[page * 5:page * 5 + 5]
+    msg = settings_ui.lifehacks_list("✏️ Изменить", chunk, page, total_pages)
+    markup = InlineKeyboardMarkup(_lifehack_selection_rows(chunk, "set_lh_edit_", page, total_pages, "edit"))
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=markup, transient=True)
 
 
-async def send_lifehack_delete_list(bot, cid, q=None):
+async def send_lifehack_delete_list(bot, cid, q=None, page=0):
     import myday
 
     records = myday.lifehack_records(include_disabled=False)
-    msg = settings_ui.lifehacks_list("❌ Удалить", records)
-    markup = InlineKeyboardMarkup(_lifehack_selection_rows(records, "set_lh_delete_"))
+    total_pages = max(1, (len(records) + 4) // 5)
+    page = max(0, min(int(page), total_pages - 1))
+    chunk = records[page * 5:page * 5 + 5]
+    msg = settings_ui.lifehacks_list("❌ Удалить", chunk, page, total_pages)
+    markup = InlineKeyboardMarkup(_lifehack_selection_rows(chunk, "set_lh_delete_", page, total_pages, "delete"))
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=markup, transient=True)
 
@@ -970,12 +1021,18 @@ async def handle_callback(bot, cid, data, q=None):
         await send_home(bot, cid)
     elif data == "set_lifehacks":
         await send_lifehacks(bot, cid, q)
+    elif data.startswith("set_lh_page_"):
+        await send_lifehack_page(bot, cid, data[len("set_lh_page_"):], q)
     elif data == "set_lh_add":
         await start_lifehack_add(bot, cid)
     elif data == "set_lh_edit":
         await send_lifehack_edit_list(bot, cid, q)
+    elif data.startswith("set_lh_edit_page_"):
+        await send_lifehack_edit_list(bot, cid, q, data[len("set_lh_edit_page_"):])
     elif data == "set_lh_delete":
         await send_lifehack_delete_list(bot, cid, q)
+    elif data.startswith("set_lh_delete_page_"):
+        await send_lifehack_delete_list(bot, cid, q, data[len("set_lh_delete_page_"):])
     elif data.startswith("set_lh_edit_"):
         await start_lifehack_edit(bot, cid, data[len("set_lh_edit_"):])
     elif data.startswith("set_lh_delete_yes_"):

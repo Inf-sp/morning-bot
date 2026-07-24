@@ -421,6 +421,10 @@ async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
     не отправляется; при открытии раздела бот читает уже готовый кэш.
     """
     for cid in access.get_allowed_cids():
+        # Прогрев нужен только тем, кому утром действительно отправляется
+        # сводка. Разделы по-прежнему собираются при ручном открытии.
+        if not settings.notif_on(cid, "morning_brief"):
+            continue
         if tracking.has_active_actions():
             logging.info("home cache warm skipped: user action active")
             return

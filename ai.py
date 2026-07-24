@@ -598,11 +598,14 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
     with _GEMINI_RATE_LOCK:
         wait = api_usage.seconds_until_gemini_slot(limit=4, window=60)
         if wait > 0:
+            remaining = _remaining_seconds()
+            if remaining is not None and wait >= max(0.0, remaining - 0.2):
+                raise _deadline_error()
             time.sleep(wait)
         t0 = time.time()
         r = _post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
-            {}, payload, 30, "gemini", timeout_cap=6)
+            {}, payload, 30, "gemini", timeout_cap=5)
     data = r.json()
     usage = data.get("usageMetadata") or data.get("usage_metadata") or {}
     input_tokens = int(usage.get("promptTokenCount") or usage.get("prompt_token_count") or 0)

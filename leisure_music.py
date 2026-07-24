@@ -123,9 +123,12 @@ async def send_music_preferences(bot, cid, q=None):
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_listen"),
                                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
     if q is not None:
-        await q.message.edit_text(text, reply_markup=kb)
-    else:
-        await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+        try:
+            await q.message.edit_text(text, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 async def listen_dislike(bot, cid):
     rec = store.last_recos.get(str(cid))

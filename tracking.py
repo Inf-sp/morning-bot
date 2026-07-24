@@ -399,6 +399,14 @@ def touch(cid) -> None:
         if now - _last_touch.get(cid, 0) < _TOUCH_THROTTLE_SECONDS:
             return
         _last_touch[cid] = now
+        if len(_last_touch) > 2048:
+            cutoff = now - 7 * DAY
+            stale = [key for key, timestamp in _last_touch.items() if timestamp < cutoff]
+            for key in stale:
+                _last_touch.pop(key, None)
+            if len(_last_touch) > 2048:
+                for key, _ in sorted(_last_touch.items(), key=lambda item: item[1])[:256]:
+                    _last_touch.pop(key, None)
         data = store._load(config.ACTIVITY_KEY)
         rec = data.get(cid) or {"last_ts": 0, "count": 0, "days": [], "first_ts": int(now)}
         rec["last_ts"] = int(now)

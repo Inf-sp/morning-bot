@@ -116,14 +116,26 @@ def settings_home(city="", notifications_on=True):
     return b.build_stripped()
 
 
-def lifehacks_home(total):
+def lifehacks_home(total, records=None, page=0, total_pages=1):
     b = MessageBuilder()
     b.section("💡 Лайфхаки")
     b.line(f"Всего: {total}")
+    if records:
+        b.spacer()
+        for item in records:
+            category = str(item.get("category") or "разное").capitalize()
+            text = " ".join(str(item.get("text") or "").split())
+            b.labeled_line(category, text[:180], lowercase=False)
+    elif not total:
+        b.spacer()
+        b.line("Записей пока нет.")
+    if total_pages > 1:
+        b.spacer()
+        b.line(f"Страница {page + 1} из {total_pages}")
     return b.build_stripped()
 
 
-def lifehacks_list(title, records):
+def lifehacks_list(title, records, page=0, total_pages=1):
     b = MessageBuilder()
     b.section(title)
     if not records:
@@ -133,6 +145,9 @@ def lifehacks_list(title, records):
             category = str(item.get("category") or "разное").capitalize()
             text = " ".join(str(item.get("text") or "").split())
             b.labeled_line(category, text[:180], lowercase=False)
+    if total_pages > 1:
+        b.spacer()
+        b.line(f"Страница {page + 1} из {total_pages}")
     return b.build_stripped()
 
 

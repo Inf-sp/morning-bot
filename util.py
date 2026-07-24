@@ -13,6 +13,7 @@ _WEEKDAY_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 _MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня",
            "июля", "августа", "сентября", "октября", "ноября", "декабря"]
 _TTL_CACHE = {}
+_TTL_CACHE_MAX = 1024
 
 LOADING_PHRASES = [
     "⏳ Готовлю ответ…",
@@ -133,7 +134,7 @@ class StatusManager:
     async def stop(self, delete=True):
         await self._cancel()
         if self.mode != "inline" and delete and self.message is not None:
-            _log.info("StatusManager.stop: deleting message_id=%s cid=%s",
+            _log.debug("StatusManager.stop: deleting message_id=%s cid=%s",
                       getattr(self.message, "message_id", None), self.cid)
             try:
                 await self.message.delete()
@@ -145,14 +146,14 @@ class StatusManager:
         if self.mode == "inline":
             await self.stop(delete=False)
             if self.cid is not None and self.bot is not None:
-                _log.info("StatusManager.replace(inline): sending new message cid=%s text_len=%s",
+                _log.debug("StatusManager.replace(inline): sending new message cid=%s text_len=%s",
                           self.cid, len(text or ""))
                 try:
                     msg = await self.bot.send_message(chat_id=self.cid, text=text, **kwargs)
                 except Exception as e:
                     _log.error("StatusManager.replace(inline): send_message failed cid=%s: %r", self.cid, e, exc_info=True)
                     raise
-                _log.info("StatusManager.replace(inline): sent message_id=%s cid=%s", msg.message_id, self.cid)
+                _log.debug("StatusManager.replace(inline): sent message_id=%s cid=%s", msg.message_id, self.cid)
                 return True
             _log.warning("StatusManager.replace(inline): no cid/bot, cid=%s bot=%s", self.cid, self.bot is not None)
             return False
@@ -180,7 +181,12 @@ def ttl_get(namespace: str, key: str, ttl: int):
     return value
 
 def ttl_set(namespace: str, key: str, value):
-    _TTL_CACHE[(namespace, key)] = (time.time(), value)
+    cache_key = (namespace, key)
+    now = time.time()
+    _TTL_CACHE[cache_key] = (now, value)
+    if len(_TTL_CACHE) > _TTL_CACHE_MAX:
+        oldest = min(_TTL_CACHE, key=lambda item: _TTL_CACHE[item][0])
+        _TTL_CACHE.pop(oldest, None)
     return value
 
 def esc(t: str | None) -> str:
