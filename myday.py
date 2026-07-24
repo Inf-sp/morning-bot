@@ -486,8 +486,8 @@ def _lifehack_fallback(cid, rain=False, hot=False, is_weekend=False):
 
 def _generate_lifehack_pool(cid):
     interests = []
-    movies = store.get_list(config.WATCHLIST_KEY, cid)[:4]
-    books = store.get_list(config.BOOKS_KEY, cid)[:4]
+    movies = store.get_list(config.FAVORITE_MOVIES_KEY, cid)[:4]
+    books = store.get_list(config.FAVORITE_BOOKS_KEY, cid)[:4]
     if movies:
         interests.append(f"любит фильмы/сериалы: {', '.join(str(m) for m in movies if m)}")
     if books:
@@ -640,9 +640,9 @@ def _item_text(item):
 
 def _build_quote_context(cid):
     """Собирает контекст пользователя для персонализации цитаты."""
-    movies = store.get_list(config.WATCHLIST_KEY, cid)[:6]
-    books = store.get_list(config.BOOKS_KEY, cid)[:6]
-    artists = store.get_list(config.ARTISTS_KEY, cid)[:6]
+    movies = store.get_list(config.FAVORITE_MOVIES_KEY, cid)[:6]
+    books = store.get_list(config.FAVORITE_BOOKS_KEY, cid)[:6]
+    artists = store.get_list(config.FAVORITE_ARTISTS_KEY, cid)[:6]
     seen_authors = store.get_list(config.QUOTE_AUTHORS_KEY, cid)
     if len(seen_authors) >= _QUOTE_RESET_AFTER:
         store.set_list(config.QUOTE_AUTHORS_KEY, cid, [])

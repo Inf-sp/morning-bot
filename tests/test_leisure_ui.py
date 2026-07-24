@@ -25,6 +25,12 @@ def test_leisure_home_contains_three_sections_in_one_column_and_home():
     assert [len(row) for row in rows] == [1, 1, 1, 2, 1]
 
 
+def test_saved_leisure_categories_use_saved_marker():
+    assert _labels(leisure_home._leisure_category_keyboard("leisure_saved", saved=True))[:3] == [
+        ["💾 Кино"], ["💾 Музыка"], ["💾 Книги"],
+    ]
+
+
 def test_movie_home_uses_clear_recommendation_labels():
     labels = _labels(leisure_movies._movie_home_kb())
     assert labels == [

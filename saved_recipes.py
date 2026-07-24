@@ -19,17 +19,17 @@ async def save_my_recipe(bot, cid, q=None):
     d = store.last_recipe.get(cid_s)
     if not d or not d.get("name"):
         await bot.send_message(chat_id=cid, text="Нет рецепта для сохранения."); return
-    saved = store.get_list(config.MY_RECIPES_KEY, cid_s)
+    saved = store.get_list(config.SAVED_RECIPES_KEY, cid_s)
     names_lower = [r.get("name", "").lower() for r in saved]
     if d["name"].lower() in names_lower:
         index = names_lower.index(d["name"].lower())
         saved.pop(index)
-        store.set_list(config.MY_RECIPES_KEY, cid_s, saved)
+        store.set_list(config.SAVED_RECIPES_KEY, cid_s, saved)
         if d.get("cuisine"):
             bump_cuisine_weight(cid, d["cuisine"], -1)
         is_saved = False
     else:
-        store.add_to_list(config.MY_RECIPES_KEY, cid_s, d)
+        store.add_to_list(config.SAVED_RECIPES_KEY, cid_s, d)
         if d.get("cuisine"):
             bump_cuisine_weight(cid, d["cuisine"], 1)
         is_saved = True
@@ -38,7 +38,7 @@ async def save_my_recipe(bot, cid, q=None):
 
 async def send_my_recipes(bot, cid, back="as_notes"):
     cid_s = str(cid)
-    recipes = store.get_list(config.MY_RECIPES_KEY, cid_s)
+    recipes = store.get_list(config.SAVED_RECIPES_KEY, cid_s)
     if not recipes:
         msg = food_ui.my_recipes_empty()
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
@@ -56,7 +56,7 @@ async def send_my_recipes(bot, cid, back="as_notes"):
 
 async def send_my_recipe_full(bot, cid, idx):
     cid_s = str(cid)
-    recipes = store.get_list(config.MY_RECIPES_KEY, cid_s)
+    recipes = store.get_list(config.SAVED_RECIPES_KEY, cid_s)
     if idx >= len(recipes):
         await bot.send_message(
             chat_id=cid, text="Рецепт не найден.",
@@ -73,10 +73,10 @@ async def send_my_recipe_full(bot, cid, idx):
 
 async def my_recipe_del(bot, cid, idx):
     cid_s = str(cid)
-    recipes = store.get_list(config.MY_RECIPES_KEY, cid_s)
+    recipes = store.get_list(config.SAVED_RECIPES_KEY, cid_s)
     if idx < len(recipes):
         name = recipes[idx].get("name", "рецепт")
         recipes.pop(idx)
-        store.set_list(config.MY_RECIPES_KEY, cid_s, recipes)
+        store.set_list(config.SAVED_RECIPES_KEY, cid_s, recipes)
         await bot.send_message(chat_id=cid, text=f"❌ «{util.esc(name)}» удалён из базы рецептов.")
     await send_my_recipes(bot, cid)

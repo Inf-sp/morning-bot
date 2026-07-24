@@ -210,7 +210,7 @@ async def warm_home_cache(cid):
 
 
 def _plan_countries(cid):
-    return [n.get("country", "") for n in store.get_list(config.NOTES_KEY, cid)
+    return [n.get("country", "") for n in store.get_list(config.CONTENT_RECORDS_KEY, cid)
             if isinstance(n, dict) and n.get("bucket") == "plan" and n.get("country")]
 
 
@@ -270,7 +270,7 @@ def _valid_country_name(name):
 
 def _visited_codes(cid):
     """Ленивая миграция обоих старых списков в единственную связь user -> country_code."""
-    primary = store.get_list(config.FAVCOUNTRIES_KEY, cid)
+    primary = store.get_list(config.SAVED_COUNTRIES_KEY, cid)
     migration_done = bool(settings.get(cid, "travel_country_codes_migrated", False))
     legacy = [] if migration_done else store.get_list(config.COUNTRIES_KEY, cid)
     raw = list(primary) + list(legacy)
@@ -302,7 +302,7 @@ def _visited_codes(cid):
         if item != code:
             changed = True
     if changed or legacy:
-        store.set_list(config.FAVCOUNTRIES_KEY, cid, codes)
+        store.set_list(config.SAVED_COUNTRIES_KEY, cid, codes)
     if not migration_done:
         settings.set_(cid, "travel_country_codes_migrated", True)
     return codes
@@ -450,7 +450,7 @@ async def handle_country_callback(bot, cid, q, act):
         action, code, page = match.group(1), match.group(2), int(match.group(3))
         if action == "del":
             await _confirm_country_delete(bot, cid, code, page, q); return
-        store.set_list(config.FAVCOUNTRIES_KEY, cid, [x for x in _visited_codes(cid) if x != code])
+        store.set_list(config.SAVED_COUNTRIES_KEY, cid, [x for x in _visited_codes(cid) if x != code])
         await send_countries(bot, cid, page, q); return
     match = re.fullmatch(r"trav_country_([A-Z0-9]+)_(\d+)", act)
     if match:
@@ -472,7 +472,7 @@ async def add_visited_country(bot, cid, text):
     codes = _visited_codes(cid)
     if code not in codes:
         codes.append(code)
-        store.set_list(config.FAVCOUNTRIES_KEY, cid, codes)
+        store.set_list(config.SAVED_COUNTRIES_KEY, cid, codes)
     _save_cached_card(code, _stub_card(code, country_name, util.flag_from_cc(code)), replace=False)
     await send_countries(bot, cid, 0)
 
@@ -620,7 +620,7 @@ async def travel_fav(bot, cid):
         if code:
             codes = _visited_codes(cid)
             if code not in codes: codes.append(code)
-            store.set_list(config.FAVCOUNTRIES_KEY, cid, codes)
+            store.set_list(config.SAVED_COUNTRIES_KEY, cid, codes)
             _save_cached_card(code, _stub_card(code, country, util.flag_from_cc(code)), replace=False)
             await bot.send_message(chat_id=cid, text=f"✅ {country} добавлена в «Мои страны».")
     await send_go(bot, cid)

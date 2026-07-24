@@ -22,7 +22,7 @@ def _item_text(item):
 
 
 def _ensure_books(cid):
-    return [_item_text(item) for item in store.get_list(config.BOOKS_KEY, cid)
+    return [_item_text(item) for item in store.get_list(config.FAVORITE_BOOKS_KEY, cid)
             if _item_text(item)]
 
 
@@ -204,7 +204,7 @@ _FALLBACK_BOOKS = [
 def _book_used(cid):
     """Названия книг, которые нельзя повторять: любимые, знакомые, закладки, отклонённые."""
     used = set()
-    for key in (config.BOOKS_KEY, config.READLIST_KEY):
+    for key in (config.FAVORITE_BOOKS_KEY, config.SAVED_BOOKS_KEY):
         for x in store.get_list(key, cid):
             title = _item_text(x)
             if title:
@@ -292,7 +292,7 @@ async def book_love(bot, cid, i, q=None):
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
-        _add_unique(config.BOOKS_KEY, cid, title)
+        _add_unique(config.FAVORITE_BOOKS_KEY, cid, title)
         if q is not None:
             import saved_items
             await q.message.edit_reply_markup(

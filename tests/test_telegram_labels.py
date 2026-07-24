@@ -35,11 +35,11 @@ def test_wardrobe_card_uses_current_outfit_labels():
     })
 
     assert _bold_fragments(message) == [
-        "🧵 Образ на сегодня · Скандинавский",
+        "🧥 Образ на сегодня · Скандинавский",
         "Надень:",
         "Полезно:",
     ]
-    assert "🧵 Образ на сегодня · Скандинавский" in message.text
+    assert "🧥 Образ на сегодня · Скандинавский" in message.text
     assert "Гардероб · Образ на сегодня" not in message.text
     assert "Надень:\n• Белая рубашка\n• Синие брюки" in message.text
     assert "💡 Полезно: подверни рукава рубашки." in message.text

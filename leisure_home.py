@@ -28,11 +28,16 @@ def _keyboard():
     ])
 
 
-def _leisure_category_keyboard(callback_prefix):
+def _leisure_category_keyboard(callback_prefix, *, saved=False):
+    labels = (
+        ("💾 Кино", "💾 Музыка", "💾 Книги")
+        if saved
+        else ("🎬 Кино", "🎧 Музыка", "📖 Книги")
+    )
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎬 Кино", callback_data=f"{callback_prefix}_movie")],
-        [InlineKeyboardButton("🎧 Музыка", callback_data=f"{callback_prefix}_music")],
-        [InlineKeyboardButton("📖 Книги", callback_data=f"{callback_prefix}_books")],
+        [InlineKeyboardButton(labels[0], callback_data=f"{callback_prefix}_movie")],
+        [InlineKeyboardButton(labels[1], callback_data=f"{callback_prefix}_music")],
+        [InlineKeyboardButton(labels[2], callback_data=f"{callback_prefix}_books")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -43,7 +48,7 @@ async def send_saved(bot, cid, q=None):
     b.section("💾 Сохранённое · Досуг")
     b.spacer()
     b.line("Выбери категорию сохранённых фильмов, книг или музыки.")
-    msg = b.build_stripped(reply_markup=_leisure_category_keyboard("leisure_saved"))
+    msg = b.build_stripped(reply_markup=_leisure_category_keyboard("leisure_saved", saved=True))
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)

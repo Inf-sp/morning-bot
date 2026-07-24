@@ -61,12 +61,12 @@ def _shown_norms(cid):
 # ---------- множества исключений ----------
 def _excluded_norms(cid, include_shown=True):
     """Названия, которые нельзя показывать: любимые/seen/blacklist/закладки(+показанные)."""
-    keys = [config.WATCHLIST_KEY]
+    keys = [config.FAVORITE_MOVIES_KEY]
     names = []
     for k in keys:
         names += store.get_list(k, cid)
     names += recommendation_stoplist.values(cid, "movie")
-    notes = store.get_list(config.NOTES_KEY, cid)
+    notes = store.get_list(config.CONTENT_RECORDS_KEY, cid)
     names += [n.get("text", "") for n in notes
               if isinstance(n, dict) and "кино" in str(n.get("source", "")).lower()]
     ex = {_norm(x) for x in names}
@@ -81,7 +81,7 @@ def taste_profile(cid, resolve_details=True):
 
     anchors: [{title, id, kind, detail}] — резолвленные через TMDb любимые.
     """
-    loved = [_title_only(x) for x in store.get_list(config.WATCHLIST_KEY, cid)]
+    loved = [_title_only(x) for x in store.get_list(config.FAVORITE_MOVIES_KEY, cid)]
     loved = [x for x in loved if x][:MAX_ANCHORS]
     anchors = []
     genre_freq = {}

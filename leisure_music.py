@@ -83,7 +83,7 @@ async def listen_love(bot, cid, q=None):
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
         artist = rec["items"][0]
-        _add_unique(config.ARTISTS_KEY, cid, artist)
+        _add_unique(config.FAVORITE_ARTISTS_KEY, cid, artist)
         _invalidate_artist(cid)
         _kick_off_new_artist_concert_check(cid, [artist])
         if q is not None:
@@ -145,7 +145,7 @@ def _item_text(item):
 
 def _ensure_artists(cid):
     """Единая нормализация списка артистов для музыкальных рекомендаций."""
-    return [_item_text(item) for item in store.get_list(config.ARTISTS_KEY, cid)
+    return [_item_text(item) for item in store.get_list(config.FAVORITE_ARTISTS_KEY, cid)
             if _item_text(item)]
 
 
@@ -212,7 +212,7 @@ async def send_listen(bot, cid, *, preview=False):
     anchors = ", ".join(arts[:25])
     language_context = _language_music_context(cid)
     blocked = recommendation_stoplist.values(cid, "artist")
-    notes = store.get_list(config.NOTES_KEY, cid)
+    notes = store.get_list(config.CONTENT_RECORDS_KEY, cid)
     booked = [n.get("text", "") for n in notes
               if isinstance(n, dict) and "музык" in str(n.get("source", "")).lower()]
     known = (set(a.lower() for a in arts) | set(b.lower() for b in booked)

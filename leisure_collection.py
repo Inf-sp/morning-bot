@@ -55,7 +55,7 @@ async def collect_done(bot, cid, kind: str, text: str):
             chat_id=cid, text="Не смог разобрать список — попробуй ещё раз.",
             reply_markup=back_menu_keyboard("m_leisure"))
         return
-    key_map = {"artists": config.ARTISTS_KEY, "movies": config.WATCHLIST_KEY, "books": config.BOOKS_KEY}
+    key_map = {"artists": config.FAVORITE_ARTISTS_KEY, "movies": config.FAVORITE_MOVIES_KEY, "books": config.FAVORITE_BOOKS_KEY}
     key = key_map.get(kind)
     if key:
         existing = {_norm(x) for x in store.get_list(key, cid)}
@@ -79,7 +79,7 @@ async def collect_done(bot, cid, kind: str, text: str):
 
 def _ensure_books(cid):
     """Возвращает список книг пользователя (без авто-сида)."""
-    return store.get_list(config.BOOKS_KEY, cid)
+    return store.get_list(config.FAVORITE_BOOKS_KEY, cid)
 
 def _norm(x):
     """Нормализованное имя элемента (строка или {name}) для сравнения без учёта регистра."""
@@ -97,15 +97,15 @@ def _add_unique(key, cid, value):
 def _note_fav_exists(cid, text):
     """Есть ли уже такая закладка (bucket=fav) с тем же текстом."""
     t = (text or "").strip().lower()
-    for n in store.get_list(config.NOTES_KEY, cid):
+    for n in store.get_list(config.CONTENT_RECORDS_KEY, cid):
         if isinstance(n, dict) and n.get("bucket", "fav") == "fav" and n.get("text", "").strip().lower() == t:
             return True
     return False
 
 def dedupe_lists():
     """Разовая чистка: убирает повторы (без учёта регистра) в списках любимого/закладок."""
-    keys = [config.BOOKS_KEY, config.ARTISTS_KEY, config.WATCHLIST_KEY,
-            config.READLIST_KEY, config.COUNTRIES_KEY]
+    keys = [config.FAVORITE_BOOKS_KEY, config.FAVORITE_ARTISTS_KEY, config.FAVORITE_MOVIES_KEY,
+            config.SAVED_BOOKS_KEY, config.COUNTRIES_KEY]
     changed_any = False
     for key in keys:
         data = store._load(key)
@@ -145,16 +145,16 @@ def seed_movies_from_content():
         return False
     titles = [t for t in raw.get("films", []) + raw.get("series", []) if isinstance(t, str) and t.strip()]
     for title in titles:
-        _add_unique(config.WATCHLIST_KEY, config.CHAT_ID, title.strip())
+        _add_unique(config.FAVORITE_MOVIES_KEY, config.CHAT_ID, title.strip())
     flags[marker] = True
     store._save("_seed_flags", flags)
     return True
 
 def content_recommend(kind, cid):
     if kind == "movie":
-        loved = store.get_list(config.WATCHLIST_KEY, cid)
+        loved = store.get_list(config.FAVORITE_MOVIES_KEY, cid)
         blocked = recommendation_stoplist.values(cid, "movie")
-        notes_all = store.get_list(config.NOTES_KEY, cid)
+        notes_all = store.get_list(config.CONTENT_RECORDS_KEY, cid)
         noted_movies = [n.get("text", "") for n in notes_all
                         if isinstance(n, dict) and "кино" in str(n.get("source", "")).lower()]
         what = "фильмов или сериалов"
@@ -180,7 +180,7 @@ JSON: {{"items": [{{"title": "название (год)", "title_en": "ориг�
     # книги: референсы вкуса берём из "Мои книги" (настройки/БД, авто-загрузка из content.json)
     my_books = _ensure_books(cid)
     my_books_titles = [b if isinstance(b, str) else str(b) for b in my_books]
-    read_seen = store.get_list(config.READLIST_KEY, cid)
+    read_seen = store.get_list(config.SAVED_BOOKS_KEY, cid)
     blocked = recommendation_stoplist.values(cid, "book")
     read_titles = [s if isinstance(s, str) else str(s) for s in read_seen]
     refs = my_books_titles

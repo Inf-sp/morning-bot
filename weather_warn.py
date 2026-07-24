@@ -278,7 +278,7 @@ def _has_plan_today(cid) -> bool:
     try:
         from datetime import datetime
         today = datetime.now(config.TZ).strftime("%d.%m")
-        notes = store.get_list(config.NOTES_KEY, cid)
+        notes = store.get_list(config.CONTENT_RECORDS_KEY, cid)
         for n in notes:
             if isinstance(n, dict) and n.get("bucket") == "plan" and n.get("date") == today:
                 return True

@@ -7,7 +7,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 from telegram import MessageEntity
 
 from ui.settings import wardrobe_style
-from ui.wardrobe import render_wardrobe_message
+from ui.wardrobe import outfit_header, render_wardrobe_message
 from wardrobe_model import normalize_parsed_item, public_item_name
 from wardrobe_outfit import (
     SAFE_NEUTRAL_STYLE_TIP,
@@ -59,6 +59,15 @@ def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
 
     assert "\nНадень:\n• Цепочка со значком сторон света\n• Футболка Levi's" in message.text
     assert "Надень:\n\n" not in message.text
+
+
+def test_outfit_header_uses_emoji_of_selected_style():
+    assert outfit_header("Минимализм") == "👕 Образ на сегодня · Минимализм"
+    assert outfit_header("Городской") == "🧢 Образ на сегодня · Городской"
+    assert outfit_header("Повседневный") == "👖 Образ на сегодня · Повседневный"
+    assert outfit_header("Скандинавский") == "🧥 Образ на сегодня · Скандинавский"
+    assert outfit_header("Классический") == "👔 Образ на сегодня · Классический"
+    assert outfit_header("Спортивный") == "👟 Образ на сегодня · Спортивный"
 
 
 def test_other_outfit_changes_the_base_not_one_random_item():

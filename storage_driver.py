@@ -17,6 +17,10 @@ _READ_CACHE_TTL = 5
 _read_cache = {}
 
 
+def _legacy_keys(key):
+    return tuple(getattr(config, "LEGACY_STORAGE_KEYS", {}).get(key, ()))
+
+
 def _cache_get(key):
     cached = _read_cache.get(key)
     if not cached or time.monotonic() - cached[0] >= _READ_CACHE_TTL:
@@ -80,6 +84,13 @@ def load(key):
     connection = db()
 
     if connection is None:
+        if key not in _memory:
+            for legacy_key in _legacy_keys(key):
+                if legacy_key in _memory:
+                    value = copy.deepcopy(_memory[legacy_key])
+                    _memory[key] = copy.deepcopy(value)
+                    _cache_set(key, value)
+                    return value
         value = {
             k: list(v) if isinstance(v, list) else v
             for k, v in _memory.get(key, {}).items()
@@ -88,6 +99,7 @@ def load(key):
         return value
 
     try:
+        migrated = False
         with _connection_lock:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -96,7 +108,22 @@ def load(key):
                 )
                 row = cursor.fetchone()
 
+                if row is None:
+                    for legacy_key in _legacy_keys(key):
+                        cursor.execute(
+                            "SELECT value FROM kv WHERE key = %s",
+                            (legacy_key,),
+                        )
+                        row = cursor.fetchone()
+                        if row is not None:
+                            migrated = True
+                            break
+
         value = row[0] if row else {}
+        if migrated:
+            # Копируем, а не удаляем старый ключ: откат версии остаётся
+            # безопасным, а новая версия дальше работает только с canonical key.
+            save(key, value)
         _cache_set(key, value)
         return copy.deepcopy(value)
 

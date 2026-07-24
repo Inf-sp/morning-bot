@@ -34,7 +34,7 @@ def _ensure_artists(cid):
     """Возвращает список артистов пользователя (без авто-сида). Элемент может быть
     строкой или {"id":..., "value": строка} (после захода в удаление, см.
     store.ensure_list_ids_via) — нормализуем сразу здесь, единственной точке чтения."""
-    return [_item_text(a) for a in store.get_list(config.ARTISTS_KEY, cid) if _item_text(a)]
+    return [_item_text(a) for a in store.get_list(config.FAVORITE_ARTISTS_KEY, cid) if _item_text(a)]
 
 _TRIBUTE_MARKERS = ("tribute", "cover", "covers", "candlelight", "songs of", "the music of",
                     "performed by", "celebrating", "by candle", "symphonic", "reimagined",

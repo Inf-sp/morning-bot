@@ -69,7 +69,7 @@ def _recipe_kb(cid=None, recipe=None):
     name = str((recipe or {}).get("name") or "").strip().casefold()
     saved = bool(name) and any(
         str(item.get("name") or "").strip().casefold() == name
-        for item in store.get_list(config.MY_RECIPES_KEY, cid)
+        for item in store.get_list(config.SAVED_RECIPES_KEY, cid)
         if isinstance(item, dict)
     )
     return _kb([

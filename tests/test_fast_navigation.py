@@ -6,6 +6,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import bot
 import config
+import store
 import storage_driver
 import tracking
 from telegram.error import TimedOut
@@ -45,6 +46,39 @@ def test_storage_reuses_connection_without_probe_and_caches_reads(monkeypatch):
     assert storage_driver.load("fast-key") == {"value": 1}
     assert len(connection.queries) == 1
     assert "SELECT 1" not in connection.queries
+
+
+def test_canonical_key_copies_legacy_memory_data_without_deleting_it(monkeypatch):
+    legacy_key = "watchlist.json"
+    canonical_key = config.FAVORITE_MOVIES_KEY
+    legacy_data = {"42": ["Паразиты"]}
+
+    monkeypatch.setattr(config, "DATABASE_URL", "")
+    monkeypatch.setattr(storage_driver, "_memory", {legacy_key: legacy_data})
+    monkeypatch.setattr(storage_driver, "_read_cache", {})
+
+    assert storage_driver.load(canonical_key) == legacy_data
+    assert storage_driver._memory[canonical_key] == legacy_data
+    assert storage_driver._memory[legacy_key] == legacy_data
+
+
+def test_profile_purge_also_removes_legacy_collection_data(monkeypatch):
+    cid = "42"
+    legacy_key = "watchlist.json"
+    canonical_key = config.FAVORITE_MOVIES_KEY
+
+    monkeypatch.setattr(config, "DATABASE_URL", "")
+    monkeypatch.setattr(
+        storage_driver,
+        "_memory",
+        {legacy_key: {cid: ["Паразиты"]}, canonical_key: {cid: ["Паразиты"]}},
+    )
+    monkeypatch.setattr(storage_driver, "_read_cache", {})
+
+    store.purge_user(cid)
+
+    assert cid not in storage_driver._memory[legacy_key]
+    assert cid not in storage_driver._memory[canonical_key]
 
 
 def test_activity_tracking_is_throttled(monkeypatch):

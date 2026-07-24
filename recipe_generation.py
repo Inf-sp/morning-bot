@@ -913,7 +913,7 @@ def _my_recipe_pref(cid):
     """Контекст из базы рецептов для промпта (первые 5 названий)."""
     if not cid:
         return ""
-    saved = store.get_list(config.MY_RECIPES_KEY, str(cid))[:5]
+    saved = store.get_list(config.SAVED_RECIPES_KEY, str(cid))[:5]
     names = ", ".join(r.get("name", "") for r in saved if r.get("name"))
     return f"Пользователь любит готовить: {names}. Похожий стиль приветствуется.\n" if names else ""
 

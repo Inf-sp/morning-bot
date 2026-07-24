@@ -133,9 +133,9 @@ _MOVIE_FALLBACKS = [
 
 def _movie_used(cid):
     """Множество названий, которые нельзя повторять: любимые, знакомые, чёрный список, закладки."""
-    wl = store.get_list(config.WATCHLIST_KEY, cid)
+    wl = store.get_list(config.FAVORITE_MOVIES_KEY, cid)
     blocked = recommendation_stoplist.values(cid, "movie")
-    notes_all = store.get_list(config.NOTES_KEY, cid)
+    notes_all = store.get_list(config.CONTENT_RECORDS_KEY, cid)
     noted = [n.get("text", "") for n in notes_all
              if isinstance(n, dict) and "кино" in str(n.get("source", "")).lower()]
     used = set()
@@ -233,7 +233,7 @@ async def send_recos(bot, cid, kind):
         return
     # Даже без любимых открытие раздела должно дать современную качественную
     # рекомендацию; вкус просто начнёт уточняться после первых сохранений.
-    seen = store.get_list(config.WATCHLIST_KEY, cid)
+    seen = store.get_list(config.FAVORITE_MOVIES_KEY, cid)
     if not seen:
         candidates = await asyncio.to_thread(
             tmdb.discover, "movie", None, MIN_TMDB_RATING, 2000)
@@ -844,7 +844,7 @@ async def movie_love(bot, cid, i, q=None):
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
-        _add_unique(config.WATCHLIST_KEY, cid, title)
+        _add_unique(config.FAVORITE_MOVIES_KEY, cid, title)
         if q is not None:
             import saved_items
             await q.message.edit_reply_markup(
@@ -861,7 +861,7 @@ async def add_reco(bot, cid, i, q=None):
     folder = "Кино" if kind == "movie" else "Книги"
     saved = saved_items.toggle_note(cid, title, source=folder)
     if kind != "movie":
-        items = store.get_list(config.READLIST_KEY, cid)
+        items = store.get_list(config.SAVED_BOOKS_KEY, cid)
         target = str(title).strip().casefold()
         if saved:
             existing = {
@@ -869,13 +869,13 @@ async def add_reco(bot, cid, i, q=None):
                 for item in items
             }
             if target not in existing:
-                store.set_list(config.READLIST_KEY, cid, [*items, title])
+                store.set_list(config.SAVED_BOOKS_KEY, cid, [*items, title])
         else:
             items = [
                 item for item in items
                 if str(item.get("value") if isinstance(item, dict) else item).strip().casefold() != target
             ]
-            store.set_list(config.READLIST_KEY, cid, items)
+            store.set_list(config.SAVED_BOOKS_KEY, cid, items)
     await saved_items.update_save_button(q, f"reco_{i}", saved)
     if not saved:
         return

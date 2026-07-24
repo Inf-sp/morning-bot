@@ -105,9 +105,9 @@ def _has_data(cid, section: str) -> bool:
         prof = store.get_profile(cid)
         return bool(
             prof.get("leisure_genres")
-            or store.get_list(config.ARTISTS_KEY, cid)
-            or store.get_list(config.WATCHLIST_KEY, cid)
-            or store.get_list(config.BOOKS_KEY, cid)
+            or store.get_list(config.FAVORITE_ARTISTS_KEY, cid)
+            or store.get_list(config.FAVORITE_MOVIES_KEY, cid)
+            or store.get_list(config.FAVORITE_BOOKS_KEY, cid)
         )
     if section == "health":
         prof = store.get_profile(cid)
@@ -388,15 +388,15 @@ async def _save_leisure_titles(cid, raw: str, mode: str) -> list:
     books = d.get("books") if isinstance(d.get("books"), list) else _split_raw(raw, ["книг"])
 
     if movies:
-        _merge_list(config.WATCHLIST_KEY, cid, movies, mode)
+        _merge_list(config.FAVORITE_MOVIES_KEY, cid, movies, mode)
         saved.append(f"Фильмы ({len(movies)}): {', '.join(str(m) for m in movies[:3])}…")
     if artists:
-        _merge_list(config.ARTISTS_KEY, cid, artists, mode)
+        _merge_list(config.FAVORITE_ARTISTS_KEY, cid, artists, mode)
         import leisure_music
         leisure_music._kick_off_new_artist_concert_check(cid, artists)
         saved.append(f"Музыканты ({len(artists)}): {', '.join(str(a) for a in artists[:3])}…")
     if books:
-        _merge_list(config.BOOKS_KEY, cid, books, mode)
+        _merge_list(config.FAVORITE_BOOKS_KEY, cid, books, mode)
         saved.append(f"Книги ({len(books)}): {', '.join(str(b) for b in books[:3])}…")
     if not saved:
         saved.append("Предпочтения сохранены")

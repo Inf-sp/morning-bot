@@ -73,7 +73,7 @@ def day_summary(
     )
     outfit = cap_sentence(outfit)
     if outfit:
-        b.text_line("👕 ")
+        b.text_line("🧶 ")
         b.labeled_line("Надень", finish_dot(outfit), lowercase=False)
         b.spacer()
 

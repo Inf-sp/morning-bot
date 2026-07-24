@@ -70,6 +70,23 @@ def _finish_dot(value):
     return value
 
 
+_STYLE_EMOJI = {
+    "Минимализм": "👕",
+    "Городской": "🧢",
+    "Повседневный": "👖",
+    "Скандинавский": "🧥",
+    "Классический": "👔",
+    "Спортивный": "👟",
+}
+
+
+def outfit_header(primary_style=""):
+    """Единый заголовок образа: эмодзи отражает выбранный стиль."""
+    style = _clean_text(primary_style)
+    emoji = _STYLE_EMOJI.get(style, "👕")
+    return f"{emoji} Образ на сегодня" + (f" · {style}" if style else "")
+
+
 def render_wardrobe_message(look_data):
     """Образ на сегодня: погодное решение, вещи и один практический совет.
     Без повторяющих объяснений и итогового подтверждения готовности образа.
@@ -78,11 +95,8 @@ def render_wardrobe_message(look_data):
     """
     look_data = look_data or {}
     b = MessageBuilder()
-    header = "🧵 Образ на сегодня"
     primary_style = _clean_text(look_data.get("primary_style"))
-    if primary_style:
-        header += f" · {primary_style}"
-    b.section(header)
+    b.section(outfit_header(primary_style))
 
     intro = _finish_dot(look_data.get("weather_intro"))
     if intro:
@@ -221,7 +235,7 @@ def zone_picker_screen():
 
 def wardrobe_home_screen(total):
     b = MessageBuilder()
-    b.section(f"👕 Мой шкаф · {total} {_pluralize_items(total)}")
+    b.section(f"🧶 Мой шкаф · {total} {_pluralize_items(total)}")
     b.line("Выбери категорию:")
     return b.build_stripped()
 

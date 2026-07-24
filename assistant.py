@@ -165,10 +165,10 @@ async def try_add_love_from_chat(bot, cid, text):
         await travel.add_visited_country(bot, cid, title)
         return True
     key_map = {
-        "movies": config.WATCHLIST_KEY,
-        "books": config.BOOKS_KEY,
-        "artists": config.ARTISTS_KEY,
-        "countries": config.FAVCOUNTRIES_KEY,
+        "movies": config.FAVORITE_MOVIES_KEY,
+        "books": config.FAVORITE_BOOKS_KEY,
+        "artists": config.FAVORITE_ARTISTS_KEY,
+        "countries": config.SAVED_COUNTRIES_KEY,
     }
     existing = {
         (x.get("value", "") if isinstance(x, dict) else str(x)).strip().lower()

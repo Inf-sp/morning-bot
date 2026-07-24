@@ -35,15 +35,15 @@ def _saved_note_index(notes, text, bucket="fav"):
 
 
 def is_note_saved(cid, text, bucket="fav"):
-    return _saved_note_index(store.get_list(config.NOTES_KEY, cid), text, bucket) is not None
+    return _saved_note_index(store.get_list(config.CONTENT_RECORDS_KEY, cid), text, bucket) is not None
 
 
 def toggle_note(cid, text, *, source="Прочее", bucket="fav", entities=None, extra=None):
-    notes = store.get_list(config.NOTES_KEY, cid)
+    notes = store.get_list(config.CONTENT_RECORDS_KEY, cid)
     index = _saved_note_index(notes, text, bucket)
     if index is not None:
         notes.pop(index)
-        store.set_list(config.NOTES_KEY, cid, notes)
+        store.set_list(config.CONTENT_RECORDS_KEY, cid, notes)
         return False
     note = {
         "date": datetime.now(config.TZ).strftime("%d.%m"),
@@ -55,7 +55,7 @@ def toggle_note(cid, text, *, source="Прочее", bucket="fav", entities=None
         note["entities"] = entities
     if extra:
         note.update(extra)
-    store.set_list(config.NOTES_KEY, cid, [*notes, note])
+    store.set_list(config.CONTENT_RECORDS_KEY, cid, [*notes, note])
     return True
 
 
@@ -105,13 +105,13 @@ async def save_fav(bot, cid, q=None):
 def _note_type(source):
     s = (source or "").lower()
     if "фильм" in s or "сериал" in s or "кино" in s:
-        return ("movie", "movie", config.WATCHLIST_KEY, "Кино")
+        return ("movie", "movie", config.FAVORITE_MOVIES_KEY, "Кино")
     if "книг" in s:
-        return ("book", "book", config.BOOKS_KEY, "Книги")
+        return ("book", "book", config.FAVORITE_BOOKS_KEY, "Книги")
     if "музык" in s or "концерт" in s:
-        return ("music", "artist", config.ARTISTS_KEY, "Артисты")
+        return ("music", "artist", config.FAVORITE_ARTISTS_KEY, "Артисты")
     if "путешеств" in s or "стран" in s:
-        return ("travel", "country", config.FAVCOUNTRIES_KEY, "Страны")
+        return ("travel", "country", config.SAVED_COUNTRIES_KEY, "Страны")
     return (None, None, None, None)
 
 def _note_bucket(n):
@@ -154,11 +154,11 @@ def _fav_group_info(key: str):
     return "Прочее", "всё, что не попало в отдельную категорию"
 
 def _pop_note(cid, i):
-    notes_list = store.get_list(config.NOTES_KEY, cid)
+    notes_list = store.get_list(config.CONTENT_RECORDS_KEY, cid)
     if i >= len(notes_list):
         return None
     n = notes_list.pop(i)
-    store.set_list(config.NOTES_KEY, cid, notes_list)
+    store.set_list(config.CONTENT_RECORDS_KEY, cid, notes_list)
     return n
 
 def _note_text(n):
@@ -222,7 +222,7 @@ async def export_notes(bot, cid):
     _plain = lambda s: _re2.sub(r"<[^>]+>", "", s).strip()
     lines = ["Мои сохранения (DM)", ""]
 
-    notes_list = store.get_list(config.NOTES_KEY, cid)
+    notes_list = store.get_list(config.CONTENT_RECORDS_KEY, cid)
     fav = [n for n in notes_list if _note_bucket(n) == "fav"]
     lines.append("⏳ ВРЕМЕННЫЕ ЗАКЛАДКИ")
     if fav:
@@ -251,8 +251,8 @@ async def export_notes(bot, cid):
     lines.append("❤️ ЛЮБИМЫЕ")
     sections = [
         ("Мои страны", store.get_list(config.COUNTRIES_KEY, cid)),
-        ("Мои музыканты", store.get_list(config.ARTISTS_KEY, cid)),
-        ("Мои книги", store.get_list(config.BOOKS_KEY, cid)),
+        ("Мои музыканты", store.get_list(config.FAVORITE_ARTISTS_KEY, cid)),
+        ("Мои книги", store.get_list(config.FAVORITE_BOOKS_KEY, cid)),
     ]
     any_love = False
     for name, items in sections:
@@ -363,7 +363,7 @@ async def send_food(bot, cid, q=None, back="m_food"):
 
 async def send_travel(bot, cid):
     rows = [
-        [InlineKeyboardButton("🧳 Посещённые страны", callback_data="colr:travel_favorite_countries:set_travel")],
+        [InlineKeyboardButton("💾 Сохранённые страны", callback_data="colr:travel_saved_countries:set_travel")],
         [InlineKeyboardButton("⭐️ Сохранённые места", callback_data="colr:travel_saved_places:set_travel")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
@@ -376,7 +376,7 @@ async def send_travel(bot, cid):
 
 
 async def send_plans(bot, cid):
-    notes_list = store.get_list(config.NOTES_KEY, cid)
+    notes_list = store.get_list(config.CONTENT_RECORDS_KEY, cid)
     items = [(i, n) for i, n in enumerate(notes_list) if _note_bucket(n) == "plan"]
     if not items:
         msg = settings_ui.trips_empty()
@@ -395,7 +395,7 @@ async def send_plans(bot, cid):
         reply_markup=InlineKeyboardMarkup(rows))
 
 async def plan_view(bot, cid, i):
-    notes_list = store.get_list(config.NOTES_KEY, cid)
+    notes_list = store.get_list(config.CONTENT_RECORDS_KEY, cid)
     if i >= len(notes_list) or _note_bucket(notes_list[i]) != "plan":
         await send_plans(bot, cid); return
     n = notes_list[i]
@@ -414,7 +414,7 @@ async def plan_view(bot, cid, i):
             await bot.send_message(chat_id=cid, text=chunk_text, reply_markup=markup)
 
 async def fav_view(bot, cid, i, back="as_bucket_fav", delete_cb=None):
-    notes_list = store.get_list(config.NOTES_KEY, cid)
+    notes_list = store.get_list(config.CONTENT_RECORDS_KEY, cid)
     if i >= len(notes_list) or _note_bucket(notes_list[i]) != "fav":
         await send_bucket(bot, cid, "fav"); return
     n = notes_list[i]
@@ -459,7 +459,7 @@ async def fav_del_group(bot, cid, group, i):
 
 
 async def send_fav_group(bot, cid, group):
-    notes_list = store.get_list(config.NOTES_KEY, cid)
+    notes_list = store.get_list(config.CONTENT_RECORDS_KEY, cid)
     items = []
     for i, n in enumerate(notes_list):
         if _note_bucket(n) != "fav":
@@ -492,7 +492,7 @@ async def send_bucket(bot, cid, bucket):
         await send_love_home(bot, cid); return
     if bucket == "plan":
         await send_plans(bot, cid); return
-    notes_list = store.get_list(config.NOTES_KEY, cid)
+    notes_list = store.get_list(config.CONTENT_RECORDS_KEY, cid)
     items = [(i, n) for i, n in enumerate(notes_list) if _note_bucket(n) == "fav"]
     count = len(items)
     if not count:
@@ -542,20 +542,20 @@ async def send_love_home(bot, cid, back="m_notes"):
 
 def _love_items(cid, key):
     if key == "movies":
-        return list(store.get_list(config.WATCHLIST_KEY, cid))
+        return list(store.get_list(config.FAVORITE_MOVIES_KEY, cid))
     if key == "countries":
-        cur = store.get_list(config.FAVCOUNTRIES_KEY, cid)
+        cur = store.get_list(config.SAVED_COUNTRIES_KEY, cid)
         return [c if isinstance(c, str) else c.get("name", "") for c in cur]
     if key == "artists":
-        return list(store.get_list(config.ARTISTS_KEY, cid))
+        return list(store.get_list(config.FAVORITE_ARTISTS_KEY, cid))
     if key == "books":
-        return list(store.get_list(config.BOOKS_KEY, cid))
+        return list(store.get_list(config.FAVORITE_BOOKS_KEY, cid))
     return []
 
 def _love_title(key):
     return {
         "movies": ui_label("cinema", "Мое кино"),
-        "countries": "🧳 Посещённые страны",
+        "countries": "💾 Сохранённые страны",
         "artists": ui_label("music", "Мои музыканты"),
         "books": ui_label("books", "Мои книги"),
     }.get(key, "Любимые")
@@ -591,8 +591,8 @@ async def send_love_section(bot, cid, key):
                            reply_markup=InlineKeyboardMarkup(rows))
 
 def _love_key_of(key):
-    return {"movies": config.WATCHLIST_KEY, "countries": config.FAVCOUNTRIES_KEY,
-            "artists": config.ARTISTS_KEY, "books": config.BOOKS_KEY}.get(key)
+    return {"movies": config.FAVORITE_MOVIES_KEY, "countries": config.SAVED_COUNTRIES_KEY,
+            "artists": config.FAVORITE_ARTISTS_KEY, "books": config.FAVORITE_BOOKS_KEY}.get(key)
 
 async def love_add_start(bot, cid, key, origin="base"):
     if key == "countries":

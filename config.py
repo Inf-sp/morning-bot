@@ -136,12 +136,14 @@ LEVELS_FILE = "levels.json"
 WARDROBE_FILE = "wardrobe.json"
 WARDROBE_GAPS_KEY = "wardrobe_gaps.json"
 DIARY_KEY = "diary.json"
-ARTISTS_KEY = "artists.json"
-WATCHLIST_KEY = "watchlist.json"
-READLIST_KEY = "readlist.json"
-FAVCOUNTRIES_KEY = "favcountries.json"
-COUNTRIES_KEY = "mycountries.json"
-BOOKS_KEY = "mybooks.json"
+# Канонические имена пользовательских коллекций. Состояние «любимое» отличается
+# от «сохранённого на потом», поэтому они никогда не используют один ключ.
+FAVORITE_ARTISTS_KEY = "favorite_artists.json"
+FAVORITE_MOVIES_KEY = "favorite_movies.json"
+SAVED_BOOKS_KEY = "saved_books.json"
+SAVED_COUNTRIES_KEY = "saved_countries.json"
+LEGACY_COUNTRIES_KEY = "mycountries.json"
+FAVORITE_BOOKS_KEY = "favorite_books.json"
 BOOK_RECO_CACHE_KEY = "book_reco_cache.json"  # {cid: {date, item}} — текущая карточка книги на день
 LOCAL_CINEMA_CACHE_KEY = "local_cinema_cache.json"  # {cid: {city, ts, movies}} — подтверждённая городская афиша
 MUSIC_RECO_CACHE_KEY = "music_reco_cache.json"  # {cid: {date, item}} — персональный артист на день
@@ -154,12 +156,9 @@ MOVIE_SHOWN_KEY = "movie_shown.json"
 BOOK_SEEN_KEY = "book_seen.json"
 MUSIC_SEEN_KEY = "music_seen.json"
 RECOMMENDATION_STOPLIST_KEY = "recommendation_stoplist.json"
-WORRIES_KEY = "worries.json"
-# Новое имя раздела использует прежний ключ, чтобы существующие записи
-# мигрировали лениво и не потерялись после обновления.
-THOUGHTS_KEY = WORRIES_KEY
+THOUGHTS_KEY = "thoughts.json"
 THOUGHT_REVIEWS_KEY = "thought_reviews.json"
-NOTES_KEY = "notes.json"
+CONTENT_RECORDS_KEY = "content_records.json"
 DICT_KEY = "dict.json"
 TTS_CACHE_KEY = "tts_cache.json"
 LANGUAGE_REVIEW_KEY = "language_review.json"
@@ -169,7 +168,7 @@ PROFILE_KEY = "profile.json"   # память пользователя: фоку
 LIFEHACK_KEY = "lifehacks_seen.json"       # anti-repeat для fallback lifehacks.json
 LIFEHACK_POOL_KEY = "myday_lifehack_pool.json"  # недельный AI-пул базы знаний {cid: {...}}
 FRIDGE_KEY = "fridge.json"
-MY_RECIPES_KEY = "my_recipes.json"
+SAVED_RECIPES_KEY = "saved_recipes.json"
 LEFTOVER_RECIPES_SEEN_KEY = "leftover_recipes_seen.json"  # anti-repeat: {cid: [последние N названий]}
 ACTIVE_MEAL_KEY = "active_meal.json"          # {cid: "breakfast"|"lunch"|"dinner"|"fridge"}
 RECIPE_QUEUE_KEY = "recipe_queue.json"        # {cid: {"meal":..., "items":[...], "pos": int}}
@@ -194,6 +193,30 @@ ACTION_LATENCY_KEY = "action_latency.json"  # задержка действий 
 ACTIVITY_KEY = "activity.json"     # last_seen + счётчики и состояние напоминания после неактивности
 ADMIN_STATE_KEY = "admin_state.json"  # per-admin cursors and compact dashboard state
 DEPLOY_REPORT_KEY = "deploy_report.json"  # служебное состояние деплой-уведомлений
+
+# Прежние имена оставлены только для обратной совместимости модулей, которые
+# ещё не переведены на канонический словарь. Значения уже указывают на новые
+# ключи, а storage_driver лениво переносит данные из старых физических ключей.
+ARTISTS_KEY = FAVORITE_ARTISTS_KEY
+WATCHLIST_KEY = FAVORITE_MOVIES_KEY
+READLIST_KEY = SAVED_BOOKS_KEY
+FAVCOUNTRIES_KEY = SAVED_COUNTRIES_KEY
+COUNTRIES_KEY = LEGACY_COUNTRIES_KEY
+BOOKS_KEY = FAVORITE_BOOKS_KEY
+WORRIES_KEY = THOUGHTS_KEY
+NOTES_KEY = CONTENT_RECORDS_KEY
+MY_RECIPES_KEY = SAVED_RECIPES_KEY
+
+LEGACY_STORAGE_KEYS = {
+    FAVORITE_ARTISTS_KEY: ("artists.json",),
+    FAVORITE_MOVIES_KEY: ("watchlist.json",),
+    SAVED_BOOKS_KEY: ("readlist.json",),
+    SAVED_COUNTRIES_KEY: ("favcountries.json", "mycountries.json"),
+    FAVORITE_BOOKS_KEY: ("mybooks.json",),
+    THOUGHTS_KEY: ("worries.json",),
+    CONTENT_RECORDS_KEY: ("notes.json",),
+    SAVED_RECIPES_KEY: ("my_recipes.json",),
+}
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}
 
