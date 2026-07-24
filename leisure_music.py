@@ -128,12 +128,13 @@ async def send_music_preferences(bot, cid, q=None):
             pass
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
-async def listen_dislike(bot, cid):
+async def listen_dislike(bot, cid, *, status=None):
+    """Скрывает текущего артиста и заменяет его карточку следующим."""
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
         recommendation_stoplist.add(cid, "artist", rec["items"][0], "hidden")
     _invalidate_artist(cid)
-    await send_listen(bot, cid)
+    await send_listen(bot, cid, status=status)
 
 def _item_text(item):
     """Текст элемента списка: элемент может быть строкой или {"id":..., "value": строка}
@@ -192,7 +193,7 @@ def _language_music_context(cid):
     }
 
 
-async def send_listen(bot, cid, *, preview=False):
+async def send_listen(bot, cid, *, preview=False, status=None):
     import saved_items
     _log.info("send_listen: start cid=%s", cid)
     cached = _cached_artist(cid)
@@ -204,8 +205,8 @@ async def send_listen(bot, cid, *, preview=False):
             store.last_recos[str(cid)] = {"kind": "listen", "items": [artist]}
             store.last_source[str(cid)] = "Досуг · Музыка"
             msg = leisure_ui.artist_card(cached)
-            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                                   reply_markup=_listen_kb(saved=False))
+            await _deliver_artist_card(
+                bot, cid, msg, _listen_kb(saved=False), status=status)
             return
     arts_raw = _ensure_artists(cid)
     arts = [_item_text(a) for a in arts_raw if _item_text(a)]
@@ -265,9 +266,13 @@ async def send_listen(bot, cid, *, preview=False):
         _log.info("send_listen: no data after retries cid=%s data=%r", cid, data)
         if preview:
             return None
-        await bot.send_message(
-            chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
-            reply_markup=back_menu_keyboard("m_leisure")); return
+        text = "Не удалось подобрать. Попробуй ещё раз."
+        kb = back_menu_keyboard("m_leisure")
+        if status is not None:
+            await status.replace(text, reply_markup=kb)
+        else:
+            await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+        return
     artist = data.get("artist", "")
     _cache_artist(cid, data)
     if preview:
@@ -281,10 +286,17 @@ async def send_listen(bot, cid, *, preview=False):
         raise
     store.last_answer[str(cid)] = leisure_ui.plain_from_html(msg.text)
     _log.info("send_listen: sending card cid=%s artist=%r", cid, artist)
+    await _deliver_artist_card(
+        bot, cid, msg, _listen_kb(saved_items.is_note_saved(cid, artist)), status=status)
+
+
+async def _deliver_artist_card(bot, cid, msg, reply_markup, *, status=None):
+    """Возвращает карточку в текущую inline-заглушку либо отправляет новый экран."""
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=reply_markup)
+        return
     await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities,
-        reply_markup=_listen_kb(saved_items.is_note_saved(cid, artist)),
-    )
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=reply_markup)
 
 async def add_listen(bot, cid, i, q=None):
     import saved_items

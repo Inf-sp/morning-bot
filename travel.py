@@ -526,6 +526,30 @@ def travel_suggest_one(cid, excluded=None):
     return ai.llm_json(prompt, 250, tier="cheap", module="travel_utility")
 
 
+_LOCAL_COUNTRY_FALLBACKS = ("Исландия", "Португалия", "Дания", "Япония")
+
+
+def _local_country_fallback(cid, excluded=None):
+    """Выбирает новое направление из локального каталога без сети и AI."""
+    blocked = {
+        str(value).strip().casefold()
+        for value in [
+            *(excluded or []),
+            *recommendation_stoplist.values(cid, "country"),
+            *_plan_countries(cid),
+            *(_country_name(code) for code in _visited_codes(cid)),
+        ]
+        if str(value).strip()
+    }
+    visited_codes = set(_visited_codes(cid))
+    for country in _LOCAL_COUNTRY_FALLBACKS:
+        if country.casefold() in blocked:
+            continue
+        if util.cc_of(country).upper() not in visited_codes:
+            return {"country": country}
+    return None
+
+
 def _is_country_flag(value):
     chars = list(str(value or "").strip())
     return len(chars) == 2 and all(0x1F1E6 <= ord(char) <= 0x1F1FF for char in chars)
@@ -552,7 +576,7 @@ def _resolve_country_code(country):
     return str((lookup or {}).get("iso") or "").upper()
 
 
-async def send_go(bot, cid):
+async def send_go(bot, cid, *, status=None):
     visited_codes = set(_visited_codes(cid))
     skip_set = {name.strip().casefold() for name in (
         [_country_name(code) for code in visited_codes]
@@ -576,17 +600,18 @@ async def send_go(bot, cid):
             if candidate_name and candidate_name not in rejected:
                 rejected.append(candidate_name)
     except Exception as exc:
-        await verify.safe_error(bot, cid, exc, back="m_travel"); return
+        _log.warning("travel suggestion failed, using local fallback: %r", exc)
+        data = _local_country_fallback(cid, rejected)
     if not data:
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("✨ Попробовать ещё", callback_data="a_trav_go")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
         ])
-        await bot.send_message(
-            chat_id=cid,
-            text="Не удалось подобрать новую страну без повторов. Попробуй ещё раз.",
-            reply_markup=kb,
-        )
+        text = "Не удалось подобрать новую страну без повторов. Попробуй ещё раз."
+        if status is not None:
+            await status.replace(text, reply_markup=kb)
+        else:
+            await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
         return
     country = str(data.get("country") or "").strip()
     flag, facts = await asyncio.to_thread(
@@ -601,13 +626,13 @@ async def send_go(bot, cid):
         data["photo"] = photo
     store.suggested_countries[str(cid)] = country
     store.last_recipe[str(cid)] = data
-    await send_plan(bot, cid)
+    await send_plan(bot, cid, status=status)
 
 
-async def travel_dislike(bot, cid):
+async def travel_dislike(bot, cid, *, status=None):
     country = store.suggested_countries.get(str(cid))
     if country: recommendation_stoplist.add(cid, "country", country, "hidden")
-    await send_go(bot, cid)
+    await send_go(bot, cid, status=status)
 
 
 async def travel_fav(bot, cid):
@@ -690,12 +715,17 @@ def _plan_from_sources(country, generated, facts, travel_facts, interests, photo
     }
 
 
-async def send_plan(bot, cid):
+async def send_plan(bot, cid, *, status=None):
     import saved_items
     data = store.last_recipe.get(str(cid)) or {}
     country = data.get("country") or store.suggested_countries.get(str(cid), "")
     if not country:
-        await bot.send_message(chat_id=cid, text="Сначала выбери страну в Поездках."); return
+        text = "Сначала выбери страну в Поездках."
+        if status is not None:
+            await status.replace(text, reply_markup=_home_kb())
+        else:
+            await bot.send_message(chat_id=cid, text=text)
+        return
     home = store.get_settings(cid).get("city", "дом")
     facts = await asyncio.to_thread(research.country_facts, country)
     travel_facts = await asyncio.to_thread(research.country_travel_facts, country)
@@ -748,7 +778,8 @@ async def send_plan(bot, cid):
             },
         )
     except Exception as exc:
-        await verify.safe_error(bot, cid, exc, back="m_travel"); return
+        _log.warning("travel card failed, using local facts: %r", exc)
+        plan = {}
     plan = _plan_from_sources(country, plan, facts, travel_facts, interests, data.get("photo"))
     if not plan["flag"]:
         plan["flag"] = data.get("flag", "")
@@ -765,6 +796,9 @@ async def send_plan(bot, cid):
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     photo = plan.get("photo") or {}
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+        return
     if photo.get("url"):
         try:
             await bot.send_photo(

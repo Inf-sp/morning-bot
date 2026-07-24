@@ -83,7 +83,7 @@ def test_translation_exercise_keeps_full_answer_and_three_options():
     assert len(data["wrong"]) == 2
 
 
-def test_recall_rejects_distractors_with_a_different_part_of_speech():
+def test_recall_uses_local_distractors_with_the_same_part_of_speech():
     entry = {
         "term": "Begeleiding", "translation": "Сопровождение",
         "lang": "nl", "pos": "noun",
@@ -97,10 +97,12 @@ def test_recall_rejects_distractors_with_a_different_part_of_speech():
         entry, unrelated_shapes, trainer_engine.EXERCISE_RECALL,
     )
 
-    assert data is None
+    assert data is not None
+    assert len(data["wrong"]) == 2
+    assert set(data["wrong"]).issubset({"huis", "boek", "vriend", "trein"})
 
 
-def test_translation_exercise_rejects_single_word_distractors_for_a_phrase():
+def test_translation_exercise_uses_full_local_distractors_for_a_phrase():
     entry = {
         "term": "Ik vind het stom", "translation": "Я думаю, это глупо",
         "lang": "nl",
@@ -114,4 +116,26 @@ def test_translation_exercise_rejects_single_word_distractors_for_a_phrase():
         entry, word_entries, trainer_engine.EXERCISE_CHOOSE_TRANSLATION,
     )
 
-    assert data is None
+    assert data is not None
+    assert all(len(option.split()) >= 4 for option in data["wrong"])
+
+
+def test_phrase_quiz_uses_full_local_distractors_not_other_dictionary_entries():
+    entry = {
+        "term": "Ik ben op zoek naar een rode kitten voor een klein prijsje",
+        "translation": "Я ищу красного котенка за низкую цену",
+        "lang": "nl",
+    }
+    personal_dictionary = [
+        {"term": "Wegens", "translation": "Из-за (как door, omdat)", "lang": "nl"},
+        {"term": "Nieuw", "translation": "Новый [ни-ве]", "lang": "nl"},
+    ]
+
+    data = trainer_exercises.build_exercise(
+        entry, personal_dictionary, trainer_engine.EXERCISE_CHOOSE_TRANSLATION,
+    )
+
+    assert data is not None
+    assert len(data["wrong"]) == 2
+    assert not set(data["wrong"]) & {item["translation"] for item in personal_dictionary}
+    assert all(len(option.split()) >= 4 for option in data["wrong"])

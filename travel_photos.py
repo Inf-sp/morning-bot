@@ -158,7 +158,7 @@ def find_illustration(query):
     name = " ".join(str(query or "").split()).strip()
     if not name:
         return None
-    return _unsplash(name, strict=False) or _pexels(name, strict=False)
+    return _unsplash(name, strict=True) or _pexels(name, strict=True)
 
 
 def find_photo(query):

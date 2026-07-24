@@ -54,9 +54,10 @@ GAME_UI = {
         "suspect": "Подозреваемый:",
         "found": "✅ Дело раскрыто!",
         "answer": "Ответ",
-        "analyse": "Анализ:",
+        "explain": "Почему:",
         "again": "✨ Ещё",
         "back": "⬅️ Назад",
+        "home": "#️⃣ Главная",
         "nohint": "Подсказок больше нет.",
         "wrong": "❌ Не то",
         "retry": "Ещё попытка - напиши ответ или возьми подсказку.",
@@ -65,16 +66,17 @@ GAME_UI = {
         "diff_q": "Choose difficulty:",
         "easy": "Easy",
         "hard": "Hard",
-        "title": "Детектив",
+        "title": "Detective",
         "who": "Who am I?",
         "hint": "💡 Подсказка",
         "reveal": "😞 Сдаюсь",
         "suspect": "Suspect:",
-        "found": "✅ Дело раскрыто!",
+        "found": "✅ Case solved!",
         "answer": "Answer",
-        "analyse": "Analysis:",
+        "explain": "Why:",
         "again": "✨ Again",
         "back": "⬅️ Back",
+        "home": "#️⃣ Home",
         "nohint": "No more hints.",
         "wrong": "❌ Not quite",
         "retry": "One more try - write the answer or take a hint.",
@@ -83,16 +85,17 @@ GAME_UI = {
         "diff_q": "Kies de moeilijkheidsgraad:",
         "easy": "Makkelijk",
         "hard": "Moeilijk",
-        "title": "Детектив",
+        "title": "Detective",
         "who": "Wie ben ik?",
         "hint": "💡 Подсказка",
         "reveal": "😞 Сдаюсь",
         "suspect": "Verdachte:",
-        "found": "✅ Дело раскрыто!",
+        "found": "✅ Zaak opgelost!",
         "answer": "Antwoord",
-        "analyse": "Analyse:",
+        "explain": "Waarom:",
         "again": "✨ Nog een",
         "back": "⬅️ Terug",
+        "home": "#️⃣ Hoofdmenu",
         "nohint": "Geen hints meer.",
         "wrong": "❌ Niet juist",
         "retry": "Nog een poging - schrijf het antwoord of neem een hint.",
@@ -257,7 +260,7 @@ async def send_game(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["hint"], callback_data="game_hint"),
          InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton(ui["back"], callback_data="m_learn"), InlineKeyboardButton(ui["home"], callback_data="m_menu")],
     ])
     clues = "\n".join(f"• {c.strip()}" for c in d.get("clues", "").split("\n") if c.strip())
     msg = learning_ui.game_card(ui, clues)
@@ -297,14 +300,14 @@ async def _send_game_result(bot, cid, st, ui, kb):
     msg = learning_ui.game_found(ui, st.get("answer", ""), body)
     query = _get_english_query(st, store.game_config.get(str(cid), {}).get("lang", "русский"))
     if query:
-        query = f"{query} single subject close-up isolated"
+        query = f"{query} single subject landscape horizontal"
     photo = None
     if query:
         try:
             photo = travel_photos.find_illustration(query)
         except Exception:
             pass
-    if photo and isinstance(photo, dict) and photo.get("url"):
+    if (_is_landscape_photo(photo)):
         try:
             await bot.send_photo(
                 chat_id=cid,
@@ -317,6 +320,16 @@ async def _send_game_result(bot, cid, st, ui, kb):
         except Exception:
             pass
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+def _is_landscape_photo(photo):
+    """Детектив показывает только горизонтальный кадр с одним объектом."""
+    if not isinstance(photo, dict) or not photo.get("url"):
+        return False
+    try:
+        return int(photo.get("width") or 0) > int(photo.get("height") or 0) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 async def game_answer(bot, cid, text):
@@ -338,7 +351,7 @@ async def game_answer(bot, cid, text):
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton(ui["again"], callback_data="game_again")],
             [InlineKeyboardButton(ui["back"], callback_data="m_learn"),
-             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+             InlineKeyboardButton(ui["home"], callback_data="m_menu")],
         ])
         await _send_game_result(bot, cid, st, ui, kb)
         return True

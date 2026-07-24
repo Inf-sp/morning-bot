@@ -90,9 +90,9 @@ def _back_keyboard():
 
 
 async def send_prompt(bot, cid):
-    store.pending_input[str(cid)] = "role_medicine"
-    msg = medicine_ui.prompt_screen()
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_back_keyboard())
+    # Совместимость для старых вызовов: отдельного входа больше нет.
+    import doctor
+    await doctor.send_prompt(bot, cid)
 
 
 def is_medicine_question(text):
@@ -484,7 +484,8 @@ Brand name: {brand_name or 'не указан'}. Найденный препар
            fallback_reason=fallback_reason, intent=intent, lookup_name=used_lookup)
     msg = medicine_ui.medicine_card(result)
     store.last_answer[str(cid)] = msg.text
-    store.last_source[str(cid)] = "Здоровье · Лекарство"
+    store.pending_input[str(cid)] = "role_doctor"
+    store.last_source[str(cid)] = "Здоровье · Врач"
     store.last_surface[str(cid)] = "health"
-    store.last_action[str(cid)] = ("role", "medicine", question)
+    store.last_action[str(cid)] = ("role", "doctor", question)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_back_keyboard())

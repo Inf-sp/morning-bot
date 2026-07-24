@@ -17,6 +17,15 @@ class FakeBot:
         self.sent.append(kwargs)
 
 
+class FakeInlineStatus:
+    def __init__(self):
+        self.replaced = []
+
+    async def replace(self, text, **kwargs):
+        self.replaced.append({"text": text, **kwargs})
+        return True
+
+
 def test_rejected_visited_country_changes_next_generation_request(monkeypatch):
     attempts = []
 
@@ -27,7 +36,7 @@ def test_rejected_visited_country_changes_next_generation_request(monkeypatch):
 
     selected = []
 
-    async def send_plan(_bot, cid):
+    async def send_plan(_bot, cid, *, status=None):
         selected.append(travel.store.last_recipe[str(cid)]["country"])
 
     monkeypatch.setattr(travel, "_visited_codes", lambda _cid: ["CL"])
@@ -45,6 +54,53 @@ def test_rejected_visited_country_changes_next_generation_request(monkeypatch):
 
     assert attempts == [[], ["Чили"]]
     assert selected == ["Япония"]
+    assert bot.sent == []
+
+
+def test_other_trip_uses_local_country_when_ai_is_unavailable(monkeypatch):
+    selected = []
+
+    def unavailable(*_args, **_kwargs):
+        raise RuntimeError("AI temporarily unavailable")
+
+    async def send_plan(_bot, _cid, *, status=None):
+        selected.append(travel.store.suggested_countries["42"])
+
+    monkeypatch.setattr(travel, "travel_suggest_one", unavailable)
+    monkeypatch.setattr(travel, "_visited_codes", lambda _cid: [])
+    monkeypatch.setattr(travel, "_plan_countries", lambda _cid: [])
+    monkeypatch.setattr(travel.recommendation_stoplist, "values", lambda *_args: [])
+    monkeypatch.setattr(travel, "_recommendation_photo", lambda *_args: None)
+    monkeypatch.setattr(travel, "send_plan", send_plan)
+    bot = FakeBot()
+
+    asyncio.run(travel.send_go(bot, "42"))
+
+    assert selected
+    assert not bot.sent
+
+
+def test_country_card_uses_local_facts_when_ai_is_unavailable(monkeypatch):
+    async def unavailable(*_args, **_kwargs):
+        raise RuntimeError("AI temporarily unavailable")
+
+    monkeypatch.setattr(travel.store, "last_recipe", {"42": {"country": "Исландия", "flag": "🇮🇸"}})
+    monkeypatch.setattr(travel.store, "suggested_countries", {"42": "Исландия"})
+    monkeypatch.setattr(travel.ai, "allm_json", unavailable)
+    monkeypatch.setattr(travel.research, "country_facts", lambda _name: {"cc": "IS", "languages": ["Icelandic", "English"]})
+    monkeypatch.setattr(
+        travel.research,
+        "country_travel_facts",
+        lambda _name: {"about": "Вулканы и горячие источники.", "languages": ["исландский", "английский"]},
+    )
+    monkeypatch.setattr(travel, "_travel_interests", lambda _cid: [])
+    status = FakeInlineStatus()
+    bot = FakeBot()
+
+    asyncio.run(travel.send_plan(bot, "42", status=status))
+
+    assert len(status.replaced) == 1
+    assert "Исландия" in status.replaced[0]["text"]
     assert bot.sent == []
 
 

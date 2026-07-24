@@ -18,6 +18,15 @@ class FakeBot:
         return SimpleNamespace(message_id=len(self.sent))
 
 
+class FakeInlineStatus:
+    def __init__(self):
+        self.replaced = []
+
+    async def replace(self, text, **kwargs):
+        self.replaced.append({"text": text, **kwargs})
+        return True
+
+
 def test_dutch_learning_language_adds_priority_and_example(monkeypatch):
     monkeypatch.setattr(leisure_music.store, "get_learning_language", lambda _cid: "nl")
 
@@ -67,3 +76,22 @@ def test_music_prompt_uses_learning_language_without_web_search(monkeypatch):
     assert "не жёсткий фильтр" in prompts[0]
     assert "популярным или признанным" in prompts[0]
     assert bot.sent and "Eefje de Visser" in bot.sent[0]["text"]
+
+
+def test_next_artist_replaces_the_inline_card_instead_of_sending_a_new_message(monkeypatch):
+    artist = {
+        "artist": "Eefje de Visser",
+        "desc": "Мелодичный современный арт-поп.",
+        "why": ["Воздушная электроника"],
+        "tracks": ["De Parade"],
+        "fact": "Нидерландская певица.",
+    }
+    monkeypatch.setattr(leisure_music, "_cached_artist", lambda _cid: artist)
+    status = FakeInlineStatus()
+    bot = FakeBot()
+
+    asyncio.run(leisure_music.send_listen(bot, "42", status=status))
+
+    assert len(status.replaced) == 1
+    assert "Eefje de Visser" in status.replaced[0]["text"]
+    assert bot.sent == []

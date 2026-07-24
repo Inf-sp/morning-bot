@@ -57,6 +57,66 @@ _POS_ALIASES = {
     "conjunction": "conjunction", "союз": "conjunction", "voegwoord": "conjunction",
 }
 
+# Отвлекающие варианты не должны зависеть от личного словаря: иначе длинная
+# фраза может получить рядом случайное слово, которое пользователь добавил
+# когда-то давно. Это короткий проверенный учебный пул, а не материал ученика.
+_LOCAL_PHRASE_DISTRACTORS = {
+    "ru": (
+        "Мы встречаемся после работы в центре города",
+        "Я жду автобус у следующей остановки",
+        "Она покупает подарок для своего друга",
+        "Сегодня мы готовим ужин дома вместе",
+        "Он ищет тихое место для учебы",
+    ),
+    "nl": (
+        "We spreken na het werk in het centrum af",
+        "Ik wacht bij de volgende halte op de bus",
+        "Zij koopt een cadeau voor haar vriend",
+        "Vandaag koken we samen thuis het avondeten",
+        "Hij zoekt een rustige plek om te studeren",
+    ),
+    "en": (
+        "We are meeting in the city after work",
+        "I am waiting for the bus at the stop",
+        "She is buying a gift for her friend",
+        "Today we are cooking dinner together at home",
+        "He is looking for a quiet place to study",
+    ),
+}
+
+_LOCAL_WORD_DISTRACTORS = {
+    "ru": {
+        "noun": ("Встреча", "Причина", "Вопрос", "Подарок"),
+        "verb": ("Ждать", "Искать", "Покупать", "Объяснять"),
+        "adjective": ("Новый", "Важный", "Тихий", "Свободный"),
+        "adverb": ("Медленно", "Скоро", "Вместе", "Снова"),
+        "preposition": ("Перед", "После", "Вместо", "Между"),
+        "pronoun": ("Кто-то", "Никто", "Каждый", "Другой"),
+        "conjunction": ("Потому что", "Хотя", "Если", "Когда"),
+        "": ("Вопрос", "Ждать", "Новый", "Скоро"),
+    },
+    "nl": {
+        "noun": ("huis", "boek", "vriend", "trein"),
+        "verb": ("wachten", "zoeken", "kopen", "leren"),
+        "adjective": ("nieuw", "groot", "klein", "rustig"),
+        "adverb": ("langzaam", "snel", "samen", "opnieuw"),
+        "preposition": ("voor", "zonder", "tegen", "tussen"),
+        "pronoun": ("iemand", "niemand", "iedereen", "ander"),
+        "conjunction": ("omdat", "hoewel", "als", "wanneer"),
+        "": ("huis", "wachten", "nieuw", "snel"),
+    },
+    "en": {
+        "noun": ("house", "book", "friend", "train"),
+        "verb": ("wait", "search", "buy", "learn"),
+        "adjective": ("new", "large", "quiet", "ready"),
+        "adverb": ("slowly", "soon", "together", "again"),
+        "preposition": ("before", "after", "without", "between"),
+        "pronoun": ("someone", "nobody", "everyone", "another"),
+        "conjunction": ("because", "although", "if", "when"),
+        "": ("house", "wait", "new", "soon"),
+    },
+}
+
 
 def _entry_pos(entry):
     raw = " ".join(str(entry.get("pos") or "").casefold().split())
@@ -122,6 +182,20 @@ def clean_options(correct, candidates, needed=2):
     return result
 
 
+def _local_distractors(entry, correct, language, rng):
+    """Полные учебные варианты той же формы, не связанные с базой пользователя."""
+    language = str(language or "nl").casefold()
+    language = language if language in _LOCAL_WORD_DISTRACTORS else "nl"
+    if _value_kind(correct) == "phrase":
+        pool = list(_LOCAL_PHRASE_DISTRACTORS[language])
+    else:
+        pool = list(_LOCAL_WORD_DISTRACTORS[language].get(
+            _entry_pos(entry), _LOCAL_WORD_DISTRACTORS[language][""],
+        ))
+    rng.shuffle(pool)
+    return clean_options(correct, pool)
+
+
 def _wrong_terms(entry, other_entries, rng):
     own_term = entry_term(entry).casefold()
     pool = [entry_term(other) for other in other_entries
@@ -174,38 +248,22 @@ def _gap_wrong_terms(entry, correct, other_entries, rng):
         return []
     lang = str(entry.get("lang") or "nl").strip().casefold()
     shape = _grammar_shape(correct, lang)
-    pool = []
-    for other in other_entries:
-        if _entry_pos(other) != pos:
-            continue
-        forms = other.get("forms") or []
-        if not isinstance(forms, list):
-            forms = []
-        term = entry_term(other)
-        bare = re.sub(r"^(de|het|een|to|the|a|an)\s+", "", term, flags=re.I)
-        values = [term, bare, *forms]
-        for value in values:
-            value = str(value or "").strip()
+    pool = [value for value in _local_distractors(entry, correct, lang, rng)
             if (1 <= len(_tokens(value)) <= 3 and len(value) <= 32
-                    and _grammar_shape(value, lang) == shape):
-                pool.append(value)
+                and _grammar_shape(value, lang) == shape)]
     rng.shuffle(pool)
     return clean_options(correct, pool)
 
 
 def _choose_translation(entry, other_entries, rng):
     correct = _first_translation(entry)
-    pool = [_first_translation(other) for other in other_entries
-            if entry_term(other).casefold() != entry_term(entry).casefold()
-            and _compatible_translation(entry, other)]
-    rng.shuffle(pool)
-    wrong = clean_options(correct, pool)
+    wrong = _local_distractors(entry, correct, "ru", rng)
     return {"term": entry_term(entry), "correct": correct, "wrong": wrong} if len(wrong) >= 2 else None
 
 
 def _recall(entry, other_entries, rng):
     correct = entry_term(entry)
-    wrong = clean_options(correct, _wrong_terms(entry, other_entries, rng))
+    wrong = _local_distractors(entry, correct, entry.get("lang", "nl"), rng)
     return {"ru": _first_translation(entry), "correct": correct, "wrong": wrong} if len(wrong) >= 2 else None
 
 
@@ -272,7 +330,7 @@ def _conversation(entry, other_entries, rng, situation):
     if not situation or not situation.get("line"):
         return None
     correct = _cap(entry_term(entry))
-    wrong = clean_options(correct, _wrong_terms(entry, other_entries, rng))
+    wrong = _local_distractors(entry, correct, entry.get("lang", "nl"), rng)
     if len(wrong) < 2:
         return None
     return {"situation": situation["line"], "situation_ru": situation.get("line_ru", ""),

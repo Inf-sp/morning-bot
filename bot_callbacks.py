@@ -256,9 +256,9 @@ async def handle(update, context, remove_reply_keyboard):
                 store.pending_input[cid] = "setcity"
                 await bot.send_message(chat_id=cid, text="📍 Напиши название города — переключу на него.")
             elif act == "trav_go":
-                await _inline_status(lambda _s: travel.send_go(bot, cid))
+                await _inline_status(lambda status: travel.send_go(bot, cid, status=status))
             elif act == "trav_no":
-                await _inline_status(lambda _s: travel.travel_dislike(bot, cid))
+                await _inline_status(lambda status: travel.travel_dislike(bot, cid, status=status))
             elif act == "trav_plan":
                 await _inline_status(lambda _s: travel.send_plan(bot, cid))
             elif act == "trav_fav":
@@ -302,7 +302,7 @@ async def handle(update, context, remove_reply_keyboard):
             elif act == "listen":
                 await _ack(q); await leisure_music.send_music_home(bot, cid, q)
             elif act == "listen_no":
-                await _inline_status(lambda _s: leisure_music.listen_dislike(bot, cid))
+                await _inline_status(lambda status: leisure_music.listen_dislike(bot, cid, status=status))
             elif act in ("food_breakfast", "recipe_breakfast"):
                 await _inline_status(lambda status: cooking.enter_meal(bot, cid, "breakfast", status=status))
             elif act in ("food_lunch", "recipe_lunch"):

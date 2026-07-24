@@ -216,8 +216,10 @@ async def handle_callback(bot, cid, q, data):
         return
     # врач
     if data == "as_medicine":
-        import medicine
-        await medicine.send_prompt(bot, cid); return
+        # Старые сообщения с отдельной кнопкой остаются рабочими, но теперь
+        # ведут в единый сценарий врача.
+        import doctor
+        await doctor.send_prompt(bot, cid); return
     if data == "as_doctor":
         import doctor
         await doctor.send_prompt(bot, cid); return

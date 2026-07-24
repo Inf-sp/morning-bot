@@ -4,9 +4,9 @@ from .builder import MessageBuilder, MessageSpec
 def prompt_screen():
     b = MessageBuilder()
     b.title("👩🏻‍⚕️ Врач")
-    b.line("Опиши, что беспокоит, или задай вопрос о здоровье.")
+    b.line("Опиши, что беспокоит, или спроси о лекарстве.")
     b.spacer()
-    b.line("Я разберу ситуацию, объясню возможные причины и подскажу, что делать дальше.")
+    b.line("Я разберу симптомы или официальную информацию о препарате и подскажу, что делать дальше.")
     return b.build_stripped()
 
 

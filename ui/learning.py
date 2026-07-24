@@ -325,7 +325,7 @@ def game_found(ui, answer, body=""):
     b.bold(answer)
     if body:
         b.spacer()
-        b.bold("Почему:")
+        b.bold(ui.get("explain", "Почему:"))
         b.newline()
         points = [part.strip(" •-\n") for part in str(body).replace("\n", ". ").split(".") if part.strip()]
         for point in points[:3]:
