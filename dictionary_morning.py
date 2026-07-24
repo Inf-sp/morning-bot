@@ -7,7 +7,12 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 import learning_dictionary as dictionary
-from dictionary_model import CANONICAL_ENTRY_OVERRIDES, normalize_key, normalize_term_case
+from dictionary_model import (
+    CANONICAL_ENTRY_OVERRIDES,
+    capitalize_initial,
+    normalize_key,
+    normalize_term_case,
+)
 from ui import learning as learning_ui
 from ui.constants import delete_label
 
@@ -53,7 +58,11 @@ def _build_morning_word(cid, language):
     del_row = []
     lines = []
     for w in chosen:
-        term = normalize_term_case(_entry_term(w), dictionary._kind_of(_entry_term(w)))
+        # Фразы сохраняют внутренний регистр, но в рассылке всегда начинаются
+        # с заглавной буквы — так же, как на экране словаря.
+        term = capitalize_initial(
+            normalize_term_case(_entry_term(w), dictionary._kind_of(_entry_term(w)))
+        )
         ru = _entry_translation(w)
         override = CANONICAL_ENTRY_OVERRIDES.get(normalize_key(_entry_term(w)))
         if override:
