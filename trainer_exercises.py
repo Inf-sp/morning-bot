@@ -14,7 +14,6 @@ from trainer_engine import (
     EXERCISE_FILL_GAP,
     EXERCISE_FIND_ERROR,
     EXERCISE_RECALL,
-    EXERCISE_TRANSLATE_CONTEXT,
 )
 
 
@@ -32,7 +31,8 @@ def _cap(value):
 
 
 def _first_translation(entry):
-    return entry_translation(entry).split(";")[0].split(",")[0].strip()
+    # Запятая может быть частью полноценного перевода: «Я думаю, это глупо».
+    return entry_translation(entry).split(";")[0].strip()
 
 
 def _example(entry):
@@ -53,7 +53,7 @@ def clean_options(correct, candidates, needed=2):
     for candidate in candidates:
         candidate = str(candidate or "").strip()
         lowered = candidate.lower()
-        junk = (not candidate or "____" in candidate or len(candidate) > 40
+        junk = (not candidate or "____" in candidate or len(candidate) > 100
                 or bool(set(_tokens(lowered)) & {"todo", "n/a", "none", "null"}))
         if not junk and lowered not in seen:
             result.append(candidate)
@@ -138,7 +138,7 @@ def _choose_translation(entry, other_entries, rng):
     pool = [_first_translation(other) for other in other_entries
             if entry_term(other) != entry_term(entry)]
     wrong = clean_options(correct, pool)
-    return {"term": entry_term(entry), "correct": correct, "wrong": wrong} if wrong else None
+    return {"term": entry_term(entry), "correct": correct, "wrong": wrong} if len(wrong) >= 2 else None
 
 
 def _recall(entry, other_entries, rng):
@@ -201,15 +201,6 @@ def _fill_gap(entry, other_entries, rng):
             "note": entry.get("breakdown") or ""}
 
 
-def _translate_context(entry, _other_entries, _rng):
-    alternatives = entry.get("alt_translations") or []
-    if not isinstance(alternatives, list):
-        alternatives = []
-    return {"ru": _first_translation(entry), "correct": _cap(entry_term(entry)),
-            "alt": alternatives,
-            "situation": entry.get("situation_type") or ""}
-
-
 def _conversation(entry, other_entries, rng, situation):
     if not situation or not situation.get("line"):
         return None
@@ -227,7 +218,6 @@ _BUILDERS = {
     EXERCISE_BUILD_SENTENCE: _build_sentence,
     EXERCISE_FIND_ERROR: _find_error,
     EXERCISE_FILL_GAP: _fill_gap,
-    EXERCISE_TRANSLATE_CONTEXT: _translate_context,
 }
 
 

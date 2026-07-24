@@ -6,6 +6,8 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import config
 import learning_dictionary
 import trainer
+import trainer_engine
+import trainer_exercises
 from dictionary_model import display_term
 from ui.builder import MessageBuilder
 from ui.learning_entry import render_learning_entry
@@ -51,3 +53,31 @@ def test_trainer_options_use_the_same_capitalized_format():
     })
 
     assert set(options) == {"Begrijpen", "Bewonderen", "Vervangen"}
+
+
+def test_trainer_options_keep_commas_inside_full_translation():
+    options = trainer._options({
+        "correct": "Я думаю, это глупо",
+        "wrong": ["Поддерживать", "Объяснять"],
+    })
+
+    assert "Я думаю, это глупо" in options
+
+
+def test_translation_exercise_keeps_full_answer_and_three_options():
+    entry = {
+        "term": "Ik vind het stom",
+        "translation": "Я думаю, это глупо",
+        "lang": "nl",
+    }
+    other = [
+        {"term": "Ondersteunen", "translation": "Поддерживать", "lang": "nl"},
+        {"term": "Uitleggen", "translation": "Объяснять", "lang": "nl"},
+    ]
+
+    data = trainer_exercises.build_exercise(
+        entry, other, trainer_engine.EXERCISE_CHOOSE_TRANSLATION,
+    )
+
+    assert data["correct"] == "Я думаю, это глупо"
+    assert len(data["wrong"]) == 2

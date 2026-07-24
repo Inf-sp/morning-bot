@@ -45,7 +45,7 @@ def test_result_card_hides_unverified_verb_forms_and_marks_close_answer():
                       "translation": "Эта куртка подходит для зимы."}],
     }
     text = exercise_result(
-        {"exercise_type": "translate_context", "term": "geschikt", "entry": entry},
+        {"exercise_type": "recall_free", "term": "geschikt", "entry": entry},
         False,
         chosen="geschikte",
         language_report={"issues": [{"issue_type": "grammar"}],

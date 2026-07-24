@@ -625,11 +625,14 @@ async def send_wardrobe_zones(bot, cid, q=None):
     rows = [
         [InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add")],
     ]
-    for zone in ZONE_ORDER:
-        rows.append([InlineKeyboardButton(
-            public_zone_name(zone),
-            callback_data=f"w_cat_{ZONE_SLUG[zone]}",
-        )])
+    for index in range(0, len(ZONE_ORDER), 2):
+        category_row = []
+        for zone in ZONE_ORDER[index:index + 2]:
+            category_row.append(InlineKeyboardButton(
+                public_zone_name(zone),
+                callback_data=f"w_cat_{ZONE_SLUG[zone]}",
+            ))
+        rows.append(category_row)
     if total:
         rows.append([InlineKeyboardButton("✏️ Изменить", callback_data="w_del")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])

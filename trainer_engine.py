@@ -15,14 +15,13 @@ EXERCISE_RECALL = "recall"
 EXERCISE_BUILD_SENTENCE = "build_sentence"
 EXERCISE_FIND_ERROR = "find_error"
 EXERCISE_FILL_GAP = "fill_gap"
-EXERCISE_TRANSLATE_CONTEXT = "translate_context"
 EXERCISE_CHOOSE_REACTION = "choose_reaction"
 
 ALL_EXERCISES = (
     EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL,
     EXERCISE_BUILD_SENTENCE, EXERCISE_FIND_ERROR,
     EXERCISE_FILL_GAP,
-    EXERCISE_TRANSLATE_CONTEXT, EXERCISE_CHOOSE_REACTION,
+    EXERCISE_CHOOSE_REACTION,
 )
 
 QUEUE_BATCH_SIZE = 10
@@ -65,7 +64,7 @@ def select_exercise_type(entry, avoid="", rng=random):
         if kind == "rule":
             candidates.append(EXERCISE_FIND_ERROR)
     else:
-        candidates = [EXERCISE_TRANSLATE_CONTEXT]
+        candidates = [EXERCISE_RECALL]
         if entry.get("situation_type"):
             candidates.append(EXERCISE_CHOOSE_REACTION)
         if kind == "phrase" and len(_entry_term(entry).split()) >= 3:

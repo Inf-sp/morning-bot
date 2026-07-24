@@ -263,7 +263,7 @@ def food_menu(idea=None):
     cuisine_code = str(idea.get("cuisine") or "").strip().lower()
     cuisine_flag = CUISINE_EMOJI.get(cuisine_code, CUISINE_EMOJI["international"])
     cuisine_name = CUISINE_RU.get(cuisine_code, CUISINE_RU["international"])
-    header = "🥣 Готовка · Идея на сегодня"
+    header = f"🥣 Готовка · {cuisine_flag} {cuisine_name} · Идея на сегодня"
     b.section(header)
 
     name = _cooking_text(idea.get("name"))
@@ -277,9 +277,6 @@ def food_menu(idea=None):
     if ingredients:
         b.spacer()
         b.labeled_line("Ингредиенты", ", ".join(ingredients))
-    servings = str(idea.get("servings") or "").strip()
-    if servings:
-        b.text_line(f"👤 {servings}")
     missing = idea.get("missing_ingredients") or idea.get("missing") or []
     if isinstance(missing, str):
         missing = [missing]
@@ -306,15 +303,6 @@ def food_menu(idea=None):
         b.newline()
         for step in steps:
             b.bullet(step)
-    pairings = []
-    for key in ("pairing_wine", "pairing_drink"):
-        value = re.sub(r"^[^\wА-Яа-яЁё]+", "", str(idea.get(key) or "").strip())
-        if value:
-            pairings.append(value)
-    if pairings:
-        b.spacer()
-        b.labeled_line("К блюду подойдет", "; ".join(pairings), lowercase=False)
-
     tip = _cooking_sentence(idea.get("tip"))
     if tip:
         b.spacer()
@@ -325,7 +313,7 @@ def food_menu(idea=None):
         [("✨ Другой рецепт", "m_food_next")],
         [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
         [("🧊 Мой холодильник", "as_fridge_home")],
-        [("🎚️ Предпочтения", "set_cuisines")],
+        [("💾 Сохранённое", "as_my_recipes"), ("🎚️ Предпочтения", "set_cuisines")],
         [("#️⃣ Главная", "m_menu")],
     ]
     return b.build_stripped(reply_markup=ikb(rows))

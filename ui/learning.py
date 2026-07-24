@@ -63,19 +63,6 @@ def exercise_fill_gap(data):
     return msg
 
 
-def exercise_translate_context(data):
-    b = MessageBuilder()
-    b.section("🗣 Скажи в ситуации")
-    b.spacer()
-    if data.get("situation"):
-        _q(b, "Ситуация", data["situation"])
-        b.spacer()
-    _q(b, "Напиши", data["ru"])
-    msg = b.build()
-    msg.text = msg.text.rstrip("\n")
-    return msg
-
-
 def exercise_choose_reaction(data):
     b = MessageBuilder()
     b.section("💭 Что ответить")
@@ -133,7 +120,6 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
     entry = data.get("entry") if isinstance(data.get("entry"), dict) else {}
     forgot = chosen == "__forgot__"
     is_close = (not is_correct and not forgot
-                and data.get("exercise_type") == "translate_context"
                 and bool((language_report or {}).get("issues")))
     b = MessageBuilder()
     b.section("✅ Верно" if is_correct else ("📝 Ответ" if forgot else ("🟡 Почти" if is_close else "❌ Ошибка")))

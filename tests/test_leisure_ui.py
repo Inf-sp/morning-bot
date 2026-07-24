@@ -31,6 +31,7 @@ def test_movie_home_uses_clear_recommendation_labels():
         ["✨ Другое кино"],
         ["🎭 По жанру", "🌙 По настроению"],
         ["❤️ Моё кино", "💾 Сохранить"],
+        ["💾 Сохранённое", "🎚️ Предпочтения"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
@@ -38,11 +39,12 @@ def test_movie_home_uses_clear_recommendation_labels():
 def test_book_and_music_home_follow_same_model():
     assert _labels(leisure_books.books_home_keyboard())[:4] == [
         ["✨ Подобрать книгу"], ["❤️ Мои книги", "💾 Сохранить"],
+        ["💾 Сохранённое", "🎚️ Предпочтения"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
-    assert _labels(leisure_music.music_home_keyboard())[:4] == [
+    assert _labels(leisure_music.music_home_keyboard())[:5] == [
         ["✨ Подобрать музыку"], ["❤️ Мои артисты", "💾 Сохранить"],
-        ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["💾 Сохранённое", "🎚️ Предпочтения"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert leisure_books.books_home_keyboard().inline_keyboard[0][0].callback_data == "book_reco"
     assert leisure_music.music_home_keyboard().inline_keyboard[0][0].callback_data == "music_reco"

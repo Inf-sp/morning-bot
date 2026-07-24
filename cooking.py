@@ -75,6 +75,7 @@ def _recipe_kb(cid=None, recipe=None):
     return _kb([
         [("✨ Другой рецепт", "as_food")],
         [(save_toggle_label(saved), "as_recipe_save")],
+        [("💾 Сохранённое", "as_my_recipes"), ("🎚️ Предпочтения", "set_cuisines")],
         [("⬅️ Назад", "as_food_back"), ("#️⃣ Главная", "m_menu")],
     ])
 
@@ -142,8 +143,6 @@ _MEAL_GUARD = {
 
 async def _send_queue_card(bot, cid, meal, d, status=None):
     """Отправляет карточку ОДНОГО показываемого рецепта без фото."""
-    if meal == "breakfast":
-        d = {**d, "pairing_wine": ""}
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe_queue", meal)
     store.last_source[str(cid)] = "Питание · Рецепт"
@@ -152,7 +151,7 @@ async def _send_queue_card(bot, cid, meal, d, status=None):
         label=food_ui.MEAL_LABEL.get(meal, "Рецепт"),
         meal=meal,
         cuisine_emoji_fallback=RECIPE_CUISINE_EMOJI_FALLBACK,
-        show_cuisine_emoji=False,
+        show_cuisine_emoji=True,
     )
     store.last_answer[str(cid)] = card.text
     kb = _recipe_kb(cid, d)

@@ -180,9 +180,6 @@ def food_card(
     if ingredients:
         b.spacer()
         b.labeled_line("Ингредиенты", ingredients)
-    servings = str(data.get("servings") or "").strip()
-    if servings:
-        b.text_line(f"👤 {servings}")
     missing = data.get("missing_ingredients") or []
     if isinstance(missing, str):
         missing = [missing]
@@ -198,14 +195,6 @@ def food_card(
         b.newline()
         for step in steps:
             b.bullet(step)
-    pairings = []
-    for key in ("pairing_wine", "pairing_drink"):
-        value = re.sub(r"^[^\wА-Яа-яЁё]+", "", str(data.get(key) or "").strip())
-        if value:
-            pairings.append(value)
-    if pairings:
-        b.spacer()
-        b.labeled_line("К блюду подойдет", "; ".join(pairings), lowercase=False)
     if chef_tip:
         b.spacer()
         b.labeled_line("💡 Полезно", chef_tip, lowercase=False)

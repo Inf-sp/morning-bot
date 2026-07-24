@@ -41,32 +41,32 @@ class StatusManager:
     # экране конкретного раздела (гардероб, готовка и т.п.), см. TOPIC_STAGES.
     TOPIC_STAGES = {
         "wardrobe": (
-            (0, "⏳ Разбираю шкаф..."),
+            (0, "⏳ Ищу..."),
             (3, "🧩 Собираю образ..."),
             (8, "✨ Почти готово..."),
         ),
         "food": (
-            (0, "⏳ Ищу рецепт..."),
+            (0, "⏳ Ищу..."),
             (3, "🥕 Подбираю ингредиенты..."),
             (8, "✨ Почти готово..."),
         ),
         "learning": (
-            (0, "⏳ Готовлю задание..."),
+            (0, "⏳ Ищу..."),
             (3, "📚 Подбираю слова..."),
             (8, "✨ Почти готово..."),
         ),
         "leisure": (
-            (0, "⏳ Подбираю варианты..."),
+            (0, "⏳ Ищу..."),
             (3, "🎬 Сверяюсь со вкусом..."),
             (8, "✨ Почти готово..."),
         ),
         "travel": (
-            (0, "⏳ Ищу маршрут..."),
+            (0, "⏳ Ищу..."),
             (3, "🗺️ Прикидываю план..."),
             (8, "✨ Почти готово..."),
         ),
         "health": (
-            (0, "⏳ Собираю мысли..."),
+            (0, "⏳ Ищу..."),
             (3, "💬 Подбираю слова..."),
             (8, "✨ Почти готово..."),
         ),
@@ -121,9 +121,9 @@ class StatusManager:
             return False
         try:
             if self.mode == "inline":
-                # Inline-статус не должен трогать клавиатуру сообщения: временная
-                # noop-кнопка ломала финальные меню, а последующая очистка могла
-                # удалить уже установленную рабочую клавиатуру.
+                # На время долгого запроса заменяем текущую карточку статусом.
+                # Финальный результат вернётся в это же сообщение с рабочей клавиатурой.
+                await self.message.edit_text(text, **kwargs)
                 return True
             else:
                 await self.message.edit_text(text, **kwargs)
@@ -144,16 +144,12 @@ class StatusManager:
     async def replace(self, text, **kwargs):
         await self._cancel()
         if self.mode == "inline":
-            await self.stop(delete=False)
+            if await self._edit(text, **kwargs):
+                return True
             if self.cid is not None and self.bot is not None:
-                _log.debug("StatusManager.replace(inline): sending new message cid=%s text_len=%s",
-                          self.cid, len(text or ""))
-                try:
-                    msg = await self.bot.send_message(chat_id=self.cid, text=text, **kwargs)
-                except Exception as e:
-                    _log.error("StatusManager.replace(inline): send_message failed cid=%s: %r", self.cid, e, exc_info=True)
-                    raise
-                _log.debug("StatusManager.replace(inline): sent message_id=%s cid=%s", msg.message_id, self.cid)
+                _log.debug("StatusManager.replace(inline): sending fallback message cid=%s text_len=%s",
+                           self.cid, len(text or ""))
+                await self.bot.send_message(chat_id=self.cid, text=text, **kwargs)
                 return True
             _log.warning("StatusManager.replace(inline): no cid/bot, cid=%s bot=%s", self.cid, self.bot is not None)
             return False

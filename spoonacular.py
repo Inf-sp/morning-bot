@@ -162,7 +162,6 @@ def normalize_recipe(recipe: dict, search_result=None) -> dict:
             "unit": " ".join(str(item.get("unit") or "").split()),
             "original": " ".join(str(item.get("original") or "").split()),
         })
-    wine = recipe.get("winePairing") if isinstance(recipe.get("winePairing"), dict) else {}
     return {
         "id": str(recipe.get("id") or search_result.get("id") or "").strip(),
         "name": str(recipe.get("title") or search_result.get("title") or "").strip(),
@@ -180,8 +179,6 @@ def normalize_recipe(recipe: dict, search_result=None) -> dict:
             for item in search_result.get("missedIngredients") or []
             if isinstance(item, dict) and item.get("name")
         ],
-        "pairing_wines": [str(item).strip() for item in wine.get("pairedWines") or [] if str(item).strip()],
-        "pairing_text": " ".join(str(wine.get("pairingText") or "").split()),
         "source_provider": "spoonacular",
     }
 
@@ -228,7 +225,6 @@ def source_recipes(meal_type, *, ingredients="", limit=10, avoid=()):
     details = _request("/recipes/informationBulk", {
         "ids": ",".join(ids),
         "includeNutrition": "false",
-        "addWinePairing": "true",
     }, ttl=_RECIPE_TTL)
     details_by_id = {
         str(item.get("id")): item for item in (details or [])

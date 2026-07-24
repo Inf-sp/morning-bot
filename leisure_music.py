@@ -97,6 +97,8 @@ def _listen_kb(saved=False, favorite=False):
         [InlineKeyboardButton("🎫 Концерты", callback_data="a_artist_concerts")],
         [InlineKeyboardButton("❤️ Мои артисты", callback_data="artist_favorites"),
          InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data="listen_0")],
+        [InlineKeyboardButton("💾 Сохранённое", callback_data="artist_saved"),
+         InlineKeyboardButton("🎚️ Предпочтения", callback_data="music_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -106,6 +108,8 @@ def music_home_keyboard():
         [InlineKeyboardButton("✨ Подобрать музыку", callback_data="music_reco")],
         [InlineKeyboardButton("❤️ Мои артисты", callback_data="artist_favorites"),
          InlineKeyboardButton("💾 Сохранить", callback_data="artist_saved")],
+        [InlineKeyboardButton("💾 Сохранённое", callback_data="artist_saved"),
+         InlineKeyboardButton("🎚️ Предпочтения", callback_data="music_prefs")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

@@ -93,8 +93,6 @@ def _recipe_source_prompt_block(sources) -> str:
             "ready_minutes": source.get("ready_minutes"),
             "used_ingredient_count": source.get("used_ingredient_count"),
             "missed_ingredient_count": source.get("missed_ingredient_count"),
-            "pairing_wines": source.get("pairing_wines") or [],
-            "pairing_text": source.get("pairing_text") or "",
         })
     if not compact:
         return ""
@@ -103,7 +101,6 @@ def _recipe_source_prompt_block(sources) -> str:
         f"\n{provider} — единственный источник базовых рецептов для этого ответа. "
         "Выбери лучший подходящий вариант из списка, переведи на русский и адаптируй под пользователя. "
         "Не придумывай блюдо с нуля. Сохраняй source_recipe_id выбранного источника. "
-        "Если у выбранного источника есть pairing_wines, выбери в pairing_wine только одно значение из этого списка.\n"
         f"{secure.wrap_untrusted(source_json, f'рецепты {provider}')}\n"
     )
 
@@ -130,10 +127,6 @@ def _with_recipe_source(item, sources, index=0):
     if source.get("source_provider") == "spoonacular":
         result["spoonacular_id"] = str(source["id"])
         result["spoonacular_source_name"] = str(source.get("name") or "")
-        wines = [str(value).strip() for value in source.get("pairing_wines") or [] if str(value).strip()]
-        requested = str(result.get("pairing_wine") or "").strip()
-        matched = next((wine for wine in wines if wine.casefold() == requested.casefold()), "")
-        result["pairing_wine"] = matched or (wines[0] if wines else "")
     else:
         result["source_meal_id"] = str(source["id"])
         result["themealdb_id"] = str(source["id"])
@@ -191,7 +184,6 @@ def _source_recipe_card(source) -> dict:
     ingredients = [item for item in ingredients if item]
     minutes = _home_minutes(source.get("ready_minutes"))
     servings = source.get("servings")
-    wines = [str(item).strip() for item in source.get("pairing_wines") or [] if str(item).strip()]
     steps = _source_instruction_steps(source)
     cuisine = _resolve_home_cuisine(
         source.get("area") or source.get("cuisine"),
@@ -210,17 +202,28 @@ def _source_recipe_card(source) -> dict:
             if str(item).strip()
         ],
         "image": str(source.get("thumbnail") or "").strip(),
-        "pairing_wine": wines[0] if wines else "",
-        "pairing_drink": "",
         "code_fallback": True,
     }
     return _with_recipe_source(card, [source])
 
 
+def _recipe_is_russian(recipe) -> bool:
+    """Не выпускает внешний или AI-рецепт с непереведёнными полями в UI."""
+    if not isinstance(recipe, dict):
+        return False
+    visible = [recipe.get("name"), recipe.get("ingredients")]
+    steps = recipe.get("steps") or []
+    if isinstance(steps, str):
+        steps = [steps]
+    visible.extend(steps)
+    return bool(visible) and all(re.search(r"[а-яё]", str(value or ""), re.I) for value in visible)
+
+
 def _source_fallback_card(sources) -> dict:
     for source in sources or []:
         card = _source_recipe_card(source)
-        if card.get("name") and card.get("ingredients") and card.get("steps"):
+        if (_recipe_is_russian(card)
+                and card.get("name") and card.get("ingredients") and card.get("steps")):
             return card
     return {}
 
@@ -245,6 +248,8 @@ def _source_home_idea(source, context) -> dict:
         "servings": card.get("servings") or "",
         "code_fallback": True,
     })
+    if not _recipe_is_russian(idea):
+        return {}
     if not idea.get("steps"):
         idea["steps"] = [
             {"text": step, "minutes": None} for step in _source_instruction_steps(source)
@@ -576,14 +581,6 @@ def _normalize_home_idea(data, context: dict) -> dict:
     name = " ".join(str(data.get("name") or "").split()).strip()
     reason = _home_human_reason(data.get("reason"), context)
     tip = _home_useful_tip(data.get("tip"))
-    pairing_wine = " ".join(str(data.get("pairing_wine") or "").split())[:80]
-    pairing_drink = " ".join(str(data.get("pairing_drink") or "").split())[:100]
-    if context.get("meal") == "breakfast":
-        pairing_wine = ""
-    if pairing_wine and not re.search(r"[а-яё]", pairing_wine, re.I):
-        pairing_wine = ""
-    if pairing_drink and not re.search(r"[а-яё]", pairing_drink, re.I):
-        pairing_drink = ""
     ingredients = [_home_natural_ingredient(item) for item in _home_string_list(data.get("ingredients"))]
     steps = _home_steps(data.get("steps"))
     cuisine = _resolve_home_cuisine(data.get("cuisine"), name, ingredients, steps)
@@ -637,8 +634,6 @@ def _normalize_home_idea(data, context: dict) -> dict:
         "missing": missing,
         "substitution": substitution,
         "tip": tip,
-        "pairing_wine": pairing_wine,
-        "pairing_drink": pairing_drink,
         "missing_ingredients": _home_string_list(data.get("missing_ingredients")),
         "image": str(data.get("image") or "").strip(),
         "servings": str(data.get("servings") or "").strip(),
@@ -652,8 +647,6 @@ def _home_idea_complete(idea) -> bool:
     required = ("name", "minutes", "ingredients", "steps")
     if not all(idea.get(field) for field in required):
         return False
-    if idea.get("code_fallback"):
-        return True
     visible_texts = [idea.get("name"), *(idea.get("ingredients") or [])]
     visible_texts.extend(step.get("text") for step in (idea.get("steps") or []))
     if not all(re.search(r"[а-яё]", str(text or ""), re.I) for text in visible_texts):
@@ -678,7 +671,7 @@ def _home_idea_context(cid, now=None) -> dict:
     cuisine_codes = cooking_settings.cuisines(cid)
     signature_data = {
         "date": now.date().isoformat(),
-        "home_copy_version": 8,
+        "home_copy_version": 9,
         "meal": meal,
         "available": available,
         "unavailable": unavailable,
@@ -752,10 +745,6 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
         "При пустом холодильнике формулировка нейтральная.\n"
         "• tip — один конкретный приём именно для этого блюда с понятной техникой или результатом. "
         "Запрещены общие советы вроде «добавь чеснок и лук для аромата».\n"
-        "• Для завтрака pairing_wine всегда пустой. Для обеда и ужина — одно сочетание только из "
-        "pairing_wines выбранного рецепта; если список пуст, верни пустую строку.\n"
-        "• pairing_drink — один конкретный безалкогольный напиток, подходящий к блюду; без пояснений и общих слов. "
-        "Все сочетания пиши по-русски, не используй английские названия вроде white wine.\n"
         "• Во всём тексте обращайся только на «ты»: «приготовь», «обжарь», «добавь». "
         "Не используй формы «приготовьте», «обжарьте», «добавьте».\n"
         "• Никаких эмодзи, общих вступлений, текста о настройках и нескольких советов.\n"
@@ -763,8 +752,7 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
         '"ingredients":["все продукты блюда"],'
         '"steps":[{"text":"Нарежь начинку","minutes":3},{"text":"Взбей яйца и вылей на сковороду","minutes":4},{"text":"Добавь начинку и сложи омлет","minutes":5}],'
         '"use_first":[],"missing":[],"substitution":null,'
-        '"tip":"один совет","pairing_wine":"Cabernet Sauvignon или пустая строка",'
-        '"pairing_drink":"безалкогольный напиток"}. Если блока нет, используй пустой массив или null.'
+        '"tip":"один совет"}. Если блока нет, используй пустой массив или null.'
     )
 
 
@@ -854,7 +842,7 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
                     "attempt": attempt,
                     "language": "ru",
                     "profile_version": context["signature"],
-                    "schema_version": 8,
+                    "schema_version": 9,
                 },
             )
         except Exception as error:
@@ -884,8 +872,6 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
                 break
     if not _home_idea_complete(idea):
         idea = _home_local_idea(context)
-    if context["meal"] == "breakfast":
-        idea = {**idea, "pairing_wine": ""}
     if not _home_idea_complete(idea):
         raise ValueError("Неполный рецепт для главного экрана Готовки")
     # За время AI-запроса профиль мог измениться в другом сценарии. Перечитываем его,
@@ -973,7 +959,11 @@ def _gen_recipe(constraint, cid=None):
     except Exception as error:
         _log.warning("recipe LLM chain unavailable, using source card: %s", type(error).__name__)
         return _source_fallback_card(sources) or _fallback_recipe()
-    return _with_recipe_source(result, sources)
+    result = _with_recipe_source(result, sources)
+    if _recipe_is_russian(result):
+        return result
+    _log.warning("recipe AI returned a non-Russian card; using local fallback")
+    return _source_fallback_card(sources) or _fallback_recipe()
 
 def _fallback_recipe():
     return {
@@ -1030,7 +1020,11 @@ def _gen_leftovers_recipe(ingredients, cid=None):
         _log.warning("leftovers LLM chain unavailable, using source card: %s", type(error).__name__)
         source_card = _source_fallback_card(sources)
         return source_card or _fallback_leftovers_recipe(ingredients) or _fallback_recipe()
-    return _with_recipe_source(result, sources)
+    result = _with_recipe_source(result, sources)
+    if _recipe_is_russian(result):
+        return result
+    _log.warning("leftovers AI returned a non-Russian card; using local fallback")
+    return _source_fallback_card(sources) or _fallback_leftovers_recipe(ingredients) or _fallback_recipe()
 
 
 def _fallback_leftovers_recipe(ingredients):

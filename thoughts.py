@@ -365,6 +365,11 @@ def _fallback_review(items):
         if item.get("type") == "anxious_prediction"
         or (_ANXIOUS_RE.search(item.get("text", "")) and not _EXPLICIT_ACTION_RE.search(item.get("text", "")))
     ]
+    distress = [
+        item for item in items
+        if item in anxious
+        or (item.get("type") == "emotion" and _EMOTION_RE.search(item.get("text", "")))
+    ]
     practical = [
         item for item in items
         if item.get("type") == "practical_problem"
@@ -373,8 +378,8 @@ def _fallback_review(items):
         and _EXPLICIT_ACTION_RE.search(item.get("text", ""))
     ]
     summary = (
-        "Срочность пока не подтверждена."
-        if anxious and not practical and not decisions
+        "Тревога сейчас сильная. Сначала вернём немного опоры — решать всё сразу не нужно."
+        if distress and not practical and not decisions
         else "Есть задачи и предположения — отделим факты от того, что пока неизвестно."
     )
     analysis = []
@@ -387,6 +392,8 @@ def _fallback_review(items):
             analysis.append(f"«{ref}» пока предположение, а не подтверждённый факт; конкретный срок не указан.")
         else:
             analysis.append("Это тревожное предположение, а не факт.")
+    if distress and not anxious and not practical and not decisions:
+        analysis.append("Чувство тревоги реально, но оно не требует немедленно находить решение.")
     if practical:
         ref = _short_reference(practical[0].get("text", ""))
         analysis.append(f"Реального действия сейчас требует «{ref}».")
@@ -397,6 +404,12 @@ def _fallback_review(items):
         next_step = _imperative_from_thought(practical[0].get("text", ""))
     elif decisions:
         next_step = f"Следуй уже принятому решению: «{_short_reference(decisions[0].get('text', ''), 10)}»."
+    elif distress:
+        raw_text = " ".join(str(item.get("text", "")) for item in distress).casefold()
+        if re.search(r"срок|дедлайн|успею|не успею|времени", raw_text):
+            next_step = "Открой календарь и проверь ближайший срок."
+        else:
+            next_step = "Поставь обе ноги на пол и сделай один медленный выдох длиннее вдоха."
     else:
         next_step = (
             "Проверь дедлайн и выбери один ближайший шаг."
@@ -463,9 +476,18 @@ async def _build_review(items):
         and not _ANXIOUS_RE.search(item.get("text", ""))
         for item in items
     )
+    distress_only = any(
+        item.get("type") == "emotion" and _EMOTION_RE.search(item.get("text", ""))
+        for item in items
+    ) and not any(
+        _EXPLICIT_ACTION_RE.search(item.get("text", ""))
+        for item in items
+    )
     # Для одной тревоги о сроках правила надёжнее генерации: не превращаем
     # её в команду «срочно всё закончить» из-за случайного ответа модели.
-    if anxious_only and not any(_DECISION_RE.search(item.get("text", "")) for item in items):
+    if (anxious_only or distress_only) and not any(
+        _DECISION_RE.search(item.get("text", "")) for item in items
+    ):
         return fallback
     combined = "\n".join(f"- {item.get('text', '')}" for item in items)
     kinds = ", ".join(item.get("type", "unknown") for item in items)
@@ -478,6 +500,8 @@ async def _build_review(items):
         "за 5–10 минут; не предлагай закончить весь проект. Если есть только тревожный прогноз, не придумывай "
         "задачу: назови отсутствие подтверждённого срока или факта и предложи проверить один реальный параметр. "
         "Если подтверждения нет, прямо назови мысль предположением, а не фактом. Не повторяй исходные мысли полностью. "
+        "Если человек сообщает о сильной тревоге без конкретной задачи, сначала помоги снизить напряжение коротким безопасным действием, "
+        "а не отправляй его искать дедлайн. "
         "Фраза с «кажется», «боюсь», «вдруг», «успею/не успею» остаётся тревожным предположением, "
         "даже если в ней есть слова «задачи» или «дела». Практической задачей считай только запись "
         "с явным действием вроде «нужно купить», «надо позвонить» или «не забыть отправить». "

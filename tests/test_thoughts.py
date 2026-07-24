@@ -454,6 +454,17 @@ def test_invalid_or_generic_model_response_uses_content_specific_fallback(monkey
     assert result["next_step"] == "Купи фильтры для фонтана."
 
 
+def test_strong_anxiety_gets_grounding_step_instead_of_generic_deadline_advice(monkeypatch):
+    _setup_state(monkeypatch)
+    result = asyncio.run(thoughts._build_review([
+        {"text": "Много тревожности", "type": "emotion"},
+    ]))
+
+    assert "Тревога" in result["summary"]
+    assert "Срочность пока не подтверждена" not in result["summary"]
+    assert result["next_step"] == "Поставь обе ноги на пол и сделай один медленный выдох длиннее вдоха."
+
+
 def test_formally_valid_but_content_free_next_step_uses_fallback(monkeypatch):
     _setup_state(monkeypatch)
 

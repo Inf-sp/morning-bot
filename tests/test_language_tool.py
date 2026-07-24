@@ -7,7 +7,6 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import language_tool
 import trainer
 import trainer_grading
-from trainer_engine import EXERCISE_TRANSLATE_CONTEXT
 from ui.learning import exercise_result
 
 
@@ -116,7 +115,7 @@ def test_disputed_dutch_error_uses_groq_then_gemini(monkeypatch):
     monkeypatch.setattr(trainer.ai, "allm_json", fake_ai)
     grade, report = asyncio.run(trainer._grade_dutch_written({
         "lang": "nl",
-        "exercise_type": EXERCISE_TRANSLATE_CONTEXT,
+        "exercise_type": "recall_free",
         "correct": "Ik ga naar huis.",
         "alt": [],
         "ru": "Я иду домой.",
@@ -152,7 +151,7 @@ def test_language_tool_card_is_formatted_by_code():
     report = {**_report(), "explanation": "После ik используется форма ga."}
     message = exercise_result(
         {
-            "exercise_type": EXERCISE_TRANSLATE_CONTEXT,
+            "exercise_type": "recall_free",
             "correct": "Ik ga naar huis.",
             "ru": "Я иду домой.",
         },
@@ -187,7 +186,7 @@ def test_english_written_answer_does_not_use_language_tool(monkeypatch):
     state = {
         "current": {
             "lang": "en",
-            "exercise_type": EXERCISE_TRANSLATE_CONTEXT,
+            "exercise_type": "recall_free",
             "correct": "I am going home.",
             "alt": [],
             "ru": "Я иду домой.",

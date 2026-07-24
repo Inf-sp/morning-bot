@@ -747,7 +747,7 @@ def _word_of_day(cid):
     ru = dictionary.entry_translation(entry).replace(";", ",")
     return f"{_cap(term)} → {_cap(ru)}.", lang
 
-_DAY_CACHE_VERSION = 7
+_DAY_CACHE_VERSION = 8
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):

@@ -28,7 +28,6 @@ from trainer_engine import (
     EXERCISE_FILL_GAP,
     EXERCISE_FIND_ERROR,
     EXERCISE_RECALL,
-    EXERCISE_TRANSLATE_CONTEXT,
 )
 from ui import learning as learning_ui
 from ui.navigation import back_menu_keyboard
@@ -173,7 +172,7 @@ async def _render_next(bot, cid):
         data = await _build_exercise(cid, item)
         if data is None:
             for fallback in (
-                EXERCISE_TRANSLATE_CONTEXT, EXERCISE_BUILD_SENTENCE,
+                EXERCISE_BUILD_SENTENCE,
                 EXERCISE_FILL_GAP, EXERCISE_RECALL, EXERCISE_CHOOSE_TRANSLATION,
             ):
                 if fallback in (item["exercise_type"], state.get("last_exercise_type")):
@@ -226,10 +225,7 @@ async def _send_exercise(bot, cid, data):
         await bot.send_message(chat_id=cid, text=message.text, entities=message.entities,
                                reply_markup=_keyboard(rows))
         return
-    if kind == EXERCISE_TRANSLATE_CONTEXT:
-        message = learning_ui.exercise_translate_context(data)
-        rows = [[("✍️ Написать", "ex_answer")], [("Показать ответ", "ex_giveup")], _nav_row()]
-    elif kind == EXERCISE_BUILD_SENTENCE:
+    if kind == EXERCISE_BUILD_SENTENCE:
         data.setdefault("_picked", [])
         message = learning_ui.exercise_build_sentence(data)
         remaining = [(token, index) for index, token in enumerate(data["shuffled"])
@@ -331,8 +327,6 @@ async def handle_text(bot, cid, text):
     language_report = None
     if data.get("lang") == "nl":
         grade, language_report = await _grade_dutch_written(data, text)
-    elif data["exercise_type"] == EXERCISE_TRANSLATE_CONTEXT:
-        grade = await _grade_context(data, text)
     else:
         grade = trainer_grading.grade_free_text(
             data, text, used_hint=bool(data.get("hint_shown")))
@@ -401,9 +395,7 @@ async def _grade_dutch_written(data, text):
         "corrected_text": language_tool.apply_first_replacements(text, effective_issues),
     }
     decision = {}
-    needs_semantic_judgment = (
-        data.get("exercise_type") == EXERCISE_TRANSLATE_CONTEXT and not local.correct
-    )
+    needs_semantic_judgment = not local.correct
     needs_dispute_explanation = bool(
         report.get("available") and _needs_ai_explanation(report)
     )

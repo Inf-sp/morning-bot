@@ -118,7 +118,7 @@ def settings_home(city="", notifications_on=True):
 
 def lifehacks_home(total, records=None, page=0, total_pages=1):
     b = MessageBuilder()
-    b.section("💡 Лайфхаки")
+    b.section("🦉 Лайфхаки")
     b.line(f"Всего: {total}")
     if records:
         b.spacer()

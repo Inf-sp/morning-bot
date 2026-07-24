@@ -32,13 +32,11 @@ def _source():
         "servings": 2,
         "missed_ingredients": ["parsley"],
         "thumbnail": "https://img.spoonacular.com/recipes/716429-556x370.jpg",
-        "pairing_wines": ["Cabernet Sauvignon"],
-        "pairing_text": "Cabernet Sauvignon works well with this dish.",
         "source_provider": "spoonacular",
     }
 
 
-def test_fridge_search_fetches_ten_candidates_and_bulk_pairing(monkeypatch):
+def test_fridge_search_fetches_ten_candidates_and_bulk_details(monkeypatch):
     calls = []
     usage = []
     monkeypatch.setattr(spoonacular.config, "SPOONACULAR_API_KEY", "secret-key")
@@ -67,10 +65,6 @@ def test_fridge_search_fetches_ten_candidates_and_bulk_pairing(monkeypatch):
             "name": "pasta", "amount": 200, "unit": "g", "original": "200 g pasta",
         }],
         "analyzedInstructions": [{"steps": [{"step": "Boil the pasta."}]}],
-        "winePairing": {
-            "pairedWines": ["cabernet sauvignon"],
-            "pairingText": "Cabernet Sauvignon works well.",
-        },
     }]
 
     def fake_get(url, params, timeout):
@@ -87,9 +81,7 @@ def test_fridge_search_fetches_ten_candidates_and_bulk_pairing(monkeypatch):
     assert calls[0][1]["ingredients"] == "chicken,rice,tomato"
     assert calls[0][1]["number"] == 10
     assert calls[1][0] == "https://api.spoonacular.com/recipes/informationBulk"
-    assert calls[1][1]["addWinePairing"] == "true"
     assert calls[1][1]["ids"] == "716429"
-    assert result[0]["pairing_wines"] == ["cabernet sauvignon"]
     assert result[0]["instructions"] == ["Boil the pasta."]
     assert all(service == "spoonacular" for service, _kwargs in usage)
 
@@ -115,7 +107,6 @@ def test_spoonacular_is_primary_and_gemini_selects_translates_adapts(monkeypatch
             "servings": "1 порц.",
             "ingredients": "паста, цветная капуста, чеснок",
             "steps": ["Отвари пасту", "Добавь овощи"],
-            "pairing_wine": "Cabernet Sauvignon",
         }
 
     monkeypatch.setattr(recipe_generation.ai, "llm_json", fake_llm)
@@ -126,7 +117,6 @@ def test_spoonacular_is_primary_and_gemini_selects_translates_adapts(monkeypatch
     assert "переведи на русский и адаптируй" in captured["prompt"]
     assert result["spoonacular_id"] == "716429"
     assert result["spoonacular_source_name"].startswith("Pasta with Garlic")
-    assert result["pairing_wine"] == "Cabernet Sauvignon"
 
 
 def test_themealdb_is_used_when_spoonacular_returns_no_recipes(monkeypatch):
@@ -138,37 +128,28 @@ def test_themealdb_is_used_when_spoonacular_returns_no_recipes(monkeypatch):
     assert recipe_generation._recipe_sources("ужин") == fallback
 
 
-def test_cooking_idea_card_combines_pairings_without_labels_or_emoji():
+def test_cooking_idea_card_has_no_extra_drink_block():
     message = food_menu({
         "name": "Паста с овощами",
         "ingredients": ["паста", "овощи"],
         "steps": ["Отвари пасту", "Добавь овощи"],
-        "pairing_wine": "🍷 Cabernet Sauvignon",
-        "pairing_drink": "🥤 холодный чай с лимоном",
     })
 
-    assert "🥣 Готовка · Идея на сегодня" in message.text
-    assert "К блюду подойдет: Cabernet Sauvignon; холодный чай с лимоном" in message.text
-    assert "Сочетания" not in message.text
-    assert "Без алкоголя" not in message.text
-    assert "🍷" not in message.text
-    assert "🥤" not in message.text
+    assert "🥣 Готовка · 🌍 Международная кухня · Идея на сегодня" in message.text
+    assert "Напиток" not in message.text
 
 
-def test_recipe_card_hides_time_and_image_and_uses_one_pairing_line():
+def test_recipe_card_hides_time_and_image():
     message = food_card({
         "name": "Паста с овощами",
         "time": "25 мин",
         "servings": "2 порц.",
         "ingredients": "паста, овощи",
         "steps": ["Отвари пасту", "Добавь овощи"],
-        "pairing_wine": "Cabernet Sauvignon",
-        "pairing_drink": "холодный чай с лимоном",
         "image": "https://img.spoonacular.com/recipe.jpg",
     })
 
-    assert "К блюду подойдет: Cabernet Sauvignon; холодный чай с лимоном" in message.text
-    assert "👤 2 порц." in message.text
+    assert "порц." not in message.text
     assert "25 мин" not in message.text
     assert "⏱" not in message.text
     assert "Фото блюда" not in message.text
@@ -187,16 +168,10 @@ def test_all_llms_down_still_returns_spoonacular_card(monkeypatch):
     )
 
     result = recipe_generation._gen_recipe("ужин", cid="42")
-    card = recipe_generation._source_recipe_card(_source())
 
-    assert result["code_fallback"] is True
-    assert result["name"].startswith("Pasta with Garlic")
-    assert result["time"] == "25 мин"
-    assert result["ingredients"] == "100 g pasta"
-    assert result["missing_ingredients"] == ["parsley"]
-    assert result["image"].startswith("https://img.spoonacular.com/")
-    assert result["steps"] == ["Boil the pasta.", "Add the vegetables."]
-    assert card == result
+    assert result["name"] == "Быстрый омлет с овощами"
+    assert recipe_generation._recipe_is_russian(result) is True
+    assert "Pasta" not in str(result)
 
 
 def test_code_card_formats_source_fields_without_ai():
@@ -211,7 +186,7 @@ def test_code_card_formats_source_fields_without_ai():
         "code_fallback": True,
     })
 
-    assert "👤 2 порц." in message.text
+    assert "порц." not in message.text
     assert "⏱" not in message.text
     assert "25 мин" not in message.text
     assert "Не хватает:\nparsley" in message.text
@@ -225,11 +200,7 @@ def test_home_idea_can_be_built_from_spoonacular_without_ai():
         "has_fridge": True,
     })
 
-    assert recipe_generation._home_idea_complete(idea) is True
-    assert idea["code_fallback"] is True
-    assert idea["minutes"] == 25
-    assert idea["missing_ingredients"] == ["parsley"]
-    assert idea["image"].startswith("https://img.spoonacular.com/")
+    assert idea == {}
 
 
 def test_batch_returns_plain_template_when_sources_and_llms_are_down(monkeypatch):
