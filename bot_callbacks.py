@@ -123,7 +123,11 @@ async def handle(update, context, remove_reply_keyboard):
         return
     # Гардероб: инлайн-кабинет
     if data.startswith("w_"):
-        await wardrobe.handle_callback(bot, cid, q, data)
+        if data == "w_look":
+            await _inline_status(
+                lambda status: wardrobe.handle_callback(bot, cid, q, data, status=status))
+        else:
+            await wardrobe.handle_callback(bot, cid, q, data)
         return
     if data.startswith("colr:"):
         _, collection_id, back = data.split(":", 2)

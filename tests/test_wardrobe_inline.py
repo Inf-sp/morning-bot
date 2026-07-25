@@ -5,6 +5,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import wardrobe
+import bot_callbacks
 from ui.wardrobe import purchase_check_card
 
 
@@ -165,6 +166,46 @@ def test_other_outfit_keeps_result_card_instead_of_deleting_it(monkeypatch):
     asyncio.run(wardrobe.handle_callback(object(), "42", Query(), "w_look"))
 
     assert calls[0][0] == "start_inline"
+    assert calls[-1] == ("stop", True)
+
+
+def test_wardrobe_callback_reuses_shared_inline_status(monkeypatch):
+    calls = []
+
+    class Status:
+        mode = "inline"
+
+        async def stop(self, delete=True):
+            calls.append(("stop", delete))
+
+    async def handle_callback(bot, cid, q, data, status=None):
+        calls.append(("wardrobe", bot, cid, q, data, status))
+        assert status.mode == "inline"
+
+    async def start_inline(q, bot=None, cid=None, stages=None):
+        calls.append(("start_inline", q, bot, cid, stages))
+        return Status()
+
+    monkeypatch.setattr(bot_callbacks.wardrobe, "handle_callback", handle_callback)
+    monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
+
+    class Query:
+        data = "w_look"
+        message = type("Message", (), {"chat_id": "42", "message_id": 7})()
+
+    class Update:
+        callback_query = Query()
+
+    class Context:
+        bot = object()
+
+    asyncio.run(bot_callbacks.handle(Update(), Context(), None))
+
+    assert calls[0][0] == "start_inline"
+    assert calls[1][0] == "wardrobe"
+    assert calls[1][-1].mode == "inline"
     assert calls[-1] == ("stop", True)
 
 

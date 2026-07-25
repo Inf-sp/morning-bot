@@ -38,6 +38,16 @@ def test_result_card_shows_only_verified_verb_forms():
     assert "Прошедшее время" not in text
 
 
+def test_result_card_shows_saved_example_with_a_conjugated_verb():
+    text = _result({
+        "lang": "nl", "term": "Beloven", "translation": "обещать", "pos": "verb",
+        "examples": [{"text": "Ik beloof het je.",
+                      "translation": "Я обещаю тебе это."}],
+    })
+
+    assert "💡 Полезно: Ik beloof het je → Я обещаю тебе это" in text
+
+
 def test_result_card_hides_unverified_verb_forms_and_marks_close_answer():
     entry = {
         "lang": "nl", "term": "geschikt", "translation": "подходящий", "pos": "adj",

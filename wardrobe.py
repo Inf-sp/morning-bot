@@ -828,12 +828,14 @@ async def ingest(bot, cid, text):
 
 
 # ---------- роутер кнопок ----------
-async def handle_callback(bot, cid, q, data):
+async def handle_callback(bot, cid, q, data, status=None):
     if data == "w_look":
         previous = _get_cached_look(cid) or {}
         store.clear_wardrobe_daylook(cid)
-        status = await util.StatusManager.start_inline(
-            q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["wardrobe"])
+        owns_status = status is None
+        if owns_status:
+            status = await util.StatusManager.start_inline(
+                q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["wardrobe"])
         try:
             await send_looks(
                 bot, cid, status=status, kb=_wardrobe_home_kb(),
@@ -843,7 +845,8 @@ async def handle_callback(bot, cid, q, data):
         except Exception as e:
             await verify.safe_error(bot, cid, e, back="m_wardrobe")
         finally:
-            await status.stop(delete=True)
+            if owns_status:
+                await status.stop(delete=True)
         return
     if data in ("w_closet", "w_del_g"):
         await send_wardrobe_zones(bot, cid, q=q); return

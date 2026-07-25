@@ -94,6 +94,26 @@ def test_recall_exercise_exposes_acceptable_answers():
     assert trainer_grading.grade_free_text(data, "Wat doe je daar").correct is True
 
 
+def test_recall_quiz_does_not_offer_a_free_text_button():
+    class FakeBot:
+        async def send_poll(self, **kwargs):
+            self.poll_kwargs = kwargs
+            return type("Message", (), {"poll": None})()
+
+    bot = FakeBot()
+    asyncio.run(trainer._send_exercise(bot, "trainer-recall-button", {
+        "exercise_type": trainer_engine.EXERCISE_RECALL,
+        "term": "Beloven",
+        "ru": "Обещать",
+        "correct": "Beloven",
+        "wrong": ["Gaan", "Zien"],
+    }))
+
+    labels = [button.text for row in bot.poll_kwargs["reply_markup"].inline_keyboard for button in row]
+    assert "⌨️ Написать ответ" not in labels
+    assert labels[-2:] == ["⬅️ Назад", "#️⃣ Главная"]
+
+
 def test_exact_dutch_answer_cannot_be_downgraded_by_ai(monkeypatch):
     report = {
         "available": True,

@@ -211,10 +211,7 @@ async def _send_exercise(bot, cid, data):
     if kind in (EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL):
         options = _options(data)
         data["_options"] = options
-        poll_rows = []
-        if kind == EXERCISE_RECALL:
-            poll_rows.append([("⌨️ Написать ответ", f"ex_answer_{data['_task_id']}")])
-        poll_rows.append(_nav_row())
+        poll_rows = [_nav_row()]
         message = await bot.send_poll(
             chat_id=cid,
             question=(f"🎯 Выбери перевод\n\nЧто значит {data['term']}?"

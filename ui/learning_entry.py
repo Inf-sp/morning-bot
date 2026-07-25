@@ -64,15 +64,39 @@ def _example(entry, term):
         candidates.append({"text": entry["example_nl"], "translation": entry["example_ru"]})
     term_words = re.findall(r"[\wÀ-ÖØ-öø-ÿ'-]+", term.casefold())
     bare = [word for word in term_words if word not in {"de", "het", "een", "to", "the", "a", "an"}]
+    # Сохранённый пример может содержать не инфинитив, а обычную словоформу:
+    # ``Beloven`` → ``Ik beloof ...``.  Учитываем формы, если они сохранены,
+    # и короткое начало основы для регулярных/сильных глаголов.
+    search_words = list(bare)
+    for key in ("infinitive", "past_singular", "past_participle", "perfect_form"):
+        search_words.extend(re.findall(r"[\wÀ-ÖØ-öø-ÿ'-]+", str(entry.get(key) or "").casefold()))
+    forms = entry.get("forms")
+    if isinstance(forms, list):
+        for form in forms:
+            search_words.extend(re.findall(r"[\wÀ-ÖØ-öø-ÿ'-]+", str(form or "").casefold()))
+    search_words = list(dict.fromkeys(search_words))
+
+    def related_word(left, right):
+        if left == right:
+            return True
+        if len(left) < 5 or len(right) < 4:
+            return False
+        common = 0
+        for left_char, right_char in zip(left, right):
+            if left_char != right_char:
+                break
+            common += 1
+        return common >= 4
+
     for item in candidates:
         if not isinstance(item, dict):
             continue
-        text = str(item.get("text") or "").strip()
-        translation = str(item.get("translation") or "").strip()
+        text = str(item.get("text") or item.get("nl") or "").strip()
+        translation = str(item.get("translation") or item.get("ru") or "").strip()
         words = re.findall(r"[\wÀ-ÖØ-öø-ÿ'-]+", text.casefold())
         related = (len(bare) > 1 and " ".join(bare) in " ".join(words)) or any(
-            word in words or (len(word) > 4 and any(candidate.startswith(word[:-2]) for candidate in words))
-            for word in bare
+            related_word(search_word, candidate)
+            for search_word in search_words for candidate in words
         )
         if text and translation and related and not _mixed_script(text):
             return text, translation
