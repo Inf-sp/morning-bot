@@ -110,6 +110,10 @@ async def handle(update, context, remove_reply_keyboard):
         await saved_items.handle_notes_callback(bot, cid, q, data)
         return
     if data.startswith("as_"):
+        if data in ("as_food", "as_fridge_cook"):
+            await _inline_status(
+                lambda status: cooking.handle_callback(bot, cid, q, data, status=status))
+            return
         if data.startswith(("as_food", "as_fridge", "as_recipe", "as_my_recipe")):
             await cooking.handle_callback(bot, cid, q, data)
         elif data.startswith(("as_daycheck", "as_motiv", "as_doctor", "as_medicine", "as_health_")):
@@ -157,7 +161,8 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "m_food_gen":
         await _inline_status(lambda status: cooking.send_recipe_featured(bot, cid, status=status)); return
     if data == "m_food_next":
-        await menu.send_food_menu(bot, cid, refresh=True, q=q); return
+        await _inline_status(
+            lambda status: menu.send_food_menu(bot, cid, status=status, refresh=True)); return
     # Пропустить первичный опрос раздела
     if data.startswith("fv_skip_"):
         section = data[len("fv_skip_"):]

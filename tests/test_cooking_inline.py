@@ -33,3 +33,28 @@ def test_inline_recipe_result_replaces_search_status(monkeypatch):
         Bot(), "42", "dinner", {"name": "Паста", "steps": ["Свари пасту"]}, status=Status()))
 
     assert calls == [("replace", "Новый рецепт", {"entities": [], "reply_markup": "recipe-kb"})]
+
+
+def test_cooking_callback_can_use_shared_inline_status(monkeypatch):
+    calls = []
+
+    class Status:
+        mode = "inline"
+
+        async def stop(self, delete=True):
+            calls.append(("stop", delete))
+
+    async def show_next_recipe(bot, cid, status=None):
+        calls.append(("show_next_recipe", bot, cid, status))
+
+    async def unexpected_start_inline(*_args, **_kwargs):
+        raise AssertionError("shared callback status must be reused")
+
+    monkeypatch.setattr(cooking, "show_next_recipe", show_next_recipe)
+    monkeypatch.setattr(cooking.util.StatusManager, "start_inline", unexpected_start_inline)
+
+    asyncio.run(cooking.handle_callback(object(), "42", object(), "as_food", status=Status()))
+
+    assert calls[0][0] == "show_next_recipe"
+    assert calls[0][3].mode == "inline"
+    assert calls == [("show_next_recipe", calls[0][1], "42", calls[0][3])]

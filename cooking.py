@@ -329,19 +329,22 @@ async def send_leftovers(bot, cid, ingredients, status=None):
     await status.replace(card.text, entities=card.entities, reply_markup=_fridge_recipe_kb())
 
 
-async def handle_callback(bot, cid, q, data):
+async def handle_callback(bot, cid, q, data, status=None):
     """Обрабатывает кулинарные callback-и. Возвращает True при совпадении."""
     import fridge as fridge_flow
     import saved_recipes
     if data == "as_food":
-        status = await util.StatusManager.start_inline(
-            q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["food"])
+        owns_status = status is None
+        if owns_status:
+            status = await util.StatusManager.start_inline(
+                q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["food"])
         try:
             await show_next_recipe(bot, cid, status=status)
         except Exception as error:
             await verify.safe_error(bot, cid, error, back="m_food")
         finally:
-            await status.stop(delete=True)
+            if owns_status:
+                await status.stop(delete=True)
         return True
     if data == "as_food_back":
         await back_to_food_menu(bot, cid)
@@ -385,8 +388,10 @@ async def handle_callback(bot, cid, q, data):
         )
         return True
     if data == "as_fridge_cook":
-        status = await util.StatusManager.start_inline(
-            q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["food"])
+        owns_status = status is None
+        if owns_status:
+            status = await util.StatusManager.start_inline(
+                q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["food"])
         try:
             available = _fridge_available(store.get_list(config.FRIDGE_KEY, str(cid)))
             if not available:
@@ -397,7 +402,8 @@ async def handle_callback(bot, cid, q, data):
         except Exception as error:
             await verify.safe_error(bot, cid, error, back="m_food")
         finally:
-            await status.stop(delete=True)
+            if owns_status:
+                await status.stop(delete=True)
         return True
     if data.startswith("as_fridge_clean_"):
         import cleanup
