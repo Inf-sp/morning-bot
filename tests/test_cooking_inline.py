@@ -58,3 +58,21 @@ def test_cooking_callback_can_use_shared_inline_status(monkeypatch):
     assert calls[0][0] == "show_next_recipe"
     assert calls[0][3].mode == "inline"
     assert calls == [("show_next_recipe", calls[0][1], "42", calls[0][3])]
+
+
+def test_recipe_menu_fallback_reuses_shared_inline_status(monkeypatch):
+    calls = []
+
+    class Status:
+        mode = "inline"
+
+    async def send_food_menu(bot, cid, status=None):
+        calls.append((bot, cid, status))
+        assert status.mode == "inline"
+
+    monkeypatch.setattr(cooking, "get_active_meal", lambda _cid: "")
+    monkeypatch.setattr(cooking.menu, "send_food_menu", send_food_menu)
+
+    asyncio.run(cooking.show_next_recipe(object(), "42", status=Status()))
+
+    assert calls[0][2].mode == "inline"

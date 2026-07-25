@@ -6,6 +6,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import wardrobe
 import bot_callbacks
+import util
 from ui.wardrobe import purchase_check_card
 
 
@@ -31,6 +32,23 @@ def test_send_home_includes_inline_keyboard():
         ["🎚️ Предпочтения"],
         ["#️⃣ Главная"],
     ]
+
+
+def test_loading_indicator_is_one_vertical_inline_button(monkeypatch):
+    class Query:
+        markup = None
+
+        async def edit_message_reply_markup(self, **kwargs):
+            self.markup = kwargs["reply_markup"]
+
+    monkeypatch.setattr(util, "loading_phrase", lambda: "🔍 Ищу нужную информацию…")
+    query = Query()
+
+    asyncio.run(util.ack_loading(query))
+
+    assert len(query.markup.inline_keyboard) == 1
+    assert len(query.markup.inline_keyboard[0]) == 1
+    assert query.markup.inline_keyboard[0][0].text == "🔍 Ищу нужную информацию…"
 
 
 def test_cached_home_edits_once_without_loading_message(monkeypatch):
@@ -186,8 +204,12 @@ def test_wardrobe_callback_reuses_shared_inline_status(monkeypatch):
         calls.append(("start_inline", q, bot, cid, stages))
         return Status()
 
+    async def ack_loading(q):
+        calls.append(("ack_loading", q))
+
     monkeypatch.setattr(bot_callbacks.wardrobe, "handle_callback", handle_callback)
     monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
+    monkeypatch.setattr(bot_callbacks, "_ack", ack_loading)
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
     monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
 
@@ -204,8 +226,9 @@ def test_wardrobe_callback_reuses_shared_inline_status(monkeypatch):
     asyncio.run(bot_callbacks.handle(Update(), Context(), None))
 
     assert calls[0][0] == "start_inline"
-    assert calls[1][0] == "wardrobe"
-    assert calls[1][-1].mode == "inline"
+    assert calls[1][0] == "ack_loading"
+    assert calls[2][0] == "wardrobe"
+    assert calls[2][-1].mode == "inline"
     assert calls[-1] == ("stop", True)
 
 

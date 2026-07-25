@@ -250,7 +250,7 @@ async def show_next_recipe(bot, cid, status=None):
     if not meal:
         # активная категория не выбрана (например, состояние потеряно) — просим
         # выбрать категорию явно, вместо того чтобы угадывать одну из четырёх.
-        await menu.send_food_menu(bot, cid)
+        await menu.send_food_menu(bot, cid, status=status)
         return
     ingredients = None
     if meal == "fridge":
@@ -258,7 +258,12 @@ async def show_next_recipe(bot, cid, status=None):
         available = _fridge_available(raw)
         if not available:
             msg = food_ui.fridge_empty_for_recipe()
-            await bot.send_message(chat_id=cid, text=msg.text)
+            if status is not None:
+                await status.replace(msg.text, entities=msg.entities,
+                                     reply_markup=back_menu_keyboard("m_food"))
+            else:
+                await bot.send_message(chat_id=cid, text=msg.text,
+                                       reply_markup=back_menu_keyboard("m_food"))
             return
         ingredients = ", ".join(available)
     prev = store.last_recipe.get(str(cid)) or {}
@@ -288,13 +293,13 @@ async def show_next_recipe(bot, cid, status=None):
     await _send_queue_card(bot, cid, meal, d, status=status)
 
 
-async def back_to_food_menu(bot, cid):
+async def back_to_food_menu(bot, cid, status=None):
     """«Назад» из карточки рецепта (§2 спеки): возврат в меню «Готовка» вместо «Готово.»,
     со сбросом активной категории и очереди — новый явный выбор категории обязателен."""
     _log.info("back_to_food_menu: cid=%s", cid)
     clear_active_meal(cid)
     clear_recipe_queue(cid)
-    await menu.send_food_menu(bot, cid)
+    await menu.send_food_menu(bot, cid, status=status)
 
 async def send_recipe_featured(bot, cid, status=None):
     """Новый рецепт из меню — под результатом кнопки завтрак/обед/ужин."""
@@ -347,7 +352,15 @@ async def handle_callback(bot, cid, q, data, status=None):
                 await status.stop(delete=True)
         return True
     if data == "as_food_back":
-        await back_to_food_menu(bot, cid)
+        owns_status = status is None
+        if owns_status:
+            status = await util.StatusManager.start_inline(
+                q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["food"])
+        try:
+            await back_to_food_menu(bot, cid, status=status)
+        finally:
+            if owns_status:
+                await status.stop(delete=True)
         return True
     if data in ("as_fridge", "as_fridge_home"):
         await fridge_flow.send_fridge(bot, cid, q)
@@ -396,7 +409,12 @@ async def handle_callback(bot, cid, q, data, status=None):
             available = _fridge_available(store.get_list(config.FRIDGE_KEY, str(cid)))
             if not available:
                 message = food_ui.fridge_empty_for_recipe()
-                await bot.send_message(chat_id=cid, text=message.text)
+                if status is not None:
+                    await status.replace(message.text, entities=message.entities,
+                                         reply_markup=back_menu_keyboard("m_food"))
+                else:
+                    await bot.send_message(chat_id=cid, text=message.text,
+                                           reply_markup=back_menu_keyboard("m_food"))
             else:
                 await enter_meal(bot, cid, "fridge", ", ".join(available), status=status)
         except Exception as error:

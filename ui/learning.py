@@ -345,7 +345,7 @@ def game_found(ui, answer, body=""):
 
 def game_hint(ui, hint):
     b = MessageBuilder()
-    b.section(ui["hint"])
+    b.section(ui.get("hint_title", ui["hint"]))
     b.spacer()
     b.bold(hint)
     b.spacer()

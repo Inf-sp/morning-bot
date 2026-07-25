@@ -12,9 +12,6 @@ from ui import learning as learning_ui
 from ui.navigation import back_menu_keyboard
 
 
-LEVEL_LABELS = {"simple": "Простой", "medium": "Средний", "hard": "Сложный"}
-
-
 def _code(language):
     if language in ("nl", "en"):
         return language
@@ -37,19 +34,15 @@ def _flag(language):
     return "🇳🇱" if _code(language) == "nl" else "🇬🇧"
 
 
-def _level_label(level):
-    return LEVEL_LABELS.get(level, "Средний")
 # ================= ИГРА-ДЕТЕКТИВ =================
 # Служебные заголовки локализованы под активный язык обучения —
 # улики и служебный UI на одном языке, а не в смеси.
 GAME_UI = {
     "русский": {
-        "diff_q": "Выбери сложность:",
-        "easy": "Лёгкая",
-        "hard": "Тяжёлая",
         "title": "Детектив",
         "who": "Кто это?",
         "hint": "💡 Подсказка",
+        "hint_title": "💡 Подсказка",
         "reveal": "😞 Сдаюсь",
         "suspect": "Подозреваемый:",
         "found": "✅ Дело раскрыто!",
@@ -63,39 +56,35 @@ GAME_UI = {
         "retry": "Ещё попытка - напиши ответ или возьми подсказку.",
     },
     "английский": {
-        "diff_q": "Choose difficulty:",
-        "easy": "Easy",
-        "hard": "Hard",
         "title": "Detective",
         "who": "Who am I?",
         "hint": "💡 Подсказка",
+        "hint_title": "💡 Hint",
         "reveal": "😞 Сдаюсь",
         "suspect": "Suspect:",
         "found": "✅ Case solved!",
         "answer": "Answer",
         "explain": "Why:",
-        "again": "✨ Again",
-        "back": "⬅️ Back",
-        "home": "#️⃣ Home",
+        "again": "✨ Ещё",
+        "back": "⬅️ Назад",
+        "home": "#️⃣ Главная",
         "nohint": "No more hints.",
         "wrong": "❌ Not quite",
         "retry": "One more try - write the answer or take a hint.",
     },
     "нидерландский": {
-        "diff_q": "Kies de moeilijkheidsgraad:",
-        "easy": "Makkelijk",
-        "hard": "Moeilijk",
         "title": "Detective",
         "who": "Wie ben ik?",
         "hint": "💡 Подсказка",
+        "hint_title": "💡 Hint",
         "reveal": "😞 Сдаюсь",
         "suspect": "Verdachte:",
         "found": "✅ Zaak opgelost!",
         "answer": "Antwoord",
         "explain": "Waarom:",
-        "again": "✨ Nog een",
-        "back": "⬅️ Terug",
-        "home": "#️⃣ Hoofdmenu",
+        "again": "✨ Ещё",
+        "back": "⬅️ Назад",
+        "home": "#️⃣ Главная",
         "nohint": "Geen hints meer.",
         "wrong": "❌ Niet juist",
         "retry": "Nog een poging - schrijf het antwoord of neem een hint.",
@@ -170,24 +159,17 @@ def _remember_game_answer(cid, d):
     _set_game_recent(cid, rec)
 
 
-def game_data(clue_lang, difficulty, recent, attempt=0):
-    if difficulty == "easy":
-        subject = ("только очень известное животное (например, кошка, собака, лев, слон, жираф, "
-                   "обезьяна, пингвин, акула или дельфин) ИЛИ очень известного героя мультфильма или кино "
-                   "(например, Микки Маус, Гарри Поттер, Человек-паук, Бэтмен, Шрек, Симба, "
-                   "Эльза или Винни-Пух). Выбирай только героя, которого узнает почти любой человек. "
-                   "Не загадывай предметы, растения, знаменитостей, исторических людей, редких персонажей "
-                   "или абстрактные понятия.")
-        diff_desc = ("уровень языка A1–A2: только короткие простые предложения и самые частые слова. "
-                     "Каждая улика должна прямо описывать цвет, размер, звук, место, действие или известную роль. "
-                     "Загадка должна быть очень лёгкой: ответ можно угадать уже по двум-трём уликам. "
-                     "Не используй метафоры, идиомы, редкие слова, сложные времена или длинные описания")
-    elif difficulty == "hard":
-        subject = "персонажа, историческую личность или абстрактное понятие"
-        diff_desc = "редкие персонажи или абстрактные понятия, специфичная лексика, хитрые подсказки"
-    else:
-        subject = "известного персонажа или историческую личность (кино, наука, история, музыка, литература)"
-        diff_desc = "исторические личности, актёры, более тонкие подсказки"
+def game_data(clue_lang, recent, attempt=0):
+    subject = ("только очень известное животное (например, кошка, собака, лев, слон, жираф, "
+               "обезьяна, пингвин, акула или дельфин) ИЛИ очень известного героя мультфильма или кино "
+               "(например, Микки Маус, Гарри Поттер, Человек-паук, Бэтмен, Шрек, Симба, "
+               "Эльза или Винни-Пух). Выбирай только героя, которого узнает почти любой человек. "
+               "Не загадывай предметы, растения, знаменитостей, исторических людей, редких персонажей "
+               "или абстрактные понятия.")
+    diff_desc = ("уровень языка A1–A2: только короткие простые предложения и самые частые слова. "
+                 "Каждая улика должна прямо описывать цвет, размер, звук, место, действие или известную роль. "
+                 "Загадка должна быть очень лёгкой: ответ можно угадать уже по двум-трём уликам. "
+                 "Не используй метафоры, идиомы, редкие слова, сложные времена или длинные описания")
     avoid = ("Не загадывай ничего из этого списка и их переводы/синонимы: " + ", ".join(recent[-80:])) if recent else ""
     prompt = f"""Игра-детектив. Загадай: {subject}.
 Сложность: {diff_desc}. ВЕСЬ текст на языке: {clue_lang}. {avoid}
@@ -217,38 +199,31 @@ EXPLAIN: 2 живых предложения — что это такое и п�
 async def start(bot, cid):
     store.challenge_state.pop(str(cid), None)
     lang = _language_for_code(_active_language_code(cid))
-    store.game_config[str(cid)] = {"lang": lang, "difficulty": "med"}
-    await ask_difficulty(bot, cid, lang)
+    store.game_config[str(cid)] = {"lang": lang}
+    await send_game(bot, cid)
 
-async def ask_difficulty(bot, cid, lang):
-    ui = _game_ui(lang)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(ui["easy"], callback_data="gamediff_easy")],
-        [InlineKeyboardButton(ui["hard"], callback_data="gamediff_hard")],
-    ])
-    await bot.send_message(chat_id=cid, text=ui["diff_q"], reply_markup=kb)
-
-async def send_game(bot, cid):
+async def send_game(bot, cid, status=None):
     store.challenge_state.pop(str(cid), None)   # фикс: чтобы перевод не перехватывал
-    cfg = store.game_config.get(str(cid), {"lang": "английский", "difficulty": "easy"})
-    lang = cfg["lang"]
+    cfg = store.game_config.get(str(cid), {"lang": "английский"})
+    lang = cfg.get("lang", "английский")
     ui = _game_ui(lang)
     recent = _game_recent(cid)
     try:
         d = {}
         for attempt in range(5):
-            cand = game_data(lang, cfg["difficulty"], recent, attempt=attempt)
+            cand = game_data(lang, recent, attempt=attempt)
             if cand.get("answer") and not _game_is_recent(cand, recent):
                 d = cand
                 break
             if cand.get("answer"):
                 recent = recent + [cand.get("answer", "")] + list(cand.get("aliases") or [])
         if not d:
-            await bot.send_message(
-                chat_id=cid,
-                text="Не смог загадать новое без повтора. Попробуй ещё раз через минуту.",
-                reply_markup=back_menu_keyboard("m_learn"),
-            )
+            text = "Не смог загадать новое без повтора. Попробуй ещё раз через минуту."
+            kb = back_menu_keyboard("m_learn")
+            if status is not None:
+                await status.replace(text, reply_markup=kb)
+            else:
+                await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
             return
     except Exception as e:
         await verify.safe_error(bot, cid, e, back="m_learn"); return
@@ -264,7 +239,10 @@ async def send_game(bot, cid):
     ])
     clues = "\n".join(f"• {c.strip()}" for c in d.get("clues", "").split("\n") if c.strip())
     msg = learning_ui.game_card(ui, clues)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+    else:
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 def _fuzzy(a, b):
     if not a or not b:

@@ -42,7 +42,7 @@ _STATUS_TOPIC_PREFIXES = (
     ("a_recipe_", "food"), ("food_", "food"),
     ("a_dict", "learning"), ("a_train", "learning"), ("a_tr_", "learning"),
     ("ex_", "learning"), ("again_tr_", "learning"), ("game", "learning"),
-    ("a_game", "learning"), ("gamediff_", "learning"),
+    ("a_game", "learning"),
     ("movie_", "leisure"), ("book_", "leisure"), ("listen", "leisure"), ("reco_", "leisure"), ("a_concerts", "leisure"),
     ("m_travel", "travel"), ("a_trav_", "travel"),
     ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("as_health_", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
@@ -66,6 +66,9 @@ async def handle(update, context, remove_reply_keyboard):
         _log.info("_inline_status: data=%s topic=%s cid=%s q_message_id=%s",
                   data, topic, cid, getattr(q.message, "message_id", None))
         status = await util.StatusManager.start_inline(q, bot=bot, cid=cid, stages=stages)
+        # Единый индикатор для долгих inline-сценариев: одна вертикальная
+        # анимированная кнопка остаётся на текущей карточке до результата.
+        await _ack(q)
         try:
             return await call(status)
         except Exception as e:
@@ -110,7 +113,7 @@ async def handle(update, context, remove_reply_keyboard):
         await saved_items.handle_notes_callback(bot, cid, q, data)
         return
     if data.startswith("as_"):
-        if data in ("as_food", "as_fridge_cook"):
+        if data in ("as_food", "as_food_back", "as_fridge_cook"):
             await _inline_status(
                 lambda status: cooking.handle_callback(bot, cid, q, data, status=status))
             return
@@ -325,17 +328,6 @@ async def handle(update, context, remove_reply_keyboard):
         await learning_router.handle_callback(bot, cid, data, _inline_status)
         return
     # Игра
-    if data.startswith("gamediff_"):
-        diff = data.split("_")[1]
-        cfg = store.game_config.get(str(cid), {"lang": "русский"})
-        cfg["difficulty"] = diff
-        store.game_config[str(cid)] = cfg
-        await _inline_status(lambda _s: learning_game.send_game(bot, cid))
-        try:
-            await q.message.delete()
-        except Exception as e:
-            _log.info("game difficulty prompt delete failed cid=%s: %r", cid, e)
-        return
     if data == "noop":
         return
     if data.startswith(("clt:", "clp:", "cla:", "clx:", "cld:", "cldc:", "clact:", "clactc:", "clcancel:", "cledit:")):
@@ -351,7 +343,7 @@ async def handle(update, context, remove_reply_keyboard):
         await dictionary.del_word(bot, cid, int(data.split("_")[1]))
         return
     if data == "game_again":
-        await _inline_status(lambda _s: learning_game.send_game(bot, cid))
+        await _inline_status(lambda status: learning_game.send_game(bot, cid, status=status))
         return
     if data == "game_hint":
         await learning_game.game_hint(bot, cid, q)
