@@ -149,6 +149,17 @@ def test_unverified_lgbt_model_text_is_not_shown_as_a_fact():
     assert plan["lgbt"] == "нужна осторожность — в карточке нет свежих проверенных данных"
 
 
+def test_colombia_uses_real_flag_instead_of_model_text():
+    plan = travel._plan_from_sources(
+        "Колумбия",
+        {"flag": "флаг Колумбии", "about": "Тропическая страна."},
+        {"cc": ""}, {}, [], None,
+    )
+
+    assert plan["flag"] == "🇨🇴"
+    assert travel_ui.travel_plan(plan, "Колумбия").text.startswith("🇨🇴 Колумбия")
+
+
 def test_country_suggestion_prompt_does_not_make_transport_the_reason(monkeypatch):
     captured = {}
 

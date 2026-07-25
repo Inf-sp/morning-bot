@@ -342,7 +342,12 @@ async def handle_callback(bot, cid, q, data, status=None):
         owns_status = status is None
         if owns_status:
             status = await util.StatusManager.start_inline(
-                q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["food"])
+                q,
+                bot=bot,
+                cid=cid,
+                stages=util.StatusManager.TOPIC_STAGES["food"],
+                preserve_message=True,
+            )
         try:
             await show_next_recipe(bot, cid, status=status)
         except Exception as error:
@@ -355,7 +360,12 @@ async def handle_callback(bot, cid, q, data, status=None):
         owns_status = status is None
         if owns_status:
             status = await util.StatusManager.start_inline(
-                q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["food"])
+                q,
+                bot=bot,
+                cid=cid,
+                stages=util.StatusManager.TOPIC_STAGES["food"],
+                preserve_message=True,
+            )
         try:
             await back_to_food_menu(bot, cid, status=status)
         finally:
@@ -404,7 +414,12 @@ async def handle_callback(bot, cid, q, data, status=None):
         owns_status = status is None
         if owns_status:
             status = await util.StatusManager.start_inline(
-                q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["food"])
+                q,
+                bot=bot,
+                cid=cid,
+                stages=util.StatusManager.TOPIC_STAGES["food"],
+                preserve_message=True,
+            )
         try:
             available = _fridge_available(store.get_list(config.FRIDGE_KEY, str(cid)))
             if not available:

@@ -696,8 +696,14 @@ def _plan_from_sources(country, generated, facts, travel_facts, interests, photo
     """Собирает карточку: факты побеждают редакторский текст модели."""
     generated = generated if isinstance(generated, dict) else {}
     source_languages = travel_facts.get("languages") or _normalize_languages(facts.get("languages"))
+    country_code = str(facts.get("cc") or util.cc_of(country) or "").upper()
+    generated_flag = generated.get("flag")
     return {
-        "flag": util.flag_from_cc(facts.get("cc") or "") or generated.get("flag", ""),
+        # Флаг — только вычисляемое значение. Модель иногда возвращает текст
+        # вроде «флаг Колумбии», который нельзя показывать в заголовке карточки.
+        "flag": util.flag_from_cc(country_code) or (
+            str(generated_flag).strip() if _is_country_flag(generated_flag) else ""
+        ),
         "title": country,
         "about": travel_facts.get("about") or _editorial_line(generated.get("about")),
         "fit": _editorial_line(generated.get("fit")) or _fallback_fit(interests),
@@ -781,8 +787,8 @@ async def send_plan(bot, cid, *, status=None):
         _log.warning("travel card failed, using local facts: %r", exc)
         plan = {}
     plan = _plan_from_sources(country, plan, facts, travel_facts, interests, data.get("photo"))
-    if not plan["flag"]:
-        plan["flag"] = data.get("flag", "")
+    if not _is_country_flag(plan.get("flag")):
+        plan["flag"] = data.get("flag", "") if _is_country_flag(data.get("flag")) else util.flag_from_cc(util.cc_of(country))
     msg = travel_ui.travel_plan(plan, country)
     store.last_answer[str(cid)] = msg.text
     store.last_source[str(cid)] = "Поездки · Страна"

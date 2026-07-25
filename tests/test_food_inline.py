@@ -22,8 +22,8 @@ def test_other_food_menu_refresh_edits_current_inline_message(monkeypatch):
         async def stop(self, delete=True):
             calls.append(("stop", delete))
 
-    async def start_inline(q, bot=None, cid=None, stages=None):
-        calls.append(("start_inline", q, bot, cid, stages))
+    async def start_inline(q, bot=None, cid=None, stages=None, preserve_message=False):
+        calls.append(("start_inline", q, bot, cid, stages, preserve_message))
         return Status()
 
     class Bot:
@@ -41,6 +41,7 @@ def test_other_food_menu_refresh_edits_current_inline_message(monkeypatch):
     asyncio.run(menu.send_food_menu(Bot(), "42", refresh=True, q=Query()))
 
     assert calls[0][0] == "start_inline"
+    assert calls[0][-1] is True
     assert calls[1] == ("replace", "Обновлённый рецепт", {
         "entities": [], "reply_markup": "food-kb",
     })

@@ -835,7 +835,12 @@ async def handle_callback(bot, cid, q, data, status=None):
         owns_status = status is None
         if owns_status:
             status = await util.StatusManager.start_inline(
-                q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["wardrobe"])
+                q,
+                bot=bot,
+                cid=cid,
+                stages=util.StatusManager.TOPIC_STAGES["wardrobe"],
+                preserve_message=True,
+            )
         try:
             await send_looks(
                 bot, cid, status=status, kb=_wardrobe_home_kb(),

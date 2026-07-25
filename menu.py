@@ -85,7 +85,12 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None):
     if status is None:
         if q is not None:
             status = await util.StatusManager.start_inline(
-                q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["food"])
+                q,
+                bot=bot,
+                cid=cid,
+                stages=util.StatusManager.TOPIC_STAGES["food"],
+                preserve_message=True,
+            )
         else:
             status = await util.StatusManager.start(
                 bot, cid, stages=util.StatusManager.TOPIC_STAGES["food"])

@@ -60,15 +60,22 @@ async def handle(update, context, remove_reply_keyboard):
     data = q.data
     bot = context.bot
 
-    async def _inline_status(call):
+    async def _inline_status(call, *, preserve_message=False):
         topic = _status_topic(data)
         stages = util.StatusManager.TOPIC_STAGES.get(topic) if topic else None
         _log.info("_inline_status: data=%s topic=%s cid=%s q_message_id=%s",
                   data, topic, cid, getattr(q.message, "message_id", None))
-        status = await util.StatusManager.start_inline(q, bot=bot, cid=cid, stages=stages)
+        status = await util.StatusManager.start_inline(
+            q,
+            bot=bot,
+            cid=cid,
+            stages=stages,
+            preserve_message=preserve_message,
+        )
         # Единый индикатор для долгих inline-сценариев: одна вертикальная
         # анимированная кнопка остаётся на текущей карточке до результата.
-        await _ack(q)
+        if not preserve_message:
+            await _ack(q)
         try:
             return await call(status)
         except Exception as e:
@@ -115,7 +122,8 @@ async def handle(update, context, remove_reply_keyboard):
     if data.startswith("as_"):
         if data in ("as_food", "as_food_back", "as_fridge_cook"):
             await _inline_status(
-                lambda status: cooking.handle_callback(bot, cid, q, data, status=status))
+                lambda status: cooking.handle_callback(bot, cid, q, data, status=status),
+                preserve_message=True)
             return
         if data.startswith(("as_food", "as_fridge", "as_recipe", "as_my_recipe")):
             await cooking.handle_callback(bot, cid, q, data)
@@ -128,7 +136,8 @@ async def handle(update, context, remove_reply_keyboard):
     if data.startswith("w_"):
         if data == "w_look":
             await _inline_status(
-                lambda status: wardrobe.handle_callback(bot, cid, q, data, status=status))
+                lambda status: wardrobe.handle_callback(bot, cid, q, data, status=status),
+                preserve_message=True)
         else:
             await wardrobe.handle_callback(bot, cid, q, data)
         return
@@ -166,10 +175,13 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "m_notes":
         await saved_items.send_notes(bot, cid); return
     if data == "m_food_gen":
-        await _inline_status(lambda status: cooking.send_recipe_featured(bot, cid, status=status)); return
+        await _inline_status(
+            lambda status: cooking.send_recipe_featured(bot, cid, status=status),
+            preserve_message=True); return
     if data == "m_food_next":
         await _inline_status(
-            lambda status: menu.send_food_menu(bot, cid, status=status, refresh=True)); return
+            lambda status: menu.send_food_menu(bot, cid, status=status, refresh=True),
+            preserve_message=True); return
     # Пропустить первичный опрос раздела
     if data.startswith("fv_skip_"):
         section = data[len("fv_skip_"):]
@@ -315,11 +327,17 @@ async def handle(update, context, remove_reply_keyboard):
             elif act == "listen_no":
                 await _inline_status(lambda status: leisure_music.listen_dislike(bot, cid, status=status))
             elif act in ("food_breakfast", "recipe_breakfast"):
-                await _inline_status(lambda status: cooking.enter_meal(bot, cid, "breakfast", status=status))
+                await _inline_status(
+                    lambda status: cooking.enter_meal(bot, cid, "breakfast", status=status),
+                    preserve_message=True)
             elif act in ("food_lunch", "recipe_lunch"):
-                await _inline_status(lambda status: cooking.enter_meal(bot, cid, "lunch", status=status))
+                await _inline_status(
+                    lambda status: cooking.enter_meal(bot, cid, "lunch", status=status),
+                    preserve_message=True)
             elif act in ("food_dinner", "recipe_dinner"):
-                await _inline_status(lambda status: cooking.enter_meal(bot, cid, "dinner", status=status))
+                await _inline_status(
+                    lambda status: cooking.enter_meal(bot, cid, "dinner", status=status),
+                    preserve_message=True)
         except Exception as e:
             await verify.safe_error(bot, cid, e)
         return

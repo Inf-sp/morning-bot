@@ -51,6 +51,34 @@ def test_loading_indicator_is_one_vertical_inline_button(monkeypatch):
     assert query.markup.inline_keyboard[0][0].text == "🔍 Ищу нужную информацию…"
 
 
+def test_preserved_inline_status_changes_only_loading_button():
+    class Message:
+        def __init__(self):
+            self.text_edits = []
+            self.markup_edits = []
+
+        async def edit_text(self, text, **kwargs):
+            self.text_edits.append((text, kwargs))
+
+        async def edit_reply_markup(self, **kwargs):
+            self.markup_edits.append(kwargs["reply_markup"])
+
+    class Query:
+        message = Message()
+
+    status = asyncio.run(util.StatusManager.start_inline(
+        Query(), stages=((0, "⏳ Ищу..."),), preserve_message=True))
+    assert Query.message.text_edits == []
+    assert len(Query.message.markup_edits) == 1
+    assert len(Query.message.markup_edits[0].inline_keyboard) == 1
+    assert len(Query.message.markup_edits[0].inline_keyboard[0]) == 1
+
+    asyncio.run(status.replace("Готовая карточка", reply_markup="final-kb"))
+
+    assert Query.message.text_edits == [("Готовая карточка", {"reply_markup": "final-kb"})]
+    assert len(Query.message.markup_edits) == 1
+
+
 def test_cached_home_edits_once_without_loading_message(monkeypatch):
     cached = {
         "date": wardrobe._day_key(),
@@ -158,8 +186,8 @@ def test_other_outfit_keeps_result_card_instead_of_deleting_it(monkeypatch):
 
     status = Status()
 
-    async def start_inline(q, bot=None, cid=None, stages=None):
-        calls.append(("start_inline", q, bot, cid, stages))
+    async def start_inline(q, bot=None, cid=None, stages=None, preserve_message=False):
+        calls.append(("start_inline", q, bot, cid, stages, preserve_message))
         return status
 
     async def unexpected_start(*_args, **_kwargs):
@@ -184,6 +212,7 @@ def test_other_outfit_keeps_result_card_instead_of_deleting_it(monkeypatch):
     asyncio.run(wardrobe.handle_callback(object(), "42", Query(), "w_look"))
 
     assert calls[0][0] == "start_inline"
+    assert calls[0][-1] is True
     assert calls[-1] == ("stop", True)
 
 
@@ -200,8 +229,8 @@ def test_wardrobe_callback_reuses_shared_inline_status(monkeypatch):
         calls.append(("wardrobe", bot, cid, q, data, status))
         assert status.mode == "inline"
 
-    async def start_inline(q, bot=None, cid=None, stages=None):
-        calls.append(("start_inline", q, bot, cid, stages))
+    async def start_inline(q, bot=None, cid=None, stages=None, preserve_message=False):
+        calls.append(("start_inline", q, bot, cid, stages, preserve_message))
         return Status()
 
     async def ack_loading(q):
@@ -226,9 +255,9 @@ def test_wardrobe_callback_reuses_shared_inline_status(monkeypatch):
     asyncio.run(bot_callbacks.handle(Update(), Context(), None))
 
     assert calls[0][0] == "start_inline"
-    assert calls[1][0] == "ack_loading"
-    assert calls[2][0] == "wardrobe"
-    assert calls[2][-1].mode == "inline"
+    assert calls[0][-1] is True
+    assert calls[1][0] == "wardrobe"
+    assert calls[1][-1].mode == "inline"
     assert calls[-1] == ("stop", True)
 
 

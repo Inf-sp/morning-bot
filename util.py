@@ -72,13 +72,16 @@ class StatusManager:
         ),
     }
 
-    def __init__(self, bot, cid=None, message=None, parse_mode=None, mode="message", stages=None):
+    def __init__(self, bot, cid=None, message=None, parse_mode=None, mode="message", stages=None,
+                 preserve_message=False):
         self.bot = bot
         self.cid = cid
         self.message = message
         self.parse_mode = parse_mode
         self.mode = mode
         self.stages = stages or self.STAGES
+        self.preserve_message = preserve_message
+        self._inline_original_markup = getattr(message, "reply_markup", None)
         self._inline_cleared = False
         self._inline_replaced = False
         self._finalized = False
@@ -97,9 +100,19 @@ class StatusManager:
         return manager
 
     @classmethod
-    async def start_inline(cls, q, bot=None, cid=None, text=None, stages=None):
-        manager = cls(bot, cid=cid, message=q.message, mode="inline", stages=stages)
-        manager._inline_replaced = await manager._edit(text or manager.stages[0][1])
+    async def start_inline(cls, q, bot=None, cid=None, text=None, stages=None, preserve_message=False):
+        manager = cls(
+            bot,
+            cid=cid,
+            message=q.message,
+            mode="inline",
+            stages=stages,
+            preserve_message=preserve_message,
+        )
+        if preserve_message:
+            await manager._edit_loading_button(manager.stages[0][1])
+        else:
+            manager._inline_replaced = await manager._edit(text or manager.stages[0][1])
         manager._task = asyncio.create_task(manager._run())
         return manager
 
@@ -114,7 +127,23 @@ class StatusManager:
                 pass
             if self._stopped.is_set():
                 return
-            await self._edit(text)
+            if self.preserve_message:
+                await self._edit_loading_button(text)
+            else:
+                await self._edit(text)
+
+    async def _edit_loading_button(self, text):
+        if self.message is None:
+            return False
+        try:
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            markup = InlineKeyboardMarkup([[
+                InlineKeyboardButton(str(text), callback_data="noop"),
+            ]])
+            await self.message.edit_reply_markup(reply_markup=markup)
+            return True
+        except Exception:
+            return False
 
     async def _edit(self, text, **kwargs):
         if self.message is None:
@@ -123,8 +152,9 @@ class StatusManager:
             return False
         try:
             if self.mode == "inline":
-                # На время долгого запроса заменяем текущую карточку статусом.
-                # Финальный результат вернётся в это же сообщение с рабочей клавиатурой.
+                # Обычный inline-сценарий временно заменяет текущую карточку статусом.
+                # В preserve_message статус меняет только клавиатуру — текст карточки
+                # остаётся видимым до готового результата.
                 await self.message.edit_text(text, **kwargs)
                 return True
             else:
@@ -141,6 +171,12 @@ class StatusManager:
                 await self.message.delete()
             except Exception as e:
                 _log.warning("StatusManager.stop: inline status delete failed: %r", e)
+        if (self.mode == "inline" and self.preserve_message and not self._finalized
+                and self.message is not None):
+            try:
+                await self.message.edit_reply_markup(reply_markup=self._inline_original_markup)
+            except Exception as e:
+                _log.warning("StatusManager.stop: inline markup restore failed: %r", e)
         if self.mode != "inline" and delete and self.message is not None:
             _log.debug("StatusManager.stop: deleting message_id=%s cid=%s",
                       getattr(self.message, "message_id", None), self.cid)
@@ -243,7 +279,7 @@ _COUNTRY_CC = {
     "сша": "US", "америка": "US", "usa": "US", "united states": "US", "us": "US",
     "канада": "CA", "canada": "CA", "мексика": "MX", "mexico": "MX",
     "бразилия": "BR", "brazil": "BR", "аргентина": "AR", "argentina": "AR",
-    "чили": "CL", "chile": "CL",
+    "чили": "CL", "chile": "CL", "колумбия": "CO", "colombia": "CO",
     "япония": "JP", "japan": "JP", "китай": "CN", "china": "CN",
     "южная корея": "KR", "корея": "KR", "south korea": "KR", "korea": "KR",
     "таиланд": "TH", "thailand": "TH", "вьетнам": "VN", "vietnam": "VN",
