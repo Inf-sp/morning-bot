@@ -157,8 +157,7 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "m_food_gen":
         await _inline_status(lambda status: cooking.send_recipe_featured(bot, cid, status=status)); return
     if data == "m_food_next":
-        await _inline_status(
-            lambda status: menu.send_food_menu(bot, cid, status=status, refresh=True)); return
+        await menu.send_food_menu(bot, cid, refresh=True, q=q); return
     # Пропустить первичный опрос раздела
     if data.startswith("fv_skip_"):
         section = data[len("fv_skip_"):]
