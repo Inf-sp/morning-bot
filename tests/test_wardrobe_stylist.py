@@ -140,6 +140,17 @@ def test_style_screen_reads_settings_once(monkeypatch):
     assert calls["count"] == 1
 
 
+def test_wardrobe_preferences_hide_less_sporty_button():
+    markup = settings._wardrobe_style_kb("prefs-test", state={
+        "styles": [], "fit": "", "palette": [], "avoid": [],
+    })
+    labels = [button.text for row in markup.inline_keyboard for button in row]
+
+    assert "Меньше спортивного" not in labels
+    assert "Без крупных принтов" in labels
+    assert "Без узкого кроя" in labels
+
+
 def test_outfit_copy_rejects_short_sleeve_hallucinations_and_internal_tags():
     shirt = {
         "id": "top-1",
@@ -183,8 +194,23 @@ def test_style_tip_rolls_sleeves_only_when_length_is_confirmed():
     short = {"zone": "Верх", "subcategory": "Рубашки", "name": "Рубашка с коротким рукавом"}
     long = {"zone": "Верх", "subcategory": "Рубашки", "name": "Рубашка с длинными рукавами"}
 
-    assert build_style_tip([short]) == SAFE_NEUTRAL_STYLE_TIP
+    assert build_style_tip([short]) != "Слегка заправь верх спереди, чтобы силуэт выглядел собраннее."
     assert build_style_tip([long]).startswith("Подверни рукава")
+
+
+def test_generic_style_tip_can_change_for_another_outfit():
+    items = [
+        {"id": "top-1", "zone": "Верх", "name": "Футболка"},
+        {"id": "bottom-1", "zone": "Низ", "name": "Брюки"},
+        {"id": "shoe-1", "zone": "Обувь", "name": "Кеды"},
+    ]
+
+    first = build_style_tip(items)
+    second = build_style_tip(items, avoid_tips={first})
+
+    assert first != second
+    assert "заправь верх спереди" not in first.casefold()
+    assert "заправь верх спереди" not in second.casefold()
 
 
 def test_final_accessory_is_allowed_only_when_selected_and_present_in_database():

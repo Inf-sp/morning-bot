@@ -170,7 +170,7 @@ def _save_cached_look(cid, item_ids, look_data):
 def build_wardrobe_keyboard(has_result=True):
     return _kb([
         [("✨ Другой образ" if has_result else "✨ Подобрать образ", "w_look")],
-        [("🧐 Оценить покупку", "w_check"), ("👕 Мой шкаф", "w_closet")],
+        [("🧐 Оценить покупку", "w_check"), ("🧶 Мой шкаф", "w_closet")],
         [("🎚️ Предпочтения", "set_wardrobe_style")],
         [("#️⃣ Главная", "m_menu")],
     ])
@@ -313,7 +313,7 @@ def _no_outfit_screen(result_kb, alternative=False):
     return text, result_kb
 
 
-async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, q=None):
+async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, previous_style_tip=None, q=None):
     result_kb = kb or _wardrobe_home_kb()
     cached = None if previous_item_ids else _get_cached_look(cid)
     if cached:
@@ -387,7 +387,12 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, q=N
     order = {"Верх": 0, "Низ": 1, "Обувь": 2, "Верхняя одежда": 3, "Аксессуары": 4}
     best_sorted = sorted(best, key=lambda it: order.get(it.get("zone"), 9))
     reasons = build_outfit_reasons(best_sorted, weather_ctx)
-    tip = build_style_tip(best_sorted, weather_ctx)
+    fallback_tip = build_style_tip(
+        best_sorted,
+        weather_ctx,
+        avoid_tips={previous_style_tip} if previous_style_tip else None,
+    )
+    tip = fallback_tip
     reasons, tip = await ai_reframe_look(best_sorted, reasons, tip)
 
     item_ids = [it.get("id") for it in best_sorted]
@@ -401,6 +406,9 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, q=N
         final_heading,
         gap_note or "ничего добавлять не нужно",
     )
+    if (previous_style_tip
+            and validated_copy["style_tip"].casefold() == str(previous_style_tip).casefold()):
+        validated_copy["style_tip"] = fallback_tip
     look_data = {
         "primary_style": choose_outfit_style(best_sorted, selected_styles),
         "weather_intro": _weather_decision(weather_ctx),
@@ -633,8 +641,6 @@ async def send_wardrobe_zones(bot, cid, q=None):
                 callback_data=f"w_cat_{ZONE_SLUG[zone]}",
             ))
         rows.append(category_row)
-    if total:
-        rows.append([InlineKeyboardButton("✏️ Изменить", callback_data="w_del")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     msg = wardrobe_ui.wardrobe_home_screen(total)
     kb = InlineKeyboardMarkup(rows)
@@ -826,12 +832,13 @@ async def handle_callback(bot, cid, q, data):
     if data == "w_look":
         previous = _get_cached_look(cid) or {}
         store.clear_wardrobe_daylook(cid)
-        status = await util.StatusManager.start(
-            bot, cid=cid, message=q.message, stages=util.StatusManager.TOPIC_STAGES["wardrobe"])
+        status = await util.StatusManager.start_inline(
+            q, bot=bot, cid=cid, stages=util.StatusManager.TOPIC_STAGES["wardrobe"])
         try:
             await send_looks(
                 bot, cid, status=status, kb=_wardrobe_home_kb(),
                 previous_item_ids=previous.get("item_ids") or [],
+                previous_style_tip=(previous.get("look_data") or {}).get("style_tip"),
             )
         except Exception as e:
             await verify.safe_error(bot, cid, e, back="m_wardrobe")

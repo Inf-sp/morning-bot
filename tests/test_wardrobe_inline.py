@@ -26,7 +26,7 @@ def test_send_home_includes_inline_keyboard():
     assert bot.message["reply_markup"] is not None
     assert _labels(bot.message["reply_markup"]) == [
         ["✨ Подобрать образ"],
-        ["🧐 Оценить покупку", "👕 Мой шкаф"],
+        ["🧐 Оценить покупку", "🧶 Мой шкаф"],
         ["🎚️ Предпочтения"],
         ["#️⃣ Главная"],
     ]
@@ -128,3 +128,59 @@ def test_purchase_action_sits_directly_below_other_outfit():
         ["✨ Другой образ"],
         ["🧐 Оценить покупку", "🧶 Мой шкаф"],
     ]
+
+
+def test_other_outfit_keeps_result_card_instead_of_deleting_it(monkeypatch):
+    calls = []
+
+    class Status:
+        async def stop(self, delete=True):
+            calls.append(("stop", delete))
+
+    status = Status()
+
+    async def start_inline(q, bot=None, cid=None, stages=None):
+        calls.append(("start_inline", q, bot, cid, stages))
+        return status
+
+    async def unexpected_start(*_args, **_kwargs):
+        raise AssertionError("inline wardrobe refresh must not use message-mode status")
+
+    async def fake_send_looks(bot, cid, **kwargs):
+        calls.append(("send_looks", bot, cid, kwargs))
+        assert kwargs["status"] is status
+        assert kwargs["previous_style_tip"] == "старый совет"
+
+    monkeypatch.setattr(wardrobe.util.StatusManager, "start_inline", start_inline)
+    monkeypatch.setattr(wardrobe.util.StatusManager, "start", unexpected_start)
+    monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: {
+        "item_ids": ["old-item"],
+        "look_data": {"style_tip": "старый совет"},
+    })
+    monkeypatch.setattr(wardrobe, "send_looks", fake_send_looks)
+
+    class Query:
+        message = object()
+
+    asyncio.run(wardrobe.handle_callback(object(), "42", Query(), "w_look"))
+
+    assert calls[0][0] == "start_inline"
+    assert calls[-1] == ("stop", True)
+
+
+def test_closet_screen_does_not_show_edit_button(monkeypatch):
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {
+        "zones": {"Верх": {"Футболки": [{"id": "top-1", "name": "Футболка"}]}}
+    })
+
+    bot = Bot()
+    asyncio.run(wardrobe.send_wardrobe_zones(bot, "closet-test"))
+
+    labels = _labels(bot.message["reply_markup"])
+    assert all("✏️ Изменить" not in row for row in labels)

@@ -1,5 +1,6 @@
 """Локальный движок подбора и оценки образа."""
 
+import hashlib
 import re
 from datetime import datetime, timedelta
 
@@ -13,7 +14,12 @@ from wardrobe_model import (
 
 WARDROBE_OUTERWEAR_MAX_TEMP = 20
 NEUTRAL_COLORS = ("бел", "чёрн", "черн", "сер", "беж", "сини", "деним", "джинс")
-SAFE_NEUTRAL_STYLE_TIP = "Слегка заправь верх спереди, чтобы силуэт выглядел собраннее."
+SAFE_NEUTRAL_STYLE_TIPS = (
+    "Оставь верх навыпуск, чтобы силуэт выглядел расслабленнее.",
+    "Носи верх навыпуск, чтобы силуэт выглядел легче.",
+    "Сделай обувь финальным акцентом, чтобы образ выглядел собраннее.",
+)
+SAFE_NEUTRAL_STYLE_TIP = SAFE_NEUTRAL_STYLE_TIPS[0]
 _SUNGLASSES_MARKERS = ("солнцезащит", "солнечн", "очки от солнца", "sunglasses")
 _RAINCOAT_MARKERS = ("дождевик", "raincoat")
 
@@ -315,21 +321,61 @@ def _has_confirmed_long_sleeves(item):
     return "лонгслив" in text or ("длинн" in text and "рукав" in text)
 
 
-def build_style_tip(items, weather_ctx=None):
-    """Один совет по носке, использующий только вещи из items. Пустая строка,
-    если нет подходящего шаблона — не выдумываем совет ради совета."""
+def _tip_key(text):
+    return re.sub(r"\s+", " ", str(text or "")).strip().casefold()
+
+
+def _tip_order(items, candidates):
+    """Детерминированно меняет порядок нейтральных советов между комплектами."""
+    fingerprint = "|".join(
+        str(item.get("id") or item.get("name") or "")
+        for item in items
+    ).encode("utf-8")
+    offset = int(hashlib.sha256(fingerprint).hexdigest()[:8], 16) % len(candidates)
+    return candidates[offset:] + candidates[:offset]
+
+
+def build_style_tip(items, weather_ctx=None, avoid_tips=None):
+    """Один разнообразный совет по носке, использующий только вещи из items.
+
+    ``avoid_tips`` нужен для явного «Другого образа»: новый комплект не должен
+    получать тот же финальный совет, если есть безопасная альтернатива.
+    """
     weather_ctx = weather_ctx or {}
+    avoided = {_tip_key(tip) for tip in (avoid_tips or ()) if _tip_key(tip)}
+
+    def first_available(candidates):
+        return next((tip for tip in candidates if _tip_key(tip) not in avoided), None)
+
     outer = next((it for it in items if it.get("zone") == "Верхняя одежда"), None)
     if outer and weather_ctx.get("warm") and any(
         marker in str(outer.get("name") or "").casefold() for marker in _OPENABLE_LAYER_MARKERS
     ):
-        return "Оставь верхний слой расстёгнутым, чтобы силуэт выглядел легче."
+        tip = first_available(["Оставь верхний слой расстёгнутым, чтобы силуэт выглядел легче."])
+        if tip:
+            return tip
     sleeved = next((it for it in items
                     if it.get("zone") == "Верх" and _has_confirmed_long_sleeves(it)),
                    None)
     if sleeved:
-        return "Подверни рукава до середины предплечья, чтобы образ выглядел легче."
-    return SAFE_NEUTRAL_STYLE_TIP
+        tip = first_available(["Подверни рукава до середины предплечья, чтобы образ выглядел легче."])
+        if tip:
+            return tip
+    long_bottom = next((it for it in items
+                        if it.get("zone") == "Низ"
+                        and "длинн" in str(it.get("name") or "").casefold()), None)
+    if long_bottom:
+        tip = first_available(["Подверни низ на один оборот, чтобы открыть обувь и облегчить силуэт."])
+        if tip:
+            return tip
+    accessory = next((it for it in items if it.get("zone") == "Аксессуары"), None)
+    if accessory:
+        tip = first_available(["Оставь один заметный аксессуар, чтобы образ выглядел собраннее."])
+        if tip:
+            return tip
+
+    ordered = _tip_order(list(items), list(SAFE_NEUTRAL_STYLE_TIPS))
+    return first_available(ordered) or ordered[0]
 
 
 _COLOR_CLAIM_MARKERS = (
@@ -352,7 +398,7 @@ _GARMENT_CLAIM_MARKERS = (
 )
 _ACCESSORY_CLAIM_MARKERS = ("аксессуар", "часы", "ремн", "сумк", "рюкзак", "шарф", "кепк", "шапк", "очк", "украшен", "кольц", "цепоч")
 _STYLE_TIP_ACTION_RE = re.compile(
-    r"\b(?:заправ|подверн|закат|остав|расстег|застег|подтян|сдвин|слож|нос|"
+    r"\b(?:заправ|подверн|закат|остав|расстег|застег|подтян|сдвин|слож|нос|сдела|"
     r"добав|сними|убери|возьми)\w*",
     re.IGNORECASE,
 )
@@ -360,6 +406,9 @@ _STYLE_TIP_RESULT_RE = re.compile(r"(?:чтобы|так\s+(?:образ|сил�
 _UNHELPFUL_STYLE_TIP_MARKERS = (
     "без дополнительных", "без изменений", "ничего добавлять", "ничего менять",
     "образ готов", "не нужно", "носи комплект", "носи этот наряд",
+)
+_DISALLOWED_STYLE_TIP_MARKERS = (
+    "слегка заправь верх спереди",
 )
 
 
@@ -440,6 +489,7 @@ def _natural_reason(reason):
 def _valid_style_tip(tip, items):
     tip_low = str(tip or "").casefold()
     if (any(marker in tip_low for marker in _UNHELPFUL_STYLE_TIP_MARKERS)
+            or any(marker in tip_low for marker in _DISALLOWED_STYLE_TIP_MARKERS)
             or not _STYLE_TIP_ACTION_RE.search(tip_low)
             or not _STYLE_TIP_RESULT_RE.search(tip_low)):
         return False
