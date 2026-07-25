@@ -35,7 +35,7 @@ def _score(*, width, height, description, position, strict=True):
         return min(width * height, 30_000_000) - position * 20_000
 
 
-def _pexels(query, strict=True):
+def _pexels(query, strict=True, first_result=False):
     if not config.PEXELS_API_KEY:
         return None
     started = time.monotonic()
@@ -74,7 +74,7 @@ def _pexels(query, strict=True):
                 candidates.append((score, photo, url))
         if not candidates:
             return None
-        _, photo, url = max(candidates, key=lambda row: row[0])
+        _, photo, url = candidates[0] if first_result else max(candidates, key=lambda row: row[0])
         return {
             "provider": "pexels", "id": str(photo.get("id") or ""), "url": url,
             "page_url": str(photo.get("url") or ""), "photographer": str(photo.get("photographer") or ""),
@@ -87,7 +87,7 @@ def _pexels(query, strict=True):
         return None
 
 
-def _unsplash(query, strict=True):
+def _unsplash(query, strict=True, first_result=False):
     if not config.UNSPLASH_ACCESS_KEY:
         return None
     started = time.monotonic()
@@ -126,7 +126,7 @@ def _unsplash(query, strict=True):
                 candidates.append((score, photo, url, description))
         if not candidates:
             return None
-        _, photo, url, description = max(candidates, key=lambda row: row[0])
+        _, photo, url, description = candidates[0] if first_result else max(candidates, key=lambda row: row[0])
         user = photo.get("user") or {}
         provider_runtime.activate_fallback("pexels", "unsplash", reason="request")
         return {
@@ -151,14 +151,16 @@ def country_cover(country):
 
 
 def find_illustration(query):
-    """Find a beautiful photo for the detective game result.
+    """Find the first acceptable horizontal photo for the detective result.
 
-    Uses Unsplash first and falls back to Pexels if needed.
+    The query is already a Russian answer word. Provider orientation filters and
+    the final width/height guard keep the result horizontal.
     """
     name = " ".join(str(query or "").split()).strip()
     if not name:
         return None
-    return _unsplash(name, strict=True) or _pexels(name, strict=True)
+    return (_unsplash(name, strict=True, first_result=True)
+            or _pexels(name, strict=True, first_result=True))
 
 
 def find_photo(query):

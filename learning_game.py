@@ -196,11 +196,11 @@ EXPLAIN: 2 живых предложения — что это такое и п�
     out["aliases"] = [x.strip() for x in out.get("aliases", "").split("|") if x.strip()]
     return out
 
-async def start(bot, cid):
+async def start(bot, cid, status=None):
     store.challenge_state.pop(str(cid), None)
     lang = _language_for_code(_active_language_code(cid))
     store.game_config[str(cid)] = {"lang": lang}
-    await send_game(bot, cid)
+    await send_game(bot, cid, status=status)
 
 async def send_game(bot, cid, status=None):
     store.challenge_state.pop(str(cid), None)   # фикс: чтобы перевод не перехватывал
@@ -255,30 +255,20 @@ def _fuzzy(a, b):
     return False
 
 
-def _get_english_query(st, lang):
-    answer = st.get("answer", "")
-    aliases = st.get("aliases", [])
-    latin_candidates = []
-    for name in [answer] + aliases:
-        name_str = str(name).strip()
-        if name_str and not any(ord(c) >= 0x0400 and ord(c) <= 0x04FF for c in name_str):
-            latin_candidates.append(name_str)
-    if not latin_candidates:
-        return answer
-    if lang == "нидерландский" and len(latin_candidates) > 1:
-        for cand in latin_candidates:
-            if cand.lower() != answer.lower():
-                return cand
-    return latin_candidates[0]
+def _get_russian_query(st):
+    """Берёт первое русское слово из русской формы ответа для поиска фото."""
+    for name in [st.get("answer", "")] + list(st.get("aliases") or []):
+        words = re.findall(r"[А-Яа-яЁё]+(?:-[А-Яа-яЁё]+)?", str(name or ""))
+        if words:
+            return words[0]
+    return ""
 
 
 async def _send_game_result(bot, cid, st, ui, kb):
     import travel_photos
     body = st.get("explain") or st.get("quote", "")
     msg = learning_ui.game_found(ui, st.get("answer", ""), body)
-    query = _get_english_query(st, store.game_config.get(str(cid), {}).get("lang", "русский"))
-    if query:
-        query = f"{query} single subject landscape horizontal"
+    query = _get_russian_query(st)
     photo = None
     if query:
         try:

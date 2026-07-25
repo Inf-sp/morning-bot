@@ -173,7 +173,10 @@ async def handle_action(bot, cid, q, act, run_with_status):
         else:
             await dictionary.send_dict_manage(bot, cid, rest, q=q)
     elif act == "game":
-        await game.start(bot, cid)
+        await run_with_status(
+            lambda status: game.start(bot, cid, status=status),
+            preserve_message=True,
+        )
     elif act == "levels":
         await learning_preferences.send_levels(bot, cid, back="m_learn")
     else:

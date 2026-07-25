@@ -276,4 +276,6 @@ def test_closet_screen_does_not_show_edit_button(monkeypatch):
     asyncio.run(wardrobe.send_wardrobe_zones(bot, "closet-test"))
 
     labels = _labels(bot.message["reply_markup"])
+    assert labels[-2] == ["🆕 Добавить вещь"]
+    assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert all("✏️ Изменить" not in row for row in labels)

@@ -54,30 +54,67 @@ def _day_key():
     return datetime.now(config.TZ).date().isoformat()
 
 
-def _weather_decision(weather_ctx):
-    """Коротко называет только условия, которые меняют выбор одежды."""
+def _weather_decision(weather_ctx, variant=0):
+    """Коротко называет условия, которые меняют выбор одежды.
+
+    Вариант меняется между новыми образами, чтобы одинаковая погода не
+    превращалась в один и тот же застывший текст.
+    """
     if not weather_ctx or weather_ctx.get("tmax") is None:
         return ""
+    try:
+        variant = max(0, int(variant))
+    except (TypeError, ValueError):
+        variant = 0
+
+    def choose(options):
+        return options[variant % len(options)]
+
     has_rain = weather_ctx.get("has_rain")
     strong_wind = weather_ctx.get("strong_wind")
     hot = weather_ctx.get("hot")
     warm = weather_ctx.get("warm")
 
     if has_rain and hot:
-        return "Тепло, возможен дождь — нужен лёгкий защищённый слой."
+        return choose((
+            "Тепло, возможен дождь — пригодится лёгкая защита.",
+            "Тёплый день с дождём — выбери закрытую обувь и защищённый слой.",
+        ))
     if has_rain and strong_wind:
-        return "Прохладно, ветрено и возможен дождь."
+        return choose((
+            "Прохладно, ветрено и возможен дождь — нужен защищённый слой.",
+            "Сегодня лучше прикрыться от ветра и дождя.",
+        ))
     if has_rain:
-        return "Возможен дождь — лучше выбрать закрытую обувь."
+        return choose((
+            "Возможен дождь — лучше выбрать закрытую обувь.",
+            "Возьми вещь, которая не боится короткого дождя.",
+        ))
     if strong_wind and hot:
-        return "Тепло, но ветрено — пригодится лёгкий слой."
+        return choose((
+            "Тепло, но ветрено — пригодится лёгкий слой.",
+            "Жарко, но порывисто — оставь лёгкую защиту от ветра.",
+        ))
     if strong_wind:
-        return "Прохладно и ветрено — нужен дополнительный слой."
+        return choose((
+            "Прохладно и ветрено — нужен дополнительный слой.",
+            "Ветер усилит прохладу — добавь лёгкий верхний слой.",
+        ))
     if hot:
-        return "Жарко и сухо — выбирай лёгкие ткани."
+        return choose((
+            "Жарко и сухо — выбирай лёгкие ткани.",
+            "Солнечный тёплый день — пусть вещи дышат и не перегружают образ.",
+        ))
     if warm:
-        return "Тепло и сухо — достаточно лёгких слоёв."
-    return "Прохладно — нужен дополнительный слой."
+        return choose((
+            "Тепло и сухо — достаточно лёгких слоёв.",
+            "Мягкая погода — выбирай дышащие вещи без лишнего утепления.",
+            "Днём комфортно — лёгкого верха будет достаточно.",
+        ))
+    return choose((
+        "Прохладно — нужен дополнительный слой.",
+        "Свежо — собери образ с тёплым верхним слоем.",
+    ))
 
 
 def build_weather_context(wdata, day_str, tmax, tmin, wind_ms, rain_prob_day, rain_mm_day, weathercode):
@@ -187,10 +224,10 @@ def _cancel_wardrobe_input(cid):
     store.wardrobe_edit_item.pop(cid, None)
 
 
-async def send_home(bot, cid, q=None):
+async def send_home(bot, cid, q=None, status=None):
     """Главный экран раздела «Гардероб» — сразу образ на сегодня."""
     _cancel_wardrobe_input(cid)
-    await send_looks(bot, cid, kb=_wardrobe_home_kb(), q=q)
+    await send_looks(bot, cid, status=status, kb=_wardrobe_home_kb(), q=q)
 
 
 class _WarmCacheStatus:
@@ -313,7 +350,8 @@ def _no_outfit_screen(result_kb, alternative=False):
     return text, result_kb
 
 
-async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, previous_style_tip=None, q=None):
+async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
+                     previous_style_tip=None, previous_weather_intro=None, q=None):
     result_kb = kb or _wardrobe_home_kb()
     cached = None if previous_item_ids else _get_cached_look(cid)
     if cached:
@@ -322,31 +360,42 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, pre
         store.last_answer[str(cid)] = cached.get("text", "")
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
         text, entities = _build_look_message(cached.get("look_data", {}))
-        if q is not None:
+        if status is not None:
+            await status.replace(text, entities=entities, reply_markup=result_kb)
+        elif q is not None:
             try:
                 await q.message.edit_text(text, entities=entities, reply_markup=result_kb)
             except Exception:
                 await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=result_kb)
-        elif status is not None:
-            await status.replace(text, entities=entities, reply_markup=result_kb)
         else:
             await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=result_kb)
         return
     w = store.load_wardrobe(cid)
     if not store.wardrobe_to_text(w).strip():
         empty_text, empty_kb = _empty_wardrobe_screen()
-        if q is not None:
+        if status is not None:
+            await status.replace(empty_text, parse_mode="HTML", reply_markup=empty_kb)
+        elif q is not None:
             try:
                 await q.message.edit_text(empty_text, parse_mode="HTML", reply_markup=empty_kb)
             except Exception:
                 await bot.send_message(chat_id=cid, text=empty_text, parse_mode="HTML", reply_markup=empty_kb)
-        elif status is not None:
-            await status.replace(empty_text, parse_mode="HTML", reply_markup=empty_kb)
         else:
             await bot.send_message(chat_id=cid, text=empty_text, parse_mode="HTML", reply_markup=empty_kb)
         return
     s = store.get_settings(cid)
-    status = status or await util.StatusManager.start(bot, cid, message=q.message if q else None, stages=util.StatusManager.TOPIC_STAGES["wardrobe"])
+    if status is None:
+        if q is not None:
+            status = await util.StatusManager.start_inline(
+                q,
+                bot=bot,
+                cid=cid,
+                stages=util.StatusManager.TOPIC_STAGES["wardrobe"],
+                preserve_message=True,
+            )
+        else:
+            status = await util.StatusManager.start(
+                bot, cid, message=None, stages=util.StatusManager.TOPIC_STAGES["wardrobe"])
     tmax = tmin = None
     flags = None
     try:
@@ -409,9 +458,14 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None, pre
     if (previous_style_tip
             and validated_copy["style_tip"].casefold() == str(previous_style_tip).casefold()):
         validated_copy["style_tip"] = fallback_tip
+    weather_variant = len(store.recent_looks.get(str(cid), []))
+    weather_intro = _weather_decision(weather_ctx, variant=weather_variant)
+    if (previous_weather_intro
+            and weather_intro.casefold() == str(previous_weather_intro).strip().casefold()):
+        weather_intro = _weather_decision(weather_ctx, variant=weather_variant + 1)
     look_data = {
         "primary_style": choose_outfit_style(best_sorted, selected_styles),
-        "weather_intro": _weather_decision(weather_ctx),
+        "weather_intro": weather_intro,
         "items": [{"name": public_item_name(it)} for it in validated_copy["items"]],
         "style_tip": (
             "Возьми зонт или лёгкий дождевик, чтобы выбранные вещи не промокли."
@@ -630,9 +684,7 @@ async def send_wardrobe_zones(bot, cid, q=None):
     _cancel_wardrobe_input(cid)
     w = store.load_wardrobe(cid)
     total, counts = wardrobe_stats(w)
-    rows = [
-        [InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add")],
-    ]
+    rows = []
     for index in range(0, len(ZONE_ORDER), 2):
         category_row = []
         for zone in ZONE_ORDER[index:index + 2]:
@@ -641,6 +693,7 @@ async def send_wardrobe_zones(bot, cid, q=None):
                 callback_data=f"w_cat_{ZONE_SLUG[zone]}",
             ))
         rows.append(category_row)
+    rows.append([InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     msg = wardrobe_ui.wardrobe_home_screen(total)
     kb = InlineKeyboardMarkup(rows)
@@ -846,6 +899,7 @@ async def handle_callback(bot, cid, q, data, status=None):
                 bot, cid, status=status, kb=_wardrobe_home_kb(),
                 previous_item_ids=previous.get("item_ids") or [],
                 previous_style_tip=(previous.get("look_data") or {}).get("style_tip"),
+                previous_weather_intro=(previous.get("look_data") or {}).get("weather_intro"),
             )
         except Exception as e:
             await verify.safe_error(bot, cid, e, back="m_wardrobe")

@@ -191,11 +191,13 @@ def _home_kb():
     ])
 
 
-async def send_home(bot, cid, q=None):
+async def send_home(bot, cid, q=None, status=None):
     idea = await asyncio.to_thread(_home_idea, cid)
     visited_count = len(_visited_codes(cid))
     msg = travel_ui.home_screen(idea, visited_count)
-    if q is not None:
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=_home_kb())
+    elif q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=_home_kb()); return
         except Exception:

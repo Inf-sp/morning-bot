@@ -41,32 +41,32 @@ class StatusManager:
     # экране конкретного раздела (гардероб, готовка и т.п.), см. TOPIC_STAGES.
     TOPIC_STAGES = {
         "wardrobe": (
-            (0, "⏳ Ищу..."),
+            (0, "⏳ Ищу образ..."),
             (3, "🧩 Собираю образ..."),
             (8, "✨ Почти готово..."),
         ),
         "food": (
-            (0, "⏳ Ищу..."),
+            (0, "⏳ Ищу рецепт..."),
             (3, "🥕 Подбираю ингредиенты..."),
             (8, "✨ Почти готово..."),
         ),
         "learning": (
-            (0, "⏳ Ищу..."),
+            (0, "🧠 Ищу задание..."),
             (3, "📚 Подбираю слова..."),
             (8, "✨ Почти готово..."),
         ),
         "leisure": (
-            (0, "⏳ Ищу..."),
+            (0, "✨ Ищу рекомендацию..."),
             (3, "🎬 Сверяюсь со вкусом..."),
             (8, "✨ Почти готово..."),
         ),
         "travel": (
-            (0, "⏳ Ищу..."),
+            (0, "✈️ Ищу поездку..."),
             (3, "🗺️ Прикидываю план..."),
             (8, "✨ Почти готово..."),
         ),
         "health": (
-            (0, "⏳ Ищу..."),
+            (0, "💬 Ищу ответ..."),
             (3, "💬 Подбираю слова..."),
             (8, "✨ Почти готово..."),
         ),
@@ -113,6 +113,7 @@ class StatusManager:
             await manager._edit_loading_button(manager.stages[0][1])
         else:
             manager._inline_replaced = await manager._edit(text or manager.stages[0][1])
+            await manager._edit_loading_button(manager.stages[0][1])
         manager._task = asyncio.create_task(manager._run())
         return manager
 
@@ -131,6 +132,7 @@ class StatusManager:
                 await self._edit_loading_button(text)
             else:
                 await self._edit(text)
+                await self._edit_loading_button(text)
 
     async def _edit_loading_button(self, text):
         if self.message is None:
@@ -171,8 +173,8 @@ class StatusManager:
                 await self.message.delete()
             except Exception as e:
                 _log.warning("StatusManager.stop: inline status delete failed: %r", e)
-        if (self.mode == "inline" and self.preserve_message and not self._finalized
-                and self.message is not None):
+        if (self.mode == "inline" and not self._finalized and self.message is not None
+                and (self.preserve_message or not self._inline_replaced)):
             try:
                 await self.message.edit_reply_markup(reply_markup=self._inline_original_markup)
             except Exception as e:

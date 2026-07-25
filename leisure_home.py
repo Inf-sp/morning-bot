@@ -90,7 +90,7 @@ def _next_concert(events):
     return min(candidates, default=None, key=lambda item: item[0])
 
 
-async def send_home(bot, cid, q=None):
+async def send_home(bot, cid, q=None, status=None):
     settings = store.get_settings(cid)
     city = str(settings.get("city") or leisure_movies._movie_city(cid) or "твой город").strip()
     cc = str(settings.get("cc") or "NL").upper()
@@ -151,7 +151,9 @@ async def send_home(bot, cid, q=None):
         b.add(f"💭 {quote_line}", MessageEntity.ITALIC)
         b.newline()
     msg = b.build_stripped(reply_markup=_keyboard())
-    if q is not None:
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+    elif q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
             return

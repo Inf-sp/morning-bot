@@ -69,16 +69,21 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None):
     import util
     import verify
 
-    if not refresh and status is None and q is None:
+    if not refresh:
         cached = recipe_generation.get_cached_cooking_home_idea(cid)
         if cached is not None:
             msg = menu_ui.food_menu(cached)
-            await bot.send_message(
-                chat_id=cid,
-                text=msg.text,
-                entities=msg.entities,
-                reply_markup=msg.reply_markup,
-            )
+            if status is not None:
+                await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+            elif q is not None:
+                try:
+                    await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+                except Exception:
+                    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                                           reply_markup=msg.reply_markup)
+            else:
+                await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                                       reply_markup=msg.reply_markup)
             return
 
     owns_status = status is None

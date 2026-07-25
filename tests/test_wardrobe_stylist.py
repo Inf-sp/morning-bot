@@ -6,6 +6,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 from telegram import MessageEntity
 
+import wardrobe
 from ui.settings import wardrobe_style
 from ui.wardrobe import outfit_header, render_wardrobe_message
 from wardrobe_model import normalize_parsed_item, public_item_name
@@ -84,6 +85,30 @@ def test_other_outfit_changes_the_base_not_one_random_item():
 
     assert alternative is not None
     assert len({"t1", "b1", "s1", "a1"} - {item["id"] for item in alternative}) >= 2
+
+
+def test_suitable_accessory_is_preferred_when_it_is_available():
+    wardrobe_data = {"zones": {
+        "Верх": {"Футболки": [_item("t1", "Верх", "Белая футболка")]},
+        "Низ": {"Брюки": [_item("b1", "Низ", "Бежевые брюки")]},
+        "Обувь": {"Кеды": [_item("s1", "Обувь", "Белые кеды")]},
+        "Аксессуары": {"Часы": [_item("a1", "Аксессуары", "Чёрные часы")]},
+    }}
+
+    outfit = pick_best_outfit(
+        wardrobe_data,
+        {"tmax": 22, "has_rain": False, "strong_wind": False, "warm": True, "sunny": False},
+        [],
+        "",
+    )
+
+    assert any(item["id"] == "a1" for item in outfit)
+
+
+def test_weather_intro_changes_between_new_outfits():
+    weather = {"tmax": 22, "has_rain": False, "strong_wind": False, "warm": True}
+
+    assert wardrobe._weather_decision(weather, variant=0) != wardrobe._weather_decision(weather, variant=1)
 
 
 def test_parsed_item_keeps_fit_season_and_occasions():

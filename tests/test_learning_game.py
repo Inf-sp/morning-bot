@@ -5,6 +5,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import learning_game
+import learning_router
 import travel_photos
 from ui import learning as learning_ui
 
@@ -55,6 +56,40 @@ def test_detective_starts_easy_riddle_without_difficulty_prompt(monkeypatch):
     assert learning_game.store.game_config["42"] == {"lang": "нидерландский"}
 
 
+def test_detective_start_reuses_inline_status(monkeypatch):
+    calls = []
+
+    async def send_game(bot, cid, status=None):
+        calls.append((bot, cid, status))
+
+    marker = object()
+    monkeypatch.setattr(learning_game.store, "game_config", {})
+    monkeypatch.setattr(learning_game, "_active_language_code", lambda _cid: "nl")
+    monkeypatch.setattr(learning_game, "send_game", send_game)
+
+    asyncio.run(learning_game.start(object(), "42", status=marker))
+
+    assert calls[0][2] is marker
+
+
+def test_detective_route_uses_preserving_inline_status(monkeypatch):
+    calls = []
+
+    async def run_with_status(callback, **kwargs):
+        calls.append(kwargs)
+        await callback(object())
+
+    async def start(bot, cid, status=None):
+        calls.append((bot, cid, status))
+
+    monkeypatch.setattr(learning_router.game, "start", start)
+
+    asyncio.run(learning_router.handle_action(object(), "42", object(), "game", run_with_status))
+
+    assert calls[0] == {"preserve_message": True}
+    assert calls[1][1:] == ("42", calls[1][2])
+
+
 def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypatch):
     class Bot:
         messages = []
@@ -92,3 +127,58 @@ def test_detective_rejects_portrait_photo(monkeypatch):
 
     assert bot.photos == []
     assert len(bot.messages) == 1
+
+
+def test_detective_searches_by_first_russian_word(monkeypatch):
+    queries = []
+    monkeypatch.setattr(
+        travel_photos,
+        "find_illustration",
+        lambda query: queries.append(query) or {
+            "url": "https://example.test/cat.jpg", "width": 1600, "height": 900,
+        },
+    )
+    bot = FakeBot()
+    state = {
+        "answer": "De kat",
+        "aliases": ["Кошка", "Cat", "Kat"],
+        "explain": "Een kat is een huisdier.",
+    }
+
+    asyncio.run(learning_game._send_game_result(
+        bot, "42", state, learning_game.GAME_UI["нидерландский"], None))
+
+    assert queries == ["Кошка"]
+    assert len(bot.photos) == 1
+
+
+def test_detective_photo_search_returns_first_horizontal_result(monkeypatch):
+    class Response:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {"results": [
+                {
+                    "id": "first", "width": 1200, "height": 700,
+                    "alt_description": "first result",
+                    "urls": {"regular": "https://example.test/first.jpg"},
+                    "user": {}, "links": {},
+                },
+                {
+                    "id": "second", "width": 2400, "height": 1300,
+                    "alt_description": "second result",
+                    "urls": {"regular": "https://example.test/second.jpg"},
+                    "user": {}, "links": {},
+                },
+            ]}
+
+    monkeypatch.setattr(travel_photos.config, "UNSPLASH_ACCESS_KEY", "test-key")
+    monkeypatch.setattr(travel_photos.requests, "get", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr(travel_photos.api_usage, "record_request", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(travel_photos.provider_runtime, "record_result", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(travel_photos.provider_runtime, "activate_fallback", lambda *_args, **_kwargs: None)
+
+    photo = travel_photos.find_illustration("Кошка")
+
+    assert photo["id"] == "first"

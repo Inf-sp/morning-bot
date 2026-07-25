@@ -54,6 +54,64 @@ def _status_topic(data):
             return topic
     return None
 
+
+def _status_stages(data):
+    """Возвращает статусы ожидания с понятным первым действием."""
+    topic = _status_topic(data)
+    stages = util.StatusManager.TOPIC_STAGES.get(topic) if topic else None
+    if not stages:
+        stages = util.StatusManager.STAGES
+
+    if data.startswith(("as_food", "as_fridge_cook", "m_food", "food_")):
+        first = "⏳ Ищу рецепт..."
+    elif data == "w_look":
+        first = "⏳ Ищу образ..."
+    elif data.startswith(("movie_", "reco_", "a_watch")):
+        first = "🎬 Ищу кино..."
+    elif data.startswith(("book_", "a_read")):
+        first = "📚 Ищу книгу..."
+    elif data.startswith(("listen", "a_listen")):
+        first = "🎧 Ищу музыку..."
+    elif data.startswith("a_concerts"):
+        first = "🎫 Ищу концерт..."
+    elif data.startswith(("game", "a_game")):
+        return (
+            (0, "🕵️ Ищу загадку..."),
+            (3, "🧩 Собираю загадку..."),
+            (8, "✨ Почти готово..."),
+        )
+    elif data.startswith(("a_dict", "word_")):
+        first = "📖 Ищу слово..."
+    elif data.startswith(("a_train", "a_tr_", "ex_", "again_tr_")):
+        first = "🧠 Ищу задание..."
+    elif data.startswith(("a_trav_", "m_travel")):
+        first = "✈️ Ищу поездку..."
+    elif data == "m_food":
+        first = "⏳ Ищу рецепт..."
+    elif data == "m_wardrobe":
+        first = "⏳ Ищу образ..."
+    elif data == "m_leisure":
+        first = "🍿 Ищу рекомендации..."
+    elif data == "a_plany":
+        first = "☀️ Собираю мой день..."
+    elif data == "a_w_week":
+        first = "🌦️ Ищу прогноз..."
+    elif topic == "wardrobe":
+        first = "⏳ Ищу образ..."
+    elif topic == "food":
+        first = "⏳ Ищу рецепт..."
+    elif topic == "learning":
+        first = "🧠 Ищу задание..."
+    elif topic == "leisure":
+        first = "✨ Ищу рекомендацию..."
+    elif topic == "travel":
+        first = "✈️ Ищу поездку..."
+    elif topic == "health":
+        first = "💬 Ищу ответ..."
+    else:
+        return stages
+    return ((0, first), *stages[1:])
+
 async def handle(update, context, remove_reply_keyboard):
     q = update.callback_query
     cid = str(q.message.chat_id)
@@ -62,7 +120,7 @@ async def handle(update, context, remove_reply_keyboard):
 
     async def _inline_status(call, *, preserve_message=False):
         topic = _status_topic(data)
-        stages = util.StatusManager.TOPIC_STAGES.get(topic) if topic else None
+        stages = _status_stages(data)
         _log.info("_inline_status: data=%s topic=%s cid=%s q_message_id=%s",
                   data, topic, cid, getattr(q.message, "message_id", None))
         status = await util.StatusManager.start_inline(
@@ -72,10 +130,8 @@ async def handle(update, context, remove_reply_keyboard):
             stages=stages,
             preserve_message=preserve_message,
         )
-        # Единый индикатор для долгих inline-сценариев: одна вертикальная
-        # анимированная кнопка остаётся на текущей карточке до результата.
-        if not preserve_message:
-            await _ack(q)
+        # Единый индикатор для долгих inline-сценариев: StatusManager сам
+        # ставит тематическую одноколоночную кнопку и обновляет её по этапам.
         try:
             return await call(status)
         except Exception as e:
@@ -211,7 +267,9 @@ async def handle(update, context, remove_reply_keyboard):
         await firstvisit.show_prompt(bot, cid, "cooking")
         await _unack(q); return
     if data == "m_food":
-        await menu.send_food_menu(bot, cid); return
+        await _inline_status(
+            lambda status: menu.send_food_menu(bot, cid, status=status, q=q),
+            preserve_message=True); return
     _FV_SECTION = {"m_wardrobe": "wardrobe", "m_learn": "learning",
                    "m_leisure": "leisure", "m_balance": "health"}
     if data in _FV_SECTION and firstvisit.needs_setup(cid, _FV_SECTION[data]):
@@ -219,16 +277,18 @@ async def handle(update, context, remove_reply_keyboard):
         await firstvisit.show_prompt(bot, cid, _FV_SECTION[data])
         await _unack(q); return
     if data == "m_leisure":
-        # send_home сам редактирует исходное сообщение и ставит финальную
-        # клавиатуру; inline-статус не должен менять её.
-        await leisure_home.send_home(bot, cid, q)
+        await _inline_status(
+            lambda status: leisure_home.send_home(bot, cid, q, status=status),
+            preserve_message=True)
         return
     if data == "m_wardrobe":
-        # Образ — полезный результат, поэтому открываем его отдельным сообщением,
-        # а временное главное меню после этого удаляется автоматически.
-        await wardrobe.send_home(bot, cid); return
+        await _inline_status(
+            lambda status: wardrobe.send_home(bot, cid, q=q, status=status),
+            preserve_message=True); return
     if data == "m_travel":
-        await travel.send_home(bot, cid, q); return
+        await _inline_status(
+            lambda status: travel.send_home(bot, cid, q, status=status),
+            preserve_message=True); return
     if data == "m_myday":
         await myday.send_plany(bot, cid, force=True); return
     if data == "m_menu":
@@ -295,9 +355,9 @@ async def handle(update, context, remove_reply_keyboard):
             elif act.startswith("trav_mode_"):
                 await travel.toggle_transport(bot, cid, act[len("trav_mode_"):], q)
             elif act == "watch":
-                await _ack(q); await leisure_movies.send_movie_home(bot, cid, q)
+                await _inline_status(lambda _s: leisure_movies.send_movie_home(bot, cid, q))
             elif act == "read":
-                await _ack(q); await leisure_books.send_books_home(bot, cid, q)
+                await _inline_status(lambda _s: leisure_books.send_books_home(bot, cid, q))
             elif act == "readlist":
                 await cleanup.open_collection(bot, cid, "books_saved", back="a_read")
             elif act == "watchlist":
@@ -323,7 +383,7 @@ async def handle(update, context, remove_reply_keyboard):
                          "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
                 await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, act.split("_")[1]))
             elif act == "listen":
-                await _ack(q); await leisure_music.send_music_home(bot, cid, q)
+                await _inline_status(lambda _s: leisure_music.send_music_home(bot, cid, q))
             elif act == "listen_no":
                 await _inline_status(lambda status: leisure_music.listen_dislike(bot, cid, status=status))
             elif act in ("food_breakfast", "recipe_breakfast"):
@@ -361,7 +421,9 @@ async def handle(update, context, remove_reply_keyboard):
         await dictionary.del_word(bot, cid, int(data.split("_")[1]))
         return
     if data == "game_again":
-        await _inline_status(lambda status: learning_game.send_game(bot, cid, status=status))
+        await _inline_status(
+            lambda status: learning_game.send_game(bot, cid, status=status),
+            preserve_message=True)
         return
     if data == "game_hint":
         await learning_game.game_hint(bot, cid, q)

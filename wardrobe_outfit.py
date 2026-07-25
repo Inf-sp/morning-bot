@@ -149,8 +149,9 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text, selected_styl
         if tr and tmax is not None and tr[0] <= tmax <= tr[1]:
             score += 5
         if it.get("zone") == "Аксессуары":
-            # Аксессуар не добавляется автоматически: он должен получить пользу
-            # от погоды или соответствия выбранному стилю.
+            # Подходящий аксессуар должен выигрывать у пустого optional-слота;
+            # очки получают дополнительный приоритет в солнечную или жаркую погоду.
+            score += 2
             if (weather_ctx.get("hot") or weather_ctx.get("sunny")) and _is_sunglasses(it):
                 score += 5
     score += _color_penalty(items)
