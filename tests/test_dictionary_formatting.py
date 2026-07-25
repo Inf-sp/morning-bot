@@ -8,7 +8,7 @@ import learning_dictionary
 import trainer
 import trainer_engine
 import trainer_exercises
-from dictionary_model import display_term
+from dictionary_model import display_term, normalize_entry
 from ui.builder import MessageBuilder
 from ui.learning_entry import render_learning_entry
 
@@ -44,6 +44,17 @@ def test_article_card_keeps_natural_sentence_case_after_migration():
     })
 
     assert "Het gevolg → Последствие" in builder.build().text
+
+
+def test_known_dutch_phrases_keep_their_own_translation():
+    entry = normalize_entry({
+        "term": "Wat balen",
+        "translation": "Что ты делаешь там?",
+        "lang": "nl",
+    })
+
+    assert entry["term"] == "Wat balen"
+    assert entry["translation"] == "Вот досада!"
 
 
 def test_trainer_options_use_the_same_capitalized_format():

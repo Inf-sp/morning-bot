@@ -32,7 +32,7 @@ def _cap(value):
 
 def _first_translation(entry):
     # Запятая может быть частью полноценного перевода: «Я думаю, это глупо».
-    return entry_translation(entry).split(";")[0].strip()
+    return next((part.strip() for part in entry_translation(entry).split(";") if part.strip()), "")
 
 
 def _example(entry):
@@ -258,13 +258,26 @@ def _gap_wrong_terms(entry, correct, other_entries, rng):
 def _choose_translation(entry, other_entries, rng):
     correct = _first_translation(entry)
     wrong = _local_distractors(entry, correct, "ru", rng)
-    return {"term": entry_term(entry), "correct": correct, "wrong": wrong} if len(wrong) >= 2 else None
+    return (
+        {"term": entry_term(entry), "correct": correct, "wrong": wrong}
+        if correct and len(wrong) >= 2 else None
+    )
 
 
 def _recall(entry, other_entries, rng):
     correct = entry_term(entry)
     wrong = _local_distractors(entry, correct, entry.get("lang", "nl"), rng)
-    return {"ru": _first_translation(entry), "correct": correct, "wrong": wrong} if len(wrong) >= 2 else None
+    translation = _first_translation(entry)
+    if not correct or not translation or len(wrong) < 2:
+        return None
+    acceptable = entry.get("acceptable_answers") or entry.get("forms") or []
+    acceptable = [str(value).strip() for value in acceptable if str(value).strip()]
+    return {
+        "ru": translation,
+        "correct": correct,
+        "wrong": wrong,
+        "acceptable_answers": acceptable,
+    }
 
 
 def _build_sentence(entry, _other_entries, rng):
@@ -283,9 +296,16 @@ def _build_sentence(entry, _other_entries, rng):
 
 
 def _find_error(entry, _other_entries, _rng):
+    # Без сохранённого проверенного правила нельзя надёжно отличить
+    # прилагательное от существительного после een.
+    if entry.get("verified_error_rule") != "een_de_adjective":
+        return None
     example = _example(entry)
     text = str(example.get("text") or "").strip()
+    term = entry_term(entry).casefold()
     tokens = text.split()
+    if not term or term not in text.casefold():
+        return None
     # Строим только настоящую ошибку: у нидерландского прилагательного после
     # een перед de-существительным убираем обязательное окончание -e.
     error_idx = next((i for i in range(1, min(len(tokens) - 1, 6))

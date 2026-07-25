@@ -389,8 +389,14 @@ def audit_trainer_contracts():
         "examples": [{"text": "Ik vergelijk deze boeken.",
                       "translation": "Я сравниваю эти книги."}],
     }
-    error_entry = {**base, "examples": [{
-        "text": "Ik woon in een rustige buurt.", "translation": "Я живу в спокойном районе."}]}
+    error_entry = {
+        "term": "nieuw", "translation": "новый", "lang": "nl",
+        "pos": "adjective", "verified_error_rule": "een_de_adjective",
+        "examples": [{
+            "text": "Ik koop een nieuwe fiets.",
+            "translation": "Я покупаю новый велосипед.",
+        }],
+    }
     gap_entry = {
         "term": "binnenzetten", "translation": "заносить внутрь", "lang": "nl",
         "pos": "глагол", "examples": [{

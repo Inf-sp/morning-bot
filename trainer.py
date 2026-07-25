@@ -8,6 +8,7 @@ DictionaryRepository на следующем архитектурном этап
 import asyncio
 import json
 import random
+import secrets
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -49,6 +50,10 @@ def _nav_row():
     return [("⬅️ Назад", "m_learn"), ("#️⃣ Главная", "m_menu")]
 
 
+def _task_matches(data, task_id):
+    return bool(task_id) and str(data.get("_task_id") or "") == str(task_id)
+
+
 def _options(data):
     options = []
     seen = set()
@@ -65,32 +70,38 @@ def _options(data):
 
 def _correct_option_id(data, options):
     expected = str(data.get("correct") or "").strip().casefold()
-    return next(index for index, option in enumerate(options)
-                if str(option).strip().casefold() == expected)
+    for index, option in enumerate(options):
+        if str(option).strip().casefold() == expected:
+            return index
+    raise ValueError("training exercise has no correct option")
 
 
 async def _generate_situation(entry, language):
     term = entry_term(entry)
     prompt = f"""Ты методист разговорной практики для языка: {language}.
-Целевое слово/фраза: «{term}» — {entry_translation(entry)}.
+Целевое слово/фраза: {secure.wrap_untrusted(term, "целевая фраза")} — {secure.wrap_untrusted(entry_translation(entry), "перевод")}.
 
 Придумай ОДНУ короткую реплику собеседника на {language}, в ответ на которую
-естественно употребить именно «{term}».
+естественно употребить именно {secure.wrap_untrusted(term, "целевая фраза")}.
 
 Верни JSON: {{"line": "реплика собеседника", "line_ru": "перевод реплики"}}"""
     try:
         result = await ai.allm_json(prompt, 300, tier="cheap", module="learning_trainer")
-        line = str(result.get("line") or "").strip()
-        line_ru = str(result.get("line_ru") or "").strip()
+        if not isinstance(result, dict):
+            return None
+        line = " ".join(str(result.get("line") or "").split()).strip()[:240]
+        line_ru = " ".join(str(result.get("line_ru") or "").split()).strip()[:240]
     except Exception:
         return None
-    return {"line": line, "line_ru": line_ru} if line else None
+    return {"line": line, "line_ru": line_ru} if line and line_ru else None
 
 
 async def _build_exercise(cid, item):
     repository = DictionaryRepository(cid)
     entry = item["entry"]
-    if not (entry.get("examples") or (entry.get("example_nl") and entry.get("example_ru"))):
+    if (not item.get("_refresh_attempted")
+            and not (entry.get("examples") or (entry.get("example_nl") and entry.get("example_ru")))):
+        item["_refresh_attempted"] = True
         # Старые записи без примера донасыщаются существующим механизмом один
         # раз при подготовке материала; результат задания сам AI не вызывает.
         from dictionary_import import _refresh_dict_entry
@@ -184,6 +195,7 @@ async def _render_next(bot, cid):
         if data is None:
             continue
         data["hint_shown"] = False
+        data["_task_id"] = secrets.token_hex(4)
         state["current"] = data
         state["last_exercise_type"] = data["exercise_type"]
         await _send_exercise(bot, cid, data)
@@ -194,10 +206,15 @@ async def _render_next(bot, cid):
 
 
 async def _send_exercise(bot, cid, data):
+    data.setdefault("_task_id", secrets.token_hex(4))
     kind = data["exercise_type"]
     if kind in (EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL):
         options = _options(data)
         data["_options"] = options
+        poll_rows = []
+        if kind == EXERCISE_RECALL:
+            poll_rows.append([("⌨️ Написать ответ", f"ex_answer_{data['_task_id']}")])
+        poll_rows.append(_nav_row())
         message = await bot.send_poll(
             chat_id=cid,
             question=(f"🎯 Выбери перевод\n\nЧто значит {data['term']}?"
@@ -207,10 +224,10 @@ async def _send_exercise(bot, cid, data):
             type="quiz",
             correct_option_id=_correct_option_id(data, options),
             is_anonymous=False,
-            reply_markup=_keyboard([_nav_row()]),
+            reply_markup=_keyboard(poll_rows),
         )
         if getattr(message, "poll", None):
-            trainer_session.register_poll(cid, message.poll.id)
+            trainer_session.register_poll(cid, message.poll.id, data["_task_id"])
         return
     if kind in (EXERCISE_FILL_GAP, EXERCISE_CHOOSE_REACTION):
         renderers = {
@@ -220,7 +237,7 @@ async def _send_exercise(bot, cid, data):
         options = _options(data)
         data["_options"] = options
         message = renderers[kind](data)
-        rows = [[(option, f"ex_pick_{index}")] for index, option in enumerate(options)]
+        rows = [[(option, f"ex_pick_{data['_task_id']}_{index}")] for index, option in enumerate(options)]
         rows.append(_nav_row())
         await bot.send_message(chat_id=cid, text=message.text, entities=message.entities,
                                reply_markup=_keyboard(rows))
@@ -230,13 +247,13 @@ async def _send_exercise(bot, cid, data):
         message = learning_ui.exercise_build_sentence(data)
         remaining = [(token, index) for index, token in enumerate(data["shuffled"])
                      if index not in data.get("_picked_idx", [])]
-        rows = [[(token, f"ex_tok_{index}")] for token, index in remaining[:6]]
+        rows = [[(token, f"ex_tok_{data['_task_id']}_{index}")] for token, index in remaining[:6]]
         if data.get("_picked"):
-            rows.append([("↩️ Сбросить", "ex_tok_reset")])
+            rows.append([("↩️ Сбросить", f"ex_tok_reset_{data['_task_id']}")])
         rows.append(_nav_row())
     elif kind == EXERCISE_FIND_ERROR:
         message = learning_ui.exercise_find_error(data)
-        rows = [[(token, f"ex_word_{index}")] for index, token in enumerate(data["tokens"][:6])]
+        rows = [[(token, f"ex_word_{data['_task_id']}_{index}")] for index, token in enumerate(data["tokens"][:6])]
         rows.append(_nav_row())
     else:
         return
@@ -245,10 +262,11 @@ async def _send_exercise(bot, cid, data):
 
 
 async def handle_poll_answer(bot, poll_answer):
-    cid = trainer_session.take_poll_chat(poll_answer.poll_id)
+    context = trainer_session.take_poll_context(poll_answer.poll_id)
     option_ids = list(getattr(poll_answer, "option_ids", []) or [])
-    if cid and option_ids:
-        await pick_option(bot, cid, int(option_ids[0]))
+    if context and option_ids:
+        cid, task_id = context
+        await pick_option(bot, cid, int(option_ids[0]), task_id=task_id)
 
 
 async def _apply_result(bot, cid, state, grade, message):
@@ -264,7 +282,7 @@ async def _apply_result(bot, cid, state, grade, message):
         _reinsert_failed(state, data)
     data["_result_correct"] = bool(grade.correct)
     data["_result_message"] = message
-    kb = _keyboard([[("✨ Другое задание", "ex_next")], _nav_row()])
+    kb = _keyboard([[("✨ Другое задание", f"ex_next_{data['_task_id']}")], _nav_row()])
     await bot.send_message(chat_id=cid, text=message.text, entities=message.entities, reply_markup=kb)
 
 
@@ -283,7 +301,7 @@ def _reinsert_failed(state, data):
     state["queue"].insert(position, {"entry": entry, "exercise_type": kind})
 
 
-async def pick_option(bot, cid, index):
+async def pick_option(bot, cid, index, *, task_id=""):
     state = trainer_session.get(cid)
     if not state or not state.get("current"):
         await bot.send_message(
@@ -291,22 +309,30 @@ async def pick_option(bot, cid, index):
             reply_markup=back_menu_keyboard("m_learn"))
         return
     data = state["current"]
+    if not _task_matches(data, task_id) or data["exercise_type"] not in (
+        EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL,
+        EXERCISE_FILL_GAP, EXERCISE_CHOOSE_REACTION,
+    ):
+        return
     options = data.get("_options") or []
     grade = trainer_grading.grade_choice(data, index, options)
     message = learning_ui.exercise_result(
-        data, grade.correct, chosen=options[index] if index < len(options) else "")
+        data, grade.correct, chosen=options[index] if 0 <= index < len(options) else "")
     await _apply_result(bot, cid, state, grade, message)
 
 
-async def request_text_answer(bot, cid):
+async def request_text_answer(bot, cid, *, task_id=""):
     state = trainer_session.get(cid)
-    if state and state.get("current"):
+    if state and state.get("current") and _task_matches(state["current"], task_id):
         trainer_session.expect_text_answer(cid)
         await bot.send_message(chat_id=cid, text="Напиши свой ответ следующим сообщением.",
-                               reply_markup=_keyboard([_nav_row()]))
+                               reply_markup=_keyboard([
+                                   [("❌ Не помню", f"ex_giveup_{task_id}")],
+                                   _nav_row(),
+                               ]))
 
 
-async def give_up(bot, cid):
+async def give_up(bot, cid, *, task_id=""):
     state = trainer_session.get(cid)
     if not state or not state.get("current"):
         await bot.send_message(
@@ -314,6 +340,8 @@ async def give_up(bot, cid):
             reply_markup=back_menu_keyboard("m_learn"))
         return
     data = state["current"]
+    if not _task_matches(data, task_id):
+        return
     grade = trainer_grading.GradeResult(False, trainer_grading.AnswerQuality.NOT_REMEMBERED)
     await _apply_result(bot, cid, state, grade, learning_ui.exercise_result(data, False, chosen="__forgot__"))
 
@@ -394,6 +422,9 @@ async def _grade_dutch_written(data, text):
         "issues": effective_issues,
         "corrected_text": language_tool.apply_first_replacements(text, effective_issues),
     }
+    acceptable = [data.get("correct", ""), *(data.get("acceptable_answers") or data.get("alt") or [])]
+    if local.correct and any(trainer_grading.exact_match(text, answer) for answer in acceptable):
+        return local, {**report, "explanation": ""}
     decision = {}
     needs_semantic_judgment = not local.correct
     needs_dispute_explanation = bool(
@@ -457,15 +488,17 @@ async def _grade_context(data, text):
     return trainer_grading.GradeResult(correct, quality)
 
 
-async def pick_token(bot, cid, index):
+async def pick_token(bot, cid, index, *, task_id=""):
     state = trainer_session.get(cid)
     if not state or not state.get("current"):
         return
     data = state["current"]
+    if not _task_matches(data, task_id) or data.get("_answered"):
+        return
     if data["exercise_type"] == EXERCISE_BUILD_SENTENCE:
         picked_idx = data.setdefault("_picked_idx", [])
         picked = data.setdefault("_picked", [])
-        if index not in picked_idx and index < len(data["shuffled"]):
+        if index not in picked_idx and 0 <= index < len(data["shuffled"]):
             picked_idx.append(index)
             picked.append(data["shuffled"][index])
         if len(picked) == len(data["tokens"]):
@@ -474,28 +507,29 @@ async def pick_token(bot, cid, index):
                                 learning_ui.exercise_result(data, grade.correct, chosen=" ".join(picked)))
         else:
             await _send_exercise(bot, cid, data)
-    elif data["exercise_type"] == EXERCISE_FIND_ERROR and index < len(data["tokens"]):
+    elif data["exercise_type"] == EXERCISE_FIND_ERROR and 0 <= index < len(data["tokens"]):
         grade = trainer_grading.grade_error_position(data, index)
         await _apply_result(bot, cid, state, grade,
                             learning_ui.exercise_result(data, grade.correct, chosen=data["tokens"][index]))
 
 
-async def reset_tokens(bot, cid):
+async def reset_tokens(bot, cid, *, task_id=""):
     state = trainer_session.get(cid)
-    if state and state.get("current"):
+    if state and state.get("current") and _task_matches(state["current"], task_id):
         state["current"]["_picked"] = []
         state["current"]["_picked_idx"] = []
         await _send_exercise(bot, cid, state["current"])
 
 
-async def next_exercise(bot, cid):
+async def next_exercise(bot, cid, *, task_id=""):
     state = trainer_session.get(cid)
     if not state:
         await bot.send_message(
             chat_id=cid, text="Тренажёр устарел, открой заново.",
             reply_markup=back_menu_keyboard("m_learn"))
         return
-    if state.get("current") and state["current"].get("_answered"):
+    if (state.get("current") and _task_matches(state["current"], task_id)
+            and state["current"].get("_answered")):
         state["current"] = None
         await _render_next(bot, cid)
 

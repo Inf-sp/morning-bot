@@ -1003,6 +1003,7 @@ async def _refresh_dict_entry(cid, item):
     Обновляет запись на месте по индексу — не через _save_normalized_dict_entry,
     т.к. та считает совпадение термина дубликатом и не заменит поля."""
     term = _entry_term(item)
+    original_translation = _entry_translation(item)
     lang = _dict_lang(item)
     try:
         entry = await _normalize_dict_entry_full(term, lang, source_text=term)
@@ -1018,11 +1019,14 @@ async def _refresh_dict_entry(cid, item):
             updated = dict(w)
             updated.update({
                 "lang": entry["lang"],
-                "term": entry["term"],
-                "article": entry.get("article", ""),
-                "translation": entry["translation"],
-                "breakdown": entry.get("breakdown", ""),
-                "examples": entry.get("examples", []),
+                # Existing user data is authoritative. Lazy enrichment may add
+                # missing metadata, but must not replace the learned pair with
+                # a new AI interpretation.
+                "term": term,
+                "article": w.get("article") or entry.get("article", ""),
+                "translation": original_translation or entry["translation"],
+                "breakdown": w.get("breakdown") or entry.get("breakdown", ""),
+                "examples": w.get("examples") or entry.get("examples", []),
                 "status": w.get("status") or "new",
                 "last_shown_at": w.get("last_shown_at"),
                 "updated_at": datetime.now(config.TZ).isoformat(),

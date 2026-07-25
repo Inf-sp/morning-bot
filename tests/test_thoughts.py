@@ -301,24 +301,6 @@ def test_specialized_pending_has_priority_over_thought_capture(monkeypatch):
     assert cancelled == [(cid, {"clear_pending": False})]
 
 
-def test_evening_close_only_sends_when_open_records_exist(monkeypatch):
-    _repo, _settings, _fixed_now = _setup_state(monkeypatch)
-    bot = FakeBot()
-    monkeypatch.setattr(thoughts.settings, "notif_on", lambda _cid, _kind: True)
-    monkeypatch.setattr(thoughts, "open_records", lambda _cid: [])
-    assert asyncio.run(thoughts.send_evening_close(bot, "42")) is False
-
-    monkeypatch.setattr(thoughts, "open_records", lambda _cid: [{"id": "x"}])
-    assert asyncio.run(thoughts.send_evening_close(bot, "42")) is True
-    assert bot.sent[0]["text"] == (
-        "😌 Закроем день\n\n"
-        "Осталось записей: 1\n"
-        "Разберём или оставим до завтра?"
-    )
-    assert _button_count(bot.sent[0]["reply_markup"]) == 1
-    assert bot.sent[0]["reply_markup"].inline_keyboard[0][0].text == "Оставить до завтра"
-
-
 def test_legacy_inbox_opens_new_home_without_clear_all(monkeypatch):
     repo, _settings, fixed_now = _setup_state(monkeypatch)
     repo.items = [{
@@ -341,12 +323,11 @@ def test_legacy_inbox_opens_new_home_without_clear_all(monkeypatch):
     assert "❌ Очистить записи" in labels
 
 
-def test_thought_notifications_are_on_by_default_and_evening_is_at_20(monkeypatch):
+def test_evening_thought_notification_is_removed(monkeypatch):
     monkeypatch.setattr(settings, "get", lambda _cid, _key, default=None: default)
 
     assert settings.notif_on("42", "checkin_day") is True
-    assert settings.notif_on("42", "checkin_eve") is True
-    assert "21:00" in settings._notif_label("checkin_eve", "Закрыть день")
+    assert all(kind != "checkin_eve" for kind, _label in settings.NOTIF_TYPES)
 
 
 def test_legacy_clear_all_button_no_longer_deletes_records(monkeypatch):

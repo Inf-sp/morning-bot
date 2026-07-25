@@ -20,6 +20,8 @@ PHRASE_CORRECTIONS = {
 # учёта регистра, чтобы исправить и новые, и legacy-копии записи.
 CANONICAL_ENTRY_OVERRIDES = {
     "bewonderen": ("Bewonderen", "Восхищаться"),
+    "wat balen": ("Wat balen", "Вот досада!"),
+    "wat doe je daar": ("Wat doe je daar?", "Что ты делаешь там?"),
 }
 
 

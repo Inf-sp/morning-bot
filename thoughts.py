@@ -14,8 +14,6 @@ import settings
 import store
 from ui import thoughts as thoughts_ui
 from ui.constants import delete_label
-
-
 THOUGHT_TYPES = {
     "practical_problem", "anxious_prediction", "emotion",
     "medical", "crisis", "unknown",
@@ -840,23 +838,4 @@ async def send_day_reminder(bot, cid):
         chat_id=cid, text=msg.text, entities=msg.entities,
         reply_markup=kb, transient=True)
     activate_capture(cid, source="reminder")
-    return True
-
-
-async def send_evening_close(bot, cid):
-    cid = str(cid)
-    if not settings.notif_on(cid, "checkin_eve"):
-        return False
-    if settings.get(cid, "_thoughts_evening_closed_date", "") == _today():
-        return False
-    opened = open_records(cid)
-    if not opened:
-        return False
-    msg = thoughts_ui.evening(len(opened))
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("Оставить до завтра", callback_data="thought_tomorrow"),
-    ]])
-    await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities,
-        reply_markup=kb, transient=True)
     return True

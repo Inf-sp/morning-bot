@@ -22,15 +22,28 @@ class DictionaryRepository:
     def all(self):
         entries = self.records.all()
         normalized = []
-        seen = set()
+        seen = {}
         for entry in entries:
             item = normalize_entry(entry)
             lang = "en" if entry_language(item) == "en" else "nl"
             item["lang"] = lang
-            key = (lang, normalize_key(entry_term(item)), normalize_key(entry_translation(item)))
+            key = (lang, normalize_key(entry_term(item)))
             if key in seen:
+                existing = normalized[seen[key]]
+                values = [
+                    part.strip()
+                    for part in str(existing.get("translation") or "").split(";")
+                    if part.strip()
+                ]
+                for part in str(entry_translation(item) or "").split(";"):
+                    part = part.strip()
+                    if part and normalize_key(part) not in {normalize_key(value) for value in values}:
+                        values.append(part)
+                existing["translation"] = "; ".join(values)
+                if not existing.get("examples") and item.get("examples"):
+                    existing["examples"] = item["examples"]
                 continue
-            seen.add(key)
+            seen[key] = len(normalized)
             normalized.append(item)
         if normalized != entries:
             self.records.save(normalized)

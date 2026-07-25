@@ -187,9 +187,6 @@ async def handle_role(bot, cid, role, text):
 async def send_daycheck(bot, cid):
     await thoughts.send_home(bot, cid)
 
-async def send_evening_review(bot, cid):
-    return await thoughts.send_evening_close(bot, cid)
-
 async def worry_clear_all(bot, cid):
     # Совместимость со старыми Telegram-сообщениями: историческая кнопка
     # «Очистить всё» больше не выполняет массовое удаление.

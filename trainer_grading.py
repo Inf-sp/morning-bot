@@ -43,6 +43,10 @@ def fuzzy_match(actual, expected):
     return previous[-1] <= max(1, len(expected) // 6)
 
 
+def exact_match(actual, expected):
+    return bool(_normalize(actual)) and _normalize(actual) == _normalize(expected)
+
+
 def grade_choice(data, chosen_idx, options):
     if chosen_idx < 0 or chosen_idx >= len(options):
         return GradeResult(False, AnswerQuality.NOT_REMEMBERED)
@@ -51,7 +55,10 @@ def grade_choice(data, chosen_idx, options):
 
 
 def grade_free_text(data, text, *, used_hint=False):
-    variants = [data["correct"], *(data.get("alt") or [])]
+    variants = [
+        data["correct"],
+        *(data.get("acceptable_answers") or data.get("alt") or []),
+    ]
     correct = any(fuzzy_match(text, variant) for variant in variants)
     if not correct:
         return GradeResult(False, AnswerQuality.NOT_REMEMBERED)

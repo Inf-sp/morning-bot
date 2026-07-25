@@ -24,7 +24,6 @@ NOTIF_TYPES = [
     ("daily_words",     "Слова и фразы дня"),
     ("checkin_day",     "Мысли днём"),
     ("evening_weather", "Прогноз на завтра"),
-    ("checkin_eve",     "Закрыть день"),
     ("weather_warn",    "Погодное предупреждение"),
 ]
 
@@ -121,7 +120,7 @@ def notif_on(cid, kind):
             return bool(legacy_value)
     if kind == "daily_words":
         return bool(get(cid, "notif_grammar", False))
-    if kind in ("checkin_day", "checkin_eve"):
+    if kind == "checkin_day":
         return True
     return False
 
@@ -170,7 +169,6 @@ def _notif_label(kind: str, label: str) -> str:
         "daily_words": "11:00",
         "checkin_day": "14:00",
         "evening_weather": "20:30",
-        "checkin_eve": "21:00",
     }
     if kind in times:
         return f"{label} (ежедневно в {times[kind]})"
@@ -503,9 +501,6 @@ async def _send_scheduled_notification(bot, cid, kind):
     elif kind == "checkin_day":
         import thoughts as _thoughts
         return await _thoughts.send_day_reminder(bot, cid)
-    elif kind == "checkin_eve":
-        import thoughts as _thoughts
-        return await _thoughts.send_evening_close(bot, cid)
     elif kind == "weekend_events":
         import leisure_concerts
         await leisure_concerts.send_weekend_events(_NoKbBot(bot), cid)
@@ -568,7 +563,6 @@ _ADMIN_NOTIFICATION_META = {
     "daily_words":     ("11:00", "📚 Обучение"),
     "checkin_day":     ("14:00", "😮‍💨 Мысли"),
     "evening_weather": ("20:30", "🌦️ Погода"),
-    "checkin_eve":     ("21:00", "🌙 Вечер"),
     "weather_warn":    ("08:45, если есть повод", "⚠️ Погодные предупреждения"),
 }
 

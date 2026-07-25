@@ -17,25 +17,37 @@ import util
 
 async def handle_callback(bot, cid, data, run_with_status):
     """Callback-и заданий тренажёра с префиксом ex_."""
-    if data == "ex_next":
-        await run_with_status(lambda _s: trainer.next_exercise(bot, cid))
+    if data.startswith("ex_next_"):
+        await run_with_status(lambda _s: trainer.next_exercise(
+            bot, cid, task_id=data[len("ex_next_"):]))
+    elif data == "ex_next":
+        return True
     elif data.startswith("ex_pick_"):
-        await run_with_status(lambda _s: trainer.pick_option(
-            bot, cid, int(data[len("ex_pick_"):])))
-    elif data == "ex_answer":
-        await trainer.request_text_answer(bot, cid)
-    elif data == "ex_giveup":
-        await run_with_status(lambda _s: trainer.give_up(bot, cid))
+        task_id, _, index = data[len("ex_pick_"):].rpartition("_")
+        if task_id and index.lstrip("-").isdigit():
+            await run_with_status(lambda _s: trainer.pick_option(
+                bot, cid, int(index), task_id=task_id))
+    elif data.startswith("ex_answer_"):
+        await trainer.request_text_answer(bot, cid, task_id=data[len("ex_answer_"):])
+    elif data.startswith("ex_giveup_"):
+        await run_with_status(lambda _s: trainer.give_up(
+            bot, cid, task_id=data[len("ex_giveup_"):]))
+    elif data == "ex_answer" or data == "ex_giveup":
+        return True
     elif data.startswith("ex_tok_"):
         token = data[len("ex_tok_"):]
-        if token == "reset":
-            await trainer.reset_tokens(bot, cid)
+        if token.startswith("reset_"):
+            await trainer.reset_tokens(bot, cid, task_id=token[len("reset_"):])
         else:
-            await run_with_status(lambda _s: trainer.pick_token(
-                bot, cid, int(token)))
+            task_id, _, index = token.rpartition("_")
+            if task_id and index.lstrip("-").isdigit():
+                await run_with_status(lambda _s: trainer.pick_token(
+                    bot, cid, int(index), task_id=task_id))
     elif data.startswith("ex_word_"):
-        await run_with_status(lambda _s: trainer.pick_token(
-            bot, cid, int(data[len("ex_word_"):])))
+        task_id, _, index = data[len("ex_word_"):].rpartition("_")
+        if task_id and index.lstrip("-").isdigit():
+            await run_with_status(lambda _s: trainer.pick_token(
+                bot, cid, int(index), task_id=task_id))
     else:
         return False
     return True

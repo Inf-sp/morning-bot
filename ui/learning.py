@@ -133,6 +133,16 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
     if data.get("bad_translation"):
         b.spacer()
         b.line("По-русски предлог «на» здесь не нужен.")
+    if not is_correct and data.get("exercise_type") == "find_error":
+        correct_text = str(data.get("correct_text") or "").strip()
+        if correct_text:
+            b.spacer()
+            b.labeled_line("Правильно", correct_text, lowercase=False)
+    if not is_correct and data.get("exercise_type") == "fill_gap":
+        result_sentence = str(data.get("result_sentence") or "").strip()
+        if result_sentence:
+            b.spacer()
+            b.labeled_line("Правильно", result_sentence, lowercase=False)
     _render_trainer_entry_card(b, entry, data)
     msg = b.build()
     msg.text = msg.text.rstrip("\n")

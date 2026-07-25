@@ -471,15 +471,6 @@ async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logging.exception("job_checkin_day failed for cid=%s", cid)
 
-async def job_checkin_evening(context: ContextTypes.DEFAULT_TYPE):
-    for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "checkin_eve"):
-            continue
-        try:
-            await settings.send_scheduled_notification(context.bot, cid, "checkin_eve")
-        except Exception:
-            logging.exception("job_checkin_evening failed for cid=%s", cid)
-
 async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
     """Прогревает недельный кэш концертов перед уведомлением «Куда сходить» (10:00 пт),
     чтобы само уведомление и последующие интерактивные «Концерты» читали кэш, а не ждали Ticketmaster."""
@@ -825,7 +816,6 @@ def _build_application():
     jq.run_daily(job_daily_words, time=_t("11:00"), days=tuple(range(7)), **_job_options("daily_words"))
     jq.run_daily(job_checkin_day, time=_t("14:00"), days=tuple(range(7)), **_job_options("checkin_day_daily"))
     jq.run_daily(job_evening_weather, time=_t("20:30"), days=tuple(range(7)), **_job_options("evening_weather_daily"))
-    jq.run_daily(job_checkin_evening, time=_t("21:00"), days=tuple(range(7)), **_job_options("checkin_evening_daily"))
     jq.run_daily(job_inactivity_reminders, time=_t("09:00"), days=tuple(range(7)), **_job_options("inactivity_reminders_daily"))
     _log.info("Scheduler configured jobs=%s", len(jq.jobs()))
     return app
