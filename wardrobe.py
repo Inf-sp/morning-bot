@@ -12,7 +12,7 @@ import verify
 import secure
 import settings as _settings
 from ui import wardrobe as wardrobe_ui
-from ui.constants import choose_label, delete_label, ui_label
+from ui.constants import choose_label, delete_label, save_toggle_label, ui_label
 from wardrobe_model import (
     ZONE_ORDER,
     flat_items as _flat_wardrobe_items,
@@ -23,20 +23,17 @@ from wardrobe_model import (
     wardrobe_stats,
 )
 from wardrobe_outfit import (
-    build_outfit_reasons,
-    build_style_tip,
     choose_outfit_style,
     pick_best_outfit,
     save_outfit_feedback,
-    validate_outfit_copy,
 )
-from wardrobe_copy import ai_reframe_look
 from wardrobe_migration import migrate_item_attrs
 
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
-COPY_VALIDATOR_VERSION = 6
+COPY_VALIDATOR_VERSION = 7
+PURCHASE_RECOMMENDATION_VERSION = 1
 
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
@@ -150,6 +147,69 @@ def _build_look_message(look_data):
     return msg.text, msg.entities
 
 
+def _purchase_recommendation_text(recommendation):
+    recommendation = recommendation or {}
+    item = _clean_text(recommendation.get("item"))
+    reason = _clean_text(recommendation.get("reason"))
+    return f"{item} — {reason}" if item and reason else item or reason
+
+
+def _purchase_recommendation_saved(cid, recommendation):
+    if not recommendation:
+        return False
+    import saved_items
+    return saved_items.is_note_saved(
+        cid, _purchase_recommendation_text(recommendation), "wardrobe_purchase",
+    )
+
+
+def _purchase_candidate(w, weather_ctx):
+    """Возвращает только действительно полезный пробел, без генерации текста."""
+    if weather_ctx.get("has_rain") and not _has_rain_outerwear(w):
+        return {
+            "version": PURCHASE_RECOMMENDATION_VERSION,
+            "item": "Лёгкая непромокаемая ветровка",
+            "reason": "закроет важный пробел в шкафу и защитит образ от дождя",
+            "priority": 100,
+        }
+
+    items = [item for _zone, _subcat, item in _flat_wardrobe_items(w)]
+    facts = " ".join(str(item.get("name") or "") for item in items).casefold()
+    if "джинс" not in facts and "деним" not in facts:
+        tops = [
+            item for item in items
+            if item.get("zone") == "Верх"
+            and any(marker in str(item.get("name") or "").casefold()
+                    for marker in ("рубаш", "футбол", "лонгслив", "топ"))
+        ]
+        if tops:
+            return {
+                "version": PURCHASE_RECOMMENDATION_VERSION,
+                "item": "Серые широкие джинсы",
+                "reason": "закроют пробел в шкафу и дадут больше сочетаний с твоими рубашками и футболками",
+                "priority": 40,
+            }
+    return None
+
+
+def _get_or_create_purchase_recommendation(cid, w, weather_ctx):
+    current = store.get_wardrobe_purchase_recommendation(cid)
+    candidate = _purchase_candidate(w, weather_ctx)
+    if current and current.get("version") == PURCHASE_RECOMMENDATION_VERSION:
+        current_priority = int(current.get("priority", 0) or 0)
+        candidate_priority = int((candidate or {}).get("priority", 0) or 0)
+        if candidate_priority > current_priority:
+            store.set_wardrobe_purchase_recommendation(cid, candidate)
+            return candidate
+        if current.get("status") == "rejected":
+            return {}
+        return current
+    if candidate:
+        store.set_wardrobe_purchase_recommendation(cid, candidate)
+        return candidate
+    return current
+
+
 def _clean_text(value):
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
@@ -204,13 +264,19 @@ def _save_cached_look(cid, item_ids, look_data):
 
 
 # ---------- главный экран раздела (панель состояния) ----------
-def build_wardrobe_keyboard(has_result=True):
-    return _kb([
-        [("✨ Другой образ" if has_result else "✨ Подобрать образ", "w_look")],
+def build_wardrobe_keyboard(has_result=True, *, has_purchase=False, purchase_saved=False):
+    rows = [[("✨ Другой образ" if has_result else "✨ Подобрать образ", "w_look")]]
+    if has_purchase:
+        rows.append([
+            (save_toggle_label(purchase_saved), "w_buy_save"),
+            ("❌ Не сейчас", "w_buy_reject"),
+        ])
+    rows.extend([
         [("🧐 Оценить покупку", "w_check"), ("🧶 Мой шкаф", "w_closet")],
         [("🎚️ Предпочтения", "set_wardrobe_style")],
         [("#️⃣ Главная", "m_menu")],
     ])
+    return _kb(rows)
 
 
 _wardrobe_home_kb = build_wardrobe_keyboard
@@ -227,7 +293,7 @@ def _cancel_wardrobe_input(cid):
 async def send_home(bot, cid, q=None, status=None):
     """Главный экран раздела «Гардероб» — сразу образ на сегодня."""
     _cancel_wardrobe_input(cid)
-    await send_looks(bot, cid, status=status, kb=_wardrobe_home_kb(), q=q)
+    await send_looks(bot, cid, status=status, q=q)
 
 
 class _WarmCacheStatus:
@@ -240,12 +306,7 @@ async def warm_home_cache(cid):
     """Собирает образ дня в кэш без отправки пользователю."""
     if _get_cached_look(cid):
         return True
-    await send_looks(
-        None,
-        cid,
-        status=_WarmCacheStatus(),
-        kb=_wardrobe_home_kb(),
-    )
+    await send_looks(None, cid, status=_WarmCacheStatus())
     # Для пустого шкафа постоянная карточка не нужна; сам прогрев всё равно успешен.
     return bool(_get_cached_look(cid) or not store.wardrobe_to_text(store.load_wardrobe(cid)).strip())
 
@@ -359,7 +420,16 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         store.last_source[str(cid)] = "Гардероб · Образ"
         store.last_answer[str(cid)] = cached.get("text", "")
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
-        text, entities = _build_look_message(cached.get("look_data", {}))
+        look_data = cached.get("look_data", {})
+        text, entities = _build_look_message(look_data)
+        if kb is None:
+            result_kb = build_wardrobe_keyboard(
+                has_result=True,
+                has_purchase=bool(look_data.get("purchase_recommendation")),
+                purchase_saved=_purchase_recommendation_saved(
+                    cid, look_data.get("purchase_recommendation") or {},
+                ),
+            )
         if status is not None:
             await status.replace(text, entities=entities, reply_markup=result_kb)
         elif q is not None:
@@ -435,43 +505,19 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
 
     order = {"Верх": 0, "Низ": 1, "Обувь": 2, "Верхняя одежда": 3, "Аксессуары": 4}
     best_sorted = sorted(best, key=lambda it: order.get(it.get("zone"), 9))
-    reasons = build_outfit_reasons(best_sorted, weather_ctx)
-    fallback_tip = build_style_tip(
-        best_sorted,
-        weather_ctx,
-        avoid_tips={previous_style_tip} if previous_style_tip else None,
-    )
-    tip = fallback_tip
-    reasons, tip = await ai_reframe_look(best_sorted, reasons, tip)
-
     item_ids = [it.get("id") for it in best_sorted]
-    final_heading = "На случай дождя" if gap_note else "Образ готов"
-    validated_copy = validate_outfit_copy(
-        best_sorted,
-        w,
-        weather_ctx,
-        reasons,
-        tip,
-        final_heading,
-        gap_note or "ничего добавлять не нужно",
-    )
-    if (previous_style_tip
-            and validated_copy["style_tip"].casefold() == str(previous_style_tip).casefold()):
-        validated_copy["style_tip"] = fallback_tip
-    weather_variant = len(store.recent_looks.get(str(cid), []))
-    weather_intro = _weather_decision(weather_ctx, variant=weather_variant)
-    if (previous_weather_intro
-            and weather_intro.casefold() == str(previous_weather_intro).strip().casefold()):
-        weather_intro = _weather_decision(weather_ctx, variant=weather_variant + 1)
+    purchase_recommendation = _get_or_create_purchase_recommendation(cid, w, weather_ctx)
     look_data = {
         "primary_style": choose_outfit_style(best_sorted, selected_styles),
-        "weather_intro": weather_intro,
-        "items": [{"name": public_item_name(it)} for it in validated_copy["items"]],
-        "style_tip": (
-            "Возьми зонт или лёгкий дождевик, чтобы выбранные вещи не промокли."
-            if gap_note else validated_copy["style_tip"]
-        ),
+        "items": [{"name": public_item_name(it)} for it in best_sorted],
+        "purchase_recommendation": purchase_recommendation,
     }
+    if kb is None:
+        result_kb = build_wardrobe_keyboard(
+            has_result=True,
+            has_purchase=bool(purchase_recommendation),
+            purchase_saved=_purchase_recommendation_saved(cid, purchase_recommendation),
+        )
     text, entities = _build_look_message(look_data)
     # Порядок важен: save_outfit_feedback мутирует гардероб (use_count/last_used) и
     # бампает версию через mutate_wardrobe — кэш дня должен сохраняться ПОСЛЕ, иначе
@@ -483,6 +529,49 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     store.last_source[str(cid)] = "Гардероб · Образ"
     store.last_answer[str(cid)] = text
     await status.replace(text, entities=entities, reply_markup=result_kb)
+
+
+async def save_purchase_recommendation(bot, cid, q=None):
+    """Переключает сохранение текущей рекомендации покупки."""
+    recommendation = store.get_wardrobe_purchase_recommendation(cid)
+    text = _purchase_recommendation_text(recommendation)
+    if not text:
+        return
+    import saved_items
+    saved = saved_items.toggle_note(
+        cid,
+        text,
+        source="Гардероб · Покупка",
+        bucket="wardrobe_purchase",
+    )
+    await saved_items.update_save_button(q, "w_buy_save", saved)
+
+
+async def reject_purchase_recommendation(bot, cid, q=None):
+    """Отклоняет текущую покупку и убирает её из карточки без нового подбора."""
+    recommendation = store.get_wardrobe_purchase_recommendation(cid)
+    if not recommendation:
+        return
+    store.set_wardrobe_purchase_recommendation(cid, {
+        **recommendation,
+        "status": "rejected",
+    })
+    cached = store.get_wardrobe_daylook(cid)
+    look_data = dict(cached.get("look_data") or {}) if cached else {}
+    if not look_data:
+        return
+    look_data.pop("purchase_recommendation", None)
+    text, entities = _build_look_message(look_data)
+    cached["look_data"] = look_data
+    cached["text"] = text
+    store.set_wardrobe_daylook(cid, cached)
+    kb = build_wardrobe_keyboard(has_result=True)
+    message = getattr(q, "message", None) if q is not None else None
+    if message is not None:
+        try:
+            await message.edit_text(text, entities=entities, reply_markup=kb)
+        except Exception:
+            pass
 
 
 def get_wardrobe_gaps(cid):
@@ -896,16 +985,20 @@ async def handle_callback(bot, cid, q, data, status=None):
             )
         try:
             await send_looks(
-                bot, cid, status=status, kb=_wardrobe_home_kb(),
+                bot, cid, status=status,
                 previous_item_ids=previous.get("item_ids") or [],
-                previous_style_tip=(previous.get("look_data") or {}).get("style_tip"),
-                previous_weather_intro=(previous.get("look_data") or {}).get("weather_intro"),
             )
         except Exception as e:
             await verify.safe_error(bot, cid, e, back="m_wardrobe")
         finally:
             if owns_status:
                 await status.stop(delete=True)
+        return
+    if data == "w_buy_save":
+        await save_purchase_recommendation(bot, cid, q=q)
+        return
+    if data == "w_buy_reject":
+        await reject_purchase_recommendation(bot, cid, q=q)
         return
     if data in ("w_closet", "w_del_g"):
         await send_wardrobe_zones(bot, cid, q=q); return

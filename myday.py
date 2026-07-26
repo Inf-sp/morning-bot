@@ -826,25 +826,27 @@ def _build_day_text(cid, *, refresh_current=False):
         )
         rain = daytime["rain_prob"]
         rain_mm = daytime["rain_mm"]
+        display_wind_ms = daytime.get("wind_ms") or wind_ms
         current_code = (data.get("current") or {}).get("weathercode")
         current_precipitation = weather.current_precipitation_text(current_code)
         display_code = current_code if current_precipitation else code
-        icon = weather.weather_icon(display_code, tmax, rain, wind_ms, rain_mm)
+        icon = weather.weather_icon(display_code, tmax, rain, display_wind_ms, rain_mm)
         rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
-        rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-        # ветер: показываем всегда, в одной строке с температурой и дождём, без эмодзи
-        _, wword = weather.wind_scale(wind_ms)
-        wind_p = weather._periods(data, day_str, "windspeed_10m", 6)
-        wind_when = (" (" + ", ".join(wind_p) + ")") if wind_p else ""
-        wind_part = f"{wword} до {wind_ms:.0f} м/с{wind_when}"
+        if len(rain_p) > 1:
+            rain_when = ", ".join(rain_p[:-1]) + " и " + rain_p[-1]
+        else:
+            rain_when = "".join(rain_p)
         weather_icon = icon
-        rain_part = weather.rain_text(rain, rain_mm, rain_when)
         if current_precipitation:
             rain_part = current_precipitation
-            if rain and rain_when:
-                rain_part += f" · вероятность {rain:.0f}%{rain_when}"
+            if rain_when:
+                rain_part += f", {rain_when}"
+        elif weather._rain_real(rain, rain_mm):
+            rain_part = f"Дождь {rain_when}".rstrip()
+        else:
+            rain_part = ""
+        wind_part = f"Ветер до {display_wind_ms:.0f} м/с"
         weather_line = f"до {tmax:+.0f}°C" + (f" · {rain_part}" if rain_part else "") + f" · {wind_part}"
-        hum_title, hum_line = weather.humidity_phrase(data, day_str, tmax, s.get("cc", ""))
     else:
         rain = 0
         rain_mm = None
@@ -856,7 +858,6 @@ def _build_day_text(cid, *, refresh_current=False):
             weather_line = f"Погодный лимит исчерпан. {weather.WEATHER_LIMIT_FALLBACK}"
         else:
             weather_line = "Сейчас недоступна — остальная сводка всё равно готова."
-        hum_title, hum_line = "", ""
 
     now = datetime.now(TZ)
     weekday_name = _WEEKDAY_SHORT[now.weekday()]
@@ -886,7 +887,6 @@ def _build_day_text(cid, *, refresh_current=False):
         s.get("city", ""),
         weather_icon=weather_icon,
         weather_line=weather_line,
-        humidity_line=f"{hum_title} · {hum_line}" if hum_title else "",
         word_line=word_line,
         word_lang=word_lang,
         mood=mood,

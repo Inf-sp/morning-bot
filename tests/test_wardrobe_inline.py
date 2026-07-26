@@ -196,13 +196,12 @@ def test_other_outfit_keeps_result_card_instead_of_deleting_it(monkeypatch):
     async def fake_send_looks(bot, cid, **kwargs):
         calls.append(("send_looks", bot, cid, kwargs))
         assert kwargs["status"] is status
-        assert kwargs["previous_style_tip"] == "старый совет"
 
     monkeypatch.setattr(wardrobe.util.StatusManager, "start_inline", start_inline)
     monkeypatch.setattr(wardrobe.util.StatusManager, "start", unexpected_start)
     monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: {
         "item_ids": ["old-item"],
-        "look_data": {"style_tip": "старый совет"},
+        "look_data": {},
     })
     monkeypatch.setattr(wardrobe, "send_looks", fake_send_looks)
 

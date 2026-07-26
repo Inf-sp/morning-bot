@@ -88,34 +88,34 @@ def outfit_header(primary_style=""):
 
 
 def render_wardrobe_message(look_data):
-    """Образ на сегодня: погодное решение, вещи и один практический совет.
-    Без повторяющих объяснений и итогового подтверждения готовности образа.
+    """Образ на сегодня: вещи и стабильная рекомендация покупки.
+    Погодная строка и подпись списка намеренно не показываются.
 
-    look_data: {primary_style, weather_intro, items[{name}], style_tip}
+    look_data: {primary_style, items[{name}], purchase_recommendation}
     """
     look_data = look_data or {}
     b = MessageBuilder()
     primary_style = _clean_text(look_data.get("primary_style"))
     b.section(outfit_header(primary_style))
 
-    intro = _finish_dot(look_data.get("weather_intro"))
-    if intro:
-        b.spacer()
-        b.italic(intro)
-
     items = [_upper_first(_clean_text(_item_display(it))) for it in (look_data.get("items") or [])]
     items = [it for it in items if it]
     if items:
         b.spacer()
-        b.labeled_line("Надень")
         for it in items:
             b.bullet(it)
 
-    tip = _finish_dot(look_data.get("style_tip"))
+    recommendation = look_data.get("purchase_recommendation") or {}
+    if isinstance(recommendation, dict):
+        item = _clean_text(recommendation.get("item"))
+        reason = _finish_dot(recommendation.get("reason"))
+        tip = f"{item} — {reason}" if item and reason else item or reason
+    else:
+        tip = _clean_text(recommendation)
     if tip:
         b.spacer()
         b.text_line("💡 ")
-        b.labeled_line("Полезно", tip)
+        b.labeled_line("Полезно", tip, lowercase=False)
 
     return b.build_stripped()
 

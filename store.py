@@ -107,6 +107,41 @@ def clear_wardrobe_daylook(chat_id):
         prof.pop("wardrobe_daylook", None)
         set_profile(chat_id, prof)
 
+
+def get_wardrobe_purchase_recommendation(chat_id):
+    """Текущая рекомендация вещи для покупки, независимая от дневного образа."""
+    value = get_profile(chat_id).get("wardrobe_purchase_recommendation", {})
+    return value if isinstance(value, dict) else {}
+
+
+def set_wardrobe_purchase_recommendation(chat_id, data):
+    prof = get_profile(chat_id)
+    prof["wardrobe_purchase_recommendation"] = dict(data or {})
+    set_profile(chat_id, prof)
+
+
+def clear_wardrobe_purchase_recommendation(chat_id):
+    prof = get_profile(chat_id)
+    if "wardrobe_purchase_recommendation" in prof:
+        prof.pop("wardrobe_purchase_recommendation", None)
+        set_profile(chat_id, prof)
+
+
+def clear_wardrobe_purchase_if_matches(chat_id, items):
+    """Закрывает рекомендацию, когда пользователь добавил предложенную вещь."""
+    recommendation = get_wardrobe_purchase_recommendation(chat_id)
+    target = " ".join(str(recommendation.get("item") or "").casefold().split())
+    if not target:
+        return False
+    names = {
+        " ".join(str(item.get("name") or "").casefold().split())
+        for item in (items or []) if isinstance(item, dict)
+    }
+    if target not in names and not any(target in name or name in target for name in names):
+        return False
+    clear_wardrobe_purchase_recommendation(chat_id)
+    return True
+
 WARDROBE_HISTORY_LIMIT = 14
 
 
@@ -279,6 +314,7 @@ def add_wardrobe_items(cid, items: list) -> list:
                 added.append(it)
 
     mutate_wardrobe(cid, _mut)
+    clear_wardrobe_purchase_if_matches(cid, added)
     return added
 
 
@@ -302,6 +338,7 @@ def reset_wardrobe(cid):
     """Полная замена гардероба пустым (используется при mode=replace в анкете)."""
     save_wardrobe(_empty_wardrobe(), cid)
     clear_wardrobe_daylook(cid)
+    clear_wardrobe_purchase_recommendation(cid)
 
 
 def get_valid_wardrobe_daylook(cid):

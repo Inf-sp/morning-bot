@@ -38,19 +38,20 @@ def _item(item_id, zone, name):
     }
 
 
-def test_outfit_card_has_one_italic_intro_and_one_useful_tip():
+def test_outfit_card_omits_weather_intro_and_naden_label():
     message = render_wardrobe_message({
-        "weather_intro": "Жарко и сухо — нужен лёгкий образ",
         "items": [{"name": "Белая футболка"}, {"name": "Широкие брюки"}, {"name": "Белые кеды"}],
-        "style_tip": "Заправь футболку только спереди",
-        "reasons": ["Свободный низ поддерживает объём верха, а светлая обувь облегчает силуэт"],
-        "final_heading": "Финальный штрих",
-        "final_text": "добавь серебристые часы",
+        "purchase_recommendation": {
+            "item": "Серые широкие джинсы",
+            "reason": "закроют пробел в шкафу и дадут больше сочетаний с твоими рубашками и футболками",
+        },
     })
 
-    assert _entities(message, MessageEntity.ITALIC) == ["Жарко и сухо — нужен лёгкий образ."]
-    assert "💡 Полезно: заправь футболку только спереди." in message.text
-    assert "Финальный штрих" not in message.text
+    assert _entities(message, MessageEntity.ITALIC) == []
+    assert "Жарко и сухо" not in message.text
+    assert "Надень" not in message.text
+    assert "• Голубая" not in message.text
+    assert "💡 Полезно: Серые широкие джинсы — закроют пробел" in message.text
 
 
 def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
@@ -58,8 +59,8 @@ def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
         "items": [{"name": "цепочка со значком сторон света"}, {"name": "футболка Levi's"}],
     })
 
-    assert "\nНадень:\n• Цепочка со значком сторон света\n• Футболка Levi's" in message.text
-    assert "Надень:\n\n" not in message.text
+    assert "\n• Цепочка со значком сторон света\n• Футболка Levi's" in message.text
+    assert "Надень" not in message.text
 
 
 def test_outfit_header_uses_emoji_of_selected_style():
@@ -109,6 +110,43 @@ def test_weather_intro_changes_between_new_outfits():
     weather = {"tmax": 22, "has_rain": False, "strong_wind": False, "warm": True}
 
     assert wardrobe._weather_decision(weather, variant=0) != wardrobe._weather_decision(weather, variant=1)
+
+
+def test_purchase_recommendation_is_stable_until_a_more_important_gap(monkeypatch):
+    profile = {}
+    monkeypatch.setattr(wardrobe.store, "get_wardrobe_purchase_recommendation", lambda _cid: dict(profile))
+    monkeypatch.setattr(wardrobe.store, "set_wardrobe_purchase_recommendation", lambda _cid, value: profile.update(value))
+
+    w = {"zones": {
+        "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},
+        "Низ": {"Брюки": [{"name": "Бежевые брюки", "zone": "Низ"}]},
+        "Обувь": {"Кеды": [{"name": "Белые кеды", "zone": "Обувь"}]},
+    }}
+    dry = {"has_rain": False}
+    first = wardrobe._get_or_create_purchase_recommendation("stable-rec", w, dry)
+    second = wardrobe._get_or_create_purchase_recommendation("stable-rec", w, {"has_rain": False, "strong_wind": True})
+
+    assert first["item"] == "Серые широкие джинсы"
+    assert second == first
+
+    important = wardrobe._get_or_create_purchase_recommendation(
+        "stable-rec", w, {"has_rain": True})
+    assert important["item"] == "Лёгкая непромокаемая ветровка"
+
+    profile["status"] = "rejected"
+    assert wardrobe._get_or_create_purchase_recommendation("stable-rec", w, {"has_rain": True}) == {}
+
+
+def test_wardrobe_purchase_button_has_single_save_action():
+    labels = [
+        button.text
+        for row in wardrobe.build_wardrobe_keyboard(has_purchase=True).inline_keyboard
+        for button in row
+    ]
+
+    assert labels.count("💾 Сохранить") == 1
+    assert "❌ Не сейчас" in labels
+    assert "✅ Сохранено" not in labels
 
 
 def test_parsed_item_keeps_fit_season_and_occasions():

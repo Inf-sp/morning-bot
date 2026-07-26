@@ -26,7 +26,6 @@ def day_summary(
     flag="",
     weather_icon="🌡️",
     weather_line="",
-    humidity_line="",
     word_line="",
     word_lang="nl",
     mood="",
@@ -43,9 +42,6 @@ def day_summary(
 
     if weather_line:
         _compact_line(b, weather_icon, "Погода", weather_line)
-    if humidity_line:
-        b.line(humidity_line)
-        b.spacer()
 
     if word_line:
         word_label = "Нидерландский" if word_lang == "nl" else "Английский"
