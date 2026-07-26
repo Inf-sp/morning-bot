@@ -276,6 +276,24 @@ def _periods(data, day_str, key, threshold):
     return [p for p in ["утром", "днём", "вечером", "ночью"] if p in hit]
 
 
+def _join_periods(periods):
+    periods = list(periods or [])
+    if len(periods) > 1:
+        return ", ".join(periods[:-1]) + " и " + periods[-1]
+    return "".join(periods)
+
+
+def _compact_forecast_line(icon, tmax, rain, rain_mm, rain_periods, wind_ms):
+    """Единая короткая строка прогноза для уведомления и экрана «на завтра»."""
+    parts = [f"до {tmax:+.0f}°C"]
+    if _rain_real(rain, rain_mm):
+        when = _join_periods(rain_periods)
+        parts.append(f"Дождь {when}".rstrip())
+    wind_label = "Сильный ветер" if float(wind_ms or 0) > 10 else "Ветер"
+    parts.append(f"{wind_label} до {float(wind_ms or 0):.0f} м/с")
+    return f"{icon} Погода: " + " · ".join(parts)
+
+
 def _daytime_max(data, day_str, key):
     """Максимум hourly-показателя в дневном окне DAYTIME_START_H..DAYTIME_END_H."""
     try:
@@ -456,9 +474,7 @@ async def send_weather(bot, cid, mode="today", status=None):
         day_str = d["time"][day]
         icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
-        rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
-
-        main_lines = _weather_main_lines(icon, tmax, rain, rain_mm, rain_when, wind_ms)
+        main_lines = [_compact_forecast_line(icon, tmax, rain, rain_mm, rain_p, wind_ms)]
         alert = ""
         fact_title = ""
         fact = ""
@@ -498,13 +514,10 @@ async def send_weather(bot, cid, mode="today", status=None):
         day_str = d["time"][day]
         icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
-        rain_when = (" (" + ", ".join(rain_p) + ")") if rain_p else ""
         desc = DESC.get(code, "")
         cc = s.get("cc", "")
         alert = storm_alert(wind_ms, code, rain, rain_mm, cc=cc)
-        main_lines = _weather_main_lines(
-            icon, tmax, rain, rain_mm, rain_when, wind_ms, plain_wind=True,
-        )
+        main_lines = [_compact_forecast_line(icon, tmax, rain, rain_mm, rain_p, wind_ms)]
         fact = ""
         if alert:
             pass

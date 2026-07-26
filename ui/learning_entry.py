@@ -58,7 +58,7 @@ def _verified_forms(entry):
     return forms if confidence >= 0.75 and all(forms) and not any(_mixed_script(form) for form in forms) else []
 
 
-def _example(entry, term):
+def _example(entry, term, *, fallback_to_saved=False):
     candidates = list(entry.get("examples") or [])
     if entry.get("example_nl") and entry.get("example_ru"):
         candidates.append({"text": entry["example_nl"], "translation": entry["example_ru"]})
@@ -88,18 +88,30 @@ def _example(entry, term):
             common += 1
         return common >= 4
 
+    valid = []
     for item in candidates:
         if not isinstance(item, dict):
             continue
-        text = str(item.get("text") or item.get("nl") or "").strip()
-        translation = str(item.get("translation") or item.get("ru") or "").strip()
+        text = str(item.get("text") or item.get("nl") or item.get("sentence") or "").strip()
+        translation = str(
+            item.get("translation") or item.get("ru")
+            or item.get("sentence_ru") or item.get("translation_ru") or ""
+        ).strip()
         words = re.findall(r"[\wÀ-ÖØ-öø-ÿ'-]+", text.casefold())
         related = (len(bare) > 1 and " ".join(bare) in " ".join(words)) or any(
             related_word(search_word, candidate)
             for search_word in search_words for candidate in words
         )
-        if text and translation and related and not _mixed_script(text):
+        if not text or not translation or _mixed_script(text):
+            continue
+        valid.append((text, translation))
+        if related:
             return text, translation
+    # У текущей записи пример уже принадлежит этому слову. Если слово дано в
+    # другой форме (например, ``zijn`` → ``ben``), строгая проверка поверхности
+    # не должна оставлять карточку результата без сохранённого предложения.
+    if fallback_to_saved and valid:
+        return valid[0]
     return "", ""
 
 
@@ -108,7 +120,10 @@ def _without_terminal_period(value):
     return str(value or "").strip().rstrip(". ")
 
 
-def render_learning_entry(builder, entry, *, fallback_term="", fallback_translation=""):
+def render_learning_entry(
+    builder, entry, *, fallback_term="", fallback_translation="",
+    fallback_to_saved_example=False,
+):
     """Рендерит термин, нужную грамматику и связанный пример без заголовка."""
     term = _term(entry, fallback_term)
     translation = str(entry.get("translation") or entry.get("ru") or fallback_translation or "").strip()
@@ -134,7 +149,9 @@ def render_learning_entry(builder, entry, *, fallback_term="", fallback_translat
     forms = _verified_forms(entry)
     if forms:
         builder.labeled_line("Формы", " · ".join(forms), lowercase=False)
-    example, example_translation = _example(entry, term)
+    example, example_translation = _example(
+        entry, term, fallback_to_saved=fallback_to_saved_example,
+    )
     if example and example_translation:
         builder.spacer()
         builder.text_line("💡 ")

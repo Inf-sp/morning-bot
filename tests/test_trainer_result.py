@@ -48,6 +48,16 @@ def test_result_card_shows_saved_example_with_a_conjugated_verb():
     assert "💡 Полезно: Ik beloof het je → Я обещаю тебе это" in text
 
 
+def test_trainer_result_keeps_example_when_saved_surface_is_an_irregular_form():
+    text = _result({
+        "lang": "nl", "term": "zijn", "translation": "быть", "pos": "verb",
+        "examples": [{"text": "Ik ben vandaag thuis.",
+                      "translation": "Я сегодня дома."}],
+    })
+
+    assert "💡 Полезно: Ik ben vandaag thuis → Я сегодня дома" in text
+
+
 def test_result_card_hides_unverified_verb_forms_and_marks_close_answer():
     entry = {
         "lang": "nl", "term": "geschikt", "translation": "подходящий", "pos": "adj",

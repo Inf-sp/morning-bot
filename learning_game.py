@@ -159,6 +159,38 @@ def _remember_game_answer(cid, d):
     _set_game_recent(cid, rec)
 
 
+_GAME_SIGNATURE_MARKERS = (
+    "ус", "whisker", "snorhaar", "snorhar", "муз", "mouse", "mice", "muis", "хобот", "trunk", "slurf", "грива", "mane", "manen",
+    "паутина", "web", "spinnen", "волшебн", "wand", "toverstaf", "зелён", "зелен", "green", "groen",
+    "болот", "swamp", "moeras", "крыл", "wing", "vleugel", "чёрно-бел", "черно-бел", "black and white", "zwart-wit",
+    "лёд", "лед", "ice", "ijs", "мёд", "мед", "honey", "honing", "маск", "mask", "gotham", "готэм",
+    "hogwarts", "хогвартс", "arendelle", "аренд", "fiona", "фиона", "minnie", "минни", "mufasa", "муфаса",
+    "дональд", "donald", "красн.*шорт", "red shorts", "rode broek", "осёл", "осел", "donkey",
+)
+_GAME_VAGUE_CLUE_MARKERS = (
+    "активен ночью", "active at night", "'s nachts actief", "большие глаза", "big eyes", "grote ogen",
+    "любит рыбу", "likes fish", "houdt van vis", "известн.*друг", "известн.*подруг", "known friend",
+    "bekend vriend", "bekend vriendinnetje",
+)
+
+
+def _clues_are_guessable(data):
+    """Отбрасывает наборы, где нет отличительного признака ответа."""
+    clues = [str(clue or "").strip() for clue in str(data.get("clues") or "").splitlines() if str(clue or "").strip()]
+    if len(clues) < 4:
+        return False
+    text = " ".join(clues).casefold()
+    vague_count = sum(bool(re.search(marker, text)) for marker in _GAME_VAGUE_CLUE_MARKERS)
+    signature_count = sum(bool(re.search(marker, text)) for marker in _GAME_SIGNATURE_MARKERS)
+    if signature_count < 1:
+        return False
+    # Две и более универсальные характеристики без уникальной концовки делают
+    # задачу угадыванием наугад. Последняя улика обязана нести отличительный факт.
+    last = clues[-1].casefold()
+    last_has_signature = any(re.search(marker, last) for marker in _GAME_SIGNATURE_MARKERS)
+    return vague_count < 2 or last_has_signature
+
+
 def game_data(clue_lang, recent, attempt=0):
     subject = ("только очень известное животное (например, кошка, собака, лев, слон, жираф, "
                "обезьяна, пингвин, акула или дельфин) ИЛИ очень известного героя мультфильма или кино "
@@ -168,7 +200,7 @@ def game_data(clue_lang, recent, attempt=0):
                "или абстрактные понятия.")
     diff_desc = ("уровень языка A1–A2: только короткие простые предложения и самые частые слова. "
                  "Каждая улика должна прямо описывать цвет, размер, звук, место, действие или известную роль. "
-                 "Загадка должна быть очень лёгкой: ответ можно угадать уже по двум-трём уликам. "
+                 "Загадка должна быть очень лёгкой: ответ можно уверенно угадать по третьей или четвёртой улике. "
                  "Не используй метафоры, идиомы, редкие слова, сложные времена или длинные описания")
     avoid = ("Не загадывай ничего из этого списка и их переводы/синонимы: " + ", ".join(recent[-80:])) if recent else ""
     prompt = f"""Игра-детектив. Загадай: {subject}.
@@ -176,19 +208,24 @@ def game_data(clue_lang, recent, attempt=0):
 Для лёгкого режима особенно важно: не усложняй загадку ради интриги, не выбирай редкий вариант и не скрывай ответ сложными словами.
 Попытка генерации: {attempt + 1}. Если сомневаешься, выбирай менее очевидный вариант, которого не было в списке.
 Каждая подсказка и каждое предложение заканчивается точкой.
-Стиль: улики должны быть атмосферными и чуть кинематографичными, но короткими. Не сухой список фактов.
-Добавь 1 деталь действия/сцены в каждой улике: след, привычка, жест, звук, место, предмет, последствия.
+Стиль: улики должны быть короткими, конкретными и честными, а не туманными.
+Порядок обязателен: 1) простая сцена или действие, 2) заметный внешний признак, 3) отличительная привычка/способность/роль, 4) почти очевидная уникальная деталь.
+Минимум одна из последних двух улик обязана содержать узнаваемый признак: особый предмет, место, имя друга, способность, костюм, родственника или известную роль.
+Не пиши «активен ночью», «у него большие глаза», «любит рыбу», «у него есть известный друг/подруга» без дополнительной уникальной детали — это слишком расплывчато.
+Последняя улика должна позволить догадаться почти сразу, но не должна содержать само название ответа.
 Не повторяй одинаковые формулировки между уликами.
 Ответь строго, каждое поле с новой строки, без markdown:
 CLUES: 4 улики на языке {clue_lang}, через | , от косвенной к более явной — конкретные детали (форма, цвет, происхождение, функция, ощущения), без имени/названия
 ANSWER: название на языке {clue_lang}
 ALIASES: то же название на русском, английском и нидерландском через |
+ENGLISH: название ответа на английском, только 1–4 слова
 HINT: ещё одна явная подсказка на языке {clue_lang}
 HINT2: совсем простая, почти очевидная подсказка (но без названия), на языке {clue_lang}
 EXPLAIN: 2 живых предложения — что это такое и почему улики вели именно к нему (на языке {clue_lang})"""
     raw = ai.llm(prompt, 900, 1.0, tier="cheap")
     out = {}
     for key, field in (("CLUES", "clues"), ("ANSWER", "answer"), ("ALIASES", "aliases"),
+                       ("ENGLISH", "answer_en"),
                        ("HINT", "hint"), ("HINT2", "hint2"), ("EXPLAIN", "explain")):
         m = re.search(rf"{key}:\s*(.+?)(?=\n[A-Z]+\d*:|\Z)", raw, re.S)
         out[field] = m.group(1).strip() if m else ""
@@ -212,7 +249,7 @@ async def send_game(bot, cid, status=None):
         d = {}
         for attempt in range(5):
             cand = game_data(lang, recent, attempt=attempt)
-            if cand.get("answer") and not _game_is_recent(cand, recent):
+            if cand.get("answer") and _clues_are_guessable(cand) and not _game_is_recent(cand, recent):
                 d = cand
                 break
             if cand.get("answer"):
@@ -229,7 +266,8 @@ async def send_game(bot, cid, status=None):
         await verify.safe_error(bot, cid, e, back="m_learn"); return
     _remember_game_answer(cid, d)
     hints = [_dot(h) for h in [d.get("hint"), d.get("hint2")] if (h or "").strip()]
-    store.game_state[str(cid)] = {"answer": d.get("answer", ""), "aliases": d.get("aliases", []),
+    store.game_state[str(cid)] = {"answer": d.get("answer", ""), "answer_en": d.get("answer_en", ""),
+                                  "aliases": d.get("aliases", []),
                                   "quote": d.get("quote", ""), "hints": hints, "hint_i": 0,
                                   "explain": _dot(d.get("explain", "")), "tries": 0}
     kb = InlineKeyboardMarkup([
@@ -255,12 +293,22 @@ def _fuzzy(a, b):
     return False
 
 
-def _get_russian_query(st):
-    """Берёт первое русское слово из русской формы ответа для поиска фото."""
-    for name in [st.get("answer", "")] + list(st.get("aliases") or []):
-        words = re.findall(r"[А-Яа-яЁё]+(?:-[А-Яа-яЁё]+)?", str(name or ""))
-        if words:
-            return words[0]
+def _get_english_query(st):
+    """Возвращает только английское название ответа для поиска фото."""
+    explicit = str(st.get("answer_en") or "").strip()
+    if explicit and re.search(r"[A-Za-z]", explicit):
+        return explicit
+
+    # Старые состояния не имели отдельного answer_en. По контракту генератора
+    # второй alias — английский: русский | английский | нидерландский.
+    aliases = [str(alias or "").strip() for alias in (st.get("aliases") or [])]
+    if len(aliases) > 1 and re.search(r"[A-Za-z]", aliases[1]):
+        return aliases[1]
+    if re.search(r"[A-Za-z]", str(st.get("answer") or "")):
+        return str(st.get("answer") or "").strip()
+    for alias in aliases:
+        if re.search(r"[A-Za-z]", alias):
+            return alias
     return ""
 
 
@@ -268,7 +316,7 @@ async def _send_game_result(bot, cid, st, ui, kb):
     import travel_photos
     body = st.get("explain") or st.get("quote", "")
     msg = learning_ui.game_found(ui, st.get("answer", ""), body)
-    query = _get_russian_query(st)
+    query = _get_english_query(st)
     photo = None
     if query:
         try:

@@ -23,6 +23,7 @@ from wardrobe_model import (
     wardrobe_stats,
 )
 from wardrobe_outfit import (
+    build_style_tip,
     choose_outfit_style,
     pick_best_outfit,
     save_outfit_feedback,
@@ -192,7 +193,7 @@ def _purchase_candidate(w, weather_ctx):
     return None
 
 
-def _get_or_create_purchase_recommendation(cid, w, weather_ctx):
+def _get_or_create_purchase_recommendation(cid, w, weather_ctx, fallback_tip=""):
     current = store.get_wardrobe_purchase_recommendation(cid)
     candidate = _purchase_candidate(w, weather_ctx)
     if current and current.get("version") == PURCHASE_RECOMMENDATION_VERSION:
@@ -207,7 +208,18 @@ def _get_or_create_purchase_recommendation(cid, w, weather_ctx):
     if candidate:
         store.set_wardrobe_purchase_recommendation(cid, candidate)
         return candidate
-    return current
+    if current:
+        return current
+    if fallback_tip:
+        fallback = {
+            "version": PURCHASE_RECOMMENDATION_VERSION,
+            "kind": "wear",
+            "reason": fallback_tip,
+            "priority": 0,
+        }
+        store.set_wardrobe_purchase_recommendation(cid, fallback)
+        return fallback
+    return {}
 
 
 def _clean_text(value):
@@ -227,6 +239,9 @@ def _get_cached_look(cid):
     if not cached or cached.get("date") != _day_key():   # день — бизнес-правило «раз в день»
         return None
     if cached.get("copy_validator_version") != COPY_VALIDATOR_VERSION:
+        return None
+    look_data = cached.get("look_data") or {}
+    if "purchase_recommendation" not in look_data or look_data.get("purchase_recommendation") is None:
         return None
     return cached
 
@@ -506,7 +521,10 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     order = {"Верх": 0, "Низ": 1, "Обувь": 2, "Верхняя одежда": 3, "Аксессуары": 4}
     best_sorted = sorted(best, key=lambda it: order.get(it.get("zone"), 9))
     item_ids = [it.get("id") for it in best_sorted]
-    purchase_recommendation = _get_or_create_purchase_recommendation(cid, w, weather_ctx)
+    fallback_tip = build_style_tip(best_sorted, weather_ctx)
+    purchase_recommendation = _get_or_create_purchase_recommendation(
+        cid, w, weather_ctx, fallback_tip=fallback_tip,
+    )
     look_data = {
         "primary_style": choose_outfit_style(best_sorted, selected_styles),
         "items": [{"name": public_item_name(it)} for it in best_sorted],

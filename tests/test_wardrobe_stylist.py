@@ -137,6 +137,23 @@ def test_purchase_recommendation_is_stable_until_a_more_important_gap(monkeypatc
     assert wardrobe._get_or_create_purchase_recommendation("stable-rec", w, {"has_rain": True}) == {}
 
 
+def test_wardrobe_keeps_a_wear_tip_when_no_purchase_gap_exists(monkeypatch):
+    profile = {}
+    monkeypatch.setattr(wardrobe.store, "get_wardrobe_purchase_recommendation", lambda _cid: dict(profile))
+    monkeypatch.setattr(wardrobe.store, "set_wardrobe_purchase_recommendation", lambda _cid, value: profile.update(value))
+
+    w = {"zones": {
+        "Верх": {"Рубашки": [{"name": "Зелёная рубашка", "zone": "Верх"}]},
+        "Низ": {"Джинсы": [{"name": "Синие джинсы", "zone": "Низ"}]},
+    }}
+    recommendation = wardrobe._get_or_create_purchase_recommendation(
+        "wear-tip", w, {"has_rain": False}, fallback_tip="Оставь рубашку навыпуск, чтобы образ выглядел легче.",
+    )
+
+    assert recommendation["kind"] == "wear"
+    assert recommendation["reason"].startswith("Оставь рубашку")
+
+
 def test_wardrobe_purchase_button_has_single_save_action():
     labels = [
         button.text

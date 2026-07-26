@@ -153,8 +153,8 @@ def country_cover(country):
 def find_illustration(query):
     """Find the first acceptable horizontal photo for the detective result.
 
-    The query is already a Russian answer word. Provider orientation filters and
-    the final width/height guard keep the result horizontal.
+    The query is already the English answer. Provider orientation filters and
+    the final width/height guard keep the first returned result horizontal.
     """
     name = " ".join(str(query or "").split()).strip()
     if not name:

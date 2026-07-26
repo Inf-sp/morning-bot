@@ -45,6 +45,45 @@ def test_lazy_dictionary_refresh_preserves_existing_translation():
     assert stored[0]["term"] == "Wat balen"
 
 
+def test_trainer_refreshes_an_entry_with_an_incomplete_saved_example(monkeypatch):
+    refreshed = {
+        "lang": "nl",
+        "term": "Gevolg",
+        "translation": "Последствие",
+        "pos": "noun",
+        "examples": [{
+            "text": "Dat kan ernstige gevolgen hebben.",
+            "translation": "Это может иметь серьёзные последствия.",
+        }],
+    }
+
+    class FakeRepository:
+        def __init__(self, _cid):
+            pass
+
+        def training_entries(self, _language):
+            return []
+
+        def correction_for(self, _entry):
+            return None
+
+    async def fake_refresh(_cid, _entry):
+        return refreshed
+
+    monkeypatch.setattr(trainer, "DictionaryRepository", FakeRepository)
+    monkeypatch.setattr(dictionary_import, "_refresh_dict_entry", fake_refresh)
+
+    data = asyncio.run(trainer._build_exercise("42", {
+        "entry": {
+            "lang": "nl", "term": "Gevolg", "translation": "Последствие",
+            "examples": [{"text": "Dat kan ernstige gevolgen hebben."}],
+        },
+        "exercise_type": trainer_engine.EXERCISE_CHOOSE_TRANSLATION,
+    }))
+
+    assert data["entry"]["examples"][0]["translation"] == "Это может иметь серьёзные последствия."
+
+
 def test_starting_new_trainer_session_invalidates_old_polls():
     cid = "trainer-regression"
     trainer_session.finish(cid)

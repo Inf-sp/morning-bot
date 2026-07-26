@@ -100,7 +100,7 @@ async def _build_exercise(cid, item):
     repository = DictionaryRepository(cid)
     entry = item["entry"]
     if (not item.get("_refresh_attempted")
-            and not (entry.get("examples") or (entry.get("example_nl") and entry.get("example_ru")))):
+            and not _has_saved_example(entry)):
         item["_refresh_attempted"] = True
         # Старые записи без примера донасыщаются существующим механизмом один
         # раз при подготовке материала; результат задания сам AI не вызывает.
@@ -129,6 +129,25 @@ async def _build_exercise(cid, item):
             "unneeded_preposition": correction["unneeded_preposition"],
         })
     return data
+
+
+def _has_saved_example(entry):
+    """Проверяет наличие полноценного примера, а не только непустого списка."""
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("example_nl") and entry.get("example_ru"):
+        return True
+    for example in entry.get("examples") or []:
+        if not isinstance(example, dict):
+            continue
+        text = example.get("text") or example.get("nl") or example.get("sentence")
+        translation = (
+            example.get("translation") or example.get("ru")
+            or example.get("sentence_ru") or example.get("translation_ru")
+        )
+        if str(text or "").strip() and str(translation or "").strip():
+            return True
+    return False
 
 
 async def start(bot, cid, language, mode=None):

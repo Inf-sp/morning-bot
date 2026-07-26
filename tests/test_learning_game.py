@@ -101,7 +101,8 @@ def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypat
     monkeypatch.setattr(learning_game, "_game_recent", lambda _cid: [])
     monkeypatch.setattr(learning_game, "_remember_game_answer", lambda *_args: None)
     monkeypatch.setattr(learning_game, "game_data", lambda *_args, **_kwargs: {
-        "clues": "Een korte aanwijzing.", "answer": "De kat", "aliases": [],
+        "clues": "Hij loopt stil.\nHij heeft snorharen.\nHij miauwt vaak.\nHij jaagt op muizen.",
+        "answer": "De kat", "answer_en": "Cat", "aliases": [],
         "hint": "Hij miauwt.", "hint2": "Hij woont vaak in een huis.",
         "explain": "Dit is een kat.",
     })
@@ -111,6 +112,18 @@ def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypat
 
     labels = [button.text for row in bot.messages[0]["reply_markup"].inline_keyboard for button in row]
     assert labels == ["💡 Подсказка", "😞 Сдаюсь", "⬅️ Назад", "#️⃣ Главная"]
+
+
+def test_detective_rejects_vague_clues_without_a_signature():
+    assert not learning_game._clues_are_guessable({
+        "clues": "Het is 's nachts actief.\nHet heeft grote ogen.\nHet houdt van vis.\nHet heeft een bekend vriendinnetje.",
+    })
+
+
+def test_detective_accepts_easy_clues_with_a_unique_final_detail():
+    assert learning_game._clues_are_guessable({
+        "clues": "Hij loopt stil.\nHij heeft snorharen.\nHij miauwt vaak.\nHij jaagt op muizen.",
+    })
 
 
 def test_detective_rejects_portrait_photo(monkeypatch):
@@ -129,7 +142,7 @@ def test_detective_rejects_portrait_photo(monkeypatch):
     assert len(bot.messages) == 1
 
 
-def test_detective_searches_by_first_russian_word(monkeypatch):
+def test_detective_searches_by_english_answer(monkeypatch):
     queries = []
     monkeypatch.setattr(
         travel_photos,
@@ -142,13 +155,14 @@ def test_detective_searches_by_first_russian_word(monkeypatch):
     state = {
         "answer": "De kat",
         "aliases": ["Кошка", "Cat", "Kat"],
+        "answer_en": "Cat",
         "explain": "Een kat is een huisdier.",
     }
 
     asyncio.run(learning_game._send_game_result(
         bot, "42", state, learning_game.GAME_UI["нидерландский"], None))
 
-    assert queries == ["Кошка"]
+    assert queries == ["Cat"]
     assert len(bot.photos) == 1
 
 

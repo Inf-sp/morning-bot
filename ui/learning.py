@@ -213,6 +213,7 @@ def _render_trainer_entry_card(b, entry, data):
         b, entry,
         fallback_term=(data.get("term") or data.get("result_correct") or data.get("correct") or ""),
         fallback_translation=data.get("ru") or "",
+        fallback_to_saved_example=True,
     )
 
 
