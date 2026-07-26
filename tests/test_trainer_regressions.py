@@ -84,6 +84,51 @@ def test_trainer_refreshes_an_entry_with_an_incomplete_saved_example(monkeypatch
     assert data["entry"]["examples"][0]["translation"] == "Это может иметь серьёзные последствия."
 
 
+def test_trainer_refreshes_an_example_saved_for_another_phrase(monkeypatch):
+    refreshed = {
+        "lang": "nl",
+        "term": "Wat balen",
+        "translation": "Вот досада!",
+        "pos": "phrase",
+        "examples": [{
+            "text": "Wat balen dat het regent.",
+            "translation": "Вот досада, что идёт дождь.",
+        }],
+    }
+    refreshed_calls = []
+
+    class FakeRepository:
+        def __init__(self, _cid):
+            pass
+
+        def training_entries(self, _language):
+            return []
+
+        def correction_for(self, _entry):
+            return None
+
+    async def fake_refresh(_cid, entry):
+        refreshed_calls.append(entry)
+        return refreshed
+
+    monkeypatch.setattr(trainer, "DictionaryRepository", FakeRepository)
+    monkeypatch.setattr(dictionary_import, "_refresh_dict_entry", fake_refresh)
+
+    data = asyncio.run(trainer._build_exercise("42", {
+        "entry": {
+            "lang": "nl", "term": "Wat balen", "translation": "Вот досада!",
+            "examples": [{
+                "text": "Ik zie je op straat, wat doe je daar?",
+                "translation": "Я вижу тебя на улице, что ты делаешь там?",
+            }],
+        },
+        "exercise_type": trainer_engine.EXERCISE_CHOOSE_TRANSLATION,
+    }))
+
+    assert refreshed_calls
+    assert data["entry"]["examples"] == refreshed["examples"]
+
+
 def test_starting_new_trainer_session_invalidates_old_polls():
     cid = "trainer-regression"
     trainer_session.finish(cid)

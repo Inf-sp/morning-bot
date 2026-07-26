@@ -31,7 +31,7 @@ async def handle_callback(bot, cid, data, run_with_status, q=None):
         )
     elif data.startswith("ex_next_"):
         await run_with_status(lambda _s: trainer.next_exercise(
-            bot, cid, task_id=data[len("ex_next_"):]))
+            bot, cid, task_id=data[len("ex_next_"):]), preserve_message=True)
     elif data == "ex_next":
         return True
     elif data.startswith("ex_pick_"):
@@ -71,7 +71,7 @@ async def handle_action(bot, cid, q, act, run_with_status):
         await learning.send_train_lang_select(bot, cid)
     elif act in ("train_nl", "train_en"):
         await run_with_status(lambda _s: trainer.start(
-            bot, cid, act.rsplit("_", 1)[-1]))
+            bot, cid, act.rsplit("_", 1)[-1]), preserve_message=True)
     elif act == "train_progress":
         await run_with_status(lambda _s: trainer.send_progress(bot, cid))
     elif act == "dict":

@@ -51,11 +51,26 @@ def test_result_card_shows_saved_example_with_a_conjugated_verb():
 def test_trainer_result_keeps_example_when_saved_surface_is_an_irregular_form():
     text = _result({
         "lang": "nl", "term": "zijn", "translation": "быть", "pos": "verb",
+        "forms": ["zijn", "ben"],
         "examples": [{"text": "Ik ben vandaag thuis.",
                       "translation": "Я сегодня дома."}],
     })
 
     assert "💡 Полезно: Ik ben vandaag thuis → Я сегодня дома" in text
+
+
+def test_result_card_does_not_attach_an_example_from_another_phrase():
+    text = _result({
+        "lang": "nl", "term": "Wat balen", "translation": "Вот досада!", "pos": "phrase",
+        "examples": [{
+            "text": "Ik zie je op straat, wat doe je daar?",
+            "translation": "Я вижу тебя на улице, что ты делаешь там?",
+        }],
+    })
+
+    assert "Wat balen → Вот досада!" in text
+    assert "💡 Полезно:" not in text
+    assert "wat doe je daar" not in text.casefold()
 
 
 def test_result_card_hides_unverified_verb_forms_and_marks_close_answer():

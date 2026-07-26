@@ -197,13 +197,36 @@ def _get_or_create_purchase_recommendation(cid, w, weather_ctx, fallback_tip="")
     current = store.get_wardrobe_purchase_recommendation(cid)
     candidate = _purchase_candidate(w, weather_ctx)
     if current and current.get("version") == PURCHASE_RECOMMENDATION_VERSION:
+        if not _purchase_recommendation_text(current):
+            if candidate:
+                store.set_wardrobe_purchase_recommendation(cid, candidate)
+                return candidate
+            if fallback_tip:
+                fallback = {
+                    "version": PURCHASE_RECOMMENDATION_VERSION,
+                    "kind": "wear",
+                    "reason": fallback_tip,
+                    "priority": 0,
+                }
+                store.set_wardrobe_purchase_recommendation(cid, fallback)
+                return fallback
+            return {}
         current_priority = int(current.get("priority", 0) or 0)
         candidate_priority = int((candidate or {}).get("priority", 0) or 0)
         if candidate_priority > current_priority:
             store.set_wardrobe_purchase_recommendation(cid, candidate)
             return candidate
         if current.get("status") == "rejected":
-            return {}
+            if not fallback_tip:
+                return {}
+            fallback = {
+                "version": PURCHASE_RECOMMENDATION_VERSION,
+                "kind": "wear",
+                "reason": fallback_tip,
+                "priority": 0,
+            }
+            store.set_wardrobe_purchase_recommendation(cid, fallback)
+            return fallback
         return current
     if candidate:
         store.set_wardrobe_purchase_recommendation(cid, candidate)
@@ -220,6 +243,34 @@ def _get_or_create_purchase_recommendation(cid, w, weather_ctx, fallback_tip="")
         store.set_wardrobe_purchase_recommendation(cid, fallback)
         return fallback
     return {}
+
+
+def _cached_outfit_items(w, look_data):
+    names = {
+        _clean_text(item.get("name") if isinstance(item, dict) else item).casefold()
+        for item in (look_data.get("items") or [])
+    }
+    return [
+        item for _zone, _subcategory, item in _flat_wardrobe_items(w)
+        if _clean_text(public_item_name(item)).casefold() in names
+        or _clean_text(item.get("name")).casefold() in names
+    ]
+
+
+def _repair_missing_purchase_recommendation(cid, look_data):
+    """Восстанавливает полезный блок в старом дневном кэше образа."""
+    look_data = dict(look_data or {})
+    if _purchase_recommendation_text(look_data.get("purchase_recommendation")):
+        return look_data
+    wardrobe = store.load_wardrobe(cid)
+    outfit_items = _cached_outfit_items(wardrobe, look_data)
+    fallback_tip = build_style_tip(outfit_items, {})
+    recommendation = _get_or_create_purchase_recommendation(
+        cid, wardrobe, {}, fallback_tip=fallback_tip,
+    )
+    if recommendation:
+        look_data["purchase_recommendation"] = recommendation
+    return look_data
 
 
 def _clean_text(value):
@@ -435,8 +486,14 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         store.last_source[str(cid)] = "Гардероб · Образ"
         store.last_answer[str(cid)] = cached.get("text", "")
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
-        look_data = cached.get("look_data", {})
+        original_look_data = cached.get("look_data", {})
+        look_data = _repair_missing_purchase_recommendation(cid, original_look_data)
         text, entities = _build_look_message(look_data)
+        store.last_answer[str(cid)] = text
+        if look_data != original_look_data:
+            cached["look_data"] = look_data
+            cached["text"] = text
+            store.set_wardrobe_daylook(cid, cached)
         if kb is None:
             result_kb = build_wardrobe_keyboard(
                 has_result=True,
@@ -579,6 +636,7 @@ async def reject_purchase_recommendation(bot, cid, q=None):
     if not look_data:
         return
     look_data.pop("purchase_recommendation", None)
+    look_data = _repair_missing_purchase_recommendation(cid, look_data)
     text, entities = _build_look_message(look_data)
     cached["look_data"] = look_data
     cached["text"] = text

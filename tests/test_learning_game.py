@@ -90,6 +90,44 @@ def test_detective_route_uses_preserving_inline_status(monkeypatch):
     assert calls[1][1:] == ("42", calls[1][2])
 
 
+def test_trainer_start_uses_preserving_inline_status(monkeypatch):
+    calls = []
+
+    async def run_with_status(callback, **kwargs):
+        calls.append(kwargs)
+        await callback(object())
+
+    async def start(bot, cid, language):
+        calls.append((bot, cid, language))
+
+    monkeypatch.setattr(learning_router.trainer, "start", start)
+
+    asyncio.run(learning_router.handle_action(
+        object(), "42", object(), "train_nl", run_with_status,
+    ))
+
+    assert calls[0] == {"preserve_message": True}
+
+
+def test_trainer_next_task_uses_preserving_inline_status(monkeypatch):
+    calls = []
+
+    async def run_with_status(callback, **kwargs):
+        calls.append(kwargs)
+        await callback(object())
+
+    async def next_exercise(bot, cid, task_id=""):
+        calls.append((bot, cid, task_id))
+
+    monkeypatch.setattr(learning_router.trainer, "next_exercise", next_exercise)
+
+    asyncio.run(learning_router.handle_callback(
+        object(), "42", "ex_next_task-1", run_with_status,
+    ))
+
+    assert calls[0] == {"preserve_message": True}
+
+
 def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypatch):
     class Bot:
         messages = []

@@ -154,6 +154,51 @@ def test_wardrobe_keeps_a_wear_tip_when_no_purchase_gap_exists(monkeypatch):
     assert recommendation["reason"].startswith("Оставь рубашку")
 
 
+def test_cached_outfit_repairs_missing_useful_recommendation(monkeypatch):
+    profile = {}
+    wardrobe_data = {"zones": {
+        "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},
+        "Низ": {"Брюки": [{"name": "Бежевые брюки", "zone": "Низ"}]},
+        "Обувь": {"Кеды": [{"name": "Бежевые кеды с чёрной точкой", "zone": "Обувь"}]},
+    }}
+    look_data = {
+        "primary_style": "Городской",
+        "items": [
+            {"name": "Голубая рубашка"},
+            {"name": "Бежевые брюки"},
+            {"name": "Бежевые кеды с чёрной точкой"},
+        ],
+        "purchase_recommendation": {},
+    }
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
+    monkeypatch.setattr(wardrobe.store, "get_wardrobe_purchase_recommendation", lambda _cid: dict(profile))
+    monkeypatch.setattr(wardrobe.store, "set_wardrobe_purchase_recommendation", lambda _cid, value: profile.update(value))
+
+    repaired = wardrobe._repair_missing_purchase_recommendation("cached-tip", look_data)
+    message = render_wardrobe_message(repaired)
+
+    assert repaired["purchase_recommendation"]
+    assert "💡 Полезно:" in message.text
+
+
+def test_malformed_saved_recommendation_is_replaced_for_another_outfit(monkeypatch):
+    profile = {"version": wardrobe.PURCHASE_RECOMMENDATION_VERSION, "priority": 0}
+    wardrobe_data = {"zones": {
+        "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},
+        "Низ": {"Джинсы": [{"name": "Синие джинсы", "zone": "Низ"}]},
+        "Обувь": {"Кеды": [{"name": "Бежевые кеды", "zone": "Обувь"}]},
+    }}
+    monkeypatch.setattr(wardrobe.store, "get_wardrobe_purchase_recommendation", lambda _cid: dict(profile))
+    monkeypatch.setattr(wardrobe.store, "set_wardrobe_purchase_recommendation", lambda _cid, value: profile.update(value))
+
+    recommendation = wardrobe._get_or_create_purchase_recommendation(
+        "another-outfit", wardrobe_data, {},
+        fallback_tip="Сделай обувь финальным акцентом, чтобы образ выглядел собраннее.",
+    )
+
+    assert recommendation["reason"]
+
+
 def test_wardrobe_purchase_button_has_single_save_action():
     labels = [
         button.text

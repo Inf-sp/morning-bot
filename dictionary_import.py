@@ -24,6 +24,7 @@ from dictionary_model import (
     entry_language,
     entry_term,
     entry_translation,
+    example_matches_term,
     normalize_translation_case,
     normalize_entry,
     normalize_key,
@@ -251,7 +252,8 @@ def _dict_example(entry):
         translation = re.sub(r"\s+", " ", str(example.get("translation") or "")).strip()
         if (text and translation and len(text) <= 140 and len(translation) <= 140
                 and len(text.split()) <= 16 and len(translation.split()) <= 16):
-            candidates.append((text, translation))
+            if example_matches_term(entry, {"text": text, "translation": translation}):
+                candidates.append((text, translation))
     return min(candidates, key=lambda pair: len(pair[0]) + len(pair[1])) if candidates else None
 
 
@@ -1026,7 +1028,10 @@ async def _refresh_dict_entry(cid, item):
                 "article": w.get("article") or entry.get("article", ""),
                 "translation": original_translation or entry["translation"],
                 "breakdown": w.get("breakdown") or entry.get("breakdown", ""),
-                "examples": w.get("examples") or entry.get("examples", []),
+                "examples": (
+                    w.get("examples") if _dict_example(w) is not None
+                    else entry.get("examples", [])
+                ),
                 "status": w.get("status") or "new",
                 "last_shown_at": w.get("last_shown_at"),
                 "updated_at": datetime.now(config.TZ).isoformat(),

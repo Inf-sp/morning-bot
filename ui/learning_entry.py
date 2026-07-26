@@ -2,6 +2,8 @@
 
 import re
 
+from dictionary_model import example_matches_term
+
 from dictionary_model import display_term
 
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
@@ -58,37 +60,10 @@ def _verified_forms(entry):
     return forms if confidence >= 0.75 and all(forms) and not any(_mixed_script(form) for form in forms) else []
 
 
-def _example(entry, term, *, fallback_to_saved=False):
+def _example(entry, term):
     candidates = list(entry.get("examples") or [])
     if entry.get("example_nl") and entry.get("example_ru"):
         candidates.append({"text": entry["example_nl"], "translation": entry["example_ru"]})
-    term_words = re.findall(r"[\wÀ-ÖØ-öø-ÿ'-]+", term.casefold())
-    bare = [word for word in term_words if word not in {"de", "het", "een", "to", "the", "a", "an"}]
-    # Сохранённый пример может содержать не инфинитив, а обычную словоформу:
-    # ``Beloven`` → ``Ik beloof ...``.  Учитываем формы, если они сохранены,
-    # и короткое начало основы для регулярных/сильных глаголов.
-    search_words = list(bare)
-    for key in ("infinitive", "past_singular", "past_participle", "perfect_form"):
-        search_words.extend(re.findall(r"[\wÀ-ÖØ-öø-ÿ'-]+", str(entry.get(key) or "").casefold()))
-    forms = entry.get("forms")
-    if isinstance(forms, list):
-        for form in forms:
-            search_words.extend(re.findall(r"[\wÀ-ÖØ-öø-ÿ'-]+", str(form or "").casefold()))
-    search_words = list(dict.fromkeys(search_words))
-
-    def related_word(left, right):
-        if left == right:
-            return True
-        if len(left) < 5 or len(right) < 4:
-            return False
-        common = 0
-        for left_char, right_char in zip(left, right):
-            if left_char != right_char:
-                break
-            common += 1
-        return common >= 4
-
-    valid = []
     for item in candidates:
         if not isinstance(item, dict):
             continue
@@ -97,21 +72,10 @@ def _example(entry, term, *, fallback_to_saved=False):
             item.get("translation") or item.get("ru")
             or item.get("sentence_ru") or item.get("translation_ru") or ""
         ).strip()
-        words = re.findall(r"[\wÀ-ÖØ-öø-ÿ'-]+", text.casefold())
-        related = (len(bare) > 1 and " ".join(bare) in " ".join(words)) or any(
-            related_word(search_word, candidate)
-            for search_word in search_words for candidate in words
-        )
         if not text or not translation or _mixed_script(text):
             continue
-        valid.append((text, translation))
-        if related:
+        if example_matches_term({**entry, "term": term}, {"text": text, "translation": translation}):
             return text, translation
-    # У текущей записи пример уже принадлежит этому слову. Если слово дано в
-    # другой форме (например, ``zijn`` → ``ben``), строгая проверка поверхности
-    # не должна оставлять карточку результата без сохранённого предложения.
-    if fallback_to_saved and valid:
-        return valid[0]
     return "", ""
 
 
@@ -122,7 +86,6 @@ def _without_terminal_period(value):
 
 def render_learning_entry(
     builder, entry, *, fallback_term="", fallback_translation="",
-    fallback_to_saved_example=False,
 ):
     """Рендерит термин, нужную грамматику и связанный пример без заголовка."""
     term = _term(entry, fallback_term)
@@ -149,9 +112,7 @@ def render_learning_entry(
     forms = _verified_forms(entry)
     if forms:
         builder.labeled_line("Формы", " · ".join(forms), lowercase=False)
-    example, example_translation = _example(
-        entry, term, fallback_to_saved=fallback_to_saved_example,
-    )
+    example, example_translation = _example(entry, term)
     if example and example_translation:
         builder.spacer()
         builder.text_line("💡 ")

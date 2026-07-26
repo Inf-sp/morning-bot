@@ -358,7 +358,9 @@ async def handle(update, context, remove_reply_keyboard):
             elif act.startswith("trav_mode_"):
                 await travel.toggle_transport(bot, cid, act[len("trav_mode_"):], q)
             elif act == "watch":
-                await _inline_status(lambda _s: leisure_movies.send_movie_home(bot, cid, q))
+                await _inline_status(
+                    lambda status: leisure_movies.send_movie_home(bot, cid, q),
+                    preserve_message=True)
             elif act == "read":
                 await _inline_status(lambda _s: leisure_books.send_books_home(bot, cid, q))
             elif act == "readlist":
@@ -494,7 +496,9 @@ async def handle(update, context, remove_reply_keyboard):
         await leisure_movies.toggle_movie_pref(bot, cid, data, q)
         return
     if data == "movie_reco":
-        await _inline_status(lambda _s: leisure_movies.send_recos(bot, cid, "movie"))
+        await _inline_status(
+            lambda _s: leisure_movies.send_recos(bot, cid, "movie"),
+            preserve_message=True)
         return
     if data == "movie_now_playing":
         await _ack(q)
@@ -509,13 +513,19 @@ async def handle(update, context, remove_reply_keyboard):
         await leisure_movies.send_movie_mood_menu(bot, cid, q)
         return
     if data.startswith("movie_g_"):
-        await _inline_status(lambda _s: leisure_movies.send_movie_by_genre(bot, cid, data[len("movie_g_"):]))
+        await _inline_status(
+            lambda _s: leisure_movies.send_movie_by_genre(bot, cid, data[len("movie_g_"):]),
+            preserve_message=True)
         return
     if data.startswith("movie_mood_"):
-        await _inline_status(lambda _s: leisure_movies.send_movie_by_mood(bot, cid, data[len("movie_mood_"):]))
+        await _inline_status(
+            lambda _s: leisure_movies.send_movie_by_mood(bot, cid, data[len("movie_mood_"):]),
+            preserve_message=True)
         return
     if data.startswith("movie_love_"):
-        await _inline_status(lambda _s: leisure_movies.movie_love(bot, cid, int(data.split("_")[-1]), q))
+        await _inline_status(
+            lambda _s: leisure_movies.movie_love(bot, cid, int(data.split("_")[-1]), q),
+            preserve_message=True)
         return
     if data.startswith("book_love_"):
         await _inline_status(lambda _s: leisure_books.book_love(bot, cid, int(data.split("_")[-1]), q))
@@ -527,7 +537,9 @@ async def handle(update, context, remove_reply_keyboard):
         await leisure_movies.add_reco(bot, cid, int(data.split("_")[1]), q)
         return
     if data.startswith("movie_no_"):
-        await _inline_status(lambda _s: leisure_movies.movie_dislike(bot, cid, int(data.split("_")[-1])))
+        await _inline_status(
+            lambda _s: leisure_movies.movie_dislike(bot, cid, int(data.split("_")[-1])),
+            preserve_message=True)
         return
     if data.startswith("book_no_"):
         await _inline_status(lambda _s: leisure_books.book_dislike(bot, cid, int(data.split("_")[-1])))

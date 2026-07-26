@@ -12,7 +12,7 @@ import secrets
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from dictionary_model import capitalize_initial, display_term
+from dictionary_model import capitalize_initial, display_term, example_matches_term
 import ai
 import language_tool
 import secure
@@ -144,7 +144,9 @@ def _has_saved_example(entry):
     if not isinstance(entry, dict):
         return False
     if entry.get("example_nl") and entry.get("example_ru"):
-        return True
+        return example_matches_term(entry, {
+            "text": entry["example_nl"], "translation": entry["example_ru"],
+        })
     for example in entry.get("examples") or []:
         if not isinstance(example, dict):
             continue
@@ -153,7 +155,8 @@ def _has_saved_example(entry):
             example.get("translation") or example.get("ru")
             or example.get("sentence_ru") or example.get("translation_ru")
         )
-        if str(text or "").strip() and str(translation or "").strip():
+        if (str(text or "").strip() and str(translation or "").strip()
+                and example_matches_term(entry, example)):
             return True
     return False
 
