@@ -260,6 +260,44 @@ def test_wardrobe_callback_reuses_shared_inline_status(monkeypatch):
     assert calls[-1] == ("stop", True)
 
 
+def test_week_forecast_uses_preserved_inline_status(monkeypatch):
+    calls = []
+
+    class Status:
+        mode = "inline"
+
+        async def stop(self, delete=True):
+            calls.append(("stop", delete))
+
+    async def start_inline(q, bot=None, cid=None, stages=None, preserve_message=False):
+        calls.append(("start_inline", preserve_message))
+        return Status()
+
+    async def send_weather(bot, cid, mode, status=None):
+        calls.append(("weather", bot, cid, mode, status.mode))
+
+    monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
+    monkeypatch.setattr(bot_callbacks.weather, "send_weather", send_weather)
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
+
+    class Query:
+        data = "a_w_week"
+        message = type("Message", (), {"chat_id": "42", "message_id": 7})()
+
+    class Update:
+        callback_query = Query()
+
+    class Context:
+        bot = object()
+
+    asyncio.run(bot_callbacks.handle(Update(), Context(), None))
+
+    assert calls[0] == ("start_inline", True)
+    assert calls[1][-2:] == ("week", "inline")
+    assert calls[-1] == ("stop", True)
+
+
 def test_closet_screen_does_not_show_edit_button(monkeypatch):
     class Bot:
         message = None

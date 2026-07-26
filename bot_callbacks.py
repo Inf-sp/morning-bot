@@ -334,7 +334,10 @@ async def handle(update, context, remove_reply_keyboard):
             elif await learning_router.handle_action(bot, cid, q, act, _inline_status):
                 pass
             elif act == "w_week":
-                await _inline_status(lambda _s: weather.send_weather(bot, cid, "week"))
+                await _inline_status(
+                    lambda status: weather.send_weather(bot, cid, "week", status=status),
+                    preserve_message=True,
+                )
             elif act == "setcity":
                 store.pending_input[cid] = "setcity"
                 await bot.send_message(chat_id=cid, text="📍 Напиши название города — переключу на него.")

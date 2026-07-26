@@ -797,6 +797,13 @@ def _day_menu_kb():
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
+
+def _day_wind_text(wind_ms):
+    """Короткое обозначение ветра для сводки дня."""
+    value = float(wind_ms or 0)
+    label = "Сильный ветер" if value > 10 else "Ветер"
+    return f"{label} до {value:.0f} м/с"
+
 def _build_day_text(cid, *, refresh_current=False):
     s = store.get_settings(cid)
     try:
@@ -845,7 +852,7 @@ def _build_day_text(cid, *, refresh_current=False):
             rain_part = f"Дождь {rain_when}".rstrip()
         else:
             rain_part = ""
-        wind_part = f"Ветер до {display_wind_ms:.0f} м/с"
+        wind_part = _day_wind_text(display_wind_ms)
         weather_line = f"до {tmax:+.0f}°C" + (f" · {rain_part}" if rain_part else "") + f" · {wind_part}"
     else:
         rain = 0

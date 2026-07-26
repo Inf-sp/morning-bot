@@ -390,7 +390,7 @@ def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="",
 
 
 # ---------- отправка ----------
-async def send_weather(bot, cid, mode="today"):
+async def send_weather(bot, cid, mode="today", status=None):
     s = store.get_settings(cid)
     try:
         data = fetch_weather(s["lat"], s["lon"], 9)
@@ -574,6 +574,9 @@ async def send_weather(bot, cid, mode="today"):
 
     kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
     msg = weather_ui.week_forecast(rng, s["city"], overview, day_data, advice)
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+        return
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 

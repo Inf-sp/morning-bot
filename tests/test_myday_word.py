@@ -1,3 +1,9 @@
+import os
+
+os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
+os.environ.setdefault("GEMINI_API_KEY", "test-key")
+
+from myday import _day_wind_text
 from ui.myday import day_summary
 
 
@@ -12,6 +18,11 @@ def test_day_summary_keeps_only_compact_weather_block():
     assert "🌧️ Погода: до +21°C · Дождь днём и вечером · Ветер до 10 м/с" in message.text
     assert "влажност" not in message.text.lower()
     assert "100%" not in message.text
+
+
+def test_day_wind_text_marks_only_wind_above_ten_as_strong():
+    assert _day_wind_text(10) == "Ветер до 10 м/с"
+    assert _day_wind_text(11) == "Сильный ветер до 11 м/с"
 
 
 def test_day_summary_keeps_capitalized_dictionary_translation_after_arrow():
