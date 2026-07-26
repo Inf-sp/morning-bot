@@ -15,9 +15,21 @@ import trainer
 import util
 
 
-async def handle_callback(bot, cid, data, run_with_status):
+async def handle_callback(bot, cid, data, run_with_status, q=None):
     """Callback-и заданий тренажёра с префиксом ex_."""
-    if data.startswith("ex_next_"):
+    if data.startswith("ex_remove_confirm_"):
+        await trainer.remove_from_training(
+            bot, cid, task_id=data[len("ex_remove_confirm_"):], q=q,
+        )
+    elif data.startswith("ex_remove_cancel_"):
+        await trainer.cancel_remove_from_training(
+            bot, cid, task_id=data[len("ex_remove_cancel_"):], q=q,
+        )
+    elif data.startswith("ex_remove_"):
+        await trainer.confirm_remove_from_training(
+            bot, cid, task_id=data[len("ex_remove_"):], q=q,
+        )
+    elif data.startswith("ex_next_"):
         await run_with_status(lambda _s: trainer.next_exercise(
             bot, cid, task_id=data[len("ex_next_"):]))
     elif data == "ex_next":

@@ -12,7 +12,7 @@ import secrets
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from dictionary_model import capitalize_initial
+from dictionary_model import capitalize_initial, display_term
 import ai
 import language_tool
 import secure
@@ -48,6 +48,14 @@ def _keyboard(rows):
 
 def _nav_row():
     return [("⬅️ Назад", "m_learn"), ("#️⃣ Главная", "m_menu")]
+
+
+def _result_keyboard(data, *, allow_remove=True):
+    rows = [[("✨ Другое задание", f"ex_next_{data['_task_id']}")]]
+    if allow_remove and not data.get("_removed"):
+        rows.append([("❌ Удалить из обучения", f"ex_remove_{data['_task_id']}")])
+    rows.append(_nav_row())
+    return _keyboard(rows)
 
 
 def _task_matches(data, task_id):
@@ -298,8 +306,87 @@ async def _apply_result(bot, cid, state, grade, message):
         _reinsert_failed(state, data)
     data["_result_correct"] = bool(grade.correct)
     data["_result_message"] = message
-    kb = _keyboard([[("✨ Другое задание", f"ex_next_{data['_task_id']}")], _nav_row()])
+    kb = _result_keyboard(data)
     await bot.send_message(chat_id=cid, text=message.text, entities=message.entities, reply_markup=kb)
+
+
+def _trainer_display_term(data):
+    entry = data.get("entry") if isinstance(data.get("entry"), dict) else {}
+    term = entry.get("term") or entry.get("word") or data.get("term") or ""
+    return display_term(term, entry.get("article") or "")
+
+
+async def confirm_remove_from_training(bot, cid, task_id="", q=None):
+    state = trainer_session.get(cid)
+    if not state or not state.get("current"):
+        return
+    data = state["current"]
+    if not _task_matches(data, task_id) or not data.get("_answered") or data.get("_removed"):
+        return
+    text = f"Удалить «{_trainer_display_term(data)}» из обучения?"
+    markup = _keyboard([
+        [("❌ Удалить", f"ex_remove_confirm_{task_id}")],
+        [("Отмена", f"ex_remove_cancel_{task_id}")],
+    ])
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=markup)
+
+
+async def cancel_remove_from_training(bot, cid, task_id="", q=None):
+    state = trainer_session.get(cid)
+    if not state or not state.get("current"):
+        return
+    data = state["current"]
+    if not _task_matches(data, task_id) or not data.get("_answered") or data.get("_removed"):
+        return
+    message = data.get("_result_message")
+    if message is None:
+        return
+    markup = _result_keyboard(data)
+    if q is not None:
+        try:
+            await q.message.edit_text(
+                message.text, entities=message.entities, reply_markup=markup,
+            )
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid, text=message.text, entities=message.entities, reply_markup=markup,
+    )
+
+
+async def remove_from_training(bot, cid, task_id="", q=None):
+    state = trainer_session.get(cid)
+    if not state or not state.get("current"):
+        return
+    data = state["current"]
+    if not _task_matches(data, task_id) or not data.get("_answered") or data.get("_removed"):
+        return
+    repository = DictionaryRepository(cid)
+    repository.delete_training_entry(data["lang"], data["term"])
+    term_key = str(data["term"]).casefold()
+    queue_idx = state.get("queue_idx", 0)
+    queue = state.get("queue") or []
+    state["queue"] = queue[:queue_idx] + [
+        item for item in queue[queue_idx:]
+        if str(entry_term(item.get("entry") or "")).casefold() != term_key
+    ]
+    data["_removed"] = True
+    text = f"✅ Удалено из обучения\n\n{_trainer_display_term(data)}"
+    markup = _result_keyboard(data, allow_remove=False)
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=markup)
 
 
 def _reinsert_failed(state, data):

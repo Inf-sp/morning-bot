@@ -406,7 +406,7 @@ async def handle(update, context, remove_reply_keyboard):
         return
 
     if data.startswith("ex_"):
-        await learning_router.handle_callback(bot, cid, data, _inline_status)
+        await learning_router.handle_callback(bot, cid, data, _inline_status, q=q)
         return
     # Игра
     if data == "noop":

@@ -87,6 +87,58 @@ def test_trainer_refreshes_an_entry_with_an_incomplete_saved_example(monkeypatch
 def test_starting_new_trainer_session_invalidates_old_polls():
     cid = "trainer-regression"
     trainer_session.finish(cid)
+
+
+def test_trainer_result_offers_remove_from_learning():
+    labels = [
+        button.text
+        for row in trainer._result_keyboard({"_task_id": "task-1"}).inline_keyboard
+        for button in row
+    ]
+
+    assert labels[:2] == ["✨ Другое задание", "❌ Удалить из обучения"]
+
+
+def test_remove_from_training_deletes_dictionary_entry_and_future_queue_items(monkeypatch):
+    cid = "trainer-remove"
+    trainer_session.finish(cid)
+    entry = {"lang": "nl", "term": "Gevolg", "translation": "Последствие"}
+    state = trainer_session.start(cid, "nl", [
+        {"entry": entry, "exercise_type": trainer_engine.EXERCISE_RECALL},
+        {"entry": entry, "exercise_type": trainer_engine.EXERCISE_CHOOSE_TRANSLATION},
+    ])
+    state["queue_idx"] = 1
+    state["current"] = {
+        "_task_id": "task-1", "_answered": True, "lang": "nl", "term": "Gevolg",
+        "entry": entry,
+    }
+
+    class FakeRepository:
+        def __init__(self, _cid):
+            self.deleted = None
+
+        def delete_training_entry(self, language, term):
+            self.deleted = (language, term)
+            return entry
+
+    repository = FakeRepository(cid)
+    monkeypatch.setattr(trainer, "DictionaryRepository", lambda _cid: repository)
+
+    class FakeMessage:
+        async def edit_text(self, text, **kwargs):
+            self.text = text
+            self.kwargs = kwargs
+
+    class FakeQuery:
+        message = FakeMessage()
+
+    asyncio.run(trainer.remove_from_training(object(), cid, task_id="task-1", q=FakeQuery()))
+
+    assert repository.deleted == ("nl", "Gevolg")
+    assert state["current"]["_removed"] is True
+    assert len(state["queue"]) == 1
+    assert "✅ Удалено из обучения" in FakeQuery.message.text
+    trainer_session.finish(cid)
     trainer_session.start(cid, "nl", [])
     trainer_session.register_poll(cid, "old-poll")
 
