@@ -159,9 +159,9 @@ async def _send_queue_card(bot, cid, meal, d, status=None):
     _log.info("_send_queue_card: meal=%s cid=%s status_mode=%s text_len=%s",
               meal, cid, getattr(status, "mode", None), len(card.text or ""))
     if status is not None and getattr(status, "mode", None) == "inline":
-        # В callback-сценарии текущая карточка уже заменена inline-статусом.
-        # Возвращаем рецепт в то же сообщение, чтобы не оставлять старую
-        # карточку во время поиска и не отправлять лишнее сообщение в чат.
+        # В preserve_message-сценарии StatusManager оставляет старую карточку
+        # видимой, отправляет готовый рецепт новым сообщением и восстанавливает
+        # её клавиатуру.
         await status.replace(card.text, entities=card.entities, reply_markup=kb)
         return
     if status is not None:

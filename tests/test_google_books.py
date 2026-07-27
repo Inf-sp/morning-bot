@@ -29,6 +29,8 @@ class FakeResponse:
                         "title": "Flowers for Algernon",
                         "authors": ["Daniel Keyes"],
                         "publishedDate": "1959-04",
+                        "averageRating": 4.2,
+                        "ratingsCount": 318,
                         "imageLinks": {
                             "thumbnail": "http://books.google.com/cover.jpg",
                         },
@@ -68,6 +70,8 @@ def test_find_volume_uses_key_and_picks_matching_book(monkeypatch):
     assert result["google_books_id"] == "algernon"
     assert result["author"] == "Daniel Keyes"
     assert result["year"] == "1959"
+    assert result["rating"] == 4.2
+    assert result["ratings_count"] == 318
     assert result["cover_url"] == "https://books.google.com/cover.jpg"
     assert result["isbn"] == "9780000000001"
     assert captured["url"] == "https://www.googleapis.com/books/v1/volumes"

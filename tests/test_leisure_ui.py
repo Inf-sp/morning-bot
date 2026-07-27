@@ -35,7 +35,7 @@ def test_movie_home_uses_clear_recommendation_labels():
     labels = _labels(leisure_movies._movie_home_kb())
     assert labels == [
         ["✨ Другое кино"],
-        ["🎭 По жанру", "🌙 По настроению"],
+        ["🎭 По жанру"],
         ["❤️ Моё кино", "💾 Сохранить"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
@@ -43,7 +43,7 @@ def test_movie_home_uses_clear_recommendation_labels():
 
 def test_book_and_music_home_follow_same_model():
     assert _labels(leisure_books.books_home_keyboard())[:4] == [
-        ["✨ Подобрать книгу"], ["❤️ Мои книги", "💾 Сохранить"],
+        ["✨ Подобрать книгу"], ["🎭 По жанру"], ["❤️ Мои книги", "💾 Сохранить"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert _labels(leisure_music.music_home_keyboard())[:5] == [
@@ -63,7 +63,7 @@ def test_recommendation_cards_use_content_specific_next_labels():
         ["🎫 Концерты"],
         ["❤️ Мои артисты", "💾 Сохранить"],
     ]
-    assert _labels(leisure_books._book_kb(0, saved=True))[1] == ["❤️ Мои книги", "✅ Сохранено"]
+    assert _labels(leisure_books._book_kb(0, saved=True))[2] == ["❤️ Мои книги", "✅ Сохранено"]
     assert _labels(leisure_movies._movie_kb(0, saved=True))[2] == ["❤️ Моё кино", "✅ Сохранено"]
     assert _labels(leisure_music._listen_kb(saved=True))[2] == ["❤️ Мои артисты", "✅ Сохранено"]
 
@@ -83,6 +83,30 @@ def test_book_recommendation_skips_favorite_saved_as_structured_value(monkeypatc
     ], "42")
 
     assert result["title"] == "Маленький принц"
+
+
+def test_book_recommendation_prefers_reader_rating(monkeypatch):
+    monkeypatch.setattr(leisure_books.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(leisure_books.recommendation_stoplist, "values", lambda *_args: [])
+
+    result = leisure_books._pick_good_book([
+        {"title": "Книга без оценки"},
+        {"title": "Книга читателей", "rating": 4.6, "ratings_count": 240},
+        {"title": "Книга с меньшей оценкой", "rating": 4.1, "ratings_count": 900},
+    ], "42")
+
+    assert result["title"] == "Книга читателей"
+
+
+def test_book_genre_menu_has_only_genre_choices():
+    labels = _labels(leisure_books._book_genre_menu_kb())
+
+    assert labels[:-1] == [
+        ["🧙 Фэнтези", "🚀 Фантастика"],
+        ["🔍 Детектив", "😱 Триллер"],
+        ["💕 Романтика", "🏛 История"],
+        ["👤 Биографии", "🧠 Психология"],
+    ]
 
 
 def test_book_cache_drops_favorite_saved_as_structured_value(monkeypatch):
@@ -111,6 +135,17 @@ def test_book_quote_matches_my_day_italic_format():
     assert "💭 «Война - это мир.»" in message.text
     assert "💬 Цитата" not in message.text
     assert any(entity.type == MessageEntity.ITALIC for entity in message.entities)
+
+
+def test_book_card_shows_reader_rating():
+    message = leisure_books._book_text({
+        "title": "1984",
+        "author": "Джордж Оруэлл",
+        "rating": 4.7,
+        "ratings_count": 1234,
+    })
+
+    assert "⭐ Оценка читателей: 4.7/5 · 1 234 оценок" in message.text
 
 
 def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):

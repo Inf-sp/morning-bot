@@ -79,6 +79,36 @@ def test_preserved_inline_status_changes_only_loading_button():
     assert len(Query.message.markup_edits) == 1
 
 
+def test_preserved_inline_status_sends_ready_result_as_new_message():
+    sent = []
+
+    class Message:
+        reply_markup = "old-kb"
+        text_edits = []
+        markup_edits = []
+
+        async def edit_text(self, text, **kwargs):
+            self.text_edits.append((text, kwargs))
+
+        async def edit_reply_markup(self, **kwargs):
+            self.markup_edits.append(kwargs["reply_markup"])
+
+    class Query:
+        message = Message()
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    status = asyncio.run(util.StatusManager.start_inline(
+        Query(), bot=Bot(), cid="42", stages=((0, "⏳ Ищу..."),), preserve_message=True))
+    asyncio.run(status.replace("Готовая карточка", reply_markup="final-kb"))
+
+    assert sent == [{"chat_id": "42", "text": "Готовая карточка", "reply_markup": "final-kb"}]
+    assert Query.message.text_edits == []
+    assert Query.message.markup_edits[-1] == "old-kb"
+
+
 def test_cached_home_edits_once_without_loading_message(monkeypatch):
     cached = {
         "date": wardrobe._day_key(),
@@ -257,6 +287,42 @@ def test_wardrobe_callback_reuses_shared_inline_status(monkeypatch):
     assert calls[0][-1] is True
     assert calls[1][0] == "wardrobe"
     assert calls[1][-1].mode == "inline"
+    assert calls[-1] == ("stop", True)
+
+
+def test_book_refresh_uses_preserved_inline_status(monkeypatch):
+    calls = []
+
+    class Status:
+        async def stop(self, delete=True):
+            calls.append(("stop", delete))
+
+    async def start_inline(q, bot=None, cid=None, stages=None, preserve_message=False):
+        calls.append(("start_inline", preserve_message))
+        return Status()
+
+    async def book_dislike(bot, cid, index):
+        calls.append(("book_dislike", bot, cid, index))
+
+    monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
+    monkeypatch.setattr(bot_callbacks.leisure_books, "book_dislike", book_dislike)
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
+
+    class Query:
+        data = "book_no_0"
+        message = type("Message", (), {"chat_id": "42", "message_id": 7})()
+
+    class Update:
+        callback_query = Query()
+
+    class Context:
+        bot = object()
+
+    asyncio.run(bot_callbacks.handle(Update(), Context(), None))
+
+    assert calls[0] == ("start_inline", True)
+    assert calls[1][-3:] == (Context.bot, "42", 0)
     assert calls[-1] == ("stop", True)
 
 

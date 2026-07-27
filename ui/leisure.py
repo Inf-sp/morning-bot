@@ -287,6 +287,16 @@ def book_text(item):
         meta_offset = head_and_gap_offset + u16_len(head) + 1
         b._entities.append(MessageEntity(MessageEntity.ITALIC, meta_offset, u16_len(meta_text)))
     b.newline()
+    try:
+        rating = float(item.get("rating"))
+        ratings_count = int(item.get("ratings_count") or 0)
+    except (TypeError, ValueError):
+        rating = 0
+        ratings_count = 0
+    if rating > 0 and ratings_count > 0:
+        b.spacer()
+        count_text = f"{ratings_count:,}".replace(",", " ")
+        b.line(f"⭐ Оценка читателей: {rating:.1f}/5 · {count_text} оценок")
     if item.get("desc"):
         b.spacer()
         b.line(item["desc"])

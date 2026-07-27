@@ -30,6 +30,22 @@ def _year(value: str) -> str:
     return match.group(1) if match else ""
 
 
+def _float_value(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def _int_value(value):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, number)
+
+
 def _cover_url(image_links: dict) -> str:
     for key in ("extraLarge", "large", "medium", "small", "thumbnail", "smallThumbnail"):
         url = str((image_links or {}).get(key) or "").strip()
@@ -56,6 +72,8 @@ def _volume(item: dict) -> dict:
         "year": _year(info.get("publishedDate")),
         "description": str(info.get("description") or "").strip(),
         "categories": [str(value).strip() for value in (info.get("categories") or []) if str(value).strip()],
+        "rating": _float_value(info.get("averageRating")),
+        "ratings_count": _int_value(info.get("ratingsCount")),
         "cover_url": _cover_url(info.get("imageLinks") or {}),
         "preview_link": str(info.get("previewLink") or "").strip(),
         "info_link": str(info.get("infoLink") or "").strip(),
@@ -86,7 +104,7 @@ def _match_score(volume: dict, titles: list[str], author: str) -> float:
     return score
 
 
-def _search_items(query: str) -> list[dict]:
+def _search_items(query: str, max_results: int = 8) -> list[dict]:
     if not config.GOOGLE_BOOKS_API_KEY or not str(query or "").strip():
         return []
     cache_key = _norm(query)
@@ -115,7 +133,7 @@ def _search_items(query: str) -> list[dict]:
                 params={
                     "q": query,
                     "key": config.GOOGLE_BOOKS_API_KEY,
-                    "maxResults": 8,
+                    "maxResults": max(1, min(40, int(max_results))),
                     "orderBy": "relevance",
                     "printType": "books",
                     "projection": "lite",
@@ -177,6 +195,22 @@ def _search_items(query: str) -> list[dict]:
     return items
 
 
+def search_by_subject(subject: str, max_results: int = 40) -> list[dict]:
+    """Возвращает книги из Google Books по предметной категории."""
+    subject = str(subject or "").strip()
+    if not subject:
+        return []
+    volumes = []
+    for item in _search_items(f"subject:{subject}", max_results=max_results):
+        try:
+            volume = _volume(item)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if volume.get("title"):
+            volumes.append(volume)
+    return volumes
+
+
 def find_volume(title: str, alternative_title: str = "", author: str = "") -> dict | None:
     """Возвращает наиболее похожее издание, не случайный первый результат."""
     titles = [value for value in (alternative_title, title) if str(value or "").strip()]
@@ -210,7 +244,10 @@ def enrich_book(item: dict) -> dict:
         return result
     if not volume:
         return result
-    for field in ("google_books_id", "cover_url", "preview_link", "info_link", "isbn"):
+    for field in (
+        "google_books_id", "cover_url", "preview_link", "info_link", "isbn",
+        "rating", "ratings_count",
+    ):
         if volume.get(field):
             result[field] = volume[field]
     if not result.get("author") and volume.get("author"):

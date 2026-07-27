@@ -190,6 +190,26 @@ class StatusManager:
     async def replace(self, text, **kwargs):
         await self._cancel()
         if self.mode == "inline":
+            if self.preserve_message and self.bot is not None and self.cid is not None:
+                try:
+                    await self.bot.send_message(chat_id=self.cid, text=text, **kwargs)
+                except Exception as e:
+                    _log.warning(
+                        "StatusManager.replace(inline): preserved result delivery failed: %r",
+                        e,
+                    )
+                else:
+                    try:
+                        await self.message.edit_reply_markup(reply_markup=self._inline_original_markup)
+                    except Exception as e:
+                        # Результат уже доставлен. Не отправляем его повторно, если
+                        # восстановить старую клавиатуру не удалось.
+                        _log.warning(
+                            "StatusManager.replace(inline): original markup restore failed: %r",
+                            e,
+                        )
+                    self._finalized = True
+                    return True
             if await self._edit(text, **kwargs):
                 self._finalized = True
                 return True

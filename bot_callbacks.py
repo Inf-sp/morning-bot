@@ -342,9 +342,15 @@ async def handle(update, context, remove_reply_keyboard):
                 store.pending_input[cid] = "setcity"
                 await bot.send_message(chat_id=cid, text="📍 Напиши название города — переключу на него.")
             elif act == "trav_go":
-                await _inline_status(lambda status: travel.send_go(bot, cid, status=status))
+                await _inline_status(
+                    lambda _s: travel.send_go(bot, cid),
+                    preserve_message=True,
+                )
             elif act == "trav_no":
-                await _inline_status(lambda status: travel.travel_dislike(bot, cid, status=status))
+                await _inline_status(
+                    lambda _s: travel.travel_dislike(bot, cid),
+                    preserve_message=True,
+                )
             elif act == "trav_plan":
                 await _inline_status(lambda _s: travel.send_plan(bot, cid))
             elif act == "trav_fav":
@@ -390,7 +396,10 @@ async def handle(update, context, remove_reply_keyboard):
             elif act == "listen":
                 await _inline_status(lambda _s: leisure_music.send_music_home(bot, cid, q))
             elif act == "listen_no":
-                await _inline_status(lambda status: leisure_music.listen_dislike(bot, cid, status=status))
+                await _inline_status(
+                    lambda _s: leisure_music.listen_dislike(bot, cid),
+                    preserve_message=True,
+                )
             elif act in ("food_breakfast", "recipe_breakfast"):
                 await _inline_status(
                     lambda status: cooking.enter_meal(bot, cid, "breakfast", status=status),
@@ -467,6 +476,16 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "book_reco":
         await _inline_status(lambda _s: leisure_books.send_books_reco(bot, cid))
         return
+    if data == "book_genre_menu":
+        await _ack(q)
+        await leisure_books.send_book_genre_menu(bot, cid, q)
+        return
+    if data.startswith("book_g_"):
+        await _inline_status(
+            lambda _s: leisure_books.send_book_by_genre(bot, cid, data[len("book_g_"):]),
+            preserve_message=True,
+        )
+        return
     if data == "music_reco":
         await _inline_status(lambda _s: leisure_music.send_listen(bot, cid))
         return
@@ -508,18 +527,9 @@ async def handle(update, context, remove_reply_keyboard):
         await _ack(q)
         await leisure_movies.send_movie_genre_menu(bot, cid, q)
         return
-    if data == "movie_mood_menu":
-        await _ack(q)
-        await leisure_movies.send_movie_mood_menu(bot, cid, q)
-        return
     if data.startswith("movie_g_"):
         await _inline_status(
             lambda _s: leisure_movies.send_movie_by_genre(bot, cid, data[len("movie_g_"):]),
-            preserve_message=True)
-        return
-    if data.startswith("movie_mood_"):
-        await _inline_status(
-            lambda _s: leisure_movies.send_movie_by_mood(bot, cid, data[len("movie_mood_"):]),
             preserve_message=True)
         return
     if data.startswith("movie_love_"):
@@ -542,7 +552,10 @@ async def handle(update, context, remove_reply_keyboard):
             preserve_message=True)
         return
     if data.startswith("book_no_"):
-        await _inline_status(lambda _s: leisure_books.book_dislike(bot, cid, int(data.split("_")[-1])))
+        await _inline_status(
+            lambda _s: leisure_books.book_dislike(bot, cid, int(data.split("_")[-1])),
+            preserve_message=True,
+        )
         return
     if data.startswith("listen_"):
         await leisure_music.add_listen(bot, cid, int(data.split("_")[1]), q)

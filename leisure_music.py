@@ -291,7 +291,7 @@ async def send_listen(bot, cid, *, preview=False, status=None):
 
 
 async def _deliver_artist_card(bot, cid, msg, reply_markup, *, status=None):
-    """Возвращает карточку в текущую inline-заглушку либо отправляет новый экран."""
+    """Передаёт карточку через статусный сценарий либо отправляет новый экран."""
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=reply_markup)
         return

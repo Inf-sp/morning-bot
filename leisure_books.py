@@ -15,6 +15,18 @@ from ui import leisure as leisure_ui
 from ui.constants import save_toggle_label
 
 
+_BOOK_GENRES = [
+    ("fantasy", "🧙 Фэнтези", "Fantasy"),
+    ("scifi", "🚀 Фантастика", "Science fiction"),
+    ("detective", "🔍 Детектив", "Mystery & Detective"),
+    ("thriller", "😱 Триллер", "Thrillers"),
+    ("romance", "💕 Романтика", "Romance"),
+    ("history", "🏛 История", "History"),
+    ("biography", "👤 Биографии", "Biography & Autobiography"),
+    ("psychology", "🧠 Психология", "Psychology"),
+]
+
+
 def _item_text(item):
     if isinstance(item, dict):
         return str(item.get("value", "")).strip()
@@ -88,6 +100,7 @@ def _book_text(it):
 def _book_kb(i, saved=False, favorite=False):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_no_{i}")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
         [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites"),
          InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -97,6 +110,7 @@ def _book_kb(i, saved=False, favorite=False):
 def books_home_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать книгу", callback_data="book_reco")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
         [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites"),
          InlineKeyboardButton("💾 Сохранить", callback_data="book_saved")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
@@ -108,8 +122,31 @@ async def send_books_home(bot, cid, q=None):
     await send_books_reco(bot, cid)
 
 
+def _book_genre_menu_kb():
+    buttons = [InlineKeyboardButton(label, callback_data=f"book_g_{key}")
+               for key, label, _subject in _BOOK_GENRES]
+    rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data="a_read"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ])
+    return InlineKeyboardMarkup(rows)
+
+
+async def send_book_genre_menu(bot, cid, q=None):
+    text = "Выбери жанр — подберу книгу с хорошей оценкой читателей."
+    kb = _book_genre_menu_kb()
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
 async def send_book_preferences(bot, cid, q=None):
-    text = "🎚️ Предпочтения книг\n\nЖанры и формат книги можно настроить здесь."
+    text = "🎚️ Предпочтения книг\n\nФормат книги можно настроить здесь. Для отдельного подбора используй «🎭 По жанру»."
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_read"),
                                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
     if q is not None:
@@ -218,19 +255,61 @@ def _fallback_book(cid, extra_skip=()):
     pool = [b for b in _FALLBACK_BOOKS if b["title"].lower() not in used] or _FALLBACK_BOOKS
     return random.choice(pool)
 
-def _pick_good_book(items, cid, extra_skip=()):
-    """Первая книга из items, которой ещё нет в списках/показанных; иначе - гарантированный фолбэк."""
+def _pick_good_book(items, cid, extra_skip=(), *, fallback=True):
+    """Выбирает неиспользованную книгу, предпочитая высокие оценки читателей."""
     used = _book_used(cid) | {str(x).strip().lower() for x in extra_skip}
-    for it in items or []:
+    candidates = []
+    for index, it in enumerate(items or []):
+        if not isinstance(it, dict):
+            continue
         t = (it.get("title", "") or "").strip().lower()
         if t and t not in used:
-            return it
-    return _fallback_book(cid, extra_skip=extra_skip)
+            try:
+                rating = float(it.get("rating") or 0)
+            except (TypeError, ValueError):
+                rating = 0
+            try:
+                ratings_count = int(it.get("ratings_count") or 0)
+            except (TypeError, ValueError):
+                ratings_count = 0
+            candidates.append((rating > 0 and ratings_count > 0, rating, ratings_count, -index, it))
+    if candidates:
+        candidates.sort(reverse=True, key=lambda row: row[:-1])
+        return candidates[0][-1]
+    return _fallback_book(cid, extra_skip=extra_skip) if fallback else None
 
-async def get_current_book(cid):
-    cached = _cached_book(cid)
-    if cached:
-        return cached
+
+def _book_genre(key):
+    for genre_key, label, subject in _BOOK_GENRES:
+        if genre_key == key:
+            return label, subject
+    return None, None
+
+
+async def _enrich_book_candidates(items):
+    """Добавляет оценки читателей к нескольким AI-кандидатам перед выбором."""
+    candidates = [dict(item) for item in (items or []) if isinstance(item, dict)][:5]
+    if not candidates:
+        return []
+    try:
+        enriched = await asyncio.wait_for(
+            asyncio.gather(*(
+                asyncio.to_thread(google_books.enrich_book, item)
+                for item in candidates
+            )),
+            timeout=5.0,
+        )
+        return [dict(item or {}) for item in enriched]
+    except Exception:
+        return candidates
+
+
+async def _book_candidates(cid, category=None):
+    if category:
+        _label, subject = _book_genre(category.get("value"))
+        if not subject:
+            return []
+        return await asyncio.to_thread(google_books.search_by_subject, subject)
     items = []
     for _ in range(2):
         try:
@@ -240,6 +319,17 @@ async def get_current_book(cid):
             items = []
         if items:
             break
+    return await _enrich_book_candidates(items)
+
+
+async def get_current_book(cid):
+    cached = _cached_book(cid)
+    if cached:
+        if not cached.get("rating") or not cached.get("ratings_count"):
+            cached = await asyncio.to_thread(google_books.enrich_book, cached)
+            _cache_book(cid, cached)
+        return cached
+    items = await _book_candidates(cid)
     it = _pick_good_book(items, cid)
     _cache_book(cid, it)
     return it
@@ -251,40 +341,77 @@ async def send_books_reco(bot, cid):
     store.last_recos[str(cid)] = {"kind": "book", "items": [it.get("title", "")]}
     store.last_source[str(cid)] = "Досуг · Книги"
     store.last_answer[str(cid)] = it.get("title", "")
-    prepared = await _send_book_card(bot, cid, it, 0)
+    prepared = await _send_book_card(bot, cid, it, 0, enrich=False)
     _cache_book(cid, prepared)
+
+
+async def send_book_by_genre(bot, cid, genre_key):
+    label, subject = _book_genre(genre_key)
+    if not subject:
+        await send_book_genre_menu(bot, cid)
+        return
+    category = {"kind": "genre", "value": genre_key, "label": label}
+    items = await _book_candidates(cid, category)
+    it = _pick_good_book(items, cid, fallback=False)
+    if not it:
+        genre_label = label.split(" ", 1)[-1]
+        await bot.send_message(
+            chat_id=cid,
+            text=f"В жанре «{genre_label}» пока не нашёл подходящую книгу.",
+            reply_markup=_book_genre_menu_kb(),
+        )
+        return
+    rec = {"kind": "book", "items": [it.get("title", "")], "category": category}
+    store.last_recos[str(cid)] = rec
+    store.last_source[str(cid)] = "Досуг · Книги"
+    store.last_answer[str(cid)] = it.get("title", "")
+    prepared = await _send_book_card(bot, cid, it, 0, enrich=False)
+    _cache_book(cid, prepared)
+
 
 async def book_dislike(bot, cid, i):
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         recommendation_stoplist.add(cid, "book", title, "hidden")
-    try:
-        data = await asyncio.to_thread(content_recommend, "book", str(cid))
-        items = data.get("items", [])
-    except Exception:
-        items = []
     rec = store.last_recos.get(str(cid), {"kind": "book", "items": []})
-    it = _pick_good_book(items, cid, extra_skip=rec.get("items", []))
+    category = rec.get("category")
+    items = await _book_candidates(cid, category)
+    it = _pick_good_book(
+        items, cid, extra_skip=rec.get("items", []), fallback=not category,
+    )
+    if not it:
+        await bot.send_message(
+            chat_id=cid,
+            text="В этом жанре пока не нашёл другой книги.",
+            reply_markup=_book_genre_menu_kb(),
+        )
+        return
     rec["items"].append(it.get("title", ""))
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1
-    prepared = await _send_book_card(bot, cid, it, ni)
+    prepared = await _send_book_card(bot, cid, it, ni, enrich=False)
     _cache_book(cid, prepared)
 
 async def _advance_book(bot, cid):
     """Загрузить следующую рекомендацию книги и показать карточку."""
-    try:
-        data = await asyncio.to_thread(content_recommend, "book", str(cid))
-        items = data.get("items", [])
-    except Exception:
-        items = []
     rec = store.last_recos.get(str(cid), {"kind": "book", "items": []})
-    it = _pick_good_book(items, cid, extra_skip=rec.get("items", []))
+    category = rec.get("category")
+    items = await _book_candidates(cid, category)
+    it = _pick_good_book(
+        items, cid, extra_skip=rec.get("items", []), fallback=not category,
+    )
+    if not it:
+        await bot.send_message(
+            chat_id=cid,
+            text="В этом жанре пока не нашёл другой книги.",
+            reply_markup=_book_genre_menu_kb(),
+        )
+        return
     rec["items"].append(it.get("title", ""))
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1
-    prepared = await _send_book_card(bot, cid, it, ni)
+    prepared = await _send_book_card(bot, cid, it, ni, enrich=False)
     _cache_book(cid, prepared)
 
 async def book_love(bot, cid, i, q=None):
