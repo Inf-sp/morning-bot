@@ -24,29 +24,33 @@ _GEMINI_RATE_LOCK = threading.Lock()
 _ACTIVE_DEADLINE = contextvars.ContextVar("ai_deadline", default=None)
 STANDARD_BUDGET_SECONDS = 10.0
 COMPLEX_BUDGET_SECONDS = 15.0
+OPENROUTER_FALLBACK_RESERVE_SECONDS = 2.5
 FREE_CHAT_BUDGET_SECONDS = 10.0
-FREE_CHAT_ROUTE_VERSION = "free-chat-standard-v3"
+FREE_CHAT_ROUTE_VERSION = "free-chat-standard-v4"
 FREE_CHAT_SCENARIO = "assistant/free_chat"
 FREE_CHAT_TIER = "smart"
 _FREE_CHAT_PROVIDER_TIMEOUTS = {
     "groq_standard": 3.0,
-    "gemini_lite": 3.0,
+    "github_models": 3.0,
+    "cf": 3.0,
     "openrouter": 4.0,
 }
 _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS = 1.0
 _COMPLEX_MODULE_PREFIXES = (
     "assistant", "food", "cooking", "recipe", "wardrobe", "travel", "leisure", "learning",
 )
+_PUBLIC_AI_FALLBACK_MODULES = frozenset({
+    "learning", "learning_game", "learning_trainer", "trainer",
+    "learning_dictionary", "learning_dict_add", "learning_srs_migration", "dictionary_import",
+})
 
 GROQ_SIMPLE = "groq_simple"
 GROQ_STANDARD = "groq_standard"
 GROQ_COMPLEX = "groq_complex"
-GEMINI_LITE = "gemini_lite"
 _ROUTE_PROVIDER_BASE = {
     GROQ_SIMPLE: "groq",
     GROQ_STANDARD: "groq",
     GROQ_COMPLEX: "groq",
-    GEMINI_LITE: "gemini",
 }
 
 # ---------- Cost logger ----------
@@ -390,8 +394,6 @@ def _provider_model_name(provider: str) -> str:
         return config.GROQ_STANDARD_MODEL
     if provider == GROQ_COMPLEX:
         return config.GROQ_COMPLEX_MODEL
-    if provider == GEMINI_LITE:
-        return config.GEMINI_LITE_MODEL
     if provider == "gemini":
         return config.GEMINI_MODEL
     if provider == "github_models":
@@ -502,9 +504,10 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
     except Exception:
         pass
 
-def _post(url, headers, payload, timeout, name, timeout_cap=None):
+def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=None):
     service_aliases = {"cf": "cloudflare", **_ROUTE_PROVIDER_BASE}
     service = service_aliases.get(name, name)
+    meter_service = usage_service or service
     gemini_request = service == "gemini"
     if timeout_cap is None:
         timeout_cap = _timeout_cap(name)
@@ -512,13 +515,22 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None):
         timeout = min(float(timeout), float(timeout_cap))
     t0 = time.time()
     timeout = _bounded_timeout(timeout)
+
+    def record_usage(ok, **kwargs):
+        api_usage.record_request(meter_service, ok=ok, **kwargs)
+        if meter_service != service:
+            try:
+                provider_runtime.record_result(service, ok, **kwargs)
+            except Exception:
+                pass
+
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=timeout)
     except requests.exceptions.Timeout as e:
-        api_usage.record_request(service, ok=False, error="timeout")
+        record_usage(False, error="timeout")
         raise LLMProviderError(name, f"{name} timeout", temporary=True, error_type=type(e).__name__) from e
     except requests.exceptions.ConnectionError as e:
-        api_usage.record_request(service, ok=False, error="network_error")
+        record_usage(False, error="network_error")
         raise LLMProviderError(name, f"{name} network error", temporary=True, error_type=type(e).__name__) from e
     finally:
         if gemini_request:
@@ -529,10 +541,8 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None):
         temporary = _is_temporary_status(r.status_code)
         limit_scope = ""
         cooldown_until = None
-        api_usage.record_request(service, ok=False, status_code=r.status_code,
-                                 error=f"HTTP {r.status_code}",
-                                 latency_ms=int((time.time() - t0) * 1000),
-                                 headers=r.headers)
+        record_usage(False, status_code=r.status_code, error=f"HTTP {r.status_code}",
+                     latency_ms=int((time.time() - t0) * 1000), headers=r.headers)
         retry_after = None
         try:
             retry_after = int(r.headers.get("Retry-After") or 0) or None
@@ -555,8 +565,7 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None):
                                retry_after=retry_after, limit_scope=limit_scope,
                                cooldown_until=cooldown_until)
     if service != "gemini":
-        api_usage.record_request(service, ok=True, latency_ms=int((time.time() - t0) * 1000),
-                                 headers=r.headers)
+        record_usage(True, latency_ms=int((time.time() - t0) * 1000), headers=r.headers)
     return r
 
 def _as_text(x):
@@ -808,7 +817,8 @@ def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "pl
     r = _post("https://api.groq.com/openai/v1/chat/completions",
         {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"},
         payload,
-        40, provider, timeout_cap=5)
+        40, provider, timeout_cap=5,
+        usage_service=api_usage.groq_model_service(model or _provider_model_name(provider)))
     return r.json()["choices"][0]["message"]["content"]
 
 def _gen_cf(prompt, max_tokens):
@@ -818,7 +828,12 @@ def _gen_cf(prompt, max_tokens):
         {"Authorization": f"Bearer {config.CF_API_TOKEN}", "Content-Type": "application/json"},
         {"messages": [{"role": "user", "content": prompt}], "max_tokens": max_tokens},
         40, "cf", timeout_cap=4)
-    return _as_text(r.json().get("result", {}).get("response"))
+    output = _as_text(r.json().get("result", {}).get("response"))
+    api_usage.record_request(
+        "cloudflare", units={"neurons": api_usage.estimate_cloudflare_neurons(prompt, output)},
+        include_request=False,
+    )
+    return output
 
 # ---------- circuit breaker для временных сбоев ----------
 _RATE_LIMIT_COOLDOWN_SEC = 300
@@ -914,8 +929,8 @@ def _reserve_gemini_for_action() -> bool:
 
 # Три понятных маршрута: простой, обычный и сложный. OpenRouter вызывается
 # только последним резервом через общую политику fallback.
-SIMPLE_ORDER = (GROQ_SIMPLE, "cf", "openrouter")
-STANDARD_ORDER = (GROQ_STANDARD, GEMINI_LITE, "openrouter")
+SIMPLE_ORDER = (GROQ_SIMPLE, "github_models", "cf", "openrouter")
+STANDARD_ORDER = (GROQ_STANDARD, "github_models", "cf", "openrouter")
 COMPLEX_ORDER = ("gemini", GROQ_COMPLEX, "openrouter")
 UTILITY_ORDER = SIMPLE_ORDER
 DEFAULT_ORDER = STANDARD_ORDER
@@ -1024,6 +1039,16 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
               allow_personal_openrouter=False, cache_context=None):
     if not module:
         module = _caller_module()
+    if (
+        fallback_policy is None
+        and not fallback_allowed
+        and module in _PUBLIC_AI_FALLBACK_MODULES
+    ):
+        # Учебные тексты не содержат профильных данных: для них последний
+        # OpenRouter-резерв включён централизованно, чтобы новый вызов не
+        # зависел от того, не забыл ли автор передать три флага вручную.
+        fallback_allowed = True
+        privacy_level = "public"
     policy = _coerce_policy(fallback_allowed, privacy_level, response_mode, fallback_policy,
                             allow_personal_openrouter)
     order = _resolve(tier, order, route=route, module=module)
@@ -1065,10 +1090,6 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
     order = _reorder_for_cooldown(_reorder_for_monitor(order))
     calls = {
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature, response_mode),
-        GEMINI_LITE: lambda: _gen_gemini(
-            prompt, max_tokens, temperature, response_mode,
-            model=config.GEMINI_LITE_MODEL, provider=GEMINI_LITE,
-        ),
         GROQ_SIMPLE: lambda: _gen_groq(
             prompt, max_tokens, temperature, response_mode,
             model=config.GROQ_SIMPLE_MODEL, provider=GROQ_SIMPLE,
@@ -1099,6 +1120,17 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             break
         if name == "openrouter":
             continue
+        if (
+            policy.openrouter_allowed
+            and "openrouter" in order
+            and config.OPENROUTER_API_KEY
+            and remaining is not None
+            and remaining <= OPENROUTER_FALLBACK_RESERVE_SECONDS
+        ):
+            # Не тратим последние секунды на очередной провайдер: они
+            # зарезервированы для последнего общего AI-fallback.
+            errs.append("chain:openrouter-reserved")
+            break
         if _monitor_name(name) == "gemini":
             if not _reserve_gemini_for_action():
                 errs.append("gemini: action budget exhausted")
@@ -1440,7 +1472,8 @@ def _chat(provider, history, system, timeout_cap=None):
         r = _post("https://api.groq.com/openai/v1/chat/completions",
             {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"},
             {"model": _provider_model_name(provider), "messages": [{"role": "system", "content": system}] + history,
-             "max_tokens": 700, "temperature": 0.8}, 40, provider, timeout_cap=bounded_cap(5))
+             "max_tokens": 700, "temperature": 0.8}, 40, provider, timeout_cap=bounded_cap(5),
+             usage_service=api_usage.groq_model_service(_provider_model_name(provider)))
         return r.json()["choices"][0]["message"]["content"]
     if provider == "openrouter":
         if not config.OPENROUTER_API_KEY:
@@ -1462,7 +1495,16 @@ def _chat(provider, history, system, timeout_cap=None):
         r = _post(f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/run/{config.CF_MODEL}",
             {"Authorization": f"Bearer {config.CF_API_TOKEN}", "Content-Type": "application/json"},
             {"messages": [{"role": "system", "content": system}] + history, "max_tokens": 700}, 40, "cf", timeout_cap=bounded_cap(4))
-        return _as_text(r.json().get("result", {}).get("response"))
+        output = _as_text(r.json().get("result", {}).get("response"))
+        api_usage.record_request(
+            "cloudflare",
+            units={"neurons": api_usage.estimate_cloudflare_neurons(
+                system + "\n" + "\n".join(str(item.get("content") or "") for item in history),
+                output,
+            )},
+            include_request=False,
+        )
+        return output
 
 
 def _log_free_chat_route(*, served_by="", outcome=""):

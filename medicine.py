@@ -167,7 +167,7 @@ drug_other. Дозировка и форма не входят в generic_name.
 Сообщение: {secure.wrap_untrusted(text, 'запрос пользователя')}
 JSON: {{"generic_name":"","brand_name":"","dose":"","release_form":"","intent":"drug_other"}}"""
     try:
-        data = await ai.allm_json(prompt, 350, order=("groq_standard", "gemini_lite"), module="medicine",
+        data = await ai.allm_json(prompt, 350, order=("groq_standard", "github_models", "cf", "openrouter"), module="medicine",
                                   privacy_level="sensitive", budget_seconds=8)
     except Exception:
         return local

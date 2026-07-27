@@ -218,6 +218,50 @@ def _parse_game_words(raw, source_text):
     return words[:3]
 
 
+_LOCAL_GAME_CARDS = {
+    "нидерландский": (
+        {
+            "description": "Ik woon vaak bij mensen. Overdag slaap ik graag op warme plekken. Ik kan heel stil lopen en soms jaag ik op kleine dieren.",
+            "answer": "de kat", "aliases": ["кошка", "cat", "kat", "poes"], "answer_en": "cat",
+            "hint": "Ik heb snorharen en ik zeg miauw.",
+            "explain": "Een kat woont vaak bij mensen. Het dier heeft snorharen en jaagt soms op muizen.",
+            "words": [{"word": "snorharen", "translation": "усы"}, {"word": "jagen", "translation": "охотиться"}],
+        },
+        {
+            "description": "Ik woon vaak bij mensen en ik hou van wandelen. Ik hoor goed en ik kom snel als iemand mij roept. Soms bewaak ik het huis.",
+            "answer": "de hond", "aliases": ["собака", "dog", "hond"], "answer_en": "dog",
+            "hint": "Ik heb een natte neus en ik blaf als ik blij ben.",
+            "explain": "Een hond woont vaak bij mensen. Hij wandelt graag en kan het huis bewaken.",
+            "words": [{"word": "wandelen", "translation": "гулять"}, {"word": "bewaken", "translation": "охранять"}],
+        },
+    ),
+    "английский": (
+        {
+            "description": "I often live with people. During the day I like to sleep in warm places. I can walk very quietly and sometimes hunt small animals.",
+            "answer": "the cat", "aliases": ["кошка", "cat", "kat", "poes"], "answer_en": "cat",
+            "hint": "I have whiskers and I say meow.",
+            "explain": "A cat often lives with people. It has whiskers and sometimes hunts mice.",
+            "words": [{"word": "whiskers", "translation": "усы"}, {"word": "hunt", "translation": "охотиться"}],
+        },
+        {
+            "description": "I often live with people and I like going for walks. I can hear very well and I come quickly when someone calls me. Sometimes I guard the house.",
+            "answer": "the dog", "aliases": ["собака", "dog", "hond"], "answer_en": "dog",
+            "hint": "I have a wet nose and I say woof.",
+            "explain": "A dog often lives with people. It likes walks and can guard the house.",
+            "words": [{"word": "walk", "translation": "гулять"}, {"word": "guard", "translation": "охранять"}],
+        },
+    ),
+}
+
+
+def _local_game_data(clue_lang, recent):
+    cards = _LOCAL_GAME_CARDS.get(clue_lang) or _LOCAL_GAME_CARDS["английский"]
+    for card in cards:
+        if not _game_is_recent(card, recent):
+            return dict(card)
+    return dict(cards[0])
+
+
 def _description_is_guessable(data, lang=None):
     """Проверяет связное языковое описание, а не список отдельных улик."""
     description = " ".join(str(data.get("description") or "").split())
@@ -284,7 +328,15 @@ ENGLISH: English name in 1-4 words
 HINT: one strong hint in {clue_lang}
 EXPLAIN: 1-2 short sentences in {clue_lang}
 WORDS: word|Russian translation; word|Russian translation; word|Russian translation"""
-    raw = ai.llm(prompt, 900, 1.0, tier="cheap")
+    try:
+        raw = ai.llm(
+            prompt, 900, 1.0, tier="cheap", module="learning_game",
+            fallback_allowed=True, privacy_level="public",
+        )
+    except Exception:
+        # Загадка не должна превращаться в ошибку интерфейса, если одновременно
+        # недоступны все AI-провайдеры и последний общий OpenRouter fallback.
+        return _local_game_data(clue_lang, recent)
     out = {}
     for key, field in (("DESCRIPTION", "description"), ("ANSWER", "answer"), ("ALIASES", "aliases"),
                        ("ENGLISH", "answer_en"),

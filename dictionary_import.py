@@ -557,7 +557,7 @@ async def _request_verb_analysis(word, fixed_preposition=""):
     prompt = _verb_analysis_prompt(word, fixed_preposition)
     return await asyncio.wait_for(
         ai.allm_json(
-            prompt, 700, order=("groq_standard", "gemini_lite"),
+            prompt, 700, order=("groq_standard", "github_models", "cf", "openrouter"),
             module="learning_dict_add",
             fallback_allowed=True, privacy_level="public",
         ),
@@ -805,7 +805,10 @@ INPUT_JSON: {input_payload}
 Если ввод не является ни нидерландской/английской записью, ни русским значением для
 перевода на явно указанный целевой язык, верни {{"ok": false, "reason": "коротко почему"}}.
 """
-    d = await ai.allm_json(prompt, 900, module="learning_dict_add")
+    d = await ai.allm_json(
+        prompt, 900, module="learning_dict_add",
+        fallback_allowed=True, privacy_level="public",
+    )
     if not isinstance(d, dict) or not d.get("ok"):
         return None
     lang = lang_hint if lang_hint in ("nl", "en") else ("en" if d.get("lang") == "en" else "nl")

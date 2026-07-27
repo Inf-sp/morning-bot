@@ -217,7 +217,7 @@ updates или выполнять расписание. Без PostgreSQL защ
 - Groq
 - GitHub Models
 - Cloudflare
-- OpenRouter — аварийный fallback для публичного текста и явно разрешённых JSON-сценариев, например рецептов в «Готовке»
+- OpenRouter — последний общий аварийный fallback
 
 Они используются не одинаково:
 
@@ -229,10 +229,15 @@ updates или выполнять расписание. Без PostgreSQL защ
 
 AI-маршруты разделены по сложности:
 
-- простые задачи: `Groq · gpt-oss-20b → Cloudflare AI · gpt-oss-20b`;
-- обычная генерация и обучение: `Groq · qwen3.6-27b → Gemini 2.5 Flash-Lite`;
-- сложные задачи: `Gemini 2.5 Flash → Groq · gpt-oss-120b`;
-- последним резервом остаётся `OpenRouter`.
+- простые задачи: `Groq · gpt-oss-20b → GitHub Models → Cloudflare AI → OpenRouter`;
+- обычная генерация и обучение: `Groq · qwen3.6-27b → GitHub Models → Cloudflare AI → OpenRouter`;
+- сложные задачи: `Gemini 2.5 Flash → Groq · gpt-oss-120b → OpenRouter`;
+- Gemini не используется как обычный fallback.
+
+Для публичных учебных задач последний OpenRouter fallback включается централизованно,
+даже если конкретный вызов не передал флаги вручную. Сценарии с персональными или
+медицинскими данными не отправляются в OpenRouter автоматически: у них должен быть
+резерв на уровне допустимого провайдера или локальный кодовый fallback.
 
 Для Готовки используется сложный маршрут. Если AI-цепочка недоступна, рецепт
 форматируется кодом напрямую из ответа Spoonacular, без AI.
@@ -303,6 +308,7 @@ Google Books либо фактический расход за текущий п
 - `DATABASE_URL` — без него хранилище работает в памяти (данные не переживают перезапуск);
 - `GEMINI_MODEL` — модель Gemini, по умолчанию `gemini-2.5-flash`;
 - `GEMINI_DAILY_LIMIT` — подтверждённая дневная квота проекта Gemini; если не задана или равна `0`, админка показывает только фактическое число запросов;
+- `GROQ_MODEL_DAILY_LIMIT` — локальный дневной лимит каждой модели Groq; по умолчанию `1 000` для Free Plan;
 - `GITHUB_MODELS_TOKEN` — универсальный AI-резерв через GitHub Models; токену нужен доступ `models:read`;
 - `GITHUB_MODELS_MODEL` — модель GitHub Models, по умолчанию `openai/gpt-4.1-mini`;
 - `GOOGLE_BOOKS_API_KEY` — поиск и проверка метаданных и обложек книг в Google Books; доступ проверяется официальным поисковым запросом одной книги раз в сутки, фактические запросы ограничены локальным дневным счётчиком на 1 000;
@@ -314,7 +320,8 @@ Google Books либо фактический расход за текущий п
 - `AZURE_SPEECH_VOICE` — нидерландский голос; по умолчанию `nl-NL-MaartenNeural`;
 - `AZURE_SPEECH_RATE` — скорость произношения; по умолчанию `-10%`;
 - `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` — LLM-провайдеры и последний резерв;
-- `GEMINI_LITE_MODEL`, `GROQ_SIMPLE_MODEL`, `GROQ_STANDARD_MODEL`, `GROQ_COMPLEX_MODEL`, `CLOUDFLARE_MODEL` — модели маршрутов с безопасными значениями по умолчанию;
+- `OPENROUTER_DAILY_LIMIT` и `CF_NEURON_DAILY_LIMIT` — локальные пределы для `openrouter/free` и Workers AI; по умолчанию `50` запросов и `10 000` neurons;
+- `GROQ_SIMPLE_MODEL`, `GROQ_STANDARD_MODEL`, `GROQ_COMPLEX_MODEL`, `CLOUDFLARE_MODEL` — модели маршрутов с безопасными значениями по умолчанию;
 - `TMDB_API_KEY`, `TICKETMASTER_API_KEY`, `TAVILY_API_KEY`, `FIRECRAWL_API_KEY` — фильмы, концерты, веб-поиск;
 - `PEXELS_API_KEY` — основной источник туристических фотографий для карточки «Подобрать страну»;
 - `UNSPLASH_ACCESS_KEY` — официальный резерв туристических фотографий, если Pexels недоступен или не нашёл подходящий кадр;

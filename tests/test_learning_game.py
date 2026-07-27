@@ -220,26 +220,51 @@ def test_detective_accepts_connected_description_with_a_unique_hint():
 
 
 def test_game_data_uses_description_and_parses_learning_words(monkeypatch):
-    monkeypatch.setattr(learning_game.ai, "llm", lambda *_args, **_kwargs: (
-        "DESCRIPTION: Ik woon vaak bij mensen. Ik slaap graag op warme plekken. "
-        "Soms jaag ik op kleine dieren.\n"
-        "ANSWER: de kat\n"
-        "ALIASES: кошка|cat|kat\n"
-        "ENGLISH: cat\n"
-        "HINT: Ik heb snorharen en ik zeg miauw.\n"
-        "EXPLAIN: Een kat woont vaak bij mensen en jaagt soms op muizen.\n"
-        "WORDS: snorharen|усы; jagen|охотиться; ik|я"
-    ))
+    captured = {}
+
+    def fake_llm(*_args, **kwargs):
+        captured.update(kwargs)
+        return (
+            "DESCRIPTION: Ik woon vaak bij mensen. Ik slaap graag op warme plekken. "
+            "Soms jaag ik op kleine dieren.\n"
+            "ANSWER: de kat\n"
+            "ALIASES: кошка|cat|kat\n"
+            "ENGLISH: cat\n"
+            "HINT: Ik heb snorharen en ik zeg miauw.\n"
+            "EXPLAIN: Een kat woont vaak bij mensen en jaagt soms op muizen.\n"
+            "WORDS: snorharen|усы; jagen|охотиться; ik|я"
+        )
+
+    monkeypatch.setattr(learning_game.ai, "llm", fake_llm)
 
     data = learning_game.game_data("нидерландский", [])
 
     assert data["description"].startswith("Ik woon vaak bij mensen.")
+    assert captured["fallback_allowed"] is True
+    assert captured["privacy_level"] == "public"
     assert "clues" not in data
     assert "hint2" not in data
     assert data["words"] == [
         {"word": "snorharen", "translation": "усы"},
         {"word": "jagen", "translation": "охотиться"},
     ]
+
+
+def test_game_data_uses_public_openrouter_fallback_and_local_card(monkeypatch):
+    captured = {}
+
+    def unavailable(*_args, **kwargs):
+        captured.update(kwargs)
+        raise RuntimeError("all providers unavailable")
+
+    monkeypatch.setattr(learning_game.ai, "llm", unavailable)
+
+    data = learning_game.game_data("английский", [])
+
+    assert captured["fallback_allowed"] is True
+    assert captured["privacy_level"] == "public"
+    assert data["answer"] == "the cat"
+    assert learning_game._description_is_guessable(data, "английский")
 
 
 def test_detective_rejects_answer_inside_description():

@@ -57,12 +57,12 @@ def test_github_models_chat_payload_and_json_mode(monkeypatch):
 
 def test_model_tiers_use_the_requested_provider_chain():
     assert ai._resolve(None, None, module="learning") == (
-        "groq_standard", "gemini_lite", "openrouter",
+        "groq_standard", "github_models", "cf", "openrouter",
     )
     assert ai._resolve(None, None, module="food") == (
         "gemini", "groq_complex", "openrouter",
     )
-    assert ai.CHAT_ORDER == ("groq_standard", "gemini_lite", "openrouter")
+    assert ai.CHAT_ORDER == ("groq_standard", "github_models", "cf", "openrouter")
 
 
 def test_food_tries_openrouter_after_three_unavailable_providers(monkeypatch):

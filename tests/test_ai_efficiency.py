@@ -82,6 +82,24 @@ def test_utility_routes_do_not_start_with_gemini():
         assert "gemini" not in ai._resolve(None, None, module=module)
 
 
+def test_public_learning_modules_use_the_last_ai_reserve_by_default(monkeypatch):
+    monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_gen_groq", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("groq down")))
+    monkeypatch.setattr(
+        ai, "_openrouter_plain_text_fallback",
+        lambda *_args, **_kwargs: "резервный ответ",
+    )
+
+    result = ai.llm(
+        "Верни короткий ответ", order=("groq_standard", "openrouter"),
+        module="learning_game",
+    )
+
+    assert result == "резервный ответ"
+
+
 def test_final_card_routes_keep_gemini_as_the_single_premium_primary():
     for module in ("travel", "food", "wardrobe"):
         assert ai._resolve(None, None, module=module)[0] == "gemini"

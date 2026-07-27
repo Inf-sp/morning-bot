@@ -28,12 +28,48 @@ _blank = provider_runtime.blank_state
 _load = provider_runtime.load_state
 _quota_from_headers = provider_runtime.quota_from_headers
 
+_AI_SERVICES = ("groq", "gemini", "github_models", "cloudflare", "openrouter")
+_DATA_SERVICES = (
+    "openweather", "firecrawl", "tavily", "tmdb", "google_books", "languagetool",
+    "spoonacular", "azure_speech", "ticketmaster", "zeroentropy", "pexels", "unsplash",
+)
+_DATA_CATEGORIES = {
+    "openweather": "Погода",
+    "firecrawl": "Поиск",
+    "tavily": "Поиск",
+    "tmdb": "Кино",
+    "google_books": "Книги",
+    "languagetool": "Обучение",
+    "spoonacular": "Готовка",
+    "azure_speech": "Озвучка",
+    "ticketmaster": "Концерты",
+    "zeroentropy": "Здоровье",
+    "pexels": "Фото",
+    "unsplash": "Фото",
+}
+_AI_ROLES = {
+    "gemini": "Сложные задачи",
+    "github_models": "Резерв",
+    "cloudflare": "Резерв",
+    "openrouter": "Последний резерв",
+}
+_GROQ_MODELS = (
+    ("simple", config.GROQ_SIMPLE_MODEL, "Основной"),
+    ("standard", config.GROQ_STANDARD_MODEL, "Основной"),
+    ("complex", config.GROQ_COMPLEX_MODEL, "Резерв"),
+)
+
 
 def _number(value) -> str:
     return f"{int(value):,}".replace(",", " ")
 
 
 def _confirmed_quota(service: str, state: dict) -> tuple[int | None, int | None]:
+    if service.startswith("groq_model:"):
+        usage = api_usage.service_usage(service)
+        used = int(usage["requests_today"])
+        total = int(config.GROQ_MODEL_DAILY_LIMIT)
+        return max(total - used, 0), total
     remaining, total = state.get("quota_remaining"), state.get("quota_total")
     if remaining is not None and total is not None:
         return int(remaining), int(total)
@@ -50,6 +86,12 @@ def _confirmed_quota(service: str, state: dict) -> tuple[int | None, int | None]
         used = int(model_usage["used"])
         total = int(config.GEMINI_DAILY_LIMIT)
         return max(total - used, 0), total
+    if service == "openrouter":
+        usage = api_usage.openrouter_usage()
+        return usage["remaining"], usage["total"]
+    if service == "cloudflare":
+        usage = api_usage.cloudflare_neuron_usage()
+        return usage["remaining"], usage["total"]
     return None, None
 
 
@@ -57,21 +99,37 @@ def _usage_detail(service: str) -> str:
     usage = api_usage.service_usage(service)
     requests_today = int(usage["requests_today"])
     if service == "telegram":
-        return "до 30 сообщений/с"
+        return "ошибка отправки"
     if service == "themealdb":
-        return "без дневной квоты"
+        return "резервный источник"
     if service == "languagetool":
         return f"{_number(requests_today)} проверок сегодня"
     if service == "gemini":
         model_usage = api_usage.gemini_requests(config.GEMINI_MODEL)
-        return f"{_number(model_usage['used'])} запросов сегодня"
+        return f"{_number(model_usage['used'])} сегодня"
+    if service.startswith("groq_model:"):
+        return _quota_text(*_confirmed_quota(service, provider_runtime.get_state("groq")))
+    if service == "github_models":
+        return "лимит по модели"
+    if service == "cloudflare":
+        remaining, total = _confirmed_quota(service, provider_runtime.get_state(service))
+        return f"{_number(remaining)}/{_number(total)} neurons осталось"
+    if service == "openrouter":
+        remaining, total = _confirmed_quota(service, provider_runtime.get_state(service))
+        return f"{_number(remaining)}/{_number(total)} осталось"
     if service == "azure_speech" and usage["characters_today"]:
         return f"{_number(usage['characters_today'])} символов сегодня"
     if service == "database":
         return "подключено"
     if service == "tavily" and usage["credits_month"]:
-        return f"{_number(usage['credits_month'])} кредитов в этом месяце"
-    return f"{_number(requests_today)} запросов сегодня"
+        return f"{_number(usage['credits_month'])} кредитов сегодня"
+    return f"{_number(requests_today)} сегодня"
+
+
+def _quota_text(remaining: int, total: int) -> str:
+    if remaining <= 0:
+        return "лимит исчерпан"
+    return f"{_number(remaining)}/{_number(total)} осталось"
 
 
 def _status_detail(service: str, state: dict) -> str:
@@ -81,12 +139,12 @@ def _status_detail(service: str, state: dict) -> str:
         reset_at = int(provider_runtime.get_state("tavily").get("quota_reset_at") or 0)
         until = provider_runtime.reset_date_label(reset_at)
         remaining, total = _confirmed_quota(service, state)
-        usage = f"{_number(total)} из {_number(total)} · " if total else ""
+        usage = f"{_number(total)}/{_number(total)} осталось · " if total else ""
         return f"месячный лимит исчерпан · {usage}до {until}"
     if service == "tavily":
         budget = api_usage.tavily_budget()
         mode = " · экономный режим" if budget["mode"] == "economy" else ""
-        return (f"{_number(budget['used'])} из {_number(budget['total'])}"
+        return (f"{_number(budget['remaining'])}/{_number(budget['total'])} осталось"
                 f"{mode} · ≈ {budget['daily_budget']} в день")
     if (
         state.get("status") not in (OK, UNKNOWN)
@@ -97,7 +155,7 @@ def _status_detail(service: str, state: dict) -> str:
     if remaining is not None and total is not None:
         if remaining <= 0:
             return "лимит исчерпан"
-        return f"{_number(remaining)} из {_number(total)}"
+        return _quota_text(remaining, total)
     if state.get("status") not in (OK, UNKNOWN):
         return str(state.get("last_error") or "сервис не ответил")
     return _usage_detail(service)
@@ -107,6 +165,10 @@ def format_row(service: str, state: dict | None = None) -> str:
     spec = SPEC_BY_KEY[service]
     state = state or provider_runtime.get_state(service)
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
+    if service == "groq":
+        return _format_groq_row(config.GROQ_SIMPLE_MODEL, "Основной", state)
+    if service in ("gemini", "github_models", "cloudflare", "openrouter"):
+        return _format_ai_row(service, state)
     if service == "google_books":
         usage = api_usage.google_books_requests()
         remaining = int(usage["remaining"])
@@ -119,13 +181,14 @@ def format_row(service: str, state: dict | None = None) -> str:
                 f"{_DOT[status]} {spec.label}", spec.category, _status_detail(service, state),
             ])
         dot = _DOT[WARNING if remaining <= 200 else OK]
-        return f"{dot} Google Books · Книги · {_number(remaining)} / 1 000"
+        return f"{dot} Google Books · Книги · {_number(remaining)}/1 000 осталось"
     remaining, total = _confirmed_quota(service, state)
     if status in (OK, UNKNOWN) and total and remaining is not None and remaining <= total * 0.2:
         status = WARNING
     parts = [f"{_DOT[status]} {spec.label}"]
-    if spec.category:
-        parts.append(spec.category)
+    category = _DATA_CATEGORIES.get(service, spec.category)
+    if category:
+        parts.append(category)
     parts.append(_status_detail(service, state))
     fallback = str(state.get("fallback") or "")
     if fallback and fallback in SPEC_BY_KEY:
@@ -133,9 +196,70 @@ def format_row(service: str, state: dict | None = None) -> str:
     return " · ".join(parts)
 
 
+def _display_model(model: str) -> str:
+    return str(model or "").rsplit("/", 1)[-1]
+
+
+def _format_groq_row(model: str, role: str, state: dict | None = None) -> str:
+    state = state or provider_runtime.get_state("groq")
+    if not _configured("groq"):
+        return f"🔴 Groq · {role} · {_display_model(model)} · API-ключ не настроен"
+    usage_service = api_usage.groq_model_service(model)
+    remaining, total = _confirmed_quota(usage_service, state)
+    status = state.get("status") if state.get("status") in _DOT else UNKNOWN
+    if remaining is not None and total and remaining <= total * 0.2:
+        status = WARNING
+    return f"{_DOT[status]} Groq · {role} · {_display_model(model)} · {_quota_text(remaining, total)}"
+
+
+def _format_ai_row(service: str, state: dict | None = None) -> str:
+    state = state or provider_runtime.get_state(service)
+    label = SPEC_BY_KEY[service].label
+    role = _AI_ROLES[service]
+    status = state.get("status") if state.get("status") in _DOT else UNKNOWN
+    if not _configured(service):
+        return f"🔴 {label} · {role} · API-ключ не настроен"
+    quota_remaining, quota_total = _confirmed_quota(service, state)
+    if service == "gemini":
+        detail = _usage_detail(service)
+    elif service == "github_models":
+        detail = "лимит по модели"
+    elif service == "cloudflare":
+        remaining, total = api_usage.cloudflare_neuron_usage()["remaining"], api_usage.cloudflare_neuron_usage()["total"]
+        detail = _quota_text(remaining, total).replace(" осталось", " neurons осталось")
+    else:
+        remaining, total = api_usage.openrouter_usage()["remaining"], api_usage.openrouter_usage()["total"]
+        detail = _quota_text(remaining, total)
+    if service == "gemini" and quota_remaining is not None and quota_remaining <= 0:
+        detail = "лимит исчерпан"
+    remaining, total = quota_remaining, quota_total
+    if remaining is not None and total and remaining <= total * 0.2:
+        status = WARNING
+    if status in (DOWN, WARNING) and state.get("error_type") not in ("quota", "rate_limit"):
+        detail = str(state.get("last_error") or detail)
+    return f"{_DOT[status]} {label} · {role} · {detail}"
+
+
 def rows() -> list[str]:
     current = _load().get("services") or {}
-    return [format_row(spec.key, current.get(spec.key)) for spec in SPECS]
+    out = ["🧠 AI"]
+    for service in ("groq", "gemini", "github_models", "cloudflare", "openrouter"):
+        state = current.get(service) or provider_runtime.get_state(service)
+        if service == "groq":
+            out.extend(_format_groq_row(model, role, state) for _, model, role in _GROQ_MODELS)
+        else:
+            out.append(format_row(service, state))
+    out.append("🌐 Данные")
+    for service in _DATA_SERVICES:
+        state = current.get(service) or provider_runtime.get_state(service)
+        out.append(format_row(service, state))
+    for service in ("telegram", "database"):
+        state = current.get(service) or provider_runtime.get_state(service)
+        if state.get("status") not in (OK, UNKNOWN):
+            label = "PostgreSQL" if service == "database" else "Telegram"
+            detail = "нет подключения" if service == "database" else "ошибка отправки"
+            out.append(f"🔴 {label} · {detail}")
+    return out
 
 
 def last_check_time() -> str:

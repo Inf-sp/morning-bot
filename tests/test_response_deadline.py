@@ -80,9 +80,12 @@ def test_free_chat_gives_openrouter_its_reserved_remaining_budget(monkeypatch):
         if provider == "groq_standard":
             clock["now"] = 3.0
             raise ai.LLMProviderError(provider, "groq timeout", temporary=True)
-        if provider == "gemini_lite":
+        if provider == "github_models":
             clock["now"] = 6.0
-            raise ai.LLMProviderError(provider, "gemini lite timeout", temporary=True)
+            raise ai.LLMProviderError(provider, "github models timeout", temporary=True)
+        if provider == "cf":
+            clock["now"] = 9.0
+            raise ai.LLMProviderError(provider, "cloudflare timeout", temporary=True)
         return "Ответ OpenRouter"
 
     monkeypatch.setattr(ai, "_chat", provider)
@@ -92,8 +95,9 @@ def test_free_chat_gives_openrouter_its_reserved_remaining_budget(monkeypatch):
     assert result == "Ответ OpenRouter"
     assert calls == [
         ("groq_standard", 3.0),
-        ("gemini_lite", 3.0),
-        ("openrouter", 4.0),
+        ("github_models", 3.0),
+        ("cf", 3.0),
+        ("openrouter", 1.0),
     ]
 
 
@@ -119,7 +123,7 @@ def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
 
 
 def test_free_chat_route_uses_the_standard_chain():
-    assert ai.CHAT_ORDER == ("groq_standard", "gemini_lite", "openrouter")
+    assert ai.CHAT_ORDER == ("groq_standard", "github_models", "cf", "openrouter")
     assert ai.FREE_CHAT_TIER == "smart"
 
 
@@ -135,7 +139,7 @@ def test_free_chat_route_log_identifies_deployment_and_serving_provider(monkeypa
     line = records[0]
     assert "scenario=assistant/free_chat" in line
     assert "tier=smart" in line
-    assert "provider_chain=groq_standard,gemini_lite,openrouter" in line
+    assert "provider_chain=groq_standard,github_models,cf,openrouter" in line
     assert "served_by=openrouter" in line
     assert "version=1.16.236" in line
     assert "deployment=deployment-42" in line

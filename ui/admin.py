@@ -201,7 +201,10 @@ def api_ai(rows, updated_at):
     b.bold("🛠 Система")
     b.newline()
     for line in rows:
-        b.line(str(line))
+        if str(line) in ("🧠 AI", "🌐 Данные"):
+            b.bold(str(line))
+        else:
+            b.line(str(line))
     b.spacer()
     b.line(f"Обновлено в {updated_at}")
     return b.build_stripped()

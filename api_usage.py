@@ -70,6 +70,56 @@ def gemini_requests(model="", *, consume=False) -> dict:
     )
 
 
+def _model_slug(model: str) -> str:
+    return "".join(char if char.isalnum() else "_" for char in str(model or "").strip().casefold()).strip("_")
+
+
+def groq_model_service(model: str) -> str:
+    """Stable usage bucket for one Groq model's daily request quota."""
+    return f"groq_model:{_model_slug(model)}"
+
+
+def groq_model_usage(model: str) -> dict:
+    usage = service_usage(groq_model_service(model))
+    used = int(usage["requests_today"])
+    return {
+        "used": used,
+        "remaining": max(int(config.GROQ_MODEL_DAILY_LIMIT) - used, 0),
+        "total": int(config.GROQ_MODEL_DAILY_LIMIT),
+    }
+
+
+def openrouter_usage() -> dict:
+    usage = service_usage("openrouter")
+    used = int(usage["requests_today"])
+    return {
+        "used": used,
+        "remaining": max(int(config.OPENROUTER_DAILY_LIMIT) - used, 0),
+        "total": int(config.OPENROUTER_DAILY_LIMIT),
+    }
+
+
+def cloudflare_neuron_usage() -> dict:
+    usage = service_usage("cloudflare")
+    used = int(usage.get("neurons_today") or 0)
+    return {
+        "used": used,
+        "remaining": max(int(config.CF_NEURON_DAILY_LIMIT) - used, 0),
+        "total": int(config.CF_NEURON_DAILY_LIMIT),
+    }
+
+
+def estimate_cloudflare_neurons(prompt: str, output: str) -> int:
+    """Estimate Workers AI neurons for gpt-oss-20b from input/output tokens.
+
+    The inference response does not expose the account's daily neuron meter, so
+    the local counter uses the published per-token model rates.
+    """
+    input_tokens = max(1, round(len(str(prompt or "")) / 4))
+    output_tokens = max(1, round(len(str(output or "")) / 4))
+    return max(1, round(input_tokens * 18182 / 1_000_000 + output_tokens * 27273 / 1_000_000))
+
+
 def service_usage(service: str) -> dict:
     """Фактический расход и последние rate-limit-заголовки без сетевых проверок."""
     try:
@@ -82,6 +132,7 @@ def service_usage(service: str) -> dict:
         "messages_today": _count(svc, "day", "messages"),
         "characters_today": _count(svc, "day", "characters"),
         "tokens_today": _count(svc, "day", "tokens"),
+        "neurons_today": _count(svc, "day", "neurons"),
         "credits_month": _count(svc, "month", "credits"),
         "headers": dict(svc.get("last_headers") or {}),
     }
@@ -205,10 +256,11 @@ def _append_event(svc: dict, event: dict, now_ts: int) -> None:
 
 def record_request(service: str, ok: bool = True, *, units: dict | None = None,
                    status_code: int | None = None, error: str = "",
-                   latency_ms: int | None = None, headers: dict | None = None) -> None:
+                   latency_ms: int | None = None, headers: dict | None = None,
+                   include_request: bool = True) -> None:
     now = _now()
     now_ts = int(now.timestamp())
-    units = {"requests": 1, **(units or {})}
+    units = ({"requests": 1} if include_request else {}) | (units or {})
 
     def mut(data):
         data = data or _template()

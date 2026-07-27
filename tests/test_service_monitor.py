@@ -46,7 +46,7 @@ def test_quota_rows_show_remaining_not_usage(monkeypatch):
     )
 
     assert service_monitor.format_row("openweather") == (
-        "🟢 OpenWeather · Везде · 998 из 1 000"
+        "🟢 OpenWeather · Погода · 998/1 000 осталось"
     )
 
 
@@ -55,7 +55,7 @@ def test_one_remaining_request_uses_singular(monkeypatch):
     provider_runtime.record_result("spoonacular", True, quota_remaining=1, quota_total=150)
 
     assert service_monitor.format_row("spoonacular") == (
-        "🟡 Spoonacular · Готовка · 1 из 150"
+        "🟡 Spoonacular · Готовка · 1/150 осталось"
     )
 
 
@@ -64,7 +64,7 @@ def test_exhausted_quota_is_yellow(monkeypatch):
     provider_runtime.record_result("gemini", True, quota_remaining=0, quota_total=20)
 
     assert service_monitor.format_row("gemini") == (
-        "🟡 Gemini · Везде · лимит исчерпан"
+        "🟡 Gemini · Сложные задачи · лимит исчерпан"
     )
 
 
@@ -78,8 +78,50 @@ def test_gemini_usage_does_not_expose_internal_model_name(monkeypatch):
 
     row = service_monitor._usage_detail("gemini")
 
-    assert row == "28 запросов сегодня"
+    assert row == "28 сегодня"
     assert "gemini-" not in row
+
+
+def test_system_rows_use_roles_and_hide_healthy_infrastructure(monkeypatch):
+    _memory_store(monkeypatch)
+
+    rows = service_monitor.rows()
+
+    assert rows[0] == "🧠 AI"
+    assert "🌐 Данные" in rows
+    assert not any("Telegram" in row for row in rows)
+    assert not any("PostgreSQL" in row for row in rows)
+    assert not any(row.startswith("🟢 TheMealDB") for row in rows)
+
+
+def test_groq_and_cloudflare_rows_use_their_real_units(monkeypatch):
+    _memory_store(monkeypatch)
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+    model = "openai/gpt-oss-20b"
+    for _ in range(3):
+        service_monitor.api_usage.record_request(
+            service_monitor.api_usage.groq_model_service(model),
+        )
+    service_monitor.api_usage.record_request(
+        "cloudflare", units={"neurons": 158}, include_request=False,
+    )
+
+    rows = service_monitor.rows()
+
+    assert any("Groq · Основной · gpt-oss-20b · 997/1 000 осталось" in row for row in rows)
+    assert any("Cloudflare AI · Резерв · 9 842/10 000 neurons осталось" in row for row in rows)
+
+
+def test_themealdb_is_shown_only_after_real_spoonacular_fallback(monkeypatch):
+    _memory_store(monkeypatch)
+    provider_runtime.record_result("spoonacular", False, error="quota")
+    provider_runtime.record_result("themealdb", True)
+    assert provider_runtime.activate_fallback("spoonacular", "themealdb")
+
+    rows = service_monitor.rows()
+
+    assert any("Spoonacular" in row and "→ TheMealDB" in row for row in rows)
+    assert not any(row.startswith("🟢 TheMealDB") for row in rows)
 
 
 def test_fallback_is_hidden_until_target_really_succeeds(monkeypatch):

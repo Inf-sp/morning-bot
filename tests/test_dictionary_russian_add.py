@@ -89,6 +89,7 @@ def test_russian_value_is_translated_not_transliterated(monkeypatch):
 
     async def fake_allm_json(prompt, *_args, **_kwargs):
         captured["prompt"] = prompt
+        captured["kwargs"] = _kwargs
         return {
             "ok": True,
             "lang": "nl",
@@ -123,6 +124,8 @@ def test_russian_value_is_translated_not_transliterated(monkeypatch):
     assert entry["translation"] == "Уверенность"
     assert "НИКОГДА не" in captured["prompt"]
     assert "de Uverenheid" in captured["prompt"]
+    assert captured["kwargs"]["fallback_allowed"] is True
+    assert captured["kwargs"]["privacy_level"] == "public"
 
 
 def test_analysis_cannot_replace_user_term_or_save_prompt_instruction(monkeypatch):
