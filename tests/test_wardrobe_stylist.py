@@ -133,10 +133,6 @@ def test_purchase_recommendation_is_stable_until_a_more_important_gap(monkeypatc
         "stable-rec", w, {"has_rain": True})
     assert important["item"] == "Лёгкая непромокаемая ветровка"
 
-    profile["status"] = "rejected"
-    assert wardrobe._get_or_create_purchase_recommendation("stable-rec", w, {"has_rain": True}) == {}
-
-
 def test_wardrobe_keeps_a_wear_tip_when_no_purchase_gap_exists(monkeypatch):
     profile = {}
     monkeypatch.setattr(wardrobe.store, "get_wardrobe_purchase_recommendation", lambda _cid: dict(profile))
@@ -207,7 +203,7 @@ def test_wardrobe_purchase_button_has_single_save_action():
     ]
 
     assert labels.count("💾 Сохранить") == 1
-    assert "❌ Не сейчас" in labels
+    assert "❌ Не сейчас" not in labels
     assert "✅ Сохранено" not in labels
 
 

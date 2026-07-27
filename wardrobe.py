@@ -216,17 +216,6 @@ def _get_or_create_purchase_recommendation(cid, w, weather_ctx, fallback_tip="")
         if candidate_priority > current_priority:
             store.set_wardrobe_purchase_recommendation(cid, candidate)
             return candidate
-        if current.get("status") == "rejected":
-            if not fallback_tip:
-                return {}
-            fallback = {
-                "version": PURCHASE_RECOMMENDATION_VERSION,
-                "kind": "wear",
-                "reason": fallback_tip,
-                "priority": 0,
-            }
-            store.set_wardrobe_purchase_recommendation(cid, fallback)
-            return fallback
         return current
     if candidate:
         store.set_wardrobe_purchase_recommendation(cid, candidate)
@@ -333,10 +322,7 @@ def _save_cached_look(cid, item_ids, look_data):
 def build_wardrobe_keyboard(has_result=True, *, has_purchase=False, purchase_saved=False):
     rows = [[("✨ Другой образ" if has_result else "✨ Подобрать образ", "w_look")]]
     if has_purchase:
-        rows.append([
-            (save_toggle_label(purchase_saved), "w_buy_save"),
-            ("❌ Не сейчас", "w_buy_reject"),
-        ])
+        rows.append([(save_toggle_label(purchase_saved), "w_buy_save")])
     rows.extend([
         [("🧐 Оценить покупку", "w_check"), ("🧶 Мой шкаф", "w_closet")],
         [("🎚️ Предпочтения", "set_wardrobe_style")],
@@ -620,34 +606,6 @@ async def save_purchase_recommendation(bot, cid, q=None):
         bucket="wardrobe_purchase",
     )
     await saved_items.update_save_button(q, "w_buy_save", saved)
-
-
-async def reject_purchase_recommendation(bot, cid, q=None):
-    """Отклоняет текущую покупку и убирает её из карточки без нового подбора."""
-    recommendation = store.get_wardrobe_purchase_recommendation(cid)
-    if not recommendation:
-        return
-    store.set_wardrobe_purchase_recommendation(cid, {
-        **recommendation,
-        "status": "rejected",
-    })
-    cached = store.get_wardrobe_daylook(cid)
-    look_data = dict(cached.get("look_data") or {}) if cached else {}
-    if not look_data:
-        return
-    look_data.pop("purchase_recommendation", None)
-    look_data = _repair_missing_purchase_recommendation(cid, look_data)
-    text, entities = _build_look_message(look_data)
-    cached["look_data"] = look_data
-    cached["text"] = text
-    store.set_wardrobe_daylook(cid, cached)
-    kb = build_wardrobe_keyboard(has_result=True)
-    message = getattr(q, "message", None) if q is not None else None
-    if message is not None:
-        try:
-            await message.edit_text(text, entities=entities, reply_markup=kb)
-        except Exception:
-            pass
 
 
 def get_wardrobe_gaps(cid):
@@ -1072,9 +1030,6 @@ async def handle_callback(bot, cid, q, data, status=None):
         return
     if data == "w_buy_save":
         await save_purchase_recommendation(bot, cid, q=q)
-        return
-    if data == "w_buy_reject":
-        await reject_purchase_recommendation(bot, cid, q=q)
         return
     if data in ("w_closet", "w_del_g"):
         await send_wardrobe_zones(bot, cid, q=q); return
