@@ -265,6 +265,44 @@ def test_non_verb_keeps_existing_flow_without_verb_request(monkeypatch):
     assert "Формы:" not in dictionary_import._dict_entry_message(result).text
 
 
+def test_bevelen_card_uses_verb_analysis_and_related_noun():
+    message = dictionary_import._dict_entry_message({
+        "lang": "nl", "term": "bevelen", "article": "het",
+        "translation": "приказывать", "pos": "существительное",
+        "breakdown": "существительное · het-слово", "plural": "bevelen",
+        "examples": [{
+            "text": "Ik moet hem bevelen om te stoppen.",
+            "translation": "Мне нужно приказать ему остановиться.",
+        }],
+    }, status="added")
+
+    assert message.text == (
+        "🇳🇱 Добавлено в нидерландский словарь\n\n"
+        "Bevelen → Приказывать\n\n"
+        "Разбор: глагол\n"
+        "Формы: bevelen · beval · bevolen\n"
+        "Пример:\n"
+        "Ik moet hem bevelen om te stoppen. → Мне нужно приказать ему остановиться.\n\n"
+        "💡 Полезно: het bevel → приказ (множественное число: de bevelen)"
+    )
+
+
+def test_bevelen_is_normalized_before_verb_enrichment():
+    entry = asyncio.run(dictionary_import._enrich_dutch_verb({
+        "lang": "nl", "term": "bevelen", "article": "het",
+        "translation": "приказывать", "pos": "существительное",
+        "breakdown": "существительное · het-слово", "plural": "bevelen",
+    }, "42"))
+
+    assert entry["pos"] == "глагол"
+    assert entry["article"] == ""
+    assert entry["past_singular"] == "beval"
+    assert entry["past_participle"] == "bevolen"
+    assert entry["related_noun"] == {
+        "term": "het bevel", "translation": "приказ", "plural": "de bevelen",
+    }
+
+
 def test_successful_analysis_fields_are_saved_in_existing_dictionary_record(monkeypatch):
     stored = []
     monkeypatch.setattr(dictionary_import.store, "get_list", lambda _key, _cid: [])

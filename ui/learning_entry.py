@@ -38,6 +38,8 @@ def _breakdown(entry):
         return "разговорная фраза"
     is_verb = pos in {"глагол", "verb", "werkwoord"} or "глагол" in raw or "werkwoord" in raw
     if is_verb:
+        if entry.get("related_noun"):
+            return "глагол"
         verb_type = str(entry.get("verb_type") or "").strip().casefold()
         return {"strong": "сильный глагол", "weak": "слабый глагол", "irregular": "неправильный глагол"}.get(verb_type, "глагол")
     is_noun = pos in {"существительное", "noun", "zelfstandig naamwoord"} or "существительн" in raw
@@ -57,6 +59,9 @@ def _verified_forms(entry):
     except (TypeError, ValueError):
         confidence = 0
     forms = [str(entry.get(key) or "").strip() for key in ("infinitive", "past_singular", "perfect_form")]
+    if entry.get("related_noun"):
+        forms = [str(entry.get(key) or "").strip()
+                 for key in ("infinitive", "past_singular", "past_participle")]
     return forms if confidence >= 0.75 and all(forms) and not any(_mixed_script(form) for form in forms) else []
 
 
@@ -114,10 +119,29 @@ def render_learning_entry(
         builder.labeled_line("Формы", " · ".join(forms), lowercase=False)
     example, example_translation = _example(entry, term)
     if example and example_translation:
-        builder.spacer()
-        builder.text_line("💡 ")
-        builder.bold("Полезно:")
-        builder.text_line(
-            f" {_without_terminal_period(example)} → {_without_terminal_period(example_translation)}"
-        )
-        builder.newline()
+        related_noun = entry.get("related_noun")
+        if isinstance(related_noun, dict) and related_noun.get("term") and related_noun.get("translation"):
+            builder.labeled_line("Пример", lowercase=False)
+            builder.text_line(
+                f"{str(example).strip()} → {str(example_translation).strip()}"
+            )
+            builder.newline()
+            builder.spacer()
+            builder.text_line("💡 ")
+            builder.bold("Полезно:")
+            builder.text_line(" ")
+            builder.bold(str(related_noun["term"]).strip())
+            builder.text_line(" → ")
+            builder.bold(str(related_noun["translation"]).strip())
+            related_plural = str(related_noun.get("plural") or "").strip()
+            if related_plural:
+                builder.text_line(f" (множественное число: {related_plural})")
+            builder.newline()
+        else:
+            builder.spacer()
+            builder.text_line("💡 ")
+            builder.bold("Полезно:")
+            builder.text_line(
+                f" {_without_terminal_period(example)} → {_without_terminal_period(example_translation)}"
+            )
+            builder.newline()

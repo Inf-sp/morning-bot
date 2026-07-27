@@ -78,7 +78,7 @@ _VERB_ANALYSIS_KEYS = (
     "infinitive", "past_singular", "past_participle", "auxiliary",
     "perfect_form", "verb_type", "example_nl", "example_ru",
     "analysis_confidence", "analysis_provider", "analysis_updated_at",
-    "verb_analysis_failed",
+    "verb_analysis_failed", "related_noun",
 )
 _VERB_RESPONSE_KEYS = {
     "is_verb", "infinitive", "translations", "past_singular",
@@ -269,10 +269,57 @@ def _verb_analysis_fields(entry):
     return {key: entry[key] for key in _VERB_ANALYSIS_KEYS if key in entry}
 
 
+def _apply_known_dutch_verb_card(entry):
+    """Исправляет однозначную форму, которую модель может принять за plural noun.
+
+    `bevelen` без артикля — инфинитив «приказывать». Существительное имеет
+    другую словарную форму: `het bevel`; `de bevelen` — только его множественное
+    число. Локальные данные также дают стабильный пример и связанную форму
+    существительного без дополнительного AI-запроса.
+    """
+    if not isinstance(entry, dict) or entry.get("lang") != "nl":
+        return entry
+    term = re.sub(r"\s+", " ", str(entry.get("term") or "")).strip().casefold()
+    if term != "bevelen" or str(entry.get("article") or "").strip().casefold() == "de":
+        return entry
+    updated = dict(entry)
+    updated.update({
+        "term": "bevelen",
+        "article": "",
+        "translation": "приказывать",
+        "breakdown": "глагол",
+        "pos": "глагол",
+        "plural": "",
+        "infinitive": "bevelen",
+        "past_singular": "beval",
+        "past_participle": "bevolen",
+        "auxiliary": "hebben",
+        "perfect_form": "heeft bevolen",
+        "verb_type": "irregular",
+        "forms": ["beval", "bevolen"],
+        "example_nl": "Ik moet hem bevelen om te stoppen.",
+        "example_ru": "Мне нужно приказать ему остановиться.",
+        "examples": [{
+            "text": "Ik moet hem bevelen om te stoppen.",
+            "translation": "Мне нужно приказать ему остановиться.",
+        }],
+        "analysis_confidence": 1.0,
+        "analysis_provider": "local_grammar",
+        "related_noun": {
+            "term": "het bevel",
+            "translation": "приказ",
+            "plural": "de bevelen",
+        },
+    })
+    updated.pop("verb_analysis_failed", None)
+    return updated
+
+
 def _dict_entry_message(entry, status="added"):
     """Единая карточка слова или фразы: статус, перевод, разбор и один пример."""
     from ui.builder import MessageBuilder
 
+    entry = _apply_known_dutch_verb_card(entry)
     b = MessageBuilder()
     lang = entry.get("lang") if entry.get("lang") in ("nl", "en") else "nl"
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
@@ -531,7 +578,7 @@ def _cached_verb_entry(cid, term):
 
 
 async def _enrich_dutch_verb(entry, cid=None, force=False):
-    entry = dict(entry)
+    entry = _apply_known_dutch_verb_card(dict(entry))
     if not _is_dutch_verb_entry(entry):
         return entry
     entry, _ = learning_data_quality.normalize_dutch_grammar(entry)
@@ -839,7 +886,7 @@ INPUT_JSON: {input_payload}
         # идентичность записи, которую пользователь попросил выучить.
         entry["term"] = _normalized_user_term(raw_user_term, lang)
         entry["normalized_term"] = entry["term"]
-    return entry
+    return _apply_known_dutch_verb_card(entry)
 
 
 _SRS_FIELD_KEYS = (
