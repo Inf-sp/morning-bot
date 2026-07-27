@@ -87,8 +87,8 @@ def test_system_rows_use_roles_and_hide_healthy_infrastructure(monkeypatch):
 
     rows = service_monitor.rows()
 
-    assert rows[0] == "🧠 AI"
-    assert "🌐 Данные" in rows
+    assert rows[0] == "AI"
+    assert "Данные" in rows
     assert not any("Telegram" in row for row in rows)
     assert not any("PostgreSQL" in row for row in rows)
     assert not any(row.startswith("🟢 TheMealDB") for row in rows)

@@ -201,8 +201,11 @@ def api_ai(rows, updated_at):
     b.bold("🛠 Система")
     b.newline()
     for line in rows:
-        if str(line) in ("🧠 AI", "🌐 Данные"):
+        if str(line) in ("AI", "Данные"):
+            if str(line) == "Данные":
+                b.spacer()
             b.bold(str(line))
+            b.newline()
         else:
             b.line(str(line))
     b.spacer()

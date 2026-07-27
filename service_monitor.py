@@ -242,14 +242,14 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
 
 def rows() -> list[str]:
     current = _load().get("services") or {}
-    out = ["🧠 AI"]
+    out = ["AI"]
     for service in ("groq", "gemini", "github_models", "cloudflare", "openrouter"):
         state = current.get(service) or provider_runtime.get_state(service)
         if service == "groq":
             out.extend(_format_groq_row(model, role, state) for _, model, role in _GROQ_MODELS)
         else:
             out.append(format_row(service, state))
-    out.append("🌐 Данные")
+    out.append("Данные")
     for service in _DATA_SERVICES:
         state = current.get(service) or provider_runtime.get_state(service)
         out.append(format_row(service, state))

@@ -26,6 +26,25 @@ def test_system_ui_has_no_last_raw_error_block():
     assert message.text.endswith("Обновлено в 21:44")
 
 
+def test_system_ui_separates_ai_and_data_sections_without_heading_emojis():
+    message = admin_ui.api_ai(
+        ["AI", "🟢 Groq · Основной · gpt-oss-20b · 1 000/1 000 осталось",
+         "Данные", "🟢 TMDB · Кино · 1 сегодня"],
+        "21:44",
+    )
+
+    assert message.text == (
+        "🛠 Система\n\n"
+        "AI\n"
+        "🟢 Groq · Основной · gpt-oss-20b · 1 000/1 000 осталось\n\n"
+        "Данные\n"
+        "🟢 TMDB · Кино · 1 сегодня\n\n"
+        "Обновлено в 21:44"
+    )
+    assert "🧠 AI" not in message.text
+    assert "🌐 Данные" not in message.text
+
+
 def test_tracking_keeps_diagnostic_context_and_redacts_secrets(monkeypatch):
     state = {"log": []}
     monkeypatch.setattr(tracking.store, "_load", lambda _key: state)
