@@ -148,7 +148,7 @@ def test_book_card_shows_reader_rating():
     assert "⭐ Оценка читателей: 4.7/5 · 1 234 оценок" in message.text
 
 
-def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):
+def test_leisure_home_shows_only_rated_russian_movies_with_short_descriptions(monkeypatch):
     class Bot:
         sent = []
 
@@ -161,8 +161,10 @@ def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):
              "overview": "Одиссей возвращается домой после долгой войны и сталкивается с новыми испытаниями."},
             {"title": "Приглашение", "rating": 7.8, "vote_count": 100,
              "overview": "Таинственное приглашение на ужин превращает обычный вечер в тревожную загадку."},
-            {"title": "Des preuves d'amour", "rating": 7.7, "vote_count": 100,
+            {"title": "Des preuves d'amour", "title_ru": "Доказательства любви", "rating": 7.7, "vote_count": 100,
              "overview": "История любви, которой приходится пройти через неожиданные испытания."},
+            {"title": "Изумительная Мокси", "rating": None, "vote_count": 0,
+             "overview": "Домашняя кошка ищет дорогу домой."},
         ]
 
     async def unexpected(*_args, **_kwargs):
@@ -189,10 +191,13 @@ def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):
     assert "🎟️ Сейчас в кино" not in text
     assert "Одиссея" in text
     assert "Приглашение" in text
-    assert "Des preuves d'amour" in text
+    assert "Доказательства любви" in text
+    assert "Des preuves d'amour" not in text
+    assert "Изумительная Мокси" not in text
     assert "Одиссея · ⭐ 7.9 · Приключения" in text
-    assert "Таинственное приглашение" not in text
-    assert "испытаниями.\n\n• Приглашение" not in text
+    assert "Таинственное приглашение на ужин" in text
+    assert "• Приглашение · ⭐ 7.8" in text
+    assert "\n  Таинственное приглашение" in text
     assert "💭" not in text
     assert "🎧 Послушать" not in text
     assert "📖 Почитать" not in text
@@ -220,7 +225,7 @@ def test_leisure_home_uses_compact_verified_event_teaser(monkeypatch):
             "rating": 7.8,
             "vote_count": 100,
             "genres": ["драма"],
-            "overview": "Это длинный синопсис, который не должен попадать в компактную витрину досуга.",
+                "overview": "Это очень длинный синопсис для проверки компактной витрины. " * 4,
         }]
 
     monkeypatch.setattr(leisure_home.store, "get_settings", lambda *_args: {"city": "Алкмар", "cc": "NL"})
@@ -237,9 +242,49 @@ def test_leisure_home_uses_compact_verified_event_teaser(monkeypatch):
     assert "Lowlands 2026 · Фестиваль" in text
     assert "Festivalticket" not in text
     assert "Indie Pop" not in text
-    assert "Это длинный синопсис" not in text
+    assert text.count("Это очень длинный синопсис для проверки компактной витрины.") == 1
     assert "Эта цитата не относится" not in text
     assert _labels(bot.sent[0]["reply_markup"]) == [
         ["🎬 Кино"], ["🎧 Музыка"], ["📖 Книги"],
         ["💾 Сохранённое", "🎚️ Предпочтения"], ["#️⃣ Главная"],
     ]
+
+
+def test_leisure_home_edits_menu_message_once(monkeypatch):
+    class Message:
+        reply_markup = "main-menu"
+
+        def __init__(self):
+            self.edits = []
+
+        async def edit_text(self, text, **kwargs):
+            self.edits.append((text, kwargs))
+
+    class Query:
+        def __init__(self):
+            self.message = Message()
+
+    class Bot:
+        def __init__(self):
+            self.sent = []
+
+        async def send_message(self, **kwargs):
+            self.sent.append(kwargs)
+
+    async def no_movies(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(leisure_home.store, "get_settings", lambda *_args: {"city": "Алкмар", "cc": "NL"})
+    monkeypatch.setattr(leisure_home.leisure_concerts, "_concerts_cache_get", lambda *_args: None)
+    monkeypatch.setattr(leisure_home.leisure_movies, "get_local_now_playing", no_movies)
+    monkeypatch.setattr(leisure_home.leisure_music, "_cached_artist", lambda *_args: None)
+    monkeypatch.setattr(leisure_home.leisure_books, "_cached_book", lambda *_args: None)
+
+    bot = Bot()
+    query = Query()
+    import asyncio
+    asyncio.run(leisure_home.send_home(bot, "42", q=query))
+
+    assert len(query.message.edits) == 1
+    assert bot.sent == []
+    assert query.message.edits[0][0].startswith("🍿 Развлечения на сегодня · Алкмар")

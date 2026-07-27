@@ -98,6 +98,12 @@ def _format_rating(rating: float | None) -> str | None:
     return f"⭐ {value:.1f}"
 
 
+def has_visible_movie_rating(movie) -> bool:
+    """Рейтинг можно показать, только если он не основан на нескольких голосах."""
+    vote_count = int(_item_value(movie, "vote_count", 0) or 0)
+    return bool(_format_rating(_item_value(movie, "rating"))) and vote_count >= 25
+
+
 def _format_movie_row(b: MessageBuilder, movie, *, with_description=False) -> None:
     title = str(_item_value(movie, "title", "") or "").strip()
     if not title:
@@ -106,22 +112,22 @@ def _format_movie_row(b: MessageBuilder, movie, *, with_description=False) -> No
     b.bold(title)
     # Рейтинг с несколькими голосами выглядит убедительно, но вводит в заблуждение.
     # Для свежего проката показываем его только после минимальной выборки.
-    vote_count = int(_item_value(movie, "vote_count", 0) or 0)
-    rating = _format_rating(_item_value(movie, "rating")) if vote_count >= 25 else None
+    rating = _format_rating(_item_value(movie, "rating")) if has_visible_movie_rating(movie) else None
     if rating:
         b.text_line(f" · {rating}")
     genre = _primary_genre(movie)
     if genre:
         b.text_line(f" · {genre}")
     if with_description:
-        overview = clip(str(_item_value(movie, "overview", "") or ""), limit=180)
+        overview = clip(str(_item_value(movie, "overview", "") or ""), limit=110)
         if overview:
             if overview[-1] not in ".!?…":
                 overview += "."
-            b.text_line(f" · {overview}")
     b.newline()
     if with_description:
-        b.newline()
+        if overview:
+            b.text_line(f"  {overview}")
+            b.newline()
 
 
 def movie_card(item, tm):

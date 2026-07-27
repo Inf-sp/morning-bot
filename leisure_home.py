@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -14,6 +15,9 @@ import store
 from ui import leisure as leisure_ui
 from ui.builder import MessageBuilder
 from util import flag_from_cc
+
+
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 
 
 def _keyboard():
@@ -89,6 +93,26 @@ def _next_concert(events):
     return min(candidates, default=None, key=lambda item: item[0])
 
 
+def _showcase_movies(movies, limit=3):
+    """Оставляет для витрины только законченные русскоязычные карточки."""
+    result = []
+    for movie in movies or []:
+        if not isinstance(movie, dict):
+            continue
+        title = str(movie.get("title_ru") or movie.get("title") or "").strip()
+        overview = str(movie.get("overview") or "").strip()
+        if (not _CYRILLIC_RE.search(title)
+                or not overview
+                or not leisure_ui.has_visible_movie_rating(movie)):
+            continue
+        item = dict(movie)
+        item["title"] = title
+        result.append(item)
+        if len(result) >= limit:
+            break
+    return result
+
+
 async def send_home(bot, cid, q=None, status=None):
     settings = store.get_settings(cid)
     city = str(settings.get("city") or leisure_movies._movie_city(cid) or "твой город").strip()
@@ -96,7 +120,9 @@ async def send_home(bot, cid, q=None, status=None):
     concert = _next_concert(leisure_concerts._concerts_cache_get(cid, cc) or [])
     artist = leisure_music._cached_artist(cid)
     book = leisure_books._cached_book(cid)
-    now_playing = await leisure_movies.get_local_now_playing(cid, limit=3)
+    now_playing = _showcase_movies(
+        await leisure_movies.get_local_now_playing(cid, limit=12),
+    )
 
     b = MessageBuilder()
     b.section(f"🍿 Развлечения на сегодня · {city}")
@@ -145,7 +171,7 @@ async def send_home(bot, cid, q=None, status=None):
     if now_playing:
         b.section("🎟️ Идёт в кино")
         for movie in now_playing:
-            leisure_ui._format_movie_row(b, movie)
+            leisure_ui._format_movie_row(b, movie, with_description=True)
     msg = b.build_stripped(reply_markup=_keyboard())
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)

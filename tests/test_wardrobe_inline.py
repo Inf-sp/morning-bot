@@ -399,18 +399,11 @@ def test_week_forecast_uses_preserved_inline_status(monkeypatch):
 def test_leisure_navigation_replaces_current_menu(monkeypatch):
     calls = []
 
-    class Status:
-        mode = "inline"
-
-        async def stop(self, delete=True):
-            calls.append(("stop", delete))
-
     async def start_inline(q, bot=None, cid=None, stages=None, preserve_message=False):
-        calls.append(("start_inline", preserve_message))
-        return Status()
+        raise AssertionError("навигация в Досуг не должна запускать StatusManager")
 
     async def send_home(bot, cid, q, status=None):
-        calls.append(("leisure_home", status.mode))
+        calls.append(("leisure_home", q, status))
 
     monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
     monkeypatch.setattr(bot_callbacks.leisure_home, "send_home", send_home)
@@ -430,11 +423,10 @@ def test_leisure_navigation_replaces_current_menu(monkeypatch):
 
     asyncio.run(bot_callbacks.handle(Update(), Context(), None))
 
-    assert calls == [
-        ("start_inline", False),
-        ("leisure_home", "inline"),
-        ("stop", True),
-    ]
+    assert len(calls) == 1
+    assert calls[0][0] == "leisure_home"
+    assert calls[0][1].data == "m_leisure"
+    assert calls[0][2] is None
 
 
 def test_closet_screen_does_not_show_edit_button(monkeypatch):

@@ -278,9 +278,10 @@ async def handle(update, context, remove_reply_keyboard):
         await firstvisit.show_prompt(bot, cid, _FV_SECTION[data])
         await _unack(q); return
     if data == "m_leisure":
-        await _inline_status(
-            lambda status: leisure_home.send_home(bot, cid, q, status=status),
-        )
+        # Это навигация, а не отдельная долгая рекомендация. Экран Досуга сам
+        # редактирует исходное сообщение и имеет один fallback на send_message;
+        # статусный цикл здесь создавал лишнюю цепочку edit → edit → fallback.
+        await leisure_home.send_home(bot, cid, q)
         return
     if data == "m_wardrobe":
         await _inline_status(
