@@ -531,15 +531,21 @@ _FESTIVAL_MARKERS = (
 )
 
 
+def _clean_event_label(value):
+    """Убирает билетный суффикс из названия фестиваля для пользовательского UI."""
+    label = " ".join(str(value or "").split()).strip()
+    return re.sub(r"\s*[-–—]\s*(?:festival\s*)?ticket(?:s)?\s*$", "", label, flags=re.IGNORECASE).strip()
+
+
 def _concert_context(e):
     """Возвращает пользовательский формат события без догадок через AI."""
     explicit_type = str(e.get("_event_type") or "").strip().lower()
-    explicit_name = " ".join(str(e.get("_festival_name") or "").split()).strip()
+    explicit_name = _clean_event_label(e.get("_festival_name"))
     if explicit_type == "festival" and explicit_name:
         return f"Фестиваль · {explicit_name}"
 
     artist = " ".join(str(e.get("_artist") or "").split()).strip()
-    event_name = " ".join(str(e.get("name") or "").split()).strip()
+    event_name = _clean_event_label(e.get("name"))
     event_low = event_name.casefold()
     artist_low = artist.casefold()
     attractions = [

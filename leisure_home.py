@@ -4,17 +4,16 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import leisure_concerts
 import leisure_books
 import leisure_movies
 import leisure_music
-import myday
 import store
 from ui import leisure as leisure_ui
 from ui.builder import MessageBuilder
-from util import esc
+from util import flag_from_cc
 
 
 def _keyboard():
@@ -107,13 +106,21 @@ async def send_home(bot, cid, q=None, status=None):
         artist_name = str(event.get("_artist") or event.get("name") or "").strip()
         b.bold("🎫 Событие")
         b.newline()
-        b.line(f"{artist_name} · {event_date.day} {leisure_ui._MONTHS_RU[event_date.month]} · {venue_city}")
+        flag = flag_from_cc(cc)
+        place = " · ".join(
+            value for value in (
+                f"{event_date.day} {leisure_ui._MONTHS_RU[event_date.month]}",
+                venue_city,
+            ) if value
+        )
+        if flag:
+            place = f"{place} {flag}".strip()
+        b.line(f"{artist_name} · {place}" if place else artist_name)
         context = leisure_concerts._concert_context(event)
-        genre = leisure_concerts._concert_genre(event)
-        price = leisure_concerts._concert_min_price(event)
-        details = " · ".join(value for value in (context, genre, price) if value)
-        if details:
-            b.line(details)
+        if context.startswith("Фестиваль · "):
+            context = context.removeprefix("Фестиваль · ") + " · Фестиваль"
+        if context:
+            b.line(context)
     elif artist and artist.get("artist"):
         b.bold("🎧 Послушать")
         b.newline()
@@ -138,18 +145,7 @@ async def send_home(bot, cid, q=None, status=None):
     if now_playing:
         b.section("🎟️ Идёт в кино")
         for movie in now_playing:
-            leisure_ui._format_movie_row(b, movie, with_description=True)
-    try:
-        quote_data = myday._fetch_quote(cid)
-    except Exception:
-        quote_data = {}
-    quote = myday._clip_quote(myday._strip_quotes(quote_data.get("quote", "")))
-    if quote and myday._quote_valid(quote):
-        author = esc(quote_data.get("src", "")).strip()
-        quote_line = f"«{esc(quote)}»" + (f" — по {author}" if author else "")
-        b.spacer()
-        b.add(f"💭 {quote_line}", MessageEntity.ITALIC)
-        b.newline()
+            leisure_ui._format_movie_row(b, movie)
     msg = b.build_stripped(reply_markup=_keyboard())
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)

@@ -213,6 +213,21 @@ class StatusManager:
             if await self._edit(text, **kwargs):
                 self._finalized = True
                 return True
+            if self._inline_replaced:
+                # Исходное сообщение уже было превращено в статус. Если ответ
+                # Telegram потерялся после применения edit, безусловный fallback
+                # через send_message создаст дубликат готовой карточки. Повторяем
+                # идемпотентное редактирование один раз и затем считаем доставку
+                # завершённой, не отправляя второй экран.
+                if await self._edit(text, **kwargs):
+                    self._finalized = True
+                    return True
+                _log.warning(
+                    "StatusManager.replace(inline): result edit uncertain; skip duplicate send cid=%s",
+                    self.cid,
+                )
+                self._finalized = True
+                return False
             if self.cid is not None and self.bot is not None:
                 _log.debug("StatusManager.replace(inline): sending fallback message cid=%s text_len=%s",
                            self.cid, len(text or ""))

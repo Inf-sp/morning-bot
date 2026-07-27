@@ -176,11 +176,6 @@ def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):
     monkeypatch.setattr(leisure_home.leisure_music, "send_listen", unexpected)
     monkeypatch.setattr(leisure_home.leisure_books, "get_current_book", unexpected)
     monkeypatch.setattr(leisure_home.leisure_concerts, "_fetch_favorite_events", unexpected)
-    monkeypatch.setattr(
-        leisure_home.myday,
-        "_fetch_quote",
-        lambda *_args: {"quote": "Не откладывай жизнь на потом.", "src": "Сенека"},
-    )
     bot = Bot()
 
     import asyncio
@@ -195,14 +190,55 @@ def test_leisure_home_shows_three_top_movies_in_cinemas(monkeypatch):
     assert "Одиссея" in text
     assert "Приглашение" in text
     assert "Des preuves d'amour" in text
-    assert "Одиссей возвращается домой после долгой войны" in text
-    assert "Таинственное приглашение на ужин" in text
-    assert "Одиссея · ⭐ 7.9 · Приключения · Одиссей возвращается домой после долгой войны" in text
-    assert "испытаниями.\n\n• Приглашение" in text
-    assert "💭 «Не откладывай жизнь на потом.» — по Сенека" in text
+    assert "Одиссея · ⭐ 7.9 · Приключения" in text
+    assert "Таинственное приглашение" not in text
+    assert "испытаниями.\n\n• Приглашение" not in text
+    assert "💭" not in text
     assert "🎧 Послушать" not in text
     assert "📖 Почитать" not in text
     assert "🎫 В этом месяце" not in text
+
+
+def test_leisure_home_uses_compact_verified_event_teaser(monkeypatch):
+    class Bot:
+        sent = []
+
+        async def send_message(self, **kwargs):
+            self.sent.append(kwargs)
+
+    event = {
+        "name": "Lowlands 2026 - Festivalticket",
+        "_artist": "Romy",
+        "classifications": [{"genre": {"name": "Indie Pop"}}],
+        "dates": {"start": {"localDate": "2099-08-21"}},
+        "_embedded": {"venues": [{"city": {"name": "Biddinghuizen"}}]},
+    }
+
+    async def movies(*_args, **_kwargs):
+        return [{
+            "title": "Приглашение",
+            "rating": 7.8,
+            "vote_count": 100,
+            "genres": ["драма"],
+            "overview": "Это длинный синопсис, который не должен попадать в компактную витрину досуга.",
+        }]
+
+    monkeypatch.setattr(leisure_home.store, "get_settings", lambda *_args: {"city": "Алкмар", "cc": "NL"})
+    monkeypatch.setattr(leisure_home.leisure_concerts, "_concerts_cache_get", lambda *_args: [event])
+    monkeypatch.setattr(leisure_home.leisure_movies, "get_local_now_playing", movies)
+    monkeypatch.setattr(leisure_home.leisure_music, "_cached_artist", lambda *_args: None)
+    monkeypatch.setattr(leisure_home.leisure_books, "_cached_book", lambda *_args: None)
+    bot = Bot()
+    import asyncio
+    asyncio.run(leisure_home.send_home(bot, "42"))
+    text = bot.sent[0]["text"]
+
+    assert "Romy · 21 августа · Biddinghuizen 🇳🇱" in text
+    assert "Lowlands 2026 · Фестиваль" in text
+    assert "Festivalticket" not in text
+    assert "Indie Pop" not in text
+    assert "Это длинный синопсис" not in text
+    assert "Эта цитата не относится" not in text
     assert _labels(bot.sent[0]["reply_markup"]) == [
         ["🎬 Кино"], ["🎧 Музыка"], ["📖 Книги"],
         ["💾 Сохранённое", "🎚️ Предпочтения"], ["#️⃣ Главная"],

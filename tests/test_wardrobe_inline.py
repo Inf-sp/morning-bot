@@ -109,6 +109,38 @@ def test_preserved_inline_status_sends_ready_result_as_new_message():
     assert Query.message.markup_edits[-1] == "old-kb"
 
 
+def test_inline_status_does_not_send_duplicate_after_uncertain_edit():
+    sent = []
+
+    class Message:
+        reply_markup = "old-kb"
+
+        def __init__(self):
+            self.text_edits = []
+
+        async def edit_text(self, text, **kwargs):
+            self.text_edits.append((text, kwargs))
+            if len(self.text_edits) == 2:
+                raise TimeoutError("Telegram response was lost after the edit")
+
+        async def edit_reply_markup(self, **kwargs):
+            pass
+
+    class Query:
+        message = Message()
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    status = asyncio.run(util.StatusManager.start_inline(
+        Query(), bot=Bot(), cid="42", stages=((0, "⏳ Ищу..."),), preserve_message=False))
+    asyncio.run(status.replace("Готовая карточка", reply_markup="final-kb"))
+
+    assert sent == []
+    assert status._finalized is True
+
+
 def test_cached_home_edits_once_without_loading_message(monkeypatch):
     cached = {
         "date": wardrobe._day_key(),
