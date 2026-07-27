@@ -77,13 +77,13 @@ async def handle_action(bot, cid, q, act, run_with_status):
     elif act == "dict":
         await dictionary.send_dict(bot, cid, q=q)
     elif act == "dictconfirm_add":
-        await util.ack_loading(q)
+        # Подтверждение добавления не должно превращать старую кнопку в
+        # дублирующий inline-индикатор «Ищу…» / «Проверяю…».
+        await util.clear_loading(q)
         await dictionary_import.confirm_pending_dict_add(bot, cid)
-        await util.clear_loading(q)
     elif act == "dictconfirm_retry":
-        await util.ack_loading(q)
-        await dictionary_import.retry_pending_dict_add(bot, cid)
         await util.clear_loading(q)
+        await dictionary_import.retry_pending_dict_add(bot, cid)
     elif act == "dictconfirm_cancel":
         await dictionary_import.cancel_pending_dict_add(bot, cid)
     elif act == "dictdone":

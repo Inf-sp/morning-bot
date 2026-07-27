@@ -45,6 +45,28 @@ def test_dictionary_processing_status_uses_neutral_emojis_without_language_flag(
     assert all("🇳🇱" not in text and "🇬🇧" not in text for _delay, text in stages)
 
 
+def test_dictionary_confirmation_removes_old_keyboard_without_loading_button(monkeypatch):
+    events = []
+
+    class Query:
+        async def edit_message_reply_markup(self, reply_markup=None):
+            events.append(("markup", reply_markup))
+
+    async def fake_confirm(_bot, _cid):
+        events.append("confirm")
+
+    async def fake_retry(_bot, _cid):
+        events.append("retry")
+
+    monkeypatch.setattr(learning_router.dictionary_import, "confirm_pending_dict_add", fake_confirm)
+    monkeypatch.setattr(learning_router.dictionary_import, "retry_pending_dict_add", fake_retry)
+
+    for action, marker in (("dictconfirm_add", "confirm"), ("dictconfirm_retry", "retry")):
+        events.clear()
+        asyncio.run(learning_router.handle_action(object(), "42", Query(), action, None))
+        assert events == [("markup", None), marker]
+
+
 def test_dictionary_command_has_priority_over_open_thoughts(monkeypatch):
     cid = "dictionary-over-thoughts"
     routed = []
