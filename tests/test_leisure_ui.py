@@ -1,4 +1,5 @@
 import os
+import asyncio
 from datetime import datetime
 from telegram import MessageEntity
 
@@ -6,10 +7,12 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import leisure_books
+import cleanup
 import leisure_home
 import leisure_music
 import leisure_movies
 import config
+import saved_items
 from ui.menu import _SCREENS
 
 
@@ -17,12 +20,12 @@ def _labels(markup):
     return [[button.text for button in row] for row in markup.inline_keyboard]
 
 
-def test_leisure_home_contains_three_sections_in_one_column_and_home():
+def test_leisure_home_contains_three_sections_in_one_row_and_home():
     rows = _SCREENS["m_leisure"][3]
     assert [label for row in rows for label, _ in row] == [
-        "🎬 Кино", "🎧 Музыка", "📖 Книги", "💾 Сохранённое", "🎚️ Предпочтения", "#️⃣ Главная"
+        "🎬 Кино", "🎧 Музыка", "📖 Книги", "💾 Сохранения", "🎚️ Предпочтения", "#️⃣ Главная"
     ]
-    assert [len(row) for row in rows] == [1, 1, 1, 2, 1]
+    assert [len(row) for row in rows] == [3, 2, 1]
 
 
 def test_saved_leisure_categories_use_saved_marker():
@@ -36,18 +39,18 @@ def test_movie_home_uses_clear_recommendation_labels():
     assert labels == [
         ["✨ Другое кино"],
         ["🎭 По жанру"],
-        ["❤️ Моё кино", "💾 Сохранить"],
+        ["💾 Сохранить"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
 def test_book_and_music_home_follow_same_model():
     assert _labels(leisure_books.books_home_keyboard())[:4] == [
-        ["✨ Подобрать книгу"], ["🎭 По жанру"], ["❤️ Мои книги", "💾 Сохранить"],
+        ["✨ Подобрать книгу"], ["🎭 По жанру"], ["💾 Сохранить"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert _labels(leisure_music.music_home_keyboard())[:5] == [
-        ["✨ Подобрать музыку"], ["❤️ Мои артисты", "💾 Сохранить"],
+        ["✨ Подобрать музыку"], ["💾 Сохранить"],
         ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert leisure_books.books_home_keyboard().inline_keyboard[0][0].callback_data == "book_reco"
@@ -61,11 +64,51 @@ def test_recommendation_cards_use_content_specific_next_labels():
     assert _labels(leisure_music._listen_kb())[:3] == [
         ["✨ Другой артист"],
         ["🎫 Концерты"],
-        ["❤️ Мои артисты", "💾 Сохранить"],
+        ["💾 Сохранить"],
     ]
-    assert _labels(leisure_books._book_kb(0, saved=True))[2] == ["❤️ Мои книги", "✅ Сохранено"]
-    assert _labels(leisure_movies._movie_kb(0, saved=True))[2] == ["❤️ Моё кино", "✅ Сохранено"]
-    assert _labels(leisure_music._listen_kb(saved=True))[2] == ["❤️ Мои артисты", "✅ Сохранено"]
+    assert _labels(leisure_books._book_kb(0, saved=True))[2] == ["✅ Сохранено"]
+    assert _labels(leisure_movies._movie_kb(0, saved=True))[2] == ["✅ Сохранено"]
+    assert _labels(leisure_music._listen_kb(saved=True))[2] == ["✅ Сохранено"]
+
+
+def test_personal_leisure_lists_are_available_from_preferences():
+    assert _labels(leisure_movies._movie_prefs_kb("42"))[0] == ["❤️ Моё кино"]
+    assert _labels(leisure_books._book_preferences_kb()) == [
+        ["❤️ Мои книги"], ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+    assert _labels(leisure_music._music_preferences_kb()) == [
+        ["❤️ Мои артисты"], ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+
+
+def test_saved_movie_is_visible_in_leisure_saved_collection(monkeypatch):
+    saved = {
+        "id": "movie-1",
+        "text": "Патерсон",
+        "source": "Кино",
+        "bucket": "fav",
+    }
+    monkeypatch.setattr(cleanup.store, "ensure_list_ids", lambda *_args: [saved])
+
+    records = cleanup._collection_records(cleanup.COLLECTIONS["cinema_saved"], "42")
+
+    assert records == [saved]
+
+
+def test_saved_movie_card_shows_saved_state():
+    class Message:
+        reply_markup = leisure_movies._movie_kb(0)
+
+        async def edit_reply_markup(self, *, reply_markup):
+            self.reply_markup = reply_markup
+
+    class Query:
+        message = Message()
+
+    query = Query()
+    asyncio.run(saved_items.update_save_button(query, "reco_0", True))
+
+    assert _labels(query.message.reply_markup)[2] == ["✅ Сохранено"]
 
 
 def test_book_recommendation_skips_favorite_saved_as_structured_value(monkeypatch):
@@ -245,8 +288,8 @@ def test_leisure_home_uses_compact_verified_event_teaser(monkeypatch):
     assert text.count("Это очень длинный синопсис для проверки компактной витрины.") == 1
     assert "Эта цитата не относится" not in text
     assert _labels(bot.sent[0]["reply_markup"]) == [
-        ["🎬 Кино"], ["🎧 Музыка"], ["📖 Книги"],
-        ["💾 Сохранённое", "🎚️ Предпочтения"], ["#️⃣ Главная"],
+        ["🎬 Кино", "🎧 Музыка", "📖 Книги"],
+        ["💾 Сохранения", "🎚️ Предпочтения"], ["#️⃣ Главная"],
     ]
 
 

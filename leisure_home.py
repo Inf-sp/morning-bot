@@ -22,10 +22,10 @@ _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 
 def _keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎬 Кино", callback_data="a_watch")],
-        [InlineKeyboardButton("🎧 Музыка", callback_data="a_listen")],
-        [InlineKeyboardButton("📖 Книги", callback_data="a_read")],
-        [InlineKeyboardButton("💾 Сохранённое", callback_data="leisure_saved"),
+        [InlineKeyboardButton("🎬 Кино", callback_data="a_watch"),
+         InlineKeyboardButton("🎧 Музыка", callback_data="a_listen"),
+         InlineKeyboardButton("📖 Книги", callback_data="a_read")],
+        [InlineKeyboardButton("💾 Сохранения", callback_data="leisure_saved"),
          InlineKeyboardButton("🎚️ Предпочтения", callback_data="leisure_prefs")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -48,7 +48,7 @@ def _leisure_category_keyboard(callback_prefix, *, saved=False):
 
 async def send_saved(bot, cid, q=None):
     b = MessageBuilder()
-    b.section("💾 Сохранённое · Досуг")
+    b.section("💾 Сохранения · Досуг")
     b.spacer()
     b.line("Выбери категорию сохранённых фильмов, книг или музыки.")
     msg = b.build_stripped(reply_markup=_leisure_category_keyboard("leisure_saved", saved=True))

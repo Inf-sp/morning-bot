@@ -116,10 +116,9 @@ _SCREENS = {
             "Общие предпочтения и сохранённое — здесь.",
         ],
         [
-            [("🎬 Кино", "a_watch")],
-            [(ui_label("music", "Музыка"), "a_listen")],
-            [(ui_label("books", "Книги"), "a_read")],
-            [("💾 Сохранённое", "leisure_saved"), ("🎚️ Предпочтения", "leisure_prefs")],
+            [("🎬 Кино", "a_watch"), (ui_label("music", "Музыка"), "a_listen"),
+             (ui_label("books", "Книги"), "a_read")],
+            [("💾 Сохранения", "leisure_saved"), ("🎚️ Предпочтения", "leisure_prefs")],
             [("#️⃣ Главная", "m_menu")],
         ],
         False,

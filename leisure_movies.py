@@ -41,8 +41,7 @@ def _movie_kb(i, category=None, saved=False, favorite=False):
     rows = [
         [InlineKeyboardButton("✨ Другое кино", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
-        [InlineKeyboardButton("❤️ Моё кино", callback_data="a_watchlist"),
-         InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
+        [InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
     ]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
@@ -233,8 +232,7 @@ def _movie_home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другое кино", callback_data="movie_reco")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
-        [InlineKeyboardButton("❤️ Моё кино", callback_data="a_watchlist"),
-         InlineKeyboardButton("💾 Сохранить", callback_data="movie_saved")],
+        [InlineKeyboardButton("💾 Сохранить", callback_data="movie_saved")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -562,7 +560,7 @@ def _movie_prefs_kb(cid):
     spref = settings.get(cid, "movie_series_status", "") or ""
     rpref = settings.get(cid, "movie_recency", "") or ""
     rating = str(settings.get(cid, "movie_min_rating", "") or "")
-    rows = []
+    rows = [[InlineKeyboardButton("❤️ Моё кино", callback_data="leisure_prefs_movie_favorites")]]
     rows.append([InlineKeyboardButton("— Любимые жанры —", callback_data="noop")])
     gbtns = [InlineKeyboardButton(("✅ " if gid in gsel else "⬜ ") + label,
                                   callback_data=f"mpref_g_{gid}") for label, gid in _PREF_GENRES]
@@ -585,7 +583,7 @@ def _movie_prefs_kb(cid):
                                   callback_data=f"mpref_c_{v}") for label, v in _PREF_COUNTRIES]
     for i in range(0, len(cbtns), 2):
         rows.append(cbtns[i:i + 2])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="leisure_prefs"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 

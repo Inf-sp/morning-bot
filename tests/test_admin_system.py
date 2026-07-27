@@ -91,7 +91,7 @@ def test_system_screen_has_logs_on_separate_row(monkeypatch):
     asyncio.run(admin.send_api_ai(bot, "42"))
 
     markup = bot.sent[0]["reply_markup"].inline_keyboard
-    assert [button.text for button in markup[0]] == ["⚠️ Ошибки"]
+    assert [button.text for button in markup[0]] == ["📊 Нагрузка AI", "⚠️ Ошибки"]
     assert [button.text for button in markup[-1]] == ["⬅️ Назад", "#️⃣ Главная"]
     assert "Ответы · 95%" not in bot.sent[0]["text"]
     assert "Автоматический резерв" not in bot.sent[0]["text"]

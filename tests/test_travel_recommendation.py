@@ -26,6 +26,16 @@ class FakeInlineStatus:
         return True
 
 
+def test_travel_home_places_saved_and_preferences_in_one_row():
+    labels = [[button.text for button in row] for row in travel._home_kb().inline_keyboard]
+
+    assert labels == [
+        ["✨ Другая поездка"],
+        ["💾 Сохранения", "🎚️ Предпочтения"],
+        ["#️⃣ Главная"],
+    ]
+
+
 def test_rejected_visited_country_changes_next_generation_request(monkeypatch):
     attempts = []
 

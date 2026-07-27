@@ -95,8 +95,7 @@ def _listen_kb(saved=False, favorite=False):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другой артист", callback_data="a_listen_no")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="a_artist_concerts")],
-        [InlineKeyboardButton("❤️ Мои артисты", callback_data="artist_favorites"),
-         InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data="listen_0")],
+        [InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data="listen_0")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -104,8 +103,7 @@ def _listen_kb(saved=False, favorite=False):
 def music_home_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать музыку", callback_data="music_reco")],
-        [InlineKeyboardButton("❤️ Мои артисты", callback_data="artist_favorites"),
-         InlineKeyboardButton("💾 Сохранить", callback_data="artist_saved")],
+        [InlineKeyboardButton("💾 Сохранить", callback_data="artist_saved")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -116,10 +114,17 @@ async def send_music_home(bot, cid, q=None):
     await send_listen(bot, cid)
 
 
+def _music_preferences_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("❤️ Мои артисты", callback_data="leisure_prefs_music_favorites")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="leisure_prefs"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+
+
 async def send_music_preferences(bot, cid, q=None):
     text = "🎚️ Предпочтения музыки\n\nЖанры, новое и знакомое, популярное и музыка на изучаемом языке."
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_listen"),
-                                InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
+    kb = _music_preferences_kb()
     if q is not None:
         try:
             await q.message.edit_text(text, reply_markup=kb)

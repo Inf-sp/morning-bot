@@ -185,6 +185,7 @@ CONCERTS_CACHE_KEY = "concerts_cache.json"  # {cid: {"ts": epoch, "cc": "NL", "e
 SEEN_CONCERTS_KEY = "seen_concerts.json"  # {cid: [concert_id, ...]} — для уведомления о новых концертах любимых артистов
 ARTIST_EXTERNAL_EVENTS_KEY = "artist_external_events.json"  # глобальный кэш внешнего поиска концертов (Tavily+Firecrawl) по нормализованному имени артиста, TTL 7 дней: {artist_key: {"ts": epoch, "events": [...]}}
 COST_LOG_KEY = "cost_log.json"     # лог LLM-вызовов для сводки расходов
+AI_TRAFFIC_LOG_KEY = "ai_traffic_log.json"  # попытки AI без текста запросов и ответов
 AI_RESPONSE_CACHE_KEY = "ai_response_cache.json"  # кэш дорогих AI-ответов по хэшу промпта
 WEATHER_CACHE_KEY = "weather_cache.json"  # устойчивый кэш OpenWeather: {cache_key: {"ts": epoch, "data": {...}}}
 TRAVEL_COUNTRY_CARDS_KEY = "travel_country_cards.json"  # глобальные карточки по ISO-коду

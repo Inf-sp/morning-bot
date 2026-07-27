@@ -101,8 +101,7 @@ def _book_kb(i, saved=False, favorite=False):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
-        [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites"),
-         InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
+        [InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -111,8 +110,7 @@ def books_home_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать книгу", callback_data="book_reco")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
-        [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites"),
-         InlineKeyboardButton("💾 Сохранить", callback_data="book_saved")],
+        [InlineKeyboardButton("💾 Сохранить", callback_data="book_saved")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -145,10 +143,17 @@ async def send_book_genre_menu(bot, cid, q=None):
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
+def _book_preferences_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("❤️ Мои книги", callback_data="leisure_prefs_books_favorites")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="leisure_prefs"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+
+
 async def send_book_preferences(bot, cid, q=None):
     text = "🎚️ Предпочтения книг\n\nФормат книги можно настроить здесь. Для отдельного подбора используй «🎭 По жанру»."
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_read"),
-                                InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
+    kb = _book_preferences_kb()
     if q is not None:
         try:
             await q.message.edit_text(text, reply_markup=kb)

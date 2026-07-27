@@ -64,7 +64,7 @@ COLLECTIONS = {
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить фильм", "as_loveadd_movies")),
     "cinema_saved": _collection(
-        "cinema_saved", "cinema", f"⭐️ Сохранённое · {ui_label('cinema', 'Кино')}", config.CONTENT_RECORDS_KEY, "note",
+        "cinema_saved", "cinema", f"⭐️ Сохранения · {ui_label('cinema', 'Кино')}", config.CONTENT_RECORDS_KEY, "note",
         "a_watch", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
         note_group="movies"),
     "cinema_watched": _collection(
@@ -80,7 +80,7 @@ COLLECTIONS = {
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить книгу", "as_loveadd_books")),
     "books_saved": _collection(
-        "books_saved", "books", f"⭐️ Сохранённое · {ui_label('books', 'Книги')}", config.SAVED_BOOKS_KEY, "book",
+        "books_saved", "books", f"⭐️ Сохранения · {ui_label('books', 'Книги')}", config.SAVED_BOOKS_KEY, "book",
         "a_read", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": False}]),
     "books_read": _collection(
         "books_read", "books", f"{ui_label('seen', 'Прочитано')} · {ui_label('books', 'Книги')}", config.BOOK_SEEN_KEY, "book",
@@ -98,7 +98,7 @@ COLLECTIONS = {
         "music_hidden_artists", "music", "Скрытые артисты", config.MUSIC_DISLIKE_KEY, "artist",
         "a_listen", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
     "music_saved": _collection(
-        "music_saved", "music", f"⭐️ Сохранённое · {ui_label('music', 'Музыка')}", config.CONTENT_RECORDS_KEY, "note",
+        "music_saved", "music", f"⭐️ Сохранения · {ui_label('music', 'Музыка')}", config.CONTENT_RECORDS_KEY, "note",
         "a_listen", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
         note_group="music"),
     "music_seen_artists": _collection(
@@ -249,9 +249,9 @@ def _note_in_group(note, group):
     if not group:
         return True
     try:
-        import settings as _s
+        import saved_items
         source = note.get("source", "Прочее") if isinstance(note, dict) else "Прочее"
-        return _s._fav_group(source) == group
+        return saved_items._fav_group(source) == group
     except Exception:
         return False
 
@@ -340,16 +340,16 @@ def _ctx_items(cid, ctx):
         return f"{flag} Чистка словаря", items, f"a_dictlang_{lang}"
     if ctx == "nb" or ctx.startswith("nb_"):
         import re as _re
-        import settings as _s
+        import saved_items
         _strip = lambda s: _re.sub(r"<[^>]+>", "", s).strip()
         notes = store.get_list(config.CONTENT_RECORDS_KEY, cid)
         group = ctx[len("nb_"):] if ctx.startswith("nb_") else None
         items = [(i, _strip(n.get("text", "") if isinstance(n, dict) else str(n)))
                  for i, n in enumerate(notes)
                  if (n.get("bucket", "fav") if isinstance(n, dict) else "fav") == "fav"
-                 and (group is None or _s._fav_group(n.get("source", "Прочее") if isinstance(n, dict) else "Прочее") == group)]
+                 and (group is None or saved_items._fav_group(n.get("source", "Прочее") if isinstance(n, dict) else "Прочее") == group)]
         if group:
-            label, _desc = _s._fav_group_info(group)
+            label, _desc = saved_items._fav_group_info(group)
             return f"{label} · Сохранённое", items, f"as_bucket_favgrp_{group}"
         return "Сохранённое", items, "as_bucket_fav"
     if ctx in ("wl", "rl"):
@@ -577,16 +577,16 @@ def _view_items(ctx, cid):
         return cfg["title"], items, cfg["back"]
     if ctx == "nb" or ctx.startswith("nb_"):
         import re as _re
-        import settings as _s
+        import saved_items
         _strip = lambda s: _re.sub(r"<[^>]+>", "", s).strip()
         notes = store.ensure_list_ids(config.CONTENT_RECORDS_KEY, cid)
         group = ctx[len("nb_"):] if ctx.startswith("nb_") else None
         items = [(n["id"], _strip(n.get("text", "")))
                  for n in notes
                  if n.get("bucket", "fav") == "fav"
-                 and (group is None or _s._fav_group(n.get("source", "Прочее")) == group)]
+                 and (group is None or saved_items._fav_group(n.get("source", "Прочее")) == group)]
         if group:
-            label, _desc = _s._fav_group_info(group)
+            label, _desc = saved_items._fav_group_info(group)
             return f"{label} · Сохранённое", items, f"as_bucket_favgrp_{group}"
         return "Сохранённое", items, "as_bucket_fav"
     if ctx.startswith("lv_") or ctx.startswith("lvls_"):

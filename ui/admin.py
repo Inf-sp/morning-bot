@@ -213,6 +213,18 @@ def api_ai(rows, updated_at):
     return b.build_stripped()
 
 
+def ai_traffic(rows, updated_at):
+    b = MessageBuilder()
+    b.bold("📊 Нагрузка AI · 24 часа")
+    b.newline()
+    b.spacer()
+    for row in rows:
+        b.line(str(row))
+    b.spacer()
+    b.line(f"Обновлено в {updated_at}")
+    return b.build_stripped()
+
+
 def logs(rows, errors_24h, updated_at):
     b = MessageBuilder()
     b.bold("⚠️ Ошибки")

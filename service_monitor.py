@@ -113,7 +113,7 @@ def _usage_detail(service: str) -> str:
         return "лимит по модели"
     if service == "cloudflare":
         remaining, total = _confirmed_quota(service, provider_runtime.get_state(service))
-        return f"{_number(remaining)}/{_number(total)} neurons осталось"
+        return f"{_number(remaining)}/{_number(total)} осталось"
     if service == "openrouter":
         remaining, total = _confirmed_quota(service, provider_runtime.get_state(service))
         return f"{_number(remaining)}/{_number(total)} осталось"
@@ -138,9 +138,7 @@ def _status_detail(service: str, state: dict) -> str:
     if service == "tavily" and provider_runtime.tavily_monthly_quota_exhausted():
         reset_at = int(provider_runtime.get_state("tavily").get("quota_reset_at") or 0)
         until = provider_runtime.reset_date_label(reset_at)
-        remaining, total = _confirmed_quota(service, state)
-        usage = f"{_number(total)}/{_number(total)} осталось · " if total else ""
-        return f"месячный лимит исчерпан · {usage}до {until}"
+        return f"месячный лимит исчерпан · до {until}"
     if service == "tavily":
         budget = api_usage.tavily_budget()
         mode = " · экономный режим" if budget["mode"] == "economy" else ""
@@ -226,7 +224,7 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
         detail = "лимит по модели"
     elif service == "cloudflare":
         remaining, total = api_usage.cloudflare_neuron_usage()["remaining"], api_usage.cloudflare_neuron_usage()["total"]
-        detail = _quota_text(remaining, total).replace(" осталось", " neurons осталось")
+        detail = _quota_text(remaining, total)
     else:
         remaining, total = api_usage.openrouter_usage()["remaining"], api_usage.openrouter_usage()["total"]
         detail = _quota_text(remaining, total)

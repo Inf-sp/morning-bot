@@ -55,6 +55,8 @@ _ROUTE_PROVIDER_BASE = {
 
 # ---------- Cost logger ----------
 _COST_MAX = 500  # максимум записей в rolling-буфере
+_AI_TRAFFIC_MAX = 1000
+_AI_TRAFFIC_TTL = 48 * 3600
 OPENROUTER_FALLBACK_STATS_KEY = "openrouter_fallback_stats.json"
 LOCAL_FALLBACK_TEXT = "Сейчас не удалось подготовить ответ. Попробуй ещё раз чуть позже."
 
@@ -197,6 +199,76 @@ def _log_cost(provider: str, model: str, prompt: str, result: str, module: str =
         store._save(config.COST_LOG_KEY, {"log": buf[-_COST_MAX:]})
     except Exception:
         pass  # логирование не должно ломать основной поток
+
+
+def _record_ai_attempt(provider: str, model: str, module: str, *, ok: bool,
+                       latency_ms: int = 0, failure: str = "", cache_hit: bool = False) -> None:
+    """Короткий технический след AI-попытки без текста запроса или ответа."""
+    try:
+        import tracking
+
+        trace = tracking.current_action()
+        origin = "Пользователь" if trace is not None else "Фон"
+        actor = str(getattr(trace, "cid", "") or "") if trace is not None else ""
+        section = str(getattr(trace, "section", "") or "")
+        if not section:
+            section = tracking._section_for(f"{module}.py")
+        entry = {
+            "ts": int(time.time()),
+            "provider": str(provider or "")[:40],
+            "model": str(model or "")[:80],
+            "module": str(module or "")[:60],
+            "origin": origin,
+            "actor": actor,
+            "section": str(section or "Система")[:40],
+            "action": str(getattr(trace, "action", "") or "")[:100],
+            "ok": bool(ok),
+            "cache_hit": bool(cache_hit),
+            "latency_ms": max(0, int(latency_ms or 0)),
+            "failure": str(failure or "")[:120],
+        }
+        cutoff = entry["ts"] - _AI_TRAFFIC_TTL
+        data = store._load(config.AI_TRAFFIC_LOG_KEY) or {}
+        rows = [row for row in data.get("log", []) if int(row.get("ts") or 0) >= cutoff]
+        rows.append(entry)
+        store._save(config.AI_TRAFFIC_LOG_KEY, {"log": rows[-_AI_TRAFFIC_MAX:]})
+    except Exception:
+        pass
+
+
+def ai_traffic_summary(period_seconds=24 * 3600, limit=5) -> dict:
+    """Сводка попыток для админки: кто и какой раздел создаёт нагрузку."""
+    try:
+        cutoff = time.time() - max(60, int(period_seconds or 0))
+        rows = [
+            row for row in (store._load(config.AI_TRAFFIC_LOG_KEY) or {}).get("log", [])
+            if int(row.get("ts") or 0) >= cutoff
+        ]
+    except Exception:
+        rows = []
+    grouped = {}
+    providers = {}
+    for row in rows:
+        key = (str(row.get("origin") or "Фон"), str(row.get("section") or "Система"),
+               str(row.get("actor") or ""))
+        item = grouped.setdefault(key, {
+            "origin": key[0], "section": key[1], "actor": key[2],
+            "attempts": 0, "failed": 0, "cache_hits": 0,
+        })
+        item["attempts"] += 1
+        item["failed"] += 0 if row.get("ok") else 1
+        item["cache_hits"] += 1 if row.get("cache_hit") else 0
+        provider = str(row.get("provider") or "")
+        if provider and provider != "cache":
+            providers[provider] = providers.get(provider, 0) + 1
+    sources = sorted(grouped.values(), key=lambda item: (-item["attempts"], -item["failed"]))
+    return {
+        "total": len(rows),
+        "failed": sum(1 for row in rows if not row.get("ok")),
+        "cache_hits": sum(1 for row in rows if row.get("cache_hit")),
+        "providers": dict(sorted(providers.items(), key=lambda item: -item[1])),
+        "sources": sources[:max(1, int(limit or 1))],
+    }
 
 
 def _log_openrouter_fallback(origin_provider: str, reason: str, ok: bool,
@@ -1074,6 +1146,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
     cached = _cache_get(cache_key, cache_ttl)
     if cached:
         if _is_cacheable_response(cached, response_mode):
+            _record_ai_attempt("cache", "", module, ok=True, cache_hit=True)
             try:
                 import tracking
                 tracking.annotate_action(provider="cache", cache_hit=True)
@@ -1137,6 +1210,10 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                 continue
         unavailable = _provider_is_unavailable(name)
         if unavailable is not None:
+            _record_ai_attempt(
+                name, _provider_model_name(name), module, ok=False,
+                failure=str(unavailable),
+            )
             try:
                 import tracking
                 tracking.record_ai_failure(
@@ -1160,6 +1237,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                         _monitor_name(failed), _monitor_name(name), reason="request",
                     )
                 ms = int((time.time() - t0) * 1000)
+                _record_ai_attempt(name, _provider_model_name(name), module, ok=True, latency_ms=ms)
                 if _monitor_name(name) != "gemini" and gemini_rate_limit_err is not None:
                     api_usage.record_gemini_fallback(target=name, reason="cooldown")
                     _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
@@ -1176,7 +1254,16 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                 except Exception:
                     pass
                 return out
+            _record_ai_attempt(
+                name, _provider_model_name(name), module, ok=False,
+                latency_ms=int((time.time() - t0) * 1000), failure="empty response",
+            )
         except Exception as e:
+            ms = int((time.time() - t0) * 1000)
+            _record_ai_attempt(
+                name, _provider_model_name(name), module, ok=False,
+                latency_ms=ms, failure=str(e) or type(e).__name__,
+            )
             try:
                 import tracking
                 tracking.record_ai_failure(
@@ -1201,9 +1288,13 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             origin, err = "provider_chain", None
             reason = "all_providers_failed"
         _log.warning("LLM chain failed; trying OpenRouter fallback: provider=%s reason=%s", origin, reason)
+        fallback_started = time.time()
         out = _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin, reason,
                                               response_mode=policy.response_mode)
+        fallback_ms = int((time.time() - fallback_started) * 1000)
         if out:
+            _record_ai_attempt("openrouter", config.OPENROUTER_MODEL, module, ok=True,
+                               latency_ms=fallback_ms)
             if origin in calls:
                 provider_runtime.activate_fallback(
                     _monitor_name(origin), "openrouter", reason=reason,
@@ -1221,6 +1312,8 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             except Exception:
                 pass
             return out
+        _record_ai_attempt("openrouter", config.OPENROUTER_MODEL, module, ok=False,
+                           latency_ms=fallback_ms, failure="fallback failed")
         if _monitor_name(origin) == "gemini" and getattr(err, "error_type", "") == "rate_limit":
             api_usage.record_gemini_fallback(target="local", reason="openrouter_failed")
             _log_gemini_limit("gemini_rate_limit", err, fallback=True)
@@ -1534,16 +1627,23 @@ def _chat_chain_impl(history, cid=None):
             break
         unavailable = _provider_is_unavailable(p)
         if unavailable is not None:
+            _record_ai_attempt(p, _provider_model_name(p), "assistant", ok=False,
+                               failure=str(unavailable))
             failed_providers.append(p)
             errs.append(f"{p}:{unavailable}")
             continue
         try:
+            attempt_started = time.time()
             attempt_timeout = min(
                 _FREE_CHAT_PROVIDER_TIMEOUTS[p],
                 remaining if remaining is not None else _FREE_CHAT_PROVIDER_TIMEOUTS[p],
             )
             out = _as_text(_chat(p, history, system, timeout_cap=attempt_timeout))
             if out and out.strip():
+                _record_ai_attempt(
+                    p, _provider_model_name(p), "assistant", ok=True,
+                    latency_ms=int((time.time() - attempt_started) * 1000),
+                )
                 for failed in failed_providers:
                     provider_runtime.activate_fallback(
                         _monitor_name(failed), _monitor_name(p), reason="request",
@@ -1559,7 +1659,14 @@ def _chat_chain_impl(history, cid=None):
                     pass
                 _log_free_chat_route(served_by=p, outcome="success")
                 return out
+            _record_ai_attempt(
+                p, _provider_model_name(p), "assistant", ok=False,
+                latency_ms=int((time.time() - attempt_started) * 1000), failure="empty response",
+            )
         except Exception as e:
+            _record_ai_attempt(p, _provider_model_name(p), "assistant", ok=False,
+                               latency_ms=int((time.time() - attempt_started) * 1000),
+                               failure=str(e) or type(e).__name__)
             failed_providers.append(p)
             _mark_cooldown(p, e)
             errs.append(f"{p}:{e}")

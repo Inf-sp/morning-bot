@@ -109,7 +109,7 @@ def test_groq_and_cloudflare_rows_use_their_real_units(monkeypatch):
     rows = service_monitor.rows()
 
     assert any("Groq · Основной · gpt-oss-20b · 997/1 000 осталось" in row for row in rows)
-    assert any("Cloudflare AI · Резерв · 9 842/10 000 neurons осталось" in row for row in rows)
+    assert any("Cloudflare AI · Резерв · 9 842/10 000 осталось" in row for row in rows)
 
 
 def test_themealdb_is_shown_only_after_real_spoonacular_fallback(monkeypatch):

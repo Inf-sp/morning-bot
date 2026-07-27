@@ -473,6 +473,15 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "leisure_prefs_music":
         await _inline_status(lambda _s: leisure_music.send_music_preferences(bot, cid, q))
         return
+    if data == "leisure_prefs_movie_favorites":
+        await cleanup.open_collection(bot, cid, "cinema_favorites", back="leisure_prefs_movie")
+        return
+    if data == "leisure_prefs_books_favorites":
+        await cleanup.open_collection(bot, cid, "books_favorites", back="leisure_prefs_books")
+        return
+    if data == "leisure_prefs_music_favorites":
+        await cleanup.open_collection(bot, cid, "music_favorite_artists", back="leisure_prefs_music")
+        return
     if data == "movie_prefs":
         await _inline_status(lambda _s: leisure_movies.send_movie_prefs(bot, cid, q))
         return
