@@ -269,7 +269,8 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "m_food":
         await _inline_status(
             lambda status: menu.send_food_menu(bot, cid, status=status, q=q),
-            preserve_message=True); return
+        )
+        return
     _FV_SECTION = {"m_wardrobe": "wardrobe", "m_learn": "learning",
                    "m_leisure": "leisure", "m_balance": "health"}
     if data in _FV_SECTION and firstvisit.needs_setup(cid, _FV_SECTION[data]):
@@ -279,16 +280,18 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "m_leisure":
         await _inline_status(
             lambda status: leisure_home.send_home(bot, cid, q, status=status),
-            preserve_message=True)
+        )
         return
     if data == "m_wardrobe":
         await _inline_status(
             lambda status: wardrobe.send_home(bot, cid, q=q, status=status),
-            preserve_message=True); return
+        )
+        return
     if data == "m_travel":
         await _inline_status(
             lambda status: travel.send_home(bot, cid, q, status=status),
-            preserve_message=True); return
+        )
+        return
     if data == "m_myday":
         await myday.send_plany(bot, cid, force=True); return
     if data == "m_menu":
@@ -365,8 +368,7 @@ async def handle(update, context, remove_reply_keyboard):
                 await travel.toggle_transport(bot, cid, act[len("trav_mode_"):], q)
             elif act == "watch":
                 await _inline_status(
-                    lambda status: leisure_movies.send_movie_home(bot, cid, q),
-                    preserve_message=True)
+                    lambda _s: leisure_movies.send_movie_home(bot, cid, q))
             elif act == "read":
                 await _inline_status(lambda _s: leisure_books.send_books_home(bot, cid, q))
             elif act == "readlist":

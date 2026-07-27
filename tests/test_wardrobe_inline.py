@@ -364,6 +364,47 @@ def test_week_forecast_uses_preserved_inline_status(monkeypatch):
     assert calls[-1] == ("stop", True)
 
 
+def test_leisure_navigation_replaces_current_menu(monkeypatch):
+    calls = []
+
+    class Status:
+        mode = "inline"
+
+        async def stop(self, delete=True):
+            calls.append(("stop", delete))
+
+    async def start_inline(q, bot=None, cid=None, stages=None, preserve_message=False):
+        calls.append(("start_inline", preserve_message))
+        return Status()
+
+    async def send_home(bot, cid, q, status=None):
+        calls.append(("leisure_home", status.mode))
+
+    monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
+    monkeypatch.setattr(bot_callbacks.leisure_home, "send_home", send_home)
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
+    monkeypatch.setattr(bot_callbacks.firstvisit, "needs_setup", lambda _cid, _section: False)
+
+    class Query:
+        data = "m_leisure"
+        message = type("Message", (), {"chat_id": "42", "message_id": 7})()
+
+    class Update:
+        callback_query = Query()
+
+    class Context:
+        bot = object()
+
+    asyncio.run(bot_callbacks.handle(Update(), Context(), None))
+
+    assert calls == [
+        ("start_inline", False),
+        ("leisure_home", "inline"),
+        ("stop", True),
+    ]
+
+
 def test_closet_screen_does_not_show_edit_button(monkeypatch):
     class Bot:
         message = None
