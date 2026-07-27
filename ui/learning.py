@@ -317,30 +317,37 @@ def morning_words(flag, words=None, empty_hint=False):
     return msg
 
 
-def game_card(ui, clues):
+def game_card(ui, description):
     b = MessageBuilder()
     b.section(f"🕵️ {ui['title']}")
-    b.section(ui["suspect"])
-    b.line(clues)
+    b.line(description)
     b.section(ui["who"])
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
 
 
-def game_found(ui, answer, body=""):
+def game_found(ui, answer, body="", words=None):
     b = MessageBuilder()
     b.section(ui["found"])
     b.spacer()
     b.bold(answer)
     if body:
         b.spacer()
-        b.bold(ui.get("explain", "Почему:"))
+        b.line(str(body).strip())
+    valid_words = [
+        item for item in (words or [])
+        if isinstance(item, dict) and item.get("word") and item.get("translation")
+    ][:3]
+    if valid_words:
+        b.spacer()
+        b.bold(ui.get("remember", "📚 Запомни:"))
         b.newline()
-        points = [part.strip(" •-\n") for part in str(body).replace("\n", ". ").split(".") if part.strip()]
-        for point in points[:3]:
-            b.bullet(point)
-    return b.build()
+        for item in valid_words:
+            b.bullet(f"{item['word']} → {item['translation']}")
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
 
 
 def game_hint(ui, hint):
@@ -350,7 +357,13 @@ def game_hint(ui, hint):
     b.bold(hint)
     b.spacer()
     b.text_line(ui["who"])
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")]])
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")],
+        [
+            InlineKeyboardButton(ui["back"], callback_data="m_learn"),
+            InlineKeyboardButton(ui["home"], callback_data="m_menu"),
+        ],
+    ])
     return b.build(reply_markup=kb)
 
 

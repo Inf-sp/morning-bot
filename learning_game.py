@@ -35,59 +35,49 @@ def _flag(language):
 
 
 # ================= ИГРА-ДЕТЕКТИВ =================
-# Служебные заголовки локализованы под активный язык обучения —
-# улики и служебный UI на одном языке, а не в смеси.
+# Текст игры локализован под активный язык обучения, а кнопки остаются русскими.
 GAME_UI = {
     "русский": {
-        "title": "Детектив",
+        "title": "Детектив · Русский",
         "who": "Кто это?",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Подсказка",
         "reveal": "😞 Сдаюсь",
-        "suspect": "Подозреваемый:",
         "found": "✅ Дело раскрыто!",
-        "answer": "Ответ",
-        "explain": "Почему:",
+        "remember": "📚 Запомни:",
         "again": "✨ Ещё",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
-        "nohint": "Подсказок больше нет.",
         "wrong": "❌ Не то",
-        "retry": "Ещё попытка - напиши ответ или возьми подсказку.",
+        "retry": "Попробуй ещё один раз.",
     },
     "английский": {
-        "title": "Detective",
+        "title": "Detective · English",
         "who": "Who am I?",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
         "reveal": "😞 Сдаюсь",
-        "suspect": "Suspect:",
         "found": "✅ Case solved!",
-        "answer": "Answer",
-        "explain": "Why:",
+        "remember": "📚 Remember:",
         "again": "✨ Ещё",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
-        "nohint": "No more hints.",
-        "wrong": "❌ Not quite",
-        "retry": "One more try - write the answer or take a hint.",
+        "wrong": "❌ Not yet",
+        "retry": "Try one more time.",
     },
     "нидерландский": {
-        "title": "Detective",
+        "title": "Detective · Nederlands",
         "who": "Wie ben ik?",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
         "reveal": "😞 Сдаюсь",
-        "suspect": "Verdachte:",
         "found": "✅ Zaak opgelost!",
-        "answer": "Antwoord",
-        "explain": "Waarom:",
+        "remember": "📚 Onthoud:",
         "again": "✨ Ещё",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
-        "nohint": "Geen hints meer.",
         "wrong": "❌ Niet juist",
-        "retry": "Nog een poging - schrijf het antwoord of neem een hint.",
+        "retry": "Probeer nog één keer.",
     },
 }
 
@@ -166,6 +156,12 @@ _GAME_SIGNATURE_MARKERS = (
     "лёд", "лед", "ice", "ijs", "мёд", "мед", "honey", "honing", "маск", "mask", "gotham", "готэм",
     "hogwarts", "хогвартс", "arendelle", "аренд", "fiona", "фиона", "minnie", "минни", "mufasa", "муфаса",
     "дональд", "donald", "красн.*шорт", "red shorts", "rode broek", "осёл", "осел", "donkey",
+    "картоф", "potato", "aardappel", "сыр", "cheese", "kaas", "колес", "wheel", "wiel", "руль", "steering wheel", "stuur",
+    "водител", "driver", "chauffeur", "пилот", "pilot", "piloot", "врач", "doctor", "arts", "учител", "teacher", "leraar",
+    "пожарн", "firefighter", "brandweer", "автобус", "bus", "поезд", "train", "trein", "самолёт", "самолет", "plane", "vliegtuig",
+    "мяу", "meow", "miauw", "лаять", "bark", "blaf", "woof", "хвост", "tail", "staart", "лап", "paws", "poten",
+    "печь", "oven", "fornuis", "экран", "screen", "scherm", "звон", "ring", "bellen", "больн", "sick", "ziek",
+    "больниц", "hospital", "ziekenhuis", "пациент", "patient", "patiënt", "ученик", "student", "leerling",
 )
 _GAME_VAGUE_CLUE_MARKERS = (
     "активен ночью", "active at night", "'s nachts actief", "большие глаза", "big eyes", "grote ogen",
@@ -174,64 +170,159 @@ _GAME_VAGUE_CLUE_MARKERS = (
 )
 
 
+def _game_sentences(text):
+    return [part.strip() for part in re.split(r"(?<=[.!?…])\s+", str(text or "").strip()) if part.strip()]
+
+
+def _game_has_answer(text, answer, aliases=()):
+    source = str(text or "").casefold()
+    for value in [answer] + list(aliases or []):
+        value = str(value or "").strip().casefold()
+        if not value:
+            continue
+        words = [re.escape(word) for word in re.findall(r"[\wÀ-ÿА-яЁё]+", value)]
+        if words and re.search(
+            r"(?<![\wÀ-ÿА-яЁё])" + r"\s+".join(words) + r"(?![\wÀ-ÿА-яЁё])",
+            source,
+        ):
+            return True
+    return False
+
+
+def _game_has_target_language(text, lang):
+    # Русские переводы принадлежат только ALIASES и WORDS.
+    return not re.search(r"[А-Яа-яЁё]", str(text or ""))
+
+
+def _game_word_in_text(word, text):
+    word = str(word or "").strip().casefold()
+    source = str(text or "").casefold()
+    if not word or not source:
+        return False
+    return word in source or any(
+        _fuzzy(word, token)
+        for token in re.findall(r"[a-zà-öø-ÿ]+", source)
+    )
+
+
+def _parse_game_words(raw, source_text):
+    basic_words = {"ik", "i", "zijn", "be", "een", "a", "an", "the"}
+    words = []
+    for item in str(raw or "").split(";"):
+        parts = [part.strip() for part in item.split("|", 1)]
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            continue
+        word, translation = parts
+        if word.casefold() not in basic_words and _game_word_in_text(word, source_text):
+            words.append({"word": word, "translation": translation})
+    return words[:3]
+
+
+def _description_is_guessable(data, lang=None):
+    """Проверяет связное языковое описание, а не список отдельных улик."""
+    description = " ".join(str(data.get("description") or "").split())
+    answer = str(data.get("answer") or "").strip()
+    aliases = data.get("aliases") or []
+    hint = " ".join(str(data.get("hint") or "").split())
+    sentences = _game_sentences(description)
+    if not answer or not hint or not (2 <= len(sentences) <= 5):
+        return False
+    if not 20 <= len(description.split()) <= 55:
+        return False
+    if _game_has_answer(description, answer, aliases) or _game_has_answer(hint, answer, aliases):
+        return False
+    if lang and (
+        not _game_has_target_language(description, lang)
+        or not _game_has_target_language(hint, lang)
+        or not _game_has_target_language(data.get("explain", ""), lang)
+    ):
+        return False
+    combined = " ".join((description, hint, data.get("explain", ""))).casefold()
+    vague_count = sum(bool(re.search(marker, combined)) for marker in _GAME_VAGUE_CLUE_MARKERS)
+    signature_count = sum(bool(re.search(marker, combined)) for marker in _GAME_SIGNATURE_MARKERS)
+    hint_signature_count = sum(bool(re.search(marker, hint.casefold())) for marker in _GAME_SIGNATURE_MARKERS)
+    if signature_count < 1 or vague_count >= 2 or hint_signature_count < 1:
+        return False
+    # Подсказка обязана добавлять отличительный признак, а не повторять общий текст.
+    return any(
+        marker not in description.casefold()
+        for marker in _GAME_SIGNATURE_MARKERS
+        if re.search(marker, hint.casefold())
+    )
+
+
 def _clues_are_guessable(data):
-    """Отбрасывает наборы, где нет отличительного признака ответа."""
-    clues = [str(clue or "").strip() for clue in str(data.get("clues") or "").splitlines() if str(clue or "").strip()]
-    if len(clues) < 4:
-        return False
-    text = " ".join(clues).casefold()
-    vague_count = sum(bool(re.search(marker, text)) for marker in _GAME_VAGUE_CLUE_MARKERS)
-    signature_count = sum(bool(re.search(marker, text)) for marker in _GAME_SIGNATURE_MARKERS)
-    if signature_count < 1:
-        return False
-    # Две и более универсальные характеристики без уникальной концовки делают
-    # задачу угадыванием наугад. Последняя улика обязана нести отличительный факт.
-    last = clues[-1].casefold()
-    last_has_signature = any(re.search(marker, last) for marker in _GAME_SIGNATURE_MARKERS)
-    return vague_count < 2 or last_has_signature
+    """Совместимое имя; новые раунды проверяют DESCRIPTION."""
+    return _description_is_guessable(data)
 
 
 def game_data(clue_lang, recent, attempt=0):
-    subject = ("только очень известное животное (например, кошка, собака, лев, слон, жираф, "
-               "обезьяна, пингвин, акула или дельфин) ИЛИ очень известного героя мультфильма или кино "
-               "(например, Микки Маус, Гарри Поттер, Человек-паук, Бэтмен, Шрек, Симба, "
-               "Эльза или Винни-Пух). Выбирай только героя, которого узнает почти любой человек. "
-               "Не загадывай предметы, растения, знаменитостей, исторических людей, редких персонажей "
+    subject = ("одно очень знакомое животное, блюдо, предмет, профессию, вид транспорта, место "
+               "или очень известного героя мультфильма/кино. Выбирай только то, что узнает человек "
+               "с базовым языком: например кошка, пицца, автобус, врач, поезд, Шрек или Гарри Поттер. "
+               "Не выбирай растения, знаменитостей, исторических людей, редких персонажей, бренды "
                "или абстрактные понятия.")
-    diff_desc = ("уровень языка A1–A2: только короткие простые предложения и самые частые слова. "
-                 "Каждая улика должна прямо описывать цвет, размер, звук, место, действие или известную роль. "
-                 "Загадка должна быть очень лёгкой: ответ можно уверенно угадать по третьей или четвёртой улике. "
-                 "Не используй метафоры, идиомы, редкие слова, сложные времена или длинные описания")
     avoid = ("Не загадывай ничего из этого списка и их переводы/синонимы: " + ", ".join(recent[-80:])) if recent else ""
-    prompt = f"""Игра-детектив. Загадай: {subject}.
-Сложность: {diff_desc}. ВЕСЬ текст на языке: {clue_lang}. {avoid}
-Для лёгкого режима особенно важно: не усложняй загадку ради интриги, не выбирай редкий вариант и не скрывай ответ сложными словами.
-Попытка генерации: {attempt + 1}. Если сомневаешься, выбирай менее очевидный вариант, которого не было в списке.
-Каждая подсказка и каждое предложение заканчивается точкой.
-Стиль: улики должны быть короткими, конкретными и честными, а не туманными.
-Порядок обязателен: 1) простая сцена или действие, 2) заметный внешний признак, 3) отличительная привычка/способность/роль, 4) почти очевидная уникальная деталь.
-Минимум одна из последних двух улик обязана содержать узнаваемый признак: особый предмет, место, имя друга, способность, костюм, родственника или известную роль.
-Не пиши «активен ночью», «у него большие глаза», «любит рыбу», «у него есть известный друг/подруга» без дополнительной уникальной детали — это слишком расплывчато.
-Последняя улика должна позволить догадаться почти сразу, но не должна содержать само название ответа.
-Не повторяй одинаковые формулировки между уликами.
-Ответь строго, каждое поле с новой строки, без markdown:
-CLUES: 4 улики на языке {clue_lang}, через | , от косвенной к более явной — конкретные детали (форма, цвет, происхождение, функция, ощущения), без имени/названия
-ANSWER: название на языке {clue_lang}
-ALIASES: то же название на русском, английском и нидерландском через |
-ENGLISH: название ответа на английском, только 1–4 слова
-HINT: ещё одна явная подсказка на языке {clue_lang}
-HINT2: совсем простая, почти очевидная подсказка (но без названия), на языке {clue_lang}
-EXPLAIN: 2 живых предложения — что это такое и почему улики вели именно к нему (на языке {clue_lang})"""
+    prompt = f"""Create a short guessing game for a language learner.
+Target language: {clue_lang}. CEFR level: A1-A2.
+Choose {subject}
+{avoid}
+Write a natural mini-description of 3-4 connected sentences, about 25-45 words total.
+Use simple, natural language. Do not write a list of clues. Include 2-4 concrete characteristics.
+Make guessing possible without making the answer immediately obvious. Never include the answer itself.
+Avoid metaphors, vague statements, trivia, specialist knowledge and factual errors.
+HINT must be one strong short sentence in the target language. It should make the answer almost obvious
+without saying the answer; use a distinctive characteristic, not a generic fact.
+EXPLAIN must be 1-2 short natural sentences in the target language.
+WORDS must contain at most 3 useful words from DESCRIPTION, HINT or EXPLAIN, with Russian translations.
+Do not choose function words such as ik, I, zijn, be, een, a, the.
+Attempt: {attempt + 1}. Return exactly these fields, one per line, without markdown:
+DESCRIPTION: 3-4 connected sentences in {clue_lang}, 25-45 words
+ANSWER: answer in {clue_lang}
+ALIASES: accepted Russian, English and Dutch names separated by |
+ENGLISH: English name in 1-4 words
+HINT: one strong hint in {clue_lang}
+EXPLAIN: 1-2 short sentences in {clue_lang}
+WORDS: word|Russian translation; word|Russian translation; word|Russian translation"""
     raw = ai.llm(prompt, 900, 1.0, tier="cheap")
     out = {}
-    for key, field in (("CLUES", "clues"), ("ANSWER", "answer"), ("ALIASES", "aliases"),
+    for key, field in (("DESCRIPTION", "description"), ("ANSWER", "answer"), ("ALIASES", "aliases"),
                        ("ENGLISH", "answer_en"),
-                       ("HINT", "hint"), ("HINT2", "hint2"), ("EXPLAIN", "explain")):
-        m = re.search(rf"{key}:\s*(.+?)(?=\n[A-Z]+\d*:|\Z)", raw, re.S)
+                       ("HINT", "hint"), ("EXPLAIN", "explain"), ("WORDS", "words_raw")):
+        m = re.search(rf"{key}:\s*(.+?)(?=\n[A-Z]+\d*:\s|\Z)", raw, re.S)
         out[field] = m.group(1).strip() if m else ""
-    out["clues"] = out.get("clues", "").replace(" | ", "\n").replace("|", "\n")
     out["aliases"] = [x.strip() for x in out.get("aliases", "").split("|") if x.strip()]
+    source_text = " ".join((out.get("description", ""), out.get("hint", ""), out.get("explain", "")))
+    out["description"] = " ".join(str(out.get("description") or "").split())
+    out["hint"] = " ".join(str(out.get("hint") or "").split())
+    out["explain"] = " ".join(str(out.get("explain") or "").split())
+    out["words"] = _parse_game_words(out.get("words_raw", ""), source_text)
     return out
+
+
+def _game_play_kb(ui, *, hint_available):
+    first_row = []
+    if hint_available:
+        first_row.append(InlineKeyboardButton(ui["hint"], callback_data="game_hint"))
+    first_row.append(InlineKeyboardButton(ui["reveal"], callback_data="game_reveal"))
+    return InlineKeyboardMarkup([
+        first_row,
+        [
+            InlineKeyboardButton(ui["back"], callback_data="m_learn"),
+            InlineKeyboardButton(ui["home"], callback_data="m_menu"),
+        ],
+    ])
+
+
+def _game_result_kb(ui):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(ui["again"], callback_data="game_again")],
+        [
+            InlineKeyboardButton(ui["back"], callback_data="m_learn"),
+            InlineKeyboardButton(ui["home"], callback_data="m_menu"),
+        ],
+    ])
+
 
 async def start(bot, cid, status=None):
     store.challenge_state.pop(str(cid), None)
@@ -249,7 +340,8 @@ async def send_game(bot, cid, status=None):
         d = {}
         for attempt in range(5):
             cand = game_data(lang, recent, attempt=attempt)
-            if cand.get("answer") and _clues_are_guessable(cand) and not _game_is_recent(cand, recent):
+            if (cand.get("answer") and _description_is_guessable(cand, lang)
+                    and not _game_is_recent(cand, recent)):
                 d = cand
                 break
             if cand.get("answer"):
@@ -265,18 +357,15 @@ async def send_game(bot, cid, status=None):
     except Exception as e:
         await verify.safe_error(bot, cid, e, back="m_learn"); return
     _remember_game_answer(cid, d)
-    hints = [_dot(h) for h in [d.get("hint"), d.get("hint2")] if (h or "").strip()]
     store.game_state[str(cid)] = {"answer": d.get("answer", ""), "answer_en": d.get("answer_en", ""),
                                   "aliases": d.get("aliases", []),
-                                  "quote": d.get("quote", ""), "hints": hints, "hint_i": 0,
-                                  "explain": _dot(d.get("explain", "")), "tries": 0}
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(ui["hint"], callback_data="game_hint"),
-         InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")],
-        [InlineKeyboardButton(ui["back"], callback_data="m_learn"), InlineKeyboardButton(ui["home"], callback_data="m_menu")],
-    ])
-    clues = "\n".join(f"• {c.strip()}" for c in d.get("clues", "").split("\n") if c.strip())
-    msg = learning_ui.game_card(ui, clues)
+                                  "description": d.get("description", ""),
+                                  "hint": _dot(d.get("hint", "")),
+                                  "hint_used": False,
+                                  "explain": _dot(d.get("explain", "")),
+                                  "words": d.get("words", []), "tries": 0}
+    msg = learning_ui.game_card(ui, d.get("description", ""))
+    kb = _game_play_kb(ui, hint_available=True)
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
     else:
@@ -314,8 +403,9 @@ def _get_english_query(st):
 
 async def _send_game_result(bot, cid, st, ui, kb):
     import travel_photos
-    body = st.get("explain") or st.get("quote", "")
-    msg = learning_ui.game_found(ui, st.get("answer", ""), body)
+    msg = learning_ui.game_found(
+        ui, st.get("answer", ""), st.get("explain", ""), st.get("words", []),
+    )
     query = _get_english_query(st)
     photo = None
     if query:
@@ -348,6 +438,13 @@ def _is_landscape_photo(photo):
         return False
 
 
+async def _finish_game_round(bot, cid, st, ui):
+    """Единое завершение для правильного ответа, сдачи и второй ошибки."""
+    store.game_state.pop(str(cid), None)
+    _remember_game_answer(cid, st)
+    await _send_game_result(bot, cid, st, ui, _game_result_kb(ui))
+
+
 async def game_answer(bot, cid, text):
     st = store.game_state.get(str(cid))
     if not st:
@@ -362,54 +459,40 @@ async def game_answer(bot, cid, text):
         pool += [n] + n.split()
     correct = any(_fuzzy(guess, p) for p in pool if p)
     if correct:
-        store.game_state.pop(str(cid), None)
-        _remember_game_answer(cid, st)
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(ui["again"], callback_data="game_again")],
-            [InlineKeyboardButton(ui["back"], callback_data="m_learn"),
-             InlineKeyboardButton(ui["home"], callback_data="m_menu")],
-        ])
-        await _send_game_result(bot, cid, st, ui, kb)
+        await _finish_game_round(bot, cid, st, ui)
         return True
     st["tries"] = st.get("tries", 0) + 1
     if st["tries"] >= 2:
-        store.game_state.pop(str(cid), None)
-        _remember_game_answer(cid, st)
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(ui["again"], callback_data="game_again")]])
-        await bot.send_message(chat_id=cid, text=f"{ui['wrong']}. {st['answer']}.", reply_markup=kb)
+        await _finish_game_round(bot, cid, st, ui)
     else:
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(ui["hint"], callback_data="game_hint"),
-                                    InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")]])
-        await bot.send_message(chat_id=cid, text=f"{ui['wrong']}. {ui['retry']}", reply_markup=kb)
+        kb = _game_play_kb(ui, hint_available=not st.get("hint_used"))
+        await bot.send_message(chat_id=cid, text=f"{ui['wrong']}\n\n{ui['retry']}", reply_markup=kb)
     return True
 
 
 async def game_hint(bot, cid, q):
     st = store.game_state.get(str(cid))
     ui = _game_ui(store.game_config.get(str(cid), {}).get("lang", "русский"))
-    hints = (st or {}).get("hints") or []
-    i = (st or {}).get("hint_i", 0)
-    if st and i < len(hints):
-        st["hint_i"] = i + 1
-        msg = learning_ui.game_hint(ui, hints[i])
+    if st and not st.get("hint_used") and st.get("hint"):
+        st["hint_used"] = True
+        kb = _game_play_kb(ui, hint_available=False)
+        try:
+            await q.message.edit_reply_markup(reply_markup=kb)
+        except Exception:
+            pass
+        msg = learning_ui.game_hint(ui, st["hint"])
         await q.message.reply_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
     else:
-        await q.message.reply_text(ui["nohint"])
+        await q.message.reply_text(ui["hint_title"])
 
 
 async def game_reveal(bot, cid, q):
-    st = store.game_state.pop(str(cid), None)
+    st = store.game_state.get(str(cid))
     ui = _game_ui(store.game_config.get(str(cid), {}).get("lang", "русский"))
     if not st:
         return
-    _remember_game_answer(cid, st)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(ui["again"], callback_data="game_again")],
-        [InlineKeyboardButton(ui["back"], callback_data="m_learn"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
     try:
         await q.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await _send_game_result(bot, cid, st, ui, kb)
+    await _finish_game_round(bot, cid, st, ui)

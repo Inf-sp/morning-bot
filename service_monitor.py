@@ -107,19 +107,6 @@ def format_row(service: str, state: dict | None = None) -> str:
     spec = SPEC_BY_KEY[service]
     state = state or provider_runtime.get_state(service)
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
-    if service == "cohere":
-        usage = api_usage.cohere_requests()
-        available = int(usage["remaining"])
-        if available <= 0:
-            return "🟡 Cohere · лимит исчерпан → GitHub Models"
-        if not _configured(service):
-            return "🔴 Cohere · API-ключ не настроен"
-        if status in (WARNING, DOWN):
-            return " · ".join([
-                f"{_DOT[status]} {spec.label}", spec.category, _status_detail(service, state),
-            ])
-        dot = _DOT[WARNING if available <= 200 else OK]
-        return f"{dot} Cohere · {_number(available)} / 1 000"
     if service == "google_books":
         usage = api_usage.google_books_requests()
         remaining = int(usage["remaining"])
@@ -162,7 +149,6 @@ def _probe_request(service: str):
     common = {"timeout": 15}
     probes = {
         "gemini": ("GET", "https://generativelanguage.googleapis.com/v1beta/models", {"params": {"key": config.GEMINI_API_KEY, "pageSize": 1}}),
-        "cohere": ("GET", "https://api.cohere.com/v1/models", {"headers": {"Authorization": f"Bearer {config.COHERE_API_KEY}"}, "params": {"page_size": 1}}),
         "github_models": ("GET", "https://models.github.ai/catalog/models", {"headers": {"Authorization": f"Bearer {config.GITHUB_MODELS_TOKEN}"}}),
         "groq": ("GET", "https://api.groq.com/openai/v1/models", {"headers": {"Authorization": f"Bearer {config.GROQ_API_KEY}"}}),
         "openrouter": ("GET", "https://openrouter.ai/api/v1/key", {"headers": {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}"}}),
@@ -214,16 +200,12 @@ def probe(service: str) -> bool:
         return False
     try:
         method, url, kwargs = _probe_request(service)
-        if service == "cohere" and not api_usage.cohere_requests()["allowed"]:
-            return False
         if service == "google_books" and not api_usage.google_books_requests()["allowed"]:
             return False
         try:
             response = requests.request(method, url, **kwargs)
         finally:
-            if service == "cohere":
-                api_usage.cohere_requests(consume=True)
-            elif service == "google_books":
+            if service == "google_books":
                 api_usage.google_books_requests(consume=True)
         ok = 200 <= response.status_code < 300
         error = ""

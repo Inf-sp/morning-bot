@@ -17,9 +17,9 @@ def test_error_time_uses_configured_timezone_not_server_timezone():
 
 
 def test_system_ui_has_no_last_raw_error_block():
-    message = admin_ui.api_ai(["🟢 Cohere · Обучение · 3 из 1 000"], "21:44")
+    message = admin_ui.api_ai(["🟢 Groq · Обучение · 3 запроса сегодня"], "21:44")
 
-    assert message.text.startswith("🛠 Система\n\n🟢 Cohere · Обучение · 3 из 1 000")
+    assert message.text.startswith("🛠 Система\n\n🟢 Groq · Обучение · 3 запроса сегодня")
     assert "Автоматический резерв" not in message.text
     assert "95%" not in message.text
     assert "Последняя ошибка" not in message.text
@@ -38,7 +38,7 @@ def test_tracking_keeps_diagnostic_context_and_redacts_secrets(monkeypatch):
     except NameError as exc:
         tracking.log_error(
             "app", str(exc), exc=exc, section="Обучение",
-            action="не открылось задание", service="Cohere", fallback="Gemini",
+            action="не открылось задание", service="Groq", fallback="Gemini",
         )
 
     entry = state["log"][0]
@@ -48,7 +48,7 @@ def test_tracking_keeps_diagnostic_context_and_redacts_secrets(monkeypatch):
     assert entry["file"] == "test_admin_system.py"
     assert entry["line"] > 0
     assert entry["function"] == "test_tracking_keeps_diagnostic_context_and_redacts_secrets"
-    assert entry["service"] == "Cohere"
+    assert entry["service"] == "Groq"
     assert entry["fallback"] == "Gemini"
     assert entry["version"] == "1.2.3"
     assert "Traceback" in entry["traceback"]

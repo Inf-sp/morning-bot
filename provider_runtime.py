@@ -50,12 +50,11 @@ class ProviderSpec:
 # Fallbacks are directed. Tavily is reserve-only while its monthly quota is
 # exhausted; search never bounces back from Tavily to Firecrawl.
 SPECS = (
-    ProviderSpec("cohere", "Cohere", ("Обучение", "Ассистент"), ("github_models", "gemini"), 3600),
-    ProviderSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"), ("github_models", "groq", "openrouter"), 3600),
+    ProviderSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"), ("groq", "openrouter"), 3600),
     ProviderSpec("github_models", "GitHub Models", ("Готовка", "Обучение", "Ассистент"), ("openrouter",), 3600),
-    ProviderSpec("groq", "Groq", ("Готовка", "Обучение", "Ассистент"), ("github_models", "openrouter"), 3600),
+    ProviderSpec("groq", "Groq", ("Готовка", "Обучение", "Ассистент"), ("cloudflare", "openrouter"), 3600),
     ProviderSpec("openrouter", "OpenRouter", ("Готовка",), (), 3600),
-    ProviderSpec("cloudflare", "Cloudflare AI", ("Ассистент",), ("github_models",), 3600),
+    ProviderSpec("cloudflare", "Cloudflare AI", ("Ассистент",), ("openrouter",), 3600),
     ProviderSpec("openweather", "OpenWeather", ("Мой день", "Гардероб"), ()),
     ProviderSpec("firecrawl", "Firecrawl", ("Поиск", "Поездка", "Концерты"), (), 900),
     ProviderSpec("tavily", "Tavily", ("Поиск",), ("firecrawl",)),
@@ -74,12 +73,11 @@ SPECS = (
 )
 SPEC_BY_KEY = {spec.key: spec for spec in SPECS}
 LABELS = {spec.key: spec.label for spec in SPECS}
-AI_PROVIDERS = {"cohere", "gemini", "github_models", "groq", "openrouter", "cloudflare"}
+AI_PROVIDERS = {"gemini", "github_models", "groq", "openrouter", "cloudflare"}
 
 
 def is_configured(provider: str) -> bool:
     values = {
-        "cohere": config.COHERE_API_KEY,
         "gemini": config.GEMINI_API_KEY,
         "github_models": config.GITHUB_MODELS_TOKEN,
         "groq": config.GROQ_API_KEY,

@@ -209,7 +209,7 @@ _SECTION_BY_MODULE = {
 _SERVICE_NAMES = (
     "azure speech", "language tool", "languagetool", "spoonacular", "themealdb",
     "openweather", "ticketmaster", "google books", "firecrawl",
-    "openrouter", "github models", "cloudflare", "zeroentropy", "cohere", "gemini",
+    "openrouter", "github models", "cloudflare", "zeroentropy", "gemini",
     "groq", "tavily", "telegram", "tmdb", "pexels", "unsplash",
 )
 
@@ -230,7 +230,7 @@ _FALLBACK_BY_SERVICE = {
     "Azure Speech": "текстовая карточка", "TMDB": "Gemini",
     "Google Books": "Open Library", "Ticketmaster": "Tavily",
     "ZeroEntropy": "поиск в базе", "Tavily": "Firecrawl",
-    "Gemini": "GitHub Models", "Cohere": "Gemini", "Groq": "GitHub Models",
+    "Gemini": "GitHub Models", "Groq": "GitHub Models",
 }
 
 

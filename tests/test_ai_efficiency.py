@@ -192,7 +192,7 @@ def test_premium_fallback_keeps_action_statistics(monkeypatch):
         raise ai.LLMProviderError("gemini", "temporary", status_code=503, temporary=True)
 
     monkeypatch.setattr(ai, "_gen_gemini", unavailable)
-    monkeypatch.setattr(ai, "_gen_github_models", lambda *_args: calls.append("github_models") or '{"ok":true}')
+    monkeypatch.setattr(ai, "_gen_groq", lambda *_args, **_kwargs: calls.append("groq") or '{"ok":true}')
 
     trace = tracking.start_action("42", "Поездка", "country", budget_seconds=10)
     try:
@@ -201,11 +201,11 @@ def test_premium_fallback_keeps_action_statistics(monkeypatch):
         tracking.finish_action(trace)
 
     row = memory[tracking.config.ACTION_LATENCY_KEY]["log"][0]
-    assert calls == ["gemini", "github_models"]
-    assert row["requested_tier"] == "premium"
+    assert calls == ["gemini", "groq"]
+    assert row["requested_tier"] == "complex"
     assert row["primary"] == "gemini"
     assert row["primary_status"] == "503"
-    assert row["served_by"] == "github_models"
+    assert row["served_by"] == "groq_complex"
     assert row["gemini_calls"] == 1
 
 

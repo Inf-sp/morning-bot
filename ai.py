@@ -25,18 +25,29 @@ _ACTIVE_DEADLINE = contextvars.ContextVar("ai_deadline", default=None)
 STANDARD_BUDGET_SECONDS = 10.0
 COMPLEX_BUDGET_SECONDS = 15.0
 FREE_CHAT_BUDGET_SECONDS = 10.0
-FREE_CHAT_ROUTE_VERSION = "free-chat-utility-v2"
+FREE_CHAT_ROUTE_VERSION = "free-chat-standard-v3"
 FREE_CHAT_SCENARIO = "assistant/free_chat"
-FREE_CHAT_TIER = "utility"
+FREE_CHAT_TIER = "smart"
 _FREE_CHAT_PROVIDER_TIMEOUTS = {
-    "groq": 3.0,
-    "github_models": 3.0,
+    "groq_standard": 3.0,
+    "gemini_lite": 3.0,
     "openrouter": 4.0,
 }
 _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS = 1.0
 _COMPLEX_MODULE_PREFIXES = (
     "assistant", "food", "cooking", "recipe", "wardrobe", "travel", "leisure", "learning",
 )
+
+GROQ_SIMPLE = "groq_simple"
+GROQ_STANDARD = "groq_standard"
+GROQ_COMPLEX = "groq_complex"
+GEMINI_LITE = "gemini_lite"
+_ROUTE_PROVIDER_BASE = {
+    GROQ_SIMPLE: "groq",
+    GROQ_STANDARD: "groq",
+    GROQ_COMPLEX: "groq",
+    GEMINI_LITE: "gemini",
+}
 
 # ---------- Cost logger ----------
 _COST_MAX = 500  # максимум записей в rolling-буфере
@@ -151,7 +162,6 @@ def _is_temporary_exception(exc):
 
 _TIMEOUT_CAPS = {
     "gemini": 6.0,
-    "cohere": 5.0,
     "github_models": 5.0,
     "groq": 5.0,
     "cf": 4.0,
@@ -374,16 +384,22 @@ def _parse_retry_seconds(headers=None, body="") -> int | None:
 
 def _provider_model_name(provider: str) -> str:
     provider = (provider or "").strip()
+    if provider == GROQ_SIMPLE:
+        return config.GROQ_SIMPLE_MODEL
+    if provider == GROQ_STANDARD:
+        return config.GROQ_STANDARD_MODEL
+    if provider == GROQ_COMPLEX:
+        return config.GROQ_COMPLEX_MODEL
+    if provider == GEMINI_LITE:
+        return config.GEMINI_LITE_MODEL
     if provider == "gemini":
         return config.GEMINI_MODEL
-    if provider == "cohere":
-        return config.COHERE_MODEL
     if provider == "github_models":
         return config.GITHUB_MODELS_MODEL
     if provider == "groq":
-        return "llama-3.3-70b-versatile"
+        return config.GROQ_STANDARD_MODEL
     if provider == "cf":
-        return "cloudflare-cf-model"
+        return config.CF_MODEL
     return ""
 
 
@@ -445,14 +461,6 @@ def _gemini_cooldown_error():
     )
 
 
-def _cohere_limit_error():
-    if api_usage.cohere_requests()["allowed"]:
-        return None
-    return LLMProviderError(
-        "cohere", "cohere monthly limit exhausted", error_type="quota",
-    )
-
-
 def get_gemini_rate_limit_stats(period_days=1) -> dict:
     return api_usage.gemini_state(period_days)
 
@@ -495,13 +503,9 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
         pass
 
 def _post(url, headers, payload, timeout, name, timeout_cap=None):
-    service = {"cf": "cloudflare"}.get(name, name)
-    cohere_request = service == "cohere"
+    service_aliases = {"cf": "cloudflare", **_ROUTE_PROVIDER_BASE}
+    service = service_aliases.get(name, name)
     gemini_request = service == "gemini"
-    if cohere_request:
-        limit_error = _cohere_limit_error()
-        if limit_error is not None:
-            raise limit_error
     if timeout_cap is None:
         timeout_cap = _timeout_cap(name)
     if timeout_cap is not None:
@@ -511,21 +515,13 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None):
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=timeout)
     except requests.exceptions.Timeout as e:
-        if cohere_request:
-            provider_runtime.record_result(service, False, error="timeout")
-        else:
-            api_usage.record_request(service, ok=False, error="timeout")
+        api_usage.record_request(service, ok=False, error="timeout")
         raise LLMProviderError(name, f"{name} timeout", temporary=True, error_type=type(e).__name__) from e
     except requests.exceptions.ConnectionError as e:
-        if cohere_request:
-            provider_runtime.record_result(service, False, error="network_error")
-        else:
-            api_usage.record_request(service, ok=False, error="network_error")
+        api_usage.record_request(service, ok=False, error="network_error")
         raise LLMProviderError(name, f"{name} network error", temporary=True, error_type=type(e).__name__) from e
     finally:
-        if cohere_request:
-            api_usage.cohere_requests(consume=True)
-        elif gemini_request:
+        if gemini_request:
             api_usage.gemini_requests(consume=True)
     if r.status_code != 200:
         # тело ошибки в логи (видно причину), но без секретов
@@ -533,16 +529,10 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None):
         temporary = _is_temporary_status(r.status_code)
         limit_scope = ""
         cooldown_until = None
-        if cohere_request:
-            provider_runtime.record_result(
-                service, False, status_code=r.status_code,
-                error=f"HTTP {r.status_code}", headers=r.headers,
-            )
-        else:
-            api_usage.record_request(service, ok=False, status_code=r.status_code,
-                                     error=f"HTTP {r.status_code}",
-                                     latency_ms=int((time.time() - t0) * 1000),
-                                     headers=r.headers)
+        api_usage.record_request(service, ok=False, status_code=r.status_code,
+                                 error=f"HTTP {r.status_code}",
+                                 latency_ms=int((time.time() - t0) * 1000),
+                                 headers=r.headers)
         retry_after = None
         try:
             retry_after = int(r.headers.get("Retry-After") or 0) or None
@@ -564,9 +554,7 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None):
                                error_type="rate_limit" if limit_scope else "http_error",
                                retry_after=retry_after, limit_scope=limit_scope,
                                cooldown_until=cooldown_until)
-    if cohere_request:
-        provider_runtime.record_result(service, True, headers=r.headers)
-    elif service != "gemini":
+    if service != "gemini":
         api_usage.record_request(service, ok=True, latency_ms=int((time.time() - t0) * 1000),
                                  headers=r.headers)
     return r
@@ -582,7 +570,8 @@ def _as_text(x):
     return None
 
 # ---------- одиночная генерация ----------
-def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text"):
+def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text",
+                model=None, provider="gemini"):
     cooling = _gemini_cooldown_error()
     if cooling is not None:
         raise cooling
@@ -604,8 +593,8 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
             time.sleep(wait)
         t0 = time.time()
         r = _post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
-            {}, payload, 30, "gemini", timeout_cap=5)
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model or _provider_model_name(provider)}:generateContent?key={config.GEMINI_API_KEY}",
+            {}, payload, 30, provider, timeout_cap=5)
     data = r.json()
     usage = data.get("usageMetadata") or data.get("usage_metadata") or {}
     input_tokens = int(usage.get("promptTokenCount") or usage.get("prompt_token_count") or 0)
@@ -622,45 +611,6 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
         headers=r.headers,
     )
     return data["candidates"][0]["content"]["parts"][0]["text"]
-
-
-def _gen_cohere(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text"):
-    """Cohere Chat API V2 для языковых, классификационных и JSON-задач."""
-    if not config.COHERE_API_KEY:
-        raise LLMProviderError("cohere", "no cohere key", error_type="credentials")
-    cohere_temperature = 0.3 if temperature is None else float(temperature)
-    payload = {
-        "model": config.COHERE_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": int(max_tokens or 1200),
-        "temperature": min(max(cohere_temperature, 0.0), 1.0),
-        # Command A+ currently rejects disabled reasoning, while the default
-        # reasoning can consume the whole short-answer budget. Keep a small,
-        # bounded thinking slice and leave the rest for the actual response.
-        "thinking": {
-            "type": "enabled",
-            "token_budget": min(64, max(20, int(max_tokens or 1200) // 5)),
-        },
-    }
-    if response_mode == "json":
-        payload["response_format"] = {"type": "json_object"}
-    r = _post(
-        "https://api.cohere.com/v2/chat",
-        {
-            "Authorization": f"Bearer {config.COHERE_API_KEY}",
-            "Content-Type": "application/json",
-            "X-Client-Name": "morning-bot",
-        },
-        payload,
-        30,
-        "cohere",
-    )
-    data = r.json()
-    content = (data.get("message") or {}).get("content") or []
-    for block in content:
-        if isinstance(block, dict) and block.get("type") == "text" and str(block.get("text") or "").strip():
-            return str(block["text"]).strip()
-    raise LLMProviderError("cohere", "empty cohere response", error_type="empty_response")
 
 
 def _gen_github_models(prompt, max_tokens, temperature,
@@ -843,11 +793,12 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
                                  int((time.time() - t0) * 1000))
         return None
 
-def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text"):
+def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text",
+              model=None, provider="groq"):
     if not config.GROQ_API_KEY:
         raise Exception("no groq")
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": model or _provider_model_name(provider),
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
         "temperature": temperature,
@@ -857,13 +808,13 @@ def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "pl
     r = _post("https://api.groq.com/openai/v1/chat/completions",
         {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"},
         payload,
-        40, "groq", timeout_cap=5)
+        40, provider, timeout_cap=5)
     return r.json()["choices"][0]["message"]["content"]
 
 def _gen_cf(prompt, max_tokens):
     if not (config.CF_API_TOKEN and config.CF_ACCOUNT_ID):
         raise Exception("no cf")
-    r = _post(f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.1-8b-instruct",
+    r = _post(f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/run/{config.CF_MODEL}",
         {"Authorization": f"Bearer {config.CF_API_TOKEN}", "Content-Type": "application/json"},
         {"messages": [{"role": "user", "content": prompt}], "max_tokens": max_tokens},
         40, "cf", timeout_cap=4)
@@ -889,10 +840,11 @@ def _mark_cooldown(name, err):
     retry_after = getattr(err, "retry_after", None)
     if retry_after:
         seconds = max(seconds, min(int(retry_after), 3600))
-    _cooldowns[name] = max(_cooldowns.get(name, 0), time.time() + seconds)
+    key = _ROUTE_PROVIDER_BASE.get(name, name)
+    _cooldowns[key] = max(_cooldowns.get(key, 0), time.time() + seconds)
 
 def _is_cooling(name):
-    return _cooldowns.get(name, 0) > time.time()
+    return _cooldowns.get(_ROUTE_PROVIDER_BASE.get(name, name), 0) > time.time()
 
 def _reorder_for_cooldown(order):
     """Провайдеров на cooldown (недавний временный сбой) отодвигаем в конец, чтобы не терять
@@ -903,11 +855,19 @@ def _reorder_for_cooldown(order):
 
 
 def _monitor_name(provider):
+    provider = _ROUTE_PROVIDER_BASE.get(provider, provider)
     return "cloudflare" if provider == "cf" else provider
 
 
 def _provider_name(service):
     return "cf" if service == "cloudflare" else service
+
+
+def _route_name_for_provider(order, provider):
+    for name in order:
+        if _monitor_name(name) == provider:
+            return name
+    return provider
 
 
 def _reorder_for_monitor(order):
@@ -916,31 +876,17 @@ def _reorder_for_monitor(order):
     result = list(order)
     if not result:
         return tuple(result)
-    selected = _provider_name(provider_runtime.selected_provider(_monitor_name(result[0])))
+    selected = _route_name_for_provider(
+        result, _provider_name(provider_runtime.selected_provider(_monitor_name(result[0])))
+    )
     if selected in result and selected != result[0]:
         result.remove(selected)
         result.insert(0, selected)
     return tuple(result)
 
 
-def _reorder_for_cohere_limit(order, *, cohere_primary=False):
-    """При месячном лимите ставит GitHub Models сразу после пропущенного Cohere."""
-    if "cohere" not in order or api_usage.cohere_requests()["allowed"]:
-        return order
-    result = [name for name in order if name != "github_models"]
-    if cohere_primary:
-        result.remove("cohere")
-        result.insert(0, "cohere")
-    result.insert(result.index("cohere") + 1, "github_models")
-    return tuple(result)
-
-
 def _provider_is_unavailable(name):
-    if name == "cohere":
-        limit_error = _cohere_limit_error()
-        if limit_error is not None:
-            return limit_error
-    if name == "gemini":
+    if _monitor_name(name) == "gemini":
         rate_limit = _gemini_cooldown_error()
         if rate_limit is not None:
             return rate_limit
@@ -966,24 +912,23 @@ def _reserve_gemini_for_action() -> bool:
     except Exception:
         return True
 
-# Разбор, классификация и короткий structured output не расходуют Gemini.
-UTILITY_ORDER = ("groq", "github_models", "cohere", "openrouter")
-# Gemini остаётся только для одной финальной пользовательской карточки.
-PREMIUM_ORDER = ("gemini", "github_models", "groq", "openrouter")
-DEFAULT_ORDER = UTILITY_ORDER
-# Свободный чат — отдельный utility-маршрут: Gemini намеренно отсутствует.
-CHAT_ORDER = ("groq", "github_models", "openrouter")
-GRAMMAR_ORDER = UTILITY_ORDER
-LEISURE_ORDER = PREMIUM_ORDER
-FOOD_ORDER = PREMIUM_ORDER
+# Три понятных маршрута: простой, обычный и сложный. OpenRouter вызывается
+# только последним резервом через общую политику fallback.
+SIMPLE_ORDER = (GROQ_SIMPLE, "cf", "openrouter")
+STANDARD_ORDER = (GROQ_STANDARD, GEMINI_LITE, "openrouter")
+COMPLEX_ORDER = ("gemini", GROQ_COMPLEX, "openrouter")
+UTILITY_ORDER = SIMPLE_ORDER
+DEFAULT_ORDER = STANDARD_ORDER
+CHAT_ORDER = STANDARD_ORDER
+GRAMMAR_ORDER = STANDARD_ORDER
+LEISURE_ORDER = COMPLEX_ORDER
+FOOD_ORDER = COMPLEX_ORDER
 
 # Явные пресеты: позволяют приоритизировать конкретный провайдер, не меняя код вызова по всему проекту.
 PROVIDER_ORDER = {
-    "cf": ("cf", "groq", "github_models", "cohere"),
-    "groq": ("groq", "github_models", "cohere", "openrouter"),
-    "github_models": ("github_models", "groq", "cohere", "openrouter"),
-    "cohere": ("cohere", "groq", "github_models", "openrouter"),
-    "gemini": PREMIUM_ORDER,
+    "cf": ("cf", "openrouter"),
+    "groq": STANDARD_ORDER,
+    "gemini": COMPLEX_ORDER,
 }
 
 # --- тиры: маршрутизация по задаче ---
@@ -1001,7 +946,7 @@ TIERS = {
 # запрет конкретного provider не зависели от того, что явно передал вызов внутри
 # раздела. Единственный способ обойти policy — явный order=(...) в вызове.
 MODULE_POLICY = {
-    # Cohere первым: языки, строгий JSON, классификация и короткий анализ.
+    # Быстрый utility-маршрут: языки, строгий JSON, классификация и короткий анализ.
     "learning": GRAMMAR_ORDER,
     "learning_dict_add": GRAMMAR_ORDER,
     "learning_trainer": GRAMMAR_ORDER,
@@ -1013,7 +958,7 @@ MODULE_POLICY = {
     "health": GRAMMAR_ORDER,
     "balance": GRAMMAR_ORDER,
     "thoughts": GRAMMAR_ORDER,
-    # Gemini первым: творческая генерация, рекомендации и свободный диалог.
+    # Сложные карточки, рекомендации и свободный диалог используют premium-маршрут.
     "food": FOOD_ORDER,
     "cooking": FOOD_ORDER,
     "recipe_generation": FOOD_ORDER,
@@ -1040,6 +985,7 @@ def _resolve(tier, order, route=None, module=""):
         return tuple(
             n for n in order
             if n == "openrouter" or n in PROVIDER_ORDER or n in DEFAULT_ORDER
+            or n in {"github_models", "groq", "gemini", "cf"}
         )
     if module and module in MODULE_POLICY:
         return MODULE_POLICY[module]
@@ -1083,13 +1029,18 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
     order = _resolve(tier, order, route=route, module=module)
     try:
         import tracking
+        primary = order[0] if order else ""
+        requested_tier = (
+            "complex" if primary in ("gemini", GROQ_COMPLEX)
+            else "simple" if primary in (GROQ_SIMPLE, "cf")
+            else "standard"
+        )
         tracking.annotate_ai_route(
-            requested_tier="premium" if order and order[0] == "gemini" else "utility",
-            primary=order[0] if order else "",
+            requested_tier=requested_tier,
+            primary=primary,
         )
     except Exception:
         pass
-    cohere_primary = bool(order and order[0] == "cohere")
     cache_ttl = _cache_ttl(module, response_mode)
     cache_key = _cache_key(
         order, prompt, max_tokens, temperature, module, response_mode,
@@ -1108,16 +1059,32 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         # исправлен на записи) - не отдаём его снова на TTL модуля (до 30 дней),
         # чистим и генерируем заново.
         _cache_delete(cache_key)
-    pre_gemini_unavailable = _gemini_cooldown_error() if "gemini" in order else None
+    pre_gemini_unavailable = _gemini_cooldown_error() if any(
+        _monitor_name(name) == "gemini" for name in order
+    ) else None
     order = _reorder_for_cooldown(_reorder_for_monitor(order))
-    order = _reorder_for_cohere_limit(order, cohere_primary=cohere_primary)
     calls = {
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature, response_mode),
-        "cohere": lambda: _gen_cohere(prompt, max_tokens, temperature, response_mode),
+        GEMINI_LITE: lambda: _gen_gemini(
+            prompt, max_tokens, temperature, response_mode,
+            model=config.GEMINI_LITE_MODEL, provider=GEMINI_LITE,
+        ),
+        GROQ_SIMPLE: lambda: _gen_groq(
+            prompt, max_tokens, temperature, response_mode,
+            model=config.GROQ_SIMPLE_MODEL, provider=GROQ_SIMPLE,
+        ),
+        GROQ_STANDARD: lambda: _gen_groq(
+            prompt, max_tokens, temperature, response_mode,
+            model=config.GROQ_STANDARD_MODEL, provider=GROQ_STANDARD,
+        ),
+        GROQ_COMPLEX: lambda: _gen_groq(
+            prompt, max_tokens, temperature, response_mode,
+            model=config.GROQ_COMPLEX_MODEL, provider=GROQ_COMPLEX,
+        ),
+        "groq": lambda: _gen_groq(prompt, max_tokens, temperature, response_mode),
         "github_models": lambda: _gen_github_models(
             prompt, max_tokens, temperature, response_mode,
         ),
-        "groq": lambda: _gen_groq(prompt, max_tokens, temperature, response_mode),
         "cf": lambda: _gen_cf(prompt, max_tokens),
     }
     errs = []
@@ -1132,7 +1099,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             break
         if name == "openrouter":
             continue
-        if name == "gemini":
+        if _monitor_name(name) == "gemini":
             if not _reserve_gemini_for_action():
                 errs.append("gemini: action budget exhausted")
                 continue
@@ -1145,15 +1112,11 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                 )
             except Exception:
                 pass
-            local_cohere_limit = (
-                name == "cohere" and getattr(unavailable, "error_type", "") == "quota"
-            )
-            if not local_cohere_limit:
-                failed_providers.append(name)
+            failed_providers.append(name)
             errs.append(f"{name}:{unavailable}")
             if _is_temporary_exception(unavailable):
                 temporary_errs.append((name, unavailable))
-            if name == "gemini" and getattr(unavailable, "error_type", "") == "rate_limit":
+            if _monitor_name(name) == "gemini" and getattr(unavailable, "error_type", "") == "rate_limit":
                 gemini_rate_limit_err = unavailable
             continue
         t0 = time.time()
@@ -1165,11 +1128,11 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                         _monitor_name(failed), _monitor_name(name), reason="request",
                     )
                 ms = int((time.time() - t0) * 1000)
-                if name != "gemini" and gemini_rate_limit_err is not None:
+                if _monitor_name(name) != "gemini" and gemini_rate_limit_err is not None:
                     api_usage.record_gemini_fallback(target=name, reason="cooldown")
                     _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
                     rate_limit_logged = True
-                _log_cost(name, name, prompt, out, module, ms=ms, ok=True)
+                _log_cost(name, _provider_model_name(name), prompt, out, module, ms=ms, ok=True)
                 if _is_cacheable_response(out, response_mode):
                     _cache_set(cache_key, out)
                 try:
@@ -1194,7 +1157,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             errs.append(f"{name}:{e}")
             if _is_temporary_exception(e):
                 temporary_errs.append((name, e))
-            if name == "gemini" and getattr(e, "error_type", "") == "rate_limit":
+            if _monitor_name(name) == "gemini" and getattr(e, "error_type", "") == "rate_limit":
                 gemini_rate_limit_err = e
     remaining = _remaining_seconds()
     if (policy.openrouter_allowed and (remaining is None or remaining > 0.2)
@@ -1213,7 +1176,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                 provider_runtime.activate_fallback(
                     _monitor_name(origin), "openrouter", reason=reason,
                 )
-            if origin == "gemini" and getattr(err, "error_type", "") == "rate_limit":
+            if _monitor_name(origin) == "gemini" and getattr(err, "error_type", "") == "rate_limit":
                 api_usage.record_gemini_fallback(target="openrouter", reason=reason)
                 _log_gemini_limit("gemini_rate_limit", err, fallback=True)
                 rate_limit_logged = True
@@ -1226,7 +1189,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             except Exception:
                 pass
             return out
-        if origin == "gemini" and getattr(err, "error_type", "") == "rate_limit":
+        if _monitor_name(origin) == "gemini" and getattr(err, "error_type", "") == "rate_limit":
             api_usage.record_gemini_fallback(target="local", reason="openrouter_failed")
             _log_gemini_limit("gemini_rate_limit", err, fallback=True)
             rate_limit_logged = True
@@ -1436,38 +1399,17 @@ def _chat(provider, history, system, timeout_cap=None):
             return default
         return min(float(default), float(timeout_cap))
 
-    if provider == "gemini":
+    if _monitor_name(provider) == "gemini":
         if not _reserve_gemini_for_action():
             raise LLMProviderError("gemini", "gemini action budget exhausted", error_type="action_budget")
         cooling = _gemini_cooldown_error()
         if cooling is not None:
             raise cooling
         contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in history]
-        r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
+        r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{_provider_model_name(provider)}:generateContent?key={config.GEMINI_API_KEY}",
             {}, {"system_instruction": {"parts": [{"text": system}]}, "contents": contents,
-                 "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, "gemini", timeout_cap=bounded_cap(6))
+                 "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, provider, timeout_cap=bounded_cap(6))
         return r.json()["candidates"][0]["content"]["parts"][0]["text"]
-    if provider == "cohere":
-        if not config.COHERE_API_KEY:
-            raise LLMProviderError("cohere", "no cohere key", error_type="credentials")
-        r = _post(
-            "https://api.cohere.com/v2/chat",
-            {
-                "Authorization": f"Bearer {config.COHERE_API_KEY}",
-                "Content-Type": "application/json",
-                "X-Client-Name": "morning-bot",
-            },
-            {
-                "model": config.COHERE_MODEL,
-                "messages": [{"role": "system", "content": system}] + history,
-                "max_tokens": 700,
-                "temperature": 0.8,
-            },
-            30,
-            "cohere",
-            timeout_cap=bounded_cap(5),
-        )
-        return r.json()["message"]["content"][0]["text"]
     if provider == "github_models":
         if not config.GITHUB_MODELS_TOKEN:
             raise LLMProviderError(
@@ -1492,13 +1434,13 @@ def _chat(provider, history, system, timeout_cap=None):
             timeout_cap=bounded_cap(5),
         )
         return r.json()["choices"][0]["message"]["content"]
-    if provider == "groq":
+    if _monitor_name(provider) == "groq":
         if not config.GROQ_API_KEY:
             raise Exception("no groq")
         r = _post("https://api.groq.com/openai/v1/chat/completions",
             {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"},
-            {"model": "llama-3.3-70b-versatile", "messages": [{"role": "system", "content": system}] + history,
-             "max_tokens": 700, "temperature": 0.8}, 40, "groq", timeout_cap=bounded_cap(5))
+            {"model": _provider_model_name(provider), "messages": [{"role": "system", "content": system}] + history,
+             "max_tokens": 700, "temperature": 0.8}, 40, provider, timeout_cap=bounded_cap(5))
         return r.json()["choices"][0]["message"]["content"]
     if provider == "openrouter":
         if not config.OPENROUTER_API_KEY:
@@ -1517,7 +1459,7 @@ def _chat(provider, history, system, timeout_cap=None):
     if provider == "cf":
         if not (config.CF_API_TOKEN and config.CF_ACCOUNT_ID):
             raise Exception("no cf")
-        r = _post(f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.1-8b-instruct",
+        r = _post(f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/run/{config.CF_MODEL}",
             {"Authorization": f"Bearer {config.CF_API_TOKEN}", "Content-Type": "application/json"},
             {"messages": [{"role": "system", "content": system}] + history, "max_tokens": 700}, 40, "cf", timeout_cap=bounded_cap(4))
         return _as_text(r.json().get("result", {}).get("response"))
@@ -1564,7 +1506,7 @@ def _chat_chain_impl(history, cid=None):
                     provider_runtime.activate_fallback(
                         _monitor_name(failed), _monitor_name(p), reason="request",
                     )
-                _log_cost(p, p, "c" * prompt_len, out, "assistant")
+                _log_cost(p, _provider_model_name(p), "c" * prompt_len, out, "assistant")
                 try:
                     import tracking
                     tracking.annotate_action(

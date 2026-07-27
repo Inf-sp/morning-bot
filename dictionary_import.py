@@ -557,7 +557,7 @@ async def _request_verb_analysis(word, fixed_preposition=""):
     prompt = _verb_analysis_prompt(word, fixed_preposition)
     return await asyncio.wait_for(
         ai.allm_json(
-            prompt, 700, order=("cohere", "groq", "github_models"),
+            prompt, 700, order=("groq_standard", "gemini_lite"),
             module="learning_dict_add",
             fallback_allowed=True, privacy_level="public",
         ),

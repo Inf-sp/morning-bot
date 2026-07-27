@@ -55,14 +55,14 @@ def test_github_models_chat_payload_and_json_mode(monkeypatch):
     assert captured["name"] == "github_models"
 
 
-def test_github_models_is_common_fallback_in_all_routes():
-    assert ai._resolve(None, None, module="learning")[:3] == (
-        "groq", "github_models", "cohere",
+def test_model_tiers_use_the_requested_provider_chain():
+    assert ai._resolve(None, None, module="learning") == (
+        "groq_standard", "gemini_lite", "openrouter",
     )
     assert ai._resolve(None, None, module="food") == (
-        "gemini", "github_models", "groq", "openrouter",
+        "gemini", "groq_complex", "openrouter",
     )
-    assert ai.CHAT_ORDER[:2] == ("groq", "github_models")
+    assert ai.CHAT_ORDER == ("groq_standard", "gemini_lite", "openrouter")
 
 
 def test_food_tries_openrouter_after_three_unavailable_providers(monkeypatch):
@@ -80,7 +80,6 @@ def test_food_tries_openrouter_after_three_unavailable_providers(monkeypatch):
 
     monkeypatch.setattr(ai, "_gen_gemini", unavailable("gemini"))
     monkeypatch.setattr(ai, "_gen_groq", unavailable("groq"))
-    monkeypatch.setattr(ai, "_gen_github_models", unavailable("github_models"))
     monkeypatch.setattr(
         ai, "_openrouter_plain_text_fallback",
         lambda *_args, **_kwargs: calls.append("openrouter") or '{"ok":true}',
@@ -92,7 +91,7 @@ def test_food_tries_openrouter_after_three_unavailable_providers(monkeypatch):
     )
 
     assert result == {"ok": True}
-    assert calls == ["gemini", "github_models", "groq", "openrouter"]
+    assert calls == ["gemini", "groq", "openrouter"]
 
 
 def test_github_models_supports_chat_history(monkeypatch):

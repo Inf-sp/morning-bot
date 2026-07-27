@@ -77,12 +77,12 @@ def test_free_chat_gives_openrouter_its_reserved_remaining_budget(monkeypatch):
 
     def provider(provider, _history, _system, timeout_cap=None):
         calls.append((provider, timeout_cap))
-        if provider == "groq":
+        if provider == "groq_standard":
             clock["now"] = 3.0
             raise ai.LLMProviderError(provider, "groq timeout", temporary=True)
-        if provider == "github_models":
+        if provider == "gemini_lite":
             clock["now"] = 6.0
-            raise ai.LLMProviderError(provider, "github timeout", temporary=True)
+            raise ai.LLMProviderError(provider, "gemini lite timeout", temporary=True)
         return "Ответ OpenRouter"
 
     monkeypatch.setattr(ai, "_chat", provider)
@@ -91,8 +91,8 @@ def test_free_chat_gives_openrouter_its_reserved_remaining_budget(monkeypatch):
 
     assert result == "Ответ OpenRouter"
     assert calls == [
-        ("groq", 3.0),
-        ("github_models", 3.0),
+        ("groq_standard", 3.0),
+        ("gemini_lite", 3.0),
         ("openrouter", 4.0),
     ]
 
@@ -115,13 +115,12 @@ def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
     with pytest.raises(Exception, match="вовремя"):
         ai.chat_chain([{"role": "user", "content": "test"}])
 
-    assert calls == ["groq"]
+    assert calls == ["groq_standard"]
 
 
-def test_free_chat_route_is_utility_without_gemini():
-    assert ai.CHAT_ORDER == ("groq", "github_models", "openrouter")
-    assert "gemini" not in ai.CHAT_ORDER
-    assert ai.FREE_CHAT_TIER == "utility"
+def test_free_chat_route_uses_the_standard_chain():
+    assert ai.CHAT_ORDER == ("groq_standard", "gemini_lite", "openrouter")
+    assert ai.FREE_CHAT_TIER == "smart"
 
 
 def test_free_chat_route_log_identifies_deployment_and_serving_provider(monkeypatch):
@@ -135,8 +134,8 @@ def test_free_chat_route_log_identifies_deployment_and_serving_provider(monkeypa
 
     line = records[0]
     assert "scenario=assistant/free_chat" in line
-    assert "tier=utility" in line
-    assert "provider_chain=groq,github_models,openrouter" in line
+    assert "tier=smart" in line
+    assert "provider_chain=groq_standard,gemini_lite,openrouter" in line
     assert "served_by=openrouter" in line
     assert "version=1.16.236" in line
     assert "deployment=deployment-42" in line

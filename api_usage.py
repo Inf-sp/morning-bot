@@ -20,7 +20,6 @@ SERVICE_LABELS = {
 }
 SERVICE_ICONS = SERVICE_LABELS
 GOOGLE_BOOKS_DAILY_LIMIT = 1000
-COHERE_MONTHLY_LIMIT = 1000
 TAVILY_MONTHLY_LIMIT = 1000
 TAVILY_SOFT_LIMIT = 900
 
@@ -58,14 +57,6 @@ def google_books_requests(*, consume=False) -> dict:
     return _local_request_counter(
         "google_books_requests_date", "google_books_requests_used",
         _now().date().isoformat(), GOOGLE_BOOKS_DAILY_LIMIT, consume,
-    )
-
-
-def cohere_requests(*, consume=False) -> dict:
-    """Два локальных поля месячного Trial-лимита Cohere в общем KV состояния."""
-    return _local_request_counter(
-        "cohere_requests_month", "cohere_requests_used",
-        _now().strftime("%Y-%m"), COHERE_MONTHLY_LIMIT, consume,
     )
 
 
