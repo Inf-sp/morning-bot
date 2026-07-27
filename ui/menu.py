@@ -197,7 +197,7 @@ def learning_menu(home: dict):
     b.spacer()
     focus = home.get("focus") or "добавить первые слова в тренажёре."
     b.text_line("💡 ")
-    b.label("Фокус", focus)
+    b.label("Полезно", focus)
 
     return b.build_stripped(reply_markup=ikb([
         [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
