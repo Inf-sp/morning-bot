@@ -113,6 +113,20 @@ def test_recall_uses_local_distractors_with_the_same_part_of_speech():
     assert set(data["wrong"]).issubset({"huis", "boek", "vriend", "trein"})
 
 
+def test_short_verb_translation_does_not_get_sentence_distractors():
+    data = trainer_exercises.build_exercise(
+        {
+            "term": "Omgaan", "translation": "Справляться с",
+            "lang": "nl", "pos": "verb",
+        },
+        [],
+        trainer_engine.EXERCISE_CHOOSE_TRANSLATION,
+    )
+
+    assert data is not None
+    assert all(len(option.split()) <= 3 for option in data["wrong"])
+
+
 def test_translation_exercise_uses_full_local_distractors_for_a_phrase():
     entry = {
         "term": "Ik vind het stom", "translation": "Я думаю, это глупо",

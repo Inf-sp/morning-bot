@@ -139,6 +139,15 @@ def _value_kind(value):
     return "phrase" if len(_tokens(value)) > 1 else "word"
 
 
+def _is_sentence_like(value):
+    """Короткое словосочетание — не предложение для вариантов Quiz.
+
+    Например, «справляться с» и «вместо этого» состоят из нескольких слов,
+    но должны получать короткие варианты того же типа, а не целые реплики.
+    """
+    return len(_tokens(value)) >= 4
+
+
 def _compatible_term(entry, candidate):
     """Отвлекающий вариант должен совпадать по типу материала и форме."""
     term = entry_term(entry)
@@ -186,7 +195,7 @@ def _local_distractors(entry, correct, language, rng):
     """Полные учебные варианты той же формы, не связанные с базой пользователя."""
     language = str(language or "nl").casefold()
     language = language if language in _LOCAL_WORD_DISTRACTORS else "nl"
-    if _value_kind(correct) == "phrase":
+    if _is_sentence_like(correct):
         pool = list(_LOCAL_PHRASE_DISTRACTORS[language])
     else:
         pool = list(_LOCAL_WORD_DISTRACTORS[language].get(
