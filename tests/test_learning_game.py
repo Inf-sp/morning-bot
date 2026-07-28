@@ -267,6 +267,43 @@ def test_game_data_uses_public_openrouter_fallback_and_local_card(monkeypatch):
     assert learning_game._description_is_guessable(data, "английский")
 
 
+def test_local_detective_fallback_skips_played_cards():
+    data = learning_game._local_game_data(
+        "английский", ["the cat", "cat", "the dog", "dog"],
+    )
+
+    assert data["answer"] not in {"the cat", "the dog"}
+    assert learning_game._description_is_guessable(data, "английский")
+
+
+def test_detective_uses_local_round_when_ai_repeats_every_attempt(monkeypatch):
+    repeated = {
+        "description": (
+            "I often live with people. During the day I like to sleep in warm places. "
+            "I can walk very quietly and sometimes hunt small animals."
+        ),
+        "answer": "the cat", "answer_en": "cat", "aliases": ["cat", "kat"],
+        "hint": "I have whiskers and I say meow.",
+        "explain": "A cat often lives with people and sometimes hunts mice.",
+        "words": [{"word": "whiskers", "translation": "усы"}],
+    }
+    fallback = dict(learning_game._LOCAL_GAME_CARDS["английский"][1])
+    remembered = []
+
+    monkeypatch.setattr(learning_game.store, "game_config", {"42": {"lang": "английский"}})
+    monkeypatch.setattr(learning_game, "_game_recent", lambda _cid: ["the cat", "cat", "kat"])
+    monkeypatch.setattr(learning_game, "game_data", lambda *_args, **_kwargs: repeated)
+    monkeypatch.setattr(learning_game, "_local_game_data", lambda *_args: fallback)
+    monkeypatch.setattr(learning_game, "_remember_game_answer", lambda _cid, data: remembered.append(data))
+
+    bot = FakeBot()
+    asyncio.run(learning_game.send_game(bot, "42"))
+
+    assert "Not able to" not in bot.messages[0]["text"]
+    assert "Who am I?" in bot.messages[0]["text"]
+    assert remembered == [fallback]
+
+
 def test_detective_rejects_answer_inside_description():
     assert not learning_game._description_is_guessable({
         "description": "Ik ben een kat. Ik woon bij mensen. Ik maak soms een zacht geluid.",

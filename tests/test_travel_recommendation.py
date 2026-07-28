@@ -20,10 +20,55 @@ class FakeBot:
 class FakeInlineStatus:
     def __init__(self):
         self.replaced = []
+        self.stopped = []
 
     async def replace(self, text, **kwargs):
         self.replaced.append({"text": text, **kwargs})
         return True
+
+    async def stop(self, delete=True):
+        self.stopped.append(delete)
+
+
+def test_travel_plan_with_inline_status_keeps_country_photo(monkeypatch):
+    photo = {"url": "https://example.test/iceland.jpg", "width": 1600, "height": 900}
+
+    class PhotoBot(FakeBot):
+        def __init__(self):
+            super().__init__()
+            self.photos = []
+
+        async def send_photo(self, **kwargs):
+            self.photos.append(kwargs)
+
+    async def plan_json(*_args, **_kwargs):
+        return {}
+
+    monkeypatch.setattr(travel.store, "last_recipe", {
+        "42": {"country": "Исландия", "flag": "🇮🇸", "photo": photo},
+    })
+    monkeypatch.setattr(travel.store, "suggested_countries", {"42": "Исландия"})
+    monkeypatch.setattr(travel.store, "get_settings", lambda _cid: {"city": "Алкмар"})
+    monkeypatch.setattr(travel.research, "country_facts", lambda _name: {"cc": "IS"})
+    monkeypatch.setattr(travel.research, "country_travel_facts", lambda _name: {})
+    monkeypatch.setattr(travel.research, "facts_block", lambda _facts: "")
+    monkeypatch.setattr(travel, "_travel_interests", lambda _cid: [])
+    monkeypatch.setattr(travel.ai, "allm_json", plan_json)
+    monkeypatch.setattr(
+        travel, "_plan_from_sources",
+        lambda country, *_args: {"title": country, "flag": "🇮🇸", "about": "Вулканы и горячие источники.", "photo": photo},
+    )
+
+    bot = PhotoBot()
+    status = FakeInlineStatus()
+    asyncio.run(travel.send_plan(bot, "42", status=status))
+
+    assert len(bot.photos) == 1
+    assert bot.photos[0]["chat_id"] == "42"
+    assert bot.photos[0]["photo"] == photo["url"]
+    assert bot.photos[0]["caption"] == "🇮🇸 Исландия\n\nВулканы и горячие источники."
+    assert status.replaced == []
+    assert status.stopped == [False]
 
 
 def test_travel_home_places_saved_and_preferences_in_one_row():

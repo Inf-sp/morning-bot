@@ -808,6 +808,19 @@ async def send_plan(bot, cid, *, status=None):
     ])
     photo = plan.get("photo") or {}
     if status is not None:
+        if photo.get("url"):
+            # Inline-ожидание сохраняет исходную карточку. Нельзя завершать его
+            # через replace: тот умеет отправить только текст и раньше отбрасывал
+            # готовую фотографию страны.
+            await status.stop(delete=False)
+            try:
+                await bot.send_photo(
+                    chat_id=cid, photo=photo["url"], caption=msg.text,
+                    caption_entities=msg.entities, reply_markup=kb,
+                )
+                return
+            except Exception as exc:
+                _log.warning("travel details photo delivery failed: %s", type(exc).__name__)
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
         return
     if photo.get("url"):

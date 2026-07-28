@@ -68,6 +68,17 @@ def test_inline_status_starts_with_action_specific_text():
         assert bot_callbacks._status_stages(data)[0][1] == expected
 
 
+def test_long_inline_actions_have_three_distinct_progress_stages():
+    for data in (
+        "game_again", "m_food_next", "w_look", "movie_reco", "book_reco",
+        "listen_no", "a_concerts_nl", "a_trav_go", "a_trav_country_NL_0",
+        "a_dictadd_smart_nl", "ex_next_task", "m_myday",
+    ):
+        stages = bot_callbacks._status_stages(data)
+        assert [delay for delay, _text in stages] == [0, 2, 6]
+        assert len({text for _delay, text in stages}) == 3
+
+
 def test_thought_review_keeps_health_menu_visible_while_loading(monkeypatch):
     calls = []
 

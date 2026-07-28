@@ -64,10 +64,13 @@ def _status_stages(data):
     if not stages:
         stages = util.StatusManager.STAGES
 
+    def progress(first, second, final):
+        return ((0, first), (2, second), (6, final))
+
     if data.startswith(("as_food", "as_fridge_cook", "m_food", "food_")):
         first = "⏳ Ищу рецепт..."
     elif data == "as_daycheck":
-        first = "🧠 Разбираю мысль..."
+        return progress("🧠 Разбираю мысль...", "💭 Ищу опору в записи...", "📝 Готовлю разбор...")
     elif data == "w_look":
         first = "⏳ Ищу образ..."
     elif data.startswith(("movie_", "reco_", "a_watch")):
@@ -77,19 +80,15 @@ def _status_stages(data):
     elif data.startswith(("listen", "a_listen")):
         first = "🎧 Ищу музыку..."
     elif data.startswith("a_concerts"):
-        first = "🎫 Ищу концерт..."
+        return progress("🎫 Ищу концерт...", "📅 Проверяю афишу...", "📝 Готовлю события...")
     elif data.startswith(("game", "a_game")):
-        return (
-            (0, "🕵️ Ищу загадку..."),
-            (3, "🧩 Собираю загадку..."),
-            (8, "✨ Почти готово..."),
-        )
+        return progress("🕵️ Ищу загадку...", "📖 Проверяю текст...", "🧩 Собираю загадку...")
     elif data.startswith(("a_dict", "word_")):
-        first = "📖 Ищу слово..."
+        return progress("📖 Ищу слово...", "🔤 Проверяю форму...", "📝 Готовлю карточку...")
     elif data.startswith(("a_train", "a_tr_", "ex_", "again_tr_")):
         first = "🧠 Ищу задание..."
     elif re.fullmatch(r"a_trav_country_[A-Z0-9]+_\d+", data):
-        first = "🗺️ Открываю страну..."
+        return progress("🗺️ Открываю страну...", "🔍 Собираю факты...", "📝 Готовлю карточку страны...")
     elif data.startswith(("a_trav_", "m_travel")):
         first = "✈️ Ищу поездку..."
     elif data == "m_food":
@@ -99,9 +98,9 @@ def _status_stages(data):
     elif data == "m_leisure":
         first = "🍿 Ищу рекомендации..."
     elif data in ("a_plany", "m_myday"):
-        first = "☀️ Собираю мой день..."
+        return progress("☀️ Собираю мой день...", "🌦️ Сверяю планы...", "📝 Готовлю сводку...")
     elif data == "a_w_week":
-        first = "🌦️ Ищу прогноз..."
+        return progress("🌦️ Ищу прогноз...", "🗓️ Сверяю дни...", "📝 Готовлю прогноз...")
     elif topic == "wardrobe":
         first = "⏳ Ищу образ..."
     elif topic == "food":

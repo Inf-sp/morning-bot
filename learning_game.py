@@ -234,6 +234,34 @@ _LOCAL_GAME_CARDS = {
             "explain": "Een hond woont vaak bij mensen. Hij wandelt graag en kan het huis bewaken.",
             "words": [{"word": "wandelen", "translation": "гулять"}, {"word": "bewaken", "translation": "охранять"}],
         },
+        {
+            "description": "Ik ben rond en ik kom vaak uit de oven. Mensen delen mij graag met vrienden. Ik heb vaak tomaat en andere lekkere dingen bovenop. Je eet mij meestal warm.",
+            "answer": "de pizza", "aliases": ["пицца", "pizza"], "answer_en": "pizza",
+            "hint": "Ik heb vaak kaas en ik word in punten gesneden.",
+            "explain": "Een pizza komt uit de oven en wordt vaak warm met kaas gegeten.",
+            "words": [{"word": "oven", "translation": "духовка"}, {"word": "delen", "translation": "делить"}],
+        },
+        {
+            "description": "Ik rijd elke dag door de stad en stop vaak onderweg. Veel mensen kunnen tegelijk met mij reizen. Je wacht meestal bij een halte voordat je instapt. Ik heb een vaste route.",
+            "answer": "de bus", "aliases": ["автобус", "bus"], "answer_en": "bus",
+            "hint": "Ik heb grote wielen en deuren voor veel passagiers.",
+            "explain": "Een bus rijdt een vaste route en neemt veel passagiers mee.",
+            "words": [{"word": "halte", "translation": "остановка"}, {"word": "instappen", "translation": "садиться в транспорт"}],
+        },
+        {
+            "description": "Ik werk vaak in een ziekenhuis of een praktijk. Mensen komen bij mij als zij ziek zijn of pijn hebben. Ik stel vragen en probeer hen te helpen. Soms schrijf ik een recept.",
+            "answer": "de dokter", "aliases": ["врач", "doctor", "dokter", "arts"], "answer_en": "doctor",
+            "hint": "Ik onderzoek patiënten en luister naar hun klachten.",
+            "explain": "Een dokter helpt zieke mensen en onderzoekt patiënten.",
+            "words": [{"word": "pijn", "translation": "боль"}, {"word": "onderzoeken", "translation": "осматривать, исследовать"}],
+        },
+        {
+            "description": "Ik leef in een warm land en ik ben heel groot. Ik eet planten en loop vaak samen met mijn familie. Mijn oren zijn groot en ik kan goed zwemmen. Ik ben sterk.",
+            "answer": "de olifant", "aliases": ["слон", "elephant", "olifant"], "answer_en": "elephant",
+            "hint": "Ik heb een lange slurf en grote witte tanden.",
+            "explain": "Een olifant is groot, heeft een slurf en leeft vaak met zijn familie.",
+            "words": [{"word": "slurf", "translation": "хобот"}, {"word": "sterk", "translation": "сильный"}],
+        },
     ),
     "английский": (
         {
@@ -249,6 +277,34 @@ _LOCAL_GAME_CARDS = {
             "hint": "I have a wet nose and I say woof.",
             "explain": "A dog often lives with people. It likes walks and can guard the house.",
             "words": [{"word": "walk", "translation": "гулять"}, {"word": "guard", "translation": "охранять"}],
+        },
+        {
+            "description": "I am round and often come from the oven. People like to share me with friends. I often have tomato and other tasty things on top. You usually eat me warm.",
+            "answer": "the pizza", "aliases": ["пицца", "pizza"], "answer_en": "pizza",
+            "hint": "I often have cheese and people cut me into slices.",
+            "explain": "A pizza comes from the oven and people often eat it warm with cheese.",
+            "words": [{"word": "oven", "translation": "духовка"}, {"word": "share", "translation": "делить"}],
+        },
+        {
+            "description": "I drive through the city every day and stop many times. Many people can travel with me at once. You usually wait at a stop before you get in. I have a fixed route.",
+            "answer": "the bus", "aliases": ["автобус", "bus"], "answer_en": "bus",
+            "hint": "I have big wheels and doors for many passengers.",
+            "explain": "A bus follows a route and takes many passengers with it.",
+            "words": [{"word": "route", "translation": "маршрут"}, {"word": "passenger", "translation": "пассажир"}],
+        },
+        {
+            "description": "I often work in a hospital or a clinic. People come to me when they are sick or have pain. I ask questions and try to help them. Sometimes I write a prescription.",
+            "answer": "the doctor", "aliases": ["врач", "doctor", "dokter", "arts"], "answer_en": "doctor",
+            "hint": "I examine patients and listen to their problems.",
+            "explain": "A doctor helps sick people and examines patients.",
+            "words": [{"word": "pain", "translation": "боль"}, {"word": "examine", "translation": "осматривать"}],
+        },
+        {
+            "description": "I live in a warm country and I am very big. I eat plants and often walk with my family. My ears are large and I can swim well. I am strong.",
+            "answer": "the elephant", "aliases": ["слон", "elephant", "olifant"], "answer_en": "elephant",
+            "hint": "I have a long trunk and big white teeth.",
+            "explain": "An elephant is big, has a trunk and often lives with its family.",
+            "words": [{"word": "trunk", "translation": "хобот"}, {"word": "strong", "translation": "сильный"}],
         },
     ),
 }
@@ -388,6 +444,7 @@ async def send_game(bot, cid, status=None):
     lang = cfg.get("lang", "английский")
     ui = _game_ui(lang)
     recent = _game_recent(cid)
+    played_recent = list(recent)
     try:
         d = {}
         for attempt in range(5):
@@ -399,13 +456,15 @@ async def send_game(bot, cid, status=None):
             if cand.get("answer"):
                 recent = recent + [cand.get("answer", "")] + list(cand.get("aliases") or [])
         if not d:
-            text = "Не смог загадать новое без повтора. Попробуй ещё раз через минуту."
-            kb = back_menu_keyboard("m_learn")
-            if status is not None:
-                await status.replace(text, reply_markup=kb)
+            # Повторы и невалидный формат от AI не должны оставлять пользователя
+            # без раунда. Используем историю только реальных сыгранных загадок:
+            # ответы неудачных попыток не считаются сыгранными и не должны
+            # вытеснять подходящую локальную карточку.
+            fallback = _local_game_data(lang, played_recent)
+            if fallback.get("answer") and _description_is_guessable(fallback, lang):
+                d = fallback
             else:
-                await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
-            return
+                raise RuntimeError("Detective fallback card is invalid")
     except Exception as e:
         await verify.safe_error(bot, cid, e, back="m_learn"); return
     _remember_game_answer(cid, d)

@@ -202,7 +202,7 @@ def test_leisure_home_shows_only_rated_russian_movies_with_short_descriptions(mo
         return [
             {"title": "Одиссея", "rating": 7.9, "vote_count": 100, "genres": ["приключения"],
              "overview": "Одиссей возвращается домой после долгой войны и сталкивается с новыми испытаниями."},
-            {"title": "Приглашение", "rating": 7.8, "vote_count": 100,
+            {"title": "Приглашение", "rating": 7.8, "vote_count": 100, "genres": ["драма"],
              "overview": "Таинственное приглашение на ужин превращает обычный вечер в тревожную загадку."},
             {"title": "Des preuves d'amour", "title_ru": "Доказательства любви", "rating": 7.7, "vote_count": 100,
              "overview": "История любви, которой приходится пройти через неожиданные испытания."},
@@ -237,10 +237,10 @@ def test_leisure_home_shows_only_rated_russian_movies_with_short_descriptions(mo
     assert "Доказательства любви" in text
     assert "Des preuves d'amour" not in text
     assert "Изумительная Мокси" not in text
-    assert "Одиссея · ⭐ 7.9 · Приключения" in text
-    assert "Таинственное приглашение на ужин" in text
-    assert "• Приглашение · ⭐ 7.8" in text
-    assert "\n  Таинственное приглашение" in text
+    assert "Одиссея · Приключения · Одиссей возвращается домой" in text
+    assert "• Приглашение · Драма · Таинственное приглашение на ужин" in text
+    assert "⭐" not in text
+    assert "\n  Таинственное приглашение" not in text
     assert "💭" not in text
     assert "🎧 Послушать" not in text
     assert "📖 Почитать" not in text

@@ -110,11 +110,6 @@ def _format_movie_row(b: MessageBuilder, movie, *, with_description=False) -> No
         return
     b.text_line("• ")
     b.bold(title)
-    # Рейтинг с несколькими голосами выглядит убедительно, но вводит в заблуждение.
-    # Для свежего проката показываем его только после минимальной выборки.
-    rating = _format_rating(_item_value(movie, "rating")) if has_visible_movie_rating(movie) else None
-    if rating:
-        b.text_line(f" · {rating}")
     genre = _primary_genre(movie)
     if genre:
         b.text_line(f" · {genre}")
@@ -123,11 +118,9 @@ def _format_movie_row(b: MessageBuilder, movie, *, with_description=False) -> No
         if overview:
             if overview[-1] not in ".!?…":
                 overview += "."
-    b.newline()
-    if with_description:
         if overview:
-            b.text_line(f"  {overview}")
-            b.newline()
+            b.text_line(f" · {overview}")
+    b.newline()
 
 
 def movie_card(item, tm):

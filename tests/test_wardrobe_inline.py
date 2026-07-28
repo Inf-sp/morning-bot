@@ -108,6 +108,43 @@ def test_inline_status_does_not_duplicate_loading_text_and_button():
     assert Query.message.text_edits == [("Готовая карточка", {"reply_markup": "final-kb"})]
 
 
+def test_inline_status_progresses_through_all_waiting_stages():
+    class Message:
+        def __init__(self):
+            self.markup_edits = []
+
+        async def edit_reply_markup(self, **kwargs):
+            self.markup_edits.append(kwargs["reply_markup"])
+
+    class Query:
+        message = Message()
+
+    async def run_status():
+        status = await util.StatusManager.start_inline(
+            Query(),
+            stages=(
+                (0, "🕵️ Ищу загадку..."),
+                (0, "📖 Проверяю текст..."),
+                (0, "🧩 Собираю загадку..."),
+            ),
+            preserve_message=True,
+        )
+        await asyncio.sleep(0.01)
+        await status.stop(delete=False)
+
+    asyncio.run(run_status())
+
+    assert [
+        markup.inline_keyboard[0][0].text if markup is not None else None
+        for markup in Query.message.markup_edits
+    ] == [
+        "🕵️ Ищу загадку...",
+        "📖 Проверяю текст...",
+        "🧩 Собираю загадку...",
+        None,
+    ]
+
+
 def test_text_status_updates_its_message_without_an_inline_loading_button():
     class Message:
         def __init__(self):
