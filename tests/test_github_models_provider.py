@@ -1,5 +1,7 @@
 import os
 
+import pytest
+
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
@@ -20,6 +22,12 @@ class FakeResponse:
             }],
             "usage": {"prompt_tokens": 5, "completion_tokens": 8},
         }
+
+
+class _ErrorResponse:
+    status_code = 400
+    headers = {}
+    text = '{"error":{"message":"Failed to validate JSON. See failed_generation"}}'
 
 
 def test_github_models_chat_payload_and_json_mode(monkeypatch):
@@ -53,6 +61,53 @@ def test_github_models_chat_payload_and_json_mode(monkeypatch):
     assert captured["payload"]["max_tokens"] == 500
     assert captured["timeout"] == 30
     assert captured["name"] == "github_models"
+
+
+def test_groq_retries_json_validation_failure_without_json_mode(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ai.config, "GROQ_API_KEY", "groq-secret")
+
+    def fake_post(_url, _headers, payload, _timeout, name, **_kwargs):
+        calls.append(payload)
+        if payload.get("response_format"):
+            raise ai.LLMProviderError(
+                name, "Failed to validate JSON. See failed_generation",
+                status_code=400, error_type="http_error",
+            )
+        return FakeResponse('{"ok":true}')
+
+    monkeypatch.setattr(ai, "_post", fake_post)
+
+    result = ai._gen_groq("Верни JSON", 500, 0.0, response_mode="json", provider="groq_standard")
+
+    assert result == '{"ok":true}'
+    assert calls[0]["response_format"] == {"type": "json_object"}
+    assert "response_format" not in calls[1]
+
+
+def test_groq_json_validation_rejection_does_not_create_service_incident(monkeypatch):
+    usage_calls = []
+    monkeypatch.setattr(ai.requests, "post", lambda *_args, **_kwargs: _ErrorResponse())
+    monkeypatch.setattr(
+        ai.api_usage, "record_request",
+        lambda service, ok=True, **kwargs: usage_calls.append((service, ok, kwargs)),
+    )
+
+    with pytest.raises(ai.LLMProviderError):
+        ai._post(
+            "https://example.test", {}, {}, 1, "groq_standard",
+            suppress_json_validation_failure=True,
+        )
+
+    assert usage_calls == [
+        ("groq", False, {
+            "status_code": 400,
+            "error": "HTTP 400",
+            "latency_ms": pytest.approx(0, abs=1000),
+            "headers": {},
+            "monitor_result": False,
+        }),
+    ]
 
 
 def test_model_tiers_use_the_requested_provider_chain():

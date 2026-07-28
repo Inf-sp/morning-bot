@@ -109,11 +109,10 @@ class StatusManager:
             stages=stages,
             preserve_message=preserve_message,
         )
-        if preserve_message:
-            await manager._edit_loading_button(manager.stages[0][1])
-        else:
-            manager._inline_replaced = await manager._edit(text or manager.stages[0][1])
-            await manager._edit_loading_button(manager.stages[0][1])
+        # Inline-статус живёт только в кнопке. Раньше обычный режим одновременно
+        # заменял текст карточки и добавлял такую же кнопку, из-за чего в чате
+        # появлялись две одинаковые строки ожидания.
+        await manager._edit_loading_button(text or manager.stages[0][1])
         manager._task = asyncio.create_task(manager._run())
         return manager
 
@@ -128,11 +127,7 @@ class StatusManager:
                 pass
             if self._stopped.is_set():
                 return
-            if self.preserve_message:
-                await self._edit_loading_button(text)
-            else:
-                await self._edit(text)
-                await self._edit_loading_button(text)
+            await self._edit_loading_button(text)
 
     async def _edit_loading_button(self, text):
         if self.message is None:

@@ -456,8 +456,7 @@ async def send_api_ai(bot, cid, q=None):
     rows = service_monitor.rows()
 
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 Нагрузка AI", callback_data="adm_ai_traffic"),
-         InlineKeyboardButton("⚠️ Ошибки", callback_data="adm_logs")],
+        [InlineKeyboardButton("⚠️ Ошибки", callback_data="adm_logs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.api_ai(rows, service_monitor.last_check_time())
@@ -523,9 +522,28 @@ def _compact_log_row(entry):
     file_name, line = _log_location(entry)
     section = str(entry.get("section") or tracking._section_for(file_name, entry.get("source")))
     action = str(entry.get("action") or tracking._action_for(entry.get("function"), entry.get("source")))
+    if str(entry.get("source") or "") == "llm":
+        if str(entry.get("kind") or "") == "json-parse":
+            action = "не удалось обработать ответ"
+        else:
+            action = "не удалось подготовить ответ"
+        return f"{_hhmm(entry.get('ts', 0))} · {section} · {action}"
     error = " ".join(_log_error_text(entry).split())[:170]
     location = f"{file_name}:{line}" if line else file_name
     return f"{_hhmm(entry.get('ts', 0))} · {section} · {action} · {error} · {location}"
+
+
+def _monitor_error_message(message, status_code):
+    code = int(status_code or 0)
+    if code == 429:
+        return "лимит исчерпан"
+    if code == 400:
+        return "ошибка запроса"
+    if code in (408, 502, 503, 504):
+        return "временно недоступен"
+    if message == "не удалось определить статус":
+        return "сервис не ответил"
+    return message
 
 
 def _monitor_error_row(entry):
@@ -535,16 +553,9 @@ def _monitor_error_row(entry):
     message = str(entry.get("text") or entry.get("message") or "Ошибка").strip().rstrip(".")
     if message.startswith(f"{label}:"):
         message = message.split(":", 1)[1].strip()
-    details = []
     status_code = entry.get("status_code")
-    if status_code:
-        details.append(f"HTTP {status_code}")
-    exception_type = str(entry.get("exception_type") or "")
-    if exception_type:
-        details.append(exception_type)
-    latency_ms = entry.get("latency_ms")
-    if latency_ms is not None:
-        details.append(f"{int(latency_ms)} мс")
+    message = _monitor_error_message(message, status_code)
+    details = []
     fallback = str(entry.get("fallback_target") or "")
     fallback_spec = provider_runtime.SPEC_BY_KEY.get(fallback)
     if fallback_spec:
@@ -555,7 +566,7 @@ def _monitor_error_row(entry):
         duration = max(0, recovered_at - started_at)
         details.append(f"восстановлен за {max(1, round(duration / 60))} мин")
     suffix = f" · {' · '.join(details)}" if details else ""
-    return f"{_hhmm(entry.get('ts', 0))} · Система · {label}: {message}{suffix}"
+    return f"{_hhmm(entry.get('ts', 0))} · Система · {label} · {message}{suffix}"
 
 
 def _collapse_monitor_errors(entries, window_seconds=600):

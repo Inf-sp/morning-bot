@@ -492,6 +492,13 @@ def audit_navigation_contracts(root=None):
         findings.append("doctor prompt must set pending input and show navigation")
 
     trainer_source = source("trainer.py")
-    if '"ex_next"' not in trainer_source or '"m_menu"' not in trainer_source:
+    trainer_router = source("learning_router.py")
+    trainer_has_next_button = "ex_next_" in trainer_source
+    trainer_has_next_route = (
+        'data.startswith("ex_next_")' in trainer_router
+        and "trainer.next_exercise" in trainer_router
+    )
+    trainer_has_main_menu = '"m_menu"' in trainer_source
+    if not (trainer_has_next_button and trainer_has_next_route and trainer_has_main_menu):
         findings.append("trainer answer navigation is incomplete")
     return findings

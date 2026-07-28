@@ -82,6 +82,32 @@ def test_preserved_inline_status_changes_only_loading_button():
     assert len(Query.message.markup_edits) == 1
 
 
+def test_inline_status_does_not_duplicate_loading_text_and_button():
+    class Message:
+        def __init__(self):
+            self.text_edits = []
+            self.markup_edits = []
+
+        async def edit_text(self, text, **kwargs):
+            self.text_edits.append((text, kwargs))
+
+        async def edit_reply_markup(self, **kwargs):
+            self.markup_edits.append(kwargs["reply_markup"])
+
+    class Query:
+        message = Message()
+
+    status = asyncio.run(util.StatusManager.start_inline(
+        Query(), stages=((0, "🔍 Подбираю разбор..."),), preserve_message=False))
+
+    assert Query.message.text_edits == []
+    assert _labels(Query.message.markup_edits[0]) == [["🔍 Подбираю разбор..."]]
+
+    asyncio.run(status.replace("Готовая карточка", reply_markup="final-kb"))
+
+    assert Query.message.text_edits == [("Готовая карточка", {"reply_markup": "final-kb"})]
+
+
 def test_preserved_inline_status_sends_ready_result_as_new_message():
     sent = []
 

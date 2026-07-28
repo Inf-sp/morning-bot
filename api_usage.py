@@ -257,7 +257,7 @@ def _append_event(svc: dict, event: dict, now_ts: int) -> None:
 def record_request(service: str, ok: bool = True, *, units: dict | None = None,
                    status_code: int | None = None, error: str = "",
                    latency_ms: int | None = None, headers: dict | None = None,
-                   include_request: bool = True) -> None:
+                   include_request: bool = True, monitor_result: bool = True) -> None:
     now = _now()
     now_ts = int(now.timestamp())
     units = ({"requests": 1} if include_request else {}) | (units or {})
@@ -302,14 +302,15 @@ def record_request(service: str, ok: bool = True, *, units: dict | None = None,
         store.mutate_kv(config.API_USAGE_KEY, mut)
     except Exception:
         pass
-    try:
-        provider_runtime.record_result(
-            service, ok, status_code=status_code, error=error, headers=headers,
-            latency_ms=latency_ms,
-        )
-    except Exception:
-        # Usage accounting must never make a product request fail.
-        pass
+    if monitor_result:
+        try:
+            provider_runtime.record_result(
+                service, ok, status_code=status_code, error=error, headers=headers,
+                latency_ms=latency_ms,
+            )
+        except Exception:
+            # Usage accounting must never make a product request fail.
+            pass
 
 
 def set_gemini_rate_limit(*, limit_scope: str = "", retry_after: int | None = None,

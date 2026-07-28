@@ -576,7 +576,15 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
     except Exception:
         pass
 
-def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=None):
+def _is_json_validation_error(status_code, body="") -> bool:
+    if int(status_code or 0) != 400:
+        return False
+    text = str(body or "").casefold()
+    return "failed to validate json" in text or "failed_generation" in text
+
+
+def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=None,
+          suppress_json_validation_failure=False):
     service_aliases = {"cf": "cloudflare", **_ROUTE_PROVIDER_BASE}
     service = service_aliases.get(name, name)
     meter_service = usage_service or service
@@ -588,9 +596,11 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=
     t0 = time.time()
     timeout = _bounded_timeout(timeout)
 
-    def record_usage(ok, **kwargs):
-        api_usage.record_request(meter_service, ok=ok, **kwargs)
-        if meter_service != service:
+    def record_usage(ok, *, monitor_result=True, **kwargs):
+        api_usage.record_request(
+            meter_service, ok=ok, monitor_result=monitor_result, **kwargs,
+        )
+        if meter_service != service and monitor_result:
             try:
                 provider_runtime.record_result(service, ok, **kwargs)
             except Exception:
@@ -613,8 +623,15 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=
         temporary = _is_temporary_status(r.status_code)
         limit_scope = ""
         cooldown_until = None
-        record_usage(False, status_code=r.status_code, error=f"HTTP {r.status_code}",
-                     latency_ms=int((time.time() - t0) * 1000), headers=r.headers)
+        json_validation_failure = (
+            suppress_json_validation_failure
+            and _is_json_validation_error(r.status_code, body)
+        )
+        record_usage(
+            False, status_code=r.status_code, error=f"HTTP {r.status_code}",
+            latency_ms=int((time.time() - t0) * 1000), headers=r.headers,
+            monitor_result=not json_validation_failure,
+        )
         retry_after = None
         try:
             retry_after = int(r.headers.get("Retry-After") or 0) or None
@@ -886,11 +903,26 @@ def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "pl
     }
     if response_mode == "json":
         payload["response_format"] = {"type": "json_object"}
-    r = _post("https://api.groq.com/openai/v1/chat/completions",
-        {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"},
-        payload,
-        40, provider, timeout_cap=5,
-        usage_service=api_usage.groq_model_service(model or _provider_model_name(provider)))
+    headers = {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"}
+    usage_service = api_usage.groq_model_service(model or _provider_model_name(provider))
+    try:
+        r = _post(
+            "https://api.groq.com/openai/v1/chat/completions", headers, payload,
+            40, provider, timeout_cap=5, usage_service=usage_service,
+            suppress_json_validation_failure=response_mode == "json",
+        )
+    except LLMProviderError as exc:
+        if response_mode != "json" or not _is_json_validation_error(exc.status_code, str(exc)):
+            raise
+        # Некоторые модели Groq иногда отклоняют собственный JSON-режим. Prompt
+        # уже требует валидный JSON, а локальный парсер проверит ответ, поэтому
+        # повторяем тот же запрос без server-side ограничения.
+        retry_payload = dict(payload)
+        retry_payload.pop("response_format", None)
+        r = _post(
+            "https://api.groq.com/openai/v1/chat/completions", headers, retry_payload,
+            40, provider, timeout_cap=5, usage_service=usage_service,
+        )
     return r.json()["choices"][0]["message"]["content"]
 
 def _gen_cf(prompt, max_tokens):

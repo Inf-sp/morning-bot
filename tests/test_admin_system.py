@@ -83,7 +83,7 @@ class _Bot:
         self.sent.append(kwargs)
 
 
-def test_system_screen_has_logs_on_separate_row(monkeypatch):
+def test_system_screen_has_only_logs_and_navigation(monkeypatch):
     monkeypatch.setattr(admin.service_monitor, "rows", lambda: ["⚪ Gemini · Везде · лимит неизвестен"])
     monkeypatch.setattr(admin.service_monitor, "last_check_time", lambda: "21:44")
     bot = _Bot()
@@ -91,7 +91,7 @@ def test_system_screen_has_logs_on_separate_row(monkeypatch):
     asyncio.run(admin.send_api_ai(bot, "42"))
 
     markup = bot.sent[0]["reply_markup"].inline_keyboard
-    assert [button.text for button in markup[0]] == ["📊 Нагрузка AI", "⚠️ Ошибки"]
+    assert [button.text for button in markup[0]] == ["⚠️ Ошибки"]
     assert [button.text for button in markup[-1]] == ["⬅️ Назад", "#️⃣ Главная"]
     assert "Ответы · 95%" not in bot.sent[0]["text"]
     assert "Автоматический резерв" not in bot.sent[0]["text"]
@@ -116,6 +116,55 @@ def test_logs_have_only_clear_and_navigation_rows(monkeypatch):
     assert all("Скопировать" not in button for row in labels for button in row)
 
 
+def test_logs_hide_llm_provider_payload_and_code_location(monkeypatch):
+    now = 1_784_466_000
+    entry = {
+        "id": "llm-1", "ts": now, "source": "llm",
+        "section": "Ассистент", "action": "не сформирован ответ",
+        "kind": "all-providers-failed",
+        "error": (
+            'groq_standard:groq_standard 400: {"error":{"message":'
+            '"Failed to validate JSON. See failed_generation"}}; chain:deadline'
+        ),
+        "file": "ai.py", "line": 1334,
+    }
+    monkeypatch.setattr(admin.time, "time", lambda: now + 10)
+    monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: [entry])
+    monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [])
+    monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
+    bot = _Bot()
+
+    asyncio.run(admin.send_logs(bot, "42"))
+
+    text = bot.sent[0]["text"]
+    assert "Ассистент · не удалось подготовить ответ" in text
+    assert "groq_standard" not in text
+    assert "failed_generation" not in text
+    assert "ai.py" not in text
+
+
+def test_logs_keep_monitor_errors_short(monkeypatch):
+    now = 1_784_466_000
+    incident = {
+        "ts": now, "service": "groq", "event_type": "error",
+        "text": "Groq: не удалось определить статус.", "status_code": 400,
+        "latency_ms": 2071, "fallback_target": "github_models",
+        "started_at": now - 90, "recovered_at": now,
+    }
+    monkeypatch.setattr(admin.time, "time", lambda: now + 10)
+    monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: [])
+    monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [incident])
+    monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
+    bot = _Bot()
+
+    asyncio.run(admin.send_logs(bot, "42"))
+
+    text = bot.sent[0]["text"]
+    assert "Система · Groq · ошибка запроса · резерв GitHub Models · восстановлен за 2 мин" in text
+    assert "HTTP 400" not in text
+    assert "2071 мс" not in text
+
+
 def test_logs_collapse_duplicate_monitor_incidents_and_show_all_unique_rows(monkeypatch):
     now = 1_784_466_000
     app_errors = [{
@@ -138,7 +187,7 @@ def test_logs_collapse_duplicate_monitor_incidents_and_show_all_unique_rows(monk
     asyncio.run(admin.send_logs(bot, "42"))
 
     text = bot.sent[0]["text"]
-    assert text.count("Ticketmaster: лимит исчерпан") == 1
+    assert text.count("Система · Ticketmaster · лимит исчерпан") == 1
     assert "повторилось 5 раз" in text
     assert "действие 12" in text
     assert "Ещё записей" not in text
