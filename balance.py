@@ -190,8 +190,8 @@ async def handle_role(bot, cid, role, text):
 
 
 # ---------- 😮‍💨 Мысли ----------
-async def send_daycheck(bot, cid):
-    await thoughts.send_home(bot, cid)
+async def send_daycheck(bot, cid, status=None):
+    await thoughts.send_home(bot, cid, status=status)
 
 async def worry_clear_all(bot, cid):
     # Совместимость со старыми Telegram-сообщениями: историческая кнопка
@@ -203,7 +203,7 @@ async def save_worries(bot, cid, text):
 
 
 # ---------- роутер кнопок Баланса ----------
-async def handle_callback(bot, cid, q, data):
+async def handle_callback(bot, cid, q, data, status=None):
     if data == "as_health_principles":
         await send_health_principles(bot, cid, q=q); return
     if data.startswith("as_health_principle_"):
@@ -212,7 +212,7 @@ async def handle_callback(bot, cid, q, data):
         return
     # мысли
     if data == "as_daycheck":
-        await send_daycheck(bot, cid); return
+        await send_daycheck(bot, cid, status=status); return
     # Совместимость со старыми сообщениями с кнопкой «Мотивация».
     if data == "as_motiv":
         await send_health_focus(bot, cid)

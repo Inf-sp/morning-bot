@@ -91,6 +91,28 @@ def test_other_outfit_changes_the_base_not_one_random_item():
     assert len({"t1", "b1", "s1", "a1"} - {item["id"] for item in alternative}) >= 2
 
 
+def test_hot_dry_weather_prioritizes_shorts_over_trousers():
+    top = _item("top", "Верх", "Белая футболка")
+    trousers = _item("trousers", "Низ", "Чёрные брюки")
+    shorts = _item("shorts", "Низ", "Оливковые шорты")
+    shoes = _item("shoes", "Обувь", "Белые кроссовки")
+    top["warmth"] = shorts["warmth"] = "лёгкие"
+    trousers["warmth"] = shoes["warmth"] = "обычные"
+    wardrobe_data = {"zones": {
+        "Верх": {"Футболки": [top]},
+        "Низ": {"Брюки": [trousers], "Шорты": [shorts]},
+        "Обувь": {"Кроссовки": [shoes]},
+    }}
+    weather = {
+        "tmax": 25, "hot": True, "warm": False, "has_rain": False,
+        "strong_wind": False, "sunny": True,
+    }
+
+    outfit = pick_best_outfit(wardrobe_data, weather, [], "", selected_styles=[])
+
+    assert {item["id"] for item in outfit} == {"top", "shorts", "shoes"}
+
+
 def test_suitable_accessory_is_preferred_when_it_is_available():
     wardrobe_data = {"zones": {
         "Верх": {"Футболки": [_item("t1", "Верх", "Белая футболка")]},
@@ -182,6 +204,63 @@ def test_layer_is_shown_after_its_base_top():
     assert [item["id"] for item in sorted(items, key=outfit_display_order)] == [
         "tee", "vest", "trousers", "sneakers",
     ]
+
+
+def test_city_style_prefers_a_relaxed_top_over_office_shirts_outside_the_first_pool():
+    wardrobe_data = {"zones": {
+        "Верх": {"Рубашки": [
+            _item("office", "Верх", "Белая офисная рубашка"),
+            _item("formal-1", "Верх", "Голубая деловая рубашка"),
+            _item("formal-2", "Верх", "Серая строгая рубашка"),
+            _item("formal-3", "Верх", "Чёрная костюмная рубашка"),
+            _item("tee", "Верх", "Белая свободная футболка"),
+        ]},
+        "Низ": {"Брюки": [_item("trousers", "Низ", "Чёрные брюки")]},
+        "Обувь": {"Кеды": [_item("sneakers", "Обувь", "Чёрные кеды")]},
+    }}
+
+    outfit = pick_best_outfit(
+        wardrobe_data,
+        {"tmax": 20, "has_rain": False, "strong_wind": False, "warm": True},
+        [],
+        "",
+        selected_styles=["Городской"],
+    )
+
+    assert outfit is not None
+    assert "tee" in {item["id"] for item in outfit}
+    assert "office" not in {item["id"] for item in outfit}
+
+
+def test_city_style_recommends_a_relaxed_tshirt_when_only_office_top_is_available():
+    wardrobe_data = {"zones": {
+        "Верх": {"Рубашки": [{"name": "Белая офисная рубашка", "zone": "Верх"}]},
+        "Низ": {"Брюки": [{"name": "Чёрные брюки", "zone": "Низ"}]},
+        "Обувь": {"Кеды": [{"name": "Чёрные кеды", "zone": "Обувь"}]},
+    }}
+
+    recommendation = wardrobe._purchase_candidate(
+        wardrobe_data,
+        {"has_rain": False},
+        selected_styles=["Городской"],
+    )
+
+    assert recommendation["item"] == "Белая свободная футболка"
+    assert "городскую базу" in recommendation["reason"]
+
+
+def test_city_style_does_not_recommend_a_tshirt_when_a_city_base_already_exists():
+    wardrobe_data = {"zones": {
+        "Верх": {"Футболки": [{"name": "Белая свободная футболка", "zone": "Верх"}]},
+        "Низ": {"Джинсы": [{"name": "Серые широкие джинсы", "zone": "Низ"}]},
+        "Обувь": {"Кеды": [{"name": "Чёрные кеды", "zone": "Обувь"}]},
+    }}
+
+    assert wardrobe._purchase_candidate(
+        wardrobe_data,
+        {"has_rain": False},
+        selected_styles=["Городской"],
+    ) is None
 
 
 def test_weather_intro_changes_between_new_outfits():

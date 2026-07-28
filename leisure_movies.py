@@ -284,6 +284,43 @@ def _local_movie_score(item, prefs):
     return score
 
 
+def _now_playing_week_key():
+    today = datetime.now(config.TZ).date()
+    year, week, _weekday = today.isocalendar()
+    return f"{year}-W{week:02d}"
+
+
+def _now_playing_catalog_get(cid, city):
+    data = store._load(config.MOVIE_NOW_PLAYING_CACHE_KEY) or {}
+    entry = data.get(str(cid)) if isinstance(data, dict) else None
+    if (not isinstance(entry, dict)
+            or entry.get("city") != city
+            or entry.get("week") != _now_playing_week_key()):
+        return None
+    items = entry.get("items")
+    if not isinstance(items, list) or not items:
+        return None
+    return [dict(item) for item in items if isinstance(item, dict)]
+
+
+def _now_playing_catalog_set(cid, city, items):
+    records = [dict(item) for item in (items or []) if isinstance(item, dict)]
+    if not records:
+        return None
+
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        data[str(cid)] = {
+            "city": city,
+            "week": _now_playing_week_key(),
+            "items": records,
+        }
+        return data, None
+
+    store.mutate_kv(config.MOVIE_NOW_PLAYING_CACHE_KEY, mutate)
+    return records
+
+
 async def get_local_now_playing(cid, *, limit=20, refresh=False):
     """Локальная афиша → TMDB metadata → полезная сортировка.
 
@@ -291,23 +328,26 @@ async def get_local_now_playing(cid, *, limit=20, refresh=False):
     афиши нельзя утверждать, что фильм идёт в городе пользователя.
     """
     city = _movie_city(cid)
-    listed = await asyncio.to_thread(local_cinema.get_city_movies, cid, city, refresh=refresh)
     prefs = _movie_prefs(cid)
-    items = []
-    for local in listed[:30]:
-        meta = await asyncio.to_thread(tmdb.search_id, local.title, "movie") if config.TMDB_API_KEY else None
-        if meta:
-            year = int(meta.get("year") or 0)
-            # Старая картина не становится новинкой только из-за повторного показа.
-            if year and year < datetime.now(config.TZ).year - 1:
-                continue
-            item = dict(meta)
-            item["title"] = item.get("name") or local.title
-            item["genres"] = [tmdb.GENRES.get(g, "") for g in item.get("genre_ids") or [] if tmdb.GENRES.get(g)]
-        else:
-            item = {"title": local.title, "genres": list(local.genres), "rating": None,
-                    "vote_count": 0, "popularity": 0, "genre_ids": []}
-        items.append(item)
+    items = None if refresh else _now_playing_catalog_get(cid, city)
+    if items is None:
+        listed = await asyncio.to_thread(local_cinema.get_city_movies, cid, city, refresh=refresh)
+        items = []
+        for local in listed[:30]:
+            meta = await asyncio.to_thread(tmdb.search_id, local.title, "movie") if config.TMDB_API_KEY else None
+            if meta:
+                year = int(meta.get("year") or 0)
+                # Старая картина не становится новинкой только из-за повторного показа.
+                if year and year < datetime.now(config.TZ).year - 1:
+                    continue
+                item = dict(meta)
+                item["title"] = item.get("name") or local.title
+                item["genres"] = [tmdb.GENRES.get(g, "") for g in item.get("genre_ids") or [] if tmdb.GENRES.get(g)]
+            else:
+                item = {"title": local.title, "genres": list(local.genres), "rating": None,
+                        "vote_count": 0, "popularity": 0, "genre_ids": []}
+            items.append(item)
+        _now_playing_catalog_set(cid, city, items)
     items.sort(key=lambda item: _local_movie_score(item, prefs), reverse=True)
     return items[:max(1, int(limit or 20))]
 
@@ -317,11 +357,14 @@ async def send_movie_home(bot, cid, q=None):
     await send_recos(bot, cid, "movie")
 
 
-async def send_movie_now_playing(bot, cid, q=None):
+async def send_movie_now_playing(bot, cid, q=None, status=None):
     city = _movie_city(cid)
     now_playing = await get_local_now_playing(cid, limit=30)
     msg = leisure_ui.movie_now_playing_screen(city, now_playing)
     kb = back_menu_keyboard("a_watch")
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+        return
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)

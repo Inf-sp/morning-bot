@@ -331,3 +331,67 @@ def test_leisure_home_edits_menu_message_once(monkeypatch):
     assert len(query.message.edits) == 1
     assert bot.sent == []
     assert query.message.edits[0][0].startswith("🍿 Развлечения на сегодня · Алкмар")
+
+
+def test_local_cinema_catalogue_is_reused_for_a_week_and_refreshes_next_week(monkeypatch):
+    cache = {}
+    calls = {"cinema": 0, "tmdb": 0}
+
+    def load(key):
+        return cache.get(key)
+
+    def mutate(key, change):
+        value, result = change(cache.get(key) or {})
+        cache[key] = value
+        return result
+
+    def local_movies(*_args, **_kwargs):
+        calls["cinema"] += 1
+        return [leisure_movies.local_cinema.LocalCinemaMovie("Film")]
+
+    def movie_meta(*_args, **_kwargs):
+        calls["tmdb"] += 1
+        return {"name": "Фильм", "year": 2026, "rating": 7.7, "vote_count": 100, "genre_ids": [18]}
+
+    monkeypatch.setattr(leisure_movies.store, "_load", load)
+    monkeypatch.setattr(leisure_movies.store, "mutate_kv", mutate)
+    monkeypatch.setattr(leisure_movies, "_movie_city", lambda _cid: "Алкмар")
+    monkeypatch.setattr(leisure_movies, "_movie_prefs", lambda _cid: {})
+    monkeypatch.setattr(leisure_movies.local_cinema, "get_city_movies", local_movies)
+    monkeypatch.setattr(leisure_movies.tmdb, "search_id", movie_meta)
+    monkeypatch.setattr(leisure_movies.config, "TMDB_API_KEY", "test-key")
+    monkeypatch.setattr(leisure_movies, "_now_playing_week_key", lambda: "2026-W30", raising=False)
+
+    first = asyncio.run(leisure_movies.get_local_now_playing("42", limit=3))
+    second = asyncio.run(leisure_movies.get_local_now_playing("42", limit=3))
+
+    assert first == second
+    assert calls == {"cinema": 1, "tmdb": 1}
+
+    monkeypatch.setattr(leisure_movies, "_now_playing_week_key", lambda: "2026-W31")
+    asyncio.run(leisure_movies.get_local_now_playing("42", limit=3))
+
+    assert calls == {"cinema": 2, "tmdb": 2}
+
+
+def test_full_cinema_list_is_delivered_through_the_inline_status(monkeypatch):
+    calls = []
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            calls.append((text, kwargs))
+
+    class Bot:
+        async def send_message(self, **_kwargs):
+            raise AssertionError("inline result must use the shared status")
+
+    async def movies(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(leisure_movies, "_movie_city", lambda _cid: "Алкмар")
+    monkeypatch.setattr(leisure_movies, "get_local_now_playing", movies)
+
+    asyncio.run(leisure_movies.send_movie_now_playing(Bot(), "42", status=Status()))
+
+    assert calls
+    assert calls[0][0].startswith("🎟️ Сейчас в кино · Алкмар")

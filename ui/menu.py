@@ -163,7 +163,7 @@ def learning_menu(home: dict):
         b.spacer()
         b.line("Я буду использовать их в тренажёре и повторении.")
         return b.build_stripped(reply_markup=ikb([
-            [("🆕 Добавить слова", f"a_dictadd_{code}")],
+            [("🆕 Добавить слова", f"a_dictadd_smart_{code}")],
             [("✨ Подобрать слова", f"a_dictseed_start_{code}")],
         ]))
 

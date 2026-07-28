@@ -127,7 +127,10 @@ class StatusManager:
                 pass
             if self._stopped.is_set():
                 return
-            await self._edit_loading_button(text)
+            if self.mode == "inline":
+                await self._edit_loading_button(text)
+            else:
+                await self._edit(text)
 
     async def _edit_loading_button(self, text):
         if self.message is None:

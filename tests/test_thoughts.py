@@ -136,6 +136,37 @@ def test_opening_thoughts_immediately_shows_review_with_clear_button(monkeypatch
     assert "❌ Очистить записи" in labels
 
 
+def test_opening_thoughts_delivers_slow_review_through_inline_status(monkeypatch):
+    repo, _settings, _fixed_now = _setup_state(monkeypatch)
+    repo.items = [{
+        "id": "1", "text": "Нужно купить фильтры для фонтана.",
+        "status": "open", "date": "2026-07-16",
+    }]
+
+    async def fake_model(*_args, **_kwargs):
+        return {
+            "summary": "Есть одна конкретная задача.",
+            "analysis": ["Покупку можно запланировать отдельно."],
+            "next_step": "Купи фильтры для фонтана.",
+        }
+
+    class InlineStatus:
+        def __init__(self):
+            self.replaced = []
+
+        async def replace(self, text, **kwargs):
+            self.replaced.append({"text": text, **kwargs})
+
+    monkeypatch.setattr(thoughts.ai, "allm_json", fake_model)
+    bot = FakeBot()
+    status = InlineStatus()
+
+    asyncio.run(thoughts.send_home(bot, "42", status=status))
+
+    assert bot.sent == []
+    assert status.replaced[0]["text"].startswith("🧐 Разбор мыслей")
+
+
 def test_crisis_and_medical_have_priority_without_model(monkeypatch):
     async def fail_model(*_args, **_kwargs):
         raise AssertionError("model must not override safety rules")

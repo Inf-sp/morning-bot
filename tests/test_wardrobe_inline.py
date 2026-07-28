@@ -108,6 +108,40 @@ def test_inline_status_does_not_duplicate_loading_text_and_button():
     assert Query.message.text_edits == [("Готовая карточка", {"reply_markup": "final-kb"})]
 
 
+def test_text_status_updates_its_message_without_an_inline_loading_button():
+    class Message:
+        def __init__(self):
+            self.text_edits = []
+            self.markup_edits = []
+
+        async def edit_text(self, text, **kwargs):
+            self.text_edits.append((text, kwargs))
+
+        async def edit_reply_markup(self, **kwargs):
+            self.markup_edits.append(kwargs["reply_markup"])
+
+    class Bot:
+        def __init__(self):
+            self.message = Message()
+
+        async def send_message(self, **_kwargs):
+            return self.message
+
+    async def run_status():
+        bot = Bot()
+        status = await util.StatusManager.start(
+            bot, "42", stages=((0, "⏳ Подбираю перевод..."), (0, "🔍 Подбираю разбор...")),
+        )
+        await asyncio.sleep(0.01)
+        await status.stop(delete=False)
+        return bot.message
+
+    message = asyncio.run(run_status())
+
+    assert message.text_edits == [("🔍 Подбираю разбор...", {})]
+    assert message.markup_edits == []
+
+
 def test_preserved_inline_status_sends_ready_result_as_new_message():
     sent = []
 
@@ -425,11 +459,18 @@ def test_week_forecast_uses_preserved_inline_status(monkeypatch):
     assert calls[-1] == ("stop", True)
 
 
-def test_leisure_navigation_replaces_current_menu(monkeypatch):
+def test_leisure_navigation_keeps_menu_visible_with_an_inline_loading_button(monkeypatch):
     calls = []
 
+    class Status:
+        mode = "inline"
+
+        async def stop(self, delete=True):
+            calls.append(("stop", delete))
+
     async def start_inline(q, bot=None, cid=None, stages=None, preserve_message=False):
-        raise AssertionError("навигация в Досуг не должна запускать StatusManager")
+        calls.append(("start_inline", q, bot, cid, stages, preserve_message))
+        return Status()
 
     async def send_home(bot, cid, q, status=None):
         calls.append(("leisure_home", q, status))
@@ -451,10 +492,81 @@ def test_leisure_navigation_replaces_current_menu(monkeypatch):
 
     asyncio.run(bot_callbacks.handle(Update(), Context(), None))
 
-    assert len(calls) == 1
-    assert calls[0][0] == "leisure_home"
-    assert calls[0][1].data == "m_leisure"
-    assert calls[0][2] is None
+    assert calls[0][0] == "start_inline"
+    assert calls[0][-1] is True
+    assert calls[1][0] == "leisure_home"
+    assert calls[1][1].data == "m_leisure"
+    assert calls[1][2].mode == "inline"
+    assert calls[-1] == ("stop", True)
+
+
+def test_personalized_main_sections_keep_the_main_menu_while_loading(monkeypatch):
+    calls = []
+
+    class Status:
+        mode = "inline"
+
+        async def stop(self, delete=True):
+            calls.append(("stop", delete))
+
+    async def start_inline(q, bot=None, cid=None, stages=None, preserve_message=False):
+        calls.append(("start_inline", q.data, preserve_message))
+        return Status()
+
+    monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
+
+    async def food_home(_bot, _cid, status=None, q=None):
+        calls.append(("food", status, q))
+
+    async def wardrobe_home(_bot, _cid, q=None, status=None):
+        calls.append(("wardrobe", status, q))
+
+    async def travel_home(_bot, _cid, q=None, status=None):
+        calls.append(("travel", status, q))
+
+    async def day_home(_bot, _cid, force=False, status=None):
+        calls.append(("myday", status, force))
+
+    cases = (
+        ("m_food", "food", lambda: (
+            monkeypatch.setattr(bot_callbacks.menu, "has_available_fridge", lambda _cid: True),
+            monkeypatch.setattr(bot_callbacks.menu, "send_food_menu", food_home),
+        )),
+        ("m_wardrobe", "wardrobe", lambda: (
+            monkeypatch.setattr(bot_callbacks.wardrobe, "has_wardrobe_items", lambda _cid: True),
+            monkeypatch.setattr(bot_callbacks.wardrobe, "send_home", wardrobe_home),
+        )),
+        ("m_travel", "travel", lambda: monkeypatch.setattr(
+            bot_callbacks.travel, "send_home", travel_home,
+        )),
+        ("m_myday", "myday", lambda: monkeypatch.setattr(
+            bot_callbacks.myday, "send_plany", day_home,
+        )),
+    )
+
+    class Context:
+        bot = object()
+
+    for data, expected, setup in cases:
+        calls.clear()
+        setup()
+
+        class Query:
+            message = type("Message", (), {"chat_id": "42", "message_id": 7})()
+
+        query = Query()
+        query.data = data
+        update = type("Update", (), {"callback_query": query})()
+        asyncio.run(bot_callbacks.handle(update, Context(), None))
+
+        assert calls[0] == ("start_inline", data, True)
+        assert calls[1][0] == expected
+        assert calls[1][1].mode == "inline"
+        if data == "m_myday":
+            assert calls[1][2] is False
+        assert calls[-1] == ("stop", True)
 
 
 def test_closet_screen_does_not_show_edit_button(monkeypatch):

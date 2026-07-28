@@ -22,6 +22,19 @@ SAFE_NEUTRAL_STYLE_TIPS = (
 SAFE_NEUTRAL_STYLE_TIP = SAFE_NEUTRAL_STYLE_TIPS[0]
 _SUNGLASSES_MARKERS = ("солнцезащит", "солнечн", "очки от солнца", "sunglasses")
 _RAINCOAT_MARKERS = ("дождевик", "raincoat")
+_SHORTS_MARKERS = ("шорт", "shorts")
+_CITY_STYLE = "городской"
+_CITY_2026_RELAXED_MARKERS = (
+    "свобод", "оверсайз", "широк", "прям", "relaxed", "roomy",
+    "карго", "utility", "деним", "джинс", "чинос",
+)
+_CITY_2026_BASE_MARKERS = (
+    "футболк", "майк", "лонгслив", "худи", "свитш", "толстовк", "поло",
+    "street", "streetwear", "oversize", "оверсайз",
+)
+_CITY_2026_STRICT_MARKERS = (
+    "офисн", "делов", "строг", "костюмн", "formal", "business",
+)
 
 # Зона вещи недостаточна для построения комплекта: старые вещи и ответ AI при
 # добавлении могли сохранить жилет или overshirt в «Верхе». Роль определяем по
@@ -65,6 +78,61 @@ def outfit_role(item):
     return ""
 
 
+def _item_facts(item):
+    return " ".join(
+        str(item.get(key) or "")
+        for key in ("name", "subcategory", "style", "fit", "formality", "material")
+    ).casefold()
+
+
+def urban_2026_item_score(item):
+    """Мягкий сигнал актуального городского силуэта.
+
+    Он не заменяет погоду, посадку из предпочтений и выбранный стиль: нужен
+    только для выбора между сопоставимыми вещами из уже существующего шкафа.
+    """
+    facts = _item_facts(item)
+    role = outfit_role(item)
+    score = 0
+    relaxed = any(marker in facts for marker in _CITY_2026_RELAXED_MARKERS)
+    strict = any(marker in facts for marker in _CITY_2026_STRICT_MARKERS)
+
+    if role == "base_top":
+        if any(marker in facts for marker in _CITY_2026_BASE_MARKERS):
+            score += 3
+        if relaxed:
+            score += 2
+        if strict:
+            score -= 4
+    elif role == "layer":
+        if relaxed or any(marker in facts for marker in ("overshirt", "оверши", "shacket", "шакет")):
+            score += 2
+    elif role == "bottom":
+        if relaxed:
+            score += 3
+        if any(marker in facts for marker in ("узк", "скинни", "slim")):
+            score -= 2
+    elif role == "shoes" and any(marker in facts for marker in ("кеды", "кроссов", "sneaker")):
+        score += 2
+    return score
+
+
+def is_urban_2026_base_top(item):
+    """Есть ли в шкафу базовый верх для современного городского комплекта."""
+    if outfit_role(item) != "base_top":
+        return False
+    facts = _item_facts(item)
+    if any(marker in facts for marker in _CITY_2026_STRICT_MARKERS) and not any(
+        marker in facts for marker in _CITY_2026_RELAXED_MARKERS
+    ):
+        return False
+    return any(marker in facts for marker in _CITY_2026_BASE_MARKERS + _CITY_2026_RELAXED_MARKERS)
+
+
+def _city_style_selected(selected_styles):
+    return any(str(style or "").casefold() == _CITY_STYLE for style in (selected_styles or []))
+
+
 def outfit_display_order(item):
     """Порядок вещей в карточке: базовый верх, слой, низ, обувь, верхняя одежда."""
     return _ROLE_DISPLAY_ORDER.get(outfit_role(item), {
@@ -79,7 +147,7 @@ def is_complete_outfit(items):
     return not needs_base_top or "base_top" in roles
 
 
-def _completed_layered_combos(combo, candidates):
+def _completed_layered_combos(combo, candidates, selected_styles=None):
     """Добавляет возможный базовый верх к неполному комплекту.
 
     Нужны все варианты, а не первая футболка: затем общий скоринг выберет
@@ -94,7 +162,7 @@ def _completed_layered_combos(combo, candidates):
         for item in pool
         if outfit_role(item) == "base_top"
         and (not item.get("id") or item.get("id") not in combo_ids)
-    ])
+    ], selected_styles=selected_styles)
     return [combo + [base_top] for base_top in base_tops]
 
 def _day_key():
@@ -123,6 +191,19 @@ def _temp_conflicts(item, weather_ctx):
 def _is_sunglasses(item):
     facts = f"{item.get('name', '')} {item.get('subcategory', '')}".casefold()
     return item.get("zone") == "Аксессуары" and any(marker in facts for marker in _SUNGLASSES_MARKERS)
+
+
+def _is_shorts(item):
+    facts = f"{item.get('name', '')} {item.get('subcategory', '')}".casefold()
+    return outfit_role(item) == "bottom" and any(marker in facts for marker in _SHORTS_MARKERS)
+
+
+def _shorts_weather(weather_ctx):
+    return bool(
+        weather_ctx.get("hot")
+        and not weather_ctx.get("has_rain")
+        and not weather_ctx.get("strong_wind")
+    )
 
 
 def _is_raincoat(item):
@@ -154,6 +235,10 @@ def select_outfit_candidates(w, weather_ctx):
             # Очки могут лежать дальше первых двух аксессуаров, которые попадут
             # в перебор, поэтому поднимаем их до ограничения пула кандидатов.
             items = sorted(items, key=lambda item: not _is_sunglasses(item))
+        elif zone == "Низ" and _shorts_weather(weather_ctx):
+            # При устойчивой жаре шорты должны дойти до конечного скоринга,
+            # даже если брюки были добавлены в шкаф раньше.
+            items = sorted(items, key=lambda item: not _is_shorts(item))
         candidates[zone] = items
     return candidates
 
@@ -178,10 +263,7 @@ def _color_penalty(items):
 def outfit_style_score(items, style):
     """Насколько конкретный комплект соответствует одному из шести UI-стилей."""
     style = str(style or "").casefold()
-    facts = " ".join(
-        " ".join(str(item.get(key) or "") for key in ("name", "subcategory", "style", "fit", "material"))
-        for item in items
-    ).casefold()
+    facts = " ".join(_item_facts(item) for item in items)
     colors = [str(color).casefold() for item in items for color in (item.get("colors") or [])]
     accessories = sum(item.get("zone") == "Аксессуары" for item in items)
     neutral = sum(_is_neutral_color(color) for color in colors)
@@ -200,6 +282,8 @@ def outfit_style_score(items, style):
         score -= max(accessories - 1, 0) * 2
     elif style == "скандинавский":
         score += sum(any(marker in color for marker in ("беж", "сер", "бел", "олив", "корич")) for color in colors)
+    elif style == _CITY_STYLE:
+        score += sum(urban_2026_item_score(item) for item in items)
     elif style in ("повседневный", "классический") and any(marker in facts for marker in ("sport", "спортив", "джоггер")):
         score -= 3
     return score
@@ -228,6 +312,10 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text, selected_styl
             score += 2
             if (weather_ctx.get("hot") or weather_ctx.get("sunny")) and _is_sunglasses(it):
                 score += 5
+        if _shorts_weather(weather_ctx) and _is_shorts(it):
+            # Это сильнее цветового тай-брейкера, но не отменяет защиту от
+            # дождя и ветра, историю ношения или явные ограничения пользователя.
+            score += 8
     score += _color_penalty(items)
     if selected_styles:
         score += 2 * max(outfit_style_score(items, style) for style in selected_styles)
@@ -281,11 +369,22 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text, selected_styl
     return score
 
 
-def _top_candidates(items, limit=3):
+def _top_candidates(items, limit=3, selected_styles=None):
     """Ограничивает размер зоны до перебора комбинаций (см. _combos) без
     предвзятости по частоте ношения — какая вещь выигрывает, решает score_outfit
-    (цельность образа), а не то, что вещь ещё не использовалась."""
-    return items[:limit]
+    (цельность образа), а не то, что вещь ещё не использовалась.
+
+    Для активного городского стиля сначала поднимаем актуальные свободные и
+    утилитарные вещи. Иначе четвёртая-пятая вещь в категории не дошла бы до
+    конечного скоринга вовсе.
+    """
+    if not _city_style_selected(selected_styles):
+        return items[:limit]
+    ranked = sorted(
+        enumerate(items),
+        key=lambda pair: (-urban_2026_item_score(pair[1]), pair[0]),
+    )
+    return [item for _index, item in ranked[:limit]]
 
 
 def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=None,
@@ -300,10 +399,12 @@ def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item
 
     def _combos():
         import itertools
-        pools = [_top_candidates(candidates[z]) for z in required]
+        pools = [_top_candidates(candidates[z], selected_styles=selected_styles) for z in required]
         optional_zones = [z for z in ("Верхняя одежда", "Аксессуары") if candidates.get(z)]
         for zone in optional_zones:
-            pools.append([None] + _top_candidates(candidates[zone], limit=2))
+            pools.append([None] + _top_candidates(
+                candidates[zone], limit=2, selected_styles=selected_styles,
+            ))
         for combo in itertools.product(*pools):
             yield [it for it in combo if it is not None]
 
@@ -315,7 +416,7 @@ def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item
     combos = [
         complete
         for combo in raw_combos
-        for complete in _completed_layered_combos(combo, candidates)
+        for complete in _completed_layered_combos(combo, candidates, selected_styles)
     ]
     if previous_item_ids:
         # «Другой образ» должен менять основу комплекта, а не одну случайную вещь.

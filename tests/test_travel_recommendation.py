@@ -114,6 +114,25 @@ def test_country_card_uses_local_facts_when_ai_is_unavailable(monkeypatch):
     assert bot.sent == []
 
 
+def test_saved_country_card_uses_inline_status_when_it_needs_building(monkeypatch):
+    card = {
+        "country_code": "NL", "country_name": "Нидерланды", "flag": "🇳🇱",
+        "description": "Каналы, города и море.", "highlight": "велосипедные маршруты",
+        "languages": ["нидерландский"], "currency": "евро · EUR",
+        "main_nuance": "погода быстро меняется", "fact": "Амстердам известен каналами",
+    }
+    status = FakeInlineStatus()
+    bot = FakeBot()
+
+    monkeypatch.setattr(travel, "_visited_codes", lambda _cid: ["NL"])
+    monkeypatch.setattr(travel, "_build_country_card", lambda _code: card)
+
+    asyncio.run(travel.send_country_card(bot, "42", "NL", status=status))
+
+    assert bot.sent == []
+    assert status.replaced[0]["text"].startswith("🇳🇱 Нидерланды")
+
+
 def test_iceland_card_uses_verified_travel_fields_not_model_claims():
     facts = research.country_facts("Исландия")
     travel_facts = research.country_travel_facts("Исландия")

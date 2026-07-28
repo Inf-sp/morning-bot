@@ -411,7 +411,7 @@ def _build_country_card_unlocked(code):
     return _save_cached_card(relation_code, card)
 
 
-async def send_country_card(bot, cid, code, page=0, q=None):
+async def send_country_card(bot, cid, code, page=0, q=None, status=None):
     if code not in _visited_codes(cid):
         await send_countries(bot, cid, page, q); return
     card = await asyncio.to_thread(_build_country_card, code)
@@ -420,6 +420,9 @@ async def send_country_card(bot, cid, code, page=0, q=None):
         [InlineKeyboardButton(delete_label("Удалить страну"), callback_data=f"a_trav_country_del_{code}_{page}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_trav_countries_{page}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+        return
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb); return
@@ -441,7 +444,7 @@ async def _confirm_country_delete(bot, cid, code, page, q):
         await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
-async def handle_country_callback(bot, cid, q, act):
+async def handle_country_callback(bot, cid, q, act, status=None):
     if act == "trav_country_add":
         await send_country_add_prompt(bot, cid)
         return
@@ -456,7 +459,7 @@ async def handle_country_callback(bot, cid, q, act):
         await send_countries(bot, cid, page, q); return
     match = re.fullmatch(r"trav_country_([A-Z0-9]+)_(\d+)", act)
     if match:
-        await send_country_card(bot, cid, match.group(1), int(match.group(2)), q)
+        await send_country_card(bot, cid, match.group(1), int(match.group(2)), q, status=status)
 
 
 async def add_visited_country(bot, cid, text):
@@ -637,7 +640,7 @@ async def travel_dislike(bot, cid, *, status=None):
     await send_go(bot, cid, status=status)
 
 
-async def travel_fav(bot, cid):
+async def travel_fav(bot, cid, *, status=None):
     country = store.suggested_countries.get(str(cid))
     if country:
         code = util.cc_of(country).upper()
@@ -650,7 +653,7 @@ async def travel_fav(bot, cid):
             store.set_list(config.SAVED_COUNTRIES_KEY, cid, codes)
             _save_cached_card(code, _stub_card(code, country, util.flag_from_cc(code)), replace=False)
             await bot.send_message(chat_id=cid, text=f"✅ {country} добавлена в «Мои страны».")
-    await send_go(bot, cid)
+    await send_go(bot, cid, status=status)
 
 
 def _card_text(value):

@@ -912,16 +912,14 @@ def _build_day_text(cid, *, refresh_current=False):
         _log.warning("[verify] weather: %s", w)
     return text, msg.entities
 
-async def send_plany(bot, cid, force=False, show_loading=True):
-    """Собирает и отправляет сводку «Мой день» без промежуточного «Собираю...» —
-    пользователь сразу получает готовый результат одним сообщением. show_loading
-    сохранён в сигнатуре для обратной совместимости вызовов, но больше не шлёт
-    отдельное сообщение — при холодном кэше показывается только typing-индикатор."""
+async def send_plany(bot, cid, force=False, show_loading=True, status=None):
+    """Собирает и отправляет сводку «Мой день». При inline-действии статус
+    остаётся кнопкой под исходным экраном, а готовая сводка приходит отдельно."""
     import time as _time
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     cache = None if force else _load_day_cache(cid, today)
     stale = cache is None
-    if stale:
+    if stale and status is None:
         try:
             await bot.send_chat_action(chat_id=cid, action="typing")
         except Exception:
@@ -934,6 +932,11 @@ async def send_plany(bot, cid, force=False, show_loading=True):
             await verify.safe_error(bot, cid, e, back="m_myday"); return
         cache = _save_day_cache(cid, today, text, entities, _time.time())
     cached = cache
+    if status is not None:
+        await status.replace(
+            cached["text"], entities=cached.get("entities"), reply_markup=_day_menu_kb(),
+        )
+        return
     await bot.send_message(
         chat_id=cid, text=cached["text"], entities=cached.get("entities"),
         reply_markup=_day_menu_kb(),

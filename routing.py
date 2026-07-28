@@ -74,6 +74,19 @@ def _match_condition(test, subject_name):
 
     Возвращает ("exact", {str,...}) | ("prefix", {str,...}) | None, если условие
     не распознано (например, сложное выражение, объединяющее что-то ещё)."""
+    # data.startswith("one") or data.startswith("two")
+    #
+    # Callback routers often group neighbouring dynamic routes this way.  The
+    # audit only needs the union when every branch has the same match type;
+    # mixed expressions stay deliberately unsupported instead of producing a
+    # false positive.
+    if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.Or):
+        parts = [_match_condition(value, subject_name) for value in test.values]
+        if parts and all(part is not None for part in parts):
+            kinds = {part[0] for part in parts}
+            if len(kinds) == 1:
+                return (parts[0][0], set().union(*(part[1] for part in parts)))
+        return None
     # data == "x"  /  "x" == data
     if isinstance(test, ast.Compare) and len(test.ops) == 1 and isinstance(test.ops[0], ast.Eq):
         left, right = test.left, test.comparators[0]

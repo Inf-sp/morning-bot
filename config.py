@@ -151,6 +151,7 @@ LEGACY_COUNTRIES_KEY = "mycountries.json"
 FAVORITE_BOOKS_KEY = "favorite_books.json"
 BOOK_RECO_CACHE_KEY = "book_reco_cache.json"  # {cid: {date, item}} — текущая карточка книги на день
 LOCAL_CINEMA_CACHE_KEY = "local_cinema_cache.json"  # {cid: {city, ts, movies}} — подтверждённая городская афиша
+MOVIE_NOW_PLAYING_CACHE_KEY = "movie_now_playing_cache.json"  # {cid: {city, week, items}} — стабильный каталог проката на неделю
 MUSIC_RECO_CACHE_KEY = "music_reco_cache.json"  # {cid: {date, item}} — персональный артист на день
 MOVIE_BLACKLIST_KEY = "movie_blacklist.json"
 BOOK_BLACKLIST_KEY = "book_blacklist.json"

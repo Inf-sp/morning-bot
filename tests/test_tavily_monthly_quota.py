@@ -41,7 +41,7 @@ def test_tavily_monthly_limit_blocks_until_first_day_of_next_month(monkeypatch):
     assert state["quota_state"] == provider_runtime.MONTHLY_QUOTA_EXHAUSTED
     assert provider_runtime.reset_date_label(state["quota_reset_at"]) == "1 августа"
     assert provider_runtime.tavily_monthly_quota_exhausted(july_23)
-    assert service_monitor.format_row("tavily").endswith("до 1 августа")
+    assert service_monitor.format_row("tavily") == "🟡 Tavily · Поиск · лимит исчерпан"
     assert "восстановлен" not in " ".join(event["text"] for event in provider_runtime.history())
 
 

@@ -136,9 +136,7 @@ def _status_detail(service: str, state: dict) -> str:
     if state.get("error_type") == "fallback":
         return str(state.get("last_error") or "резерв недоступен")
     if service == "tavily" and provider_runtime.tavily_monthly_quota_exhausted():
-        reset_at = int(provider_runtime.get_state("tavily").get("quota_reset_at") or 0)
-        until = provider_runtime.reset_date_label(reset_at)
-        return f"месячный лимит исчерпан · до {until}"
+        return "лимит исчерпан"
     if service == "tavily":
         budget = api_usage.tavily_budget()
         mode = " · экономный режим" if budget["mode"] == "economy" else ""

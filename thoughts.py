@@ -295,7 +295,7 @@ async def classify(text):
 
 async def send_home(
     bot, cid, *, cleared=False, capture_source="manual", explicit=False,
-    wait_for_input=True, auto_review=True,
+    wait_for_input=True, auto_review=True, status=None,
 ):
     cid = str(cid)
     opened = open_records(cid)
@@ -303,15 +303,18 @@ async def send_home(
     # результату. Явный вход из напоминания «Выгрузить тревоги» остаётся
     # исключением: он должен дать возможность добавить новую запись.
     if opened and not cleared and not explicit and auto_review:
-        await review_all(bot, cid)
+        await review_all(bot, cid, status=status)
         return
     msg = thoughts_ui.cleared_home() if cleared else thoughts_ui.home(opened)
     rows = []
     rows.append(_navigation_row())
     kb = InlineKeyboardMarkup(rows)
-    await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities,
-        reply_markup=kb, transient=True)
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+    else:
+        await bot.send_message(
+            chat_id=cid, text=msg.text, entities=msg.entities,
+            reply_markup=kb, transient=True)
     if wait_for_input:
         activate_capture(cid, source=capture_source, explicit=explicit)
 
@@ -584,7 +587,7 @@ async def _show_cached_review(bot, cid, q=None):
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_review_keyboard())
 
 
-async def review_all(bot, cid, q=None):
+async def review_all(bot, cid, q=None, status=None):
     cid = str(cid)
     opened = open_records(cid)
     if not opened:
@@ -602,6 +605,9 @@ async def review_all(bot, cid, q=None):
     store.last_source[cid] = "Здоровье · Мысли"
     msg = thoughts_ui.review(result["summary"], result["analysis"], result["next_step"])
     store.last_answer[cid] = msg.text
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=_review_keyboard())
+        return
     if q is not None:
         message_id = getattr(getattr(q, "message", None), "message_id", None)
         store.transient_message.pop(cid, None)

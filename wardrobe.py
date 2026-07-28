@@ -25,6 +25,7 @@ from wardrobe_model import (
 from wardrobe_outfit import (
     build_style_tip,
     choose_outfit_style,
+    is_urban_2026_base_top,
     outfit_display_order,
     pick_best_outfit,
     save_outfit_feedback,
@@ -34,8 +35,8 @@ from wardrobe_migration import migrate_item_attrs
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
-COPY_VALIDATOR_VERSION = 7
-PURCHASE_RECOMMENDATION_VERSION = 1
+COPY_VALIDATOR_VERSION = 9
+PURCHASE_RECOMMENDATION_VERSION = 2
 
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
@@ -165,7 +166,11 @@ def _purchase_recommendation_saved(cid, recommendation):
     )
 
 
-def _purchase_candidate(w, weather_ctx):
+def _city_style_selected(selected_styles):
+    return any(str(style or "").casefold() == "городской" for style in (selected_styles or []))
+
+
+def _purchase_candidate(w, weather_ctx, selected_styles=None):
     """Возвращает только действительно полезный пробел, без генерации текста."""
     if weather_ctx.get("has_rain") and not _has_rain_outerwear(w):
         return {
@@ -176,6 +181,16 @@ def _purchase_candidate(w, weather_ctx):
         }
 
     items = [item for _zone, _subcat, item in _flat_wardrobe_items(w)]
+    if _city_style_selected(selected_styles):
+        tops = [item for item in items if item.get("zone") == "Верх"]
+        if tops and not any(is_urban_2026_base_top(item) for item in tops):
+            return {
+                "version": PURCHASE_RECOMMENDATION_VERSION,
+                "item": "Белая свободная футболка",
+                "reason": "добавит современную городскую базу к брюкам и кедам",
+                "priority": 60,
+            }
+
     facts = " ".join(str(item.get("name") or "") for item in items).casefold()
     if "джинс" not in facts and "деним" not in facts:
         tops = [
@@ -194,10 +209,12 @@ def _purchase_candidate(w, weather_ctx):
     return None
 
 
-def _get_or_create_purchase_recommendation(cid, w, weather_ctx, fallback_tip=""):
+def _get_or_create_purchase_recommendation(cid, w, weather_ctx, fallback_tip="", selected_styles=None):
     current = store.get_wardrobe_purchase_recommendation(cid)
-    candidate = _purchase_candidate(w, weather_ctx)
-    if current and current.get("version") == PURCHASE_RECOMMENDATION_VERSION:
+    if current and current.get("version") != PURCHASE_RECOMMENDATION_VERSION:
+        current = {}
+    candidate = _purchase_candidate(w, weather_ctx, selected_styles)
+    if current:
         if not _purchase_recommendation_text(current):
             if candidate:
                 store.set_wardrobe_purchase_recommendation(cid, candidate)
@@ -250,13 +267,19 @@ def _cached_outfit_items(w, look_data):
 def _repair_missing_purchase_recommendation(cid, look_data):
     """Восстанавливает полезный блок в старом дневном кэше образа."""
     look_data = dict(look_data or {})
-    if _purchase_recommendation_text(look_data.get("purchase_recommendation")):
+    recommendation = look_data.get("purchase_recommendation") or {}
+    if (_purchase_recommendation_text(recommendation)
+            and recommendation.get("version") == PURCHASE_RECOMMENDATION_VERSION):
         return look_data
     wardrobe = store.load_wardrobe(cid)
     outfit_items = _cached_outfit_items(wardrobe, look_data)
     fallback_tip = build_style_tip(outfit_items, {})
     recommendation = _get_or_create_purchase_recommendation(
-        cid, wardrobe, {}, fallback_tip=fallback_tip,
+        cid,
+        wardrobe,
+        {},
+        fallback_tip=fallback_tip,
+        selected_styles=[look_data.get("primary_style")],
     )
     if recommendation:
         look_data["purchase_recommendation"] = recommendation
@@ -567,7 +590,11 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     item_ids = [it.get("id") for it in best_sorted]
     fallback_tip = build_style_tip(best_sorted, weather_ctx)
     purchase_recommendation = _get_or_create_purchase_recommendation(
-        cid, w, weather_ctx, fallback_tip=fallback_tip,
+        cid,
+        w,
+        weather_ctx,
+        fallback_tip=fallback_tip,
+        selected_styles=selected_styles,
     )
     look_data = {
         "primary_style": choose_outfit_style(best_sorted, selected_styles),

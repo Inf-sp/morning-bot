@@ -235,6 +235,55 @@ def test_add_dutch_word_does_not_default_to_english():
     assert lang == "nl"
 
 
+def test_add_dutch_phrase_uses_its_dutch_verb_as_a_language_hint():
+    payload, lang = dictionary_import._extract_chat_dict_add("Add Ik kies voor", "42")
+
+    assert payload == "Ik kies voor"
+    assert lang == "nl"
+
+
+def test_add_dutch_phrase_reaches_the_netherlands_dictionary_flow(monkeypatch):
+    normalized = []
+    sent = []
+
+    class Status:
+        async def stop(self):
+            return None
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def start(*_args, **_kwargs):
+        return Status()
+
+    async def normalize(payload, lang, **_kwargs):
+        normalized.append((payload, lang))
+        return {
+            "id": "phrase-id", "lang": lang, "term": payload,
+            "translation": "Я выбираю", "breakdown": "фраза", "examples": [],
+        }
+
+    async def enrich(entry, _cid):
+        return entry
+
+    async def quality(entry):
+        return entry
+
+    monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
+    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", normalize)
+    monkeypatch.setattr(dictionary_import, "_enrich_dutch_verb", enrich)
+    monkeypatch.setattr(dictionary_import.learning_data_quality, "check_new_entry", quality)
+    monkeypatch.setattr(dictionary_import, "_save_normalized_dict_entry", lambda _cid, entry: ("added", entry))
+    monkeypatch.setattr(dictionary_import, "_dict_entry_message", lambda *_args, **_kwargs: SimpleNamespace(
+        text="Готово", entities=[]))
+    monkeypatch.setattr(dictionary_import, "_dict_saved_kb", lambda *_args, **_kwargs: "keyboard")
+
+    assert asyncio.run(dictionary_import.try_add_dict_from_chat(Bot(), "42", "Add Ik kies voor"))
+    assert normalized == [("Ik kies voor", "nl")]
+    assert [message["text"] for message in sent] == ["Готово"]
+
+
 def test_russian_chat_command_keeps_dutch_default():
     payload, lang = dictionary_import._extract_chat_dict_add("Добавь suspicious", "42")
 

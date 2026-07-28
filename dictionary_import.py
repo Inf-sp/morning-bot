@@ -140,6 +140,7 @@ _DUTCH_ARTICLE_RE = re.compile(r"\b(de|het)\s+\w+", re.I)
 _DUTCH_WORD_HINTS = {
     "liever", "vanwege", "bewonderen", "tegoed", "walging", "gevolg",
     "afdeling", "ongeveer", "twijfelen", "twijfelt", "wennen", "omgaan",
+    "kies",
 }
 
 
