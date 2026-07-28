@@ -1,8 +1,10 @@
 import os
+from datetime import datetime
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
+import myday
 from myday import _day_wind_text
 from ui.myday import day_summary
 
@@ -36,3 +38,41 @@ def test_day_summary_keeps_capitalized_dictionary_translation_after_arrow():
 
     assert "🇳🇱 Нидерландский: Slim → Худой, умный." in message.text
     assert "→ Худой" in message.text
+
+
+def test_yesterdays_day_cache_never_hides_todays_mood(monkeypatch):
+    cid = "myday-new-mood"
+    myday._day_cache.pop(cid, None)
+    monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {
+        "myday_home_cache": {
+            "date": "2026-07-27",
+            "version": myday._DAY_CACHE_VERSION,
+            "text": "⚡️ Настрой: Вчерашняя фраза.",
+            "entities": [],
+            "ts": 0,
+        },
+    })
+
+    assert myday._load_day_cache(cid, "2026-07-28") is None
+
+
+def test_daily_mood_never_repeats_when_hashes_collide(monkeypatch):
+    class FixedDateTime:
+        current = datetime(2026, 7, 27)
+
+        @classmethod
+        def now(cls, _tz):
+            return cls.current
+
+    class SameDigest:
+        def digest(self):
+            return b"\0" * 32
+
+    monkeypatch.setattr("balance.datetime", FixedDateTime)
+    monkeypatch.setattr("balance.hashlib.sha256", lambda _value: SameDigest())
+
+    yesterday = __import__("balance").health_focus("42")["phrase"]
+    FixedDateTime.current = datetime(2026, 7, 28)
+    today = __import__("balance").health_focus("42")["phrase"]
+
+    assert today != yesterday

@@ -47,6 +47,8 @@ def test_chain_does_not_start_another_provider_after_deadline(monkeypatch):
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
+    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
 
     def slow_failure(*_args, **_kwargs):
         calls.append("gemini")

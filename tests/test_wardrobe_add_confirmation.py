@@ -16,11 +16,13 @@ class _Bot:
         self.messages.append(kwargs)
 
 
-def test_success_confirmation_uses_brand_and_compact_known_details():
+def test_success_confirmation_shows_category_and_style():
     message = wardrobe_ui.add_success({
         "name": "светло-серая рубашка",
         "brand": "GU",
         "zone": "Верх",
+        "subcategory": "Рубашки",
+        "style": "Скандинавский",
         "color": "светло-серый",
         "length": "короткий рукав",
         "warmth": "лёгкие",
@@ -28,7 +30,9 @@ def test_success_confirmation_uses_brand_and_compact_known_details():
 
     assert message.text == (
         "✅ Вещь добавлена в «Мой шкаф»\n\n"
-        "Светло-серая рубашка GU · короткий рукав · лёгкая ткань"
+        "Светло-серая рубашка GU · короткий рукав · лёгкая ткань\n"
+        "Категория: Верх\n"
+        "Стиль: Скандинавский"
     )
     assert "Светло-серая рубашка GU" in [
         message.text.encode("utf-16-le")[entity.offset * 2:(entity.offset + entity.length) * 2].decode("utf-16-le")
@@ -36,11 +40,12 @@ def test_success_confirmation_uses_brand_and_compact_known_details():
     ]
 
 
-def test_success_confirmation_without_brand_omits_empty_and_technical_fields():
+def test_success_confirmation_keeps_known_details_without_empty_values():
     message = wardrobe_ui.add_success({
         "name": "чёрные широкие брюки",
         "brand": "",
         "zone": "Низ",
+        "style": "Повседневный",
         "color": "чёрный",
         "warmth": "лёгкие",
         "material": None,
@@ -48,8 +53,12 @@ def test_success_confirmation_without_brand_omits_empty_and_technical_fields():
         "fit": None,
     })
 
-    assert message.text == "✅ Вещь добавлена в «Мой шкаф»\n\nЧёрные широкие брюки · лёгкие"
-    assert all(label not in message.text for label in ("Категория:", "Цвет:", "Тепло:"))
+    assert message.text == (
+        "✅ Вещь добавлена в «Мой шкаф»\n\n"
+        "Чёрные широкие брюки · лёгкие\n"
+        "Категория: Низ\n"
+        "Стиль: Повседневный"
+    )
     assert "None" not in message.text
 
 

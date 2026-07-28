@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 import hashlib
 import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -137,10 +137,16 @@ _FOCUS_GUIDANCE = {
 }
 
 
+def _focus_index(cid, day):
+    digest = hashlib.sha256(str(cid).encode()).digest()
+    start = int.from_bytes(digest[:4], "big") % len(_FOCUS_PHRASES)
+    return (start + date.fromisoformat(day).toordinal()) % len(_FOCUS_PHRASES)
+
+
 def health_focus(cid):
-    day = datetime.now(TZ).strftime("%Y-%m-%d")
-    digest = hashlib.sha256(f"{cid}:{day}".encode()).digest()
-    kind, phrase = _FOCUS_PHRASES[int.from_bytes(digest[:4], "big") % len(_FOCUS_PHRASES)]
+    now = datetime.now(TZ)
+    day = now.strftime("%Y-%m-%d")
+    kind, phrase = _FOCUS_PHRASES[_focus_index(cid, day)]
     steps, tip = _FOCUS_GUIDANCE[kind]
     return {"phrase": phrase, "steps": steps, "tip": tip}
 

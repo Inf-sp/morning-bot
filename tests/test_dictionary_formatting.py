@@ -150,3 +150,31 @@ def test_phrase_quiz_uses_full_local_distractors_not_other_dictionary_entries():
     assert len(data["wrong"]) == 2
     assert not set(data["wrong"]) & {item["translation"] for item in personal_dictionary}
     assert all(len(option.split()) >= 4 for option in data["wrong"])
+
+
+def test_normalize_dictionary_merges_same_term_with_different_translations(monkeypatch):
+    stored = [
+        {
+            "lang": "nl",
+            "term": "bevelen",
+            "translation": "Приказывать",
+            "examples": [{"text": "Ik beveel hem te stoppen.", "translation": "Я приказываю ему остановиться."}],
+        },
+        {"lang": "nl", "term": "Bevelen", "translation": "Отдавать приказ"},
+    ]
+
+    monkeypatch.setattr(learning_dictionary.store, "get_list", lambda *_args: list(stored))
+    monkeypatch.setattr(
+        learning_dictionary.store,
+        "set_list",
+        lambda _key, _cid, entries: stored.__setitem__(slice(None), entries),
+    )
+
+    normalized = learning_dictionary.normalize_user_dictionary("dictionary-duplicates")
+
+    assert len(normalized) == 1
+    assert normalized[0]["translation"] == "Приказывать; Отдавать приказ"
+    assert normalized[0]["examples"] == [{
+        "text": "Ik beveel hem te stoppen.",
+        "translation": "Я приказываю ему остановиться.",
+    }]

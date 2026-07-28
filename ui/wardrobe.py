@@ -362,6 +362,29 @@ def _success_item_details(item):
     return details[:3]
 
 
+def _success_item_category(item):
+    item = item or {}
+    return _clean_text(item.get("zone"))
+
+
+def _success_item_style(item):
+    style = (item or {}).get("style")
+    if isinstance(style, (list, tuple)):
+        style = " · ".join(_clean_text(value) for value in style if _clean_text(value))
+    return _upper_first(_clean_text(style))
+
+
+def _success_item_metadata(builder, item):
+    category = _success_item_category(item)
+    if category:
+        builder.newline()
+        builder.text_line(f"Категория: {category}")
+    style = _success_item_style(item)
+    if style:
+        builder.newline()
+        builder.text_line(f"Стиль: {style}")
+
+
 def add_success(item):
     """Подтверждение после фактического сохранения одной вещи в шкаф."""
     b = MessageBuilder()
@@ -371,6 +394,7 @@ def add_success(item):
     details = _success_item_details(item)
     if details:
         b.text_line(" · " + " · ".join(details))
+    _success_item_metadata(b, item)
     return b.build_stripped()
 
 
@@ -383,6 +407,7 @@ def add_batch_success(items):
         details = _success_item_details(item)
         if details:
             b.text_line(" · " + " · ".join(details))
+        _success_item_metadata(b, item)
     return b.build_stripped()
 
 

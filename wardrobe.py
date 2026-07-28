@@ -12,7 +12,7 @@ import verify
 import secure
 import settings as _settings
 from ui import wardrobe as wardrobe_ui
-from ui.constants import choose_label, delete_label, save_toggle_label, ui_label
+from ui.constants import choose_label, delete_label, ui_label
 from wardrobe_model import (
     ZONE_ORDER,
     flat_items as _flat_wardrobe_items,
@@ -321,8 +321,6 @@ def _save_cached_look(cid, item_ids, look_data):
 # ---------- главный экран раздела (панель состояния) ----------
 def build_wardrobe_keyboard(has_result=True, *, has_purchase=False, purchase_saved=False):
     rows = [[("✨ Другой образ" if has_result else "✨ Подобрать образ", "w_look")]]
-    if has_purchase:
-        rows.append([(save_toggle_label(purchase_saved), "w_buy_save")])
     rows.extend([
         [("🧐 Оценить покупку", "w_check"), ("🧶 Мой шкаф", "w_closet")],
         [("🎚️ Предпочтения", "set_wardrobe_style")],

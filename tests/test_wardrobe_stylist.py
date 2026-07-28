@@ -195,16 +195,15 @@ def test_malformed_saved_recommendation_is_replaced_for_another_outfit(monkeypat
     assert recommendation["reason"]
 
 
-def test_wardrobe_purchase_button_has_single_save_action():
+def test_outfit_card_has_no_save_action():
     labels = [
         button.text
         for row in wardrobe.build_wardrobe_keyboard(has_purchase=True).inline_keyboard
         for button in row
     ]
 
-    assert labels.count("💾 Сохранить") == 1
+    assert "💾 Сохранить" not in labels
     assert "❌ Не сейчас" not in labels
-    assert "✅ Сохранено" not in labels
 
 
 def test_parsed_item_keeps_fit_season_and_occasions():

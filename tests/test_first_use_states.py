@@ -1,10 +1,14 @@
 import asyncio
 import os
+from types import SimpleNamespace
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import dictionary_seed
+import bot_text
+import cooking
+import fridge
 import leisure_home
 import menu
 import onboard
@@ -193,3 +197,157 @@ def test_fill_wardrobe_returns_to_the_normal_home_after_saving(monkeypatch):
     asyncio.run(wardrobe.add_item(object(), "42", "Белая футболка", return_to_home=True))
 
     assert opened == ["42"]
+
+
+def _prepare_pending_text_router(monkeypatch):
+    async def no_async_match(*_args, **_kwargs):
+        return False
+
+    monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
+    monkeypatch.setattr(bot_text.assistant, "try_add_lifehack_from_chat", no_async_match)
+    monkeypatch.setattr(bot_text.assistant, "try_edit_lifehack_from_chat", no_async_match)
+    monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", no_async_match)
+    monkeypatch.setattr(bot_text.balance.thoughts, "capture_waiting", lambda _cid: False)
+
+
+def test_fill_wardrobe_text_input_opens_normal_home(monkeypatch):
+    cid = "first-wardrobe-text"
+    sent = []
+    opened = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def parse(_text):
+        return [{"name": "Белая футболка"}]
+
+    async def send_home(_bot, routed_cid):
+        opened.append(routed_cid)
+
+    monkeypatch.setattr(wardrobe, "_parse_items", parse)
+    monkeypatch.setattr(wardrobe.store, "add_wardrobe_items", lambda *_args: [{"name": "Белая футболка"}])
+    monkeypatch.setattr(wardrobe, "send_home", send_home)
+    _prepare_pending_text_router(monkeypatch)
+
+    bot = Bot()
+    asyncio.run(wardrobe.handle_callback(bot, cid, None, "w_fill"))
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=cid),
+        message=SimpleNamespace(text="Белая футболка"),
+    )
+    asyncio.run(bot_text.handle(
+        update,
+        SimpleNamespace(bot=bot),
+        lambda *_args: asyncio.sleep(0),
+    ))
+
+    assert opened == [cid]
+    assert cid not in store.pending_input
+    assert [message["text"] for message in sent] == [
+        "Пришли список всей своей одежды одним сообщением — я сам разложу всё по шкафу.",
+    ]
+
+
+def test_first_fridge_fill_returns_to_normal_cooking_home(monkeypatch):
+    """The first product list must finish on a recipe, not a fridge status screen."""
+
+    saved = []
+    opened = []
+    sent = []
+
+    monkeypatch.setattr(fridge.store, "get_list", lambda _key, _cid: list(saved))
+    monkeypatch.setattr(
+        fridge.store,
+        "set_list",
+        lambda _key, _cid, values: saved.__setitem__(slice(None), values),
+    )
+
+    async def send_food_home(_bot, cid, *, refresh=False, **_kwargs):
+        opened.append((str(cid), refresh))
+
+    async def unexpected_fridge_screen(*_args, **_kwargs):
+        raise AssertionError("first fill must not end on the fridge screen")
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(menu, "send_food_menu", send_food_home)
+    monkeypatch.setattr(fridge, "send_fridge", unexpected_fridge_screen)
+
+    asyncio.run(fridge.fridge_add_done(Bot(), "42", "курица, рис"))
+
+    assert opened == [("42", True)]
+    assert sent == []
+
+
+def test_first_fridge_fill_text_input_opens_normal_cooking_home(monkeypatch):
+    cid = "first-fridge-text"
+    saved = []
+    sent = []
+    opened = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(fridge.store, "get_list", lambda _key, _cid: list(saved))
+    monkeypatch.setattr(
+        fridge.store,
+        "set_list",
+        lambda _key, _cid, values: saved.__setitem__(slice(None), values),
+    )
+
+    async def send_food_home(_bot, routed_cid, *, refresh=False, **_kwargs):
+        opened.append((str(routed_cid), refresh))
+
+    monkeypatch.setattr(menu, "send_food_menu", send_food_home)
+    _prepare_pending_text_router(monkeypatch)
+
+    bot = Bot()
+    asyncio.run(cooking.handle_callback(bot, cid, None, "as_fridge_add"))
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=cid),
+        message=SimpleNamespace(text="курица, рис"),
+    )
+    asyncio.run(bot_text.handle(
+        update,
+        SimpleNamespace(bot=bot),
+        lambda *_args: asyncio.sleep(0),
+    ))
+
+    assert opened == [(cid, True)]
+    assert cid not in store.pending_input
+    assert [message["text"] for message in sent] == [
+        "✏️ Напиши продукты через запятую или с новой строки — добавлю в список.",
+    ]
+
+
+def test_first_fridge_fill_opens_cooking_after_category_choice(monkeypatch):
+    cid = "first-fridge-category"
+    saved = []
+    opened = []
+
+    class Bot:
+        async def send_message(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr(fridge.store, "get_list", lambda _key, _cid: list(saved))
+    monkeypatch.setattr(
+        fridge.store,
+        "set_list",
+        lambda _key, _cid, values: saved.__setitem__(slice(None), values),
+    )
+
+    async def send_food_home(_bot, routed_cid, *, refresh=False, **_kwargs):
+        opened.append((str(routed_cid), refresh))
+
+    monkeypatch.setattr(menu, "send_food_menu", send_food_home)
+    fridge._pending_category_choices.clear()
+
+    asyncio.run(fridge.fridge_add_done(Bot(), cid, "дуриан"))
+    asyncio.run(fridge.fridge_assign_category(Bot(), cid, 1))
+
+    assert opened == [(cid, True)]

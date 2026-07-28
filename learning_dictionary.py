@@ -118,7 +118,7 @@ def normalize_user_dictionary(cid):
     words = store.get_list(config.DICT_KEY, cid)
     changed = False
     result = []
-    seen = set()
+    seen = {}
     for item in words:
         if not isinstance(item, dict):
             item = normalize_entry(item)
@@ -130,11 +130,28 @@ def normalize_user_dictionary(cid):
         if correction:
             item["term"] = correction["term"]
             item["translation"] = correction["translation"]
-        key = (lang, normalize_key(entry_term(item)), normalize_key(entry_translation(item)))
+        key = (lang, normalize_key(entry_term(item)))
         if key in seen:
+            existing = result[seen[key]]
+            translations = []
+            translation_keys = set()
+            for source in (entry_translation(existing), entry_translation(item)):
+                for value in str(source or "").split(";"):
+                    value = value.strip()
+                    value_key = normalize_key(value)
+                    if value and value_key and value_key not in translation_keys:
+                        translations.append(value)
+                        translation_keys.add(value_key)
+            if translations:
+                existing["translation"] = "; ".join(translations)
+            if not existing.get("examples") and item.get("examples"):
+                existing["examples"] = item["examples"]
+            for field, value in item.items():
+                if field not in existing or existing[field] in (None, "", []):
+                    existing[field] = value
             changed = True
             continue
-        seen.add(key)
+        seen[key] = len(result)
         result.append(item)
         if item != next((old for old in words if old is item), item):
             changed = True

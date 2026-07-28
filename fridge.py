@@ -143,6 +143,7 @@ async def fridge_add_done(bot, cid, text, cat_idx: int = -1):
     cid_s = str(cid)
     items_new = _fridge_split_input(text)
     items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
+    first_fill = not _fridge_available(items)
     existing = {it["name"].lower() for it in items}
     added = []
     duplicates = []
@@ -173,18 +174,32 @@ async def fridge_add_done(bot, cid, text, cat_idx: int = -1):
         if item["name"] in added:
             added_by_cat.setdefault(item["cat"], []).append(item["name"])
     rejected = _fridge_rejected_lines(text)
-    if added or duplicates or rejected:
+    if (added or duplicates or rejected) and not first_fill:
         msg = food_ui.fridge_updated(
             added_by_cat, added, duplicates, rejected, _CAT_ORDER, _CAT_EMOJI, _CAT_BTN_LABEL)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     if needs_category:
-        _pending_category_choices[cid_s] = {"names": needs_category, "return_cat": cat_idx}
+        _pending_category_choices[cid_s] = {
+            "names": needs_category,
+            "return_cat": cat_idx,
+            "return_to_food": first_fill,
+        }
         await send_fridge_category_choice(bot, cid)
+        return
+    if first_fill and _fridge_available(items):
+        await _send_cooking_home(bot, cid)
         return
     if cat_idx >= 0:
         await send_fridge_cat(bot, cid, cat_idx, 0)
     else:
         await send_fridge(bot, cid)
+
+
+async def _send_cooking_home(bot, cid, q=None):
+    """Continue a first fridge fill with the useful Cooking result."""
+    import menu
+
+    await menu.send_food_menu(bot, cid, refresh=True, q=q)
 
 
 async def send_fridge_category_choice(bot, cid, q=None):
@@ -239,6 +254,9 @@ async def fridge_assign_category(bot, cid, cat_idx: int, q=None):
         return
     _pending_category_choices.pop(cid_s, None)
     return_cat = pending.get("return_cat", -1)
+    if pending.get("return_to_food"):
+        await _send_cooking_home(bot, cid, q)
+        return
     if isinstance(return_cat, int) and 0 <= return_cat < len(_CAT_ORDER):
         await send_fridge_cat(bot, cid, return_cat, 0, q)
     else:
