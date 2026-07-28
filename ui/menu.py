@@ -51,8 +51,8 @@ def main_menu_rows():
         [(ui_label("myday", "Мой день"), "m_myday")],
         [(ui_label("wardrobe", "Гардероб"), "m_wardrobe"), (ui_label("food", "Готовка"), "m_food")],
         [(ui_label("learning", "Обучение"), "m_learn"), (ui_label("health", "Здоровье"), "m_balance")],
-        [(ui_label("travel", "Поездки"), "m_travel"), (ui_label("cinema", "Кино"), "m_movie")],
-        [(ui_label("books", "Книги"), "m_books"), (ui_label("music", "Музыка"), "m_music")],
+        [(ui_label("travel", "Поездки"), "m_travel"), (ui_label("music", "Музыка"), "m_music")],
+        [(ui_label("cinema", "Кино"), "m_movie"), (ui_label("books", "Книги"), "m_books")],
         [(ui_label("settings", "Настройки"), "m_notes")],
     ]
 
@@ -93,7 +93,6 @@ _SCREENS = {
             [("✨ Другой образ", "w_look")],
             [("🧐 Оценить покупку", "w_check")],
             [("🧶 Мой шкаф", "w_closet")],
-            [("🎚️ Предпочтения", "set_wardrobe_style")],
             [("#️⃣ Главная", "m_menu")],
         ],
     ),
@@ -102,9 +101,8 @@ _SCREENS = {
         "Здоровье",
         "",
         [
-            [(ui_label("doctor", "Врач"), "as_doctor")],
-            [(ui_label("worry_diary", "Мысли"), "as_daycheck")],
-            [("🎚️ Предпочтения", "as_health_principles")],
+            [(ui_label("doctor", "Врач"), "as_doctor"),
+             (ui_label("worry_diary", "Мысли"), "as_daycheck")],
             [("#️⃣ Главная", "m_menu")],
         ],
     ),
@@ -119,7 +117,7 @@ def learning_menu(home: dict):
 
     b = MessageBuilder()
     if not home.get("has_material"):
-        b.section("📚 Обучение")
+        b.section("🧠 Обучение")
         b.spacer()
         b.line("Добавляй сюда слова и фразы, которые хочешь запомнить.")
         b.spacer()
@@ -175,11 +173,8 @@ def learning_menu(home: dict):
 
     return b.build_stripped(reply_markup=ikb([
         [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
-        [
-            (ui_label("game", "Детектив"), "a_game"),
-            ("📖 Мой словарь", f"a_dictlang_{code}_from_menu"),
-        ],
-        [("🎚️ Настройки", "set_learning")],
+        [(ui_label("game", "Детектив"), "a_game")],
+        [("📖 Мой словарь", f"a_dictlang_{code}_from_menu")],
         [("#️⃣ Главная", "m_menu")],
     ]))
 
@@ -287,7 +282,6 @@ def food_menu(idea=None):
         [("✨ Другой рецепт", "m_food_next")],
         [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
         [("🧊 Мой холодильник", "as_fridge_home")],
-        [("💾 Сохранённое", "as_my_recipes"), ("🎚️ Предпочтения", "set_cuisines")],
         [("#️⃣ Главная", "m_menu")],
     ]
     return b.build_stripped(reply_markup=ikb(rows))

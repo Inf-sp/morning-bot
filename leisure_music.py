@@ -10,12 +10,16 @@ import ai
 import config
 import music_releases
 import recommendation_stoplist
+import settings
 import store
 from ui import leisure as leisure_ui
 from ui.constants import save_toggle_label, ui_label
-from ui.navigation import back_menu_keyboard
 
 _log = logging.getLogger(__name__)
+
+
+def _music_home_only_kb():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
 
 _MUSIC_GENRES = [
     ("indie", "🌿 Инди", "инди-поп или инди-рок"),
@@ -25,6 +29,7 @@ _MUSIC_GENRES = [
     ("rock", "🎸 Рок", "рок"),
     ("hiphop", "🎤 Хип-хоп", "хип-хоп"),
 ]
+_MUSIC_STYLE_KEY = "music_styles"
 _RECENT_ARTISTS_LIMIT = 40
 
 # Последний резерв, когда все AI-провайдеры временно недоступны. Это реальные,
@@ -198,20 +203,19 @@ def _listen_kb(saved=False, favorite=False):
         [InlineKeyboardButton("🎭 По жанру", callback_data="music_genre_menu"),
          InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data="listen_0")],
         [InlineKeyboardButton("💾 Сохранения", callback_data="artist_saved"),
-         InlineKeyboardButton("🎚️ Предпочтения", callback_data="music_prefs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+         InlineKeyboardButton("❤️ Мои артисты", callback_data="artist_favorites")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
 def music_home_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать музыку", callback_data="music_reco")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="music_genre_menu"),
-         InlineKeyboardButton("💾 Сохранения", callback_data="artist_saved")],
-        [InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find"),
-         InlineKeyboardButton("🎚️ Предпочтения", callback_data="music_prefs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="music_genre_menu")],
+        [InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find")],
+        [InlineKeyboardButton("💾 Сохранения", callback_data="artist_saved"),
+         InlineKeyboardButton("❤️ Мои артисты", callback_data="artist_favorites")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
@@ -292,10 +296,7 @@ def _music_genre_menu_kb():
     buttons = [InlineKeyboardButton(label, callback_data=f"music_g_{key}")
                for key, label, _prompt_name in _MUSIC_GENRES]
     rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -324,17 +325,39 @@ async def send_music_by_genre(bot, cid, genre_key, *, status=None):
     )
 
 
-def _music_preferences_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("❤️ Мои артисты", callback_data="artist_favorites")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
+def _music_styles(cid):
+    selected = settings.get(cid, _MUSIC_STYLE_KEY, [])
+    if not isinstance(selected, list):
+        return []
+    valid = {key for key, _label, _prompt_name in _MUSIC_GENRES}
+    return [key for key in selected if key in valid]
+
+
+def _music_style_context(cid):
+    selected = set(_music_styles(cid))
+    labels = [prompt_name for key, _label, prompt_name in _MUSIC_GENRES if key in selected]
+    if not labels:
+        return ""
+    return "Любимые стили пользователя: " + ", ".join(labels) + "."
+
+
+def _music_preferences_kb(cid):
+    selected = set(_music_styles(cid))
+    buttons = [
+        InlineKeyboardButton(("✅ " if key in selected else "⬜ ") + label,
+                             callback_data=f"music_style_{key}")
+        for key, label, _prompt_name in _MUSIC_GENRES
+    ]
+    rows = [[InlineKeyboardButton("— Любимые стили —", callback_data="noop")]]
+    rows.extend(buttons[index:index + 2] for index in range(0, len(buttons), 2))
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="artist_favorites"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    return InlineKeyboardMarkup(rows)
 
 
 async def send_music_preferences(bot, cid, q=None):
-    text = "🎚️ Предпочтения музыки\n\nДобавь любимых артистов — так рекомендации будут точнее."
-    kb = _music_preferences_kb()
+    text = "🎚️ Предпочтения музыки\n\nВыбери любимые стили — они будут учитываться в обычном подборе."
+    kb = _music_preferences_kb(cid)
     if q is not None:
         try:
             await q.message.edit_text(text, reply_markup=kb)
@@ -342,6 +365,20 @@ async def send_music_preferences(bot, cid, q=None):
         except Exception:
             pass
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+async def toggle_music_style(bot, cid, style_key, q=None):
+    valid = {key for key, _label, _prompt_name in _MUSIC_GENRES}
+    if style_key not in valid:
+        return
+    selected = _music_styles(cid)
+    if style_key in selected:
+        selected.remove(style_key)
+    else:
+        selected.append(style_key)
+    settings.set_(cid, _MUSIC_STYLE_KEY, selected)
+    _invalidate_artist(cid)
+    await send_music_preferences(bot, cid, q)
 
 async def listen_dislike(bot, cid, *, status=None):
     """Скрывает текущего артиста и заменяет его карточку следующим."""
@@ -390,6 +427,11 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
         "Не предлагай артиста из другого основного жанра."
         if category else ""
     )
+    selected_styles = _music_styles(cid)
+    style_context = _music_style_context(cid) if not category else ""
+    fallback_category = category
+    if fallback_category is None and selected_styles:
+        fallback_category = {"value": selected_styles[0]}
     blocked = recommendation_stoplist.values(cid, "artist")
     recent = _recent_artists(cid)
     notes = store.get_list(config.CONTENT_RECORDS_KEY, cid)
@@ -414,6 +456,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
                 "и других дальних жанров в сравнениях, если их нет во вкусе пользователя.\n\n"
                 f"Любимые исполнители пользователя (его вкус): {anchors}.\n"
                 f"{genre_context}\n"
+                f"{style_context}\n"
                 f"НЕ предлагай никого из этого списка (уже в закладках/любимых/отклонены): {avoid_this_try}.\n"
                 "Предложи РОВНО ОДНОГО НОВОГО исполнителя, максимально близкого по вкусу "
                 "пользователя. Предпочитай современных активных артистов с выразительной, мелодичной, "
@@ -433,7 +476,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
             _log.warning("send_listen: allm_json attempt=%s failed cid=%s: %r", attempt, cid, e, exc_info=True)
             # Cooldown или таймаут цепочки не исправится мгновенным повтором.
             # Сразу переходим к локальному резерву, чтобы не показывать ошибку.
-            data = _local_artist_fallback(known, category)
+            data = _local_artist_fallback(known, fallback_category)
             break
         cand_artist = str(cand.get("artist") or "").strip() if isinstance(cand, dict) else ""
         _log.info("send_listen: attempt=%s cid=%s cand_type=%s cand_artist=%r",
@@ -445,13 +488,13 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
             rejected.append(cand_artist)
         data = cand
     if not data or not data.get("artist"):
-        data = _local_artist_fallback(known, category)
+        data = _local_artist_fallback(known, fallback_category)
     if not data or not data.get("artist"):
         _log.info("send_listen: no data after retries cid=%s data=%r", cid, data)
         if preview:
             return None
         text = "Не удалось подобрать. Попробуй ещё раз."
-        kb = back_menu_keyboard("m_music")
+        kb = _music_home_only_kb()
         if status is not None:
             await status.replace(text, reply_markup=kb)
         else:

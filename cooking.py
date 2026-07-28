@@ -10,7 +10,7 @@ import util
 import verify
 from ui import balance as balance_ui
 from ui import food as food_ui
-from ui.constants import save_toggle_label, ui_label
+from ui.constants import ui_label
 from ui.navigation import back_menu_keyboard
 import menu
 from response_delivery import (
@@ -66,16 +66,8 @@ def _recipe_kb(cid=None, recipe=None):
     категории (balance.get_active_meal) — см. handle_callback. «Назад» — отдельный
     callback, а не общий m_close, чтобы не задевать другие разделы, которые тоже
     используют m_close для закрытия карточки без возврата в конкретное меню."""
-    name = str((recipe or {}).get("name") or "").strip().casefold()
-    saved = bool(name) and any(
-        str(item.get("name") or "").strip().casefold() == name
-        for item in store.get_list(config.SAVED_RECIPES_KEY, cid)
-        if isinstance(item, dict)
-    )
     return _kb([
         [("✨ Другой рецепт", "as_food")],
-        [(save_toggle_label(saved), "as_recipe_save")],
-        [("💾 Сохранённое", "as_my_recipes"), ("🎚️ Предпочтения", "set_cuisines")],
         [("⬅️ Назад", "as_food_back"), ("#️⃣ Главная", "m_menu")],
     ])
 
@@ -337,7 +329,6 @@ async def send_leftovers(bot, cid, ingredients, status=None):
 async def handle_callback(bot, cid, q, data, status=None):
     """Обрабатывает кулинарные callback-и. Возвращает True при совпадении."""
     import fridge as fridge_flow
-    import saved_recipes
     if data == "as_food":
         owns_status = status is None
         if owns_status:
@@ -460,28 +451,6 @@ async def handle_callback(bot, cid, q, data, status=None):
             await function(bot, cid, int(parts[3]), int(parts[4]), int(parts[5]), q)
         except (ValueError, IndexError):
             await fridge_flow.send_fridge(bot, cid, q)
-        return True
-    if data == "as_recipe_save":
-        await saved_recipes.save_my_recipe(bot, cid, q)
-        return True
-    if data == "as_recipe_clean":
-        import cleanup
-        await cleanup.open_cleanup(bot, cid, "recipes")
-        return True
-    if data == "as_my_recipes":
-        await saved_recipes.send_my_recipes(bot, cid)
-        return True
-    if data.startswith("as_my_recipe_del_"):
-        try:
-            await saved_recipes.my_recipe_del(bot, cid, int(data.split("_")[-1]))
-        except (ValueError, IndexError):
-            pass
-        return True
-    if data.startswith("as_my_recipe_"):
-        try:
-            await saved_recipes.send_my_recipe_full(bot, cid, int(data.split("_")[-1]))
-        except (ValueError, IndexError):
-            pass
         return True
     return False
 

@@ -117,15 +117,3 @@ def worries_cleared():
 
 def worries_saved(count):
     return MessageSpec(text=f"✅ Сохранено: +{count}.")
-
-
-def health_principles(selected_count):
-    b = MessageBuilder()
-    b.section("🎚️ Предпочтения")
-    b.line("Выбери, что важно поддерживать сейчас.")
-    b.spacer()
-    if selected_count:
-        b.line(f"Выбрано: {selected_count}.")
-    else:
-        b.line("Пока ничего не выбрано.")
-    return b.build_stripped()

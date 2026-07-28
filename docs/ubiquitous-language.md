@@ -13,10 +13,9 @@
 | Любимые артисты | ❤️ Мои артисты | `favorite_artists` / `favorite_artists.json` |
 | Сохранённая музыка | 💾 Сохранённое → Музыка | `content_record(bucket="music")` / `content_records.json` |
 | Сохранённая карточка | 💾 Сохранённое | `content_record` / `content_records.json` |
-| Сохранённые страны | 💾 Сохранённые страны | `saved_countries` / `saved_countries.json` |
+| Сохранённые страны | 🧳 Мой чемодан | `saved_countries` / `saved_countries.json` |
 | Сохранённые места | 💾 Сохранённое → Поездки | `content_record(bucket="travel")` / `content_records.json` |
 | Посещённые страны | 🧳 Посещённые страны | `visited_countries` — отдельная будущая коллекция |
-| Сохранённые рецепты | 🍽 Мои рецепты | `saved_recipes` / `saved_recipes.json` |
 | Мысль | 😮‍💨 Мысли | `thought` / `thoughts.json` |
 | Разбор мысли | 🧠 Разбор мысли | `thought_review` / `thought_reviews.json` |
 | Лайфхак | 🦉 Лайфхак | `lifehack` / локальный каталог `lifehacks.json` |

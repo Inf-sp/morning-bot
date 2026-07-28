@@ -17,7 +17,6 @@ import verify
 import tracking
 import local_cinema
 from ui import leisure as leisure_ui
-from ui.navigation import back_menu_keyboard
 from leisure_collection import (
     _ask_collect,
     content_recommend,
@@ -32,6 +31,10 @@ def _display_title(it, tm):
 def _movie_card(it, tm):
     return leisure_ui.movie_card(it, tm)
 
+
+def _movie_home_only_kb():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
+
 def _movie_kb(i, category=None, saved=False, favorite=False):
     """Клавиатура карточки кино с быстрым подбором по жанру.
 
@@ -43,8 +46,8 @@ def _movie_kb(i, category=None, saved=False, favorite=False):
          InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
     ]
     rows.append([InlineKeyboardButton("💾 Сохранения", callback_data="movie_saved"),
-                 InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+                 InlineKeyboardButton("❤️ Моё кино", callback_data="movie_favorites")])
+    rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -73,7 +76,7 @@ def _movie_genre_menu_kb():
                for label, gid in _GENRE_MENU]
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i:i + 2])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 MIN_TMDB_RATING = 7.0
@@ -220,7 +223,7 @@ async def send_recos(bot, cid, kind):
     if not it:
         await bot.send_message(
             chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
-            reply_markup=back_menu_keyboard("m_movie")); return
+            reply_markup=_movie_home_only_kb()); return
     disp = _display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
     store.last_recos[str(cid)] = {"kind": kind, "items": [disp]}
@@ -232,10 +235,10 @@ async def send_recos(bot, cid, kind):
 def _movie_home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать кино", callback_data="movie_reco")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
-         InlineKeyboardButton("💾 Сохранения", callback_data="movie_saved")],
-        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
+        [InlineKeyboardButton("💾 Сохранения", callback_data="movie_saved"),
+         InlineKeyboardButton("❤️ Моё кино", callback_data="movie_favorites")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
@@ -562,7 +565,7 @@ async def _advance_movie(bot, cid):
     if not it:
         await bot.send_message(
             chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
-            reply_markup=back_menu_keyboard("m_movie")); return
+            reply_markup=_movie_home_only_kb()); return
     disp = _display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
     rec["items"].append(disp)
@@ -619,8 +622,7 @@ def _movie_prefs_kb(cid):
     spref = settings.get(cid, "movie_series_status", "") or ""
     rpref = settings.get(cid, "movie_recency", "") or ""
     rating = str(settings.get(cid, "movie_min_rating", "") or "")
-    rows = [[InlineKeyboardButton("❤️ Моё кино", callback_data="movie_favorites")]]
-    rows.append([InlineKeyboardButton("— Любимые жанры —", callback_data="noop")])
+    rows = [[InlineKeyboardButton("— Любимые жанры —", callback_data="noop")]]
     gbtns = [InlineKeyboardButton(("✅ " if gid in gsel else "⬜ ") + label,
                                   callback_data=f"mpref_g_{gid}") for label, gid in _PREF_GENRES]
     for i in range(0, len(gbtns), 2):
@@ -642,7 +644,8 @@ def _movie_prefs_kb(cid):
                                   callback_data=f"mpref_c_{v}") for label, v in _PREF_COUNTRIES]
     for i in range(0, len(cbtns), 2):
         rows.append(cbtns[i:i + 2])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="movie_favorites"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 

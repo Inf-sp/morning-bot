@@ -46,7 +46,6 @@ PER_USER_KEYS = {
     "city_facts_seen.json",
     "lifehacks_seen.json",
     "fridge.json",
-    "my_recipes.json",
     "quote_authors_seen.json",
     "motiv_lagom_seen.json",
     "micro_topics.json",

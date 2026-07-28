@@ -71,13 +71,25 @@ def test_travel_plan_with_inline_status_keeps_country_photo(monkeypatch):
     assert status.stopped == [False]
 
 
-def test_travel_home_places_saved_and_preferences_in_one_row():
+def test_travel_home_keeps_preferences_inside_suitcase():
     labels = [[button.text for button in row] for row in travel._home_kb().inline_keyboard]
 
     assert labels == [
         ["✨ Другая поездка"],
-        ["💾 Сохранения", "🎚️ Предпочтения"],
+        ["🧳 Мой чемодан"],
         ["#️⃣ Главная"],
+    ]
+
+
+def test_suitcase_contains_travel_preferences(monkeypatch):
+    monkeypatch.setattr(travel, "_sorted_countries", lambda _cid: [])
+
+    keyboard, _page, _pages = travel._countries_kb("42", 0)
+    labels = [[button.text for button in row] for row in keyboard.inline_keyboard]
+
+    assert labels[-2:] == [
+        ["🎚️ Предпочтения"],
+        ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 

@@ -362,7 +362,7 @@ def artist_card(data):
 
 def weekly_books_screen(items):
     b = MessageBuilder()
-    b.text_line("📖 ")
+    b.text_line("📚 ")
     b.bold("Книги этой недели")
     b.newline()
     if not items:

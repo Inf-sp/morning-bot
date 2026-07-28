@@ -13,7 +13,7 @@ store.add_wardrobe_items/remove_wardrobe_items):
            hid_<key> (скрытое/чёрный список — действие только убирает из
            чёрного списка, не трогает fav_key, чтобы не превращать «вернуть в
            рекомендации» в скрытый сигнал «мне нравится»),
-           fridge/recipes/diary (холодильник/рецепты/История самочувствия).
+           fridge/diary (холодильник/История самочувствия).
 """
 import secrets
 import time
@@ -43,7 +43,7 @@ _SEEN_STORE_KEYS = {"movies": config.MOVIE_SEEN_KEY, "books": config.BOOK_SEEN_K
                     "artists": config.MUSIC_SEEN_KEY}
 
 def _collection(id, owner, title, storage_key, item_type, back, actions,
-                note_group=None, add_button=None):
+                note_group=None, add_button=None, footer_button=None):
     return {
         "id": id,
         "owner": owner,
@@ -54,6 +54,7 @@ def _collection(id, owner, title, storage_key, item_type, back, actions,
         "actions": actions,
         "note_group": note_group,
         "add_button": add_button,
+        "footer_button": footer_button,
     }
 
 
@@ -62,7 +63,8 @@ COLLECTIONS = {
         "cinema_favorites", "cinema", f"Любимое · {ui_label('cinema', 'Кино')}", config.FAVORITE_MOVIES_KEY, "movie",
         "m_movie", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("🆕 Добавить фильм", "as_loveadd_movies")),
+        add_button=("🆕 Добавить фильм", "as_loveadd_movies"),
+        footer_button=("🎚️ Предпочтения", "movie_prefs")),
     "cinema_saved": _collection(
         "cinema_saved", "cinema", f"⭐️ Сохранения · {ui_label('cinema', 'Кино')}", config.CONTENT_RECORDS_KEY, "note",
         "m_movie", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
@@ -78,7 +80,8 @@ COLLECTIONS = {
         "books_favorites", "books", f"Любимое · {ui_label('books', 'Книги')}", config.FAVORITE_BOOKS_KEY, "book",
         "m_books", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("🆕 Добавить книгу", "as_loveadd_books")),
+        add_button=("🆕 Добавить книгу", "as_loveadd_books"),
+        footer_button=("🎚️ Предпочтения", "book_prefs")),
     "books_saved": _collection(
         "books_saved", "books", f"⭐️ Сохранения · {ui_label('books', 'Книги')}", config.SAVED_BOOKS_KEY, "book",
         "m_books", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": False}]),
@@ -93,7 +96,8 @@ COLLECTIONS = {
         "music_favorite_artists", "music", "Любимые артисты", config.FAVORITE_ARTISTS_KEY, "artist",
         "m_music", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("🆕 Добавить артиста", "as_loveadd_artists")),
+        add_button=("🆕 Добавить артиста", "as_loveadd_artists"),
+        footer_button=("🎚️ Предпочтения", "music_prefs")),
     "music_hidden_artists": _collection(
         "music_hidden_artists", "music", "Скрытые артисты", config.MUSIC_DISLIKE_KEY, "artist",
         "m_music", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
@@ -106,7 +110,7 @@ COLLECTIONS = {
         "m_music", [{"id": "remove", "label": "Убрать из знакомого", "confirm": False}]),
 
     "travel_saved_countries": _collection(
-        "travel_saved_countries", "travel", "💾 Сохранённые страны", config.SAVED_COUNTRIES_KEY, "country",
+        "travel_saved_countries", "travel", "🧳 Мой чемодан", config.SAVED_COUNTRIES_KEY, "country",
         "m_travel", [{"id": "remove", "label": "Убрать страны", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить страну", "as_loveadd_countries")),
@@ -118,9 +122,6 @@ COLLECTIONS = {
         "m_travel", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
         note_group="travel"),
 
-    "recipes_saved": _collection(
-        "recipes_saved", "food", ui_label("recipes", "Рецепты"), config.SAVED_RECIPES_KEY, "recipe",
-        "as_my_recipes", [{"id": "remove", "label": "Удалить рецепты", "confirm": True}]),
     "fridge_items": _collection(
         "fridge_items", "food", ui_label("products", "Продукты"), config.FRIDGE_KEY, "product",
         "as_fridge", [{"id": "remove", "label": "Удалить продукты", "confirm": True}]),
@@ -142,7 +143,6 @@ _COLLECTION_ALIASES = {
     "hid_countries": "travel_hidden_countries",
     "wl": "cinema_favorites",
     "rl": "books_saved",
-    "recipes": "recipes_saved",
     "fridge": "fridge_items",
 }
 
@@ -154,7 +154,7 @@ def _is_view_ctx(ctx):
             or ctx.startswith("hid_")
             or ctx.startswith("d_") or ctx in ("wl", "rl")
             or ctx.startswith("fridge_cat_")
-            or ctx in ("fridge", "recipes", "diary"))
+            or ctx in ("fridge", "diary"))
 
 
 def _canonical_ctx(ctx):
@@ -206,8 +206,6 @@ def _view_store_key(ctx):
         return config.FRIDGE_KEY
     if ctx.startswith("fridge_cat_"):
         return config.FRIDGE_KEY
-    if ctx == "recipes":
-        return config.SAVED_RECIPES_KEY
     return None
 
 
@@ -387,10 +385,6 @@ def _ctx_items(cid, ctx):
         raw = store.get_list(config.FRIDGE_KEY, cid)
         items = [(i, it["name"] if isinstance(it, dict) else it) for i, it in enumerate(raw)]
         return "Чистка: холодильник", items, "as_fridge"
-    if ctx == "recipes":
-        recipes = store.get_list(config.SAVED_RECIPES_KEY, cid)
-        items = [(i, r.get("name", f"Рецепт {i+1}")) for i, r in enumerate(recipes)]
-        return ui_label("recipes", "Чистка: рецепты"), items, "as_my_recipes"
     return "Чистка", [], "m_learn"
 
 
@@ -408,8 +402,6 @@ def _action_label(ctx):
         return "Убрать из сохранённого"
     if ctx.startswith("kast_"):
         return "Удалить вещи"
-    if ctx == "recipes":
-        return "Удалить рецепты"
     if ctx == "fridge" or ctx.startswith("fridge_cat_"):
         return "Удалить продукты"
     if ctx in ("wl", "rl"):
@@ -543,8 +535,6 @@ def _cleanup_delete(cid, ctx):
             store.set_list(store_key, cid, [it for i, it in enumerate(store.get_list(store_key, cid)) if i not in sel])
     elif ctx == "fridge":
         store.set_list(config.FRIDGE_KEY, cid, [it for i, it in enumerate(store.get_list(config.FRIDGE_KEY, cid)) if i not in sel])
-    elif ctx == "recipes":
-        store.set_list(config.SAVED_RECIPES_KEY, cid, [r for i, r in enumerate(store.get_list(config.SAVED_RECIPES_KEY, cid)) if i not in sel])
     store.list_sel[f"{cid}:{ctx}"] = set()
 
 
@@ -640,10 +630,6 @@ def _view_items(ctx, cid):
         records = store.ensure_list_ids(config.FRIDGE_KEY, cid)
         items = [(r["id"], _view_label(r)) for r in records]
         return "Чистка: холодильник", items, "as_fridge"
-    if ctx == "recipes":
-        records = store.ensure_list_ids(config.SAVED_RECIPES_KEY, cid)
-        items = [(r["id"], r.get("name", "Рецепт")) for r in records]
-        return ui_label("recipes", "Чистка: рецепты"), items, "as_my_recipes"
     return "Чистка", [], "m_learn"
 
 
@@ -816,6 +802,10 @@ async def _render_view(bot, cid, view_id, q=None):
         page_ids = {i for i, _ in chunk}
         page_label = "✅ Снять выбор на странице" if page_ids <= sel else choose_label("Выбрать все на странице")
         rows.append([InlineKeyboardButton(page_label, callback_data=f"cla:{view_id}:{page}")])
+    footer_button = cfg.get("footer_button") if cfg else None
+    if footer_button:
+        label, callback_data = footer_button
+        rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
     rows.append([InlineKeyboardButton(
         "Готово" if view.get("editing") else "✏️ Изменить",
         callback_data=f"cledit:{view_id}:{0 if view.get('editing') else 1}",

@@ -280,20 +280,3 @@ def fridge_empty_for_recipe():
         "🧊 Холодильник пуст или все продукты отмечены как отсутствующие.\n\n"
         "Отметь продукты, которые есть сейчас, и попробуй снова."
     ).build()
-
-
-def my_recipes_empty():
-    b = MessageBuilder()
-    b.section(ui_label("recipes", "Мои рецепты"))
-    b.spacer()
-    b.line("Пусто. Сохраняй рецепты кнопкой «💾 Сохранить» под любым рецептом.")
-    return b.build_stripped()
-
-
-def my_recipes_list(recipes):
-    b = MessageBuilder()
-    b.section(ui_label("recipes", "Мои рецепты"))
-    b.spacer()
-    for recipe in recipes:
-        b.bullet(recipe.get("name", "?"))
-    return b.build_stripped()

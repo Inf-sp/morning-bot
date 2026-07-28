@@ -559,7 +559,7 @@ class NotificationOption:
 _ADMIN_NOTIFICATION_META = {
     "morning_brief":   ("08:30", "☀️ Утро"),
     "weekend_events":  ("пт 10:00", "🎧 События"),
-    "daily_words":     ("11:00", "📚 Обучение"),
+    "daily_words":     ("11:00", "🧠 Обучение"),
     "checkin_day":     ("14:00", "😮‍💨 Мысли"),
     "evening_weather": ("20:30", "🌦️ Погода"),
     "weather_warn":    ("08:45, если есть повод", "⚠️ Погодные предупреждения"),
@@ -647,8 +647,8 @@ async def notif_off_all(bot, cid, q=None):
 
 async def send_personalization(bot, cid, q=None):
     """Персонализация сейчас пустует по содержанию — Гардероб, Обучение, Кино/музыка
-    и Кухни переехали в свои разделы («Гардероб» → «🎚️ Предпочтения», «Обучение»
-    → «🎚️ Настройки», «Готовка» → «🎚️ Предпочтения»).
+    и Кухни переехали в свои разделы («Гардероб» → «🧶 Мой шкаф» → «🎚️ Предпочтения», «Обучение»
+    → «🎚️ Настройки», «Готовка» → «🧊 Мой холодильник» → «🎚️ Предпочтения»).
     Экран оставлен как compat-редирект на главные Настройки."""
     rows = [
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -674,7 +674,7 @@ def _cuisines_kb(cid):
         for key, label in CUISINE_OPTIONS
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_food"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_fridge_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -926,29 +926,6 @@ def wardrobe_prefs_context(cid):
     return "\n".join(parts)
 
 
-# ===== Настройки гардероба (живут в разделе «Гардероб», не в Персонализации) =====
-async def send_wardrobe_settings_hub(bot, cid, q=None):
-    """«Настройки гардероба»: Стиль (предпочтения подбора) и Мой гардероб (сами вещи)."""
-    msg = settings_ui.mydata_section(
-        "Настройки гардероба",
-        "Стиль влияет на подбор образа. Мой гардероб — управление вещами.",
-    )
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("👕 Мой гардероб", callback_data="set_wardrobe_g")],
-        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="set_wardrobe_style")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            _mark_transient_edit(bot, cid, q.message)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=kb, transient=True)
-
-
 def _wardrobe_style_state(cid):
     raw = _all().get(str(cid), {})
     palette = raw.get("wardrobe_palette", [])
@@ -982,7 +959,7 @@ def _wardrobe_style_kb(cid, state=None):
     )
                      for i, value in enumerate(STYLE_AVOID_OPTIONS)]
     rows.extend(avoid_buttons[i:i + 2] for i in range(0, len(avoid_buttons), 2))
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -1004,8 +981,8 @@ async def send_wardrobe_style(bot, cid, q=None):
 
 
 async def send_wardrobe_prefs(bot, cid, back="set_priorities", q=None):
-    """Совместимость со старыми сообщениями: раздел переехал в «Гардероб» → «Настройки
-    гардероба» → «Стиль»."""
+    """Совместимость со старыми сообщениями: настройки открываются из
+    «Гардероб» → «Мой шкаф»."""
     await send_wardrobe_style(bot, cid, q=q)
 
 
@@ -1043,10 +1020,6 @@ async def handle_callback(bot, cid, data, q=None):
         import balance
         import fridge
         await fridge.send_fridge(bot, cid, back="set_food")
-    elif data == "set_myrecipes":
-        import balance
-        import saved_recipes
-        await saved_recipes.send_my_recipes(bot, cid)
     elif data == "set_fridge_g":
         import menu
         await menu.send_food_menu(bot, cid)
@@ -1069,7 +1042,8 @@ async def handle_callback(bot, cid, data, q=None):
         # Compat-редирект для старых сообщений: раздел "Приоритеты" стал "Персонализацией".
         await send_personalization(bot, cid, q)
     elif data == "set_wardrobe_settings":
-        await send_wardrobe_settings_hub(bot, cid, q)
+        import wardrobe
+        await wardrobe.send_wardrobe_zones(bot, cid, q=q)
     elif data == "set_wardrobe_style":
         await send_wardrobe_style(bot, cid, q)
     elif data in ("set_wardrobe_prefs", "set_stylepick", "set_fitpick", "set_layerspick"):

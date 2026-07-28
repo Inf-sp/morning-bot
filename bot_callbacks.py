@@ -39,7 +39,7 @@ _log = logging.getLogger(__name__)
 
 _STATUS_TOPIC_PREFIXES = (
     ("w_", "wardrobe"),
-    ("m_food", "food"), ("as_food", "food"), ("as_fridge", "food"), ("as_recipe", "food"), ("as_my_recipe", "food"),
+    ("m_food", "food"), ("as_food", "food"), ("as_fridge", "food"), ("as_recipe", "food"),
     ("a_recipe_", "food"), ("food_", "food"),
     ("a_dict", "learning"), ("a_train", "learning"), ("a_tr_", "learning"),
     ("ex_", "learning"), ("again_tr_", "learning"), ("game", "learning"),
@@ -47,7 +47,7 @@ _STATUS_TOPIC_PREFIXES = (
     ("m_movie", "leisure"), ("m_books", "leisure"), ("m_music", "leisure"),
     ("movie_", "leisure"), ("book_", "leisure"), ("music_", "leisure"), ("listen", "leisure"), ("reco_", "leisure"), ("a_concerts", "leisure"),
     ("m_travel", "travel"), ("a_trav_", "travel"),
-    ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("as_health_", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
+    ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
 )
 
 def _status_topic(data):
@@ -196,9 +196,9 @@ async def handle(update, context, remove_reply_keyboard):
                 lambda status: cooking.handle_callback(bot, cid, q, data, status=status),
                 preserve_message=True)
             return
-        if data.startswith(("as_food", "as_fridge", "as_recipe", "as_my_recipe")):
+        if data.startswith(("as_food", "as_fridge", "as_recipe")):
             await cooking.handle_callback(bot, cid, q, data)
-        elif data.startswith(("as_daycheck", "as_motiv", "as_doctor", "as_medicine", "as_health_")):
+        elif data.startswith(("as_daycheck", "as_motiv", "as_doctor", "as_medicine")):
             await balance.handle_callback(bot, cid, q, data)
         else:
             await saved_items.handle_notes_callback(bot, cid, q, data)
@@ -217,7 +217,7 @@ async def handle(update, context, remove_reply_keyboard):
         await cleanup.open_collection(bot, cid, collection_id, back=back)
         return
     # Настройки обучения
-    if data in ("set_learning", "toggle_learning_language"):
+    if data in ("set_learning", "set_learning_dict", "toggle_learning_language", "toggle_learning_language_dict"):
         try:
             await learning_settings.handle_learning_settings_callback(bot, cid, q, data)
         except Exception as e:
@@ -519,6 +519,9 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "movie_saved":
         await cleanup.open_collection(bot, cid, "cinema_saved", back="m_movie")
         return
+    if data == "movie_favorites":
+        await cleanup.open_collection(bot, cid, "cinema_favorites", back="m_movie")
+        return
     if data == "book_favorites":
         await cleanup.open_collection(bot, cid, "books_favorites", back="m_books")
         return
@@ -536,6 +539,10 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data == "music_prefs":
         await leisure_music.send_music_preferences(bot, cid, q)
+        return
+    if data.startswith("music_style_"):
+        await _ack(q)
+        await leisure_music.toggle_music_style(bot, cid, data[len("music_style_"):], q)
         return
     if data.startswith("mpref_"):
         await _ack(q)

@@ -426,6 +426,7 @@ def test_wardrobe_preferences_hide_less_sporty_button():
     assert "Меньше спортивного" not in labels
     assert "Без крупных принтов" in labels
     assert "Без узкого кроя" in labels
+    assert markup.inline_keyboard[-1][0].callback_data == "w_closet"
 
 
 def test_outfit_copy_rejects_short_sleeve_hallucinations_and_internal_tags():

@@ -97,25 +97,25 @@ def _book_cover(title, title_en=""):
 def _book_text(it):
     return leisure_ui.book_text(it)
 
+
 def _book_kb(i, saved=False, favorite=False):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu"),
          InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
         [InlineKeyboardButton("💾 Сохранения", callback_data="book_saved"),
-         InlineKeyboardButton("🎚️ Предпочтения", callback_data="book_prefs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+         InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
 def books_home_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать книгу", callback_data="book_reco")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu"),
-         InlineKeyboardButton("💾 Сохранения", callback_data="book_saved")],
-        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="book_prefs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
+        [InlineKeyboardButton("💾 Сохранения", callback_data="book_saved"),
+         InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
@@ -195,10 +195,7 @@ def _book_genre_menu_kb():
     buttons = [InlineKeyboardButton(label, callback_data=f"book_g_{key}")
                for key, label, _subject in _BOOK_GENRES]
     rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -216,8 +213,7 @@ async def send_book_genre_menu(bot, cid, q=None):
 
 def _book_preferences_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
+        [InlineKeyboardButton("⬅️ Назад", callback_data="book_favorites"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 

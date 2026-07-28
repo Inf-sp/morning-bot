@@ -909,17 +909,7 @@ def _cuisine_context(cid):
     import settings
     return settings.cuisine_context(cid)
 
-def _my_recipe_pref(cid):
-    """Контекст из базы рецептов для промпта (первые 5 названий)."""
-    if not cid:
-        return ""
-    saved = store.get_list(config.SAVED_RECIPES_KEY, str(cid))[:5]
-    names = ", ".join(r.get("name", "") for r in saved if r.get("name"))
-    return f"Пользователь любит готовить: {names}. Похожий стиль приветствуется.\n" if names else ""
-
-
 def _gen_recipe(constraint, cid=None):
-    pref = _my_recipe_pref(cid)
     context = _cuisine_context(cid) if cid else ""
     cz = (context + "\n") if context else ""
     avoid = _leftover_recent(cid) if cid else []
@@ -928,7 +918,7 @@ def _gen_recipe(constraint, cid=None):
     source_block = _themealdb_prompt_block(sources)
     try:
         result = ai.llm_json(
-            f"{cz}{avoid_line}{pref}Ты — шеф-повар с идеальной логикой. "
+            f"{cz}{avoid_line}Ты — шеф-повар с идеальной логикой. "
             f"Выбери и адаптируй 1 рецепт ({constraint}), 1 человек, электрическая плита, духовка SAGE.\n"
             f"{source_block}"
             "Правила:\n"

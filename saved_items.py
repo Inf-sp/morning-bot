@@ -315,7 +315,7 @@ async def send_food(bot, cid, q=None, back="m_food"):
 
 async def send_travel(bot, cid):
     rows = [
-        [InlineKeyboardButton("💾 Сохранённые страны", callback_data="colr:travel_saved_countries:set_travel")],
+        [InlineKeyboardButton("🧳 Мой чемодан", callback_data="colr:travel_saved_countries:set_travel")],
         [InlineKeyboardButton("⭐️ Сохранённые места", callback_data="colr:travel_saved_places:set_travel")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
@@ -483,7 +483,6 @@ LOVE_SECTIONS = [
     (ui_label("cinema", "Кино"), "movies"),
     (ui_label("music", "Мои музыканты"), "artists"),
     (ui_label("books", "Мои книги"), "books"),
-    (ui_label("recipes", "Рецепты"), "recipes"),
 ]
 
 async def send_love_home(bot, cid, back="m_notes"):
@@ -507,7 +506,7 @@ def _love_items(cid, key):
 def _love_title(key):
     return {
         "movies": ui_label("cinema", "Мое кино"),
-        "countries": "💾 Сохранённые страны",
+        "countries": "🧳 Мой чемодан",
         "artists": ui_label("music", "Мои музыканты"),
         "books": ui_label("books", "Мои книги"),
     }.get(key, "Любимые")
@@ -523,11 +522,6 @@ async def send_love_section(bot, cid, key):
     if key == "countries":
         import travel
         await travel.send_countries(bot, cid)
-        return
-    if key == "recipes":
-        import cooking
-        import saved_recipes
-        await saved_recipes.send_my_recipes(bot, cid, back="as_love")
         return
     items = _love_items(cid, key)
     title = _love_title(key)
@@ -630,7 +624,5 @@ async def handle_notes_callback(bot, cid, q, data):
         await love_add_start(bot, cid, data[len("as_loveadd_"):]); return
     if data.startswith("as_love_"):
         key = data[len("as_love_"):]
-        if key == "recipes":
-            await send_love_section(bot, cid, "recipes"); return
         import cleanup as _cl
         await _cl.open_cleanup(bot, cid, f"lv_{key}", back="as_notes"); return

@@ -137,14 +137,14 @@ class _RetryingHTTPXRequest(HTTPXRequest):
 # callback-префикс -> тема для тематических фраз ожидания (util.StatusManager.TOPIC_STAGES)
 _STATUS_TOPIC_PREFIXES = (
     ("w_", "wardrobe"),
-    ("m_food", "food"), ("as_food", "food"), ("as_fridge", "food"), ("as_recipe", "food"), ("as_my_recipe", "food"),
+    ("m_food", "food"), ("as_food", "food"), ("as_fridge", "food"), ("as_recipe", "food"),
     ("a_recipe_", "food"), ("food_", "food"),
     ("a_dict", "learning"), ("a_train", "learning"), ("a_tr_", "learning"),
     ("ex_", "learning"), ("again_tr_", "learning"), ("game", "learning"),
     ("a_game", "learning"), ("gamediff_", "learning"),
     ("movie_", "leisure"), ("book_", "leisure"), ("listen", "leisure"), ("reco_", "leisure"), ("a_concerts", "leisure"),
     ("m_travel", "travel"), ("a_trav_", "travel"),
-    ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("as_health_", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
+    ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
 )
 
 

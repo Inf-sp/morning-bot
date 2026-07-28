@@ -424,7 +424,7 @@ _PER_USER_KEYS = {
     config.CONTENT_RECORDS_KEY, config.DICT_KEY, config.LANGUAGE_REVIEW_KEY,
     config.DATA_REFRESH_BACKUP_KEY,
     config.LEGACY_LAGOM_KEY, config.DIARY_KEY, config.LIFEHACK_KEY,
-    config.FRIDGE_KEY, config.SAVED_RECIPES_KEY, config.LEFTOVER_RECIPES_SEEN_KEY, config.QUOTE_AUTHORS_KEY,
+    config.FRIDGE_KEY, config.LEFTOVER_RECIPES_SEEN_KEY, config.QUOTE_AUTHORS_KEY,
     config.LEGACY_MOTIV_LAGOM_SEEN_KEY, config.CONCERTS_CACHE_KEY,
 }
 # При удалении профиля очищаем и старые физические ключи, иначе ленивый перенос

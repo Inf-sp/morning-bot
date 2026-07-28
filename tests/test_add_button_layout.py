@@ -31,6 +31,7 @@ def _assert_add_menu(rows, expected_add):
 
 def test_wardrobe_add_action_is_above_navigation_and_separate():
     rows = _labels(wardrobe.closet_kb())
+    assert rows[-3] == ["🎚️ Предпочтения"]
     assert rows[-2] == ["🆕 Добавить вещь"]
     assert all("Провер" not in label and "Оцен" not in label for row in rows for label in row)
     assert rows[-1] == ["⬅️ Назад", "#️⃣ Главная"]
@@ -42,7 +43,9 @@ def test_fridge_add_action_is_first_and_separate(monkeypatch):
 
     asyncio.run(fridge.send_fridge(bot, "pytest-add-layout"))
 
-    _assert_add_menu(_labels(bot.message["reply_markup"]), "🆕 Добавить продукт")
+    rows = _labels(bot.message["reply_markup"])
+    _assert_add_menu(rows, "🆕 Добавить продукт")
+    assert rows[-2] == ["🎚️ Предпочтения"]
 
 
 def test_favorites_add_action_names_object(monkeypatch):

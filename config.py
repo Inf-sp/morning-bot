@@ -176,7 +176,6 @@ PROFILE_KEY = "profile.json"   # память пользователя: фоку
 LIFEHACK_KEY = "lifehacks_seen.json"       # anti-repeat для fallback lifehacks.json
 LIFEHACK_POOL_KEY = "myday_lifehack_pool.json"  # недельный AI-пул базы знаний {cid: {...}}
 FRIDGE_KEY = "fridge.json"
-SAVED_RECIPES_KEY = "saved_recipes.json"
 LEFTOVER_RECIPES_SEEN_KEY = "leftover_recipes_seen.json"  # anti-repeat: {cid: [последние N названий]}
 ACTIVE_MEAL_KEY = "active_meal.json"          # {cid: "breakfast"|"lunch"|"dinner"|"fridge"}
 RECIPE_QUEUE_KEY = "recipe_queue.json"        # {cid: {"meal":..., "items":[...], "pos": int}}
@@ -214,7 +213,6 @@ COUNTRIES_KEY = LEGACY_COUNTRIES_KEY
 BOOKS_KEY = FAVORITE_BOOKS_KEY
 WORRIES_KEY = THOUGHTS_KEY
 NOTES_KEY = CONTENT_RECORDS_KEY
-MY_RECIPES_KEY = SAVED_RECIPES_KEY
 
 LEGACY_STORAGE_KEYS = {
     FAVORITE_ARTISTS_KEY: ("artists.json",),
@@ -224,7 +222,6 @@ LEGACY_STORAGE_KEYS = {
     FAVORITE_BOOKS_KEY: ("mybooks.json",),
     THOUGHTS_KEY: ("worries.json",),
     CONTENT_RECORDS_KEY: ("notes.json",),
-    SAVED_RECIPES_KEY: ("my_recipes.json",),
 }
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}

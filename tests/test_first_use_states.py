@@ -9,6 +9,8 @@ import dictionary_seed
 import bot_text
 import cooking
 import fridge
+import learning_dictionary
+import learning_settings
 import menu
 import onboard
 import settings
@@ -26,7 +28,7 @@ def test_learning_empty_state_has_one_clear_next_step():
     message = menu_ui.learning_menu({"has_material": False, "lang_code": "nl"})
 
     assert message.text == (
-        "📚 Обучение\n\n"
+        "🧠 Обучение\n\n"
         "Добавляй сюда слова и фразы, которые хочешь запомнить.\n\n"
         "Можно просто написать мне в чате:\n"
         "«добавь в словарь wennen aan»\n\n"
@@ -36,6 +38,48 @@ def test_learning_empty_state_has_one_clear_next_step():
         ["🆕 Добавить слова"],
         ["✨ Подобрать слова"],
     ]
+
+
+def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
+    message = menu_ui.learning_menu({
+        "has_material": True, "lang_code": "nl", "kind": "word",
+        "term": "morgen", "translation": "завтра", "progress": {},
+        "focus": "вспомнить перевод до открытия спойлера.",
+    })
+
+    assert _labels(message.reply_markup) == [
+        ["🎯 Тренажёр"],
+        ["🕵️ Детектив"],
+        ["📖 Мой словарь"],
+        ["#️⃣ Главная"],
+    ]
+
+
+def test_dictionary_contains_learning_preferences(monkeypatch):
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: [])
+    bot = Bot()
+
+    asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl"))
+
+    assert _labels(bot.message["reply_markup"])[-3:] == [
+        ["🎚️ Предпочтения"],
+        ["✨ Подобрать слова"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+
+
+def test_learning_preferences_return_to_active_dictionary():
+    keyboard = learning_settings.learning_settings_kb("нидерландский", "simple", back="a_dictlang_active")
+
+    assert keyboard.inline_keyboard[0][0].callback_data == "toggle_learning_language_dict"
+    assert keyboard.inline_keyboard[1][0].callback_data == "set_learning_level_simple_dict"
+    assert keyboard.inline_keyboard[-1][0].callback_data == "a_dictlang_active"
 
 
 def test_seed_intro_uses_the_same_learning_empty_state_copy(monkeypatch):
@@ -49,7 +93,7 @@ def test_seed_intro_uses_the_same_learning_empty_state_copy(monkeypatch):
 
     asyncio.run(dictionary_seed.send_seed_intro(Bot(), "42"))
 
-    assert sent[0]["text"].startswith("📚 Обучение\n\nДобавляй сюда слова и фразы")
+    assert sent[0]["text"].startswith("🧠 Обучение\n\nДобавляй сюда слова и фразы")
     assert _labels(sent[0]["reply_markup"]) == [
         ["🆕 Добавить слова"], ["✨ Подобрать слова"],
     ]
@@ -108,9 +152,7 @@ def test_health_home_opens_without_first_use_data(monkeypatch):
 
     assert text.startswith("⚡️ Фокус на сегодня · Здоровье\n\nСделай короткую паузу.")
     assert _labels(markup) == [
-        ["👩🏻‍⚕️ Врач"],
-        ["😮‍💨 Мысли"],
-        ["🎚️ Предпочтения"],
+        ["👩🏻‍⚕️ Врач", "😮‍💨 Мысли"],
         ["#️⃣ Главная"],
     ]
 

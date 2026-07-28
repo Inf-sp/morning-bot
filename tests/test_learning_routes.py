@@ -49,22 +49,21 @@ def test_navigation_audit_recognizes_all_travel_saved_country_callbacks():
 def test_cooking_learning_health_and_travel_menu_callbacks_are_routable():
     callbacks = {
         "cooking": (
-            "m_food", "m_food_next", "as_food", "as_food_back", "as_recipe_save",
-            "as_my_recipes", "as_fridge_home", "as_fridge_add", "as_fridge_pick_0",
+            "m_food", "m_food_next", "as_food", "as_food_back",
+            "as_fridge_home", "as_fridge_add", "as_fridge_pick_0",
             "as_fridge_cat_0_0", "as_fridge_clean_0", "as_fridge_tgl_0_0_0",
-            "as_my_recipe_0", "a_recipe_breakfast", "a_recipe_lunch", "a_recipe_dinner",
+            "a_recipe_breakfast", "a_recipe_lunch", "a_recipe_dinner",
             "set_cuisines",
         ),
         "learning": (
             "m_learn", "a_train", "a_train_nl", "a_train_en", "a_train_progress",
             "a_game", "game_again", "game_hint", "game_reveal", "a_dictadd_smart_nl",
-            "a_dictseed_start_nl", "a_dictlang_nl_from_menu", "a_dictlang_nl",
-            "a_dictedit_nl", "a_dictviewid_0_word", "set_learning",
-            "toggle_learning_language", "set_learning_level_easy",
+            "a_dictseed_start_nl", "a_dictlang_nl_from_menu", "a_dictlang_nl", "a_dictlang_active",
+            "a_dictedit_nl", "a_dictviewid_0_word", "set_learning", "set_learning_dict",
+            "toggle_learning_language", "toggle_learning_language_dict", "set_learning_level_easy", "set_learning_level_easy_dict",
         ),
         "health": (
-            "m_balance", "as_health_principles", "as_health_principle_sleep",
-            "as_daycheck", "as_motiv", "as_medicine", "as_doctor", "thought_capture",
+            "m_balance", "as_daycheck", "as_motiv", "as_medicine", "as_doctor", "thought_capture",
             "thought_review", "thought_review_later", "thought_review_clear",
             "thought_review_clear_cancel", "thought_review_clear_yes",
         ),

@@ -337,6 +337,7 @@ def test_purchase_action_sits_directly_below_other_outfit():
         ["✨ Другой образ"],
         ["🧐 Оценить покупку", "🧶 Мой шкаф"],
     ]
+    assert "🎚️ Предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
 
 
 def test_other_outfit_keeps_result_card_instead_of_deleting_it(monkeypatch):

@@ -185,8 +185,7 @@ def _home_idea(cid):
 def _home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другая поездка", callback_data="a_trav_go")],
-        [InlineKeyboardButton("💾 Сохранения", callback_data="a_trav_countries_0"),
-         InlineKeyboardButton("🎚️ Предпочтения", callback_data="a_trav_transport")],
+        [InlineKeyboardButton("🧳 Мой чемодан", callback_data="a_trav_countries_0")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -338,6 +337,7 @@ def _countries_kb(cid, page):
         InlineKeyboardButton(f"{page + 1} / {pages}", callback_data="noop"),
         InlineKeyboardButton("▶️", callback_data=next_callback),
     ])
+    rows.append([InlineKeyboardButton("🎚️ Предпочтения", callback_data="a_trav_transport")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows), page, pages
 
@@ -496,7 +496,7 @@ async def send_transport_settings(bot, cid, q=None):
     rows = [[InlineKeyboardButton(("✅ " if key in selected else "") + f"{emoji} {label}",
                                   callback_data=f"a_trav_mode_{key}")]
             for key, emoji, label, _ in _TRANSPORTS]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="a_trav_countries_0"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     msg = travel_ui.transport_screen(", ".join(_TRANSPORT_BY_KEY[k][2] for k in selected_transports(cid)))
     kb = InlineKeyboardMarkup(rows)
     if q is not None:

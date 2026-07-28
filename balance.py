@@ -1,7 +1,6 @@
 from datetime import date, datetime
 import hashlib
 import logging
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 
@@ -9,10 +8,8 @@ _log = logging.getLogger(__name__)
 import ai
 import verify
 import secure
-from ui import balance as balance_ui
 from ui import food as food_ui
 from ui.constants import CUISINE_EMOJI, ui_label
-import settings
 import menu
 import thoughts
 from response_delivery import (
@@ -21,74 +18,6 @@ from response_delivery import (
 )
 
 TZ = config.TZ
-
-HEALTH_PRINCIPLES = (
-    ("sleep", "Сон и восстановление"),
-    ("movement", "Движение каждый день"),
-    ("nutrition", "Регулярное питание"),
-    ("calm", "Меньше перегруза"),
-    ("screen", "Меньше экрана"),
-    ("outdoors", "Больше свежего воздуха"),
-)
-_HEALTH_PRINCIPLE_LABELS = dict(HEALTH_PRINCIPLES)
-
-
-def health_principles(cid):
-    saved = settings.get(cid, "health_principles", [])
-    if not isinstance(saved, list):
-        return []
-    return [key for key in saved if key in _HEALTH_PRINCIPLE_LABELS]
-
-
-def _mark_transient_edit(bot, cid, message):
-    marker = getattr(bot, "mark_transient_message", None)
-    if marker is not None:
-        marker(cid, getattr(message, "message_id", None))
-
-
-async def send_health_principles(bot, cid, q=None):
-    selected = set(health_principles(cid))
-    buttons = [
-        InlineKeyboardButton(
-            ("✅ " if key in selected else "") + label,
-            callback_data=f"as_health_principle_{key}",
-        )
-        for key, label in HEALTH_PRINCIPLES
-    ]
-    rows = [[button] for button in buttons]
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_balance"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
-    msg = balance_ui.health_principles(len(selected))
-    kb = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            _mark_transient_edit(bot, cid, q.message)
-            return
-        except Exception:
-            pass
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
-        reply_markup=kb,
-        transient=True,
-    )
-
-
-async def toggle_health_principle(bot, cid, key, q=None):
-    if key not in _HEALTH_PRINCIPLE_LABELS:
-        await send_health_principles(bot, cid, q=q)
-        return
-    selected = health_principles(cid)
-    if key in selected:
-        selected = [item for item in selected if item != key]
-    else:
-        selected.append(key)
-    settings.set_(cid, "health_principles", selected)
-    await send_health_principles(bot, cid, q=q)
 
 # ---------- Фокус на сегодня ----------
 _FOCUS_PHRASES = (
@@ -204,12 +133,6 @@ async def save_worries(bot, cid, text):
 
 # ---------- роутер кнопок Баланса ----------
 async def handle_callback(bot, cid, q, data, status=None):
-    if data == "as_health_principles":
-        await send_health_principles(bot, cid, q=q); return
-    if data.startswith("as_health_principle_"):
-        await toggle_health_principle(
-            bot, cid, data[len("as_health_principle_"):], q=q)
-        return
     # мысли
     if data == "as_daycheck":
         await send_daycheck(bot, cid, status=status); return

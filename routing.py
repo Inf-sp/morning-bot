@@ -303,7 +303,7 @@ def _resolve_subrouter_target(sub_module, callback_data, _callback_tree):
     if callback_data.startswith(("fav_", "ls_")):
         return _NOTES_ROUTER
     if callback_data.startswith("as_") and not callback_data.startswith(
-        ("as_food", "as_fridge", "as_recipe", "as_my_recipe", "as_daycheck", "as_motiv", "as_doctor")
+        ("as_food", "as_fridge", "as_recipe", "as_daycheck", "as_motiv", "as_doctor")
     ):
         return _NOTES_ROUTER
     return _SUBROUTERS["settings"]

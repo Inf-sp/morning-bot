@@ -19,24 +19,25 @@ def _labels(markup):
     return [[button.text for button in row] for row in markup.inline_keyboard]
 
 
-def test_category_homes_keep_their_own_saved_and_preferences():
+def test_category_homes_keep_their_own_saved_and_personal_lists():
     assert _labels(leisure_movies._movie_home_kb()) == [
         ["✨ Подобрать кино"],
-        ["🎭 По жанру", "💾 Сохранения"],
-        ["🎚️ Предпочтения"],
-        ["⬅️ Назад", "#️⃣ Главная"],
+        ["🎭 По жанру"],
+        ["💾 Сохранения", "❤️ Моё кино"],
+        ["#️⃣ Главная"],
     ]
     assert _labels(leisure_books.books_home_keyboard()) == [
         ["✨ Подобрать книгу"],
-        ["🎭 По жанру", "💾 Сохранения"],
-        ["🎚️ Предпочтения"],
-        ["⬅️ Назад", "#️⃣ Главная"],
+        ["🎭 По жанру"],
+        ["💾 Сохранения", "❤️ Мои книги"],
+        ["#️⃣ Главная"],
     ]
     assert _labels(leisure_music.music_home_keyboard()) == [
         ["✨ Подобрать музыку"],
-        ["🎭 По жанру", "💾 Сохранения"],
-        ["🎫 Концерты", "🎚️ Предпочтения"],
-        ["⬅️ Назад", "#️⃣ Главная"],
+        ["🎭 По жанру"],
+        ["🎫 Концерты"],
+        ["💾 Сохранения", "❤️ Мои артисты"],
+        ["#️⃣ Главная"],
     ]
 
 
@@ -49,14 +50,52 @@ def test_recommendation_cards_use_content_specific_next_labels():
     assert _labels(leisure_music._listen_kb(saved=True))[2] == ["🎭 По жанру", "✅ Сохранено"]
 
 
+def test_preferences_are_available_from_personal_content_lists():
+    assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    assert cleanup.COLLECTIONS["cinema_favorites"]["footer_button"] == ("🎚️ Предпочтения", "movie_prefs")
+    assert _labels(leisure_books._book_preferences_kb())[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    assert cleanup.COLLECTIONS["books_favorites"]["footer_button"] == ("🎚️ Предпочтения", "book_prefs")
+    assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    assert cleanup.COLLECTIONS["music_favorite_artists"]["footer_button"] == ("🎚️ Предпочтения", "music_prefs")
+
+
 def test_personal_lists_are_available_from_their_category_preferences():
-    assert _labels(leisure_movies._movie_prefs_kb("42"))[0] == ["❤️ Моё кино"]
-    assert _labels(leisure_books._book_preferences_kb()) == [
-        ["❤️ Мои книги"], ["⬅️ Назад", "#️⃣ Главная"],
+    assert _labels(leisure_music._music_preferences_kb("42"))[0] == ["— Любимые стили —"]
+
+
+def test_leisure_category_keyboards_do_not_offer_a_back_button():
+    keyboards = [
+        leisure_movies._movie_kb(0), leisure_movies._movie_genre_menu_kb(),
+        leisure_books._book_kb(0),
+        leisure_books._book_genre_menu_kb(),
+        leisure_music._listen_kb(), leisure_music._music_genre_menu_kb(),
     ]
-    assert _labels(leisure_music._music_preferences_kb()) == [
-        ["❤️ Мои артисты"], ["⬅️ Назад", "#️⃣ Главная"],
-    ]
+    assert all("⬅️ Назад" not in sum(_labels(keyboard), []) for keyboard in keyboards)
+    assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    assert _labels(leisure_books._book_preferences_kb())[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+
+
+def test_save_collections_and_preferences_share_one_row_everywhere():
+    assert ["💾 Сохранения", "❤️ Мои артисты"] in _labels(leisure_music.music_home_keyboard())
+    assert ["💾 Сохранения", "❤️ Мои артисты"] in _labels(leisure_music._listen_kb())
+
+
+def test_music_styles_are_stored_and_invalidate_the_daily_recommendation(monkeypatch):
+    saved = {}
+    monkeypatch.setattr(leisure_music.settings, "get", lambda *_args: [])
+    monkeypatch.setattr(leisure_music.settings, "set_", lambda _cid, key, value: saved.update({key: value}))
+    monkeypatch.setattr(leisure_music, "_invalidate_artist", lambda _cid: None)
+
+    class Message:
+        async def edit_text(self, *_args, **_kwargs):
+            return None
+
+    class Query:
+        message = Message()
+
+    asyncio.run(leisure_music.toggle_music_style(None, "42", "indie", Query()))
+    assert saved["music_styles"] == ["indie"]
 
 
 def test_saved_movie_is_visible_in_its_collection(monkeypatch):
@@ -157,7 +196,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "🎬 Кино на сегодня · Алкмар" in movie.text
     assert "🎟️ Идёт в кино" in movie.text
     assert "Короткая завязка фильма." in movie.text
-    assert "📖 Книги этой недели" in books.text
+    assert "📚 Книги этой недели" in books.text
     assert "«Новая книга» · Автор · ⭐ 4.4" in books.text
     assert "🎧 Музыка этой недели" in music.text
     assert "🎫 Ближайшие концерты" in music.text

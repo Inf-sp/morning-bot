@@ -17,9 +17,12 @@ import secure
 import store
 import util
 from ui import leisure as leisure_ui
-from ui.navigation import back_menu_keyboard
 
 _log = logging.getLogger(__name__)
+
+
+def _music_home_only_kb():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
 
 
 def _item_text(item):
@@ -827,7 +830,7 @@ async def prompt_artist_search(bot, cid):
     await bot.send_message(
         chat_id=cid,
         text="🔍 Найти артиста\n\nНапиши имя исполнителя — проверю концерты на ближайший год.",
-        reply_markup=back_menu_keyboard("a_concerts_find"),
+        reply_markup=_music_home_only_kb(),
         transient=True,
     )
 
@@ -855,8 +858,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
     if not artists:
         rows.append([InlineKeyboardButton("🆕 Добавить артиста", callback_data="as_loveadd_artists")])
     rows.append([InlineKeyboardButton(f"🌍 {cname}", callback_data="a_concerts_pick")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
 
     if not artists and not artists_override:
@@ -1031,6 +1033,6 @@ async def concert_pick_country(bot, cid):
         for cc, _name, label in sorted(countries, key=lambda x: x[1])
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_music"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
                            reply_markup=InlineKeyboardMarkup(rows))
