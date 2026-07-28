@@ -27,14 +27,14 @@ def cleared_home():
     return b.build_stripped()
 
 
-def review(summary, analysis, next_step):
+def review(summary, analysis, next_step, *, analysis_title="", closing=""):
     b = MessageBuilder()
-    b.section("🧐 Разбор мыслей")
+    b.section("🧠 Разбор мысли")
     if summary:
         b.line(summary)
     if analysis:
         b.spacer()
-        b.bold("Что происходит:")
+        b.bold(analysis_title or "Что важно:")
         b.newline()
         for item in analysis[:3]:
             b.bullet(item)
@@ -43,6 +43,9 @@ def review(summary, analysis, next_step):
         b.bold("Сейчас сделай одно:")
         b.newline()
         b.line(next_step)
+    if closing:
+        b.spacer()
+        b.italic(closing)
     return b.build_stripped()
 
 

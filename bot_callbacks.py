@@ -67,7 +67,7 @@ def _status_stages(data):
     if data.startswith(("as_food", "as_fridge_cook", "m_food", "food_")):
         first = "⏳ Ищу рецепт..."
     elif data == "as_daycheck":
-        first = "🧐 Разбираю мысли..."
+        first = "🧠 Разбираю мысль..."
     elif data == "w_look":
         first = "⏳ Ищу образ..."
     elif data.startswith(("movie_", "reco_", "a_watch")):

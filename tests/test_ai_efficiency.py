@@ -82,6 +82,31 @@ def test_utility_routes_do_not_start_with_gemini():
         assert "gemini" not in ai._resolve(None, None, module=module)
 
 
+def test_wardrobe_item_parsing_uses_the_simple_groq_route():
+    assert ai._resolve(None, None, module="wardrobe_utility")[:2] == (
+        ai.GROQ_SIMPLE, "cf",
+    )
+    assert ai._resolve(None, (ai.GROQ_SIMPLE, "cf")) == (ai.GROQ_SIMPLE, "cf")
+
+
+def test_invalid_json_from_primary_uses_the_next_provider(monkeypatch):
+    monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_gen_groq", lambda *_args, **_kwargs: '{"items": [}')
+    monkeypatch.setattr(
+        ai,
+        "_gen_github_models",
+        lambda *_args, **_kwargs: '{"items": [{"name": "готово"}]}',
+    )
+
+    result = ai.llm_json(
+        "Верни JSON", order=(ai.GROQ_STANDARD, "github_models"), module="test_json_fallback",
+    )
+
+    assert result == {"items": [{"name": "готово"}]}
+
+
 def test_public_learning_modules_use_the_last_ai_reserve_by_default(monkeypatch):
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)

@@ -101,7 +101,7 @@ def test_thought_review_keeps_health_menu_visible_while_loading(monkeypatch):
 
     asyncio.run(bot_callbacks.handle(Update(), Context(), None))
 
-    assert calls[0] == ("start_inline", "🧐 Разбираю мысли...", True)
+    assert calls[0] == ("start_inline", "🧠 Разбираю мысль...", True)
     assert calls[1] == ("health", "42", "as_daycheck", calls[1][3])
     assert calls[1][3].mode == "inline"
     assert calls[-1] == ("stop", True)

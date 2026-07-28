@@ -144,7 +144,10 @@ def guess_subcategory(zone, name, fallback_text=""):
     valid = set(ZONE_SUBCATS.get(zone, ["Другое"]))
     for text in (str(name).lower(), str(fallback_text).lower()):
         for subcategory, keys in SUBCATEGORY_KEYWORDS.items():
-            if subcategory in valid and any(key in text for key in keys):
+            if subcategory in valid and any(
+                (bool(re.search(r"\bочк", text)) if key == "очк" else key in text)
+                for key in keys
+            ):
                 return subcategory
     return "Другое"
 

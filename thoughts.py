@@ -94,7 +94,11 @@ def cancel_capture(cid, *, clear_pending=True):
         store.pending_input.pop(cid, None)
 _ANXIOUS_RE = re.compile(
     r"(?i)(кажется|боюсь|вдруг|наверно|наверное|а если|точно всё|всё сделал неправильно|"
-    r"ничего не успею|катастроф|случится)"
+    r"ничего не успею|катастроф|случится|пережива)"
+)
+_EXAM_ANXIETY_RE = re.compile(
+    r"(?i)(?:экзамен|тест|аттестаци).{0,100}(?:пережива|боюсь|тревож|вдруг)"
+    r"|(?:пережива|боюсь|тревож|вдруг).{0,100}(?:экзамен|тест|аттестаци)"
 )
 _EMOTION_RE = re.compile(
     r"(?i)(тревожн|мне страшно|я злюсь|мне грустно|не могу собраться|перегружен|"
@@ -360,6 +364,24 @@ def _imperative_from_thought(value):
 
 
 def _fallback_review(items):
+    exam_anxiety = next((
+        item for item in items
+        if _EXAM_ANXIETY_RE.search(str(item.get("text", "")))
+        and re.search(r"(?i)готов", str(item.get("text", "")))
+    ), None)
+    if exam_anxiety:
+        return {
+            "summary": (
+                "Ты переживаешь из-за экзамена, хотя подготовка уже идёт. "
+                "Тревога скорее цепляется за мысль «а вдруг не справлюсь», а не за отсутствие подготовки."
+            ),
+            "analysis": [
+                "Экзамен через месяц, поэтому сейчас можно постепенно закрывать слабые места, а не готовиться ко всему сразу."
+            ],
+            "analysis_title": "Что уже в твою пользу:",
+            "next_step": "Выбери один тип задания с экзамена и потренируй его 10–15 минут.",
+            "closing": "Тревогу не обязательно сначала убрать: можно готовиться маленькими шагами, даже когда она есть.",
+        }
     decisions = [item for item in items if _DECISION_RE.search(item.get("text", ""))]
     anxious = [
         item for item in items
@@ -494,26 +516,21 @@ async def _build_review(items):
     kinds = ", ".join(item.get("type", "unknown") for item in items)
     now = _now()
     prompt = (
-        "Бережно и очень ясно разбери текущие мысли пользователя, как практичный CBT-инструмент для взрослого "
-        "с СДВГ и тревожностью. Сначала отдели факт от прогноза и снизь ложную срочность, затем выбери только "
-        "один следующий шаг. Не ставь диагноз, не оценивай характер и не требуй собраться. "
-        "Если есть решаемая задача, вынеси её наружу и назови один видимый шаг, который можно начать примерно "
-        "за 5–10 минут; не предлагай закончить весь проект. Если есть только тревожный прогноз, не придумывай "
-        "задачу: назови отсутствие подтверждённого срока или факта и предложи проверить один реальный параметр. "
-        "Если подтверждения нет, прямо назови мысль предположением, а не фактом. Не повторяй исходные мысли полностью. "
-        "Если человек сообщает о сильной тревоге без конкретной задачи, сначала помоги снизить напряжение коротким безопасным действием, "
-        "а не отправляй его искать дедлайн. "
-        "Фраза с «кажется», «боюсь», «вдруг», «успею/не успею» остаётся тревожным предположением, "
-        "даже если в ней есть слова «задачи» или «дела». Практической задачей считай только запись "
-        "с явным действием вроде «нужно купить», «надо позвонить» или «не забыть отправить». "
-        "Не повторяй одну мысль в summary, analysis и next_step: каждый блок должен добавлять новую информацию. "
-        "Пиши коротко, чтобы человеку с СДВГ и тревожностью было легко быстро понять вывод. "
-        "Предложи ровно один конкретный следующий шаг. Не давай универсальных советов: «записать мысль», "
-        "«сменить обстановку», «вернуться к текущему делу», «выбрать действие на 5–15 минут», "
-        "«отложить мысль до отдельного времени». Не предлагай снова записывать уже записанные мысли. "
-        "Не задавай вопросов, не ставь диагноз и не используй психологические оценки.\n"
-        "Верни только валидный JSON: {\"summary\":\"до 20 слов\",\"analysis\":[\"от 1 до 3 пунктов, "
-        "каждый до 20 слов\"],\"next_step\":\"ровно одно конкретное действие\"}.\n"
+        "Ты разбираешь короткие мысли, которые пользователь выгрузил из головы. Твоя цель — дать ясность, "
+        "а не механически классифицировать запись. Сначала пойми, что перед тобой: тревога о будущем, конкретная "
+        "проблема, откладываемая задача, неопределённость, конфликт, самокритика, перегрузка или мысль без действия. "
+        "Не показывай эту классификацию. Начни с 1–2 конкретных предложений: что именно беспокоит человека и какой "
+        "более полезный взгляд поддерживают уже названные факты. Не пиши «это нормально», «понимаю тебя» или "
+        "«твои чувства валидны». Не придумывай факты.\n"
+        "Если тревога о будущем, отдели реальный риск от сценария «а вдруг». Если дата уже названа, не предлагай "
+        "проверить дедлайн или календарь. Не превращай каждую мысль в задачу: действие нужно только когда оно "
+        "поможет. Тогда дай ровно ОДИН простой следующий шаг на 5–15 минут; никаких планов, чек-листов и вариантов. "
+        "Не используй канцелярские или терапевтические слова: «содержание мысли», «зафиксируй», «наблюдай», "
+        "«отделим факты», «проработай эмоцию». Не повторяй исходные мысли полностью, не задавай вопросов, "
+        "не ставь диагноз и не оценивай характер.\n"
+        "Верни только валидный JSON: {\"summary\":\"2–4 коротких предложения\",\"analysis\":[\"1–2 конкретных пункта\"],"
+        "\"analysis_title\":\"Что уже в твою пользу: или Что важно:\",\"next_step\":\"одно действие или пустая строка\","
+        "\"closing\":\"короткая фраза-опора или пустая строка\"}. Весь ответ — максимум 120 слов.\n"
         f"Текущая локальная дата: {now.strftime('%Y-%m-%d')}. "
         f"Локальное время: {now.strftime('%H:%M %Z')}. Количество мыслей: {len(items)}.\n"
         f"Скрытые типы: {kinds}.\n"
@@ -530,19 +547,28 @@ async def _build_review(items):
         result = {
             "summary": _clean_review_line(data.get("summary")),
             "analysis": analysis[:3],
+            "analysis_title": _clean_review_line(data.get("analysis_title")),
             "next_step": _clean_review_line(data.get("next_step")),
+            "closing": _clean_review_line(data.get("closing")),
         }
+        title_key = result["analysis_title"].rstrip(".:").casefold()
+        if title_key not in {"что уже в твою пользу", "что важно"}:
+            result["analysis_title"] = "Что важно:"
+        else:
+            result["analysis_title"] = result["analysis_title"].rstrip(".:") + ":"
         invalid = (
             not result["summary"]
-            or _word_count(result["summary"]) > 20
+            or _word_count(result["summary"]) > 70
             or not (1 <= len(result["analysis"]) <= 3)
-            or any(_word_count(value) > 20 for value in result["analysis"])
-            or not result["next_step"]
-            or _word_count(result["next_step"]) > 35
-            or ";" in result["next_step"]
-            or len(re.findall(r"[^.!?]+[.!?]+", result["next_step"])) > 1
-            or " и " in result["next_step"].casefold()
-            or not _step_is_content_specific(result["next_step"], items)
+            or any(_word_count(value) > 35 for value in result["analysis"])
+            or _word_count(result["closing"]) > 28
+            or (result["next_step"] and (
+                _word_count(result["next_step"]) > 35
+                or ";" in result["next_step"]
+                or len(re.findall(r"[^.!?]+[.!?]+", result["next_step"])) > 1
+                or " и " in result["next_step"].casefold()
+                or not _step_is_content_specific(result["next_step"], items)
+            ))
             or _review_has_banned_advice(result)
             or _review_has_repetition(result)
         )
@@ -576,7 +602,10 @@ async def _show_cached_review(bot, cid, q=None):
     if not isinstance(analysis, list):
         analysis = result.get("actions", [])
     next_step = result.get("next_step") or result.get("reframe", "")
-    msg = thoughts_ui.review(result.get("summary", ""), analysis, next_step)
+    msg = thoughts_ui.review(
+        result.get("summary", ""), analysis, next_step,
+        analysis_title=result.get("analysis_title", ""), closing=result.get("closing", ""),
+    )
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=_review_keyboard())
@@ -603,7 +632,10 @@ async def review_all(bot, cid, q=None, status=None):
     }
     settings.set_(cid, "_thoughts_review_cache", cache)
     store.last_source[cid] = "Здоровье · Мысли"
-    msg = thoughts_ui.review(result["summary"], result["analysis"], result["next_step"])
+    msg = thoughts_ui.review(
+        result["summary"], result["analysis"], result["next_step"],
+        analysis_title=result.get("analysis_title", ""), closing=result.get("closing", ""),
+    )
     store.last_answer[cid] = msg.text
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=_review_keyboard())

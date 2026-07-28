@@ -653,28 +653,56 @@ def add_wardrobe_gap(cid, item, reason, priority=True):
 _ZONES_DESC = "; ".join(f"{z}: {', '.join(subs)}" for z, subs in store.ZONE_SUBCATS.items())
 
 
+def _local_text_item(text):
+    """Безопасный минимальный разбор одной знакомой вещи без внешнего AI.
+
+    Нужен только как запасной путь, когда модель недоступна либо вернула пустой
+    JSON: пользователь всё равно может добавить понятную вещь и не теряет ввод.
+    Не угадываем неизвестные предметы и не разбиваем потенциальный список.
+    """
+    name = re.sub(r"\s+", " ", str(text or "")).strip(" ,;.-")
+    if not name or len(name) > 160 or re.search(r"[,;\n]", name):
+        return None
+    item = normalize_parsed_item({
+        "name": name,
+        "style": "Повседневный",
+        "_source_text": name,
+    })
+    if not item or item.get("zone") == "Другое":
+        return None
+    return item
+
+
 async def _parse_items(text):
-    parsed = await ai.allm_json(
-        f"Разбери вещи по атрибутам. Зоны и подкатегории (используй ТОЛЬКО эти значения, "
-        f"если не подходит ни одна — subcategory=\"Другое\"): {_ZONES_DESC}\n"
-        f"Вещи:\n{secure.wrap_untrusted(text, 'список вещей')}\n"
-        "Для каждой вещи верни: zone (одна из зон выше, если не ясно — \"Другое\"), "
-        "subcategory (строго из списка для этой зоны), name (естественное русское название: цвет перед "
-        "типом вещи, затем детали; пример: «Тёмно-оливковые брюки с карманами», но БЕЗ слов "
-        "лёгкая/тонкая/тёплая/толстая/плотная/летняя/зимняя — это отдельные поля), "
-        "color (основной цвет), color_secondary (доп. цвет или пусто), material (материал или пусто), "
-        "length (длина или пусто), warmth (СТРОГО лёгкие/обычные/тёплые; толстая/плотная/утеплённая = тёплые), "
-        "fit (свободная/прямая/приталенная или пусто), season (массив сезонов), rain_ok, wind_ok, "
-        "occasions (массив подходящих случаев), style (Casual/Formal/Sport/Streetwear и т.п. или пусто). "
-        "Сохраняй бренд, если он указан.\n"
-        'JSON: {"items": [{"zone":"","subcategory":"","name":"","brand":"","color":"","color_secondary":"",'
-        '"material":"","length":"","warmth":"обычные","fit":"","season":[],"rain_ok":false,"wind_ok":false,'
-        '"occasions":[],"style":""}]}',
-        1100, tier="cheap", module="wardrobe_utility")
-    raw_items = parsed.get("items") or []
-    source_text = text if len(raw_items) == 1 else ""
-    norm = [normalize_parsed_item({**item, "_source_text": source_text}) for item in raw_items]
-    return [it for it in norm if it]
+    try:
+        parsed = await ai.allm_json(
+            f"Разбери вещи по атрибутам. Зоны и подкатегории (используй ТОЛЬКО эти значения, "
+            f"если не подходит ни одна — subcategory=\"Другое\"): {_ZONES_DESC}\n"
+            f"Вещи:\n{secure.wrap_untrusted(text, 'список вещей')}\n"
+            "Для каждой вещи верни: zone (одна из зон выше, если не ясно — \"Другое\"), "
+            "subcategory (строго из списка для этой зоны), name (естественное русское название: цвет перед "
+            "типом вещи, затем детали; пример: «Тёмно-оливковые брюки с карманами», но БЕЗ слов "
+            "лёгкая/тонкая/тёплая/толстая/плотная/летняя/зимняя — это отдельные поля), "
+            "color (основной цвет), color_secondary (доп. цвет или пусто), material (материал или пусто), "
+            "length (длина или пусто), warmth (СТРОГО лёгкие/обычные/тёплые; толстая/плотная/утеплённая = тёплые), "
+            "fit (свободная/прямая/приталенная или пусто), season (массив сезонов), rain_ok, wind_ok, "
+            "occasions (массив подходящих случаев), style (Casual/Formal/Sport/Streetwear и т.п. или пусто). "
+            "Сохраняй бренд, если он указан.\n"
+            'JSON: {"items": [{"zone":"","subcategory":"","name":"","brand":"","color":"","color_secondary":"",'
+            '"material":"","length":"","warmth":"обычные","fit":"","season":[],"rain_ok":false,"wind_ok":false,'
+            '"occasions":[],"style":""}]}',
+            1100, tier="cheap", module="wardrobe_utility")
+        raw_items = parsed.get("items") or []
+        source_text = text if len(raw_items) == 1 else ""
+        items = [normalize_parsed_item({**item, "_source_text": source_text}) for item in raw_items]
+        items = [item for item in items if item]
+        if items:
+            return items
+    except Exception:
+        _log.info("Не удалось разобрать вещь через AI; пробуем локальный разбор")
+
+    item = _local_text_item(text)
+    return [item] if item else []
 
 
 async def _show_added_items(bot, cid, items):

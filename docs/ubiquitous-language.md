@@ -18,7 +18,7 @@
 | Посещённые страны | 🧳 Посещённые страны | `visited_countries` — отдельная будущая коллекция |
 | Сохранённые рецепты | 🍽 Мои рецепты | `saved_recipes` / `saved_recipes.json` |
 | Мысль | 😮‍💨 Мысли | `thought` / `thoughts.json` |
-| Разбор мыслей | 🧐 Разбор мыслей | `thought_review` / `thought_reviews.json` |
+| Разбор мысли | 🧠 Разбор мысли | `thought_review` / `thought_reviews.json` |
 | Лайфхак | 🦉 Лайфхак | `lifehack` / локальный каталог `lifehacks.json` |
 
 ## Правила

@@ -12,6 +12,7 @@ import secure
 import settings
 import saved_items
 import thoughts
+from ui import thoughts as thoughts_ui
 
 
 def _labels(markup):
@@ -129,7 +130,7 @@ def test_opening_thoughts_immediately_shows_review_with_clear_button(monkeypatch
     asyncio.run(thoughts.send_home(bot, "42"))
 
     text = bot.sent[0]["text"]
-    assert text.startswith("🧐 Разбор мыслей")
+    assert text.startswith("🧠 Разбор мысли")
     assert "Сейчас в голове:" not in text
     labels = [button.text for row in bot.sent[0]["reply_markup"].inline_keyboard for button in row]
     assert "🧐 Разобрать мысли" not in labels
@@ -164,7 +165,7 @@ def test_opening_thoughts_delivers_slow_review_through_inline_status(monkeypatch
     asyncio.run(thoughts.send_home(bot, "42", status=status))
 
     assert bot.sent == []
-    assert status.replaced[0]["text"].startswith("🧐 Разбор мыслей")
+    assert status.replaced[0]["text"].startswith("🧠 Разбор мысли")
 
 
 def test_crisis_and_medical_have_priority_without_model(monkeypatch):
@@ -206,7 +207,7 @@ def test_capture_cleans_lightly_and_keeps_one_message_as_one_thought(monkeypatch
     assert repo.items[0]["type"] == "practical_problem"
     assert repo.items[0]["confidence"] == 0.87
     assert repo.items[0]["can_be_actioned"] is True
-    assert bot.sent[0]["text"].startswith("🧐 Разбор мыслей")
+    assert bot.sent[0]["text"].startswith("🧠 Разбор мысли")
     assert "Нужно подготовиться к экзамену, купить ручку" in bot.sent[0]["text"]
     assert bot.sent[0].get("transient") is not True
     assert settings_state[("42", "_thoughts_capture_state")] == {"status": "idle"}
@@ -377,7 +378,7 @@ def test_legacy_clear_all_button_no_longer_deletes_records(monkeypatch):
     asyncio.run(balance.worry_clear_all(bot, "42"))
 
     assert len(repo.items) == 1
-    assert bot.sent[0]["text"].startswith("🧐 Разбор мыслей")
+    assert bot.sent[0]["text"].startswith("🧠 Разбор мысли")
 
 
 def test_batch_review_is_short_and_has_only_allowed_buttons(monkeypatch):
@@ -403,7 +404,7 @@ def test_batch_review_is_short_and_has_only_allowed_buttons(monkeypatch):
 
     asyncio.run(thoughts.review_all(bot, "42", q=q))
 
-    assert q.message.text.startswith("🧐 Разбор мыслей")
+    assert q.message.text.startswith("🧠 Разбор мысли")
     assert q.message.text.count("• Фильтры требуют действия.") == 1
     assert "Закажи фильтры для фонтана." in q.message.text
     assert "?" not in q.message.text
@@ -475,6 +476,56 @@ def test_strong_anxiety_gets_grounding_step_instead_of_generic_deadline_advice(m
     assert "Тревога" in result["summary"]
     assert "Срочность пока не подтверждена" not in result["summary"]
     assert result["next_step"] == "Поставь обе ноги на пол и сделай один медленный выдох длиннее вдоха."
+
+
+def test_exam_anxiety_uses_known_preparation_as_an_anchor_not_a_deadline_check(monkeypatch):
+    async def model_must_not_run(*_args, **_kwargs):
+        raise AssertionError("exam anxiety with known preparation must use the local reflection")
+
+    monkeypatch.setattr(thoughts.ai, "allm_json", model_must_not_run)
+    result = asyncio.run(thoughts._build_review([{
+        "text": "Переживаю из-за экзамена через месяц, хотя готовлюсь",
+        "type": "anxious_prediction",
+    }]))
+
+    combined = " ".join([result["summary"], *result["analysis"]]).casefold()
+    assert "экзамен" in combined
+    assert "готов" in combined
+    assert "календар" not in result["next_step"].casefold()
+    assert "задани" in result["next_step"].casefold()
+    assert "10–15" in result["next_step"]
+    message = thoughts_ui.review(
+        result["summary"], result["analysis"], result["next_step"],
+        analysis_title=result.get("analysis_title"), closing=result.get("closing"),
+    )
+    assert message.text.startswith("🧠 Разбор мысли")
+    assert "Что уже в твою пользу:" in message.text
+    assert "Сейчас сделай одно:" in message.text
+
+
+def test_review_can_offer_an_anchor_without_forcing_an_action(monkeypatch):
+    _setup_state(monkeypatch)
+
+    async def calm_model(*_args, **_kwargs):
+        return {
+            "summary": "Ты уже сказал всё важное и не обязан решать это прямо сейчас.",
+            "analysis": ["В записи нет конкретной проблемы, которую нужно срочно исправлять."],
+            "analysis_title": "Что важно:",
+            "next_step": "",
+            "closing": "К этой мысли можно вернуться, когда появятся новые факты.",
+        }
+
+    monkeypatch.setattr(thoughts.ai, "allm_json", calm_model)
+    result = asyncio.run(thoughts._build_review([
+        {"text": "Не знаю, стоит ли волноваться", "type": "unknown"},
+    ]))
+    message = thoughts_ui.review(
+        result["summary"], result["analysis"], result["next_step"],
+        analysis_title=result.get("analysis_title"), closing=result.get("closing"),
+    )
+
+    assert result["next_step"] == ""
+    assert "Сейчас сделай одно:" not in message.text
 
 
 def test_formally_valid_but_content_free_next_step_uses_fallback(monkeypatch):
@@ -582,7 +633,7 @@ def test_stale_clear_callback_never_deletes_without_cached_review(monkeypatch):
     asyncio.run(thoughts.handle_callback(bot, "42", q, "thought_review_clear_yes"))
 
     assert [item["id"] for item in repo.items] == ["new"]
-    assert bot.sent[0]["text"].startswith("🧐 Разбор мыслей")
+    assert bot.sent[0]["text"].startswith("🧠 Разбор мысли")
     assert "Новая мысль" in bot.sent[0]["text"]
 
 

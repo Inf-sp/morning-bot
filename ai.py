@@ -1033,7 +1033,7 @@ def _reserve_gemini_for_action() -> bool:
 
 # Три понятных маршрута: простой, обычный и сложный. OpenRouter вызывается
 # только последним резервом через общую политику fallback.
-SIMPLE_ORDER = (GROQ_SIMPLE, "github_models", "cf", "openrouter")
+SIMPLE_ORDER = (GROQ_SIMPLE, "cf", "github_models", "openrouter")
 STANDARD_ORDER = (GROQ_STANDARD, "github_models", "cf", "openrouter")
 COMPLEX_ORDER = ("gemini", GROQ_COMPLEX, "openrouter")
 UTILITY_ORDER = SIMPLE_ORDER
@@ -1066,6 +1066,7 @@ TIERS = {
 # раздела. Единственный способ обойти policy — явный order=(...) в вызове.
 MODULE_POLICY = {
     # Быстрый utility-маршрут: языки, строгий JSON, классификация и короткий анализ.
+    "wardrobe_utility": SIMPLE_ORDER,
     "learning": GRAMMAR_ORDER,
     "learning_dict_add": GRAMMAR_ORDER,
     "learning_trainer": GRAMMAR_ORDER,
@@ -1103,7 +1104,8 @@ def _resolve(tier, order, route=None, module=""):
         return tuple(
             n for n in order
             if n == "openrouter" or n in PROVIDER_ORDER or n in DEFAULT_ORDER
-            or n in {"github_models", "groq", "gemini", "cf"}
+            or n in {GROQ_SIMPLE, GROQ_STANDARD, GROQ_COMPLEX,
+                     "github_models", "groq", "gemini", "cf"}
         )
     if module and module in MODULE_POLICY:
         return MODULE_POLICY[module]
@@ -1139,7 +1141,7 @@ def _caller_module() -> str:
 def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, module="", route=None,
               fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
               response_mode: ResponseMode = "plain_text", fallback_policy=None,
-              allow_personal_openrouter=False, cache_context=None):
+              allow_personal_openrouter=False, cache_context=None, response_validator=None):
     if not module:
         module = _caller_module()
     if (
@@ -1263,6 +1265,27 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         try:
             out = _as_text(calls[name]())
             if out and out.strip():
+                if response_validator is not None:
+                    try:
+                        response_validator(out)
+                    except Exception:
+                        ms = int((time.time() - t0) * 1000)
+                        _record_ai_attempt(
+                            name, _provider_model_name(name), module, ok=False,
+                            latency_ms=ms, failure="invalid structured response",
+                        )
+                        try:
+                            import tracking
+                            tracking.record_ai_failure(name, "invalid_response")
+                        except Exception:
+                            pass
+                        failed_providers.append(name)
+                        errs.append(f"{name}:invalid structured response")
+                        temporary_errs.append((name, LLMProviderError(
+                            name, "invalid structured response", temporary=True,
+                            error_type="invalid_response",
+                        )))
+                        continue
                 for failed in failed_providers:
                     provider_runtime.activate_fallback(
                         _monitor_name(failed), _monitor_name(name), reason="request",
@@ -1463,52 +1486,16 @@ def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", ro
                    allow_personal_openrouter=False, fallback_policy=None, cache_context=None):
     if not module:
         module = _caller_module()
-    expected_format = "JSON object"
-    raw = llm(prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
-                       "Внутри строковых значений НЕ используй двойные кавычки - "
-                       "вместо них используй « » или одинарные.", max_tokens, 0.7, order, tier, module, route,
-              fallback_allowed=fallback_allowed, privacy_level=privacy_level, response_mode="json",
-              fallback_policy=fallback_policy, allow_personal_openrouter=allow_personal_openrouter,
-              cache_context=cache_context)
-    try:
-        return _parse_json_response(raw)
-    except ValueError as exc:
-        parse_error = exc
-
-    repair_prompt = (
-        "Преобразуй ответ ИИ ниже в один валидный JSON-объект без markdown и пояснений. "
-        "Сохрани существующие данные, не добавляй новые факты. Если данных недостаточно, верни {}.\n\n"
-        "Ожидаемая задача:\n"
-        f"{secure.wrap_untrusted(prompt[:3000], 'исходный промпт')}\n\n"
-        "Ответ ИИ для исправления:\n"
-        f"{secure.wrap_untrusted(str(raw)[:6000], 'сырой ответ ИИ')}"
+    raw = _llm_impl(
+        prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
+        "Внутри строковых значений НЕ используй двойные кавычки - "
+        "вместо них используй « » или одинарные.",
+        max_tokens, 0.7, order, tier, module, route,
+        fallback_allowed, privacy_level, "json", fallback_policy,
+        allow_personal_openrouter, cache_context,
+        response_validator=_parse_json_response,
     )
-    try:
-        repaired = llm(repair_prompt, max_tokens, 0.1, order, tier, module, route,
-                       fallback_allowed=fallback_allowed, privacy_level=privacy_level,
-                       response_mode="json", fallback_policy=fallback_policy,
-                       allow_personal_openrouter=allow_personal_openrouter)
-        return _parse_json_response(repaired)
-    except Exception as exc:
-        try:
-            provider = (tuple(order or ()) or ("llm",))[0]
-            import tracking
-            tracking.log_error(
-                "llm",
-                (
-                    f"Не удалось разобрать JSON: {type(parse_error).__name__ if 'parse_error' in locals() else type(exc).__name__}; "
-                    f"provider={provider}; model={_provider_model_name(provider)}; expected={expected_format}; "
-                    f"response={_json_preview(raw)}"
-                ),
-                kind="json-parse",
-                action="не обработан ответ сервиса",
-                service=provider.title().replace("_", " "),
-                fallback="безопасный шаблон",
-                exc=exc,
-            )
-        except Exception:
-            pass
-    raise Exception("Не удалось разобрать ответ ИИ (JSON). Попробуй ещё раз.")
+    return _parse_json_response(raw)
 
 
 def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
