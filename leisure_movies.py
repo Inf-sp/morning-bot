@@ -49,19 +49,7 @@ def _movie_kb(i, category=None, favorite=False):
     return InlineKeyboardMarkup(rows)
 
 
-# Полный набор жанров — для экрана предпочтений (чекбоксы).
-_GENRE_ALL = [
-    ("Комедия", 35), ("Ужасы", 27),
-    ("Фантастика", 878), ("Триллер", 53),
-    ("Романтика", 10749), ("Драма", 18),
-    ("Боевик", 28), ("Детектив", 9648),
-    ("Криминал", 80), ("Фэнтези", 14),
-    ("Приключения", 12), ("Вестерн", 37),
-    ("Документальный", 99), ("Семейный", 10751),
-]
-
-# Шесть популярных жанров для быстрого меню «По жанру» (2 столбца, помещается на экран).
-# Остальные жанры остаются в предпочтениях и в алгоритме ранжирования.
+# Шесть популярных жанров для быстрого меню «По жанру».
 _GENRE_MENU = [
     ("😂 Комедия", 35), ("👻 Ужасы", 27),
     ("🚀 Фантастика", 878), ("🔪 Триллер", 53),
@@ -394,15 +382,10 @@ async def warm_movie_home_cache(cid):
 
 def _movie_prefs(cid):
     """Предпочтения кино из настроек → dict для движка (приоритеты, не запреты)."""
-    g = settings.get(cid, "movie_genres", []) or []
-    countries = settings.get(cid, "movie_countries", []) or []
     return {
-        "genres": [int(x) for x in g if str(x).isdigit()],
         "type_pref": settings.get(cid, "movie_type_pref", "") or None,
-        "series_status": settings.get(cid, "movie_series_status", "") or None,
         "recency": settings.get(cid, "movie_recency", "") or None,
         "min_rating": _as_float(settings.get(cid, "movie_min_rating", None)),
-        "countries": countries,
     }
 
 
@@ -599,51 +582,29 @@ async def _show_menu_over_card(bot, cid, text, kb, q):
 
 
 # ---------- экран «Предпочтения кино» ----------
-_PREF_GENRES = [(label, gid) for label, gid in _GENRE_ALL]
-_PREF_COUNTRIES = [("США", "US"), ("Британия", "GB"), ("Корея", "KR"),
-                   ("Япония", "JP"), ("Франция", "FR"), ("Германия", "DE")]
-_PREF_TYPE = [(ui_label("cinema", "Фильмы"), "movie"), ("Сериалы", "tv"), ("Без разницы", "")]
-_PREF_STATUS = [("✅ Завершённые", "completed"), ("Любые", "")]
+_PREF_TYPE = [(ui_label("cinema", "Фильмы"), "movie"), ("Сериалы", "tv")]
 _PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("6.5", "6.5"), ("7.0", "7.0"), ("7.5", "7.5"), ("8.0", "8.0")]
 
 
 def _movie_prefs_kb(cid):
-    gsel = {int(x) for x in (settings.get(cid, "movie_genres", []) or []) if str(x).isdigit()}
-    csel = set(settings.get(cid, "movie_countries", []) or [])
     tpref = settings.get(cid, "movie_type_pref", "") or ""
-    spref = settings.get(cid, "movie_series_status", "") or ""
     rpref = settings.get(cid, "movie_recency", "") or ""
     rating = str(settings.get(cid, "movie_min_rating", "") or "")
-    rows = [[InlineKeyboardButton("— Любимые жанры —", callback_data="noop")]]
-    gbtns = [InlineKeyboardButton(("✅ " if gid in gsel else "⬜ ") + label,
-                                  callback_data=f"mpref_g_{gid}") for label, gid in _PREF_GENRES]
-    for i in range(0, len(gbtns), 2):
-        rows.append(gbtns[i:i + 2])
-    rows.append([InlineKeyboardButton("— Тип —", callback_data="noop")])
-    rows.append([InlineKeyboardButton(("✅ " if tpref == v else "") + label,
-                                      callback_data=f"mpref_type_{v or 'any'}") for label, v in _PREF_TYPE])
-    rows.append([InlineKeyboardButton("— Сериалы —", callback_data="noop")])
-    rows.append([InlineKeyboardButton(("✅ " if spref == v else "") + label,
-                                      callback_data=f"mpref_status_{v or 'any'}") for label, v in _PREF_STATUS])
-    rows.append([InlineKeyboardButton("— Новинки —", callback_data="noop")])
+    rows = [[InlineKeyboardButton(("✅ " if tpref == value else "") + label,
+                                  callback_data=f"mpref_type_{value}")
+             for label, value in _PREF_TYPE]]
     rows.append([InlineKeyboardButton(("✅ " if rpref == v else "") + label,
                                       callback_data=f"mpref_recency_{v or 'any'}") for label, v in _PREF_RECENCY])
-    rows.append([InlineKeyboardButton("— Мин. рейтинг —", callback_data="noop")])
     rows.append([InlineKeyboardButton(("✅ " if rating == v else "") + f"⭐️ {label}",
                                       callback_data=f"mpref_rating_{v}") for label, v in _PREF_RATING])
-    rows.append([InlineKeyboardButton("— Страны —", callback_data="noop")])
-    cbtns = [InlineKeyboardButton(("✅ " if v in csel else "⬜ ") + label,
-                                  callback_data=f"mpref_c_{v}") for label, v in _PREF_COUNTRIES]
-    for i in range(0, len(cbtns), 2):
-        rows.append(cbtns[i:i + 2])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="movie_favorites"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
 async def send_movie_prefs(bot, cid, q=None):
-    text = ("🎬 Предпочтения кино\n\n"
+    text = ("📌 Предпочтения кино\n\n"
             "Это приоритеты, а не жёсткие фильтры — я учитываю их при подборе, "
             "но всё равно могу предложить что-то за их пределами.")
     kb = _movie_prefs_kb(cid)
@@ -657,27 +618,20 @@ async def send_movie_prefs(bot, cid, q=None):
 
 async def toggle_movie_pref(bot, cid, data, q=None):
     """Обработка mpref_* переключателей."""
-    if data.startswith("mpref_g_"):
-        gid = data[len("mpref_g_"):]
-        cur = [str(x) for x in (settings.get(cid, "movie_genres", []) or [])]
-        cur = [x for x in cur if x != gid] if gid in cur else cur + [gid]
-        settings.set_(cid, "movie_genres", cur)
-    elif data.startswith("mpref_c_"):
-        cc = data[len("mpref_c_"):]
-        cur = list(settings.get(cid, "movie_countries", []) or [])
-        cur = [x for x in cur if x != cc] if cc in cur else cur + [cc]
-        settings.set_(cid, "movie_countries", cur)
-    elif data.startswith("mpref_type_"):
+    if data.startswith("mpref_type_"):
         v = data[len("mpref_type_"):]
-        settings.set_(cid, "movie_type_pref", "" if v == "any" else v)
-    elif data.startswith("mpref_status_"):
-        v = data[len("mpref_status_"):]
-        settings.set_(cid, "movie_series_status", "" if v == "any" else v)
+        if v in {"movie", "tv"}:
+            current = settings.get(cid, "movie_type_pref", "") or ""
+            settings.set_(cid, "movie_type_pref", "" if current == v else v)
     elif data.startswith("mpref_recency_"):
         v = data[len("mpref_recency_"):]
-        settings.set_(cid, "movie_recency", "" if v == "any" else v)
+        if v in {"new", "any"}:
+            settings.set_(cid, "movie_recency", "" if v == "any" else v)
     elif data.startswith("mpref_rating_"):
-        settings.set_(cid, "movie_min_rating", data[len("mpref_rating_"):])
+        v = data[len("mpref_rating_"):]
+        if v in {value for _label, value in _PREF_RATING}:
+            current = str(settings.get(cid, "movie_min_rating", "") or "")
+            settings.set_(cid, "movie_min_rating", "" if current == v else v)
     await send_movie_prefs(bot, cid, q)
 
 

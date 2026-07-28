@@ -52,15 +52,162 @@ def test_recommendation_cards_use_content_specific_next_labels():
 
 def test_preferences_are_available_from_personal_content_lists():
     assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["cinema_favorites"]["footer_button"] == ("🎚️ Предпочтения", "movie_prefs")
-    assert _labels(leisure_books._book_preferences_kb())[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["books_favorites"]["footer_button"] == ("🎚️ Предпочтения", "book_prefs")
+    assert cleanup.COLLECTIONS["cinema_favorites"]["menu_button"] == ("📌 Предпочтения", "movie_prefs")
+    assert cleanup.COLLECTIONS["cinema_favorites"]["add_button_at_bottom"] is True
+    assert cleanup.COLLECTIONS["cinema_favorites"]["allow_edit"] is False
+    assert _labels(leisure_books._book_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    assert cleanup.COLLECTIONS["books_favorites"]["menu_button"] == ("📌 Предпочтения", "book_prefs")
+    assert cleanup.COLLECTIONS["books_favorites"]["add_button_at_bottom"] is True
+    assert cleanup.COLLECTIONS["books_favorites"]["allow_edit"] is False
     assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["music_favorite_artists"]["footer_button"] == ("🎚️ Предпочтения", "music_prefs")
+    assert cleanup.COLLECTIONS["music_favorite_artists"]["menu_button"] == ("📌 Предпочтения", "music_prefs")
+    assert cleanup.COLLECTIONS["music_favorite_artists"]["add_button_at_bottom"] is True
+    assert cleanup.COLLECTIONS["music_favorite_artists"]["allow_edit"] is False
+
+
+def test_movie_preferences_keep_only_type_recency_and_rating(monkeypatch):
+    monkeypatch.setattr(leisure_movies.settings, "get", lambda *_args: "")
+
+    rows = _labels(leisure_movies._movie_prefs_kb("42"))
+
+    assert rows == [
+        ["🎬 Фильмы", "Сериалы"],
+        ["Новинки", "✅ Любые годы"],
+        ["⭐️ 6.5", "⭐️ 7.0", "⭐️ 7.5", "⭐️ 8.0"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+    assert leisure_movies._movie_prefs("42") == {
+        "type_pref": None,
+        "recency": None,
+        "min_rating": None,
+    }
+
+
+def test_book_preferences_filter_recommendations_by_recency_and_rating(monkeypatch):
+    values = {"book_recency": "new", "book_min_rating": "4.5"}
+    monkeypatch.setattr(leisure_books.settings, "get", lambda _cid, key, default=None: values.get(key, default))
+    monkeypatch.setattr(leisure_books, "_book_used", lambda _cid: set())
+    current_year = datetime.now(config.TZ).year
+    items = [
+        {"title": "Старая высокая", "year": str(current_year - 3), "rating": 4.9, "ratings_count": 100},
+        {"title": "Новая ниже", "year": str(current_year), "rating": 4.4, "ratings_count": 100},
+        {"title": "Новая подходящая", "year": str(current_year), "rating": 4.7, "ratings_count": 10},
+    ]
+
+    rows = _labels(leisure_books._book_preferences_kb("42"))
+
+    assert rows == [
+        ["✅ Новинки", "Любые годы"],
+        ["⭐️ 3.5", "⭐️ 4.0", "✅ ⭐️ 4.5"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+    assert leisure_books._pick_good_book(items, "42", fallback=False)["title"] == "Новая подходящая"
+
+
+def test_artist_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
+    view_id = "artists-layout"
+    cleanup._views[view_id] = {
+        "ctx": "music_favorite_artists",
+        "revision": 0,
+        "selected_ids": set(),
+        "page": 0,
+        "back": "m_music",
+        "created_at": 0,
+        "confirming": False,
+        "editing": False,
+    }
+    monkeypatch.setattr(
+        cleanup, "_view_items",
+        lambda *_args: ("🎚️ Мои артисты", [("artist-1", "Артист")], "m_music"),
+    )
+
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    bot = Bot()
+    try:
+        asyncio.run(cleanup._render_view(bot, "42", view_id))
+    finally:
+        cleanup._views.pop(view_id, None)
+
+    rows = _labels(bot.message["reply_markup"])
+    assert rows[-2:] == [["🆕 Добавить артиста"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert all("✏️ Изменить" not in row for row in rows)
+
+
+def test_movie_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
+    view_id = "movies-layout"
+    cleanup._views[view_id] = {
+        "ctx": "cinema_favorites",
+        "revision": 0,
+        "selected_ids": set(),
+        "page": 0,
+        "back": "m_movie",
+        "created_at": 0,
+        "confirming": False,
+        "editing": False,
+    }
+    monkeypatch.setattr(
+        cleanup, "_view_items",
+        lambda *_args: ("🎚️ Моё кино", [("movie-1", "Фильм")], "m_movie"),
+    )
+
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    bot = Bot()
+    try:
+        asyncio.run(cleanup._render_view(bot, "42", view_id))
+    finally:
+        cleanup._views.pop(view_id, None)
+
+    rows = _labels(bot.message["reply_markup"])
+    assert rows[-2:] == [["🆕 Добавить фильм"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert all("✏️ Изменить" not in row for row in rows)
+
+
+def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
+    view_id = "books-layout"
+    cleanup._views[view_id] = {
+        "ctx": "books_favorites",
+        "revision": 0,
+        "selected_ids": set(),
+        "page": 0,
+        "back": "m_books",
+        "created_at": 0,
+        "confirming": False,
+        "editing": False,
+    }
+    monkeypatch.setattr(
+        cleanup, "_view_items",
+        lambda *_args: ("🎚️ Мои книги", [("book-1", "Книга")], "m_books"),
+    )
+
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    bot = Bot()
+    try:
+        asyncio.run(cleanup._render_view(bot, "42", view_id))
+    finally:
+        cleanup._views.pop(view_id, None)
+
+    rows = _labels(bot.message["reply_markup"])
+    assert rows[-2:] == [["🆕 Добавить книгу"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert all("✏️ Изменить" not in row for row in rows)
 
 
 def test_personal_lists_are_available_from_their_category_preferences():
-    assert _labels(leisure_music._music_preferences_kb("42"))[0] == ["— Любимые стили —"]
+    assert _labels(leisure_music._music_preferences_kb("42"))[0] == ["⬜ 🌿 Инди", "⬜ ✨ Поп"]
 
 
 def test_leisure_category_keyboards_do_not_offer_a_back_button():
@@ -72,7 +219,7 @@ def test_leisure_category_keyboards_do_not_offer_a_back_button():
     ]
     assert all("⬅️ Назад" not in sum(_labels(keyboard), []) for keyboard in keyboards)
     assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert _labels(leisure_books._book_preferences_kb())[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    assert _labels(leisure_books._book_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 

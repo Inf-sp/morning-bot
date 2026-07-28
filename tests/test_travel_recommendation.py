@@ -87,10 +87,9 @@ def test_suitcase_contains_travel_preferences(monkeypatch):
     keyboard, _page, _pages = travel._countries_kb("42", 0)
     labels = [[button.text for button in row] for row in keyboard.inline_keyboard]
 
-    assert labels[-2:] == [
-        ["🎚️ Предпочтения"],
-        ["⬅️ Назад", "#️⃣ Главная"],
-    ]
+    assert labels[0] == ["📌 Предпочтения"]
+    assert labels[-2] == ["🆕 Добавить страну"]
+    assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 
 def test_rejected_visited_country_changes_next_generation_request(monkeypatch):

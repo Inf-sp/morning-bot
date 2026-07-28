@@ -43,7 +43,7 @@ def _kb(rows):
 
 def closet_kb():
     return _kb([
-        [("🎚️ Предпочтения", "set_wardrobe_style")],
+        [("📌 Предпочтения", "set_wardrobe_style")],
         [("🆕 Добавить вещь", "w_add")],
         [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")],
     ])
@@ -347,7 +347,8 @@ def _save_cached_look(cid, item_ids, look_data):
 def build_wardrobe_keyboard(has_result=True, *, has_purchase=False, purchase_saved=False):
     rows = [[("✨ Другой образ" if has_result else "✨ Подобрать образ", "w_look")]]
     rows.extend([
-        [("🧐 Оценить покупку", "w_check"), ("🎚️ Мой шкаф", "w_closet")],
+        [("🧐 Оценить покупку", "w_check")],
+        [("🎚️ Мой шкаф", "w_closet")],
         [("#️⃣ Главная", "m_menu")],
     ])
     return _kb(rows)
@@ -866,16 +867,12 @@ async def send_wardrobe_zones(bot, cid, q=None):
     _cancel_wardrobe_input(cid)
     w = store.load_wardrobe(cid)
     total, counts = wardrobe_stats(w)
-    rows = []
-    for index in range(0, len(ZONE_ORDER), 2):
-        category_row = []
-        for zone in ZONE_ORDER[index:index + 2]:
-            category_row.append(InlineKeyboardButton(
-                public_zone_name(zone),
-                callback_data=f"w_cat_{ZONE_SLUG[zone]}",
-            ))
-        rows.append(category_row)
-    rows.append([InlineKeyboardButton("🎚️ Предпочтения", callback_data="set_wardrobe_style")])
+    rows = [[InlineKeyboardButton("📌 Предпочтения", callback_data="set_wardrobe_style")]]
+    for zone in ZONE_ORDER:
+        rows.append([InlineKeyboardButton(
+            public_zone_name(zone),
+            callback_data=f"w_cat_{ZONE_SLUG[zone]}",
+        )])
     rows.append([InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     msg = wardrobe_ui.wardrobe_home_screen(total)

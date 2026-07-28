@@ -9,6 +9,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import google_books
 import recommendation_stoplist
+import settings
 import store
 import tracking
 from ui import leisure as leisure_ui
@@ -24,6 +25,8 @@ _BOOK_GENRES = [
     ("biography", "👤 Биографии", "Biography & Autobiography"),
     ("psychology", "🧠 Психология", "Psychology"),
 ]
+_PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
+_PREF_RATING = [("3.5", "3.5"), ("4.0", "4.0"), ("4.5", "4.5")]
 
 
 def _item_text(item):
@@ -47,7 +50,8 @@ def _cached_book(cid):
     entry = (store._load(config.BOOK_RECO_CACHE_KEY) or {}).get(str(cid)) or {}
     item = entry.get("item")
     today = datetime.now(config.TZ).date().isoformat()
-    if entry.get("date") != today or not isinstance(item, dict):
+    if (entry.get("date") != today or not isinstance(item, dict)
+            or entry.get("preferences") != _book_preferences(cid)):
         return None
     title = _item_text(item)
     if not title or title.casefold() in _book_used(cid):
@@ -60,7 +64,11 @@ def _cache_book(cid, item):
 
     def mutate(data):
         data = data if isinstance(data, dict) else {}
-        data[str(cid)] = {"date": today, "item": dict(item or {})}
+        data[str(cid)] = {
+            "date": today,
+            "item": dict(item or {}),
+            "preferences": _book_preferences(cid),
+        }
         return data, None
 
     store.mutate_kv(config.BOOK_RECO_CACHE_KEY, mutate)
@@ -95,6 +103,33 @@ def _book_cover(title, title_en=""):
 
 def _book_text(it):
     return leisure_ui.book_text(it)
+
+
+def _book_preferences(cid):
+    return {
+        "recency": settings.get(cid, "book_recency", "") or None,
+        "min_rating": _as_float(settings.get(cid, "book_min_rating", None)),
+    }
+
+
+def _as_float(value):
+    try:
+        return float(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _book_matches_preferences(item, cid):
+    preferences = _book_preferences(cid)
+    min_rating = preferences["min_rating"]
+    rating = _as_float(item.get("rating"))
+    if min_rating is not None and (rating is None or rating < min_rating):
+        return False
+    if preferences["recency"] == "new":
+        year = str(item.get("year") or item.get("published_date") or "")[:4]
+        if not year.isdigit() or int(year) < datetime.now(config.TZ).year - 1:
+            return False
+    return True
 
 
 def _book_kb(i, favorite=False):
@@ -207,16 +242,25 @@ async def send_book_genre_menu(bot, cid, q=None):
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
-def _book_preferences_kb():
+def _book_preferences_kb(cid):
+    preferences = _book_preferences(cid)
+    recency = preferences["recency"] or ""
+    rating = str(preferences["min_rating"] or "")
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton(("✅ " if recency == value else "") + label,
+                              callback_data=f"bookpref_recency_{value or 'any'}")
+         for label, value in _PREF_RECENCY],
+        [InlineKeyboardButton(("✅ " if rating == value else "") + f"⭐️ {label}",
+                              callback_data=f"bookpref_rating_{value}")
+         for label, value in _PREF_RATING],
         [InlineKeyboardButton("⬅️ Назад", callback_data="book_favorites"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
 async def send_book_preferences(bot, cid, q=None):
-    text = "🎚️ Предпочтения книг\n\nФормат книги можно настроить здесь. Для отдельного подбора используй «🎭 По жанру»."
-    kb = _book_preferences_kb()
+    text = "📌 Предпочтения книг\n\nВыбери новизну и минимальную оценку читателей."
+    kb = _book_preferences_kb(cid)
     if q is not None:
         try:
             await q.message.edit_text(text, reply_markup=kb)
@@ -224,6 +268,19 @@ async def send_book_preferences(bot, cid, q=None):
         except Exception:
             pass
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+async def toggle_book_preference(bot, cid, data, q=None):
+    if data.startswith("bookpref_recency_"):
+        value = data[len("bookpref_recency_"):]
+        if value in {"new", "any"}:
+            settings.set_(cid, "book_recency", "" if value == "any" else value)
+    elif data.startswith("bookpref_rating_"):
+        value = data[len("bookpref_rating_"):]
+        if value in {rating for _label, rating in _PREF_RATING}:
+            current = str(settings.get(cid, "book_min_rating", "") or "")
+            settings.set_(cid, "book_min_rating", "" if current == value else value)
+    await send_book_preferences(bot, cid, q)
 
 async def _send_book_card(bot, cid, it, i, *, enrich=True):
     if enrich:
@@ -330,7 +387,7 @@ def _pick_good_book(items, cid, extra_skip=(), *, fallback=True):
         if not isinstance(it, dict):
             continue
         t = (it.get("title", "") or "").strip().lower()
-        if t and t not in used:
+        if t and t not in used and _book_matches_preferences(it, cid):
             try:
                 rating = float(it.get("rating") or 0)
             except (TypeError, ValueError):

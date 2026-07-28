@@ -326,7 +326,9 @@ def _countries_kb(cid, page):
     shown = codes[page * _COUNTRIES_PER_PAGE:(page + 1) * _COUNTRIES_PER_PAGE]
     buttons = [InlineKeyboardButton(f"{util.flag_from_cc(code)} {_country_name(code)}".strip(),
                                     callback_data=f"a_trav_country_{code}_{page}") for code in shown]
-    rows = [[InlineKeyboardButton("🆕 Добавить страну", callback_data="a_trav_country_add")]]
+    rows = [
+        [InlineKeyboardButton("📌 Предпочтения", callback_data="a_trav_transport")],
+    ]
     rows.extend(buttons[i:i + 2] for i in range(0, len(buttons), 2))
     previous_page = (page - 1) % pages
     next_page = (page + 1) % pages
@@ -337,7 +339,7 @@ def _countries_kb(cid, page):
         InlineKeyboardButton(f"{page + 1} / {pages}", callback_data="noop"),
         InlineKeyboardButton("▶️", callback_data=next_callback),
     ])
-    rows.append([InlineKeyboardButton("🎚️ Предпочтения", callback_data="a_trav_transport")])
+    rows.append([InlineKeyboardButton("🆕 Добавить страну", callback_data="a_trav_country_add")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows), page, pages
 

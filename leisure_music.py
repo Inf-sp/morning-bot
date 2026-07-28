@@ -344,15 +344,14 @@ def _music_preferences_kb(cid):
                              callback_data=f"music_style_{key}")
         for key, label, _prompt_name in _MUSIC_GENRES
     ]
-    rows = [[InlineKeyboardButton("— Любимые стили —", callback_data="noop")]]
-    rows.extend(buttons[index:index + 2] for index in range(0, len(buttons), 2))
+    rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="artist_favorites"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
 async def send_music_preferences(bot, cid, q=None):
-    text = "🎚️ Предпочтения музыки\n\nВыбери любимые стили — они будут учитываться в обычном подборе."
+    text = "📌 Предпочтения музыки\n\nВыбери любимые стили — они будут учитываться в обычном подборе."
     kb = _music_preferences_kb(cid)
     if q is not None:
         try:

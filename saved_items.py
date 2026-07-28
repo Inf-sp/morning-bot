@@ -292,8 +292,8 @@ async def send_notes(bot, cid):
 async def send_food(bot, cid, q=None, back="m_food"):
     """Compat-экран для старых кнопок Готовки: без отдельной базы рецептов."""
     rows = [
+        [InlineKeyboardButton("📌 Предпочтения", callback_data="set_cuisines")],
         [InlineKeyboardButton("🎚️ Мой холодильник", callback_data="set_fridge")],
-        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="set_cuisines")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     msg = settings_ui.mydata_section(

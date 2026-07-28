@@ -62,10 +62,28 @@ from util import clear_loading as _unack
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID
 _PROCESS_STARTED_AT = datetime.now(TZ).isoformat()
+_RECENT_TRAVEL_OPENINGS = {}
+_TRAVEL_OPENING_DEDUP_SECONDS = 3
 
 
 
 _WORRY_PROMPT_WINDOW_S = 1800  # окно, в течение которого свободный текст ещё считается ответом на "Дневную разгрузку"
+
+
+def _claim_travel_opening(cid, message_id, data):
+    """Не запускает один и тот же главный экран Поездок повторно от двойного тапа."""
+    if data != "m_travel":
+        return True
+    now = asyncio.get_running_loop().time()
+    key = (str(cid), str(message_id or ""), data)
+    expired = [item for item, seen_at in _RECENT_TRAVEL_OPENINGS.items()
+               if now - seen_at >= _TRAVEL_OPENING_DEDUP_SECONDS]
+    for item in expired:
+        _RECENT_TRAVEL_OPENINGS.pop(item, None)
+    if key in _RECENT_TRAVEL_OPENINGS:
+        return False
+    _RECENT_TRAVEL_OPENINGS[key] = now
+    return True
 
 
 class _RetryingHTTPXRequest(HTTPXRequest):
@@ -222,6 +240,9 @@ async def answer_callback(update, context):
     cid = str(q.message.chat_id)
     bot = context.bot
     data = str(getattr(q, "data", "") or "")
+    if not _claim_travel_opening(cid, getattr(q.message, "message_id", None), data):
+        await q.answer()
+        return
     topic = bot_callbacks._status_topic(data) or "Меню"
     budget = 15 if topic in {"wardrobe", "food", "leisure", "travel"} else 10
     trace = tracking.start_action(cid, topic, data or "callback", budget_seconds=budget)

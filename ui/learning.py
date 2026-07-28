@@ -369,7 +369,7 @@ def game_hint(ui, hint):
 
 def learning_settings(active_language, active_level):
     b = MessageBuilder()
-    b.section("🎚️ Предпочтения")
+    b.section("📌 Предпочтения")
     b.spacer()
     b.labeled_line("Активный язык")
     b.bold(active_language)

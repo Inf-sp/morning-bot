@@ -19,7 +19,7 @@ def personalization():
 
 def cuisines(current):
     b = MessageBuilder()
-    b.section("🎚️ Предпочтения")
+    b.section("📌 Предпочтения")
     b.line("Выбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника с их учётом.")
     b.spacer()
     b.bold("Сейчас:")
@@ -87,14 +87,14 @@ def style_custom_input():
 
 def style_pick():
     b = MessageBuilder()
-    b.section("🎚️ Предпочтения")
+    b.section("📌 Предпочтения")
     b.line("Выбери из предложенных или опиши своими словами — бот учтёт при подборе образа:")
     return b.build_stripped()
 
 
 def wardrobe_style(styles, fit, palette, avoid):
     b = MessageBuilder()
-    b.section("🎚️ Предпочтения")
+    b.section("📌 Предпочтения")
     b.spacer()
     b.labeled_line("Стиль", " · ".join(styles) if styles else "не выбран")
     b.labeled_line("Посадка", fit or "не выбрана")

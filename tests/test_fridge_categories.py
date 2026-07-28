@@ -85,14 +85,14 @@ def test_fridge_home_has_available_counts_and_delete_before_navigation(monkeypat
     message = bot.messages[-1]
     assert message["text"].startswith("🎚️ Мой холодильник · 2 продукта в наличии")
     assert _labels(message["reply_markup"]) == [
-        ["🆕 Добавить продукт"],
+        ["📌 Предпочтения"],
         ["Мясо и рыба · 1"],
         ["Овощи и фрукты · 1"],
         ["Молочное и напитки · 0"],
         ["Бакалея · 0"],
         ["Специи и соусы · 0"],
         ["Заморозка · 0"],
-        ["🎚️ Предпочтения"],
+        ["🆕 Добавить продукт"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 

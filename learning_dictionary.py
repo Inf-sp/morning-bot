@@ -513,7 +513,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     chunk = entries[start:start + _DICT_LIST_PAGE_SIZE]
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     rows = [
-        [InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")],
+        [InlineKeyboardButton("📌 Предпочтения", callback_data="set_learning_dict")],
     ]
     word_buttons = []
     for item in chunk:
@@ -532,8 +532,8 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
             InlineKeyboardButton("◀️", callback_data=f"a_dictlang_{lang}_{previous_page}"),
             InlineKeyboardButton("▶️", callback_data=f"a_dictlang_{lang}_{next_page}"),
         ])
-    rows.append([InlineKeyboardButton("🎚️ Предпочтения", callback_data="set_learning_dict")])
     rows.append([InlineKeyboardButton("✨ Подобрать слова", callback_data=f"a_dictseed_start_{lang}")])
+    rows.append([InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     if entries:
         text = f"{flag} Мой словарь · {len(entries)} слов и фраз"

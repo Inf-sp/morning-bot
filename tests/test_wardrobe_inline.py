@@ -332,12 +332,13 @@ def test_purchase_check_does_not_invent_zero_compatibility():
     assert "Подойдёт: недостаточно данных" in message.text
 
 
-def test_purchase_action_sits_directly_below_other_outfit():
-    assert _labels(wardrobe.build_wardrobe_keyboard())[:2] == [
+def test_wardrobe_home_actions_use_one_column():
+    assert _labels(wardrobe.build_wardrobe_keyboard())[:3] == [
         ["✨ Другой образ"],
-        ["🧐 Оценить покупку", "🎚️ Мой шкаф"],
+        ["🧐 Оценить покупку"],
+        ["🎚️ Мой шкаф"],
     ]
-    assert "🎚️ Предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
+    assert "📌 Предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
 
 
 def test_other_outfit_keeps_result_card_instead_of_deleting_it(monkeypatch):
@@ -607,7 +608,7 @@ def test_personalized_main_sections_keep_the_main_menu_while_loading(monkeypatch
         assert calls[-1] == ("stop", True)
 
 
-def test_closet_screen_does_not_show_edit_button(monkeypatch):
+def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
     class Bot:
         message = None
 
@@ -624,4 +625,5 @@ def test_closet_screen_does_not_show_edit_button(monkeypatch):
     labels = _labels(bot.message["reply_markup"])
     assert labels[-2] == ["🆕 Добавить вещь"]
     assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    assert all(len(row) == 1 for row in labels[:-1])
     assert all("✏️ Изменить" not in row for row in labels)

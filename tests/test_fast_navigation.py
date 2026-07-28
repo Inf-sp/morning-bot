@@ -123,6 +123,44 @@ def test_callback_ack_runs_in_parallel_with_handler(monkeypatch):
     asyncio.run(asyncio.wait_for(bot.answer_callback(Update(), Context()), timeout=1))
 
 
+def test_duplicate_travel_taps_start_one_action(monkeypatch):
+    calls = []
+    release = asyncio.Event()
+    bot._RECENT_TRAVEL_OPENINGS.clear()
+
+    class Query:
+        data = "m_travel"
+        message = type("Message", (), {"chat_id": "travel-user", "message_id": 17})()
+
+        async def answer(self):
+            return None
+
+    class Context:
+        bot = object()
+
+    async def handle(*_args, **_kwargs):
+        calls.append("travel")
+        await release.wait()
+
+    monkeypatch.setattr(bot.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot.tracking, "touch", lambda _cid: None)
+    monkeypatch.setattr(bot.tracking, "start_action", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(bot.tracking, "finish_action", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(bot.tracking, "mark_first_feedback", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(bot.bot_callbacks, "handle", handle)
+
+    async def run():
+        updates = [type("Update", (), {"callback_query": Query()})() for _ in range(2)]
+        tasks = [asyncio.create_task(bot.answer_callback(update, Context())) for update in updates]
+        await asyncio.sleep(0)
+        release.set()
+        await asyncio.gather(*tasks)
+
+    asyncio.run(run())
+
+    assert calls == ["travel"]
+
+
 def test_telegram_connect_timeout_is_retried_once(monkeypatch):
     calls = {"count": 0}
 

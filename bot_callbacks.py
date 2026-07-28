@@ -510,6 +510,10 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "book_prefs":
         await leisure_books.send_book_preferences(bot, cid, q)
         return
+    if data.startswith("bookpref_"):
+        await _ack(q)
+        await leisure_books.toggle_book_preference(bot, cid, data, q)
+        return
     if data == "artist_favorites":
         await cleanup.open_collection(bot, cid, "music_favorite_artists", back="m_music")
         return

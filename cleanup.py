@@ -43,7 +43,8 @@ _SEEN_STORE_KEYS = {"movies": config.MOVIE_SEEN_KEY, "books": config.BOOK_SEEN_K
                     "artists": config.MUSIC_SEEN_KEY}
 
 def _collection(id, owner, title, storage_key, item_type, back, actions,
-                note_group=None, add_button=None, footer_button=None):
+                note_group=None, add_button=None, menu_button=None,
+                add_button_at_bottom=False, allow_edit=True):
     return {
         "id": id,
         "owner": owner,
@@ -54,7 +55,9 @@ def _collection(id, owner, title, storage_key, item_type, back, actions,
         "actions": actions,
         "note_group": note_group,
         "add_button": add_button,
-        "footer_button": footer_button,
+        "menu_button": menu_button,
+        "add_button_at_bottom": add_button_at_bottom,
+        "allow_edit": allow_edit,
     }
 
 
@@ -64,7 +67,9 @@ COLLECTIONS = {
         "m_movie", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить фильм", "as_loveadd_movies"),
-        footer_button=("🎚️ Предпочтения", "movie_prefs")),
+        menu_button=("📌 Предпочтения", "movie_prefs"),
+        add_button_at_bottom=True,
+        allow_edit=False),
     "cinema_watched": _collection(
         "cinema_watched", "cinema", f"{ui_label('seen', 'Смотрел')} · {ui_label('cinema', 'Кино')}", config.MOVIE_SEEN_KEY, "movie",
         "m_movie", [{"id": "remove", "label": "Убрать из просмотренного", "confirm": False}]),
@@ -77,7 +82,9 @@ COLLECTIONS = {
         "m_books", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить книгу", "as_loveadd_books"),
-        footer_button=("🎚️ Предпочтения", "book_prefs")),
+        menu_button=("📌 Предпочтения", "book_prefs"),
+        add_button_at_bottom=True,
+        allow_edit=False),
     "books_read": _collection(
         "books_read", "books", f"{ui_label('seen', 'Прочитано')} · {ui_label('books', 'Книги')}", config.BOOK_SEEN_KEY, "book",
         "m_books", [{"id": "remove", "label": "Убрать из прочитанного", "confirm": False}]),
@@ -90,7 +97,9 @@ COLLECTIONS = {
         "m_music", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить артиста", "as_loveadd_artists"),
-        footer_button=("🎚️ Предпочтения", "music_prefs")),
+        menu_button=("📌 Предпочтения", "music_prefs"),
+        add_button_at_bottom=True,
+        allow_edit=False),
     "music_hidden_artists": _collection(
         "music_hidden_artists", "music", "Скрытые артисты", config.MUSIC_DISLIKE_KEY, "artist",
         "m_music", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
@@ -763,8 +772,13 @@ async def _render_view(bot, cid, view_id, q=None):
         lines.append("")
     rows = []
     cfg = _collection_cfg(ctx)
+    menu_button = cfg.get("menu_button") if cfg else None
+    if menu_button:
+        label, callback_data = menu_button
+        rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
     add_button = cfg.get("add_button") if cfg else _view_add_button(ctx)
-    if add_button:
+    add_button_at_bottom = bool(cfg and cfg.get("add_button_at_bottom"))
+    if add_button and not add_button_at_bottom:
         label, callback_data = add_button
         rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
     for full_id, lbl in chunk:
@@ -788,14 +802,14 @@ async def _render_view(bot, cid, view_id, q=None):
         page_ids = {i for i, _ in chunk}
         page_label = "✅ Снять выбор на странице" if page_ids <= sel else choose_label("Выбрать все на странице")
         rows.append([InlineKeyboardButton(page_label, callback_data=f"cla:{view_id}:{page}")])
-    footer_button = cfg.get("footer_button") if cfg else None
-    if footer_button:
-        label, callback_data = footer_button
+    if add_button and add_button_at_bottom:
+        label, callback_data = add_button
         rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
-    rows.append([InlineKeyboardButton(
-        "Готово" if view.get("editing") else "✏️ Изменить",
-        callback_data=f"cledit:{view_id}:{0 if view.get('editing') else 1}",
-    )])
+    if not cfg or cfg.get("allow_edit", True):
+        rows.append([InlineKeyboardButton(
+            "Готово" if view.get("editing") else "✏️ Изменить",
+            callback_data=f"cledit:{view_id}:{0 if view.get('editing') else 1}",
+        )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=view["back"]),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
@@ -881,6 +895,8 @@ async def handle_view_callback(bot, cid, data, q=None):
         await _render_view(bot, cid, view_id, q=q)
         return
     if op == "cledit":
+        if not (_collection_cfg(ctx) or {}).get("allow_edit", True):
+            return
         view["editing"] = bool(int(rest[0]))
         if not view["editing"]:
             view["selected_ids"].clear()

@@ -67,9 +67,11 @@ def test_dictionary_contains_learning_preferences(monkeypatch):
 
     asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl"))
 
-    assert _labels(bot.message["reply_markup"])[-3:] == [
-        ["🎚️ Предпочтения"],
+    rows = _labels(bot.message["reply_markup"])
+    assert rows[0] == ["📌 Предпочтения"]
+    assert rows[-3:] == [
         ["✨ Подобрать слова"],
+        ["🆕 Добавить слово"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
