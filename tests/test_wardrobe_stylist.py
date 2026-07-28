@@ -1,6 +1,8 @@
 import os
 import asyncio
 
+import pytest
+
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
@@ -13,6 +15,7 @@ from wardrobe_model import normalize_parsed_item, public_item_name
 from wardrobe_outfit import (
     SAFE_NEUTRAL_STYLE_TIP,
     build_style_tip,
+    outfit_display_order,
     pick_best_outfit,
     validate_outfit_copy,
 )
@@ -104,6 +107,81 @@ def test_suitable_accessory_is_preferred_when_it_is_available():
     )
 
     assert any(item["id"] == "a1" for item in outfit)
+
+
+def test_layer_misfiled_as_top_is_completed_with_a_base_top():
+    wardrobe_data = {"zones": {
+        # Старые вещи могли быть добавлены AI в «Верх», поэтому роль определяем
+        # по самой вещи, а не доверяем только сохранённой зоне.
+        "Верх": {"Другое": [
+            _item("vest", "Верх", "Чёрный жилет без рукавов"),
+            _item("tee", "Верх", "Белая футболка"),
+        ]},
+        "Низ": {"Брюки": [_item("trousers", "Низ", "Чёрные брюки")]},
+        "Обувь": {"Кеды": [_item("sneakers", "Обувь", "Бежевые кеды")]},
+    }}
+
+    outfit = pick_best_outfit(
+        wardrobe_data,
+        {"tmax": 20, "has_rain": False, "strong_wind": False, "warm": True},
+        [],
+        "",
+    )
+
+    assert outfit is not None
+    assert {item["id"] for item in outfit} == {"vest", "tee", "trousers", "sneakers"}
+
+
+def test_layer_without_a_base_top_is_not_a_complete_outfit():
+    wardrobe_data = {"zones": {
+        "Верх": {"Другое": [_item("vest", "Верх", "Чёрный жилет без рукавов")]},
+        "Низ": {"Брюки": [_item("trousers", "Низ", "Чёрные брюки")]},
+        "Обувь": {"Кеды": [_item("sneakers", "Обувь", "Бежевые кеды")]},
+    }}
+
+    outfit = pick_best_outfit(
+        wardrobe_data,
+        {"tmax": 20, "has_rain": False, "strong_wind": False, "warm": True},
+        [],
+        "",
+    )
+
+    assert outfit is None
+
+
+@pytest.mark.parametrize("layer_name", [
+    "Серая рубашка overshirt",
+    "Чёрный кардиган",
+    "Чёрная ветровка",
+])
+def test_other_layers_and_outerwear_do_not_replace_base_top(layer_name):
+    wardrobe_data = {"zones": {
+        "Верх": {"Другое": [_item("layer", "Верх", layer_name)]},
+        "Низ": {"Брюки": [_item("trousers", "Низ", "Чёрные брюки")]},
+        "Обувь": {"Кеды": [_item("sneakers", "Обувь", "Бежевые кеды")]},
+    }}
+
+    outfit = pick_best_outfit(
+        wardrobe_data,
+        {"tmax": 20, "has_rain": False, "strong_wind": False, "warm": True},
+        [],
+        "",
+    )
+
+    assert outfit is None
+
+
+def test_layer_is_shown_after_its_base_top():
+    items = [
+        _item("vest", "Верх", "Чёрный жилет без рукавов"),
+        _item("trousers", "Низ", "Чёрные брюки"),
+        _item("sneakers", "Обувь", "Бежевые кеды"),
+        _item("tee", "Верх", "Белая футболка"),
+    ]
+
+    assert [item["id"] for item in sorted(items, key=outfit_display_order)] == [
+        "tee", "vest", "trousers", "sneakers",
+    ]
 
 
 def test_weather_intro_changes_between_new_outfits():

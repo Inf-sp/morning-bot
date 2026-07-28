@@ -23,6 +23,80 @@ SAFE_NEUTRAL_STYLE_TIP = SAFE_NEUTRAL_STYLE_TIPS[0]
 _SUNGLASSES_MARKERS = ("солнцезащит", "солнечн", "очки от солнца", "sunglasses")
 _RAINCOAT_MARKERS = ("дождевик", "raincoat")
 
+# Зона вещи недостаточна для построения комплекта: старые вещи и ответ AI при
+# добавлении могли сохранить жилет или overshirt в «Верхе». Роль определяем по
+# самой вещи перед финальным выбором, чтобы дополнительный слой не подменял
+# базовый верх.
+_BASE_TOP_MARKERS = (
+    "футболк", "майк", "рубаш", "лонгслив", "поло", "топ", "водолазк",
+    "свитер", "джемпер", "свитш", "худи", "толстовк", "кофт",
+)
+_LAYER_MARKERS = (
+    "жилет", "кардиган", "overshirt", "оверши", "shacket", "шакет",
+    "пиджак", "блейзер",
+)
+_OUTERWEAR_MARKERS = (
+    "куртк", "ветровк", "пальто", "плащ", "дождевик", "парка", "пуховик",
+    "тренч", "анорак", "бомбер",
+)
+_ROLE_DISPLAY_ORDER = {
+    "base_top": 0,
+    "layer": 1,
+    "bottom": 2,
+    "shoes": 3,
+    "outerwear": 4,
+}
+
+
+def outfit_role(item):
+    """Возвращает функциональную роль вещи в комплекте, не меняя её категорию в шкафу."""
+    facts = " ".join(str(item.get(key) or "") for key in ("name", "subcategory")).casefold()
+    zone = str(item.get("zone") or "")
+    if any(marker in facts for marker in _LAYER_MARKERS):
+        return "layer"
+    if zone == "Верхняя одежда" or any(marker in facts for marker in _OUTERWEAR_MARKERS):
+        return "outerwear"
+    if zone == "Низ":
+        return "bottom"
+    if zone == "Обувь":
+        return "shoes"
+    if any(marker in facts for marker in _BASE_TOP_MARKERS):
+        return "base_top"
+    return ""
+
+
+def outfit_display_order(item):
+    """Порядок вещей в карточке: базовый верх, слой, низ, обувь, верхняя одежда."""
+    return _ROLE_DISPLAY_ORDER.get(outfit_role(item), {
+        "Верх": 0, "Низ": 2, "Обувь": 3, "Верхняя одежда": 4, "Аксессуары": 5,
+    }.get(item.get("zone"), 9))
+
+
+def is_complete_outfit(items):
+    """Проверяет, что дополнительный или верхний слой не заменил базовый верх."""
+    roles = [outfit_role(item) for item in items]
+    needs_base_top = any(role in {"layer", "outerwear"} for role in roles)
+    return not needs_base_top or "base_top" in roles
+
+
+def _completed_layered_combos(combo, candidates):
+    """Добавляет возможный базовый верх к неполному комплекту.
+
+    Нужны все варианты, а не первая футболка: затем общий скоринг выберет
+    подходящий к погоде, стилю и истории вещей вариант.
+    """
+    if is_complete_outfit(combo):
+        return [combo]
+    combo_ids = {item.get("id") for item in combo if item.get("id")}
+    base_tops = _top_candidates([
+        item
+        for pool in candidates.values()
+        for item in pool
+        if outfit_role(item) == "base_top"
+        and (not item.get("id") or item.get("id") not in combo_ids)
+    ])
+    return [combo + [base_top] for base_top in base_tops]
+
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
 
@@ -217,8 +291,8 @@ def _top_candidates(items, limit=3):
 def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=None,
                      selected_styles=None):
     """Собирает кандидатов, перебирает ограниченные комбинации (топ-3 на зону),
-    возвращает лучший набор вещей (list[item]) или None, если нет кандидатов хотя
-    бы на одну обязательную зону (Верх/Низ/Обувь)."""
+    возвращает лучший полный набор вещей (list[item]) или None, если нет
+    кандидатов для базовой части образа (верх/низ/обувь)."""
     candidates = select_outfit_candidates(w, weather_ctx)
     required = ["Верх", "Низ", "Обувь"]
     if any(not candidates.get(z) for z in required):
@@ -234,7 +308,15 @@ def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item
             yield [it for it in combo if it is not None]
 
     previous_item_ids = set(previous_item_ids or [])
-    combos = list(_combos())
+    raw_combos = list(_combos())
+    # Финальная программная проверка комплектности: жилет, кардиган или
+    # overshirt не может стать единственным верхом. Если базовый верх есть в
+    # шкафу, добавляем его в вариант и только затем считаем общий score.
+    combos = [
+        complete
+        for combo in raw_combos
+        for complete in _completed_layered_combos(combo, candidates)
+    ]
     if previous_item_ids:
         # «Другой образ» должен менять основу комплекта, а не одну случайную вещь.
         # Для полного набора из 4–5 элементов требуем минимум две замены; для
@@ -258,7 +340,7 @@ def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item
         ], prefs_text, selected_styles), combo) for _s, combo in scored]
         rescored.sort(key=lambda x: x[0], reverse=True)
         best_score, best_combo = rescored[0]
-    return best_combo
+    return best_combo if is_complete_outfit(best_combo) else None
 
 
 # ---------- текст образа: локальный fallback ----------

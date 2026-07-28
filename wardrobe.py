@@ -25,6 +25,7 @@ from wardrobe_model import (
 from wardrobe_outfit import (
     build_style_tip,
     choose_outfit_style,
+    outfit_display_order,
     pick_best_outfit,
     save_outfit_feedback,
 )
@@ -562,8 +563,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
             await bot.send_message(chat_id=cid, text=no_text, parse_mode="HTML", reply_markup=no_kb)
         return
 
-    order = {"Верх": 0, "Низ": 1, "Обувь": 2, "Верхняя одежда": 3, "Аксессуары": 4}
-    best_sorted = sorted(best, key=lambda it: order.get(it.get("zone"), 9))
+    best_sorted = sorted(best, key=outfit_display_order)
     item_ids = [it.get("id") for it in best_sorted]
     fallback_tip = build_style_tip(best_sorted, weather_ctx)
     purchase_recommendation = _get_or_create_purchase_recommendation(
