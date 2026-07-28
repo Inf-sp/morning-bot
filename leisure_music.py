@@ -26,6 +26,73 @@ _MUSIC_GENRES = [
 ]
 _RECENT_ARTISTS_LIMIT = 40
 
+# Последний резерв, когда все AI-провайдеры временно недоступны. Это реальные,
+# достаточно известные артисты с существующими треками; выбор всё равно исключает
+# уже знакомых, сохранённых, отклонённых и недавно показанных.
+_LOCAL_ARTIST_FALLBACKS = {
+    "indie": [
+        {"artist": "Big Thief", "desc": "Живой инди-рок с хрупким вокалом и неожиданными поворотами.",
+         "why": ["Тёплая, детальная гитарная музыка без лишнего шума.", "Песни звучат свободнее и острее обычного инди-попа."],
+         "tracks": ["Not", "Simulation Swarm", "Vampire Empire"],
+         "fact": "Американская инди-группа из Бруклина."},
+    ],
+    "pop": [
+        {"artist": "Caroline Polachek", "desc": "Артистичный поп с воздушным вокалом и точной электроникой.",
+         "why": ["Мелодии остаются лёгкими, но аранжировки не банальные.", "Это поп с более странным и кинематографичным настроением."],
+         "tracks": ["Bunny Is a Rider", "Welcome to My Island", "So Hot You're Hurting My Feelings"],
+         "fact": "Американская певица и продюсер."},
+    ],
+    "electronic": [
+        {"artist": "Fred again..", "desc": "Электроника, собранная из живых голосов, дневниковых фраз и мягких битов.",
+         "why": ["Танцевальная музыка здесь остаётся очень личной и мелодичной.", "Подойдёт, если хочется движения без холодного клубного звучания."],
+         "tracks": ["Delilah (pull me out of this)", "Danielle (smile on my face)", "adore u"],
+         "fact": "Британский электронный музыкант и продюсер."},
+    ],
+    "rnb": [
+        {"artist": "Kelela", "desc": "Гладкий альтернативный R&B на стыке клубной электроники и мягкого соула.",
+         "why": ["Вокал остаётся близким и спокойным, даже когда биты становятся резче.", "Звучание смелее привычного современного R&B."],
+         "tracks": ["Rewind", "Washed Away", "On the Run"],
+         "fact": "Американская певица и автор песен."},
+    ],
+    "rock": [
+        {"artist": "Fontaines D.C.", "desc": "Нервный, мелодичный рок с тёмным городским настроением.",
+         "why": ["Есть напор и гитары, но песни не превращаются в шум.", "Подойдёт для более собранного и драматичного настроения."],
+         "tracks": ["I Love You", "Starburster", "Favourite"],
+         "fact": "Ирландская рок-группа, основанная в Дублине."},
+    ],
+    "hiphop": [
+        {"artist": "Little Simz", "desc": "Точный хип-хоп с сильным голосом, джазовыми деталями и личными историями.",
+         "why": ["Ритм и тексты держат внимание без показной агрессии.", "В музыке много масштаба, но она остаётся очень личной."],
+         "tracks": ["Introvert", "Gorilla", "Woman"],
+         "fact": "Британская рэперша из Лондона."},
+    ],
+    "default": [
+        {"artist": "FKA twigs", "desc": "Хрупкий арт-поп, где R&B, электроника и камерный вокал постоянно меняют форму.",
+         "why": ["Много деталей, воздуха и эмоционального напряжения.", "Звучание смелее обычного попа, но остаётся очень мелодичным."],
+         "tracks": ["Two Weeks", "cellophane", "oh my love"],
+         "fact": "Британская певица, автор песен и танцовщица."},
+        {"artist": "Khruangbin", "desc": "Мягкая гитарная психоделика с фанком, соулом и долгими тёплыми грувами.",
+         "why": ["Подходит для спокойного фона, но в музыке много мелких деталей.", "Здесь больше солнечного грува, чем в привычном инди-роке."],
+         "tracks": ["Time (You and I)", "Friday Morning", "Texas Sun"],
+         "fact": "Американское трио из Хьюстона."},
+        {"artist": "Little Simz", "desc": "Точный хип-хоп с сильным голосом, джазовыми деталями и личными историями.",
+         "why": ["Ритм и тексты держат внимание без показной агрессии.", "В музыке много масштаба, но она остаётся очень личной."],
+         "tracks": ["Introvert", "Gorilla", "Woman"],
+         "fact": "Британская рэперша из Лондона."},
+    ],
+}
+
+
+def _local_artist_fallback(known, category=None):
+    """Возвращает нового артиста без сетевого запроса, если AI-цепочка недоступна."""
+    key = category.get("value") if isinstance(category, dict) else "default"
+    candidates = [*_LOCAL_ARTIST_FALLBACKS.get(key, []), *_LOCAL_ARTIST_FALLBACKS["default"]]
+    known = {str(value or "").casefold() for value in known}
+    for item in candidates:
+        if item["artist"].casefold() not in known:
+            return dict(item)
+    return None
+
 
 def _cached_artist(cid):
     entry = (store._load(config.MUSIC_RECO_CACHE_KEY) or {}).get(str(cid)) or {}
@@ -301,7 +368,10 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
                 1000, tier="leisure", route="gemini", module="leisure")
         except Exception as e:
             _log.warning("send_listen: allm_json attempt=%s failed cid=%s: %r", attempt, cid, e, exc_info=True)
-            cand = None
+            # Cooldown или таймаут цепочки не исправится мгновенным повтором.
+            # Сразу переходим к локальному резерву, чтобы не показывать ошибку.
+            data = _local_artist_fallback(known, category)
+            break
         cand_artist = str(cand.get("artist") or "").strip() if isinstance(cand, dict) else ""
         _log.info("send_listen: attempt=%s cid=%s cand_type=%s cand_artist=%r",
                   attempt, cid, type(cand).__name__, cand_artist)
@@ -311,6 +381,8 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
         if cand_artist:
             rejected.append(cand_artist)
         data = cand
+    if not data or not data.get("artist"):
+        data = _local_artist_fallback(known, category)
     if not data or not data.get("artist"):
         _log.info("send_listen: no data after retries cid=%s data=%r", cid, data)
         if preview:
