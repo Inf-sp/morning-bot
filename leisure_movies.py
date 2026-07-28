@@ -231,7 +231,7 @@ async def send_recos(bot, cid, kind):
 
 def _movie_home_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Другое кино", callback_data="movie_reco")],
+        [InlineKeyboardButton("✨ Подобрать кино", callback_data="movie_reco")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
          InlineKeyboardButton("💾 Сохранения", callback_data="movie_saved")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
@@ -355,15 +355,29 @@ async def get_local_now_playing(cid, *, limit=20, refresh=False):
 
 
 async def send_movie_home(bot, cid, q=None):
-    """Открытие Кино сразу даёт персональный фильм, а не второй экран афиши."""
-    await send_recos(bot, cid, "movie")
+    """Короткая витрина текущего локального проката без AI."""
+    await send_movie_now_playing(bot, cid)
+
+
+def _featured_now_playing(items):
+    """На витрину попадают только достаточно известные картины из проката."""
+    featured = []
+    for item in items or []:
+        try:
+            rating = float(item.get("rating") or 0)
+            votes = int(item.get("vote_count") or 0)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if rating >= 6.5 and votes >= 100:
+            featured.append(item)
+    return featured
 
 
 async def send_movie_now_playing(bot, cid, q=None, status=None):
     city = _movie_city(cid)
-    now_playing = await get_local_now_playing(cid, limit=30)
+    now_playing = _featured_now_playing(await get_local_now_playing(cid, limit=20))[:5]
     msg = leisure_ui.movie_now_playing_screen(city, now_playing)
-    kb = back_menu_keyboard("m_movie")
+    kb = _movie_home_kb()
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
         return

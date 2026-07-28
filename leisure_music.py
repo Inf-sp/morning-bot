@@ -8,6 +8,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
 import config
+import music_releases
 import recommendation_stoplist
 import store
 from ui import leisure as leisure_ui
@@ -215,7 +216,69 @@ def music_home_keyboard():
 
 
 async def send_music_home(bot, cid, q=None):
-    await send_listen(bot, cid)
+    concerts, albums = await asyncio.gather(
+        _weekly_concerts(cid),
+        asyncio.to_thread(
+            music_releases.weekly_new_albums,
+            str(store.get_settings(cid).get("cc") or "NL"),
+        ),
+        return_exceptions=True,
+    )
+    if isinstance(concerts, Exception):
+        _log.warning("music home concerts failed cid=%s: %r", cid, concerts)
+        concerts = []
+    if isinstance(albums, Exception):
+        _log.warning("music home releases failed cid=%s: %r", cid, albums)
+        albums = []
+    msg = leisure_ui.music_week_screen(concerts or [], albums or [])
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities,
+        reply_markup=music_home_keyboard(),
+    )
+
+
+async def _weekly_concerts(cid):
+    """Ближайшие подтверждённые концерты любимых артистов без web/AI fallback."""
+    import leisure_concerts
+    from util import _MONTHS
+
+    settings_data = store.get_settings(cid)
+    cc = str(settings_data.get("cc") or "NL").upper()
+    artists = leisure_concerts._ensure_artists(cid)
+    if not artists or not config.TICKETMASTER_API_KEY:
+        return []
+    events = leisure_concerts._concerts_cache_get(cid, cc)
+    if events is None:
+        now = datetime.now(config.TZ)
+        events = await leisure_concerts._ticketmaster_events_many(
+            artists, cc,
+            start_dt=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            size=3, limit=20,
+        )
+        leisure_concerts._concerts_cache_set(cid, cc, events)
+
+    today = datetime.now(config.TZ).date().isoformat()
+    rows, seen = [], set()
+    for event in events:
+        artist = str(event.get("_artist") or "").strip()
+        event_date = str(((event.get("dates") or {}).get("start") or {}).get("localDate") or "")
+        venue = (((event.get("_embedded") or {}).get("venues") or [{}])[0])
+        city = str(((venue.get("city") or {}).get("name") or "")).strip()
+        key = (artist.casefold(), event_date, city.casefold())
+        if not artist or (event_date and event_date < today) or key in seen:
+            continue
+        seen.add(key)
+        try:
+            year, month, day = event_date.split("-")
+            date_label = f"{int(day)} {_MONTHS[int(month) - 1]}"
+            if int(year) != datetime.now(config.TZ).year:
+                date_label += f" {year}"
+        except (ValueError, IndexError):
+            date_label = event_date
+        rows.append({"artist": artist, "date": date_label, "place": city})
+        if len(rows) >= 3:
+            break
+    return rows
 
 
 def _music_genre(key):

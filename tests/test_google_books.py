@@ -118,6 +118,27 @@ def test_no_google_books_key_skips_network(monkeypatch):
     assert google_books.find_volume("1984", author="George Orwell") is None
 
 
+def test_new_releases_request_uses_newest_order_and_deduplicates(monkeypatch):
+    calls = []
+
+    def search(query, max_results, *, order_by):
+        calls.append((query, max_results, order_by))
+        return [{"id": query, "volumeInfo": {
+            "title": "Одна книга", "authors": ["Автор"],
+        }}]
+
+    monkeypatch.setattr(google_books, "_search_items", search)
+
+    result = google_books.search_new_releases(12)
+
+    assert calls == [
+        ("subject:Fiction", 12, "newest"),
+        ("subject:Biography", 12, "newest"),
+        ("subject:History", 12, "newest"),
+    ]
+    assert len(result) == 1
+
+
 def test_enrichment_failure_returns_original_card(monkeypatch):
     monkeypatch.setattr(
         google_books, "find_volume",

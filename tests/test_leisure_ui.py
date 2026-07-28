@@ -21,7 +21,7 @@ def _labels(markup):
 
 def test_category_homes_keep_their_own_saved_and_preferences():
     assert _labels(leisure_movies._movie_home_kb()) == [
-        ["✨ Другое кино"],
+        ["✨ Подобрать кино"],
         ["🎭 По жанру", "💾 Сохранения"],
         ["🎚️ Предпочтения"],
         ["⬅️ Назад", "#️⃣ Главная"],
@@ -141,6 +141,29 @@ def test_book_card_has_complete_description_and_reader_rating():
     assert "⭐ Оценка читателей: 4.7/5 · 1 234 оценок" in message.text
 
 
+def test_category_week_screens_are_compact_and_show_only_content():
+    movie = leisure_movies.leisure_ui.movie_now_playing_screen("Алкмар", [{
+        "title": "Фильм", "genre": "drama", "overview": "Короткая завязка фильма",
+    }])
+    books = leisure_movies.leisure_ui.weekly_books_screen([{
+        "title": "Новая книга", "author": "Автор", "rating": 4.4,
+        "ratings_count": 120, "description": "Законченная завязка сюжета",
+    }])
+    music = leisure_movies.leisure_ui.music_week_screen(
+        [{"artist": "Romy", "date": "21 августа", "place": "Биддингхёйзен"}],
+        [{"artist": "Big Thief", "title": "Double Infinity"}],
+    )
+
+    assert "🎬 Кино на сегодня · Алкмар" in movie.text
+    assert "🎟️ Идёт в кино" in movie.text
+    assert "Короткая завязка фильма." in movie.text
+    assert "📖 Книги этой недели" in books.text
+    assert "«Новая книга» · Автор · ⭐ 4.4" in books.text
+    assert "🎧 Музыка этой недели" in music.text
+    assert "🎫 Ближайшие концерты" in music.text
+    assert "💿 Новые альбомы" in music.text
+
+
 def test_book_quote_uses_the_my_day_italic_format():
     message = leisure_books._book_text({"title": "1984", "quote": "Война - это мир."})
     assert "💭 «Война - это мир.»" in message.text
@@ -175,3 +198,30 @@ def test_local_cinema_catalogue_is_reused_for_a_week(monkeypatch):
     asyncio.run(leisure_movies.get_local_now_playing("42", limit=3))
     asyncio.run(leisure_movies.get_local_now_playing("42", limit=3))
     assert calls == {"cinema": 1, "tmdb": 1}
+
+
+def test_movie_home_keeps_only_well_known_current_releases():
+    featured = leisure_movies._featured_now_playing([
+        {"title": "Хит", "rating": 7.3, "vote_count": 950},
+        {"title": "Мало голосов", "rating": 9.0, "vote_count": 5},
+        {"title": "Слабая оценка", "rating": 6.2, "vote_count": 900},
+    ])
+    assert [item["title"] for item in featured] == ["Хит"]
+
+
+def test_weekly_books_keep_only_current_popular_releases(monkeypatch):
+    today = datetime.now(config.TZ).date().isoformat()
+    stored = {}
+
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: stored.update(value))
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
+        {"title": "Заметная", "published_date": today, "rating": 4.5, "ratings_count": 140},
+        {"title": "Без отзывов", "published_date": today, "rating": 4.8, "ratings_count": 2},
+        {"title": "Старая", "published_date": "2025-01-01", "rating": 4.9, "ratings_count": 900},
+    ])
+
+    items = asyncio.run(leisure_books.get_weekly_new_books())
+
+    assert [item["title"] for item in items] == ["Заметная"]
+    assert stored["items"] == items

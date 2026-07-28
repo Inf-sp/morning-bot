@@ -2,7 +2,7 @@
 
 import asyncio
 import random
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -120,7 +120,75 @@ def books_home_keyboard():
 
 
 async def send_books_home(bot, cid, q=None):
-    await send_books_reco(bot, cid)
+    items = await get_weekly_new_books()
+    msg = leisure_ui.weekly_books_screen(items)
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities,
+        reply_markup=books_home_keyboard(),
+    )
+
+
+def _book_week_key() -> str:
+    current = datetime.now(config.TZ).date()
+    year, week, _weekday = current.isocalendar()
+    return f"{year}-W{week:02d}"
+
+
+def _weekly_book_cache_get():
+    entry = store._load(config.BOOK_WEEKLY_CACHE_KEY)
+    if (not isinstance(entry, dict) or entry.get("week") != _book_week_key()
+            or entry.get("date") != datetime.now(config.TZ).date().isoformat()):
+        return None
+    items = entry.get("items")
+    return [dict(item) for item in items] if isinstance(items, list) else []
+
+
+def _weekly_book_cache_set(items):
+    store._save(config.BOOK_WEEKLY_CACHE_KEY, {
+        "week": _book_week_key(),
+        "date": datetime.now(config.TZ).date().isoformat(),
+        "items": [dict(item) for item in (items or []) if isinstance(item, dict)],
+    })
+
+
+def _released_this_week(value: str) -> bool:
+    try:
+        released = date.fromisoformat(str(value or "")[:10])
+    except ValueError:
+        return False
+    today = datetime.now(config.TZ).date()
+    week_start = today - timedelta(days=today.weekday())
+    return week_start <= released <= week_start + timedelta(days=6)
+
+
+def _weekly_book_score(item):
+    try:
+        rating = float(item.get("rating") or 0)
+        ratings_count = int(item.get("ratings_count") or 0)
+    except (TypeError, ValueError):
+        return None
+    # Релиз может быть новым, но его пока никто не знает. В витрине нужны
+    # только книги с уже заметным читательским откликом.
+    if rating < 3.8 or ratings_count < 10:
+        return None
+    return rating * 100 + min(ratings_count, 5000) ** 0.5
+
+
+async def get_weekly_new_books():
+    cached = _weekly_book_cache_get()
+    if cached is not None:
+        return cached
+    candidates = await asyncio.to_thread(google_books.search_new_releases, 20)
+    ranked = []
+    for item in candidates:
+        score = _weekly_book_score(item)
+        if score is None or not _released_this_week(item.get("published_date")):
+            continue
+        ranked.append((score, item))
+    ranked.sort(key=lambda row: row[0], reverse=True)
+    items = [dict(item) for _score, item in ranked[:4]]
+    _weekly_book_cache_set(items)
+    return items
 
 
 def _book_genre_menu_kb():

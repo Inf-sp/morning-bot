@@ -57,13 +57,15 @@ def movie_home_screen(genre_labels, country_label=None, now_playing=None):
 
 def movie_now_playing_screen(country_label, now_playing):
     b = MessageBuilder()
-    b.text_line("🎟️ ")
-    b.bold(f"Сейчас в кино · {country_label}")
+    b.text_line("🎬 ")
+    b.bold(f"Кино на сегодня · {country_label}")
     b.newline()
     if now_playing:
         b.spacer()
+        b.bold("🎟️ Идёт в кино")
+        b.newline()
         for item in now_playing:
-            _format_movie_row(b, item)
+            _format_movie_row(b, item, with_description=True)
     else:
         b.spacer()
         b.line("Пока не удалось подтвердить актуальные показы.")
@@ -355,6 +357,82 @@ def artist_card(data):
         b.bold(ui_label("interesting", "Факт:"))
         b.newline()
         b.line(data["fact"])
+    return b.build_stripped()
+
+
+def weekly_books_screen(items):
+    b = MessageBuilder()
+    b.text_line("📖 ")
+    b.bold("Книги этой недели")
+    b.newline()
+    if not items:
+        b.spacer()
+        b.line("Пока нет подтверждённых заметных новинок этой недели.")
+        return b.build_stripped()
+    b.spacer()
+    b.bold("✨ Новые книги")
+    b.newline()
+    for item in items[:4]:
+        title = str(_item_value(item, "title", "") or "").strip()
+        author = str(_item_value(item, "author", "") or "").strip()
+        if not title:
+            continue
+        b.text_line("• ")
+        b.bold(f"«{title}»")
+        if author:
+            b.text_line(f" · {author}")
+        rating = _item_value(item, "rating")
+        count = _item_value(item, "ratings_count")
+        try:
+            if float(rating) > 0 and int(count) > 0:
+                b.text_line(f" · ⭐ {float(rating):.1f}")
+        except (TypeError, ValueError):
+            pass
+        b.newline()
+        description = clip(str(_item_value(item, "description", "") or ""), limit=115)
+        if description:
+            if description[-1] not in ".!?…":
+                description += "."
+            b.line(description)
+    return b.build_stripped()
+
+
+def music_week_screen(concerts, albums):
+    b = MessageBuilder()
+    b.text_line("🎧 ")
+    b.bold("Музыка этой недели")
+    b.newline()
+    if concerts:
+        b.spacer()
+        b.bold("🎫 Ближайшие концерты")
+        b.newline()
+        for event in concerts[:3]:
+            artist = str(_item_value(event, "artist", "") or "").strip()
+            if not artist:
+                continue
+            meta = [str(_item_value(event, key, "") or "").strip()
+                    for key in ("date", "place")]
+            b.text_line("• ")
+            b.bold(artist)
+            if any(meta):
+                b.text_line(" · " + " · ".join(value for value in meta if value))
+            b.newline()
+    if albums:
+        b.spacer()
+        b.bold("💿 Новые альбомы")
+        b.newline()
+        for album in albums[:4]:
+            artist = str(_item_value(album, "artist", "") or "").strip()
+            title = str(_item_value(album, "title", "") or "").strip()
+            if not artist or not title:
+                continue
+            b.text_line("• ")
+            b.bold(artist)
+            b.text_line(f" — {title}")
+            b.newline()
+    if not concerts and not albums:
+        b.spacer()
+        b.line("Пока нет подтверждённых заметных релизов и концертов этой недели.")
     return b.build_stripped()
 
 

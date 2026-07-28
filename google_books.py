@@ -104,10 +104,11 @@ def _match_score(volume: dict, titles: list[str], author: str) -> float:
     return score
 
 
-def _search_items(query: str, max_results: int = 8) -> list[dict]:
+def _search_items(query: str, max_results: int = 8, *, order_by: str = "relevance") -> list[dict]:
     if not config.GOOGLE_BOOKS_API_KEY or not str(query or "").strip():
         return []
-    cache_key = _norm(query)
+    order_by = "newest" if order_by == "newest" else "relevance"
+    cache_key = f"{_norm(query)}|{order_by}"
     cached = util.ttl_get("google_books", cache_key, _CACHE_TTL)
     if isinstance(cached, list):
         return cached
@@ -134,7 +135,7 @@ def _search_items(query: str, max_results: int = 8) -> list[dict]:
                     "q": query,
                     "key": config.GOOGLE_BOOKS_API_KEY,
                     "maxResults": max(1, min(40, int(max_results))),
-                    "orderBy": "relevance",
+                    "orderBy": order_by,
                     "printType": "books",
                     "projection": "lite",
                 },
@@ -207,6 +208,30 @@ def search_by_subject(subject: str, max_results: int = 40) -> list[dict]:
         except (AttributeError, TypeError, ValueError):
             continue
         if volume.get("title"):
+            volumes.append(volume)
+    return volumes
+
+
+def search_new_releases(max_results: int = 20) -> list[dict]:
+    """Недавние художественные и документальные книги из Google Books.
+
+    Google Books не даёт отдельный чарт продаж. Поэтому дальше отбираются
+    только издания с оценками читателей: это надёжнее, чем называть случайную
+    новую запись в каталоге «топовой».
+    """
+    volumes = []
+    seen = set()
+    per_query = max(1, min(40, int(max_results)))
+    for query in ("subject:Fiction", "subject:Biography", "subject:History"):
+        for item in _search_items(query, max_results=per_query, order_by="newest"):
+            try:
+                volume = _volume(item)
+            except (AttributeError, TypeError, ValueError):
+                continue
+            title = _norm(volume.get("title"))
+            if not title or title in seen:
+                continue
+            seen.add(title)
             volumes.append(volume)
     return volumes
 
