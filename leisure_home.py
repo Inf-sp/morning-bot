@@ -11,6 +11,7 @@ import leisure_concerts
 import leisure_books
 import leisure_movies
 import leisure_music
+import config
 import store
 from ui import leisure as leisure_ui
 from ui.builder import MessageBuilder
@@ -123,6 +124,11 @@ async def send_home(bot, cid, q=None, status=None):
     now_playing = _showcase_movies(
         await leisure_movies.get_local_now_playing(cid, limit=12),
     )
+    has_favorites = any((
+        store.get_list(config.FAVORITE_MOVIES_KEY, cid),
+        store.get_list(config.FAVORITE_ARTISTS_KEY, cid),
+        store.get_list(config.FAVORITE_BOOKS_KEY, cid),
+    ))
 
     b = MessageBuilder()
     b.section(f"🍿 Развлечения на сегодня · {city}")
@@ -168,6 +174,9 @@ async def send_home(bot, cid, q=None, status=None):
         b.line("Три фильма, которые сейчас идут в кино.")
     else:
         b.line("Выбери кино, музыку или книгу — подберу что-то на сегодня.")
+    if not has_favorites:
+        b.spacer()
+        b.line("💡 Добавь любимые фильмы, артистов и книги в Предпочтениях — рекомендации станут точнее.")
     if now_playing:
         b.section("🎟️ Идёт в кино")
         for movie in now_playing:

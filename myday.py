@@ -17,7 +17,6 @@ import ai
 import weather
 import learning
 import learning_dictionary as dictionary
-import dictionary_seed
 import research
 import secure
 import util
@@ -913,35 +912,12 @@ def _build_day_text(cid, *, refresh_current=False):
         _log.warning("[verify] weather: %s", w)
     return text, msg.entities
 
-async def _maybe_prompt_dict_seed(bot, cid):
-    """Если словарь на активном языке пуст, а seed ещё не предлагали - предложить
-    один раз наполнить словарь (§28 CLAUDE.md: стартовые слова по language/level)."""
-    try:
-        lang = learning._active_language_code(cid)
-        words = dictionary.DictionaryRepository(cid).all()
-        has_words = any(
-            dictionary.entry_term(w) and dictionary.entry_language(w) == lang
-            for w in words
-        )
-        if has_words:
-            return
-        prof = store.get_profile(cid)
-        if prof.get("_myday_seed_prompted"):
-            return
-        prof["_myday_seed_prompted"] = True
-        store.set_profile(cid, prof)
-        await dictionary_seed.send_seed_intro(bot, cid, lang)
-    except Exception as e:
-        _log.warning("myday: _maybe_prompt_dict_seed failed: %s", e)
-
-
 async def send_plany(bot, cid, force=False, show_loading=True):
     """Собирает и отправляет сводку «Мой день» без промежуточного «Собираю...» —
     пользователь сразу получает готовый результат одним сообщением. show_loading
     сохранён в сигнатуре для обратной совместимости вызовов, но больше не шлёт
     отдельное сообщение — при холодном кэше показывается только typing-индикатор."""
     import time as _time
-    await _maybe_prompt_dict_seed(bot, cid)
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     cache = None if force else _load_day_cache(cid, today)
     stale = cache is None

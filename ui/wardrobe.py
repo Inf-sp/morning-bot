@@ -87,6 +87,16 @@ def outfit_header(primary_style=""):
     return f"{emoji} Образ на сегодня" + (f" · {style}" if style else "")
 
 
+def empty_wardrobe():
+    b = MessageBuilder()
+    b.section("🧶 Гардероб")
+    b.spacer()
+    b.line("Добавь вещи один раз — дальше я буду собирать образ за тебя.")
+    b.spacer()
+    b.line("Пришли список всей своей одежды одним сообщением. Я сам разложу всё по шкафу.")
+    return b.build_stripped()
+
+
 def render_wardrobe_message(look_data):
     """Образ на сегодня: вещи и стабильная рекомендация покупки.
     Погодная строка и подпись списка намеренно не показываются.

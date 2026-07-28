@@ -14,7 +14,7 @@ def _labels(markup):
     return [[button.text for button in row] for row in markup.inline_keyboard]
 
 
-def test_send_home_includes_inline_keyboard():
+def test_empty_wardrobe_explains_how_to_fill_it():
     class Bot:
         message = None
 
@@ -25,11 +25,14 @@ def test_send_home_includes_inline_keyboard():
 
     asyncio.run(wardrobe.send_home(bot, "pytest-wardrobe-inline"))
 
+    assert bot.message["text"] == (
+        "🧶 Гардероб\n\n"
+        "Добавь вещи один раз — дальше я буду собирать образ за тебя.\n\n"
+        "Пришли список всей своей одежды одним сообщением. Я сам разложу всё по шкафу."
+    )
     assert bot.message["reply_markup"] is not None
     assert _labels(bot.message["reply_markup"]) == [
-        ["✨ Подобрать образ"],
-        ["🧐 Оценить покупку", "🧶 Мой шкаф"],
-        ["🎚️ Предпочтения"],
+        ["🆕 Заполнить шкаф"],
         ["#️⃣ Главная"],
     ]
 
@@ -409,7 +412,6 @@ def test_leisure_navigation_replaces_current_menu(monkeypatch):
     monkeypatch.setattr(bot_callbacks.leisure_home, "send_home", send_home)
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
     monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
-    monkeypatch.setattr(bot_callbacks.firstvisit, "needs_setup", lambda _cid, _section: False)
 
     class Query:
         data = "m_leisure"

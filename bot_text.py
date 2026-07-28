@@ -6,8 +6,6 @@ import re
 import access
 import assistant
 import balance
-import dictionary_seed
-import firstvisit
 import fridge
 import learning_dictionary as dictionary
 import dictionary_import
@@ -140,6 +138,8 @@ async def handle(update, context, remove_reply_keyboard):
             await medicine.answer(bot, cid, text); return
         if kind == "wardrobe_add":
             await wardrobe.add_item(bot, cid, text); return
+        if kind == "wardrobe_fill":
+            await wardrobe.add_item(bot, cid, text, return_to_home=True); return
         if kind == "wardrobe_add_set":
             await wardrobe.add_item_settings(bot, cid, text)
             return
@@ -186,8 +186,6 @@ async def handle(update, context, remove_reply_keyboard):
         if kind and kind.startswith("collect_"):
             import leisure_collection
             await leisure_collection.collect_done(bot, cid, kind[len("collect_"):], text); return
-        if kind and kind.startswith("firstvisit_"):
-            await firstvisit.handle_response(bot, cid, kind[len("firstvisit_"):], text); return
         if kind and kind.startswith("loveadd_"):
             await saved_items.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
         if kind and kind.startswith("loveaddls_"):

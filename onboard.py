@@ -1,8 +1,7 @@
-"""Онбординг нового пользователя: имя → город → языки → уровень → готово."""
+"""Онбординг нового пользователя: имя → город → язык → уровень → готово."""
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import store
 from ui import onboarding as onboarding_ui
-import dictionary_seed
 
 # in-memory кеш шага (быстрый доступ; _onboard_step в профиле — персистентный бэкап)
 _ob: dict = {}
@@ -39,7 +38,7 @@ def get_text_step(cid) -> str | None:
 
 
 async def start(bot, cid):
-    _ob[str(cid)] = {"step": "name", "langs": []}
+    _ob[str(cid)] = {"step": "name"}
     _save_step(cid, "name")
     store.pending_input[str(cid)] = "onboard_name"
     msg = onboarding_ui.onboard_start()
@@ -91,47 +90,28 @@ async def handle_callback(bot, cid, q, data: str):
         if choice == "skip":
             await _finish(bot, cid)
             return
+        if choice not in ("nl", "en"):
+            return
         import settings as _s
-        if choice == "both":
-            choice = "nl"
-        st["langs"] = [choice]
+        st["language"] = choice
         store.set_learning_language(cid, choice)
         _s.set_(cid, "study_lang", "нидерландский" if choice == "nl" else "английский")
-        other = "английский" if choice == "nl" else "нидерландский"
-        store.ensure_level(cid, other, "medium")
         st["step"] = "lvl"
-        st["lvl_queue"] = list(st["langs"])
         _ob[str(cid)] = st
-        await _ask_next_level(bot, cid, q)
+        await _ask_level(bot, cid, q, choice)
         return
 
     if data.startswith("ob_lvl_"):
         _, _, code, level = data.split("_")
         lang = "нидерландский" if code == "nl" else "английский"
         store.set_level(cid, lang, level)
-        queue = st.get("lvl_queue", [])
-        if queue and queue[0] == code:
-            queue.pop(0)
-        st["lvl_queue"] = queue
-        _ob[str(cid)] = st
-        if queue:
-            await _ask_next_level(bot, cid, q)
-        else:
-            await _finish(bot, cid)
-        return
-
-    if data.startswith("ob_prio_"):
-        # Compat-редирект для старых сообщений: шаг "приоритеты" убран из онбординга.
+        if st.get("language") not in (None, code):
+            return
         await _finish(bot, cid)
         return
 
 
-async def _ask_next_level(bot, cid, q):
-    st = _ob.get(str(cid), {})
-    queue = st.get("lvl_queue", [])
-    if not queue:
-        await _finish(bot, cid); return
-    code = queue[0]
+async def _ask_level(bot, cid, q, code):
     msg = onboarding_ui.onboard_level_question(code)
     try:
         edited = await q.edit_message_text(
@@ -152,7 +132,6 @@ async def _ask_next_level(bot, cid, q):
 
 async def _finish(bot, cid):
     import menu
-    st = _ob.get(str(cid), {})
     _ob.pop(str(cid), None)
     _save_step(cid, None)
     store.pending_input.pop(str(cid), None)
@@ -167,5 +146,3 @@ async def _finish(bot, cid):
         reply_markup=menu.main_menu_kb(),
         transient=True,
     )
-    if st.get("langs"):
-        await dictionary_seed.send_seed_intro(bot, cid)

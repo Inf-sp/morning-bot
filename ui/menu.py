@@ -153,28 +153,38 @@ def learning_menu(home: dict):
     title = "Английский" if code == "en" else "Нидерландский"
 
     b = MessageBuilder()
+    if not home.get("has_material"):
+        b.section("📚 Обучение")
+        b.spacer()
+        b.line("Добавляй сюда слова и фразы, которые хочешь запомнить.")
+        b.spacer()
+        b.line("Можно просто написать мне в чате:")
+        b.line("«добавь в словарь wennen aan»")
+        b.spacer()
+        b.line("Я буду использовать их в тренажёре и повторении.")
+        return b.build_stripped(reply_markup=ikb([
+            [("🆕 Добавить слова", f"a_dictadd_{code}")],
+            [("✨ Подобрать слова", f"a_dictseed_start_{code}")],
+        ]))
+
     b.bold(f"{flag} Изучаем сегодня · {title}")
     b.newline()
     b.spacer()
-
-    if not home.get("has_material"):
-        b.line("В словаре пока нет слов с переводом — начни с тренажёра, он поможет добавить первые.")
+    kind = home.get("kind") or "phrase"
+    material_label = {
+        "word": "Слово дня",
+        "phrase": "Фраза дня",
+        "construction": "Конструкция дня",
+        "rule": "Правило дня",
+    }.get(kind, "Фраза дня")
+    if kind == "construction":
+        b.text_line(home["term"])
     else:
-        kind = home.get("kind") or "phrase"
-        material_label = {
-            "word": "Слово дня",
-            "phrase": "Фраза дня",
-            "construction": "Конструкция дня",
-            "rule": "Правило дня",
-        }.get(kind, "Фраза дня")
-        if kind == "construction":
-            b.text_line(home["term"])
-        else:
-            b.label(material_label, home["term"], lowercase=False)
-        if kind != "rule" and home.get("translation"):
-            b.text_line(" → ")
-            b.add(finish_dot(home["translation"]), MessageEntity.SPOILER)
-        b.newline()
+        b.label(material_label, home["term"], lowercase=False)
+    if kind != "rule" and home.get("translation"):
+        b.text_line(" → ")
+        b.add(finish_dot(home["translation"]), MessageEntity.SPOILER)
+    b.newline()
 
     phrase = home.get("live_language") or {}
     if phrase.get("text") and phrase.get("translation"):
@@ -316,3 +326,16 @@ def food_menu(idea=None):
         [("#️⃣ Главная", "m_menu")],
     ]
     return b.build_stripped(reply_markup=ikb(rows))
+
+
+def food_empty_menu():
+    b = MessageBuilder()
+    b.section("🥣 Готовка")
+    b.spacer()
+    b.line("Добавь продукты, которые обычно есть дома.")
+    b.spacer()
+    b.line("Я буду подбирать простые рецепты из них и показывать, чего не хватает.")
+    return b.build_stripped(reply_markup=ikb([
+        [("🧊 Заполнить холодильник", "as_fridge_add")],
+        [("#️⃣ Главная", "m_menu")],
+    ]))

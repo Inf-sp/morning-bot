@@ -17,6 +17,7 @@ from dictionary_seed_ui import (
     render_text as _seed_render_text,
     level_keyboard as _seed_level_keyboard,
 )
+from ui import menu as menu_ui
 from ui.navigation import back_menu_keyboard
 
 _DICT_SEED_LIMIT = 30
@@ -91,22 +92,21 @@ def _seed_state_clear(cid):
     SeedStateRepository(cid).clear()
 
 
-async def send_seed_intro(bot, cid, lang=None):
-    code, language, level = _seed_language(cid, lang)
-    items = _seed_candidates(cid, code, level, "word")
-    if not items:
-        await send_dict_lang(bot, cid, code)
-        return
-    text = (
-        "Для эффективного обучения сначала наполним ваш словарь.\n\n"
-        f"Я подобрал слова уровня «{LEVEL_LABELS.get(level, level)}». Просмотрите список и отметьте те, "
-        "которые хотите добавить."
+async def send_seed_intro(bot, cid, lang=None, q=None):
+    code, _language, _level = _seed_language(cid, lang)
+    msg = menu_ui.learning_menu({"has_material": False, "lang_code": code})
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid,
+        text=msg.text,
+        entities=msg.entities,
+        reply_markup=msg.reply_markup,
     )
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🆕 Добавить свои слова", callback_data=f"a_dictadd_smart_{code}")],
-        [InlineKeyboardButton("✨ Подобрать слова", callback_data=f"a_dictseed_start_{code}")],
-    ])
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
 async def offer_seed_for_level_change(bot, cid, language, level):

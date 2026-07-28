@@ -442,12 +442,15 @@ def _build_weather_rules(cid, w, flags):
 
 # ---------- генерация лука по погоде ----------
 def _empty_wardrobe_screen():
-    kb = build_wardrobe_keyboard(has_result=False)
-    text = (
-        "<b>👕 Образ на сегодня</b>\n\n"
-        "Чтобы собрать образ из твоих вещей, сначала добавь их в шкаф."
-    )
-    return text, kb
+    kb = _kb([
+        [("🆕 Заполнить шкаф", "w_fill")],
+        [("#️⃣ Главная", "m_menu")],
+    ])
+    return wardrobe_ui.empty_wardrobe().text, kb
+
+
+def has_wardrobe_items(cid) -> bool:
+    return bool(store.wardrobe_to_text(store.load_wardrobe(cid)).strip())
 
 
 def _no_outfit_screen(result_kb, alternative=False):
@@ -662,7 +665,7 @@ async def _show_added_items(bot, cid, items):
     rows.append([("⬅️ Назад", "w_closet"), ("#️⃣ Главная", "m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_kb(rows))
 
-async def add_item(bot, cid, text):
+async def add_item(bot, cid, text, *, return_to_home=False):
     try:
         items = await _parse_items(text)
     except Exception as e:
@@ -671,6 +674,9 @@ async def add_item(bot, cid, text):
         await bot.send_message(chat_id=cid, text="Не удалось распознать вещь. Опиши её одним сообщением.", reply_markup=_back_kb())
         return
     saved = store.add_wardrobe_items(cid, items)
+    if return_to_home and saved:
+        await send_home(bot, cid)
+        return
     await _show_added_items(bot, cid, saved)
 
 async def add_item_settings(bot, cid, text):
@@ -1038,6 +1044,14 @@ async def handle_callback(bot, cid, q, data, status=None):
         await bot.send_message(chat_id=cid, text="Опиши её одним сообщением или отправь вещи списком через запятую.\n\n"
                                "Пример: Голубая свободная рубашка Uniqlo.",
                                reply_markup=_back_kb()); return
+    if data == "w_fill":
+        store.pending_input[str(cid)] = "wardrobe_fill"
+        await bot.send_message(
+            chat_id=cid,
+            text="Пришли список всей своей одежды одним сообщением — я сам разложу всё по шкафу.",
+            reply_markup=_back_kb(),
+        )
+        return
     if data == "w_add_ok":
         await send_wardrobe_zones(bot, cid, q=q); return
     if data == "w_add_all":

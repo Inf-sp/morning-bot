@@ -1,8 +1,8 @@
 """Структурный (AST-based) резолвер маршрутизации callback_data.
 
 Не исполняет ни один handler и не импортирует telegram/config/store — читает
-исходный текст bot.py и под-роутеров, строит дерево реальных if/elif-условий
-маршрутизации в том порядке, в котором их видит `answer_callback`, и отвечает
+исходный текст bot_callbacks.py и под-роутеров, строит дерево реальных
+if/elif-условий маршрутизации в том порядке, в котором их видит `handle`, и отвечает
 на вопрос "к какому handler'у (файл + функция) уйдёт этот конкретный
 callback_data", либо "ни к какому" (orphan).
 
@@ -196,12 +196,12 @@ def _extract_act_prefix_rules(body):
 
 
 def _handled_by_toplevel(callback_data, tree):
-    """Проходит по всем if/elif верхнего уровня функции answer_callback в порядке
+    """Проходит по всем if/elif верхнего уровня функции handle в порядке
     объявления. Возвращает (True, subrouter_module_or_None) на первом совпадении,
     либо (False, None), если ни одна ветка не совпала."""
-    fn = _find_function(tree, "_answer_callback_impl")
+    fn = _find_function(tree, "handle")
     if fn is None:
-        raise RuntimeError("_answer_callback_impl не найдена в bot.py — резолвер рассинхронизирован с кодом")
+        raise RuntimeError("handle не найдена в bot_callbacks.py — резолвер рассинхронизирован с кодом")
 
     for stmt in fn.body:
         if not isinstance(stmt, ast.If):
@@ -250,22 +250,22 @@ def resolve_callback_handler(callback_data: str):
     None если обработка целиком в bot.py, либо None+handled=False, если callback
     не совпал ни с одной веткой ни на одном уровне.
 
-    Не исполняет ни один handler - только структурно проходит AST bot.py и,
+    Не исполняет ни один handler - только структурно проходит AST bot_callbacks.py и,
     при необходимости, под-роутера, куда bot.py передаёт управление.
     """
-    bot_src = _read_source("bot.py")
-    bot_tree = ast.parse(bot_src)
+    callback_src = _read_source("bot_callbacks.py")
+    callback_tree = ast.parse(callback_src)
 
-    handled_top, sub_module = _handled_by_toplevel(callback_data, bot_tree)
+    handled_top, sub_module = _handled_by_toplevel(callback_data, callback_tree)
     if not handled_top:
-        return {"handled": False, "module": None, "detail": "no matching branch in bot.py answer_callback"}
+        return {"handled": False, "module": None, "detail": "no matching branch in bot_callbacks.handle"}
     if sub_module is None:
-        return {"handled": True, "module": "bot.py", "detail": "handled directly in answer_callback"}
+        return {"handled": True, "module": "bot_callbacks.py", "detail": "handled directly in callback router"}
 
     # Определяем, какая функция под-роутера вызывается: handle_notes_callback у
     # settings.py используется для fav_/ls_/as_(не food/fridge/...) веток, а
     # handle_callback - для set_/setadd_/setdel_.
-    file_name, func_name = _resolve_subrouter_target(sub_module, callback_data, bot_tree)
+    file_name, func_name = _resolve_subrouter_target(sub_module, callback_data, callback_tree)
     sub_src = _read_source(file_name)
     sub_tree = ast.parse(sub_src)
     fn = _find_function(sub_tree, func_name)
@@ -281,12 +281,12 @@ def resolve_callback_handler(callback_data: str):
             "detail": "reached sub-router but no matching branch inside it"}
 
 
-def _resolve_subrouter_target(sub_module, callback_data, bot_tree):
+def _resolve_subrouter_target(sub_module, callback_data, _callback_tree):
     if sub_module == "learning_router" and callback_data.startswith("a_"):
         return "learning_router.py", "handle_action"
     if sub_module != "settings":
         return _SUBROUTERS[sub_module]
-    # settings.py has two entrypoints; bot.py's own branching decides which one.
+    # saved_items.py has two entrypoints; callback router decides which one.
     if callback_data.startswith(("fav_", "ls_")):
         return _NOTES_ROUTER
     if callback_data.startswith("as_") and not callback_data.startswith(

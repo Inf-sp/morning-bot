@@ -1060,7 +1060,6 @@ MODULE_POLICY = {
     "leisure_concerts": LEISURE_ORDER,
     "leisure_collection": LEISURE_ORDER,
     "myday": LEISURE_ORDER,
-    "firstvisit": UTILITY_ORDER,
     "weather": LEISURE_ORDER,
 }
 

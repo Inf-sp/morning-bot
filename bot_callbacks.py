@@ -6,10 +6,11 @@ import access
 import balance
 import cleanup
 import cooking
+import dictionary_seed
 import dictionary_tts
-import firstvisit
 import fridge
 import learning_dictionary as dictionary
+import learning
 import learning_game
 import learning_settings
 import learning_router
@@ -238,45 +239,21 @@ async def handle(update, context, remove_reply_keyboard):
         await _inline_status(
             lambda status: menu.send_food_menu(bot, cid, status=status, refresh=True),
             preserve_message=True); return
-    # Пропустить первичный опрос раздела
-    if data.startswith("fv_skip_"):
-        section = data[len("fv_skip_"):]
-        await _ack(q)
-        await firstvisit.skip(bot, cid, section)
-        await _unack(q); return
-    # Теги-чекбоксы в опросе (fv_tag_{section}_{key})
-    if data == "fv_leisure_text":
-        await _ack(q)
-        await firstvisit.leisure_text_prompt(bot, cid)
-        await _unack(q); return
-    if data.startswith("fv_tagdone_"):
-        await _ack(q)
-        await firstvisit.tags_done(bot, cid, data[len("fv_tagdone_"):])
-        await _unack(q); return
-    if data.startswith("fv_tag_"):
-        rest = data[len("fv_tag_"):]
-        section, _, key = rest.partition("_")
-        await _ack(q)
-        await firstvisit.toggle_tag(bot, cid, section, key, q); return
     if data in ("m_learn", "m_menu"):
         trainer.cancel(cid)
 
-    # Первичный опрос при входе в раздел (wardrobe / learning / leisure / health / cooking)
-    if data == "m_food" and firstvisit.needs_setup(cid, "cooking"):
-        await _ack(q)
-        await firstvisit.show_prompt(bot, cid, "cooking")
-        await _unack(q); return
+    if data == "m_learn" and not learning.build_learning_home(cid).get("has_material"):
+        await dictionary_seed.send_seed_intro(bot, cid, q=q)
+        return
+
     if data == "m_food":
+        if not menu.has_available_fridge(cid):
+            await menu.send_food_menu(bot, cid, q=q)
+            return
         await _inline_status(
             lambda status: menu.send_food_menu(bot, cid, status=status, q=q),
         )
         return
-    _FV_SECTION = {"m_wardrobe": "wardrobe", "m_learn": "learning",
-                   "m_leisure": "leisure", "m_balance": "health"}
-    if data in _FV_SECTION and firstvisit.needs_setup(cid, _FV_SECTION[data]):
-        await _ack(q)
-        await firstvisit.show_prompt(bot, cid, _FV_SECTION[data])
-        await _unack(q); return
     if data == "m_leisure":
         # Это навигация, а не отдельная долгая рекомендация. Экран Досуга сам
         # редактирует исходное сообщение и имеет один fallback на send_message;
@@ -284,6 +261,9 @@ async def handle(update, context, remove_reply_keyboard):
         await leisure_home.send_home(bot, cid, q)
         return
     if data == "m_wardrobe":
+        if not wardrobe.has_wardrobe_items(cid):
+            await wardrobe.send_home(bot, cid, q=q)
+            return
         await _inline_status(
             lambda status: wardrobe.send_home(bot, cid, q=q, status=status),
         )

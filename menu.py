@@ -1,3 +1,5 @@
+import config
+import store
 from ui import menu as menu_ui
 
 REPLY_KB_REMOVED_FLAG = "reply_kb_removed_v7"  # разово снимаем нижнюю Reply-клавиатуру
@@ -6,7 +8,6 @@ REPLY_KB_REMOVED_FLAG = "reply_kb_removed_v7"  # разово снимаем н�
 
 def welcome_for(cid):
     """Приветствие с именем пользователя из профиля, если оно уже собрано онбордингом."""
-    import store
     name = store.get_profile(cid).get("name", "") if cid is not None else ""
     return menu_ui.welcome(name)
 
@@ -63,11 +64,33 @@ def menu_screen(key, cid=None):
     return msg.text, msg.entities, msg.reply_markup
 
 
+def has_available_fridge(cid) -> bool:
+    from fridge_model import _fridge_available
+    return bool(_fridge_available(store.get_list(config.FRIDGE_KEY, str(cid))))
+
+
 async def send_food_menu(bot, cid, status=None, refresh=False, q=None):
     import asyncio
     import recipe_generation
     import util
     import verify
+
+    if not has_available_fridge(cid):
+        msg = menu_ui.food_empty_menu()
+        if status is not None:
+            await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+        elif q is not None:
+            try:
+                await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+            except Exception:
+                await bot.send_message(
+                    chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
+                )
+        else:
+            await bot.send_message(
+                chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
+            )
+        return
 
     if not refresh:
         cached = recipe_generation.get_cached_cooking_home_idea(cid)

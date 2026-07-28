@@ -47,7 +47,6 @@ import secure
 import service_monitor
 from process_guard import PollingLease, process_identity
 import onboard
-import firstvisit
 import tracking
 import util
 from deploy_report import (

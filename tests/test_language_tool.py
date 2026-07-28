@@ -101,7 +101,7 @@ def test_async_check_retries_once_after_temporary_outage(monkeypatch):
     assert calls == [("Ik ga.", "nl-NL"), ("Ik ga.", "nl-NL")]
 
 
-def test_disputed_dutch_error_uses_groq_then_gemini(monkeypatch):
+def test_disputed_dutch_error_uses_standard_learning_fallback(monkeypatch):
     captured = {}
     monkeypatch.setattr(trainer.language_tool, "check_text", lambda *_args: _report())
 
@@ -123,7 +123,9 @@ def test_disputed_dutch_error_uses_groq_then_gemini(monkeypatch):
     }, "Ik gaat naar huis."))
 
     assert grade.correct is False
-    assert captured["kwargs"]["order"] == ("groq", "gemini")
+    assert captured["kwargs"]["order"] == (
+        "groq_standard", "github_models", "cf", "openrouter",
+    )
     assert report["explanation"] == "После ik нужна форма ga, а не gaat."
 
 

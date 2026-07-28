@@ -79,9 +79,6 @@ async def handle_learning_settings_callback(bot, cid, q, data):
         store.set_learning_language(cid, new_code)
         store.ensure_level(cid, _language_for_code(old_code), "medium")
         store.ensure_level(cid, _language_for_code(new_code), "medium")
-        prof = store.get_profile(cid)
-        prof.pop("_myday_seed_prompted", None)
-        store.set_profile(cid, prof)
         await send_learning_settings(bot, cid, q=q, back=back)
         return
     if data.startswith("set_learning_level_"):

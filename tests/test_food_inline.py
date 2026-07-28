@@ -31,6 +31,7 @@ def test_other_food_menu_refresh_edits_current_inline_message(monkeypatch):
             raise AssertionError("food refresh must not send a new chat message")
 
     monkeypatch.setattr(util.StatusManager, "start_inline", start_inline)
+    monkeypatch.setattr(menu, "has_available_fridge", lambda _cid: True)
     monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", lambda *_args: {"name": "Паста"})
     monkeypatch.setattr(menu.menu_ui, "food_menu", lambda _idea: SimpleNamespace(
         text="Обновлённый рецепт", entities=[], reply_markup="food-kb"))
