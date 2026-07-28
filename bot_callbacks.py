@@ -45,7 +45,7 @@ _STATUS_TOPIC_PREFIXES = (
     ("ex_", "learning"), ("again_tr_", "learning"), ("game", "learning"),
     ("a_game", "learning"),
     ("m_movie", "leisure"), ("m_books", "leisure"), ("m_music", "leisure"),
-    ("movie_", "leisure"), ("book_", "leisure"), ("music_", "leisure"), ("listen", "leisure"), ("reco_", "leisure"), ("a_concerts", "leisure"),
+    ("movie_", "leisure"), ("book_", "leisure"), ("music_", "leisure"), ("listen", "leisure"), ("a_concerts", "leisure"),
     ("m_travel", "travel"), ("a_trav_", "travel"),
     ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
 )
@@ -73,7 +73,7 @@ def _status_stages(data):
         return progress("🧠 Разбираю мысль...", "💭 Ищу опору в записи...", "📝 Готовлю разбор...")
     elif data == "w_look":
         first = "⏳ Ищу образ..."
-    elif data.startswith(("movie_", "reco_", "a_watch")):
+    elif data.startswith(("movie_", "a_watch")):
         first = "🎬 Ищу кино..."
     elif data.startswith(("book_", "a_read")):
         first = "📚 Ищу книгу..."
@@ -383,16 +383,10 @@ async def handle(update, context, remove_reply_keyboard):
                     lambda _s: leisure_movies.send_movie_home(bot, cid, q))
             elif act == "read":
                 await _inline_status(lambda _s: leisure_books.send_books_home(bot, cid, q))
-            elif act == "readlist":
-                await cleanup.open_collection(bot, cid, "books_saved", back="m_books")
             elif act == "watchlist":
                 await cleanup.open_collection(bot, cid, "cinema_favorites", back="m_movie")
-            elif act == "readlist":
-                await cleanup.open_collection(bot, cid, "books_saved", back="m_books")
             elif act == "watchclean":
                 await cleanup.open_collection(bot, cid, "cinema_favorites", back="m_movie")
-            elif act == "readclean":
-                await cleanup.open_collection(bot, cid, "books_saved", back="m_books")
             elif act == "concerts_find":
                 await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, "home"))
             elif act == "concerts_nearby":
@@ -460,15 +454,6 @@ async def handle(update, context, remove_reply_keyboard):
         await learning_game.game_reveal(bot, cid, q)
         return
     # Старые кнопки общего экрана «Досуг»: направляем в соответствующую категорию.
-    if data == "leisure_saved_movie":
-        await cleanup.open_collection(bot, cid, "cinema_saved", back="m_movie")
-        return
-    if data == "leisure_saved_books":
-        await cleanup.open_collection(bot, cid, "books_saved", back="m_books")
-        return
-    if data == "leisure_saved_music":
-        await cleanup.open_collection(bot, cid, "music_saved", back="m_music")
-        return
     if data == "leisure_prefs_movie":
         await leisure_movies.send_movie_prefs(bot, cid, q)
         return
@@ -516,26 +501,17 @@ async def handle(update, context, remove_reply_keyboard):
             preserve_message=True,
         )
         return
-    if data == "movie_saved":
-        await cleanup.open_collection(bot, cid, "cinema_saved", back="m_movie")
-        return
     if data == "movie_favorites":
         await cleanup.open_collection(bot, cid, "cinema_favorites", back="m_movie")
         return
     if data == "book_favorites":
         await cleanup.open_collection(bot, cid, "books_favorites", back="m_books")
         return
-    if data == "book_saved":
-        await cleanup.open_collection(bot, cid, "books_saved", back="m_books")
-        return
     if data == "book_prefs":
         await leisure_books.send_book_preferences(bot, cid, q)
         return
     if data == "artist_favorites":
         await cleanup.open_collection(bot, cid, "music_favorite_artists", back="m_music")
-        return
-    if data == "artist_saved":
-        await cleanup.open_collection(bot, cid, "music_saved", back="m_music")
         return
     if data == "music_prefs":
         await leisure_music.send_music_preferences(bot, cid, q)
@@ -576,9 +552,6 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "listen_love":
         await leisure_music.listen_love(bot, cid, q)
         return
-    if data.startswith("reco_"):
-        await leisure_movies.add_reco(bot, cid, int(data.split("_")[1]), q)
-        return
     if data.startswith("movie_no_"):
         await _inline_status(
             lambda _s: leisure_movies.movie_dislike(bot, cid, int(data.split("_")[-1])),
@@ -589,9 +562,6 @@ async def handle(update, context, remove_reply_keyboard):
             lambda _s: leisure_books.book_dislike(bot, cid, int(data.split("_")[-1])),
             preserve_message=True,
         )
-        return
-    if data.startswith("listen_"):
-        await leisure_music.add_listen(bot, cid, int(data.split("_")[1]), q)
         return
     # Совместимость со старыми сообщениями дневника тревог.
     if data == "worry_clearall":

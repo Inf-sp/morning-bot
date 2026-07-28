@@ -50,7 +50,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     assert _labels(message.reply_markup) == [
         ["🎯 Тренажёр"],
         ["🕵️ Детектив"],
-        ["📖 Мой словарь"],
+        ["🎚️ Мой словарь"],
         ["#️⃣ Главная"],
     ]
 

@@ -145,7 +145,6 @@ DIARY_KEY = "diary.json"
 # от «сохранённого на потом», поэтому они никогда не используют один ключ.
 FAVORITE_ARTISTS_KEY = "favorite_artists.json"
 FAVORITE_MOVIES_KEY = "favorite_movies.json"
-SAVED_BOOKS_KEY = "saved_books.json"
 SAVED_COUNTRIES_KEY = "saved_countries.json"
 LEGACY_COUNTRIES_KEY = "mycountries.json"
 FAVORITE_BOOKS_KEY = "favorite_books.json"
@@ -207,7 +206,6 @@ DEPLOY_REPORT_KEY = "deploy_report.json"  # служебное состояни�
 # ключи, а storage_driver лениво переносит данные из старых физических ключей.
 ARTISTS_KEY = FAVORITE_ARTISTS_KEY
 WATCHLIST_KEY = FAVORITE_MOVIES_KEY
-READLIST_KEY = SAVED_BOOKS_KEY
 FAVCOUNTRIES_KEY = SAVED_COUNTRIES_KEY
 COUNTRIES_KEY = LEGACY_COUNTRIES_KEY
 BOOKS_KEY = FAVORITE_BOOKS_KEY
@@ -217,7 +215,6 @@ NOTES_KEY = CONTENT_RECORDS_KEY
 LEGACY_STORAGE_KEYS = {
     FAVORITE_ARTISTS_KEY: ("artists.json",),
     FAVORITE_MOVIES_KEY: ("watchlist.json",),
-    SAVED_BOOKS_KEY: ("readlist.json",),
     SAVED_COUNTRIES_KEY: ("favcountries.json", "mycountries.json"),
     FAVORITE_BOOKS_KEY: ("mybooks.json",),
     THOUGHTS_KEY: ("worries.json",),

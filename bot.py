@@ -142,7 +142,7 @@ _STATUS_TOPIC_PREFIXES = (
     ("a_dict", "learning"), ("a_train", "learning"), ("a_tr_", "learning"),
     ("ex_", "learning"), ("again_tr_", "learning"), ("game", "learning"),
     ("a_game", "learning"), ("gamediff_", "learning"),
-    ("movie_", "leisure"), ("book_", "leisure"), ("listen", "leisure"), ("reco_", "leisure"), ("a_concerts", "leisure"),
+    ("movie_", "leisure"), ("book_", "leisure"), ("listen", "leisure"), ("a_concerts", "leisure"),
     ("m_travel", "travel"), ("a_trav_", "travel"),
     ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
 )

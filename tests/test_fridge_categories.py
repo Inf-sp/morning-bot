@@ -83,7 +83,7 @@ def test_fridge_home_has_available_counts_and_delete_before_navigation(monkeypat
     asyncio.run(fridge.send_fridge(bot, "fridge-home"))
 
     message = bot.messages[-1]
-    assert message["text"].startswith("🧊 Мой холодильник · 2 продукта в наличии")
+    assert message["text"].startswith("🎚️ Мой холодильник · 2 продукта в наличии")
     assert _labels(message["reply_markup"]) == [
         ["🆕 Добавить продукт"],
         ["Мясо и рыба · 1"],

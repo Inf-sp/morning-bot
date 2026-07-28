@@ -292,7 +292,7 @@ async def send_notes(bot, cid):
 async def send_food(bot, cid, q=None, back="m_food"):
     """Compat-экран для старых кнопок Готовки: без отдельной базы рецептов."""
     rows = [
-        [InlineKeyboardButton("🧊 Мой холодильник", callback_data="set_fridge")],
+        [InlineKeyboardButton("🎚️ Мой холодильник", callback_data="set_fridge")],
         [InlineKeyboardButton("🎚️ Предпочтения", callback_data="set_cuisines")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
@@ -315,7 +315,7 @@ async def send_food(bot, cid, q=None, back="m_food"):
 
 async def send_travel(bot, cid):
     rows = [
-        [InlineKeyboardButton("🧳 Мой чемодан", callback_data="colr:travel_saved_countries:set_travel")],
+        [InlineKeyboardButton("🎚️ Мой чемодан", callback_data="colr:travel_saved_countries:set_travel")],
         [InlineKeyboardButton("⭐️ Сохранённые места", callback_data="colr:travel_saved_places:set_travel")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
@@ -506,7 +506,7 @@ def _love_items(cid, key):
 def _love_title(key):
     return {
         "movies": ui_label("cinema", "Мое кино"),
-        "countries": "🧳 Мой чемодан",
+        "countries": "🎚️ Мой чемодан",
         "artists": ui_label("music", "Мои музыканты"),
         "books": ui_label("books", "Мои книги"),
     }.get(key, "Любимые")

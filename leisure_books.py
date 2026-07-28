@@ -12,7 +12,6 @@ import recommendation_stoplist
 import store
 import tracking
 from ui import leisure as leisure_ui
-from ui.constants import save_toggle_label
 
 
 _BOOK_GENRES = [
@@ -98,13 +97,11 @@ def _book_text(it):
     return leisure_ui.book_text(it)
 
 
-def _book_kb(i, saved=False, favorite=False):
+def _book_kb(i, favorite=False):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_no_{i}")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu"),
-         InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
-        [InlineKeyboardButton("💾 Сохранения", callback_data="book_saved"),
-         InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
+        [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -113,8 +110,7 @@ def books_home_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать книгу", callback_data="book_reco")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
-        [InlineKeyboardButton("💾 Сохранения", callback_data="book_saved"),
-         InlineKeyboardButton("❤️ Мои книги", callback_data="book_favorites")],
+        [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -230,7 +226,6 @@ async def send_book_preferences(bot, cid, q=None):
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 async def _send_book_card(bot, cid, it, i, *, enrich=True):
-    import saved_items
     if enrich:
         try:
             remaining = tracking.remaining_action_seconds()
@@ -244,7 +239,7 @@ async def _send_book_card(bot, cid, it, i, *, enrich=True):
     else:
         it = dict(it or {})
     msg = _book_text(it)
-    kb = _book_kb(i, saved_items.is_note_saved(cid, it.get("title", "")))
+    kb = _book_kb(i)
     cover = it.get("cover_url")
     if not cover:
         try:
@@ -313,7 +308,7 @@ _FALLBACK_BOOKS = [
 def _book_used(cid):
     """Названия книг, которые нельзя повторять: любимые, знакомые, закладки, отклонённые."""
     used = set()
-    for key in (config.FAVORITE_BOOKS_KEY, config.SAVED_BOOKS_KEY):
+    for key in (config.FAVORITE_BOOKS_KEY,):
         for x in store.get_list(key, cid):
             title = _item_text(x)
             if title:
@@ -493,6 +488,4 @@ async def book_love(bot, cid, i, q=None):
         title = rec["items"][i]
         _add_unique(config.FAVORITE_BOOKS_KEY, cid, title)
         if q is not None:
-            import saved_items
-            await q.message.edit_reply_markup(
-                reply_markup=_book_kb(i, saved=saved_items.is_note_saved(cid, title), favorite=True))
+            await q.message.edit_reply_markup(reply_markup=_book_kb(i, favorite=True))

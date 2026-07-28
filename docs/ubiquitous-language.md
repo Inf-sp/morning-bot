@@ -6,16 +6,13 @@
 
 | Сущность | Интерфейс | Код / KV-ключ |
 |---|---|---|
-| Любимые фильмы | ❤️ Моё кино | `favorite_movies` / `favorite_movies.json` |
-| Сохранённые фильмы | 💾 Сохранённое → Кино | `content_record(bucket="movies")` / `content_records.json` |
-| Любимые книги | ❤️ Мои книги | `favorite_books` / `favorite_books.json` |
-| Сохранённые книги | 💾 Сохранённое → Книги | `saved_books` / `saved_books.json` |
-| Любимые артисты | ❤️ Мои артисты | `favorite_artists` / `favorite_artists.json` |
-| Сохранённая музыка | 💾 Сохранённое → Музыка | `content_record(bucket="music")` / `content_records.json` |
+| Любимые фильмы | 🎚️ Моё кино | `favorite_movies` / `favorite_movies.json` |
+| Любимые книги | 🎚️ Мои книги | `favorite_books` / `favorite_books.json` |
+| Любимые артисты | 🎚️ Мои артисты | `favorite_artists` / `favorite_artists.json` |
 | Сохранённая карточка | 💾 Сохранённое | `content_record` / `content_records.json` |
-| Сохранённые страны | 🧳 Мой чемодан | `saved_countries` / `saved_countries.json` |
+| Сохранённые страны | 🎚️ Мой чемодан | `saved_countries` / `saved_countries.json` |
 | Сохранённые места | 💾 Сохранённое → Поездки | `content_record(bucket="travel")` / `content_records.json` |
-| Посещённые страны | 🧳 Посещённые страны | `visited_countries` — отдельная будущая коллекция |
+| Посещённые страны | 🎚️ Посещённые страны | `visited_countries` — отдельная будущая коллекция |
 | Мысль | 😮‍💨 Мысли | `thought` / `thoughts.json` |
 | Разбор мысли | 🧠 Разбор мысли | `thought_review` / `thought_reviews.json` |
 | Лайфхак | 🦉 Лайфхак | `lifehack` / локальный каталог `lifehacks.json` |

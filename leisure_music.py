@@ -13,7 +13,7 @@ import recommendation_stoplist
 import settings
 import store
 from ui import leisure as leisure_ui
-from ui.constants import save_toggle_label, ui_label
+from ui.constants import ui_label
 
 _log = logging.getLogger(__name__)
 
@@ -192,18 +192,15 @@ async def listen_love(bot, cid, q=None):
         _invalidate_artist(cid)
         _kick_off_new_artist_concert_check(cid, [artist])
         if q is not None:
-            import saved_items
-            await q.message.edit_reply_markup(
-                reply_markup=_listen_kb(saved_items.is_note_saved(cid, artist), favorite=True))
+            await q.message.edit_reply_markup(reply_markup=_listen_kb())
 
-def _listen_kb(saved=False, favorite=False):
+
+def _listen_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другой артист", callback_data="a_listen_no")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="a_artist_concerts")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="music_genre_menu"),
-         InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data="listen_0")],
-        [InlineKeyboardButton("💾 Сохранения", callback_data="artist_saved"),
-         InlineKeyboardButton("❤️ Мои артисты", callback_data="artist_favorites")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="music_genre_menu")],
+        [InlineKeyboardButton("🎚️ Мои артисты", callback_data="artist_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -213,8 +210,7 @@ def music_home_keyboard():
         [InlineKeyboardButton("✨ Подобрать музыку", callback_data="music_reco")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="music_genre_menu")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find")],
-        [InlineKeyboardButton("💾 Сохранения", callback_data="artist_saved"),
-         InlineKeyboardButton("❤️ Мои артисты", callback_data="artist_favorites")],
+        [InlineKeyboardButton("🎚️ Мои артисты", callback_data="artist_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -404,7 +400,6 @@ def _ensure_artists(cid):
 
 
 async def send_listen(bot, cid, *, preview=False, category=None, force=False, status=None):
-    import saved_items
     _log.info("send_listen: start cid=%s", cid)
     category = category if isinstance(category, dict) and category.get("kind") == "genre" else None
     cached = None if category or force else _cached_artist(cid)
@@ -417,7 +412,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
             store.last_source[str(cid)] = "Музыка"
             msg = leisure_ui.artist_card(cached)
             await _deliver_artist_card(
-                bot, cid, msg, _listen_kb(saved=False), status=status)
+                bot, cid, msg, _listen_kb(), status=status)
             return
     arts_raw = _ensure_artists(cid)
     arts = [_item_text(a) for a in arts_raw if _item_text(a)]
@@ -518,7 +513,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
     store.last_answer[str(cid)] = leisure_ui.plain_from_html(msg.text)
     _log.info("send_listen: sending card cid=%s artist=%r", cid, artist)
     await _deliver_artist_card(
-        bot, cid, msg, _listen_kb(saved_items.is_note_saved(cid, artist)), status=status)
+        bot, cid, msg, _listen_kb(), status=status)
 
 
 async def _deliver_artist_card(bot, cid, msg, reply_markup, *, status=None):
@@ -528,14 +523,3 @@ async def _deliver_artist_card(bot, cid, msg, reply_markup, *, status=None):
         return
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=reply_markup)
-
-async def add_listen(bot, cid, i, q=None):
-    import saved_items
-    rec = store.last_recos.get(str(cid))
-    if rec and rec.get("kind") == "listen" and rec["items"]:
-        title = rec["items"][0]
-        saved = saved_items.toggle_note(cid, title, source="Музыка")
-        await saved_items.update_save_button(q, "listen_0", saved)
-        if saved:
-            _invalidate_artist(cid)
-            await send_listen(bot, cid, category=rec.get("category"), force=bool(rec.get("category")))

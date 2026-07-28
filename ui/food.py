@@ -216,7 +216,8 @@ def _products_label(count):
 
 def fridge_home(available):
     b = MessageBuilder()
-    b.bold(ui_label("products", "Мой холодильник"))
+    title = ui_label("products", "Мой холодильник").removeprefix("🧊 ").removeprefix("🎚️ ")
+    b.bold("🎚️ " + title)
     b.text_line(f" · {available} {_products_label(available)} в наличии")
     b.spacer()
     b.line("Выбери категорию:")

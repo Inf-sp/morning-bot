@@ -105,7 +105,7 @@ def _note_fav_exists(cid, text):
 def dedupe_lists():
     """Разовая чистка: убирает повторы (без учёта регистра) в списках любимого/закладок."""
     keys = [config.FAVORITE_BOOKS_KEY, config.FAVORITE_ARTISTS_KEY, config.FAVORITE_MOVIES_KEY,
-            config.SAVED_BOOKS_KEY, config.COUNTRIES_KEY]
+            config.COUNTRIES_KEY]
     changed_any = False
     for key in keys:
         data = store._load(key)
@@ -180,12 +180,10 @@ JSON: {{"items": [{{"title": "название (год)", "title_en": "ориг�
     # книги: референсы вкуса берём из "Мои книги" (настройки/БД, авто-загрузка из content.json)
     my_books = _ensure_books(cid)
     my_books_titles = [b if isinstance(b, str) else str(b) for b in my_books]
-    read_seen = store.get_list(config.SAVED_BOOKS_KEY, cid)
     blocked = recommendation_stoplist.values(cid, "book")
-    read_titles = [s if isinstance(s, str) else str(s) for s in read_seen]
     refs = my_books_titles
     anchors = ", ".join(refs[:25])
-    skip = my_books_titles + read_titles + blocked
+    skip = my_books_titles + blocked
     avoid = ("\nНЕ рекомендуй уже прочитанное/в закладках/отклонённое: " + ", ".join(skip[:80])) if skip else ""
     web_block = ""
     from datetime import datetime

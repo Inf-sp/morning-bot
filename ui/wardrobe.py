@@ -245,7 +245,7 @@ def zone_picker_screen():
 
 def wardrobe_home_screen(total):
     b = MessageBuilder()
-    b.section(f"🧶 Мой шкаф · {total} {_pluralize_items(total)}")
+    b.section(f"🎚️ Мой шкаф · {total} {_pluralize_items(total)}")
     b.line("Выбери категорию:")
     return b.build_stripped()
 
@@ -388,7 +388,7 @@ def _success_item_metadata(builder, item):
 def add_success(item):
     """Подтверждение после фактического сохранения одной вещи в шкаф."""
     b = MessageBuilder()
-    b.line("✅ Вещь добавлена в «Мой шкаф»")
+    b.line("✅ Вещь добавлена в «🎚️ Мой шкаф»")
     b.spacer()
     b.bold(_success_item_title(item))
     details = _success_item_details(item)
@@ -400,7 +400,7 @@ def add_success(item):
 
 def add_batch_success(items):
     b = MessageBuilder()
-    b.line("✅ Вещи добавлены в «Мой шкаф»")
+    b.line("✅ Вещи добавлены в «🎚️ Мой шкаф»")
     for item in items or []:
         b.spacer()
         b.bold(_success_item_title(item))

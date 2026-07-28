@@ -92,7 +92,7 @@ _SCREENS = {
         [
             [("✨ Другой образ", "w_look")],
             [("🧐 Оценить покупку", "w_check")],
-            [("🧶 Мой шкаф", "w_closet")],
+            [("🎚️ Мой шкаф", "w_closet")],
             [("#️⃣ Главная", "m_menu")],
         ],
     ),
@@ -174,7 +174,7 @@ def learning_menu(home: dict):
     return b.build_stripped(reply_markup=ikb([
         [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
         [(ui_label("game", "Детектив"), "a_game")],
-        [("📖 Мой словарь", f"a_dictlang_{code}_from_menu")],
+        [("🎚️ Мой словарь", f"a_dictlang_{code}_from_menu")],
         [("#️⃣ Главная", "m_menu")],
     ]))
 
@@ -281,7 +281,7 @@ def food_menu(idea=None):
     rows = [
         [("✨ Другой рецепт", "m_food_next")],
         [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
-        [("🧊 Мой холодильник", "as_fridge_home")],
+        [("🎚️ Мой холодильник", "as_fridge_home")],
         [("#️⃣ Главная", "m_menu")],
     ]
     return b.build_stripped(reply_markup=ikb(rows))

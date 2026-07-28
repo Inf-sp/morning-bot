@@ -347,7 +347,7 @@ def _save_cached_look(cid, item_ids, look_data):
 def build_wardrobe_keyboard(has_result=True, *, has_purchase=False, purchase_saved=False):
     rows = [[("✨ Другой образ" if has_result else "✨ Подобрать образ", "w_look")]]
     rows.extend([
-        [("🧐 Оценить покупку", "w_check"), ("🧶 Мой шкаф", "w_closet")],
+        [("🧐 Оценить покупку", "w_check"), ("🎚️ Мой шкаф", "w_closet")],
         [("#️⃣ Главная", "m_menu")],
     ])
     return _kb(rows)

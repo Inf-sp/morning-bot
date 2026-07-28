@@ -1,5 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from ui.constants import COUNTRY_EMOJI, save_toggle_label, ui_label
+from ui.constants import COUNTRY_EMOJI, ui_label
 import asyncio
 import logging
 import re
@@ -35,18 +35,16 @@ def _movie_card(it, tm):
 def _movie_home_only_kb():
     return InlineKeyboardMarkup([[InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
 
-def _movie_kb(i, category=None, saved=False, favorite=False):
+def _movie_kb(i, category=None, favorite=False):
     """Клавиатура карточки кино с быстрым подбором по жанру.
 
     category используется только для сохранения контекста подбора.
     """
     rows = [
         [InlineKeyboardButton("✨ Другое кино", callback_data=f"movie_no_{i}")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
-         InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
+        [InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")],
     ]
-    rows.append([InlineKeyboardButton("💾 Сохранения", callback_data="movie_saved"),
-                 InlineKeyboardButton("❤️ Моё кино", callback_data="movie_favorites")])
     rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
@@ -153,7 +151,6 @@ def _pick_good_movie(items, used_titles):
     return None, None
 
 async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None):
-    import saved_items
     it = it if isinstance(it, dict) else {"title": str(it)}
     if tm == "__lookup__":
         try:
@@ -169,10 +166,7 @@ async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None):
         except Exception:
             tm = None
     title, msg = _movie_card(it, tm)
-    kb = _movie_kb(
-        i, category=category,
-        saved=saved_items.is_note_saved(cid, it.get("title", "")),
-    )
+    kb = _movie_kb(i, category=category)
     if tm and tm.get("poster"):
         try:
             await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=msg.text, caption_entities=msg.entities, reply_markup=kb)
@@ -236,8 +230,7 @@ def _movie_home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать кино", callback_data="movie_reco")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
-        [InlineKeyboardButton("💾 Сохранения", callback_data="movie_saved"),
-         InlineKeyboardButton("❤️ Моё кино", callback_data="movie_favorites")],
+        [InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -544,7 +537,7 @@ async def _advance_movie(bot, cid):
 
     Если текущая сессия рекомендаций привязана к жанру (last_recos["category"],
     проставлено в _show_discovered), следующая карточка ОБЯЗАНА остаться в той же категории —
-    «Заменить»/«В любимые»/«Уже видел»/«Сохранить» внутри «Комедии» не должны сбрасывать
+    «Заменить»/«В любимые»/«Уже видел» внутри «Комедии» не должны сбрасывать
     подбор на общий алгоритм. Без category — обычный путь Recommendations/Similar по любимым.
     """
     rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
@@ -719,7 +712,7 @@ async def send_movie_by_genre(bot, cid, genre_id):
 
 async def _show_discovered(bot, cid, it, tm, category=None):
     """category — контекст жанра, из которого пришла карточка: сохраняем его
-    в last_recos, чтобы «Заменить»/«Сохранить»/«В любимые»/«Уже видел» (через _advance_movie)
+    в last_recos, чтобы «Заменить»/«В любимые»/«Уже видел» (через _advance_movie)
     брали СЛЕДУЮЩУЮ рекомендацию из той же категории, а не сбрасывались на общий подбор,
     и чтобы подбор оставался внутри выбранного жанра."""
     disp = _display_title(it, tm)
@@ -779,41 +772,4 @@ async def movie_love(bot, cid, i, q=None):
         title = rec["items"][i]
         _add_unique(config.FAVORITE_MOVIES_KEY, cid, title)
         if q is not None:
-            import saved_items
-            await q.message.edit_reply_markup(
-                reply_markup=_movie_kb(i, saved=saved_items.is_note_saved(cid, title), favorite=True))
-
-async def add_reco(bot, cid, i, q=None):
-    """Переключает сохранение текущей рекомендации кино или книги."""
-    import saved_items
-    rec = store.last_recos.get(str(cid))
-    if not (rec and i < len(rec["items"])):
-        return
-    title = rec["items"][i]
-    kind = rec["kind"]
-    folder = "Кино" if kind == "movie" else "Книги"
-    saved = saved_items.toggle_note(cid, title, source=folder)
-    if kind != "movie":
-        items = store.get_list(config.SAVED_BOOKS_KEY, cid)
-        target = str(title).strip().casefold()
-        if saved:
-            existing = {
-                str(item.get("value") if isinstance(item, dict) else item).strip().casefold()
-                for item in items
-            }
-            if target not in existing:
-                store.set_list(config.SAVED_BOOKS_KEY, cid, [*items, title])
-        else:
-            items = [
-                item for item in items
-                if str(item.get("value") if isinstance(item, dict) else item).strip().casefold() != target
-            ]
-            store.set_list(config.SAVED_BOOKS_KEY, cid, items)
-    await saved_items.update_save_button(q, f"reco_{i}", saved)
-    if not saved:
-        return
-    if kind == "movie":
-        await _advance_movie(bot, cid)
-    else:
-        import leisure_books
-        await leisure_books._advance_book(bot, cid)
+            await q.message.edit_reply_markup(reply_markup=_movie_kb(i, favorite=True))

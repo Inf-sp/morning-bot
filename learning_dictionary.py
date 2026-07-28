@@ -586,7 +586,7 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
 def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")],
-        [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}")],
+        [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -610,7 +610,7 @@ def _dict_search_kb(entry, term_key):
     delete_row = ([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelid_{word_id}")]]
                   if word_id else [])
     return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + [
-        [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
+        [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -791,7 +791,7 @@ def _dict_entry_view_kb(entry, page, term_key):
     delete_row = ([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictviewdelid_{page}_{word_id}")]]
                   if word_id else [])
     return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + [
-        [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
+        [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}_{page}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 

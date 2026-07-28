@@ -939,7 +939,6 @@ def _gen_recipe(constraint, cid=None):
                 "scenario": "food_recipe",
                 "constraint": constraint,
                 "cuisine_preferences": context,
-                "saved_recipe_preferences": pref,
                 "avoid": avoid,
                 "sources": sources,
                 "language": "ru",
@@ -1228,7 +1227,6 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
                          meal_guard="", sources=None) -> str:
     """Собирает промпт батч-генерации очереди рецептов. Вынесено отдельно от
     _gen_recipe_batch, чтобы промпт можно было проверить без вызова LLM."""
-    pref = _my_recipe_pref(cid)
     context = _cuisine_context(cid) if cid else ""
     cz = (context + "\n") if context else ""
     weights_line = _cuisine_weights_line(cuisine_weights)
@@ -1239,7 +1237,7 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
     guard_line = f"{meal_guard}\n" if meal_guard else ""
     source_block = _themealdb_prompt_block(sources)
     return (
-        f"{cz}{weights_line}{season_line}{avoid_line}{pref}"
+        f"{cz}{weights_line}{season_line}{avoid_line}"
         f"Ты — шеф-повар с идеальной логикой. Составь список из {n} РАЗНЫХ рецептов "
         f"({constraint}), 1 человек, электрическая плита, духовка SAGE.\n"
         f"{guard_line}"

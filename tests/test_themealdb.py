@@ -113,7 +113,6 @@ def test_gemini_prompt_selects_translates_and_adapts_themealdb(monkeypatch):
     monkeypatch.setattr(recipe_generation, "_themealdb_sources", lambda *_args, **_kwargs: [_source()])
     monkeypatch.setattr(recipe_generation, "_cuisine_context", lambda _cid: "Любит японскую кухню")
     monkeypatch.setattr(recipe_generation, "_leftover_recent", lambda _cid: [])
-    monkeypatch.setattr(recipe_generation, "_my_recipe_pref", lambda _cid: "")
 
     def fake_llm(prompt, *_args, **kwargs):
         captured.update({"prompt": prompt, "kwargs": kwargs})
@@ -143,7 +142,6 @@ def test_recipe_queue_keeps_themealdb_source_for_each_adaptation(monkeypatch):
     sources = [_source(), {**_source(), "id": "52800", "name": "Second source"}]
     monkeypatch.setattr(recipe_generation, "_themealdb_sources", lambda *_args, **_kwargs: sources)
     monkeypatch.setattr(recipe_generation, "_cuisine_context", lambda _cid: "")
-    monkeypatch.setattr(recipe_generation, "_my_recipe_pref", lambda _cid: "")
 
     def fake_llm(prompt, *_args, **kwargs):
         captured.update({"prompt": prompt, "kwargs": kwargs})

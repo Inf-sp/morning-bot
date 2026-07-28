@@ -40,7 +40,7 @@ def home_screen(idea, visited_count):
 
 def countries_screen(count, page, pages):
     b = MessageBuilder()
-    b.title("🧳 Мой чемодан")
+    b.title("🎚️ Мой чемодан")
     b.line(f"{count} {plural_countries(count)} сохранено для твоей истории путешествий.")
     if not count:
         b.spacer()

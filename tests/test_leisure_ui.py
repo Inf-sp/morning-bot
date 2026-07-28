@@ -19,24 +19,24 @@ def _labels(markup):
     return [[button.text for button in row] for row in markup.inline_keyboard]
 
 
-def test_category_homes_keep_their_own_saved_and_personal_lists():
+def test_category_homes_keep_personal_lists_in_their_own_sections():
     assert _labels(leisure_movies._movie_home_kb()) == [
         ["✨ Подобрать кино"],
         ["🎭 По жанру"],
-        ["💾 Сохранения", "❤️ Моё кино"],
+        ["🎚️ Моё кино"],
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_books.books_home_keyboard()) == [
         ["✨ Подобрать книгу"],
         ["🎭 По жанру"],
-        ["💾 Сохранения", "❤️ Мои книги"],
+        ["🎚️ Мои книги"],
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_music.music_home_keyboard()) == [
         ["✨ Подобрать музыку"],
         ["🎭 По жанру"],
         ["🎫 Концерты"],
-        ["💾 Сохранения", "❤️ Мои артисты"],
+        ["🎚️ Мои артисты"],
         ["#️⃣ Главная"],
     ]
 
@@ -45,9 +45,9 @@ def test_recommendation_cards_use_content_specific_next_labels():
     assert _labels(leisure_movies._movie_kb(0))[0] == ["✨ Другое кино"]
     assert _labels(leisure_books._book_kb(0))[0] == ["✨ Другая книга"]
     assert _labels(leisure_music._listen_kb())[0] == ["✨ Другой артист"]
-    assert _labels(leisure_books._book_kb(0, saved=True))[1] == ["🎭 По жанру", "✅ Сохранено"]
-    assert _labels(leisure_movies._movie_kb(0, saved=True))[1] == ["🎭 По жанру", "✅ Сохранено"]
-    assert _labels(leisure_music._listen_kb(saved=True))[2] == ["🎭 По жанру", "✅ Сохранено"]
+    assert _labels(leisure_books._book_kb(0))[1] == ["🎭 По жанру"]
+    assert _labels(leisure_movies._movie_kb(0))[1] == ["🎭 По жанру"]
+    assert _labels(leisure_music._listen_kb())[2] == ["🎭 По жанру"]
 
 
 def test_preferences_are_available_from_personal_content_lists():
@@ -76,9 +76,9 @@ def test_leisure_category_keyboards_do_not_offer_a_back_button():
     assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 
-def test_save_collections_and_preferences_share_one_row_everywhere():
-    assert ["💾 Сохранения", "❤️ Мои артисты"] in _labels(leisure_music.music_home_keyboard())
-    assert ["💾 Сохранения", "❤️ Мои артисты"] in _labels(leisure_music._listen_kb())
+def test_music_does_not_offer_saved_items():
+    assert "💾 Сохранения" not in sum(_labels(leisure_music.music_home_keyboard()), [])
+    assert "💾 Сохранения" not in sum(_labels(leisure_music._listen_kb()), [])
 
 
 def test_music_styles_are_stored_and_invalidate_the_daily_recommendation(monkeypatch):
@@ -98,25 +98,13 @@ def test_music_styles_are_stored_and_invalidate_the_daily_recommendation(monkeyp
     assert saved["music_styles"] == ["indie"]
 
 
-def test_saved_movie_is_visible_in_its_collection(monkeypatch):
-    saved = {"id": "movie-1", "text": "Патерсон", "source": "Кино", "bucket": "fav"}
-    monkeypatch.setattr(cleanup.store, "ensure_list_ids", lambda *_args: [saved])
-    assert cleanup._collection_records(cleanup.COLLECTIONS["cinema_saved"], "42") == [saved]
-
-
-def test_saved_movie_card_shows_saved_state():
-    class Message:
-        reply_markup = leisure_movies._movie_kb(0)
-
-        async def edit_reply_markup(self, *, reply_markup):
-            self.reply_markup = reply_markup
-
-    class Query:
-        message = Message()
-
-    query = Query()
-    asyncio.run(saved_items.update_save_button(query, "reco_0", True))
-    assert _labels(query.message.reply_markup)[1] == ["🎭 По жанру", "✅ Сохранено"]
+def test_movies_and_books_do_not_offer_saved_items():
+    for keyboard in (
+        leisure_movies._movie_home_kb(), leisure_movies._movie_kb(0),
+        leisure_books.books_home_keyboard(), leisure_books._book_kb(0),
+    ):
+        assert "💾 Сохранения" not in sum(_labels(keyboard), [])
+        assert "💾 Сохранить" not in sum(_labels(keyboard), [])
 
 
 def test_book_recommendation_skips_favorite_and_prefers_reader_rating(monkeypatch):

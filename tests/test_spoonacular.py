@@ -96,7 +96,6 @@ def test_spoonacular_is_primary_and_gemini_selects_translates_adapts(monkeypatch
     )
     monkeypatch.setattr(recipe_generation, "_cuisine_context", lambda _cid: "Любит итальянскую кухню")
     monkeypatch.setattr(recipe_generation, "_leftover_recent", lambda _cid: [])
-    monkeypatch.setattr(recipe_generation, "_my_recipe_pref", lambda _cid: "")
 
     def fake_llm(prompt, *_args, **kwargs):
         captured.update({"prompt": prompt, "kwargs": kwargs})
@@ -162,7 +161,6 @@ def test_all_llms_down_still_returns_spoonacular_card(monkeypatch):
     monkeypatch.setattr(recipe_generation.spoonacular, "source_recipes", lambda *_args, **_kwargs: [_source()])
     monkeypatch.setattr(recipe_generation, "_cuisine_context", lambda _cid: "")
     monkeypatch.setattr(recipe_generation, "_leftover_recent", lambda _cid: [])
-    monkeypatch.setattr(recipe_generation, "_my_recipe_pref", lambda _cid: "")
     monkeypatch.setattr(
         recipe_generation.ai, "llm_json",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("all LLMs unavailable")),
@@ -207,7 +205,6 @@ def test_home_idea_can_be_built_from_spoonacular_without_ai():
 def test_batch_returns_plain_template_when_sources_and_llms_are_down(monkeypatch):
     monkeypatch.setattr(recipe_generation, "_recipe_sources", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(recipe_generation, "_cuisine_context", lambda _cid: "")
-    monkeypatch.setattr(recipe_generation, "_my_recipe_pref", lambda _cid: "")
     monkeypatch.setattr(
         recipe_generation.ai, "llm_json",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("all unavailable")),

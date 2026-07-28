@@ -60,15 +60,11 @@ def _collection(id, owner, title, storage_key, item_type, back, actions,
 
 COLLECTIONS = {
     "cinema_favorites": _collection(
-        "cinema_favorites", "cinema", f"Любимое · {ui_label('cinema', 'Кино')}", config.FAVORITE_MOVIES_KEY, "movie",
+        "cinema_favorites", "cinema", "🎚️ Моё кино", config.FAVORITE_MOVIES_KEY, "movie",
         "m_movie", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить фильм", "as_loveadd_movies"),
         footer_button=("🎚️ Предпочтения", "movie_prefs")),
-    "cinema_saved": _collection(
-        "cinema_saved", "cinema", f"⭐️ Сохранения · {ui_label('cinema', 'Кино')}", config.CONTENT_RECORDS_KEY, "note",
-        "m_movie", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
-        note_group="movies"),
     "cinema_watched": _collection(
         "cinema_watched", "cinema", f"{ui_label('seen', 'Смотрел')} · {ui_label('cinema', 'Кино')}", config.MOVIE_SEEN_KEY, "movie",
         "m_movie", [{"id": "remove", "label": "Убрать из просмотренного", "confirm": False}]),
@@ -77,14 +73,11 @@ COLLECTIONS = {
         "m_movie", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
 
     "books_favorites": _collection(
-        "books_favorites", "books", f"Любимое · {ui_label('books', 'Книги')}", config.FAVORITE_BOOKS_KEY, "book",
+        "books_favorites", "books", "🎚️ Мои книги", config.FAVORITE_BOOKS_KEY, "book",
         "m_books", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить книгу", "as_loveadd_books"),
         footer_button=("🎚️ Предпочтения", "book_prefs")),
-    "books_saved": _collection(
-        "books_saved", "books", f"⭐️ Сохранения · {ui_label('books', 'Книги')}", config.SAVED_BOOKS_KEY, "book",
-        "m_books", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": False}]),
     "books_read": _collection(
         "books_read", "books", f"{ui_label('seen', 'Прочитано')} · {ui_label('books', 'Книги')}", config.BOOK_SEEN_KEY, "book",
         "m_books", [{"id": "remove", "label": "Убрать из прочитанного", "confirm": False}]),
@@ -93,7 +86,7 @@ COLLECTIONS = {
         "m_books", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
 
     "music_favorite_artists": _collection(
-        "music_favorite_artists", "music", "Любимые артисты", config.FAVORITE_ARTISTS_KEY, "artist",
+        "music_favorite_artists", "music", "🎚️ Мои артисты", config.FAVORITE_ARTISTS_KEY, "artist",
         "m_music", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить артиста", "as_loveadd_artists"),
@@ -101,16 +94,12 @@ COLLECTIONS = {
     "music_hidden_artists": _collection(
         "music_hidden_artists", "music", "Скрытые артисты", config.MUSIC_DISLIKE_KEY, "artist",
         "m_music", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
-    "music_saved": _collection(
-        "music_saved", "music", f"⭐️ Сохранения · {ui_label('music', 'Музыка')}", config.CONTENT_RECORDS_KEY, "note",
-        "m_music", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
-        note_group="music"),
     "music_seen_artists": _collection(
         "music_seen_artists", "music", f"{ui_label('seen', 'Уже знаю')} · {ui_label('music', 'Музыка')}", config.MUSIC_SEEN_KEY, "artist",
         "m_music", [{"id": "remove", "label": "Убрать из знакомого", "confirm": False}]),
 
     "travel_saved_countries": _collection(
-        "travel_saved_countries", "travel", "🧳 Мой чемодан", config.SAVED_COUNTRIES_KEY, "country",
+        "travel_saved_countries", "travel", "🎚️ Мой чемодан", config.SAVED_COUNTRIES_KEY, "country",
         "m_travel", [{"id": "remove", "label": "Убрать страны", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить страну", "as_loveadd_countries")),
@@ -142,7 +131,6 @@ _COLLECTION_ALIASES = {
     "hid_artists": "music_hidden_artists",
     "hid_countries": "travel_hidden_countries",
     "wl": "cinema_favorites",
-    "rl": "books_saved",
     "fridge": "fridge_items",
 }
 
@@ -152,7 +140,7 @@ def _is_view_ctx(ctx):
             or ctx == "nb" or ctx.startswith("nb_")
             or ctx.startswith("lv_") or ctx.startswith("lvls_")
             or ctx.startswith("hid_")
-            or ctx.startswith("d_") or ctx in ("wl", "rl")
+            or ctx.startswith("d_") or ctx == "wl"
             or ctx.startswith("fridge_cat_")
             or ctx in ("fridge", "diary"))
 
@@ -200,8 +188,6 @@ def _view_store_key(ctx):
         return config.DICT_KEY
     if ctx == "wl":
         return config.FAVORITE_MOVIES_KEY
-    if ctx == "rl":
-        return config.SAVED_BOOKS_KEY
     if ctx == "fridge":
         return config.FRIDGE_KEY
     if ctx.startswith("fridge_cat_"):
@@ -350,10 +336,10 @@ def _ctx_items(cid, ctx):
             label, _desc = saved_items._fav_group_info(group)
             return f"{label} · Сохранённое", items, f"as_bucket_favgrp_{group}"
         return "Сохранённое", items, "as_bucket_fav"
-    if ctx in ("wl", "rl"):
-        key = config.FAVORITE_MOVIES_KEY if ctx == "wl" else config.SAVED_BOOKS_KEY
-        title = "🍿 Чистка: посмотреть" if ctx == "wl" else "📚 Чистка: почитать"
-        back = "m_movie" if ctx == "wl" else "m_books"
+    if ctx == "wl":
+        key = config.FAVORITE_MOVIES_KEY
+        title = "🍿 Чистка: посмотреть"
+        back = "m_movie"
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(key, cid))]
         return title, items, back
     if ctx.startswith("kast_"):
@@ -513,8 +499,8 @@ def _cleanup_delete(cid, ctx):
     elif ctx == "nb" or ctx.startswith("nb_"):
         notes = [n for i, n in enumerate(store.get_list(config.CONTENT_RECORDS_KEY, cid)) if i not in sel]
         store.set_list(config.CONTENT_RECORDS_KEY, cid, notes)
-    elif ctx in ("wl", "rl"):
-        key = config.FAVORITE_MOVIES_KEY if ctx == "wl" else config.SAVED_BOOKS_KEY
+    elif ctx == "wl":
+        key = config.FAVORITE_MOVIES_KEY
         store.set_list(key, cid, [it for i, it in enumerate(store.get_list(key, cid)) if i not in sel])
     elif ctx.startswith("kast_"):
         store.remove_wardrobe_items(cid, sel)
@@ -619,10 +605,10 @@ def _view_items(ctx, cid):
             if _l._dict_lang(w) == lang
         ]
         return f"{flag} Чистка словаря", items, f"a_dictlang_{lang}"
-    if ctx in ("wl", "rl"):
-        key = config.FAVORITE_MOVIES_KEY if ctx == "wl" else config.SAVED_BOOKS_KEY
-        title = "🍿 Чистка: посмотреть" if ctx == "wl" else "📚 Чистка: почитать"
-        back = "m_movie" if ctx == "wl" else "m_books"
+    if ctx == "wl":
+        key = config.FAVORITE_MOVIES_KEY
+        title = "🍿 Чистка: посмотреть"
+        back = "m_movie"
         records = store.ensure_list_ids(key, cid)
         items = [(r["id"], _view_label(r)) for r in records]
         return title, items, back
