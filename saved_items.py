@@ -289,54 +289,6 @@ async def send_notes(bot, cid):
         reply_markup=InlineKeyboardMarkup(rows), transient=True)
 
 
-async def send_mydata_leisure(bot, cid, back="m_leisure"):
-    rows = [
-        [InlineKeyboardButton(ui_label("cinema", "Кино"), callback_data="set_mydata_cinema")],
-        [InlineKeyboardButton(ui_label("books", "Книги"), callback_data="set_mydata_books")],
-        [InlineKeyboardButton(ui_label("music", "Музыка"), callback_data="set_mydata_music")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ]
-    msg = settings_ui.mydata_section(
-        f"{ui_label('leisure', 'Досуг')}",
-        "Наполни любимое — рекомендации станут точнее.",
-    )
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=InlineKeyboardMarkup(rows), transient=True)
-
-
-async def send_mydata_cinema(bot, cid):
-    rows = [
-        [InlineKeyboardButton("Любимое", callback_data="colr:cinema_favorites:set_mydata_leisure")],
-        [InlineKeyboardButton("⭐️ Сохранённое", callback_data="colr:cinema_saved:set_mydata_leisure")],
-        [InlineKeyboardButton("Предпочтения", callback_data="movie_prefs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ]
-    msg = settings_ui.mydata_section(f"{ui_label('cinema', 'Кино')}")
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=InlineKeyboardMarkup(rows), transient=True)
-
-
-async def send_mydata_books(bot, cid):
-    rows = [
-        [InlineKeyboardButton("Любимое", callback_data="colr:books_favorites:set_mydata_leisure")],
-        [InlineKeyboardButton("⭐️ Сохранённое", callback_data="colr:books_saved:set_mydata_leisure")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ]
-    msg = settings_ui.mydata_section(f"{ui_label('books', 'Книги')}")
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=InlineKeyboardMarkup(rows), transient=True)
-
-
-async def send_mydata_music(bot, cid):
-    rows = [
-        [InlineKeyboardButton("Любимые артисты", callback_data="colr:music_favorite_artists:set_mydata_leisure")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_mydata_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ]
-    msg = settings_ui.mydata_section(f"{ui_label('music', 'Музыка')}")
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=InlineKeyboardMarkup(rows), transient=True)
-
-
 async def send_food(bot, cid, q=None, back="m_food"):
     """Compat-экран для старых кнопок Готовки: без отдельной базы рецептов."""
     rows = [
@@ -622,9 +574,7 @@ async def love_add_done(bot, cid, key, text, origin="base"):
     import cleanup as _cl
     msg = settings_ui.favorite_added()
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
-    ctx_prefix = "lvls" if origin == "leisure" else "lv"
-    await _cl.open_cleanup(bot, cid, f"{ctx_prefix}_{key}",
-                           back="set_mydata_leisure" if origin == "leisure" else "as_notes")
+    await _cl.open_cleanup(bot, cid, f"lv_{key}", back="as_notes")
 
 
 async def handle_notes_callback(bot, cid, q, data):

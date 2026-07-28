@@ -17,7 +17,6 @@ import learning_settings
 import learning_router
 import leisure_books
 import leisure_concerts
-import leisure_home
 import leisure_movies
 import leisure_music
 import memory
@@ -45,7 +44,8 @@ _STATUS_TOPIC_PREFIXES = (
     ("a_dict", "learning"), ("a_train", "learning"), ("a_tr_", "learning"),
     ("ex_", "learning"), ("again_tr_", "learning"), ("game", "learning"),
     ("a_game", "learning"),
-    ("movie_", "leisure"), ("book_", "leisure"), ("listen", "leisure"), ("reco_", "leisure"), ("a_concerts", "leisure"),
+    ("m_movie", "leisure"), ("m_books", "leisure"), ("m_music", "leisure"),
+    ("movie_", "leisure"), ("book_", "leisure"), ("music_", "leisure"), ("listen", "leisure"), ("reco_", "leisure"), ("a_concerts", "leisure"),
     ("m_travel", "travel"), ("a_trav_", "travel"),
     ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("as_health_", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
 )
@@ -77,7 +77,7 @@ def _status_stages(data):
         first = "🎬 Ищу кино..."
     elif data.startswith(("book_", "a_read")):
         first = "📚 Ищу книгу..."
-    elif data.startswith(("listen", "a_listen")):
+    elif data.startswith(("music_", "listen", "a_listen")):
         first = "🎧 Ищу музыку..."
     elif data.startswith("a_concerts"):
         return progress("🎫 Ищу концерт...", "📅 Проверяю афишу...", "📝 Готовлю события...")
@@ -95,8 +95,12 @@ def _status_stages(data):
         first = "⏳ Ищу рецепт..."
     elif data == "m_wardrobe":
         first = "⏳ Ищу образ..."
-    elif data == "m_leisure":
-        first = "🍿 Ищу рекомендации..."
+    elif data == "m_movie":
+        first = "🎬 Ищу кино..."
+    elif data == "m_books":
+        first = "📚 Ищу книгу..."
+    elif data == "m_music":
+        first = "🎧 Ищу музыку..."
     elif data in ("a_plany", "m_myday"):
         return progress("☀️ Собираю мой день...", "🌦️ Сверяю планы...", "📝 Готовлю сводку...")
     elif data == "a_w_week":
@@ -264,11 +268,20 @@ async def handle(update, context, remove_reply_keyboard):
             lambda status: menu.send_food_menu(bot, cid, status=status, q=q),
         )
         return
-    if data == "m_leisure":
+    if data == "m_movie":
         await _inline_status(
-            lambda status: leisure_home.send_home(bot, cid, q, status=status),
+            lambda _status: leisure_movies.send_movie_home(bot, cid, q),
         )
         return
+    if data == "m_books":
+        await _inline_status(lambda _status: leisure_books.send_books_home(bot, cid, q))
+        return
+    if data == "m_music":
+        await _inline_status(lambda _status: leisure_music.send_music_home(bot, cid, q))
+        return
+    if data == "m_leisure":
+        # Старые карточки не ведут в удалённый агрегатор Досуга.
+        data = "m_menu"
     if data == "m_wardrobe":
         if not wardrobe.has_wardrobe_items(cid):
             await wardrobe.send_home(bot, cid, q=q)
@@ -371,15 +384,15 @@ async def handle(update, context, remove_reply_keyboard):
             elif act == "read":
                 await _inline_status(lambda _s: leisure_books.send_books_home(bot, cid, q))
             elif act == "readlist":
-                await cleanup.open_collection(bot, cid, "books_saved", back="a_read")
+                await cleanup.open_collection(bot, cid, "books_saved", back="m_books")
             elif act == "watchlist":
-                await cleanup.open_collection(bot, cid, "cinema_favorites", back="a_watch")
+                await cleanup.open_collection(bot, cid, "cinema_favorites", back="m_movie")
             elif act == "readlist":
-                await cleanup.open_collection(bot, cid, "books_saved", back="a_read")
+                await cleanup.open_collection(bot, cid, "books_saved", back="m_books")
             elif act == "watchclean":
-                await cleanup.open_collection(bot, cid, "cinema_favorites", back="a_watch")
+                await cleanup.open_collection(bot, cid, "cinema_favorites", back="m_movie")
             elif act == "readclean":
-                await cleanup.open_collection(bot, cid, "books_saved", back="a_read")
+                await cleanup.open_collection(bot, cid, "books_saved", back="m_books")
             elif act == "concerts_find":
                 await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, "home"))
             elif act == "concerts_nearby":
@@ -446,21 +459,15 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "game_reveal":
         await learning_game.game_reveal(bot, cid, q)
         return
-    # Развлечения / путешествия
-    if data == "leisure_saved":
-        await leisure_home.send_saved(bot, cid, q)
-        return
-    if data == "leisure_prefs":
-        await leisure_home.send_preferences(bot, cid, q)
-        return
+    # Старые кнопки общего экрана «Досуг»: направляем в соответствующую категорию.
     if data == "leisure_saved_movie":
-        await cleanup.open_collection(bot, cid, "cinema_saved", back="leisure_saved")
+        await cleanup.open_collection(bot, cid, "cinema_saved", back="m_movie")
         return
     if data == "leisure_saved_books":
-        await cleanup.open_collection(bot, cid, "books_saved", back="leisure_saved")
+        await cleanup.open_collection(bot, cid, "books_saved", back="m_books")
         return
     if data == "leisure_saved_music":
-        await cleanup.open_collection(bot, cid, "music_saved", back="leisure_saved")
+        await cleanup.open_collection(bot, cid, "music_saved", back="m_music")
         return
     if data == "leisure_prefs_movie":
         await leisure_movies.send_movie_prefs(bot, cid, q)
@@ -472,13 +479,13 @@ async def handle(update, context, remove_reply_keyboard):
         await leisure_music.send_music_preferences(bot, cid, q)
         return
     if data == "leisure_prefs_movie_favorites":
-        await cleanup.open_collection(bot, cid, "cinema_favorites", back="leisure_prefs_movie")
+        await cleanup.open_collection(bot, cid, "cinema_favorites", back="movie_prefs")
         return
     if data == "leisure_prefs_books_favorites":
-        await cleanup.open_collection(bot, cid, "books_favorites", back="leisure_prefs_books")
+        await cleanup.open_collection(bot, cid, "books_favorites", back="book_prefs")
         return
     if data == "leisure_prefs_music_favorites":
-        await cleanup.open_collection(bot, cid, "music_favorite_artists", back="leisure_prefs_music")
+        await cleanup.open_collection(bot, cid, "music_favorite_artists", back="music_prefs")
         return
     if data == "movie_prefs":
         await leisure_movies.send_movie_prefs(bot, cid, q)
@@ -499,23 +506,33 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "music_reco":
         await _inline_status(lambda _s: leisure_music.send_listen(bot, cid))
         return
+    if data == "music_genre_menu":
+        await _ack(q)
+        await leisure_music.send_music_genre_menu(bot, cid, q)
+        return
+    if data.startswith("music_g_"):
+        await _inline_status(
+            lambda status: leisure_music.send_music_by_genre(bot, cid, data[len("music_g_"):], status=status),
+            preserve_message=True,
+        )
+        return
     if data == "movie_saved":
-        await cleanup.open_collection(bot, cid, "cinema_saved", back="a_watch")
+        await cleanup.open_collection(bot, cid, "cinema_saved", back="m_movie")
         return
     if data == "book_favorites":
-        await cleanup.open_collection(bot, cid, "books_favorites", back="a_read")
+        await cleanup.open_collection(bot, cid, "books_favorites", back="m_books")
         return
     if data == "book_saved":
-        await cleanup.open_collection(bot, cid, "books_saved", back="a_read")
+        await cleanup.open_collection(bot, cid, "books_saved", back="m_books")
         return
     if data == "book_prefs":
         await leisure_books.send_book_preferences(bot, cid, q)
         return
     if data == "artist_favorites":
-        await cleanup.open_collection(bot, cid, "music_favorite_artists", back="a_listen")
+        await cleanup.open_collection(bot, cid, "music_favorite_artists", back="m_music")
         return
     if data == "artist_saved":
-        await cleanup.open_collection(bot, cid, "music_saved", back="a_listen")
+        await cleanup.open_collection(bot, cid, "music_saved", back="m_music")
         return
     if data == "music_prefs":
         await leisure_music.send_music_preferences(bot, cid, q)

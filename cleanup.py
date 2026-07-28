@@ -60,50 +60,50 @@ def _collection(id, owner, title, storage_key, item_type, back, actions,
 COLLECTIONS = {
     "cinema_favorites": _collection(
         "cinema_favorites", "cinema", f"Любимое · {ui_label('cinema', 'Кино')}", config.FAVORITE_MOVIES_KEY, "movie",
-        "a_watch", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
+        "m_movie", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить фильм", "as_loveadd_movies")),
     "cinema_saved": _collection(
         "cinema_saved", "cinema", f"⭐️ Сохранения · {ui_label('cinema', 'Кино')}", config.CONTENT_RECORDS_KEY, "note",
-        "a_watch", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
+        "m_movie", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
         note_group="movies"),
     "cinema_watched": _collection(
         "cinema_watched", "cinema", f"{ui_label('seen', 'Смотрел')} · {ui_label('cinema', 'Кино')}", config.MOVIE_SEEN_KEY, "movie",
-        "a_watch", [{"id": "remove", "label": "Убрать из просмотренного", "confirm": False}]),
+        "m_movie", [{"id": "remove", "label": "Убрать из просмотренного", "confirm": False}]),
     "cinema_hidden": _collection(
         "cinema_hidden", "cinema", f"Скрытое · {ui_label('cinema', 'Кино')}", config.MOVIE_BLACKLIST_KEY, "movie",
-        "a_watch", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
+        "m_movie", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
 
     "books_favorites": _collection(
         "books_favorites", "books", f"Любимое · {ui_label('books', 'Книги')}", config.FAVORITE_BOOKS_KEY, "book",
-        "a_read", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
+        "m_books", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить книгу", "as_loveadd_books")),
     "books_saved": _collection(
         "books_saved", "books", f"⭐️ Сохранения · {ui_label('books', 'Книги')}", config.SAVED_BOOKS_KEY, "book",
-        "a_read", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": False}]),
+        "m_books", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": False}]),
     "books_read": _collection(
         "books_read", "books", f"{ui_label('seen', 'Прочитано')} · {ui_label('books', 'Книги')}", config.BOOK_SEEN_KEY, "book",
-        "a_read", [{"id": "remove", "label": "Убрать из прочитанного", "confirm": False}]),
+        "m_books", [{"id": "remove", "label": "Убрать из прочитанного", "confirm": False}]),
     "books_hidden": _collection(
         "books_hidden", "books", f"Скрытое · {ui_label('books', 'Книги')}", config.BOOK_BLACKLIST_KEY, "book",
-        "a_read", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
+        "m_books", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
 
     "music_favorite_artists": _collection(
         "music_favorite_artists", "music", "Любимые артисты", config.FAVORITE_ARTISTS_KEY, "artist",
-        "a_listen", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
+        "m_music", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить артиста", "as_loveadd_artists")),
     "music_hidden_artists": _collection(
         "music_hidden_artists", "music", "Скрытые артисты", config.MUSIC_DISLIKE_KEY, "artist",
-        "a_listen", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
+        "m_music", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
     "music_saved": _collection(
         "music_saved", "music", f"⭐️ Сохранения · {ui_label('music', 'Музыка')}", config.CONTENT_RECORDS_KEY, "note",
-        "a_listen", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
+        "m_music", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
         note_group="music"),
     "music_seen_artists": _collection(
         "music_seen_artists", "music", f"{ui_label('seen', 'Уже знаю')} · {ui_label('music', 'Музыка')}", config.MUSIC_SEEN_KEY, "artist",
-        "a_listen", [{"id": "remove", "label": "Убрать из знакомого", "confirm": False}]),
+        "m_music", [{"id": "remove", "label": "Убрать из знакомого", "confirm": False}]),
 
     "travel_saved_countries": _collection(
         "travel_saved_countries", "travel", "💾 Сохранённые страны", config.SAVED_COUNTRIES_KEY, "country",
@@ -355,7 +355,7 @@ def _ctx_items(cid, ctx):
     if ctx in ("wl", "rl"):
         key = config.FAVORITE_MOVIES_KEY if ctx == "wl" else config.SAVED_BOOKS_KEY
         title = "🍿 Чистка: посмотреть" if ctx == "wl" else "📚 Чистка: почитать"
-        back = "a_watchlist" if ctx == "wl" else "a_readlist"
+        back = "m_movie" if ctx == "wl" else "m_books"
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(key, cid))]
         return title, items, back
     if ctx.startswith("kast_"):
@@ -374,7 +374,7 @@ def _ctx_items(cid, ctx):
         title = {"movies": f"{ui_label('cinema', 'Чистка: фильмы')}", "countries": f"{ui_label('countries', 'Чистка: страны')}",
                  "artists": f"{ui_label('music', 'Чистка: музыканты')}", "books": f"{ui_label('books', 'Чистка: книги')}"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
-        return title, items, "m_leisure_settings" if is_leisure else "as_notes"
+        return title, items, "as_notes"
     if ctx.startswith("hid_"):
         key = ctx[len("hid_"):]
         store_key = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
@@ -597,7 +597,7 @@ def _view_items(ctx, cid):
                  "artists": ui_label("music", "Чистка: музыканты"), "books": ui_label("books", "Чистка: книги")}.get(key, "Чистка")
         records = store.ensure_list_ids(store_key, cid) if store_key else []
         items = [(r["id"], _view_label(r)) for r in records]
-        return title, items, "m_leisure_settings" if is_leisure else "as_notes"
+        return title, items, "as_notes"
     if ctx.startswith("hid_"):
         key = ctx[len("hid_"):]
         store_key = _HIDDEN_STORE_KEYS.get(key)
@@ -632,7 +632,7 @@ def _view_items(ctx, cid):
     if ctx in ("wl", "rl"):
         key = config.FAVORITE_MOVIES_KEY if ctx == "wl" else config.SAVED_BOOKS_KEY
         title = "🍿 Чистка: посмотреть" if ctx == "wl" else "📚 Чистка: почитать"
-        back = "a_watchlist" if ctx == "wl" else "a_readlist"
+        back = "m_movie" if ctx == "wl" else "m_books"
         records = store.ensure_list_ids(key, cid)
         items = [(r["id"], _view_label(r)) for r in records]
         return title, items, back

@@ -855,7 +855,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
     if not artists:
         rows.append([InlineKeyboardButton("🆕 Добавить артиста", callback_data="as_loveadd_artists")])
     rows.append([InlineKeyboardButton(f"🌍 {cname}", callback_data="a_concerts_pick")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
 
@@ -931,7 +931,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
         rows_data,
         empty_hint=empty_hint,
     )
-    store.last_source[str(cid)] = "Досуг · Концерты"
+    store.last_source[str(cid)] = "Музыка · Концерты"
     store.last_answer[str(cid)] = msg.text
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
                            disable_web_page_preview=True)
@@ -1031,6 +1031,6 @@ async def concert_pick_country(bot, cid):
         for cc, _name, label in sorted(countries, key=lambda x: x[1])
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_music"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
                            reply_markup=InlineKeyboardMarkup(rows))

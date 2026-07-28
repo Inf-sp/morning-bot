@@ -51,6 +51,7 @@ def test_inline_status_starts_with_action_specific_text():
         "w_look": "⏳ Ищу образ...",
         "movie_reco": "🎬 Ищу кино...",
         "book_reco": "📚 Ищу книгу...",
+        "music_g_indie": "🎧 Ищу музыку...",
         "listen_no": "🎧 Ищу музыку...",
         "a_concerts_nl": "🎫 Ищу концерт...",
         "a_trav_go": "✈️ Ищу поездку...",
@@ -60,7 +61,9 @@ def test_inline_status_starts_with_action_specific_text():
         "a_listen": "🎧 Ищу музыку...",
         "m_food": "⏳ Ищу рецепт...",
         "m_wardrobe": "⏳ Ищу образ...",
-        "m_leisure": "🍿 Ищу рекомендации...",
+        "m_movie": "🎬 Ищу кино...",
+        "m_books": "📚 Ищу книгу...",
+        "m_music": "🎧 Ищу музыку...",
         "m_myday": "☀️ Собираю мой день...",
     }
 
@@ -71,7 +74,7 @@ def test_inline_status_starts_with_action_specific_text():
 def test_long_inline_actions_have_three_distinct_progress_stages():
     for data in (
         "game_again", "m_food_next", "w_look", "movie_reco", "book_reco",
-        "listen_no", "a_concerts_nl", "a_trav_go", "a_trav_country_NL_0",
+        "listen_no", "music_g_indie", "a_concerts_nl", "a_trav_go", "a_trav_country_NL_0",
         "a_dictadd_smart_nl", "ex_next_task", "m_myday",
     ):
         stages = bot_callbacks._status_stages(data)

@@ -5,6 +5,9 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import saved_items
+import leisure_books
+import leisure_movies
+import leisure_music
 
 
 class _Bot:
@@ -23,11 +26,11 @@ def _labels(message):
     ]
 
 
-def test_leisure_category_screens_do_not_show_hidden_or_seen_lists():
+def test_category_preferences_do_not_show_hidden_or_seen_lists():
     for sender in (
-        saved_items.send_mydata_cinema,
-        saved_items.send_mydata_books,
-        saved_items.send_mydata_music,
+        leisure_movies.send_movie_prefs,
+        leisure_books.send_book_preferences,
+        leisure_music.send_music_preferences,
     ):
         bot = _Bot()
         asyncio.run(sender(bot, "hidden-buttons"))

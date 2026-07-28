@@ -74,6 +74,9 @@ def test_cooking_learning_health_and_travel_menu_callbacks_are_routable():
             "a_trav_country_NL_0", "a_trav_country_del_NL_0",
             "a_trav_country_yes_NL_0", "a_trav_transport", "a_trav_mode_train",
         ),
+        "music": (
+            "music_reco", "music_genre_menu", "music_g_indie",
+        ),
     }
 
     missing = {

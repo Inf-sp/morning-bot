@@ -1,6 +1,5 @@
 UI_EMOJI = {
     "myday": "☀️",
-    "leisure": "🍿",
     "cinema": "🎬",
     "books": "📖",
     "music": "🎧",

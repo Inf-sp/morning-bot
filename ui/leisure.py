@@ -297,8 +297,11 @@ def book_text(item):
         count_text = f"{ratings_count:,}".replace(",", " ")
         b.line(f"⭐ Оценка читателей: {rating:.1f}/5 · {count_text} оценок")
     if item.get("desc"):
+        desc = str(item["desc"]).strip()
+        if desc and desc[-1] not in ".!?…":
+            desc += "."
         b.spacer()
-        b.line(item["desc"])
+        b.line(desc)
     why = item.get("why") or []
     if isinstance(why, list) and why:
         b.spacer()
@@ -307,11 +310,14 @@ def book_text(item):
         for w in why:
             b.bullet(str(w).lstrip("-–— "))
     if item.get("plot"):
+        plot = str(item["plot"]).strip()
+        if plot and plot[-1] not in ".!?…":
+            plot += "."
         b.spacer()
         b.text_line("✏️ ")
         b.bold("Коротко о сюжете")
         b.newline()
-        b.line(item["plot"])
+        b.line(plot)
     if item.get("quote"):
         quote = str(item["quote"]).strip().strip("«»\"")
         b.spacer()

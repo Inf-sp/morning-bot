@@ -496,7 +496,7 @@ def test_week_forecast_uses_preserved_inline_status(monkeypatch):
     assert calls[-1] == ("stop", True)
 
 
-def test_leisure_navigation_keeps_menu_visible_with_an_inline_loading_button(monkeypatch):
+def test_movie_navigation_keeps_menu_visible_with_an_inline_loading_button(monkeypatch):
     calls = []
 
     class Status:
@@ -510,15 +510,15 @@ def test_leisure_navigation_keeps_menu_visible_with_an_inline_loading_button(mon
         return Status()
 
     async def send_home(bot, cid, q, status=None):
-        calls.append(("leisure_home", q, status))
+        calls.append(("movie_home", q, status))
 
     monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
-    monkeypatch.setattr(bot_callbacks.leisure_home, "send_home", send_home)
+    monkeypatch.setattr(bot_callbacks.leisure_movies, "send_movie_home", send_home)
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
     monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
 
     class Query:
-        data = "m_leisure"
+        data = "m_movie"
         message = type("Message", (), {"chat_id": "42", "message_id": 7})()
 
     class Update:
@@ -531,9 +531,9 @@ def test_leisure_navigation_keeps_menu_visible_with_an_inline_loading_button(mon
 
     assert calls[0][0] == "start_inline"
     assert calls[0][-1] is True
-    assert calls[1][0] == "leisure_home"
-    assert calls[1][1].data == "m_leisure"
-    assert calls[1][2].mode == "inline"
+    assert calls[1][0] == "movie_home"
+    assert calls[1][1].data == "m_movie"
+    assert calls[1][2] is None
     assert calls[-1] == ("stop", True)
 
 

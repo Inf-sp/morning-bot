@@ -38,8 +38,8 @@ async def _ask_collect(bot, cid, kind: str):
     """Показывает экран сбора предпочтений и ставит pending_input."""
     store.pending_input[str(cid)] = f"collect_{kind}"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Пропустить", callback_data="m_leisure")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
+        [InlineKeyboardButton("Пропустить", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     await bot.send_message(chat_id=cid, text=_COLLECT_HINTS[kind], parse_mode="HTML", reply_markup=kb)
@@ -53,7 +53,7 @@ async def collect_done(bot, cid, kind: str, text: str):
     if not items:
         await bot.send_message(
             chat_id=cid, text="Не смог разобрать список — попробуй ещё раз.",
-            reply_markup=back_menu_keyboard("m_leisure"))
+            reply_markup=back_menu_keyboard("m_menu"))
         return
     key_map = {"artists": config.FAVORITE_ARTISTS_KEY, "movies": config.FAVORITE_MOVIES_KEY, "books": config.FAVORITE_BOOKS_KEY}
     key = key_map.get(kind)
@@ -205,9 +205,8 @@ JSON: {{"items": [{{"title": "название (год)", "title_en": "ориг�
 Порекомендуй РОВНО 5 действительно сильных КНИГ {current_year} года под этот вкус (без проходных).
 Сравнивай ТОЛЬКО с книгами из его списка выше, не с фильмами/сериалами.{avoid}
 JSON: {{"items": [{{"title": "название", "title_en": "оригинальное название", "year": "{current_year}",
- "author": "автор", "desc": "вводный абзац: 1-2 емких предложения о мире/конфликте/жанре, без воды",
- "why": ["раздел 1: сильный тезис почему читать, с точным сравнением с книгами пользователя", "раздел 1: второй сильный тезис"],
- "plot": "раздел 2: сюжет и главный конфликт, 2-3 точных предложения; если мир уже описан, не дублируй",
- "quote": "короткая цитата из книги",
+ "author": "автор", "desc": "одно законченное конкретное предложение: жанр, герой или среда и главный конфликт; не пиши обрывок, набор эпитетов или рекламный слоган",
+ "why": ["одна конкретная причина читать", "ещё одна конкретная причина, только если она не повторяет первую"],
+ "plot": "одно-два законченных предложения о завязке и ставке героя; не пересказывай описание мира и не обрывай фразу",
  "hook": "1 короткий редакторский итог без общих слов"}}]}}"""
     return ai.llm_json(prompt, 1300, tier="leisure")

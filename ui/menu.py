@@ -13,7 +13,6 @@ UI_FOOD = ui_label("food", "").strip()
 UI_LEARNING = ui_label("learning", "").strip()
 UI_HEALTH = ui_label("health", "").strip()
 UI_TRAVEL = ui_label("travel", "").strip()
-UI_LEISURE = ui_label("leisure", "").strip()
 UI_SETTINGS = ui_label("settings", "").strip()
 
 
@@ -52,7 +51,8 @@ def main_menu_rows():
         [(ui_label("myday", "Мой день"), "m_myday")],
         [(ui_label("wardrobe", "Гардероб"), "m_wardrobe"), (ui_label("food", "Готовка"), "m_food")],
         [(ui_label("learning", "Обучение"), "m_learn"), (ui_label("health", "Здоровье"), "m_balance")],
-        [(ui_label("travel", "Поездки"), "m_travel"), (ui_label("leisure", "Досуг"), "m_leisure")],
+        [(ui_label("travel", "Поездки"), "m_travel"), (ui_label("cinema", "Кино"), "m_movie")],
+        [(ui_label("books", "Книги"), "m_books"), (ui_label("music", "Музыка"), "m_music")],
         [(ui_label("settings", "Настройки"), "m_notes")],
     ]
 
@@ -108,42 +108,7 @@ _SCREENS = {
             [("#️⃣ Главная", "m_menu")],
         ],
     ),
-    "m_leisure": (
-        UI_LEISURE,
-        "Досуг",
-        [
-            "Фильмы, музыка и книги - под твой вкус.",
-            "Общие предпочтения и сохранённое — здесь.",
-        ],
-        [
-            [("🎬 Кино", "a_watch"), (ui_label("music", "Музыка"), "a_listen"),
-             (ui_label("books", "Книги"), "a_read")],
-            [("💾 Сохранения", "leisure_saved"), ("🎚️ Предпочтения", "leisure_prefs")],
-            [("#️⃣ Главная", "m_menu")],
-        ],
-        False,
-    ),
 }
-
-
-def leisure_menu(source="", answer=""):
-    rows = _SCREENS["m_leisure"][3]
-    source = str(source or "")
-    answer = " ".join(str(answer or "").split()).strip()
-    category = source.rsplit("·", 1)[-1].strip() if source.startswith("Досуг") else ""
-    if category and answer:
-        b = MessageBuilder()
-        b.section(f"🍿 Досуг на сегодня · {category}")
-        b.spacer()
-        b.line(answer[:280] + ("…" if len(answer) > 280 else ""))
-        return b.build_stripped(reply_markup=ikb(rows))
-    b = MessageBuilder()
-    b.section("🍿 Досуг")
-    b.spacer()
-    b.line("Что выбрать сегодня?")
-    b.spacer()
-    b.line("Могу подобрать кино, музыку или книгу.")
-    return b.build_stripped(reply_markup=ikb(rows))
 
 
 def learning_menu(home: dict):

@@ -9,7 +9,6 @@ import dictionary_seed
 import bot_text
 import cooking
 import fridge
-import leisure_home
 import menu
 import onboard
 import settings
@@ -96,37 +95,6 @@ def test_empty_fridge_check_reads_the_actual_fridge_store(monkeypatch):
 
     assert menu.has_available_fridge("42") is False
     assert calls == [(menu.config.FRIDGE_KEY, "42")]
-
-
-def test_first_leisure_screen_needs_no_preferences(monkeypatch):
-    sent = []
-
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
-    async def no_movies(*_args, **_kwargs):
-        return []
-
-    monkeypatch.setattr(leisure_home.store, "get_settings", lambda _cid: {"city": "Алкмар", "cc": "NL"})
-    monkeypatch.setattr(leisure_home.store, "get_list", lambda *_args: [])
-    monkeypatch.setattr(leisure_home.leisure_concerts, "_concerts_cache_get", lambda *_args: [])
-    monkeypatch.setattr(leisure_home.leisure_music, "_cached_artist", lambda *_args: None)
-    monkeypatch.setattr(leisure_home.leisure_books, "_cached_book", lambda *_args: None)
-    monkeypatch.setattr(leisure_home.leisure_movies, "get_local_now_playing", no_movies)
-
-    asyncio.run(leisure_home.send_home(Bot(), "42"))
-
-    assert sent[0]["text"] == (
-        "🍿 Развлечения на сегодня · Алкмар\n\n"
-        "Выбери кино, музыку или книгу — подберу что-то на сегодня.\n\n"
-        "💡 Добавь любимые фильмы, артистов и книги в Предпочтениях — рекомендации станут точнее."
-    )
-    assert _labels(sent[0]["reply_markup"]) == [
-        ["🎬 Кино", "🎧 Музыка", "📖 Книги"],
-        ["💾 Сохранения", "🎚️ Предпочтения"],
-        ["#️⃣ Главная"],
-    ]
 
 
 def test_health_home_opens_without_first_use_data(monkeypatch):

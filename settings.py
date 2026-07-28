@@ -1032,16 +1032,9 @@ async def handle_callback(bot, cid, data, q=None):
         await delete_lifehack(bot, cid, data[len("set_lh_delete_yes_"):])
     elif data.startswith("set_lh_delete_"):
         await confirm_lifehack_delete(bot, cid, data[len("set_lh_delete_"):])
-    elif data == "set_mydata_leisure":
-        await saved_items.send_mydata_leisure(bot, cid)
-    elif data == "set_mydata_leisure_p":
-        await saved_items.send_mydata_leisure(bot, cid, back="set_priorities")
-    elif data == "set_mydata_cinema":
-        await saved_items.send_mydata_cinema(bot, cid)
-    elif data == "set_mydata_books":
-        await saved_items.send_mydata_books(bot, cid)
-    elif data == "set_mydata_music":
-        await saved_items.send_mydata_music(bot, cid)
+    elif data in {"set_mydata_leisure", "set_mydata_leisure_p", "set_mydata_cinema", "set_mydata_books", "set_mydata_music"}:
+        # Кнопки из старых сообщений: общая страница «Досуг» больше не существует.
+        await send_home(bot, cid)
     elif data == "set_food":
         await saved_items.send_food(bot, cid, q)
     elif data == "set_travel":

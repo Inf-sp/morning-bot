@@ -35,15 +35,16 @@ def _movie_card(it, tm):
 def _movie_kb(i, category=None, saved=False, favorite=False):
     """Клавиатура карточки кино с быстрым подбором по жанру.
 
-    category используется только для сохранения контекста подбора; кнопка возврата
-    на карточке всегда ведёт в общее меню Досуга.
+    category используется только для сохранения контекста подбора.
     """
     rows = [
         [InlineKeyboardButton("✨ Другое кино", callback_data=f"movie_no_{i}")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
-        [InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
+         InlineKeyboardButton(save_toggle_label(saved, "Сохранить"), callback_data=f"reco_{i}")],
     ]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("💾 Сохранения", callback_data="movie_saved"),
+                 InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -72,7 +73,7 @@ def _movie_genre_menu_kb():
                for label, gid in _GENRE_MENU]
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i:i + 2])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 MIN_TMDB_RATING = 7.0
@@ -207,7 +208,7 @@ async def send_recos(bot, cid, kind):
             disp = _display_title(it, tm)
             movie_engine.mark_shown(cid, disp)
             store.last_recos[str(cid)] = {"kind": kind, "items": [disp]}
-            store.last_source[str(cid)] = "Досуг · Кино"
+            store.last_source[str(cid)] = "Кино"
             store.last_answer[str(cid)] = disp
             await _send_movie_card(bot, cid, it, 0, tm=tm)
             return
@@ -219,11 +220,11 @@ async def send_recos(bot, cid, kind):
     if not it:
         await bot.send_message(
             chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
-            reply_markup=back_menu_keyboard("m_leisure")); return
+            reply_markup=back_menu_keyboard("m_movie")); return
     disp = _display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
     store.last_recos[str(cid)] = {"kind": kind, "items": [disp]}
-    store.last_source[str(cid)] = "Досуг · Кино"
+    store.last_source[str(cid)] = "Кино"
     store.last_answer[str(cid)] = f"{disp} - {it.get('hook','')}"
     await _send_movie_card(bot, cid, it, 0, tm=tm)
 
@@ -231,9 +232,10 @@ async def send_recos(bot, cid, kind):
 def _movie_home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другое кино", callback_data="movie_reco")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
-        [InlineKeyboardButton("💾 Сохранить", callback_data="movie_saved")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu"),
+         InlineKeyboardButton("💾 Сохранения", callback_data="movie_saved")],
+        [InlineKeyboardButton("🎚️ Предпочтения", callback_data="movie_prefs")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
@@ -361,7 +363,7 @@ async def send_movie_now_playing(bot, cid, q=None, status=None):
     city = _movie_city(cid)
     now_playing = await get_local_now_playing(cid, limit=30)
     msg = leisure_ui.movie_now_playing_screen(city, now_playing)
-    kb = back_menu_keyboard("a_watch")
+    kb = back_menu_keyboard("m_movie")
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
         return
@@ -546,7 +548,7 @@ async def _advance_movie(bot, cid):
     if not it:
         await bot.send_message(
             chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
-            reply_markup=back_menu_keyboard("m_leisure")); return
+            reply_markup=back_menu_keyboard("m_movie")); return
     disp = _display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
     rec["items"].append(disp)
@@ -603,7 +605,7 @@ def _movie_prefs_kb(cid):
     spref = settings.get(cid, "movie_series_status", "") or ""
     rpref = settings.get(cid, "movie_recency", "") or ""
     rating = str(settings.get(cid, "movie_min_rating", "") or "")
-    rows = [[InlineKeyboardButton("❤️ Моё кино", callback_data="leisure_prefs_movie_favorites")]]
+    rows = [[InlineKeyboardButton("❤️ Моё кино", callback_data="movie_favorites")]]
     rows.append([InlineKeyboardButton("— Любимые жанры —", callback_data="noop")])
     gbtns = [InlineKeyboardButton(("✅ " if gid in gsel else "⬜ ") + label,
                                   callback_data=f"mpref_g_{gid}") for label, gid in _PREF_GENRES]
@@ -626,7 +628,7 @@ def _movie_prefs_kb(cid):
                                   callback_data=f"mpref_c_{v}") for label, v in _PREF_COUNTRIES]
     for i in range(0, len(cbtns), 2):
         rows.append(cbtns[i:i + 2])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="leisure_prefs"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -689,7 +691,7 @@ async def send_movie_by_genre(bot, cid, genre_id):
             _discover_pick, cid, [genre_id], _movie_prefs(cid),
             require_genre_ids=[genre_id], reason=reason)
     except Exception as e:
-        await verify.safe_error(bot, cid, e, back="m_leisure")
+        await verify.safe_error(bot, cid, e, back="m_movie")
         return
     if not it:
         await bot.send_message(chat_id=cid, text="В этом жанре пока не нашёл нового. Попробуй другой.",
@@ -709,7 +711,7 @@ async def _show_discovered(bot, cid, it, tm, category=None):
     rec["items"].append(disp)
     rec["category"] = category
     store.last_recos[str(cid)] = rec
-    store.last_source[str(cid)] = "Досуг · Кино"
+    store.last_source[str(cid)] = "Кино"
     await _send_movie_card(bot, cid, it, len(rec["items"]) - 1, tm=tm, category=category)
 
 
