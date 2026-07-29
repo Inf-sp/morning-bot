@@ -311,6 +311,46 @@ def test_detective_uses_local_round_when_ai_repeats_every_attempt(monkeypatch):
     assert remembered == [fallback]
 
 
+def test_detective_fallback_uses_accumulated_recent_cards(monkeypatch):
+    seen_recent = []
+
+    def fake_game_data(_lang, recent, attempt=0):
+        return {
+            "description": "I live with people and like warm places.",
+            "answer": "the dog",
+            "answer_en": "dog",
+            "aliases": ["собака"],
+            "hint": "I have a wet nose and say woof.",
+            "explain": "A dog often lives with people.",
+            "words": [],
+        }
+
+    def fake_local_game_data(_lang, recent):
+        seen_recent.append(list(recent))
+        return {
+            "description": "I am big and have a trunk.",
+            "answer": "the elephant",
+            "answer_en": "elephant",
+            "aliases": ["слон"],
+            "hint": "I have a long trunk.",
+            "explain": "An elephant is very large.",
+            "words": [],
+        }
+
+    monkeypatch.setattr(learning_game.store, "game_config", {"42": {"lang": "английский"}})
+    monkeypatch.setattr(learning_game, "_game_recent", lambda _cid: [])
+    monkeypatch.setattr(learning_game, "game_data", fake_game_data)
+    monkeypatch.setattr(learning_game, "_local_game_data", fake_local_game_data)
+    monkeypatch.setattr(learning_game, "_description_is_guessable", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(learning_game, "_remember_game_answer", lambda *_args: None)
+
+    bot = FakeBot()
+    asyncio.run(learning_game.send_game(bot, "42"))
+
+    assert seen_recent[0][:2] == ["the dog", "собака"]
+    assert len(seen_recent[0]) >= 2
+
+
 def test_detective_rejects_answer_inside_description():
     assert not learning_game._description_is_guessable({
         "description": "Ik ben een kat. Ik woon bij mensen. Ik maak soms een zacht geluid.",

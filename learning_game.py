@@ -123,14 +123,14 @@ def _game_recent(cid):
         name = (name or "").strip()
         if name and not any(_game_same(name, old) for old in out):
             out.append(name)
-    out = out[-80:]
+    out = out[-120:]
     store.game_recent[str(cid)] = out
     return out
 
 
 def _set_game_recent(cid, rec):
     rec = [str(x).strip() for x in (rec or []) if str(x).strip()]
-    rec = rec[-80:]
+    rec = rec[-120:]
     store.game_recent[str(cid)] = rec
     prof = store.get_profile(cid)
     prof["game_recent"] = rec
@@ -440,7 +440,6 @@ async def send_game(bot, cid, status=None):
     lang = cfg.get("lang", "английский")
     ui = _game_ui(lang)
     recent = _game_recent(cid)
-    played_recent = list(recent)
     try:
         d = {}
         for attempt in range(5):
@@ -456,7 +455,7 @@ async def send_game(bot, cid, status=None):
             # без раунда. Используем историю только реальных сыгранных загадок:
             # ответы неудачных попыток не считаются сыгранными и не должны
             # вытеснять подходящую локальную карточку.
-            fallback = _local_game_data(lang, played_recent)
+            fallback = _local_game_data(lang, recent)
             if fallback.get("answer") and _description_is_guessable(fallback, lang):
                 d = fallback
             else:
