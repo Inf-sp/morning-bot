@@ -12,9 +12,10 @@ import verify
 import secure
 import settings as _settings
 from ui import wardrobe as wardrobe_ui
-from ui.constants import choose_label, delete_label, ui_label
+from ui.constants import delete_label, ui_label
 from wardrobe_model import (
     ZONE_ORDER,
+    ZONE_SUBCATS,
     flat_items as _flat_wardrobe_items,
     has_rain_outerwear as _has_rain_outerwear,
     normalize_parsed_item,
@@ -156,15 +157,6 @@ def _purchase_recommendation_text(recommendation):
     item = _clean_text(recommendation.get("item"))
     reason = _clean_text(recommendation.get("reason"))
     return f"{item} — {reason}" if item and reason else item or reason
-
-
-def _purchase_recommendation_saved(cid, recommendation):
-    if not recommendation:
-        return False
-    import saved_items
-    return saved_items.is_note_saved(
-        cid, _purchase_recommendation_text(recommendation), "wardrobe_purchase",
-    )
 
 
 def _city_style_selected(selected_styles):
@@ -344,7 +336,7 @@ def _save_cached_look(cid, item_ids, look_data):
 
 
 # ---------- главный экран раздела (панель состояния) ----------
-def build_wardrobe_keyboard(has_result=True, *, has_purchase=False, purchase_saved=False):
+def build_wardrobe_keyboard(has_result=True):
     rows = [[("✨ Другой образ" if has_result else "✨ Подобрать образ", "w_look")]]
     rows.extend([
         [("🧐 Оценить покупку", "w_check")],
@@ -507,13 +499,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
             cached["text"] = text
             store.set_wardrobe_daylook(cid, cached)
         if kb is None:
-            result_kb = build_wardrobe_keyboard(
-                has_result=True,
-                has_purchase=bool(look_data.get("purchase_recommendation")),
-                purchase_saved=_purchase_recommendation_saved(
-                    cid, look_data.get("purchase_recommendation") or {},
-                ),
-            )
+            result_kb = build_wardrobe_keyboard(has_result=True)
         if status is not None:
             await status.replace(text, entities=entities, reply_markup=result_kb)
         elif q is not None:
@@ -603,11 +589,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         "purchase_recommendation": purchase_recommendation,
     }
     if kb is None:
-        result_kb = build_wardrobe_keyboard(
-            has_result=True,
-            has_purchase=bool(purchase_recommendation),
-            purchase_saved=_purchase_recommendation_saved(cid, purchase_recommendation),
-        )
+        result_kb = build_wardrobe_keyboard(has_result=True)
     text, entities = _build_look_message(look_data)
     # Порядок важен: save_outfit_feedback мутирует гардероб (use_count/last_used) и
     # бампает версию через mutate_wardrobe — кэш дня должен сохраняться ПОСЛЕ, иначе
@@ -619,24 +601,6 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     store.last_source[str(cid)] = "Гардероб · Образ"
     store.last_answer[str(cid)] = text
     await status.replace(text, entities=entities, reply_markup=result_kb)
-
-
-async def save_purchase_recommendation(bot, cid, q=None):
-    """Переключает сохранение текущей рекомендации покупки."""
-    recommendation = store.get_wardrobe_purchase_recommendation(cid)
-    text = _purchase_recommendation_text(recommendation)
-    if not text:
-        return
-    import saved_items
-    saved = saved_items.toggle_note(
-        cid,
-        text,
-        source="Гардероб · Покупка",
-        bucket="wardrobe_purchase",
-    )
-    await saved_items.update_save_button(q, "w_buy_save", saved)
-
-
 def get_wardrobe_gaps(cid):
     return store.get_list(config.WARDROBE_GAPS_KEY, cid)
 
@@ -651,7 +615,7 @@ def add_wardrobe_gap(cid, item, reason, priority=True):
     return True
 
 
-_ZONES_DESC = "; ".join(f"{z}: {', '.join(subs)}" for z, subs in store.ZONE_SUBCATS.items())
+_ZONES_DESC = "; ".join(f"{z}: {', '.join(subs)}" for z, subs in ZONE_SUBCATS.items())
 
 
 def _local_text_item(text):
@@ -1039,7 +1003,6 @@ async def check_purchase(bot, cid, text):
                 "item": text,
                 "wardrobe": w,
                 "preferences": prefs,
-                "web_facts": web_data,
                 "language": "ru",
                 "profile_version": 1,
                 "schema_version": 1,
@@ -1084,9 +1047,6 @@ async def handle_callback(bot, cid, q, data, status=None):
         finally:
             if owns_status:
                 await status.stop(delete=True)
-        return
-    if data == "w_buy_save":
-        await save_purchase_recommendation(bot, cid, q=q)
         return
     if data in ("w_closet", "w_del_g"):
         await send_wardrobe_zones(bot, cid, q=q); return

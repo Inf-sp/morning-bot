@@ -4,7 +4,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
 from .balance import finish_dot
 from .builder import MessageBuilder, MessageSpec
-from .constants import CUISINE_EMOJI, LANGUAGE_EMOJI, choose_label, ui_label
+from .constants import CUISINE_EMOJI, LANGUAGE_EMOJI, ui_label
 from .food import CUISINE_RU
 
 UI_MYDAY = ui_label("myday", "").strip()
@@ -53,7 +53,7 @@ def main_menu_rows():
         [(ui_label("learning", "Обучение"), "m_learn"), (ui_label("health", "Здоровье"), "m_balance")],
         [(ui_label("travel", "Поездки"), "m_travel"), (ui_label("music", "Музыка"), "m_music")],
         [(ui_label("cinema", "Кино"), "m_movie"), (ui_label("books", "Книги"), "m_books")],
-        [(ui_label("settings", "Настройки"), "m_notes")],
+        [(ui_label("settings", "Настройки"), "m_settings")],
     ]
 
 

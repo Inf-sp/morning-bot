@@ -3,7 +3,7 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 import requests
 

@@ -1,5 +1,5 @@
 from .builder import MessageBuilder, MessageSpec
-from .constants import choose_label, ui_label
+from .constants import ui_label
 
 
 def notifications():
@@ -166,41 +166,6 @@ def lifehack_delete_confirm(text):
     return b.build_stripped()
 
 
-def database_refresh_result(result):
-    result = result or {}
-    cache_lines = ""
-    if result.get("cache_refreshed") is not None:
-        cache_lines += f"\nКэши экранов обновлены: {result.get('cache_refreshed', 0)}"
-    if result.get("cache_failed"):
-        cache_lines += f"\nНе удалось обновить: {result['cache_failed']}"
-    if not any(result.get(key) for key in ("fixed", "duplicates", "review")):
-        return MessageSpec(
-            text=("✅ База в порядке\n"
-                  "Все записи уже соответствуют актуальному формату."
-                  f"{cache_lines}"),
-        )
-    return MessageSpec(text=(
-        "✅ База обновлена\n"
-        f"Проверено: {result.get('checked', 0)}\n"
-        f"Исправлено: {result.get('fixed', 0)}\n"
-        f"Объединено дубликатов: {result.get('duplicates', 0)}\n"
-        f"Требуют проверки: {result.get('review', 0)}\n"
-        f"Без изменений: {result.get('unchanged', 0)}"
-        f"{cache_lines}"
-    ))
-
-
-def language_review_item(item, remaining):
-    item = item or {}
-    b = MessageBuilder().section("🔎 Проверить изменение")
-    b.labeled_line("Сейчас", str(item.get("original") or "—"), lowercase=False)
-    if item.get("suggestion"):
-        b.labeled_line("Предлагается", str(item["suggestion"]), lowercase=False)
-    b.labeled_line("Почему", str(item.get("reason") or "Нужна ручная проверка"), lowercase=False)
-    b.labeled_line("Осталось", str(remaining))
-    return b.build_stripped()
-
-
 def mydata_section(title, hint=""):
     b = MessageBuilder().section(title)
     if hint:
@@ -208,120 +173,8 @@ def mydata_section(title, hint=""):
     return b.build_stripped()
 
 
-def nothing_to_save():
-    return MessageSpec(text="Нечего сохранять.")
-
-
-def saved_to_later():
-    return MessageSpec(text="⏳ Сохранено во временные закладки.")
-
-
-def note_blacklisted(preview, category):
-    return MessageSpec(text=f"«{preview[:50]}» - в чёрный список «{category}». Больше не порекомендую.")
-
-
-def note_removed_from_later():
-    return MessageSpec(text="Удалил из закладок.")
-
-
-def note_moved_to_favorites(preview, category):
-    return MessageSpec(text=f"❤️ «{preview[:50]}» - в любимые, раздел «{category}».")
-
-
-def note_deleted():
-    return MessageSpec(text="❌ Удалил.")
-
-
-def favorite_card(source, date, text, entities=None):
-    """Заголовок заметки + произвольное тело. Тело приходит как (text, entities) напрямую
-    из уже отправленного Telegram-сообщения (q.message.entities) — никакого HTML-парсинга
-    не нужно, entities только сдвигаются под заголовок через embed()."""
-    b = MessageBuilder()
-    b.text_line("⭐ ")
-    b.bold(source)
-    if date:
-        b.text_line(f" · {date}")
-    b.newline()
-    b.spacer()
-    b.embed(MessageSpec(text=text, entities=entities))
-    return b.build()
-
-
-def trips_empty():
-    b = MessageBuilder()
-    b.section("✈️ Поездки")
-    b.line("Пока пусто.")
-    return b.build_stripped()
-
-
-def trips_home():
-    b = MessageBuilder()
-    b.section("✈️ Поездки")
-    b.line("Сохранённые планы поездок.")
-    b.spacer()
-    b.line("Выбери план.")
-    return b.build_stripped()
-
-
-def later_home_empty():
-    b = MessageBuilder()
-    b.section("💾 Сохранить")
-    b.line(
-        "Сюда попадают временные закладки из ответов: кино, книги, музыка, "
-        "поездки, еда, гардероб и всё прочее."
-    )
-    b.spacer()
-    b.line("Пока пусто — сохраняй интересное кнопкой «💾 Сохранить» под ответами.")
-    return b.build_stripped()
-
-
-def later_home():
-    b = MessageBuilder()
-    b.section("💾 Сохранить")
-    b.line(
-        "Сюда попадают временные закладки из ответов: кино, книги, музыка, "
-        "поездки, еда, гардероб и всё прочее."
-    )
-    b.spacer()
-    b.line("Открой категорию, чтобы посмотреть и почистить её.")
-    return b.build_stripped()
-
-
-def later_group(label, desc):
-    b = MessageBuilder()
-    b.section(f"💾 Сохранить · {label}")
-    b.text_line(f"Здесь лежат временные закладки: {desc}.\n")
-    b.line("Открой карточку, чтобы увидеть её в исходном виде или удалить.")
-    return b.build_stripped()
-
-
-def favorites_home():
-    b = MessageBuilder()
-    b.section("❤️ Любимые")
-    b.line("Твои топ-категории.")
-    b.spacer()
-    b.line("Выбери раздел.")
-    return b.build_stripped()
-
-
-def favorite_section(title, items):
-    b = MessageBuilder()
-    b.section(title)
-    b.spacer()
-    if items:
-        for it in items[:50]:
-            b.bullet(it)
-    else:
-        b.italic("пусто")
-    return b.build_stripped()
-
-
 def favorite_add_prompt(name):
     return MessageSpec(text=f"Напиши {name} — добавлю в любимые.")
-
-
-def favorite_added():
-    return MessageSpec(text="Добавлено.")
 
 
 def admin_only():

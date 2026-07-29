@@ -6,8 +6,6 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import fridge
 import dictionary_import
-import saved_items
-import settings
 import wardrobe
 
 
@@ -47,27 +45,6 @@ def test_fridge_preferences_are_first_and_add_is_separate(monkeypatch):
     assert rows[0] == ["📌 Предпочтения"]
     assert rows[-2] == ["🆕 Добавить продукт"]
     assert rows[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-
-
-def test_favorites_add_action_names_object(monkeypatch):
-    monkeypatch.setattr(saved_items, "_love_items", lambda *_args: ["Книга"])
-    bot = _Bot()
-
-    asyncio.run(saved_items.send_love_section(bot, "pytest-add-layout", "books"))
-
-    _assert_add_menu(_labels(bot.message["reply_markup"]), "🆕 Добавить книгу")
-
-
-def test_lagom_add_action_is_first_and_separate(monkeypatch):
-    import memory
-
-    monkeypatch.setattr(memory, "get_lagom", lambda *_args: ["Больше ходить"])
-    bot = _Bot()
-
-    asyncio.run(settings.send_lagom(bot, "pytest-add-layout"))
-
-    _assert_add_menu(_labels(bot.message["reply_markup"]), "🆕 Добавить принцип")
-
 
 def test_dictionary_batch_keeps_add_action_on_own_first_row():
     rows = _labels(dictionary_import._dict_batch_preview_kb())

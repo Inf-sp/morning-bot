@@ -14,33 +14,21 @@ import config
 import ai
 import store
 import callback_topics
-import trainer_session
 import access
 import menu
-import assistant
 import balance
-import cooking
 import recipe_generation
-import fridge
-import retry_flow
 import bot_callbacks
 import bot_text
 import myday
 import wardrobe
 import learning_dictionary as dictionary
-import learning_game
-import learning_settings
 import trainer
-import learning_router
 import learning
-import cleanup
 import settings
-import saved_items
 import leisure_movies
 import leisure_collection
 import leisure_concerts
-import leisure_music
-import leisure_books
 import travel
 import weather
 import verify
@@ -51,14 +39,9 @@ import onboard
 import tracking
 import util
 from deploy_report import (
-    build_deploy_report_message,
     get_app_version,
-    load_release_notes,
-    load_release_title,
     maybe_send_admin_deploy_notification,
 )
-from util import ack_loading as _ack
-from util import clear_loading as _unack
 
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID
@@ -331,13 +314,9 @@ async def poll_answer_handler(update, context):
 
 
 # ---------- Команды-обёртки ----------
-async def notes_command(update, context):
-    store.pending_input.pop(str(update.effective_chat.id), None)
-    await saved_items.send_notes(context.bot, update.effective_chat.id)
-
 async def settings_command(update, context):
     store.pending_input.pop(str(update.effective_chat.id), None)
-    await saved_items.send_notes(context.bot, update.effective_chat.id)
+    await settings.send_home(context.bot, update.effective_chat.id)
 
 async def admin_command(update, context):
     cid = update.effective_chat.id
@@ -596,11 +575,6 @@ async def post_init(app):
             logging.info("Dedupe lists: applied")
     except Exception:
         logging.exception("Dedupe lists failed")
-    try:
-        if leisure_collection.seed_movies_from_content():
-            logging.info("Movies seed: applied")
-    except Exception:
-        logging.exception("Movies seed failed")
     from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeDefault
     common_commands = [
         BotCommand("menu", "Главное меню"),
@@ -776,7 +750,6 @@ def _build_application():
     app.add_handler(MessageHandler(filters.ALL, message_activity_handler), group=-1)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", menu_command))
-    app.add_handler(CommandHandler("notes", notes_command))
     app.add_handler(CommandHandler("settings", settings_command))
     app.add_handler(CommandHandler("setup", settings_command))
     app.add_handler(CommandHandler("admin", admin_command))
@@ -838,7 +811,6 @@ def main():
     if not lease.acquire():
         raise SystemExit("Polling lease was not acquired")
     app = None
-    conflict = False
     try:
         app = _build_application()
         _log.info(
@@ -846,7 +818,6 @@ def main():
             identity["pid"], identity["hostname"], identity["deployment"], id(app),
         )
         app.run_polling(drop_pending_updates=True, bootstrap_retries=0)
-        conflict = bool(app.bot_data.get("polling_conflict"))
     finally:
         _log.info(
             "Process stopping pid=%s hostname=%s deployment=%s",

@@ -304,7 +304,7 @@ async def send_home(
     cid = str(cid)
     opened = open_records(cid)
     # Открытие вкладки с уже записанными мыслями сразу ведёт к полезному
-    # результату. Явный вход из напоминания «Выгрузить тревоги» остаётся
+    # результату. Явный вход из напоминания «Выгрузить мысли» остаётся
     # исключением: он должен дать возможность добавить новую запись.
     if opened and not cleared and not explicit and auto_review:
         await review_all(bot, cid, status=status)
@@ -869,7 +869,7 @@ async def send_day_reminder(bot, cid):
         pass
     msg = thoughts_ui.day_reminder()
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✍️ Выгрузить тревоги", callback_data="thought_capture")],
+        [InlineKeyboardButton("🧠 Выгрузить мысли", callback_data="thought_capture")],
         [InlineKeyboardButton("😌 Всё спокойно", callback_data="thought_calm")],
     ])
     await bot.send_message(

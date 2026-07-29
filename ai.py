@@ -1083,7 +1083,6 @@ MODULE_POLICY = {
     "cooking": FOOD_ORDER,
     "recipe_generation": FOOD_ORDER,
     "wardrobe": LEISURE_ORDER,
-    "wardrobe_copy": LEISURE_ORDER,
     "wardrobe_migration": LEISURE_ORDER,
     "travel": LEISURE_ORDER,
     "travel_facts10": LEISURE_ORDER,

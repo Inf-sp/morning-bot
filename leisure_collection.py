@@ -1,81 +1,8 @@
-import re
-
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
 import ai
 import config
 import recommendation_stoplist
 import research
 import store
-from ui.constants import ui_label
-from ui.navigation import back_menu_keyboard
-
-# ===== КОНТЕНТ (content.py) =====
-
-# --- Инлайн-сбор предпочтений при пустом профиле ---
-_COLLECT_HINTS = {
-    "artists": (
-        f"{ui_label('music', '')} <b>Ещё нет любимых исполнителей</b>\n\n"
-        "Чтобы подбирать музыку под твой вкус, мне нужно знать, кого ты слушаешь.\n\n"
-        "Пришли список прямо сюда — по одному или через запятую:\n"
-        "<i>Например: The xx, Massive Attack, Portishead</i>"
-    ),
-    "movies": (
-        f"{ui_label('cinema', '')} <b>Ещё нет любимых фильмов</b>\n\n"
-        "Пришли список фильмов или сериалов, которые тебе понравились, — "
-        "подберу похожее.\n\n"
-        "<i>Например: Паразиты, Эйфория, Настоящий детектив</i>"
-    ),
-    "books": (
-        f"{ui_label('books', '')} <b>Ещё нет любимых книг</b>\n\n"
-        "Пришли список книг, которые ты читал и которые тебе понравились, — "
-        "подберу похожее.\n\n"
-        "<i>Например: Дюна, Атлант расправил плечи, Идиот</i>"
-    ),
-}
-
-async def _ask_collect(bot, cid, kind: str):
-    """Показывает экран сбора предпочтений и ставит pending_input."""
-    store.pending_input[str(cid)] = f"collect_{kind}"
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Пропустить", callback_data="m_menu")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
-    await bot.send_message(chat_id=cid, text=_COLLECT_HINTS[kind], parse_mode="HTML", reply_markup=kb)
-
-async def collect_done(bot, cid, kind: str, text: str):
-    """Парсит и сохраняет введённый список; повторно открывает раздел."""
-    import secure as _sec
-    raw = _sec.clamp(text)
-    # Разбиваем по запятым, переносам, точкам с запятой
-    items = [x.strip() for x in re.split(r"[,;\n]+", raw) if x.strip()]
-    if not items:
-        await bot.send_message(
-            chat_id=cid, text="Не смог разобрать список — попробуй ещё раз.",
-            reply_markup=back_menu_keyboard("m_menu"))
-        return
-    key_map = {"artists": config.FAVORITE_ARTISTS_KEY, "movies": config.FAVORITE_MOVIES_KEY, "books": config.FAVORITE_BOOKS_KEY}
-    key = key_map.get(kind)
-    if key:
-        existing = {_norm(x) for x in store.get_list(key, cid)}
-        added = [it for it in items if _norm(it) not in existing]
-        for it in added:
-            store.add_to_list(key, cid, it)
-        n = len(added)
-        label = {"artists": "артист(ов)", "movies": "фильм(ов)", "books": "книг(и)"}[kind]
-        await bot.send_message(chat_id=cid,
-            text=f"✅ Сохранено {n} {label}.", parse_mode="HTML")
-    # Повторно открываем нужный раздел
-    if kind == "artists":
-        import leisure_music
-        await leisure_music.send_listen(bot, cid)
-    elif kind == "movies":
-        import leisure_movies
-        await leisure_movies.send_recos(bot, cid, "movie")
-    elif kind == "books":
-        import leisure_books
-        await leisure_books.send_books_reco(bot, cid)
 
 def _ensure_books(cid):
     """Возвращает список книг пользователя (без авто-сида)."""
@@ -86,26 +13,10 @@ def _norm(x):
     s = x.get("name", "") if isinstance(x, dict) else str(x)
     return s.strip().lower()
 
-def _add_unique(key, cid, value):
-    """Добавляет в список, только если такого ещё нет (без учёта регистра). True - если добавлено."""
-    existing = {_norm(x) for x in store.get_list(key, cid)}
-    if _norm(value) in existing:
-        return False
-    store.add_to_list(key, cid, value)
-    return True
-
-def _note_fav_exists(cid, text):
-    """Есть ли уже такая закладка (bucket=fav) с тем же текстом."""
-    t = (text or "").strip().lower()
-    for n in store.get_list(config.CONTENT_RECORDS_KEY, cid):
-        if isinstance(n, dict) and n.get("bucket", "fav") == "fav" and n.get("text", "").strip().lower() == t:
-            return True
-    return False
-
 def dedupe_lists():
-    """Разовая чистка: убирает повторы (без учёта регистра) в списках любимого/закладок."""
+    """Разовая чистка: убирает повторы в личных коллекциях."""
     keys = [config.FAVORITE_BOOKS_KEY, config.FAVORITE_ARTISTS_KEY, config.FAVORITE_MOVIES_KEY,
-            config.COUNTRIES_KEY]
+            config.SAVED_COUNTRIES_KEY]
     changed_any = False
     for key in keys:
         data = store._load(key)
@@ -128,38 +39,13 @@ def dedupe_lists():
             changed_any = True
     return changed_any
 
-def seed_movies_from_content():
-    """Разово: вливает films+series из content.json в watchlist владельца (CHAT_ID).
-    Маркер в store не даёт повторить — удалённые фильмы не возвращаются при рестарте."""
-    if not config.CHAT_ID:
-        return False
-    marker = f"movies_{config.CHAT_ID}"
-    flags = store._load("_seed_flags") or {}
-    if flags.get(marker):
-        return False
-    try:
-        from pathlib import Path
-        import json
-        raw = json.loads((Path(__file__).parent / "content.json").read_text(encoding="utf-8"))
-    except Exception:
-        return False
-    titles = [t for t in raw.get("films", []) + raw.get("series", []) if isinstance(t, str) and t.strip()]
-    for title in titles:
-        _add_unique(config.FAVORITE_MOVIES_KEY, config.CHAT_ID, title.strip())
-    flags[marker] = True
-    store._save("_seed_flags", flags)
-    return True
-
 def content_recommend(kind, cid):
     if kind == "movie":
         loved = store.get_list(config.FAVORITE_MOVIES_KEY, cid)
         blocked = recommendation_stoplist.values(cid, "movie")
-        notes_all = store.get_list(config.CONTENT_RECORDS_KEY, cid)
-        noted_movies = [n.get("text", "") for n in notes_all
-                        if isinstance(n, dict) and "кино" in str(n.get("source", "")).lower()]
         what = "фильмов или сериалов"
         loved_titles = [s if isinstance(s, str) else str(s) for s in loved]
-        skip = loved_titles + blocked + noted_movies
+        skip = loved_titles + blocked
         avoid = ("\nНЕ рекомендуй то, что уже отмечено или не понравилось: " + ", ".join(skip[:80])) if skip else ""
         anchors = ", ".join(loved_titles[:25])
         web_block = ""
@@ -177,14 +63,14 @@ def content_recommend(kind, cid):
 JSON: {{"items": [{{"title": "название (год)", "title_en": "оригинальное/английское название", "hook": "1 строка: на что похоже из его референсов и чем зацепит"}}]}}"""
         return ai.llm_json(prompt, 1000, tier="leisure")
 
-    # книги: референсы вкуса берём из "Мои книги" (настройки/БД, авто-загрузка из content.json)
+    # Книги: референсы вкуса берём только из личного списка пользователя.
     my_books = _ensure_books(cid)
     my_books_titles = [b if isinstance(b, str) else str(b) for b in my_books]
     blocked = recommendation_stoplist.values(cid, "book")
     refs = my_books_titles
     anchors = ", ".join(refs[:25])
     skip = my_books_titles + blocked
-    avoid = ("\nНЕ рекомендуй уже прочитанное/в закладках/отклонённое: " + ", ".join(skip[:80])) if skip else ""
+    avoid = ("\nНЕ рекомендуй уже прочитанное, любимое или отклонённое: " + ", ".join(skip[:80])) if skip else ""
     web_block = ""
     from datetime import datetime
     current_year = datetime.now(config.TZ).year

@@ -10,7 +10,6 @@
 from dataclasses import dataclass
 from typing import Callable
 
-import config
 import store
 import weather
 
@@ -216,14 +215,13 @@ def collect_context(data, cid) -> WarnContext:
     bike = bool(_s.get(cid, "bike", False))
     pollen_allergy = bool(_s.get(cid, "pollen_allergy", False))
     has_raincoat = _raincoat_present(cid)
-    has_plan_today = _has_plan_today(cid)
 
     ctx = WarnContext(
         tmax=tmax, tmin=tmin, wind_ms=wind_ms, gust_ms=gust_ms,
         rain_prob=rain_prob, rain_mm=rain_mm, weathercode=weathercode,
         uv=uv, humidity=humidity,
         bike=bike, has_raincoat=has_raincoat, pollen_allergy=pollen_allergy,
-        has_plan_today=has_plan_today,
+        has_plan_today=False,
     )
     # интервалы «когда» из hourly в дневном окне
     ctx.when_rain = _hourly_when(data, day_str, "precipitation_probability", RAIN_PROB_WARN)
@@ -271,20 +269,6 @@ def _raincoat_present(cid) -> bool:
         return wardrobe._has_rain_outerwear(store.load_wardrobe(cid))
     except Exception:
         return False
-
-
-def _has_plan_today(cid) -> bool:
-    """Есть ли заметка-план на сегодняшнюю дату (формат '%d.%m', без времени)."""
-    try:
-        from datetime import datetime
-        today = datetime.now(config.TZ).strftime("%d.%m")
-        notes = store.get_list(config.CONTENT_RECORDS_KEY, cid)
-        for n in notes:
-            if isinstance(n, dict) and n.get("bucket") == "plan" and n.get("date") == today:
-                return True
-    except Exception:
-        pass
-    return False
 
 
 # ---------- сборка предупреждения ----------

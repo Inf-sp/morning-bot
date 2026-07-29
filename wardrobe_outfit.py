@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import config
 import store
 from wardrobe_model import (
+    ZONE_ORDER,
     flat_items as _flat_wardrobe_items,
     public_item_name,
     strip_internal_tags,
@@ -216,7 +217,7 @@ def select_outfit_candidates(w, weather_ctx):
     {zone: [item, ...]} — зона «Верхняя одежда» опциональна по погоде и может
     вернуть пустой список кандидатов, даже если в шкафу есть куртки."""
     candidates = {}
-    for zone in store.ZONE_ORDER:
+    for zone in ZONE_ORDER:
         if zone == "Другое":
             continue
         items = [it for _s, items in (w.get("zones", {}).get(zone, {}) or {}).items() for it in items]

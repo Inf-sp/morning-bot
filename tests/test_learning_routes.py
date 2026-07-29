@@ -69,7 +69,7 @@ def test_cooking_learning_health_and_travel_menu_callbacks_are_routable():
         ),
         "travel": (
             "m_travel", "a_trav_go", "a_trav_no", "a_trav_plan", "a_trav_fav",
-            "a_trav_save", "a_trav_countries_0", "a_trav_country_add",
+            "a_trav_countries_0", "a_trav_country_add",
             "a_trav_country_NL_0", "a_trav_country_del_NL_0",
             "a_trav_country_yes_NL_0", "a_trav_transport", "a_trav_mode_train",
         ),

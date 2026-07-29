@@ -227,7 +227,7 @@ def audit_architecture(root=None):
         "live_language.py", "learning_game.py", "learning_settings.py",
         "cooking.py", "leisure_movies.py", "leisure_books.py",
         "leisure_collection.py",
-        "leisure_music.py", "leisure_concerts.py", "saved_items.py",
+        "leisure_music.py", "leisure_concerts.py", "personal_collections.py",
         "storage_driver.py", "runtime_state.py", "repositories.py",
         "provider_runtime.py",
         "response_delivery.py", "retry_flow.py",
@@ -334,6 +334,7 @@ def audit_architecture(root=None):
     ownership_rules = {
         "balance.py": ("def enter_meal(", "def send_fridge(", "import cooking", "from cooking import"),
         "settings.py": ("def send_notes(", "def handle_notes_callback("),
+        "personal_collections.py": ("def send_notes(", "def handle_notes_callback("),
         "leisure_movies.py": ("def content_recommend(", "def collect_done(", "def dedupe_lists("),
         "store.py": ("def db(", "def load(", "def mutate("),
         "cooking.py": [

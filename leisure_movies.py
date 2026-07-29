@@ -1,9 +1,8 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from ui.constants import COUNTRY_EMOJI, ui_label
+from ui.constants import ui_label
 import asyncio
 import logging
 import re
-import random
 from datetime import datetime
 import config
 
@@ -17,10 +16,7 @@ import verify
 import tracking
 import local_cinema
 from ui import leisure as leisure_ui
-from leisure_collection import (
-    _ask_collect,
-    content_recommend,
-)
+from leisure_collection import content_recommend
 
 def _display_title(it, tm):
     """Название, которое реально показано пользователю (TMDb если есть, иначе от LLM)."""
@@ -35,10 +31,10 @@ def _movie_card(it, tm):
 def _movie_home_only_kb():
     return InlineKeyboardMarkup([[InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
 
-def _movie_kb(i, category=None, favorite=False):
+def _movie_kb(i, category=None):
     """Клавиатура карточки кино с быстрым подбором по жанру.
 
-    category используется только для сохранения контекста подбора.
+    category используется только для контекста подбора.
     """
     rows = [
         [InlineKeyboardButton("✨ Другое кино", callback_data=f"movie_no_{i}")],
@@ -76,14 +72,11 @@ _MOVIE_FALLBACKS = [
 ]
 
 def _movie_used(cid):
-    """Множество названий, которые нельзя повторять: любимые, знакомые, чёрный список, закладки."""
+    """Множество названий, которые нельзя повторять: любимые и чёрный список."""
     wl = store.get_list(config.FAVORITE_MOVIES_KEY, cid)
     blocked = recommendation_stoplist.values(cid, "movie")
-    notes_all = store.get_list(config.CONTENT_RECORDS_KEY, cid)
-    noted = [n.get("text", "") for n in notes_all
-             if isinstance(n, dict) and "кино" in str(n.get("source", "")).lower()]
     used = set()
-    for x in list(wl) + blocked + noted:
+    for x in list(wl) + blocked:
         used.add((x if isinstance(x, str) else str(x)).lower())
     return used
 
@@ -172,7 +165,7 @@ async def send_recos(bot, cid, kind):
         await leisure_books.send_books_reco(bot, cid)
         return
     # Даже без любимых открытие раздела должно дать современную качественную
-    # рекомендацию; вкус просто начнёт уточняться после первых сохранений.
+    # рекомендацию; вкус начнёт уточняться после первых отметок в любимом.
     seen = store.get_list(config.FAVORITE_MOVIES_KEY, cid)
     if not seen:
         candidates = await asyncio.to_thread(
@@ -520,7 +513,7 @@ async def _advance_movie(bot, cid):
 
     Если текущая сессия рекомендаций привязана к жанру (last_recos["category"],
     проставлено в _show_discovered), следующая карточка ОБЯЗАНА остаться в той же категории —
-    «Заменить»/«В любимые»/«Уже видел» внутри «Комедии» не должны сбрасывать
+    «Другое кино»/«В любимые»/«Уже видел» внутри «Комедии» не должны сбрасывать
     подбор на общий алгоритм. Без category — обычный путь Recommendations/Similar по любимым.
     """
     rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
@@ -668,7 +661,7 @@ async def send_movie_by_genre(bot, cid, genre_id):
 
 async def _show_discovered(bot, cid, it, tm, category=None):
     """category — контекст жанра, из которого пришла карточка: сохраняем его
-    в last_recos, чтобы «Заменить»/«В любимые»/«Уже видел» (через _advance_movie)
+    в last_recos, чтобы «Другое кино»/«В любимые»/«Уже видел» (через _advance_movie)
     брали СЛЕДУЮЩУЮ рекомендацию из той же категории, а не сбрасывались на общий подбор,
     и чтобы подбор оставался внутри выбранного жанра."""
     disp = _display_title(it, tm)
@@ -726,6 +719,6 @@ async def movie_love(bot, cid, i, q=None):
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
-        _add_unique(config.FAVORITE_MOVIES_KEY, cid, title)
+        store.add_to_list(config.FAVORITE_MOVIES_KEY, cid, title)
         if q is not None:
-            await q.message.edit_reply_markup(reply_markup=_movie_kb(i, favorite=True))
+            await q.message.edit_reply_markup(reply_markup=_movie_kb(i))

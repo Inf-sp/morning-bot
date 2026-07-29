@@ -13,7 +13,6 @@ import leisure_books
 import leisure_movies
 import leisure_music
 import movie_engine
-import saved_items
 
 
 def _labels(markup):
@@ -259,7 +258,7 @@ def test_leisure_category_keyboards_do_not_offer_a_back_button():
     assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 
-def test_music_does_not_offer_saved_items():
+def test_music_does_not_offer_generic_bookmarks():
     assert "💾 Сохранения" not in sum(_labels(leisure_music.music_home_keyboard()), [])
     assert "💾 Сохранения" not in sum(_labels(leisure_music._listen_kb()), [])
 
@@ -281,7 +280,7 @@ def test_music_styles_are_stored_and_invalidate_the_daily_recommendation(monkeyp
     assert saved["music_styles"] == ["indie"]
 
 
-def test_movies_and_books_do_not_offer_saved_items():
+def test_movies_and_books_do_not_offer_generic_bookmarks():
     for keyboard in (
         leisure_movies._movie_home_kb(), leisure_movies._movie_kb(0),
         leisure_books.books_home_keyboard(), leisure_books._book_kb(0),
@@ -292,7 +291,7 @@ def test_movies_and_books_do_not_offer_saved_items():
 
 def test_book_recommendation_skips_favorite_and_prefers_reader_rating(monkeypatch):
     def get_list(key, _cid):
-        return [{"value": "1984"}] if key == config.BOOKS_KEY else []
+        return [{"value": "1984"}] if key == config.FAVORITE_BOOKS_KEY else []
 
     monkeypatch.setattr(leisure_books.store, "get_list", get_list)
     monkeypatch.setattr(leisure_books.recommendation_stoplist, "values", lambda *_args: [])
@@ -335,7 +334,7 @@ def test_book_cache_drops_a_favorite(monkeypatch):
     monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {
         "42": {"date": today, "item": {"title": "1984"}},
     })
-    monkeypatch.setattr(leisure_books.store, "get_list", lambda key, _cid: [{"value": "1984"}] if key == config.BOOKS_KEY else [])
+    monkeypatch.setattr(leisure_books.store, "get_list", lambda key, _cid: [{"value": "1984"}] if key == config.FAVORITE_BOOKS_KEY else [])
     monkeypatch.setattr(leisure_books.recommendation_stoplist, "values", lambda *_args: [])
     assert leisure_books._cached_book("42") is None
 

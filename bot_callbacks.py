@@ -8,11 +8,8 @@ import balance
 import callback_topics
 import cleanup
 import cooking
-import dictionary_seed
 import dictionary_tts
-import fridge
 import learning_dictionary as dictionary
-import learning
 import learning_game
 import learning_settings
 import learning_router
@@ -20,12 +17,11 @@ import leisure_books
 import leisure_concerts
 import leisure_movies
 import leisure_music
-import memory
 import menu
 import myday
 import onboard
 import retry_flow
-import saved_items
+import personal_collections
 import settings
 import store
 import trainer
@@ -34,7 +30,7 @@ import util
 import verify
 import wardrobe
 import weather
-from util import ack_loading as _ack, clear_loading as _unack
+from util import ack_loading as _ack
 
 _log = logging.getLogger(__name__)
 
@@ -154,9 +150,9 @@ async def handle(update, context, remove_reply_keyboard):
         await onboard.handle_callback(bot, cid, q, data)
         return
 
-    # Закладки: fav_view_* и fav_del_*
+    # Старые callbacks карточек не меняют данные и ведут к актуальному экрану.
     if data.startswith("fav_"):
-        await saved_items.handle_notes_callback(bot, cid, q, data)
+        await personal_collections.handle_collection_callback(bot, cid, q, data)
         return
     if data.startswith("thought_"):
         await balance.thoughts.handle_callback(bot, cid, q, data)
@@ -166,9 +162,9 @@ async def handle(update, context, remove_reply_keyboard):
         # кнопка перестаёт крутиться до сетевого запроса Azure.
         await dictionary_tts.send_pronunciation(bot, cid, data.split(":", 1)[1])
         return
-    # Здоровье/готовка vs Закладки/Любимое
+    # Здоровье/готовка vs личные коллекции
     if data.startswith("ls_"):
-        await saved_items.handle_notes_callback(bot, cid, q, data)
+        await personal_collections.handle_collection_callback(bot, cid, q, data)
         return
     if data.startswith("as_"):
         if data == "as_daycheck":
@@ -187,7 +183,7 @@ async def handle(update, context, remove_reply_keyboard):
         elif data.startswith(("as_daycheck", "as_motiv", "as_doctor", "as_medicine")):
             await balance.handle_callback(bot, cid, q, data)
         else:
-            await saved_items.handle_notes_callback(bot, cid, q, data)
+            await personal_collections.handle_collection_callback(bot, cid, q, data)
         return
     # Гардероб: инлайн-кабинет
     if data.startswith("w_"):
@@ -229,8 +225,8 @@ async def handle(update, context, remove_reply_keyboard):
         except Exception:
             pass
         return
-    if data == "m_notes":
-        await saved_items.send_notes(bot, cid); return
+    if data in ("m_settings", "m_notes"):
+        await settings.send_home(bot, cid); return
     if data == "m_food_gen":
         await _inline_status(
             lambda status: cooking.send_recipe_featured(bot, cid, status=status),
@@ -241,10 +237,6 @@ async def handle(update, context, remove_reply_keyboard):
             preserve_message=True); return
     if data in ("m_learn", "m_menu"):
         trainer.cancel(cid)
-
-    if data == "m_learn" and not learning.build_learning_home(cid).get("has_material"):
-        await dictionary_seed.send_seed_intro(bot, cid, q=q)
-        return
 
     if data == "m_food":
         if not menu.has_available_fridge(cid):
@@ -351,8 +343,6 @@ async def handle(update, context, remove_reply_keyboard):
                 await _inline_status(lambda _s: travel.send_plan(bot, cid))
             elif act == "trav_fav":
                 await _inline_status(lambda status: travel.travel_fav(bot, cid, status=status))
-            elif act == "trav_save":
-                await travel.save_plan(bot, cid, q)
             elif re.fullmatch(r"trav_country_[A-Z0-9]+_\d+", act):
                 await _inline_status(
                     lambda status: travel.handle_country_callback(bot, cid, q, act, status=status),

@@ -60,15 +60,12 @@ def _shown_norms(cid):
 
 # ---------- множества исключений ----------
 def _excluded_norms(cid, include_shown=True):
-    """Названия, которые нельзя показывать: любимые/seen/blacklist/закладки(+показанные)."""
+    """Названия, которые нельзя показывать: любимые, стоп-лист и показанные."""
     keys = [config.FAVORITE_MOVIES_KEY]
     names = []
     for k in keys:
         names += store.get_list(k, cid)
     names += recommendation_stoplist.values(cid, "movie")
-    notes = store.get_list(config.CONTENT_RECORDS_KEY, cid)
-    names += [n.get("text", "") for n in notes
-              if isinstance(n, dict) and "кино" in str(n.get("source", "")).lower()]
     ex = {_norm(x) for x in names}
     if include_shown:
         ex |= _shown_norms(cid)

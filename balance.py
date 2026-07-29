@@ -8,8 +8,6 @@ _log = logging.getLogger(__name__)
 import ai
 import verify
 import secure
-from ui import food as food_ui
-from ui.constants import CUISINE_EMOJI, ui_label
 import menu
 import thoughts
 from response_delivery import (

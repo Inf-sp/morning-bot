@@ -41,13 +41,13 @@ def home_screen(idea, visited_count):
 def countries_screen(count, page, pages):
     b = MessageBuilder()
     b.title("🎚️ Мой чемодан")
-    b.line(f"{count} {plural_countries(count)} сохранено для твоей истории путешествий.")
+    b.line(f"В чемодане: {count} {plural_countries(count)}.")
     if not count:
         b.spacer()
-        b.line("Пока здесь пусто. Сохраняй страны кнопкой «💾 Сохранить» в карточке поездки.")
+        b.line("Пока здесь пусто. Добавь страну, в которой уже был.")
     else:
         b.spacer()
-        b.line("Выбери страну, чтобы посмотреть её карточку или убрать из сохранённых.")
+        b.line("Выбери страну, чтобы посмотреть её карточку или убрать из чемодана.")
     return b.build_stripped()
 
 

@@ -355,7 +355,7 @@ def test_malformed_saved_recommendation_is_replaced_for_another_outfit(monkeypat
 def test_outfit_card_has_no_save_action():
     labels = [
         button.text
-        for row in wardrobe.build_wardrobe_keyboard(has_purchase=True).inline_keyboard
+        for row in wardrobe.build_wardrobe_keyboard().inline_keyboard
         for button in row
     ]
 

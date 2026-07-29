@@ -3,11 +3,11 @@ import os
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
-import bot
+import deploy_report
 
 
 def test_deploy_report_filters_duplicate_status_lines():
-    message = bot.build_deploy_report_message(
+    message = deploy_report.build_deploy_report_message(
         "1.16.45",
         [
             "Исправлено добавление слов.",

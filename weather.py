@@ -1,15 +1,11 @@
 import asyncio
 import logging
 import random
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
-from copy import deepcopy
-import time
 import requests
 
 _log = logging.getLogger(__name__)
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-import api_usage
 import config
 import store
 import ai
@@ -112,6 +108,14 @@ def rain_text(rain, rain_mm=None, when=""):
     if rain:
         return f"Дождь{when} {rain:.0f}%"
     return ""
+
+
+def _rain_description(rain, rain_mm, periods=()):
+    """Короткая фактическая фраза для AI-сводки без неинициализированных данных."""
+    if not _rain_real(rain, rain_mm):
+        return "без осадков"
+    when = ", ".join(str(period).strip() for period in (periods or []) if str(period).strip())
+    return f"дождь {rain:.0f}%" + (f" {when}" if when else "")
 
 
 def _weather_main_lines(
@@ -455,7 +459,7 @@ async def send_weather(bot, cid, mode="today", status=None):
             periods.append({"label": label, "line": line})
         joke = _joke_outfit(s["city"], d["temperature_2m_max"][0], d["precipitation_probability_max"][0] or 0,
                             d["windspeed_10m_max"][0] or 0, DESC.get(d["weathercode"][0], ""), "сегодня")
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
         msg = weather_ui.full_forecast(header, periods, joke)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
@@ -494,7 +498,7 @@ async def send_weather(bot, cid, mode="today", status=None):
                     fact = mf
         else:
             fact = _world_fact()
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
         msg = weather_ui.day_forecast(header, main_lines, alert=alert, fact_title=fact_title, fact=fact)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
@@ -523,7 +527,7 @@ async def send_weather(bot, cid, mode="today", status=None):
             pass
         else:
             try:
-                rain_desc = f"дождь {rain:.0f}%{rain_when}" if _rain_real(rain, rain_mm) else "без осадков"
+                rain_desc = _rain_description(rain, rain_mm, rain_p)
                 summary = await ai.allm(
                     f"Погода завтра в {s['city']}: {desc}, до {tmax:+.0f}°C, {rain_desc}, "
                     f"ветер {wind_ms:.0f} м/с.\n\n"
@@ -585,7 +589,7 @@ async def send_weather(bot, cid, mode="today", status=None):
     overview = _week_overview(day_data)
     advice = _week_advice(day_data)
 
-    kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="a_plany"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
+    kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
     msg = weather_ui.week_forecast(rng, s["city"], overview, day_data, advice)
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)

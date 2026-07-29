@@ -13,7 +13,6 @@ import recommendation_stoplist
 import settings
 import store
 from ui import leisure as leisure_ui
-from ui.constants import ui_label
 
 _log = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ _RECENT_ARTISTS_LIMIT = 40
 
 # Последний резерв, когда все AI-провайдеры временно недоступны. Это реальные,
 # достаточно известные артисты с существующими треками; выбор всё равно исключает
-# уже знакомых, сохранённых, отклонённых и недавно показанных.
+# уже знакомых, любимых, отклонённых и недавно показанных.
 _LOCAL_ARTIST_FALLBACKS = {
     "indie": [
         {"artist": "Big Thief", "desc": "Живой инди-рок с хрупким вокалом и неожиданными поворотами.",
@@ -150,16 +149,6 @@ def _add_unique(key, cid, value):
     items = store.get_list(key, cid)
     if value and value.lower() not in {_item_text(item).lower() for item in items}:
         store.set_list(key, cid, [*items, value])
-
-
-async def _ask_collect(bot, cid, kind):
-    import leisure_collection
-    return await leisure_collection._ask_collect(bot, cid, kind)
-
-
-def content_recommend(kind, cid):
-    import leisure_collection
-    return leisure_collection.content_recommend(kind, cid)
 
 
 def _kick_off_new_artist_concert_check(cid, artist_names):
@@ -428,12 +417,9 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
         fallback_category = {"value": selected_styles[0]}
     blocked = recommendation_stoplist.values(cid, "artist")
     recent = _recent_artists(cid)
-    notes = store.get_list(config.CONTENT_RECORDS_KEY, cid)
-    booked = [n.get("text", "") for n in notes
-              if isinstance(n, dict) and "музык" in str(n.get("source", "")).lower()]
-    known = (set(a.lower() for a in arts) | set(b.lower() for b in booked)
+    known = (set(a.lower() for a in arts)
              | set(value.lower() for value in blocked) | set(value.lower() for value in recent))
-    avoid_all = ", ".join(list(arts) + booked + blocked + recent)[:600]
+    avoid_all = ", ".join(list(arts) + blocked + recent)[:600]
     data = None
     rejected = []
     for attempt in range(3):
@@ -451,7 +437,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
                 f"Любимые исполнители пользователя (его вкус): {anchors}.\n"
                 f"{genre_context}\n"
                 f"{style_context}\n"
-                f"НЕ предлагай никого из этого списка (уже в закладках/любимых/отклонены): {avoid_this_try}.\n"
+                f"НЕ предлагай никого из этого списка (уже в любимых, отклонены или недавно показаны): {avoid_this_try}.\n"
                 "Предложи РОВНО ОДНОГО НОВОГО исполнителя, максимально близкого по вкусу "
                 "пользователя. Предпочитай современных активных артистов с выразительной, мелодичной, "
                 "качественно спродюсированной музыкой. Исполнитель должен быть заметным, популярным или "

@@ -1,19 +1,16 @@
 """Учебный словарь: схема, репозиторий, нормализация, миграции и экраны."""
 
 import logging
-import random
 import re
 from datetime import datetime
 from pathlib import Path
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
 import config
 import secure
-import srs
 import store
-import verify
 from dictionary_model import (
     CANONICAL_ENTRY_OVERRIDES,
     PHRASE_CORRECTIONS,
@@ -27,9 +24,7 @@ from dictionary_model import (
     normalize_key,
     normalize_term_case,
 )
-from dictionary_repository import DictionaryRepository
 from ui import dictionary as dict_ui
-from ui import learning as learning_ui
 from ui.constants import delete_label
 from ui.navigation import back_menu_keyboard
 
@@ -65,7 +60,6 @@ def migrate_dict_caps():
                     words[index] = normalized
                     changed = True
                 continue
-            original = dict(w)
             normalized_entry = normalize_entry(w)
             # Keep every legacy field that may be read by older callers, while
             # making the canonical fields agree with the same display value.
@@ -483,7 +477,6 @@ async def _show_screen(
 
 
 _DICT_ORIGIN_TO_BACK = {
-    "notes": "m_notes",
     "menu": "m_learn",
     "mydata": "set_home",
     "learnset": "set_learning",
@@ -491,12 +484,12 @@ _DICT_ORIGIN_TO_BACK = {
 _DICT_BACK_TO_ORIGIN = {v: k for k, v in _DICT_ORIGIN_TO_BACK.items()}
 
 
-async def send_dict(bot, cid, back="m_notes", q=None):
+async def send_dict(bot, cid, back="m_learn", q=None):
     c = _dict_counts(cid)
     nl_total = c["nl"]
     en_total = c["en"]
     msg = dict_ui.dict_overview(nl_total, en_total)
-    origin = _DICT_BACK_TO_ORIGIN.get(back, "notes")
+    origin = _DICT_BACK_TO_ORIGIN.get(back, "menu")
     rows = [
         [InlineKeyboardButton(f"🇳🇱 Нидерландский ({nl_total})", callback_data=f"a_dictlang_nl_from_{origin}")],
         [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data=f"a_dictlang_en_from_{origin}")],
@@ -543,7 +536,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
 
 
 async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
-    """Вкладка «Добавить или удалить слово»: список слов (тап открывает карточку
+    """Список слов: тап открывает карточку
     с удалением) + приглашение написать слово текстом, чтобы добавить его."""
     store.pending_input[str(cid)] = f"dictadd_smart_{lang}"
     entries = _dict_lang_entries(cid, lang)
@@ -669,6 +662,16 @@ async def confirm_delete_dict_entry(bot, cid, lang, term_key, q=None):
 
 def _entry_by_id(cid, word_id):
     return next((item for item in _ensure_dict(cid) if str(item.get("id") or "") == str(word_id)), None)
+
+
+def _dict_loose_text(lang, word):
+    """Ключ для проверки дубля при переносе записи между словарями."""
+    value = re.sub(r"\s+", " ", str(word or "").strip()).rstrip(".").casefold()
+    if lang == "nl":
+        value = re.sub(r"^(de|het|een)\s+", "", value)
+    elif lang == "en":
+        value = re.sub(r"^(to|the|a|an)\s+", "", value)
+    return value
 
 
 async def confirm_delete_dict_entry_by_id(bot, cid, word_id, q=None):

@@ -196,7 +196,7 @@ _SECTION_BY_MODULE = {
     "themealdb": "Готовка", "learning": "Обучение", "trainer": "Обучение",
     "learning_game": "Обучение", "learning_dictionary": "Обучение",
     "dictionary_import": "Обучение", "language_tool": "Обучение",
-    "wardrobe": "Гардероб", "wardrobe_copy": "Гардероб",
+    "wardrobe": "Гардероб",
     "research": "Поиск", "assistant": "Ассистент", "leisure_movies": "Кино",
     "tmdb": "Кино", "leisure_books": "Книги", "google_books": "Книги",
     "leisure_music": "Музыка", "leisure_concerts": "Концерты",

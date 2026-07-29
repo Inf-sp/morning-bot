@@ -10,7 +10,6 @@ import config
 import bot_text
 import secure
 import settings
-import saved_items
 import thoughts
 from ui import thoughts as thoughts_ui
 
@@ -245,7 +244,7 @@ def test_day_reminder_skips_recent_entry_then_opens_optional_capture(monkeypatch
         for row in bot.sent[0]["reply_markup"].inline_keyboard
         for button in row
     ]
-    assert labels == ["✍️ Выгрузить тревоги", "😌 Всё спокойно"]
+    assert labels == ["🧠 Выгрузить мысли", "😌 Всё спокойно"]
     assert thoughts.capture_waiting("42") is True
     assert settings_state[("42", "_thoughts_capture_state")]["status"] == "implicit_wait"
 
@@ -639,7 +638,7 @@ def test_stale_clear_callback_never_deletes_without_cached_review(monkeypatch):
 
 def test_full_history_delete_is_absent_from_settings_and_legacy_callbacks_are_safe(monkeypatch):
     bot = FakeBot()
-    asyncio.run(saved_items.send_notes(bot, "42"))
+    asyncio.run(settings.send_home(bot, "42"))
     labels = [button.text for row in bot.sent[0]["reply_markup"].inline_keyboard for button in row]
     assert "❌ Удалить историю мыслей" not in labels
     assert "🔄 Обновление данных" not in labels
@@ -654,13 +653,8 @@ def test_full_history_delete_is_absent_from_settings_and_legacy_callbacks_are_sa
     assert bot.sent[-1]["text"].startswith("🎚️ Настройки")
 
 
-def test_stale_database_refresh_button_returns_to_settings_without_processing(monkeypatch):
+def test_stale_database_refresh_button_returns_to_settings_without_processing():
     bot = FakeBot()
-
-    async def fail_refresh(*_args, **_kwargs):
-        raise AssertionError("legacy refresh must not run")
-
-    monkeypatch.setattr(settings, "refresh_database", fail_refresh)
 
     asyncio.run(settings.handle_callback(bot, "42", "set_refresh_data"))
 

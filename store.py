@@ -3,7 +3,6 @@ import time
 import uuid as _uuid
 from pathlib import Path
 import config
-from wardrobe_model import ZONE_ORDER, ZONE_SUBCATS
 import storage_driver
 import runtime_state
 
@@ -414,18 +413,20 @@ _PER_USER_KEYS = {
     config.TRANSIENT_MESSAGES_KEY,
     config.SETTINGS_FILE, config.PROFILE_KEY, config.LEVELS_FILE,
     config.FAVORITE_ARTISTS_KEY, config.FAVORITE_MOVIES_KEY,
-    config.COUNTRIES_KEY, config.FAVORITE_BOOKS_KEY, config.BOOK_RECO_CACHE_KEY,
+    config.LEGACY_COUNTRIES_KEY, config.FAVORITE_BOOKS_KEY, config.BOOK_RECO_CACHE_KEY,
     config.MOVIE_NOW_PLAYING_CACHE_KEY,
     config.SAVED_COUNTRIES_KEY, config.MOVIE_BLACKLIST_KEY, config.BOOK_BLACKLIST_KEY,
     config.MUSIC_DISLIKE_KEY, config.TRAVEL_DISLIKE_KEY,
-    config.WORRIES_KEY, config.THOUGHT_REVIEWS_KEY,
+    config.THOUGHTS_KEY, config.THOUGHT_REVIEWS_KEY,
     config.MOVIE_SEEN_KEY, config.BOOK_SEEN_KEY, config.MUSIC_SEEN_KEY,
     config.RECOMMENDATION_STOPLIST_KEY,
-    config.CONTENT_RECORDS_KEY, config.DICT_KEY, config.LANGUAGE_REVIEW_KEY,
-    config.DATA_REFRESH_BACKUP_KEY,
-    config.LEGACY_LAGOM_KEY, config.DIARY_KEY, config.LIFEHACK_KEY,
+    config.DICT_KEY, config.DIARY_KEY, config.LIFEHACK_KEY,
     config.FRIDGE_KEY, config.LEFTOVER_RECIPES_SEEN_KEY, config.QUOTE_AUTHORS_KEY,
-    config.LEGACY_MOTIV_LAGOM_SEEN_KEY, config.CONCERTS_CACHE_KEY,
+    config.CONCERTS_CACHE_KEY,
+    # Удалённые сценарии: чистим старые физические ключи только при удалении
+    # аккаунта, но обычный код их больше не читает и не записывает.
+    "content_records.json", "notes.json", "language_review.json",
+    "data_refresh_backups.json", "lagom.json", "motiv_lagom_seen.json",
 }
 # При удалении профиля очищаем и старые физические ключи, иначе ленивый перенос
 # мог бы снова восстановить уже удалённые пользовательские данные.

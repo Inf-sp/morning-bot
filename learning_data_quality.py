@@ -8,9 +8,7 @@ import re
 import unicodedata
 import uuid
 
-import config
 import language_tool
-import store
 from dictionary_model import (
     entry_language, entry_term, entry_translation, normalize_term_case,
     normalize_translation_case,
@@ -21,7 +19,6 @@ _DOUBLE_PUNCT_RE = re.compile(r"([.!?])\1+")
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 _LATIN_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]")
 _ARTICLE_RE = re.compile(r"^(de|het|een)\s+", re.I)
-_BATCH_SIZE = 10
 _MAX_CONCURRENCY = 2
 
 _NL_FIXED_PREPOSITIONS = {
@@ -228,7 +225,10 @@ def normalize_entry(raw) -> tuple[dict, bool]:
     elif "example_nl" in normalized:
         normalized.pop("example_nl", None)
 
-    for legacy in ("word", "base_form", "ru", "language"):
+    for legacy in (
+        "word", "base_form", "ru", "language",
+        "pending_language_check", "language_check_status", "language_review_required",
+    ):
         normalized.pop(legacy, None)
     for key in list(normalized):
         if normalized[key] is None or normalized[key] == "" or normalized[key] == []:
@@ -289,20 +289,10 @@ def _set_field(entry: dict, path: str, value: str) -> None:
         entry[path] = value
 
 
-def _review_reason(issue: dict) -> str:
-    issue_type = str(issue.get("issue_type") or "").lower()
-    if issue_type == "grammar":
-        return "Возможна грамматическая ошибка"
-    if issue_type in ("misspelling", "typographical"):
-        return "Проверь написание"
-    return "Изменение может повлиять на смысл"
-
-
-async def check_entry(entry: dict, *, semaphore=None) -> tuple[dict, dict, list[dict]]:
-    """Check only foreign-language fields; never sends translations to LT."""
+async def check_entry(entry: dict, *, semaphore=None) -> tuple[dict, dict]:
+    """Безопасно исправляет только однозначные ошибки в изучаемом языке."""
     checked = copy.deepcopy(entry)
     stats = {"checked_fields": 0, "fixed_fields": 0, "available": True}
-    reviews = []
     targets = _targets(checked)
     reports = await asyncio.gather(*(
         language_tool.check_text_retry(
@@ -331,224 +321,19 @@ async def check_entry(entry: dict, *, semaphore=None) -> tuple[dict, dict, list[
         if corrected != target["text"]:
             _set_field(checked, target["field"], corrected)
             stats["fixed_fields"] += 1
-        unsafe = [
-            issue for issue in issues
-            if issue not in safe_issues
-            and not (
-                not target["safe"]
-                and language_tool.is_safe_issue(issue, allow_spelling=False)
-            )
-            and not (
-                is_term_target
-                and "SENTENCE_START" in str(issue.get("rule_id") or "").upper()
-            )
-        ]
-        for issue in unsafe[:1]:
-            replacements = issue.get("replacements") or []
-            suggestion = (
-                language_tool.apply_first_replacements(target["text"], [issue])
-                if replacements else ""
-            )
-            reviews.append({
-                "entryId": checked.get("id"),
-                "field": target["field"],
-                "original": target["text"],
-                "suggestion": suggestion,
-                "reason": _review_reason(issue),
-                "language": entry_language(checked),
-            })
-    if stats["available"]:
-        checked.pop("pending_language_check", None)
-        checked["language_check_status"] = "review" if reviews else "checked"
-    else:
-        checked["pending_language_check"] = True
-        checked["language_check_status"] = "pending"
-    if reviews:
-        checked["language_review_required"] = True
-    else:
-        checked.pop("language_review_required", None)
     checked, _ = normalize_entry(checked)
-    return checked, stats, reviews
+    return checked, stats
 
 
 async def check_new_entry(entry: dict) -> dict:
-    """Best-effort pre-save check. Outage marks the record and never blocks save."""
+    """Best-effort pre-save check; an outage never blocks adding a word."""
     if entry_language(entry) != "nl":
         return entry
     normalized, _ = normalize_entry(entry)
     try:
-        checked, _stats, _reviews = await check_entry(
+        checked, _stats = await check_entry(
             normalized, semaphore=asyncio.Semaphore(_MAX_CONCURRENCY),
         )
         return checked
     except Exception:
-        normalized["pending_language_check"] = True
-        normalized["language_check_status"] = "pending"
         return normalized
-
-
-def _canonical(entry: dict) -> tuple[str, str]:
-    term = unicodedata.normalize("NFKC", entry_term(entry))
-    term = _SPACE_RE.sub(" ", term).strip().rstrip(".").casefold()
-    article = str(entry.get("article") or "").strip().casefold()
-    return entry_language(entry), f"{article} {term}".strip()
-
-
-def _merge_translations(left: str, right: str) -> str:
-    values = []
-    for value in (left, right):
-        value = _clean(value)
-        if value and value.casefold() not in {item.casefold() for item in values}:
-            values.append(value)
-    return "; ".join(values)
-
-
-def _merge_entries(primary: dict, duplicate: dict) -> dict:
-    merged = dict(primary)
-    merged["translation"] = _merge_translations(
-        entry_translation(primary), entry_translation(duplicate),
-    )
-    examples = [dict(item) for item in primary.get("examples") or []]
-    seen_examples = {(_clean(item.get("text")).casefold(), _clean(item.get("translation")).casefold()) for item in examples}
-    for item in duplicate.get("examples") or []:
-        key = (_clean(item.get("text")).casefold(), _clean(item.get("translation")).casefold())
-        if key not in seen_examples:
-            examples.append(dict(item))
-            seen_examples.add(key)
-    if examples:
-        merged["examples"] = examples
-    for key, value in duplicate.items():
-        if key not in merged or merged[key] in (None, "", []):
-            merged[key] = value
-    return merged
-
-
-async def refresh_dictionary(cid) -> dict:
-    raw_entries = store.get_list(config.DICT_KEY, cid)
-    previous_reviews = store.get_list(config.LANGUAGE_REVIEW_KEY, cid)
-    normalized = []
-    normalized_changed = []
-    for raw in raw_entries:
-        entry, changed = normalize_entry(raw)
-        if entry.get("term"):
-            pos = str(entry.get("pos") or "").casefold()
-            breakdown = str(entry.get("breakdown") or "").casefold()
-            if (entry_language(entry) == "nl"
-                    and (pos in {"глагол", "verb", "werkwoord"}
-                         or "глагол" in breakdown or "werkwoord" in breakdown
-                         or dutch_verb_with_preposition(entry_term(entry)))):
-                try:
-                    import dictionary_import
-                    refreshed = await dictionary_import._enrich_dutch_verb(entry, cid, force=True)
-                    changed = changed or refreshed != entry
-                    entry = refreshed
-                except Exception:
-                    entry["verb_analysis_failed"] = True
-            normalized.append(entry)
-            normalized_changed.append(changed)
-
-    semaphore = asyncio.Semaphore(_MAX_CONCURRENCY)
-    checked_entries = []
-    entry_fixed_flags = []
-    field_fixes = 0
-    reviews = []
-    for start in range(0, len(normalized), _BATCH_SIZE):
-        results = await asyncio.gather(*(
-            check_entry(entry, semaphore=semaphore)
-            for entry in normalized[start:start + _BATCH_SIZE]
-        ))
-        for offset, (entry, stats, entry_reviews) in enumerate(results):
-            checked_entries.append(entry)
-            field_fixes += int(stats.get("fixed_fields") or 0)
-            source_index = start + offset
-            entry_fixed_flags.append(
-                bool(normalized_changed[source_index]) or bool(stats.get("fixed_fields"))
-            )
-            reviews.extend(entry_reviews)
-
-    deduplicated = []
-    positions = {}
-    duplicate_count = 0
-    for entry in checked_entries:
-        key = _canonical(entry)
-        if key in positions:
-            index = positions[key]
-            deduplicated[index] = _merge_entries(deduplicated[index], entry)
-            duplicate_count += 1
-        else:
-            positions[key] = len(deduplicated)
-            deduplicated.append(entry)
-
-    active_ids = {entry.get("id") for entry in deduplicated}
-    reviews = [item for item in reviews if item.get("entryId") in active_ids]
-    pending_entry_ids = {
-        entry.get("id") for entry in deduplicated if entry.get("pending_language_check")
-    }
-    reviews.extend(
-        item for item in previous_reviews
-        if item.get("entryId") in pending_entry_ids
-    )
-    unique_reviews = []
-    seen_reviews = set()
-    for item in reviews:
-        key = (item.get("entryId"), item.get("field"), item.get("original"), item.get("suggestion"))
-        if key not in seen_reviews:
-            unique_reviews.append(item)
-            seen_reviews.add(key)
-    reviews = unique_reviews
-    store.set_list(config.DICT_KEY, cid, deduplicated)
-    store.set_list(config.LANGUAGE_REVIEW_KEY, cid, reviews)
-    fixed_records = sum(1 for changed in entry_fixed_flags if changed)
-    review_entry_ids = {item.get("entryId") for item in reviews}
-    return {
-        "checked": len(raw_entries),
-        "fixed": min(len(raw_entries), fixed_records),
-        "field_fixes": field_fixes,
-        "duplicates": duplicate_count,
-        "review": len(review_entry_ids | pending_entry_ids),
-        "review_items": len(review_entry_ids),
-        "pending": len(pending_entry_ids),
-        "unchanged": max(0, len(raw_entries) - fixed_records - duplicate_count - len(review_entry_ids | pending_entry_ids)),
-    }
-
-
-def review_items(cid) -> list[dict]:
-    return store.get_list(config.LANGUAGE_REVIEW_KEY, cid)
-
-
-def resolve_review(cid, action: str) -> dict | None:
-    reviews = review_items(cid)
-    if not reviews:
-        return None
-    current = reviews.pop(0)
-    entries = store.get_list(config.DICT_KEY, cid)
-    index = next((i for i, item in enumerate(entries) if item.get("id") == current.get("entryId")), None)
-    if index is not None and action == "delete":
-        reviews = [item for item in reviews if item.get("entryId") != current.get("entryId")]
-        entries.pop(index)
-        store.set_list(config.DICT_KEY, cid, entries)
-    elif index is not None and action == "apply" and current.get("suggestion"):
-        entry = copy.deepcopy(entries[index])
-        field = current.get("field", "")
-        suggestion = _clean(current["suggestion"])
-        if field == "article_term":
-            match = _ARTICLE_RE.match(suggestion)
-            if match:
-                entry["article"] = match.group(1).casefold()
-                entry["term"] = _normalize_term(suggestion[match.end():])
-        else:
-            _set_field(entry, field, suggestion)
-        entry["language_review_required"] = any(
-            item.get("entryId") == entry.get("id") for item in reviews
-        )
-        entries[index] = entry
-        store.set_list(config.DICT_KEY, cid, entries)
-    elif index is not None:
-        entry = dict(entries[index])
-        entry["language_review_required"] = any(
-            item.get("entryId") == entry.get("id") for item in reviews
-        )
-        entries[index] = entry
-        store.set_list(config.DICT_KEY, cid, entries)
-    store.set_list(config.LANGUAGE_REVIEW_KEY, cid, reviews)
-    return current

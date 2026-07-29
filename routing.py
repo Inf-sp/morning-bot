@@ -11,7 +11,7 @@ callback_data", либо "ни к какому" (orphan).
 verify.audit_callbacks(), у которой было структурное слепое пятно: она
 собирала все "data ==" / "data.startswith" условия по всем файлам в одно
 плоское множество, из-за чего верхнеуровневый `data.startswith(("set_", ...))`
-в bot.py засчитывался как "обработано", даже если внутри settings.handle_callback
+в bot_callbacks.py засчитывался как "обработано", даже если внутри settings.handle_callback
 ветки для конкретного callback_data не было.
 """
 import ast
@@ -30,11 +30,11 @@ _SUBROUTERS = {
     "balance": ("balance.py", "handle_callback"),
     "cooking": ("cooking.py", "handle_callback"),
     "learning_router": ("learning_router.py", "handle_callback"),
-    "saved_items": ("saved_items.py", "handle_notes_callback"),
+    "personal_collections": ("personal_collections.py", "handle_collection_callback"),
     "cleanup": ("cleanup.py", "handle_cleanup"),
 }
-# handle_notes_callback - отдельная функция в settings.py, с другим именем.
-_NOTES_ROUTER = ("saved_items.py", "handle_notes_callback")
+# Личные коллекции используют отдельный callback-роутер.
+_COLLECTIONS_ROUTER = ("personal_collections.py", "handle_collection_callback")
 
 
 def _read_source(filename):
@@ -135,7 +135,7 @@ def _walk_if_chain(node, subject_name):
 
 
 def _direct_subrouter_call(stmts):
-    """Ищет вызов <module>.handle_callback(...)/handle_notes_callback(...) в
+    """Ищет вызов callback-роутера в
     операторах, не спускаясь во вложенные if (вложенность разбирает вызывающая
     сторона — _body_calls_subrouter)."""
     for stmt in stmts:
@@ -143,7 +143,7 @@ def _direct_subrouter_call(stmts):
             continue
         for n in ast.walk(stmt):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute):
-                if n.func.attr in ("handle_callback", "handle_notes_callback", "handle_action") and isinstance(n.func.value, ast.Name):
+                if n.func.attr in ("handle_callback", "handle_collection_callback", "handle_action") and isinstance(n.func.value, ast.Name):
                     return n.func.value.id
     return None
 
@@ -230,7 +230,7 @@ def _handled_by_toplevel(callback_data, tree):
         if not matched:
             continue
         # Особый случай a_<act>: часть действий делегирована
-        # локальному роутеру learning, остальные остаются в bot.py.
+        # локальному роутеру learning, остальные остаются в bot_callbacks.py.
         if kind == "prefix" and "a_" in values:
             learning_tree = ast.parse(_read_source("learning_router.py"))
             learning_action = _find_function(learning_tree, "handle_action")
@@ -260,11 +260,11 @@ def resolve_callback_handler(callback_data: str):
 
     Возвращает dict {"handled": bool, "module": str|None, "detail": str} —
     "module" - под-роутер (settings/wardrobe/myday/balance/learning_router/cleanup/onboard),
-    None если обработка целиком в bot.py, либо None+handled=False, если callback
+    None если обработка целиком в bot_callbacks.py, либо None+handled=False, если callback
     не совпал ни с одной веткой ни на одном уровне.
 
     Не исполняет ни один handler - только структурно проходит AST bot_callbacks.py и,
-    при необходимости, под-роутера, куда bot.py передаёт управление.
+    при необходимости, под-роутера, куда bot_callbacks.py передаёт управление.
     """
     callback_src = _read_source("bot_callbacks.py")
     callback_tree = ast.parse(callback_src)
@@ -275,9 +275,8 @@ def resolve_callback_handler(callback_data: str):
     if sub_module is None:
         return {"handled": True, "module": "bot_callbacks.py", "detail": "handled directly in callback router"}
 
-    # Определяем, какая функция под-роутера вызывается: handle_notes_callback у
-    # settings.py используется для fav_/ls_/as_(не food/fridge/...) веток, а
-    # handle_callback - для set_/setadd_/setdel_.
+    # Личные коллекции обрабатывают fav_/ls_/as_ (кроме предметных веток),
+    # настройки — set_/setadd_/setdel_.
     file_name, func_name = _resolve_subrouter_target(sub_module, callback_data, callback_tree)
     sub_src = _read_source(file_name)
     sub_tree = ast.parse(sub_src)
@@ -299,13 +298,13 @@ def _resolve_subrouter_target(sub_module, callback_data, _callback_tree):
         return "learning_router.py", "handle_action"
     if sub_module != "settings":
         return _SUBROUTERS[sub_module]
-    # saved_items.py has two entrypoints; callback router decides which one.
+    # Callback router distinguishes personal collections from Settings.
     if callback_data.startswith(("fav_", "ls_")):
-        return _NOTES_ROUTER
+        return _COLLECTIONS_ROUTER
     if callback_data.startswith("as_") and not callback_data.startswith(
         ("as_food", "as_fridge", "as_recipe", "as_daycheck", "as_motiv", "as_doctor")
     ):
-        return _NOTES_ROUTER
+        return _COLLECTIONS_ROUTER
     return _SUBROUTERS["settings"]
 
 

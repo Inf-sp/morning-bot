@@ -5,7 +5,6 @@ import logging
 import re
 
 import ai
-import api_usage
 import config
 import secure
 import provider_runtime
@@ -708,7 +707,6 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
     restrictions = context.get("diet_prefs") or "не указаны"
     memory_prefs = "; ".join(context.get("memory_prefs") or []) or "не указаны"
     cuisines = context.get("cuisines") or "не указаны"
-    cuisine_codes = context.get("cuisine_codes") or []
     source_block = _themealdb_prompt_block(sources)
     return (
         f"Сейчас нужен {meal}. Составь одну короткую идею полноценного блюда на сегодня.\n"

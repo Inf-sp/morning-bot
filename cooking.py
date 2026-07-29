@@ -1,29 +1,20 @@
 import asyncio
 import logging
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 
 _log = logging.getLogger(__name__)
-import rerank
 import util
 import verify
 from ui import balance as balance_ui
 from ui import food as food_ui
-from ui.constants import ui_label
 from ui.navigation import back_menu_keyboard
 import menu
 from response_delivery import (
-    answer_keyboard as _ans_kb,
     back_keyboard as _back_kb,
-    build_entity_card as _build_entity_card,
-    clean_card_text as _clean_card_text,
     keyboard as _kb,
-    send_response as _send,
 )
 from recipe_state import (
-    MEAL_CHOICES,
-    _leftover_recent,
     _leftover_remember,
     _persist_current_queue_recipe,
     add_to_recipe_history,
@@ -62,7 +53,7 @@ def _finish_dot(value):
 def _recipe_kb(cid=None, recipe=None):
     """Единая клавиатура карточки рецепта для всех 4 категорий (§6.2 спеки).
 
-    «Ещё рецепт» (as_food) и «Назад» (as_food_back) работают в рамках активной
+    «Другой рецепт» (as_food) и «Назад» (as_food_back) работают в рамках активной
     категории (balance.get_active_meal) — см. handle_callback. «Назад» — отдельный
     callback, а не общий m_close, чтобы не задевать другие разделы, которые тоже
     используют m_close для закрытия карточки без возврата в конкретное меню."""
@@ -234,9 +225,9 @@ async def enter_meal(bot, cid, meal, ingredients=None, status=None):
 
 
 async def show_next_recipe(bot, cid, status=None):
-    """«Ещё рецепт» (as_food): показывает следующий рецепт активной категории (§6.1).
+    """«Другой рецепт» (as_food): показывает следующий рецепт активной категории (§6.1).
 
-    Категория берётся из active_meal — не из текста кнопки, поэтому «Ещё рецепт»
+    Категория берётся из active_meal — не из текста кнопки, поэтому «Другой рецепт»
     физически не может перепрыгнуть в другую категорию (фикс бага из ТЗ п.1)."""
     meal = get_active_meal(cid)
     if not meal:

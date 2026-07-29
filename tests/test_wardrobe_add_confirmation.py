@@ -94,13 +94,13 @@ def test_no_success_confirmation_when_store_did_not_save_item(monkeypatch):
 
 
 def test_text_accessory_is_saved_when_ai_parser_is_unavailable(monkeypatch):
-    saved_items = []
+    stored_items = []
 
     async def unavailable(*_args, **_kwargs):
         raise Exception("⚠️ ИИ временно недоступен — попробуй снова через пару минут.")
 
     def save(_cid, items):
-        saved_items.extend(items)
+        stored_items.extend(items)
         return [{**items[0], "id": "chain-1"}]
 
     monkeypatch.setattr(wardrobe.ai, "allm_json", unavailable)
@@ -109,7 +109,7 @@ def test_text_accessory_is_saved_when_ai_parser_is_unavailable(monkeypatch):
 
     asyncio.run(wardrobe.add_item(bot, "wardrobe-chain", "Цепочка со значком сторон света"))
 
-    assert saved_items[0]["zone"] == "Аксессуары"
-    assert saved_items[0]["subcategory"] == "Украшения"
+    assert stored_items[0]["zone"] == "Аксессуары"
+    assert stored_items[0]["subcategory"] == "Украшения"
     assert bot.messages[0]["text"].startswith("✅ Вещь добавлена в «🎚️ Мой шкаф»")
     assert "Категория: Аксессуары\nСтиль: Повседневный" in bot.messages[0]["text"]

@@ -1,15 +1,14 @@
 """Движок коллекций: пагинация + мультивыбор + контекстные действия.
 
-Используется из learning, notes, wardrobe, balance, bot. Пользовательское
-описание раздела — docs/cleanup.md; история миграции на текущую архитектуру —
-docs/archive/audit-cleanup-plan.md.
+Используется из learning, wardrobe, balance и bot. Пользовательское
+описание раздела — docs/cleanup.md.
 
 "view"-режим (стабильный item_id + revision коллекции, короткий callback_data
 вида "clt:<view_id>:<short_id>") распространён на все контексты, кроме
 гардероба (kast_*, мигрирован раньше через
 store.add_wardrobe_items/remove_wardrobe_items):
-           d_<lang>_<kind> (словарь), nb/nb_* (закладки),
-           wl/rl (watchlist/readlist), lv_<key>/lvls_<key> (любимые),
+           d_<lang>_<kind> (словарь), wl/rl (watchlist/readlist),
+           lv_<key>/lvls_<key> (любимые),
            hid_<key> (скрытое/чёрный список — действие только убирает из
            чёрного списка, не трогает fav_key, чтобы не превращать «вернуть в
            рекомендации» в скрытый сигнал «мне нравится»),
@@ -23,6 +22,7 @@ import config
 import recommendation_stoplist
 import store
 from fridge_model import _CAT_BTN_LABEL, _CAT_ORDER, _fridge_migrate
+from wardrobe_model import ZONE_SUBCATS
 from util import esc
 from ui.constants import choose_label, delete_label, ui_label
 
@@ -37,13 +37,19 @@ _views = {}  # view_id -> {"ctx", "revision", "selected_ids", "page", "back", "c
 # путь) выше — держать в синхроне при изменении набора категорий.
 _LOVE_STORE_KEYS = {"movies": config.FAVORITE_MOVIES_KEY, "countries": config.SAVED_COUNTRIES_KEY,
                     "artists": config.FAVORITE_ARTISTS_KEY, "books": config.FAVORITE_BOOKS_KEY}
+_PERSONAL_COLLECTION_BACK = {
+    "movies": "m_movie",
+    "books": "m_books",
+    "artists": "m_music",
+    "countries": "m_travel",
+}
 _HIDDEN_STORE_KEYS = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
                       "artists": config.MUSIC_DISLIKE_KEY, "countries": config.TRAVEL_DISLIKE_KEY}
 _SEEN_STORE_KEYS = {"movies": config.MOVIE_SEEN_KEY, "books": config.BOOK_SEEN_KEY,
                     "artists": config.MUSIC_SEEN_KEY}
 
 def _collection(id, owner, title, storage_key, item_type, back, actions,
-                note_group=None, add_button=None, menu_button=None,
+                add_button=None, menu_button=None,
                 add_button_at_bottom=False, allow_edit=True):
     return {
         "id": id,
@@ -53,7 +59,6 @@ def _collection(id, owner, title, storage_key, item_type, back, actions,
         "item_type": item_type,
         "back": back,
         "actions": actions,
-        "note_group": note_group,
         "add_button": add_button,
         "menu_button": menu_button,
         "add_button_at_bottom": add_button_at_bottom,
@@ -115,11 +120,6 @@ COLLECTIONS = {
     "travel_hidden_countries": _collection(
         "travel_hidden_countries", "travel", "Скрытые страны", config.TRAVEL_DISLIKE_KEY, "country",
         "m_travel", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
-    "travel_saved_places": _collection(
-        "travel_saved_places", "travel", f"⭐️ Сохранённое · {ui_label('travel', 'Поездки')}", config.CONTENT_RECORDS_KEY, "note",
-        "m_travel", [{"id": "remove", "label": "Убрать из сохранённого", "confirm": True}],
-        note_group="travel"),
-
     "fridge_items": _collection(
         "fridge_items", "food", ui_label("products", "Продукты"), config.FRIDGE_KEY, "product",
         "as_fridge", [{"id": "remove", "label": "Удалить продукты", "confirm": True}]),
@@ -146,7 +146,6 @@ _COLLECTION_ALIASES = {
 
 def _is_view_ctx(ctx):
     return (ctx in COLLECTIONS or ctx in _COLLECTION_ALIASES
-            or ctx == "nb" or ctx.startswith("nb_")
             or ctx.startswith("lv_") or ctx.startswith("lvls_")
             or ctx.startswith("hid_")
             or ctx.startswith("d_") or ctx == "wl"
@@ -185,8 +184,6 @@ def _view_store_key(ctx):
     cfg = _collection_cfg(ctx)
     if cfg:
         return cfg["storage_key"]
-    if ctx == "nb" or ctx.startswith("nb_"):
-        return config.CONTENT_RECORDS_KEY
     if ctx.startswith("lvls_"):
         return _LOVE_STORE_KEYS.get(ctx[len("lvls_"):])
     if ctx.startswith("lv_"):
@@ -213,9 +210,7 @@ _VIEW_ADD_LABEL = {
 
 
 def _view_add_button(ctx):
-    """Кнопка «Добавить» для lv_<key>/lvls_<key> (Любимое) — нет у hid_*
-    (Скрытое, чёрный список — пополняется автоматически, не вручную) и у nb/nb_*
-    (Сохранённое пополняется кнопкой «Сохранить» под ответом бота, не отсюда)."""
+    """Кнопка «Добавить» для lv_<key>/lvls_<key> (Любимое)."""
     if ctx.startswith("lvls_"):
         key = ctx[len("lvls_"):]
         label = _VIEW_ADD_LABEL.get(key)
@@ -238,25 +233,8 @@ def _view_label(it):
     return it.get("name", "")
 
 
-def _note_in_group(note, group):
-    if not group:
-        return True
-    try:
-        import saved_items
-        source = note.get("source", "Прочее") if isinstance(note, dict) else "Прочее"
-        return saved_items._fav_group(source) == group
-    except Exception:
-        return False
-
-
 def _collection_records(cfg, cid):
-    records = store.ensure_list_ids(cfg["storage_key"], cid)
-    if cfg.get("note_group"):
-        records = [
-            r for r in records
-            if r.get("bucket", "fav") == "fav" and _note_in_group(r, cfg["note_group"])
-        ]
-    return records
+    return store.ensure_list_ids(cfg["storage_key"], cid)
 
 
 def _collection_item_label(cfg, item):
@@ -331,20 +309,6 @@ def _ctx_items(cid, ctx):
                 ru = _l._entry_translation(w)
                 items.append((i, f"{term} — {ru}".strip(" —")))
         return f"{flag} Чистка словаря", items, f"a_dictlang_{lang}"
-    if ctx == "nb" or ctx.startswith("nb_"):
-        import re as _re
-        import saved_items
-        _strip = lambda s: _re.sub(r"<[^>]+>", "", s).strip()
-        notes = store.get_list(config.CONTENT_RECORDS_KEY, cid)
-        group = ctx[len("nb_"):] if ctx.startswith("nb_") else None
-        items = [(i, _strip(n.get("text", "") if isinstance(n, dict) else str(n)))
-                 for i, n in enumerate(notes)
-                 if (n.get("bucket", "fav") if isinstance(n, dict) else "fav") == "fav"
-                 and (group is None or saved_items._fav_group(n.get("source", "Прочее") if isinstance(n, dict) else "Прочее") == group)]
-        if group:
-            label, _desc = saved_items._fav_group_info(group)
-            return f"{label} · Сохранённое", items, f"as_bucket_favgrp_{group}"
-        return "Сохранённое", items, "as_bucket_fav"
     if ctx == "wl":
         key = config.FAVORITE_MOVIES_KEY
         title = "🍿 Чистка: посмотреть"
@@ -355,7 +319,7 @@ def _ctx_items(cid, ctx):
         import wardrobe as _w
         _, zone_slug, subcat_idx, origin = ctx.split("_")
         zone = _w.ZONE_BY_SLUG.get(zone_slug, "Другое")
-        subcats = store.ZONE_SUBCATS.get(zone, ["Другое"])
+        subcats = ZONE_SUBCATS.get(zone, ["Другое"])
         subcat = subcats[int(subcat_idx)] if int(subcat_idx) < len(subcats) else "Другое"
         items = _wardrobe_flat(cid, zone, subcat)
         return subcat, items, f"w_delz_{zone_slug}_{origin}"
@@ -367,7 +331,7 @@ def _ctx_items(cid, ctx):
         title = {"movies": f"{ui_label('cinema', 'Чистка: фильмы')}", "countries": f"{ui_label('countries', 'Чистка: страны')}",
                  "artists": f"{ui_label('music', 'Чистка: музыканты')}", "books": f"{ui_label('books', 'Чистка: книги')}"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
-        return title, items, "as_notes"
+        return title, items, _PERSONAL_COLLECTION_BACK.get(key, "m_menu")
     if ctx.startswith("hid_"):
         key = ctx[len("hid_"):]
         store_key = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
@@ -393,8 +357,6 @@ def _action_label(ctx):
         return "Убрать из любимого"
     if ctx.startswith("hid_"):
         return "Вернуть в рекомендации"
-    if ctx == "nb" or ctx.startswith("nb_"):
-        return "Убрать из сохранённого"
     if ctx.startswith("kast_"):
         return "Удалить вещи"
     if ctx == "fridge" or ctx.startswith("fridge_cat_"):
@@ -505,9 +467,6 @@ def _cleanup_delete(cid, ctx):
         import learning as _l
         words = [w for i, w in enumerate(_l._ensure_dict(cid)) if i not in sel]
         store.set_list(config.DICT_KEY, cid, words)
-    elif ctx == "nb" or ctx.startswith("nb_"):
-        notes = [n for i, n in enumerate(store.get_list(config.CONTENT_RECORDS_KEY, cid)) if i not in sel]
-        store.set_list(config.CONTENT_RECORDS_KEY, cid, notes)
     elif ctx == "wl":
         key = config.FAVORITE_MOVIES_KEY
         store.set_list(key, cid, [it for i, it in enumerate(store.get_list(key, cid)) if i not in sel])
@@ -560,20 +519,6 @@ def _view_items(ctx, cid):
         records = _collection_records(cfg, cid)
         items = [(r["id"], _collection_item_label(cfg, r)) for r in records]
         return cfg["title"], items, cfg["back"]
-    if ctx == "nb" or ctx.startswith("nb_"):
-        import re as _re
-        import saved_items
-        _strip = lambda s: _re.sub(r"<[^>]+>", "", s).strip()
-        notes = store.ensure_list_ids(config.CONTENT_RECORDS_KEY, cid)
-        group = ctx[len("nb_"):] if ctx.startswith("nb_") else None
-        items = [(n["id"], _strip(n.get("text", "")))
-                 for n in notes
-                 if n.get("bucket", "fav") == "fav"
-                 and (group is None or saved_items._fav_group(n.get("source", "Прочее")) == group)]
-        if group:
-            label, _desc = saved_items._fav_group_info(group)
-            return f"{label} · Сохранённое", items, f"as_bucket_favgrp_{group}"
-        return "Сохранённое", items, "as_bucket_fav"
     if ctx.startswith("lv_") or ctx.startswith("lvls_"):
         is_leisure = ctx.startswith("lvls_")
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
@@ -582,7 +527,7 @@ def _view_items(ctx, cid):
                  "artists": ui_label("music", "Чистка: музыканты"), "books": ui_label("books", "Чистка: книги")}.get(key, "Чистка")
         records = store.ensure_list_ids(store_key, cid) if store_key else []
         items = [(r["id"], _view_label(r)) for r in records]
-        return title, items, "as_notes"
+        return title, items, _PERSONAL_COLLECTION_BACK.get(key, "m_menu")
     if ctx.startswith("hid_"):
         key = ctx[len("hid_"):]
         store_key = _HIDDEN_STORE_KEYS.get(key)
@@ -632,7 +577,6 @@ def _view_delete(ctx, cid, ids):
     """Удаляет выбранные записи из storage view-контекста по стабильным id."""
     if not ids:
         return 0
-    cfg = _collection_cfg(ctx)
     store_key = _view_store_key(ctx)
     if not store_key:
         return 0
@@ -963,8 +907,8 @@ async def handle_view_callback(bot, cid, data, q=None):
 async def open_cleanup(bot, cid, ctx, back=None):
     """Свежий вход в режим чистки — сбрасываем выбор.
 
-    Для view-контекстов (nb/nb_*, PR3a) делегирует на новую инфраструктуру
-    (стабильный id + revision + короткий callback_data); для остальных —
+    Для view-контекстов делегирует на новую инфраструктуру (стабильный id +
+    revision + короткий callback_data); для остальных —
     прежний позиционный формат без изменений."""
     if _is_view_ctx(ctx):
         await open_view(bot, cid, ctx, back=back)

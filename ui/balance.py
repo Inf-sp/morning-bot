@@ -2,7 +2,7 @@ import re
 
 from .builder import MessageBuilder
 from .builder import MessageSpec
-from .constants import choose_label, ui_label
+from .constants import ui_label
 from util import cap_sentence
 
 
@@ -116,4 +116,4 @@ def worries_cleared():
 
 
 def worries_saved(count):
-    return MessageSpec(text=f"✅ Сохранено: +{count}.")
+    return MessageSpec(text=f"✅ Добавлено: +{count}.")

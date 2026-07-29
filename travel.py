@@ -16,9 +16,8 @@ import settings
 import store
 import travel_photos
 import util
-import verify
 from ui import travel as travel_ui
-from ui.constants import choose_label, delete_label, save_toggle_label
+from ui.constants import delete_label
 
 _log = logging.getLogger(__name__)
 _COUNTRIES_PER_PAGE = 10
@@ -210,11 +209,6 @@ async def warm_home_cache(cid):
     return True
 
 
-def _plan_countries(cid):
-    return [n.get("country", "") for n in store.get_list(config.CONTENT_RECORDS_KEY, cid)
-            if isinstance(n, dict) and n.get("bucket") == "plan" and n.get("country")]
-
-
 def _card_cache():
     data = store._load(config.TRAVEL_COUNTRY_CARDS_KEY)
     return data if isinstance(data, dict) else {}
@@ -273,7 +267,7 @@ def _visited_codes(cid):
     """Ленивая миграция обоих старых списков в единственную связь user -> country_code."""
     primary = store.get_list(config.SAVED_COUNTRIES_KEY, cid)
     migration_done = bool(settings.get(cid, "travel_country_codes_migrated", False))
-    legacy = [] if migration_done else store.get_list(config.COUNTRIES_KEY, cid)
+    legacy = [] if migration_done else store.get_list(config.LEGACY_COUNTRIES_KEY, cid)
     raw = list(primary) + list(legacy)
     cache = _card_cache()
     codes, changed = [], False
@@ -524,7 +518,7 @@ async def toggle_transport(bot, cid, key, q=None):
 def travel_suggest_one(cid, excluded=None):
     visited = [_country_name(code) for code in _visited_codes(cid)]
     blocked = recommendation_stoplist.values(cid, "country")
-    skip = ", ".join(visited + blocked + _plan_countries(cid) + list(excluded or []))
+    skip = ", ".join(visited + blocked + list(excluded or []))
     interests = " · ".join(_travel_interests(cid)) or "без явных предпочтений"
     prompt = f"""Не предлагай: {skip}. Предложи ровно одну новую страну для путешествия.
 Сильные интересы путешественника: {interests}. Не выбирай страну из-за самолёта,
@@ -543,7 +537,6 @@ def _local_country_fallback(cid, excluded=None):
         for value in [
             *(excluded or []),
             *recommendation_stoplist.values(cid, "country"),
-            *_plan_countries(cid),
             *(_country_name(code) for code in _visited_codes(cid)),
         ]
         if str(value).strip()
@@ -587,7 +580,7 @@ async def send_go(bot, cid, *, status=None):
     visited_codes = set(_visited_codes(cid))
     skip_set = {name.strip().casefold() for name in (
         [_country_name(code) for code in visited_codes]
-        + recommendation_stoplist.values(cid, "country") + _plan_countries(cid)
+        + recommendation_stoplist.values(cid, "country")
     ) if name.strip()}
     data = None
     rejected = []
@@ -654,7 +647,7 @@ async def travel_fav(bot, cid, *, status=None):
             if code not in codes: codes.append(code)
             store.set_list(config.SAVED_COUNTRIES_KEY, cid, codes)
             _save_cached_card(code, _stub_card(code, country, util.flag_from_cc(code)), replace=False)
-            await bot.send_message(chat_id=cid, text=f"✅ {country} добавлена в «Мои страны».")
+            await bot.send_message(chat_id=cid, text=f"✅ {country} добавлена в «Мой чемодан».")
     await send_go(bot, cid, status=status)
 
 
@@ -729,7 +722,6 @@ def _plan_from_sources(country, generated, facts, travel_facts, interests, photo
 
 
 async def send_plan(bot, cid, *, status=None):
-    import saved_items
     data = store.last_recipe.get(str(cid)) or {}
     country = data.get("country") or store.suggested_countries.get(str(cid), "")
     if not country:
@@ -804,8 +796,7 @@ async def send_plan(bot, cid, *, status=None):
         "plan_entities": util.entities_to_json(msg.entities), "details": plan,
     }
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Другая страна", callback_data="a_trav_no")],
-        [InlineKeyboardButton(save_toggle_label(saved_items.is_note_saved(cid, msg.text, "plan")), callback_data="a_trav_save")],
+        [InlineKeyboardButton("✨ Другая поездка", callback_data="a_trav_no")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     photo = plan.get("photo") or {}
@@ -835,19 +826,3 @@ async def send_plan(bot, cid, *, status=None):
         except Exception as exc:
             _log.warning("travel details photo delivery failed: %s", type(exc).__name__)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def save_plan(bot, cid, q=None):
-    import saved_items
-    data = store.last_recipe.get(str(cid)) or {}
-    text = data.get("plan_text") or ""
-    if not text:
-        await bot.send_message(chat_id=cid, text="Сначала подбери страну."); return
-    saved = saved_items.toggle_note(
-        cid, text,
-        source="Карточка страны",
-        bucket="plan",
-        entities=data.get("plan_entities", []),
-        extra={"country": data.get("country", "")},
-    )
-    await saved_items.update_save_button(q, "a_trav_save", saved)

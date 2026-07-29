@@ -6,7 +6,8 @@ import live_language
 import srs
 import store
 import trainer_engine
-from learning_dictionary import DictionaryRepository, entry_language, entry_term, entry_translation
+from dictionary_repository import DictionaryRepository
+from learning_dictionary import entry_language, entry_term, entry_translation
 from dictionary_model import normalize_term_case
 from trainer_engine import (
     EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL,

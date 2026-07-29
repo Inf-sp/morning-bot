@@ -34,8 +34,8 @@ def test_every_service_exposes_the_same_state_shape(monkeypatch):
     assert all(required <= set(state) for state in provider_runtime.states())
 
 
-def test_category_is_everywhere_for_two_or_more_sections():
-    assert provider_runtime.SPEC_BY_KEY["gemini"].category == "Везде"
+def test_ai_provider_catalog_uses_roles_not_sections():
+    assert provider_runtime.SPEC_BY_KEY["gemini"].category == "Сложные задачи"
     assert provider_runtime.SPEC_BY_KEY["spoonacular"].category == "Готовка"
 
 

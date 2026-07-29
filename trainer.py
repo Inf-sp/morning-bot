@@ -1,8 +1,6 @@
 """Telegram-сценарий адаптивного языкового тренажёра.
 
-Соединяет чистые engine/exercises/grading, состояние сессии, SRS и UI.
-Словарные операции пока получает через learning; эта зависимость заменяется
-DictionaryRepository на следующем архитектурном этапе.
+Соединяет чистые engine/exercises/grading, состояние сессии, SRS, словарь и UI.
 """
 
 import asyncio
@@ -13,6 +11,7 @@ import secrets
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from dictionary_model import capitalize_initial, display_term, example_matches_term
+from dictionary_repository import DictionaryRepository
 import ai
 import language_tool
 import secure
@@ -21,7 +20,7 @@ import trainer_engine
 import trainer_exercises
 import trainer_grading
 import trainer_session
-from learning_dictionary import DictionaryRepository, entry_language, entry_term, entry_translation
+from learning_dictionary import entry_language, entry_term, entry_translation
 from trainer_engine import (
     EXERCISE_BUILD_SENTENCE,
     EXERCISE_CHOOSE_REACTION,

@@ -10,12 +10,8 @@ import fridge
 import learning_dictionary as dictionary
 import dictionary_import
 import learning_game
-import learning_settings
-import leisure_movies
-import memory
-import myday
 import onboard
-import saved_items
+import personal_collections
 import secure
 import settings
 import store
@@ -23,7 +19,6 @@ import tracking
 import trainer
 import trainer_session
 import travel
-import verify
 import wardrobe
 import weather
 
@@ -180,16 +175,10 @@ async def handle(update, context, remove_reply_keyboard):
             except (ValueError, IndexError):
                 ci = -1
             await fridge.fridge_add_done(bot, cid, text, ci); return
-        if kind == "setadd_lagom":
-            await bot.send_message(chat_id=cid, text="Раздел «Лагом» удалён.")
-            return
-        if kind and kind.startswith("collect_"):
-            import leisure_collection
-            await leisure_collection.collect_done(bot, cid, kind[len("collect_"):], text); return
         if kind and kind.startswith("loveadd_"):
-            await saved_items.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
+            await personal_collections.love_add_done(bot, cid, kind[len("loveadd_"):], text); return
         if kind and kind.startswith("loveaddls_"):
-            await saved_items.love_add_done(bot, cid, kind[len("loveaddls_"):], text, origin="leisure"); return
+            await personal_collections.love_add_done(bot, cid, kind[len("loveaddls_"):], text, origin="leisure"); return
 
     # Fallback: pending_input мог быть сброшен при рестарте — проверяем профиль
     ob_step = onboard.get_text_step(cid)

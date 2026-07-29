@@ -17,7 +17,12 @@ from ui import learning as learning_ui
 from ui.constants import delete_label
 
 _code = dictionary._code
-_flag = lambda language: "🇳🇱" if _code(language) == "nl" else "🇬🇧"
+
+
+def _flag(language):
+    return "🇳🇱" if _code(language) == "nl" else "🇬🇧"
+
+
 _ensure_dict = dictionary._ensure_dict
 _dict_lang = dictionary._dict_lang
 _entry_term = dictionary._entry_term

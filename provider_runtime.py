@@ -34,15 +34,20 @@ _RU_MONTHS_GENITIVE = (
 class ProviderSpec:
     key: str
     label: str
+    # Разделы нужны только для расчёта затронутых возможностей в админской
+    # сводке. Роль — отдельная пользовательская подпись в экране «Система».
     sections: tuple[str, ...]
     fallbacks: tuple[str, ...] = ()
     # Фоновые probes — диагностические, а не пользовательский трафик.
     # Часовой интервал сохраняет актуальность админского экрана без
     # постоянного опроса внешних сервисов.
     probe_every: int = 3600
+    role: str = ""
 
     @property
     def category(self) -> str:
+        if self.role:
+            return self.role
         sections = tuple(dict.fromkeys(self.sections))
         return sections[0] if len(sections) == 1 else "Везде"
 
@@ -50,11 +55,15 @@ class ProviderSpec:
 # Fallbacks are directed. Tavily is reserve-only while its monthly quota is
 # exhausted; search never bounces back from Tavily to Firecrawl.
 SPECS = (
-    ProviderSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"), ("groq", "openrouter"), 3600),
-    ProviderSpec("github_models", "GitHub Models", ("Готовка", "Обучение", "Ассистент"), ("cloudflare", "openrouter"), 3600),
-    ProviderSpec("groq", "Groq", ("Готовка", "Обучение", "Ассистент"), ("github_models", "cloudflare", "openrouter"), 3600),
-    ProviderSpec("openrouter", "OpenRouter", ("AI",), (), 3600),
-    ProviderSpec("cloudflare", "Cloudflare AI", ("Ассистент",), ("openrouter",), 3600),
+    ProviderSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"),
+                 ("groq", "openrouter"), 3600, role="Сложные задачи"),
+    ProviderSpec("github_models", "GitHub Models", ("Готовка", "Обучение", "Ассистент"),
+                 ("cloudflare", "openrouter"), 3600, role="Резерв"),
+    ProviderSpec("groq", "Groq", ("Готовка", "Обучение", "Ассистент"),
+                 ("github_models", "cloudflare", "openrouter"), 3600, role="Основной"),
+    ProviderSpec("openrouter", "OpenRouter", ("AI",), (), 3600, role="Последний резерв"),
+    ProviderSpec("cloudflare", "Cloudflare AI", ("Ассистент",),
+                 ("openrouter",), 3600, role="Резерв"),
     ProviderSpec("openweather", "OpenWeather", ("Мой день", "Гардероб"), ()),
     ProviderSpec("firecrawl", "Firecrawl", ("Поиск", "Поездка", "Концерты"), (), 900),
     ProviderSpec("tavily", "Tavily", ("Поиск",), ("firecrawl",)),

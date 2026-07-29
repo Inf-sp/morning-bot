@@ -1,5 +1,4 @@
 import os
-import json
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -58,8 +57,6 @@ FIRECRAWL_API_KEY = os.environ.get("FIRECRAWL_API_KEY", "")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID") or CHAT_ID
-RAILWAY_GIT_COMMIT_SHA = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "").strip()
-RAILWAY_GIT_COMMIT_MESSAGE = os.environ.get("RAILWAY_GIT_COMMIT_MESSAGE", "").strip()
 
 
 def _read_text_file(path, default=""):
@@ -141,8 +138,7 @@ LEVELS_FILE = "levels.json"
 WARDROBE_FILE = "wardrobe.json"
 WARDROBE_GAPS_KEY = "wardrobe_gaps.json"
 DIARY_KEY = "diary.json"
-# Канонические имена пользовательских коллекций. Состояние «любимое» отличается
-# от «сохранённого на потом», поэтому они никогда не используют один ключ.
+# Канонические имена пользовательских коллекций.
 FAVORITE_ARTISTS_KEY = "favorite_artists.json"
 FAVORITE_MOVIES_KEY = "favorite_movies.json"
 SAVED_COUNTRIES_KEY = "saved_countries.json"
@@ -165,12 +161,8 @@ MUSIC_SEEN_KEY = "music_seen.json"
 RECOMMENDATION_STOPLIST_KEY = "recommendation_stoplist.json"
 THOUGHTS_KEY = "thoughts.json"
 THOUGHT_REVIEWS_KEY = "thought_reviews.json"
-CONTENT_RECORDS_KEY = "content_records.json"
 DICT_KEY = "dict.json"
 TTS_CACHE_KEY = "tts_cache.json"
-LANGUAGE_REVIEW_KEY = "language_review.json"
-DATA_REFRESH_BACKUP_KEY = "data_refresh_backups.json"
-LEGACY_LAGOM_KEY = "lagom.json"  # только для удаления старых пользовательских данных
 PROFILE_KEY = "profile.json"   # память пользователя: фокус, фидбек гардероба, наблюдения
 LIFEHACK_KEY = "lifehacks_seen.json"       # anti-repeat для fallback lifehacks.json
 LIFEHACK_POOL_KEY = "myday_lifehack_pool.json"  # недельный AI-пул базы знаний {cid: {...}}
@@ -181,7 +173,6 @@ RECIPE_QUEUE_KEY = "recipe_queue.json"        # {cid: {"meal":..., "items":[...]
 RECIPE_HISTORY_KEY = "recipe_history.json"    # {cid: [последние 100 названий]} — общая anti-repeat история
 CUISINE_WEIGHTS_KEY = "cuisine_weights.json"  # {cid: {"italian": 3, "japanese": -1, ...}} — обучение по действиям
 QUOTE_AUTHORS_KEY = "quote_authors_seen.json"
-LEGACY_MOTIV_LAGOM_SEEN_KEY = "motiv_lagom_seen.json"  # только для purge_user
 CONCERTS_CACHE_KEY = "concerts_cache.json"  # {cid: {"ts": epoch, "cc": "NL", "events": [...]}}, прогревается перед пятничной афишей
 SEEN_CONCERTS_KEY = "seen_concerts.json"  # {cid: [concert_id, ...]} — для уведомления о новых концертах любимых артистов
 ARTIST_EXTERNAL_EVENTS_KEY = "artist_external_events.json"  # глобальный кэш внешнего поиска концертов (Tavily+Firecrawl) по нормализованному имени артиста, TTL 7 дней: {artist_key: {"ts": epoch, "events": [...]}}
@@ -201,77 +192,12 @@ ACTIVITY_KEY = "activity.json"     # last_seen + счётчики и состо�
 ADMIN_STATE_KEY = "admin_state.json"  # per-admin cursors and compact dashboard state
 DEPLOY_REPORT_KEY = "deploy_report.json"  # служебное состояние деплой-уведомлений
 
-# Прежние имена оставлены только для обратной совместимости модулей, которые
-# ещё не переведены на канонический словарь. Значения уже указывают на новые
-# ключи, а storage_driver лениво переносит данные из старых физических ключей.
-ARTISTS_KEY = FAVORITE_ARTISTS_KEY
-WATCHLIST_KEY = FAVORITE_MOVIES_KEY
-FAVCOUNTRIES_KEY = SAVED_COUNTRIES_KEY
-COUNTRIES_KEY = LEGACY_COUNTRIES_KEY
-BOOKS_KEY = FAVORITE_BOOKS_KEY
-WORRIES_KEY = THOUGHTS_KEY
-NOTES_KEY = CONTENT_RECORDS_KEY
-
 LEGACY_STORAGE_KEYS = {
     FAVORITE_ARTISTS_KEY: ("artists.json",),
     FAVORITE_MOVIES_KEY: ("watchlist.json",),
     SAVED_COUNTRIES_KEY: ("favcountries.json", "mycountries.json"),
     FAVORITE_BOOKS_KEY: ("mybooks.json",),
     THOUGHTS_KEY: ("worries.json",),
-    CONTENT_RECORDS_KEY: ("notes.json",),
 }
 
 DEFAULT_CITY = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}
-
-
-def _load_json(path, default):
-    try:
-        with open(_HERE / path, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return default
-
-
-# --- Посещённые страны (сид-файл countries.json) ---
-VISITED = ", ".join(_load_json("countries.json", []))
-
-# --- Шаблоны промптов (prompts.json) ---
-_PROMPTS = _load_json("prompts.json", {})
-STYLE_PROFILE = _PROMPTS.get("style_profile", "")
-CONTENT_TASTE = _PROMPTS.get("content_taste", "")
-
-
-def place_hint(city="", country="", cc=""):
-    """Подсказка о локации для генерации фактов - зависит от выбранной страны."""
-    city = city or ""
-    country = country or ""
-    if (cc or "").upper() == "NL":
-        return (f"{city} (Северная Голландия, Нидерланды) - история региона, "
-                "местные законы и менталитет, архитектура, инфраструктура (NS, велоправила, налоги, ЖКХ)")
-    if country and city:
-        return f"{city} ({country})"
-    return city or country or "выбранное место"
-
-MYDAY_RULES = """ПРАВИЛА КАТЕГОРИЙ:
-
-[Интересный факт]
-• Только про {place_hint}
-• РЕАЛЬНЫЙ и проверяемый факт — без домыслов, без выдумок
-• Локальный: история, архитектура, инфраструктура, природа, менталитет, законы
-• Максимум 2 коротких предложения, без выводов и оценок
-• Не повторяй банальные туристические клише
-
-[Цитата]
-• От реального мыслителя, учёного или предпринимателя (Сенека, Марк Аврелий, Навал, Джобс, Мунгер и т.п.)
-• Короткая, без воды, без банальностей
-• Не выдумывай цитаты — только реально существующие
-
-[Образ]
-• Используй ТОЛЬКО вещи из гардероба пользователя (точные названия)
-• 1 верх + 1 низ + обувь + опциональный аксессуар
-• Сочетание по цвету и стилю (минимализм, натуральные ткани)
-• Температурный ориентир: ≥24°C без дождя → шорты + футболка; +17..+23 → лёгкие брюки + футболка/рубашка; ≤16°C или дождь/ветер → слои, ветровка, закрытая обувь"""
-
-
-def myday_rules(city="", country="", cc=""):
-    return MYDAY_RULES.replace("{place_hint}", place_hint(city, country, cc))

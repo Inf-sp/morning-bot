@@ -5,11 +5,9 @@ import re
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
-import secure
 import store
 import verify
 from ui import learning as learning_ui
-from ui.navigation import back_menu_keyboard
 
 
 def _code(language):

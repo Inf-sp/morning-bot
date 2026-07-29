@@ -136,9 +136,8 @@ def food_card(
     data, label="Рецепт дня", meal=None, cuisine_emoji_fallback=None,
     show_leading_emoji=True, show_cuisine_emoji=True,
 ):
-    """Карточка рецепта. Не пишется в БД как HTML: живёт в store.last_recipe/last_answer
-    только до рестарта, а в заметки (NOTES_KEY) попадает через save_fav, который берёт
-    entities напрямую из уже отправленного сообщения — MessageBuilder тут ничем не хуже HTML.
+    """Карточка рецепта. Живёт в store.last_recipe/last_answer только до рестарта;
+    MessageBuilder сохраняет разметку без промежуточного HTML.
 
     meal — код категории ("breakfast"/"lunch"/"dinner"/"fridge") для эмодзи в заголовке
     (§7); если не передан, используется общий 🥣 + label, как раньше.

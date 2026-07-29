@@ -7,7 +7,6 @@ from urllib.parse import urlparse
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
-import config
 import medicine
 import research
 import secure

@@ -4,7 +4,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import random
 import re
 import unicodedata
 import uuid
@@ -17,20 +16,13 @@ import config
 import secure
 import store
 import util
-import verify
 import learning_dictionary as dictionary
 import learning_data_quality
 from dictionary_model import (
-    entry_language,
-    entry_term,
-    entry_translation,
     example_matches_term,
     normalize_translation_case,
-    normalize_entry,
-    normalize_key,
     normalize_term_case,
 )
-from ui import dictionary as dict_ui
 from ui.constants import delete_label
 from ui.learning_entry import render_learning_entry
 from ui.navigation import back_menu_keyboard
@@ -899,11 +891,6 @@ _SRS_FIELD_KEYS = (
     "srs_level", "srs_easiness", "srs_interval_days", "srs_due_at",
     "srs_history", "srs_last_exercise_type",
 )
-_LANGUAGE_CHECK_KEYS = (
-    "pending_language_check", "language_check_status", "language_review_required",
-)
-
-
 def _save_normalized_dict_entry(cid, entry):
     """Сохраняет запись единого словаря (структура из спеки: term/article/translation/
     breakdown/examples/status + поля тренажёра pos/construction/SRS-состояние,
@@ -911,7 +898,6 @@ def _save_normalized_dict_entry(cid, entry):
     added/updated/duplicate."""
     entry = dict(entry)
     srs_fields = {k: entry[k] for k in _SRS_FIELD_KEYS if k in entry}
-    language_check_fields = {k: entry[k] for k in _LANGUAGE_CHECK_KEYS if k in entry}
     verb_fields = _verb_analysis_fields(entry)
     words = store.ensure_list_ids(config.DICT_KEY, cid)
     loose_text = _dict_loose_text(entry["lang"], entry["term"])
@@ -950,10 +936,6 @@ def _save_normalized_dict_entry(cid, entry):
                 if duplicate.get(key) != value:
                     duplicate[key] = value
                     changed = True
-            for key, value in language_check_fields.items():
-                if duplicate.get(key) != value:
-                    duplicate[key] = value
-                    changed = True
             if entry.get("analysis_provider") and "verb_analysis_failed" in duplicate:
                 duplicate.pop("verb_analysis_failed", None)
                 changed = True
@@ -980,7 +962,6 @@ def _save_normalized_dict_entry(cid, entry):
                 "last_shown_at": item.get("last_shown_at"),
                 "updated_at": datetime.now(config.TZ).isoformat(),
                 **verb_fields,
-                **language_check_fields,
             })
             if entry.get("analysis_provider"):
                 updated.pop("verb_analysis_failed", None)
@@ -1007,7 +988,6 @@ def _save_normalized_dict_entry(cid, entry):
         "last_shown_at": entry.get("last_shown_at"),
         **srs_fields,
         **verb_fields,
-        **language_check_fields,
     }
     store.add_to_list(config.DICT_KEY, cid, saved)
     return "added", saved

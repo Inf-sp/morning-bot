@@ -1,7 +1,7 @@
 from telegram import MessageEntity
 
 from .balance import finish_dot
-from .builder import MessageBuilder, lower_initial
+from .builder import MessageBuilder
 from util import cap_sentence
 
 

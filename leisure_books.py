@@ -1,4 +1,4 @@
-"""Книжные рекомендации, замены, сохранение и любимые книги."""
+"""Книжные рекомендации, замены и любимые книги."""
 
 import asyncio
 import random
@@ -35,14 +35,9 @@ def _item_text(item):
     return str(item or "").strip()
 
 
-def _ensure_books(cid):
-    return [_item_text(item) for item in store.get_list(config.FAVORITE_BOOKS_KEY, cid)
-            if _item_text(item)]
-
-
 def _add_unique(key, cid, value):
     items = store.get_list(key, cid)
-    if value and value.lower() not in {_item_text(item).lower() for item in items}:
+    if value and value.casefold() not in {_item_text(item).casefold() for item in items}:
         store.set_list(key, cid, [*items, value])
 
 
@@ -74,14 +69,11 @@ def _cache_book(cid, item):
     store.mutate_kv(config.BOOK_RECO_CACHE_KEY, mutate)
 
 
-async def _ask_collect(bot, cid, kind):
-    import leisure_collection
-    return await leisure_collection._ask_collect(bot, cid, kind)
-
-
 def content_recommend(kind, cid):
     import leisure_collection
     return leisure_collection.content_recommend(kind, cid)
+
+
 def _book_cover(title, title_en=""):
     import requests
     timeout = 4.0
@@ -132,7 +124,7 @@ def _book_matches_preferences(item, cid):
     return True
 
 
-def _book_kb(i, favorite=False):
+def _book_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
@@ -363,7 +355,7 @@ _FALLBACK_BOOKS = [
 ]
 
 def _book_used(cid):
-    """Названия книг, которые нельзя повторять: любимые, знакомые, закладки, отклонённые."""
+    """Названия книг, которые нельзя повторять: любимые, показанные и отклонённые."""
     used = set()
     for key in (config.FAVORITE_BOOKS_KEY,):
         for x in store.get_list(key, cid):
@@ -461,7 +453,6 @@ async def get_current_book(cid):
 
 async def send_books_reco(bot, cid):
     it = await get_current_book(cid)
-    title = it.get("title", "")
     store.last_recos[str(cid)] = {"kind": "book", "items": [it.get("title", "")]}
     store.last_source[str(cid)] = "Книги"
     store.last_answer[str(cid)] = it.get("title", "")
@@ -545,4 +536,4 @@ async def book_love(bot, cid, i, q=None):
         title = rec["items"][i]
         _add_unique(config.FAVORITE_BOOKS_KEY, cid, title)
         if q is not None:
-            await q.message.edit_reply_markup(reply_markup=_book_kb(i, favorite=True))
+            await q.message.edit_reply_markup(reply_markup=_book_kb(i))

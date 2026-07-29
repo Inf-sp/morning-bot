@@ -6,9 +6,11 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import dictionary_seed
+import bot_callbacks
 import bot_text
 import cooking
 import fridge
+import learning
 import learning_dictionary
 import learning_settings
 import menu
@@ -37,6 +39,41 @@ def test_learning_empty_state_has_one_clear_next_step():
     assert _labels(message.reply_markup) == [
         ["🆕 Добавить слова"],
         ["✨ Подобрать слова"],
+    ]
+
+
+def test_learning_entry_shows_empty_state_without_starting_seed(monkeypatch):
+    class Message:
+        chat_id = 42
+        updated = None
+
+        async def edit_text(self, text, **kwargs):
+            self.updated = {"text": text, **kwargs}
+
+    class Query:
+        data = "m_learn"
+        message = Message()
+
+    class Bot:
+        async def send_message(self, **_kwargs):
+            raise AssertionError("empty learning state should replace the current menu")
+
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
+    monkeypatch.setattr(bot_callbacks.trainer, "cancel", lambda _cid: None)
+    monkeypatch.setattr(learning, "build_learning_home", lambda _cid: {
+        "has_material": False, "lang_code": "nl",
+    })
+
+    import asyncio
+
+    asyncio.run(bot_callbacks.handle(
+        SimpleNamespace(callback_query=Query()), SimpleNamespace(bot=Bot()), lambda: None,
+    ))
+
+    assert Query.message.updated["text"].startswith("🧠 Обучение\n\nДобавляй сюда слова")
+    assert _labels(Query.message.updated["reply_markup"]) == [
+        ["🆕 Добавить слова"], ["✨ Подобрать слова"],
     ]
 
 

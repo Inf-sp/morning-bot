@@ -22,7 +22,6 @@ UI_EMOJI = {
     "doctor": "👩🏻‍⚕️",
     "worry_diary": "😮‍💨",
     "recommendation": "✨",
-    "save": "💾",
     "favorite": "❤️",
     "settings": "🎚️",
     "breakfast": "🥐",
@@ -178,11 +177,6 @@ STATUS_EMOJI = {
 def ui_label(key, text):
     emoji = UI_EMOJI.get(key)
     return f"{emoji} {text}" if emoji else text
-
-
-def save_toggle_label(saved, unsaved="Сохранить"):
-    return "✅ Сохранено" if saved else f"💾 {unsaved}"
-
 
 def delete_label(text):
     """Единая подпись для любой кнопки, удаляющей или убирающей данные."""

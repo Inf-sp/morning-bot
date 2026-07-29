@@ -97,7 +97,6 @@ _INTENT_MAP = [
     (("одеться", "что надеть", "образ дня", "образ на"), "outfit"),
     (("погода", "дождь", "температура", "зонт", "прогноз"), "weather"),
     (("тревог", "тревож", "беспокоюсь", "стресс", "переживаю", "нервничаю"), "worry"),
-    (("заметк", "сохран", "запомни это", "мои заметки", "база"), "notes"),
 ]
 
 _RECIPE_INGREDIENT_RE = re.compile(
@@ -285,12 +284,17 @@ def _looks_medical(text: str) -> bool:
 
 
 async def _run_intent(bot, cid, action, recipe_ingredients=None):
-    import balance, cooking, leisure_movies, wardrobe, myday, settings, travel
+    import balance
+    import cooking
+    import leisure_movies
+    import myday
+    import settings
+    import travel
+    import wardrobe
     import fridge
     import leisure_concerts
     import leisure_music
     import learning_dictionary as dictionary
-    import saved_items
     import weather as wx
     # Ответы ассистента на свободный текст не должны нести кнопку «⬅️ Назад» -
     # пользователь не открывал раздел через меню, и вести её было бы некуда.
@@ -332,8 +336,6 @@ async def _run_intent(bot, cid, action, recipe_ingredients=None):
         await wx.send_weather(no_kb_bot, cid, "today")
     elif action == "worry":
         await balance.send_daycheck(no_kb_bot, cid)
-    elif action == "notes":
-        await saved_items.send_notes(no_kb_bot, cid)
 
 
 async def chat_reply(bot, cid, text):

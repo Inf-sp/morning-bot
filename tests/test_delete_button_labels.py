@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_dynamic_cleanup_delete_actions_use_cross_emoji():
     assert cleanup._button_action_label("Удалить вещи") == "❌ Удалить вещи"
-    assert cleanup._button_action_label("Убрать из сохранённого") == "❌ Убрать из сохранённого"
+    assert cleanup._button_action_label("Убрать из списка") == "❌ Убрать из списка"
     assert cleanup._button_action_label("Вернуть в рекомендации", "restore") == "Вернуть в рекомендации"
 
 

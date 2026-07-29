@@ -8,7 +8,6 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import assistant
 import bot_text
-import config
 import myday
 
 

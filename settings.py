@@ -1,18 +1,11 @@
 import logging
-import re
-from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
-import learning_dictionary as dictionary
 import dictionary_morning
 import learning_settings as learning_preferences
-import saved_items
-import cooking
-import util
-import memory
 from ui import settings as settings_ui
-from ui.constants import choose_label, cuisine_label, delete_label, ui_label
+from ui.constants import cuisine_label, ui_label
 
 _log = logging.getLogger(__name__)
 
@@ -174,7 +167,23 @@ def _notif_label(kind: str, label: str) -> str:
     return label
 
 async def send_home(bot, cid):
-    await saved_items.send_notes(bot, cid)
+    rows = [
+        [InlineKeyboardButton("📍 Город", callback_data="set_city")],
+        [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
+        [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ]
+    city = store.get_settings(cid).get("city") or ""
+    notification_kinds = [item.key for item in get_notification_options()]
+    notifications_on = any(notif_on(cid, kind) for kind in notification_kinds)
+    msg = settings_ui.settings_home(city, notifications_on)
+    await bot.send_message(
+        chat_id=cid,
+        text=msg.text,
+        entities=msg.entities,
+        reply_markup=InlineKeyboardMarkup(rows),
+        transient=True,
+    )
 
 
 async def send_lifehacks(bot, cid, q=None):
@@ -325,92 +334,6 @@ async def delete_lifehack(bot, cid, record_id):
 
     myday.delete_lifehack(record_id)
     await send_lifehacks(bot, cid)
-
-
-async def send_lagom(bot, cid, q=None):
-    values = [str(item).strip() for item in (memory.get_lagom(cid) or []) if str(item).strip()]
-    text = "🎚️ Принципы\n\n" + ("\n".join(f"• {item}" for item in values)
-                                  if values else "Пока пусто.")
-    rows = [[InlineKeyboardButton("🆕 Добавить принцип", callback_data="setadd_lagom")]]
-    if values:
-        rows.append([InlineKeyboardButton(delete_label("Очистить"), callback_data="set_clear_lagom")])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
-    markup = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=markup)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=markup)
-
-
-async def refresh_database(bot, cid, q=None):
-    import data_refresh
-
-    if q is not None:
-        try:
-            await q.message.edit_text("🔄 Обновляю данные…")
-        except Exception:
-            pass
-    result = await data_refresh.refresh_user_database(cid)
-    msg = settings_ui.database_refresh_result(result)
-    rows = []
-    if result.get("language_review_items"):
-        rows.append([InlineKeyboardButton("🔎 Проверить изменения", callback_data="set_refresh_review")])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
-    kb = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def send_language_review(bot, cid, q=None):
-    import learning_data_quality
-
-    items = learning_data_quality.review_items(cid)
-    if not items:
-        msg = settings_ui.mydata_section("✅ Проверка завершена", "Сомнительных изменений больше нет.")
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
-            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-        ]])
-    else:
-        current = items[0]
-        msg = settings_ui.language_review_item(current, len(items))
-        rows = []
-        if current.get("suggestion"):
-            rows.append([InlineKeyboardButton("✅ Заменить", callback_data="set_refresh_review_apply")])
-        rows.append([InlineKeyboardButton("❌ Удалить запись", callback_data="set_refresh_review_delete")])
-        rows.append([
-            InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
-            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-        ])
-        kb = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def resolve_language_review(bot, cid, action, q=None):
-    import learning_data_quality
-
-    learning_data_quality.resolve_review(cid, action)
-    await send_language_review(bot, cid, q)
 
 
 class _NoKbBot:
@@ -646,10 +569,7 @@ async def notif_off_all(bot, cid, q=None):
 
 
 async def send_personalization(bot, cid, q=None):
-    """Персонализация сейчас пустует по содержанию — Гардероб, Обучение, Кино/музыка
-    и Кухни переехали в свои разделы («Гардероб» → «🎚️ Мой шкаф» → «📌 Предпочтения», «Обучение»
-    → «🎚️ Настройки», «Готовка» → «🎚️ Мой холодильник» → «📌 Предпочтения»).
-    Экран оставлен как compat-редирект на главные Настройки."""
+    """Безопасный редирект для уже отправленных кнопок старой персонализации."""
     rows = [
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
@@ -1013,11 +933,12 @@ async def handle_callback(bot, cid, data, q=None):
         # Кнопки из старых сообщений: общая страница «Досуг» больше не существует.
         await send_home(bot, cid)
     elif data == "set_food":
-        await saved_items.send_food(bot, cid, q)
+        import menu
+        await menu.send_food_menu(bot, cid, q=q)
     elif data == "set_travel":
-        await saved_items.send_travel(bot, cid)
+        import travel
+        await travel.send_home(bot, cid, q=q)
     elif data == "set_fridge":
-        import balance
         import fridge
         await fridge.send_fridge(bot, cid, back="set_food")
     elif data == "set_fridge_g":
@@ -1035,7 +956,7 @@ async def handle_callback(bot, cid, data, q=None):
     elif data in ("set_thought_history_delete", "set_thought_history_delete_yes"):
         # Старые сообщения могли сохранить удалённую кнопку. Массовое удаление
         # истории мыслей больше недоступно из интерфейса.
-        await saved_items.send_notes(bot, cid)
+        await send_home(bot, cid)
     elif data == "set_priorities":
         await send_personalization(bot, cid, q)
     elif data.startswith("set_prio_"):

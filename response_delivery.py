@@ -6,7 +6,6 @@ import store
 import util
 import verify
 from ui import balance as balance_ui
-from ui.constants import save_toggle_label
 
 
 def keyboard(rows):
@@ -33,7 +32,6 @@ def answer_keyboard(cont_label="Подробнее", cont_callback="chat_retry",
         rows.append([(cont_label, cont_callback)])
     if depth:
         rows.append([("Короче", "ans_short")])
-    rows.append([(save_toggle_label(False), "as_fav")])
     rows.append([("⬅️ Назад", "m_close"), ("#️⃣ Главная", "m_menu")])
     return keyboard(rows)
 

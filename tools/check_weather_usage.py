@@ -12,7 +12,6 @@ os.environ.setdefault("WEATHER_API_KEY", "test-weather")
 import requests
 
 import config
-import store
 import weather
 import storage_driver
 

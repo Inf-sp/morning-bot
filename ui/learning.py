@@ -1,8 +1,8 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
 from dictionary_model import display_term
-from .builder import MessageBuilder, MessageSpec
-from .constants import choose_label, ui_label
+from .builder import MessageBuilder
+from .constants import ui_label
 from .learning_entry import render_learning_entry
 
 

@@ -1,4 +1,3 @@
-import asyncio
 import os
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
@@ -6,9 +5,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import config
 import cleanup
-import movie_engine
 import recommendation_stoplist
-import saved_items
 
 
 def _memory_store(monkeypatch, initial=None):
@@ -79,28 +76,6 @@ def test_refresh_migrates_hidden_and_seen_lists_and_clears_old_categories(monkey
     assert {item["category"] for item in state[config.RECOMMENDATION_STOPLIST_KEY]} == {
         "Не рекомендовать"
     }
-
-
-def test_removed_saved_movie_moves_to_stoplist_and_is_filtered(monkeypatch):
-    state = _memory_store(monkeypatch, {
-        config.NOTES_KEY: [{
-            "text": "Патерсон",
-            "source": "Досуг · Кино",
-            "bucket": "fav",
-        }],
-    })
-
-    async def no_bucket(*_args, **_kwargs):
-        return None
-
-    monkeypatch.setattr(saved_items, "send_bucket", no_bucket)
-
-    asyncio.run(saved_items.fav_del(None, "stoplist", 0))
-
-    assert state[config.NOTES_KEY] == []
-    assert recommendation_stoplist.values("stoplist", "movie") == ["Патерсон"]
-    assert movie_engine._norm("Патерсон") in movie_engine._excluded_norms("stoplist", include_shown=False)
-
 
 def test_removed_favorite_and_seen_item_use_same_stoplist(monkeypatch):
     state = _memory_store(monkeypatch)

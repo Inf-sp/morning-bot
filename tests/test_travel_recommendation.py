@@ -108,7 +108,6 @@ def test_rejected_visited_country_changes_next_generation_request(monkeypatch):
     monkeypatch.setattr(travel, "_visited_codes", lambda _cid: ["CL"])
     monkeypatch.setattr(travel, "_country_name", lambda code: "Чили" if code == "CL" else code)
     monkeypatch.setattr(travel.recommendation_stoplist, "values", lambda *_args: [])
-    monkeypatch.setattr(travel, "_plan_countries", lambda _cid: [])
     monkeypatch.setattr(travel, "travel_suggest_one", suggest)
     monkeypatch.setattr(travel, "_resolve_country_code", lambda name: {"Чили": "CL", "Япония": "JP"}[name])
     monkeypatch.setattr(travel, "_resolve_country_flag", lambda name, *_args: ("🇯🇵", {"cc": "JP"}))
@@ -134,7 +133,6 @@ def test_other_trip_uses_local_country_when_ai_is_unavailable(monkeypatch):
 
     monkeypatch.setattr(travel, "travel_suggest_one", unavailable)
     monkeypatch.setattr(travel, "_visited_codes", lambda _cid: [])
-    monkeypatch.setattr(travel, "_plan_countries", lambda _cid: [])
     monkeypatch.setattr(travel.recommendation_stoplist, "values", lambda *_args: [])
     monkeypatch.setattr(travel, "_recommendation_photo", lambda *_args: None)
     monkeypatch.setattr(travel, "send_plan", send_plan)
@@ -255,7 +253,6 @@ def test_country_suggestion_prompt_does_not_make_transport_the_reason(monkeypatc
     monkeypatch.setattr(travel.ai, "llm_json", fake_llm)
     monkeypatch.setattr(travel, "_visited_codes", lambda _cid: [])
     monkeypatch.setattr(travel.recommendation_stoplist, "values", lambda *_args: [])
-    monkeypatch.setattr(travel, "_plan_countries", lambda _cid: [])
     monkeypatch.setattr(travel.memory, "get_preferences", lambda _cid: ["Люблю природу и походы"])
 
     travel.travel_suggest_one("42")
