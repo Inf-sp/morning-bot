@@ -47,6 +47,19 @@ _DICT_KIND_RE = dictionary._DICT_KIND_RE
 _DICT_QUESTION_PAYLOAD_RE = dictionary._DICT_QUESTION_PAYLOAD_RE
 
 
+class DictionaryAnalysisUnavailable(RuntimeError):
+    """Ни один AI-резерв не смог надёжно разобрать словарную запись."""
+
+
+# Разбор слова — короткая публичная учебная задача. После основной Qwen-модели
+# пробуем Gemini и другой Groq-модельный класс: сбой одного JSON-провайдера не
+# должен заставлять пользователя повторять тот же ввод.
+_DICT_ANALYSIS_ORDER = (
+    ai.GROQ_STANDARD, "gemini", ai.GROQ_SIMPLE,
+    "github_models", "cf", "openrouter",
+)
+
+
 def _dictionary_nav(cid, lang=None, back=None):
     code = lang if lang in ("nl", "en") else _active_language_code(cid)
     return back_menu_keyboard(back or f"a_dictlang_{code}")
@@ -132,7 +145,7 @@ _DUTCH_ARTICLE_RE = re.compile(r"\b(de|het)\s+\w+", re.I)
 _DUTCH_WORD_HINTS = {
     "liever", "vanwege", "bewonderen", "tegoed", "walging", "gevolg",
     "afdeling", "ongeveer", "twijfelen", "twijfelt", "wennen", "omgaan",
-    "kies",
+    "kies", "tering",
 }
 
 
@@ -798,10 +811,16 @@ INPUT_JSON: {input_payload}
 Если ввод не является ни нидерландской/английской записью, ни русским значением для
 перевода на явно указанный целевой язык, верни {{"ok": false, "reason": "коротко почему"}}.
 """
-    d = await ai.allm_json(
-        prompt, 900, module="learning_dict_add",
-        fallback_allowed=True, privacy_level="public",
-    )
+    try:
+        d = await ai.allm_json(
+            prompt, 650, order=_DICT_ANALYSIS_ORDER, module="learning_dict_add",
+            fallback_allowed=True, privacy_level="public", budget_seconds=16,
+        )
+    except Exception as exc:
+        # Не скрываем под общим «не получилось разобрать» факт, что исчерпались
+        # именно AI-резервы. Вызывающий сценарий попросит перевод или контекст.
+        _log.info("dictionary analysis unavailable for %r: %s", raw_user_term, type(exc).__name__)
+        raise DictionaryAnalysisUnavailable() from exc
     if not isinstance(d, dict) or not d.get("ok"):
         return None
     lang = lang_hint if lang_hint in ("nl", "en") else ("en" if d.get("lang") == "en" else "nl")
@@ -1120,27 +1139,20 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
     check_lang = lang if lang in ("nl", "en") else _active_language_code(cid)
     status_message = await util.StatusManager.start(
         bot, cid, stages=_dict_check_stages(check_lang))
-    failed = False
+    unavailable = False
     try:
         entry = await _normalize_dict_entry_full(payload, lang, source_text=source_text)
         if entry:
             entry = await _enrich_dutch_verb(entry, cid)
             entry = await learning_data_quality.check_new_entry(entry)
+    except DictionaryAnalysisUnavailable:
+        unavailable = True
+        entry = None
     except Exception:
-        failed = True
         entry = None
     await status_message.stop()
-    if failed:
-        await bot.send_message(
-            chat_id=cid, text="⚠️ Не получилось разобрать слово. Попробуй ещё раз.",
-            reply_markup=_dictionary_nav(cid, lang))
-        return
     if not entry:
-        await bot.send_message(
-            chat_id=cid,
-            text="Не уверена в форме или переводе. Пришли так: de kater → похмелье.",
-            reply_markup=_dictionary_nav(cid, lang),
-        )
+        await _ask_dict_clarification(bot, cid, payload, lang, unavailable=unavailable)
         return
     status, saved = _save_normalized_dict_entry(cid, entry)
     msg = _dict_entry_message(saved, status=status)
@@ -1155,6 +1167,78 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
         persistent_inline=True)
+
+
+def _clarification_entry(term, translation, lang):
+    """Безопасная карточка из значения, которое пользователь подтвердил сам.
+
+    Не угадываем артикль, часть речи и пример: их лучше оставить пустыми, чем
+    добавить ложную грамматику после отказа всех генераторов.
+    """
+    clean_term = _normalized_user_term(term, lang)
+    clean_translation = re.sub(r"\s+", " ", str(translation or "")).strip(" \t\n\r:;,.-–—")
+    if not clean_term or not clean_translation or _contains_suspicious_analysis_text(clean_translation):
+        return None
+    return {
+        "lang": lang,
+        "term": clean_term[:120],
+        "article": "",
+        "translation": normalize_translation_case(clean_translation)[:180],
+        "breakdown": "слово" if len(clean_term.split()) == 1 else "фраза",
+        "examples": [],
+        "raw_user_term": _clean_raw_user_term(term)[:120],
+        "normalized_term": clean_term[:120],
+        "source_text": _clean_raw_user_term(term)[:120],
+        "added_at": datetime.now(config.TZ).isoformat(),
+        "status": "new",
+        "last_shown_at": None,
+        **_extract_srs_fields({}),
+    }
+
+
+async def _ask_dict_clarification(bot, cid, payload, lang=None, *, unavailable=False):
+    """Запрашивает только недостающий смысл, не предлагая повторить тот же ввод."""
+    raw_term = _clean_raw_user_term(payload)
+    code = lang if lang in ("nl", "en") else _active_language_code(cid)
+    store.dict_pending_add[str(cid)] = {"term": raw_term, "lang": code}
+    store.pending_input[str(cid)] = f"dictclarify_{code}"
+    lead = "Сейчас не удалось проверить" if unavailable else "Не удалось уверенно определить"
+    message = (
+        f"{lead} «{raw_term}». Напиши перевод или короткий контекст — "
+        "например: «ругательство» или «болезнь»."
+    )
+    await bot.send_message(chat_id=cid, text=message, reply_markup=_dictionary_nav(cid, code))
+
+
+async def add_dict_clarification(bot, cid, clarification, lang=None):
+    """Завершает добавление по переводу, который пользователь указал сам."""
+    cid = str(cid)
+    pending = store.dict_pending_add.get(cid) or {}
+    code = lang if lang in ("nl", "en") else pending.get("lang")
+    term = str(pending.get("term") or "")
+    value = _clean_raw_user_term(clarification)
+    if "→" in value:
+        left, _, right = value.partition("→")
+        if _dict_loose_text(code or "nl", left) == _dict_loose_text(code or "nl", term):
+            value = right.strip()
+    entry = _clarification_entry(term, value, code or _active_language_code(cid))
+    if not entry:
+        await bot.send_message(
+            chat_id=cid,
+            text="Напиши короткий перевод или контекст этого слова.",
+            reply_markup=_dictionary_nav(cid, code),
+        )
+        return
+    store.pending_input.pop(cid, None)
+    store.dict_pending_add.pop(cid, None)
+    status, saved = _save_normalized_dict_entry(cid, entry)
+    msg = _dict_entry_message(saved, status=status)
+    term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities,
+        reply_markup=_dict_saved_kb(saved, term_key, show_dictionary=True),
+        persistent_inline=True,
+    )
 
 
 async def retry_pending_dict_add(bot, cid):

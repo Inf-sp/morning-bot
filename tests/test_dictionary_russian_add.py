@@ -235,6 +235,13 @@ def test_add_dutch_word_does_not_default_to_english():
     assert lang == "nl"
 
 
+def test_add_tering_uses_dutch_dictionary_hint():
+    payload, lang = dictionary_import._extract_chat_dict_add("Add tering", "42")
+
+    assert payload == "tering"
+    assert lang == "nl"
+
+
 def test_add_dutch_phrase_uses_its_dutch_verb_as_a_language_hint():
     payload, lang = dictionary_import._extract_chat_dict_add("Add Ik kies voor", "42")
 
@@ -282,6 +289,109 @@ def test_add_dutch_phrase_reaches_the_netherlands_dictionary_flow(monkeypatch):
     assert asyncio.run(dictionary_import.try_add_dict_from_chat(Bot(), "42", "Add Ik kies voor"))
     assert normalized == [("Ik kies voor", "nl")]
     assert [message["text"] for message in sent] == ["Готово"]
+
+
+def test_add_word_asks_for_meaning_when_all_ai_reserves_fail(monkeypatch):
+    cid = "dictionary-clarification"
+    sent = []
+
+    class Status:
+        async def stop(self):
+            return None
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def start(*_args, **_kwargs):
+        return Status()
+
+    async def unavailable(*_args, **_kwargs):
+        raise dictionary_import.DictionaryAnalysisUnavailable()
+
+    monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
+    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", unavailable)
+    dictionary_import.store.pending_input.pop(cid, None)
+    dictionary_import.store.dict_pending_add.pop(cid, None)
+
+    asyncio.run(dictionary_import.add_dict_entry_from_chat(Bot(), cid, "tering", "nl"))
+
+    assert sent[-1]["text"] == (
+        "Сейчас не удалось проверить «tering». Напиши перевод или короткий контекст — "
+        "например: «ругательство» или «болезнь»."
+    )
+    assert dictionary_import.store.pending_input[cid] == "dictclarify_nl"
+    assert dictionary_import.store.dict_pending_add[cid]["term"] == "tering"
+
+
+def test_dictionary_analysis_uses_distinct_ai_reserves(monkeypatch):
+    calls = []
+
+    async def analyze(_prompt, max_tokens, **kwargs):
+        calls.append((max_tokens, kwargs))
+        return {
+            "ok": True,
+            "lang": "nl",
+            "term": "de tering",
+            "article": "de",
+            "translation": "туберкулёз; ругательство",
+            "breakdown": "существительное, de-слово",
+            "examples": [],
+            "pos": "существительное",
+            "plural": "",
+            "forms": [],
+            "topic": "здоровье",
+            "difficulty": "B1",
+            "construction": "",
+            "situation_type": "",
+            "alt_translations": [],
+            "needs_confirmation": True,
+            "reason": "слово многозначное",
+        }
+
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", analyze)
+
+    entry = asyncio.run(dictionary_import._normalize_dict_entry_full("tering", "nl"))
+
+    assert entry["term"] == "Tering"
+    assert calls == [
+        (650, {
+            "order": dictionary_import._DICT_ANALYSIS_ORDER,
+            "module": "learning_dict_add",
+            "fallback_allowed": True,
+            "privacy_level": "public",
+            "budget_seconds": 16,
+        })
+    ]
+
+
+def test_dictionary_clarification_saves_word_without_another_ai_request(monkeypatch):
+    cid = "dictionary-clarification-save"
+    saved = []
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    dictionary_import.store.pending_input[cid] = "dictclarify_nl"
+    dictionary_import.store.dict_pending_add[cid] = {"term": "tering", "lang": "nl"}
+    monkeypatch.setattr(
+        dictionary_import, "_save_normalized_dict_entry",
+        lambda _cid, entry: ("added", saved.append(dict(entry)) or entry),
+    )
+
+    asyncio.run(dictionary_import.add_dict_clarification(Bot(), cid, "ругательство"))
+
+    assert saved[0]["lang"] == "nl"
+    assert saved[0]["term"] == "Tering"
+    assert saved[0]["translation"] == "Ругательство"
+    assert saved[0]["breakdown"] == "слово"
+    assert saved[0]["examples"] == []
+    assert saved[0]["raw_user_term"] == "tering"
+    assert sent[-1]["text"].startswith("🇳🇱 Добавлено")
+    assert cid not in dictionary_import.store.pending_input
+    assert cid not in dictionary_import.store.dict_pending_add
 
 
 def test_russian_chat_command_keeps_dutch_default():

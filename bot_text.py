@@ -161,6 +161,8 @@ async def handle(update, context, remove_reply_keyboard):
             await dictionary_import.add_smart_batch(bot, cid, text, kind.split("_")[2]); return
         if kind and kind.startswith("dictadd_"):
             await dictionary_import.add_words_batch(bot, cid, text, kind.split("_")[1]); return
+        if kind and kind.startswith("dictclarify_"):
+            await dictionary_import.add_dict_clarification(bot, cid, text, kind.split("_")[1]); return
         if kind and kind.startswith("dictsearch_"):
             await dictionary.handle_dict_search(bot, cid, kind.split("_")[1], text); return
         if kind == "styleinput":
