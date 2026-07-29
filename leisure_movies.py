@@ -592,12 +592,14 @@ def _movie_prefs_kb(cid):
     rpref = settings.get(cid, "movie_recency", "") or ""
     rating = str(settings.get(cid, "movie_min_rating", "") or "")
     rows = [[InlineKeyboardButton(("✅ " if tpref == value else "") + label,
-                                  callback_data=f"mpref_type_{value}")
-             for label, value in _PREF_TYPE]]
-    rows.append([InlineKeyboardButton(("✅ " if rpref == v else "") + label,
-                                      callback_data=f"mpref_recency_{v or 'any'}") for label, v in _PREF_RECENCY])
-    rows.append([InlineKeyboardButton(("✅ " if rating == v else "") + f"⭐️ {label}",
-                                      callback_data=f"mpref_rating_{v}") for label, v in _PREF_RATING])
+                                  callback_data=f"mpref_type_{value}")]
+            for label, value in _PREF_TYPE]
+    rows.extend([[InlineKeyboardButton(("✅ " if rpref == value else "") + label,
+                                      callback_data=f"mpref_recency_{value or 'any'}")]
+                 for label, value in _PREF_RECENCY])
+    rows.extend([[InlineKeyboardButton(("✅ " if rating == value else "") + f"⭐️ {label}",
+                                      callback_data=f"mpref_rating_{value}")]
+                 for label, value in _PREF_RATING])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="movie_favorites"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)

@@ -344,7 +344,7 @@ def _music_preferences_kb(cid):
                              callback_data=f"music_style_{key}")
         for key, label, _prompt_name in _MUSIC_GENRES
     ]
-    rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
+    rows = [[button] for button in buttons]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="artist_favorites"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)

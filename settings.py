@@ -673,7 +673,7 @@ def _cuisines_kb(cid):
         )
         for key, label in CUISINE_OPTIONS
     ]
-    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    rows = [[button] for button in buttons]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_fridge_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
@@ -825,7 +825,7 @@ def _toggle_multi(cid, key, options, idx):
 def _multi_pick_kb(selected, options, prefix, back):
     buttons = [InlineKeyboardButton(("✅ " if v in selected else "") + v, callback_data=f"{prefix}_{i}")
                for i, v in enumerate(options)]
-    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    rows = [[button] for button in buttons]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
@@ -948,17 +948,17 @@ def _wardrobe_style_kb(cid, state=None):
                    for i, f in enumerate(FIT_OPTIONS)]
     palette = set(state["palette"])
     avoid = set(state["avoid"])
-    rows = [style_buttons[i:i + 2] for i in range(0, len(style_buttons), 2)]
-    rows.extend(fit_buttons[i:i + 3] for i in range(0, len(fit_buttons), 3))
+    rows = [[button] for button in style_buttons]
+    rows.extend([[button] for button in fit_buttons])
     palette_buttons = [InlineKeyboardButton(("✅ " if value in palette else "") + value.capitalize(), callback_data=f"set_palette_{i}")
                        for i, value in enumerate(PALETTE_OPTIONS)]
-    rows.append(palette_buttons)
+    rows.extend([[button] for button in palette_buttons])
     avoid_buttons = [InlineKeyboardButton(
         ("✅ " if value in avoid else "") + STYLE_AVOID_LABELS[value],
         callback_data=f"set_stylelimit_{i}",
     )
                      for i, value in enumerate(STYLE_AVOID_OPTIONS)]
-    rows.extend(avoid_buttons[i:i + 2] for i in range(0, len(avoid_buttons), 2))
+    rows.extend([[button] for button in avoid_buttons])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 

@@ -81,7 +81,14 @@ def test_learning_preferences_return_to_active_dictionary():
 
     assert keyboard.inline_keyboard[0][0].callback_data == "toggle_learning_language_dict"
     assert keyboard.inline_keyboard[1][0].callback_data == "set_learning_level_simple_dict"
+    assert all(len(row) == 1 for row in keyboard.inline_keyboard[:-1])
     assert keyboard.inline_keyboard[-1][0].callback_data == "a_dictlang_active"
+
+
+def test_cuisine_preferences_use_one_column():
+    keyboard = settings._cuisines_kb("42")
+
+    assert all(len(row) == 1 for row in keyboard.inline_keyboard[:-1])
 
 
 def test_seed_intro_uses_the_same_learning_empty_state_copy(monkeypatch):

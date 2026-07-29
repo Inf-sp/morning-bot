@@ -71,9 +71,14 @@ def test_movie_preferences_keep_only_type_recency_and_rating(monkeypatch):
     rows = _labels(leisure_movies._movie_prefs_kb("42"))
 
     assert rows == [
-        ["🎬 Фильмы", "Сериалы"],
-        ["Новинки", "✅ Любые годы"],
-        ["⭐️ 6.5", "⭐️ 7.0", "⭐️ 7.5", "⭐️ 8.0"],
+        ["🎬 Фильмы"],
+        ["Сериалы"],
+        ["Новинки"],
+        ["✅ Любые годы"],
+        ["⭐️ 6.5"],
+        ["⭐️ 7.0"],
+        ["⭐️ 7.5"],
+        ["⭐️ 8.0"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert leisure_movies._movie_prefs("42") == {
@@ -81,6 +86,16 @@ def test_movie_preferences_keep_only_type_recency_and_rating(monkeypatch):
         "recency": None,
         "min_rating": None,
     }
+
+
+def test_leisure_preference_choices_use_one_column():
+    keyboards = (
+        leisure_movies._movie_prefs_kb("42"),
+        leisure_books._book_preferences_kb("42"),
+        leisure_music._music_preferences_kb("42"),
+    )
+
+    assert all(len(row) == 1 for keyboard in keyboards for row in _labels(keyboard)[:-1])
 
 
 def test_book_preferences_filter_recommendations_by_recency_and_rating(monkeypatch):
@@ -97,8 +112,11 @@ def test_book_preferences_filter_recommendations_by_recency_and_rating(monkeypat
     rows = _labels(leisure_books._book_preferences_kb("42"))
 
     assert rows == [
-        ["✅ Новинки", "Любые годы"],
-        ["⭐️ 3.5", "⭐️ 4.0", "✅ ⭐️ 4.5"],
+        ["✅ Новинки"],
+        ["Любые годы"],
+        ["⭐️ 3.5"],
+        ["⭐️ 4.0"],
+        ["✅ ⭐️ 4.5"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert leisure_books._pick_good_book(items, "42", fallback=False)["title"] == "Новая подходящая"
@@ -207,7 +225,7 @@ def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
 
 
 def test_personal_lists_are_available_from_their_category_preferences():
-    assert _labels(leisure_music._music_preferences_kb("42"))[0] == ["⬜ 🌿 Инди", "⬜ ✨ Поп"]
+    assert _labels(leisure_music._music_preferences_kb("42"))[0] == ["⬜ 🌿 Инди"]
 
 
 def test_leisure_category_keyboards_do_not_offer_a_back_button():

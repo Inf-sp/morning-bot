@@ -41,15 +41,18 @@ def _level_label(level):
 def learning_settings_kb(active_lang, active_level, back="set_home"):
     dictionary_origin = back == "a_dictlang_active"
     suffix = "_dict" if dictionary_origin else ""
-    row = []
-    for level in LEVELS:
-        mark = "✅ " if level == active_level else ""
-        row.append(InlineKeyboardButton(f"{mark}{LEVEL_LABELS[level]}", callback_data=f"set_learning_level_{level}{suffix}"))
-    return InlineKeyboardMarkup([
+    rows = [
         [InlineKeyboardButton("🇳🇱 Нидерландский" if _code(active_lang) == "nl" else "🇬🇧 Английский", callback_data=f"toggle_learning_language{suffix}")],
-        row,
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ]
+    rows.extend([
+        [InlineKeyboardButton(
+            f"{'✅ ' if level == active_level else ''}{LEVEL_LABELS[level]}",
+            callback_data=f"set_learning_level_{level}{suffix}",
+        )]
+        for level in LEVELS
     ])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    return InlineKeyboardMarkup(rows)
 
 
 async def send_learning_settings(bot, cid, q=None, back="set_home"):

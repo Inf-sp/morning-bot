@@ -247,12 +247,12 @@ def _book_preferences_kb(cid):
     recency = preferences["recency"] or ""
     rating = str(preferences["min_rating"] or "")
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(("✅ " if recency == value else "") + label,
-                              callback_data=f"bookpref_recency_{value or 'any'}")
-         for label, value in _PREF_RECENCY],
-        [InlineKeyboardButton(("✅ " if rating == value else "") + f"⭐️ {label}",
-                              callback_data=f"bookpref_rating_{value}")
-         for label, value in _PREF_RATING],
+        *[[InlineKeyboardButton(("✅ " if recency == value else "") + label,
+                                callback_data=f"bookpref_recency_{value or 'any'}")]
+          for label, value in _PREF_RECENCY],
+        *[[InlineKeyboardButton(("✅ " if rating == value else "") + f"⭐️ {label}",
+                                callback_data=f"bookpref_rating_{value}")]
+          for label, value in _PREF_RATING],
         [InlineKeyboardButton("⬅️ Назад", callback_data="book_favorites"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
