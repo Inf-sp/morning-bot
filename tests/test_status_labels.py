@@ -71,6 +71,21 @@ def test_inline_status_starts_with_action_specific_text():
         assert bot_callbacks._status_stages(data)[0][1] == expected
 
 
+def test_long_main_screens_have_a_specific_tracking_topic():
+    cases = {
+        "m_myday": "myday",
+        "m_wardrobe": "wardrobe",
+        "m_food": "food",
+        "m_movie": "leisure",
+        "m_books": "leisure",
+        "m_music": "leisure",
+        "m_travel": "travel",
+    }
+
+    for data, expected in cases.items():
+        assert bot_callbacks._status_topic(data) == expected
+
+
 def test_long_inline_actions_have_three_distinct_progress_stages():
     for data in (
         "game_again", "m_food_next", "w_look", "movie_reco", "book_reco",

@@ -1,6 +1,8 @@
 import asyncio
 import os
 
+import pytest
+
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
@@ -123,13 +125,17 @@ def test_callback_ack_runs_in_parallel_with_handler(monkeypatch):
     asyncio.run(asyncio.wait_for(bot.answer_callback(Update(), Context()), timeout=1))
 
 
-def test_duplicate_travel_taps_start_one_action(monkeypatch):
+@pytest.mark.parametrize(
+    "callback_data",
+    ("m_myday", "m_wardrobe", "m_food", "m_movie", "m_books", "m_music", "m_travel"),
+)
+def test_duplicate_long_main_screen_taps_start_one_action(monkeypatch, callback_data):
     calls = []
     release = asyncio.Event()
-    bot._RECENT_TRAVEL_OPENINGS.clear()
+    bot._RECENT_HOME_OPENINGS.clear()
 
     class Query:
-        data = "m_travel"
+        data = callback_data
         message = type("Message", (), {"chat_id": "travel-user", "message_id": 17})()
 
         async def answer(self):
@@ -139,7 +145,7 @@ def test_duplicate_travel_taps_start_one_action(monkeypatch):
         bot = object()
 
     async def handle(*_args, **_kwargs):
-        calls.append("travel")
+        calls.append(callback_data)
         await release.wait()
 
     monkeypatch.setattr(bot.access, "is_allowed", lambda _cid: True)
@@ -158,7 +164,7 @@ def test_duplicate_travel_taps_start_one_action(monkeypatch):
 
     asyncio.run(run())
 
-    assert calls == ["travel"]
+    assert calls == [callback_data]
 
 
 def test_telegram_connect_timeout_is_retried_once(monkeypatch):

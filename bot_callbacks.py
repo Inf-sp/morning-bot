@@ -5,6 +5,7 @@ import re
 
 import access
 import balance
+import callback_topics
 import cleanup
 import cooking
 import dictionary_seed
@@ -37,24 +38,9 @@ from util import ack_loading as _ack, clear_loading as _unack
 
 _log = logging.getLogger(__name__)
 
-_STATUS_TOPIC_PREFIXES = (
-    ("w_", "wardrobe"),
-    ("m_food", "food"), ("as_food", "food"), ("as_fridge", "food"), ("as_recipe", "food"),
-    ("a_recipe_", "food"), ("food_", "food"),
-    ("a_dict", "learning"), ("a_train", "learning"), ("a_tr_", "learning"),
-    ("ex_", "learning"), ("again_tr_", "learning"), ("game", "learning"),
-    ("a_game", "learning"),
-    ("m_movie", "leisure"), ("m_books", "leisure"), ("m_music", "leisure"),
-    ("movie_", "leisure"), ("book_", "leisure"), ("music_", "leisure"), ("listen", "leisure"), ("a_concerts", "leisure"),
-    ("m_travel", "travel"), ("a_trav_", "travel"),
-    ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
-)
-
 def _status_topic(data):
-    for prefix, topic in _STATUS_TOPIC_PREFIXES:
-        if data.startswith(prefix):
-            return topic
-    return None
+    """Совместимый внутренний вход для статусов ожидания."""
+    return callback_topics.status_topic(data)
 
 
 def _status_stages(data):

@@ -13,6 +13,7 @@ from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
 import config
 import ai
 import store
+import callback_topics
 import trainer_session
 import access
 import menu
@@ -62,27 +63,27 @@ from util import clear_loading as _unack
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID
 _PROCESS_STARTED_AT = datetime.now(TZ).isoformat()
-_RECENT_TRAVEL_OPENINGS = {}
-_TRAVEL_OPENING_DEDUP_SECONDS = 3
+_RECENT_HOME_OPENINGS = {}
+_HOME_OPENING_DEDUP_SECONDS = 3
 
 
 
 _WORRY_PROMPT_WINDOW_S = 1800  # окно, в течение которого свободный текст ещё считается ответом на "Дневную разгрузку"
 
 
-def _claim_travel_opening(cid, message_id, data):
-    """Не запускает один и тот же главный экран Поездок повторно от двойного тапа."""
-    if data != "m_travel":
+def _claim_home_opening(cid, message_id, data):
+    """Не запускает повторно долгий главный экран от двойного тапа."""
+    if data not in callback_topics.LONG_HOME_CALLBACKS:
         return True
     now = asyncio.get_running_loop().time()
     key = (str(cid), str(message_id or ""), data)
-    expired = [item for item, seen_at in _RECENT_TRAVEL_OPENINGS.items()
-               if now - seen_at >= _TRAVEL_OPENING_DEDUP_SECONDS]
+    expired = [item for item, seen_at in _RECENT_HOME_OPENINGS.items()
+               if now - seen_at >= _HOME_OPENING_DEDUP_SECONDS]
     for item in expired:
-        _RECENT_TRAVEL_OPENINGS.pop(item, None)
-    if key in _RECENT_TRAVEL_OPENINGS:
+        _RECENT_HOME_OPENINGS.pop(item, None)
+    if key in _RECENT_HOME_OPENINGS:
         return False
-    _RECENT_TRAVEL_OPENINGS[key] = now
+    _RECENT_HOME_OPENINGS[key] = now
     return True
 
 
@@ -152,27 +153,6 @@ class _RetryingHTTPXRequest(HTTPXRequest):
             )
             return await super().do_request(*args, **kwargs)
 
-# callback-префикс -> тема для тематических фраз ожидания (util.StatusManager.TOPIC_STAGES)
-_STATUS_TOPIC_PREFIXES = (
-    ("w_", "wardrobe"),
-    ("m_food", "food"), ("as_food", "food"), ("as_fridge", "food"), ("as_recipe", "food"),
-    ("a_recipe_", "food"), ("food_", "food"),
-    ("a_dict", "learning"), ("a_train", "learning"), ("a_tr_", "learning"),
-    ("ex_", "learning"), ("again_tr_", "learning"), ("game", "learning"),
-    ("a_game", "learning"), ("gamediff_", "learning"),
-    ("movie_", "leisure"), ("book_", "leisure"), ("listen", "leisure"), ("a_concerts", "leisure"),
-    ("m_travel", "travel"), ("a_trav_", "travel"),
-    ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"), ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
-)
-
-
-def _status_topic(data: str) -> str | None:
-    for prefix, topic in _STATUS_TOPIC_PREFIXES:
-        if data.startswith(prefix):
-            return topic
-    return None
-
-
 def _looks_like_command(text: str) -> bool:
     """Текст похож на команду, а не на тревогу - не глотать его окном
     "Дневной разгрузки"."""
@@ -240,11 +220,11 @@ async def answer_callback(update, context):
     cid = str(q.message.chat_id)
     bot = context.bot
     data = str(getattr(q, "data", "") or "")
-    if not _claim_travel_opening(cid, getattr(q.message, "message_id", None), data):
+    if not _claim_home_opening(cid, getattr(q.message, "message_id", None), data):
         await q.answer()
         return
     topic = bot_callbacks._status_topic(data) or "Меню"
-    budget = 15 if topic in {"wardrobe", "food", "leisure", "travel"} else 10
+    budget = 15 if topic in {"myday", "wardrobe", "food", "leisure", "travel"} else 10
     trace = tracking.start_action(cid, topic, data or "callback", budget_seconds=budget)
     ok = True
     marker = getattr(bot, "mark_transient_message", None)

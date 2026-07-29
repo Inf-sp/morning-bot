@@ -12,6 +12,7 @@ import config
 import leisure_books
 import leisure_movies
 import leisure_music
+import movie_engine
 import saved_items
 
 
@@ -86,6 +87,23 @@ def test_movie_preferences_keep_only_type_recency_and_rating(monkeypatch):
         "recency": None,
         "min_rating": None,
     }
+
+
+def test_movie_engine_ignores_retired_manual_country_and_genre_preferences():
+    candidate = {
+        "genre_ids": [1], "countries": ["NL"], "kind": "movie",
+        "rating": 7.0, "vote_count": 100, "popularity": 10, "freq": 1,
+    }
+    taste = {"genres": {}, "countries": {}, "kind_pref": None}
+
+    current = movie_engine._score(candidate, taste, {"type_pref": None})
+    retired = movie_engine._score(
+        candidate,
+        taste,
+        {"type_pref": None, "genres": [1], "countries": ["NL"]},
+    )
+
+    assert retired == current
 
 
 def test_leisure_preference_choices_use_one_column():

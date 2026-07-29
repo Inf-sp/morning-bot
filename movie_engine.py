@@ -212,16 +212,10 @@ def _score(c, taste, prefs=None):
     score += math.log10(max(1, int(c.get("vote_count") or 0))) * 0.8
     score += min(float(c.get("popularity") or 0), 100.0) * 0.02
     score += (c.get("freq", 1) - 1) * 2.0  # рекомендован от нескольких любимых
-    # предпочтения из настроек (приоритет, не запрет)
+    # Действующие предпочтения из настроек (приоритет, не запрет).
     if prefs:
-        pg = set(prefs.get("genres") or [])
-        if pg and pg.intersection(c.get("genre_ids", [])):
-            score += 3.0
         if prefs.get("type_pref") in ("movie", "tv") and c.get("kind") == prefs["type_pref"]:
             score += 2.0
-        if prefs.get("countries"):
-            if set(prefs["countries"]).intersection(c.get("countries", []) or []):
-                score += 2.0
     return score
 
 
@@ -233,7 +227,7 @@ def rank(candidates, taste, prefs=None):
 def recommend(cid, prefs=None, limit=10):
     """Список ранжированных кандидатов (без LLM). Пустой — если данных мало.
 
-    prefs — dict предпочтений из настроек (genres/type_pref/countries/min_rating/...).
+    prefs — dict действующих предпочтений (type_pref/recency/min_rating).
     """
     taste = taste_profile(cid)
     if not taste.get("anchors"):
