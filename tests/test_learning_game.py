@@ -199,6 +199,13 @@ def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypat
     assert "• " not in bot.messages[0]["text"]
     labels = [button.text for row in bot.messages[0]["reply_markup"].inline_keyboard for button in row]
     assert labels == ["💡 Подсказка", "😞 Сдаюсь", "⬅️ Назад", "#️⃣ Главная"]
+    assert [len(row) for row in bot.messages[0]["reply_markup"].inline_keyboard] == [1, 1, 2]
+
+
+def test_detective_result_keyboard_uses_renamed_followup_button():
+    kb = learning_game._game_result_kb(learning_game.GAME_UI["русский"])
+
+    assert kb.inline_keyboard[0][0].text == "✨ Ещё одна загадка"
 
 
 def test_detective_rejects_vague_clues_without_a_signature():

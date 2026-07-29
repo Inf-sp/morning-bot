@@ -43,7 +43,7 @@ GAME_UI = {
         "reveal": "😞 Сдаюсь",
         "found": "✅ Дело раскрыто!",
         "remember": "📚 Запомни:",
-        "again": "✨ Ещё",
+        "again": "✨ Ещё одна загадка",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
         "wrong": "❌ Не то",
@@ -57,7 +57,7 @@ GAME_UI = {
         "reveal": "😞 Сдаюсь",
         "found": "✅ Case solved!",
         "remember": "📚 Remember:",
-        "again": "✨ Ещё",
+        "again": "✨ Ещё одна загадка",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
         "wrong": "❌ Not yet",
@@ -71,7 +71,7 @@ GAME_UI = {
         "reveal": "😞 Сдаюсь",
         "found": "✅ Zaak opgelost!",
         "remember": "📚 Onthoud:",
-        "again": "✨ Ещё",
+        "again": "✨ Ещё одна загадка",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
         "wrong": "❌ Niet juist",
@@ -407,17 +407,15 @@ WORDS: word|Russian translation; word|Russian translation; word|Russian translat
 
 
 def _game_play_kb(ui, *, hint_available):
-    first_row = []
+    rows = []
     if hint_available:
-        first_row.append(InlineKeyboardButton(ui["hint"], callback_data="game_hint"))
-    first_row.append(InlineKeyboardButton(ui["reveal"], callback_data="game_reveal"))
-    return InlineKeyboardMarkup([
-        first_row,
-        [
-            InlineKeyboardButton(ui["back"], callback_data="m_learn"),
-            InlineKeyboardButton(ui["home"], callback_data="m_menu"),
-        ],
+        rows.append([InlineKeyboardButton(ui["hint"], callback_data="game_hint")])
+    rows.append([InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")])
+    rows.append([
+        InlineKeyboardButton(ui["back"], callback_data="m_learn"),
+        InlineKeyboardButton(ui["home"], callback_data="m_menu"),
     ])
+    return InlineKeyboardMarkup(rows)
 
 
 def _game_result_kb(ui):
