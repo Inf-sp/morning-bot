@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 from datetime import datetime
 
 _log = logging.getLogger(__name__)
-from telegram import InlineKeyboardMarkup, ReplyKeyboardRemove
+from telegram import InlineKeyboardMarkup, Message, ReplyKeyboardRemove
 from telegram.error import Conflict, TimedOut
 from telegram.request import HTTPXRequest
 from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
@@ -48,6 +48,14 @@ CHAT_ID = config.CHAT_ID
 _PROCESS_STARTED_AT = datetime.now(TZ).isoformat()
 _RECENT_HOME_OPENINGS = {}
 _HOME_OPENING_DEDUP_SECONDS = 3
+_HOME_WARM_SCHEDULE = (
+    ("myday", "08:00"),
+    ("wardrobe", "08:05"),
+    ("cooking", "08:10"),
+    ("travel", "08:15"),
+    ("cinema", "08:20"),
+    ("learning", "08:25"),
+)
 
 
 
@@ -99,6 +107,10 @@ class _RetryingHTTPXRequest(HTTPXRequest):
                 update_type = "callback_query"
             elif endpoint == "sendMessage":
                 update_type = "message"
+            elif endpoint == "sendRichMessage":
+                update_type = "rich_message"
+            elif endpoint == "sendRichMessageDraft":
+                update_type = "rich_draft"
             elif endpoint == "editMessageText":
                 update_type = "edit_message"
             elif endpoint == "sendPhoto":
@@ -394,11 +406,12 @@ async def job_warm_weather_cache(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
-    """В 08:00 молча готовит дорогие главные экраны на день.
+    """Молча готовит один дорогой главный экран на день.
 
     Ошибка одного раздела не мешает прогреть остальные. Пользователю ничего
     не отправляется; при открытии раздела бот читает уже готовый кэш.
     """
+    scheduled_section = str(getattr(getattr(context, "job", None), "data", "") or "")
     for cid in access.get_allowed_cids():
         # Прогрев нужен только тем, кому утром действительно отправляется
         # сводка. Разделы по-прежнему собираются при ручном открытии.
@@ -415,6 +428,8 @@ async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
             ("travel", lambda: travel.warm_home_cache(cid)),
             ("cinema", lambda: leisure_movies.warm_movie_home_cache(cid)),
         )
+        if scheduled_section:
+            steps = tuple(step for step in steps if step[0] == scheduled_section)
         warmed = []
         for name, call in steps:
             if tracking.has_active_actions():
@@ -696,6 +711,86 @@ class _MenuCleanupBot(ExtBot):
             return last
         return await self._send_message_once(chat_id, *args, **kwargs)
 
+    async def _send_rich_message_once(self, chat_id, rich_message, **kwargs):
+        """Send a Bot API Rich Message while preserving normal send semantics.
+
+        PTB 21.x intentionally exposes ``do_api_request`` for Bot API methods
+        that have appeared before the SDK has typed wrappers.  This stays here,
+        rather than in every UI module, so transient-screen cleanup, inline
+        button preservation and first-feedback telemetry keep working exactly
+        like they do for ``send_message``.
+        """
+        transient = kwargs.pop("transient", False)
+        preserve_previous_inline = kwargs.pop("preserve_previous_inline", False)
+        persistent_inline = kwargs.pop("persistent_inline", False)
+        api_kwargs = {"chat_id": chat_id, "rich_message": rich_message}
+        for key in (
+            "reply_markup", "disable_notification", "protect_content",
+            "message_thread_id", "business_connection_id", "message_effect_id",
+            "reply_parameters",
+        ):
+            value = kwargs.pop(key, None)
+            if value is not None:
+                api_kwargs[key] = value
+        # Keep unknown caller options visible instead of silently discarding a
+        # future Bot API field. They are still sent through PTB's public API.
+        api_kwargs.update({key: value for key, value in kwargs.items() if value is not None})
+        send = asyncio.create_task(self.do_api_request(
+            "sendRichMessage", api_kwargs=api_kwargs, return_type=Message,
+        ))
+        send.add_done_callback(self._mark_send_done)
+        if preserve_previous_inline:
+            msg = await send
+        else:
+            msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
+        self._post_send(
+            chat_id, msg, transient=transient, persistent_inline=persistent_inline,
+        )
+        return msg
+
+    async def send_rich_message(self, chat_id, rich_message, **kwargs):
+        """Public project adapter for Bot API ``sendRichMessage``.
+
+        Callers always supply a classic fallback through ``rich_delivery``;
+        this method deliberately only handles the successful Rich transport.
+        """
+        return await self._send_rich_message_once(chat_id, rich_message, **kwargs)
+
+    async def edit_rich_message(self, chat_id, message_id, rich_message, **kwargs):
+        """Public project adapter for ``editMessageText.rich_message``."""
+        api_kwargs = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "rich_message": rich_message,
+        }
+        for key in ("reply_markup", "business_connection_id"):
+            value = kwargs.pop(key, None)
+            if value is not None:
+                api_kwargs[key] = value
+        api_kwargs.update({key: value for key, value in kwargs.items() if value is not None})
+        edit = asyncio.create_task(self.do_api_request(
+            "editMessageText", api_kwargs=api_kwargs, return_type=Message,
+        ))
+        edit.add_done_callback(self._mark_send_done)
+        return await edit
+
+    async def send_rich_message_draft(self, chat_id, draft_id, rich_message, **kwargs):
+        """Send the short-lived Rich draft used by the free-chat stream."""
+        api_kwargs = {
+            "chat_id": chat_id,
+            "draft_id": int(draft_id),
+            "rich_message": rich_message,
+        }
+        value = kwargs.pop("message_thread_id", None)
+        if value is not None:
+            api_kwargs["message_thread_id"] = value
+        api_kwargs.update({key: value for key, value in kwargs.items() if value is not None})
+        draft = asyncio.create_task(self.do_api_request(
+            "sendRichMessageDraft", api_kwargs=api_kwargs,
+        ))
+        draft.add_done_callback(self._mark_send_done)
+        return await draft
+
     async def send_photo(self, chat_id, *args, **kwargs):
         send = asyncio.create_task(super().send_photo(chat_id, *args, **kwargs))
         send.add_done_callback(self._mark_send_done)
@@ -767,7 +862,13 @@ def _build_application():
     def _t(hm):
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
     jq.run_once(job_startup_audits, when=2, **_job_options("startup_audits_once"))
-    jq.run_once(job_warm_home_pages, when=5, **_job_options("warm_home_pages_startup"))
+    for index, (section, _time_label) in enumerate(_HOME_WARM_SCHEDULE):
+        jq.run_once(
+            job_warm_home_pages,
+            when=5 + index * 60,
+            data=section,
+            **_job_options(f"warm_home_{section}_startup"),
+        )
     jq.run_once(service_monitor.monitoring_job, when=10, **_job_options("monitoring_startup"))
     jq.run_repeating(
         service_monitor.monitoring_job,
@@ -775,13 +876,15 @@ def _build_application():
         first=310,
         **_job_options("monitoring_repeating"),
     )
-    jq.run_daily(
-        job_warm_home_pages,
-        time=_t("08:00"),
-        days=tuple(range(7)),
-        **_job_options("warm_home_pages_daily"),
-    )
-    jq.run_daily(job_warm_weather_cache, time=_t("08:10"), days=tuple(range(7)), **_job_options("warm_weather_cache_daily"))
+    for section, time_label in _HOME_WARM_SCHEDULE:
+        jq.run_daily(
+            job_warm_home_pages,
+            time=_t(time_label),
+            days=tuple(range(7)),
+            data=section,
+            **_job_options(f"warm_home_{section}_daily"),
+        )
+    jq.run_daily(job_warm_weather_cache, time=_t("07:55"), days=tuple(range(7)), **_job_options("warm_weather_cache_daily"))
     jq.run_daily(job_morning_brief, time=_t("08:30"), days=tuple(range(7)), **_job_options("morning_brief_daily"))
     jq.run_daily(job_weather_warn, time=_t("08:45"), days=tuple(range(7)), **_job_options("weather_warn_daily"))
     jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(4,), **_job_options("concerts_cache_weekly"))

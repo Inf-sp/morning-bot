@@ -17,6 +17,11 @@ def _env_int(name, default):
         return default
 
 
+def _env_bool(name, default=False):
+    value = str(os.environ.get(name, "" if not default else "1")).strip().casefold()
+    return value in {"1", "true", "yes", "on"}
+
+
 WEATHER_FREE_DAILY_LIMIT = _env_int("WEATHER_FREE_DAILY_LIMIT", 1000)
 WEATHER_HARD_DAILY_LIMIT = _env_int("WEATHER_HARD_DAILY_LIMIT", WEATHER_FREE_DAILY_LIMIT)
 WEATHER_WARNING_LIMIT = _env_int("WEATHER_WARNING_LIMIT", int(WEATHER_HARD_DAILY_LIMIT * 0.7))
@@ -57,6 +62,10 @@ FIRECRAWL_API_KEY = os.environ.get("FIRECRAWL_API_KEY", "")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID") or CHAT_ID
+# Rich Messages are enabled by default on the current Telegram Bot API. Keeping a
+# flag makes it possible to immediately return to classic messages if Telegram
+# rolls out an incompatible client-side change.
+TELEGRAM_RICH_MESSAGES = _env_bool("TELEGRAM_RICH_MESSAGES", True)
 
 
 def _read_text_file(path, default=""):

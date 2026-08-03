@@ -4,6 +4,7 @@ from html import unescape
 from telegram import MessageEntity
 
 from .builder import MessageBuilder
+from . import rich
 
 
 _LEADING_EMOJI_RE = re.compile(
@@ -49,6 +50,56 @@ def _split_leading_label(line: str):
     if not first_alpha.isupper():
         return None
     return label, (match.group(2) or "").strip()
+
+
+def _rich_assistant_message(title, lines, quote_flags):
+    """Render the same assistant answer as native headings/lists/quotes.
+
+    The plain ``MessageBuilder`` output below remains the universal fallback;
+    this function only describes presentation and never makes content choices.
+    """
+    blocks = [rich.heading(title, size=3)]
+    bullets = []
+
+    def flush_bullets():
+        nonlocal bullets
+        if bullets:
+            blocks.append({
+                "type": "list",
+                "items": [
+                    {"blocks": [rich.paragraph(item)]}
+                    for item in bullets
+                ],
+            })
+            bullets = []
+
+    for index, line in enumerate(lines):
+        line = str(line or "").strip()
+        if not line:
+            continue
+        if line.startswith("- "):
+            bullets.append(line[2:].strip())
+            continue
+        flush_bullets()
+        label_parts = _split_leading_label(line)
+        if quote_flags[index]:
+            blocks.append({
+                "type": "blockquote",
+                "blocks": [rich.paragraph(line)],
+            })
+        elif label_parts:
+            label, content = label_parts
+            if content:
+                blocks.append(rich.paragraph([
+                    {"type": "bold", "text": f"{label}:"},
+                    f" {content}",
+                ]))
+            else:
+                blocks.append(rich.heading(label, size=4))
+        else:
+            blocks.append(rich.paragraph(line))
+    flush_bullets()
+    return rich.message(blocks)
 
 
 def assistant_answer(answer: str):
@@ -105,4 +156,6 @@ def assistant_answer(answer: str):
             else:
                 b.blank()
 
-    return b.build_stripped()
+    msg = b.build_stripped()
+    msg.rich_message = _rich_assistant_message(title, normalized_lines, quote_flags)
+    return msg

@@ -12,6 +12,7 @@ import ai
 import api_usage
 import config
 import provider_runtime
+import rich_delivery
 import store
 import tmdb
 import util
@@ -689,6 +690,25 @@ def _concert_event_id(e):
     return f"{artist.lower()}:{date}:{city.lower()}"
 
 
+def _concert_date_unix(local_date):
+    """Return local noon for an ISO event date, or ``None`` when it is invalid.
+
+    Concert sources currently confirm a date but not always a usable start
+    time.  Noon in the configured local timezone keeps that date stable when
+    Telegram renders the RichTextDateTime entity in the recipient's timezone.
+    """
+    from datetime import datetime
+
+    try:
+        return int(
+            datetime.strptime(str(local_date), "%Y-%m-%d")
+            .replace(hour=12, tzinfo=config.TZ)
+            .timestamp()
+        )
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
 def _seen_concerts_has_history(cid):
     return str(cid) in store._load(config.SEEN_CONCERTS_KEY)
 
@@ -769,6 +789,7 @@ async def _build_new_concerts_msg(cid):
             "genre": _concert_genre(e),
             "price": _concert_min_price(e),
             "date": _fmt_date(date) if date else "",
+            "date_unix": _concert_date_unix(date),
             "url": e.get("url", ""),
             "verification": "confirmed" if source in ("official_site", "venue", "ticketmaster") else "review",
         })
@@ -918,6 +939,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
             "genre": _concert_genre(e),
             "price": _concert_min_price(e),
             "date": _fmt_date(date) if date else "",
+            "date_unix": _concert_date_unix(date),
             "url": e.get("url", ""),
             "verification": "confirmed" if source in ("official_site", "venue", "ticketmaster") else "review",
         })
@@ -934,8 +956,18 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
     )
     store.last_source[str(cid)] = "Музыка · Концерты"
     store.last_answer[str(cid)] = msg.text
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
-                           disable_web_page_preview=True)
+    if rich_delivery.enabled(bot):
+        await rich_delivery.send(bot, cid, msg, reply_markup=kb)
+    else:
+        # Preserve the existing classic result exactly when Rich Messages are
+        # disabled or this Bot API adapter is unavailable.
+        await bot.send_message(
+            chat_id=cid,
+            text=msg.text,
+            entities=msg.entities,
+            reply_markup=kb,
+            disable_web_page_preview=True,
+        )
 
 
 

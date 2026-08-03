@@ -1,5 +1,7 @@
 import asyncio
+import logging
 import re
+import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import store
@@ -7,8 +9,13 @@ import ai
 import util
 import verify
 import research
+import rich_delivery
 import myday
 from ui import assistant as assistant_ui
+from ui.builder import MessageSpec
+
+
+_log = logging.getLogger(__name__)
 
 _MED_WORDS = ("боль", "болит", "симптом", "врач", "горло", "кашель", "тошнот", "давлен",
               "сыпь", "простуд", "грипп", "живот", "голова", "мигрень", "насморк")
@@ -386,17 +393,73 @@ async def chat_reply(bot, cid, text):
             prompt_text += "\n\nСвежие фрагменты из открытых источников:\n" + "\n---\n".join(sources)
     hist.append({"role": "user", "content": prompt_text})
     hist = hist[-10:]
-    status = await util.StatusManager.start(bot, cid)
+    # Rich drafts are Telegram's native live preview surface. Classic bots and
+    # older delivery paths keep the existing editable status message instead.
+    draft = await rich_delivery.start_draft(bot, cid)
+    status = None if draft is not None else await util.StatusManager.start(bot, cid)
+    streamed_text = ""
+    last_draft_at = time.monotonic()
+    last_draft_length = 0
+
+    async def update_draft(delta):
+        """Coalesce model tokens into a readable Telegram live preview."""
+        nonlocal streamed_text, last_draft_at, last_draft_length
+        streamed_text += str(delta or "")
+        now = time.monotonic()
+        if (
+            last_draft_length > 0
+            and
+            len(streamed_text) - last_draft_length < 80
+            and now - last_draft_at < 0.45
+        ):
+            return
+        await draft.text(streamed_text)
+        last_draft_at = now
+        last_draft_length = len(streamed_text)
+
     try:
-        answer = await ai.achat_chain(hist, cid)
+        answer = (
+            await ai.achat_chain_stream(hist, cid, on_delta=update_draft)
+            if draft is not None else await ai.achat_chain(hist, cid)
+        )
     except Exception as e:
-        await status.stop(delete=True)
+        if status is not None:
+            await status.stop(delete=True)
+        if draft is not None and isinstance(e, ai.StreamOutputInterrupted):
+            interrupted = MessageSpec(
+                text=str(e),
+                rich_message={"blocks": [{"type": "paragraph", "text": str(e)}]},
+            )
+            try:
+                await rich_delivery.send(bot, cid, interrupted)
+            except Exception as error:
+                # The API may have accepted the rich message before a network
+                # error reached us. A classic retry here could duplicate the
+                # final answer in the chat, so only validation errors fall
+                # back inside rich_delivery itself.
+                _log.warning(
+                    "Rich interrupted-answer delivery unconfirmed; skip duplicate fallback: %s",
+                    type(error).__name__,
+                )
+            return
         await verify.safe_error(bot, cid, e); return
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
     store.last_answer[str(cid)] = answer
     store.last_surface[str(cid)] = "chat"
     msg = assistant_ui.assistant_answer((answer or "").strip() or "Пусто, попробуй ещё раз.")
+    if draft is not None:
+        try:
+            await rich_delivery.send(bot, cid, msg)
+        except Exception as error:
+            # rich_delivery already falls back to classic text for known Bot
+            # API validation errors. For a timeout/network error delivery is
+            # uncertain, and a second send can create a duplicate response.
+            _log.warning(
+                "Rich assistant-answer delivery unconfirmed; skip duplicate fallback: %s",
+                type(error).__name__,
+            )
+        return
     ok = await status.replace(msg.text, entities=msg.entities)
     if not ok:
         try:

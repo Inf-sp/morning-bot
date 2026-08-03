@@ -9,6 +9,10 @@ class MessageSpec:
     entities: list[MessageEntity] | None = None
     reply_markup: InlineKeyboardMarkup | None = None
     parse_mode: str | None = None
+    # Optional Bot API 10.1/10.2 content. ``text``/``entities`` always remain
+    # available as the safe fallback for clients or API methods without Rich
+    # Message support.
+    rich_message: dict | None = None
 
 
 def u16_len(text: str) -> int:

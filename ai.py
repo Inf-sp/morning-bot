@@ -99,6 +99,22 @@ class LLMProviderError(Exception):
         self.cooldown_until = cooldown_until
 
 
+class _PartialStreamError(Exception):
+    """Provider stream failed after it had already yielded visible text."""
+
+    def __init__(self, error, partial):
+        super().__init__(str(error))
+        self.error = error
+        self.partial = str(partial or "")
+
+
+class StreamOutputInterrupted(Exception):
+    """Safe user-facing outcome for an interrupted visible stream."""
+
+    def __init__(self):
+        super().__init__("⏳ Ответ оборвался. Отправь сообщение ещё раз.")
+
+
 def _budget_for_module(module: str) -> float:
     module = str(module or "").casefold()
     if module.startswith(_COMPLEX_MODULE_PREFIXES):
@@ -248,6 +264,7 @@ def ai_traffic_summary(period_seconds=24 * 3600, limit=5) -> dict:
         rows = []
     grouped = {}
     providers = {}
+    peaks = {}
     for row in rows:
         key = (str(row.get("origin") or "Фон"), str(row.get("section") or "Система"),
                str(row.get("actor") or ""))
@@ -261,13 +278,19 @@ def ai_traffic_summary(period_seconds=24 * 3600, limit=5) -> dict:
         provider = str(row.get("provider") or "")
         if provider and provider != "cache":
             providers[provider] = providers.get(provider, 0) + 1
+        bucket = int(row.get("ts") or 0) // 300 * 300
+        peak = peaks.setdefault(bucket, {"ts": bucket, "attempts": 0, "failed": 0})
+        peak["attempts"] += 1
+        peak["failed"] += 0 if row.get("ok") else 1
     sources = sorted(grouped.values(), key=lambda item: (-item["attempts"], -item["failed"]))
+    peak = max(peaks.values(), key=lambda item: (item["attempts"], item["failed"]), default=None)
     return {
         "total": len(rows),
         "failed": sum(1 for row in rows if not row.get("ok")),
         "cache_hits": sum(1 for row in rows if row.get("cache_hit")),
         "providers": dict(sorted(providers.items(), key=lambda item: -item[1])),
         "sources": sources[:max(1, int(limit or 1))],
+        "peak": peak,
     }
 
 
@@ -656,6 +679,198 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=
     if service != "gemini":
         record_usage(True, latency_ms=int((time.time() - t0) * 1000), headers=r.headers)
     return r
+
+
+def _stream_post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=None):
+    """Open one SSE request and account for it exactly once when it finishes.
+
+    ``_post`` records a successful HTTP 200 before the body is read, which is
+    correct for JSON responses but wrong for a stream that can later break.
+    Free-chat streaming therefore has its own small transport helper.
+    """
+    service_aliases = {"cf": "cloudflare", **_ROUTE_PROVIDER_BASE}
+    service = service_aliases.get(name, name)
+    meter_service = usage_service or service
+    if timeout_cap is None:
+        timeout_cap = _timeout_cap(name)
+    if timeout_cap is not None:
+        timeout = min(float(timeout), float(timeout_cap))
+    timeout = _bounded_timeout(timeout)
+    started = time.time()
+    accounted = False
+
+    def record(ok, *, error="", status_code=None, headers_=None):
+        nonlocal accounted
+        if accounted:
+            return
+        accounted = True
+        details = {
+            "latency_ms": int((time.time() - started) * 1000),
+            "headers": headers_ or {},
+        }
+        if not ok:
+            details["error"] = error or "stream_error"
+            if status_code is not None:
+                details["status_code"] = status_code
+        api_usage.record_request(meter_service, ok=ok, **details)
+        if meter_service != service:
+            try:
+                provider_runtime.record_result(service, ok, **details)
+            except Exception:
+                pass
+
+    try:
+        response = requests.post(
+            url, headers=headers, json=payload, timeout=timeout, stream=True,
+        )
+    except requests.exceptions.Timeout as error:
+        record(False, error="timeout")
+        raise LLMProviderError(
+            name, f"{name} timeout", temporary=True,
+            error_type=type(error).__name__,
+        ) from error
+    except requests.exceptions.ConnectionError as error:
+        record(False, error="network_error")
+        raise LLMProviderError(
+            name, f"{name} network error", temporary=True,
+            error_type=type(error).__name__,
+        ) from error
+
+    if response.status_code == 200:
+        return response, record
+
+    body = secure.redact((response.text or "")[:300])
+    status_code = response.status_code
+    record(
+        False,
+        error=f"HTTP {status_code}",
+        status_code=status_code,
+        headers_=response.headers,
+    )
+    try:
+        response.close()
+    except Exception:
+        pass
+    retry_after = None
+    try:
+        retry_after = int(response.headers.get("Retry-After") or 0) or None
+    except Exception:
+        pass
+    raise LLMProviderError(
+        name, f"{name} {status_code}: {body}", status_code=status_code,
+        temporary=_is_temporary_status(status_code), error_type="http_error",
+        retry_after=retry_after,
+    )
+
+
+def _stream_content(value):
+    """Normalise OpenAI-compatible delta content without accepting tool calls."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        chunks = []
+        for item in value:
+            if isinstance(item, str):
+                chunks.append(item)
+            elif isinstance(item, dict):
+                chunks.append(str(item.get("text") or item.get("content") or ""))
+        return "".join(chunks)
+    return ""
+
+
+def _iter_sse_deltas(response, provider):
+    """Yield content deltas and reject incomplete/error SSE responses."""
+    saw_done = False
+    saw_finish = False
+    try:
+        # Requests defaults a ``text/event-stream`` response without a charset
+        # to ISO-8859-1.  SSE payloads are UTF-8, so letting Requests decode
+        # them corrupts non-ASCII assistant text before JSON sees it.
+        for raw_line in response.iter_lines(decode_unicode=False):
+            remaining = _remaining_seconds()
+            if remaining is not None and remaining <= 0.2:
+                raise _deadline_error()
+            if isinstance(raw_line, bytes):
+                line = raw_line.decode("utf-8", errors="replace").strip()
+            else:
+                line = str(raw_line or "").strip()
+            if not line or line.startswith(":"):
+                continue
+            if not line.startswith("data:"):
+                continue
+            raw = line[5:].strip()
+            if raw == "[DONE]":
+                saw_done = True
+                break
+            try:
+                event = json.loads(raw)
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                raise LLMProviderError(
+                    provider, "malformed stream event", temporary=True,
+                    error_type="stream_protocol",
+                ) from error
+            error_payload = event.get("error") if isinstance(event, dict) else None
+            if error_payload:
+                if isinstance(error_payload, dict):
+                    detail = error_payload.get("message") or error_payload.get("code") or "stream error"
+                else:
+                    detail = str(error_payload)
+                raise LLMProviderError(
+                    provider, str(detail), temporary=True, error_type="stream_error",
+                )
+            choices = event.get("choices") if isinstance(event, dict) else None
+            for choice in choices or []:
+                if not isinstance(choice, dict):
+                    continue
+                delta = choice.get("delta") or {}
+                content = _stream_content(delta.get("content") if isinstance(delta, dict) else "")
+                if content:
+                    yield content
+                if choice.get("finish_reason"):
+                    saw_finish = True
+        if not (saw_done or saw_finish):
+            raise LLMProviderError(
+                provider, "stream ended before completion", temporary=True,
+                error_type="stream_incomplete",
+            )
+    except requests.exceptions.Timeout as error:
+        raise LLMProviderError(
+            provider, f"{provider} timeout", temporary=True,
+            error_type=type(error).__name__,
+        ) from error
+    except requests.exceptions.ConnectionError as error:
+        raise LLMProviderError(
+            provider, f"{provider} network error", temporary=True,
+            error_type=type(error).__name__,
+        ) from error
+
+
+def _stream_openai_chat(url, headers, payload, timeout, provider, emit, *, usage_service=None):
+    """Read an OpenAI-compatible SSE completion and return its complete text."""
+    response, record = _stream_post(
+        url, headers, payload, timeout, provider, timeout_cap=timeout,
+        usage_service=usage_service,
+    )
+    pieces = []
+    try:
+        for delta in _iter_sse_deltas(response, provider):
+            pieces.append(delta)
+            emit(delta)
+        output = "".join(pieces).strip()
+        if not output:
+            raise LLMProviderError(provider, "empty stream response", error_type="empty_response")
+        record(True, headers_=response.headers)
+        return output
+    except Exception as error:
+        record(False, error=type(error).__name__, headers_=response.headers)
+        if pieces:
+            raise _PartialStreamError(error, "".join(pieces)) from error
+        raise
+    finally:
+        try:
+            response.close()
+        except Exception:
+            pass
 
 def _as_text(x):
     if isinstance(x, str):
@@ -1617,6 +1832,74 @@ def _chat(provider, history, system, timeout_cap=None):
         return output
 
 
+def _chat_stream(provider, history, system, emit, timeout_cap=None):
+    """Stream free-chat text where a provider has an SSE completion endpoint.
+
+    This intentionally covers only the free assistant route. Structured feature
+    calls must validate a completed JSON payload before users see it.
+    """
+    def bounded_cap(default):
+        if timeout_cap is None:
+            return default
+        return min(float(default), float(timeout_cap))
+
+    messages = [{"role": "system", "content": system}] + history
+    payload = {
+        "messages": messages,
+        "max_tokens": 700,
+        "temperature": 0.8,
+        "stream": True,
+    }
+    if _monitor_name(provider) == "groq":
+        if not config.GROQ_API_KEY:
+            raise LLMProviderError(provider, "no groq", error_type="credentials")
+        return _stream_openai_chat(
+            "https://api.groq.com/openai/v1/chat/completions",
+            {
+                "Authorization": f"Bearer {config.GROQ_API_KEY}",
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+            },
+            {**payload, "model": _provider_model_name(provider)},
+            bounded_cap(5), provider, emit,
+            usage_service=api_usage.groq_model_service(_provider_model_name(provider)),
+        )
+    if provider == "github_models":
+        if not config.GITHUB_MODELS_TOKEN:
+            raise LLMProviderError(provider, "no GitHub Models token", error_type="credentials")
+        return _stream_openai_chat(
+            "https://models.github.ai/inference/chat/completions",
+            {
+                "Authorization": f"Bearer {config.GITHUB_MODELS_TOKEN}",
+                "Accept": "text/event-stream",
+                "Content-Type": "application/json",
+                "X-GitHub-Api-Version": "2026-03-10",
+            },
+            {**payload, "model": config.GITHUB_MODELS_MODEL},
+            bounded_cap(5), provider, emit,
+        )
+    if provider == "openrouter":
+        if not config.OPENROUTER_API_KEY:
+            raise LLMProviderError(provider, "no OpenRouter key", error_type="credentials")
+        return _stream_openai_chat(
+            "https://openrouter.ai/api/v1/chat/completions",
+            {
+                "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+            },
+            {**payload, "model": config.OPENROUTER_MODEL},
+            bounded_cap(4), provider, emit,
+        )
+
+    # Cloudflare's current chat path is the reliable non-streaming reserve.
+    # It remains inside the same chain and publishes its finished text once.
+    output = _as_text(_chat(provider, history, system, timeout_cap=timeout_cap))
+    if output:
+        emit(output)
+    return output
+
+
 def _log_free_chat_route(*, served_by="", outcome=""):
     _log.info(
         "AI route scenario=%s tier=%s provider_chain=%s served_by=%s version=%s deployment=%s replica=%s pid=%s route_version=%s outcome=%s",
@@ -1696,11 +1979,124 @@ def _chat_chain_impl(history, cid=None):
     raise Exception(_friendly(errs))
 
 
+def _chat_chain_stream_impl(history, cid=None, emit=None):
+    """Free-chat route with SSE before the first visible provider output.
+
+    A provider may be replaced only before it has yielded text. Once the user
+    has seen a delta, swapping models would make two unrelated answers appear
+    as one; that case ends with a short retry prompt instead.
+    """
+    system = _chat_system(cid)
+    emit = emit or (lambda _delta: None)
+    errs = []
+    prompt_len = sum(len(m.get("content", "")) for m in history)
+    failed_providers = []
+    try:
+        import tracking
+        tracking.annotate_ai_route(requested_tier=FREE_CHAT_TIER, primary=CHAT_ORDER[0])
+    except Exception:
+        pass
+
+    for p in CHAT_ORDER:
+        remaining = _remaining_seconds()
+        if remaining is not None and remaining < _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS:
+            errs.append("chain:deadline")
+            break
+        unavailable = _provider_is_unavailable(p)
+        if unavailable is not None:
+            _record_ai_attempt(
+                p, _provider_model_name(p), "assistant", ok=False, failure=str(unavailable),
+            )
+            failed_providers.append(p)
+            errs.append(f"{p}:{unavailable}")
+            continue
+
+        emitted = False
+
+        def send_delta(delta):
+            nonlocal emitted
+            delta = str(delta or "")
+            if delta:
+                emitted = True
+                emit(delta)
+
+        try:
+            attempt_started = time.time()
+            attempt_timeout = min(
+                _FREE_CHAT_PROVIDER_TIMEOUTS[p],
+                remaining if remaining is not None else _FREE_CHAT_PROVIDER_TIMEOUTS[p],
+            )
+            out = _as_text(_chat_stream(p, history, system, send_delta, timeout_cap=attempt_timeout))
+            if out and out.strip():
+                _record_ai_attempt(
+                    p, _provider_model_name(p), "assistant", ok=True,
+                    latency_ms=int((time.time() - attempt_started) * 1000),
+                )
+                for failed in failed_providers:
+                    provider_runtime.activate_fallback(
+                        _monitor_name(failed), _monitor_name(p), reason="request",
+                    )
+                _log_cost(p, _provider_model_name(p), "c" * prompt_len, out, "assistant")
+                try:
+                    import tracking
+                    tracking.annotate_action(
+                        provider=p, fallback="provider" if failed_providers else "",
+                    )
+                except Exception:
+                    pass
+                _log_free_chat_route(served_by=p, outcome="success")
+                return out
+            _record_ai_attempt(
+                p, _provider_model_name(p), "assistant", ok=False,
+                latency_ms=int((time.time() - attempt_started) * 1000), failure="empty response",
+            )
+        except _PartialStreamError as stream_error:
+            error = stream_error.error
+            _record_ai_attempt(
+                p, _provider_model_name(p), "assistant", ok=False,
+                latency_ms=int((time.time() - attempt_started) * 1000),
+                failure=str(error) or type(error).__name__,
+            )
+            _mark_cooldown(p, error)
+            _log_free_chat_route(served_by=p, outcome="stream_interrupted")
+            raise StreamOutputInterrupted() from error
+        except Exception as error:
+            _record_ai_attempt(
+                p, _provider_model_name(p), "assistant", ok=False,
+                latency_ms=int((time.time() - attempt_started) * 1000),
+                failure=str(error) or type(error).__name__,
+            )
+            # ``emitted`` is normally only true for _PartialStreamError. Keep
+            # the guard for alternate provider implementations as well.
+            if emitted:
+                _mark_cooldown(p, error)
+                _log_free_chat_route(served_by=p, outcome="stream_interrupted")
+                raise StreamOutputInterrupted() from error
+            failed_providers.append(p)
+            _mark_cooldown(p, error)
+            errs.append(f"{p}:{error}")
+    try:
+        import tracking
+        tracking.annotate_action(fallback="local")
+    except Exception:
+        pass
+    _log_free_chat_route(outcome="failed")
+    raise Exception(_friendly(errs))
+
+
 def chat_chain(history, cid=None, budget_seconds=None):
     return _run_with_deadline(
         "assistant",
         budget_seconds or FREE_CHAT_BUDGET_SECONDS,
         lambda: _chat_chain_impl(history, cid),
+    )
+
+
+def chat_chain_stream(history, cid=None, emit=None, budget_seconds=None):
+    return _run_with_deadline(
+        "assistant",
+        budget_seconds or FREE_CHAT_BUDGET_SECONDS,
+        lambda: _chat_chain_stream_impl(history, cid, emit),
     )
 
 
@@ -1727,3 +2123,50 @@ async def allm_json(prompt, max_tokens=1200, order=None, tier=None, route=None, 
 
 async def achat_chain(history, cid=None, budget_seconds=FREE_CHAT_BUDGET_SECONDS):
     return await asyncio.to_thread(chat_chain, history, cid, budget_seconds)
+
+
+async def achat_chain_stream(history, cid=None, on_delta=None,
+                             budget_seconds=FREE_CHAT_BUDGET_SECONDS):
+    """Bridge synchronous provider SSE to Telegram's async draft updates."""
+    if on_delta is None:
+        return await achat_chain(history, cid, budget_seconds)
+
+    loop = asyncio.get_running_loop()
+    queue = asyncio.Queue()
+
+    def publish(kind, value):
+        loop.call_soon_threadsafe(queue.put_nowait, (kind, value))
+
+    def worker():
+        try:
+            result = chat_chain_stream(
+                history, cid, emit=lambda delta: publish("delta", delta),
+                budget_seconds=budget_seconds,
+            )
+        except Exception as error:
+            publish("error", error)
+        else:
+            publish("result", result)
+
+    worker_task = asyncio.create_task(asyncio.to_thread(worker))
+    try:
+        while True:
+            kind, value = await queue.get()
+            if kind == "delta":
+                try:
+                    await on_delta(value)
+                except Exception:
+                    # A temporary draft-render failure must not discard a
+                    # fully generated answer that can still be persisted.
+                    _log.debug("rich draft update failed", exc_info=True)
+                continue
+            await worker_task
+            if kind == "error":
+                raise value
+            return value
+    finally:
+        if not worker_task.done():
+            # ``requests`` cannot be force-cancelled safely from another
+            # thread. It is bounded by the free-chat deadline and its queued
+            # output is no longer consumed by a cancelled Telegram update.
+            worker_task.cancel()

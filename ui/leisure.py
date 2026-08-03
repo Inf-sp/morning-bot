@@ -3,6 +3,7 @@ from datetime import date, datetime
 
 from telegram import MessageEntity
 
+from . import rich
 from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
 
@@ -442,9 +443,78 @@ def music_week_screen(concerts, albums):
     return b.build_stripped()
 
 
+def _concert_context_text(event) -> str:
+    context = str(event.get("context") or "").strip()
+    if context.startswith("Фестиваль · "):
+        return context.removeprefix("Фестиваль · ") + " · Фестиваль"
+    return context
+
+
+def _concert_rich_message(place_label, events, empty_hint=""):
+    """Native blocks for the nearest-concerts result.
+
+    ``text`` remains the complete fallback in :func:`concerts_list`; the date
+    entity below merely lets a current Telegram client localise a verified
+    event date.  ``date_unix`` is prepared by the feature layer, so this UI
+    renderer never reads settings or makes a time-zone decision.
+    """
+    blocks = [rich.heading(f"{ui_label('concerts', '')} {place_label}".strip(), size=2)]
+    if not events:
+        blocks.append(rich.paragraph(
+            empty_hint or "Сейчас ничего не нашёл. Попробуй другую страну."
+        ))
+        return rich.message(blocks)
+
+    for index, event in enumerate(events):
+        if index:
+            blocks.append(rich.divider())
+
+        artist = str(event.get("artist") or "").strip()
+        if artist:
+            blocks.append(rich.heading(artist, size=4))
+
+        date_label = str(event.get("date") or "").strip()
+        place = str(event.get("place") or "").strip()
+        flag = str(event.get("flag") or "").strip()
+        place_text = " ".join(part for part in (place, flag) if part)
+        if date_label:
+            date_entity = rich.date_time(
+                date_label,
+                event.get("date_unix"),
+                date_time_format="D",
+            )
+            meta = [date_entity]
+            if place_text:
+                meta.append(f" · {place_text}")
+            blocks.append(rich.paragraph(meta if len(meta) > 1 else meta[0]))
+        elif place_text:
+            blocks.append(rich.paragraph(place_text))
+
+        context = _concert_context_text(event)
+        if context:
+            blocks.append(rich.paragraph(context))
+        price = str(event.get("price") or "").strip()
+        if price:
+            blocks.append(rich.paragraph(price))
+        if event.get("verification") == "confirmed":
+            blocks.append(rich.paragraph("✅ Подтверждён"))
+        elif event.get("verification") == "review":
+            blocks.append(rich.paragraph("🟡 Требует проверки"))
+        url = str(event.get("url") or "").strip()
+        if url:
+            blocks.append(rich.paragraph({
+                "type": "url",
+                "text": "Подробнее…",
+                "url": url,
+            }))
+
+    return rich.message(blocks)
+
+
 def concerts_list(place_label, events, empty_hint=""):
     """Список концертов твоих артистов -> MessageBuilder. Каждое событие - мини-блок:
     имя артиста, место, цена от, дата, скрытая ссылка "Подробнее…"."""
+    events = list(events or [])
     b = MessageBuilder()
     b.text_line(f"{ui_label('concerts', '')} ")
     b.bold(place_label)
@@ -452,31 +522,31 @@ def concerts_list(place_label, events, empty_hint=""):
     if not events:
         b.spacer()
         b.line(empty_hint or "Сейчас ничего не нашёл. Попробуй другую страну.")
-        return b.build_stripped()
-    for ev in events:
-        b.spacer()
-        b.bold(ev.get("artist", ""))
-        b.newline()
-        date_place = " · ".join(x for x in (ev.get("date"), ev.get("place")) if x)
-        if ev.get("flag"):
-            date_place = f"{date_place} {ev['flag']}".strip()
-        if date_place:
-            b.line(date_place)
-        if ev.get("context"):
-            context = str(ev["context"])
-            if context.startswith("Фестиваль · "):
-                context = context.removeprefix("Фестиваль · ") + " · Фестиваль"
-            b.line(context)
-        if ev.get("price"):
-            b.line(ev["price"])
-        if ev.get("verification") == "confirmed":
-            b.line("✅ Подтверждён")
-        elif ev.get("verification") == "review":
-            b.line("🟡 Требует проверки")
-        if ev.get("url"):
-            b.link("Подробнее…", ev["url"])
+    else:
+        for ev in events:
+            b.spacer()
+            b.bold(ev.get("artist", ""))
             b.newline()
-    return b.build_stripped()
+            date_place = " · ".join(x for x in (ev.get("date"), ev.get("place")) if x)
+            if ev.get("flag"):
+                date_place = f"{date_place} {ev['flag']}".strip()
+            if date_place:
+                b.line(date_place)
+            context = _concert_context_text(ev)
+            if context:
+                b.line(context)
+            if ev.get("price"):
+                b.line(ev["price"])
+            if ev.get("verification") == "confirmed":
+                b.line("✅ Подтверждён")
+            elif ev.get("verification") == "review":
+                b.line("🟡 Требует проверки")
+            if ev.get("url"):
+                b.link("Подробнее…", ev["url"])
+                b.newline()
+    msg = b.build_stripped()
+    msg.rich_message = _concert_rich_message(place_label, events, empty_hint)
+    return msg
 
 
 def _parse_event_date(value) -> date | None:

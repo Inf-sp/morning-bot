@@ -7,6 +7,7 @@
 Здесь только сборка текста. Логика/данные — в settings.py (send_admin_*).
 """
 from .builder import MessageBuilder, MessageSpec, WARNING_EMOJI
+from . import rich
 from .constants import STATUS_EMOJI, UI_EMOJI, choose_label, ui_label
 
 # --- статус-точки (единственные допустимые «светофоры») ---
@@ -195,8 +196,59 @@ def welcome_admin():
     return b.build_stripped()
 
 
-def api_ai(rows, updated_at):
-    """Компактный экран актуального состояния подключённых сервисов."""
+def _updated_footer(updated_at, updated_unix=None):
+    return rich.footer([
+        "Обновлено в ",
+        rich.date_time(updated_at, updated_unix),
+    ])
+
+
+def _system_table_row(line):
+    parts = [part.strip() for part in str(line or "").split(" · ") if part.strip()]
+    if not parts:
+        return ("—", "—", "—")
+    if len(parts) == 1:
+        return (parts[0], "—", "—")
+    if len(parts) == 2:
+        return (parts[0], "—", parts[1])
+    # Groq includes a model between the role and current quota. It belongs to
+    # the compact middle column instead of creating a four-column phone table.
+    return (parts[0], " · ".join(parts[1:-1]), parts[-1])
+
+
+def _system_rich_message(rows, updated_at, updated_unix=None):
+    groups = []
+    current_title = ""
+    current_rows = []
+    for raw in rows:
+        line = str(raw or "")
+        if line in ("AI", "Данные"):
+            if current_title:
+                groups.append((current_title, current_rows))
+            current_title, current_rows = line, []
+        elif line:
+            current_rows.append(_system_table_row(line))
+    if current_title:
+        groups.append((current_title, current_rows))
+    if not groups:
+        groups = [("Сервисы", [])]
+
+    blocks = [rich.heading("🛠 Система", size=2)]
+    for title, table_rows in groups:
+        blocks.append(rich.heading(title, size=4))
+        if table_rows:
+            blocks.append(rich.table(
+                ("Сервис", "Роль", "Состояние"), table_rows,
+                striped=True, bordered=True,
+            ))
+        else:
+            blocks.append(rich.paragraph("Пока нет данных"))
+    blocks.append(_updated_footer(updated_at, updated_unix))
+    return rich.message(blocks)
+
+
+def api_ai(rows, updated_at, updated_unix=None):
+    """Система: native table, with the existing compact text as a fallback."""
     b = MessageBuilder()
     b.bold("🛠 Система")
     b.newline()
@@ -210,10 +262,45 @@ def api_ai(rows, updated_at):
             b.line(str(line))
     b.spacer()
     b.line(f"Обновлено в {updated_at}")
-    return b.build_stripped()
+    msg = b.build_stripped()
+    msg.rich_message = _system_rich_message(rows, updated_at, updated_unix)
+    return msg
 
 
-def ai_traffic(rows, updated_at):
+def _traffic_table_row(row):
+    row = str(row or "").lstrip("• ").strip()
+    if " — " not in row:
+        return None
+    source_part, counts_part = row.split(" — ", 1)
+    source_bits = [part.strip() for part in source_part.split(" · ") if part.strip()]
+    counts = [part.strip() for part in counts_part.split(" · ") if part.strip()]
+    if not source_bits or not counts:
+        return None
+    source = " · ".join(source_bits)
+    attempts = counts[0]
+    failures = next((part for part in counts[1:] if "ошиб" in part), "—")
+    return source, attempts, failures
+
+
+def _ai_traffic_rich_message(rows, updated_at, updated_unix=None):
+    rows = [str(row or "") for row in rows]
+    overview = [row for row in rows if not row.startswith(("• ", "Пик:"))]
+    peak = next((row for row in rows if row.startswith("Пик:")), "")
+    table_rows = [parsed for parsed in (_traffic_table_row(row) for row in rows) if parsed]
+    blocks = [rich.heading("📊 Нагрузка AI · 24 часа", size=2)]
+    blocks.extend(rich.paragraph(row) for row in overview if row)
+    if peak:
+        blocks.append(rich.paragraph(peak))
+    if table_rows:
+        blocks.append(rich.table(
+            ("Источник · раздел", "Попытки", "Ошибки"), table_rows,
+            striped=True, bordered=True,
+        ))
+    blocks.append(_updated_footer(updated_at, updated_unix))
+    return rich.message(blocks)
+
+
+def ai_traffic(rows, updated_at, updated_unix=None):
     b = MessageBuilder()
     b.bold("📊 Нагрузка AI · 24 часа")
     b.newline()
@@ -222,10 +309,38 @@ def ai_traffic(rows, updated_at):
         b.line(str(row))
     b.spacer()
     b.line(f"Обновлено в {updated_at}")
-    return b.build_stripped()
+    msg = b.build_stripped()
+    msg.rich_message = _ai_traffic_rich_message(rows, updated_at, updated_unix)
+    return msg
 
 
-def logs(rows, errors_24h, updated_at):
+def _log_table_row(row):
+    row = str(row or "")
+    if " · " not in row:
+        return None
+    at, incident = row.split(" · ", 1)
+    if len(at) == 5 and at[2:3] == ":":
+        return at, incident
+    return None
+
+
+def _logs_rich_message(rows, updated_at, updated_unix=None):
+    table_rows = [parsed for parsed in (_log_table_row(row) for row in rows) if parsed]
+    extra_rows = [str(row) for row in rows if _log_table_row(row) is None]
+    blocks = [rich.heading("⚠️ Ошибки", size=2)]
+    if table_rows:
+        blocks.append(rich.table(
+            ("Время", "Инцидент"), table_rows,
+            striped=True, bordered=True,
+        ))
+    else:
+        blocks.append(rich.paragraph("Ошибок за 24 часа нет"))
+    blocks.extend(rich.paragraph(row) for row in extra_rows if row)
+    blocks.append(_updated_footer(updated_at, updated_unix))
+    return rich.message(blocks)
+
+
+def logs(rows, errors_24h, updated_at, updated_unix=None):
     b = MessageBuilder()
     b.bold("⚠️ Ошибки")
     b.newline()
@@ -237,7 +352,9 @@ def logs(rows, errors_24h, updated_at):
             b.line(row)
     b.spacer()
     b.line(f"Обновлено в {updated_at}")
-    return b.build_stripped()
+    msg = b.build_stripped()
+    msg.rich_message = _logs_rich_message(rows, updated_at, updated_unix)
+    return msg
 
 
 def user_card(name, city, cid, onboarded, last_seen, active_days, total_msgs, notif_on, notif_total):

@@ -49,3 +49,20 @@ def test_admin_ai_traffic_rows_show_background_and_user_sources(monkeypatch):
         "• Света · Обучение — 7 · 1 ошибка",
         "• Фон · Готовка — 5 · 1 ошибка",
     ]
+
+
+def test_ai_traffic_records_five_minute_peak(monkeypatch):
+    state = {"log": [
+        {"ts": 1_784_464_210, "ok": True, "cache_hit": False,
+         "origin": "Фон", "section": "Гардероб", "actor": "", "provider": "groq"},
+        {"ts": 1_784_464_300, "ok": False, "cache_hit": False,
+         "origin": "Фон", "section": "Поездка", "actor": "", "provider": "gemini"},
+        {"ts": 1_784_464_400, "ok": False, "cache_hit": False,
+         "origin": "Фон", "section": "Готовка", "actor": "", "provider": "openrouter"},
+    ]}
+    monkeypatch.setattr(ai.store, "_load", lambda _key: state)
+    monkeypatch.setattr(ai.time, "time", lambda: 1_784_464_600)
+
+    summary = ai.ai_traffic_summary()
+
+    assert summary["peak"] == {"ts": 1_784_464_200, "attempts": 3, "failed": 2}

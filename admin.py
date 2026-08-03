@@ -16,6 +16,7 @@ import ai
 import api_usage
 import config
 import provider_runtime
+import rich_delivery
 import service_monitor
 from ui.constants import delete_label, ui_label
 import store
@@ -29,13 +30,9 @@ STALE_AFTER = 15 * 60
 DB_SLOW_MS = 500
 
 async def _show(bot, cid, msg, reply_markup=None, q=None):
-    if q is not None and getattr(q, "message", None) is not None:
-        try:
-            await q.message.edit_text(text=msg.text, entities=msg.entities, reply_markup=reply_markup)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=reply_markup)
+    await rich_delivery.show(
+        bot, cid, msg, reply_markup=reply_markup, query=q,
+    )
 
 
 def _hhmm(ts) -> str:
@@ -456,10 +453,17 @@ async def send_api_ai(bot, cid, q=None):
     rows = service_monitor.rows()
 
     kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📊 Нагрузка AI", callback_data="adm_ai_traffic")],
         [InlineKeyboardButton("⚠️ Ошибки", callback_data="adm_logs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
-    msg = ui.api_ai(rows, service_monitor.last_check_time())
+    latest_check = max(
+        (int(state.get("last_check") or 0) for state in provider_runtime.states()),
+        default=0,
+    )
+    msg = ui.api_ai(
+        rows, service_monitor.last_check_time(), latest_check or None,
+    )
     await _show(bot, cid, msg, kb, q)
 
 
@@ -473,6 +477,13 @@ def _ai_traffic_rows():
         f"{total} попыток · {int(summary.get('cache_hits') or 0)} из кэша"
         f" · {failed_total} {_plural(failed_total, 'ошибка', 'ошибки', 'ошибок')}",
     ]
+    peak = summary.get("peak") or {}
+    if int(peak.get("attempts") or 0):
+        line = f"Пик: {_hhmm(peak.get('ts'))}–{_hhmm(int(peak['ts']) + 300)} · {int(peak['attempts'])} попыток"
+        failed = int(peak.get("failed") or 0)
+        if failed:
+            line += f" · {failed} {_plural(failed, 'ошибка', 'ошибки', 'ошибок')}"
+        rows.append(line)
     for source in summary.get("sources") or []:
         origin = str(source.get("origin") or "Фон")
         actor = str(source.get("actor") or "")
@@ -490,7 +501,8 @@ def _ai_traffic_rows():
 
 
 async def send_ai_traffic(bot, cid, q=None):
-    msg = ui.ai_traffic(_ai_traffic_rows(), _updated_at())
+    now = int(time.time())
+    msg = ui.ai_traffic(_ai_traffic_rows(), _updated_at(now), now)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_api_ai"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -643,6 +655,7 @@ async def send_logs(bot, cid, q=None):
         buttons.append([InlineKeyboardButton(delete_label("Очистить ошибки"), callback_data="adm_logs_clear")])
     buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_system"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(buttons)
-    msg = ui.logs(rows, len(rows), _updated_at())
+    now = int(time.time())
+    msg = ui.logs(rows, len(rows), _updated_at(now), now)
     await _show(bot, cid, msg, kb, q)
     _mark_logs_viewed(cid, errors)

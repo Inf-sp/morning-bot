@@ -209,3 +209,14 @@ def test_home_cache_warm_yields_to_active_user_action(monkeypatch):
     )
 
     asyncio.run(bot.job_warm_home_pages(object()))
+
+
+def test_home_cache_warm_schedule_separates_heavy_sections():
+    assert bot._HOME_WARM_SCHEDULE == (
+        ("myday", "08:00"),
+        ("wardrobe", "08:05"),
+        ("cooking", "08:10"),
+        ("travel", "08:15"),
+        ("cinema", "08:20"),
+        ("learning", "08:25"),
+    )
