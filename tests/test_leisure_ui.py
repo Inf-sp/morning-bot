@@ -434,3 +434,72 @@ def test_weekly_books_keep_only_current_popular_releases(monkeypatch):
 
     assert [item["title"] for item in items] == ["Заметная"]
     assert stored["items"] == items
+
+
+def test_weekly_books_fall_back_to_this_month_when_week_has_no_hits(monkeypatch):
+    today = datetime.now(config.TZ).date()
+    stored = {}
+
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: stored.update(value))
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
+        {"title": "Премьера месяца", "published_date": f"{today.year}-{today.month:02d}-01",
+         "rating": 4.2, "ratings_count": 2},
+    ])
+
+    items = asyncio.run(leisure_books.get_weekly_new_books())
+
+    assert [item["title"] for item in items] == ["Премьера месяца"]
+    assert items[0]["_showcase"] == "month"
+    assert stored["items"] == items
+
+
+def test_weekly_books_rebuilds_an_empty_daily_cache(monkeypatch):
+    today = datetime.now(config.TZ).date()
+    stored = {}
+    empty_cache = {
+        "week": leisure_books._book_week_key(),
+        "date": today.isoformat(),
+        "items": [],
+    }
+
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: empty_cache)
+    monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: stored.update(value))
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
+        {"title": "Новая витрина", "published_date": today.isoformat(),
+         "rating": 4.4, "ratings_count": 120},
+    ])
+
+    items = asyncio.run(leisure_books.get_weekly_new_books())
+
+    assert [item["title"] for item in items] == ["Новая витрина"]
+    assert stored["items"] == items
+
+
+def test_weekly_books_fall_back_to_recent_popular_releases(monkeypatch):
+    today = datetime.now(config.TZ).date()
+    stored = {}
+
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: stored.update(value))
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
+        {"title": "Популярная премьера", "published_date": str(today.replace(day=1)),
+         "rating": 4.6, "ratings_count": 240},
+        {"title": "Неудачная", "published_date": "2020-01-01",
+         "rating": 4.9, "ratings_count": 5000},
+    ])
+    monkeypatch.setattr(leisure_books, "_released_this_month", lambda _value: False)
+
+    items = asyncio.run(leisure_books.get_weekly_new_books())
+
+    assert [item["title"] for item in items] == ["Популярная премьера"]
+    assert items[0]["_showcase"] == "popular"
+
+
+def test_weekly_books_screen_labels_monthly_fallback_honestly():
+    message = leisure_books.leisure_ui.weekly_books_screen([{
+        "title": "Премьера месяца", "author": "Автор", "_showcase": "month",
+    }])
+
+    assert "✨ Новинки месяца" in message.text
+    assert "Пока нет подтверждённых" not in message.text

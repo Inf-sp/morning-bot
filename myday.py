@@ -736,7 +736,8 @@ def _book_quote_fallback(cid=None):
         if _item_text(b)
     ] if cid else []
 
-    # Сначала ищем совпадение по любимым книгам, избегая показанных авторов
+    # Любимые книги важнее, но только пока дают нового автора. Иначе одна
+    # любимая книга с единственной цитатой будет повторяться каждый день.
     matches = []
     for title in books:
         entry = _BOOK_QUOTES.get(title.casefold())
@@ -744,17 +745,11 @@ def _book_quote_fallback(cid=None):
             quote, author = entry
             if author not in seen_authors:
                 matches.append({"quote": quote, "src": author})
-    if not matches:
-        # Берём и показанных тоже — лучше повтор, чем пустота
-        for title in books:
-            entry = _BOOK_QUOTES.get(title.casefold())
-            if entry:
-                quote, author = entry
-                matches.append({"quote": quote, "src": author})
     if matches:
         return random.choice(matches)
 
-    # Нет любимой книги в базе — случайная цитата, избегая показанных авторов
+    # Любимые книги уже исчерпаны: лучше новая качественная цитата из базы,
+    # чем немедленный повтор знакомой.
     all_quotes = list(_BOOK_QUOTES.values())
     fresh = [(q, a) for q, a in all_quotes if a not in seen_authors]
     pool = fresh or all_quotes

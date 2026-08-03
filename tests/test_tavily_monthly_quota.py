@@ -33,6 +33,7 @@ def _ts(year, month, day):
 def test_tavily_monthly_limit_blocks_until_first_day_of_next_month(monkeypatch):
     _memory_store(monkeypatch)
     july_23 = _ts(2026, 7, 23)
+    monkeypatch.setattr(provider_runtime.time, "time", lambda: july_23)
 
     provider_runtime.record_result("tavily", False, status_code=432,
                                    error="monthly credits exhausted", checked_at=july_23)
@@ -47,7 +48,9 @@ def test_tavily_monthly_limit_blocks_until_first_day_of_next_month(monkeypatch):
 
 def test_tavily_monthly_block_skips_search_and_health_check(monkeypatch):
     _memory_store(monkeypatch)
-    provider_runtime.mark_tavily_monthly_quota_exhausted(checked_at=_ts(2026, 7, 23), quota_total=1000)
+    july_23 = _ts(2026, 7, 23)
+    monkeypatch.setattr(provider_runtime.time, "time", lambda: july_23)
+    provider_runtime.mark_tavily_monthly_quota_exhausted(checked_at=july_23, quota_total=1000)
     monkeypatch.setattr(research.config, "TAVILY_API_KEY", "test-key")
     calls = []
 

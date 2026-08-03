@@ -163,7 +163,9 @@ def _weekly_book_cache_get():
             or entry.get("date") != datetime.now(config.TZ).date().isoformat()):
         return None
     items = entry.get("items")
-    return [dict(item) for item in items] if isinstance(items, list) else []
+    # Пустая витрина не должна блокировать новый поиск на весь день: после
+    # обновления логики она может заполниться новинками месяца или бестселлерами.
+    return [dict(item) for item in items] if isinstance(items, list) and items else None
 
 
 def _weekly_book_cache_set(items):
@@ -184,6 +186,19 @@ def _released_this_week(value: str) -> bool:
     return week_start <= released <= week_start + timedelta(days=6)
 
 
+def _release_date(value: str) -> date | None:
+    try:
+        return date.fromisoformat(str(value or "")[:10])
+    except ValueError:
+        return None
+
+
+def _released_this_month(value: str) -> bool:
+    released = _release_date(value)
+    today = datetime.now(config.TZ).date()
+    return bool(released and released.year == today.year and released.month == today.month)
+
+
 def _weekly_book_score(item):
     try:
         rating = float(item.get("rating") or 0)
@@ -195,6 +210,55 @@ def _weekly_book_score(item):
     if rating < 3.8 or ratings_count < 10:
         return None
     return rating * 100 + min(ratings_count, 5000) ** 0.5
+
+
+def _monthly_book_score(item):
+    """У свежей премьеры может быть мало оценок, но она всё равно нужна витрине."""
+    try:
+        rating = float(item.get("rating") or 0)
+        ratings_count = int(item.get("ratings_count") or 0)
+    except (TypeError, ValueError):
+        return None
+    if rating < 3.8 or ratings_count < 1:
+        return None
+    return rating * 100 + min(ratings_count, 5000) ** 0.5
+
+
+def _recent_popular_book_score(item):
+    released = _release_date(item.get("published_date"))
+    if not released or released < datetime.now(config.TZ).date() - timedelta(days=180):
+        return None
+    try:
+        rating = float(item.get("rating") or 0)
+        ratings_count = int(item.get("ratings_count") or 0)
+    except (TypeError, ValueError):
+        return None
+    if rating < 4.0 or ratings_count < 25:
+        return None
+    return rating * 100 + min(ratings_count, 5000) ** 0.5
+
+
+def _showcase_items(rows, showcase):
+    return [{**dict(item), "_showcase": showcase} for _score, item in rows[:4]]
+
+
+def _fallback_book_showcase(candidates):
+    monthly = []
+    popular = []
+    for item in candidates:
+        month_score = _monthly_book_score(item)
+        if month_score is not None and _released_this_month(item.get("published_date")):
+            monthly.append((month_score, item))
+        popular_score = _recent_popular_book_score(item)
+        if popular_score is not None:
+            popular.append((popular_score, item))
+    if monthly:
+        monthly.sort(key=lambda row: row[0], reverse=True)
+        return _showcase_items(monthly, "month")
+    if popular:
+        popular.sort(key=lambda row: row[0], reverse=True)
+        return _showcase_items(popular, "popular")
+    return [{**dict(item), "_showcase": "fallback"} for item in _FALLBACK_BOOKS[:4]]
 
 
 async def get_weekly_new_books():
@@ -210,6 +274,8 @@ async def get_weekly_new_books():
         ranked.append((score, item))
     ranked.sort(key=lambda row: row[0], reverse=True)
     items = [dict(item) for _score, item in ranked[:4]]
+    if not items:
+        items = _fallback_book_showcase(candidates)
     _weekly_book_cache_set(items)
     return items
 

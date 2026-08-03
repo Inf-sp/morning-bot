@@ -5,6 +5,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import myday
+import config
 from myday import _day_wind_text
 from ui.myday import day_summary
 
@@ -76,3 +77,18 @@ def test_daily_mood_never_repeats_when_hashes_collide(monkeypatch):
     today = __import__("balance").health_focus("42")["phrase"]
 
     assert today != yesterday
+
+
+def test_quote_fallback_uses_fresh_author_after_favorite_book_was_shown(monkeypatch):
+    def get_list(key, _cid):
+        if key == config.FAVORITE_BOOKS_KEY:
+            return ["Маленький принц"]
+        if key == config.QUOTE_AUTHORS_KEY:
+            return ["Антуан де Сент-Экзюпери"]
+        return []
+
+    monkeypatch.setattr(myday.store, "get_list", get_list)
+
+    quote = myday._book_quote_fallback("quote-fresh-author")
+
+    assert quote["src"] != "Антуан де Сент-Экзюпери"

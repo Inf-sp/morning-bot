@@ -370,7 +370,13 @@ def weekly_books_screen(items):
         b.line("Пока нет подтверждённых заметных новинок этой недели.")
         return b.build_stripped()
     b.spacer()
-    b.bold("✨ Новые книги")
+    showcase = str(_item_value(items[0], "_showcase", "") or "")
+    title = {
+        "month": "✨ Новинки месяца",
+        "popular": "🔥 Недавно популярные",
+        "fallback": "📚 Популярное чтение",
+    }.get(showcase, "✨ Новые книги")
+    b.bold(title)
     b.newline()
     for item in items[:4]:
         title = str(_item_value(item, "title", "") or "").strip()
