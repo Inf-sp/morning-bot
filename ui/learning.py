@@ -322,6 +322,7 @@ def game_card(ui, description):
     b.section(f"🕵️ {ui['title']}")
     b.line(description)
     b.section(ui["who"])
+    b.line(ui.get("reply_next", "Напиши ответ следующим сообщением — можно на любом языке."))
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg

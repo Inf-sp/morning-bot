@@ -202,6 +202,46 @@ def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypat
     assert [len(row) for row in bot.messages[0]["reply_markup"].inline_keyboard] == [1, 1, 2]
 
 
+def test_detective_rotates_after_every_local_card_was_played_and_tells_how_to_reply(monkeypatch):
+    """The local fallback must not become the first card forever after one cycle."""
+    cid = "detective-no-repeat-regression"
+    repeated = {
+        "description": (
+            "I often live with people. During the day I like to sleep in warm places. "
+            "I can walk very quietly and sometimes hunt small animals."
+        ),
+        "answer": "the cat", "answer_en": "cat", "aliases": ["cat", "kat"],
+        "hint": "I have whiskers and I say meow.",
+        "explain": "A cat often lives with people and sometimes hunts mice.",
+        "words": [{"word": "whiskers", "translation": "усы"}],
+    }
+    all_played = [
+        name
+        for card in learning_game._LOCAL_GAME_CARDS["английский"]
+        for name in [card["answer"], *card["aliases"]]
+    ]
+
+    monkeypatch.setattr(learning_game, "game_data", lambda *_args, **_kwargs: repeated)
+    learning_game.store.game_config[cid] = {"lang": "английский"}
+    learning_game.store.game_state.pop(cid, None)
+    learning_game._set_game_recent(cid, all_played)
+    bot = FakeBot()
+    try:
+        asyncio.run(learning_game.send_game(bot, cid))
+        first_answer = learning_game.store.game_state[cid]["answer"]
+        asyncio.run(learning_game.send_game(bot, cid))
+
+        assert learning_game.store.game_state[cid]["answer"] != first_answer
+        assert "Напиши ответ следующим сообщением — можно на любом языке." in bot.messages[-1]["text"]
+    finally:
+        learning_game.store.game_config.pop(cid, None)
+        learning_game.store.game_state.pop(cid, None)
+        learning_game.store.game_recent.pop(cid, None)
+        profile = learning_game.store.get_profile(cid)
+        profile.pop("game_recent", None)
+        learning_game.store.set_profile(cid, profile)
+
+
 def test_detective_result_keyboard_uses_renamed_followup_button():
     kb = learning_game._game_result_kb(learning_game.GAME_UI["русский"])
 

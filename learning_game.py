@@ -38,6 +38,7 @@ GAME_UI = {
     "русский": {
         "title": "Детектив · Русский",
         "who": "Кто это?",
+        "reply_next": "Напиши ответ следующим сообщением — можно на любом языке.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Подсказка",
         "reveal": "😞 Сдаюсь",
@@ -52,6 +53,7 @@ GAME_UI = {
     "английский": {
         "title": "Detective · English",
         "who": "Who am I?",
+        "reply_next": "Напиши ответ следующим сообщением — можно на любом языке.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
         "reveal": "😞 Сдаюсь",
@@ -66,6 +68,7 @@ GAME_UI = {
     "нидерландский": {
         "title": "Detective · Nederlands",
         "who": "Wie ben ik?",
+        "reply_next": "Напиши ответ следующим сообщением — можно на любом языке.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
         "reveal": "😞 Сдаюсь",
@@ -140,6 +143,13 @@ def _set_game_recent(cid, rec):
 def _remember_game_answer(cid, d):
     names = [d.get("answer", "")] + list(d.get("aliases") or [])
     rec = _game_recent(cid)
+    # When the local catalogue has completed a cycle, the oldest card is used
+    # again. Move every spelling of that card to the tail so the next fallback
+    # picks the next-oldest subject instead of showing the first card forever.
+    rec = [
+        old for old in rec
+        if not any(_game_same(old, name) for name in names if str(name or "").strip())
+    ]
     for name in names:
         name = (name or "").strip()
         if name and not any(_game_same(name, old) for old in rec):
@@ -313,7 +323,19 @@ def _local_game_data(clue_lang, recent):
     for card in cards:
         if not _game_is_recent(card, recent):
             return dict(card)
-    return dict(cards[0])
+    # All local subjects were already played. Restart the cycle from the one
+    # shown longest ago; _remember_game_answer moves it to the tail afterwards.
+    # This keeps the fallback varied even while AI providers are unavailable.
+    def oldest_index(card):
+        names = [card.get("answer", "")] + list(card.get("aliases") or [])
+        positions = [
+            index
+            for index, old in enumerate(recent or [])
+            if any(_game_same(name, old) for name in names)
+        ]
+        return min(positions) if positions else -1
+
+    return dict(min(cards, key=oldest_index))
 
 
 def _description_is_guessable(data, lang=None):
