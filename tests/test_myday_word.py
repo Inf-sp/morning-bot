@@ -92,3 +92,44 @@ def test_quote_fallback_uses_fresh_author_after_favorite_book_was_shown(monkeypa
     quote = myday._book_quote_fallback("quote-fresh-author")
 
     assert quote["src"] != "Антуан де Сент-Экзюпери"
+
+
+def test_quote_uses_a_favorite_artist_when_the_list_is_not_empty(monkeypatch):
+    saved_profiles = []
+    prompt = []
+
+    def get_list(key, _cid):
+        if key == config.FAVORITE_ARTISTS_KEY:
+            return ["Romy"]
+        return []
+
+    monkeypatch.setattr(myday.store, "get_list", get_list)
+    monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {})
+    monkeypatch.setattr(myday.store, "set_list", lambda *_args: None)
+    monkeypatch.setattr(myday.store, "set_profile", lambda *_args: saved_profiles.append(_args))
+    monkeypatch.setattr(myday.ai, "llm_json", lambda text, *_args, **_kwargs: (
+        prompt.append(text) or {"quote": "Музыка помогает чувствовать связь.", "src": "Romy"}
+    ))
+
+    quote = myday._fetch_quote("artist-quote")
+
+    assert quote["src"] == "Romy"
+    assert "только одного исполнителя из списка" in prompt[0]
+    assert saved_profiles
+
+
+def test_quote_does_not_substitute_another_author_when_favorite_artist_exists(monkeypatch):
+    def get_list(key, _cid):
+        if key == config.FAVORITE_ARTISTS_KEY:
+            return ["Romy"]
+        return []
+
+    monkeypatch.setattr(myday.store, "get_list", get_list)
+    monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {})
+    monkeypatch.setattr(myday.store, "set_list", lambda *_args: None)
+    monkeypatch.setattr(myday.store, "set_profile", lambda *_args: None)
+    monkeypatch.setattr(myday.ai, "llm_json", lambda *_args, **_kwargs: {
+        "quote": "Музыка помогает чувствовать связь.", "src": "Дэвид Боуи",
+    })
+
+    assert myday._fetch_quote("artist-quote-reject") == {}

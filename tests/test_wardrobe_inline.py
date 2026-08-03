@@ -334,8 +334,8 @@ def test_purchase_check_does_not_invent_zero_compatibility():
 
 def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard())[:3] == [
-        ["✨ Другой образ"],
-        ["🧐 Оценить покупку"],
+        ["✨ Подобрать другой образ"],
+        ["🧐 Оценить новую покупку"],
         ["🎚️ Мой шкаф"],
     ]
     assert "📌 Предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])

@@ -22,11 +22,10 @@ def onboard_name_saved(name):
 
 
 def onboard_language_question():
-    return MessageSpec(text="Какой язык изучаешь? Настрою тренажёр и словарь.")
+    return MessageSpec(text="Какой язык изучаешь? Настрою практику и словарь.")
 
 
 def onboard_level_question(code):
     flag = "🇳🇱" if code == "nl" else "🇬🇧"
     lang = "нидерландского" if code == "nl" else "английского"
     return MessageSpec(text=f"{flag} Какой у тебя уровень {lang}?")
-

@@ -12,7 +12,6 @@ import ai
 import api_usage
 import config
 import provider_runtime
-import rich_delivery
 import store
 import tmdb
 import util
@@ -878,7 +877,10 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
     if not artists:
         rows.append([InlineKeyboardButton("🆕 Добавить артиста", callback_data="as_loveadd_artists")])
     rows.append([InlineKeyboardButton(f"🌍 {cname}", callback_data="a_concerts_pick")])
-    rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ])
     kb = InlineKeyboardMarkup(rows)
 
     if not artists and not artists_override:
@@ -956,18 +958,13 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
     )
     store.last_source[str(cid)] = "Музыка · Концерты"
     store.last_answer[str(cid)] = msg.text
-    if rich_delivery.enabled(bot):
-        await rich_delivery.send(bot, cid, msg, reply_markup=kb)
-    else:
-        # Preserve the existing classic result exactly when Rich Messages are
-        # disabled or this Bot API adapter is unavailable.
-        await bot.send_message(
-            chat_id=cid,
-            text=msg.text,
-            entities=msg.entities,
-            reply_markup=kb,
-            disable_web_page_preview=True,
-        )
+    await bot.send_message(
+        chat_id=cid,
+        text=msg.text,
+        entities=msg.entities,
+        reply_markup=kb,
+        disable_web_page_preview=True,
+    )
 
 
 
@@ -1064,6 +1061,9 @@ async def concert_pick_country(bot, cid):
         for cc, _name, label in sorted(countries, key=lambda x: x[1])
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data="a_concerts_find"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ])
     await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
                            reply_markup=InlineKeyboardMarkup(rows))

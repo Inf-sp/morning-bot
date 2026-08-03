@@ -75,7 +75,7 @@ def test_travel_home_keeps_preferences_inside_suitcase():
     labels = [[button.text for button in row] for row in travel._home_kb().inline_keyboard]
 
     assert labels == [
-        ["✨ Другая поездка"],
+        ["✨ Подобрать новое путешествие"],
         ["🎚️ Мой чемодан"],
         ["#️⃣ Главная"],
     ]

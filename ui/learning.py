@@ -237,7 +237,7 @@ def progress_screen(data):
 
 def train_lang_select():
     b = MessageBuilder()
-    b.section(ui_label("word_trainer", "Тренажёр"))
+    b.section(ui_label("word_trainer", "Практика изучения языка"))
     b.spacer()
     b.text_line("Слова и фразы для тренировки добавляются в разделе ")
     b.bold(ui_label("dictionary", "Словарь"))
@@ -317,9 +317,12 @@ def morning_words(flag, words=None, empty_hint=False):
     return msg
 
 
-def game_card(ui, description):
+def game_card(ui, description, category=""):
     b = MessageBuilder()
     b.section(f"🕵️ {ui['title']}")
+    if category:
+        b.line(f"Категория: {category}")
+        b.spacer()
     b.line(description)
     b.section(ui["who"])
     b.line(ui.get("reply_next", "Напиши ответ следующим сообщением — можно на любом языке."))
@@ -380,5 +383,5 @@ def learning_settings(active_language, active_level):
     b.bold(active_level)
     b.newline()
     b.spacer()
-    b.text_line("Эти предпочтения влияют на карточку обучения, тренажёры и уведомления.")
+    b.text_line("Эти предпочтения влияют на карточку обучения, практику и уведомления.")
     return b.build()

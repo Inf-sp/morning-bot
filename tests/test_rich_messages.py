@@ -61,9 +61,9 @@ def test_system_screen_has_grouped_native_tables_and_datetime_footer():
 
     tables = _table_blocks(message)
     assert len(tables) == 2
-    assert [cell["text"] for cell in tables[0]["cells"][0]] == ["Сервис", "Роль", "Состояние"]
+    assert [cell["text"] for cell in tables[0]["cells"][0]] == ["Сервис", "Состояние"]
     assert [cell["text"] for cell in tables[0]["cells"][1]] == [
-        "🟢 Groq", "Основной · gpt-oss-20b", "900/1 000 осталось",
+        "🟢 Groq", "Основной · gpt-oss-20b · 900/1 000 осталось",
     ]
     footer = message.rich_message["blocks"][-1]
     assert footer["type"] == "footer"
@@ -76,23 +76,7 @@ def test_system_screen_has_grouped_native_tables_and_datetime_footer():
     ]
 
 
-def test_ai_traffic_and_logs_use_phone_friendly_tables():
-    traffic = admin_ui.ai_traffic(
-        [
-            "12 попыток · 3 из кэша · 2 ошибки",
-            "Пик: 08:00–08:05 · 7 попыток · 2 ошибки",
-            "• Фон · Готовка — 7 · 2 ошибки",
-        ],
-        "12:30",
-    )
-    traffic_table = _table_blocks(traffic)[0]
-    assert [cell["text"] for cell in traffic_table["cells"][0]] == [
-        "Источник · раздел", "Попытки", "Ошибки",
-    ]
-    assert [cell["text"] for cell in traffic_table["cells"][1]] == [
-        "Фон · Готовка", "7", "2 ошибки",
-    ]
-
+def test_logs_use_phone_friendly_table():
     logs = admin_ui.logs(
         ["08:00 · Система · Groq · лимит исчерпан"], 1, "12:30",
     )
@@ -105,7 +89,7 @@ def test_ai_traffic_and_logs_use_phone_friendly_tables():
 
 def test_rich_delivery_uses_rich_payload_and_falls_back_on_api_validation_error(monkeypatch):
     monkeypatch.setattr(rich_delivery.config, "TELEGRAM_RICH_MESSAGES", True)
-    message = admin_ui.ai_traffic(["Попыток за последние 24 часа не было"], "12:30")
+    message = admin_ui.logs(["08:00 · Система · Groq · лимит исчерпан"], 1, "12:30")
 
     rich_bot = _RichBot()
     asyncio.run(rich_delivery.send(rich_bot, "42", message, reply_markup="buttons"))
@@ -125,7 +109,7 @@ def test_rich_delivery_uses_rich_payload_and_falls_back_on_api_validation_error(
 
 def test_rich_edit_not_modified_is_a_noop_not_a_new_message(monkeypatch):
     monkeypatch.setattr(rich_delivery.config, "TELEGRAM_RICH_MESSAGES", True)
-    message = admin_ui.ai_traffic(["Попыток за последние 24 часа не было"], "12:30")
+    message = admin_ui.logs(["08:00 · Система · Groq · лимит исчерпан"], 1, "12:30")
 
     class EditBot(_RichBot):
         async def edit_rich_message(self, **kwargs):

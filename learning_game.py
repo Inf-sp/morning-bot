@@ -36,7 +36,7 @@ def _flag(language):
 # Текст игры локализован под активный язык обучения, а кнопки остаются русскими.
 GAME_UI = {
     "русский": {
-        "title": "Детектив · Русский",
+        "title": "Угадай персонажа · Русский",
         "who": "Кто это?",
         "reply_next": "Напиши ответ следующим сообщением — можно на любом языке.",
         "hint": "💡 Подсказка",
@@ -51,7 +51,7 @@ GAME_UI = {
         "retry": "Попробуй ещё один раз.",
     },
     "английский": {
-        "title": "Detective · English",
+        "title": "Угадай персонажа · English",
         "who": "Who am I?",
         "reply_next": "Напиши ответ следующим сообщением — можно на любом языке.",
         "hint": "💡 Подсказка",
@@ -66,7 +66,7 @@ GAME_UI = {
         "retry": "Try one more time.",
     },
     "нидерландский": {
-        "title": "Detective · Nederlands",
+        "title": "Угадай персонажа · Nederlands",
         "who": "Wie ben ik?",
         "reply_next": "Напиши ответ следующим сообщением — можно на любом языке.",
         "hint": "💡 Подсказка",
@@ -81,6 +81,47 @@ GAME_UI = {
         "retry": "Probeer nog één keer.",
     },
 }
+
+
+_GAME_CATEGORY_LABELS = {
+    "animal": "животное",
+    "food": "еда",
+    "object": "предмет",
+    "profession": "профессия",
+    "transport": "транспорт",
+    "place": "место",
+    "character": "герой",
+}
+
+_GAME_CATEGORY_ALIASES = {
+    "животное": "animal", "животные": "animal", "animal": "animal",
+    "еда": "food", "продукт": "food", "продукты": "food", "food": "food",
+    "блюдо": "food", "dish": "food",
+    "предмет": "object", "object": "object",
+    "профессия": "profession", "profession": "profession",
+    "транспорт": "transport", "transport": "transport",
+    "место": "place", "place": "place",
+    "герой": "character", "персонаж": "character", "character": "character",
+}
+
+
+def _game_category_key(value):
+    """Normalise the generator's category to the small supported set."""
+    return _GAME_CATEGORY_ALIASES.get(str(value or "").strip().casefold(), "")
+
+
+def _game_category_label(data):
+    category = _game_category_key(data.get("category"))
+    if category:
+        return _GAME_CATEGORY_LABELS[category]
+    # Older cached/AI cards did not have a category. Keep those rounds useful
+    # when their answer matches the local, curated catalogue.
+    answer = data.get("answer", "")
+    for cards in _LOCAL_GAME_CARDS.values():
+        for card in cards:
+            if _game_same(answer, card.get("answer", "")):
+                return _GAME_CATEGORY_LABELS[card["category"]]
+    return "другое"
 
 def _game_ui(lang=None):
     return GAME_UI.get(lang) or GAME_UI["русский"]
@@ -230,42 +271,42 @@ _LOCAL_GAME_CARDS = {
     "нидерландский": (
         {
             "description": "Ik woon vaak bij mensen. Overdag slaap ik graag op warme plekken. Ik kan heel stil lopen en soms jaag ik op kleine dieren.",
-            "answer": "de kat", "aliases": ["кошка", "cat", "kat", "poes"], "answer_en": "cat",
+            "answer": "de kat", "category": "animal", "aliases": ["кошка", "cat", "kat", "poes"], "answer_en": "cat",
             "hint": "Ik heb snorharen en ik zeg miauw.",
             "explain": "Een kat woont vaak bij mensen. Het dier heeft snorharen en jaagt soms op muizen.",
             "words": [{"word": "snorharen", "translation": "усы"}, {"word": "jagen", "translation": "охотиться"}],
         },
         {
             "description": "Ik woon vaak bij mensen en ik hou van wandelen. Ik hoor goed en ik kom snel als iemand mij roept. Soms bewaak ik het huis.",
-            "answer": "de hond", "aliases": ["собака", "dog", "hond"], "answer_en": "dog",
+            "answer": "de hond", "category": "animal", "aliases": ["собака", "dog", "hond"], "answer_en": "dog",
             "hint": "Ik heb een natte neus en ik blaf als ik blij ben.",
             "explain": "Een hond woont vaak bij mensen. Hij wandelt graag en kan het huis bewaken.",
             "words": [{"word": "wandelen", "translation": "гулять"}, {"word": "bewaken", "translation": "охранять"}],
         },
         {
             "description": "Ik ben rond en ik kom vaak uit de oven. Mensen delen mij graag met vrienden. Ik heb vaak tomaat en andere lekkere dingen bovenop. Je eet mij meestal warm.",
-            "answer": "de pizza", "aliases": ["пицца", "pizza"], "answer_en": "pizza",
+            "answer": "de pizza", "category": "food", "aliases": ["пицца", "pizza"], "answer_en": "pizza",
             "hint": "Ik heb vaak kaas en ik word in punten gesneden.",
             "explain": "Een pizza komt uit de oven en wordt vaak warm met kaas gegeten.",
             "words": [{"word": "oven", "translation": "духовка"}, {"word": "delen", "translation": "делить"}],
         },
         {
             "description": "Ik rijd elke dag door de stad en stop vaak onderweg. Veel mensen kunnen tegelijk met mij reizen. Je wacht meestal bij een halte voordat je instapt. Ik heb een vaste route.",
-            "answer": "de bus", "aliases": ["автобус", "bus"], "answer_en": "bus",
+            "answer": "de bus", "category": "transport", "aliases": ["автобус", "bus"], "answer_en": "bus",
             "hint": "Ik heb grote wielen en deuren voor veel passagiers.",
             "explain": "Een bus rijdt een vaste route en neemt veel passagiers mee.",
             "words": [{"word": "halte", "translation": "остановка"}, {"word": "instappen", "translation": "садиться в транспорт"}],
         },
         {
             "description": "Ik werk vaak in een ziekenhuis of een praktijk. Mensen komen bij mij als zij ziek zijn of pijn hebben. Ik stel vragen en probeer hen te helpen. Soms schrijf ik een recept.",
-            "answer": "de dokter", "aliases": ["врач", "doctor", "dokter", "arts"], "answer_en": "doctor",
+            "answer": "de dokter", "category": "profession", "aliases": ["врач", "doctor", "dokter", "arts"], "answer_en": "doctor",
             "hint": "Ik onderzoek patiënten en luister naar hun klachten.",
             "explain": "Een dokter helpt zieke mensen en onderzoekt patiënten.",
             "words": [{"word": "pijn", "translation": "боль"}, {"word": "onderzoeken", "translation": "осматривать, исследовать"}],
         },
         {
             "description": "Ik leef in een warm land en ik ben heel groot. Ik eet planten en loop vaak samen met mijn familie. Mijn oren zijn groot en ik kan goed zwemmen. Ik ben sterk.",
-            "answer": "de olifant", "aliases": ["слон", "elephant", "olifant"], "answer_en": "elephant",
+            "answer": "de olifant", "category": "animal", "aliases": ["слон", "elephant", "olifant"], "answer_en": "elephant",
             "hint": "Ik heb een lange slurf en grote witte tanden.",
             "explain": "Een olifant is groot, heeft een slurf en leeft vaak met zijn familie.",
             "words": [{"word": "slurf", "translation": "хобот"}, {"word": "sterk", "translation": "сильный"}],
@@ -274,42 +315,42 @@ _LOCAL_GAME_CARDS = {
     "английский": (
         {
             "description": "I often live with people. During the day I like to sleep in warm places. I can walk very quietly and sometimes hunt small animals.",
-            "answer": "the cat", "aliases": ["кошка", "cat", "kat", "poes"], "answer_en": "cat",
+            "answer": "the cat", "category": "animal", "aliases": ["кошка", "cat", "kat", "poes"], "answer_en": "cat",
             "hint": "I have whiskers and I say meow.",
             "explain": "A cat often lives with people. It has whiskers and sometimes hunts mice.",
             "words": [{"word": "whiskers", "translation": "усы"}, {"word": "hunt", "translation": "охотиться"}],
         },
         {
             "description": "I often live with people and I like going for walks. I can hear very well and I come quickly when someone calls me. Sometimes I guard the house.",
-            "answer": "the dog", "aliases": ["собака", "dog", "hond"], "answer_en": "dog",
+            "answer": "the dog", "category": "animal", "aliases": ["собака", "dog", "hond"], "answer_en": "dog",
             "hint": "I have a wet nose and I say woof.",
             "explain": "A dog often lives with people. It likes walks and can guard the house.",
             "words": [{"word": "walk", "translation": "гулять"}, {"word": "guard", "translation": "охранять"}],
         },
         {
             "description": "I am round and often come from the oven. People like to share me with friends. I often have tomato and other tasty things on top. You usually eat me warm.",
-            "answer": "the pizza", "aliases": ["пицца", "pizza"], "answer_en": "pizza",
+            "answer": "the pizza", "category": "food", "aliases": ["пицца", "pizza"], "answer_en": "pizza",
             "hint": "I often have cheese and people cut me into slices.",
             "explain": "A pizza comes from the oven and people often eat it warm with cheese.",
             "words": [{"word": "oven", "translation": "духовка"}, {"word": "share", "translation": "делить"}],
         },
         {
             "description": "I drive through the city every day and stop many times. Many people can travel with me at once. You usually wait at a stop before you get in. I have a fixed route.",
-            "answer": "the bus", "aliases": ["автобус", "bus"], "answer_en": "bus",
+            "answer": "the bus", "category": "transport", "aliases": ["автобус", "bus"], "answer_en": "bus",
             "hint": "I have big wheels and doors for many passengers.",
             "explain": "A bus follows a route and takes many passengers with it.",
             "words": [{"word": "route", "translation": "маршрут"}, {"word": "passenger", "translation": "пассажир"}],
         },
         {
             "description": "I often work in a hospital or a clinic. People come to me when they are sick or have pain. I ask questions and try to help them. Sometimes I write a prescription.",
-            "answer": "the doctor", "aliases": ["врач", "doctor", "dokter", "arts"], "answer_en": "doctor",
+            "answer": "the doctor", "category": "profession", "aliases": ["врач", "doctor", "dokter", "arts"], "answer_en": "doctor",
             "hint": "I examine patients and listen to their problems.",
             "explain": "A doctor helps sick people and examines patients.",
             "words": [{"word": "pain", "translation": "боль"}, {"word": "examine", "translation": "осматривать"}],
         },
         {
             "description": "I live in a warm country and I am very big. I eat plants and often walk with my family. My ears are large and I can swim well. I am strong.",
-            "answer": "the elephant", "aliases": ["слон", "elephant", "olifant"], "answer_en": "elephant",
+            "answer": "the elephant", "category": "animal", "aliases": ["слон", "elephant", "olifant"], "answer_en": "elephant",
             "hint": "I have a long trunk and big white teeth.",
             "explain": "An elephant is big, has a trunk and often lives with its family.",
             "words": [{"word": "trunk", "translation": "хобот"}, {"word": "strong", "translation": "сильный"}],
@@ -399,6 +440,7 @@ Do not choose function words such as ik, I, zijn, be, een, a, the.
 Attempt: {attempt + 1}. Return exactly these fields, one per line, without markdown:
 DESCRIPTION: 3-4 connected sentences in {clue_lang}, 25-45 words
 ANSWER: answer in {clue_lang}
+CATEGORY: exactly one of animal, food, object, profession, transport, place, character
 ALIASES: accepted Russian, English and Dutch names separated by |
 ENGLISH: English name in 1-4 words
 HINT: one strong hint in {clue_lang}
@@ -414,12 +456,14 @@ WORDS: word|Russian translation; word|Russian translation; word|Russian translat
         # недоступны все AI-провайдеры и последний общий OpenRouter fallback.
         return _local_game_data(clue_lang, recent)
     out = {}
-    for key, field in (("DESCRIPTION", "description"), ("ANSWER", "answer"), ("ALIASES", "aliases"),
+    for key, field in (("DESCRIPTION", "description"), ("ANSWER", "answer"), ("CATEGORY", "category"),
+                       ("ALIASES", "aliases"),
                        ("ENGLISH", "answer_en"),
                        ("HINT", "hint"), ("EXPLAIN", "explain"), ("WORDS", "words_raw")):
         m = re.search(rf"{key}:\s*(.+?)(?=\n[A-Z]+\d*:\s|\Z)", raw, re.S)
         out[field] = m.group(1).strip() if m else ""
     out["aliases"] = [x.strip() for x in out.get("aliases", "").split("|") if x.strip()]
+    out["category"] = _game_category_key(out.get("category"))
     source_text = " ".join((out.get("description", ""), out.get("hint", ""), out.get("explain", "")))
     out["description"] = " ".join(str(out.get("description") or "").split())
     out["hint"] = " ".join(str(out.get("hint") or "").split())
@@ -485,14 +529,16 @@ async def send_game(bot, cid, status=None):
     except Exception as e:
         await verify.safe_error(bot, cid, e, back="m_learn"); return
     _remember_game_answer(cid, d)
+    category = _game_category_label(d)
     store.game_state[str(cid)] = {"answer": d.get("answer", ""), "answer_en": d.get("answer_en", ""),
                                   "aliases": d.get("aliases", []),
+                                  "category": category,
                                   "description": d.get("description", ""),
                                   "hint": _dot(d.get("hint", "")),
                                   "hint_used": False,
                                   "explain": _dot(d.get("explain", "")),
                                   "words": d.get("words", []), "tries": 0}
-    msg = learning_ui.game_card(ui, d.get("description", ""))
+    msg = learning_ui.game_card(ui, d.get("description", ""), category=category)
     kb = _game_play_kb(ui, hint_available=True)
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)

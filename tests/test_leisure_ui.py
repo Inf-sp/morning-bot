@@ -33,7 +33,7 @@ def test_category_homes_keep_personal_lists_in_their_own_sections():
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_music.music_home_keyboard()) == [
-        ["✨ Подобрать музыку"],
+            ["✨ Подобрать новую музыку"],
         ["🎭 По жанру"],
         ["🎫 Концерты"],
         ["🎚️ Мои артисты"],
@@ -42,12 +42,13 @@ def test_category_homes_keep_personal_lists_in_their_own_sections():
 
 
 def test_recommendation_cards_use_content_specific_next_labels():
-    assert _labels(leisure_movies._movie_kb(0))[0] == ["✨ Другое кино"]
+    assert _labels(leisure_movies._movie_kb(0))[0] == ["✨ Подобрать другое кино"]
     assert _labels(leisure_books._book_kb(0))[0] == ["✨ Другая книга"]
     assert _labels(leisure_music._listen_kb())[0] == ["✨ Другой артист"]
     assert _labels(leisure_books._book_kb(0))[1] == ["🎭 По жанру"]
     assert _labels(leisure_movies._movie_kb(0))[1] == ["🎭 По жанру"]
     assert _labels(leisure_music._listen_kb())[2] == ["🎭 По жанру"]
+    assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 
 def test_preferences_are_available_from_personal_content_lists():
@@ -245,14 +246,15 @@ def test_personal_lists_are_available_from_their_category_preferences():
     assert _labels(leisure_music._music_preferences_kb("42"))[0] == ["⬜ 🌿 Инди"]
 
 
-def test_leisure_category_keyboards_do_not_offer_a_back_button():
+def test_only_the_movie_recommendation_card_offers_a_back_button():
     keyboards = [
-        leisure_movies._movie_kb(0), leisure_movies._movie_genre_menu_kb(),
+        leisure_movies._movie_genre_menu_kb(),
         leisure_books._book_kb(0),
         leisure_books._book_genre_menu_kb(),
         leisure_music._listen_kb(), leisure_music._music_genre_menu_kb(),
     ]
     assert all("⬅️ Назад" not in sum(_labels(keyboard), []) for keyboard in keyboards)
+    assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert _labels(leisure_books._book_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
@@ -494,6 +496,31 @@ def test_weekly_books_fall_back_to_recent_popular_releases(monkeypatch):
 
     assert [item["title"] for item in items] == ["Популярная премьера"]
     assert items[0]["_showcase"] == "popular"
+
+
+def test_weekly_books_never_show_classics_when_catalogue_has_no_fresh_hits(monkeypatch):
+    stored = {}
+
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: stored.update(value))
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
+        {"title": "Мастер и Маргарита", "published_date": "1967-01-01",
+         "rating": 4.9, "ratings_count": 5000},
+    ])
+
+    items = asyncio.run(leisure_books.get_weekly_new_books())
+
+    assert items[0]["_showcase"] == "popular"
+    assert "Мастер и Маргарита" not in [item["title"] for item in items]
+
+
+def test_weekly_books_popular_heading_has_no_book_emoji():
+    message = leisure_books.leisure_ui.weekly_books_screen([{
+        "title": "Недавний бестселлер", "author": "Автор", "_showcase": "popular",
+    }])
+
+    assert "Популярное чтение" in message.text
+    assert "📚 Популярное чтение" not in message.text
 
 
 def test_weekly_books_screen_labels_monthly_fallback_honestly():

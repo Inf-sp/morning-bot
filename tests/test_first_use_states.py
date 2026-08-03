@@ -34,7 +34,7 @@ def test_learning_empty_state_has_one_clear_next_step():
         "Добавляй сюда слова и фразы, которые хочешь запомнить.\n\n"
         "Можно просто написать мне в чате:\n"
         "«добавь в словарь wennen aan»\n\n"
-        "Я буду использовать их в тренажёре и повторении."
+        "Я буду использовать их в практике и повторении."
     )
     assert _labels(message.reply_markup) == [
         ["🆕 Добавить слова"],
@@ -85,8 +85,8 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     })
 
     assert _labels(message.reply_markup) == [
-        ["🎯 Тренажёр"],
-        ["🕵️ Детектив"],
+        ["🎯 Практика изучения языка"],
+        ["🕵️ Угадай персонажа"],
         ["🎚️ Мой словарь"],
         ["#️⃣ Главная"],
     ]
@@ -198,7 +198,8 @@ def test_health_home_opens_without_first_use_data(monkeypatch):
 
     assert text.startswith("⚡️ Фокус на сегодня · Здоровье\n\nСделай короткую паузу.")
     assert _labels(markup) == [
-        ["👩🏻‍⚕️ Врач", "😮‍💨 Мысли"],
+        ["👩🏻‍⚕️ Спросить врача"],
+        ["😮‍💨 Разобрать мысли"],
         ["#️⃣ Главная"],
     ]
 

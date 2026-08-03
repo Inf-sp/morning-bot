@@ -45,14 +45,29 @@ def test_concerts_screen_has_no_artist_search_or_favorites(monkeypatch):
     assert "❤️ Любимые артисты" not in flat
 
 
-def test_concerts_card_has_native_blocks_and_a_datetime_fallback():
-    unix_time = leisure_concerts._concert_date_unix("2099-08-21")
+def test_concert_country_picker_returns_to_the_concert_list():
+    class Bot:
+        sent = []
+
+        async def send_message(self, **kwargs):
+            self.sent.append(kwargs)
+
+    bot = Bot()
+    asyncio.run(leisure_concerts.concert_pick_country(bot, "42"))
+
+    buttons = bot.sent[0]["reply_markup"].inline_keyboard[-1]
+    assert [(button.text, button.callback_data) for button in buttons] == [
+        ("⬅️ Назад", "a_concerts_find"),
+        ("#️⃣ Главная", "m_menu"),
+    ]
+
+
+def test_concerts_card_keeps_classic_text_and_link():
     message = leisure_ui.concerts_list(
         "Концерты · Нидерланды",
         [{
             "artist": "Romy",
             "date": "21 августа 2099",
-            "date_unix": unix_time,
             "place": "Biddinghuizen",
             "flag": "🇳🇱",
             "context": "Фестиваль · Lowlands 2099",
@@ -63,24 +78,22 @@ def test_concerts_card_has_native_blocks_and_a_datetime_fallback():
 
     assert "21 августа 2099 · Biddinghuizen 🇳🇱" in message.text
     assert any(entity.type == "text_link" for entity in message.entities)
-    blocks = message.rich_message["blocks"]
-    assert [block["type"] for block in blocks] == [
-        "heading", "heading", "paragraph", "paragraph", "paragraph", "paragraph",
+    assert message.rich_message is None
+
+
+def test_concerts_keep_the_full_classic_list_instead_of_rich_blocks():
+    events = [
+        {"artist": artist, "date": f"{index} августа 2099", "place": "Амстердам"}
+        for index, artist in enumerate(("Romy", "FKA twigs", "Bicep", "Mitski"), start=1)
     ]
-    date_text = blocks[2]["text"]
-    assert date_text[0] == {
-        "type": "date_time",
-        "text": "21 августа 2099",
-        "unix_time": unix_time,
-        "date_time_format": "D",
-    }
-    assert date_text[1] == " · Biddinghuizen 🇳🇱"
-    assert blocks[-1]["text"] == {
-        "type": "url", "text": "Подробнее…", "url": "https://example.com/romy",
-    }
+
+    message = leisure_ui.concerts_list("Концерты · Нидерланды", events)
+
+    assert message.rich_message is None
+    assert all(event["artist"] in message.text for event in events)
 
 
-def test_nearest_concerts_keeps_buttons_with_rich_and_classic_delivery(monkeypatch):
+def test_nearest_concerts_uses_the_full_classic_delivery(monkeypatch):
     event = {
         "id": "romy-2099",
         "_artist": "Romy",
@@ -110,14 +123,12 @@ def test_nearest_concerts_keeps_buttons_with_rich_and_classic_delivery(monkeypat
 
     rich_bot = RichBot()
     asyncio.run(leisure_concerts.find_concerts(rich_bot, "rich-concerts"))
-    assert len(rich_bot.rich) == 1
-    assert rich_bot.classic == []
-    assert _labels(rich_bot.rich[0]["reply_markup"]) == [
-        ["🌍 Нидерланды"], ["#️⃣ Главная"],
+    assert rich_bot.rich == []
+    assert _labels(rich_bot.classic[0]["reply_markup"]) == [
+        ["🌍 Нидерланды"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
-    rich_date = rich_bot.rich[0]["rich_message"]["blocks"][2]["text"][0]
-    assert rich_date["type"] == "date_time"
-    assert rich_date["date_time_format"] == "D"
+    assert "Romy" in rich_bot.classic[0]["text"]
+    assert rich_bot.classic[0]["disable_web_page_preview"] is True
 
     class ClassicBot:
         def __init__(self):
@@ -130,7 +141,7 @@ def test_nearest_concerts_keeps_buttons_with_rich_and_classic_delivery(monkeypat
     asyncio.run(leisure_concerts.find_concerts(classic_bot, "classic-concerts"))
     assert len(classic_bot.classic) == 1
     assert _labels(classic_bot.classic[0]["reply_markup"]) == [
-        ["🌍 Нидерланды"], ["#️⃣ Главная"],
+        ["🌍 Нидерланды"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert "Romy" in classic_bot.classic[0]["text"]
     assert classic_bot.classic[0]["disable_web_page_preview"] is True

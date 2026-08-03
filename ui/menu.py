@@ -90,8 +90,8 @@ _SCREENS = {
         "Гардероб",
         "Одежда без хаоса. Подберу образ, помогу разобрать шкаф и выбрать, что стоит докупить. Чем полнее гардероб, тем точнее рекомендации.",
         [
-            [("✨ Другой образ", "w_look")],
-            [("🧐 Оценить покупку", "w_check")],
+            [("✨ Подобрать другой образ", "w_look")],
+            [("🧐 Оценить новую покупку", "w_check")],
             [("🎚️ Мой шкаф", "w_closet")],
             [("#️⃣ Главная", "m_menu")],
         ],
@@ -101,8 +101,8 @@ _SCREENS = {
         "Здоровье",
         "",
         [
-            [(ui_label("doctor", "Врач"), "as_doctor"),
-             (ui_label("worry_diary", "Мысли"), "as_daycheck")],
+            [(ui_label("doctor", "Спросить врача"), "as_doctor")],
+            [(ui_label("worry_diary", "Разобрать мысли"), "as_daycheck")],
             [("#️⃣ Главная", "m_menu")],
         ],
     ),
@@ -124,7 +124,7 @@ def learning_menu(home: dict):
         b.line("Можно просто написать мне в чате:")
         b.line("«добавь в словарь wennen aan»")
         b.spacer()
-        b.line("Я буду использовать их в тренажёре и повторении.")
+        b.line("Я буду использовать их в практике и повторении.")
         return b.build_stripped(reply_markup=ikb([
             [("🆕 Добавить слова", f"a_dictadd_smart_{code}")],
             [("✨ Подобрать слова", f"a_dictseed_start_{code}")],
@@ -167,13 +167,13 @@ def learning_menu(home: dict):
     b.bullet(f"В изучении {progress.get('total', 0)} слов и фраз")
     b.bullet(f"Без подсказок — {progress.get('no_hint_pct', 0)}%")
     b.spacer()
-    focus = home.get("focus") or "добавить первые слова в тренажёре."
+    focus = home.get("focus") or "добавить первые слова для практики."
     b.text_line("💡 ")
     b.label("Полезно", focus)
 
     return b.build_stripped(reply_markup=ikb([
-        [(ui_label("word_trainer", "Тренажёр"), f"a_train_{code}")],
-        [(ui_label("game", "Детектив"), "a_game")],
+        [(ui_label("word_trainer", "Практика изучения языка"), f"a_train_{code}")],
+        [(ui_label("game", "Угадай персонажа"), "a_game")],
         [("🎚️ Мой словарь", f"a_dictlang_{code}_from_menu")],
         [("#️⃣ Главная", "m_menu")],
     ]))
@@ -279,7 +279,7 @@ def food_menu(idea=None):
         b.labeled_line("Полезно", tip)
 
     rows = [
-        [("✨ Другой рецепт", "m_food_next")],
+        [("✨ Подобрать другой рецепт", "m_food_next")],
         [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
         [("🎚️ Мой холодильник", "as_fridge_home")],
         [("#️⃣ Главная", "m_menu")],

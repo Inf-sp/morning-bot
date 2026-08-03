@@ -83,7 +83,7 @@ class _Bot:
         self.sent.append(kwargs)
 
 
-def test_system_screen_links_to_ai_traffic_logs_and_navigation(monkeypatch):
+def test_system_screen_links_to_logs_and_navigation(monkeypatch):
     monkeypatch.setattr(admin.service_monitor, "rows", lambda: ["⚪ Gemini · Везде · лимит неизвестен"])
     monkeypatch.setattr(admin.service_monitor, "last_check_time", lambda: "21:44")
     bot = _Bot()
@@ -91,8 +91,7 @@ def test_system_screen_links_to_ai_traffic_logs_and_navigation(monkeypatch):
     asyncio.run(admin.send_api_ai(bot, "42"))
 
     markup = bot.sent[0]["reply_markup"].inline_keyboard
-    assert [button.text for button in markup[0]] == ["📊 Нагрузка AI"]
-    assert [button.text for button in markup[1]] == ["⚠️ Ошибки"]
+    assert [button.text for button in markup[0]] == ["⚠️ Ошибки"]
     assert [button.text for button in markup[-1]] == ["⬅️ Назад", "#️⃣ Главная"]
     assert "Ответы · 95%" not in bot.sent[0]["text"]
     assert "Автоматический резерв" not in bot.sent[0]["text"]

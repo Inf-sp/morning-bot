@@ -37,11 +37,14 @@ def _movie_kb(i, category=None):
     category используется только для контекста подбора.
     """
     rows = [
-        [InlineKeyboardButton("✨ Другое кино", callback_data=f"movie_no_{i}")],
+        [InlineKeyboardButton("✨ Подобрать другое кино", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
         [InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")],
     ]
-    rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ])
     return InlineKeyboardMarkup(rows)
 
 

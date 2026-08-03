@@ -12,7 +12,6 @@ from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import access
-import ai
 import api_usage
 import config
 import provider_runtime
@@ -453,7 +452,6 @@ async def send_api_ai(bot, cid, q=None):
     rows = service_monitor.rows()
 
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 Нагрузка AI", callback_data="adm_ai_traffic")],
         [InlineKeyboardButton("⚠️ Ошибки", callback_data="adm_logs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -466,48 +464,6 @@ async def send_api_ai(bot, cid, q=None):
     )
     await _show(bot, cid, msg, kb, q)
 
-
-def _ai_traffic_rows():
-    summary = ai.ai_traffic_summary()
-    total = int(summary.get("total") or 0)
-    if not total:
-        return ["Попыток за последние 24 часа не было"]
-    failed_total = int(summary.get("failed") or 0)
-    rows = [
-        f"{total} попыток · {int(summary.get('cache_hits') or 0)} из кэша"
-        f" · {failed_total} {_plural(failed_total, 'ошибка', 'ошибки', 'ошибок')}",
-    ]
-    peak = summary.get("peak") or {}
-    if int(peak.get("attempts") or 0):
-        line = f"Пик: {_hhmm(peak.get('ts'))}–{_hhmm(int(peak['ts']) + 300)} · {int(peak['attempts'])} попыток"
-        failed = int(peak.get("failed") or 0)
-        if failed:
-            line += f" · {failed} {_plural(failed, 'ошибка', 'ошибки', 'ошибок')}"
-        rows.append(line)
-    for source in summary.get("sources") or []:
-        origin = str(source.get("origin") or "Фон")
-        actor = str(source.get("actor") or "")
-        if origin == "Пользователь":
-            profile = store.get_profile(actor) if actor else {}
-            label = str(profile.get("name") or "Пользователь").strip() or "Пользователь"
-        else:
-            label = "Фон"
-        line = f"• {label} · {source.get('section') or 'Система'} — {int(source.get('attempts') or 0)}"
-        failed = int(source.get("failed") or 0)
-        if failed:
-            line += f" · {failed} {_plural(failed, 'ошибка', 'ошибки', 'ошибок')}"
-        rows.append(line)
-    return rows
-
-
-async def send_ai_traffic(bot, cid, q=None):
-    now = int(time.time())
-    msg = ui.ai_traffic(_ai_traffic_rows(), _updated_at(now), now)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_api_ai"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
-    await _show(bot, cid, msg, kb, q)
 
 def _log_error_text(entry):
     if entry.get("error"):

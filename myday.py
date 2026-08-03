@@ -774,16 +774,26 @@ def _build_quote_context(cid):
     }
 
 
+def _is_favorite_artist(value, artists):
+    """Only attribute a music quote to an artist the user has actually saved."""
+    normalised = " ".join(str(value or "").casefold().split())
+    return bool(normalised) and normalised in {
+        " ".join(str(artist or "").casefold().split()) for artist in artists
+    }
+
+
 def _fetch_quote(cid=None):
-    """Персонализированная цитата дня с anti-repeat по авторам."""
+    """Цитата дня; любимые исполнители получают приоритет и точную атрибуцию."""
     today = datetime.now(TZ).strftime("%Y-%m-%d")
-    if cid:
-        cached = store.get_profile(cid).get("myday_quote_cache") or {}
-        if cached.get("date") == today and isinstance(cached.get("data"), dict):
-            return cached["data"]
     ctx = _build_quote_context(cid) if cid else {
         "movies": [], "books": [], "artists": [], "focus": "", "seen_authors": []
     }
+    if cid:
+        cached = store.get_profile(cid).get("myday_quote_cache") or {}
+        if cached.get("date") == today and isinstance(cached.get("data"), dict):
+            cached_quote = cached["data"]
+            if not ctx["artists"] or _is_favorite_artist(cached_quote.get("src"), ctx["artists"]):
+                return cached_quote
 
     parts = []
     if ctx["movies"]:
@@ -799,7 +809,13 @@ def _fetch_quote(cid=None):
     if ctx["seen_authors"]:
         avoid_block = f"Этих авторов уже показывали — не повторяй: {', '.join(ctx['seen_authors'])}.\n\n"
 
-    if parts:
+    if ctx["artists"]:
+        author_hint = (
+            "Выбери только одного исполнителя из списка «Любимые исполнители». "
+            "Это должна быть его реальная, хорошо известная цитата; не придумывай и не приписывай "
+            "слова другому человеку. В поле src скопируй имя исполнителя из списка без изменений."
+        )
+    elif parts:
         author_hint = (
             "Выбери автора, чьё мировоззрение или творчество перекликается с интересами человека выше. "
             "Это может быть режиссёр, писатель, музыкант, философ, предприниматель или учёный — "
@@ -828,9 +844,17 @@ def _fetch_quote(cid=None):
     if not isinstance(d, dict):
         d = {}
 
-    # Если AI не дал валидную цитату — берём из любимой книги или кураторской базы
+    # При любимых артистах не подменяем их автора книгой или случайным мыслителем:
+    # лучше не показать строку, чем выдумать музыкальную атрибуцию.
     raw_ai_quote = _strip_quotes(d.get("quote", ""))
-    if not raw_ai_quote or not _quote_valid(raw_ai_quote):
+    if ctx["artists"] and (
+        not raw_ai_quote
+        or not _quote_valid(raw_ai_quote)
+        or not _is_favorite_artist(d.get("src"), ctx["artists"])
+    ):
+        _log.warning("myday: no valid quote from a favorite artist")
+        d = {}
+    elif not raw_ai_quote or not _quote_valid(raw_ai_quote):
         d = _book_quote_fallback(cid)
 
     src = (d.get("src") or "").strip()

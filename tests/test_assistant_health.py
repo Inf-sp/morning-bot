@@ -45,7 +45,7 @@ def test_health_menu_has_one_doctor_entry_for_symptoms_and_medicines():
     menu = menu_ui.menu_screen("m_balance")
     labels = [button.text for row in menu.reply_markup.inline_keyboard for button in row]
 
-    assert "👩🏻‍⚕️ Врач" in labels
+    assert "👩🏻‍⚕️ Спросить врача" in labels
     assert "💊 Лекарства" not in labels
     assert "лекарств" in doctor_ui.prompt_screen().text.casefold()
     assert medicine_ui.medicine_card({"drug_name": "Ибупрофен"}).text.startswith("👩🏻‍⚕️ Врач · Ибупрофен")

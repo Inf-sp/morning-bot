@@ -27,6 +27,17 @@ _BOOK_GENRES = [
 ]
 _PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("3.5", "3.5"), ("4.0", "4.0"), ("4.5", "4.5")]
+_WEEKLY_SHOWCASE_VERSION = 2
+
+# Last safe fallback for the weekly showcase. These are recent, widely read
+# releases, deliberately separate from _FALLBACK_BOOKS (the classic personal
+# recommendation catalogue below).
+_WEEKLY_POPULAR_FALLBACKS = [
+    {"title": "Onyx Storm", "author": "Rebecca Yarros", "published_date": "2025-01-21"},
+    {"title": "Great Big Beautiful Life", "author": "Emily Henry", "published_date": "2025-04-22"},
+    {"title": "The Tenant", "author": "Freida McFadden", "published_date": "2025-05-06"},
+    {"title": "Atmosphere", "author": "Taylor Jenkins Reid", "published_date": "2025-06-03"},
+]
 
 
 def _item_text(item):
@@ -160,7 +171,8 @@ def _book_week_key() -> str:
 def _weekly_book_cache_get():
     entry = store._load(config.BOOK_WEEKLY_CACHE_KEY)
     if (not isinstance(entry, dict) or entry.get("week") != _book_week_key()
-            or entry.get("date") != datetime.now(config.TZ).date().isoformat()):
+            or entry.get("date") != datetime.now(config.TZ).date().isoformat()
+            or entry.get("version") != _WEEKLY_SHOWCASE_VERSION):
         return None
     items = entry.get("items")
     # Пустая витрина не должна блокировать новый поиск на весь день: после
@@ -170,6 +182,7 @@ def _weekly_book_cache_get():
 
 def _weekly_book_cache_set(items):
     store._save(config.BOOK_WEEKLY_CACHE_KEY, {
+        "version": _WEEKLY_SHOWCASE_VERSION,
         "week": _book_week_key(),
         "date": datetime.now(config.TZ).date().isoformat(),
         "items": [dict(item) for item in (items or []) if isinstance(item, dict)],
@@ -258,7 +271,7 @@ def _fallback_book_showcase(candidates):
     if popular:
         popular.sort(key=lambda row: row[0], reverse=True)
         return _showcase_items(popular, "popular")
-    return [{**dict(item), "_showcase": "fallback"} for item in _FALLBACK_BOOKS[:4]]
+    return [{**dict(item), "_showcase": "popular"} for item in _WEEKLY_POPULAR_FALLBACKS]
 
 
 async def get_weekly_new_books():

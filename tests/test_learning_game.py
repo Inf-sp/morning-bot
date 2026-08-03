@@ -194,12 +194,24 @@ def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypat
     bot = Bot()
     asyncio.run(learning_game.send_game(bot, "42"))
 
-    assert "Detective · Nederlands" in bot.messages[0]["text"]
+    assert "Угадай персонажа · Nederlands" in bot.messages[0]["text"]
+    assert "Категория: животное" in bot.messages[0]["text"]
     assert "Verdachte:" not in bot.messages[0]["text"]
     assert "• " not in bot.messages[0]["text"]
     labels = [button.text for row in bot.messages[0]["reply_markup"].inline_keyboard for button in row]
     assert labels == ["💡 Подсказка", "😞 Сдаюсь", "⬅️ Назад", "#️⃣ Главная"]
     assert [len(row) for row in bot.messages[0]["reply_markup"].inline_keyboard] == [1, 1, 2]
+
+
+def test_detective_card_shows_a_clear_russian_category():
+    message = learning_ui.game_card(
+        learning_game.GAME_UI["английский"],
+        "I have whiskers and I like warm places.",
+        category="животное",
+    )
+
+    assert "Категория: животное" in message.text
+    assert message.text.index("Категория: животное") < message.text.index("I have whiskers")
 
 
 def test_detective_rotates_after_every_local_card_was_played_and_tells_how_to_reply(monkeypatch):
@@ -275,6 +287,7 @@ def test_game_data_uses_description_and_parses_learning_words(monkeypatch):
             "DESCRIPTION: Ik woon vaak bij mensen. Ik slaap graag op warme plekken. "
             "Soms jaag ik op kleine dieren.\n"
             "ANSWER: de kat\n"
+            "CATEGORY: animal\n"
             "ALIASES: кошка|cat|kat\n"
             "ENGLISH: cat\n"
             "HINT: Ik heb snorharen en ik zeg miauw.\n"
@@ -287,6 +300,7 @@ def test_game_data_uses_description_and_parses_learning_words(monkeypatch):
     data = learning_game.game_data("нидерландский", [])
 
     assert data["description"].startswith("Ik woon vaak bij mensen.")
+    assert data["category"] == "animal"
     assert captured["fallback_allowed"] is True
     assert captured["privacy_level"] == "public"
     assert "clues" not in data

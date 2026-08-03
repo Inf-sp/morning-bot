@@ -206,14 +206,12 @@ def _updated_footer(updated_at, updated_unix=None):
 def _system_table_row(line):
     parts = [part.strip() for part in str(line or "").split(" · ") if part.strip()]
     if not parts:
-        return ("—", "—", "—")
+        return ("—", "—")
     if len(parts) == 1:
-        return (parts[0], "—", "—")
-    if len(parts) == 2:
-        return (parts[0], "—", parts[1])
-    # Groq includes a model between the role and current quota. It belongs to
-    # the compact middle column instead of creating a four-column phone table.
-    return (parts[0], " · ".join(parts[1:-1]), parts[-1])
+        return (parts[0], "—")
+    # A phone-width system screen needs one compact status column. Keep the
+    # role, model, quota or recovery reason together instead of losing it.
+    return (parts[0], " · ".join(parts[1:]))
 
 
 def _system_rich_message(rows, updated_at, updated_unix=None):
@@ -238,7 +236,7 @@ def _system_rich_message(rows, updated_at, updated_unix=None):
         blocks.append(rich.heading(title, size=4))
         if table_rows:
             blocks.append(rich.table(
-                ("Сервис", "Роль", "Состояние"), table_rows,
+                ("Сервис", "Состояние"), table_rows,
                 striped=True, bordered=True,
             ))
         else:
@@ -264,53 +262,6 @@ def api_ai(rows, updated_at, updated_unix=None):
     b.line(f"Обновлено в {updated_at}")
     msg = b.build_stripped()
     msg.rich_message = _system_rich_message(rows, updated_at, updated_unix)
-    return msg
-
-
-def _traffic_table_row(row):
-    row = str(row or "").lstrip("• ").strip()
-    if " — " not in row:
-        return None
-    source_part, counts_part = row.split(" — ", 1)
-    source_bits = [part.strip() for part in source_part.split(" · ") if part.strip()]
-    counts = [part.strip() for part in counts_part.split(" · ") if part.strip()]
-    if not source_bits or not counts:
-        return None
-    source = " · ".join(source_bits)
-    attempts = counts[0]
-    failures = next((part for part in counts[1:] if "ошиб" in part), "—")
-    return source, attempts, failures
-
-
-def _ai_traffic_rich_message(rows, updated_at, updated_unix=None):
-    rows = [str(row or "") for row in rows]
-    overview = [row for row in rows if not row.startswith(("• ", "Пик:"))]
-    peak = next((row for row in rows if row.startswith("Пик:")), "")
-    table_rows = [parsed for parsed in (_traffic_table_row(row) for row in rows) if parsed]
-    blocks = [rich.heading("📊 Нагрузка AI · 24 часа", size=2)]
-    blocks.extend(rich.paragraph(row) for row in overview if row)
-    if peak:
-        blocks.append(rich.paragraph(peak))
-    if table_rows:
-        blocks.append(rich.table(
-            ("Источник · раздел", "Попытки", "Ошибки"), table_rows,
-            striped=True, bordered=True,
-        ))
-    blocks.append(_updated_footer(updated_at, updated_unix))
-    return rich.message(blocks)
-
-
-def ai_traffic(rows, updated_at, updated_unix=None):
-    b = MessageBuilder()
-    b.bold("📊 Нагрузка AI · 24 часа")
-    b.newline()
-    b.spacer()
-    for row in rows:
-        b.line(str(row))
-    b.spacer()
-    b.line(f"Обновлено в {updated_at}")
-    msg = b.build_stripped()
-    msg.rich_message = _ai_traffic_rich_message(rows, updated_at, updated_unix)
     return msg
 
 
