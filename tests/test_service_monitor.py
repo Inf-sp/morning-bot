@@ -207,6 +207,17 @@ def test_passive_language_and_speech_probes_are_not_run_every_five_minutes():
     assert provider_runtime.SPEC_BY_KEY["gemini"].probe_every >= 3600
 
 
+def test_youtube_search_is_never_a_background_probe(monkeypatch):
+    _memory_store(monkeypatch)
+    calls = []
+    monkeypatch.setattr(service_monitor, "probe", lambda service: calls.append(service) or True)
+    monkeypatch.setattr(service_monitor, "SPECS", (provider_runtime.SPEC_BY_KEY["youtube"],))
+
+    service_monitor.check_all(force=True)
+
+    assert calls == []
+
+
 def test_passive_probe_updates_status_without_polluting_error_log(monkeypatch):
     _memory_store(monkeypatch)
 

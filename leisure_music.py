@@ -5,6 +5,7 @@ import logging
 import threading
 import time
 from datetime import datetime
+from urllib.parse import quote_plus
 
 import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -14,6 +15,7 @@ import config
 import recommendation_stoplist
 import settings
 import store
+import youtube_tracks
 from ui import leisure as leisure_ui
 
 _log = logging.getLogger(__name__)
@@ -35,11 +37,12 @@ _MUSIC_STYLE_KEY = "music_styles"
 _RECENT_ARTISTS_LIMIT = 40
 
 _DAILY_VIBES = (
-    {"track": "Introvert", "artist": "Little Simz", "tag": "Для собранного фокуса"},
-    {"track": "Friday Morning", "artist": "Khruangbin", "tag": "Лёгкий вечерний соул"},
-    {"track": "adore u", "artist": "Fred again..", "tag": "Чтобы мягко переключиться после дня"},
-    {"track": "Two Weeks", "artist": "FKA twigs", "tag": "Для красивого, немного странного вечера"},
-    {"track": "Favourite", "artist": "Fontaines D.C.", "tag": "Когда нужна гитара и немного скорости"},
+    {"genre": "hiphop", "track": "Introvert", "artist": "Little Simz", "tag": "Для собранного фокуса"},
+    {"genre": "indie", "track": "Friday Morning", "artist": "Khruangbin", "tag": "Лёгкий вечерний соул"},
+    {"genre": "electronic", "track": "adore u", "artist": "Fred again..", "tag": "Чтобы мягко переключиться после дня"},
+    {"genre": "rnb", "track": "Two Weeks", "artist": "FKA twigs", "tag": "Для красивого, немного странного вечера"},
+    {"genre": "rock", "track": "Favourite", "artist": "Fontaines D.C.", "tag": "Когда нужна гитара и немного скорости"},
+    {"genre": "pop", "track": "Bunny Is a Rider", "artist": "Caroline Polachek", "tag": "Поп без лишней предсказуемости"},
 )
 _MUSIC_REBUSES = (
     {
@@ -164,7 +167,9 @@ _LOCAL_ARTIST_FALLBACKS = {
 def _local_artist_fallback(known, category=None):
     """Возвращает нового артиста без сетевого запроса, если AI-цепочка недоступна."""
     key = category.get("value") if isinstance(category, dict) else "default"
-    candidates = [*_LOCAL_ARTIST_FALLBACKS.get(key, []), *_LOCAL_ARTIST_FALLBACKS["default"]]
+    candidates = list(_LOCAL_ARTIST_FALLBACKS.get(key, []))
+    if key == "default":
+        candidates.extend(_LOCAL_ARTIST_FALLBACKS["default"])
     known = {str(value or "").casefold() for value in known}
     for item in candidates:
         if item["artist"].casefold() not in known:
@@ -176,13 +181,20 @@ def _cached_artist(cid):
     entry = (store._load(config.MUSIC_RECO_CACHE_KEY) or {}).get(str(cid)) or {}
     item = entry.get("item")
     today = datetime.now(config.TZ).date().isoformat()
-    return dict(item) if entry.get("date") == today and isinstance(item, dict) else None
+    styles = sorted(_music_styles(cid))
+    if entry.get("date") != today or entry.get("styles") != styles or not isinstance(item, dict):
+        return None
+    return dict(item)
 
 
 def _cache_artist(cid, item):
     def mutate(data):
         data = data if isinstance(data, dict) else {}
-        data[str(cid)] = {"date": datetime.now(config.TZ).date().isoformat(), "item": dict(item or {})}
+        data[str(cid)] = {
+            "date": datetime.now(config.TZ).date().isoformat(),
+            "styles": sorted(_music_styles(cid)),
+            "item": dict(item or {}),
+        }
         return data, None
     store.mutate_kv(config.MUSIC_RECO_CACHE_KEY, mutate)
 
@@ -269,11 +281,6 @@ def _listen_kb():
 
 def music_home_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Грузить мозг (фокус)", callback_data="music_task_focus")],
-        [InlineKeyboardButton("Тренировка", callback_data="music_task_workout"),
-         InlineKeyboardButton("Дорога домой", callback_data="music_task_commute")],
-        [InlineKeyboardButton("Фон для разговора", callback_data="music_task_conversation")],
-        [InlineKeyboardButton("Архивная находка", callback_data="music_archive")],
         [InlineKeyboardButton("✨ Подобрать новую музыку", callback_data="music_reco")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="music_genre_menu")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find")],
@@ -286,8 +293,20 @@ def _daily_music_rebus(day):
     return dict(_MUSIC_REBUSES[(day.timetuple().tm_yday - 216) % len(_MUSIC_REBUSES)])
 
 
-def _daily_music_vibe(day):
-    return dict(_DAILY_VIBES[(day.timetuple().tm_yday - 216) % len(_DAILY_VIBES)])
+def _youtube_music_search_url(track, artist):
+    query = " ".join(part.strip() for part in (track, artist) if str(part or "").strip())
+    return f"https://music.youtube.com/search?q={quote_plus(query)}" if query else ""
+
+
+def _daily_music_vibe(day, selected_styles):
+    """Ежедневный трек только из жанров, которые пользователь отметил в предпочтениях."""
+    selected = set(selected_styles or [])
+    choices = [item for item in _DAILY_VIBES if item["genre"] in selected]
+    if not choices:
+        return {}
+    vibe = dict(choices[(day.timetuple().tm_yday - 216) % len(choices)])
+    vibe["url"] = _youtube_music_search_url(vibe["track"], vibe["artist"])
+    return vibe
 
 
 def _music_legend_cache_get(day):
@@ -370,10 +389,17 @@ def _music_city(cid):
     return str(settings_data.get("city") or config.DEFAULT_CITY.get("name") or "").strip()
 
 
-async def _daily_music_content():
+async def _daily_music_content(cid):
     now = datetime.now(config.TZ)
+    vibe = _daily_music_vibe(now.date(), _music_styles(cid))
+    if vibe:
+        direct_url = await asyncio.to_thread(
+            youtube_tracks.find_track_url, vibe["track"], vibe["artist"],
+        )
+        if direct_url:
+            vibe["url"] = direct_url
     return {
-        "vibe": _daily_music_vibe(now.date()),
+        "vibe": vibe,
         "rebus": _daily_music_rebus(now.date()),
         "legend": await asyncio.to_thread(_load_music_legend, now.date()),
     }
@@ -412,10 +438,11 @@ async def send_music_home(bot, cid, q=None):
         _log.warning("music home concerts failed cid=%s: %r", cid, error)
         concerts = []
     try:
-        daily_music = await _daily_music_content()
+        daily_music = await _daily_music_content(cid)
     except Exception as error:
         _log.warning("music home daily content failed cid=%s: %r", cid, error)
-        daily_music = {"vibe": _daily_music_vibe(datetime.now(config.TZ).date()),
+        daily_music = {"vibe": _daily_music_vibe(
+                           datetime.now(config.TZ).date(), _music_styles(cid)),
                        "rebus": _daily_music_rebus(datetime.now(config.TZ).date())}
     msg = leisure_ui.music_week_screen(_music_city(cid), daily_music, concerts or [])
     await bot.send_message(
@@ -475,17 +502,21 @@ def _music_genre(key):
     return "", ""
 
 
-def _music_genre_menu_kb():
+def _music_genre_menu_kb(cid):
+    selected = set(_music_styles(cid))
     buttons = [InlineKeyboardButton(label, callback_data=f"music_g_{key}")
-               for key, label, _prompt_name in _MUSIC_GENRES]
+               for key, label, _prompt_name in _MUSIC_GENRES if key in selected]
     rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
     rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
 async def send_music_genre_menu(bot, cid, q=None):
-    text = "Выбери жанр — подберу нового артиста в этом звучании."
-    kb = _music_genre_menu_kb()
+    if not _music_styles(cid):
+        await send_music_preferences(bot, cid, q)
+        return
+    text = "Выбери один из жанров из 📌 Предпочтения — подберу нового артиста в этом звучании."
+    kb = _music_genre_menu_kb(cid)
     if q is not None:
         try:
             await q.message.edit_text(text, reply_markup=kb)
@@ -497,8 +528,8 @@ async def send_music_genre_menu(bot, cid, q=None):
 
 async def send_music_by_genre(bot, cid, genre_key, *, status=None):
     label, prompt_name = _music_genre(genre_key)
-    if not prompt_name:
-        await send_music_genre_menu(bot, cid)
+    if not prompt_name or genre_key not in _music_styles(cid):
+        await _prompt_for_music_styles(bot, cid, status=status)
         return
     await send_listen(
         bot, cid,
@@ -538,7 +569,7 @@ def _music_preferences_kb(cid):
 
 
 async def send_music_preferences(bot, cid, q=None):
-    text = "📌 Предпочтения музыки\n\nВыбери любимые стили — они будут учитываться в обычном подборе."
+    text = "📌 Предпочтения музыки\n\nВыбери хотя бы один стиль — рекомендации и «Вайб дня» будут только из отмеченных жанров."
     kb = _music_preferences_kb(cid)
     if q is not None:
         try:
@@ -546,6 +577,23 @@ async def send_music_preferences(bot, cid, q=None):
             return
         except Exception:
             pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+def _music_preferences_required_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📌 Предпочтения", callback_data="music_prefs")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+
+
+async def _prompt_for_music_styles(bot, cid, *, status=None):
+    text = "Сначала отметь хотя бы один жанр в 📌 Предпочтения музыки."
+    kb = _music_preferences_required_kb()
+    if status is not None:
+        await status.replace(text, reply_markup=kb)
+        return
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
@@ -588,6 +636,12 @@ def _ensure_artists(cid):
 async def send_listen(bot, cid, *, preview=False, category=None, force=False, status=None):
     _log.info("send_listen: start cid=%s", cid)
     category = category if isinstance(category, dict) and category.get("kind") == "genre" else None
+    selected_styles = _music_styles(cid)
+    if not selected_styles or (category and category.get("value") not in selected_styles):
+        if preview:
+            return None
+        await _prompt_for_music_styles(bot, cid, status=status)
+        return
     cached = None if category or force else _cached_artist(cid)
     if cached:
         artist = str(cached.get("artist") or "")
@@ -603,16 +657,21 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
     arts_raw = _ensure_artists(cid)
     arts = [_item_text(a) for a in arts_raw if _item_text(a)]
     anchors = ", ".join(arts[:25])
-    genre_context = (
-        f"Подбор строго в жанре «{category.get('prompt_name') or category.get('label') or ''}». "
-        "Не предлагай артиста из другого основного жанра."
-        if category else ""
-    )
-    selected_styles = _music_styles(cid)
+    if category:
+        genre_context = (
+            f"Подбор строго в жанре «{category.get('prompt_name') or category.get('label') or ''}». "
+            "Не предлагай артиста из другого основного жанра."
+        )
+    else:
+        allowed = [prompt_name for key, _label, prompt_name in _MUSIC_GENRES if key in selected_styles]
+        genre_context = (
+            "Подбор строго только в выбранных жанрах: " + ", ".join(allowed) + ". "
+            "Не предлагай артиста из другого основного жанра."
+        )
     style_context = _music_style_context(cid) if not category else ""
-    fallback_category = category
-    if fallback_category is None and selected_styles:
-        fallback_category = {"value": selected_styles[0]}
+    fallback_category = category or {
+        "value": selected_styles[datetime.now(config.TZ).date().timetuple().tm_yday % len(selected_styles)],
+    }
     blocked = recommendation_stoplist.values(cid, "artist")
     recent = _recent_artists(cid)
     known = (set(a.lower() for a in arts)
@@ -620,6 +679,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
     avoid_all = ", ".join(list(arts) + blocked + recent)[:600]
     data = None
     rejected = []
+    allowed_genres = {category["value"]} if category else set(selected_styles)
     for attempt in range(3):
         avoid_this_try = avoid_all
         if rejected:
@@ -645,6 +705,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
                 f"Попытка генерации: {attempt + 1}. Если сомневаешься, выбирай менее очевидный вариант.\n"
                 "Верни строго такой JSON:\n"
                 '{"artist": "имя исполнителя", '
+                f'"genre": "один ключ из {", ".join(sorted(allowed_genres))}", '
                 '"desc": "1-2 строки образно о звучании", '
                 '"why": ["пункт 1 - на кого из его любимых похоже и чем", "пункт 2"], '
                 '"tracks": ["трек 1 - короткая пометка", "трек 2", "трек 3"], '
@@ -657,14 +718,15 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
             data = _local_artist_fallback(known, fallback_category)
             break
         cand_artist = str(cand.get("artist") or "").strip() if isinstance(cand, dict) else ""
+        cand_genre = str(cand.get("genre") or "").strip().casefold() if isinstance(cand, dict) else ""
         _log.info("send_listen: attempt=%s cid=%s cand_type=%s cand_artist=%r",
                   attempt, cid, type(cand).__name__, cand_artist)
-        if cand_artist and cand_artist.lower() not in known:
+        if cand_artist and cand_genre in allowed_genres and cand_artist.lower() not in known:
             data = cand
             break
         if cand_artist:
             rejected.append(cand_artist)
-        data = cand
+        data = None
     if not data or not data.get("artist"):
         data = _local_artist_fallback(known, fallback_category)
     if not data or not data.get("artist"):

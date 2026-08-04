@@ -451,10 +451,6 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "movie_prefs":
         await leisure_movies.send_movie_prefs(bot, cid, q)
         return
-    if data == "book_quote":
-        await _ack(q)
-        await leisure_books.send_daily_quote_book(bot, cid)
-        return
     if data == "book_reco":
         await _inline_status(lambda _s: leisure_books.send_books_reco(bot, cid))
         return

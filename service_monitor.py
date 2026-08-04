@@ -30,7 +30,7 @@ _quota_from_headers = provider_runtime.quota_from_headers
 
 _AI_SERVICES = ("groq", "gemini", "github_models", "cloudflare", "openrouter")
 _DATA_SERVICES = (
-    "openweather", "firecrawl", "tavily", "tmdb", "google_books", "languagetool",
+    "openweather", "firecrawl", "tavily", "tmdb", "google_books", "youtube", "languagetool",
     "spoonacular", "azure_speech", "ticketmaster", "zeroentropy", "pexels", "unsplash",
 )
 _DATA_CATEGORIES = {
@@ -39,6 +39,7 @@ _DATA_CATEGORIES = {
     "tavily": "Поиск",
     "tmdb": "Кино",
     "google_books": "Книги",
+    "youtube": "Музыка",
     "languagetool": "Обучение",
     "spoonacular": "Готовка",
     "azure_speech": "Озвучка",
@@ -392,6 +393,10 @@ def check_all(*, force=False) -> None:
     results = {}
     due = []
     for spec in SPECS:
+        # YouTube search costs quota. Its status is updated by real lookups only,
+        # never by a diagnostic request from the monitor.
+        if spec.key == "youtube":
+            continue
         if spec.key == "tavily" and provider_runtime.tavily_monthly_quota_exhausted(now):
             continue
         state = current.get(spec.key) or {}

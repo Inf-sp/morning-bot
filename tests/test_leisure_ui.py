@@ -19,6 +19,14 @@ def _labels(markup):
     return [[button.text for button in row] for row in markup.inline_keyboard]
 
 
+def _bold_values(message):
+    encoded = message.text.encode("utf-16-le")
+    return {
+        encoded[entity.offset * 2:(entity.offset + entity.length) * 2].decode("utf-16-le")
+        for entity in message.entities if entity.type == MessageEntity.BOLD
+    }
+
+
 def test_category_homes_keep_personal_lists_in_their_own_sections():
     assert _labels(leisure_movies._movie_home_kb()) == [
         ["✨ Подобрать кино"],
@@ -27,17 +35,12 @@ def test_category_homes_keep_personal_lists_in_their_own_sections():
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_books.books_home_keyboard()) == [
-        ["Найти книгу с этой цитатой"],
         ["✨ Подобрать книгу"],
         ["🎭 По жанру"],
         ["🎚️ Мои книги"],
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_music.music_home_keyboard()) == [
-        ["Грузить мозг (фокус)"],
-        ["Тренировка", "Дорога домой"],
-        ["Фон для разговора"],
-        ["Архивная находка"],
         ["✨ Подобрать новую музыку"],
         ["🎭 По жанру"],
         ["🎫 Концерты"],
@@ -252,17 +255,23 @@ def test_personal_lists_are_available_from_their_category_preferences():
 
 
 def test_only_the_movie_recommendation_card_offers_a_back_button():
+    music_styles = [key for key, _label, _prompt_name in leisure_music._MUSIC_GENRES]
+    original_music_styles = leisure_music._music_styles
+    leisure_music._music_styles = lambda _cid: music_styles
     keyboards = [
         leisure_movies._movie_genre_menu_kb(),
         leisure_books._book_kb(0),
         leisure_books._book_genre_menu_kb(),
-        leisure_music._listen_kb(), leisure_music._music_genre_menu_kb(),
+        leisure_music._listen_kb(), leisure_music._music_genre_menu_kb("42"),
     ]
-    assert all("⬅️ Назад" not in sum(_labels(keyboard), []) for keyboard in keyboards)
-    assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert _labels(leisure_books._book_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    try:
+        assert all("⬅️ Назад" not in sum(_labels(keyboard), []) for keyboard in keyboards)
+        assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+        assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+        assert _labels(leisure_books._book_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+        assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    finally:
+        leisure_music._music_styles = original_music_styles
 
 
 def test_music_does_not_offer_generic_bookmarks():
@@ -310,14 +319,26 @@ def test_book_recommendation_skips_favorite_and_prefers_reader_rating(monkeypatc
     assert result["title"] == "Книга читателей"
 
 
-def test_book_and_music_genre_menus_have_two_columns():
+def test_book_and_music_genre_menus_have_two_columns(monkeypatch):
+    monkeypatch.setattr(
+        leisure_music, "_music_styles",
+        lambda _cid: [key for key, _label, _prompt_name in leisure_music._MUSIC_GENRES],
+    )
     assert _labels(leisure_books._book_genre_menu_kb())[:-1] == [
         ["🧙 Фэнтези", "🚀 Фантастика"], ["🔍 Детектив", "😱 Триллер"],
         ["💕 Романтика", "🏛 История"], ["👤 Биографии", "🧠 Психология"],
     ]
-    assert _labels(leisure_music._music_genre_menu_kb())[:-1] == [
+    assert _labels(leisure_music._music_genre_menu_kb("42"))[:-1] == [
         ["🌿 Инди", "✨ Поп"], ["⚡ Электроника", "🪩 R&B"],
         ["🎸 Рок", "🎤 Хип-хоп"],
+    ]
+
+
+def test_music_genre_menu_shows_only_selected_styles(monkeypatch):
+    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie", "rock"])
+
+    assert _labels(leisure_music._music_genre_menu_kb("42")) == [
+        ["🌿 Инди", "🎸 Рок"], ["#️⃣ Главная"],
     ]
 
 
@@ -328,6 +349,7 @@ def test_music_genre_selection_stays_in_the_selected_genre(monkeypatch):
         calls.append((cid, kwargs))
 
     monkeypatch.setattr(leisure_music, "send_listen", send_listen)
+    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie"])
     asyncio.run(leisure_music.send_music_by_genre(object(), "42", "indie", status="status"))
 
     assert calls == [("42", {"category": {
@@ -369,7 +391,6 @@ def test_category_week_screens_are_compact_and_show_only_content():
         "mood": "Дождь за окном? «Глубокий сон» — тихий нуар для серого вечера.",
     })
     books = leisure_movies.leisure_ui.weekly_books_screen("Алкмар", {
-        "quote": {"text": "Рукописи не горят."},
         "rebus": {"emoji": "🧙‍♀️ ⚡ 🚂", "answer": "Гарри Поттер", "fact": "Факт."},
         "birthday": {"name": "Кнут Гамсун", "detail": "норвежский писатель"},
         "mood": "Дождливый вечер? Плотный детектив для серого вечера.",
@@ -394,7 +415,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert movie.rich_message is None
     assert any(entity.type == MessageEntity.SPOILER for entity in movie.entities)
     assert "📚 Литературный вайб · Алкмар" in books.text
-    assert "Цитата со страницы: «Рукописи не горят.»" in books.text
+    assert "Цитата со страницы:" not in books.text
     assert "Литературный ребус: 🧙‍♀️ ⚡ 🚂 → Гарри Поттер" in books.text
     assert "Именинник дня: Кнут Гамсун — норвежский писатель." in books.text
     assert "Книга под настроение: Дождливый вечер?" in books.text
@@ -407,6 +428,31 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "Концерты рядом: Romy · 21 августа · Биддингхёйзен" in music.text
     assert "Новые альбомы" not in music.text
     assert any(entity.type == MessageEntity.SPOILER for entity in music.entities)
+
+
+def test_daily_category_block_titles_are_bold():
+    movie = leisure_movies.leisure_ui.movie_now_playing_screen("Алкмар", [{
+        "title": "Фильм", "genres": ["drama"],
+    }], {
+        "rebus": {"emoji": "🦈", "answer": "Челюсти", "fact": "Факт."},
+        "birthday": {"name": "Имя", "role": "актёр"}, "mood": "Настроение.",
+    })
+    books = leisure_movies.leisure_ui.weekly_books_screen("Алкмар", {
+        "rebus": {"emoji": "📚", "answer": "Ответ", "fact": "Факт."},
+        "birthday": {"name": "Имя", "detail": "писатель"}, "mood": "Настроение.",
+    }, [{"title": "Премьера", "author": "Автор", "vibe": "жанр"}])
+    music = leisure_movies.leisure_ui.music_week_screen("Алкмар", {
+        "vibe": {"track": "Трек", "artist": "Артист", "tag": "тег"},
+        "rebus": {"emoji": "🎤", "answer": "Ответ", "fact": "Факт."},
+        "legend": {"name": "Имя", "detail": "музыкант"},
+    }, [{"artist": "Артист", "date": "Сегодня", "place": "Алкмар"}])
+
+    assert {"Ребус дня:", "Именинник дня:", "Фильм под настроение:",
+            "Что в кино:", "💡 Факт дня:"}.issubset(_bold_values(movie))
+    assert {"Литературный ребус:", "Именинник дня:",
+            "Книга под настроение:", "Главные премьеры:", "💡 Интересно:"}.issubset(_bold_values(books))
+    assert {"Вайб дня:", "Музыкальный ребус:", "Легенда дня:",
+            "Концерты рядом:", "💡 Факт дня:"}.issubset(_bold_values(music))
 
 
 def test_book_quote_uses_the_my_day_italic_format():
@@ -593,15 +639,3 @@ def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
 
     assert "Главные премьеры: «Недавний бестселлер» · Автор (триллер)" in message.text
     assert "Популярное чтение" not in message.text
-
-
-def test_quote_source_card_reveals_the_book_without_external_search():
-    message = leisure_books.leisure_ui.book_quote_source_screen({
-        "text": "Рукописи не горят.", "book": "Мастер и Маргарита",
-        "author": "Михаил Булгаков", "note": "Роман о Москве и Воланде.",
-    })
-
-    assert "📚 Книга из цитаты" in message.text
-    assert "«Рукописи не горят.»" in message.text
-    assert "Мастер и Маргарита · Михаил Булгаков" in message.text
-    assert any(entity.type == MessageEntity.ITALIC for entity in message.entities)

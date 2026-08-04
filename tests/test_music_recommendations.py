@@ -51,11 +51,12 @@ def test_music_shows_a_local_artist_when_the_ai_chain_is_unavailable(monkeypatch
     monkeypatch.setattr(leisure_music.store, "_load", lambda *_args: {})
     monkeypatch.setattr(leisure_music.store, "mutate_kv", lambda _key, change: change({})[1])
     monkeypatch.setattr(leisure_music.recommendation_stoplist, "values", lambda *_args: [])
+    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie"])
 
     asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
 
     assert len(calls) == 1
-    assert "FKA twigs" in calls[0][0]
+    assert "Big Thief" in calls[0][0]
     assert "Не удалось подобрать" not in calls[0][0]
 
 
@@ -69,9 +70,12 @@ def test_music_home_shows_daily_vibe_and_nearest_concert_without_ai(monkeypatch)
     async def concerts(_cid):
         return [{"artist": "Romy", "date": "21 августа", "place": "Алкмар"}]
 
-    async def daily_content():
+    async def daily_content(_cid):
         return {
-            "vibe": {"track": "Introvert", "artist": "Little Simz", "tag": "Для собранного фокуса"},
+            "vibe": {
+                "track": "Introvert", "artist": "Little Simz", "tag": "Для собранного фокуса",
+                "url": "https://music.youtube.com/search?q=Introvert+Little+Simz",
+            },
             "rebus": {"emoji": "👑 🐝 🎤", "answer": "Beyoncé", "fact": "Факт."},
             "legend": {"name": "Луи Армстронг", "detail": "трубач и певец"},
         }
@@ -91,6 +95,63 @@ def test_music_home_shows_daily_vibe_and_nearest_concert_without_ai(monkeypatch)
     assert "Концерты рядом: Romy · 21 августа · Алкмар" in sent[0]["text"]
     assert "Новые альбомы" not in sent[0]["text"]
     assert any(entity.type == MessageEntity.SPOILER for entity in sent[0]["entities"])
+    link = next(entity for entity in sent[0]["entities"] if entity.type == MessageEntity.TEXT_LINK)
+    assert link.url == "https://music.youtube.com/search?q=Introvert+Little+Simz"
+
+
+def test_daily_vibe_only_uses_selected_style_and_links_to_youtube_music():
+    vibe = leisure_music._daily_music_vibe(date(2026, 8, 4), ["rock"])
+
+    assert vibe["genre"] == "rock"
+    assert vibe["url"] == "https://music.youtube.com/search?q=Favourite+Fontaines+D.C."
+    assert leisure_music._daily_music_vibe(date(2026, 8, 4), []) == {}
+
+
+def test_music_recommendation_requires_a_selected_style(monkeypatch):
+    calls = []
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            calls.append((text, kwargs))
+
+    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: [])
+    monkeypatch.setattr(
+        leisure_music.ai, "allm_json",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("AI called")),
+    )
+
+    asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
+
+    assert calls[0][0] == "Сначала отметь хотя бы один жанр в 📌 Предпочтения музыки."
+    assert [(button.text, button.callback_data) for button in calls[0][1]["reply_markup"].inline_keyboard[0]] == [
+        ("📌 Предпочтения", "music_prefs"),
+    ]
+
+
+def test_music_recommendation_rejects_an_artist_outside_selected_styles(monkeypatch):
+    calls = []
+    profile = {}
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            calls.append((text, kwargs))
+
+    async def wrong_genre(*_args, **_kwargs):
+        return {"artist": "FKA twigs", "genre": "rnb"}
+
+    monkeypatch.setattr(leisure_music.ai, "allm_json", wrong_genre)
+    monkeypatch.setattr(leisure_music.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(leisure_music.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(leisure_music.store, "set_profile", lambda _cid, value: profile.update(value))
+    monkeypatch.setattr(leisure_music.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_music.store, "mutate_kv", lambda _key, change: change({})[1])
+    monkeypatch.setattr(leisure_music.recommendation_stoplist, "values", lambda *_args: [])
+    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie"])
+
+    asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
+
+    assert "Big Thief" in calls[0][0]
+    assert "FKA twigs" not in calls[0][0]
 
 
 def test_music_task_returns_a_usable_track(monkeypatch):

@@ -36,6 +36,7 @@ GROQ_COMPLEX_MODEL = os.environ.get("GROQ_COMPLEX_MODEL", "openai/gpt-oss-120b")
 GITHUB_MODELS_TOKEN = os.environ.get("GITHUB_MODELS_TOKEN", "")
 GITHUB_MODELS_MODEL = os.environ.get("GITHUB_MODELS_MODEL", "openai/gpt-4.1-mini")
 GOOGLE_BOOKS_API_KEY = os.environ.get("GOOGLE_BOOKS_API_KEY", "")
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "").strip()
 LANGUAGETOOL_API_URL = os.environ.get(
     "LANGUAGETOOL_API_URL", "https://api.languagetool.org/v2",
 ).strip().rstrip("/")
@@ -161,6 +162,7 @@ MOVIE_NOW_PLAYING_CACHE_KEY = "movie_now_playing_cache.json"  # {cid: {city, wee
 CINEMA_DAILY_CACHE_KEY = "cinema_daily_cache.json"  # {YYYY-MM-DD: {birthday}} — один проверенный именинник дня для всех пользователей
 MUSIC_RECO_CACHE_KEY = "music_reco_cache.json"  # {cid: {date, item}} — персональный артист на день
 MUSIC_DAILY_CACHE_KEY = "music_daily_cache.json"  # {YYYY-MM-DD: {legend}} — один проверенный музыкальный именинник дня для всех пользователей
+YOUTUBE_TRACK_CACHE_KEY = "youtube_track_cache.json"  # {artist + track: {ts, url}} — подтверждённые ссылки на треки
 MOVIE_BLACKLIST_KEY = "movie_blacklist.json"
 BOOK_BLACKLIST_KEY = "book_blacklist.json"
 MUSIC_DISLIKE_KEY = "music_dislike.json"

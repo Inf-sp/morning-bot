@@ -184,3 +184,11 @@ def test_google_books_key_is_redacted(monkeypatch):
     assert "google-books-secret-key-123" not in secure.redact(
         "key=google-books-secret-key-123",
     )
+
+
+def test_youtube_key_is_redacted(monkeypatch):
+    monkeypatch.setattr(google_books.config, "YOUTUBE_API_KEY", "youtube-secret-key-123")
+
+    assert "youtube-secret-key-123" not in secure.redact(
+        "key=youtube-secret-key-123",
+    )

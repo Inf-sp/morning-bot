@@ -48,32 +48,6 @@ _WEEKLY_POPULAR_FALLBACKS = [
     {"title": "Atmosphere", "author": "Taylor Jenkins Reid", "published_date": "2025-06-03"},
 ]
 
-_DAILY_BOOK_QUOTES = (
-    {
-        "text": "Человек создан для счастья, как птица для полёта.",
-        "book": "Парадокс",
-        "author": "Владимир Короленко",
-        "note": "Небольшой рассказ о человеке, который не перестаёт спорить с жизнью.",
-    },
-    {
-        "text": "Рукописи не горят.",
-        "book": "Мастер и Маргарита",
-        "author": "Михаил Булгаков",
-        "note": "Роман, где сатира, мистика и история любви идут рядом.",
-    },
-    {
-        "text": "Все счастливые семьи похожи друг на друга.",
-        "book": "Анна Каренина",
-        "author": "Лев Толстой",
-        "note": "Большой роман о семье, выборе и цене личного счастья.",
-    },
-    {
-        "text": "Лицом к лицу лица не увидать. Большое видится на расстоянии.",
-        "book": "Письмо к женщине",
-        "author": "Сергей Есенин",
-        "note": "Стихотворение о времени, переменах и попытке понять прошлое.",
-    },
-)
 _BOOK_REBUSES = (
     {
         "emoji": "🧙‍♀️ ⚡ 🚂",
@@ -217,7 +191,6 @@ def _book_kb(i):
 
 def books_home_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Найти книгу с этой цитатой", callback_data="book_quote")],
         [InlineKeyboardButton("✨ Подобрать книгу", callback_data="book_reco")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
         [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
@@ -237,7 +210,6 @@ async def send_books_home(bot, cid, q=None):
         _log.warning("books home daily content failed cid=%s: %r", cid, error)
         now = datetime.now(config.TZ)
         daily_book = {
-            "quote": _daily_book_quote(now.date()),
             "rebus": _daily_book_rebus(now.date()),
             "mood": _book_mood_without_weather(now),
         }
@@ -248,10 +220,6 @@ async def send_books_home(bot, cid, q=None):
         chat_id=cid, text=msg.text, entities=msg.entities,
         reply_markup=books_home_keyboard(),
     )
-
-
-def _daily_book_quote(day):
-    return dict(_DAILY_BOOK_QUOTES[(day.timetuple().tm_yday - 216) % len(_DAILY_BOOK_QUOTES)])
 
 
 def _daily_book_rebus(day):
@@ -392,24 +360,10 @@ def _books_with_premiere_vibes(items):
 async def _daily_book_content(cid):
     now = datetime.now(config.TZ)
     return {
-        "quote": _daily_book_quote(now.date()),
         "rebus": _daily_book_rebus(now.date()),
         "birthday": await asyncio.to_thread(_load_book_birthday, now.date()),
         "mood": await asyncio.to_thread(_book_mood_for_today, cid, now),
     }
-
-
-async def send_daily_quote_book(bot, cid):
-    quote = _daily_book_quote(datetime.now(config.TZ).date())
-    msg = leisure_ui.book_quote_source_screen(quote)
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
-    await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=keyboard,
-    )
-
 
 def _book_week_key() -> str:
     current = datetime.now(config.TZ).date()

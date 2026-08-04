@@ -69,6 +69,7 @@ SPECS = (
     ProviderSpec("tavily", "Tavily", ("Поиск",), ("firecrawl",)),
     ProviderSpec("tmdb", "TMDB", ("Кино",), ()),
     ProviderSpec("google_books", "Google Books", ("Книги",), (), 86400),
+    ProviderSpec("youtube", "YouTube", ("Музыка",), (), 86400),
     ProviderSpec("languagetool", "LanguageTool", ("Обучение",), ("gemini",), 3600),
     ProviderSpec("spoonacular", "Spoonacular", ("Готовка",), ("themealdb",), 3600),
     ProviderSpec("themealdb", "TheMealDB", ("Готовка",), ()),
@@ -97,6 +98,7 @@ def is_configured(provider: str) -> bool:
         "firecrawl": config.FIRECRAWL_API_KEY,
         "tmdb": config.TMDB_API_KEY,
         "google_books": config.GOOGLE_BOOKS_API_KEY,
+        "youtube": config.YOUTUBE_API_KEY,
         "languagetool": config.LANGUAGETOOL_API_URL,
         "spoonacular": config.SPOONACULAR_API_KEY,
         "themealdb": config.THEMEALDB_API_KEY,
@@ -378,7 +380,7 @@ def _google_books_error(error="", status_code=None) -> tuple[str, str]:
 
 
 def _friendly_error(error="", status_code=None, provider="") -> tuple[str, str]:
-    if provider == "google_books":
+    if provider in ("google_books", "youtube"):
         return _google_books_error(error, status_code)
     raw = str(error or "").strip()
     low = raw.casefold().replace("_", " ")

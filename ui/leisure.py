@@ -67,32 +67,37 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
     b.newline()
 
     b.spacer()
-    b.text_line("Ребус дня: ")
+    b.bold("Ребус дня:")
+    b.text_line(" ")
     b.text_line(str(rebus.get("emoji") or "🎬 ❓"))
     b.text_line(" → ")
     b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
 
     if birthday.get("name"):
         b.spacer()
-        b.text_line("Именинник дня: ")
+        b.bold("Именинник дня:")
+        b.text_line(" ")
         b.bold(str(birthday["name"]))
         b.line(f" — {str(birthday.get('role') or 'кинематографист').strip()}.")
 
     mood = str(cinema_day.get("mood") or "").strip()
     if mood:
         b.spacer()
-        b.text_line("Фильм под настроение: ")
+        b.bold("Фильм под настроение:")
+        b.text_line(" ")
         b.line(mood)
 
     b.spacer()
-    b.text_line("Что в кино: ")
+    b.bold("Что в кино:")
+    b.text_line(" ")
     cinema = _movie_now_playing_line(now_playing)
     b.line(cinema or "Пока не удалось подтвердить актуальные показы.")
 
     fact = str(rebus.get("fact") or cinema_day.get("fact") or "").strip()
     if fact:
         b.spacer()
-        b.text_line("💡 Факт дня: ")
+        b.bold("💡 Факт дня:")
+        b.text_line(" ")
         b.line(fact)
     return b.build_stripped()
 
@@ -418,7 +423,6 @@ def weekly_books_screen(city, daily_book, items):
     """Ежедневная литературная витрина без рейтингов и служебных подписей."""
     city = str(city or "твоего города").strip()
     daily_book = daily_book or {}
-    quote = daily_book.get("quote") or {}
     rebus = daily_book.get("rebus") or {}
     birthday = daily_book.get("birthday") or {}
     b = MessageBuilder()
@@ -427,36 +431,37 @@ def weekly_books_screen(city, daily_book, items):
     b.newline()
 
     b.spacer()
-    b.text_line("Цитата со страницы: ")
-    b.italic(f"«{str(quote.get('text') or 'Хорошая история всегда находит читателя.').strip('«»')}»")
-
-    b.spacer()
-    b.text_line("Литературный ребус: ")
+    b.bold("Литературный ребус:")
+    b.text_line(" ")
     b.text_line(str(rebus.get("emoji") or "📚 ❓"))
     b.text_line(" → ")
     b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
 
     if birthday.get("name"):
         b.spacer()
-        b.text_line("Именинник дня: ")
+        b.bold("Именинник дня:")
+        b.text_line(" ")
         b.bold(str(birthday["name"]))
         b.line(f" — {str(birthday.get('detail') or 'писатель, родившийся сегодня').strip()}.")
 
     mood = str(daily_book.get("mood") or "").strip()
     if mood:
         b.spacer()
-        b.text_line("Книга под настроение: ")
+        b.bold("Книга под настроение:")
+        b.text_line(" ")
         b.line(mood)
 
     premieres = _book_premieres_line(items)
     b.spacer()
-    b.text_line("Главные премьеры: ")
+    b.bold("Главные премьеры:")
+    b.text_line(" ")
     b.line(premieres or "Пока не удалось подтвердить заметные новинки.")
 
     fact = str(birthday.get("fact") or rebus.get("fact") or daily_book.get("fact") or "").strip()
     if fact:
         b.spacer()
-        b.text_line("💡 Интересно: ")
+        b.bold("💡 Интересно:")
+        b.text_line(" ")
         b.line(fact)
     return b.build_stripped()
 
@@ -478,27 +483,6 @@ def _book_premieres_line(items) -> str:
     return ", ".join(entries)
 
 
-def book_quote_source_screen(quote):
-    """Результат кнопки «Найти книгу с этой цитатой» — без поиска и догадок."""
-    quote = quote or {}
-    b = MessageBuilder()
-    b.text_line("📚 ")
-    b.bold("Книга из цитаты")
-    b.newline()
-    b.spacer()
-    b.italic(f"«{str(quote.get('text') or '').strip('«»')}»")
-    b.spacer()
-    b.bold(str(quote.get("book") or ""))
-    author = str(quote.get("author") or "").strip()
-    if author:
-        b.line(f" · {author}")
-    note = str(quote.get("note") or "").strip()
-    if note:
-        b.spacer()
-        b.line(note)
-    return b.build_stripped()
-
-
 def music_week_screen(city, daily_music, concerts):
     """Короткая ежедневная витрина Музыки без чартов и таблиц."""
     city = str(city or "твоего города").strip()
@@ -513,21 +497,28 @@ def music_week_screen(city, daily_music, concerts):
 
     if vibe.get("track") and vibe.get("artist"):
         b.spacer()
-        b.text_line("Вайб дня: ")
-        b.bold(f"{vibe['track']} — {vibe['artist']}")
+        b.bold("Вайб дня:")
+        b.text_line(" ")
+        track_label = f"{vibe['track']} — {vibe['artist']}"
+        if vibe.get("url"):
+            b.link(track_label, str(vibe["url"]))
+        else:
+            b.bold(track_label)
         tag = str(vibe.get("tag") or "").strip()
         if tag:
             b.line(f" ({tag})")
 
     b.spacer()
-    b.text_line("Музыкальный ребус: ")
+    b.bold("Музыкальный ребус:")
+    b.text_line(" ")
     b.text_line(str(rebus.get("emoji") or "🎧 ❓"))
     b.text_line(" → ")
     b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
 
     if legend.get("name"):
         b.spacer()
-        b.text_line("Легенда дня: ")
+        b.bold("Легенда дня:")
+        b.text_line(" ")
         b.bold(str(legend["name"]))
         b.line(f" — {str(legend.get('detail') or 'музыкант, родившийся сегодня').strip()}.")
 
@@ -537,14 +528,17 @@ def music_week_screen(city, daily_music, concerts):
         artist = str(_item_value(event, "artist", "") or "").strip()
         date = str(_item_value(event, "date", "") or "").strip()
         place = str(_item_value(event, "place", "") or "").strip()
-        b.line("Концерты рядом: " + " · ".join(value for value in (artist, date, place) if value))
+        b.bold("Концерты рядом:")
+        b.line(" " + " · ".join(value for value in (artist, date, place) if value))
     else:
-        b.line("Концерты рядом: Пока нет подтверждённых ближайших выступлений.")
+        b.bold("Концерты рядом:")
+        b.line(" Пока нет подтверждённых ближайших выступлений.")
 
     fact = str(rebus.get("fact") or daily_music.get("fact") or "").strip()
     if fact:
         b.spacer()
-        b.text_line("💡 Факт дня: ")
+        b.bold("💡 Факт дня:")
+        b.text_line(" ")
         b.line(fact)
     return b.build_stripped()
 
