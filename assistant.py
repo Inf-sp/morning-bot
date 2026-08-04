@@ -46,6 +46,56 @@ _ACK_REPLIES = ("Хорошо.", "Понял.", "Принято.")
 _THANKS_REPLIES = ("Пожалуйста.", "Рад помочь.")
 _POSITIVE_REPLIES = ("Отлично.", "Супер.")
 
+_THINK_OPEN_RE = re.compile(r"<think(?:\s[^>]*)?>", re.IGNORECASE)
+_THINK_CLOSE_RE = re.compile(r"</think\s*>", re.IGNORECASE)
+
+
+def _visible_model_text(value, *, streaming=False):
+    """Удаляет служебные рассуждения модели до попадания в Telegram или историю."""
+    text = str(value or "")
+    pieces = []
+    position = 0
+    while True:
+        opening = _THINK_OPEN_RE.search(text, position)
+        if opening is None:
+            pieces.append(text[position:])
+            break
+        pieces.append(text[position:opening.start()])
+        closing = _THINK_CLOSE_RE.search(text, opening.end())
+        if closing is None:
+            # Незавершённый reasoning-блок нельзя показывать даже в live preview.
+            break
+        position = closing.end()
+    visible = "".join(pieces)
+    if streaming:
+        # Тег может прийти несколькими SSE-кусочками: «<th» + «ink>». Пока
+        # он не собран, не даём его началу попасть в предварительный просмотр.
+        last_open = visible.rfind("<")
+        if last_open >= 0:
+            tail = visible[last_open:].casefold()
+            if any(marker.startswith(tail) for marker in ("<think", "</think")):
+                visible = visible[:last_open]
+    return visible
+
+
+class _VisibleAssistantStream:
+    """Накопитель потока, который выпускает только новые безопасные символы."""
+
+    def __init__(self):
+        self._source = ""
+        self._visible = ""
+
+    def add(self, delta):
+        self._source += str(delta or "")
+        visible = _visible_model_text(self._source, streaming=True)
+        if not visible.startswith(self._visible):
+            # Не возвращаем в черновик исходный текст при неожиданной разметке:
+            # финальный ответ всё равно будет полностью очищен перед отправкой.
+            return ""
+        new_text = visible[len(self._visible):]
+        self._visible = visible
+        return new_text
+
 
 def classify_short_reply(text: str):
     """Короткая реплика-реакция (ок/спасибо/да/нет и т.п.) -> тип, иначе None.
@@ -398,13 +448,17 @@ async def chat_reply(bot, cid, text):
     draft = await rich_delivery.start_draft(bot, cid)
     status = None if draft is not None else await util.StatusManager.start(bot, cid)
     streamed_text = ""
+    visible_stream = _VisibleAssistantStream()
     last_draft_at = time.monotonic()
     last_draft_length = 0
 
     async def update_draft(delta):
         """Coalesce model tokens into a readable Telegram live preview."""
         nonlocal streamed_text, last_draft_at, last_draft_length
-        streamed_text += str(delta or "")
+        visible_delta = visible_stream.add(delta)
+        if not visible_delta:
+            return
+        streamed_text += visible_delta
         now = time.monotonic()
         if (
             last_draft_length > 0
@@ -443,6 +497,7 @@ async def chat_reply(bot, cid, text):
                 )
             return
         await verify.safe_error(bot, cid, e); return
+    answer = _visible_model_text(answer).strip()
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
     store.last_answer[str(cid)] = answer

@@ -183,6 +183,43 @@ def test_free_chat_streams_into_rich_draft_then_persists_final_answer(monkeypatc
     store.chat_history.pop(cid, None)
 
 
+def test_free_chat_never_exposes_model_reasoning_in_draft_or_final_message(monkeypatch):
+    monkeypatch.setattr(rich_delivery.config, "TELEGRAM_RICH_MESSAGES", True)
+    monkeypatch.setattr(assistant.research, "requires_explicit_web_search", lambda _text: False)
+    cid = "rich-stream-reasoning"
+    store.chat_history.pop(cid, None)
+    leaked_reasoning = "<think>Внутреннее рассуждение модели.</think>\n\nПривет, я на связи."
+
+    async def stream(_history, _cid, on_delta=None):
+        # SSE может разрезать служебный тег посередине.
+        for delta in ("<th", "ink>Внутреннее рассуждение модели.",
+                      "</think>\n\nПривет, я на связи."):
+            await on_delta(delta)
+        return leaked_reasoning
+
+    monkeypatch.setattr(assistant.ai, "achat_chain_stream", stream)
+    bot_instance = _RichBot()
+
+    asyncio.run(assistant.chat_reply(bot_instance, cid, "Скажи привет"))
+
+    visible_draft_text = "\n".join(
+        str(block.get("text") or "")
+        for call in bot_instance.drafts[1:]
+        for block in call["rich_message"]["blocks"]
+    )
+    final_text = "\n".join(
+        str(block.get("text") or "")
+        for call in bot_instance.rich
+        for block in call["rich_message"]["blocks"]
+    )
+    assert "<think>" not in visible_draft_text
+    assert "Внутреннее рассуждение" not in visible_draft_text
+    assert "<think>" not in final_text
+    assert "Внутреннее рассуждение" not in final_text
+    assert store.chat_history[cid][-1]["content"] == "Привет, я на связи."
+    store.chat_history.pop(cid, None)
+
+
 def test_free_chat_does_not_duplicate_after_uncertain_rich_final_delivery(monkeypatch):
     monkeypatch.setattr(rich_delivery.config, "TELEGRAM_RICH_MESSAGES", True)
     monkeypatch.setattr(assistant.research, "requires_explicit_web_search", lambda _text: False)
