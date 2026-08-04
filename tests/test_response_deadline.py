@@ -129,6 +129,14 @@ def test_free_chat_route_uses_the_standard_chain():
     assert ai.FREE_CHAT_TIER == "smart"
 
 
+def test_free_chat_prompt_has_no_fixed_short_answer_cap():
+    system = ai._chat_system()
+
+    assert "подбирай длину ответа под вопрос" in system.casefold()
+    assert "ответ в 1 предложение" not in system
+    assert "до 8 строк" not in system
+
+
 def test_free_chat_route_log_identifies_deployment_and_serving_provider(monkeypatch):
     records = []
     monkeypatch.setattr(ai._log, "info", lambda message, *args: records.append(message % args))

@@ -63,10 +63,9 @@ FIRECRAWL_API_KEY = os.environ.get("FIRECRAWL_API_KEY", "")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID") or CHAT_ID
-# Rich Messages are enabled by default on the current Telegram Bot API. Keeping a
-# flag makes it possible to immediately return to classic messages if Telegram
-# rolls out an incompatible client-side change.
-TELEGRAM_RICH_MESSAGES = _env_bool("TELEGRAM_RICH_MESSAGES", True)
+# Classic Telegram messages keep the same readable text size on every client.
+# Rich Messages remain an opt-in compatibility experiment.
+TELEGRAM_RICH_MESSAGES = _env_bool("TELEGRAM_RICH_MESSAGES", False)
 
 
 def _read_text_file(path, default=""):

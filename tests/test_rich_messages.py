@@ -10,6 +10,7 @@ from telegram.error import BadRequest
 
 import bot
 import assistant
+import config
 import rich_delivery
 import store
 from ui import admin as admin_ui
@@ -41,6 +42,11 @@ class _RichBot:
     async def send_rich_message_draft(self, **kwargs):
         self.drafts.append(kwargs)
         return True
+
+
+def test_rich_messages_are_disabled_by_default_for_standard_telegram_text():
+    """Обычные экраны не должны менять типографику в Telegram-клиенте."""
+    assert config.TELEGRAM_RICH_MESSAGES is False
 
 
 def _table_blocks(message):
