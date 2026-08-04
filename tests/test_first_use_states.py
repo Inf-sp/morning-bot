@@ -6,6 +6,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import dictionary_seed
+import dictionary_seed_ui
 import bot_callbacks
 import bot_text
 import cooking
@@ -122,9 +123,33 @@ def test_learning_preferences_return_to_active_dictionary():
     assert keyboard.inline_keyboard[0][0].callback_data == "set_learning_language_nl_dict"
     assert keyboard.inline_keyboard[1][0].callback_data == "set_learning_language_en_dict"
     assert keyboard.inline_keyboard[2][0].callback_data == "set_learning_language_none_dict"
-    assert keyboard.inline_keyboard[3][0].callback_data == "set_learning_level_simple_dict"
     assert all(len(row) == 1 for row in keyboard.inline_keyboard[:-1])
     assert keyboard.inline_keyboard[-1][0].callback_data == "a_dictlang_active"
+
+
+def test_learning_level_picker_has_two_levels_and_returns_to_language_selection():
+    keyboard = learning_settings.learning_level_kb("simple", back="a_dictlang_active")
+
+    assert [row[0].text for row in keyboard.inline_keyboard[:2]] == [
+        "✅ 🔽 Простой (A1 - A2)",
+        "🔼 Сложный (B1+)",
+    ]
+    assert [row[0].callback_data for row in keyboard.inline_keyboard[:2]] == [
+        "set_learning_level_simple_dict",
+        "set_learning_level_hard_dict",
+    ]
+    assert keyboard.inline_keyboard[-1][0].callback_data == "set_learning_dict"
+
+
+def test_onboarding_and_dictionary_seed_show_only_two_complexities():
+    assert _labels(onboard._lvl_kb("nl")) == [
+        ["🔽 Простой (A1 - A2)"],
+        ["🔼 Сложный (B1+)"],
+    ]
+    assert _labels(dictionary_seed_ui.level_keyboard("nl", "hard"))[:2] == [
+        ["🔽 Простой (A1 - A2)"],
+        ["✅ 🔼 Сложный (B1+)"],
+    ]
 
 
 def test_learning_preferences_can_disable_language_study():

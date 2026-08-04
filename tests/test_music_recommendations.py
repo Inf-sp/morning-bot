@@ -77,7 +77,7 @@ def test_music_home_shows_daily_vibe_and_nearest_concert_without_ai(monkeypatch)
                 "url": "https://music.youtube.com/search?q=Introvert+Little+Simz",
             },
             "rebus": {"emoji": "👑 🐝 🎤", "answer": "Beyoncé", "fact": "Факт."},
-            "legend": {"name": "Луи Армстронг", "detail": "трубач и певец"},
+            "legend": {"name": "Луи Армстронг", "birth": "1901-08-04", "detail": "трубач и певец"},
         }
 
     monkeypatch.setattr(leisure_music, "_weekly_concerts", concerts)
@@ -91,7 +91,7 @@ def test_music_home_shows_daily_vibe_and_nearest_concert_without_ai(monkeypatch)
     assert "🎧 Музыка этой недели · Алкмар" in sent[0]["text"]
     assert "Вайб дня: Introvert — Little Simz (Для собранного фокуса)" in sent[0]["text"]
     assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in sent[0]["text"]
-    assert "Именинник дня: Луи Армстронг — трубач и певец." in sent[0]["text"]
+    assert "Именинник дня: Луи Армстронг · 4 августа 1901 — трубач и певец." in sent[0]["text"]
     assert "Концерты рядом:\n• Romy - 21 августа · Алкмар" in sent[0]["text"]
     assert sent[0]["text"].index("Именинник дня:") < sent[0]["text"].index("💡 Интересно:")
     assert "Новые альбомы" not in sent[0]["text"]
@@ -221,7 +221,10 @@ def test_music_task_returns_a_usable_track(monkeypatch):
 
 def test_music_legend_does_not_retry_an_empty_daily_cache(monkeypatch):
     today = date(2026, 8, 5)
-    cache = {today.isoformat(): {"legend": {}}}
+    cache = {today.isoformat(): {
+        "version": leisure_music._MUSIC_LEGEND_CACHE_VERSION,
+        "legend": {},
+    }}
     monkeypatch.setattr(leisure_music.store, "_load", lambda _key: cache)
     monkeypatch.setattr(leisure_music.requests, "get", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError()))
 

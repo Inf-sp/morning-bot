@@ -20,6 +20,7 @@ from ui import leisure as leisure_ui
 
 _log = logging.getLogger(__name__)
 _MUSIC_DAILY_LOCK = threading.Lock()
+_MUSIC_LEGEND_CACHE_VERSION = 2
 
 
 def _music_home_only_kb():
@@ -69,6 +70,7 @@ _MUSIC_REBUSES = (
 _MUSIC_LEGEND_FALLBACKS = {
     (8, 4): {
         "name": "Луи Армстронг",
+        "birth": "1901-08-04",
         "detail": "трубач и певец, определивший язык сольного джаза",
     },
 }
@@ -312,6 +314,8 @@ def _daily_music_vibe(day, selected_styles):
 def _music_legend_cache_get(day):
     data = store._load(config.MUSIC_DAILY_CACHE_KEY)
     entry = data.get(day.isoformat()) if isinstance(data, dict) else None
+    if not isinstance(entry, dict) or entry.get("version") != _MUSIC_LEGEND_CACHE_VERSION:
+        return None
     legend = entry.get("legend") if isinstance(entry, dict) else None
     return dict(legend) if isinstance(legend, dict) else None
 
@@ -319,7 +323,11 @@ def _music_legend_cache_get(day):
 def _music_legend_cache_set(day, legend):
     def mutate(data):
         data = data if isinstance(data, dict) else {}
-        data[day.isoformat()] = {"ts": time.time(), "legend": dict(legend or {})}
+        data[day.isoformat()] = {
+            "version": _MUSIC_LEGEND_CACHE_VERSION,
+            "ts": time.time(),
+            "legend": dict(legend or {}),
+        }
         return data, None
 
     store.mutate_kv(config.MUSIC_DAILY_CACHE_KEY, mutate)
@@ -328,12 +336,12 @@ def _music_legend_cache_set(day, legend):
 def _music_legend_detail(role):
     value = str(role or "").casefold()
     if "певиц" in value or "singer" in value:
-        return "певица, родившаяся сегодня"
+        return "певица"
     if "певец" in value or "vocalist" in value:
-        return "певец, родившийся сегодня"
+        return "певец"
     if "композитор" in value or "composer" in value:
-        return "композитор, родившийся сегодня"
-    return "музыкант, родившийся сегодня"
+        return "композитор"
+    return "музыкант"
 
 
 def _load_music_legend(day):
@@ -350,7 +358,7 @@ def _load_music_legend(day):
             _music_legend_cache_set(day, fallback)
             return dict(fallback)
         query = """
-            SELECT ?personLabel ?occupationLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
+            SELECT ?personLabel ?birth ?occupationLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
               ?person wdt:P31 wd:Q5; wdt:P569 ?birth; wdt:P106 ?occupation.
               VALUES ?occupation { wd:Q639669 wd:Q177220 wd:Q36834 }
               FILTER(MONTH(?birth) = %d && DAY(?birth) = %d)
@@ -376,6 +384,9 @@ def _load_music_legend(day):
                         "name": name,
                         "detail": _music_legend_detail((item.get("occupationLabel") or {}).get("value")),
                     }
+                    birth = str((item.get("birth") or {}).get("value") or "").strip()
+                    if birth:
+                        legend["birth"] = birth
                     _music_legend_cache_set(day, legend)
                     return legend
         except Exception as error:

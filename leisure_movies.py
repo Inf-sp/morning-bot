@@ -26,7 +26,7 @@ from leisure_collection import content_recommend
 
 
 _CINEMA_BIRTHDAY_LOCK = threading.Lock()
-_CINEMA_BIRTHDAY_CACHE_VERSION = 2
+_CINEMA_BIRTHDAY_CACHE_VERSION = 3
 _CINEMA_REBUSES = (
     {
         "emoji": "🦈 🌊 👨‍🔬",
@@ -57,6 +57,7 @@ _CINEMA_REBUSES = (
 _BIRTHDAY_FALLBACKS = {
     (8, 4): {
         "name": "Грета Гервиг",
+        "birth": "1983-08-04",
         "role": "режиссёр и актриса",
         "fact": "«Леди Бёрд» принесла ей две номинации на «Оскар».",
     },
@@ -484,7 +485,7 @@ def _load_cinema_birthday(day):
         if cached is not None:
             return cached
         query = """
-            SELECT ?person ?personLabel ?occupationLabel ?notableWorkLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
+            SELECT ?person ?personLabel ?birth ?occupationLabel ?notableWorkLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
               ?person wdt:P31 wd:Q5; wdt:P569 ?birth; wdt:P106 ?occupation.
               VALUES ?occupation { wd:Q2526255 wd:Q33999 wd:Q10800557 }
               OPTIONAL { ?person wdt:P800 ?notableWork. }
@@ -511,6 +512,9 @@ def _load_cinema_birthday(day):
                 if name:
                     work = str((item.get("notableWorkLabel") or {}).get("value") or "").strip()
                     birthday = {"name": name, "role": role}
+                    birth = str((item.get("birth") or {}).get("value") or "").strip()
+                    if birth:
+                        birthday["birth"] = birth
                     if work:
                         birthday["fact"] = f"Одна из заметных работ — «{work}»."
         except Exception as error:

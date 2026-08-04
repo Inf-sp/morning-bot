@@ -32,9 +32,13 @@ send_dict = dictionary.send_dict
 send_dict_lang = dictionary.send_dict_lang
 
 def _seed_dataset(lang, kind):
-    if kind == "phrase":
-        return phrase_catalog(lang)
-    return word_catalog(lang)
+    dataset = phrase_catalog(lang) if kind == "phrase" else word_catalog(lang)
+    # B1 раньше был отдельным «Средним». Теперь он входит в «Сложный», чтобы
+    # пользователь не потерял полезный стартовый материал после упрощения шкалы.
+    return {
+        **dataset,
+        "hard": [*(dataset.get("medium") or []), *(dataset.get("hard") or [])],
+    }
 
 
 def _seed_language(cid, lang=None):
@@ -46,7 +50,7 @@ def _seed_language(cid, lang=None):
     language = "нидерландский" if code == "nl" else "английский"
     level = store.get_level(cid, language)
     if level not in _SEED_LEVELS:
-        level = "medium"
+        level = "simple"
     return code, language, level
 
 

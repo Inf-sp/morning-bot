@@ -13,9 +13,13 @@ _LANG_KB = InlineKeyboardMarkup([
 ])
 
 def _lvl_kb(code: str) -> InlineKeyboardMarkup:
-    levels = [("simple", "Простой"), ("medium", "Средний"), ("hard", "Сложный")]
+    levels = [
+        ("simple", "🔽 Простой (A1 - A2)"),
+        ("hard", "🔼 Сложный (B1+)"),
+    ]
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(label, callback_data=f"ob_lvl_{code}_{level}") for level, label in levels]
+        [InlineKeyboardButton(label, callback_data=f"ob_lvl_{code}_{level}")]
+        for level, label in levels
     ])
 
 

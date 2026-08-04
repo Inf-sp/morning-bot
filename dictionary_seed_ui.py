@@ -3,7 +3,10 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-LEVEL_LABELS = {"simple": "Простой", "medium": "Средний", "hard": "Сложный"}
+LEVEL_LABELS = {
+    "simple": "🔽 Простой (A1 - A2)",
+    "hard": "🔼 Сложный (B1+)",
+}
 SEED_LEVELS = tuple(LEVEL_LABELS)
 PAGE_SIZE = 5
 SOURCE_NOTE = (
@@ -20,7 +23,7 @@ def _item_line(item):
 
 
 def render_text(state):
-    level = state.get("level", "medium")
+    level = state.get("level", "simple")
     kind = state.get("kind", "word")
     items = state.get("items") or []
     selected = set(state.get("selected") or [])
@@ -66,7 +69,7 @@ def render_keyboard(state):
         navigation.append(InlineKeyboardButton("▶️", callback_data=f"a_dictseed_page_{page + 1}"))
     if navigation:
         rows.append(navigation)
-    label = LEVEL_LABELS.get(state.get("level"), "Средний")
+    label = LEVEL_LABELS.get(state.get("level"), LEVEL_LABELS["simple"])
     rows.append([InlineKeyboardButton(
         f"📶 Другой уровень ({label})", callback_data="a_dictseed_level")])
     add_label = f"🆕 Добавить отмеченные ({len(selected)})" if selected else "🆕 Добавить отмеченные"
@@ -75,11 +78,12 @@ def render_keyboard(state):
 
 
 def level_keyboard(code, current):
-    row = [InlineKeyboardButton(
-        f"{'✅ ' if level == current else ''}{LEVEL_LABELS[level]}",
-        callback_data=f"a_dictseedlvl_{code}_{level}") for level in SEED_LEVELS]
     return InlineKeyboardMarkup([
-        row,
+        [InlineKeyboardButton(
+            f"{'✅ ' if level == current else ''}{LEVEL_LABELS[level]}",
+            callback_data=f"a_dictseedlvl_{code}_{level}")]
+        for level in SEED_LEVELS
+    ] + [
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictseed_start_{code}"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

@@ -324,7 +324,6 @@ def game_card(ui, description, category=""):
         b.line(f"Категория: {category}")
         b.spacer()
     b.line(description)
-    b.section(ui["who"])
     b.line(ui.get("reply_next", "Напиши ответ следующим сообщением — можно на любом языке."))
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
@@ -360,7 +359,6 @@ def game_hint(ui, hint):
     b.spacer()
     b.bold(hint)
     b.spacer()
-    b.text_line(ui["who"])
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")],
         [
@@ -388,4 +386,15 @@ def learning_settings(active_language, active_level=""):
         b.text_line("Эти предпочтения влияют на карточку обучения, практику и уведомления.")
     else:
         b.text_line("Выбери язык, когда захочешь вернуться к практике.")
+    return b.build()
+
+
+def learning_level_settings(language):
+    b = MessageBuilder()
+    b.section("📌 Сложность обучения")
+    b.spacer()
+    b.bold(language)
+    b.newline()
+    b.spacer()
+    b.text_line("Выбери сложность практики и словаря.")
     return b.build()

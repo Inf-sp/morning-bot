@@ -1122,11 +1122,12 @@ async def send_plany(bot, cid, force=False, show_loading=True, status=None):
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     cache = None if force else _load_day_cache(cid, today)
     stale = cache is None
-    if stale and status is None:
-        try:
-            await bot.send_chat_action(chat_id=cid, action="typing")
-        except Exception:
-            pass
+    if stale:
+        if status is None:
+            try:
+                await bot.send_chat_action(chat_id=cid, action="typing")
+            except Exception:
+                pass
         try:
             text, entities = await asyncio.to_thread(
                 _build_day_text, cid, refresh_current=force,

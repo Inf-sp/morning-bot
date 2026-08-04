@@ -21,6 +21,7 @@ from ui import leisure as leisure_ui
 
 _log = logging.getLogger(__name__)
 _BOOK_DAILY_LOCK = threading.Lock()
+_BOOK_BIRTHDAY_CACHE_VERSION = 2
 
 
 _BOOK_GENRES = [
@@ -72,6 +73,7 @@ _BOOK_REBUSES = (
 _BOOK_BIRTHDAY_FALLBACKS = {
     (8, 4): {
         "name": "Кнут Гамсун",
+        "birth": "1859-08-04",
         "detail": "норвежский писатель и лауреат Нобелевской премии по литературе",
         "fact": "«Голод» стал литературным прорывом Гамсуна и одним из первых современных норвежских романов.",
     },
@@ -229,6 +231,8 @@ def _book_birthday_cache_get(day):
     entry = data.get(day.isoformat()) if isinstance(data, dict) else None
     if not isinstance(entry, dict):
         return None
+    if entry.get("version") != _BOOK_BIRTHDAY_CACHE_VERSION:
+        return None
     birthday = entry.get("birthday")
     return dict(birthday) if isinstance(birthday, dict) else {}
 
@@ -236,7 +240,11 @@ def _book_birthday_cache_get(day):
 def _book_birthday_cache_set(day, birthday):
     def mutate(data):
         data = data if isinstance(data, dict) else {}
-        data[day.isoformat()] = {"ts": time.time(), "birthday": dict(birthday or {})}
+        data[day.isoformat()] = {
+            "version": _BOOK_BIRTHDAY_CACHE_VERSION,
+            "ts": time.time(),
+            "birthday": dict(birthday or {}),
+        }
         return data, None
 
     store.mutate_kv(config.BOOK_DAILY_CACHE_KEY, mutate)
@@ -245,10 +253,10 @@ def _book_birthday_cache_set(day, birthday):
 def _book_birthday_detail(role):
     value = str(role or "").casefold()
     if "поэт" in value or "poet" in value:
-        return "поэт, родившийся сегодня"
+        return "поэт"
     if "писательниц" in value or "writer" in value or "author" in value:
-        return "писатель, родившийся сегодня"
-    return "автор, родившийся сегодня"
+        return "писатель"
+    return "автор"
 
 
 def _load_book_birthday(day):
@@ -265,7 +273,7 @@ def _load_book_birthday(day):
             _book_birthday_cache_set(day, fallback)
             return dict(fallback)
         query = """
-            SELECT ?personLabel ?occupationLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
+            SELECT ?personLabel ?birth ?occupationLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
               ?person wdt:P31 wd:Q5; wdt:P569 ?birth; wdt:P106 ?occupation.
               VALUES ?occupation { wd:Q49757 wd:Q36180 wd:Q482980 }
               FILTER(MONTH(?birth) = %d && DAY(?birth) = %d)
@@ -292,6 +300,9 @@ def _load_book_birthday(day):
                         "detail": _book_birthday_detail(
                             (item.get("occupationLabel") or {}).get("value")),
                     }
+                    birth = str((item.get("birth") or {}).get("value") or "").strip()
+                    if birth:
+                        birthday["birth"] = birth
                     _book_birthday_cache_set(day, birthday)
                     return birthday
         except Exception as error:

@@ -41,12 +41,35 @@ def _language_display(language):
 
 
 def _level_label(level):
-    return LEVEL_LABELS.get(level, "Средний")
+    return LEVEL_LABELS.get(level, LEVEL_LABELS["simple"])
+
+
+def _suffix(back):
+    if back == "a_dictlang_active":
+        return "_dict"
+    if back == "m_settings":
+        return "_settings"
+    return ""
+
+
+def _language_menu_callback(back):
+    if back == "a_dictlang_active":
+        return "set_learning_dict"
+    if back == "m_settings":
+        return "set_learning_global"
+    return "set_learning"
+
+
+def _reset_learning_caches(cid):
+    import learning
+    learning.reset_daily_material_cache(cid)
+    import myday
+    myday.reset_day_cache(cid)
+
+
 # ================= НАСТРОЙКИ ОБУЧЕНИЯ =================
 def learning_settings_kb(active_lang, active_level, back="set_home"):
-    dictionary_origin = back == "a_dictlang_active"
-    settings_origin = back == "m_settings"
-    suffix = "_dict" if dictionary_origin else ("_settings" if settings_origin else "")
+    suffix = _suffix(back)
     active_code = {
         "nl": "nl", "нидерландский": "nl",
         "en": "en", "английский": "en",
@@ -65,15 +88,23 @@ def learning_settings_kb(active_lang, active_level, back="set_home"):
             callback_data=f"set_learning_language_none{suffix}",
         )],
     ]
-    if active_code:
-        rows.extend([
-            [InlineKeyboardButton(
-                f"{'✅ ' if level == active_level else ''}{LEVEL_LABELS[level]}",
-                callback_data=f"set_learning_level_{level}{suffix}",
-            )]
-            for level in LEVELS
-        ])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    return InlineKeyboardMarkup(rows)
+
+
+def learning_level_kb(active_level, back="set_home"):
+    suffix = _suffix(back)
+    rows = [
+        [InlineKeyboardButton(
+            f"{'✅ ' if level == active_level else ''}{LEVEL_LABELS[level]}",
+            callback_data=f"set_learning_level_{level}{suffix}",
+        )]
+        for level in LEVELS
+    ]
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data=_language_menu_callback(back)),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ])
     return InlineKeyboardMarkup(rows)
 
 
@@ -94,8 +125,29 @@ async def send_learning_settings(bot, cid, q=None, back="set_home"):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
+async def send_learning_level_picker(bot, cid, code, q=None, back="set_home"):
+    if code not in ("nl", "en"):
+        await send_learning_settings(bot, cid, q=q, back=back)
+        return
+    language = _language_for_code(code)
+    level = store.get_level(cid, language)
+    msg = learning_ui.learning_level_settings(_language_display(language))
+    kb = learning_level_kb(level, back)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
 async def send_levels(bot, cid, q=None, back="set_home"):
-    await send_learning_settings(bot, cid, q=q, back=back)
+    code = _active_language_code(cid)
+    if code:
+        await send_learning_level_picker(bot, cid, code, q=q, back=back)
+    else:
+        await send_learning_settings(bot, cid, q=q, back=back)
 
 
 async def handle_learning_settings_callback(bot, cid, q, data):
@@ -118,9 +170,9 @@ async def handle_learning_settings_callback(bot, cid, q, data):
         old_code = _active_language_code(cid)
         new_code = "en" if old_code == "nl" else "nl"
         store.set_learning_language(cid, new_code)
-        store.ensure_level(cid, _language_for_code(old_code), "medium")
-        store.ensure_level(cid, _language_for_code(new_code), "medium")
-        await send_learning_settings(bot, cid, q=q, back=back)
+        store.ensure_level(cid, _language_for_code(new_code), "simple")
+        _reset_learning_caches(cid)
+        await send_learning_level_picker(bot, cid, new_code, q=q, back=back)
         return
     if data.startswith("set_learning_language_"):
         code = data[len("set_learning_language_"):]
@@ -133,12 +185,12 @@ async def handle_learning_settings_callback(bot, cid, q, data):
             return
         store.set_learning_language(cid, code)
         if code in ("nl", "en"):
-            store.ensure_level(cid, _language_for_code(code), "medium")
-        import learning
-        learning.reset_daily_material_cache(cid)
-        import myday
-        myday.reset_day_cache(cid)
-        await send_learning_settings(bot, cid, q=q, back=back)
+            store.ensure_level(cid, _language_for_code(code), "simple")
+        _reset_learning_caches(cid)
+        if code in ("nl", "en"):
+            await send_learning_level_picker(bot, cid, code, q=q, back=back)
+        else:
+            await send_learning_settings(bot, cid, q=q, back=back)
         return
     if data.startswith("set_learning_level_"):
         level = data[len("set_learning_level_"):]
@@ -153,6 +205,7 @@ async def handle_learning_settings_callback(bot, cid, q, data):
                 return
             old_level = store.get_level(cid, language)
             store.set_level(cid, language, level)
+            _reset_learning_caches(cid)
             await send_learning_settings(bot, cid, q=q, back=back)
             if old_level != level:
                 from dictionary_seed import offer_seed_for_level_change

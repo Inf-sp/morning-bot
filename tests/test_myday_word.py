@@ -1,3 +1,4 @@
+import asyncio
 import os
 from datetime import datetime
 
@@ -9,6 +10,27 @@ import config
 import leisure_concerts
 from myday import _day_wind_text
 from ui.myday import day_summary
+
+
+def test_myday_inline_open_builds_a_missing_daily_cache(monkeypatch):
+    class Status:
+        replaced = None
+
+        async def replace(self, text, **kwargs):
+            self.replaced = (text, kwargs)
+
+    monkeypatch.setattr(myday, "_load_day_cache", lambda *_args: None)
+    monkeypatch.setattr(myday, "_build_day_text", lambda *_args, **_kwargs: ("Сводка готова", []))
+    monkeypatch.setattr(
+        myday,
+        "_save_day_cache",
+        lambda *_args: {"text": "Сводка готова", "entities": []},
+    )
+    status = Status()
+
+    asyncio.run(myday.send_plany(object(), "42", status=status))
+
+    assert status.replaced[0] == "Сводка готова"
 
 
 def test_day_summary_keeps_only_compact_weather_block():

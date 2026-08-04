@@ -7,6 +7,17 @@ from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
 
 
+def _birthday_date_label(value):
+    match = re.search(r"(\d{4})-(\d{2})-(\d{2})", str(value or ""))
+    if not match:
+        return ""
+    try:
+        birthday = date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    except ValueError:
+        return ""
+    return _format_date_label(birthday, include_year=True)
+
+
 def clip(text, limit=450):
     text = (text or "").strip()
     if len(text) <= limit:
@@ -101,6 +112,9 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
         b.bold("Именинник дня:")
         b.text_line(" ")
         b.bold(str(birthday["name"]))
+        birth_date = _birthday_date_label(birthday.get("birth"))
+        if birth_date:
+            b.text_line(f" · {birth_date}")
         b.text_line(f" — {str(birthday.get('role') or 'кинематографист').strip()}.")
         birthday_fact = str(birthday.get("fact") or "").strip()
         if birthday_fact:
@@ -466,7 +480,10 @@ def weekly_books_screen(city, daily_book, items):
         b.bold("Именинник дня:")
         b.text_line(" ")
         b.bold(str(birthday["name"]))
-        b.line(f" — {str(birthday.get('detail') or 'писатель, родившийся сегодня').strip()}.")
+        birth_date = _birthday_date_label(birthday.get("birth"))
+        if birth_date:
+            b.text_line(f" · {birth_date}")
+        b.line(f" — {str(birthday.get('detail') or 'писатель').strip()}.")
 
     fact = str(birthday.get("fact") or rebus.get("fact") or daily_book.get("fact") or "").strip()
     if fact:
@@ -545,7 +562,10 @@ def music_week_screen(city, daily_music, concerts):
         b.bold("Именинник дня:")
         b.text_line(" ")
         b.bold(str(legend["name"]))
-        b.line(f" — {str(legend.get('detail') or 'музыкант, родившийся сегодня').strip()}.")
+        birth_date = _birthday_date_label(legend.get("birth"))
+        if birth_date:
+            b.text_line(f" · {birth_date}")
+        b.line(f" — {str(legend.get('detail') or 'музыкант').strip()}.")
 
     fact = str(rebus.get("fact") or daily_music.get("fact") or "").strip()
     if fact:

@@ -389,13 +389,13 @@ def test_category_week_screens_are_compact_and_show_only_content():
             "fact": "«Челюсти» считают первым современным летним блокбастером.",
         },
         "birthday": {
-            "name": "Грета Гервиг", "role": "режиссёр и актриса",
+            "name": "Грета Гервиг", "birth": "+1983-08-04T00:00:00Z", "role": "режиссёр и актриса",
             "fact": "«Леди Бёрд» принесла ей две номинации на «Оскар».",
         },
     })
     books = leisure_movies.leisure_ui.weekly_books_screen("Алкмар", {
         "rebus": {"emoji": "🧙‍♀️ ⚡ 🚂", "answer": "Гарри Поттер", "fact": "Факт."},
-        "birthday": {"name": "Кнут Гамсун", "detail": "норвежский писатель"},
+        "birthday": {"name": "Кнут Гамсун", "birth": "1859-08-04", "detail": "норвежский писатель"},
     }, [{
         "title": "Onyx Storm", "author": "Ребекка Яррос",
         "vibe": "драконы, политика и тёмный фэнтези-мир",
@@ -403,14 +403,14 @@ def test_category_week_screens_are_compact_and_show_only_content():
     music = leisure_movies.leisure_ui.music_week_screen("Алкмар", {
         "vibe": {"track": "Introvert", "artist": "Little Simz", "tag": "Для собранного фокуса"},
         "rebus": {"emoji": "👑 🐝 🎤", "answer": "Beyoncé", "fact": "Факт."},
-        "legend": {"name": "Луи Армстронг", "detail": "трубач и певец"},
+        "legend": {"name": "Луи Армстронг", "birth": "1901-08-04", "detail": "трубач и певец"},
     },
         [{"artist": "Romy", "date": "21 августа", "place": "Биддингхёйзен"}],
     )
 
     assert "🎬 Кино на сегодня · Алкмар" in movie.text
     assert "Ребус дня: 🦈 🌊 👨‍🔬 → Челюсти" in movie.text
-    assert "Именинник дня: Грета Гервиг — режиссёр и актриса. «Леди Бёрд» принесла ей две номинации на «Оскар»." in movie.text
+    assert "Именинник дня: Грета Гервиг · 4 августа 1983 — режиссёр и актриса. «Леди Бёрд» принесла ей две номинации на «Оскар»." in movie.text
     assert "Фильм под настроение:" not in movie.text
     assert "Что в кино:\n• «Фильм» - Драма, триллер" in movie.text
     movie_link = next(entity for entity in movie.entities if entity.type == MessageEntity.TEXT_LINK)
@@ -422,7 +422,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "📚 Литературный вайб · Алкмар" in books.text
     assert "Цитата со страницы:" not in books.text
     assert "Литературный ребус: 🧙‍♀️ ⚡ 🚂 → Гарри Поттер" in books.text
-    assert "Именинник дня: Кнут Гамсун — норвежский писатель." in books.text
+    assert "Именинник дня: Кнут Гамсун · 4 августа 1859 — норвежский писатель." in books.text
     assert "Книга под настроение:" not in books.text
     assert "Главные премьеры:\n• «Onyx Storm» - Ребекка Яррос (Драконы, политика и тёмный фэнтези-мир)" in books.text
     assert books.text.index("Главные премьеры:") < books.text.index("Именинник дня:") < books.text.index("💡 Интересно:")
@@ -430,7 +430,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "🎧 Музыка этой недели · Алкмар" in music.text
     assert "Вайб дня: Introvert — Little Simz" in music.text
     assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in music.text
-    assert "Именинник дня: Луи Армстронг — трубач и певец." in music.text
+    assert "Именинник дня: Луи Армстронг · 4 августа 1901 — трубач и певец." in music.text
     assert "Концерты рядом:\n• Romy - 21 августа · Биддингхёйзен" in music.text
     assert music.text.index("Именинник дня:") < music.text.index("💡 Интересно:")
     assert "Новые альбомы" not in music.text
@@ -566,14 +566,14 @@ def test_cinema_birthday_uses_one_shared_daily_cache(monkeypatch):
     cache = {
         today.isoformat(): {
             "version": leisure_movies._CINEMA_BIRTHDAY_CACHE_VERSION,
-            "birthday": {"name": "Грета Гервиг", "role": "режиссёр"},
+            "birthday": {"name": "Грета Гервиг", "birth": "1983-08-04", "role": "режиссёр"},
         },
     }
     monkeypatch.setattr(leisure_movies.store, "_load", lambda _key: cache)
     monkeypatch.setattr(leisure_movies.requests, "get", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError()))
 
     assert leisure_movies._load_cinema_birthday(today) == {
-        "name": "Грета Гервиг", "role": "режиссёр",
+        "name": "Грета Гервиг", "birth": "1983-08-04", "role": "режиссёр",
     }
 
 
@@ -591,7 +591,10 @@ def test_cinema_birthday_does_not_retry_an_empty_daily_cache(monkeypatch):
 
 def test_book_birthday_uses_the_shared_daily_cache_without_retry(monkeypatch):
     today = date(2026, 8, 5)
-    cache = {today.isoformat(): {"birthday": {}}}
+    cache = {today.isoformat(): {
+        "version": leisure_books._BOOK_BIRTHDAY_CACHE_VERSION,
+        "birthday": {},
+    }}
     monkeypatch.setattr(leisure_books.store, "_load", lambda _key: cache)
     monkeypatch.setattr(leisure_books.requests, "get", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError()))
 

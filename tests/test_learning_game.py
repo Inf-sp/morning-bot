@@ -196,6 +196,7 @@ def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypat
 
     assert "Угадай персонажа · Nederlands" in bot.messages[0]["text"]
     assert "Категория: животное" in bot.messages[0]["text"]
+    assert "Wie ben ik?" not in bot.messages[0]["text"]
     assert "Verdachte:" not in bot.messages[0]["text"]
     assert "• " not in bot.messages[0]["text"]
     labels = [button.text for row in bot.messages[0]["reply_markup"].inline_keyboard for button in row]
@@ -361,7 +362,7 @@ def test_detective_uses_local_round_when_ai_repeats_every_attempt(monkeypatch):
     asyncio.run(learning_game.send_game(bot, "42"))
 
     assert "Not able to" not in bot.messages[0]["text"]
-    assert "Who am I?" in bot.messages[0]["text"]
+    assert "Who am I?" not in bot.messages[0]["text"]
     assert remembered == [fallback]
 
 
