@@ -26,6 +26,7 @@ _MEMORY_CACHE_TTL = 60 * 60
 _CACHE_LIMIT = 120
 _CACHE_LOCK = threading.Lock()
 _VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,}$")
+_YOUTUBE_WATCH_RE = re.compile(r"^https://(?:www\.)?youtube\.com/watch\?v=([A-Za-z0-9_-]{6,})$")
 _UNWANTED_MARKERS = ("cover", "karaoke", "reaction", "tutorial", "sped up")
 
 
@@ -38,10 +39,21 @@ def _cache_key(track: str, artist: str) -> str:
     return f"{_norm(artist)} | {_norm(track)}"
 
 
+def _youtube_music_url(video_id: str) -> str:
+    return f"https://music.youtube.com/watch?v={video_id}"
+
+
+def _music_url_from_cached(value: str) -> str:
+    """Старые ссылки youtube.com переводим в Music без нового API-запроса."""
+    url = str(value or "")
+    match = _YOUTUBE_WATCH_RE.fullmatch(url)
+    return _youtube_music_url(match.group(1)) if match else url
+
+
 def _cache_get(key: str):
     cached = util.ttl_get("youtube_tracks", key, _MEMORY_CACHE_TTL)
     if cached is not None:
-        return str(cached)
+        return _music_url_from_cached(str(cached))
     try:
         data = store._load(config.YOUTUBE_TRACK_CACHE_KEY)
     except Exception:
@@ -55,7 +67,7 @@ def _cache_get(key: str):
         fresh = False
     if not fresh:
         return None
-    url = str(item.get("url") or "")
+    url = _music_url_from_cached(str(item.get("url") or ""))
     util.ttl_set("youtube_tracks", key, url)
     return url
 
@@ -126,7 +138,7 @@ def _best_video_url(items, track: str, artist: str) -> str:
     score, video_id = max(candidates)
     if score < 0.68:
         return ""
-    return f"https://www.youtube.com/watch?v={video_id}"
+    return _youtube_music_url(video_id)
 
 
 def _timeout() -> float:
@@ -142,7 +154,7 @@ def _timeout() -> float:
 
 
 def find_track_url(track: str, artist: str) -> str:
-    """Возвращает точную обычную ссылку YouTube или пустую строку при сомнении."""
+    """Возвращает точную ссылку YouTube Music или пустую строку при сомнении."""
     if not config.YOUTUBE_API_KEY:
         return ""
     key = _cache_key(track, artist)

@@ -91,3 +91,17 @@ def test_release_dates_accept_only_nl_theatrical_types(monkeypatch):
     })
 
     assert tmdb._regional_theatrical_release_date(10, "NL") == date.today()
+
+
+def test_trailer_url_prefers_the_official_youtube_trailer(monkeypatch):
+    monkeypatch.setattr(tmdb.config, "TMDB_API_KEY", "test")
+    monkeypatch.setattr(tmdb.util, "ttl_get", lambda *_args: None)
+    monkeypatch.setattr(tmdb.util, "ttl_set", lambda *_args: None)
+    monkeypatch.setattr(tmdb, "_get", lambda *_args, **_kwargs: {
+        "results": [
+            {"site": "YouTube", "key": "teaser123", "type": "Teaser", "official": True},
+            {"site": "YouTube", "key": "trailer456", "type": "Trailer", "official": True},
+        ],
+    })
+
+    assert tmdb.trailer_url(42) == "https://www.youtube.com/watch?v=trailer456"

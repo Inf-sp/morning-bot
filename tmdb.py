@@ -350,6 +350,36 @@ def detail(tmdb_id, kind):
     return base
 
 
+def trailer_url(tmdb_id, kind="movie"):
+    """Точный YouTube-трейлер фильма, подтверждённый карточкой TMDB."""
+    if not config.TMDB_API_KEY or not tmdb_id or kind not in ("movie", "tv"):
+        return ""
+    cache_key = f"trailer|{kind}|{tmdb_id}"
+    cached = util.ttl_get("tmdb_trailer", cache_key, 7 * 24 * 3600)
+    if cached is not None:
+        return str(cached or "")
+    data = _get(f"/{kind}/{tmdb_id}/videos", {}, timeout=10, language="en-US") or {}
+    candidates = []
+    for video in data.get("results") or []:
+        if str(video.get("site") or "").casefold() != "youtube":
+            continue
+        key = str(video.get("key") or "").strip()
+        if not key:
+            continue
+        video_type = str(video.get("type") or "").casefold()
+        if video_type not in ("trailer", "teaser"):
+            continue
+        score = (2 if video_type == "trailer" else 0) + (1 if video.get("official") else 0)
+        candidates.append((score, str(video.get("published_at") or ""), key))
+    if not candidates:
+        util.ttl_set("tmdb_trailer", cache_key, False)
+        return ""
+    _score, _published_at, key = max(candidates)
+    url = f"https://www.youtube.com/watch?v={key}"
+    util.ttl_set("tmdb_trailer", cache_key, url)
+    return url
+
+
 def discover(kind, genre_ids=None, min_rating=None, year_gte=None, region=None,
              keywords=None, sort_by="popularity.desc", page=1):
     """Подбор кандидатов по жанру/фильтрам/настроению."""

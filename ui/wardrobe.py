@@ -109,7 +109,7 @@ def render_wardrobe_message(look_data):
     b.section(outfit_header(primary_style))
 
     items = [_upper_first(_clean_text(_item_display(it))) for it in (look_data.get("items") or [])]
-    items = [it for it in items if it]
+    items = [it for it in items if it][:3]
     if items:
         b.spacer()
         for it in items:

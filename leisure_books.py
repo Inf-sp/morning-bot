@@ -16,7 +16,6 @@ import recommendation_stoplist
 import settings
 import store
 import tracking
-import weather
 from ui import leisure as leisure_ui
 
 
@@ -205,13 +204,12 @@ async def send_books_home(bot, cid, q=None):
         _log.warning("books home premieres failed cid=%s: %r", cid, error)
         items = [dict(item) for item in _WEEKLY_POPULAR_FALLBACKS]
     try:
-        daily_book = await _daily_book_content(cid)
+        daily_book = await _daily_book_content()
     except Exception as error:
         _log.warning("books home daily content failed cid=%s: %r", cid, error)
         now = datetime.now(config.TZ)
         daily_book = {
             "rebus": _daily_book_rebus(now.date()),
-            "mood": _book_mood_without_weather(now),
         }
     msg = leisure_ui.weekly_books_screen(
         _book_city(cid), daily_book, _books_with_premiere_vibes(items),
@@ -307,39 +305,6 @@ def _book_city(cid):
     return str(settings_data.get("city") or config.DEFAULT_CITY.get("name") or "").strip()
 
 
-def _book_mood_without_weather(now):
-    if now.weekday() == 4:
-        return "Пятница вечером? «Элеанор Олифант в полном порядке» — тёплая история для паузы после недели."
-    if now.weekday() >= 5:
-        return "Выходной? «Ветер в ивах» — книга, в которую можно уйти на пару спокойных часов."
-    return "Обычный вечер? «Девушка с татуировкой дракона» — плотный детектив, который держит внимание."
-
-
-def _book_mood_for_today(cid, now):
-    rainy = False
-    try:
-        settings_data = store.get_settings(cid)
-        data = weather.fetch_weather(settings_data["lat"], settings_data["lon"], 2)
-        daily = data.get("daily") or {}
-        if daily.get("time"):
-            daytime = weather.daytime_outfit_weather(
-                data,
-                daily["time"][0],
-                (daily.get("temperature_2m_max") or [None])[0],
-                (daily.get("windspeed_10m_max") or [0])[0] or 0,
-                (daily.get("precipitation_probability_max") or [0])[0] or 0,
-                (daily.get("precipitation_sum") or [None])[0],
-                (daily.get("weathercode") or [0])[0],
-            )
-            rainy = bool(daytime.get("rain_daytime"))
-    except Exception as error:
-        _log.info("book mood weather unavailable: %s", type(error).__name__)
-
-    if rainy:
-        return "Дождливый вечер? «Девушка с татуировкой дракона» — плотный детектив, от которого стынет кровь."
-    return _book_mood_without_weather(now)
-
-
 def _premiere_vibe(item):
     title = str((item or {}).get("title") or "").casefold().strip()
     known = _PREMIERE_VIBES.get(title)
@@ -357,12 +322,11 @@ def _books_with_premiere_vibes(items):
             for item in (items or []) if isinstance(item, dict)]
 
 
-async def _daily_book_content(cid):
+async def _daily_book_content():
     now = datetime.now(config.TZ)
     return {
         "rebus": _daily_book_rebus(now.date()),
         "birthday": await asyncio.to_thread(_load_book_birthday, now.date()),
-        "mood": await asyncio.to_thread(_book_mood_for_today, cid, now),
     }
 
 def _book_week_key() -> str:

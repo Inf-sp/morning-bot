@@ -165,6 +165,7 @@ def learning_menu(home: dict):
     b.bold("Прогресс:")
     b.newline()
     b.bullet(f"В изучении {progress.get('total', 0)} слов и фраз")
+    b.bullet(f"Повторить сегодня — {progress.get('due_count', 0)}")
     b.bullet(f"Без подсказок — {progress.get('no_hint_pct', 0)}%")
     b.spacer()
     focus = home.get("focus") or "добавить первые слова для практики."
@@ -188,8 +189,8 @@ def health_menu(focus: dict):
     b.spacer()
     b.bold("Что сделать:")
     b.newline()
-    for step in focus.get("steps", ()):
-        b.line(f"- {step}")
+    for step in list(focus.get("steps", ()))[:3]:
+        b.bullet(step)
     b.spacer()
     b.text_line("💡 ")
     b.labeled_line("Полезно", focus.get("tip", ""))
@@ -257,7 +258,7 @@ def food_menu(idea=None):
         b.line(", ".join(missing))
 
     steps = []
-    for raw_step in (idea.get("steps") or [])[:5]:
+    for raw_step in (idea.get("steps") or [])[:3]:
         step = raw_step if isinstance(raw_step, dict) else {"text": raw_step}
         text = _cooking_text(step.get("text"))
         minutes = step.get("minutes")

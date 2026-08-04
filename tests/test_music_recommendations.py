@@ -91,12 +91,57 @@ def test_music_home_shows_daily_vibe_and_nearest_concert_without_ai(monkeypatch)
     assert "🎧 Музыка этой недели · Алкмар" in sent[0]["text"]
     assert "Вайб дня: Introvert — Little Simz (Для собранного фокуса)" in sent[0]["text"]
     assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in sent[0]["text"]
-    assert "Легенда дня: Луи Армстронг — трубач и певец." in sent[0]["text"]
-    assert "Концерты рядом: Romy · 21 августа · Алкмар" in sent[0]["text"]
+    assert "Именинник дня: Луи Армстронг — трубач и певец." in sent[0]["text"]
+    assert "Концерты рядом:\n• Romy - 21 августа · Алкмар" in sent[0]["text"]
+    assert sent[0]["text"].index("Именинник дня:") < sent[0]["text"].index("💡 Интересно:")
     assert "Новые альбомы" not in sent[0]["text"]
     assert any(entity.type == MessageEntity.SPOILER for entity in sent[0]["entities"])
     link = next(entity for entity in sent[0]["entities"] if entity.type == MessageEntity.TEXT_LINK)
     assert link.url == "https://music.youtube.com/search?q=Introvert+Little+Simz"
+    assert sent[0]["disable_web_page_preview"] is True
+
+
+def test_music_home_shows_three_nearby_concerts_as_separate_items():
+    message = leisure_music.leisure_ui.music_week_screen("Алкмар", {}, [
+        {"artist": "Romy", "date": "21 августа", "place": "Алкмар"},
+        {"artist": "FKA twigs", "date": "3 сентября", "place": "Амстердам"},
+        {"artist": "The National", "date": "14 сентября", "place": "Утрехт"},
+    ])
+
+    assert "Концерты рядом:\n• Romy - 21 августа · Алкмар" in message.text
+    assert "• FKA twigs - 3 сентября · Амстердам" in message.text
+    assert "• The National - 14 сентября · Утрехт" in message.text
+
+
+def test_weekly_concert_loader_keeps_three_confirmed_events(monkeypatch):
+    import leisure_concerts
+
+    events = [
+        {"_artist": "Romy", "dates": {"start": {"localDate": "2026-08-21"}},
+         "_embedded": {"venues": [{"city": {"name": "Алкмар"}}]}},
+        {"_artist": "FKA twigs", "dates": {"start": {"localDate": "2026-09-03"}},
+         "_embedded": {"venues": [{"city": {"name": "Амстердам"}}]}},
+        {"_artist": "The National", "dates": {"start": {"localDate": "2026-09-14"}},
+         "_embedded": {"venues": [{"city": {"name": "Утрехт"}}]}},
+    ]
+    requested = {}
+    monkeypatch.setattr(leisure_music.config, "TICKETMASTER_API_KEY", "ticketmaster-key")
+    monkeypatch.setattr(leisure_music.store, "get_settings", lambda _cid: {"cc": "NL"})
+    monkeypatch.setattr(leisure_concerts, "_ensure_artists", lambda _cid: ["Romy", "FKA twigs", "The National"])
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_args: None)
+
+    async def fetch(artists, cc, **kwargs):
+        requested.update({"artists": artists, "cc": cc, **kwargs})
+        return events
+
+    monkeypatch.setattr(leisure_concerts, "_ticketmaster_events_many", fetch)
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_set", lambda *_args: None)
+
+    result = asyncio.run(leisure_music._weekly_concerts("42"))
+
+    assert requested["size"] == 3
+    assert requested["limit"] == 20
+    assert [item["artist"] for item in result] == ["Romy", "FKA twigs", "The National"]
 
 
 def test_daily_vibe_only_uses_selected_style_and_links_to_youtube_music():

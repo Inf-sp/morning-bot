@@ -6,6 +6,7 @@ import re
 import threading
 import time
 from datetime import datetime
+from urllib.parse import quote_plus
 
 import requests
 
@@ -20,12 +21,12 @@ import recommendation_stoplist
 import verify
 import tracking
 import local_cinema
-import weather
 from ui import leisure as leisure_ui
 from leisure_collection import content_recommend
 
 
 _CINEMA_BIRTHDAY_LOCK = threading.Lock()
+_CINEMA_BIRTHDAY_CACHE_VERSION = 2
 _CINEMA_REBUSES = (
     {
         "emoji": "🦈 🌊 👨‍🔬",
@@ -54,7 +55,11 @@ _CINEMA_REBUSES = (
     },
 )
 _BIRTHDAY_FALLBACKS = {
-    (8, 4): {"name": "Грета Гервиг", "role": "режиссёр и актриса"},
+    (8, 4): {
+        "name": "Грета Гервиг",
+        "role": "режиссёр и актриса",
+        "fact": "«Леди Бёрд» принесла ей две номинации на «Оскар».",
+    },
 }
 
 def _display_title(it, tm):
@@ -389,7 +394,33 @@ def _featured_now_playing(items):
             continue
         if rating >= 6.5 and votes >= 100:
             featured.append(item)
-    return featured
+    return sorted(
+        featured,
+        key=lambda item: (
+            float(item.get("popularity") or 0),
+            int(item.get("vote_count") or 0),
+            float(item.get("rating") or 0),
+        ),
+        reverse=True,
+    )
+
+
+def _youtube_trailer_search_url(item):
+    query = " ".join(str(value or "").strip() for value in (
+        item.get("title"), item.get("name_en"), item.get("year"), "official trailer",
+    ) if str(value or "").strip())
+    return f"https://www.youtube.com/results?search_query={quote_plus(query)}" if query else ""
+
+
+async def _with_trailer_urls(items):
+    """Добавляет ссылку на проверенный трейлер, не смешивая сеть с UI-рендером."""
+    enriched = []
+    for source in items or []:
+        item = dict(source or {})
+        trailer = await asyncio.to_thread(tmdb.trailer_url, item.get("id"), "movie")
+        item["trailer_url"] = trailer or _youtube_trailer_search_url(item)
+        enriched.append(item)
+    return enriched
 
 
 def _daily_rebus(day):
@@ -403,6 +434,8 @@ def _cinema_birthday_cache_get(day):
     entry = data.get(day.isoformat()) if isinstance(data, dict) else None
     if not isinstance(entry, dict):
         return None
+    if entry.get("version") != _CINEMA_BIRTHDAY_CACHE_VERSION:
+        return None
     birthday = entry.get("birthday")
     return dict(birthday) if isinstance(birthday, dict) else {}
 
@@ -410,7 +443,11 @@ def _cinema_birthday_cache_get(day):
 def _cinema_birthday_cache_set(day, birthday):
     def mutate(data):
         data = data if isinstance(data, dict) else {}
-        data[day.isoformat()] = {"ts": time.time(), "birthday": dict(birthday or {})}
+        data[day.isoformat()] = {
+            "version": _CINEMA_BIRTHDAY_CACHE_VERSION,
+            "ts": time.time(),
+            "birthday": dict(birthday or {}),
+        }
         return data, None
 
     store.mutate_kv(config.CINEMA_DAILY_CACHE_KEY, mutate)
@@ -442,9 +479,10 @@ def _load_cinema_birthday(day):
         if cached is not None:
             return cached
         query = """
-            SELECT ?person ?personLabel ?occupationLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
+            SELECT ?person ?personLabel ?occupationLabel ?notableWorkLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
               ?person wdt:P31 wd:Q5; wdt:P569 ?birth; wdt:P106 ?occupation.
               VALUES ?occupation { wd:Q2526255 wd:Q33999 wd:Q10800557 }
+              OPTIONAL { ?person wdt:P800 ?notableWork. }
               FILTER(MONTH(?birth) = %d && DAY(?birth) = %d)
               SERVICE wikibase:label { bd:serviceParam wikibase:language \"ru,en\". }
             }
@@ -466,7 +504,10 @@ def _load_cinema_birthday(day):
                 name = str((item.get("personLabel") or {}).get("value") or "").strip()
                 role = _cinema_birthday_role((item.get("occupationLabel") or {}).get("value"))
                 if name:
+                    work = str((item.get("notableWorkLabel") or {}).get("value") or "").strip()
                     birthday = {"name": name, "role": role}
+                    if work:
+                        birthday["fact"] = f"Одна из заметных работ — «{work}»."
         except Exception as error:
             _log.info("cinema birthday lookup unavailable: %s", type(error).__name__)
         birthday = birthday or _BIRTHDAY_FALLBACKS.get((day.month, day.day)) or {}
@@ -474,61 +515,40 @@ def _load_cinema_birthday(day):
         return dict(birthday)
 
 
-def _movie_mood_for_today(cid, now):
-    """Подбирает один готовый фильм по свежей погоде из общего погодного кэша и дню недели."""
-    rainy = False
-    try:
-        settings_data = store.get_settings(cid)
-        data = weather.fetch_weather(settings_data["lat"], settings_data["lon"], 2)
-        daily = data.get("daily") or {}
-        if daily.get("time"):
-            daytime = weather.daytime_outfit_weather(
-                data,
-                daily["time"][0],
-                (daily.get("temperature_2m_max") or [None])[0],
-                (daily.get("windspeed_10m_max") or [0])[0] or 0,
-                (daily.get("precipitation_probability_max") or [0])[0] or 0,
-                (daily.get("precipitation_sum") or [None])[0],
-                (daily.get("weathercode") or [0])[0],
-            )
-            rainy = bool(daytime.get("rain_daytime"))
-    except Exception as error:
-        _log.info("cinema mood weather unavailable: %s", type(error).__name__)
-
-    if rainy:
-        return "Дождь за окном? «Глубокий сон» — тихий нуар для серого вечера."
-    if now.weekday() == 4:
-        return "Пятница вечером? «Достать ножи» — лёгкий хаос, который хорошо смотреть компанией."
-    if now.weekday() >= 5:
-        return "Выходной? «Идеальные дни» — спокойное кино, которое не торопит."
-    return "Обычный вечер? «Перед рассветом» — лёгкое кино для паузы после дня."
-
-
-async def _daily_cinema_content(cid):
+async def _daily_cinema_content():
     now = datetime.now(config.TZ)
     return {
         "rebus": _daily_rebus(now.date()),
         "birthday": await asyncio.to_thread(_load_cinema_birthday, now.date()),
-        "mood": await asyncio.to_thread(_movie_mood_for_today, cid, now),
     }
 
 
 async def send_movie_now_playing(bot, cid, q=None, status=None):
     city = _movie_city(cid)
-    now_playing = _featured_now_playing(await get_local_now_playing(cid, limit=20))[:5]
-    cinema_day = await _daily_cinema_content(cid)
+    featured = _featured_now_playing(await get_local_now_playing(cid, limit=20))[:3]
+    now_playing = await _with_trailer_urls(featured)
+    cinema_day = await _daily_cinema_content()
     msg = leisure_ui.movie_now_playing_screen(city, now_playing, cinema_day)
     kb = _movie_home_kb()
     if status is not None:
-        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+        await status.replace(
+            msg.text, entities=msg.entities, reply_markup=kb,
+            disable_web_page_preview=True,
+        )
         return
     if q is not None:
         try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            await q.message.edit_text(
+                msg.text, entities=msg.entities, reply_markup=kb,
+                disable_web_page_preview=True,
+            )
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
+        disable_web_page_preview=True,
+    )
 
 
 async def warm_movie_home_cache(cid):

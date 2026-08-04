@@ -80,7 +80,7 @@ def test_track_lookup_uses_youtube_api_and_caches_exact_video(monkeypatch):
     first = youtube_tracks.find_track_url("Introvert", "Little Simz")
     second = youtube_tracks.find_track_url("Introvert", "Little Simz")
 
-    assert first == "https://www.youtube.com/watch?v=rightvideo34"
+    assert first == "https://music.youtube.com/watch?v=rightvideo34"
     assert second == first
     assert len(calls) == 1
     assert calls[0]["url"] == "https://www.googleapis.com/youtube/v3/search"
@@ -95,16 +95,33 @@ def test_track_lookup_uses_youtube_api_and_caches_exact_video(monkeypatch):
     assert usage[0][0:2] == ("youtube", True)
 
 
+def test_old_youtube_cache_link_opens_in_youtube_music_without_a_request(monkeypatch):
+    _memory_cache(monkeypatch)
+    monkeypatch.setattr(youtube_tracks.config, "YOUTUBE_API_KEY", "youtube-secret")
+    key = youtube_tracks._cache_key("Introvert", "Little Simz")
+    youtube_tracks.util.ttl_set(
+        "youtube_tracks", key, "https://www.youtube.com/watch?v=oldvideo123",
+    )
+    monkeypatch.setattr(
+        youtube_tracks.requests, "get",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("network called")),
+    )
+
+    assert youtube_tracks.find_track_url("Introvert", "Little Simz") == (
+        "https://music.youtube.com/watch?v=oldvideo123"
+    )
+
+
 def test_daily_vibe_prefers_found_youtube_video(monkeypatch):
     monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["hiphop"])
     monkeypatch.setattr(
         leisure_music.youtube_tracks, "find_track_url",
         lambda track, artist: (
-            "https://www.youtube.com/watch?v=verified123" if (track, artist) == ("Introvert", "Little Simz") else ""
+            "https://music.youtube.com/watch?v=verified123" if (track, artist) == ("Introvert", "Little Simz") else ""
         ),
     )
     monkeypatch.setattr(leisure_music, "_load_music_legend", lambda _day: {})
 
     result = asyncio.run(leisure_music._daily_music_content("42"))
 
-    assert result["vibe"]["url"] == "https://www.youtube.com/watch?v=verified123"
+    assert result["vibe"]["url"] == "https://music.youtube.com/watch?v=verified123"

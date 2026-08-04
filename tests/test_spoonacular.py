@@ -139,6 +139,17 @@ def test_cooking_idea_card_has_no_extra_drink_block():
     assert "Напиток" not in message.text
 
 
+def test_cooking_home_shows_three_preparation_steps():
+    message = food_menu({
+        "name": "Паста с овощами",
+        "ingredients": ["паста", "овощи"],
+        "steps": ["Отвари пасту", "Нарежь овощи", "Смешай", "Добавь зелень"],
+    })
+
+    assert message.text.count("• ") == 3
+    assert "Добавь зелень" not in message.text
+
+
 def test_recipe_card_hides_time_and_image():
     message = food_card({
         "name": "Паста с овощами",
@@ -200,6 +211,16 @@ def test_home_idea_can_be_built_from_spoonacular_without_ai():
     })
 
     assert idea == {}
+
+
+def test_home_steps_merge_a_long_recipe_into_three_points():
+    steps = recipe_generation._home_steps([
+        "Нарежь овощи.", "Разогрей сковороду.", "Обжарь овощи.",
+        "Добавь пасту.", "Перемешай и подавай.",
+    ])
+
+    assert len(steps) == 3
+    assert all(step["text"] for step in steps)
 
 
 def test_batch_returns_plain_template_when_sources_and_llms_are_down(monkeypatch):

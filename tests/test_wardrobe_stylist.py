@@ -66,6 +66,17 @@ def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
     assert "Надень" not in message.text
 
 
+def test_outfit_card_shows_no_more_than_three_items():
+    message = render_wardrobe_message({
+        "items": [
+            {"name": "Футболка"}, {"name": "Брюки"}, {"name": "Кеды"}, {"name": "Часы"},
+        ],
+    })
+
+    assert message.text.count("\n• ") == 3
+    assert "Часы" not in message.text
+
+
 def test_outfit_header_uses_emoji_of_selected_style():
     assert outfit_header("Минимализм") == "👕 Образ на сегодня · Минимализм"
     assert outfit_header("Городской") == "🧢 Образ на сегодня · Городской"

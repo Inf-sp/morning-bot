@@ -90,6 +90,9 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         ["🎚️ Мой словарь"],
         ["#️⃣ Главная"],
     ]
+    assert "• В изучении 0 слов и фраз" in message.text
+    assert "• Повторить сегодня — 0" in message.text
+    assert "• Без подсказок — 0%" in message.text
 
 
 def test_dictionary_contains_learning_preferences(monkeypatch):
@@ -190,13 +193,14 @@ def test_empty_fridge_check_reads_the_actual_fridge_store(monkeypatch):
 def test_health_home_opens_without_first_use_data(monkeypatch):
     monkeypatch.setattr(balance, "health_focus", lambda _cid: {
         "phrase": "Сделай короткую паузу.",
-        "steps": ["Выпей воды."],
+        "steps": ["Выпей воды.", "Сделай три спокойных выдоха.", "Вернись к одному делу."],
         "tip": "Не планируй всё сразу.",
     })
 
     text, _entities, markup = menu.menu_screen("m_balance", "42")
 
     assert text.startswith("⚡️ Фокус на сегодня · Здоровье\n\nСделай короткую паузу.")
+    assert text.count("• ") == 3
     assert _labels(markup) == [
         ["👩🏻‍⚕️ Спросить врача"],
         ["😮‍💨 Разобрать мысли"],

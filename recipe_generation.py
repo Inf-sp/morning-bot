@@ -527,7 +527,9 @@ def _home_steps(value) -> list[dict]:
         if not text or _HOME_FORMAL_IMPERATIVE_RE.search(text) or not (minutes or has_time):
             continue
         result.append({"text": text, "minutes": minutes})
-    while len(result) > 5:
+    # Главная карточка всегда показывает три шага. Соседние короткие действия
+    # объединяем, чтобы не терять инструкцию из полного рецепта.
+    while len(result) > 3:
         pair_index = min(
             range(len(result) - 1),
             key=lambda index: len((result[index]["text"] + " " + result[index + 1]["text"]).split()),
@@ -537,7 +539,7 @@ def _home_steps(value) -> list[dict]:
             "text": f"{first['text'].rstrip('.!?…')}. {second['text']}",
             "minutes": (first.get("minutes") or 0) + (second.get("minutes") or 0) or None,
         }]
-    return result if 3 <= len(result) <= 5 else []
+    return result if len(result) == 3 else []
 
 
 _EUROPEAN_CUISINE_ALIASES = {
@@ -730,7 +732,7 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
         "• ingredients — полный список всего, что используется в блюде, включая масло, соль и перец, если они нужны. "
         "Для продуктов из холодильника сохраняй точное написание из входного списка. Количество пиши компактно после "
         "названия продукта: «креветки 250 г», «лук 1 шт.».\n"
-        "• steps — от 3 до 5 коротких шагов. "
+        "• steps — ровно 3 коротких шага. "
         "Объединяй логически связанные действия. Каждый шаг начинается с глагола на «ты», содержит не больше "
         "1–2 коротких предложений и не повторяет ингредиенты без необходимости. В text не пиши время шага; "
         "minutes оставь только отдельным техническим полем, сумма равна общему minutes.\n"

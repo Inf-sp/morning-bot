@@ -447,7 +447,7 @@ async def send_music_home(bot, cid, q=None):
     msg = leisure_ui.music_week_screen(_music_city(cid), daily_music, concerts or [])
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,
-        reply_markup=music_home_keyboard(),
+        reply_markup=music_home_keyboard(), disable_web_page_preview=True,
     )
 
 

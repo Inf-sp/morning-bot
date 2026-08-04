@@ -382,18 +382,20 @@ def test_book_card_has_complete_description_and_reader_rating():
 def test_category_week_screens_are_compact_and_show_only_content():
     movie = leisure_movies.leisure_ui.movie_now_playing_screen("Алкмар", [{
         "title": "Фильм", "genres": ["drama", "thriller"],
+        "trailer_url": "https://www.youtube.com/watch?v=trailer123",
     }], {
         "rebus": {
             "emoji": "🦈 🌊 👨‍🔬", "answer": "Челюсти",
             "fact": "«Челюсти» считают первым современным летним блокбастером.",
         },
-        "birthday": {"name": "Грета Гервиг", "role": "режиссёр и актриса"},
-        "mood": "Дождь за окном? «Глубокий сон» — тихий нуар для серого вечера.",
+        "birthday": {
+            "name": "Грета Гервиг", "role": "режиссёр и актриса",
+            "fact": "«Леди Бёрд» принесла ей две номинации на «Оскар».",
+        },
     })
     books = leisure_movies.leisure_ui.weekly_books_screen("Алкмар", {
         "rebus": {"emoji": "🧙‍♀️ ⚡ 🚂", "answer": "Гарри Поттер", "fact": "Факт."},
         "birthday": {"name": "Кнут Гамсун", "detail": "норвежский писатель"},
-        "mood": "Дождливый вечер? Плотный детектив для серого вечера.",
     }, [{
         "title": "Onyx Storm", "author": "Ребекка Яррос",
         "vibe": "драконы, политика и тёмный фэнтези-мир",
@@ -408,24 +410,29 @@ def test_category_week_screens_are_compact_and_show_only_content():
 
     assert "🎬 Кино на сегодня · Алкмар" in movie.text
     assert "Ребус дня: 🦈 🌊 👨‍🔬 → Челюсти" in movie.text
-    assert "Именинник дня: Грета Гервиг — режиссёр и актриса." in movie.text
-    assert "Фильм под настроение: Дождь за окном?" in movie.text
-    assert "Что в кино: Фильм (драма, триллер)" in movie.text
-    assert "💡 Факт дня: «Челюсти» считают первым современным летним блокбастером." in movie.text
+    assert "Именинник дня: Грета Гервиг — режиссёр и актриса. «Леди Бёрд» принесла ей две номинации на «Оскар»." in movie.text
+    assert "Фильм под настроение:" not in movie.text
+    assert "Что в кино:\n• «Фильм» - Драма, триллер" in movie.text
+    movie_link = next(entity for entity in movie.entities if entity.type == MessageEntity.TEXT_LINK)
+    assert movie_link.url == "https://www.youtube.com/watch?v=trailer123"
+    assert "💡 Интересно: «Челюсти» считают первым современным летним блокбастером." in movie.text
+    assert movie.text.index("Что в кино:") < movie.text.index("Именинник дня:") < movie.text.index("💡 Интересно:")
     assert movie.rich_message is None
     assert any(entity.type == MessageEntity.SPOILER for entity in movie.entities)
     assert "📚 Литературный вайб · Алкмар" in books.text
     assert "Цитата со страницы:" not in books.text
     assert "Литературный ребус: 🧙‍♀️ ⚡ 🚂 → Гарри Поттер" in books.text
     assert "Именинник дня: Кнут Гамсун — норвежский писатель." in books.text
-    assert "Книга под настроение: Дождливый вечер?" in books.text
-    assert "Главные премьеры: «Onyx Storm» · Ребекка Яррос (драконы, политика и тёмный фэнтези-мир)" in books.text
+    assert "Книга под настроение:" not in books.text
+    assert "Главные премьеры:\n• «Onyx Storm» - Ребекка Яррос (Драконы, политика и тёмный фэнтези-мир)" in books.text
+    assert books.text.index("Главные премьеры:") < books.text.index("Именинник дня:") < books.text.index("💡 Интересно:")
     assert any(entity.type == MessageEntity.SPOILER for entity in books.entities)
     assert "🎧 Музыка этой недели · Алкмар" in music.text
     assert "Вайб дня: Introvert — Little Simz" in music.text
     assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in music.text
-    assert "Легенда дня: Луи Армстронг — трубач и певец." in music.text
-    assert "Концерты рядом: Romy · 21 августа · Биддингхёйзен" in music.text
+    assert "Именинник дня: Луи Армстронг — трубач и певец." in music.text
+    assert "Концерты рядом:\n• Romy - 21 августа · Биддингхёйзен" in music.text
+    assert music.text.index("Именинник дня:") < music.text.index("💡 Интересно:")
     assert "Новые альбомы" not in music.text
     assert any(entity.type == MessageEntity.SPOILER for entity in music.entities)
 
@@ -435,11 +442,11 @@ def test_daily_category_block_titles_are_bold():
         "title": "Фильм", "genres": ["drama"],
     }], {
         "rebus": {"emoji": "🦈", "answer": "Челюсти", "fact": "Факт."},
-        "birthday": {"name": "Имя", "role": "актёр"}, "mood": "Настроение.",
+        "birthday": {"name": "Имя", "role": "актёр", "fact": "Интересный факт."},
     })
     books = leisure_movies.leisure_ui.weekly_books_screen("Алкмар", {
         "rebus": {"emoji": "📚", "answer": "Ответ", "fact": "Факт."},
-        "birthday": {"name": "Имя", "detail": "писатель"}, "mood": "Настроение.",
+        "birthday": {"name": "Имя", "detail": "писатель"},
     }, [{"title": "Премьера", "author": "Автор", "vibe": "жанр"}])
     music = leisure_movies.leisure_ui.music_week_screen("Алкмар", {
         "vibe": {"track": "Трек", "artist": "Артист", "tag": "тег"},
@@ -447,12 +454,12 @@ def test_daily_category_block_titles_are_bold():
         "legend": {"name": "Имя", "detail": "музыкант"},
     }, [{"artist": "Артист", "date": "Сегодня", "place": "Алкмар"}])
 
-    assert {"Ребус дня:", "Именинник дня:", "Фильм под настроение:",
-            "Что в кино:", "💡 Факт дня:"}.issubset(_bold_values(movie))
+    assert {"Ребус дня:", "Именинник дня:",
+            "Что в кино:", "💡 Интересно:"}.issubset(_bold_values(movie))
     assert {"Литературный ребус:", "Именинник дня:",
-            "Книга под настроение:", "Главные премьеры:", "💡 Интересно:"}.issubset(_bold_values(books))
-    assert {"Вайб дня:", "Музыкальный ребус:", "Легенда дня:",
-            "Концерты рядом:", "💡 Факт дня:"}.issubset(_bold_values(music))
+            "Главные премьеры:", "💡 Интересно:"}.issubset(_bold_values(books))
+    assert {"Вайб дня:", "Музыкальный ребус:", "Именинник дня:",
+            "Концерты рядом:", "💡 Интересно:"}.issubset(_bold_values(music))
 
 
 def test_book_quote_uses_the_my_day_italic_format():
@@ -493,11 +500,58 @@ def test_local_cinema_catalogue_is_reused_for_a_week(monkeypatch):
 
 def test_movie_home_keeps_only_well_known_current_releases():
     featured = leisure_movies._featured_now_playing([
-        {"title": "Хит", "rating": 7.3, "vote_count": 950},
+        {"title": "Менее популярный", "rating": 7.3, "vote_count": 950, "popularity": 20},
+        {"title": "Хит", "rating": 7.3, "vote_count": 950, "popularity": 80},
         {"title": "Мало голосов", "rating": 9.0, "vote_count": 5},
         {"title": "Слабая оценка", "rating": 6.2, "vote_count": 900},
     ])
-    assert [item["title"] for item in featured] == ["Хит"]
+    assert [item["title"] for item in featured] == ["Хит", "Менее популярный"]
+
+
+def test_movie_home_shows_three_popular_local_premieres_with_trailer_links(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def local_movies(_cid, *, limit):
+        assert limit == 20
+        return [
+            {"id": 1, "title": "Первый", "genres": ["drama"], "rating": 7.0,
+             "vote_count": 100, "popularity": 90},
+            {"id": 2, "title": "Второй", "genres": ["comedy"], "rating": 7.0,
+             "vote_count": 100, "popularity": 80},
+            {"id": 3, "title": "Третий", "genres": ["thriller"], "rating": 7.0,
+             "vote_count": 100, "popularity": 70},
+            {"id": 4, "title": "Четвёртый", "genres": ["action"], "rating": 7.0,
+             "vote_count": 100, "popularity": 60},
+        ]
+
+    async def cinema_day():
+        return {"rebus": {"emoji": "🎬", "answer": "Ответ"}}
+
+    monkeypatch.setattr(leisure_movies, "get_local_now_playing", local_movies)
+    monkeypatch.setattr(leisure_movies, "_daily_cinema_content", cinema_day)
+    monkeypatch.setattr(leisure_movies, "_movie_city", lambda _cid: "Алкмар")
+    monkeypatch.setattr(
+        leisure_movies.tmdb, "trailer_url",
+        lambda movie_id, _kind: f"https://www.youtube.com/watch?v=trailer{movie_id}",
+    )
+
+    asyncio.run(leisure_movies.send_movie_now_playing(Bot(), "42"))
+
+    assert "• «Первый» - Драма" in sent[0]["text"]
+    assert "• «Второй» - Комедия" in sent[0]["text"]
+    assert "• «Третий» - Триллер" in sent[0]["text"]
+    assert "Четвёртый" not in sent[0]["text"]
+    links = [entity.url for entity in sent[0]["entities"] if entity.type == MessageEntity.TEXT_LINK]
+    assert links == [
+        "https://www.youtube.com/watch?v=trailer1",
+        "https://www.youtube.com/watch?v=trailer2",
+        "https://www.youtube.com/watch?v=trailer3",
+    ]
+    assert sent[0]["disable_web_page_preview"] is True
 
 
 def test_cinema_rebus_changes_with_calendar_day():
@@ -510,7 +564,10 @@ def test_cinema_rebus_changes_with_calendar_day():
 def test_cinema_birthday_uses_one_shared_daily_cache(monkeypatch):
     today = date(2026, 8, 4)
     cache = {
-        today.isoformat(): {"birthday": {"name": "Грета Гервиг", "role": "режиссёр"}},
+        today.isoformat(): {
+            "version": leisure_movies._CINEMA_BIRTHDAY_CACHE_VERSION,
+            "birthday": {"name": "Грета Гервиг", "role": "режиссёр"},
+        },
     }
     monkeypatch.setattr(leisure_movies.store, "_load", lambda _key: cache)
     monkeypatch.setattr(leisure_movies.requests, "get", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError()))
@@ -522,7 +579,10 @@ def test_cinema_birthday_uses_one_shared_daily_cache(monkeypatch):
 
 def test_cinema_birthday_does_not_retry_an_empty_daily_cache(monkeypatch):
     today = date(2026, 8, 5)
-    cache = {today.isoformat(): {"birthday": {}}}
+    cache = {today.isoformat(): {
+        "version": leisure_movies._CINEMA_BIRTHDAY_CACHE_VERSION,
+        "birthday": {},
+    }}
     monkeypatch.setattr(leisure_movies.store, "_load", lambda _key: cache)
     monkeypatch.setattr(leisure_movies.requests, "get", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError()))
 
@@ -637,5 +697,5 @@ def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
         "title": "Недавний бестселлер", "author": "Автор", "vibe": "триллер",
     }])
 
-    assert "Главные премьеры: «Недавний бестселлер» · Автор (триллер)" in message.text
+    assert "Главные премьеры:\n• «Недавний бестселлер» - Автор (Триллер)" in message.text
     assert "Популярное чтение" not in message.text

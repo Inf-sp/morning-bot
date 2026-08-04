@@ -73,44 +73,57 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
     b.text_line(" → ")
     b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
 
+    b.spacer()
+    b.bold("Что в кино:")
+    cinema = _movie_now_playing_lines(now_playing)
+    if cinema:
+        b.newline()
+        for movie in cinema:
+            b.text_line("• ")
+            trailer_url = str(_item_value(movie, "trailer_url", "") or "").strip()
+            title = str(_item_value(movie, "title", "") or "").strip()
+            label = f"«{title}»"
+            if trailer_url:
+                b.link(label, trailer_url)
+            else:
+                b.text_line(label)
+            genres = _movie_genres_for_line(movie)
+            if genres:
+                b.line(f" - {genres[:1].upper() + genres[1:]}")
+            else:
+                b.newline()
+    else:
+        b.text_line(" ")
+        b.line("Пока не удалось подтвердить актуальные показы.")
+
     if birthday.get("name"):
         b.spacer()
         b.bold("Именинник дня:")
         b.text_line(" ")
         b.bold(str(birthday["name"]))
-        b.line(f" — {str(birthday.get('role') or 'кинематографист').strip()}.")
-
-    mood = str(cinema_day.get("mood") or "").strip()
-    if mood:
-        b.spacer()
-        b.bold("Фильм под настроение:")
-        b.text_line(" ")
-        b.line(mood)
-
-    b.spacer()
-    b.bold("Что в кино:")
-    b.text_line(" ")
-    cinema = _movie_now_playing_line(now_playing)
-    b.line(cinema or "Пока не удалось подтвердить актуальные показы.")
+        b.text_line(f" — {str(birthday.get('role') or 'кинематографист').strip()}.")
+        birthday_fact = str(birthday.get("fact") or "").strip()
+        if birthday_fact:
+            b.text_line(f" {birthday_fact}")
+        b.newline()
 
     fact = str(rebus.get("fact") or cinema_day.get("fact") or "").strip()
     if fact:
         b.spacer()
-        b.bold("💡 Факт дня:")
+        b.bold("💡 Интересно:")
         b.text_line(" ")
         b.line(fact)
     return b.build_stripped()
 
 
-def _movie_now_playing_line(now_playing) -> str:
+def _movie_now_playing_lines(now_playing) -> list[dict]:
     entries = []
     for item in now_playing or []:
         title = str(_item_value(item, "title", "") or "").strip()
         if not title:
             continue
-        genres = _movie_genres_for_line(item)
-        entries.append(f"{title} ({genres})" if genres else title)
-    return ", ".join(entries)
+        entries.append(item)
+    return entries
 
 
 def _movie_genres_for_line(movie) -> str:
@@ -437,25 +450,23 @@ def weekly_books_screen(city, daily_book, items):
     b.text_line(" → ")
     b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
 
+    premieres = _book_premiere_lines(items)
+    b.spacer()
+    b.bold("Главные премьеры:")
+    if premieres:
+        b.newline()
+        for premiere in premieres:
+            b.line(premiere)
+    else:
+        b.text_line(" ")
+        b.line("Пока не удалось подтвердить заметные новинки.")
+
     if birthday.get("name"):
         b.spacer()
         b.bold("Именинник дня:")
         b.text_line(" ")
         b.bold(str(birthday["name"]))
         b.line(f" — {str(birthday.get('detail') or 'писатель, родившийся сегодня').strip()}.")
-
-    mood = str(daily_book.get("mood") or "").strip()
-    if mood:
-        b.spacer()
-        b.bold("Книга под настроение:")
-        b.text_line(" ")
-        b.line(mood)
-
-    premieres = _book_premieres_line(items)
-    b.spacer()
-    b.bold("Главные премьеры:")
-    b.text_line(" ")
-    b.line(premieres or "Пока не удалось подтвердить заметные новинки.")
 
     fact = str(birthday.get("fact") or rebus.get("fact") or daily_book.get("fact") or "").strip()
     if fact:
@@ -466,7 +477,7 @@ def weekly_books_screen(city, daily_book, items):
     return b.build_stripped()
 
 
-def _book_premieres_line(items) -> str:
+def _book_premiere_lines(items) -> list[str]:
     entries = []
     for item in list(items or [])[:3]:
         title = str(_item_value(item, "title", "") or "").strip()
@@ -474,13 +485,13 @@ def _book_premieres_line(items) -> str:
         vibe = str(_item_value(item, "vibe", "") or "").strip()
         if not title:
             continue
-        entry = f"«{title}»"
+        entry = f"• «{title}»"
         if author:
-            entry += f" · {author}"
+            entry += f" - {author}"
         if vibe:
-            entry += f" ({vibe})"
+            entry += f" ({vibe[:1].upper() + vibe[1:]})"
         entries.append(entry)
-    return ", ".join(entries)
+    return entries
 
 
 def music_week_screen(city, daily_music, concerts):
@@ -515,29 +526,31 @@ def music_week_screen(city, daily_music, concerts):
     b.text_line(" → ")
     b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
 
+    b.spacer()
+    events = [item for item in concerts or [] if _item_value(item, "artist")][:3]
+    b.bold("Концерты рядом:")
+    if events:
+        b.newline()
+        for event in events:
+            artist = str(_item_value(event, "artist", "") or "").strip()
+            date = str(_item_value(event, "date", "") or "").strip()
+            place = str(_item_value(event, "place", "") or "").strip()
+            details = " · ".join(value for value in (date, place) if value)
+            b.line(f"• {artist}" + (f" - {details}" if details else ""))
+    else:
+        b.line(" Пока нет подтверждённых ближайших выступлений.")
+
     if legend.get("name"):
         b.spacer()
-        b.bold("Легенда дня:")
+        b.bold("Именинник дня:")
         b.text_line(" ")
         b.bold(str(legend["name"]))
         b.line(f" — {str(legend.get('detail') or 'музыкант, родившийся сегодня').strip()}.")
 
-    b.spacer()
-    event = next((item for item in concerts or [] if _item_value(item, "artist")), None)
-    if event:
-        artist = str(_item_value(event, "artist", "") or "").strip()
-        date = str(_item_value(event, "date", "") or "").strip()
-        place = str(_item_value(event, "place", "") or "").strip()
-        b.bold("Концерты рядом:")
-        b.line(" " + " · ".join(value for value in (artist, date, place) if value))
-    else:
-        b.bold("Концерты рядом:")
-        b.line(" Пока нет подтверждённых ближайших выступлений.")
-
     fact = str(rebus.get("fact") or daily_music.get("fact") or "").strip()
     if fact:
         b.spacer()
-        b.bold("💡 Факт дня:")
+        b.bold("💡 Интересно:")
         b.text_line(" ")
         b.line(fact)
     return b.build_stripped()
