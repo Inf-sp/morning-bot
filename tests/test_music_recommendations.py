@@ -126,21 +126,58 @@ def test_weekly_concert_loader_keeps_three_confirmed_events(monkeypatch):
     ]
     requested = {}
     monkeypatch.setattr(leisure_music.config, "TICKETMASTER_API_KEY", "ticketmaster-key")
-    monkeypatch.setattr(leisure_music.store, "get_settings", lambda _cid: {"cc": "NL"})
+    monkeypatch.setattr(leisure_music.store, "get_settings", lambda _cid: {"cc": "NL", "country": "Нидерланды"})
     monkeypatch.setattr(leisure_concerts, "_ensure_artists", lambda _cid: ["Romy", "FKA twigs", "The National"])
     monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_args: None)
 
-    async def fetch(artists, cc, **kwargs):
-        requested.update({"artists": artists, "cc": cc, **kwargs})
+    async def fetch(artists, cc, country):
+        requested.update({"artists": artists, "cc": cc, "country": country})
         return events
 
-    monkeypatch.setattr(leisure_concerts, "_ticketmaster_events_many", fetch)
+    monkeypatch.setattr(leisure_concerts, "_fetch_concerts", fetch)
     monkeypatch.setattr(leisure_concerts, "_concerts_cache_set", lambda *_args: None)
 
     result = asyncio.run(leisure_music._weekly_concerts("42"))
 
-    assert requested["size"] == 3
-    assert requested["limit"] == 20
+    assert requested == {
+        "artists": ["Romy", "FKA twigs", "The National"],
+        "cc": "NL",
+        "country": "Нидерланды",
+    }
+    assert [item["artist"] for item in result] == ["Romy", "FKA twigs", "The National"]
+
+
+def test_weekly_concert_loader_uses_confirmed_fallback_when_ticketmaster_is_empty(monkeypatch):
+    import leisure_concerts
+
+    events = [
+        {"_artist": "Romy", "dates": {"start": {"localDate": "2026-08-21"}},
+         "_embedded": {"venues": [{"city": {"name": "Лилль"}}]}},
+        {"_artist": "FKA twigs", "dates": {"start": {"localDate": "2026-09-03"}},
+         "_embedded": {"venues": [{"city": {"name": "Париж"}}]}},
+        {"_artist": "The National", "dates": {"start": {"localDate": "2026-09-14"}},
+         "_embedded": {"venues": [{"city": {"name": "Лион"}}]}},
+    ]
+    fallback_calls = []
+    monkeypatch.setattr(leisure_music.config, "TICKETMASTER_API_KEY", "ticketmaster-key")
+    monkeypatch.setattr(leisure_music.store, "get_settings", lambda _cid: {"cc": "FR", "country": "Франция"})
+    monkeypatch.setattr(leisure_concerts, "_ensure_artists", lambda _cid: ["Romy", "FKA twigs", "The National"])
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_args: None)
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_set", lambda *_args: None)
+
+    async def ticketmaster(*_args, **_kwargs):
+        return []
+
+    async def fetch(artists, cc, country):
+        fallback_calls.append((artists, cc, country))
+        return events
+
+    monkeypatch.setattr(leisure_concerts, "_ticketmaster_events_many", ticketmaster)
+    monkeypatch.setattr(leisure_concerts, "_fetch_concerts", fetch)
+
+    result = asyncio.run(leisure_music._weekly_concerts("42"))
+
+    assert fallback_calls == [(["Romy", "FKA twigs", "The National"], "FR", "Франция")]
     assert [item["artist"] for item in result] == ["Romy", "FKA twigs", "The National"]
 
 

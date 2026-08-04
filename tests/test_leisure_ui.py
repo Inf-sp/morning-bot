@@ -498,6 +498,36 @@ def test_local_cinema_catalogue_is_reused_for_a_week(monkeypatch):
     assert calls == {"cinema": 1, "tmdb": 1}
 
 
+def test_lille_cinema_uses_current_french_theatrical_releases_when_local_listing_is_empty(monkeypatch):
+    requested = {}
+    regional_movies = [
+        leisure_movies.tmdb.CinemaMovie(
+            id=1, title="Премьера", original_title="Premiere", overview=None,
+            poster_url=None, release_date=date(2026, 8, 1), genres=["драма"],
+            rating=7.2, popularity=80, country_code="FR", is_theatrical=True, vote_count=200,
+        ),
+    ]
+    monkeypatch.setattr(leisure_movies.store, "get_settings", lambda _cid: {
+        "city": "Лилль", "country": "Франция", "cc": "FR",
+    })
+    monkeypatch.setattr(leisure_movies, "_movie_prefs", lambda _cid: {})
+    monkeypatch.setattr(leisure_movies, "_now_playing_catalog_get", lambda *_args: None)
+    monkeypatch.setattr(leisure_movies, "_now_playing_catalog_set", lambda *_args: None)
+    monkeypatch.setattr(leisure_movies.local_cinema, "get_city_movies", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(leisure_movies.config, "TMDB_API_KEY", "test-key")
+
+    def now_playing(country, language, *, max_results):
+        requested.update(country=country, language=language, max_results=max_results)
+        return regional_movies
+
+    monkeypatch.setattr(leisure_movies.tmdb, "get_now_playing", now_playing)
+
+    result = asyncio.run(leisure_movies.get_local_now_playing("42", limit=3))
+
+    assert requested == {"country": "FR", "language": "fr-FR", "max_results": 20}
+    assert [item["title"] for item in result] == ["Премьера"]
+
+
 def test_movie_home_keeps_only_well_known_current_releases():
     featured = leisure_movies._featured_now_playing([
         {"title": "Менее популярный", "rating": 7.3, "vote_count": 950, "popularity": 20},

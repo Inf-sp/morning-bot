@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
@@ -91,6 +92,14 @@ def test_concerts_keep_the_full_classic_list_instead_of_rich_blocks():
 
     assert message.rich_message is None
     assert all(event["artist"] in message.text for event in events)
+
+
+def test_concert_cache_ignores_legacy_entry_without_search_version(monkeypatch):
+    monkeypatch.setattr(leisure_concerts.store, "_load", lambda _key: {
+        "42": {"ts": time.time(), "cc": "FR", "events": []},
+    })
+
+    assert leisure_concerts._concerts_cache_get("42", "FR") is None
 
 
 def test_nearest_concerts_uses_the_full_classic_delivery(monkeypatch):

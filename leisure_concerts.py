@@ -586,12 +586,17 @@ def _concert_place_name(name, cc=""):
     return str(name or "твоей стране").strip()
 
 _CONCERTS_CACHE_TTL = 7 * 86400  # неделя — кэш прогревается job'ом перед пятничной афишей
+_CONCERTS_CACHE_VERSION = 2
 
 
 def _concerts_cache_get(cid, cc):
     """Кэшированный список концертов пользователя за неделю; None если нет/устарел/не тот cc."""
     entry = store._load(config.CONCERTS_CACHE_KEY).get(str(cid))
-    if not entry or entry.get("cc") != cc:
+    if (
+        not entry
+        or entry.get("version") != _CONCERTS_CACHE_VERSION
+        or entry.get("cc") != cc
+    ):
         return None
     import time
     if time.time() - entry.get("ts", 0) > _CONCERTS_CACHE_TTL:
@@ -607,7 +612,12 @@ def cached_concerts(cid, cc):
 def _concerts_cache_set(cid, cc, events):
     import time
     d = store._load(config.CONCERTS_CACHE_KEY)
-    d[str(cid)] = {"ts": time.time(), "cc": cc, "events": filter_concert_events(events, cc)}
+    d[str(cid)] = {
+        "version": _CONCERTS_CACHE_VERSION,
+        "ts": time.time(),
+        "cc": cc,
+        "events": filter_concert_events(events, cc),
+    }
     store._save(config.CONCERTS_CACHE_KEY, d)
 
 

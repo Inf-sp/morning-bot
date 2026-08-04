@@ -288,10 +288,16 @@ def _movie_country_label(name, cc=""):
     return by_cc.get(cc, config.DEFAULT_CITY.get("country", "Нидерланды"))
 
 
-def _movie_service_language(_cid=None):
-    # Официальное локальное название проката; русская машинная локализация
-    # нередко создаёт несуществующие названия фильмов.
-    return "nl-NL"
+def _movie_service_language(cid=None):
+    """Язык регионального каталога без русской машинной локализации."""
+    cc = str(store.get_settings(cid).get("cc") or "NL").upper() if cid is not None else "NL"
+    return {
+        "FR": "fr-FR",
+        "DE": "de-DE",
+        "ES": "es-ES",
+        "IT": "it-IT",
+        "NL": "nl-NL",
+    }.get(cc, "en-US")
 
 
 def _movie_city(cid):
@@ -348,6 +354,22 @@ def _now_playing_catalog_set(cid, city, items):
     return records
 
 
+def _regional_now_playing_item(movie):
+    """Нормализует подтверждённый театральный релиз TMDb для витрины."""
+    release_date = getattr(movie, "release_date", None)
+    return {
+        "id": getattr(movie, "id", None),
+        "title": str(getattr(movie, "title", "") or "").strip(),
+        "name_en": str(getattr(movie, "original_title", "") or "").strip(),
+        "year": getattr(release_date, "year", 0) or 0,
+        "rating": getattr(movie, "rating", None),
+        "vote_count": int(getattr(movie, "vote_count", 0) or 0),
+        "popularity": float(getattr(movie, "popularity", 0) or 0),
+        "genre_ids": [],
+        "genres": list(getattr(movie, "genres", None) or []),
+    }
+
+
 async def get_local_now_playing(cid, *, limit=20, refresh=False):
     """Локальная афиша → TMDB metadata → полезная сортировка.
 
@@ -359,21 +381,32 @@ async def get_local_now_playing(cid, *, limit=20, refresh=False):
     items = None if refresh else _now_playing_catalog_get(cid, city)
     if items is None:
         listed = await asyncio.to_thread(local_cinema.get_city_movies, cid, city, refresh=refresh)
-        items = []
-        for local in listed[:30]:
-            meta = await asyncio.to_thread(tmdb.search_id, local.title, "movie") if config.TMDB_API_KEY else None
-            if meta:
-                year = int(meta.get("year") or 0)
-                # Старая картина не становится новинкой только из-за повторного показа.
-                if year and year < datetime.now(config.TZ).year - 1:
-                    continue
-                item = dict(meta)
-                item["title"] = item.get("name") or local.title
-                item["genres"] = [tmdb.GENRES.get(g, "") for g in item.get("genre_ids") or [] if tmdb.GENRES.get(g)]
-            else:
-                item = {"title": local.title, "genres": list(local.genres), "rating": None,
-                        "vote_count": 0, "popularity": 0, "genre_ids": []}
-            items.append(item)
+        if listed:
+            items = []
+            for local in listed[:30]:
+                meta = await asyncio.to_thread(tmdb.search_id, local.title, "movie") if config.TMDB_API_KEY else None
+                if meta:
+                    year = int(meta.get("year") or 0)
+                    # Старая картина не становится новинкой только из-за повторного показа.
+                    if year and year < datetime.now(config.TZ).year - 1:
+                        continue
+                    item = dict(meta)
+                    item["title"] = item.get("name") or local.title
+                    item["genres"] = [tmdb.GENRES.get(g, "") for g in item.get("genre_ids") or [] if tmdb.GENRES.get(g)]
+                else:
+                    item = {"title": local.title, "genres": list(local.genres), "rating": None,
+                            "vote_count": 0, "popularity": 0, "genre_ids": []}
+                items.append(item)
+        else:
+            cc = str(store.get_settings(cid).get("cc") or "NL").upper()
+            regional = await asyncio.to_thread(
+                tmdb.get_now_playing, cc, _movie_service_language(cid), max_results=20,
+            )
+            items = [
+                _regional_now_playing_item(movie)
+                for movie in regional
+                if str(getattr(movie, "title", "") or "").strip()
+            ]
         _now_playing_catalog_set(cid, city, items)
     items.sort(key=lambda item: _local_movie_score(item, prefs), reverse=True)
     return items[:max(1, int(limit or 20))]

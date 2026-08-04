@@ -463,23 +463,19 @@ async def send_music_home(bot, cid, q=None):
 
 
 async def _weekly_concerts(cid):
-    """Ближайшие подтверждённые концерты любимых артистов без web/AI fallback."""
+    """Ближайшие подтверждённые концерты любимых артистов из общей цепочки поиска."""
     import leisure_concerts
     from util import _MONTHS
 
     settings_data = store.get_settings(cid)
     cc = str(settings_data.get("cc") or "NL").upper()
+    country = str(settings_data.get("country") or cc).strip()
     artists = leisure_concerts._ensure_artists(cid)
     if not artists or not config.TICKETMASTER_API_KEY:
         return []
     events = leisure_concerts._concerts_cache_get(cid, cc)
     if events is None:
-        now = datetime.now(config.TZ)
-        events = await leisure_concerts._ticketmaster_events_many(
-            artists, cc,
-            start_dt=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            size=3, limit=20,
-        )
+        events = await leisure_concerts._fetch_concerts(artists, cc, country)
         leisure_concerts._concerts_cache_set(cid, cc, events)
 
     today = datetime.now(config.TZ).date().isoformat()
