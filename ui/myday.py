@@ -24,11 +24,14 @@ def day_summary(
     header,
     city,
     flag="",
+    country="",
     weather_icon="🌡️",
     weather_line="",
     word_line="",
     word_lang="nl",
+    movie_rebus=None,
     mood="",
+    concert_line="",
     outfit_items=None,
     lifehack="",
     quote_text="",
@@ -36,7 +39,14 @@ def day_summary(
 ):
     """Сводка дня: заголовок, затем по одной строке на блок с пустой строкой между ними."""
     b = MessageBuilder()
-    b.bold(f"Мой день · {header} · {city}{' 📍' if city else ''}")
+    place = str(city or "").strip()
+    country = str(country or "").strip()
+    flag = str(flag or "").strip()
+    if country:
+        place += f", {country}"
+    if flag:
+        place += f" {flag}"
+    b.bold(f"Мой день · {header} · {place}".rstrip(" ·"))
     b.newline()
     b.spacer()
 
@@ -56,10 +66,24 @@ def day_summary(
             b.add(translation, MessageEntity.SPOILER)
         b.newline()
         b.spacer()
+    elif movie_rebus:
+        emoji = str(movie_rebus.get("emoji") or "🎬 ❓").strip()
+        answer = str(movie_rebus.get("answer") or "Ответ").strip()
+        b.text_line("🎬 ")
+        b.bold("Ребус дня:")
+        b.text_line(f" {emoji} → ")
+        b.add(answer, MessageEntity.SPOILER)
+        b.newline()
+        b.spacer()
 
     if mood:
         b.text_line("⚡️ ")
         b.labeled_line("Настрой", finish_dot(mood), lowercase=False)
+        b.spacer()
+
+    if concert_line:
+        b.text_line("🎫 ")
+        b.labeled_line("Афиша", concert_line, lowercase=False)
         b.spacer()
 
     outfit = ", ".join(
@@ -76,10 +100,5 @@ def day_summary(
     if lifehack:
         b.labeled_line("🦉Лайфхак", cap_sentence(finish_dot(lifehack)), lowercase=False)
         b.spacer()
-
-    if quote_text:
-        quote_line = f"«{quote_text}»" + (f" — по {quote_author}" if quote_author else "")
-        b.add(f"💭 {quote_line}", MessageEntity.ITALIC)
-        b.newline()
 
     return b.build_stripped()

@@ -35,6 +35,8 @@ CANONICAL_ENTRY_OVERRIDES = {
 def language_code(language):
     if language in ("nl", "en"):
         return language
+    if language in ("", "none", "не изучаю"):
+        return "nl"
     return "nl" if language == "нидерландский" else "en"
 
 

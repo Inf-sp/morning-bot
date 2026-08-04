@@ -6,6 +6,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import myday
 import config
+import leisure_concerts
 from myday import _day_wind_text
 from ui.myday import day_summary
 
@@ -26,6 +27,25 @@ def test_day_summary_keeps_only_compact_weather_block():
 def test_day_wind_text_marks_only_wind_above_ten_as_strong():
     assert _day_wind_text(10) == "Ветер до 10 м/с"
     assert _day_wind_text(11) == "Сильный ветер до 11 м/с"
+
+
+def test_myday_concert_uses_cached_event_and_relative_date(monkeypatch):
+    monkeypatch.setattr(myday.store, "get_settings", lambda _cid: {"cc": "NL"})
+    monkeypatch.setattr(leisure_concerts, "cached_concerts", lambda *_args: [{
+        "_artist": "Tokio Hotel",
+        "dates": {"start": {"localDate": "2026-08-05"}},
+        "_embedded": {"venues": [{"city": {"name": "Амстердам"}}]},
+    }])
+
+    assert myday._concert_of_day("42", datetime(2026, 8, 4).date()) == "Tokio Hotel · Амстердам · завтра"
+    assert myday._concert_date_label("2026-08-11", datetime(2026, 8, 4).date()) == "через неделю"
+
+
+def test_myday_skips_language_material_when_learning_is_disabled(monkeypatch):
+    monkeypatch.setattr(myday.store, "learning_is_enabled", lambda _cid: False)
+    monkeypatch.setattr(myday.learning, "select_daily_material", lambda _cid: (_ for _ in ()).throw(AssertionError("no lookup")))
+
+    assert myday._word_of_day("42") == ("", "")
 
 
 def test_day_summary_keeps_capitalized_dictionary_translation_after_arrow():

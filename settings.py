@@ -117,6 +117,8 @@ def notif_on(cid, kind):
     return False
 
 def study_lang(cid):
+    if not store.learning_is_enabled(cid):
+        return "не изучаю"
     code = store.get_learning_language(cid)
     if code in ("nl", "en"):
         return "нидерландский" if code == "nl" else "английский"
@@ -170,13 +172,17 @@ async def send_home(bot, cid):
     rows = [
         [InlineKeyboardButton("📍 Город", callback_data="set_city")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
+        [InlineKeyboardButton("🧠 Язык обучения", callback_data="set_learning_global")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     city = store.get_settings(cid).get("city") or ""
     notification_kinds = [item.key for item in get_notification_options()]
     notifications_on = any(notif_on(cid, kind) for kind in notification_kinds)
-    msg = settings_ui.settings_home(city, notifications_on)
+    language = "Не изучаю"
+    if store.learning_is_enabled(cid):
+        language = "Английский" if store.get_learning_language(cid) == "en" else "Нидерландский"
+    msg = settings_ui.settings_home(city, notifications_on, language)
     await bot.send_message(
         chat_id=cid,
         text=msg.text,
@@ -1008,9 +1014,12 @@ async def handle_callback(bot, cid, data, q=None):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
     elif data == "set_notif_off_all":
         await notif_off_all(bot, cid, q)
+    elif data == "set_learning_global":
+        await learning_preferences.send_learning_settings(bot, cid, q=q, back="m_settings")
     elif data == "set_learning_mydata":
         await learning_preferences.send_learning_settings(bot, cid, q=q, back="set_priorities")
-    elif data == "set_learning" or data == "toggle_learning_language" or data.startswith("set_learning_level_"):
+    elif (data == "set_learning" or data == "toggle_learning_language"
+          or data.startswith("set_learning_language_") or data.startswith("set_learning_level_")):
         await learning_preferences.handle_learning_settings_callback(bot, cid, q, data)
     elif data == "set_city":
         store.pending_input[cid] = "setcity"

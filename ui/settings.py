@@ -105,12 +105,13 @@ def wardrobe_style(styles, fit, palette, avoid):
     return b.build_stripped()
 
 
-def settings_home(city="", notifications_on=True):
+def settings_home(city="", notifications_on=True, learning_language="Не изучаю"):
     b = MessageBuilder()
     b.section(ui_label("settings", "Настройки"))
     b.spacer()
     b.line(f"📍 Город: {city or 'не выбран'}")
     b.line(f"🔔 Уведомления: {'включены' if notifications_on else 'выключены'}")
+    b.line(f"🧠 Язык обучения: {learning_language}")
     b.spacer()
     b.line("Настройки рекомендаций находятся внутри соответствующих разделов.")
     return b.build_stripped()

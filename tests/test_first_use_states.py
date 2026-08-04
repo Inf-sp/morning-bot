@@ -119,10 +119,26 @@ def test_dictionary_contains_learning_preferences(monkeypatch):
 def test_learning_preferences_return_to_active_dictionary():
     keyboard = learning_settings.learning_settings_kb("нидерландский", "simple", back="a_dictlang_active")
 
-    assert keyboard.inline_keyboard[0][0].callback_data == "toggle_learning_language_dict"
-    assert keyboard.inline_keyboard[1][0].callback_data == "set_learning_level_simple_dict"
+    assert keyboard.inline_keyboard[0][0].callback_data == "set_learning_language_nl_dict"
+    assert keyboard.inline_keyboard[1][0].callback_data == "set_learning_language_en_dict"
+    assert keyboard.inline_keyboard[2][0].callback_data == "set_learning_language_none_dict"
+    assert keyboard.inline_keyboard[3][0].callback_data == "set_learning_level_simple_dict"
     assert all(len(row) == 1 for row in keyboard.inline_keyboard[:-1])
     assert keyboard.inline_keyboard[-1][0].callback_data == "a_dictlang_active"
+
+
+def test_learning_preferences_can_disable_language_study():
+    keyboard = learning_settings.learning_settings_kb("", "")
+    labels = [row[0].text for row in keyboard.inline_keyboard[:-1]]
+
+    assert labels == ["🇳🇱 Нидерландский", "🇬🇧 Английский", "✅ 🚫 Не изучаю"]
+
+
+def test_learning_preferences_from_settings_return_to_settings():
+    keyboard = learning_settings.learning_settings_kb("", "", back="m_settings")
+
+    assert keyboard.inline_keyboard[0][0].callback_data == "set_learning_language_nl_settings"
+    assert keyboard.inline_keyboard[-1][0].callback_data == "m_settings"
 
 
 def test_cuisine_preferences_use_one_column():

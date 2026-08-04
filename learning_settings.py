@@ -14,6 +14,8 @@ def _code(language):
 
 
 def _active_language_code(cid):
+    if not store.learning_is_enabled(cid):
+        return ""
     code = store.get_learning_language(cid)
     if code in ("nl", "en"):
         return code
@@ -26,10 +28,13 @@ def _language_for_code(code):
 
 
 def active_language(cid):
-    return _language_for_code(_active_language_code(cid))
+    code = _active_language_code(cid)
+    return _language_for_code(code) if code else "не изучаю"
 
 
 def _language_display(language):
+    if language in ("", "none", "не изучаю"):
+        return "🚫 Не изучаю"
     flag = "🇳🇱" if _code(language) == "nl" else "🇬🇧"
     title = "Нидерландский" if _code(language) == "nl" else "Английский"
     return f"{flag} {title}"
@@ -40,26 +45,46 @@ def _level_label(level):
 # ================= НАСТРОЙКИ ОБУЧЕНИЯ =================
 def learning_settings_kb(active_lang, active_level, back="set_home"):
     dictionary_origin = back == "a_dictlang_active"
-    suffix = "_dict" if dictionary_origin else ""
+    settings_origin = back == "m_settings"
+    suffix = "_dict" if dictionary_origin else ("_settings" if settings_origin else "")
+    active_code = {
+        "nl": "nl", "нидерландский": "nl",
+        "en": "en", "английский": "en",
+    }.get(str(active_lang or "").strip().lower(), "")
     rows = [
-        [InlineKeyboardButton("🇳🇱 Нидерландский" if _code(active_lang) == "nl" else "🇬🇧 Английский", callback_data=f"toggle_learning_language{suffix}")],
-    ]
-    rows.extend([
         [InlineKeyboardButton(
-            f"{'✅ ' if level == active_level else ''}{LEVEL_LABELS[level]}",
-            callback_data=f"set_learning_level_{level}{suffix}",
-        )]
-        for level in LEVELS
-    ])
+            f"{'✅ ' if active_code == 'nl' else ''}🇳🇱 Нидерландский",
+            callback_data=f"set_learning_language_nl{suffix}",
+        )],
+        [InlineKeyboardButton(
+            f"{'✅ ' if active_code == 'en' else ''}🇬🇧 Английский",
+            callback_data=f"set_learning_language_en{suffix}",
+        )],
+        [InlineKeyboardButton(
+            f"{'✅ ' if not active_code else ''}🚫 Не изучаю",
+            callback_data=f"set_learning_language_none{suffix}",
+        )],
+    ]
+    if active_code:
+        rows.extend([
+            [InlineKeyboardButton(
+                f"{'✅ ' if level == active_level else ''}{LEVEL_LABELS[level]}",
+                callback_data=f"set_learning_level_{level}{suffix}",
+            )]
+            for level in LEVELS
+        ])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
 async def send_learning_settings(bot, cid, q=None, back="set_home"):
-    active_lang = active_language(cid)
-    active_level = store.get_level(cid, active_lang)
-    msg = learning_ui.learning_settings(_language_display(active_lang), _level_label(active_level))
-    kb = learning_settings_kb(active_lang, active_level, back)
+    active_code = _active_language_code(cid)
+    active_lang = _language_for_code(active_code) if active_code else "не изучаю"
+    active_level = store.get_level(cid, active_lang) if active_code else ""
+    msg = learning_ui.learning_settings(
+        _language_display(active_lang), _level_label(active_level) if active_level else "",
+    )
+    kb = learning_settings_kb(active_code, active_level, back)
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
@@ -77,10 +102,16 @@ async def handle_learning_settings_callback(bot, cid, q, data):
     dictionary_origin = (
         data == "set_learning_dict"
         or data == "toggle_learning_language_dict"
+        or data.startswith("set_learning_language_") and data.endswith("_dict")
         or data.endswith("_dict") and data.startswith("set_learning_level_")
     )
-    back = "a_dictlang_active" if dictionary_origin else "m_learn"
-    if data in ("set_learning", "set_learning_dict"):
+    settings_origin = (
+        data == "set_learning_global"
+        or data.startswith("set_learning_language_") and data.endswith("_settings")
+        or data.endswith("_settings") and data.startswith("set_learning_level_")
+    )
+    back = "a_dictlang_active" if dictionary_origin else ("m_settings" if settings_origin else "m_learn")
+    if data in ("set_learning", "set_learning_dict", "set_learning_global"):
         await send_learning_settings(bot, cid, q=q, back=back)
         return
     if data in ("toggle_learning_language", "toggle_learning_language_dict"):
@@ -91,12 +122,35 @@ async def handle_learning_settings_callback(bot, cid, q, data):
         store.ensure_level(cid, _language_for_code(new_code), "medium")
         await send_learning_settings(bot, cid, q=q, back=back)
         return
+    if data.startswith("set_learning_language_"):
+        code = data[len("set_learning_language_"):]
+        if code.endswith("_dict"):
+            code = code[:-len("_dict")]
+        elif code.endswith("_settings"):
+            code = code[:-len("_settings")]
+        if code not in ("nl", "en", "none"):
+            await send_learning_settings(bot, cid, q=q, back=back)
+            return
+        store.set_learning_language(cid, code)
+        if code in ("nl", "en"):
+            store.ensure_level(cid, _language_for_code(code), "medium")
+        import learning
+        learning.reset_daily_material_cache(cid)
+        import myday
+        myday.reset_day_cache(cid)
+        await send_learning_settings(bot, cid, q=q, back=back)
+        return
     if data.startswith("set_learning_level_"):
         level = data[len("set_learning_level_"):]
         if level.endswith("_dict"):
             level = level[:-len("_dict")]
+        elif level.endswith("_settings"):
+            level = level[:-len("_settings")]
         if level in LEVELS:
             language = active_language(cid)
+            if language == "не изучаю":
+                await send_learning_settings(bot, cid, q=q, back=back)
+                return
             old_level = store.get_level(cid, language)
             store.set_level(cid, language, level)
             await send_learning_settings(bot, cid, q=q, back=back)

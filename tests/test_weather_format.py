@@ -4,6 +4,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import weather
+from ui import weather as weather_ui
 
 
 def test_tomorrow_forecast_uses_compact_period_weather_line():
@@ -21,3 +22,17 @@ def test_tomorrow_forecast_marks_wind_above_ten_as_strong():
     line = weather._compact_forecast_line("🌧️", 20, 0, None, [], 11)
 
     assert line == "🌧️ Погода: до +20°C · Сильный ветер до 11 м/с"
+
+
+def test_city_change_confirmation_includes_country_flag():
+    message = weather_ui.city_changed("Лилль", "FR", "fr")
+
+    assert message.text == "✅ Готово. Город переключён на Лилль, FR 🇫🇷."
+
+
+def test_week_forecast_header_shows_country_and_flag():
+    message = weather_ui.week_forecast(
+        "5–11 августа", "Лилль", "Тепло", [], "Возьми воду", country="FR", country_code="fr",
+    )
+
+    assert message.text.startswith("Неделя с 5–11 августа · Лилль, FR 🇫🇷")

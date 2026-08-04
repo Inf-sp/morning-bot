@@ -891,6 +891,8 @@ def _word_of_day(cid):
     """Запись дня для карточки 'Мой день' — тот же материал, что показывает
     экран 'Обучение' (см. learning.select_daily_material): выбор и его
     побочные эффекты (last_shown_at) живут в learning.py, здесь только формат."""
+    if not store.learning_is_enabled(cid):
+        return "", ""
     entry = learning.select_daily_material(cid)
     lang = learning._active_language_code(cid)
     if not entry:
@@ -899,7 +901,56 @@ def _word_of_day(cid):
     ru = dictionary.entry_translation(entry).replace(";", ",")
     return f"{_cap(term)} → {_cap(ru)}.", lang
 
-_DAY_CACHE_VERSION = 8
+
+def _movie_rebus_of_day(day):
+    """Локальная альтернатива языковой строке, когда обучение выключено."""
+    import leisure_movies
+    return leisure_movies.daily_movie_rebus(day)
+
+
+def _concert_date_label(value, today):
+    try:
+        event_day = datetime.fromisoformat(str(value)).date()
+    except (TypeError, ValueError):
+        return ""
+    delta = (event_day - today).days
+    if delta == 0:
+        return "сегодня"
+    if delta == 1:
+        return "завтра"
+    if delta == 7:
+        return "через неделю"
+    if 2 <= delta <= 6:
+        return f"через {delta} дн."
+    label = f"{event_day.day} {_MONTHS[event_day.month - 1]}"
+    return f"{label} {event_day.year}" if event_day.year != today.year else label
+
+
+def _concert_of_day(cid, today):
+    """Ближайшее событие из прогретой афиши; сеть и AI здесь запрещены."""
+    import leisure_concerts
+
+    settings_data = store.get_settings(cid)
+    events = leisure_concerts.cached_concerts(cid, settings_data.get("cc") or "NL")
+    for event in events:
+        start = (event.get("dates") or {}).get("start") or {}
+        date_label = _concert_date_label(start.get("localDate"), today)
+        if not date_label:
+            continue
+        try:
+            if datetime.fromisoformat(str(start.get("localDate"))).date() < today:
+                continue
+        except (TypeError, ValueError):
+            continue
+        artist = " ".join(str(event.get("_artist") or "").split())
+        venue = ((event.get("_embedded") or {}).get("venues") or [{}])[0]
+        city = " ".join(str((venue.get("city") or {}).get("name") or "").split())
+        if artist:
+            return " · ".join(part for part in (artist, city, date_label) if part)
+    return ""
+
+
+_DAY_CACHE_VERSION = 10
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
@@ -1021,38 +1072,37 @@ def _build_day_text(cid, *, refresh_current=False):
     now = datetime.now(TZ)
     weekday_name = _WEEKDAY_SHORT[now.weekday()]
     is_weekend = now.weekday() >= 5
-    word_line, word_lang = _word_of_day(cid)
+    learning_enabled = store.learning_is_enabled(cid)
+    word_line, word_lang = _word_of_day(cid) if learning_enabled else ("", "")
+    movie_rebus = {} if learning_enabled else _movie_rebus_of_day(now.date())
     import balance
     import wardrobe
     mood = balance.health_focus(cid).get("phrase", "")
     outfit_items = wardrobe.get_cached_outfit_items(cid)
+    concert_line = _concert_of_day(cid, now.date())
 
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     _hack_cat, hack_text = daily_lifehack(
         cid, rain=(rain >= 40 or bool(current_precipitation)),
         hot=(tmax is not None and tmax >= 24), is_weekend=is_weekend)
-    try:
-        q_data = _fetch_quote(cid)
-    except Exception as e:
-        _log.warning("myday: _fetch_quote failed: %s", e)
-        q_data = {}
-    raw_quote = _clip_quote(_strip_quotes(q_data.get("quote", "")))
-    quote_text, quote_author = "", ""
-    if raw_quote and _quote_valid(raw_quote):
-        quote_text = esc(raw_quote)
-        quote_author = esc(q_data.get("src", "")).strip()
     msg = myday_ui.day_summary(
         header,
         s.get("city", ""),
+        country=s.get("country", ""),
+        flag=(
+            util.flag_from_cc(s.get("cc", ""))
+            or util.flag_from_cc(str(s.get("country", "")).upper())
+            or util.country_flag(s.get("country", ""))
+        ),
         weather_icon=weather_icon,
         weather_line=weather_line,
         word_line=word_line,
         word_lang=word_lang,
+        movie_rebus=movie_rebus,
         mood=mood,
+        concert_line=concert_line,
         outfit_items=outfit_items,
         lifehack=hack_text,
-        quote_text=quote_text,
-        quote_author=quote_author,
     )
     text = msg.text
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя

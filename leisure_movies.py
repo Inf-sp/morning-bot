@@ -429,6 +429,11 @@ def _daily_rebus(day):
     return dict(_CINEMA_REBUSES[index])
 
 
+def daily_movie_rebus(day):
+    """Публичный локальный ребус дня для компактных витрин без сетевого запроса."""
+    return _daily_rebus(day)
+
+
 def _cinema_birthday_cache_get(day):
     data = store._load(config.CINEMA_DAILY_CACHE_KEY)
     entry = data.get(day.isoformat()) if isinstance(data, dict) else None

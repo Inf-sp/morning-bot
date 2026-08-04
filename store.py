@@ -203,9 +203,15 @@ def get_learning_language(chat_id):
     code = str(get_profile(chat_id).get("learning_language") or "").strip().lower()
     return code if code in ("nl", "en") else ""
 
+
+def learning_is_enabled(chat_id):
+    """Язык показывается только после явного выбора нидерландского или английского."""
+    return str(get_profile(chat_id).get("learning_language") or "").strip().lower() in ("nl", "en")
+
+
 def set_learning_language(chat_id, language):
     code = str(language or "").strip().lower()
-    if code not in ("nl", "en"):
+    if code not in ("nl", "en", "none"):
         return
     prof = get_profile(chat_id)
     prof["learning_language"] = code

@@ -590,7 +590,10 @@ async def send_weather(bot, cid, mode="today", status=None):
     advice = _week_advice(day_data)
 
     kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
-    msg = weather_ui.week_forecast(rng, s["city"], overview, day_data, advice)
+    msg = weather_ui.week_forecast(
+        rng, s["city"], overview, day_data, advice,
+        country=s.get("country", ""), country_code=s.get("cc", ""),
+    )
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
         return
@@ -697,7 +700,7 @@ async def set_city_text(bot, cid, name, show_brief=True):
             myday.reset_day_cache(cid)
         except Exception:
             pass
-        msg = weather_ui.city_changed(city_name, country)
+        msg = weather_ui.city_changed(city_name, country, cc)
         await bot.send_message(chat_id=cid, text=msg.text)
         # сразу показываем обновлённую сводку "Мой день" (не во время онбординга)
         if show_brief:
@@ -731,7 +734,7 @@ async def location_handler(update, context):
         myday.reset_day_cache(cid)
     except Exception:
         pass
-    msg = weather_ui.location_changed(city, country)
+    msg = weather_ui.location_changed(city, country, cc)
     await update.message.reply_text(msg.text)
     try:
         await send_weather(context.bot, cid, "today")

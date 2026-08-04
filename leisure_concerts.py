@@ -599,6 +599,11 @@ def _concerts_cache_get(cid, cc):
     return filter_concert_events(entry.get("events", []), cc)
 
 
+def cached_concerts(cid, cc):
+    """Подтверждённая недельная афиша из кэша без обращения к внешним сервисам."""
+    return _concerts_cache_get(cid, str(cc or "").upper()) or []
+
+
 def _concerts_cache_set(cid, cc, events):
     import time
     d = store._load(config.CONCERTS_CACHE_KEY)

@@ -132,6 +132,8 @@ def build_learning_home(cid):
     """Данные для главного экрана раздела 'Обучение': материал дня + короткий
     фокус тренировки. UI (ui/menu.py) только рендерит эти поля, не читает
     store и не выбирает материал сам — см. §8 CLAUDE.md."""
+    if not store.learning_is_enabled(cid):
+        return {"has_material": False, "disabled": True, "lang_code": ""}
     entry = select_daily_material(cid)
     lang_code = _active_language_code(cid)
     progress = build_progress_screen(cid)

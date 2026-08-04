@@ -88,6 +88,7 @@ async def handle_callback(bot, cid, q, data: str):
     if data.startswith("ob_lang_"):
         choice = data[len("ob_lang_"):]
         if choice == "skip":
+            store.set_learning_language(cid, "none")
             await _finish(bot, cid)
             return
         if choice not in ("nl", "en"):

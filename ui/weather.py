@@ -26,7 +26,7 @@ MessageBuilder (section/line/warning/embed) — единый визуальны�
 
 from .builder import MessageBuilder, MessageSpec, from_html
 from .constants import ui_label
-from util import cap_sentence
+from util import cap_sentence, country_flag, flag_from_cc
 
 
 def weather_warning(events, when="", advice=None):
@@ -81,9 +81,10 @@ def day_forecast(header, main_lines, alert="", fact_title="", fact=""):
     return b.build_stripped()
 
 
-def week_forecast(rng, city, overview, days, advice):
+def week_forecast(rng, city, overview, days, advice, country="", country_code=""):
     b = MessageBuilder()
-    b.bold(f"На неделю · {rng} · {city} 📍")
+    place = f"{str(city or '').strip()}{_country_suffix(country, country_code)}".strip(", ")
+    b.bold(f"Неделя с {rng}" + (f" · {place}" if place else ""))
     b.newline()
     b.spacer()
     b.line(overview)
@@ -133,9 +134,17 @@ def city_not_found(raw):
     return MessageSpec(text=f"Не нашёл город: {raw}.\n\nПроверь написание и пришли название ещё раз.")
 
 
-def city_changed(city, country=""):
-    return MessageSpec(text=f"✅ Готово. Город переключён на {city}" + (f", {country}." if country else "."))
+def _country_suffix(country="", country_code=""):
+    country = str(country or "").strip()
+    code = str(country_code or "").strip().upper()
+    flag = flag_from_cc(code) or flag_from_cc(country.upper()) or country_flag(country)
+    suffix = f", {country}" if country else ""
+    return f"{suffix} {flag}".rstrip() if flag else suffix
 
 
-def location_changed(city, country=""):
-    return MessageSpec(text=f"Готово. Ты находишься в городе {city}" + (f", {country}." if country else "."))
+def city_changed(city, country="", country_code=""):
+    return MessageSpec(text=f"✅ Готово. Город переключён на {city}{_country_suffix(country, country_code)}.")
+
+
+def location_changed(city, country="", country_code=""):
+    return MessageSpec(text=f"Готово. Ты находишься в городе {city}{_country_suffix(country, country_code)}.")

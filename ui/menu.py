@@ -111,6 +111,17 @@ _SCREENS = {
 
 def learning_menu(home: dict):
     """Главный экран обучения: материал дня, прогресс и следующий шаг."""
+    if home.get("disabled"):
+        b = MessageBuilder()
+        b.section("🧠 Обучение")
+        b.spacer()
+        b.line("Изучение языка выключено.")
+        b.spacer()
+        b.line("Выбери нидерландский или английский в предпочтениях, когда захочешь вернуться к практике.")
+        return b.build_stripped(reply_markup=ikb([
+            [("📌 Язык обучения", "set_learning")],
+            [("#️⃣ Главная", "m_menu")],
+        ]))
     code = home.get("lang_code", "nl")
     flag = LANGUAGE_EMOJI.get(code, LANGUAGE_EMOJI["nl"])
     title = "Английский" if code == "en" else "Нидерландский"

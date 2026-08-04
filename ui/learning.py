@@ -371,17 +371,21 @@ def game_hint(ui, hint):
     return b.build(reply_markup=kb)
 
 
-def learning_settings(active_language, active_level):
+def learning_settings(active_language, active_level=""):
     b = MessageBuilder()
     b.section("📌 Предпочтения")
     b.spacer()
-    b.labeled_line("Активный язык")
+    b.labeled_line("Язык обучения")
     b.bold(active_language)
     b.newline()
+    if active_level:
+        b.spacer()
+        b.labeled_line("Уровень")
+        b.bold(active_level)
+        b.newline()
     b.spacer()
-    b.labeled_line("Уровень")
-    b.bold(active_level)
-    b.newline()
-    b.spacer()
-    b.text_line("Эти предпочтения влияют на карточку обучения, практику и уведомления.")
+    if active_level:
+        b.text_line("Эти предпочтения влияют на карточку обучения, практику и уведомления.")
+    else:
+        b.text_line("Выбери язык, когда захочешь вернуться к практике.")
     return b.build()
