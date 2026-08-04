@@ -366,8 +366,13 @@ def test_category_week_screens_are_compact_and_show_only_content():
     )
 
     assert "🎬 Кино на сегодня · Алкмар" in movie.text
-    assert "🎟️ Идёт в кино" in movie.text
-    assert "Короткая завязка фильма." in movie.text
+    assert "Сегодня в кинотеатрах Алкмара несколько премьер и популярных фильмов." in movie.text
+    assert "Фильм · Драма" in movie.text
+    assert "Короткая завязка фильма." not in movie.text
+    table = next(block for block in movie.rich_message["blocks"] if block["type"] == "table")
+    assert [[cell["text"] for cell in row] for row in table["cells"]] == [
+        ["Фильм", "Жанр"], ["Фильм", "Драма"],
+    ]
     assert "📚 Книги этой недели" in books.text
     assert "«Новая книга» · Автор · ⭐ 4.4" in books.text
     assert "🎧 Музыка этой недели" in music.text

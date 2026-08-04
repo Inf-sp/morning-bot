@@ -5,6 +5,7 @@ from telegram import MessageEntity
 
 from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
+from . import rich
 
 
 def clip(text, limit=450):
@@ -56,20 +57,62 @@ def movie_home_screen(genre_labels, country_label=None, now_playing=None):
 
 
 def movie_now_playing_screen(country_label, now_playing):
+    city = str(country_label or "твоего города").strip()
     b = MessageBuilder()
     b.text_line("🎬 ")
-    b.bold(f"Кино на сегодня · {country_label}")
+    b.bold(f"Кино на сегодня · {city}")
     b.newline()
     if now_playing:
         b.spacer()
-        b.bold("🎟️ Идёт в кино")
+        b.line(_movie_now_playing_intro(city))
+        b.spacer()
+        b.bold("Фильм · Жанр")
         b.newline()
         for item in now_playing:
-            _format_movie_row(b, item, with_description=True)
+            title = str(_item_value(item, "title", "") or "").strip()
+            if not title:
+                continue
+            genre = _movie_table_genre(item)
+            b.line(f"{title} · {genre}")
     else:
         b.spacer()
         b.line("Пока не удалось подтвердить актуальные показы.")
-    return b.build_stripped()
+    msg = b.build_stripped()
+    if now_playing:
+        rows = []
+        for item in now_playing:
+            title = str(_item_value(item, "title", "") or "").strip()
+            if title:
+                rows.append((title, _movie_table_genre(item)))
+        msg.rich_message = rich.message([
+            rich.heading(f"🎬 Кино на сегодня · {city}", size=2),
+            rich.paragraph(_movie_now_playing_intro(city)),
+            rich.table(("Фильм", "Жанр"), rows, bordered=True, striped=True),
+        ])
+    return msg
+
+
+def _movie_now_playing_intro(city: str) -> str:
+    """Коротко объясняет, что таблица — именно локальная афиша."""
+    if city.casefold() == "алкмар":
+        place = "Алкмара"
+    else:
+        place = f"города {city}"
+    return f"Сегодня в кинотеатрах {place} несколько премьер и популярных фильмов."
+
+
+def _movie_table_genre(movie) -> str:
+    """Единый русский жанр для обеих колонок локальной афиши."""
+    genre = _primary_genre(movie)
+    if not genre:
+        return "—"
+    translations = {
+        "music": "Музыка", "adventure": "Приключения", "science fiction": "Фантастика",
+        "fantasy": "Фэнтези", "drama": "Драма", "comedy": "Комедия", "horror": "Ужасы",
+        "thriller": "Триллер", "romance": "Романтика", "animation": "Анимация",
+        "documentary": "Документальный фильм", "crime": "Криминал", "action": "Боевик",
+    }
+    return translations.get(genre.casefold(), genre)
 
 
 def _item_value(item, key, default=None):

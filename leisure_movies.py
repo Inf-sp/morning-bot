@@ -5,6 +5,7 @@ import logging
 import re
 from datetime import datetime
 import config
+import rich_delivery
 
 _log = logging.getLogger(__name__)
 import store
@@ -361,13 +362,7 @@ async def send_movie_now_playing(bot, cid, q=None, status=None):
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
         return
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
 async def warm_movie_home_cache(cid):
