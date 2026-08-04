@@ -89,6 +89,6 @@ def test_health_uses_thoughts_label_and_new_emoji():
         for button in row
     ]
 
-    assert "😮‍💨 Мысли" in labels
+    assert "😮‍💨 Разобрать мысли" in labels
     assert "📓 Тревоги" not in labels
     assert balance_ui.worries_diary([]).text.startswith("😮‍💨 Мысли\n")

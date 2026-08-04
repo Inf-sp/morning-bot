@@ -1,9 +1,13 @@
 """Книжные рекомендации, замены и любимые книги."""
 
 import asyncio
+import logging
 import random
+import threading
+import time
 from datetime import date, datetime, timedelta
 
+import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import config
@@ -12,7 +16,12 @@ import recommendation_stoplist
 import settings
 import store
 import tracking
+import weather
 from ui import leisure as leisure_ui
+
+
+_log = logging.getLogger(__name__)
+_BOOK_DAILY_LOCK = threading.Lock()
 
 
 _BOOK_GENRES = [
@@ -38,6 +47,68 @@ _WEEKLY_POPULAR_FALLBACKS = [
     {"title": "The Tenant", "author": "Freida McFadden", "published_date": "2025-05-06"},
     {"title": "Atmosphere", "author": "Taylor Jenkins Reid", "published_date": "2025-06-03"},
 ]
+
+_DAILY_BOOK_QUOTES = (
+    {
+        "text": "Человек создан для счастья, как птица для полёта.",
+        "book": "Парадокс",
+        "author": "Владимир Короленко",
+        "note": "Небольшой рассказ о человеке, который не перестаёт спорить с жизнью.",
+    },
+    {
+        "text": "Рукописи не горят.",
+        "book": "Мастер и Маргарита",
+        "author": "Михаил Булгаков",
+        "note": "Роман, где сатира, мистика и история любви идут рядом.",
+    },
+    {
+        "text": "Все счастливые семьи похожи друг на друга.",
+        "book": "Анна Каренина",
+        "author": "Лев Толстой",
+        "note": "Большой роман о семье, выборе и цене личного счастья.",
+    },
+    {
+        "text": "Лицом к лицу лица не увидать. Большое видится на расстоянии.",
+        "book": "Письмо к женщине",
+        "author": "Сергей Есенин",
+        "note": "Стихотворение о времени, переменах и попытке понять прошлое.",
+    },
+)
+_BOOK_REBUSES = (
+    {
+        "emoji": "🧙‍♀️ ⚡ 🚂",
+        "answer": "Гарри Поттер",
+        "fact": "Первый роман о Гарри Поттере вышел в 1997 году.",
+    },
+    {
+        "emoji": "🐋 ⚓ 👨‍✈️",
+        "answer": "Моби Дик",
+        "fact": "«Моби Дик» впервые был опубликован в 1851 году.",
+    },
+    {
+        "emoji": "🕳️ 🐇 👧",
+        "answer": "Алиса в Стране чудес",
+        "fact": "Льюис Кэрролл сначала рассказывал историю об Алисе устно во время прогулок.",
+    },
+    {
+        "emoji": "💍 🌋 🧙",
+        "answer": "Властелин колец",
+        "fact": "Толкин писал «Властелина колец» больше десяти лет.",
+    },
+)
+_BOOK_BIRTHDAY_FALLBACKS = {
+    (8, 4): {
+        "name": "Кнут Гамсун",
+        "detail": "норвежский писатель и лауреат Нобелевской премии по литературе",
+        "fact": "«Голод» стал литературным прорывом Гамсуна и одним из первых современных норвежских романов.",
+    },
+}
+_PREMIERE_VIBES = {
+    "onyx storm": "драконы, политика и тёмный фэнтези-мир",
+    "great big beautiful life": "роман о тайнах прошлого",
+    "the tenant": "триллер с неожиданным твистом",
+    "atmosphere": "эмоциональная история о космосе и близости",
+}
 
 
 def _item_text(item):
@@ -146,6 +217,7 @@ def _book_kb(i):
 
 def books_home_keyboard():
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Найти книгу с этой цитатой", callback_data="book_quote")],
         [InlineKeyboardButton("✨ Подобрать книгу", callback_data="book_reco")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
         [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
@@ -154,11 +226,188 @@ def books_home_keyboard():
 
 
 async def send_books_home(bot, cid, q=None):
-    items = await get_weekly_new_books()
-    msg = leisure_ui.weekly_books_screen(items)
+    try:
+        items = await get_weekly_new_books()
+    except Exception as error:
+        _log.warning("books home premieres failed cid=%s: %r", cid, error)
+        items = [dict(item) for item in _WEEKLY_POPULAR_FALLBACKS]
+    try:
+        daily_book = await _daily_book_content(cid)
+    except Exception as error:
+        _log.warning("books home daily content failed cid=%s: %r", cid, error)
+        now = datetime.now(config.TZ)
+        daily_book = {
+            "quote": _daily_book_quote(now.date()),
+            "rebus": _daily_book_rebus(now.date()),
+            "mood": _book_mood_without_weather(now),
+        }
+    msg = leisure_ui.weekly_books_screen(
+        _book_city(cid), daily_book, _books_with_premiere_vibes(items),
+    )
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,
         reply_markup=books_home_keyboard(),
+    )
+
+
+def _daily_book_quote(day):
+    return dict(_DAILY_BOOK_QUOTES[(day.timetuple().tm_yday - 216) % len(_DAILY_BOOK_QUOTES)])
+
+
+def _daily_book_rebus(day):
+    return dict(_BOOK_REBUSES[(day.timetuple().tm_yday - 216) % len(_BOOK_REBUSES)])
+
+
+def _book_birthday_cache_get(day):
+    data = store._load(config.BOOK_DAILY_CACHE_KEY)
+    entry = data.get(day.isoformat()) if isinstance(data, dict) else None
+    if not isinstance(entry, dict):
+        return None
+    birthday = entry.get("birthday")
+    return dict(birthday) if isinstance(birthday, dict) else {}
+
+
+def _book_birthday_cache_set(day, birthday):
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        data[day.isoformat()] = {"ts": time.time(), "birthday": dict(birthday or {})}
+        return data, None
+
+    store.mutate_kv(config.BOOK_DAILY_CACHE_KEY, mutate)
+
+
+def _book_birthday_detail(role):
+    value = str(role or "").casefold()
+    if "поэт" in value or "poet" in value:
+        return "поэт, родившийся сегодня"
+    if "писательниц" in value or "writer" in value or "author" in value:
+        return "писатель, родившийся сегодня"
+    return "автор, родившийся сегодня"
+
+
+def _load_book_birthday(day):
+    """Один проверенный литературный именинник на день для всех пользователей."""
+    cached = _book_birthday_cache_get(day)
+    if cached is not None:
+        return cached
+    with _BOOK_DAILY_LOCK:
+        cached = _book_birthday_cache_get(day)
+        if cached is not None:
+            return cached
+        fallback = _BOOK_BIRTHDAY_FALLBACKS.get((day.month, day.day))
+        if fallback:
+            _book_birthday_cache_set(day, fallback)
+            return dict(fallback)
+        query = """
+            SELECT ?personLabel ?occupationLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
+              ?person wdt:P31 wd:Q5; wdt:P569 ?birth; wdt:P106 ?occupation.
+              VALUES ?occupation { wd:Q49757 wd:Q36180 wd:Q482980 }
+              FILTER(MONTH(?birth) = %d && DAY(?birth) = %d)
+              SERVICE wikibase:label { bd:serviceParam wikibase:language \"ru,en\". }
+            }
+            ORDER BY DESC(?sitelinks)
+            LIMIT 1
+        """ % (day.month, day.day)
+        try:
+            response = requests.get(
+                "https://query.wikidata.org/sparql",
+                params={"query": query, "format": "json"},
+                headers={"Accept": "application/sparql-results+json", "User-Agent": "morning-bot/1.0"},
+                timeout=6,
+            )
+            response.raise_for_status()
+            bindings = response.json().get("results", {}).get("bindings", [])
+            if bindings:
+                item = bindings[0]
+                name = str((item.get("personLabel") or {}).get("value") or "").strip()
+                if name:
+                    birthday = {
+                        "name": name,
+                        "detail": _book_birthday_detail(
+                            (item.get("occupationLabel") or {}).get("value")),
+                    }
+                    _book_birthday_cache_set(day, birthday)
+                    return birthday
+        except Exception as error:
+            _log.info("book birthday lookup unavailable: %s", type(error).__name__)
+        _book_birthday_cache_set(day, {})
+        return {}
+
+
+def _book_city(cid):
+    settings_data = store.get_settings(cid)
+    return str(settings_data.get("city") or config.DEFAULT_CITY.get("name") or "").strip()
+
+
+def _book_mood_without_weather(now):
+    if now.weekday() == 4:
+        return "Пятница вечером? «Элеанор Олифант в полном порядке» — тёплая история для паузы после недели."
+    if now.weekday() >= 5:
+        return "Выходной? «Ветер в ивах» — книга, в которую можно уйти на пару спокойных часов."
+    return "Обычный вечер? «Девушка с татуировкой дракона» — плотный детектив, который держит внимание."
+
+
+def _book_mood_for_today(cid, now):
+    rainy = False
+    try:
+        settings_data = store.get_settings(cid)
+        data = weather.fetch_weather(settings_data["lat"], settings_data["lon"], 2)
+        daily = data.get("daily") or {}
+        if daily.get("time"):
+            daytime = weather.daytime_outfit_weather(
+                data,
+                daily["time"][0],
+                (daily.get("temperature_2m_max") or [None])[0],
+                (daily.get("windspeed_10m_max") or [0])[0] or 0,
+                (daily.get("precipitation_probability_max") or [0])[0] or 0,
+                (daily.get("precipitation_sum") or [None])[0],
+                (daily.get("weathercode") or [0])[0],
+            )
+            rainy = bool(daytime.get("rain_daytime"))
+    except Exception as error:
+        _log.info("book mood weather unavailable: %s", type(error).__name__)
+
+    if rainy:
+        return "Дождливый вечер? «Девушка с татуировкой дракона» — плотный детектив, от которого стынет кровь."
+    return _book_mood_without_weather(now)
+
+
+def _premiere_vibe(item):
+    title = str((item or {}).get("title") or "").casefold().strip()
+    known = _PREMIERE_VIBES.get(title)
+    if known:
+        return known
+    description = str((item or {}).get("description") or "").strip()
+    if not description:
+        return "новая заметная книга"
+    sentence = description.split(".", 1)[0].strip()
+    return sentence[:110].rstrip(" ,;:") or "новая заметная книга"
+
+
+def _books_with_premiere_vibes(items):
+    return [{**dict(item), "vibe": _premiere_vibe(item)}
+            for item in (items or []) if isinstance(item, dict)]
+
+
+async def _daily_book_content(cid):
+    now = datetime.now(config.TZ)
+    return {
+        "quote": _daily_book_quote(now.date()),
+        "rebus": _daily_book_rebus(now.date()),
+        "birthday": await asyncio.to_thread(_load_book_birthday, now.date()),
+        "mood": await asyncio.to_thread(_book_mood_for_today, cid, now),
+    }
+
+
+async def send_daily_quote_book(bot, cid):
+    quote = _daily_book_quote(datetime.now(config.TZ).date())
+    msg = leisure_ui.book_quote_source_screen(quote)
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=keyboard,
     )
 
 

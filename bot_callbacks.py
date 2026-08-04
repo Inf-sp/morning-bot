@@ -451,6 +451,10 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "movie_prefs":
         await leisure_movies.send_movie_prefs(bot, cid, q)
         return
+    if data == "book_quote":
+        await _ack(q)
+        await leisure_books.send_daily_quote_book(bot, cid)
+        return
     if data == "book_reco":
         await _inline_status(lambda _s: leisure_books.send_books_reco(bot, cid))
         return
@@ -466,6 +470,19 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data == "music_reco":
         await _inline_status(lambda _s: leisure_music.send_listen(bot, cid))
+        return
+    if data == "music_archive":
+        await _inline_status(
+            lambda status: leisure_music.send_music_task(bot, cid, "archive", status=status),
+            preserve_message=True,
+        )
+        return
+    if data.startswith("music_task_"):
+        await _inline_status(
+            lambda status: leisure_music.send_music_task(
+                bot, cid, data[len("music_task_"):], status=status),
+            preserve_message=True,
+        )
         return
     if data == "music_genre_menu":
         await _ack(q)

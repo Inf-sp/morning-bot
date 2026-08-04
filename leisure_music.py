@@ -2,19 +2,22 @@
 
 import asyncio
 import logging
+import threading
+import time
 from datetime import datetime
 
+import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
 import config
-import music_releases
 import recommendation_stoplist
 import settings
 import store
 from ui import leisure as leisure_ui
 
 _log = logging.getLogger(__name__)
+_MUSIC_DAILY_LOCK = threading.Lock()
 
 
 def _music_home_only_kb():
@@ -30,6 +33,76 @@ _MUSIC_GENRES = [
 ]
 _MUSIC_STYLE_KEY = "music_styles"
 _RECENT_ARTISTS_LIMIT = 40
+
+_DAILY_VIBES = (
+    {"track": "Introvert", "artist": "Little Simz", "tag": "Для собранного фокуса"},
+    {"track": "Friday Morning", "artist": "Khruangbin", "tag": "Лёгкий вечерний соул"},
+    {"track": "adore u", "artist": "Fred again..", "tag": "Чтобы мягко переключиться после дня"},
+    {"track": "Two Weeks", "artist": "FKA twigs", "tag": "Для красивого, немного странного вечера"},
+    {"track": "Favourite", "artist": "Fontaines D.C.", "tag": "Когда нужна гитара и немного скорости"},
+)
+_MUSIC_REBUSES = (
+    {
+        "emoji": "👑 🐝 🎤",
+        "answer": "Beyoncé",
+        "fact": "«Single Ladies» принесла Beyoncé три премии «Грэмми»."},
+    {
+        "emoji": "⚡ 🛣️ 🎸",
+        "answer": "Highway to Hell",
+        "fact": "AC/DC записали «Highway to Hell» с продюсером Маттом Лэнгом."},
+    {
+        "emoji": "🌌 🚀 👨‍🚀",
+        "answer": "Space Oddity",
+        "fact": "«Space Oddity» вышла в год первой высадки человека на Луну."},
+    {
+        "emoji": "👑 🎤 🎭",
+        "answer": "Bohemian Rhapsody",
+        "fact": "«Bohemian Rhapsody» соединяет балладу, оперу и хард-рок в одной песне."},
+    {
+        "emoji": "💜 ☔ 🎸",
+        "answer": "Purple Rain",
+        "fact": "«Purple Rain» был одновременно фильмом, альбомом и мировым туром Prince."},
+)
+_MUSIC_LEGEND_FALLBACKS = {
+    (8, 4): {
+        "name": "Луи Армстронг",
+        "detail": "трубач и певец, определивший язык сольного джаза",
+    },
+}
+_MUSIC_TASKS = {
+    "focus": (
+        {"title": "Грузить мозг (фокус)", "track": "Introvert", "artist": "Little Simz",
+         "tag": "Чёткий ритм и много деталей без лишней суеты.",
+         "note": "Подойдёт для работы, где нужно держать мысль."},
+        {"title": "Грузить мозг (фокус)", "track": "Simulation Swarm", "artist": "Big Thief",
+         "tag": "Живой гитарный поток для длинной задачи.",
+         "note": "Лучше включить, когда хочется сосредоточиться без жёсткого бита."},
+    ),
+    "workout": (
+        {"title": "Тренировка", "track": "Delilah (pull me out of this)", "artist": "Fred again..",
+         "tag": "Бит, который не даёт сбавить темп.", "note": "Для разминки или последнего подхода."},
+        {"title": "Тренировка", "track": "Gorilla", "artist": "Little Simz",
+         "tag": "Уверенный грув без лишнего пафоса.", "note": "Когда нужен темп, но не агрессия."},
+    ),
+    "commute": (
+        {"title": "Дорога домой", "track": "Friday Morning", "artist": "Khruangbin",
+         "tag": "Тёплый грув для медленного переключения.", "note": "Чтобы оставить рабочий день позади."},
+        {"title": "Дорога домой", "track": "cellophane", "artist": "FKA twigs",
+         "tag": "Тихая пауза без фонового шума.", "note": "Если хочется посмотреть в окно и никуда не спешить."},
+    ),
+    "conversation": (
+        {"title": "Фон для разговора", "track": "Texas Sun", "artist": "Khruangbin & Leon Bridges",
+         "tag": "Мягко поддерживает разговор, не перетягивая внимание.", "note": "Хорошо работает за ужином или в гостях."},
+        {"title": "Фон для разговора", "track": "Two Weeks", "artist": "FKA twigs",
+         "tag": "Воздушный поп с аккуратным ритмом.", "note": "Для тихой беседы без тишины между фразами."},
+    ),
+    "archive": (
+        {"title": "Архивная находка", "track": "Heaven or Las Vegas", "artist": "Cocteau Twins",
+         "tag": "Скрытый поп-шедевр 1990 года.", "note": "Мечтательная гитара и голос, который звучит как отдельный инструмент."},
+        {"title": "Архивная находка", "track": "Tinseltown in the Rain", "artist": "The Blue Nile",
+         "tag": "Ночной синт-поп из 80-х.", "note": "Редкий случай, когда городская меланхолия звучит очень тепло."},
+    ),
+}
 
 # Последний резерв, когда все AI-провайдеры временно недоступны. Это реальные,
 # достаточно известные артисты с существующими треками; выбор всё равно исключает
@@ -196,6 +269,11 @@ def _listen_kb():
 
 def music_home_keyboard():
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Грузить мозг (фокус)", callback_data="music_task_focus")],
+        [InlineKeyboardButton("Тренировка", callback_data="music_task_workout"),
+         InlineKeyboardButton("Дорога домой", callback_data="music_task_commute")],
+        [InlineKeyboardButton("Фон для разговора", callback_data="music_task_conversation")],
+        [InlineKeyboardButton("Архивная находка", callback_data="music_archive")],
         [InlineKeyboardButton("✨ Подобрать новую музыку", callback_data="music_reco")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="music_genre_menu")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find")],
@@ -204,22 +282,142 @@ def music_home_keyboard():
     ])
 
 
+def _daily_music_rebus(day):
+    return dict(_MUSIC_REBUSES[(day.timetuple().tm_yday - 216) % len(_MUSIC_REBUSES)])
+
+
+def _daily_music_vibe(day):
+    return dict(_DAILY_VIBES[(day.timetuple().tm_yday - 216) % len(_DAILY_VIBES)])
+
+
+def _music_legend_cache_get(day):
+    data = store._load(config.MUSIC_DAILY_CACHE_KEY)
+    entry = data.get(day.isoformat()) if isinstance(data, dict) else None
+    legend = entry.get("legend") if isinstance(entry, dict) else None
+    return dict(legend) if isinstance(legend, dict) else None
+
+
+def _music_legend_cache_set(day, legend):
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        data[day.isoformat()] = {"ts": time.time(), "legend": dict(legend or {})}
+        return data, None
+
+    store.mutate_kv(config.MUSIC_DAILY_CACHE_KEY, mutate)
+
+
+def _music_legend_detail(role):
+    value = str(role or "").casefold()
+    if "певиц" in value or "singer" in value:
+        return "певица, родившаяся сегодня"
+    if "певец" in value or "vocalist" in value:
+        return "певец, родившийся сегодня"
+    if "композитор" in value or "composer" in value:
+        return "композитор, родившийся сегодня"
+    return "музыкант, родившийся сегодня"
+
+
+def _load_music_legend(day):
+    """Один именинник из музыки на день; запрос общий и не повторяется для каждого чата."""
+    cached = _music_legend_cache_get(day)
+    if cached is not None:
+        return cached
+    with _MUSIC_DAILY_LOCK:
+        cached = _music_legend_cache_get(day)
+        if cached is not None:
+            return cached
+        fallback = _MUSIC_LEGEND_FALLBACKS.get((day.month, day.day))
+        if fallback:
+            _music_legend_cache_set(day, fallback)
+            return dict(fallback)
+        query = """
+            SELECT ?personLabel ?occupationLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
+              ?person wdt:P31 wd:Q5; wdt:P569 ?birth; wdt:P106 ?occupation.
+              VALUES ?occupation { wd:Q639669 wd:Q177220 wd:Q36834 }
+              FILTER(MONTH(?birth) = %d && DAY(?birth) = %d)
+              SERVICE wikibase:label { bd:serviceParam wikibase:language \"ru,en\". }
+            }
+            ORDER BY DESC(?sitelinks)
+            LIMIT 1
+        """ % (day.month, day.day)
+        try:
+            response = requests.get(
+                "https://query.wikidata.org/sparql",
+                params={"query": query, "format": "json"},
+                headers={"Accept": "application/sparql-results+json", "User-Agent": "morning-bot/1.0"},
+                timeout=6,
+            )
+            response.raise_for_status()
+            bindings = response.json().get("results", {}).get("bindings", [])
+            if bindings:
+                item = bindings[0]
+                name = str((item.get("personLabel") or {}).get("value") or "").strip()
+                if name:
+                    legend = {
+                        "name": name,
+                        "detail": _music_legend_detail((item.get("occupationLabel") or {}).get("value")),
+                    }
+                    _music_legend_cache_set(day, legend)
+                    return legend
+        except Exception as error:
+            _log.info("music legend lookup unavailable: %s", type(error).__name__)
+        _music_legend_cache_set(day, {})
+        return {}
+
+
+def _music_city(cid):
+    settings_data = store.get_settings(cid)
+    return str(settings_data.get("city") or config.DEFAULT_CITY.get("name") or "").strip()
+
+
+async def _daily_music_content():
+    now = datetime.now(config.TZ)
+    return {
+        "vibe": _daily_music_vibe(now.date()),
+        "rebus": _daily_music_rebus(now.date()),
+        "legend": await asyncio.to_thread(_load_music_legend, now.date()),
+    }
+
+
+def _task_for_today(key):
+    choices = _MUSIC_TASKS.get(key) or ()
+    if not choices:
+        return None
+    index = datetime.now(config.TZ).date().timetuple().tm_yday % len(choices)
+    return dict(choices[index])
+
+
+def _music_task_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+
+
+async def send_music_task(bot, cid, key, *, status=None):
+    task = _task_for_today(key)
+    if not task:
+        return
+    msg = leisure_ui.music_activity_screen(task)
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=_music_task_keyboard())
+        return
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_music_task_keyboard())
+
+
 async def send_music_home(bot, cid, q=None):
-    concerts, albums = await asyncio.gather(
-        _weekly_concerts(cid),
-        asyncio.to_thread(
-            music_releases.weekly_new_albums,
-            str(store.get_settings(cid).get("cc") or "NL"),
-        ),
-        return_exceptions=True,
-    )
-    if isinstance(concerts, Exception):
-        _log.warning("music home concerts failed cid=%s: %r", cid, concerts)
+    try:
+        concerts = await _weekly_concerts(cid)
+    except Exception as error:
+        _log.warning("music home concerts failed cid=%s: %r", cid, error)
         concerts = []
-    if isinstance(albums, Exception):
-        _log.warning("music home releases failed cid=%s: %r", cid, albums)
-        albums = []
-    msg = leisure_ui.music_week_screen(concerts or [], albums or [])
+    try:
+        daily_music = await _daily_music_content()
+    except Exception as error:
+        _log.warning("music home daily content failed cid=%s: %r", cid, error)
+        daily_music = {"vibe": _daily_music_vibe(datetime.now(config.TZ).date()),
+                       "rebus": _daily_music_rebus(datetime.now(config.TZ).date())}
+    msg = leisure_ui.music_week_screen(_music_city(cid), daily_music, concerts or [])
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,
         reply_markup=music_home_keyboard(),

@@ -5,7 +5,6 @@ from telegram import MessageEntity
 
 from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
-from . import rich
 
 
 def clip(text, limit=450):
@@ -56,63 +55,75 @@ def movie_home_screen(genre_labels, country_label=None, now_playing=None):
     return b.build_stripped()
 
 
-def movie_now_playing_screen(country_label, now_playing):
-    city = str(country_label or "твоего города").strip()
+def movie_now_playing_screen(city, now_playing, cinema_day):
+    """Ежедневная кино-витрина: лёгкая, короткая и без табличного вида."""
+    city = str(city or "твоего города").strip()
+    cinema_day = cinema_day or {}
+    rebus = cinema_day.get("rebus") or {}
+    birthday = cinema_day.get("birthday") or {}
     b = MessageBuilder()
     b.text_line("🎬 ")
     b.bold(f"Кино на сегодня · {city}")
     b.newline()
-    if now_playing:
+
+    b.spacer()
+    b.text_line("Ребус дня: ")
+    b.text_line(str(rebus.get("emoji") or "🎬 ❓"))
+    b.text_line(" → ")
+    b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
+
+    if birthday.get("name"):
         b.spacer()
-        b.line(_movie_now_playing_intro(city))
+        b.text_line("Именинник дня: ")
+        b.bold(str(birthday["name"]))
+        b.line(f" — {str(birthday.get('role') or 'кинематографист').strip()}.")
+
+    mood = str(cinema_day.get("mood") or "").strip()
+    if mood:
         b.spacer()
-        b.bold("Фильм · Жанр")
-        b.newline()
-        for item in now_playing:
-            title = str(_item_value(item, "title", "") or "").strip()
-            if not title:
-                continue
-            genre = _movie_table_genre(item)
-            b.line(f"{title} · {genre}")
-    else:
+        b.text_line("Фильм под настроение: ")
+        b.line(mood)
+
+    b.spacer()
+    b.text_line("Что в кино: ")
+    cinema = _movie_now_playing_line(now_playing)
+    b.line(cinema or "Пока не удалось подтвердить актуальные показы.")
+
+    fact = str(rebus.get("fact") or cinema_day.get("fact") or "").strip()
+    if fact:
         b.spacer()
-        b.line("Пока не удалось подтвердить актуальные показы.")
-    msg = b.build_stripped()
-    if now_playing:
-        rows = []
-        for item in now_playing:
-            title = str(_item_value(item, "title", "") or "").strip()
-            if title:
-                rows.append((title, _movie_table_genre(item)))
-        msg.rich_message = rich.message([
-            rich.heading(f"🎬 Кино на сегодня · {city}", size=2),
-            rich.paragraph(_movie_now_playing_intro(city)),
-            rich.table(("Фильм", "Жанр"), rows, bordered=True, striped=True),
-        ])
-    return msg
+        b.text_line("💡 Факт дня: ")
+        b.line(fact)
+    return b.build_stripped()
 
 
-def _movie_now_playing_intro(city: str) -> str:
-    """Коротко объясняет, что таблица — именно локальная афиша."""
-    if city.casefold() == "алкмар":
-        place = "Алкмара"
-    else:
-        place = f"города {city}"
-    return f"Сегодня в кинотеатрах {place} несколько премьер и популярных фильмов."
+def _movie_now_playing_line(now_playing) -> str:
+    entries = []
+    for item in now_playing or []:
+        title = str(_item_value(item, "title", "") or "").strip()
+        if not title:
+            continue
+        genres = _movie_genres_for_line(item)
+        entries.append(f"{title} ({genres})" if genres else title)
+    return ", ".join(entries)
 
 
-def _movie_table_genre(movie) -> str:
-    """Единый русский жанр для обеих колонок локальной афиши."""
-    genre = _primary_genre(movie)
-    if not genre:
-        return "—"
+def _movie_genres_for_line(movie) -> str:
+    raw_genres = _item_value(movie, "genres")
+    if not isinstance(raw_genres, list):
+        raw_genres = [_item_value(movie, "genre")]
     translations = {
-        "music": "Музыка", "adventure": "Приключения", "science fiction": "Фантастика",
-        "fantasy": "Фэнтези", "drama": "Драма", "comedy": "Комедия", "horror": "Ужасы",
-        "thriller": "Триллер", "romance": "Романтика", "animation": "Анимация",
-        "documentary": "Документальный фильм", "crime": "Криминал", "action": "Боевик",
+        "music": "музыка", "adventure": "приключения", "science fiction": "фантастика",
+        "fantasy": "фэнтези", "drama": "драма", "comedy": "комедия", "horror": "ужасы",
+        "thriller": "триллер", "romance": "романтика", "animation": "анимация",
+        "documentary": "документальный фильм", "crime": "криминал", "action": "боевик",
     }
-    return translations.get(genre.casefold(), genre)
+    labels = []
+    for value in raw_genres:
+        genre = str(value or "").strip()
+        if genre:
+            labels.append(translations.get(genre.casefold(), genre.casefold()))
+    return ", ".join(dict.fromkeys(labels[:3]))
 
 
 def _item_value(item, key, default=None):
@@ -403,85 +414,156 @@ def artist_card(data):
     return b.build_stripped()
 
 
-def weekly_books_screen(items):
+def weekly_books_screen(city, daily_book, items):
+    """Ежедневная литературная витрина без рейтингов и служебных подписей."""
+    city = str(city or "твоего города").strip()
+    daily_book = daily_book or {}
+    quote = daily_book.get("quote") or {}
+    rebus = daily_book.get("rebus") or {}
+    birthday = daily_book.get("birthday") or {}
     b = MessageBuilder()
     b.text_line("📚 ")
-    b.bold("Книги этой недели")
+    b.bold(f"Литературный вайб · {city}")
     b.newline()
-    if not items:
-        b.spacer()
-        b.line("Пока нет подтверждённых заметных новинок этой недели.")
-        return b.build_stripped()
+
     b.spacer()
-    showcase = str(_item_value(items[0], "_showcase", "") or "")
-    title = {
-        "month": "✨ Новинки месяца",
-        "popular": "Популярное чтение",
-        "fallback": "Популярное чтение",
-    }.get(showcase, "✨ Новые книги")
-    b.bold(title)
-    b.newline()
-    for item in items[:4]:
-        title = str(_item_value(item, "title", "") or "").strip()
-        author = str(_item_value(item, "author", "") or "").strip()
-        if not title:
-            continue
-        b.text_line("• ")
-        b.bold(f"«{title}»")
-        if author:
-            b.text_line(f" · {author}")
-        rating = _item_value(item, "rating")
-        count = _item_value(item, "ratings_count")
-        try:
-            if float(rating) > 0 and int(count) > 0:
-                b.text_line(f" · ⭐ {float(rating):.1f}")
-        except (TypeError, ValueError):
-            pass
-        b.newline()
-        description = clip(str(_item_value(item, "description", "") or ""), limit=115)
-        if description:
-            if description[-1] not in ".!?…":
-                description += "."
-            b.line(description)
+    b.text_line("Цитата со страницы: ")
+    b.italic(f"«{str(quote.get('text') or 'Хорошая история всегда находит читателя.').strip('«»')}»")
+
+    b.spacer()
+    b.text_line("Литературный ребус: ")
+    b.text_line(str(rebus.get("emoji") or "📚 ❓"))
+    b.text_line(" → ")
+    b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
+
+    if birthday.get("name"):
+        b.spacer()
+        b.text_line("Именинник дня: ")
+        b.bold(str(birthday["name"]))
+        b.line(f" — {str(birthday.get('detail') or 'писатель, родившийся сегодня').strip()}.")
+
+    mood = str(daily_book.get("mood") or "").strip()
+    if mood:
+        b.spacer()
+        b.text_line("Книга под настроение: ")
+        b.line(mood)
+
+    premieres = _book_premieres_line(items)
+    b.spacer()
+    b.text_line("Главные премьеры: ")
+    b.line(premieres or "Пока не удалось подтвердить заметные новинки.")
+
+    fact = str(birthday.get("fact") or rebus.get("fact") or daily_book.get("fact") or "").strip()
+    if fact:
+        b.spacer()
+        b.text_line("💡 Интересно: ")
+        b.line(fact)
     return b.build_stripped()
 
 
-def music_week_screen(concerts, albums):
+def _book_premieres_line(items) -> str:
+    entries = []
+    for item in list(items or [])[:3]:
+        title = str(_item_value(item, "title", "") or "").strip()
+        author = str(_item_value(item, "author", "") or "").strip()
+        vibe = str(_item_value(item, "vibe", "") or "").strip()
+        if not title:
+            continue
+        entry = f"«{title}»"
+        if author:
+            entry += f" · {author}"
+        if vibe:
+            entry += f" ({vibe})"
+        entries.append(entry)
+    return ", ".join(entries)
+
+
+def book_quote_source_screen(quote):
+    """Результат кнопки «Найти книгу с этой цитатой» — без поиска и догадок."""
+    quote = quote or {}
+    b = MessageBuilder()
+    b.text_line("📚 ")
+    b.bold("Книга из цитаты")
+    b.newline()
+    b.spacer()
+    b.italic(f"«{str(quote.get('text') or '').strip('«»')}»")
+    b.spacer()
+    b.bold(str(quote.get("book") or ""))
+    author = str(quote.get("author") or "").strip()
+    if author:
+        b.line(f" · {author}")
+    note = str(quote.get("note") or "").strip()
+    if note:
+        b.spacer()
+        b.line(note)
+    return b.build_stripped()
+
+
+def music_week_screen(city, daily_music, concerts):
+    """Короткая ежедневная витрина Музыки без чартов и таблиц."""
+    city = str(city or "твоего города").strip()
+    daily_music = daily_music or {}
+    vibe = daily_music.get("vibe") or {}
+    rebus = daily_music.get("rebus") or {}
+    legend = daily_music.get("legend") or {}
     b = MessageBuilder()
     b.text_line("🎧 ")
-    b.bold("Музыка этой недели")
+    b.bold(f"Музыка этой недели · {city}")
     b.newline()
-    if concerts:
+
+    if vibe.get("track") and vibe.get("artist"):
         b.spacer()
-        b.bold("🎫 Ближайшие концерты")
-        b.newline()
-        for event in concerts[:3]:
-            artist = str(_item_value(event, "artist", "") or "").strip()
-            if not artist:
-                continue
-            meta = [str(_item_value(event, key, "") or "").strip()
-                    for key in ("date", "place")]
-            b.text_line("• ")
-            b.bold(artist)
-            if any(meta):
-                b.text_line(" · " + " · ".join(value for value in meta if value))
-            b.newline()
-    if albums:
+        b.text_line("Вайб дня: ")
+        b.bold(f"{vibe['track']} — {vibe['artist']}")
+        tag = str(vibe.get("tag") or "").strip()
+        if tag:
+            b.line(f" ({tag})")
+
+    b.spacer()
+    b.text_line("Музыкальный ребус: ")
+    b.text_line(str(rebus.get("emoji") or "🎧 ❓"))
+    b.text_line(" → ")
+    b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
+
+    if legend.get("name"):
         b.spacer()
-        b.bold("💿 Новые альбомы")
-        b.newline()
-        for album in albums[:4]:
-            artist = str(_item_value(album, "artist", "") or "").strip()
-            title = str(_item_value(album, "title", "") or "").strip()
-            if not artist or not title:
-                continue
-            b.text_line("• ")
-            b.bold(artist)
-            b.text_line(f" — {title}")
-            b.newline()
-    if not concerts and not albums:
+        b.text_line("Легенда дня: ")
+        b.bold(str(legend["name"]))
+        b.line(f" — {str(legend.get('detail') or 'музыкант, родившийся сегодня').strip()}.")
+
+    b.spacer()
+    event = next((item for item in concerts or [] if _item_value(item, "artist")), None)
+    if event:
+        artist = str(_item_value(event, "artist", "") or "").strip()
+        date = str(_item_value(event, "date", "") or "").strip()
+        place = str(_item_value(event, "place", "") or "").strip()
+        b.line("Концерты рядом: " + " · ".join(value for value in (artist, date, place) if value))
+    else:
+        b.line("Концерты рядом: Пока нет подтверждённых ближайших выступлений.")
+
+    fact = str(rebus.get("fact") or daily_music.get("fact") or "").strip()
+    if fact:
         b.spacer()
-        b.line("Пока нет подтверждённых заметных релизов и концертов этой недели.")
+        b.text_line("💡 Факт дня: ")
+        b.line(fact)
+    return b.build_stripped()
+
+
+def music_activity_screen(task):
+    """Небольшая карточка одного трека под выбранное занятие."""
+    task = task or {}
+    b = MessageBuilder()
+    b.text_line("🎧 ")
+    b.bold(str(task.get("title") or "Музыка под занятие"))
+    b.newline()
+    b.spacer()
+    b.bold(f"{str(task.get('track') or '')} — {str(task.get('artist') or '')}".strip(" —"))
+    if task.get("tag"):
+        b.spacer()
+        b.line(str(task["tag"]))
+    if task.get("note"):
+        b.spacer()
+        b.line(str(task["note"]))
     return b.build_stripped()
 
 

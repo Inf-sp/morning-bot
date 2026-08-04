@@ -1,6 +1,6 @@
 import asyncio
 import os
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from telegram import MessageEntity
 
@@ -27,13 +27,18 @@ def test_category_homes_keep_personal_lists_in_their_own_sections():
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_books.books_home_keyboard()) == [
+        ["Найти книгу с этой цитатой"],
         ["✨ Подобрать книгу"],
         ["🎭 По жанру"],
         ["🎚️ Мои книги"],
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_music.music_home_keyboard()) == [
-            ["✨ Подобрать новую музыку"],
+        ["Грузить мозг (фокус)"],
+        ["Тренировка", "Дорога домой"],
+        ["Фон для разговора"],
+        ["Архивная находка"],
+        ["✨ Подобрать новую музыку"],
         ["🎭 По жанру"],
         ["🎫 Концерты"],
         ["🎚️ Мои артисты"],
@@ -354,30 +359,54 @@ def test_book_card_has_complete_description_and_reader_rating():
 
 def test_category_week_screens_are_compact_and_show_only_content():
     movie = leisure_movies.leisure_ui.movie_now_playing_screen("Алкмар", [{
-        "title": "Фильм", "genre": "drama", "overview": "Короткая завязка фильма",
+        "title": "Фильм", "genres": ["drama", "thriller"],
+    }], {
+        "rebus": {
+            "emoji": "🦈 🌊 👨‍🔬", "answer": "Челюсти",
+            "fact": "«Челюсти» считают первым современным летним блокбастером.",
+        },
+        "birthday": {"name": "Грета Гервиг", "role": "режиссёр и актриса"},
+        "mood": "Дождь за окном? «Глубокий сон» — тихий нуар для серого вечера.",
+    })
+    books = leisure_movies.leisure_ui.weekly_books_screen("Алкмар", {
+        "quote": {"text": "Рукописи не горят."},
+        "rebus": {"emoji": "🧙‍♀️ ⚡ 🚂", "answer": "Гарри Поттер", "fact": "Факт."},
+        "birthday": {"name": "Кнут Гамсун", "detail": "норвежский писатель"},
+        "mood": "Дождливый вечер? Плотный детектив для серого вечера.",
+    }, [{
+        "title": "Onyx Storm", "author": "Ребекка Яррос",
+        "vibe": "драконы, политика и тёмный фэнтези-мир",
     }])
-    books = leisure_movies.leisure_ui.weekly_books_screen([{
-        "title": "Новая книга", "author": "Автор", "rating": 4.4,
-        "ratings_count": 120, "description": "Законченная завязка сюжета",
-    }])
-    music = leisure_movies.leisure_ui.music_week_screen(
+    music = leisure_movies.leisure_ui.music_week_screen("Алкмар", {
+        "vibe": {"track": "Introvert", "artist": "Little Simz", "tag": "Для собранного фокуса"},
+        "rebus": {"emoji": "👑 🐝 🎤", "answer": "Beyoncé", "fact": "Факт."},
+        "legend": {"name": "Луи Армстронг", "detail": "трубач и певец"},
+    },
         [{"artist": "Romy", "date": "21 августа", "place": "Биддингхёйзен"}],
-        [{"artist": "Big Thief", "title": "Double Infinity"}],
     )
 
     assert "🎬 Кино на сегодня · Алкмар" in movie.text
-    assert "Сегодня в кинотеатрах Алкмара несколько премьер и популярных фильмов." in movie.text
-    assert "Фильм · Драма" in movie.text
-    assert "Короткая завязка фильма." not in movie.text
-    table = next(block for block in movie.rich_message["blocks"] if block["type"] == "table")
-    assert [[cell["text"] for cell in row] for row in table["cells"]] == [
-        ["Фильм", "Жанр"], ["Фильм", "Драма"],
-    ]
-    assert "📚 Книги этой недели" in books.text
-    assert "«Новая книга» · Автор · ⭐ 4.4" in books.text
-    assert "🎧 Музыка этой недели" in music.text
-    assert "🎫 Ближайшие концерты" in music.text
-    assert "💿 Новые альбомы" in music.text
+    assert "Ребус дня: 🦈 🌊 👨‍🔬 → Челюсти" in movie.text
+    assert "Именинник дня: Грета Гервиг — режиссёр и актриса." in movie.text
+    assert "Фильм под настроение: Дождь за окном?" in movie.text
+    assert "Что в кино: Фильм (драма, триллер)" in movie.text
+    assert "💡 Факт дня: «Челюсти» считают первым современным летним блокбастером." in movie.text
+    assert movie.rich_message is None
+    assert any(entity.type == MessageEntity.SPOILER for entity in movie.entities)
+    assert "📚 Литературный вайб · Алкмар" in books.text
+    assert "Цитата со страницы: «Рукописи не горят.»" in books.text
+    assert "Литературный ребус: 🧙‍♀️ ⚡ 🚂 → Гарри Поттер" in books.text
+    assert "Именинник дня: Кнут Гамсун — норвежский писатель." in books.text
+    assert "Книга под настроение: Дождливый вечер?" in books.text
+    assert "Главные премьеры: «Onyx Storm» · Ребекка Яррос (драконы, политика и тёмный фэнтези-мир)" in books.text
+    assert any(entity.type == MessageEntity.SPOILER for entity in books.entities)
+    assert "🎧 Музыка этой недели · Алкмар" in music.text
+    assert "Вайб дня: Introvert — Little Simz" in music.text
+    assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in music.text
+    assert "Легенда дня: Луи Армстронг — трубач и певец." in music.text
+    assert "Концерты рядом: Romy · 21 августа · Биддингхёйзен" in music.text
+    assert "Новые альбомы" not in music.text
+    assert any(entity.type == MessageEntity.SPOILER for entity in music.entities)
 
 
 def test_book_quote_uses_the_my_day_italic_format():
@@ -423,6 +452,44 @@ def test_movie_home_keeps_only_well_known_current_releases():
         {"title": "Слабая оценка", "rating": 6.2, "vote_count": 900},
     ])
     assert [item["title"] for item in featured] == ["Хит"]
+
+
+def test_cinema_rebus_changes_with_calendar_day():
+    today = date(2026, 8, 4)
+
+    assert leisure_movies._daily_rebus(today)["answer"] == "Челюсти"
+    assert leisure_movies._daily_rebus(today + timedelta(days=1))["answer"] != "Челюсти"
+
+
+def test_cinema_birthday_uses_one_shared_daily_cache(monkeypatch):
+    today = date(2026, 8, 4)
+    cache = {
+        today.isoformat(): {"birthday": {"name": "Грета Гервиг", "role": "режиссёр"}},
+    }
+    monkeypatch.setattr(leisure_movies.store, "_load", lambda _key: cache)
+    monkeypatch.setattr(leisure_movies.requests, "get", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError()))
+
+    assert leisure_movies._load_cinema_birthday(today) == {
+        "name": "Грета Гервиг", "role": "режиссёр",
+    }
+
+
+def test_cinema_birthday_does_not_retry_an_empty_daily_cache(monkeypatch):
+    today = date(2026, 8, 5)
+    cache = {today.isoformat(): {"birthday": {}}}
+    monkeypatch.setattr(leisure_movies.store, "_load", lambda _key: cache)
+    monkeypatch.setattr(leisure_movies.requests, "get", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError()))
+
+    assert leisure_movies._load_cinema_birthday(today) == {}
+
+
+def test_book_birthday_uses_the_shared_daily_cache_without_retry(monkeypatch):
+    today = date(2026, 8, 5)
+    cache = {today.isoformat(): {"birthday": {}}}
+    monkeypatch.setattr(leisure_books.store, "_load", lambda _key: cache)
+    monkeypatch.setattr(leisure_books.requests, "get", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError()))
+
+    assert leisure_books._load_book_birthday(today) == {}
 
 
 def test_weekly_books_keep_only_current_popular_releases(monkeypatch):
@@ -519,19 +586,22 @@ def test_weekly_books_never_show_classics_when_catalogue_has_no_fresh_hits(monke
     assert "Мастер и Маргарита" not in [item["title"] for item in items]
 
 
-def test_weekly_books_popular_heading_has_no_book_emoji():
-    message = leisure_books.leisure_ui.weekly_books_screen([{
-        "title": "Недавний бестселлер", "author": "Автор", "_showcase": "popular",
+def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
+    message = leisure_books.leisure_ui.weekly_books_screen("Алкмар", {}, [{
+        "title": "Недавний бестселлер", "author": "Автор", "vibe": "триллер",
     }])
 
-    assert "Популярное чтение" in message.text
-    assert "📚 Популярное чтение" not in message.text
+    assert "Главные премьеры: «Недавний бестселлер» · Автор (триллер)" in message.text
+    assert "Популярное чтение" not in message.text
 
 
-def test_weekly_books_screen_labels_monthly_fallback_honestly():
-    message = leisure_books.leisure_ui.weekly_books_screen([{
-        "title": "Премьера месяца", "author": "Автор", "_showcase": "month",
-    }])
+def test_quote_source_card_reveals_the_book_without_external_search():
+    message = leisure_books.leisure_ui.book_quote_source_screen({
+        "text": "Рукописи не горят.", "book": "Мастер и Маргарита",
+        "author": "Михаил Булгаков", "note": "Роман о Москве и Воланде.",
+    })
 
-    assert "✨ Новинки месяца" in message.text
-    assert "Пока нет подтверждённых" not in message.text
+    assert "📚 Книга из цитаты" in message.text
+    assert "«Рукописи не горят.»" in message.text
+    assert "Мастер и Маргарита · Михаил Булгаков" in message.text
+    assert any(entity.type == MessageEntity.ITALIC for entity in message.entities)

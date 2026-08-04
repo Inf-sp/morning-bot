@@ -3,9 +3,13 @@ from ui.constants import ui_label
 import asyncio
 import logging
 import re
+import threading
+import time
 from datetime import datetime
+
+import requests
+
 import config
-import rich_delivery
 
 _log = logging.getLogger(__name__)
 import store
@@ -16,8 +20,42 @@ import recommendation_stoplist
 import verify
 import tracking
 import local_cinema
+import weather
 from ui import leisure as leisure_ui
 from leisure_collection import content_recommend
+
+
+_CINEMA_BIRTHDAY_LOCK = threading.Lock()
+_CINEMA_REBUSES = (
+    {
+        "emoji": "🦈 🌊 👨‍🔬",
+        "answer": "Челюсти",
+        "fact": "«Челюсти» считают первым современным летним блокбастером.",
+    },
+    {
+        "emoji": "🕶️ 💊 🤖",
+        "answer": "Матрица",
+        "fact": "«Матрица» получила четыре премии «Оскар» в технических категориях.",
+    },
+    {
+        "emoji": "🛳️ 🧊 💔",
+        "answer": "Титаник",
+        "fact": "«Титаник» получил 11 премий «Оскар» — рекорд, который он делит ещё с двумя фильмами.",
+    },
+    {
+        "emoji": "🧙 💍 🌋",
+        "answer": "Властелин колец",
+        "fact": "«Возвращение короля» выиграло все 11 номинаций на «Оскар».",
+    },
+    {
+        "emoji": "🦖 🏝️ 🚙",
+        "answer": "Парк юрского периода",
+        "fact": "«Парк юрского периода» стал вехой для компьютерных визуальных эффектов в кино.",
+    },
+)
+_BIRTHDAY_FALLBACKS = {
+    (8, 4): {"name": "Грета Гервиг", "role": "режиссёр и актриса"},
+}
 
 def _display_title(it, tm):
     """Название, которое реально показано пользователю (TMDb если есть, иначе от LLM)."""
@@ -354,15 +392,143 @@ def _featured_now_playing(items):
     return featured
 
 
+def _daily_rebus(day):
+    """Один ребус и связанный факт на календарную дату, без случайных повторов в течение дня."""
+    index = (day.timetuple().tm_yday - 216) % len(_CINEMA_REBUSES)
+    return dict(_CINEMA_REBUSES[index])
+
+
+def _cinema_birthday_cache_get(day):
+    data = store._load(config.CINEMA_DAILY_CACHE_KEY)
+    entry = data.get(day.isoformat()) if isinstance(data, dict) else None
+    if not isinstance(entry, dict):
+        return None
+    birthday = entry.get("birthday")
+    return dict(birthday) if isinstance(birthday, dict) else {}
+
+
+def _cinema_birthday_cache_set(day, birthday):
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        data[day.isoformat()] = {"ts": time.time(), "birthday": dict(birthday or {})}
+        return data, None
+
+    store.mutate_kv(config.CINEMA_DAILY_CACHE_KEY, mutate)
+
+
+def _cinema_birthday_role(value):
+    role = str(value or "").casefold()
+    if "режисс" in role or "director" in role:
+        return "режиссёр"
+    if "актрис" in role or "actress" in role:
+        return "актриса"
+    if "актёр" in role or "actor" in role:
+        return "актёр"
+    return "кинематографист"
+
+
+def _load_cinema_birthday(day):
+    """Находит известного именинника кино и кэширует один результат для всех пользователей.
+
+    Wikidata вызывается только при первом открытии экрана в новую дату. Если источник
+    временно недоступен, показываем только заранее подтверждённый fallback для этой даты,
+    а не приписываем день рождения случайному человеку.
+    """
+    cached = _cinema_birthday_cache_get(day)
+    if cached is not None:
+        return cached
+    with _CINEMA_BIRTHDAY_LOCK:
+        cached = _cinema_birthday_cache_get(day)
+        if cached is not None:
+            return cached
+        query = """
+            SELECT ?person ?personLabel ?occupationLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
+              ?person wdt:P31 wd:Q5; wdt:P569 ?birth; wdt:P106 ?occupation.
+              VALUES ?occupation { wd:Q2526255 wd:Q33999 wd:Q10800557 }
+              FILTER(MONTH(?birth) = %d && DAY(?birth) = %d)
+              SERVICE wikibase:label { bd:serviceParam wikibase:language \"ru,en\". }
+            }
+            ORDER BY DESC(?sitelinks)
+            LIMIT 1
+        """ % (day.month, day.day)
+        birthday = None
+        try:
+            response = requests.get(
+                "https://query.wikidata.org/sparql",
+                params={"query": query, "format": "json"},
+                headers={"Accept": "application/sparql-results+json", "User-Agent": "morning-bot/1.0"},
+                timeout=6,
+            )
+            response.raise_for_status()
+            bindings = response.json().get("results", {}).get("bindings", [])
+            if bindings:
+                item = bindings[0]
+                name = str((item.get("personLabel") or {}).get("value") or "").strip()
+                role = _cinema_birthday_role((item.get("occupationLabel") or {}).get("value"))
+                if name:
+                    birthday = {"name": name, "role": role}
+        except Exception as error:
+            _log.info("cinema birthday lookup unavailable: %s", type(error).__name__)
+        birthday = birthday or _BIRTHDAY_FALLBACKS.get((day.month, day.day)) or {}
+        _cinema_birthday_cache_set(day, birthday)
+        return dict(birthday)
+
+
+def _movie_mood_for_today(cid, now):
+    """Подбирает один готовый фильм по свежей погоде из общего погодного кэша и дню недели."""
+    rainy = False
+    try:
+        settings_data = store.get_settings(cid)
+        data = weather.fetch_weather(settings_data["lat"], settings_data["lon"], 2)
+        daily = data.get("daily") or {}
+        if daily.get("time"):
+            daytime = weather.daytime_outfit_weather(
+                data,
+                daily["time"][0],
+                (daily.get("temperature_2m_max") or [None])[0],
+                (daily.get("windspeed_10m_max") or [0])[0] or 0,
+                (daily.get("precipitation_probability_max") or [0])[0] or 0,
+                (daily.get("precipitation_sum") or [None])[0],
+                (daily.get("weathercode") or [0])[0],
+            )
+            rainy = bool(daytime.get("rain_daytime"))
+    except Exception as error:
+        _log.info("cinema mood weather unavailable: %s", type(error).__name__)
+
+    if rainy:
+        return "Дождь за окном? «Глубокий сон» — тихий нуар для серого вечера."
+    if now.weekday() == 4:
+        return "Пятница вечером? «Достать ножи» — лёгкий хаос, который хорошо смотреть компанией."
+    if now.weekday() >= 5:
+        return "Выходной? «Идеальные дни» — спокойное кино, которое не торопит."
+    return "Обычный вечер? «Перед рассветом» — лёгкое кино для паузы после дня."
+
+
+async def _daily_cinema_content(cid):
+    now = datetime.now(config.TZ)
+    return {
+        "rebus": _daily_rebus(now.date()),
+        "birthday": await asyncio.to_thread(_load_cinema_birthday, now.date()),
+        "mood": await asyncio.to_thread(_movie_mood_for_today, cid, now),
+    }
+
+
 async def send_movie_now_playing(bot, cid, q=None, status=None):
     city = _movie_city(cid)
     now_playing = _featured_now_playing(await get_local_now_playing(cid, limit=20))[:5]
-    msg = leisure_ui.movie_now_playing_screen(city, now_playing)
+    cinema_day = await _daily_cinema_content(cid)
+    msg = leisure_ui.movie_now_playing_screen(city, now_playing, cinema_day)
     kb = _movie_home_kb()
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
         return
-    await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 async def warm_movie_home_cache(cid):
