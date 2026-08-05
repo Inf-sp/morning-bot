@@ -34,7 +34,7 @@ UI_EMOJI = {
     "seen": "✅",
     "warning": "⚠️",
     "hot": "🔥",
-    "interesting": "👨🏻‍💻",
+    "interesting": "💡",
     "system": "📊",
     "users": "👨🏻‍💻",
     "logs": "📈",

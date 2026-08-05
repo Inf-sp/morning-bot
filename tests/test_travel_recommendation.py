@@ -6,6 +6,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import travel
 import research
+from telegram import MessageEntity
 from ui import travel as travel_ui
 
 
@@ -79,6 +80,20 @@ def test_travel_home_keeps_preferences_inside_suitcase():
         ["🎚️ Мой чемодан"],
         ["#️⃣ Главная"],
     ]
+
+
+def test_travel_home_shows_a_daily_tourist_emoji_rebus():
+    idea = {
+        "emoji": "🚆", "transport_title": "Поезд", "intro": "Короткий маршрут.",
+        "from": "Алкмар", "to": "Лейден", "route": [], "tip": "Проверь расписание.",
+    }
+
+    message = travel_ui.home_screen(
+        idea, 2, rebus={"emoji": "🌋 ♨️ ❄️", "answer": "Исландия"},
+    )
+
+    assert "Туристический ребус: 🌋 ♨️ ❄️ → Исландия" in message.text
+    assert any(entity.type == MessageEntity.SPOILER for entity in message.entities)
 
 
 def test_suitcase_contains_travel_preferences(monkeypatch):

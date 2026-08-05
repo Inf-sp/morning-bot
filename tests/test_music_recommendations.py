@@ -44,6 +44,7 @@ def test_artist_tracks_link_to_youtube_music_and_keep_the_note(monkeypatch):
     data = asyncio.run(leisure_music._attach_track_links({
         "artist": "The Neighbourhood",
         "tracks": ["Sweater Weather - знаковый хит"],
+        "fact": "Первый альбом вышел в 2013 году.",
     }))
     message = leisure_ui.artist_card(data)
     links = [entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]
@@ -51,6 +52,7 @@ def test_artist_tracks_link_to_youtube_music_and_keep_the_note(monkeypatch):
     assert "• Sweater Weather — знаковый хит" in message.text
     assert len(links) == 1
     assert links[0].url == "https://music.youtube.com/watch?v=sweater123"
+    assert "💡 Полезно:" in message.text
 
 
 def test_artist_card_links_have_short_notes_and_no_web_preview(monkeypatch):

@@ -1,4 +1,5 @@
 from .builder import MessageBuilder
+from telegram import MessageEntity
 
 
 def plural_countries(n):
@@ -15,13 +16,21 @@ def visited_summary(n):
     return f"{verb} {n} {plural_countries(n)}"
 
 
-def home_screen(idea, visited_count):
+def home_screen(idea, visited_count, rebus=None):
     b = MessageBuilder()
     b.text_line(f"{idea['emoji']} ")
     b.bold(f"Поездка на сегодня · {idea['transport_title']}")
     b.newline()
     b.spacer()
     b.line(idea["intro"])
+    if rebus and rebus.get("emoji") and rebus.get("answer"):
+        b.spacer()
+        b.bold("Туристический ребус:")
+        b.text_line(" ")
+        b.text_line(str(rebus["emoji"]))
+        b.text_line(" → ")
+        b.add(str(rebus["answer"]), MessageEntity.SPOILER)
+        b.newline()
     b.spacer()
     b.bold(f"{idea['from']} → {idea['to']}")
     b.newline()

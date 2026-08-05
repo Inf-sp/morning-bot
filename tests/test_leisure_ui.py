@@ -433,10 +433,13 @@ def test_book_card_has_complete_description_and_reader_rating():
         "title": "Night Night Fawn", "desc": "Город в вечной темноте, где мечты становятся оружием",
         "plot": "Герой пытается спасти сестру из подпольного рынка снов",
         "rating": 4.7, "ratings_count": 1234,
+        "why": ["Необычный мир"],
     })
     assert "Город в вечной темноте, где мечты становятся оружием." in message.text
     assert "Герой пытается спасти сестру из подпольного рынка снов." in message.text
+    assert "Коротко о сюжете: Герой пытается спасти сестру из подпольного рынка снов." in message.text
     assert "⭐ Оценка читателей: 4.7/5 · 1 234 оценок" in message.text
+    assert "Почему стоит читать:" in message.text
 
 
 def test_category_week_screens_are_compact_and_show_only_content():

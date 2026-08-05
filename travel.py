@@ -76,6 +76,14 @@ _CARD_CLICHES = (
     "уникальн", "впечатляющ", "незабываем", "удивительн", "страна предлагает",
     "подходит пользовател", "различные виды транспорта", "комбинаци", "самолёт", "паром",
 )
+_TRAVEL_REBUSES = (
+    {"emoji": "🗼 🥐 🇫🇷", "answer": "Париж"},
+    {"emoji": "🚲 🌷 🧀", "answer": "Нидерланды"},
+    {"emoji": "🏛️ 🍝 🇮🇹", "answer": "Рим"},
+    {"emoji": "🌋 ♨️ ❄️", "answer": "Исландия"},
+    {"emoji": "⛩️ 🍣 🌸", "answer": "Япония"},
+    {"emoji": "🏖️ 🏛️ 🇬🇷", "answer": "Греция"},
+)
 
 
 def _travel_interests(cid):
@@ -88,6 +96,11 @@ def _travel_interests(cid):
         if len(found) == 2:
             break
     return found
+
+
+def _daily_travel_rebus(day=None):
+    day = day or datetime.now(config.TZ).date()
+    return dict(_TRAVEL_REBUSES[(day.timetuple().tm_yday - 1) % len(_TRAVEL_REBUSES)])
 
 
 def _editorial_line(value, *, allow_empty=True):
@@ -193,7 +206,7 @@ def _home_kb():
 async def send_home(bot, cid, q=None, status=None):
     idea = await asyncio.to_thread(_home_idea, cid)
     visited_count = len(_visited_codes(cid))
-    msg = travel_ui.home_screen(idea, visited_count)
+    msg = travel_ui.home_screen(idea, visited_count, rebus=_daily_travel_rebus())
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=_home_kb())
     elif q is not None:

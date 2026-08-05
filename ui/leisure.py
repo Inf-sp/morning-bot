@@ -393,7 +393,7 @@ def book_text(item):
     why = item.get("why") or []
     if isinstance(why, list) and why:
         b.spacer()
-        b.bold("Почему стоит читать")
+        b.bold("Почему стоит читать:")
         b.newline()
         for w in why:
             b.bullet(str(w).lstrip("-–— "))
@@ -402,9 +402,8 @@ def book_text(item):
         if plot and plot[-1] not in ".!?…":
             plot += "."
         b.spacer()
-        b.text_line("✏️ ")
-        b.bold("Коротко о сюжете")
-        b.newline()
+        b.bold("Коротко о сюжете:")
+        b.text_line(" ")
         b.line(plot)
     if item.get("quote"):
         quote = str(item["quote"]).strip().strip("«»\"")
@@ -456,7 +455,7 @@ def artist_card(data):
             b.newline()
     if data.get("fact"):
         b.spacer()
-        b.bold(ui_label("interesting", "Факт:"))
+        b.bold(ui_label("interesting", "Полезно:"))
         b.newline()
         b.line(data["fact"])
     return b.build_stripped()
