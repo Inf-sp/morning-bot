@@ -342,6 +342,66 @@ def test_music_genre_menu_shows_only_selected_styles(monkeypatch):
     ]
 
 
+def test_book_genre_menu_does_not_replace_the_recommendation_card():
+    class BookMessage:
+        def __init__(self):
+            self.edits = []
+            self.markup = None
+
+        async def edit_text(self, *args, **kwargs):
+            self.edits.append((args, kwargs))
+
+        async def edit_reply_markup(self, *, reply_markup):
+            self.markup = reply_markup
+
+    class Bot:
+        def __init__(self):
+            self.sent = []
+
+        async def send_message(self, **kwargs):
+            self.sent.append(kwargs)
+
+    message = BookMessage()
+    query = type("Query", (), {"message": message})()
+    bot = Bot()
+
+    asyncio.run(leisure_books.send_book_genre_menu(bot, "42", query))
+
+    assert message.edits == []
+    assert _labels(message.markup) == _labels(leisure_books._book_genre_menu_kb())
+    assert bot.sent == []
+
+
+def test_book_genre_uses_a_matching_fallback_when_catalogue_is_empty(monkeypatch):
+    selected = []
+
+    class Bot:
+        sent = []
+
+        async def send_message(self, **kwargs):
+            self.sent.append(kwargs)
+
+    async def send_card(_bot, _cid, book, _index, *, enrich):
+        selected.append(book)
+        return book
+
+    async def no_books(_cid, _category):
+        return []
+
+    monkeypatch.setattr(leisure_books, "_book_candidates", no_books)
+    monkeypatch.setattr(leisure_books, "_send_book_card", send_card)
+    monkeypatch.setattr(leisure_books, "_cache_book", lambda *_args: None)
+    monkeypatch.setattr(leisure_books.recommendation_stoplist, "values", lambda *_args: [])
+    monkeypatch.setattr(leisure_books.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(leisure_books.store, "last_recos", {})
+
+    bot = Bot()
+    asyncio.run(leisure_books.send_book_by_genre(bot, "genre-empty", "fantasy"))
+
+    assert selected[0]["title"] in {"Хоббит", "Волшебник Земноморья"}
+    assert bot.sent == []
+
+
 def test_music_genre_selection_stays_in_the_selected_genre(monkeypatch):
     calls = []
 
@@ -401,7 +461,6 @@ def test_category_week_screens_are_compact_and_show_only_content():
         "vibe": "драконы, политика и тёмный фэнтези-мир",
     }])
     music = leisure_movies.leisure_ui.music_week_screen("Алкмар", {
-        "vibe": {"track": "Introvert", "artist": "Little Simz", "tag": "Для собранного фокуса"},
         "rebus": {"emoji": "👑 🐝 🎤", "answer": "Beyoncé", "fact": "Факт."},
         "legend": {"name": "Луи Армстронг", "birth": "1901-08-04", "detail": "трубач и певец"},
     },
@@ -428,7 +487,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert books.text.index("Главные премьеры:") < books.text.index("Именинник дня:") < books.text.index("💡 Интересно:")
     assert any(entity.type == MessageEntity.SPOILER for entity in books.entities)
     assert "🎧 Музыка этой недели · Алкмар" in music.text
-    assert "Вайб дня: Introvert — Little Simz" in music.text
+    assert "Вайб дня" not in music.text
     assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in music.text
     assert "Именинник дня: Луи Армстронг · 4 августа 1901 — трубач и певец." in music.text
     assert "Концерты рядом:\n• Romy - 21 августа · Биддингхёйзен" in music.text
@@ -449,7 +508,6 @@ def test_daily_category_block_titles_are_bold():
         "birthday": {"name": "Имя", "detail": "писатель"},
     }, [{"title": "Премьера", "author": "Автор", "vibe": "жанр"}])
     music = leisure_movies.leisure_ui.music_week_screen("Алкмар", {
-        "vibe": {"track": "Трек", "artist": "Артист", "tag": "тег"},
         "rebus": {"emoji": "🎤", "answer": "Ответ", "fact": "Факт."},
         "legend": {"name": "Имя", "detail": "музыкант"},
     }, [{"artist": "Артист", "date": "Сегодня", "place": "Алкмар"}])
@@ -458,8 +516,9 @@ def test_daily_category_block_titles_are_bold():
             "Что в кино:", "💡 Интересно:"}.issubset(_bold_values(movie))
     assert {"Литературный ребус:", "Именинник дня:",
             "Главные премьеры:", "💡 Интересно:"}.issubset(_bold_values(books))
-    assert {"Вайб дня:", "Музыкальный ребус:", "Именинник дня:",
+    assert {"Музыкальный ребус:", "Именинник дня:",
             "Концерты рядом:", "💡 Интересно:"}.issubset(_bold_values(music))
+    assert "Вайб дня:" not in _bold_values(music)
 
 
 def test_book_quote_uses_the_my_day_italic_format():

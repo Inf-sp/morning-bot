@@ -603,6 +603,11 @@ async def send_go(bot, cid, *, status=None):
         _log.warning("travel suggestion failed, using local fallback: %r", exc)
         data = _local_country_fallback(cid, rejected)
     if not data:
+        # AI может быть доступен, но несколько раз вернуть уже посещённую или
+        # скрытую страну. Это такой же повод перейти к локальной новой стране,
+        # как и сетевой сбой, а не показывать пользователю ошибку подбора.
+        data = _local_country_fallback(cid, rejected)
+    if not data:
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("✨ Попробовать ещё", callback_data="a_trav_go")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

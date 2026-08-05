@@ -1,6 +1,6 @@
 from .builder import MessageBuilder
 from .constants import ui_label
-from wardrobe_model import public_zone_name
+from wardrobe_model import public_zone_name, zone_of
 
 
 def _lower_first(text):
@@ -98,22 +98,22 @@ def empty_wardrobe():
 
 
 def render_wardrobe_message(look_data):
-    """Образ на сегодня: вещи и стабильная рекомендация покупки.
-    Погодная строка и подпись списка намеренно не показываются.
+    """Образ на сегодня: вещи сгруппированы по понятным категориям.
 
-    look_data: {primary_style, items[{name}], purchase_recommendation}
+    Погодная строка намеренно не показывается.
+
+    look_data: {primary_style, items[{name, zone}], purchase_recommendation}
     """
     look_data = look_data or {}
     b = MessageBuilder()
     primary_style = _clean_text(look_data.get("primary_style"))
     b.section(outfit_header(primary_style))
 
-    items = [_upper_first(_clean_text(_item_display(it))) for it in (look_data.get("items") or [])]
-    items = [it for it in items if it][:3]
-    if items:
+    grouped_items = _group_outfit_items(look_data.get("items") or [])
+    if grouped_items:
         b.spacer()
-        for it in items:
-            b.bullet(it)
+        for category, items in grouped_items:
+            b.labeled_line(category, ", ".join(items), lowercase=False)
 
     recommendation = look_data.get("purchase_recommendation") or {}
     if isinstance(recommendation, dict):
@@ -138,6 +138,38 @@ def _item_display(it):
     if not isinstance(it, dict):
         return it
     return it.get("short_name") or it.get("name")
+
+
+_OUTFIT_CATEGORY_LABELS = {
+    "Верх": "Верх",
+    "Верхняя одежда": "Верхняя одежда",
+    "Низ": "Низ и обувь",
+    "Обувь": "Низ и обувь",
+    "Аксессуары": "Аксессуары",
+    "Другое": "Другое",
+}
+_OUTFIT_CATEGORY_ORDER = (
+    "Верх",
+    "Верхняя одежда",
+    "Низ и обувь",
+    "Аксессуары",
+    "Другое",
+)
+
+
+def _group_outfit_items(items):
+    """Готовит короткие строки карточки, не принимая решений о составе образа."""
+    grouped = {category: [] for category in _OUTFIT_CATEGORY_ORDER}
+    for item in items:
+        name = _upper_first(_clean_text(_item_display(item)))
+        if not name:
+            continue
+        zone = _clean_text(item.get("zone")) if isinstance(item, dict) else ""
+        category = _OUTFIT_CATEGORY_LABELS.get(zone)
+        if not category:
+            category = _OUTFIT_CATEGORY_LABELS.get(zone_of(name), "Другое")
+        grouped[category].append(name)
+    return [(category, grouped[category]) for category in _OUTFIT_CATEGORY_ORDER if grouped[category]]
 
 
 def _pluralize_items(n):

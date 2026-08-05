@@ -37,14 +37,6 @@ _MUSIC_GENRES = [
 _MUSIC_STYLE_KEY = "music_styles"
 _RECENT_ARTISTS_LIMIT = 40
 
-_DAILY_VIBES = (
-    {"genre": "hiphop", "track": "Introvert", "artist": "Little Simz", "tag": "Для собранного фокуса"},
-    {"genre": "indie", "track": "Friday Morning", "artist": "Khruangbin", "tag": "Лёгкий вечерний соул"},
-    {"genre": "electronic", "track": "adore u", "artist": "Fred again..", "tag": "Чтобы мягко переключиться после дня"},
-    {"genre": "rnb", "track": "Two Weeks", "artist": "FKA twigs", "tag": "Для красивого, немного странного вечера"},
-    {"genre": "rock", "track": "Favourite", "artist": "Fontaines D.C.", "tag": "Когда нужна гитара и немного скорости"},
-    {"genre": "pop", "track": "Bunny Is a Rider", "artist": "Caroline Polachek", "tag": "Поп без лишней предсказуемости"},
-)
 _MUSIC_REBUSES = (
     {
         "emoji": "👑 🐝 🎤",
@@ -295,20 +287,45 @@ def _daily_music_rebus(day):
     return dict(_MUSIC_REBUSES[(day.timetuple().tm_yday - 216) % len(_MUSIC_REBUSES)])
 
 
+def _track_parts(track):
+    if isinstance(track, dict):
+        title = str(track.get("title") or track.get("track") or track.get("name") or "").strip()
+        return title, str(track.get("note") or "").strip(), str(track.get("url") or "").strip()
+    title, separator, note = str(track or "").partition(" - ")
+    return title.strip(), note.strip() if separator else "", ""
+
+
 def _youtube_music_search_url(track, artist):
     query = " ".join(part.strip() for part in (track, artist) if str(part or "").strip())
     return f"https://music.youtube.com/search?q={quote_plus(query)}" if query else ""
 
 
-def _daily_music_vibe(day, selected_styles):
-    """Ежедневный трек только из жанров, которые пользователь отметил в предпочтениях."""
-    selected = set(selected_styles or [])
-    choices = [item for item in _DAILY_VIBES if item["genre"] in selected]
-    if not choices:
-        return {}
-    vibe = dict(choices[(day.timetuple().tm_yday - 216) % len(choices)])
-    vibe["url"] = _youtube_music_search_url(vibe["track"], vibe["artist"])
-    return vibe
+async def _attach_track_links(data):
+    """Добавляет к трекам карточки проверенную ссылку или точный поиск YouTube Music."""
+    data = dict(data or {})
+    artist = str(data.get("artist") or "").strip()
+    tracks = list(data.get("tracks") or [])[:3]
+    if not artist or not tracks:
+        return data
+
+    async def link_track(track):
+        title, note, url = _track_parts(track)
+        if not title:
+            return None
+        if not url:
+            try:
+                url = await asyncio.to_thread(youtube_tracks.find_track_url, title, artist)
+            except Exception:
+                url = ""
+        return {
+            "title": title,
+            "note": note,
+            "url": url or _youtube_music_search_url(title, artist),
+        }
+
+    linked = await asyncio.gather(*(link_track(track) for track in tracks))
+    data["tracks"] = [track for track in linked if track]
+    return data
 
 
 def _music_legend_cache_get(day):
@@ -402,15 +419,7 @@ def _music_city(cid):
 
 async def _daily_music_content(cid):
     now = datetime.now(config.TZ)
-    vibe = _daily_music_vibe(now.date(), _music_styles(cid))
-    if vibe:
-        direct_url = await asyncio.to_thread(
-            youtube_tracks.find_track_url, vibe["track"], vibe["artist"],
-        )
-        if direct_url:
-            vibe["url"] = direct_url
     return {
-        "vibe": vibe,
         "rebus": _daily_music_rebus(now.date()),
         "legend": await asyncio.to_thread(_load_music_legend, now.date()),
     }
@@ -452,9 +461,7 @@ async def send_music_home(bot, cid, q=None):
         daily_music = await _daily_music_content(cid)
     except Exception as error:
         _log.warning("music home daily content failed cid=%s: %r", cid, error)
-        daily_music = {"vibe": _daily_music_vibe(
-                           datetime.now(config.TZ).date(), _music_styles(cid)),
-                       "rebus": _daily_music_rebus(datetime.now(config.TZ).date())}
+        daily_music = {"rebus": _daily_music_rebus(datetime.now(config.TZ).date())}
     msg = leisure_ui.music_week_screen(_music_city(cid), daily_music, concerts or [])
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,
@@ -655,6 +662,8 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
         if artist:
             if preview:
                 return cached
+            cached = await _attach_track_links(cached)
+            _cache_artist(cid, cached)
             store.last_recos[str(cid)] = {"kind": "listen", "items": [artist]}
             store.last_source[str(cid)] = "Музыка"
             msg = leisure_ui.artist_card(cached)
@@ -748,6 +757,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
             await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
         return
     artist = data.get("artist", "")
+    data = await _attach_track_links(data)
     _remember_artist(cid, artist)
     _cache_artist(cid, data)
     if preview:

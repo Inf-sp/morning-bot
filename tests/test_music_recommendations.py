@@ -8,6 +8,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import leisure_music
+from ui import leisure as leisure_ui
 
 
 def test_recent_artist_history_is_unique_and_limited(monkeypatch):
@@ -31,6 +32,25 @@ def test_recent_artist_history_is_unique_and_limited(monkeypatch):
 def test_music_module_has_no_learning_language_priority():
     assert not hasattr(leisure_music, "_language_music_context")
     assert not hasattr(leisure_music, "_learning_language_code")
+
+
+def test_artist_tracks_link_to_youtube_music_and_keep_the_note(monkeypatch):
+    monkeypatch.setattr(
+        leisure_music.youtube_tracks, "find_track_url",
+        lambda track, artist: "https://music.youtube.com/watch?v=sweater123"
+        if (track, artist) == ("Sweater Weather", "The Neighbourhood") else "",
+    )
+
+    data = asyncio.run(leisure_music._attach_track_links({
+        "artist": "The Neighbourhood",
+        "tracks": ["Sweater Weather - знаковый хит"],
+    }))
+    message = leisure_ui.artist_card(data)
+    links = [entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]
+
+    assert "• Sweater Weather — знаковый хит" in message.text
+    assert len(links) == 1
+    assert links[0].url == "https://music.youtube.com/watch?v=sweater123"
 
 
 def test_music_shows_a_local_artist_when_the_ai_chain_is_unavailable(monkeypatch):
@@ -60,7 +80,7 @@ def test_music_shows_a_local_artist_when_the_ai_chain_is_unavailable(monkeypatch
     assert "Не удалось подобрать" not in calls[0][0]
 
 
-def test_music_home_shows_daily_vibe_and_nearest_concert_without_ai(monkeypatch):
+def test_music_home_shows_rebus_and_nearest_concert_without_ai(monkeypatch):
     sent = []
 
     class Bot:
@@ -72,10 +92,6 @@ def test_music_home_shows_daily_vibe_and_nearest_concert_without_ai(monkeypatch)
 
     async def daily_content(_cid):
         return {
-            "vibe": {
-                "track": "Introvert", "artist": "Little Simz", "tag": "Для собранного фокуса",
-                "url": "https://music.youtube.com/search?q=Introvert+Little+Simz",
-            },
             "rebus": {"emoji": "👑 🐝 🎤", "answer": "Beyoncé", "fact": "Факт."},
             "legend": {"name": "Луи Армстронг", "birth": "1901-08-04", "detail": "трубач и певец"},
         }
@@ -89,15 +105,13 @@ def test_music_home_shows_daily_vibe_and_nearest_concert_without_ai(monkeypatch)
 
     assert len(sent) == 1
     assert "🎧 Музыка этой недели · Алкмар" in sent[0]["text"]
-    assert "Вайб дня: Introvert — Little Simz (Для собранного фокуса)" in sent[0]["text"]
+    assert "Вайб дня" not in sent[0]["text"]
     assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in sent[0]["text"]
     assert "Именинник дня: Луи Армстронг · 4 августа 1901 — трубач и певец." in sent[0]["text"]
     assert "Концерты рядом:\n• Romy - 21 августа · Алкмар" in sent[0]["text"]
     assert sent[0]["text"].index("Именинник дня:") < sent[0]["text"].index("💡 Интересно:")
     assert "Новые альбомы" not in sent[0]["text"]
     assert any(entity.type == MessageEntity.SPOILER for entity in sent[0]["entities"])
-    link = next(entity for entity in sent[0]["entities"] if entity.type == MessageEntity.TEXT_LINK)
-    assert link.url == "https://music.youtube.com/search?q=Introvert+Little+Simz"
     assert sent[0]["disable_web_page_preview"] is True
 
 
@@ -179,14 +193,6 @@ def test_weekly_concert_loader_uses_confirmed_fallback_when_ticketmaster_is_empt
 
     assert fallback_calls == [(["Romy", "FKA twigs", "The National"], "FR", "Франция")]
     assert [item["artist"] for item in result] == ["Romy", "FKA twigs", "The National"]
-
-
-def test_daily_vibe_only_uses_selected_style_and_links_to_youtube_music():
-    vibe = leisure_music._daily_music_vibe(date(2026, 8, 4), ["rock"])
-
-    assert vibe["genre"] == "rock"
-    assert vibe["url"] == "https://music.youtube.com/search?q=Favourite+Fontaines+D.C."
-    assert leisure_music._daily_music_vibe(date(2026, 8, 4), []) == {}
 
 
 def test_music_recommendation_requires_a_selected_style(monkeypatch):

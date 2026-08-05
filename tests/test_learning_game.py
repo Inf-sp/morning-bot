@@ -213,10 +213,11 @@ def test_detective_card_shows_a_clear_russian_category():
 
     assert "Категория: животное" in message.text
     assert message.text.index("Категория: животное") < message.text.index("I have whiskers")
+    assert "I have whiskers and I like warm places.\n\nНапиши ответ" in message.text
 
 
-def test_detective_rotates_after_every_local_card_was_played_and_tells_how_to_reply(monkeypatch):
-    """The local fallback must not become the first card forever after one cycle."""
+def test_detective_never_repeats_a_local_card_after_the_catalogue_is_played(monkeypatch):
+    """Исчерпанный локальный каталог не должен начинать новый круг повторов."""
     cid = "detective-no-repeat-regression"
     repeated = {
         "description": (
@@ -241,17 +242,16 @@ def test_detective_rotates_after_every_local_card_was_played_and_tells_how_to_re
     bot = FakeBot()
     try:
         asyncio.run(learning_game.send_game(bot, cid))
-        first_answer = learning_game.store.game_state[cid]["answer"]
-        asyncio.run(learning_game.send_game(bot, cid))
 
-        assert learning_game.store.game_state[cid]["answer"] != first_answer
-        assert "Напиши ответ следующим сообщением — можно на любом языке." in bot.messages[-1]["text"]
+        assert cid not in learning_game.store.game_state
+        assert "Новой загадки сейчас нет. Попробуй позже." in bot.messages[-1]["text"]
     finally:
         learning_game.store.game_config.pop(cid, None)
         learning_game.store.game_state.pop(cid, None)
         learning_game.store.game_recent.pop(cid, None)
         profile = learning_game.store.get_profile(cid)
         profile.pop("game_recent", None)
+        profile.pop("game_seen", None)
         learning_game.store.set_profile(cid, profile)
 
 
@@ -366,7 +366,7 @@ def test_detective_uses_local_round_when_ai_repeats_every_attempt(monkeypatch):
     assert remembered == [fallback]
 
 
-def test_detective_fallback_uses_accumulated_recent_cards(monkeypatch):
+def test_detective_fallback_uses_only_played_cards(monkeypatch):
     seen_recent = []
 
     def fake_game_data(_lang, recent, attempt=0):
@@ -402,8 +402,7 @@ def test_detective_fallback_uses_accumulated_recent_cards(monkeypatch):
     bot = FakeBot()
     asyncio.run(learning_game.send_game(bot, "42"))
 
-    assert seen_recent[0][:2] == ["the dog", "собака"]
-    assert len(seen_recent[0]) >= 2
+    assert seen_recent == [[]]
 
 
 def test_detective_rejects_answer_inside_description():

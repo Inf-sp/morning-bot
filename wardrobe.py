@@ -36,7 +36,7 @@ from wardrobe_migration import migrate_item_attrs
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
-COPY_VALIDATOR_VERSION = 9
+COPY_VALIDATOR_VERSION = 10
 PURCHASE_RECOMMENDATION_VERSION = 2
 
 def _kb(rows):
@@ -585,7 +585,10 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     )
     look_data = {
         "primary_style": choose_outfit_style(best_sorted, selected_styles),
-        "items": [{"name": public_item_name(it)} for it in best_sorted],
+        "items": [
+            {"name": public_item_name(it), "zone": it.get("zone")}
+            for it in best_sorted
+        ],
         "purchase_recommendation": purchase_recommendation,
     }
     if kb is None:

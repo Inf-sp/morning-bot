@@ -436,8 +436,24 @@ def artist_card(data):
         b.spacer()
         b.bold("С чего начать:")
         b.newline()
-        for t in tracks:
-            b.bullet(str(t))
+        for track in tracks[:3]:
+            if isinstance(track, dict):
+                title = str(track.get("title") or track.get("track") or track.get("name") or "").strip()
+                note = str(track.get("note") or "").strip()
+                url = str(track.get("url") or "").strip()
+            else:
+                title, separator, note = str(track or "").partition(" - ")
+                title, note, url = title.strip(), note.strip() if separator else "", ""
+            if not title:
+                continue
+            b.text_line("• ")
+            if url:
+                b.link(title, url)
+            else:
+                b.text_line(title)
+            if note:
+                b.text_line(f" — {note}")
+            b.newline()
     if data.get("fact"):
         b.spacer()
         b.bold(ui_label("interesting", "Факт:"))
@@ -515,26 +531,12 @@ def music_week_screen(city, daily_music, concerts):
     """Короткая ежедневная витрина Музыки без чартов и таблиц."""
     city = str(city or "твоего города").strip()
     daily_music = daily_music or {}
-    vibe = daily_music.get("vibe") or {}
     rebus = daily_music.get("rebus") or {}
     legend = daily_music.get("legend") or {}
     b = MessageBuilder()
     b.text_line("🎧 ")
     b.bold(f"Музыка этой недели · {city}")
     b.newline()
-
-    if vibe.get("track") and vibe.get("artist"):
-        b.spacer()
-        b.bold("Вайб дня:")
-        b.text_line(" ")
-        track_label = f"{vibe['track']} — {vibe['artist']}"
-        if vibe.get("url"):
-            b.link(track_label, str(vibe["url"]))
-        else:
-            b.bold(track_label)
-        tag = str(vibe.get("tag") or "").strip()
-        if tag:
-            b.line(f" ({tag})")
 
     b.spacer()
     b.bold("Музыкальный ребус:")

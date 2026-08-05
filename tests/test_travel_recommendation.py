@@ -122,6 +122,31 @@ def test_rejected_visited_country_changes_next_generation_request(monkeypatch):
     assert bot.sent == []
 
 
+def test_other_trip_uses_local_country_after_repeated_visited_ai_answer(monkeypatch):
+    selected = []
+
+    def repeated_visited_country(*_args, **_kwargs):
+        return {"country": "Чили"}
+
+    async def send_plan(_bot, _cid, *, status=None):
+        selected.append(travel.store.suggested_countries["42"])
+
+    monkeypatch.setattr(travel, "travel_suggest_one", repeated_visited_country)
+    monkeypatch.setattr(travel, "_visited_codes", lambda _cid: ["CL"])
+    monkeypatch.setattr(travel, "_country_name", lambda code: "Чили" if code == "CL" else code)
+    monkeypatch.setattr(travel.recommendation_stoplist, "values", lambda *_args: [])
+    monkeypatch.setattr(travel, "_resolve_country_code", lambda _name: "CL")
+    monkeypatch.setattr(travel, "_resolve_country_flag", lambda name, *_args: ("🇮🇸", {"cc": "IS"}))
+    monkeypatch.setattr(travel, "_recommendation_photo", lambda *_args: None)
+    monkeypatch.setattr(travel, "send_plan", send_plan)
+    bot = FakeBot()
+
+    asyncio.run(travel.send_go(bot, "42"))
+
+    assert selected == ["Исландия"]
+    assert bot.sent == []
+
+
 def test_other_trip_uses_local_country_when_ai_is_unavailable(monkeypatch):
     selected = []
 

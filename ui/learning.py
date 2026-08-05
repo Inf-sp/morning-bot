@@ -324,7 +324,19 @@ def game_card(ui, description, category=""):
         b.line(f"Категория: {category}")
         b.spacer()
     b.line(description)
+    b.spacer()
     b.line(ui.get("reply_next", "Напиши ответ следующим сообщением — можно на любом языке."))
+    msg = b.build()
+    msg.text = msg.text.rstrip("\n")
+    return msg
+
+
+def game_no_new_round(ui):
+    """Короткий честный экран, когда без повтора нельзя собрать новый раунд."""
+    b = MessageBuilder()
+    b.section(f"🕵️ {ui['title']}")
+    b.spacer()
+    b.line("Новой загадки сейчас нет. Попробуй позже.")
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg

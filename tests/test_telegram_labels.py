@@ -28,7 +28,10 @@ def test_labeled_line_bolds_colon_and_lowercases_sentence():
 def test_wardrobe_card_uses_current_outfit_labels():
     message = render_wardrobe_message({
         "primary_style": "Скандинавский",
-        "items": [{"name": "Белая рубашка"}, {"name": "Синие брюки"}],
+        "items": [
+            {"name": "Белая рубашка", "zone": "Верх"},
+            {"name": "Синие брюки", "zone": "Низ"},
+        ],
         "purchase_recommendation": {
             "item": "Серые широкие джинсы",
             "reason": "закроют пробел в шкафу",
@@ -37,11 +40,13 @@ def test_wardrobe_card_uses_current_outfit_labels():
 
     assert _bold_fragments(message) == [
         "🧥 Образ на сегодня · Скандинавский",
+        "Верх:",
+        "Низ и обувь:",
         "Полезно:",
     ]
     assert "🧥 Образ на сегодня · Скандинавский" in message.text
     assert "Гардероб · Образ на сегодня" not in message.text
-    assert "• Белая рубашка\n• Синие брюки" in message.text
+    assert "Верх: Белая рубашка\nНиз и обувь: Синие брюки" in message.text
     assert "💡 Полезно: Серые широкие джинсы — закроют пробел в шкафу." in message.text
 
 

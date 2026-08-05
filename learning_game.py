@@ -156,38 +156,34 @@ def _game_is_recent(d, recent):
 
 
 def _game_recent(cid):
+    """Все уже загаданные пользователю ответы и варианты названий.
+
+    Ключ ``game_recent`` из старых профилей сохраняем как начальную историю,
+    а новые раунды больше не вытесняют старые: повторять загадку нельзя.
+    """
     prof = store.get_profile(cid)
-    persisted = prof.get("game_recent", []) if isinstance(prof, dict) else []
+    persisted = prof.get("game_seen", prof.get("game_recent", [])) if isinstance(prof, dict) else []
     mem = store.game_recent.get(str(cid), [])
     out = []
     for name in list(persisted) + list(mem):
         name = (name or "").strip()
         if name and not any(_game_same(name, old) for old in out):
             out.append(name)
-    out = out[-120:]
     store.game_recent[str(cid)] = out
     return out
 
 
 def _set_game_recent(cid, rec):
     rec = [str(x).strip() for x in (rec or []) if str(x).strip()]
-    rec = rec[-120:]
     store.game_recent[str(cid)] = rec
     prof = store.get_profile(cid)
-    prof["game_recent"] = rec
+    prof["game_seen"] = rec
     store.set_profile(cid, prof)
 
 
 def _remember_game_answer(cid, d):
     names = [d.get("answer", "")] + list(d.get("aliases") or [])
     rec = _game_recent(cid)
-    # When the local catalogue has completed a cycle, the oldest card is used
-    # again. Move every spelling of that card to the tail so the next fallback
-    # picks the next-oldest subject instead of showing the first card forever.
-    rec = [
-        old for old in rec
-        if not any(_game_same(old, name) for name in names if str(name or "").strip())
-    ]
     for name in names:
         name = (name or "").strip()
         if name and not any(_game_same(name, old) for old in rec):
@@ -361,19 +357,7 @@ def _local_game_data(clue_lang, recent):
     for card in cards:
         if not _game_is_recent(card, recent):
             return dict(card)
-    # All local subjects were already played. Restart the cycle from the one
-    # shown longest ago; _remember_game_answer moves it to the tail afterwards.
-    # This keeps the fallback varied even while AI providers are unavailable.
-    def oldest_index(card):
-        names = [card.get("answer", "")] + list(card.get("aliases") or [])
-        positions = [
-            index
-            for index, old in enumerate(recent or [])
-            if any(_game_same(name, old) for name in names)
-        ]
-        return min(positions) if positions else -1
-
-    return dict(min(cards, key=oldest_index))
+    return {}
 
 
 def _description_is_guessable(data, lang=None):
@@ -503,26 +487,32 @@ async def send_game(bot, cid, status=None):
     lang = cfg.get("lang", "английский")
     ui = _game_ui(lang)
     recent = _game_recent(cid)
+    attempted = list(recent)
     try:
         d = {}
         for attempt in range(5):
-            cand = game_data(lang, recent, attempt=attempt)
+            cand = game_data(lang, attempted, attempt=attempt)
             if (cand.get("answer") and _description_is_guessable(cand, lang)
                     and not _game_is_recent(cand, recent)):
                 d = cand
                 break
             if cand.get("answer"):
-                recent = recent + [cand.get("answer", "")] + list(cand.get("aliases") or [])
+                attempted += [cand.get("answer", "")] + list(cand.get("aliases") or [])
         if not d:
             # Повторы и невалидный формат от AI не должны оставлять пользователя
-            # без раунда. Используем историю только реальных сыгранных загадок:
-            # ответы неудачных попыток не считаются сыгранными и не должны
-            # вытеснять подходящую локальную карточку.
+            # без раунда. Локальный резерв сверяем только с реальными сыгранными
+            # загадками: неудачная попытка AI не может спрятать новую карточку.
             fallback = _local_game_data(lang, recent)
             if fallback.get("answer") and _description_is_guessable(fallback, lang):
                 d = fallback
             else:
-                raise RuntimeError("Detective fallback card is invalid")
+                msg = learning_ui.game_no_new_round(ui)
+                kb = _game_result_kb(ui)
+                if status is not None:
+                    await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+                else:
+                    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+                return
     except Exception as e:
         await verify.safe_error(bot, cid, e, back="m_learn"); return
     _remember_game_answer(cid, d)

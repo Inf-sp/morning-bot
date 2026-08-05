@@ -112,16 +112,9 @@ def test_old_youtube_cache_link_opens_in_youtube_music_without_a_request(monkeyp
     )
 
 
-def test_daily_vibe_prefers_found_youtube_video(monkeypatch):
-    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["hiphop"])
-    monkeypatch.setattr(
-        leisure_music.youtube_tracks, "find_track_url",
-        lambda track, artist: (
-            "https://music.youtube.com/watch?v=verified123" if (track, artist) == ("Introvert", "Little Simz") else ""
-        ),
-    )
+def test_daily_music_content_has_no_day_track(monkeypatch):
     monkeypatch.setattr(leisure_music, "_load_music_legend", lambda _day: {})
 
     result = asyncio.run(leisure_music._daily_music_content("42"))
 
-    assert result["vibe"]["url"] == "https://music.youtube.com/watch?v=verified123"
+    assert "vibe" not in result

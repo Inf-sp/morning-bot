@@ -484,7 +484,7 @@ async def send_book_genre_menu(bot, cid, q=None):
     kb = _book_genre_menu_kb()
     if q is not None:
         try:
-            await q.message.edit_text(text, reply_markup=kb)
+            await q.message.edit_reply_markup(reply_markup=kb)
             return
         except Exception:
             pass
@@ -611,6 +611,41 @@ _FALLBACK_BOOKS = [
      "hook": "Достоевский, с которого стоит начать знакомство."},
 ]
 
+_GENRE_FALLBACKS = {
+    "fantasy": [
+        {"title": "Хоббит", "title_en": "The Hobbit", "year": "1937", "author": "Дж. Р. Р. Толкин", "desc": "Приключение, с которого удобно начать большое фэнтези.", "plot": "Бильбо Бэггинс отправляется с гномами вернуть сокровища, захваченные драконом."},
+        {"title": "Волшебник Земноморья", "title_en": "A Wizard of Earthsea", "year": "1968", "author": "Урсула Ле Гуин", "desc": "Неспешное фэнтези о взрослении, силе слова и ответственности.", "plot": "Юный маг Гед выпускает в мир тень и должен встретиться с ней лицом к лицу."},
+    ],
+    "scifi": [
+        {"title": "Дюна", "title_en": "Dune", "year": "1965", "author": "Фрэнк Герберт", "desc": "Большая фантастика о власти, экологии и религии.", "plot": "Семья Атрейдесов прибывает на пустынную планету, где решается судьба главного ресурса галактики."},
+        {"title": "451° по Фаренгейту", "title_en": "Fahrenheit 451", "year": "1953", "author": "Рэй Брэдбери", "desc": "Короткая антиутопия о мире, где книги запрещены.", "plot": "Пожарный Гай Монтэг начинает сомневаться в своей работе по сожжению книг."},
+    ],
+    "detective": [
+        {"title": "Убийство в „Восточном экспрессе“", "title_en": "Murder on the Orient Express", "year": "1934", "author": "Агата Кристи", "desc": "Классический детектив с замкнутым кругом подозреваемых.", "plot": "Эркюль Пуаро расследует убийство, совершённое в застрявшем поезде."},
+        {"title": "Собака Баскервилей", "title_en": "The Hound of the Baskervilles", "year": "1902", "author": "Артур Конан Дойл", "desc": "Мрачная загадка на английских болотах.", "plot": "Шерлок Холмс и доктор Ватсон проверяют легенду о проклятии семьи Баскервилей."},
+    ],
+    "thriller": [
+        {"title": "Исчезнувшая", "title_en": "Gone Girl", "year": "2012", "author": "Гиллиан Флинн", "desc": "Психологический триллер о браке, тайнах и ненадёжных рассказчиках.", "plot": "После исчезновения жены Ник Данн оказывается главным подозреваемым."},
+        {"title": "Девушка с татуировкой дракона", "title_en": "The Girl with the Dragon Tattoo", "year": "2005", "author": "Стиг Ларссон", "desc": "Напряжённое расследование с семейной тайной.", "plot": "Журналист и хакерка ищут следы девушки, пропавшей много лет назад."},
+    ],
+    "romance": [
+        {"title": "Гордость и предубеждение", "title_en": "Pride and Prejudice", "year": "1813", "author": "Джейн Остин", "desc": "Остроумный роман о чувствах, статусе и первом впечатлении.", "plot": "Элизабет Беннет и мистер Дарси проходят путь от взаимного раздражения к пониманию."},
+        {"title": "Джейн Эйр", "title_en": "Jane Eyre", "year": "1847", "author": "Шарлотта Бронте", "desc": "Романтическая история с готическим настроением и сильной героиней.", "plot": "Сирота Джейн становится гувернанткой и влюбляется в хозяина поместья."},
+    ],
+    "history": [
+        {"title": "Волчий зал", "title_en": "Wolf Hall", "year": "2009", "author": "Хилари Мантел", "desc": "Исторический роман об Англии времён Генриха VIII.", "plot": "Томас Кромвель поднимается при дворе на фоне религиозного и личного кризиса короля."},
+        {"title": "Имя розы", "title_en": "The Name of the Rose", "year": "1980", "author": "Умберто Эко", "desc": "История Средневековья, монастырская тайна и интеллектуальный детектив.", "plot": "Монах Вильгельм расследует череду смертей в аббатстве XIV века."},
+    ],
+    "biography": [
+        {"title": "Стив Джобс", "title_en": "Steve Jobs", "year": "2011", "author": "Уолтер Айзексон", "desc": "Большая биография основателя Apple без сглаживания противоречий.", "plot": "Книга прослеживает путь Джобса от первых компьютеров до возвращения в Apple."},
+        {"title": "Становление", "title_en": "Becoming", "year": "2018", "author": "Мишель Обама", "desc": "Личная история о семье, карьере и публичной жизни.", "plot": "Мишель Обама рассказывает о детстве в Чикаго, учёбе и годах в Белом доме."},
+    ],
+    "psychology": [
+        {"title": "Думай медленно… решай быстро", "title_en": "Thinking, Fast and Slow", "year": "2011", "author": "Даниэль Канеман", "desc": "Понятное введение в когнитивные ошибки и два режима мышления.", "plot": "Канеман объясняет, как быстрые интуитивные решения отличаются от медленного анализа."},
+        {"title": "Человек в поисках смысла", "title_en": "Man's Search for Meaning", "year": "1946", "author": "Виктор Франкл", "desc": "Книга о поиске смысла в тяжёлых обстоятельствах.", "plot": "Психиатр Виктор Франкл соединяет личный опыт и основы логотерапии."},
+    ],
+}
+
 def _book_used(cid):
     """Названия книг, которые нельзя повторять: любимые, показанные и отклонённые."""
     used = set()
@@ -627,6 +662,16 @@ def _fallback_book(cid, extra_skip=()):
     used = _book_used(cid) | {str(x).strip().lower() for x in extra_skip}
     pool = [b for b in _FALLBACK_BOOKS if b["title"].lower() not in used] or _FALLBACK_BOOKS
     return random.choice(pool)
+
+
+def _genre_fallback_book(cid, genre_key, extra_skip=()):
+    """Локальный резерв сохраняет смысл выбранного жанра при пустом каталоге."""
+    used = _book_used(cid) | {str(x).strip().lower() for x in extra_skip}
+    pool = [
+        item for item in _GENRE_FALLBACKS.get(genre_key, [])
+        if item["title"].casefold() not in used
+    ]
+    return dict(random.choice(pool)) if pool else None
 
 def _pick_good_book(items, cid, extra_skip=(), *, fallback=True):
     """Выбирает неиспользованную книгу, предпочитая высокие оценки читателей."""
@@ -725,6 +770,8 @@ async def send_book_by_genre(bot, cid, genre_key):
     category = {"kind": "genre", "value": genre_key, "label": label}
     items = await _book_candidates(cid, category)
     it = _pick_good_book(items, cid, fallback=False)
+    if not it:
+        it = _genre_fallback_book(cid, genre_key)
     if not it:
         genre_label = label.split(" ", 1)[-1]
         await bot.send_message(

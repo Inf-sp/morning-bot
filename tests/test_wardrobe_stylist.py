@@ -41,9 +41,13 @@ def _item(item_id, zone, name):
     }
 
 
-def test_outfit_card_omits_weather_intro_and_naden_label():
+def test_outfit_card_groups_items_by_category_without_weather_intro_or_naden_label():
     message = render_wardrobe_message({
-        "items": [{"name": "Белая футболка"}, {"name": "Широкие брюки"}, {"name": "Белые кеды"}],
+        "items": [
+            {"name": "Белая футболка", "zone": "Верх"},
+            {"name": "Широкие брюки", "zone": "Низ"},
+            {"name": "Белые кеды", "zone": "Обувь"},
+        ],
         "purchase_recommendation": {
             "item": "Серые широкие джинсы",
             "reason": "закроют пробел в шкафу и дадут больше сочетаний с твоими рубашками и футболками",
@@ -53,7 +57,8 @@ def test_outfit_card_omits_weather_intro_and_naden_label():
     assert _entities(message, MessageEntity.ITALIC) == []
     assert "Жарко и сухо" not in message.text
     assert "Надень" not in message.text
-    assert "• Голубая" not in message.text
+    assert "Верх: Белая футболка" in message.text
+    assert "Низ и обувь: Широкие брюки, Белые кеды" in message.text
     assert "💡 Полезно: Серые широкие джинсы — закроют пробел" in message.text
 
 
@@ -62,19 +67,23 @@ def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
         "items": [{"name": "цепочка со значком сторон света"}, {"name": "футболка Levi's"}],
     })
 
-    assert "\n• Цепочка со значком сторон света\n• Футболка Levi's" in message.text
+    assert "Аксессуары: Цепочка со значком сторон света" in message.text
+    assert "Верх: Футболка Levi's" in message.text
     assert "Надень" not in message.text
 
 
-def test_outfit_card_shows_no_more_than_three_items():
+def test_outfit_card_shows_selected_accessories_after_main_items():
     message = render_wardrobe_message({
         "items": [
-            {"name": "Футболка"}, {"name": "Брюки"}, {"name": "Кеды"}, {"name": "Часы"},
+            {"name": "Футболка", "zone": "Верх"},
+            {"name": "Брюки", "zone": "Низ"},
+            {"name": "Кеды", "zone": "Обувь"},
+            {"name": "Часы", "zone": "Аксессуары"},
         ],
     })
 
-    assert message.text.count("\n• ") == 3
-    assert "Часы" not in message.text
+    assert "Низ и обувь: Брюки, Кеды" in message.text
+    assert "Аксессуары: Часы" in message.text
 
 
 def test_outfit_header_uses_emoji_of_selected_style():
