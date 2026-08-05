@@ -86,6 +86,8 @@ async def handle_action(bot, cid, q, act, run_with_status):
         await dictionary_import.retry_pending_dict_add(bot, cid)
     elif act == "dictconfirm_cancel":
         await dictionary_import.cancel_pending_dict_add(bot, cid)
+    elif act.startswith("dictchoice_"):
+        await dictionary_import.choose_dict_clarification(bot, cid, act[len("dictchoice_"):])
     elif act == "dictdone":
         store.pending_input.pop(str(cid), None)
         try:

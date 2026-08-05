@@ -370,6 +370,62 @@ def test_add_word_asks_for_meaning_when_all_ai_reserves_fail(monkeypatch):
     assert dictionary_import.store.dict_pending_add[cid]["term"] == "tering"
 
 
+def test_ambiguous_dictionary_word_offers_translation_choices(monkeypatch):
+    cid = "dictionary-translation-choices"
+    sent = []
+
+    class Status:
+        async def stop(self):
+            return None
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def start(*_args, **_kwargs):
+        return Status()
+
+    async def normalize(*_args, **_kwargs):
+        return {
+            "lang": "nl",
+            "term": "Oplossen",
+            "translation": "Решать",
+            "alt_translations": ["Растворять", "Погашать"],
+            "needs_confirmation": True,
+        }
+
+    async def unchanged(entry, *_args):
+        return entry
+
+    monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
+    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", normalize)
+    monkeypatch.setattr(dictionary_import, "_enrich_dutch_verb", unchanged)
+    monkeypatch.setattr(dictionary_import.learning_data_quality, "check_new_entry", unchanged)
+    dictionary_import.store.pending_input.pop(cid, None)
+    dictionary_import.store.dict_pending_add.pop(cid, None)
+
+    asyncio.run(dictionary_import.add_dict_entry_from_chat(Bot(), cid, "oplossen", "nl"))
+
+    buttons = [button.text for row in sent[-1]["reply_markup"].inline_keyboard for button in row]
+    assert buttons[:3] == ["Решать", "Растворять", "Погашать"]
+    assert dictionary_import.store.dict_pending_add[cid]["choices"] == [
+        "Решать", "Растворять", "Погашать",
+    ]
+
+
+def test_dictionary_translation_choice_routes_to_confirmation(monkeypatch):
+    selected = []
+
+    async def choose(_bot, cid, index):
+        selected.append((cid, index))
+
+    monkeypatch.setattr(learning_router.dictionary_import, "choose_dict_clarification", choose)
+
+    asyncio.run(learning_router.handle_action(object(), "42", None, "dictchoice_1", None))
+
+    assert selected == [("42", "1")]
+
+
 def test_dictionary_analysis_uses_distinct_ai_reserves(monkeypatch):
     calls = []
 

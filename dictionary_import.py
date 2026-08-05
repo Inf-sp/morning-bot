@@ -1154,6 +1154,12 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
     if not entry:
         await _ask_dict_clarification(bot, cid, payload, lang, unavailable=unavailable)
         return
+    if entry.get("needs_confirmation"):
+        await _ask_dict_clarification(
+            bot, cid, payload, lang,
+            choices=[entry.get("translation"), *(entry.get("alt_translations") or [])],
+        )
+        return
     status, saved = _save_normalized_dict_entry(cid, entry)
     msg = _dict_entry_message(saved, status=status)
     term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
@@ -1196,18 +1202,63 @@ def _clarification_entry(term, translation, lang):
     }
 
 
-async def _ask_dict_clarification(bot, cid, payload, lang=None, *, unavailable=False):
-    """Запрашивает только недостающий смысл, не предлагая повторить тот же ввод."""
+def _clarification_choices(values) -> list[str]:
+    """Короткие безопасные варианты, которые пользователь подтверждает кнопкой."""
+    choices = []
+    for value in values or []:
+        text = re.sub(r"\s+", " ", str(value or "")).strip()
+        if (not text or len(text) > 80 or _contains_suspicious_analysis_text(text)
+                or text.casefold() in {item.casefold() for item in choices}):
+            continue
+        choices.append(normalize_translation_case(text))
+        if len(choices) == 3:
+            break
+    return choices
+
+
+def _dict_clarification_kb(cid, lang, choices) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(choice, callback_data=f"a_dictchoice_{index}")]
+            for index, choice in enumerate(choices)]
+    return InlineKeyboardMarkup(rows + list(_dictionary_nav(cid, lang).inline_keyboard))
+
+
+async def _ask_dict_clarification(bot, cid, payload, lang=None, *, unavailable=False, choices=None):
+    """Просит пользователя подтвердить смысл, не угадывая его за него."""
     raw_term = _clean_raw_user_term(payload)
     code = lang if lang in ("nl", "en") else _active_language_code(cid)
-    store.dict_pending_add[str(cid)] = {"term": raw_term, "lang": code}
+    choices = _clarification_choices(choices)
+    pending = {"term": raw_term, "lang": code}
+    if choices:
+        pending["choices"] = choices
+    store.dict_pending_add[str(cid)] = pending
     store.pending_input[str(cid)] = f"dictclarify_{code}"
-    lead = "Сейчас не удалось проверить" if unavailable else "Не удалось уверенно определить"
-    message = (
-        f"{lead} «{raw_term}». Напиши перевод или короткий контекст — "
-        "например: «ругательство» или «болезнь»."
-    )
-    await bot.send_message(chat_id=cid, text=message, reply_markup=_dictionary_nav(cid, code))
+    if choices:
+        message = f"«{raw_term}» может означать разное. Выбери перевод или напиши свой."
+        keyboard = _dict_clarification_kb(cid, code, choices)
+    else:
+        lead = "Сейчас не удалось проверить" if unavailable else "Не удалось уверенно определить"
+        message = (
+            f"{lead} «{raw_term}». Напиши перевод или короткий контекст — "
+            "например: «ругательство» или «болезнь»."
+        )
+        keyboard = _dictionary_nav(cid, code)
+    await bot.send_message(chat_id=cid, text=message, reply_markup=keyboard)
+
+
+async def choose_dict_clarification(bot, cid, index):
+    """Подтверждает один из предложенных переводов через inline-кнопку."""
+    cid = str(cid)
+    pending = store.dict_pending_add.get(cid) or {}
+    choices = pending.get("choices") or []
+    try:
+        selected = choices[int(index)]
+    except (TypeError, ValueError, IndexError):
+        await bot.send_message(
+            chat_id=cid, text="Этот вариант уже устарел. Напиши перевод словами.",
+            reply_markup=_dictionary_nav(cid, pending.get("lang")),
+        )
+        return
+    await add_dict_clarification(bot, cid, selected, pending.get("lang"))
 
 
 async def add_dict_clarification(bot, cid, clarification, lang=None):
