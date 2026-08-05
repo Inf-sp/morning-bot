@@ -82,6 +82,45 @@ def test_concerts_card_keeps_classic_text_and_link():
     assert message.rich_message is None
 
 
+def test_concerts_show_the_full_year_without_confirmation_and_with_full_country_label(monkeypatch):
+    events = [
+        {
+            "id": f"romy-{date}",
+            "_artist": "Romy",
+            "_source": "ticketmaster",
+            "dates": {"start": {"localDate": date}},
+            "_embedded": {"venues": [{
+                "city": {"name": "Amsterdam"},
+                "country": {"countryCode": "NL"},
+            }]},
+            "url": "https://example.com/romy",
+        }
+        for date in ("2026-08-20", "2027-02-12", "2027-07-18")
+    ]
+
+    class Bot:
+        def __init__(self):
+            self.sent = []
+
+        async def send_message(self, **kwargs):
+            self.sent.append(kwargs)
+
+    monkeypatch.setattr(leisure_concerts, "_ensure_artists", lambda _cid: ["Romy"])
+    monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {
+        "cc": "NL", "country": "NL",
+    })
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda _cid, _cc: events)
+    monkeypatch.setattr(leisure_concerts.config, "TICKETMASTER_API_KEY", "test-key")
+
+    bot = Bot()
+    asyncio.run(leisure_concerts.find_concerts(bot, "42"))
+
+    message = bot.sent[0]
+    assert message["reply_markup"].inline_keyboard[0][0].text == "🇳🇱 Нидерланды"
+    assert message["text"].count("Romy") == 3
+    assert "Подтверждён" not in message["text"]
+
+
 def test_concerts_keep_the_full_classic_list_instead_of_rich_blocks():
     events = [
         {"artist": artist, "date": f"{index} августа 2099", "place": "Амстердам"}
@@ -134,7 +173,7 @@ def test_nearest_concerts_uses_the_full_classic_delivery(monkeypatch):
     asyncio.run(leisure_concerts.find_concerts(rich_bot, "rich-concerts"))
     assert rich_bot.rich == []
     assert _labels(rich_bot.classic[0]["reply_markup"]) == [
-        ["🌍 Нидерланды"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🇳🇱 Нидерланды"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert "Romy" in rich_bot.classic[0]["text"]
     assert rich_bot.classic[0]["disable_web_page_preview"] is True
@@ -150,7 +189,7 @@ def test_nearest_concerts_uses_the_full_classic_delivery(monkeypatch):
     asyncio.run(leisure_concerts.find_concerts(classic_bot, "classic-concerts"))
     assert len(classic_bot.classic) == 1
     assert _labels(classic_bot.classic[0]["reply_markup"]) == [
-        ["🌍 Нидерланды"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🇳🇱 Нидерланды"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert "Romy" in classic_bot.classic[0]["text"]
     assert classic_bot.classic[0]["disable_web_page_preview"] is True

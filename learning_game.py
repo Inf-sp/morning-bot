@@ -101,6 +101,18 @@ _GAME_CATEGORY_ALIASES = {
     "герой": "character", "персонаж": "character", "character": "character",
 }
 
+_GAME_REQUEST_FOCUSES = (
+    ("very familiar animal", "animal"),
+    ("very familiar fruit or vegetable", "food"),
+    ("ordinary everyday object", "object"),
+    ("very familiar animal", "animal"),
+    ("very familiar fruit or vegetable", "food"),
+    ("common type of transport", "transport"),
+    ("common profession", "profession"),
+    ("well-known place", "place"),
+    ("very famous film or cartoon character", "character"),
+)
+
 
 def _game_category_key(value):
     """Normalise the generator's category to the small supported set."""
@@ -351,9 +363,65 @@ _LOCAL_GAME_CARDS = {
     ),
 }
 
+_EXTRA_LOCAL_SUBJECTS = (
+    ("animal", "rabbit", "konijn", "кролик", "I have long ears and I can jump very well.", "Ik heb lange oren en ik kan heel goed springen.", "I have a soft tail.", "Ik heb een zachte staart."),
+    ("animal", "horse", "paard", "лошадь", "I can run fast and people can ride on my back.", "Ik kan snel rennen en mensen kunnen op mijn rug rijden.", "I have a long mane.", "Ik heb een lange manen."),
+    ("animal", "cow", "koe", "корова", "I live on a farm and I eat grass every day.", "Ik woon op een boerderij en ik eet elke dag gras.", "People can get milk from me.", "Mensen kunnen melk van mij krijgen."),
+    ("animal", "lion", "leeuw", "лев", "I am a large wild animal and I live with a group.", "Ik ben een groot wild dier en ik leef met een groep.", "The male has a big mane.", "Het mannetje heeft een grote manen."),
+    ("animal", "giraffe", "giraf", "жираф", "I am very tall and I like to eat leaves from trees.", "Ik ben heel lang en ik eet graag bladeren van bomen.", "I have a very long neck.", "Ik heb een heel lange nek."),
+    ("animal", "penguin", "pinguïn", "пингвин", "I live in cold places and I can swim very well.", "Ik leef op koude plekken en ik kan heel goed zwemmen.", "I am black and white and I cannot fly.", "Ik ben zwart en wit en ik kan niet vliegen."),
+    ("animal", "turtle", "schildpad", "черепаха", "I move slowly and I can live for many years.", "Ik beweeg langzaam en ik kan heel veel jaren leven.", "I carry a hard shell on my back.", "Ik draag een hard schild op mijn rug."),
+    ("animal", "bee", "bij", "пчела", "I am small and I fly from flower to flower.", "Ik ben klein en ik vlieg van bloem naar bloem.", "I make honey and I can sting.", "Ik maak honing en ik kan steken."),
+    ("animal", "butterfly", "vlinder", "бабочка", "I am an insect and I often sit on flowers.", "Ik ben een insect en ik zit vaak op bloemen.", "I have colourful wings.", "Ik heb kleurrijke vleugels."),
+    ("animal", "owl", "uil", "сова", "I am a bird and I am often awake at night.", "Ik ben een vogel en ik ben vaak wakker in de nacht.", "I have large eyes and I can fly quietly.", "Ik heb grote ogen en ik kan stil vliegen."),
+    ("animal", "monkey", "aap", "обезьяна", "I am good at climbing and I live with other animals.", "Ik kan goed klimmen en ik leef met andere dieren.", "I like bananas and I have a long tail.", "Ik houd van bananen en ik heb een lange staart."),
+    ("animal", "tiger", "tijger", "тигр", "I am a large wild cat and I can run very fast.", "Ik ben een grote wilde kat en ik kan heel snel rennen.", "I have dark stripes on my orange fur.", "Ik heb donkere strepen op mijn oranje vacht."),
+    ("food", "apple", "appel", "яблоко", "People often eat me as a snack and I can be red or green.", "Mensen eten mij vaak als snack en ik kan rood of groen zijn.", "I grow on a tree.", "Ik groei aan een boom."),
+    ("food", "banana", "banaan", "банан", "People often eat me as a snack and I am yellow.", "Mensen eten mij vaak als snack en ik ben geel.", "You remove my peel before eating me.", "Je haalt mijn schil eraf voordat je mij eet."),
+    ("food", "carrot", "wortel", "морковь", "I am a vegetable and I am usually orange.", "Ik ben een groente en ik ben meestal oranje.", "I grow under the ground.", "Ik groei onder de grond."),
+    ("food", "tomato", "tomaat", "помидор", "I am red and people often put me in a salad.", "Ik ben rood en mensen doen mij vaak in een salade.", "I have many small seeds inside.", "Ik heb veel kleine zaden vanbinnen."),
+    ("food", "cucumber", "komkommer", "огурец", "I am long, green and full of water.", "Ik ben lang, groen en vol water.", "People often cut me into a salad.", "Mensen snijden mij vaak in een salade."),
+    ("food", "strawberry", "aardbei", "клубника", "I am small, sweet and often red.", "Ik ben klein, zoet en vaak rood.", "I have tiny seeds on my skin.", "Ik heb kleine zaadjes op mijn schil."),
+    ("food", "lemon", "citroen", "лимон", "I am yellow and people use me in drinks or food.", "Ik ben geel en mensen gebruiken mij in drinken of eten.", "My taste is very sour.", "Mijn smaak is heel zuur."),
+    ("food", "orange", "sinaasappel", "апельсин", "I am round and people often make juice from me.", "Ik ben rond en mensen maken vaak sap van mij.", "I have a thick orange peel.", "Ik heb een dikke oranje schil."),
+    ("food", "grape", "druif", "виноград", "I am small and I can be green or purple.", "Ik ben klein en ik kan groen of paars zijn.", "I grow together in a bunch.", "Ik groei samen in een tros."),
+    ("food", "watermelon", "watermeloen", "арбуз", "I am very big and I have a green skin outside.", "Ik ben heel groot en ik heb een groene schil aan de buitenkant.", "Inside I am red and full of water.", "Vanbinnen ben ik rood en vol water."),
+    ("food", "potato", "aardappel", "картофель", "I grow under the ground and I have a brown skin.", "Ik groei onder de grond en ik heb een bruine schil.", "People make fries from me.", "Mensen maken friet van mij."),
+    ("food", "broccoli", "broccoli", "брокколи", "I am a green vegetable and I look like a small tree.", "Ik ben een groene groente en ik lijk op een kleine boom.", "People often cook me before eating me.", "Mensen koken mij vaak voordat ze mij eten."),
+)
+
+
+def _extra_local_game_cards(clue_lang):
+    """Знакомые темы поддерживают игру, когда внешний генератор недоступен."""
+    dutch = clue_lang == "нидерландский"
+    cards = []
+    for category, english, dutch_word, russian, en_clue, nl_clue, en_hint, nl_hint in _EXTRA_LOCAL_SUBJECTS:
+        answer = f"de {dutch_word}" if dutch else f"the {english}"
+        if dutch:
+            description = (
+                "Veel mensen kennen mij goed. Je kunt mij in het dagelijks leven of in de natuur zien. "
+                f"{nl_clue}"
+            )
+            hint, explain = nl_hint, "Deze extra hint maakt het antwoord duidelijker."
+            words = [{"word": "kennen", "translation": "знать"}, {"word": "natuur", "translation": "природа"}]
+        else:
+            description = (
+                "Many people know me well. You can see me in everyday life or in nature. "
+                f"{en_clue}"
+            )
+            hint, explain = en_hint, "This extra clue makes the answer clearer."
+            words = [{"word": "everyday", "translation": "повседневный"}, {"word": "nature", "translation": "природа"}]
+        cards.append({
+            "description": description, "answer": answer, "answer_en": english,
+            "category": category, "aliases": [russian, english, dutch_word],
+            "hint": hint, "explain": explain, "words": words, "_trusted_local": True,
+        })
+    return cards
+
 
 def _local_game_data(clue_lang, recent):
-    cards = _LOCAL_GAME_CARDS.get(clue_lang) or _LOCAL_GAME_CARDS["английский"]
+    cards = list(_LOCAL_GAME_CARDS.get(clue_lang) or _LOCAL_GAME_CARDS["английский"])
+    cards.extend(_extra_local_game_cards(clue_lang))
     for card in cards:
         if not _game_is_recent(card, recent):
             return dict(card)
@@ -379,6 +447,8 @@ def _description_is_guessable(data, lang=None):
         or not _game_has_target_language(data.get("explain", ""), lang)
     ):
         return False
+    if data.get("_trusted_local"):
+        return True
     combined = " ".join((description, hint, data.get("explain", ""))).casefold()
     vague_count = sum(bool(re.search(marker, combined)) for marker in _GAME_VAGUE_CLUE_MARKERS)
     signature_count = sum(bool(re.search(marker, combined)) for marker in _GAME_SIGNATURE_MARKERS)
@@ -399,15 +469,11 @@ def _clues_are_guessable(data):
 
 
 def game_data(clue_lang, recent, attempt=0):
-    subject = ("одно очень знакомое животное, блюдо, предмет, профессию, вид транспорта, место "
-               "или очень известного героя мультфильма/кино. Выбирай только то, что узнает человек "
-               "с базовым языком: например кошка, пицца, автобус, врач, поезд, Шрек или Гарри Поттер. "
-               "Не выбирай растения, знаменитостей, исторических людей, редких персонажей, бренды "
-               "или абстрактные понятия.")
+    subject, expected_category = _GAME_REQUEST_FOCUSES[(len(recent) + attempt) % len(_GAME_REQUEST_FOCUSES)]
     avoid = ("Не загадывай ничего из этого списка и их переводы/синонимы: " + ", ".join(recent[-80:])) if recent else ""
     prompt = f"""Create a short guessing game for a language learner.
 Target language: {clue_lang}. CEFR level: A1-A2.
-Choose {subject}
+Choose exactly one {subject}. It must be familiar to a beginner.
 {avoid}
 Write a natural mini-description of 3-4 connected sentences, about 25-45 words total.
 Use simple, natural language. Do not write a list of clues. Include 2-4 concrete characteristics.
@@ -421,7 +487,7 @@ Do not choose function words such as ik, I, zijn, be, een, a, the.
 Attempt: {attempt + 1}. Return exactly these fields, one per line, without markdown:
 DESCRIPTION: 3-4 connected sentences in {clue_lang}, 25-45 words
 ANSWER: answer in {clue_lang}
-CATEGORY: exactly one of animal, food, object, profession, transport, place, character
+CATEGORY: exactly {expected_category}
 ALIASES: accepted Russian, English and Dutch names separated by |
 ENGLISH: English name in 1-4 words
 HINT: one strong hint in {clue_lang}

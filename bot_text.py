@@ -71,9 +71,12 @@ async def handle(update, context, remove_reply_keyboard):
 
     # Явная команда словаря сильнее открытого режима ожидания любого раздела.
     # Например, «Добавить *twijfelt*» из экрана «Мысли» должна попасть в словарь,
-    # а не сохраниться как мысль. После успешной команды старый pending сбрасываем.
+    # а не сохраниться как мысль. Сбрасываем только прежний pending: обработчик
+    # словаря может открыть новый шаг уточнения перевода.
+    previous_kind = store.pending_input.get(cid)
     if await dictionary_import.try_add_dict_from_chat(bot, cid, text):
-        previous_kind = store.pending_input.pop(cid, None)
+        if store.pending_input.get(cid) == previous_kind:
+            store.pending_input.pop(cid, None)
         store.game_state.pop(cid, None)
         store.challenge_state.pop(cid, None)
         if previous_kind in ("worry", "thought", "thought_reminder"):

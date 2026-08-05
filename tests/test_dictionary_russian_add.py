@@ -106,6 +106,52 @@ def test_dictionary_command_has_priority_over_open_thoughts(monkeypatch):
     assert (cid, "_thoughts_prompt_ts", 0) in settings_changes
 
 
+def test_dictionary_clarification_survives_the_add_command_route(monkeypatch):
+    cid = "dictionary-clarification-route"
+    clarifications = []
+    assistant_replies = []
+
+    async def fake_dict_add(_bot, routed_cid, text):
+        if text == "Add oplossen":
+            bot_text.store.pending_input[routed_cid] = "dictclarify_nl"
+            bot_text.store.dict_pending_add[routed_cid] = {"term": "oplossen", "lang": "nl"}
+            return True
+        return False
+
+    async def fake_clarification(_bot, routed_cid, text, lang):
+        clarifications.append((routed_cid, text, lang))
+
+    async def no_lifehack(*_args, **_kwargs):
+        return False
+
+    async def fallback_chat(_bot, _cid, text):
+        assistant_replies.append(text)
+
+    async def remove_keyboard(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
+    monkeypatch.setattr(bot_text.assistant, "try_add_lifehack_from_chat", no_lifehack)
+    monkeypatch.setattr(bot_text.assistant, "try_edit_lifehack_from_chat", no_lifehack)
+    monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", fake_dict_add)
+    monkeypatch.setattr(bot_text.dictionary_import, "add_dict_clarification", fake_clarification)
+    monkeypatch.setattr(bot_text.assistant, "chat_reply", fallback_chat)
+    bot_text.store.pending_input.pop(cid, None)
+    bot_text.store.dict_pending_add.pop(cid, None)
+    update = lambda text: SimpleNamespace(
+        effective_chat=SimpleNamespace(id=cid),
+        message=SimpleNamespace(text=text),
+    )
+    context = SimpleNamespace(bot=SimpleNamespace())
+
+    asyncio.run(bot_text.handle(update("Add oplossen"), context, remove_keyboard))
+    asyncio.run(bot_text.handle(update("Решение"), context, remove_keyboard))
+
+    assert clarifications == [(cid, "Решение", "nl")]
+    assert assistant_replies == []
+
+
 def test_russian_value_is_translated_not_transliterated(monkeypatch):
     captured = {}
 

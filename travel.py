@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
+import country_catalog
 import config
 import memory
 import recommendation_stoplist
@@ -527,7 +528,14 @@ def travel_suggest_one(cid, excluded=None):
     return ai.llm_json(prompt, 250, tier="cheap", module="travel_utility")
 
 
-_LOCAL_COUNTRY_FALLBACKS = ("Исландия", "Португалия", "Дания", "Япония")
+# Локальные направления из встроенного справочника. Порядок сохраняет хорошие
+# первые варианты, но запас не заканчивается после нескольких рекомендаций.
+_LOCAL_COUNTRY_FALLBACKS = (
+    "Исландия", "Португалия", "Дания", "Япония", "Канада", "Норвегия",
+    "Словения", "Греция", "Хорватия", "Испания", "Италия", "Франция",
+    "Австрия", "Швейцария", "Швеция", "Финляндия", "Новая Зеландия",
+    "Австралия", "США", "Тайвань",
+)
 
 
 def _local_country_fallback(cid, excluded=None):
@@ -542,10 +550,16 @@ def _local_country_fallback(cid, excluded=None):
         if str(value).strip()
     }
     visited_codes = set(_visited_codes(cid))
+    blocked_codes = {
+        country_catalog.country_code(str(value))
+        for value in [*(excluded or []), *recommendation_stoplist.values(cid, "country")]
+        if str(value).strip()
+    }
     for country in _LOCAL_COUNTRY_FALLBACKS:
         if country.casefold() in blocked:
             continue
-        if util.cc_of(country).upper() not in visited_codes:
+        country_code = country_catalog.country_code(country)
+        if country_code and country_code not in visited_codes and country_code not in blocked_codes:
             return {"country": country}
     return None
 

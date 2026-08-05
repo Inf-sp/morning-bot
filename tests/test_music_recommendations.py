@@ -53,6 +53,28 @@ def test_artist_tracks_link_to_youtube_music_and_keep_the_note(monkeypatch):
     assert links[0].url == "https://music.youtube.com/watch?v=sweater123"
 
 
+def test_artist_card_links_have_short_notes_and_no_web_preview(monkeypatch):
+    monkeypatch.setattr(leisure_music.youtube_tracks, "find_track_url", lambda *_args: "https://music.youtube.com/watch?v=x")
+    data = asyncio.run(leisure_music._attach_track_links({
+        "artist": "The Neighbourhood",
+        "tracks": ["Sweater Weather", "Daddy Issues", "Afraid"],
+    }))
+
+    class Bot:
+        def __init__(self):
+            self.sent = []
+
+        async def send_message(self, **kwargs):
+            self.sent.append(kwargs)
+
+    message = leisure_ui.artist_card(data)
+    bot = Bot()
+    asyncio.run(leisure_music._deliver_artist_card(bot, "42", message, reply_markup=None))
+
+    assert all(track["note"] for track in data["tracks"])
+    assert bot.sent[0]["disable_web_page_preview"] is True
+
+
 def test_music_shows_a_local_artist_when_the_ai_chain_is_unavailable(monkeypatch):
     calls = []
     profile = {}

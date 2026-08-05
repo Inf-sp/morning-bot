@@ -216,8 +216,8 @@ def test_detective_card_shows_a_clear_russian_category():
     assert "I have whiskers and I like warm places.\n\nНапиши ответ" in message.text
 
 
-def test_detective_never_repeats_a_local_card_after_the_catalogue_is_played(monkeypatch):
-    """Исчерпанный локальный каталог не должен начинать новый круг повторов."""
+def test_detective_expands_local_catalogue_after_the_legacy_cards_are_played(monkeypatch):
+    """После старого набора игра продолжает новой локальной загадкой без повтора."""
     cid = "detective-no-repeat-regression"
     repeated = {
         "description": (
@@ -243,8 +243,8 @@ def test_detective_never_repeats_a_local_card_after_the_catalogue_is_played(monk
     try:
         asyncio.run(learning_game.send_game(bot, cid))
 
-        assert cid not in learning_game.store.game_state
-        assert "Новой загадки сейчас нет. Попробуй позже." in bot.messages[-1]["text"]
+        assert learning_game.store.game_state[cid]["answer"] not in all_played
+        assert "Новой загадки сейчас нет. Попробуй позже." not in bot.messages[-1]["text"]
     finally:
         learning_game.store.game_config.pop(cid, None)
         learning_game.store.game_state.pop(cid, None)
@@ -310,6 +310,18 @@ def test_game_data_uses_description_and_parses_learning_words(monkeypatch):
         {"word": "snorharen", "translation": "усы"},
         {"word": "jagen", "translation": "охотиться"},
     ]
+
+
+def test_game_data_rotates_subject_categories_between_attempts(monkeypatch):
+    prompts = []
+
+    monkeypatch.setattr(learning_game.ai, "llm", lambda prompt, *_args, **_kwargs: prompts.append(prompt) or "")
+
+    learning_game.game_data("английский", [], attempt=0)
+    learning_game.game_data("английский", [], attempt=1)
+
+    assert "Choose exactly one very familiar animal" in prompts[0]
+    assert "Choose exactly one very familiar fruit or vegetable" in prompts[1]
 
 
 def test_game_data_uses_public_openrouter_fallback_and_local_card(monkeypatch):

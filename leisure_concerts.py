@@ -586,7 +586,7 @@ def _concert_place_name(name, cc=""):
     return str(name or "твоей стране").strip()
 
 _CONCERTS_CACHE_TTL = 7 * 86400  # неделя — кэш прогревается job'ом перед пятничной афишей
-_CONCERTS_CACHE_VERSION = 2
+_CONCERTS_CACHE_VERSION = 3
 
 
 def _concerts_cache_get(cid, cc):
@@ -642,7 +642,9 @@ async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False):
     date_from = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     date_to = (now + timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ")  # 1 год вперёд
 
-    tm_events = await _ticketmaster_events_many(artists, cc, start_dt=date_from, end_dt=date_to, size=10, limit=40)
+    # Берём максимально возможную страницу Ticketmaster: короткая выдача не должна
+    # прятать даты дальнего конца годового горизонта.
+    tm_events = await _ticketmaster_events_many(artists, cc, start_dt=date_from, end_dt=date_to, size=200, limit=40)
     # External search is a bounded last fallback for unresolved artists.
     found_artists = {
         _item_text(event.get("_artist")).casefold()
@@ -794,7 +796,6 @@ async def _build_new_concerts_msg(cid):
     for e in new_events:
         date = e.get("dates", {}).get("start", {}).get("localDate", "")
         city = ((e.get("_embedded", {}).get("venues") or [{}])[0].get("city") or {}).get("name", "")
-        source = e.get("_source", "ticketmaster")
         rows_data.append({
             "artist": e.get("_artist", ""),
             "context": _concert_context(e),
@@ -805,7 +806,6 @@ async def _build_new_concerts_msg(cid):
             "date": _fmt_date(date) if date else "",
             "date_unix": _concert_date_unix(date),
             "url": e.get("url", ""),
-            "verification": "confirmed" if source in ("official_site", "venue", "ticketmaster") else "review",
         })
 
     msg = leisure_ui.concerts_list("Новые концерты твоих артистов", rows_data)
@@ -828,6 +828,21 @@ _CONCERT_CC_MAP = {
     "dk": ("DK", COUNTRY_EMOJI["dk"], "Дания"),
     "pt": ("PT", COUNTRY_EMOJI["pt"], "Португалия"),
 }
+
+
+def _concert_country_name(cc: str, fallback: str = "") -> str:
+    """Полное локализованное название страны для UI, даже если в профиле лежит код."""
+    normalized_cc = str(cc or "").upper()
+    for code, _flag, name in _CONCERT_CC_MAP.values():
+        if code == normalized_cc:
+            return name
+    return str(fallback or normalized_cc or "твоя страна").strip()
+
+
+def _concert_country_label(cc: str, fallback: str = "") -> str:
+    name = _concert_country_name(cc, fallback)
+    flag = util.flag_from_cc(str(cc or "").upper())
+    return f"{flag} {name}".strip()
 
 # Реальные географические соседи (сухопутная граница/ближайший регион), ограничены
 # набором стран выше — используется для "соседние регионы" в поиске концертов
@@ -881,7 +896,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
     s = store.get_settings(cid)
     home_cc = (s.get("cc") or "NL").upper()
     home_flag = util.flag_from_cc(home_cc)
-    home_name = s.get("country") or "твоя страна"
+    home_name = _concert_country_name(home_cc, s.get("country") or "")
     if mode in _CONCERT_CC_MAP:
         cc, flag, cname = _CONCERT_CC_MAP[mode]
     else:
@@ -891,7 +906,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
     rows = []
     if not artists:
         rows.append([InlineKeyboardButton("🆕 Добавить артиста", callback_data="as_loveadd_artists")])
-    rows.append([InlineKeyboardButton(f"🌍 {cname}", callback_data="a_concerts_pick")])
+    rows.append([InlineKeyboardButton(_concert_country_label(cc, cname), callback_data="a_concerts_pick")])
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
@@ -947,7 +962,6 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
         seen_artist_events.add(dedup_key)
 
         place = city
-        source = e.get("_source", "ticketmaster")
         rows_data.append({
             "artist": artist,
             "context": _concert_context(e),
@@ -958,7 +972,6 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
             "date": _fmt_date(date) if date else "",
             "date_unix": _concert_date_unix(date),
             "url": e.get("url", ""),
-            "verification": "confirmed" if source in ("official_site", "venue", "ticketmaster") else "review",
         })
 
     empty_hint = (
@@ -1057,19 +1070,8 @@ async def send_weekend_events(bot, cid):
 
 async def concert_pick_country(bot, cid):
     countries = [
-        ("at", "Австрия", f"{COUNTRY_EMOJI['at']} Австрия"),
-        ("be", "Бельгия", f"{COUNTRY_EMOJI['be']} Бельгия"),
-        ("gb", "Великобритания", f"{COUNTRY_EMOJI['gb']} Великобр."),
-        ("de", "Германия", f"{COUNTRY_EMOJI['de']} Германия"),
-        ("dk", "Дания", f"{COUNTRY_EMOJI['dk']} Дания"),
-        ("es", "Испания", f"{COUNTRY_EMOJI['es']} Испания"),
-        ("it", "Италия", f"{COUNTRY_EMOJI['it']} Италия"),
-        ("nl", "Нидерланды", f"{COUNTRY_EMOJI['nl']} Нидерланды"),
-        ("pl", "Польша", f"{COUNTRY_EMOJI['pl']} Польша"),
-        ("pt", "Португалия", f"{COUNTRY_EMOJI['pt']} Португалия"),
-        ("fr", "Франция", f"{COUNTRY_EMOJI['fr']} Франция"),
-        ("ch", "Швейцария", f"{COUNTRY_EMOJI['ch']} Швейцария"),
-        ("se", "Швеция", f"{COUNTRY_EMOJI['se']} Швеция"),
+        (key, name, _concert_country_label(code, name))
+        for key, (code, _flag, name) in _CONCERT_CC_MAP.items()
     ]
     buttons = [
         InlineKeyboardButton(label, callback_data=f"a_concerts_{cc}")

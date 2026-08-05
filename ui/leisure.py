@@ -629,10 +629,6 @@ def concerts_list(place_label, events, empty_hint=""):
                 b.line(context)
             if ev.get("price"):
                 b.line(ev["price"])
-            if ev.get("verification") == "confirmed":
-                b.line("✅ Подтверждён")
-            elif ev.get("verification") == "review":
-                b.line("🟡 Требует проверки")
             if ev.get("url"):
                 b.link("Подробнее…", ev["url"])
                 b.newline()

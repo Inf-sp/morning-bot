@@ -300,6 +300,9 @@ def _youtube_music_search_url(track, artist):
     return f"https://music.youtube.com/search?q={quote_plus(query)}" if query else ""
 
 
+_TRACK_FALLBACK_NOTES = ("знаковый хит", "другая грань звучания", "для следующего шага")
+
+
 async def _attach_track_links(data):
     """Добавляет к трекам карточки проверенную ссылку или точный поиск YouTube Music."""
     data = dict(data or {})
@@ -308,7 +311,7 @@ async def _attach_track_links(data):
     if not artist or not tracks:
         return data
 
-    async def link_track(track):
+    async def link_track(track, index):
         title, note, url = _track_parts(track)
         if not title:
             return None
@@ -319,11 +322,11 @@ async def _attach_track_links(data):
                 url = ""
         return {
             "title": title,
-            "note": note,
+            "note": note or _TRACK_FALLBACK_NOTES[min(index, len(_TRACK_FALLBACK_NOTES) - 1)],
             "url": url or _youtube_music_search_url(title, artist),
         }
 
-    linked = await asyncio.gather(*(link_track(track) for track in tracks))
+    linked = await asyncio.gather(*(link_track(track, index) for index, track in enumerate(tracks)))
     data["tracks"] = [track for track in linked if track]
     return data
 
@@ -724,7 +727,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
                 f'"genre": "один ключ из {", ".join(sorted(allowed_genres))}", '
                 '"desc": "1-2 строки образно о звучании", '
                 '"why": ["пункт 1 - на кого из его любимых похоже и чем", "пункт 2"], '
-                '"tracks": ["трек 1 - короткая пометка", "трек 2", "трек 3"], '
+                '"tracks": ["трек 1 - короткая пометка", "трек 2 - короткая пометка", "трек 3 - короткая пометка"], '
                 '"fact": "1 интересный факт об исполнителе"}',
                 1000, tier="leisure", route="gemini", module="leisure")
         except Exception as e:
@@ -781,7 +784,12 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
 async def _deliver_artist_card(bot, cid, msg, reply_markup, *, status=None):
     """Передаёт карточку через статусный сценарий либо отправляет новый экран."""
     if status is not None:
-        await status.replace(msg.text, entities=msg.entities, reply_markup=reply_markup)
+        await status.replace(
+            msg.text, entities=msg.entities, reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        )
         return
     await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=reply_markup)
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=reply_markup,
+        disable_web_page_preview=True,
+    )

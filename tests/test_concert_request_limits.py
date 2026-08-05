@@ -9,8 +9,10 @@ import leisure_concerts
 
 def test_concert_refresh_searches_externally_only_for_a_small_unresolved_subset(monkeypatch):
     searched = []
+    ticketmaster_calls = []
 
-    async def ticketmaster(*_args, **_kwargs):
+    async def ticketmaster(*args, **kwargs):
+        ticketmaster_calls.append((args, kwargs))
         return [{"_artist": "Already found", "id": "ticketmaster-event"}]
 
     async def external(artist, *_args, **_kwargs):
@@ -24,4 +26,5 @@ def test_concert_refresh_searches_externally_only_for_a_small_unresolved_subset(
     artists = ["Already found", *[f"Artist {index}" for index in range(8)]]
     asyncio.run(leisure_concerts._fetch_concerts(artists, "NL", "Нидерланды"))
 
+    assert ticketmaster_calls[0][1]["size"] == 200
     assert searched == [f"Artist {index}" for index in range(5)]
