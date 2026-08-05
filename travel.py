@@ -28,14 +28,17 @@ _CARD_LOCKS_GUARD = threading.Lock()
 _IDEA_LOCKS = {}
 _IDEA_LOCKS_GUARD = threading.Lock()
 
-_TRANSPORTS = (
-    ("bike", "🚴🏻‍♂️", "Велосипед", "На велосипеде"),
-    ("bus", "🚌", "Автобус", "На автобусе"),
-    ("train", "🚆", "Поезд", "На поезде"),
-    ("plane", "✈️", "Самолёт", "На самолёте"),
-    ("ferry", "⛴️", "Паром", "На пароме"),
-)
-_TRANSPORT_BY_KEY = {row[0]: row for row in _TRANSPORTS}
+_DAY_TRIP_NEIGHBORS = {
+    "NL": ("BE", "DE"), "BE": ("NL", "FR", "DE"), "DE": ("NL", "BE", "FR", "CH", "AT", "PL", "DK"),
+    "FR": ("BE", "DE", "CH", "IT", "ES"), "GB": ("FR",), "ES": ("FR", "PT"),
+    "IT": ("FR", "CH", "AT"), "AT": ("DE", "CH", "IT"), "CH": ("DE", "FR", "IT", "AT"),
+    "PL": ("DE",), "SE": ("DK",), "DK": ("DE", "SE"), "PT": ("ES",),
+}
+_DAY_TRIP_FALLBACKS = {
+    "NL": ("Берген", ["Дюны и побережье", "Старый центр", "Вернись до вечера"]),
+    "BE": ("Гент", ["Исторический центр", "Набережные Лис", "Вернись до вечера"]),
+    "DE": ("Кёльн", ["Прогуляйся у собора", "Зайди в старый город", "Оставь запас на обратную дорогу"]),
+}
 _LANG_RU = {
     "Dutch": "нидерландский", "English": "английский", "German": "немецкий",
     "French": "французский", "Italian": "итальянский", "Romansh": "ретороманский",
@@ -48,18 +51,6 @@ _CURRENCY_RU = {
     "USD": "доллар США · USD", "CAD": "канадский доллар · CAD", "JPY": "японская иена · JPY",
     "PLN": "польский злотый · PLN", "DKK": "датская крона · DKK", "SEK": "шведская крона · SEK",
 }
-
-
-def selected_transports(cid):
-    raw = settings.get(cid, "travel_transports", ["bike", "train"])
-    if not isinstance(raw, list):
-        raw = []
-    valid = [key for key in raw if key in _TRANSPORT_BY_KEY]
-    return valid or ["train"]
-
-
-def _transport_context(cid):
-    return ", ".join(_TRANSPORT_BY_KEY[key][2] for key in selected_transports(cid))
 
 
 _TRAVEL_INTERESTS = (
@@ -112,31 +103,37 @@ def _editorial_line(value, *, allow_empty=True):
 
 def _fallback_idea(cid):
     city = store.get_settings(cid).get("city") or "Алкмар"
-    key = selected_transports(cid)[0]
-    emoji, _label, title = _TRANSPORT_BY_KEY[key][1:]
-    targets = {
-        "bike": ("Берген", ["Велосипед · около 40 минут в одну сторону", "Старый центр и дюны", "Обратно до вечера"]),
-        "bus": ("Харлем", ["Автобус · без долгих пересадок", "Центр и прогулка у каналов", "Возвращение вечером"]),
-        "train": ("Лейден", ["Поезд · удобный дневной маршрут", "Старый центр и каналы", "Возвращение до вечера"]),
-        "plane": ("Копенгаген", ["Самолёт · основной транспорт", "Прогулка по центру", "Заложи время на аэропорт"]),
-        "ferry": ("Тексел", ["Паром · короткая переправа", "Дюны и побережье", "Проверь последний рейс обратно"]),
-    }
-    target, route = targets[key]
-    return {"emoji": emoji, "transport": key, "transport_title": title, "from": city, "to": target,
+    cc, country, _allowed = _day_trip_scope(cid)
+    target, route = _DAY_TRIP_FALLBACKS.get(
+        cc, (city, ["Прогуляйся по знакомому району", "Выбери новое место", "Вернись до вечера"]),
+    )
+    return {"emoji": "🗺️", "transport_title": country, "from": city, "to": target,
             "intro": "Недалеко, красиво и без перегруженного плана.", "route": route,
             "tip": "проверь расписание перед выходом и оставь запас на обратную дорогу."}
 
 
+def _country_label(code):
+    row = country_catalog.local_country(code)
+    return str(row.get("name") or util.country_name_from_cc(code) or code).strip()
+
+
+def _day_trip_scope(cid):
+    cc = str(store.get_settings(cid).get("cc") or "NL").upper()
+    allowed = (cc, *_DAY_TRIP_NEIGHBORS.get(cc, ()))
+    return cc, _country_label(cc), allowed
+
+
 def _generate_home_idea(cid):
     city = store.get_settings(cid).get("city") or "Алкмар"
-    modes = selected_transports(cid)
+    home_cc, home_country, allowed_codes = _day_trip_scope(cid)
+    allowed_countries = ", ".join(_country_label(code) for code in allowed_codes)
     previous_entry = (store._load(config.TRAVEL_IDEA_KEY) or {}).get(str(cid), {})
     previous = previous_entry.get("idea", previous_entry) if isinstance(previous_entry, dict) else {}
     prompt = f"""Предложи одну реалистичную поездку на сегодня из города {city}.
-Разрешённый транспорт: {_transport_context(cid)}. Используй его; иной транспорт только как необходимый резерв.
+Выбирай место только в {home_country} или в соседних странах: {allowed_countries}.
 Можно предложить ближайший город, деревню, природный маршрут или близкую зарубежную поездку.
 Не повторяй прошлое направление: {previous.get('to', '')}.
-Верни короткий JSON: {{"transport":"одно из {modes}","to":"место","intro":"1 предложение",
+Верни короткий JSON: {{"country_code":"ISO-код страны из разрешённого списка","to":"место","intro":"1 предложение",
 "route":["ровно 3 практичных пункта"],"tip":"короткий полезный совет"}}.
 Не используй знак =, только стрелку → там, где нужна связь."""
     try:
@@ -145,23 +142,23 @@ def _generate_home_idea(cid):
             cache_context={
                 "scenario": "travel_home_idea",
                 "city": city,
-                "transports": sorted(modes),
+                "home_country": home_cc,
+                "allowed_countries": allowed_codes,
                 "previous_destination": previous.get("to", ""),
                 "language": "ru",
-                "schema_version": 1,
+                "schema_version": 2,
             },
         )
     except Exception as exc:
         _log.warning("travel home idea failed: %r", exc)
         return _fallback_idea(cid)
-    key = raw.get("transport") if isinstance(raw, dict) else ""
-    if key not in modes:
-        key = modes[0]
-    emoji, _label, title = _TRANSPORT_BY_KEY[key][1:]
+    destination_cc = str(raw.get("country_code") or "").upper() if isinstance(raw, dict) else ""
+    if destination_cc not in allowed_codes:
+        return _fallback_idea(cid)
     route = [str(x).replace(" = ", " → ") for x in (raw.get("route") or [])[:3]]
     if len(route) < 3 or not raw.get("to"):
         return _fallback_idea(cid)
-    return {"emoji": emoji, "transport": key, "transport_title": title, "from": city,
+    return {"emoji": "🗺️", "transport_title": _country_label(destination_cc), "from": city,
             "to": str(raw["to"]), "intro": str(raw.get("intro") or "Подходит для короткой поездки на день."),
             "route": route,
             "tip": str(raw.get("tip") or "проверь расписание перед выходом.")}
@@ -174,21 +171,23 @@ def _idea_lock(cid):
 
 
 def _home_idea(cid):
-    """Одна идея на локальные сутки; город или транспорт меняют входные данные кэша."""
+    """Одна идея на локальные сутки; страна профиля задаёт допустимый радиус."""
     key = str(cid)
     today = datetime.now(config.TZ).date().isoformat()
-    city = store.get_settings(cid).get("city") or "Алкмар"
-    transports = selected_transports(cid)
+    profile = store.get_settings(cid)
+    city = profile.get("city") or "Алкмар"
+    home_cc = str(profile.get("cc") or "NL").upper()
     with _idea_lock(cid):
         state = store._load(config.TRAVEL_IDEA_KEY) or {}
         cached = state.get(key) or {}
-        if (cached.get("date") == today and cached.get("city") == city
-                and cached.get("transports") == transports and cached.get("idea")):
+        if (cached.get("version") == 2 and cached.get("date") == today and cached.get("city") == city
+                and cached.get("cc") == home_cc
+                and cached.get("idea")):
             return cached["idea"]
         idea = _generate_home_idea(cid)
 
         def change(data):
-            data[key] = {"date": today, "city": city, "transports": transports, "idea": idea}
+            data[key] = {"version": 2, "date": today, "city": city, "cc": home_cc, "idea": idea}
             return data, None
 
         store.mutate_kv(config.TRAVEL_IDEA_KEY, change)
@@ -334,9 +333,7 @@ def _countries_kb(cid, page):
     shown = codes[page * _COUNTRIES_PER_PAGE:(page + 1) * _COUNTRIES_PER_PAGE]
     buttons = [InlineKeyboardButton(f"{util.flag_from_cc(code)} {_country_name(code)}".strip(),
                                     callback_data=f"a_trav_country_{code}_{page}") for code in shown]
-    rows = [
-        [InlineKeyboardButton("📌 Предпочтения", callback_data="a_trav_transport")],
-    ]
+    rows = []
     rows.extend(buttons[i:i + 2] for i in range(0, len(buttons), 2))
     previous_page = (page - 1) % pages
     next_page = (page + 1) % pages
@@ -501,42 +498,13 @@ async def send_country_add_prompt(bot, cid):
     await bot.send_message(chat_id=cid, text="Напиши название страны, в которой уже был.", reply_markup=kb)
 
 
-async def send_transport_settings(bot, cid, q=None):
-    selected = set(selected_transports(cid))
-    rows = [[InlineKeyboardButton(("✅ " if key in selected else "") + f"{emoji} {label}",
-                                  callback_data=f"a_trav_mode_{key}")]
-            for key, emoji, label, _ in _TRANSPORTS]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="a_trav_countries_0"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
-    msg = travel_ui.transport_screen(", ".join(_TRANSPORT_BY_KEY[k][2] for k in selected_transports(cid)))
-    kb = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb); return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def toggle_transport(bot, cid, key, q=None):
-    if key not in _TRANSPORT_BY_KEY:
-        await send_transport_settings(bot, cid, q); return
-    selected = selected_transports(cid)
-    if key in selected and len(selected) > 1:
-        selected.remove(key)
-    elif key not in selected:
-        selected.append(key)
-    settings.set_(cid, "travel_transports", selected)
-    await send_transport_settings(bot, cid, q)
-
-
 def travel_suggest_one(cid, excluded=None):
     visited = [_country_name(code) for code in _visited_codes(cid)]
     blocked = recommendation_stoplist.values(cid, "country")
     skip = ", ".join(visited + blocked + list(excluded or []))
     interests = " · ".join(_travel_interests(cid)) or "без явных предпочтений"
     prompt = f"""Не предлагай: {skip}. Предложи ровно одну новую страну для путешествия.
-Сильные интересы путешественника: {interests}. Не выбирай страну из-за самолёта,
-парома или велосипеда: транспорт сам по себе не является причиной рекомендации.
+Сильные интересы путешественника: {interests}.
 Верни только JSON: {{"country":"название страны по-русски"}}."""
     return ai.llm_json(prompt, 250, tier="cheap", module="travel_utility")
 

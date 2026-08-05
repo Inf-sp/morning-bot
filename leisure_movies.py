@@ -158,10 +158,10 @@ def _normalize_movie_items(items):
         })
     return out
 
-def _pick_good_movie(items, used_titles):
-    """Возвращает (item, tm) для первого фильма с рейтингом >= порога и не из used_titles.
-    Фильмы без достаточного числа голосов не используются как запасной вариант."""
+def _pick_good_movie(items, used_titles, prefs=None):
+    """Выбирает качественный вариант с приоритетом действующих настроек кино."""
     used = {str(u).lower() for u in used_titles}
+    accepted = []
     for it in items:
         if not isinstance(it, dict):
             continue
@@ -176,8 +176,13 @@ def _pick_good_movie(items, used_titles):
         rating = (tm or {}).get("rating") or 0
         vote_count = int((tm or {}).get("vote_count") or 0)
         if rating >= MIN_TMDB_RATING and vote_count >= movie_engine.MIN_VOTE_COUNT:
-            return it, tm
-    return None, None
+            accepted.append((movie_engine._score(tm or {}, {
+                "genres": {}, "countries": {}, "kind_pref": None,
+            }, prefs), it, tm))
+    if not accepted:
+        return None, None
+    _score, item, tm = max(accepted, key=lambda row: row[0])
+    return item, tm
 
 async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None):
     it = it if isinstance(it, dict) else {"title": str(it)}
@@ -216,17 +221,25 @@ async def send_recos(bot, cid, kind):
     # рекомендацию; вкус начнёт уточняться после первых отметок в любимом.
     seen = store.get_list(config.FAVORITE_MOVIES_KEY, cid)
     if not seen:
-        candidates = await asyncio.to_thread(
-            tmdb.discover, "movie", None, MIN_TMDB_RATING, 2000)
+        prefs = _movie_prefs(cid)
+        requested_kind = prefs.get("type_pref") or "movie"
         excluded = movie_engine._excluded_norms(cid)
-        candidates = [movie for movie in candidates
-                      if movie_engine._norm(movie.get("name")) not in excluded
-                      and int(movie.get("vote_count") or 0) >= movie_engine.MIN_VOTE_COUNT]
-        candidates.sort(key=lambda movie: (
-            -(float(movie.get("rating") or 0)),
-            -int(movie.get("vote_count") or 0),
-            -(float(movie.get("popularity") or 0)),
-        ))
+        requested_kinds = [requested_kind]
+        if prefs.get("type_pref"):
+            requested_kinds.append("tv" if requested_kind == "movie" else "movie")
+        candidates = []
+        for candidate_kind in requested_kinds:
+            candidates = await asyncio.to_thread(
+                tmdb.discover, candidate_kind, None,
+                max(MIN_TMDB_RATING, float(prefs.get("min_rating") or MIN_TMDB_RATING)), 2000)
+            candidates = [movie for movie in candidates
+                          if movie_engine._norm(movie.get("name")) not in excluded
+                          and int(movie.get("vote_count") or 0) >= movie_engine.MIN_VOTE_COUNT]
+            if candidates:
+                break
+        candidates = movie_engine.rank(candidates, {
+            "genres": {}, "countries": {}, "kind_pref": None,
+        }, prefs)
         tm = candidates[0] if candidates else None
         it = {"title": (tm or {}).get("name", ""),
               "hook": "Свежий фильм с хорошими оценками — можно начать с него."} if tm else None
@@ -709,7 +722,7 @@ async def _llm_movie_pick(cid, used):
         return items[0], None
     try:
         picked = await asyncio.wait_for(
-            asyncio.to_thread(_pick_good_movie, items, used), timeout=timeout)
+            asyncio.to_thread(_pick_good_movie, items, used, _movie_prefs(cid)), timeout=timeout)
     except Exception:
         return items[0], None
     if picked[0] is not None:
@@ -722,7 +735,7 @@ async def _llm_movie_pick(cid, used):
             return fallbacks[0], None
         try:
             return await asyncio.wait_for(
-                asyncio.to_thread(_pick_good_movie, fallbacks, used), timeout=timeout)
+                asyncio.to_thread(_pick_good_movie, fallbacks, used, _movie_prefs(cid)), timeout=timeout)
         except Exception:
             return fallbacks[0], None
     return None, None
@@ -819,13 +832,13 @@ def _movie_prefs_kb(cid):
     rows.extend([[InlineKeyboardButton(("✅ " if rating == value else "") + f"⭐️ {label}",
                                       callback_data=f"mpref_rating_{value}")]
                  for label, value in _PREF_RATING])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="movie_favorites"),
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_preferences"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
 async def send_movie_prefs(bot, cid, q=None):
-    text = ("📌 Предпочтения кино\n\n"
+    text = ("🎬 Кино\n\n"
             "Это приоритеты, а не жёсткие фильтры — я учитываю их при подборе, "
             "но всё равно могу предложить что-то за их пределами.")
     kb = _movie_prefs_kb(cid)

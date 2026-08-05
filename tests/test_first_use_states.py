@@ -96,7 +96,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     assert "• Без подсказок — 0%" in message.text
 
 
-def test_dictionary_contains_learning_preferences(monkeypatch):
+def test_dictionary_contains_only_dictionary_actions(monkeypatch):
     class Bot:
         message = None
 
@@ -109,7 +109,7 @@ def test_dictionary_contains_learning_preferences(monkeypatch):
     asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl"))
 
     rows = _labels(bot.message["reply_markup"])
-    assert rows[0] == ["📌 Предпочтения"]
+    assert "📌 Предпочтения" not in [label for row in rows for label in row]
     assert rows[-3:] == [
         ["✨ Подобрать слова"],
         ["🆕 Добавить слово"],

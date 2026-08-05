@@ -107,11 +107,3 @@ def travel_plan(plan, fallback_country):
         b.spacer(); b.labeled_line("🏳️‍🌈 LGBTQ+", plan["lgbt"])
     return b.build_stripped()
 
-
-def transport_screen(current):
-    b = MessageBuilder()
-    b.title("📌 Предпочтения")
-    b.line("Можно выбрать несколько вариантов.")
-    b.spacer()
-    b.labeled_line("Сейчас", current or "не выбран")
-    return b.build_stripped()

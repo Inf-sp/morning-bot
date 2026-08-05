@@ -532,7 +532,7 @@ async def send_music_genre_menu(bot, cid, q=None):
     if not _music_styles(cid):
         await send_music_preferences(bot, cid, q)
         return
-    text = "Выбери один из жанров из 📌 Предпочтения — подберу нового артиста в этом звучании."
+    text = "Выбери один из отмеченных стилей — подберу нового артиста в этом звучании."
     kb = _music_genre_menu_kb(cid)
     if q is not None:
         try:
@@ -580,13 +580,13 @@ def _music_preferences_kb(cid):
         for key, label, _prompt_name in _MUSIC_GENRES
     ]
     rows = [[button] for button in buttons]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="artist_favorites"),
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_preferences"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
 async def send_music_preferences(bot, cid, q=None):
-    text = "📌 Предпочтения музыки\n\nВыбери хотя бы один стиль — рекомендации и «Вайб дня» будут только из отмеченных жанров."
+    text = "🎧 Музыка\n\nВыбери хотя бы один стиль — рекомендации будут только из отмеченных жанров."
     kb = _music_preferences_kb(cid)
     if q is not None:
         try:
@@ -599,14 +599,14 @@ async def send_music_preferences(bot, cid, q=None):
 
 def _music_preferences_required_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📌 Предпочтения", callback_data="music_prefs")],
+        [InlineKeyboardButton("📌 Предпочтения", callback_data="set_pref_music")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
 async def _prompt_for_music_styles(bot, cid, *, status=None):
-    text = "Сначала отметь хотя бы один жанр в 📌 Предпочтения музыки."
+    text = "Сначала отметь хотя бы один жанр в 📌 Предпочтения → Музыка."
     kb = _music_preferences_required_kb()
     if status is not None:
         await status.replace(text, reply_markup=kb)

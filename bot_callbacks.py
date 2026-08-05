@@ -357,9 +357,9 @@ async def handle(update, context, remove_reply_keyboard):
             elif act.startswith("trav_countries") or act.startswith("trav_country_"):
                 await travel.handle_country_callback(bot, cid, q, act)
             elif act == "trav_transport":
-                await travel.send_transport_settings(bot, cid, q)
+                await travel.send_home(bot, cid, q)
             elif act.startswith("trav_mode_"):
-                await travel.toggle_transport(bot, cid, act[len("trav_mode_"):], q)
+                await travel.send_home(bot, cid, q)
             elif act == "watch":
                 await _inline_status(
                     lambda _s: leisure_movies.send_movie_home(bot, cid, q))

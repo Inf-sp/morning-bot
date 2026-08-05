@@ -234,9 +234,9 @@ def test_music_recommendation_requires_a_selected_style(monkeypatch):
 
     asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
 
-    assert calls[0][0] == "Сначала отметь хотя бы один жанр в 📌 Предпочтения музыки."
+    assert calls[0][0] == "Сначала отметь хотя бы один жанр в 📌 Предпочтения → Музыка."
     assert [(button.text, button.callback_data) for button in calls[0][1]["reply_markup"].inline_keyboard[0]] == [
-        ("📌 Предпочтения", "music_prefs"),
+        ("📌 Предпочтения", "set_pref_music"),
     ]
 
 

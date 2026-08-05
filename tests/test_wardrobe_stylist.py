@@ -437,6 +437,18 @@ def test_style_screen_reads_settings_once(monkeypatch):
     assert calls["count"] == 1
 
 
+def test_style_preferences_invalidate_current_outfit_and_purchase_advice(monkeypatch):
+    invalidated = []
+    monkeypatch.setattr(settings.store, "clear_wardrobe_daylook", lambda cid: invalidated.append(("look", cid)))
+    monkeypatch.setattr(settings.store, "clear_wardrobe_purchase_recommendation", lambda cid: invalidated.append(("purchase", cid)))
+    monkeypatch.setattr(settings, "get", lambda _cid, _key, default=None: default)
+    monkeypatch.setattr(settings, "set_", lambda *_args: None)
+
+    settings._toggle_palette("42", 0)
+
+    assert invalidated == [("look", "42"), ("purchase", "42")]
+
+
 def test_wardrobe_preferences_hide_less_sporty_button():
     markup = settings._wardrobe_style_kb("prefs-test", state={
         "styles": [], "fit": "", "palette": [], "avoid": [],
@@ -447,7 +459,7 @@ def test_wardrobe_preferences_hide_less_sporty_button():
     assert "Без крупных принтов" in labels
     assert "Без узкого кроя" in labels
     assert all(len(row) == 1 for row in markup.inline_keyboard[:-1])
-    assert markup.inline_keyboard[-1][0].callback_data == "w_closet"
+    assert markup.inline_keyboard[-1][0].callback_data == "set_preferences"
 
 
 def test_outfit_copy_rejects_short_sleeve_hallucinations_and_internal_tags():

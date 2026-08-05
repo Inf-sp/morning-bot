@@ -505,9 +505,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     start = page * _DICT_LIST_PAGE_SIZE
     chunk = entries[start:start + _DICT_LIST_PAGE_SIZE]
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-    rows = [
-        [InlineKeyboardButton("📌 Предпочтения", callback_data="set_learning_dict")],
-    ]
+    rows = []
     word_buttons = []
     for item in chunk:
         word_id = str(item.get("id") or "")

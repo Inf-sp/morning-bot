@@ -13,6 +13,7 @@ import leisure_books
 import leisure_movies
 import leisure_music
 import movie_engine
+import settings
 
 
 def _labels(markup):
@@ -59,19 +60,36 @@ def test_recommendation_cards_use_content_specific_next_labels():
     assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 
-def test_preferences_are_available_from_personal_content_lists():
+def test_preferences_are_kept_out_of_personal_content_lists():
     assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["cinema_favorites"]["menu_button"] == ("📌 Предпочтения", "movie_prefs")
+    assert cleanup.COLLECTIONS["cinema_favorites"]["menu_button"] is None
     assert cleanup.COLLECTIONS["cinema_favorites"]["add_button_at_bottom"] is True
     assert cleanup.COLLECTIONS["cinema_favorites"]["allow_edit"] is False
     assert _labels(leisure_books._book_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["books_favorites"]["menu_button"] == ("📌 Предпочтения", "book_prefs")
+    assert cleanup.COLLECTIONS["books_favorites"]["menu_button"] is None
     assert cleanup.COLLECTIONS["books_favorites"]["add_button_at_bottom"] is True
     assert cleanup.COLLECTIONS["books_favorites"]["allow_edit"] is False
     assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["music_favorite_artists"]["menu_button"] == ("📌 Предпочтения", "music_prefs")
+    assert cleanup.COLLECTIONS["music_favorite_artists"]["menu_button"] is None
     assert cleanup.COLLECTIONS["music_favorite_artists"]["add_button_at_bottom"] is True
     assert cleanup.COLLECTIONS["music_favorite_artists"]["allow_edit"] is False
+
+
+def test_global_preferences_has_all_recommendation_sections():
+    class Bot:
+        def __init__(self):
+            self.sent = []
+
+        async def send_message(self, **kwargs):
+            self.sent.append(kwargs)
+
+    bot = Bot()
+    asyncio.run(settings.send_preferences(bot, "42"))
+
+    assert _labels(bot.sent[0]["reply_markup"]) == [
+        ["🧠 Обучение"], ["🥣 Кухни"], ["🧵 Стиль"], ["🎧 Музыка"],
+        ["🎬 Кино"], ["📚 Книги"], ["⬅️ Назад", "#️⃣ Главная"],
+    ]
 
 
 def test_movie_preferences_keep_only_type_recency_and_rating(monkeypatch):
@@ -112,6 +130,47 @@ def test_movie_engine_ignores_retired_manual_country_and_genre_preferences():
     )
 
     assert retired == current
+
+
+def test_movie_recency_preference_prioritises_recent_releases():
+    taste = {"genres": {}, "countries": {}, "kind_pref": None}
+    common = {"genre_ids": [], "countries": [], "kind": "movie", "rating": 7.0,
+              "vote_count": 100, "popularity": 10, "freq": 1}
+    recent = {**common, "release_date": date.today().isoformat()}
+    older = {**common, "release_date": (date.today() - timedelta(days=900)).isoformat()}
+
+    assert movie_engine._score(recent, taste, {"recency": "new"}) > movie_engine._score(
+        older, taste, {"recency": "new"}
+    )
+
+
+def test_movie_preferences_are_used_without_favourite_films(monkeypatch):
+    requested = {}
+    delivered = []
+
+    async def deliver(_bot, _cid, item, _index, tm=None, **_kwargs):
+        delivered.append((item, tm))
+
+    def discover(kind, _genres, min_rating, year):
+        requested.update(kind=kind, min_rating=min_rating, year=year)
+        return [{
+            "id": 7, "name": "Новый сериал", "kind": "tv", "rating": 8.2,
+            "vote_count": 500, "popularity": 20, "release_date": date.today().isoformat(),
+        }]
+
+    monkeypatch.setattr(leisure_movies.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(leisure_movies.movie_engine, "_excluded_norms", lambda _cid: set())
+    monkeypatch.setattr(leisure_movies.movie_engine, "mark_shown", lambda *_args: None)
+    monkeypatch.setattr(leisure_movies, "_movie_prefs", lambda _cid: {
+        "type_pref": "tv", "recency": "new", "min_rating": 8.0,
+    })
+    monkeypatch.setattr(leisure_movies.tmdb, "discover", discover)
+    monkeypatch.setattr(leisure_movies, "_send_movie_card", deliver)
+
+    asyncio.run(leisure_movies.send_recos(object(), "42", "movie"))
+
+    assert requested == {"kind": "tv", "min_rating": 8.0, "year": 2000}
+    assert delivered[0][0]["title"] == "Новый сериал"
 
 
 def test_leisure_preference_choices_use_one_column():

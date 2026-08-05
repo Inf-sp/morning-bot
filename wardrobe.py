@@ -44,7 +44,6 @@ def _kb(rows):
 
 def closet_kb():
     return _kb([
-        [("📌 Предпочтения", "set_wardrobe_style")],
         [("🆕 Добавить вещь", "w_add")],
         [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")],
     ])
@@ -834,7 +833,7 @@ async def send_wardrobe_zones(bot, cid, q=None):
     _cancel_wardrobe_input(cid)
     w = store.load_wardrobe(cid)
     total, counts = wardrobe_stats(w)
-    rows = [[InlineKeyboardButton("📌 Предпочтения", callback_data="set_wardrobe_style")]]
+    rows = []
     for zone in ZONE_ORDER:
         rows.append([InlineKeyboardButton(
             public_zone_name(zone),

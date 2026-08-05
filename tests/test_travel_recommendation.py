@@ -82,6 +82,52 @@ def test_travel_home_keeps_preferences_inside_suitcase():
     ]
 
 
+def test_today_trip_scope_is_limited_to_home_country_and_neighbours(monkeypatch):
+    monkeypatch.setattr(travel.store, "get_settings", lambda _cid: {"cc": "NL"})
+    monkeypatch.setattr(travel, "_country_label", lambda code: code)
+
+    home, _label, allowed = travel._day_trip_scope("42")
+
+    assert home == "NL"
+    assert allowed == ("NL", "BE", "DE")
+
+
+def test_today_trip_rejects_a_country_outside_the_local_scope(monkeypatch):
+    monkeypatch.setattr(travel.store, "get_settings", lambda _cid: {"city": "Алкмар", "cc": "NL"})
+    monkeypatch.setattr(travel.store, "_load", lambda _key: {})
+    monkeypatch.setattr(travel, "_country_label", lambda code: {"NL": "Нидерланды", "BE": "Бельгия", "DE": "Германия"}[code])
+    monkeypatch.setattr(
+        travel.ai,
+        "llm_json",
+        lambda *_args, **_kwargs: {"country_code": "JP", "to": "Токио", "route": ["a", "b", "c"]},
+    )
+
+    idea = travel._generate_home_idea("42")
+
+    assert idea["to"] == "Берген"
+    assert idea["transport_title"] == "Нидерланды"
+
+
+def test_today_trip_cache_is_invalidated_when_home_country_changes(monkeypatch):
+    state = {
+        "42": {
+            "version": 2,
+            "date": travel.datetime.now(travel.config.TZ).date().isoformat(),
+            "city": "Алкмар",
+            "cc": "NL",
+            "idea": {"to": "Старый маршрут"},
+        }
+    }
+    generated = {"to": "Новый маршрут"}
+    monkeypatch.setattr(travel.store, "get_settings", lambda _cid: {"city": "Алкмар", "cc": "DE"})
+    monkeypatch.setattr(travel.store, "_load", lambda _key: state)
+    monkeypatch.setattr(travel, "_generate_home_idea", lambda _cid: generated)
+    monkeypatch.setattr(travel.store, "mutate_kv", lambda _key, change: change(state))
+
+    assert travel._home_idea("42") == generated
+    assert state["42"]["cc"] == "DE"
+
+
 def test_travel_home_shows_a_daily_tourist_emoji_rebus():
     idea = {
         "emoji": "🚆", "transport_title": "Поезд", "intro": "Короткий маршрут.",
@@ -96,13 +142,13 @@ def test_travel_home_shows_a_daily_tourist_emoji_rebus():
     assert any(entity.type == MessageEntity.SPOILER for entity in message.entities)
 
 
-def test_suitcase_contains_travel_preferences(monkeypatch):
+def test_suitcase_keeps_only_saved_countries(monkeypatch):
     monkeypatch.setattr(travel, "_sorted_countries", lambda _cid: [])
 
     keyboard, _page, _pages = travel._countries_kb("42", 0)
     labels = [[button.text for button in row] for row in keyboard.inline_keyboard]
 
-    assert labels[0] == ["📌 Предпочтения"]
+    assert "📌 Предпочтения" not in [label for row in labels for label in row]
     assert labels[-2] == ["🆕 Добавить страну"]
     assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
@@ -323,5 +369,4 @@ def test_country_suggestion_prompt_does_not_make_transport_the_reason(monkeypatc
 
     travel.travel_suggest_one("42")
 
-    assert "Предпочтительный транспорт" not in captured["prompt"]
-    assert "самолёта" in captured["prompt"]
+    assert "транспорт" not in captured["prompt"].casefold()

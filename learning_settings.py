@@ -49,6 +49,8 @@ def _suffix(back):
         return "_dict"
     if back == "m_settings":
         return "_settings"
+    if back == "set_preferences":
+        return "_prefs"
     return ""
 
 
@@ -57,6 +59,8 @@ def _language_menu_callback(back):
         return "set_learning_dict"
     if back == "m_settings":
         return "set_learning_global"
+    if back == "set_preferences":
+        return "set_pref_learning"
     return "set_learning"
 
 
@@ -162,8 +166,15 @@ async def handle_learning_settings_callback(bot, cid, q, data):
         or data.startswith("set_learning_language_") and data.endswith("_settings")
         or data.endswith("_settings") and data.startswith("set_learning_level_")
     )
-    back = "a_dictlang_active" if dictionary_origin else ("m_settings" if settings_origin else "m_learn")
-    if data in ("set_learning", "set_learning_dict", "set_learning_global"):
+    preferences_origin = (
+        data == "set_pref_learning"
+        or data.startswith("set_learning_language_") and data.endswith("_prefs")
+        or data.endswith("_prefs") and data.startswith("set_learning_level_")
+    )
+    back = ("a_dictlang_active" if dictionary_origin else
+            ("set_preferences" if preferences_origin else
+             ("m_settings" if settings_origin else "m_learn")))
+    if data in ("set_learning", "set_learning_dict", "set_learning_global", "set_pref_learning"):
         await send_learning_settings(bot, cid, q=q, back=back)
         return
     if data in ("toggle_learning_language", "toggle_learning_language_dict"):
@@ -180,6 +191,8 @@ async def handle_learning_settings_callback(bot, cid, q, data):
             code = code[:-len("_dict")]
         elif code.endswith("_settings"):
             code = code[:-len("_settings")]
+        elif code.endswith("_prefs"):
+            code = code[:-len("_prefs")]
         if code not in ("nl", "en", "none"):
             await send_learning_settings(bot, cid, q=q, back=back)
             return
@@ -198,6 +211,8 @@ async def handle_learning_settings_callback(bot, cid, q, data):
             level = level[:-len("_dict")]
         elif level.endswith("_settings"):
             level = level[:-len("_settings")]
+        elif level.endswith("_prefs"):
+            level = level[:-len("_prefs")]
         if level in LEVELS:
             language = active_language(cid)
             if language == "не изучаю":

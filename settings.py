@@ -172,7 +172,7 @@ async def send_home(bot, cid):
     rows = [
         [InlineKeyboardButton("📍 Город", callback_data="set_city")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
-        [InlineKeyboardButton("🧠 Язык обучения", callback_data="set_learning_global")],
+        [InlineKeyboardButton("📌 Предпочтения", callback_data="set_preferences")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
@@ -190,6 +190,29 @@ async def send_home(bot, cid):
         reply_markup=InlineKeyboardMarkup(rows),
         transient=True,
     )
+
+
+async def send_preferences(bot, cid, q=None):
+    rows = [
+        [InlineKeyboardButton("🧠 Обучение", callback_data="set_pref_learning")],
+        [InlineKeyboardButton("🥣 Кухни", callback_data="set_pref_cuisines")],
+        [InlineKeyboardButton("🧵 Стиль", callback_data="set_pref_style")],
+        [InlineKeyboardButton("🎧 Музыка", callback_data="set_pref_music")],
+        [InlineKeyboardButton("🎬 Кино", callback_data="set_pref_movie")],
+        [InlineKeyboardButton("📚 Книги", callback_data="set_pref_books")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ]
+    msg = settings_ui.preferences_home()
+    markup = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=markup, transient=True)
 
 
 async def send_lifehacks(bot, cid, q=None):
@@ -590,7 +613,7 @@ async def send_personalization(bot, cid, q=None):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-def _cuisines_kb(cid):
+def _cuisines_kb(cid, back="set_preferences"):
     selected = set(cuisines(cid))
     buttons = [
         InlineKeyboardButton(
@@ -600,7 +623,7 @@ def _cuisines_kb(cid):
         for key, label in CUISINE_OPTIONS
     ]
     rows = [[button] for button in buttons]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_fridge_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -662,6 +685,13 @@ def wardrobe_styles(cid):
 
 STYLE_LIMIT = 3
 
+
+def _invalidate_wardrobe_recommendations(cid):
+    """Следующий образ и совет по покупке должны учитывать новые параметры стиля."""
+    store.clear_wardrobe_daylook(cid)
+    store.clear_wardrobe_purchase_recommendation(cid)
+
+
 async def set_style(bot, cid, i, q=None):
     if 0 <= i < len(STYLES):
         chosen = STYLES[i]
@@ -669,7 +699,7 @@ async def set_style(bot, cid, i, q=None):
         if chosen in selected:
             selected = [s for s in selected if s != chosen]
             set_(cid, "style", selected)
-            store.clear_wardrobe_daylook(cid)
+            _invalidate_wardrobe_recommendations(cid)
         elif len(selected) >= STYLE_LIMIT:
             if q is not None:
                 try:
@@ -681,13 +711,14 @@ async def set_style(bot, cid, i, q=None):
         else:
             selected.append(chosen)
             set_(cid, "style", selected)
-            store.clear_wardrobe_daylook(cid)
+            _invalidate_wardrobe_recommendations(cid)
     await send_wardrobe_style(bot, cid, q=q)
 
 
 async def set_fit(bot, cid, i, q=None):
     if 0 <= i < len(FIT_OPTIONS):
         set_(cid, "wardrobe_fit", FIT_OPTIONS[i])
+        _invalidate_wardrobe_recommendations(cid)
     await send_wardrobe_style(bot, cid, q=q)
 
 
@@ -734,6 +765,7 @@ def _toggle_palette(cid, idx):
     selected = wardrobe_palette(cid)
     selected = [value for value in selected if value != chosen] if chosen in selected else [*selected, chosen]
     set_(cid, "wardrobe_palette", selected)
+    _invalidate_wardrobe_recommendations(cid)
 
 
 def _toggle_multi(cid, key, options, idx):
@@ -746,6 +778,7 @@ def _toggle_multi(cid, key, options, idx):
     else:
         selected.append(chosen)
     set_(cid, key, selected)
+    _invalidate_wardrobe_recommendations(cid)
 
 
 def _multi_pick_kb(selected, options, prefix, back):
@@ -885,7 +918,7 @@ def _wardrobe_style_kb(cid, state=None):
     )
                      for i, value in enumerate(STYLE_AVOID_OPTIONS)]
     rows.extend([[button] for button in avoid_buttons])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_preferences"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -907,14 +940,30 @@ async def send_wardrobe_style(bot, cid, q=None):
 
 
 async def send_wardrobe_prefs(bot, cid, back="set_priorities", q=None):
-    """Совместимость со старыми сообщениями: настройки открываются из
-    «Гардероб» → «Мой шкаф»."""
+    """Совместимость со старыми сообщениями: открываем актуальный экран стиля."""
     await send_wardrobe_style(bot, cid, q=q)
 
 
 async def handle_callback(bot, cid, data, q=None):
     if data == "set_home":
         await send_home(bot, cid)
+    elif data == "set_preferences":
+        await send_preferences(bot, cid, q)
+    elif data == "set_pref_learning":
+        await learning_preferences.send_learning_settings(bot, cid, q=q, back="set_preferences")
+    elif data == "set_pref_cuisines":
+        await send_cuisines(bot, cid, q)
+    elif data == "set_pref_style":
+        await send_wardrobe_style(bot, cid, q)
+    elif data == "set_pref_music":
+        import leisure_music
+        await leisure_music.send_music_preferences(bot, cid, q)
+    elif data == "set_pref_movie":
+        import leisure_movies
+        await leisure_movies.send_movie_prefs(bot, cid, q)
+    elif data == "set_pref_books":
+        import leisure_books
+        await leisure_books.send_book_preferences(bot, cid, q)
     elif data == "set_lifehacks":
         await send_lifehacks(bot, cid, q)
     elif data.startswith("set_lh_page_"):

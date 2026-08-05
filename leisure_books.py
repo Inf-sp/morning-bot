@@ -502,13 +502,13 @@ def _book_preferences_kb(cid):
         *[[InlineKeyboardButton(("✅ " if rating == value else "") + f"⭐️ {label}",
                                 callback_data=f"bookpref_rating_{value}")]
           for label, value in _PREF_RATING],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="book_favorites"),
+        [InlineKeyboardButton("⬅️ Назад", callback_data="set_preferences"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
 async def send_book_preferences(bot, cid, q=None):
-    text = "📌 Предпочтения книг\n\nВыбери новизну и минимальную оценку читателей."
+    text = "📚 Книги\n\nВыбери новизну и минимальную оценку читателей."
     kb = _book_preferences_kb(cid)
     if q is not None:
         try:

@@ -94,7 +94,7 @@ def style_pick():
 
 def wardrobe_style(styles, fit, palette, avoid):
     b = MessageBuilder()
-    b.section("📌 Предпочтения")
+    b.section("🧵 Стиль")
     b.spacer()
     b.labeled_line("Стиль", " · ".join(styles) if styles else "не выбран")
     b.labeled_line("Посадка", fit or "не выбрана")
@@ -111,9 +111,15 @@ def settings_home(city="", notifications_on=True, learning_language="Не изу
     b.spacer()
     b.line(f"📍 Город: {city or 'не выбран'}")
     b.line(f"🔔 Уведомления: {'включены' if notifications_on else 'выключены'}")
-    b.line(f"🧠 Язык обучения: {learning_language}")
     b.spacer()
-    b.line("Настройки рекомендаций находятся внутри соответствующих разделов.")
+    b.line("Вкусы и параметры подбора — в «📌 Предпочтения».")
+    return b.build_stripped()
+
+
+def preferences_home():
+    b = MessageBuilder()
+    b.section("📌 Предпочтения")
+    b.line("Выбери, что учитывать в рекомендациях.")
     return b.build_stripped()
 
 

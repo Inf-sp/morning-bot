@@ -10,7 +10,7 @@ Similar по каждому любимому (anchor), фильтруются и
 """
 import re
 import math
-from datetime import date
+from datetime import date, timedelta
 
 import config
 import recommendation_stoplist
@@ -213,6 +213,13 @@ def _score(c, taste, prefs=None):
     if prefs:
         if prefs.get("type_pref") in ("movie", "tv") and c.get("kind") == prefs["type_pref"]:
             score += 2.0
+        if prefs.get("recency") == "new":
+            try:
+                released = date.fromisoformat(str(c.get("release_date") or "")[:10])
+            except ValueError:
+                released = None
+            if released and released >= date.today() - timedelta(days=730):
+                score += 2.5
     return score
 
 
