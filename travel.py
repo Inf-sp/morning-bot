@@ -208,6 +208,7 @@ async def send_home(bot, cid, q=None, status=None):
     msg = travel_ui.home_screen(idea, visited_count, rebus=_daily_travel_rebus())
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=_home_kb())
+        return
     elif q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=_home_kb()); return

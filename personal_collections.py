@@ -122,9 +122,6 @@ async def love_add_done(bot, cid, key, text, origin="base"):
             existing.add(item.casefold())
             added.append(item)
     if key == "artists" and added:
-        import leisure_concerts
-
-        leisure_concerts.invalidate_user_concerts_cache(cid)
         import leisure_music
 
         leisure_music._kick_off_new_artist_concert_check(cid, added)

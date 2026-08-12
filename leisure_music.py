@@ -255,12 +255,8 @@ def _add_unique(key, cid, value):
 
 
 def _kick_off_new_artist_concert_check(cid, artist_names):
-    """При добавлении нового артиста запускает внешний поиск концертов сразу
-    (Tavily/Firecrawl/AI), не дожидаясь недельного цикла — фоновой задачей."""
-    # Сводная подборка хранится неделю. Сбрасываем её сразу, иначе новый артист
-    # не попадёт в «Концерты» до планового воскресного обновления.
+    """Сразу проверяет нового артиста через обычную концертную цепочку."""
     import leisure_concerts
-    leisure_concerts.invalidate_user_concerts_cache(cid)
     s = store.get_settings(cid)
     cc = (s.get("cc") or "NL").upper()
     cname = s.get("country") or "твоя страна"
@@ -268,7 +264,7 @@ def _kick_off_new_artist_concert_check(cid, artist_names):
     async def _run():
         for name in artist_names:
             try:
-                await leisure_concerts.refresh_artist_external_events(name, cc, cname)
+                await leisure_concerts.refresh_new_artist_concerts(cid, name, cc, cname)
             except Exception as e:
                 _log.warning("new artist concert check failed for %r: %r", name, e)
 
@@ -531,7 +527,7 @@ async def _weekly_concerts(cid):
         return []
     events = leisure_concerts._concerts_cache_get(cid, cc)
     if events is None:
-        events = await leisure_concerts._fetch_concerts(artists, cc, country)
+        events = await leisure_concerts._fetch_concerts(artists, cc, country, cid=cid)
         leisure_concerts._concerts_cache_set(cid, cc, events)
 
     today = datetime.now(config.TZ).date().isoformat()

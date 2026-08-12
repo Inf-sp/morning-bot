@@ -52,9 +52,9 @@ _TICKETMASTER_REQUEST_INTERVAL = 0.5
 _ticketmaster_next_request_at = 0.0
 _EXTERNAL_ARTIST_LIMIT = 5
 _EXTERNAL_CONCURRENCY = asyncio.Semaphore(2)
-_POPULAR_EVENTS_CACHE_TTL = 7 * 86400
-_POPULAR_EVENTS_CACHE_VERSION = 1
-_POPULAR_EVENTS_LIMIT = 3
+_POPULAR_EVENTS_CACHE_TTL = 31 * 86400
+_POPULAR_EVENTS_CACHE_VERSION = 2
+_POPULAR_EVENTS_LIMIT = 12
 
 
 class TicketmasterRateLimitError(RuntimeError):
@@ -187,7 +187,7 @@ async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3,
 
 
 def _popular_events_cache_key(cc, period_start):
-    return f"{str(cc or '').upper()}:{period_start.isoformat()}"
+    return f"{str(cc or '').upper()}:{period_start.strftime('%Y-%m')}"
 
 
 def _popular_events_cache_get(cc, period_start):
@@ -269,19 +269,23 @@ def _ticketmaster_popular_music_events(cc, start_dt, end_dt):
 
 
 async def get_popular_music_events(cc, period_start, period_end):
-    """Несколько крупных подтверждённых музыкальных событий на ближайшую неделю."""
+    """Крупные события из месячного Ticketmaster-кэша в нужном окне дат."""
     cached = _popular_events_cache_get(cc, period_start)
     if cached is not None:
-        return cached
+        return [event for event in cached if period_start.isoformat() <=
+                event.get("dates", {}).get("start", {}).get("localDate", "") <= period_end.isoformat()]
+    from datetime import timedelta
+    refresh_end = period_start + timedelta(days=31)
     start_dt = f"{period_start.isoformat()}T00:00:00Z"
-    end_dt = f"{period_end.isoformat()}T23:59:59Z"
+    end_dt = f"{refresh_end.isoformat()}T23:59:59Z"
     try:
         events = await _ticketmaster_fetch_throttled(
             _ticketmaster_popular_music_events, cc, start_dt, end_dt)
     except TicketmasterRateLimitError:
         return []
     _popular_events_cache_set(cc, period_start, events)
-    return events
+    return [event for event in events if period_start.isoformat() <=
+            event.get("dates", {}).get("start", {}).get("localDate", "") <= period_end.isoformat()]
 
 # ---------- Внешний поиск концертов (Tavily + Firecrawl + AI) ----------
 # Ticketmaster — основной источник, но не полный: маленькие площадки, локальные
@@ -695,12 +699,14 @@ def _concert_place_name(name, cc=""):
         return "Нидерландах"
     return str(name or "твоей стране").strip()
 
-_CONCERTS_CACHE_TTL = 7 * 86400  # неделя — кэш прогревается job'ом перед пятничной афишей
-_CONCERTS_CACHE_VERSION = 3
+_CONCERTS_CACHE_TTL = 31 * 86400
+_CONCERTS_CACHE_VERSION = 4
+_ARTIST_CONCERT_CHECKS_VERSION = 1
+_ARTIST_CONCERT_CHECK_INTERVAL = 31 * 86400
 
 
 def _concerts_cache_get(cid, cc):
-    """Кэшированный список концертов пользователя за неделю; None если нет/устарел/не тот cc."""
+    """Месячный список концертов; прошедшая афиша не считается актуальной."""
     entry = store._load(config.CONCERTS_CACHE_KEY).get(str(cid))
     if (
         not entry
@@ -710,6 +716,11 @@ def _concerts_cache_get(cid, cc):
         return None
     import time
     if time.time() - entry.get("ts", 0) > _CONCERTS_CACHE_TTL:
+        return None
+    from datetime import datetime
+    today = datetime.now(config.TZ).date().isoformat()
+    if any(str(event.get("dates", {}).get("start", {}).get("localDate") or "") < today
+           for event in entry.get("events", []) if isinstance(event, dict)):
         return None
     return filter_concert_events(entry.get("events", []), cc)
 
@@ -745,7 +756,79 @@ def invalidate_user_concerts_cache(cid):
     return True
 
 
-async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False):
+def _artist_check_bucket(cid, cc):
+    data = store._load(config.CONCERT_ARTIST_CHECKS_KEY) or {}
+    user = data.get(str(cid)) or {}
+    return dict(user.get(str(cc or "").upper()) or {})
+
+
+def _artist_check_key(artist):
+    return _item_text(artist).casefold()
+
+
+def _event_date(event):
+    return str((event or {}).get("dates", {}).get("start", {}).get("localDate") or "")
+
+
+def _artist_is_due(cid, artist, cc, *, force=False, now=None):
+    """Новый артист проверяется сразу; без событий — раз в месяц.
+
+    Если концерт уже найден, повторно артиста не запрашиваем, пока не пройдёт
+    последний известный концерт в выбранной стране.
+    """
+    if force:
+        return True
+    entry = _artist_check_bucket(cid, cc).get(_artist_check_key(artist)) or {}
+    if entry.get("version") != _ARTIST_CONCERT_CHECKS_VERSION:
+        return True
+    from datetime import datetime
+    today = (now or datetime.now(config.TZ).date()).isoformat()
+    known_dates = [_event_date(event) for event in entry.get("events", []) if _event_date(event)]
+    if known_dates:
+        return not any(date >= today for date in known_dates)
+    return time.time() - float(entry.get("checked_at") or 0) >= _ARTIST_CONCERT_CHECK_INTERVAL
+
+
+def _stored_artist_events(cid, artists, cc):
+    from datetime import datetime
+    today = datetime.now(config.TZ).date().isoformat()
+    wanted = {_artist_check_key(artist) for artist in artists}
+    events = []
+    for key, entry in _artist_check_bucket(cid, cc).items():
+        if key not in wanted:
+            continue
+        events.extend(event for event in entry.get("events", [])
+                      if isinstance(event, dict) and _event_date(event) >= today)
+    return events
+
+
+def _save_artist_check_results(cid, artists, cc, events):
+    by_artist = {_artist_check_key(artist): [] for artist in artists}
+    for event in events:
+        key = _artist_check_key(event.get("_artist"))
+        if key in by_artist:
+            by_artist[key].append(event)
+    now = int(time.time())
+
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        user = data.setdefault(str(cid), {})
+        bucket = user.setdefault(str(cc or "").upper(), {})
+        for artist in artists:
+            key = _artist_check_key(artist)
+            bucket[key] = {
+                "version": _ARTIST_CONCERT_CHECKS_VERSION,
+                "artist": _item_text(artist),
+                "checked_at": now,
+                "events": by_artist.get(key, []),
+            }
+        return data, None
+
+    store.mutate_kv(config.CONCERT_ARTIST_CHECKS_KEY, mutate)
+
+
+async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False,
+                          cid=None, force_artists=()):
     """Ticketmaster для обычной афиши; web-search только для явного поиска артиста."""
     from datetime import datetime, timedelta
     now = datetime.now(config.TZ)
@@ -754,8 +837,17 @@ async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False):
 
     # Берём максимально возможную страницу Ticketmaster: короткая выдача не должна
     # прятать даты дальнего конца годового горизонта.
+    artists = list(dict.fromkeys(_item_text(artist) for artist in artists if _item_text(artist)))
+    force = {_artist_check_key(artist) for artist in force_artists}
+    due_artists = artists if cid is None else [
+        artist for artist in artists
+        if _artist_is_due(cid, artist, cc, force=_artist_check_key(artist) in force)
+    ]
+    retained_events = [] if cid is None else _stored_artist_events(cid, artists, cc)
+    if not due_artists:
+        return filter_concert_events(retained_events, cc)
     tm_events = await _ticketmaster_events_many(
-        artists, cc, start_dt=date_from, end_dt=date_to, size=200,
+        due_artists, cc, start_dt=date_from, end_dt=date_to, size=200,
         limit=_TICKETMASTER_ARTIST_BATCH_LIMIT,
     )
     # External search is a bounded last fallback for unresolved artists.
@@ -764,7 +856,7 @@ async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False):
         for event in tm_events
         if isinstance(event, dict) and _item_text(event.get("_artist"))
     }
-    unresolved = [artist for artist in artists
+    unresolved = [artist for artist in due_artists
                   if _item_text(artist).casefold() not in found_artists]
 
     async def external_for_artist(artist):
@@ -780,11 +872,17 @@ async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False):
         if isinstance(batch, Exception):
             continue
         external_events.extend(batch or [])
-    return filter_concert_events(merge_concert_events(tm_events, external_events), cc)
+    fresh_events = filter_concert_events(merge_concert_events(tm_events, external_events), cc)
+    if cid is not None:
+        _save_artist_check_results(cid, due_artists, cc, fresh_events)
+    return filter_concert_events(merge_concert_events([*retained_events, *fresh_events], []), cc)
 
 
 async def refresh_concerts_cache(cid):
-    """Прогревает недельный кэш концертов пользователя — вызывается пятничным job'ом
+    """Обновляет только артистов, которым пора сверить афишу.
+
+    Пятничный job по-прежнему готовит уведомление, но Ticketmaster для каждого
+    артиста используется максимум раз в месяц, либо после его известного концерта.
     перед уведомлением «Афиша недели», чтобы само уведомление и последующие «Концерты» не ждали API.
     Возвращает короткий результат для планового задания."""
     s = store.get_settings(cid)
@@ -793,7 +891,7 @@ async def refresh_concerts_cache(cid):
     from datetime import datetime, timedelta
     period_start = datetime.now(config.TZ).date()
     popular_events = await get_popular_music_events(
-        cc, period_start, period_start + timedelta(days=7))
+        cc, period_start, period_start + timedelta(days=31))
     artists = _ensure_artists(cid)
     if not artists:
         invalidate_user_concerts_cache(cid)
@@ -802,7 +900,7 @@ async def refresh_concerts_cache(cid):
     if not config.TICKETMASTER_API_KEY:
         return {"status": "unavailable", "artists": len(artists), "events": 0,
                 "popular_events": len(popular_events)}
-    events = await _fetch_concerts(artists, cc, cname)
+    events = await _fetch_concerts(artists, cc, cname, cid=cid)
     _concerts_cache_set(cid, cc, events)
     return {
         "status": "updated",
@@ -810,6 +908,22 @@ async def refresh_concerts_cache(cid):
         "events": len(events),
         "popular_events": len(popular_events),
     }
+
+
+async def refresh_new_artist_concerts(cid, artist, cc=None, cname=None):
+    """Проверяет только что добавленного артиста сразу и обновляет общую афишу."""
+    s = store.get_settings(cid)
+    cc = str(cc or s.get("cc") or "NL").upper()
+    cname = cname or s.get("country") or "твоя страна"
+    events = await _fetch_concerts(
+        [artist], cc, cname, cid=cid, force_artists=[artist],
+    )
+    cached = _concerts_cache_get(cid, cc) or []
+    artist_key = _artist_check_key(artist)
+    other_events = [event for event in cached
+                    if _artist_check_key(event.get("_artist")) != artist_key]
+    _concerts_cache_set(cid, cc, merge_concert_events([*other_events, *events], []))
+    return events
 
 
 _SEEN_CONCERTS_LIMIT = 300  # ограничение размера истории «виденных» concert ID на пользователя
@@ -870,7 +984,7 @@ async def _fetch_favorite_events(cid):
     cc = (s.get("cc") or "NL").upper()
     cname = s.get("country") or "твоя страна"
     cached = _concerts_cache_get(cid, cc)
-    events = cached if cached is not None else await _fetch_concerts(artists, cc, cname)
+    events = cached if cached is not None else await _fetch_concerts(artists, cc, cname, cid=cid)
 
     from datetime import datetime
     today_str = datetime.now(config.TZ).date().isoformat()
@@ -1056,7 +1170,10 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
 
     events = _concerts_cache_get(cid, cc)
     if events is None:
-        events = await _fetch_concerts(artists, cc, cname, explicit_artist_search=bool(artists_override))
+        events = await _fetch_concerts(
+            artists, cc, cname, explicit_artist_search=bool(artists_override), cid=cid,
+            force_artists=artists_override or (),
+        )
         _concerts_cache_set(cid, cc, events)
 
     def _fmt_date(ds):
@@ -1138,7 +1255,7 @@ async def _build_weekly_events_msg(cid):
         artists = _ensure_artists(cid)
         if artists:
             cached = _concerts_cache_get(cid, cc)
-            events = cached if cached is not None else await _fetch_concerts(artists, cc, cname)
+            events = cached if cached is not None else await _fetch_concerts(artists, cc, cname, cid=cid)
             if cached is None:
                 _concerts_cache_set(cid, cc, events)
             events = [e for e in events

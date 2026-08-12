@@ -6,6 +6,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import wardrobe
 import bot_callbacks
+import travel
 import util
 from ui.wardrobe import purchase_check_card
 
@@ -572,6 +573,31 @@ def test_main_menu_personal_sections_replace_welcome_with_prepared_card(monkeypa
         asyncio.run(bot_callbacks.handle(update, type("Context", (), {"bot": Bot()})(), None))
 
         assert message.edits == [("✨ Готовая карточка", {})]
+
+
+def test_travel_home_replaces_main_menu_without_sending_a_duplicate(monkeypatch):
+    class Status:
+        replaced = None
+
+        async def replace(self, text, **kwargs):
+            self.replaced = (text, kwargs)
+
+    class Bot:
+        async def send_message(self, **_kwargs):
+            raise AssertionError("travel home must not send a second copy after status.replace")
+
+    monkeypatch.setattr(travel, "_home_idea", lambda _cid: {
+        "emoji": "🗺️", "transport_title": "Нидерланды", "from": "Алкмар",
+        "to": "Утрехт", "intro": "На один день.", "route": ["Поезжай"],
+        "tip": "Проверь расписание.",
+    })
+    monkeypatch.setattr(travel, "_visited_codes", lambda _cid: [])
+    monkeypatch.setattr(travel, "_daily_travel_rebus", lambda: {})
+
+    status = Status()
+    asyncio.run(travel.send_home(Bot(), "42", status=status))
+
+    assert status.replaced is not None
 
 
 def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):

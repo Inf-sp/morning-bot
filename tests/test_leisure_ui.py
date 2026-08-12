@@ -173,6 +173,24 @@ def test_movie_preferences_are_used_without_favourite_films(monkeypatch):
     assert delivered[0][0]["title"] == "Новый сериал"
 
 
+def test_movie_home_falls_back_when_tmdb_is_temporarily_unavailable(monkeypatch):
+    monkeypatch.setattr(leisure_movies, "_cached_movie", lambda _cid: None)
+    monkeypatch.setattr(leisure_movies.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(leisure_movies.movie_engine, "_excluded_norms", lambda _cid: set())
+    monkeypatch.setattr(leisure_movies, "_movie_prefs", lambda _cid: {})
+    monkeypatch.setattr(leisure_movies.config, "TMDB_API_KEY", "test-key")
+    monkeypatch.setattr(
+        leisure_movies.tmdb, "discover",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(TimeoutError("tmdb unavailable")),
+    )
+    monkeypatch.setattr(leisure_movies, "_cache_movie", lambda *_args: None)
+
+    item, tm = asyncio.run(leisure_movies.get_current_movie("42"))
+
+    assert item["title"] == "Решение уйти"
+    assert tm is None
+
+
 def test_leisure_preference_choices_use_one_column():
     keyboards = (
         leisure_movies._movie_prefs_kb("42"),
@@ -485,6 +503,23 @@ def test_book_cache_drops_a_favorite(monkeypatch):
     monkeypatch.setattr(leisure_books.store, "get_list", lambda key, _cid: [{"value": "1984"}] if key == config.FAVORITE_BOOKS_KEY else [])
     monkeypatch.setattr(leisure_books.recommendation_stoplist, "values", lambda *_args: [])
     assert leisure_books._cached_book("42") is None
+
+
+def test_book_home_reads_its_fresh_daily_cache(monkeypatch):
+    today = datetime.now(config.TZ).date().isoformat()
+    entry = {
+        "42": {
+            "date": today,
+            "item": {"title": "Дюна", "rating": 4.5, "ratings_count": 1_000},
+            "preferences": {"recency": None, "min_rating": None},
+        },
+    }
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: entry)
+    monkeypatch.setattr(leisure_books.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(leisure_books.recommendation_stoplist, "values", lambda *_args: [])
+    monkeypatch.setattr(leisure_books.settings, "get", lambda *_args: "")
+
+    assert leisure_books._cached_book("42")["title"] == "Дюна"
 
 
 def test_book_card_has_complete_description_and_reader_rating():

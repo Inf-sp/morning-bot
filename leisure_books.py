@@ -106,7 +106,7 @@ def _cached_book(cid):
     if (entry.get("date") != today or not isinstance(item, dict)
             or entry.get("preferences") != _book_preferences(cid)):
         return None
-    title = _item_text(item)
+    title = str(item.get("title") or _item_text(item)).strip()
     if not title or title.casefold() in _book_used(cid):
         return None
     return dict(item)

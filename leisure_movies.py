@@ -293,9 +293,13 @@ async def get_current_movie(cid):
             requested_kinds.append("tv" if requested_kind == "movie" else "movie")
         candidates = []
         for candidate_kind in requested_kinds:
-            candidates = await asyncio.to_thread(
-                tmdb.discover, candidate_kind, None,
-                max(MIN_TMDB_RATING, float(prefs.get("min_rating") or MIN_TMDB_RATING)), 2000)
+            try:
+                candidates = await asyncio.to_thread(
+                    tmdb.discover, candidate_kind, None,
+                    max(MIN_TMDB_RATING, float(prefs.get("min_rating") or MIN_TMDB_RATING)), 2000)
+            except Exception as error:
+                _log.info("movie home TMDb unavailable: %s", type(error).__name__)
+                candidates = []
             candidates = [movie for movie in candidates
                           if movie_engine._norm(movie.get("name")) not in excluded
                           and int(movie.get("vote_count") or 0) >= movie_engine.MIN_VOTE_COUNT]
@@ -307,6 +311,10 @@ async def get_current_movie(cid):
         tm = candidates[0] if candidates else None
         it = {"title": (tm or {}).get("name", ""),
               "hook": "Свежий фильм с хорошими оценками — можно начать с него."} if tm else None
+        if it is None:
+            fallbacks = _fallback_movie_items(cid)
+            it = fallbacks[0] if fallbacks else None
+            tm = None
     else:
         it, tm = await _tmdb_engine_pick(cid)
         if it is None:

@@ -178,7 +178,7 @@ def test_weekly_concert_loader_keeps_three_confirmed_events(monkeypatch):
     monkeypatch.setattr(leisure_concerts, "_ensure_artists", lambda _cid: ["Romy", "FKA twigs", "The National"])
     monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_args: None)
 
-    async def fetch(artists, cc, country):
+    async def fetch(artists, cc, country, **_kwargs):
         requested.update({"artists": artists, "cc": cc, "country": country})
         return events
 
@@ -216,7 +216,7 @@ def test_weekly_concert_loader_uses_confirmed_fallback_when_ticketmaster_is_empt
     async def ticketmaster(*_args, **_kwargs):
         return []
 
-    async def fetch(artists, cc, country):
+    async def fetch(artists, cc, country, **_kwargs):
         fallback_calls.append((artists, cc, country))
         return events
 
