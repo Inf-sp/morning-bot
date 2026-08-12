@@ -556,7 +556,7 @@ def _llm_failure_reason(entry):
 def _monitor_error_message(message, status_code):
     code = int(status_code or 0)
     if code == 429:
-        return "лимит исчерпан"
+        return "слишком много запросов"
     if code == 400:
         return "ошибка запроса"
     if code in (408, 502, 503, 504):
@@ -639,7 +639,15 @@ async def send_logs(bot, cid, q=None):
     errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
     monitor_errors = [
         entry for entry in provider_runtime.history(limit=200)
-        if entry.get("ts", 0) >= cutoff and entry.get("event_type") == "error"
+        if (
+            entry.get("ts", 0) >= cutoff
+            and entry.get("event_type") == "error"
+            # A recovered provider incident or a request completed by a
+            # reserve did not break the user-facing feature. It remains in
+            # the runtime history for diagnosis, but must not spam Errors.
+            and not entry.get("recovered_at")
+            and not entry.get("fallback_target")
+        )
     ]
     combined = [
         (int(entry.get("ts") or 0), _compact_log_row(entry) + _repeat_suffix(count))

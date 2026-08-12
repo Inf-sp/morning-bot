@@ -65,11 +65,6 @@ def _number(value) -> str:
 
 
 def _confirmed_quota(service: str, state: dict) -> tuple[int | None, int | None]:
-    if service.startswith("groq_model:"):
-        usage = api_usage.service_usage(service)
-        used = int(usage["requests_today"])
-        total = int(config.GROQ_MODEL_DAILY_LIMIT)
-        return max(total - used, 0), total
     remaining, total = state.get("quota_remaining"), state.get("quota_total")
     if remaining is not None and total is not None:
         return int(remaining), int(total)
@@ -77,21 +72,6 @@ def _confirmed_quota(service: str, state: dict) -> tuple[int | None, int | None]
     header_remaining, header_total = _quota_from_headers(usage.get("headers"))
     if header_remaining is not None and header_total is not None:
         return header_remaining, header_total
-    if service == "openweather" and config.WEATHER_HARD_DAILY_LIMIT > 0:
-        used = int(usage["requests_today"])
-        total = int(config.WEATHER_HARD_DAILY_LIMIT)
-        return max(total - used, 0), total
-    if service == "gemini" and config.GEMINI_DAILY_LIMIT > 0:
-        model_usage = api_usage.gemini_requests(config.GEMINI_MODEL)
-        used = int(model_usage["used"])
-        total = int(config.GEMINI_DAILY_LIMIT)
-        return max(total - used, 0), total
-    if service == "openrouter":
-        usage = api_usage.openrouter_usage()
-        return usage["remaining"], usage["total"]
-    if service == "cloudflare":
-        usage = api_usage.cloudflare_neuron_usage()
-        return usage["remaining"], usage["total"]
     return None, None
 
 
@@ -108,13 +88,11 @@ def _usage_detail(service: str) -> str:
         model_usage = api_usage.gemini_requests(config.GEMINI_MODEL)
         return f"{_number(model_usage['used'])} сегодня"
     if service.startswith("groq_model:"):
-        return _quota_text(*_confirmed_quota(service, provider_runtime.get_state("groq")))
+        return f"{_number(requests_today)} сегодня"
     if service == "cloudflare":
-        remaining, total = _confirmed_quota(service, provider_runtime.get_state(service))
-        return f"{_number(remaining)}/{_number(total)} осталось"
+        return f"{_number(usage['neurons_today'])} нейронов сегодня"
     if service == "openrouter":
-        remaining, total = _confirmed_quota(service, provider_runtime.get_state(service))
-        return f"{_number(remaining)}/{_number(total)} осталось"
+        return f"{_number(requests_today)} сегодня"
     if service == "azure_speech" and usage["characters_today"]:
         return f"{_number(usage['characters_today'])} символов сегодня"
     if service == "database":
@@ -203,7 +181,8 @@ def _format_groq_row(model: str, role: str, state: dict | None = None) -> str:
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
     if remaining is not None and total and remaining <= total * 0.2:
         status = WARNING
-    return f"{_DOT[status]} Groq · {role} · {_display_model(model)} · {_quota_text(remaining, total)}"
+    detail = _quota_text(remaining, total) if remaining is not None and total is not None else _usage_detail(usage_service)
+    return f"{_DOT[status]} Groq · {role} · {_display_model(model)} · {detail}"
 
 
 def _format_ai_row(service: str, state: dict | None = None) -> str:
@@ -216,12 +195,12 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
     quota_remaining, quota_total = _confirmed_quota(service, state)
     if service == "gemini":
         detail = _usage_detail(service)
-    elif service == "cloudflare":
-        remaining, total = api_usage.cloudflare_neuron_usage()["remaining"], api_usage.cloudflare_neuron_usage()["total"]
-        detail = _quota_text(remaining, total)
     else:
-        remaining, total = api_usage.openrouter_usage()["remaining"], api_usage.openrouter_usage()["total"]
-        detail = _quota_text(remaining, total)
+        detail = (
+            _quota_text(quota_remaining, quota_total)
+            if quota_remaining is not None and quota_total is not None
+            else _usage_detail(service)
+        )
     if service == "gemini" and quota_remaining is not None and quota_remaining <= 0:
         detail = "лимит исчерпан"
     remaining, total = quota_remaining, quota_total

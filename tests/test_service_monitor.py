@@ -68,6 +68,36 @@ def test_exhausted_quota_is_yellow(monkeypatch):
     )
 
 
+def test_only_a_provider_response_can_mark_a_rate_limit(monkeypatch):
+    _memory_store(monkeypatch)
+
+    provider_runtime.record_result("groq", False, error="quota exceeded")
+    uncertain = provider_runtime.get_state("groq")
+    assert uncertain["error_type"] != "quota"
+    assert uncertain["last_error"] != "лимит исчерпан"
+
+    provider_runtime.record_result("groq", False, status_code=429, error="HTTP 429")
+    limited = provider_runtime.get_state("groq")
+    assert limited["error_type"] == "rate_limit"
+    assert limited["last_error"] == "слишком много запросов"
+
+
+def test_local_groq_counter_is_usage_not_provider_quota(monkeypatch):
+    _memory_store(monkeypatch)
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+    monkeypatch.setattr(service_monitor.config, "GROQ_MODEL_DAILY_LIMIT", 5)
+    model = "openai/gpt-oss-20b"
+    provider_runtime.record_result("groq", True)
+    for _ in range(5):
+        service_monitor.api_usage.record_request(
+            service_monitor.api_usage.groq_model_service(model),
+        )
+
+    assert service_monitor.format_row("groq") == (
+        "🟢 Groq · Основной · gpt-oss-20b · 5 сегодня"
+    )
+
+
 def test_gemini_usage_does_not_expose_internal_model_name(monkeypatch):
     _memory_store(monkeypatch)
     monkeypatch.setattr(
@@ -94,7 +124,7 @@ def test_system_rows_use_roles_and_hide_healthy_infrastructure(monkeypatch):
     assert not any(row.startswith("🟢 TheMealDB") for row in rows)
 
 
-def test_groq_and_cloudflare_rows_use_their_real_units(monkeypatch):
+def test_groq_and_cloudflare_rows_show_actual_usage_without_claiming_a_quota(monkeypatch):
     _memory_store(monkeypatch)
     monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
     model = "openai/gpt-oss-20b"
@@ -108,8 +138,8 @@ def test_groq_and_cloudflare_rows_use_their_real_units(monkeypatch):
 
     rows = service_monitor.rows()
 
-    assert any("Groq · Основной · gpt-oss-20b · 997/1 000 осталось" in row for row in rows)
-    assert any("Cloudflare AI · Резерв · 9 842/10 000 осталось" in row for row in rows)
+    assert any("Groq · Основной · gpt-oss-20b · 3 сегодня" in row for row in rows)
+    assert any("Cloudflare AI · Резерв · 158 нейронов сегодня" in row for row in rows)
 
 
 def test_themealdb_is_shown_only_after_real_spoonacular_fallback(monkeypatch):

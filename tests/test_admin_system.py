@@ -190,26 +190,30 @@ def test_expected_ai_outage_does_not_create_a_second_app_error(monkeypatch):
     assert logged == []
 
 
-def test_logs_keep_monitor_errors_short(monkeypatch):
+def test_logs_hide_monitor_incidents_resolved_by_recovery_or_fallback(monkeypatch):
     now = 1_784_466_000
-    incident = {
+    recovered = {
         "ts": now, "service": "groq", "event_type": "error",
         "text": "Groq: не удалось определить статус.", "status_code": 400,
-        "latency_ms": 2071, "fallback_target": "cloudflare",
+        "latency_ms": 2071,
         "started_at": now - 90, "recovered_at": now,
+    }
+    fallback = {
+        "ts": now - 1, "service": "gemini", "event_type": "error",
+        "text": "Gemini: лимит исчерпан.", "status_code": 429,
+        "fallback_target": "groq", "started_at": now - 60,
     }
     monkeypatch.setattr(admin.time, "time", lambda: now + 10)
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: [])
-    monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [incident])
+    monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [recovered, fallback])
     monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
     bot = _Bot()
 
     asyncio.run(admin.send_logs(bot, "42"))
 
     text = bot.sent[0]["text"]
-    assert "Система · Groq · ошибка запроса · резерв Cloudflare AI · восстановлен за 2 мин" in text
-    assert "HTTP 400" not in text
-    assert "2071 мс" not in text
+    assert "Система · Groq" not in text
+    assert "Система · Gemini" not in text
 
 
 def test_logs_collapse_duplicate_monitor_incidents_and_show_all_unique_rows(monkeypatch):
@@ -223,7 +227,7 @@ def test_logs_collapse_duplicate_monitor_incidents_and_show_all_unique_rows(monk
         "ts": now - index, "service": "ticketmaster", "event_type": "error",
         "incident_id": f"ticketmaster-{index}",
         "text": "Ticketmaster: лимит исчерпан.", "status_code": 429,
-        "started_at": now - 60 - index, "recovered_at": now,
+        "started_at": now - 60 - index,
     } for index in range(5)]
     monkeypatch.setattr(admin.time, "time", lambda: now)
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: app_errors)
@@ -234,7 +238,7 @@ def test_logs_collapse_duplicate_monitor_incidents_and_show_all_unique_rows(monk
     asyncio.run(admin.send_logs(bot, "42"))
 
     text = bot.sent[0]["text"]
-    assert text.count("Система · Ticketmaster · лимит исчерпан") == 1
+    assert text.count("Система · Ticketmaster · слишком много запросов") == 1
     assert "повторилось 5 раз" in text
     assert "действие 12" in text
     assert "Ещё записей" not in text

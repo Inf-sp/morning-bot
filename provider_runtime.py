@@ -386,10 +386,11 @@ def _friendly_error(error="", status_code=None, provider="") -> tuple[str, str]:
         return "quota", "дневной лимит исчерпан"
     if provider == "tavily" and code == 432:
         return "quota", "лимит тарифа исчерпан"
-    if code == 429 or any(value in low for value in ("rate limit", "too many requests")):
-        return "quota", "лимит исчерпан"
-    if any(value in low for value in ("quota exceeded", "quota exhausted")):
-        return "quota", "лимит исчерпан"
+    # A 429 is an explicit response from the provider, but it normally means
+    # a temporary rate limit rather than that the account quota is exhausted.
+    # Do not infer a quota incident from an arbitrary exception message.
+    if code == 429:
+        return "rate_limit", "слишком много запросов"
     if code in (401, 403) or any(value in low for value in ("unauthorized", "forbidden", "invalid api key")):
         return "auth", "ошибка авторизации"
     if code in (408, 504) or any(value in low for value in ("timeout", "timed out")):
