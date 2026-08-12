@@ -231,7 +231,9 @@ async def handle(update, context, remove_reply_keyboard):
         except Exception:
             pass
         return
-    if data in ("m_settings", "m_notes"):
+    if data == "m_settings":
+        await settings.send_home(bot, cid, q=q); return
+    if data == "m_notes":
         await settings.send_home(bot, cid); return
     if data == "m_food_gen":
         await _inline_status(
@@ -244,45 +246,9 @@ async def handle(update, context, remove_reply_keyboard):
     if data in ("m_learn", "m_menu"):
         trainer.cancel(cid)
 
-    if data == "m_food":
-        if not menu.has_available_fridge(cid):
-            await menu.send_food_menu(bot, cid, q=q)
-            return
-        await _inline_status(
-            lambda status: menu.send_food_menu(bot, cid, status=status, q=q),
-        )
-        return
-    if data == "m_movie":
-        await _inline_status(
-            lambda status: leisure_movies.send_movie_home(bot, cid, q, status=status),
-        )
-        return
-    if data == "m_books":
-        await _inline_status(lambda status: leisure_books.send_books_home(bot, cid, q, status=status))
-        return
-    if data == "m_music":
-        await _inline_status(lambda status: leisure_music.send_music_home(bot, cid, q, status=status))
-        return
     if data == "m_leisure":
         # Старые карточки не ведут в удалённый агрегатор Досуга.
         data = "m_menu"
-    if data == "m_wardrobe":
-        if not wardrobe.has_wardrobe_items(cid):
-            await wardrobe.send_home(bot, cid, q=q)
-            return
-        await _inline_status(
-            lambda status: wardrobe.send_home(bot, cid, q=q, status=status),
-        )
-        return
-    if data == "m_travel":
-        await _inline_status(
-            lambda status: travel.send_home(bot, cid, q, status=status),
-        )
-        return
-    if data == "m_myday":
-        await _inline_status(
-            lambda status: myday.send_plany(bot, cid, status=status),
-        ); return
     if data == "m_menu":
         text, entities, kb = menu.main_menu_screen(cid)
         # Главное меню открывается отдельным сообщением: полезная карточка
@@ -297,15 +263,6 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data.startswith("m_"):
         text, entities, kb = menu.menu_screen(data, cid)
-        if data == "m_balance":
-            await bot.send_message(
-                chat_id=cid,
-                text=text,
-                reply_markup=kb,
-                entities=entities,
-                transient=True,
-            )
-            return
         try:
             await q.message.edit_text(text, reply_markup=kb, entities=entities)
         except Exception:

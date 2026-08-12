@@ -168,7 +168,7 @@ def _notif_label(kind: str, label: str) -> str:
         return f"{label} (ежедневно в {times[kind]})"
     return label
 
-async def send_home(bot, cid):
+async def send_home(bot, cid, q=None):
     rows = [
         [InlineKeyboardButton("📍 Город", callback_data="set_city")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
@@ -183,13 +183,15 @@ async def send_home(bot, cid):
     if store.learning_is_enabled(cid):
         language = "Английский" if store.get_learning_language(cid) == "en" else "Нидерландский"
     msg = settings_ui.settings_home(city, notifications_on, language)
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
-        reply_markup=InlineKeyboardMarkup(rows),
-        transient=True,
-    )
+    markup = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=markup, transient=True)
 
 
 async def send_preferences(bot, cid, q=None):
