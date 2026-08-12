@@ -712,6 +712,8 @@ async def _render_view(bot, cid, view_id, q=None):
     else:
         count_line = f"Всего: {total}"
     lines = [f"<b>{esc(title)}</b>", "", count_line]
+    if ctx in {"cinema_favorites", "music_favorite_artists"} and total > 1:
+        lines.append("По алфавиту")
     if total:
         lines.append("")
     rows = []

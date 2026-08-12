@@ -230,7 +230,7 @@ _FALLBACK_BY_SERVICE = {
     "Azure Speech": "текстовая карточка", "TMDB": "Gemini",
     "Google Books": "Open Library", "Ticketmaster": "Tavily",
     "ZeroEntropy": "поиск в базе", "Tavily": "Firecrawl",
-    "Gemini": "GitHub Models", "Groq": "GitHub Models",
+    "Gemini": "Groq", "Groq": "Cloudflare AI",
 }
 
 
@@ -288,7 +288,6 @@ def _service_for(text, file_name=""):
                 name.title()
                 .replace("Languagetool", "LanguageTool")
                 .replace("Themealdb", "TheMealDB")
-                .replace("Github Models", "GitHub Models")
                 .replace("Openweather", "OpenWeather")
                 .replace("Openrouter", "OpenRouter")
                 .replace("Firecrawl", "Firecrawl")

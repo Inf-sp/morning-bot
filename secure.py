@@ -56,7 +56,6 @@ def _env_secret_values():
     try:
         import config
         names = ("TELEGRAM_TOKEN", "GEMINI_API_KEY", "GROQ_API_KEY",
-                 "GITHUB_MODELS_TOKEN",
                  "OPENROUTER_API_KEY", "CF_API_TOKEN", "TICKETMASTER_API_KEY",
                  "TMDB_API_KEY", "GOOGLE_BOOKS_API_KEY", "YOUTUBE_API_KEY", "SPOONACULAR_API_KEY", "THEMEALDB_API_KEY",
                  "AZURE_SPEECH_KEY",

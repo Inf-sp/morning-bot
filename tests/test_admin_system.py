@@ -148,7 +148,7 @@ def test_logs_keep_monitor_errors_short(monkeypatch):
     incident = {
         "ts": now, "service": "groq", "event_type": "error",
         "text": "Groq: не удалось определить статус.", "status_code": 400,
-        "latency_ms": 2071, "fallback_target": "github_models",
+        "latency_ms": 2071, "fallback_target": "cloudflare",
         "started_at": now - 90, "recovered_at": now,
     }
     monkeypatch.setattr(admin.time, "time", lambda: now + 10)
@@ -160,7 +160,7 @@ def test_logs_keep_monitor_errors_short(monkeypatch):
     asyncio.run(admin.send_logs(bot, "42"))
 
     text = bot.sent[0]["text"]
-    assert "Система · Groq · ошибка запроса · резерв GitHub Models · восстановлен за 2 мин" in text
+    assert "Система · Groq · ошибка запроса · резерв Cloudflare AI · восстановлен за 2 мин" in text
     assert "HTTP 400" not in text
     assert "2071 мс" not in text
 
@@ -259,7 +259,7 @@ def test_admin_home_ui_uses_compact_exact_lines_without_ok():
 
 def test_system_summary_counts_user_impact_and_not_replaced_api():
     states = [
-        {"service": "gemini", "status": "warning", "fallback": "github_models"},
+        {"service": "gemini", "status": "warning", "fallback": "groq"},
         {"service": "openweather", "status": "warning", "fallback": ""},
         {"service": "telegram", "status": "down", "fallback": ""},
         {"service": "database", "status": "down", "fallback": ""},
@@ -274,7 +274,7 @@ def test_system_summary_counts_user_impact_and_not_replaced_api():
 def test_system_summary_deduplicates_unavailable_functions():
     states = [
         {"service": "gemini", "status": "down", "fallback": "", "error_type": "fallback"},
-        {"service": "github_models", "status": "down", "fallback": "", "error_type": "auth"},
+        {"service": "groq", "status": "down", "fallback": "", "error_type": "auth"},
     ]
 
     summary = admin._system_summary(states)

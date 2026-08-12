@@ -91,7 +91,7 @@ def test_chat_stream_sends_openai_sse_payload_for_groq(monkeypatch):
 def test_stream_route_falls_back_before_first_delta(monkeypatch):
     calls = []
     deltas = []
-    monkeypatch.setattr(ai, "CHAT_ORDER", (ai.GROQ_STANDARD, "github_models"))
+    monkeypatch.setattr(ai, "CHAT_ORDER", (ai.GROQ_STANDARD, "cf"))
     monkeypatch.setattr(ai, "_record_ai_attempt", lambda *args, **kwargs: None)
     monkeypatch.setattr(ai, "_log_cost", lambda *args, **kwargs: None)
     monkeypatch.setattr(ai.provider_runtime, "activate_fallback", lambda *args, **kwargs: None)
@@ -109,13 +109,13 @@ def test_stream_route_falls_back_before_first_delta(monkeypatch):
     monkeypatch.setattr(ai, "_chat_stream", stream)
 
     assert ai._chat_chain_stream_impl([], emit=deltas.append) == "резерв ответил"
-    assert calls == [ai.GROQ_STANDARD, "github_models"]
+    assert calls == [ai.GROQ_STANDARD, "cf"]
     assert deltas == ["резерв ответил"]
 
 
 def test_stream_route_does_not_mix_providers_after_visible_delta(monkeypatch):
     calls = []
-    monkeypatch.setattr(ai, "CHAT_ORDER", (ai.GROQ_STANDARD, "github_models"))
+    monkeypatch.setattr(ai, "CHAT_ORDER", (ai.GROQ_STANDARD, "cf"))
     monkeypatch.setattr(ai, "_record_ai_attempt", lambda *args, **kwargs: None)
     monkeypatch.setattr(ai, "_log_free_chat_route", lambda **kwargs: None)
     monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _provider: None)

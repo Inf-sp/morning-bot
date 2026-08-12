@@ -36,3 +36,22 @@ def test_week_forecast_header_shows_country_and_flag():
     )
 
     assert message.text.startswith("Неделя с 5–11 августа · Лилль, FR 🇫🇷")
+
+
+def test_week_forecast_marks_extreme_heat_as_a_reason_to_change_plans():
+    days = [
+        {"name": "вторник", "tmax": 33, "tmin": 20, "wind": 4, "rain_real": False},
+        {"name": "среда", "tmax": 37, "tmin": 22, "wind": 4, "rain_real": False},
+        {"name": "четверг", "tmax": 40, "tmin": 24, "wind": 4, "rain_real": False},
+        {"name": "пятница", "tmax": 34, "tmin": 21, "wind": 4, "rain_real": False},
+        {"name": "суббота", "tmax": 31, "tmin": 19, "wind": 4, "rain_real": False},
+        {"name": "воскресенье", "tmax": 30, "tmin": 18, "wind": 4, "rain_real": False},
+        {"name": "понедельник", "tmax": 30, "tmin": 18, "wind": 4, "rain_real": False},
+    ]
+
+    advice = weather._week_advice(days)
+    message = weather_ui.week_forecast("11–17 августа", "Руан", "Жарко", [], advice, country="FR")
+
+    assert advice.startswith("В четверг до +40°C")
+    assert "избегай долгих прогулок и велосипеда днём" in advice
+    assert "💡 Полезно: В четверг до +40°C" in message.text

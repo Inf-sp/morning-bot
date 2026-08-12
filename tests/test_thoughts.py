@@ -54,6 +54,9 @@ class FakeMessage:
         self.text = text
         self.reply_markup = kwargs.get("reply_markup")
 
+    async def edit_reply_markup(self, reply_markup=None):
+        self.reply_markup = reply_markup
+
     async def delete(self):
         self.deleted = True
 
@@ -106,7 +109,10 @@ def test_empty_home_has_no_review_button(monkeypatch):
         "Список пуст."
     )
     assert message["transient"] is True
-    assert _labels(message["reply_markup"]) == [["⬅️ Назад", "#️⃣ Главная"]]
+    assert _labels(message["reply_markup"]) == [
+        ["🔔 Напоминать в 14:00"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
 
 
 def test_opening_thoughts_immediately_shows_review_with_clear_button(monkeypatch):
@@ -244,9 +250,25 @@ def test_day_reminder_skips_recent_entry_then_opens_optional_capture(monkeypatch
         for row in bot.sent[0]["reply_markup"].inline_keyboard
         for button in row
     ]
-    assert labels == ["🧠 Выгрузить мысли", "😌 Всё спокойно"]
+    assert labels == ["🧠 Выгрузить мысли", "😌 Всё спокойно", "🔕 Не спрашивать"]
     assert thoughts.capture_waiting("42") is True
     assert settings_state[("42", "_thoughts_capture_state")]["status"] == "implicit_wait"
+
+
+def test_day_reminder_can_be_disabled_from_its_message(monkeypatch):
+    _repo, settings_state, _fixed_now = _setup_state(monkeypatch)
+    bot = FakeBot()
+    query = FakeQuery()
+    settings_state[("42", "notif_checkin_day")] = True
+
+    assert asyncio.run(thoughts.send_day_reminder(bot, "42")) is True
+    assert thoughts.capture_waiting("42") is True
+
+    assert asyncio.run(thoughts.handle_callback(bot, "42", query, "thought_reminder_off")) is True
+
+    assert settings_state[("42", "notif_checkin_day")] is False
+    assert thoughts.capture_waiting("42") is False
+    assert query.message.deleted is True
 
 
 def test_direct_text_after_reminder_routes_to_thought_capture(monkeypatch):
@@ -357,8 +379,32 @@ def test_legacy_inbox_opens_new_home_without_clear_all(monkeypatch):
 def test_evening_thought_notification_is_removed(monkeypatch):
     monkeypatch.setattr(settings, "get", lambda _cid, _key, default=None: default)
 
-    assert settings.notif_on("42", "checkin_day") is True
+    assert settings.notif_on("42", "checkin_day") is False
+    assert settings.notif_on("42", "weather_warn") is True
     assert all(kind != "checkin_eve" for kind, _label in settings.NOTIF_TYPES)
+
+
+def test_thoughts_can_enable_the_day_reminder_from_its_home(monkeypatch):
+    _repo, settings_state, _fixed_now = _setup_state(monkeypatch)
+    bot = FakeBot()
+    query = FakeQuery()
+
+    assert asyncio.run(thoughts.handle_callback(bot, "42", query, "thought_reminder_on")) is True
+
+    assert settings_state[("42", "notif_checkin_day")] is True
+    assert _labels(query.message.reply_markup) == [["⬅️ Назад", "#️⃣ Главная"]]
+
+
+def test_notification_button_labels_show_only_deliveries_and_their_time(monkeypatch):
+    monkeypatch.setattr(settings, "get", lambda _cid, _key, default=None: default)
+
+    assert [(option.key, option.button_label) for option in settings.get_notification_options()] == [
+        ("morning_brief", "Мой день · 08:30"),
+        ("weekend_events", "Ближайшие события · пт 10:00"),
+        ("daily_words", "Обучение языку · 11:00"),
+        ("checkin_day", "Запись мыслей · 14:00"),
+        ("evening_weather", "Погода на завтра · 20:30"),
+    ]
 
 
 def test_legacy_clear_all_button_no_longer_deletes_records(monkeypatch):
@@ -573,7 +619,7 @@ def test_leave_for_later_saves_review_and_returns_to_thoughts(monkeypatch):
     assert bot.sent[0]["text"].startswith("😮‍💨 Мысли")
     assert "• Купить фильтры" in bot.sent[0]["text"]
     labels = [button.text for row in bot.sent[0]["reply_markup"].inline_keyboard for button in row]
-    assert labels == ["⬅️ Назад", "#️⃣ Главная"]
+    assert labels == ["🔔 Напоминать в 14:00", "⬅️ Назад", "#️⃣ Главная"]
 
 
 def test_clear_requires_confirmation_then_closes_only_current_list(monkeypatch):
@@ -617,7 +663,10 @@ def test_clear_requires_confirmation_then_closes_only_current_list(monkeypatch):
         "Голова немного свободнее.\n"
         "Можешь записать новую мысль, задачу или тревогу."
     )
-    assert _labels(bot.sent[0]["reply_markup"]) == [["⬅️ Назад", "#️⃣ Главная"]]
+    assert _labels(bot.sent[0]["reply_markup"]) == [
+        ["🔔 Напоминать в 14:00"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
 
 
 def test_stale_clear_callback_never_deletes_without_cached_review(monkeypatch):

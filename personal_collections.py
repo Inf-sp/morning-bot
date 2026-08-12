@@ -128,8 +128,13 @@ async def love_add_done(bot, cid, key, text, origin="base"):
         import leisure_music
 
         leisure_music._kick_off_new_artist_concert_check(cid, added)
-    if added:
-        await bot.send_message(chat_id=cid, text=f"✅ Добавлено: {', '.join(added)}.")
+        await leisure_music.send_favorite_artists_added_card(bot, cid, added)
+        return
+    if key == "movies" and added:
+        import leisure_movies
+
+        await leisure_movies.send_favorite_movies_added_card(bot, cid, added)
+        return
     import cleanup
 
     back = {"movies": "m_movie", "books": "m_books", "artists": "m_music"}[key]

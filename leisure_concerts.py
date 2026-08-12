@@ -47,8 +47,14 @@ _TRIBUTE_MARKERS = ("tribute", "cover", "covers", "candlelight", "songs of", "th
 # чем очередные артисты превратят ограничение в storm запросов.
 _TICKETMASTER_CONCURRENCY = asyncio.Semaphore(1)
 _TICKETMASTER_RETRY_DELAYS = (0.5, 1.5, 3.0)
+_TICKETMASTER_ARTIST_BATCH_LIMIT = 8
+_TICKETMASTER_REQUEST_INTERVAL = 0.5
+_ticketmaster_next_request_at = 0.0
 _EXTERNAL_ARTIST_LIMIT = 5
 _EXTERNAL_CONCURRENCY = asyncio.Semaphore(2)
+_POPULAR_EVENTS_CACHE_TTL = 7 * 86400
+_POPULAR_EVENTS_CACHE_VERSION = 1
+_POPULAR_EVENTS_LIMIT = 3
 
 
 class TicketmasterRateLimitError(RuntimeError):
@@ -139,10 +145,16 @@ def _ticketmaster_events_for_artist(artist, cc, start_dt="", end_dt="", size=3):
 async def _ticketmaster_fetch_throttled(fn, *args):
     """Ограничивает параллелизм запросов к Ticketmaster (_TICKETMASTER_CONCURRENCY),
     чтобы большие списки артистов не заваливали бесплатный тариф API 429-ми."""
+    global _ticketmaster_next_request_at
     async with _TICKETMASTER_CONCURRENCY:
+        delay = _ticketmaster_next_request_at - time.monotonic()
+        if delay > 0:
+            await asyncio.sleep(delay)
+        _ticketmaster_next_request_at = time.monotonic() + _TICKETMASTER_REQUEST_INTERVAL
         return await asyncio.to_thread(fn, *args)
 
-async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3, limit=40):
+async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3,
+                                    limit=_TICKETMASTER_ARTIST_BATCH_LIMIT):
     batches = []
     for artist in artists[:limit]:
         if _ticketmaster_cooldown_remaining():
@@ -172,6 +184,104 @@ async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3,
             seen_pairs.add(pair)
             found[e.get("id") or f"{artist}:{date}:{e.get('name', '')}"] = e
     return sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate") or "9999-99-99")
+
+
+def _popular_events_cache_key(cc, period_start):
+    return f"{str(cc or '').upper()}:{period_start.isoformat()}"
+
+
+def _popular_events_cache_get(cc, period_start):
+    data = store._load(config.POPULAR_MUSIC_EVENTS_CACHE_KEY) or {}
+    entry = data.get(_popular_events_cache_key(cc, period_start)) or {}
+    if (entry.get("version") != _POPULAR_EVENTS_CACHE_VERSION
+            or time.time() - float(entry.get("ts") or 0) > _POPULAR_EVENTS_CACHE_TTL):
+        return None
+    events = entry.get("events")
+    return list(events) if isinstance(events, list) else None
+
+
+def _popular_events_cache_set(cc, period_start, events):
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        data[_popular_events_cache_key(cc, period_start)] = {
+            "version": _POPULAR_EVENTS_CACHE_VERSION,
+            "ts": time.time(),
+            "events": list(events or []),
+        }
+        return data, None
+
+    store.mutate_kv(config.POPULAR_MUSIC_EVENTS_CACHE_KEY, mutate)
+
+
+def _is_large_music_event(event):
+    """Отбирает только крупные события, не выдавая случайный концерт за хит."""
+    name = str(event.get("name") or "").casefold()
+    attractions = event.get("_embedded", {}).get("attractions") or []
+    venue = (event.get("_embedded", {}).get("venues") or [{}])[0]
+    venue_name = str(venue.get("name") or "").casefold()
+    large_venue = ("arena", "stadium", "ziggo dome", "afas live", "ahoy",
+                   "parc", "palais", "forum", "hallen", "park")
+    return (
+        any(marker in f" {name} " for marker in _FESTIVAL_MARKERS)
+        or len(attractions) >= 2
+        or any(marker in venue_name for marker in large_venue)
+    )
+
+
+def _ticketmaster_popular_music_events(cc, start_dt, end_dt):
+    if not config.TICKETMASTER_API_KEY:
+        return []
+    params = {
+        "apikey": config.TICKETMASTER_API_KEY,
+        "countryCode": cc,
+        "classificationName": "music",
+        "startDateTime": start_dt,
+        "endDateTime": end_dt,
+        "size": 80,
+        "sort": "relevance,desc",
+    }
+    try:
+        response = _ticketmaster_get(
+            "https://app.ticketmaster.com/discovery/v2/events.json", params)
+    except TicketmasterRateLimitError:
+        raise
+    except Exception as error:
+        _log.warning("ticketmaster popular events failed cc=%s: %s", cc, error)
+        return []
+    selected, seen = [], set()
+    for event in response.json().get("_embedded", {}).get("events", []):
+        name = str(event.get("name") or "").strip()
+        if not name or any(marker in name.casefold() for marker in _TRIBUTE_MARKERS):
+            continue
+        if not _is_large_music_event(event):
+            continue
+        date = event.get("dates", {}).get("start", {}).get("localDate", "")
+        venue = (event.get("_embedded", {}).get("venues") or [{}])[0]
+        city = str((venue.get("city") or {}).get("name") or "").strip()
+        key = (name.casefold(), date, city.casefold())
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append(event)
+        if len(selected) >= _POPULAR_EVENTS_LIMIT:
+            break
+    return selected
+
+
+async def get_popular_music_events(cc, period_start, period_end):
+    """Несколько крупных подтверждённых музыкальных событий на ближайшую неделю."""
+    cached = _popular_events_cache_get(cc, period_start)
+    if cached is not None:
+        return cached
+    start_dt = f"{period_start.isoformat()}T00:00:00Z"
+    end_dt = f"{period_end.isoformat()}T23:59:59Z"
+    try:
+        events = await _ticketmaster_fetch_throttled(
+            _ticketmaster_popular_music_events, cc, start_dt, end_dt)
+    except TicketmasterRateLimitError:
+        return []
+    _popular_events_cache_set(cc, period_start, events)
+    return events
 
 # ---------- Внешний поиск концертов (Tavily + Firecrawl + AI) ----------
 # Ticketmaster — основной источник, но не полный: маленькие площадки, локальные
@@ -644,7 +754,10 @@ async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False):
 
     # Берём максимально возможную страницу Ticketmaster: короткая выдача не должна
     # прятать даты дальнего конца годового горизонта.
-    tm_events = await _ticketmaster_events_many(artists, cc, start_dt=date_from, end_dt=date_to, size=200, limit=40)
+    tm_events = await _ticketmaster_events_many(
+        artists, cc, start_dt=date_from, end_dt=date_to, size=200,
+        limit=_TICKETMASTER_ARTIST_BATCH_LIMIT,
+    )
     # External search is a bounded last fallback for unresolved artists.
     found_artists = {
         _item_text(event.get("_artist")).casefold()
@@ -674,21 +787,28 @@ async def refresh_concerts_cache(cid):
     """Прогревает недельный кэш концертов пользователя — вызывается пятничным job'ом
     перед уведомлением «Афиша недели», чтобы само уведомление и последующие «Концерты» не ждали API.
     Возвращает короткий результат для планового задания."""
-    artists = _ensure_artists(cid)
-    if not artists:
-        invalidate_user_concerts_cache(cid)
-        return {"status": "no_artists", "artists": 0, "events": 0}
-    if not config.TICKETMASTER_API_KEY:
-        return {"status": "unavailable", "artists": len(artists), "events": 0}
     s = store.get_settings(cid)
     cc = (s.get("cc") or "NL").upper()
     cname = s.get("country") or "твоя страна"
+    from datetime import datetime, timedelta
+    period_start = datetime.now(config.TZ).date()
+    popular_events = await get_popular_music_events(
+        cc, period_start, period_start + timedelta(days=7))
+    artists = _ensure_artists(cid)
+    if not artists:
+        invalidate_user_concerts_cache(cid)
+        return {"status": "no_artists", "artists": 0, "events": 0,
+                "popular_events": len(popular_events)}
+    if not config.TICKETMASTER_API_KEY:
+        return {"status": "unavailable", "artists": len(artists), "events": 0,
+                "popular_events": len(popular_events)}
     events = await _fetch_concerts(artists, cc, cname)
     _concerts_cache_set(cid, cc, events)
     return {
         "status": "updated",
         "artists": len(artists),
         "events": len(events),
+        "popular_events": len(popular_events),
     }
 
 
@@ -1010,7 +1130,7 @@ async def _build_weekly_events_msg(cid):
     today_str = period_start.isoformat()
     date_to_str = period_end.isoformat()
 
-    # --- Концерты ---
+    # --- Концерты любимых артистов + несколько крупных событий недели ---
     # Читаем недельный кэш (обновлён job'ом refresh_concerts_cache перед этим уведомлением),
     # чтобы не делать живой запрос к Ticketmaster по всем артистам прямо в момент отправки.
     concert_items = []
@@ -1036,6 +1156,33 @@ async def _build_weekly_events_msg(cid):
                     "date": date_str,
                     "context": _concert_context(e),
                 })
+
+    popular_events = await get_popular_music_events(cc, period_start, period_end)
+    existing = {
+        (str(item.get("title") or "").casefold(), str(item.get("date") or ""),
+         str(item.get("place") or "").casefold())
+        for item in concert_items
+    }
+    for event in popular_events:
+        date_str = event.get("dates", {}).get("start", {}).get("localDate", "")
+        venue = (event.get("_embedded", {}).get("venues") or [{}])[0]
+        venue_str = ", ".join(value for value in (
+            str(venue.get("name") or "").strip(),
+            str((venue.get("city") or {}).get("name") or "").strip(),
+        ) if value)
+        title = str(event.get("name") or "").strip()
+        key = (title.casefold(), date_str, venue_str.casefold())
+        if not title or key in existing:
+            continue
+        existing.add(key)
+        concert_items.append({
+            "title": title,
+            "place": venue_str,
+            "date": date_str,
+            "context": _concert_context(event),
+        })
+        if len(concert_items) >= 5:
+            break
 
     # --- Кинопремьеры ---
     movie_items = []

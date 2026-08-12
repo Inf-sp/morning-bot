@@ -110,36 +110,60 @@ _LOCAL_ARTIST_FALLBACKS = {
          "why": ["Тёплая, детальная гитарная музыка без лишнего шума.", "Песни звучат свободнее и острее обычного инди-попа."],
          "tracks": ["Not", "Simulation Swarm", "Vampire Empire"],
          "fact": "Американская инди-группа из Бруклина."},
+        {"artist": "Alvvays", "desc": "Светлый гитарный инди-поп, в котором меланхолия звучит легко и очень точно.",
+         "why": ["Мелодии сразу цепляют, но не становятся приторными.", "Вместо сырого инди-рока — больше поп-ясности и воздуха."],
+         "tracks": ["Archie, Marry Me", "Dreams Tonite", "After the Earthquake"],
+         "fact": "Канадская инди-поп-группа из Торонто."},
     ],
     "pop": [
         {"artist": "Caroline Polachek", "desc": "Артистичный поп с воздушным вокалом и точной электроникой.",
          "why": ["Мелодии остаются лёгкими, но аранжировки не банальные.", "Это поп с более странным и кинематографичным настроением."],
          "tracks": ["Bunny Is a Rider", "Welcome to My Island", "So Hot You're Hurting My Feelings"],
          "fact": "Американская певица и продюсер."},
+        {"artist": "Rina Sawayama", "desc": "Поп, который свободно смешивает большие припевы, гитары и клубную электронику.",
+         "why": ["Есть тот же масштабный поп-драйв, но с резкими неожиданными поворотами.", "Песни одновременно танцевальные и чуть более дерзкие."],
+         "tracks": ["XS", "This Hell", "Comme des Garçons (Like the Boys)"],
+         "fact": "Британско-японская певица и автор песен."},
     ],
     "electronic": [
         {"artist": "Fred again..", "desc": "Электроника, собранная из живых голосов, дневниковых фраз и мягких битов.",
          "why": ["Танцевальная музыка здесь остаётся очень личной и мелодичной.", "Подойдёт, если хочется движения без холодного клубного звучания."],
          "tracks": ["Delilah (pull me out of this)", "Danielle (smile on my face)", "adore u"],
          "fact": "Британский электронный музыкант и продюсер."},
+        {"artist": "Bicep", "desc": "Тёплая клубная электроника с брейкбитом, ностальгическими синтами и большим эмоциональным размахом.",
+         "why": ["Ритм держит темп, но мелодии не уходят в безликий фон.", "Больше рейвовой энергии и крупных синтезаторных моментов."],
+         "tracks": ["Glue", "Apricots", "Atlas"],
+         "fact": "Электронный дуэт из Белфаста."},
     ],
     "rnb": [
         {"artist": "Kelela", "desc": "Гладкий альтернативный R&B на стыке клубной электроники и мягкого соула.",
          "why": ["Вокал остаётся близким и спокойным, даже когда биты становятся резче.", "Звучание смелее привычного современного R&B."],
          "tracks": ["Rewind", "Washed Away", "On the Run"],
          "fact": "Американская певица и автор песен."},
+        {"artist": "Jorja Smith", "desc": "Ночной R&B с мягким голосом, джазовыми оттенками и сдержанным грувом.",
+         "why": ["Песни остаются интимными и мелодичными без лишней драматичности.", "Здесь больше живого соула и британской городской прохлады."],
+         "tracks": ["Blue Lights", "Be Honest", "Little Things"],
+         "fact": "Британская певица из Уолсолла."},
     ],
     "rock": [
         {"artist": "Fontaines D.C.", "desc": "Нервный, мелодичный рок с тёмным городским настроением.",
          "why": ["Есть напор и гитары, но песни не превращаются в шум.", "Подойдёт для более собранного и драматичного настроения."],
          "tracks": ["I Love You", "Starburster", "Favourite"],
          "fact": "Ирландская рок-группа, основанная в Дублине."},
+        {"artist": "Wolf Alice", "desc": "Гитарный рок, который одинаково уверенно работает с шумом, мечтательностью и сильными припевами.",
+         "why": ["Есть живая гитарная энергия, но мелодии остаются на первом плане.", "Диапазон шире: от тихой уязвимости до почти гранжевого напора."],
+         "tracks": ["Don't Delete the Kisses", "Smile", "The Last Man on Earth"],
+         "fact": "Британская рок-группа из Лондона."},
     ],
     "hiphop": [
         {"artist": "Little Simz", "desc": "Точный хип-хоп с сильным голосом, джазовыми деталями и личными историями.",
          "why": ["Ритм и тексты держат внимание без показной агрессии.", "В музыке много масштаба, но она остаётся очень личной."],
          "tracks": ["Introvert", "Gorilla", "Woman"],
          "fact": "Британская рэперша из Лондона."},
+        {"artist": "Noname", "desc": "Спокойный, умный хип-хоп с джазовыми сэмплами, точным флоу и разговорной интонацией.",
+         "why": ["Тексты и ритм требуют внимания, но музыка не давит тяжестью.", "Вместо большого стадионного жеста — камерная и очень живая подача."],
+         "tracks": ["Diddy Bop", "Song 31", "Rainforest"],
+         "fact": "Рэперша и поэтесса из Чикаго."},
     ],
     "default": [
         {"artist": "FKA twigs", "desc": "Хрупкий арт-поп, где R&B, электроника и камерный вокал постоянно меняют форму.",
@@ -261,6 +285,36 @@ async def listen_love(bot, cid, q=None):
         _kick_off_new_artist_concert_check(cid, [artist])
         if q is not None:
             await q.message.edit_reply_markup(reply_markup=_listen_kb())
+
+
+def _favorite_artist_style_labels(cid):
+    selected = set(_music_styles(cid))
+    return [label for key, label, _prompt_name in _MUSIC_GENRES if key in selected]
+
+
+def _favorite_artist_added_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎚️ Мои артисты", callback_data="artist_favorites")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+
+
+async def send_favorite_artists_added_card(bot, cid, artists):
+    """Показывает результат ручного добавления, не подменяя его списком."""
+    artists = [str(artist or "").strip() for artist in artists or [] if str(artist or "").strip()]
+    if not artists:
+        return
+    cached = _cached_artist(cid)
+    cached_artist = str((cached or {}).get("artist") or "").strip()
+    if len(artists) == 1:
+        data = cached if cached_artist.casefold() == artists[0].casefold() else None
+        msg = leisure_ui.favorite_artist_added_card(
+            artists[0], _favorite_artist_style_labels(cid), data=data)
+    else:
+        msg = leisure_ui.favorite_artists_added_card(artists, _favorite_artist_style_labels(cid))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=_favorite_artist_added_kb())
 
 
 def _listen_kb():
@@ -454,22 +508,14 @@ async def send_music_task(bot, cid, key, *, status=None):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_music_task_keyboard())
 
 
-async def send_music_home(bot, cid, q=None):
-    try:
-        concerts = await _weekly_concerts(cid)
-    except Exception as error:
-        _log.warning("music home concerts failed cid=%s: %r", cid, error)
-        concerts = []
-    try:
-        daily_music = await _daily_music_content(cid)
-    except Exception as error:
-        _log.warning("music home daily content failed cid=%s: %r", cid, error)
-        daily_music = {"rebus": _daily_music_rebus(datetime.now(config.TZ).date())}
-    msg = leisure_ui.music_week_screen(_music_city(cid), daily_music, concerts or [])
-    await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities,
-        reply_markup=music_home_keyboard(), disable_web_page_preview=True,
-    )
+async def send_music_home(bot, cid, q=None, status=None):
+    """Открывает дневную карточку артиста, подготовленную до входа в раздел."""
+    await send_listen(bot, cid, status=status)
+
+
+async def warm_music_home_cache(cid):
+    """Готовит персонального артиста дня, не отмечая его как уже показанного."""
+    return bool(await send_listen(bot, cid, preview=True))
 
 
 async def _weekly_concerts(cid):
@@ -761,10 +807,10 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
         return
     artist = data.get("artist", "")
     data = await _attach_track_links(data)
-    _remember_artist(cid, artist)
     _cache_artist(cid, data)
     if preview:
         return data
+    _remember_artist(cid, artist)
     rec = {"kind": "listen", "items": [artist]}
     if category:
         rec["category"] = category

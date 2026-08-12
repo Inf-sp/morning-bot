@@ -20,8 +20,8 @@ def test_movie_recommendation_keeps_main_screen_while_loading(monkeypatch):
         calls.append(("start_inline", preserve_message))
         return Status()
 
-    async def send_recos(bot, cid, kind):
-        calls.append(("send_recos", cid, kind))
+    async def send_recos(bot, cid, kind, status=None):
+        calls.append(("send_recos", cid, kind, status))
 
     monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
     monkeypatch.setattr(bot_callbacks.leisure_movies, "send_recos", send_recos)
@@ -41,7 +41,7 @@ def test_movie_recommendation_keeps_main_screen_while_loading(monkeypatch):
     asyncio.run(bot_callbacks.handle(Update(), Context(), None))
 
     assert calls[0] == ("start_inline", True)
-    assert calls[1] == ("send_recos", "42", "movie")
+    assert calls[1][:3] == ("send_recos", "42", "movie")
     assert calls[-1] == ("stop", True)
 
 

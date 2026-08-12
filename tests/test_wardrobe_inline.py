@@ -535,7 +535,7 @@ def test_movie_navigation_keeps_menu_visible_with_an_inline_loading_button(monke
     assert calls[0][-1] is True
     assert calls[1][0] == "movie_home"
     assert calls[1][1].data == "m_movie"
-    assert calls[1][2] is None
+    assert calls[1][2].mode == "inline"
     assert calls[-1] == ("stop", True)
 
 

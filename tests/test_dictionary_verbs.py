@@ -190,7 +190,7 @@ def test_request_uses_utility_route_without_retrying_timeout(monkeypatch):
         raise AssertionError("timeout must not trigger a second AI request")
 
     assert len(calls) == 1
-    assert calls[0][1]["order"] == ("groq_standard", "github_models", "cf", "openrouter")
+    assert calls[0][1]["order"] == ("groq_standard", "cf", "openrouter")
     assert calls[0][1]["fallback_allowed"] is True
     assert calls[0][1]["privacy_level"] == "public"
     assert '"word": "vervangen"' in calls[0][0]

@@ -104,39 +104,49 @@ def test_music_shows_a_local_artist_when_the_ai_chain_is_unavailable(monkeypatch
     assert "Не удалось подобрать" not in calls[0][0]
 
 
-def test_music_home_shows_rebus_and_nearest_concert_without_ai(monkeypatch):
+def test_music_keeps_recommending_when_ai_is_unavailable_and_first_fallback_is_known(monkeypatch):
+    calls = []
+    profile = {}
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            calls.append((text, kwargs))
+
+    async def unavailable(*_args, **_kwargs):
+        raise Exception("AI cooldown")
+
+    monkeypatch.setattr(leisure_music.ai, "allm_json", unavailable)
+    monkeypatch.setattr(leisure_music.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(leisure_music.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(leisure_music.store, "set_profile", lambda _cid, value: profile.update(value))
+    monkeypatch.setattr(leisure_music.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_music.store, "mutate_kv", lambda _key, change: change({})[1])
+    monkeypatch.setattr(leisure_music.recommendation_stoplist, "values", lambda *_args: ["Big Thief"])
+    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie"])
+
+    asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
+
+    assert len(calls) == 1
+    assert "Не удалось подобрать" not in calls[0][0]
+    assert "Alvvays" in calls[0][0]
+
+
+def test_music_home_shows_the_prepared_personal_artist(monkeypatch):
     sent = []
 
     class Bot:
         async def send_message(self, **kwargs):
             sent.append(kwargs)
 
-    async def concerts(_cid):
-        return [{"artist": "Romy", "date": "21 августа", "place": "Алкмар"}]
+    async def send_listen(bot, cid, *, status=None):
+        sent.append((bot, cid, status))
 
-    async def daily_content(_cid):
-        return {
-            "rebus": {"emoji": "👑 🐝 🎤", "answer": "Beyoncé", "fact": "Факт."},
-            "legend": {"name": "Луи Армстронг", "birth": "1901-08-04", "detail": "трубач и певец"},
-        }
-
-    monkeypatch.setattr(leisure_music, "_weekly_concerts", concerts)
-    monkeypatch.setattr(leisure_music, "_daily_music_content", daily_content)
-    monkeypatch.setattr(leisure_music.store, "get_settings", lambda _cid: {"cc": "NL", "city": "Алкмар"})
-    monkeypatch.setattr(leisure_music.ai, "allm_json", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("AI called")))
+    monkeypatch.setattr(leisure_music, "send_listen", send_listen)
 
     asyncio.run(leisure_music.send_music_home(Bot(), "42"))
 
     assert len(sent) == 1
-    assert "🎧 Музыка этой недели · Алкмар" in sent[0]["text"]
-    assert "Вайб дня" not in sent[0]["text"]
-    assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in sent[0]["text"]
-    assert "Именинник дня: Луи Армстронг · 4 августа 1901 — трубач и певец." in sent[0]["text"]
-    assert "Концерты рядом:\n• Romy - 21 августа · Алкмар" in sent[0]["text"]
-    assert sent[0]["text"].index("Именинник дня:") < sent[0]["text"].index("💡 Интересно:")
-    assert "Новые альбомы" not in sent[0]["text"]
-    assert any(entity.type == MessageEntity.SPOILER for entity in sent[0]["entities"])
-    assert sent[0]["disable_web_page_preview"] is True
+    assert sent[0][1:] == ("42", None)
 
 
 def test_music_home_shows_three_nearby_concerts_as_separate_items():

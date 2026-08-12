@@ -243,6 +243,21 @@ def _week_advice(days):
     strong_wind = [day for day in days if day["wind"] >= STRONG_WIND_MS]
     rainy = [day for day in days if day["rain_real"]]
     outdoor = [day for day in days if not day["rain_real"] and day["wind"] < STRONG_WIND_MS]
+    hottest = max(days, key=lambda day: day["tmax"])
+
+    # Жара важнее нейтральной оценки «сухо и можно гулять»: +40 °C — это
+    # уже повод перестроить день, даже при ясном небе и слабом ветре.
+    hot_label = {
+        "понедельник": "в понедельник", "вторник": "во вторник",
+        "среда": "в среду", "четверг": "в четверг", "пятница": "в пятницу",
+        "суббота": "в субботу", "воскресенье": "в воскресенье",
+    }.get(hottest.get("name"), "в самый жаркий день")
+    if hottest["tmax"] >= 38:
+        return (f"{hot_label.capitalize()} до {hottest['tmax']:+.0f}°C — избегай долгих "
+                "прогулок и велосипеда днём, выходи утром или вечером")
+    if hottest["tmax"] >= 32:
+        return (f"{hot_label.capitalize()} до {hottest['tmax']:+.0f}°C — планируй "
+                "активность на улице утром или вечером и возьми воду")
 
     if strong_wind and all(day in strong_wind for day in days[-2:]):
         return "В конце недели ожидается усиление ветра"
@@ -258,7 +273,6 @@ def _week_advice(days):
         return "Возьми лёгкую куртку — утром и вечером будет прохладно"
     if len(outdoor) >= 5:
         return "Можно спокойно планировать прогулки, велосипед и поездки"
-    hottest = max(days, key=lambda day: day["tmax"])
     return f"Самый тёплый день — {hottest['name']}"
 
 

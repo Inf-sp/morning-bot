@@ -57,10 +57,8 @@ class ProviderSpec:
 SPECS = (
     ProviderSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"),
                  ("groq", "openrouter"), 3600, role="Сложные задачи"),
-    ProviderSpec("github_models", "GitHub Models", ("Готовка", "Обучение", "Ассистент"),
-                 ("cloudflare", "openrouter"), 3600, role="Резерв"),
     ProviderSpec("groq", "Groq", ("Готовка", "Обучение", "Ассистент"),
-                 ("github_models", "cloudflare", "openrouter"), 3600, role="Основной"),
+                 ("cloudflare", "openrouter"), 3600, role="Основной"),
     ProviderSpec("openrouter", "OpenRouter", ("AI",), (), 3600, role="Последний резерв"),
     ProviderSpec("cloudflare", "Cloudflare AI", ("Ассистент",),
                  ("openrouter",), 3600, role="Резерв"),
@@ -83,13 +81,12 @@ SPECS = (
 )
 SPEC_BY_KEY = {spec.key: spec for spec in SPECS}
 LABELS = {spec.key: spec.label for spec in SPECS}
-AI_PROVIDERS = {"gemini", "github_models", "groq", "openrouter", "cloudflare"}
+AI_PROVIDERS = {"gemini", "groq", "openrouter", "cloudflare"}
 
 
 def is_configured(provider: str) -> bool:
     values = {
         "gemini": config.GEMINI_API_KEY,
-        "github_models": config.GITHUB_MODELS_TOKEN,
         "groq": config.GROQ_API_KEY,
         "openrouter": config.OPENROUTER_API_KEY,
         "cloudflare": config.CF_API_TOKEN and config.CF_ACCOUNT_ID,

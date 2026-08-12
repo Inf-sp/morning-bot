@@ -310,9 +310,7 @@ async def send_home(
         await review_all(bot, cid, status=status)
         return
     msg = thoughts_ui.cleared_home() if cleared else thoughts_ui.home(opened)
-    rows = []
-    rows.append(_navigation_row())
-    kb = InlineKeyboardMarkup(rows)
+    kb = _home_keyboard(cid)
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
     else:
@@ -587,6 +585,14 @@ def _review_keyboard():
     ])
 
 
+def _home_keyboard(cid):
+    rows = []
+    if not settings.notif_on(cid, "checkin_day"):
+        rows.append([InlineKeyboardButton("🔔 Напоминать в 14:00", callback_data="thought_reminder_on")])
+    rows.append(_navigation_row())
+    return InlineKeyboardMarkup(rows)
+
+
 def _cached_review(cid):
     value = settings.get(cid, "_thoughts_review_cache", {})
     return value if isinstance(value, dict) else {}
@@ -816,6 +822,18 @@ async def _clear_review(bot, cid, q):
 
 async def handle_callback(bot, cid, q, data):
     cid = str(cid)
+    if data == "thought_reminder_on":
+        settings.set_(cid, "notif_checkin_day", True)
+        try:
+            await q.message.edit_reply_markup(reply_markup=_home_keyboard(cid))
+        except Exception:
+            pass
+        return True
+    if data == "thought_reminder_off":
+        settings.set_(cid, "notif_checkin_day", False)
+        cancel_capture(cid)
+        await _dismiss_message(bot, cid, q)
+        return True
     if data == "thought_capture":
         await _dismiss_message(bot, cid, q)
         await send_home(bot, cid, capture_source="reminder", explicit=True)
@@ -871,6 +889,7 @@ async def send_day_reminder(bot, cid):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🧠 Выгрузить мысли", callback_data="thought_capture")],
         [InlineKeyboardButton("😌 Всё спокойно", callback_data="thought_calm")],
+        [InlineKeyboardButton("🔕 Не спрашивать", callback_data="thought_reminder_off")],
     ])
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,

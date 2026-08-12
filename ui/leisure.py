@@ -359,10 +359,17 @@ def book_text(item):
     year = str(item.get("year", ""))
     head_meta = ", ".join(x for x in [en, year] if x)
     head = f"{author} • «{title}»" if author else f"«{title}»"
+    url = str(item.get("url") or "").strip()
 
     b = MessageBuilder()
     b.text_line("📚 ")
-    if not head_meta:
+    if url:
+        if author:
+            b.bold(f"{author} • ")
+        b.link(f"«{title}»", url)
+        if head_meta:
+            b.bold(f" ({head_meta})")
+    elif not head_meta:
         b.bold(head)
     else:
         # "(meta)" одновременно жирный (продолжение заголовка) и курсивный —
@@ -461,6 +468,86 @@ def artist_card(data):
     return b.build_stripped()
 
 
+def favorite_artist_added_card(artist, style_labels, data=None):
+    """Короткая честная карточка после ручного добавления артиста.
+
+    Для вручную введённого имени мы не угадываем жанр исполнителя. Вместо этого
+    показываем только выбранные пользователем стили, которые действительно будут
+    использоваться в следующих рекомендациях.
+    """
+    artist = str(artist or "Артист").strip() or "Артист"
+    data = data if isinstance(data, dict) else {}
+    b = MessageBuilder()
+    b.line("✅ Добавлен в «🎚️ Мои артисты»")
+    b.spacer()
+    b.text_line("🎸 ")
+    b.bold(artist)
+    description = clip(str(data.get("desc") or ""), limit=170)
+    if description:
+        b.spacer()
+        b.line(description)
+    labels = [str(label).strip() for label in style_labels or [] if str(label).strip()]
+    if labels:
+        b.spacer()
+        b.line(f"Учту в подборках: {' · '.join(labels[:3])}")
+    else:
+        b.spacer()
+        b.line("Учту в следующих подборках.")
+    return b.build_stripped()
+
+
+def favorite_artists_added_card(artists, style_labels):
+    """Одна компактная карточка, когда пользователь добавил несколько артистов."""
+    artists = [str(artist or "").strip() for artist in artists or [] if str(artist or "").strip()]
+    b = MessageBuilder()
+    b.line("✅ Добавлены в «🎚️ Мои артисты»")
+    for artist in artists[:8]:
+        b.newline()
+        b.text_line("🎸 ")
+        b.bold(artist)
+    labels = [str(label).strip() for label in style_labels or [] if str(label).strip()]
+    if labels:
+        b.spacer()
+        b.line(f"Учту в подборках: {' · '.join(labels[:3])}")
+    return b.build_stripped()
+
+
+def favorite_movie_added_card(title, tm=None):
+    """Подтверждение ручного добавления фильма с только проверенными метаданными."""
+    title = str(title or "Фильм").strip() or "Фильм"
+    tm = tm if isinstance(tm, dict) else {}
+    shown_title = str(tm.get("name") or title).strip() or title
+    year = str(tm.get("year") or "").strip()
+    genres = str(tm.get("genres") or "").strip()
+    kind = str(tm.get("kind") or "").strip()
+    type_label = "Сериал" if kind == "tv" else ("Фильм" if kind == "movie" else "")
+    b = MessageBuilder()
+    b.line("✅ Добавлен в «🎚️ Моё кино»")
+    b.spacer()
+    b.text_line("🎬 ")
+    b.bold(shown_title)
+    details = [part for part in (year, type_label, genres) if part]
+    if details:
+        b.text_line(" · " + " · ".join(details))
+    b.spacer()
+    b.line("Учту в следующих подборках.")
+    return b.build_stripped()
+
+
+def favorite_movies_added_card(titles):
+    """Подтверждение пакетного добавления без серии лишних запросов к TMDb."""
+    titles = [str(title or "").strip() for title in titles or [] if str(title or "").strip()]
+    b = MessageBuilder()
+    b.line("✅ Добавлены в «🎚️ Моё кино»")
+    for title in titles[:8]:
+        b.newline()
+        b.text_line("🎬 ")
+        b.bold(title)
+    b.spacer()
+    b.line("Учту в следующих подборках.")
+    return b.build_stripped()
+
+
 def weekly_books_screen(city, daily_book, items):
     """Ежедневная литературная витрина без рейтингов и служебных подписей."""
     city = str(city or "твоего города").strip()
@@ -479,13 +566,13 @@ def weekly_books_screen(city, daily_book, items):
     b.text_line(" → ")
     b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
 
-    premieres = _book_premiere_lines(items)
+    premieres = _book_premiere_items(items)
     b.spacer()
     b.bold("Главные премьеры:")
     if premieres:
         b.newline()
         for premiere in premieres:
-            b.line(premiere)
+            _write_book_premiere(b, premiere)
     else:
         b.text_line(" ")
         b.line("Пока не удалось подтвердить заметные новинки.")
@@ -509,21 +596,32 @@ def weekly_books_screen(city, daily_book, items):
     return b.build_stripped()
 
 
-def _book_premiere_lines(items) -> list[str]:
+def _book_premiere_items(items) -> list:
     entries = []
     for item in list(items or [])[:3]:
         title = str(_item_value(item, "title", "") or "").strip()
-        author = str(_item_value(item, "author", "") or "").strip()
-        vibe = str(_item_value(item, "vibe", "") or "").strip()
         if not title:
             continue
-        entry = f"• «{title}»"
-        if author:
-            entry += f" - {author}"
-        if vibe:
-            entry += f" ({vibe[:1].upper() + vibe[1:]})"
-        entries.append(entry)
+        entries.append(item)
     return entries
+
+
+def _write_book_premiere(builder: MessageBuilder, item) -> None:
+    title = str(_item_value(item, "title", "") or "").strip()
+    author = str(_item_value(item, "author", "") or "").strip()
+    vibe = str(_item_value(item, "vibe", "") or "").strip()
+    url = str(_item_value(item, "url", "") or "").strip()
+
+    builder.text_line("• ")
+    if url:
+        builder.link(f"«{title}»", url)
+    else:
+        builder.text_line(f"«{title}»")
+    if author:
+        builder.text_line(f" - {author}")
+    if vibe:
+        builder.text_line(f" ({vibe[:1].upper() + vibe[1:]})")
+    builder.newline()
 
 
 def music_week_screen(city, daily_music, concerts):

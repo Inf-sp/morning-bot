@@ -31,7 +31,6 @@ FREE_CHAT_SCENARIO = "assistant/free_chat"
 FREE_CHAT_TIER = "smart"
 _FREE_CHAT_PROVIDER_TIMEOUTS = {
     "groq_standard": 3.0,
-    "github_models": 3.0,
     "cf": 3.0,
     "openrouter": 4.0,
 }
@@ -184,7 +183,6 @@ def _is_temporary_exception(exc):
 
 _TIMEOUT_CAPS = {
     "gemini": 6.0,
-    "github_models": 5.0,
     "groq": 5.0,
     "cf": 4.0,
 }
@@ -491,8 +489,6 @@ def _provider_model_name(provider: str) -> str:
         return config.GROQ_COMPLEX_MODEL
     if provider == "gemini":
         return config.GEMINI_MODEL
-    if provider == "github_models":
-        return config.GITHUB_MODELS_MODEL
     if provider == "groq":
         return config.GROQ_STANDARD_MODEL
     if provider == "cf":
@@ -926,46 +922,6 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
     return data["candidates"][0]["content"]["parts"][0]["text"]
 
 
-def _gen_github_models(prompt, max_tokens, temperature,
-                       response_mode: ResponseMode = "plain_text"):
-    """GitHub Models Chat Completions как универсальный резервный провайдер."""
-    if not config.GITHUB_MODELS_TOKEN:
-        raise LLMProviderError(
-            "github_models", "no GitHub Models token", error_type="credentials",
-        )
-    github_temperature = 0.3 if temperature is None else float(temperature)
-    payload = {
-        "model": config.GITHUB_MODELS_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": int(max_tokens or 1200),
-        "temperature": min(max(github_temperature, 0.0), 1.0),
-    }
-    if response_mode == "json":
-        payload["response_format"] = {"type": "json_object"}
-    r = _post(
-        "https://models.github.ai/inference/chat/completions",
-        {
-            "Authorization": f"Bearer {config.GITHUB_MODELS_TOKEN}",
-            "Accept": "application/vnd.github+json",
-            "Content-Type": "application/json",
-            "X-GitHub-Api-Version": "2026-03-10",
-        },
-        payload,
-        30,
-        "github_models",
-        timeout_cap=5,
-    )
-    data = r.json()
-    choices = data.get("choices") or []
-    if choices:
-        content = ((choices[0].get("message") or {}).get("content") or "").strip()
-        if content:
-            return content
-    raise LLMProviderError(
-        "github_models", "empty GitHub Models response", error_type="empty_response",
-    )
-
-
 def _gemini_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
     """Один приватный vision-запрос в Gemini для распознавания изображения.
 
@@ -1248,8 +1204,8 @@ def _reserve_gemini_for_action() -> bool:
 
 # Три понятных маршрута: простой, обычный и сложный. OpenRouter вызывается
 # только последним резервом через общую политику fallback.
-SIMPLE_ORDER = (GROQ_SIMPLE, "cf", "github_models", "openrouter")
-STANDARD_ORDER = (GROQ_STANDARD, "github_models", "cf", "openrouter")
+SIMPLE_ORDER = (GROQ_SIMPLE, "cf", "openrouter")
+STANDARD_ORDER = (GROQ_STANDARD, "cf", "openrouter")
 COMPLEX_ORDER = ("gemini", GROQ_COMPLEX, "openrouter")
 UTILITY_ORDER = SIMPLE_ORDER
 DEFAULT_ORDER = STANDARD_ORDER
@@ -1319,7 +1275,7 @@ def _resolve(tier, order, route=None, module=""):
             n for n in order
             if n == "openrouter" or n in PROVIDER_ORDER or n in DEFAULT_ORDER
             or n in {GROQ_SIMPLE, GROQ_STANDARD, GROQ_COMPLEX,
-                     "github_models", "groq", "gemini", "cf"}
+                     "groq", "gemini", "cf"}
         )
     if module and module in MODULE_POLICY:
         return MODULE_POLICY[module]
@@ -1423,9 +1379,6 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             model=config.GROQ_COMPLEX_MODEL, provider=GROQ_COMPLEX,
         ),
         "groq": lambda: _gen_groq(prompt, max_tokens, temperature, response_mode),
-        "github_models": lambda: _gen_github_models(
-            prompt, max_tokens, temperature, response_mode,
-        ),
         "cf": lambda: _gen_cf(prompt, max_tokens),
     }
     errs = []
@@ -1768,30 +1721,6 @@ def _chat(provider, history, system, timeout_cap=None):
             {}, {"system_instruction": {"parts": [{"text": system}]}, "contents": contents,
                  "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, provider, timeout_cap=bounded_cap(6))
         return r.json()["candidates"][0]["content"]["parts"][0]["text"]
-    if provider == "github_models":
-        if not config.GITHUB_MODELS_TOKEN:
-            raise LLMProviderError(
-                "github_models", "no GitHub Models token", error_type="credentials",
-            )
-        r = _post(
-            "https://models.github.ai/inference/chat/completions",
-            {
-                "Authorization": f"Bearer {config.GITHUB_MODELS_TOKEN}",
-                "Accept": "application/vnd.github+json",
-                "Content-Type": "application/json",
-                "X-GitHub-Api-Version": "2026-03-10",
-            },
-            {
-                "model": config.GITHUB_MODELS_MODEL,
-                "messages": [{"role": "system", "content": system}] + history,
-                "max_tokens": 700,
-                "temperature": 0.8,
-            },
-            30,
-            "github_models",
-            timeout_cap=bounded_cap(5),
-        )
-        return r.json()["choices"][0]["message"]["content"]
     if _monitor_name(provider) == "groq":
         if not config.GROQ_API_KEY:
             raise Exception("no groq")
@@ -1864,20 +1793,6 @@ def _chat_stream(provider, history, system, emit, timeout_cap=None):
             {**payload, "model": _provider_model_name(provider)},
             bounded_cap(5), provider, emit,
             usage_service=api_usage.groq_model_service(_provider_model_name(provider)),
-        )
-    if provider == "github_models":
-        if not config.GITHUB_MODELS_TOKEN:
-            raise LLMProviderError(provider, "no GitHub Models token", error_type="credentials")
-        return _stream_openai_chat(
-            "https://models.github.ai/inference/chat/completions",
-            {
-                "Authorization": f"Bearer {config.GITHUB_MODELS_TOKEN}",
-                "Accept": "text/event-stream",
-                "Content-Type": "application/json",
-                "X-GitHub-Api-Version": "2026-03-10",
-            },
-            {**payload, "model": config.GITHUB_MODELS_MODEL},
-            bounded_cap(5), provider, emit,
         )
     if provider == "openrouter":
         if not config.OPENROUTER_API_KEY:

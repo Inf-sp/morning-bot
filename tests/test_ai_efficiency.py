@@ -13,10 +13,10 @@ import tracking
 
 def test_cache_key_does_not_change_when_provider_order_changes():
     first = ai._cache_key(
-        ("gemini", "github_models"), "same prompt", 300, 0.2, "travel", "json",
+        ("gemini", "cf"), "same prompt", 300, 0.2, "travel", "json",
     )
     fallback = ai._cache_key(
-        ("github_models", "groq"), "same prompt", 300, 0.2, "travel", "json",
+        ("cf", "groq"), "same prompt", 300, 0.2, "travel", "json",
     )
 
     assert first == fallback
@@ -24,10 +24,10 @@ def test_cache_key_does_not_change_when_provider_order_changes():
 
 def test_cache_key_ignores_action_id_and_prompt_whitespace():
     compact = ai._cache_key(
-        ("gemini", "github_models"), "Выбери страну", 300, 0.2, "travel", "json",
+        ("gemini", "cf"), "Выбери страну", 300, 0.2, "travel", "json",
     )
     formatted = ai._cache_key(
-        ("github_models", "groq"), "  Выбери\n\n страну  ", 300, 0.2, "travel", "json",
+        ("cf", "groq"), "  Выбери\n\n страну  ", 300, 0.2, "travel", "json",
     )
 
     first = tracking.start_action("42", "Поездка", "first")
@@ -62,7 +62,7 @@ def test_structured_cache_key_uses_scenario_not_prompt_text():
         cache_context=context,
     )
     requested = ai._cache_key(
-        ("github_models",), "Расскажи про Исландию", 300, 0.2, "travel", "json",
+        ("cf",), "Расскажи про Исландию", 300, 0.2, "travel", "json",
         cache_context=dict(reversed(list(context.items()))),
     )
     other_country = ai._cache_key(
@@ -94,14 +94,10 @@ def test_invalid_json_from_primary_uses_the_next_provider(monkeypatch):
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
     monkeypatch.setattr(ai, "_gen_groq", lambda *_args, **_kwargs: '{"items": [}')
-    monkeypatch.setattr(
-        ai,
-        "_gen_github_models",
-        lambda *_args, **_kwargs: '{"items": [{"name": "готово"}]}',
-    )
+    monkeypatch.setattr(ai, "_gen_cf", lambda *_args, **_kwargs: '{"items": [{"name": "готово"}]}')
 
     result = ai.llm_json(
-        "Верни JSON", order=(ai.GROQ_STANDARD, "github_models"), module="test_json_fallback",
+        "Верни JSON", order=(ai.GROQ_STANDARD, "cf"), module="test_json_fallback",
     )
 
     assert result == {"items": [{"name": "готово"}]}

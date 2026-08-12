@@ -27,6 +27,8 @@ import trainer
 import learning
 import settings
 import leisure_movies
+import leisure_books
+import leisure_music
 import leisure_collection
 import leisure_concerts
 import travel
@@ -54,7 +56,9 @@ _HOME_WARM_SCHEDULE = (
     ("cooking", "08:10"),
     ("travel", "08:15"),
     ("cinema", "08:20"),
-    ("learning", "08:25"),
+    ("books", "08:25"),
+    ("music", "08:30"),
+    ("learning", "08:35"),
 )
 
 
@@ -381,8 +385,6 @@ async def job_morning_brief(context: ContextTypes.DEFAULT_TYPE):
 
 async def job_weather_warn(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "weather_warn"):
-            continue
         try:
             await settings.send_scheduled_notification(context.bot, cid, "weather_warn")
         except Exception:
@@ -392,8 +394,6 @@ async def job_weather_warn(context: ContextTypes.DEFAULT_TYPE):
 async def job_warm_weather_cache(context: ContextTypes.DEFAULT_TYPE):
     seen = set()
     for cid in access.get_allowed_cids():
-        if not (settings.notif_on(cid, "morning_brief") or settings.notif_on(cid, "weather_warn")):
-            continue
         try:
             s = store.get_settings(cid)
             key = (round(s["lat"], 2), round(s["lon"], 2))
@@ -413,10 +413,6 @@ async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
     """
     scheduled_section = str(getattr(getattr(context, "job", None), "data", "") or "")
     for cid in access.get_allowed_cids():
-        # Прогрев нужен только тем, кому утром действительно отправляется
-        # сводка. Разделы по-прежнему собираются при ручном открытии.
-        if not settings.notif_on(cid, "morning_brief"):
-            continue
         if tracking.has_active_actions():
             logging.info("home cache warm skipped: user action active")
             return
@@ -427,6 +423,8 @@ async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
             ("learning", lambda: asyncio.to_thread(learning.warm_home_cache, cid)),
             ("travel", lambda: travel.warm_home_cache(cid)),
             ("cinema", lambda: leisure_movies.warm_movie_home_cache(cid)),
+            ("books", lambda: leisure_books.warm_books_home_cache(cid)),
+            ("music", lambda: leisure_music.warm_music_home_cache(cid)),
         )
         if scheduled_section:
             steps = tuple(step for step in steps if step[0] == scheduled_section)

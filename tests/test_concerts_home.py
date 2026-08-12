@@ -178,6 +178,39 @@ def test_nearest_concerts_uses_the_full_classic_delivery(monkeypatch):
     assert "Romy" in rich_bot.classic[0]["text"]
     assert rich_bot.classic[0]["disable_web_page_preview"] is True
 
+
+def test_weekly_events_add_large_confirmed_music_events(monkeypatch):
+    from datetime import datetime, timedelta
+
+    first_day = (datetime.now(leisure_concerts.config.TZ).date() + timedelta(days=1)).isoformat()
+    second_day = (datetime.now(leisure_concerts.config.TZ).date() + timedelta(days=2)).isoformat()
+
+    personal = {
+        "_artist": "Romy",
+        "name": "Romy",
+        "dates": {"start": {"localDate": first_day}},
+        "_embedded": {"venues": [{"name": "Paradiso", "city": {"name": "Amsterdam"}}]},
+    }
+    festival = {
+        "name": "Lowlands 2026",
+        "dates": {"start": {"localDate": second_day}},
+        "_embedded": {"venues": [{"name": "Biddinghuizen", "city": {"name": "Biddinghuizen"}}]},
+    }
+
+    monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {"cc": "NL", "country": "Нидерланды"})
+    monkeypatch.setattr(leisure_concerts, "_ensure_artists", lambda _cid: ["Romy"])
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda _cid, _cc: [personal])
+    monkeypatch.setattr(leisure_concerts, "get_popular_music_events", lambda *_args: _async([festival]))
+    monkeypatch.setattr(leisure_concerts.config, "TICKETMASTER_API_KEY", "test-key")
+    msg = asyncio.run(leisure_concerts._build_weekly_events_msg("42"))
+
+    assert "Romy" in msg.text
+    assert "Lowlands 2026" in msg.text
+
+
+async def _async(value):
+    return value
+
     class ClassicBot:
         def __init__(self):
             self.classic = []

@@ -254,14 +254,14 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data == "m_movie":
         await _inline_status(
-            lambda _status: leisure_movies.send_movie_home(bot, cid, q),
+            lambda status: leisure_movies.send_movie_home(bot, cid, q, status=status),
         )
         return
     if data == "m_books":
-        await _inline_status(lambda _status: leisure_books.send_books_home(bot, cid, q))
+        await _inline_status(lambda status: leisure_books.send_books_home(bot, cid, q, status=status))
         return
     if data == "m_music":
-        await _inline_status(lambda _status: leisure_music.send_music_home(bot, cid, q))
+        await _inline_status(lambda status: leisure_music.send_music_home(bot, cid, q, status=status))
         return
     if data == "m_leisure":
         # Старые карточки не ведут в удалённый агрегатор Досуга.
@@ -362,9 +362,9 @@ async def handle(update, context, remove_reply_keyboard):
                 await travel.send_home(bot, cid, q)
             elif act == "watch":
                 await _inline_status(
-                    lambda _s: leisure_movies.send_movie_home(bot, cid, q))
+                    lambda status: leisure_movies.send_movie_home(bot, cid, q, status=status))
             elif act == "read":
-                await _inline_status(lambda _s: leisure_books.send_books_home(bot, cid, q))
+                await _inline_status(lambda status: leisure_books.send_books_home(bot, cid, q, status=status))
             elif act == "watchlist":
                 await cleanup.open_collection(bot, cid, "cinema_favorites", back="m_movie")
             elif act == "watchclean":
@@ -384,7 +384,7 @@ async def handle(update, context, remove_reply_keyboard):
                          "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
                 await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, act.split("_")[1]))
             elif act == "listen":
-                await _inline_status(lambda _s: leisure_music.send_music_home(bot, cid, q))
+                await _inline_status(lambda status: leisure_music.send_music_home(bot, cid, q, status=status))
             elif act == "listen_no":
                 await _inline_status(
                     lambda _s: leisure_music.listen_dislike(bot, cid),
@@ -458,7 +458,7 @@ async def handle(update, context, remove_reply_keyboard):
         await leisure_movies.send_movie_prefs(bot, cid, q)
         return
     if data == "book_reco":
-        await _inline_status(lambda _s: leisure_books.send_books_reco(bot, cid))
+        await _inline_status(lambda status: leisure_books.send_books_reco(bot, cid, status=status))
         return
     if data == "book_genre_menu":
         await _ack(q)
@@ -525,7 +525,7 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data == "movie_reco":
         await _inline_status(
-            lambda _s: leisure_movies.send_recos(bot, cid, "movie"),
+            lambda status: leisure_movies.send_recos(bot, cid, "movie", status=status),
             preserve_message=True)
         return
     if data == "movie_now_playing":

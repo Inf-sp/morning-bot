@@ -33,8 +33,6 @@ GROQ_MODEL_DAILY_LIMIT = _env_int("GROQ_MODEL_DAILY_LIMIT", 1000)
 GROQ_SIMPLE_MODEL = os.environ.get("GROQ_SIMPLE_MODEL", "openai/gpt-oss-20b").strip() or "openai/gpt-oss-20b"
 GROQ_STANDARD_MODEL = os.environ.get("GROQ_STANDARD_MODEL", "qwen/qwen3.6-27b").strip() or "qwen/qwen3.6-27b"
 GROQ_COMPLEX_MODEL = os.environ.get("GROQ_COMPLEX_MODEL", "openai/gpt-oss-120b").strip() or "openai/gpt-oss-120b"
-GITHUB_MODELS_TOKEN = os.environ.get("GITHUB_MODELS_TOKEN", "")
-GITHUB_MODELS_MODEL = os.environ.get("GITHUB_MODELS_MODEL", "openai/gpt-4.1-mini")
 GOOGLE_BOOKS_API_KEY = os.environ.get("GOOGLE_BOOKS_API_KEY", "")
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "").strip()
 LANGUAGETOOL_API_URL = os.environ.get(
@@ -103,9 +101,6 @@ API_QUOTAS = {
     "groq": [
         {"mode": "local", "unit": "requests", "period": "day"},
     ],
-    "github_models": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
     "languagetool": [
         {"mode": "local", "unit": "requests", "period": "day"},
         {"mode": "local", "unit": "characters", "period": "day"},
@@ -154,6 +149,7 @@ SAVED_COUNTRIES_KEY = "saved_countries.json"
 LEGACY_COUNTRIES_KEY = "mycountries.json"
 FAVORITE_BOOKS_KEY = "favorite_books.json"
 BOOK_RECO_CACHE_KEY = "book_reco_cache.json"  # {cid: {date, item}} — текущая карточка книги на день
+MOVIE_RECO_CACHE_KEY = "movie_reco_cache.json"  # {cid: {date, signature, item, tm}} — персональная карточка кино на день
 BOOK_WEEKLY_CACHE_KEY = "book_weekly_cache.json"  # {week, date, items} — заметные новинки книг недели
 BOOK_DAILY_CACHE_KEY = "book_daily_cache.json"  # {YYYY-MM-DD: {birthday}} — один проверенный литературный именинник на день
 LOCAL_CINEMA_CACHE_KEY = "local_cinema_cache.json"  # {cid: {city, ts, movies}} — подтверждённая городская афиша
@@ -186,6 +182,7 @@ RECIPE_HISTORY_KEY = "recipe_history.json"    # {cid: [последние 100 н
 CUISINE_WEIGHTS_KEY = "cuisine_weights.json"  # {cid: {"italian": 3, "japanese": -1, ...}} — обучение по действиям
 QUOTE_AUTHORS_KEY = "quote_authors_seen.json"
 CONCERTS_CACHE_KEY = "concerts_cache.json"  # {cid: {"ts": epoch, "cc": "NL", "events": [...]}}, прогревается перед пятничной афишей
+POPULAR_MUSIC_EVENTS_CACHE_KEY = "popular_music_events_cache.json"  # {country + week: подтверждённые крупные события}
 SEEN_CONCERTS_KEY = "seen_concerts.json"  # {cid: [concert_id, ...]} — для уведомления о новых концертах любимых артистов
 ARTIST_EXTERNAL_EVENTS_KEY = "artist_external_events.json"  # глобальный кэш внешнего поиска концертов (Tavily+Firecrawl) по нормализованному имени артиста, TTL 7 дней: {artist_key: {"ts": epoch, "events": [...]}}
 COST_LOG_KEY = "cost_log.json"     # лог LLM-вызовов для сводки расходов

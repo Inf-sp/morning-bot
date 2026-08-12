@@ -43,3 +43,30 @@ def test_ticketmaster_429_stops_batch_without_retry(monkeypatch):
     assert result == []
     assert network_calls == ["request"]
     assert [row["status_code"] for row in recorded] == [429]
+
+
+def test_ticketmaster_batch_spaces_artist_requests(monkeypatch):
+    fetched = []
+    pauses = []
+    clock = {"now": 0.0}
+
+    def fetch(artist, *_args):
+        fetched.append(artist)
+        return []
+
+    async def pause(seconds):
+        pauses.append(seconds)
+        clock["now"] += seconds
+
+    monkeypatch.setattr(leisure_concerts, "_ticketmaster_events_for_artist", fetch)
+    monkeypatch.setattr(leisure_concerts, "_ticketmaster_cooldown_remaining", lambda: 0)
+    monkeypatch.setattr(leisure_concerts.asyncio, "sleep", pause)
+    monkeypatch.setattr(leisure_concerts.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(leisure_concerts, "_ticketmaster_next_request_at", 0.0)
+
+    asyncio.run(leisure_concerts._ticketmaster_events_many(
+        ["Artist A", "Artist B", "Artist C"], "NL",
+    ))
+
+    assert fetched == ["Artist A", "Artist B", "Artist C"]
+    assert pauses == [0.5, 0.5]

@@ -501,6 +501,19 @@ def test_book_card_has_complete_description_and_reader_rating():
     assert "Почему стоит читать:" in message.text
 
 
+def test_book_card_title_links_to_google_books():
+    message = leisure_books._book_text({
+        "title": "Night Night Fawn",
+        "url": "https://books.google.com/books?id=test",
+    })
+
+    assert any(
+        entity.type == MessageEntity.TEXT_LINK
+        and entity.url == "https://books.google.com/books?id=test"
+        for entity in message.entities
+    )
+
+
 def test_category_week_screens_are_compact_and_show_only_content():
     movie = leisure_movies.leisure_ui.movie_now_playing_screen("Алкмар", [{
         "title": "Фильм", "genres": ["drama", "thriller"],
@@ -849,7 +862,21 @@ def test_weekly_books_never_show_classics_when_catalogue_has_no_fresh_hits(monke
 def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
     message = leisure_books.leisure_ui.weekly_books_screen("Алкмар", {}, [{
         "title": "Недавний бестселлер", "author": "Автор", "vibe": "триллер",
+        "url": "https://books.google.com/books?id=test",
     }])
 
     assert "Главные премьеры:\n• «Недавний бестселлер» - Автор (Триллер)" in message.text
     assert "Популярное чтение" not in message.text
+    assert any(
+        entity.type == MessageEntity.TEXT_LINK
+        and entity.url == "https://books.google.com/books?id=test"
+        for entity in message.entities
+    )
+
+
+def test_book_showcase_falls_back_to_google_books_search_link():
+    item = leisure_books._books_with_premiere_vibes([{
+        "title": "Недавний бестселлер", "author": "Автор",
+    }])[0]
+
+    assert item["url"] == "https://books.google.com/books?q=%D0%9D%D0%B5%D0%B4%D0%B0%D0%B2%D0%BD%D0%B8%D0%B9+%D0%B1%D0%B5%D1%81%D1%82%D1%81%D0%B5%D0%BB%D0%BB%D0%B5%D1%80+%D0%90%D0%B2%D1%82%D0%BE%D1%80"

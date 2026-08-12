@@ -124,7 +124,7 @@ def test_disputed_dutch_error_uses_standard_learning_fallback(monkeypatch):
 
     assert grade.correct is False
     assert captured["kwargs"]["order"] == (
-        "groq_standard", "github_models", "cf", "openrouter",
+        "groq_standard", "cf", "openrouter",
     )
     assert report["explanation"] == "После ik нужна форма ga, а не gaat."
 

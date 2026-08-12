@@ -16,7 +16,7 @@ def test_ai_traffic_groups_attempts_by_actor_and_source(monkeypatch):
     })())
 
     ai._record_ai_attempt("groq_standard", "qwen3.6-27b", "learning", ok=True, latency_ms=320)
-    ai._record_ai_attempt("github_models", "gpt-4o-mini", "learning", ok=False,
+    ai._record_ai_attempt("cf", "llama", "learning", ok=False,
                           latency_ms=80, failure="HTTP 429")
 
     summary = ai.ai_traffic_summary()

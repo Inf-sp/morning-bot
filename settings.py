@@ -12,12 +12,11 @@ _log = logging.getLogger(__name__)
 
 SETTINGS_KEY = "user_settings.json"
 NOTIF_TYPES = [
-    ("morning_brief",   "Утро"),
-    ("weekend_events",  "Куда сходить"),
-    ("daily_words",     "Слова и фразы дня"),
-    ("checkin_day",     "Мысли днём"),
-    ("evening_weather", "Прогноз на завтра"),
-    ("weather_warn",    "Погодное предупреждение"),
+    ("morning_brief",   "Мой день"),
+    ("weekend_events",  "Ближайшие события"),
+    ("daily_words",     "Обучение языку"),
+    ("checkin_day",     "Запись мыслей"),
+    ("evening_weather", "Погода на завтра"),
 ]
 
 CUISINE_OPTIONS = [
@@ -103,6 +102,10 @@ _LEGACY_NOTIF_KINDS = {
 }
 
 def notif_on(cid, kind):
+    # Предупреждения о потенциально опасной погоде обязательны: это не
+    # маркетинговая рассылка, поэтому переключателя в настройках нет.
+    if kind == "weather_warn":
+        return True
     value = get(cid, f"notif_{kind}", None)
     if value is not None:
         return bool(value)
@@ -112,8 +115,6 @@ def notif_on(cid, kind):
             return bool(legacy_value)
     if kind == "daily_words":
         return bool(get(cid, "notif_grammar", False))
-    if kind == "checkin_day":
-        return True
     return False
 
 def study_lang(cid):
@@ -159,7 +160,6 @@ def _notif_label(kind: str, label: str) -> str:
         return f"{label} (по пятницам в 10:00)"
     times = {
         "morning_brief": "08:30",
-        "weather_warn": "08:45",
         "daily_words": "11:00",
         "checkin_day": "14:00",
         "evening_weather": "20:30",
@@ -509,12 +509,11 @@ class NotificationOption:
 
 
 _ADMIN_NOTIFICATION_META = {
-    "morning_brief":   ("08:30", "☀️ Утро"),
-    "weekend_events":  ("пт 10:00", "🎧 События"),
-    "daily_words":     ("11:00", "🧠 Обучение"),
-    "checkin_day":     ("14:00", "😮‍💨 Мысли"),
-    "evening_weather": ("20:30", "🌦️ Погода"),
-    "weather_warn":    ("08:45, если есть повод", "⚠️ Погодные предупреждения"),
+    "morning_brief":   ("08:30", "Мой день"),
+    "weekend_events":  ("пт 10:00", "Ближайшие события"),
+    "daily_words":     ("11:00", "Обучение языку"),
+    "checkin_day":     ("14:00", "Запись мыслей"),
+    "evening_weather": ("20:30", "Погода на завтра"),
 }
 
 
@@ -567,8 +566,6 @@ async def send_notif(bot, cid, q=None):
         on = notif_on(cid, opt.key)
         mark = "✅" if on else "□"
         rows.append([InlineKeyboardButton(f"{mark} {opt.button_label}", callback_data=f"set_notiftgl_{opt.key}")])
-    if any(notif_on(cid, kind) for kind, _ in NOTIF_TYPES):
-        rows.append([InlineKeyboardButton("🔕 Отключить все", callback_data="set_notif_off_all")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     msg = settings_ui.notifications()
     text = msg.text

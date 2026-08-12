@@ -27,4 +27,5 @@ def test_concert_refresh_searches_externally_only_for_a_small_unresolved_subset(
     asyncio.run(leisure_concerts._fetch_concerts(artists, "NL", "Нидерланды"))
 
     assert ticketmaster_calls[0][1]["size"] == 200
+    assert ticketmaster_calls[0][1]["limit"] == 8
     assert searched == [f"Artist {index}" for index in range(5)]

@@ -28,7 +28,7 @@ _blank = provider_runtime.blank_state
 _load = provider_runtime.load_state
 _quota_from_headers = provider_runtime.quota_from_headers
 
-_AI_SERVICES = ("groq", "gemini", "github_models", "cloudflare", "openrouter")
+_AI_SERVICES = ("groq", "gemini", "cloudflare", "openrouter")
 _DATA_SERVICES = (
     "openweather", "firecrawl", "tavily", "tmdb", "google_books", "youtube", "languagetool",
     "spoonacular", "azure_speech", "ticketmaster", "zeroentropy", "pexels", "unsplash",
@@ -50,7 +50,6 @@ _DATA_CATEGORIES = {
 }
 _AI_ROLES = {
     "gemini": "Сложные задачи",
-    "github_models": "Резерв",
     "cloudflare": "Резерв",
     "openrouter": "Последний резерв",
 }
@@ -110,8 +109,6 @@ def _usage_detail(service: str) -> str:
         return f"{_number(model_usage['used'])} сегодня"
     if service.startswith("groq_model:"):
         return _quota_text(*_confirmed_quota(service, provider_runtime.get_state("groq")))
-    if service == "github_models":
-        return "лимит по модели"
     if service == "cloudflare":
         remaining, total = _confirmed_quota(service, provider_runtime.get_state(service))
         return f"{_number(remaining)}/{_number(total)} осталось"
@@ -164,7 +161,7 @@ def format_row(service: str, state: dict | None = None) -> str:
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
     if service == "groq":
         return _format_groq_row(config.GROQ_SIMPLE_MODEL, "Основной", state)
-    if service in ("gemini", "github_models", "cloudflare", "openrouter"):
+    if service in ("gemini", "cloudflare", "openrouter"):
         return _format_ai_row(service, state)
     if service == "google_books":
         usage = api_usage.google_books_requests()
@@ -219,8 +216,6 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
     quota_remaining, quota_total = _confirmed_quota(service, state)
     if service == "gemini":
         detail = _usage_detail(service)
-    elif service == "github_models":
-        detail = "лимит по модели"
     elif service == "cloudflare":
         remaining, total = api_usage.cloudflare_neuron_usage()["remaining"], api_usage.cloudflare_neuron_usage()["total"]
         detail = _quota_text(remaining, total)
@@ -240,7 +235,7 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
 def rows() -> list[str]:
     current = _load().get("services") or {}
     out = ["AI"]
-    for service in ("groq", "gemini", "github_models", "cloudflare", "openrouter"):
+    for service in ("groq", "gemini", "cloudflare", "openrouter"):
         state = current.get(service) or provider_runtime.get_state(service)
         if service == "groq":
             out.extend(_format_groq_row(model, role, state) for _, model, role in _GROQ_MODELS)
@@ -270,7 +265,6 @@ def _probe_request(service: str):
     common = {"timeout": 15}
     probes = {
         "gemini": ("GET", "https://generativelanguage.googleapis.com/v1beta/models", {"params": {"key": config.GEMINI_API_KEY, "pageSize": 1}}),
-        "github_models": ("GET", "https://models.github.ai/catalog/models", {"headers": {"Authorization": f"Bearer {config.GITHUB_MODELS_TOKEN}"}}),
         "groq": ("GET", "https://api.groq.com/openai/v1/models", {"headers": {"Authorization": f"Bearer {config.GROQ_API_KEY}"}}),
         "openrouter": ("GET", "https://openrouter.ai/api/v1/key", {"headers": {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}"}}),
         "cloudflare": ("GET", f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/models/search", {"headers": {"Authorization": f"Bearer {config.CF_API_TOKEN}"}, "params": {"per_page": 1}}),

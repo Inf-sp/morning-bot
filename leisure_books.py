@@ -6,6 +6,7 @@ import random
 import threading
 import time
 from datetime import date, datetime, timedelta
+from urllib.parse import quote_plus
 
 import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -199,27 +200,14 @@ def books_home_keyboard():
     ])
 
 
-async def send_books_home(bot, cid, q=None):
-    try:
-        items = await get_weekly_new_books()
-    except Exception as error:
-        _log.warning("books home premieres failed cid=%s: %r", cid, error)
-        items = [dict(item) for item in _WEEKLY_POPULAR_FALLBACKS]
-    try:
-        daily_book = await _daily_book_content()
-    except Exception as error:
-        _log.warning("books home daily content failed cid=%s: %r", cid, error)
-        now = datetime.now(config.TZ)
-        daily_book = {
-            "rebus": _daily_book_rebus(now.date()),
-        }
-    msg = leisure_ui.weekly_books_screen(
-        _book_city(cid), daily_book, _books_with_premiere_vibes(items),
-    )
-    await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities,
-        reply_markup=books_home_keyboard(),
-    )
+async def send_books_home(bot, cid, q=None, status=None):
+    """Открывает дневную персональную книгу вместо общей витрины."""
+    await send_books_reco(bot, cid, status=status)
+
+
+async def warm_books_home_cache(cid):
+    """Готовит книгу дня без отправки сообщения пользователю."""
+    return bool(await get_current_book(cid))
 
 
 def _daily_book_rebus(day):
@@ -328,9 +316,38 @@ def _premiere_vibe(item):
     return sentence[:110].rstrip(" ,;:") or "новая заметная книга"
 
 
+def _book_showcase_url(item) -> str:
+    """Return a stable Google Books destination for a weekly showcase item."""
+    item = item or {}
+    for key in ("info_link", "preview_link", "url"):
+        url = str(item.get(key) or "").strip()
+        if url.startswith(("https://", "http://")):
+            return url
+
+    query = " ".join(
+        str(item.get(key) or "").strip()
+        for key in ("title", "author")
+        if str(item.get(key) or "").strip()
+    )
+    return f"https://books.google.com/books?q={quote_plus(query)}" if query else ""
+
+
+def _with_book_url(item):
+    result = dict(item or {})
+    result["url"] = _book_showcase_url(result)
+    return result
+
+
 def _books_with_premiere_vibes(items):
-    return [{**dict(item), "vibe": _premiere_vibe(item)}
-            for item in (items or []) if isinstance(item, dict)]
+    return [
+        {
+            **dict(item),
+            "vibe": _premiere_vibe(item),
+            "url": _book_showcase_url(item),
+        }
+        for item in (items or [])
+        if isinstance(item, dict)
+    ]
 
 
 async def _daily_book_content():
@@ -531,7 +548,7 @@ async def toggle_book_preference(bot, cid, data, q=None):
             settings.set_(cid, "book_min_rating", "" if current == value else value)
     await send_book_preferences(bot, cid, q)
 
-async def _send_book_card(bot, cid, it, i, *, enrich=True):
+async def _send_book_card(bot, cid, it, i, *, enrich=True, status=None):
     if enrich:
         try:
             remaining = tracking.remaining_action_seconds()
@@ -544,8 +561,12 @@ async def _send_book_card(bot, cid, it, i, *, enrich=True):
             it = dict(it or {})
     else:
         it = dict(it or {})
+    it = _with_book_url(it)
     msg = _book_text(it)
     kb = _book_kb(i)
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+        return it
     cover = it.get("cover_url")
     if not cover:
         try:
@@ -753,12 +774,12 @@ async def get_current_book(cid):
     return it
 
 
-async def send_books_reco(bot, cid):
+async def send_books_reco(bot, cid, status=None):
     it = await get_current_book(cid)
     store.last_recos[str(cid)] = {"kind": "book", "items": [it.get("title", "")]}
     store.last_source[str(cid)] = "Книги"
     store.last_answer[str(cid)] = it.get("title", "")
-    prepared = await _send_book_card(bot, cid, it, 0, enrich=False)
+    prepared = await _send_book_card(bot, cid, it, 0, enrich=False, status=status)
     _cache_book(cid, prepared)
 
 

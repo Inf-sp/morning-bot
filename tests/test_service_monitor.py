@@ -194,9 +194,9 @@ def test_background_probe_does_not_select_a_fallback(monkeypatch):
 def test_monitor_fallback_is_not_used_by_request_router(monkeypatch):
     _memory_store(monkeypatch)
     provider_runtime.record_result("gemini", False, error="timeout")
-    provider_runtime.record_result("github_models", True)
+    provider_runtime.record_result("groq", True)
 
-    assert provider_runtime.activate_fallback("gemini", "github_models", reason="monitor")
+    assert provider_runtime.activate_fallback("gemini", "groq", reason="monitor")
     assert provider_runtime.selected_provider("gemini") == "gemini"
 
 

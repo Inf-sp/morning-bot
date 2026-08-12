@@ -56,7 +56,7 @@ class DictionaryAnalysisUnavailable(RuntimeError):
 # должен заставлять пользователя повторять тот же ввод.
 _DICT_ANALYSIS_ORDER = (
     ai.GROQ_STANDARD, "gemini", ai.GROQ_SIMPLE,
-    "github_models", "cf", "openrouter",
+    "cf", "openrouter",
 )
 
 
@@ -563,7 +563,7 @@ async def _request_verb_analysis(word, fixed_preposition=""):
     prompt = _verb_analysis_prompt(word, fixed_preposition)
     return await asyncio.wait_for(
         ai.allm_json(
-            prompt, 700, order=("groq_standard", "github_models", "cf", "openrouter"),
+            prompt, 700, order=("groq_standard", "cf", "openrouter"),
             module="learning_dict_add",
             fallback_allowed=True, privacy_level="public",
         ),
