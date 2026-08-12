@@ -129,23 +129,25 @@ def _origin_module(exc) -> str:
 async def safe_error(bot, cid, exc, *, skill=None, back="m_menu"):
     """Полную ошибку - в логи, пользователю - нейтральный текст. Никогда не показываем str(exc)."""
     import traceback
-    _log.error("[error] %r", exc, exc_info=True)
-    traceback.print_exc()
+    msg = str(exc)
+    expected_ai_outage = msg == "Сейчас не удалось подготовить ответ. Попробуй ещё раз чуть позже."
+    if not expected_ai_outage:
+        _log.error("[error] %r", exc, exc_info=True)
+        traceback.print_exc()
     try:
-        import tracking
-        msg = str(exc)
-        src = "llm" if (
-            getattr(skill, "name", "")
-            or "JSON" in msg
-            or "ИИ" in msg
-            or "llm" in msg.lower()
-        ) else "app"
-        origin = _origin_module(exc)
-        kind = f"{origin}: {type(exc).__name__}" if origin else type(exc).__name__
-        tracking.log_error(src, str(exc), kind=kind, exc=exc)
+        if not expected_ai_outage:
+            import tracking
+            src = "llm" if (
+                getattr(skill, "name", "")
+                or "JSON" in msg
+                or "ИИ" in msg
+                or "llm" in msg.lower()
+            ) else "app"
+            origin = _origin_module(exc)
+            kind = f"{origin}: {type(exc).__name__}" if origin else type(exc).__name__
+            tracking.log_error(src, msg, kind=kind, exc=exc)
     except Exception:
         pass
-    msg = str(exc)
     if msg.startswith(("⏳", "⚠️")):          # уже безопасный текст из ai._friendly
         out = msg
     elif skill is not None and getattr(skill, "fallback", ""):

@@ -27,6 +27,7 @@ _log = logging.getLogger(__name__)
 DAY = 86400
 STALE_AFTER = 15 * 60
 DB_SLOW_MS = 500
+_MONTHS_RU = ("", "янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
 async def _show(bot, cid, msg, reply_markup=None, q=None):
     await rich_delivery.show(
@@ -37,6 +38,15 @@ async def _show(bot, cid, msg, reply_markup=None, q=None):
 def _hhmm(ts) -> str:
     try:
         return datetime.fromtimestamp(ts, config.TZ).strftime("%H:%M")
+    except Exception:
+        return "—"
+
+
+def _log_date_time(ts) -> str:
+    """Календарная отметка инцидента: в журнале нельзя оставлять одно время."""
+    try:
+        moment = datetime.fromtimestamp(ts, config.TZ)
+        return f"{moment.day} {_MONTHS_RU[moment.month]} · {moment:%H:%M}"
     except Exception:
         return "—"
 
@@ -77,6 +87,11 @@ def _plural(n, one, few, many):
     if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
         return few
     return many
+
+
+def _repeat_suffix(count):
+    count = int(count or 0)
+    return f" · повторилось {count} {_plural(count, 'раз', 'раза', 'раз')}" if count > 1 else ""
 
 
 def _system_summary(states):
@@ -166,6 +181,13 @@ def _database_health():
 
 
 def _error_signature(entry):
+    if str(entry.get("source") or "") == "llm":
+        kind = str(entry.get("kind") or "")
+        # Одна сорвавшаяся цепочка может содержать разные технические ответы
+        # Groq, Cloudflare и OpenRouter. Для владельца это один инцидент, а не
+        # несколько якобы разных ошибок ассистента.
+        if kind == "all-providers-failed":
+            return "llm", kind
     return (
         str(entry.get("source") or ""), str(entry.get("kind") or ""),
         str(entry.get("file") or ""), str(entry.get("error") or entry.get("msg") or "")[:240],
@@ -495,10 +517,40 @@ def _compact_log_row(entry):
             action = "не удалось обработать ответ"
         else:
             action = "не удалось подготовить ответ"
-        return f"{_hhmm(entry.get('ts', 0))} · {section} · {action}"
+        reason = _llm_failure_reason(entry)
+        suffix = f" · причина: {reason}" if reason else ""
+        return f"{_log_date_time(entry.get('ts', 0))} · {section} · {action}{suffix}"
     error = " ".join(_log_error_text(entry).split())[:170]
     location = f"{file_name}:{line}" if line else file_name
-    return f"{_hhmm(entry.get('ts', 0))} · {section} · {action} · {error} · {location}"
+    return f"{_log_date_time(entry.get('ts', 0))} · {section} · {action} · {error} · {location}"
+
+
+def _llm_failure_reason(entry):
+    """Сводит технические ответы AI-цепочки к безопасной причине для админки."""
+    raw_values = list(entry.get("_reason_messages") or [])
+    raw_values.append(str(entry.get("error") or entry.get("msg") or ""))
+    raw = " ; ".join(raw_values).casefold()
+    providers = (
+        ("groq", "Groq"), ("gemini", "Gemini"),
+        ("cloudflare", "Cloudflare AI"), ("cf:", "Cloudflare AI"),
+        ("openrouter", "OpenRouter"),
+    )
+    reasons = []
+    seen = set()
+    for marker, label in providers:
+        parts = [part.strip() for part in raw.split(";") if marker in part]
+        if not parts or label in seen:
+            continue
+        seen.add(label)
+        provider_text = " ".join(parts)
+        if any(token in provider_text for token in ("429", "rate limit", "quota", "лимит")):
+            detail = "лимит"
+        elif any(token in provider_text for token in ("timeout", "503", "502", "504", "network", "сервис не ответил")):
+            detail = "сервис не ответил"
+        else:
+            detail = "не ответил"
+        reasons.append(f"{label} — {detail}")
+    return "; ".join(reasons[:4]) or "резервы не дали ответ"
 
 
 def _monitor_error_message(message, status_code):
@@ -534,7 +586,7 @@ def _monitor_error_row(entry):
         duration = max(0, recovered_at - started_at)
         details.append(f"восстановлен за {max(1, round(duration / 60))} мин")
     suffix = f" · {' · '.join(details)}" if details else ""
-    return f"{_hhmm(entry.get('ts', 0))} · Система · {label} · {message}{suffix}"
+    return f"{_log_date_time(entry.get('ts', 0))} · Система · {label} · {message}{suffix}"
 
 
 def _collapse_monitor_errors(entries, window_seconds=600):
@@ -564,10 +616,16 @@ def _collapse_app_errors(entries):
     for entry in sorted(entries, key=lambda item: int(item.get("ts") or 0), reverse=True):
         key = _error_signature(entry)
         if key not in groups:
-            groups[key] = [entry, 1]
+            groups[key] = [entry, 1, [str(entry.get("error") or entry.get("msg") or "")]]
         else:
             groups[key][1] += 1
-    return [(entry, count) for entry, count in groups.values()]
+            groups[key][2].append(str(entry.get("error") or entry.get("msg") or ""))
+    result = []
+    for entry, count, reasons in groups.values():
+        if str(entry.get("source") or "") == "llm":
+            entry = {**entry, "_reason_messages": reasons}
+        result.append((entry, count))
+    return result
 
 
 async def clear_logs(bot, cid, q=None):
@@ -584,13 +642,12 @@ async def send_logs(bot, cid, q=None):
         if entry.get("ts", 0) >= cutoff and entry.get("event_type") == "error"
     ]
     combined = [
-        (int(entry.get("ts") or 0), _compact_log_row(entry)
-         + (f" · повторилось {count} раз" if count > 1 else ""))
+        (int(entry.get("ts") or 0), _compact_log_row(entry) + _repeat_suffix(count))
         for entry, count in _collapse_app_errors(errors)
     ] + [
         (
             int(entry.get("ts") or 0),
-            _monitor_error_row(entry) + (f" · повторилось {count} раз" if count > 1 else ""),
+            _monitor_error_row(entry) + _repeat_suffix(count),
         )
         for entry, count in _collapse_monitor_errors(monitor_errors)
     ]

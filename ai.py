@@ -1549,16 +1549,8 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         tracking.annotate_action(fallback="local")
     except Exception:
         pass
-    try:
-        import tracking
-        if gemini_rate_limit_err is None:
-            tracking.log_error(
-                "llm", "; ".join(errs)[:1000] or _friendly_msg,
-                kind="all-providers-failed", action="не сформирован ответ",
-                service="несколько AI-сервисов", fallback="шаблон без AI",
-            )
-    except Exception:
-        pass
+    # Сбои конкретных провайдеров уже записаны provider_runtime как единые
+    # системные инциденты. Не создаём вторую ошибку раздела с тем же сбоем.
     raise Exception(_friendly_msg)
 
 

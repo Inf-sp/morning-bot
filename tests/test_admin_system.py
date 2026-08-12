@@ -1,5 +1,6 @@
 import asyncio
 import os
+from datetime import datetime
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
@@ -8,6 +9,7 @@ import admin
 import api_usage
 import settings
 import tracking
+import verify
 from ui import admin as admin_ui
 
 
@@ -141,6 +143,51 @@ def test_logs_hide_llm_provider_payload_and_code_location(monkeypatch):
     assert "groq_standard" not in text
     assert "failed_generation" not in text
     assert "ai.py" not in text
+
+
+def test_logs_group_ai_chain_failures_with_date_and_human_reason(monkeypatch):
+    now = int(datetime(2026, 8, 12, 13, 24, tzinfo=admin.config.TZ).timestamp())
+    errors = [
+        {
+            "id": "llm-1", "ts": now, "source": "llm", "section": "Ассистент",
+            "kind": "all-providers-failed",
+            "error": "groq_standard: HTTP 429; openrouter: HTTP 503",
+        },
+        {
+            "id": "llm-2", "ts": now - 90, "source": "llm", "section": "Разные категории",
+            "kind": "all-providers-failed",
+            "error": "groq_standard: rate limit; openrouter: timeout",
+        },
+    ]
+    monkeypatch.setattr(admin.time, "time", lambda: now + 10)
+    monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: errors)
+    monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [])
+    monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
+    bot = _Bot()
+
+    asyncio.run(admin.send_logs(bot, "42"))
+
+    text = bot.sent[0]["text"]
+    assert text.count("Ассистент · не удалось подготовить ответ") == 1
+    assert "12 авг · 13:24" in text
+    assert "причина: Groq — лимит; OpenRouter — сервис не ответил" in text
+    assert "повторилось 2 раза" in text
+
+
+def test_expected_ai_outage_does_not_create_a_second_app_error(monkeypatch):
+    logged = []
+
+    class Bot:
+        async def send_message(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr(tracking, "log_error", lambda *args, **kwargs: logged.append((args, kwargs)))
+
+    asyncio.run(verify.safe_error(
+        Bot(), "42", Exception("Сейчас не удалось подготовить ответ. Попробуй ещё раз чуть позже."),
+    ))
+
+    assert logged == []
 
 
 def test_logs_keep_monitor_errors_short(monkeypatch):

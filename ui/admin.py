@@ -269,6 +269,9 @@ def _log_table_row(row):
     row = str(row or "")
     if " · " not in row:
         return None
+    parts = row.split(" · ", 2)
+    if len(parts) == 3 and len(parts[1]) == 5 and parts[1][2:3] == ":":
+        return f"{parts[0]} · {parts[1]}", parts[2]
     at, incident = row.split(" · ", 1)
     if len(at) == 5 and at[2:3] == ":":
         return at, incident
@@ -281,7 +284,7 @@ def _logs_rich_message(rows, updated_at, updated_unix=None):
     blocks = [rich.heading("⚠️ Ошибки", size=2)]
     if table_rows:
         blocks.append(rich.table(
-            ("Время", "Инцидент"), table_rows,
+            ("Дата и время", "Инцидент"), table_rows,
             striped=True, bordered=True,
         ))
     else:
