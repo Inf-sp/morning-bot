@@ -261,6 +261,51 @@ async def handle(update, context, remove_reply_keyboard):
             transient=True,
         )
         return
+    # Первый вход в раздел заменяет временное главное меню уже подготовленной
+    # персональной карточкой. Новый вариант пользователь запрашивает кнопкой
+    # под карточкой — тогда исходный результат остаётся в истории.
+    if data == "m_myday":
+        await _inline_status(
+            lambda status: myday.send_plany(bot, cid, status=status),
+            preserve_message=False,
+        )
+        return
+    if data == "m_wardrobe":
+        await _inline_status(
+            lambda status: wardrobe.send_home(bot, cid, status=status),
+            preserve_message=False,
+        )
+        return
+    if data == "m_food":
+        await _inline_status(
+            lambda status: menu.send_food_menu(bot, cid, status=status),
+            preserve_message=False,
+        )
+        return
+    if data == "m_travel":
+        await _inline_status(
+            lambda status: travel.send_home(bot, cid, status=status),
+            preserve_message=False,
+        )
+        return
+    if data == "m_movie":
+        await _inline_status(
+            lambda status: leisure_movies.send_movie_home(bot, cid, status=status),
+            preserve_message=False,
+        )
+        return
+    if data == "m_books":
+        await _inline_status(
+            lambda status: leisure_books.send_books_home(bot, cid, status=status),
+            preserve_message=False,
+        )
+        return
+    if data == "m_music":
+        await _inline_status(
+            lambda status: leisure_music.send_music_home(bot, cid, status=status),
+            preserve_message=False,
+        )
+        return
     if data.startswith("m_"):
         text, entities, kb = menu.menu_screen(data, cid)
         try:

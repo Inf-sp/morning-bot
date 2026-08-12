@@ -498,7 +498,7 @@ def test_week_forecast_uses_preserved_inline_status(monkeypatch):
     assert calls[-1] == ("stop", True)
 
 
-def test_main_menu_sections_replace_the_welcome_before_starting_a_result(monkeypatch):
+def test_main_menu_static_sections_replace_the_welcome(monkeypatch):
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
     monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
 
@@ -517,10 +517,7 @@ def test_main_menu_sections_replace_the_welcome_before_starting_a_result(monkeyp
             raise AssertionError("first-level menu must edit the current welcome")
 
     for callback_data, title in (
-        ("m_myday", "Мой день"), ("m_wardrobe", "Гардероб"),
-        ("m_food", "Готовка"), ("m_learn", "Обучение"),
-        ("m_balance", "Здоровье"), ("m_travel", "Поездки"),
-        ("m_music", "Музыка"), ("m_movie", "Кино"), ("m_books", "Книги"),
+        ("m_learn", "Обучение"), ("m_balance", "Здоровье"),
         ("m_settings", "Настройки"),
     ):
         message = Message()
@@ -530,6 +527,51 @@ def test_main_menu_sections_replace_the_welcome_before_starting_a_result(monkeyp
 
         assert len(message.edits) == 1
         assert title in message.edits[0][0]
+
+
+def test_main_menu_personal_sections_replace_welcome_with_prepared_card(monkeypatch):
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
+
+    class Message:
+        chat_id = "42"
+        message_id = 7
+
+        def __init__(self):
+            self.edits = []
+
+        async def edit_reply_markup(self, **_kwargs):
+            return None
+
+        async def edit_text(self, text, **kwargs):
+            self.edits.append((text, kwargs))
+
+    class Bot:
+        async def send_message(self, **_kwargs):
+            raise AssertionError("the prepared home card must replace the welcome")
+
+    async def prepared_card(_bot, _cid, *args, status=None, **kwargs):
+        assert status is not None
+        await status.replace("✨ Готовая карточка")
+
+    handlers = (
+        ("m_myday", bot_callbacks.myday, "send_plany"),
+        ("m_wardrobe", bot_callbacks.wardrobe, "send_home"),
+        ("m_food", bot_callbacks.menu, "send_food_menu"),
+        ("m_travel", bot_callbacks.travel, "send_home"),
+        ("m_movie", bot_callbacks.leisure_movies, "send_movie_home"),
+        ("m_books", bot_callbacks.leisure_books, "send_books_home"),
+        ("m_music", bot_callbacks.leisure_music, "send_music_home"),
+    )
+    for callback_data, module, name in handlers:
+        monkeypatch.setattr(module, name, prepared_card)
+        message = Message()
+        query = type("Query", (), {"data": callback_data, "message": message})()
+        update = type("Update", (), {"callback_query": query})()
+
+        asyncio.run(bot_callbacks.handle(update, type("Context", (), {"bot": Bot()})(), None))
+
+        assert message.edits == [("✨ Готовая карточка", {})]
 
 
 def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
