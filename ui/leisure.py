@@ -580,7 +580,7 @@ def weekly_books_screen(city, daily_book, items):
     if premieres:
         b.newline()
         for premiere in premieres:
-            _write_book_premiere(b, premiere)
+            _write_book_premiere(b, premiere, compact=True)
     else:
         b.text_line(" ")
         b.line("Пока не удалось подтвердить заметные новинки.")
@@ -673,26 +673,57 @@ def _book_premiere_items(items) -> list:
     return entries
 
 
-def _write_book_premiere(builder: MessageBuilder, item) -> None:
+def _write_book_premiere(builder: MessageBuilder, item, *, compact=False) -> None:
     title = str(_item_value(item, "title", "") or "").strip()
+    if not title:
+        return
     author = str(_item_value(item, "author", "") or "").strip()
     summary = str(_item_value(item, "summary", "") or _item_value(item, "vibe", "") or "").strip()
     url = str(_item_value(item, "url", "") or "").strip()
 
-    builder.text_line("• ")
+    if compact:
+        builder.text_line("• ")
+        if url:
+            builder.link(f"«{title}»", url)
+        else:
+            builder.text_line(f"«{title}»")
+        if author:
+            builder.text_line(f" ({author})")
+        if summary:
+            builder.text_line(" · ")
+            builder.line(_book_premiere_summary(summary, limit=160))
+        else:
+            builder.newline()
+        return
+
     if url:
         builder.link(f"«{title}»", url)
     else:
-        builder.text_line(f"«{title}»")
-    if author:
-        builder.text_line(f" - {author}")
+        builder.bold(f"«{title}»")
     builder.newline()
+    if author:
+        builder.line(author)
+    premiere_date = _book_premiere_date(item)
+    if premiere_date:
+        builder.line(f"Премьера: {premiere_date}")
     if summary:
-        summary = clip(summary, limit=180)
-        summary = summary[:1].upper() + summary[1:]
-        if summary and summary[-1] not in ".!?…":
-            summary += "."
-        builder.line(f"  {summary}")
+        builder.line(_book_premiere_summary(summary, limit=310))
+    builder.newline()
+
+
+def _book_premiere_summary(summary, *, limit):
+    summary = clip(str(summary or ""), limit=limit)
+    summary = summary[:1].upper() + summary[1:] if summary else ""
+    return summary if summary.endswith((".", "!", "?", "…")) else summary + "."
+
+
+def _book_premiere_date(item):
+    raw = str(_item_value(item, "published_date", "") or "").strip()
+    try:
+        value = date.fromisoformat(raw)
+    except ValueError:
+        return ""
+    return _format_date_label(value, include_year=True)
 
 
 def music_week_screen(city, daily_music, concerts):
