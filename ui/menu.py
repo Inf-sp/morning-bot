@@ -255,12 +255,17 @@ def learning_menu(home: dict):
 
 def health_menu(focus: dict):
     b = MessageBuilder()
-    b.bold("⚡️ Фокус на сегодня · Здоровье")
+    b.text_line("🚑 ")
+    b.bold("Здоровье на сегодня")
     b.newline()
     b.spacer()
+    b.line("Небольшая опора без диагноза и без перегруза.")
+    b.spacer()
+    b.bold("Фокус дня:")
+    b.text_line(" ")
     b.line(focus.get("phrase", ""))
     b.spacer()
-    b.bold("Что сделать:")
+    b.bold("Сегодня:")
     b.newline()
     for step in list(focus.get("steps", ()))[:3]:
         b.bullet(step)

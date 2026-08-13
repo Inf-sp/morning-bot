@@ -240,7 +240,13 @@ def test_health_home_opens_without_first_use_data(monkeypatch):
 
     text, _entities, markup = menu.menu_screen("m_balance", "42")
 
-    assert text.startswith("⚡️ Фокус на сегодня · Здоровье\n\nСделай короткую паузу.")
+    assert text.startswith(
+        "🚑 Здоровье на сегодня\n\n"
+        "Небольшая опора без диагноза и без перегруза.\n\n"
+        "Фокус дня: Сделай короткую паузу."
+    )
+    assert "Сегодня:" in text
+    assert "💡 Полезно: не планируй всё сразу." in text
     assert text.count("• ") == 3
     assert _labels(markup) == [
         ["👩🏻‍⚕️ Спросить врача"],
