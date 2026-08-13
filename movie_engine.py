@@ -37,11 +37,10 @@ def _norm(s):
 
 
 def _title_only(s):
-    """Строка вида 'Название (2022)' → 'Название'. Элемент может быть строкой или
-    {"id":..., "value": строка} (после захода в удаление, см. store.ensure_list_ids_via)."""
-    if isinstance(s, dict):
-        s = s.get("value", "")
-    return re.sub(r"\s*\(\s*\d{4}\s*\)\s*$", "", str(s or "")).strip()
+    """Строка кино → название для TMDb, включая формат «сериал, 2023»."""
+    from leisure_collection import movie_title_for_lookup
+
+    return movie_title_for_lookup(s)
 
 
 # ---------- недавно показанные (персистентно) ----------

@@ -9,6 +9,7 @@ import json
 import re
 
 import config
+from leisure_collection import movie_title_for_lookup, normalize_movie_items, plain_label
 import store
 
 
@@ -114,12 +115,27 @@ async def love_add_done(bot, cid, key, text, origin="base"):
         return
     store_key, collection_id = collection
     items = _unique_items(re.split(r"[,;\n]+", text or ""))
-    existing = {item.casefold() for item in _love_items(cid, key)}
+    if key == "movies":
+        import asyncio
+
+        try:
+            items = await asyncio.wait_for(
+                asyncio.to_thread(normalize_movie_items, items), timeout=4.0,
+            )
+        except asyncio.TimeoutError:
+            items = [plain_label(item) for item in items if plain_label(item)]
+    else:
+        items = [plain_label(item) for item in items if plain_label(item)]
+    existing = {
+        (movie_title_for_lookup(item) if key == "movies" else item).casefold()
+        for item in _love_items(cid, key)
+    }
     added = []
     for item in items:
-        if item.casefold() not in existing:
+        dedupe_key = (movie_title_for_lookup(item) if key == "movies" else item).casefold()
+        if dedupe_key not in existing:
             store.add_to_list(store_key, cid, item)
-            existing.add(item.casefold())
+            existing.add(dedupe_key)
             added.append(item)
     if key == "artists" and added:
         import leisure_music

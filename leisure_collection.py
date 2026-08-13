@@ -1,8 +1,132 @@
+import re
+
 import ai
 import config
 import recommendation_stoplist
 import research
 import store
+
+
+_LEADING_DECORATION_RE = re.compile(
+    r"^\s*(?:[\U0001F000-\U0010FFFF\u2600-\u27BF]\uFE0F?\s*)+"
+)
+_MOVIE_SUFFIX_RE = re.compile(
+    r"^(?P<title>.+?)\s*\(\s*(?:(?P<kind>фильм|сериал)\s*,?\s*)?(?P<year>\d{4})?\s*\)\s*$",
+    re.IGNORECASE,
+)
+
+
+def item_text(item):
+    """Извлекает отображаемое значение из старого или нового элемента списка."""
+    if isinstance(item, dict):
+        return str(item.get("name") or item.get("value") or item.get("title") or "").strip()
+    return str(item or "").strip()
+
+
+def plain_label(value):
+    """Убирает Markdown и декоративные эмодзи из значения, сохранённого в списке."""
+    text = item_text(value)
+    text = re.sub(r"[*_`]+", "", text)
+    text = _LEADING_DECORATION_RE.sub("", text)
+    return re.sub(r"\s+", " ", text).strip(" \t\n\r·–—-")
+
+
+def movie_title_for_lookup(value):
+    """Возвращает только название из канонической или старой записи кино."""
+    text = plain_label(value)
+    match = _MOVIE_SUFFIX_RE.match(text)
+    if match and (match.group("kind") or match.group("year")):
+        return match.group("title").strip()
+    return text
+
+
+def _movie_parts(value):
+    text = plain_label(value)
+    match = _MOVIE_SUFFIX_RE.match(text)
+    if not match or not (match.group("kind") or match.group("year")):
+        return text, "", ""
+    return (
+        match.group("title").strip(),
+        str(match.group("kind") or "").strip().casefold(),
+        str(match.group("year") or "").strip(),
+    )
+
+
+def _resolve_movie_label(title):
+    """Ищет локализованные данные TMDb; кэш TMDb ограничивает запросы сутками."""
+    if not config.TMDB_API_KEY or not title:
+        return None
+    try:
+        import tmdb
+
+        return tmdb.lookup_title(title)
+    except Exception:
+        return None
+
+
+def canonical_movie_label(value, metadata=None):
+    """Единая строка кино: «Название (сериал, 2023)»."""
+    fallback_title, fallback_kind, fallback_year = _movie_parts(value)
+    metadata = metadata if isinstance(metadata, dict) else {}
+    title = plain_label(metadata.get("name")) or fallback_title
+    kind = str(metadata.get("kind") or fallback_kind or "").strip().casefold()
+    year = str(metadata.get("year") or fallback_year or "").strip()
+    kind_label = {"tv": "сериал", "movie": "фильм", "сериал": "сериал", "фильм": "фильм"}.get(kind, "")
+    details = [part for part in (kind_label, year if re.fullmatch(r"\d{4}", year) else "") if part]
+    return f"{title} ({', '.join(details)})" if title and details else title
+
+
+def normalize_movie_items(items):
+    """Нормализует кино и объединяет одинаковые старые и новые записи."""
+    result = []
+    seen = set()
+    for item in items or []:
+        source = plain_label(item)
+        if not source:
+            continue
+        title = movie_title_for_lookup(source)
+        label = canonical_movie_label(source, _resolve_movie_label(title))
+        normalized = movie_title_for_lookup(label).casefold()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            result.append(label)
+    return result
+
+
+def normalize_favorite_collections(resolve_movies=False):
+    """Исправляет прежние записи в БД, не меняя пользовательские предпочтения.
+
+    При обычном старте выполняется безопасная локальная чистка. Полный проход
+    после старта дополнительно уточняет тип и год каждого фильма через TMDb.
+    """
+    keys = (config.FAVORITE_BOOKS_KEY, config.FAVORITE_ARTISTS_KEY, config.FAVORITE_MOVIES_KEY)
+    changed_any = False
+    for key in keys:
+        data = store._load(key)
+        if not isinstance(data, dict):
+            continue
+        changed = False
+        for cid, items in data.items():
+            if not isinstance(items, list):
+                continue
+            if key == config.FAVORITE_MOVIES_KEY and resolve_movies:
+                normalized = normalize_movie_items(items)
+            else:
+                normalized = []
+                seen = set()
+                for item in items:
+                    label = plain_label(item)
+                    dedupe_key = (movie_title_for_lookup(label) if key == config.FAVORITE_MOVIES_KEY else label).casefold()
+                    if label and dedupe_key not in seen:
+                        seen.add(dedupe_key)
+                        normalized.append(label)
+            if normalized != items:
+                data[cid] = normalized
+                changed = True
+        if changed:
+            store._save(key, data)
+            changed_any = True
+    return changed_any
 
 def _ensure_books(cid):
     """Возвращает список книг пользователя (без авто-сида)."""
@@ -10,14 +134,13 @@ def _ensure_books(cid):
 
 def _norm(x):
     """Нормализованное имя элемента (строка или {name}) для сравнения без учёта регистра."""
-    s = x.get("name", "") if isinstance(x, dict) else str(x)
-    return s.strip().lower()
+    return item_text(x).strip().lower()
 
 def dedupe_lists():
     """Разовая чистка: убирает повторы в личных коллекциях."""
+    changed_any = normalize_favorite_collections()
     keys = [config.FAVORITE_BOOKS_KEY, config.FAVORITE_ARTISTS_KEY, config.FAVORITE_MOVIES_KEY,
             config.SAVED_COUNTRIES_KEY]
-    changed_any = False
     for key in keys:
         data = store._load(key)
         changed = False

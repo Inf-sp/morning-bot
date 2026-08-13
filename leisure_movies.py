@@ -22,7 +22,12 @@ import verify
 import tracking
 import local_cinema
 from ui import leisure as leisure_ui
-from leisure_collection import content_recommend
+from leisure_collection import (
+    canonical_movie_label,
+    content_recommend,
+    movie_title_for_lookup,
+    normalize_movie_items,
+)
 
 
 _CINEMA_BIRTHDAY_LOCK = threading.Lock()
@@ -93,7 +98,7 @@ async def send_favorite_movies_added_card(bot, cid, titles):
     if len(titles) == 1:
         try:
             tm = await asyncio.wait_for(
-                asyncio.to_thread(tmdb.lookup_title, titles[0]), timeout=4.0,
+                asyncio.to_thread(tmdb.lookup_title, movie_title_for_lookup(titles[0])), timeout=4.0,
             ) if config.TMDB_API_KEY else None
         except Exception:
             tm = None
@@ -1080,6 +1085,19 @@ async def movie_love(bot, cid, i, q=None):
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
-        store.add_to_list(config.FAVORITE_MOVIES_KEY, cid, title)
+        try:
+            normalized = await asyncio.wait_for(
+                asyncio.to_thread(normalize_movie_items, [title]), timeout=4.0,
+            )
+        except asyncio.TimeoutError:
+            normalized = [canonical_movie_label(title)]
+        if normalized:
+            title = normalized[0]
+        existing = {
+            movie_title_for_lookup(item).casefold()
+            for item in store.get_list(config.FAVORITE_MOVIES_KEY, cid)
+        }
+        if movie_title_for_lookup(title).casefold() not in existing:
+            store.add_to_list(config.FAVORITE_MOVIES_KEY, cid, title)
         if q is not None:
             await q.message.edit_reply_markup(reply_markup=_movie_kb(i))

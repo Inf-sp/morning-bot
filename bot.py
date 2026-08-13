@@ -569,6 +569,27 @@ async def job_startup_audits(context: ContextTypes.DEFAULT_TYPE):
     await asyncio.to_thread(_run_startup_audits)
 
 
+async def job_normalize_favorite_collections(context: ContextTypes.DEFAULT_TYPE):
+    """Один спокойный проход по старым личным спискам после запуска.
+
+    TMDb уже кэширует резолв названий на сутки, поэтому миграция не создаёт
+    повторных запросов при перезапуске и не задерживает запуск бота.
+    """
+    if tracking.has_active_actions():
+        context.application.job_queue.run_once(
+            job_normalize_favorite_collections,
+            when=60,
+            name="normalize_favorite_collections_once",
+            job_kwargs={"id": "normalize_favorite_collections_once", "replace_existing": True},
+        )
+        return
+    try:
+        if await asyncio.to_thread(leisure_collection.normalize_favorite_collections, True):
+            logging.info("Favorite collections: canonical labels applied")
+    except Exception:
+        logging.exception("Favorite collections normalization failed")
+
+
 async def post_init(app):
     initialized = tracking.initialize_inactivity_tracking(access.get_allowed_cids())
     if initialized:
@@ -588,6 +609,12 @@ async def post_init(app):
             logging.info("Dedupe lists: applied")
     except Exception:
         logging.exception("Dedupe lists failed")
+    app.job_queue.run_once(
+        job_normalize_favorite_collections,
+        when=120,
+        name="normalize_favorite_collections_once",
+        job_kwargs={"id": "normalize_favorite_collections_once", "replace_existing": True},
+    )
     from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeDefault
     common_commands = [
         BotCommand("menu", "Главное меню"),

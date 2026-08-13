@@ -220,6 +220,17 @@ async def try_add_love_from_chat(bot, cid, text):
         import travel
         await travel.add_visited_country(bot, cid, title)
         return True
+    from leisure_collection import movie_title_for_lookup, normalize_movie_items, plain_label
+
+    if store_key == "movies":
+        try:
+            title = (await asyncio.wait_for(
+                asyncio.to_thread(normalize_movie_items, [title]), timeout=4.0,
+            ))[0]
+        except asyncio.TimeoutError:
+            title = plain_label(title)
+    else:
+        title = plain_label(title)
     key_map = {
         "movies": config.FAVORITE_MOVIES_KEY,
         "books": config.FAVORITE_BOOKS_KEY,
@@ -227,10 +238,12 @@ async def try_add_love_from_chat(bot, cid, text):
         "countries": config.SAVED_COUNTRIES_KEY,
     }
     existing = {
-        (x.get("value", "") if isinstance(x, dict) else str(x)).strip().lower()
+        (movie_title_for_lookup(x) if store_key == "movies" else
+         (x.get("value", "") if isinstance(x, dict) else str(x))).strip().lower()
         for x in _store.get_list(key_map[store_key], cid)
     }
-    if title.strip().lower() in existing:
+    comparison_title = movie_title_for_lookup(title) if store_key == "movies" else title
+    if comparison_title.strip().lower() in existing:
         await bot.send_message(chat_id=cid, text=f"❤️ «{title}» уже в любимых ({folder_label}).")
         return True
     _store.add_to_list(key_map[store_key], cid, title)

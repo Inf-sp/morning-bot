@@ -17,6 +17,7 @@ import settings
 import store
 import youtube_tracks
 from ui import leisure as leisure_ui
+from leisure_collection import plain_label
 
 _log = logging.getLogger(__name__)
 _MUSIC_DAILY_LOCK = threading.Lock()
@@ -249,6 +250,7 @@ def _remember_artist(cid, artist):
 
 
 def _add_unique(key, cid, value):
+    value = plain_label(value)
     items = store.get_list(key, cid)
     if value and value.lower() not in {_item_text(item).lower() for item in items}:
         store.set_list(key, cid, [*items, value])

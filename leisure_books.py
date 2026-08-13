@@ -18,6 +18,7 @@ import settings
 import store
 import tracking
 from ui import leisure as leisure_ui
+from leisure_collection import plain_label
 
 
 _log = logging.getLogger(__name__)
@@ -94,6 +95,7 @@ def _item_text(item):
 
 
 def _add_unique(key, cid, value):
+    value = plain_label(value)
     items = store.get_list(key, cid)
     if value and value.casefold() not in {_item_text(item).casefold() for item in items}:
         store.set_list(key, cid, [*items, value])

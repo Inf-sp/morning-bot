@@ -6,7 +6,9 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import leisure_movies
 import leisure_music
+import leisure_collection
 import personal_collections
+import config
 
 
 def _labels(markup):
@@ -74,3 +76,35 @@ def test_manual_collection_add_routes_to_artist_card(monkeypatch):
 
     assert added == ["The National"]
     assert cards == [["The National"]]
+
+
+def test_collection_migration_uses_a_plain_russian_movie_label(monkeypatch):
+    """Старые названия кино приводятся к формату без эмодзи и разметки."""
+    items = ["🎬 **Укрытие (2023)**"]
+
+    monkeypatch.setattr(
+        leisure_collection,
+        "_resolve_movie_label",
+        lambda _title: {"name": "Укрытие", "kind": "tv", "year": "2023"},
+    )
+
+    assert leisure_collection.normalize_movie_items(items) == ["Укрытие (сериал, 2023)"]
+
+
+def test_collection_migration_updates_saved_movie_list(monkeypatch):
+    stored = {
+        config.FAVORITE_MOVIES_KEY: {"42": ["🎬 **Укрытие (2023)**"]},
+        config.FAVORITE_BOOKS_KEY: {},
+        config.FAVORITE_ARTISTS_KEY: {},
+    }
+    saved = {}
+    monkeypatch.setattr(leisure_collection.store, "_load", lambda key: stored[key])
+    monkeypatch.setattr(leisure_collection.store, "_save", lambda key, value: saved.__setitem__(key, value))
+    monkeypatch.setattr(
+        leisure_collection,
+        "_resolve_movie_label",
+        lambda _title: {"name": "Укрытие", "kind": "tv", "year": "2023"},
+    )
+
+    assert leisure_collection.normalize_favorite_collections(resolve_movies=True) is True
+    assert saved[config.FAVORITE_MOVIES_KEY]["42"] == ["Укрытие (сериал, 2023)"]
