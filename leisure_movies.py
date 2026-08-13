@@ -264,13 +264,17 @@ def _cached_movie(cid):
 
 
 def _cache_movie(cid, it, tm):
+    cached_tm = dict(tm or {})
+    if isinstance(cached_tm.get("anchors"), set):
+        cached_tm["anchors"] = sorted(cached_tm["anchors"])
+
     def mutate(data):
         data = data if isinstance(data, dict) else {}
         data[str(cid)] = {
             "date": datetime.now(config.TZ).date().isoformat(),
             "signature": _movie_cache_signature(cid),
             "item": dict(it or {}),
-            "tm": dict(tm or {}),
+            "tm": cached_tm,
         }
         return data, None
 

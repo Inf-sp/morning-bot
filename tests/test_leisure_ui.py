@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from datetime import date, datetime, timedelta
 
@@ -189,6 +190,20 @@ def test_movie_home_falls_back_when_tmdb_is_temporarily_unavailable(monkeypatch)
 
     assert item["title"] == "Решение уйти"
     assert tm is None
+
+
+def test_movie_cache_serializes_tmdb_anchors(monkeypatch):
+    def persist(_key, mutate):
+        data, _result = mutate({})
+        json.dumps(data)
+
+    monkeypatch.setattr(leisure_movies.store, "mutate_kv", persist)
+
+    leisure_movies._cache_movie(
+        "42",
+        {"title": "Паразиты"},
+        {"name": "Паразиты", "anchors": {"Олдбой"}},
+    )
 
 
 def test_leisure_preference_choices_use_one_column():
