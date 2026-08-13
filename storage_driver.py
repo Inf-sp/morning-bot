@@ -17,6 +17,18 @@ _READ_CACHE_TTL = 5
 _read_cache = {}
 
 
+def _json_safe(value):
+    """Приводит поддерживаемые контейнеры к виду, который одинаково хранится в памяти и JSONB."""
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        items = [_json_safe(item) for item in value]
+        return sorted(items, key=lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True))
+    return value
+
+
 def _legacy_keys(key):
     return tuple(getattr(config, "LEGACY_STORAGE_KEYS", {}).get(key, ()))
 
@@ -142,6 +154,7 @@ def load(key):
 
 
 def save(key, data):
+    data = _json_safe(data)
     connection = db()
 
     if connection is None:
@@ -189,6 +202,7 @@ def mutate(key, mutator):
             new_value, result = mutator(
                 current if isinstance(current, dict) else {}
             )
+            new_value = _json_safe(new_value)
 
             _memory[key] = copy.deepcopy(new_value)
             _cache_set(key, new_value)
@@ -226,6 +240,7 @@ def mutate(key, mutator):
                     new_value, result = mutator(
                         current if isinstance(current, dict) else {}
                     )
+                    new_value = _json_safe(new_value)
 
                     cursor.execute(
                         "INSERT INTO kv (key, value) VALUES (%s, %s) "

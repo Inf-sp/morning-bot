@@ -190,6 +190,23 @@ def test_expected_ai_outage_does_not_create_a_second_app_error(monkeypatch):
     assert logged == []
 
 
+def test_json_serialization_error_is_logged_as_an_application_error(monkeypatch):
+    logged = []
+
+    class Bot:
+        async def send_message(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr(tracking, "log_error", lambda *args, **kwargs: logged.append((args, kwargs)))
+
+    try:
+        raise TypeError("Object of type set is not JSON serializable")
+    except TypeError as exc:
+        asyncio.run(verify.safe_error(Bot(), "42", exc))
+
+    assert logged[0][0][0] == "app"
+
+
 def test_logs_hide_monitor_incidents_resolved_by_recovery_or_fallback(monkeypatch):
     now = 1_784_466_000
     recovered = {

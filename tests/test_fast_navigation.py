@@ -64,6 +64,23 @@ def test_canonical_key_copies_legacy_memory_data_without_deleting_it(monkeypatch
     assert storage_driver._memory[legacy_key] == legacy_data
 
 
+def test_storage_normalizes_nested_sets_before_persisting(monkeypatch):
+    monkeypatch.setattr(config, "DATABASE_URL", "")
+    monkeypatch.setattr(storage_driver, "_memory", {})
+    monkeypatch.setattr(storage_driver, "_read_cache", {})
+
+    storage_driver.mutate(
+        "recommendation-cache",
+        lambda _data: ({"movie": {"anchors": {"Олдбой", "Паразиты"}}}, None),
+    )
+    storage_driver.save("collection", {"tags": {"драма", "триллер"}})
+
+    assert storage_driver.load("recommendation-cache") == {
+        "movie": {"anchors": ["Олдбой", "Паразиты"]},
+    }
+    assert storage_driver.load("collection") == {"tags": ["драма", "триллер"]}
+
+
 def test_profile_purge_also_removes_legacy_collection_data(monkeypatch):
     cid = "42"
     legacy_key = "watchlist.json"

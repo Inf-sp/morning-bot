@@ -137,12 +137,10 @@ async def safe_error(bot, cid, exc, *, skill=None, back="m_menu"):
     try:
         if not expected_ai_outage:
             import tracking
-            src = "llm" if (
-                getattr(skill, "name", "")
-                or "JSON" in msg
-                or "ИИ" in msg
-                or "llm" in msg.lower()
-            ) else "app"
+            # Слово JSON бывает и в обычных сбоях сохранения (например,
+            # сериализация set), поэтому не считаем его признаком ошибки AI.
+            # AI-цепочка передаёт skill, а свои ограничения логирует сама.
+            src = "llm" if getattr(skill, "name", "") else "app"
             origin = _origin_module(exc)
             kind = f"{origin}: {type(exc).__name__}" if origin else type(exc).__name__
             tracking.log_error(src, msg, kind=kind, exc=exc)
