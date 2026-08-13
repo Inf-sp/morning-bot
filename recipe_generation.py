@@ -1379,10 +1379,6 @@ def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history
     items = [_normalize_queue_recipe(it) for it in items if isinstance(it, dict) and it.get("name")]
     items = [_with_recipe_source(item, sources, index) for index, item in enumerate(items)]
     presentable = [item for item in items if _queue_recipe_presentable(item)][:n]
-    if not presentable and items:
-        # Keep the source identity even when a mocked/short model response only
-        # contains a title; the caller can retry presentation validation.
-        return items[:n]
     items = presentable
     if not items and sources:
         source_cards = [_normalize_queue_recipe(_source_recipe_card(source)) for source in sources[:n]]

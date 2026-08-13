@@ -236,3 +236,17 @@ def test_batch_returns_plain_template_when_sources_and_llms_are_down(monkeypatch
     assert len(result) == 1
     assert result[0]["name"] == "Быстрый омлет с овощами"
     assert result[0]["steps"]
+
+
+def test_incomplete_recipe_batch_response_uses_presentable_local_recipe(monkeypatch):
+    monkeypatch.setattr(recipe_generation, "_recipe_sources", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        recipe_generation.ai, "llm_json",
+        lambda *_args, **_kwargs: {"recipes": [{"name": "Незавершённый рецепт"}]},
+    )
+
+    result = recipe_generation._gen_recipe_batch("ужин", cid="42")
+
+    assert len(result) == 1
+    assert result[0]["name"] == "Быстрый омлет с овощами"
+    assert recipe_generation._queue_recipe_presentable(result[0])

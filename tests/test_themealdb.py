@@ -146,8 +146,20 @@ def test_recipe_queue_keeps_themealdb_source_for_each_adaptation(monkeypatch):
     def fake_llm(prompt, *_args, **kwargs):
         captured.update({"prompt": prompt, "kwargs": kwargs})
         return {"recipes": [
-            {"source_meal_id": "52772", "name": "Первый рецепт"},
-            {"source_meal_id": "52800", "name": "Второй рецепт"},
+            {
+                "source_meal_id": "52772", "name": "Первый рецепт",
+                "ingredients": "курица, рис", "steps": [
+                    {"text": "Обжарь курицу", "minutes": 8},
+                    {"text": "Добавь рис", "minutes": 10},
+                ],
+            },
+            {
+                "source_meal_id": "52800", "name": "Второй рецепт",
+                "ingredients": "курица, рис", "steps": [
+                    {"text": "Обжарь курицу", "minutes": 8},
+                    {"text": "Добавь рис", "minutes": 10},
+                ],
+            },
         ]}
 
     monkeypatch.setattr(recipe_generation.ai, "llm_json", fake_llm)

@@ -197,6 +197,15 @@ async def enter_meal(bot, cid, meal, ingredients=None, status=None):
     генерирует очередь при необходимости и показывает первый рецепт."""
     set_active_meal(cid, meal)
     q = get_recipe_queue(cid)
+    if q.get("meal") == meal and q.get("items"):
+        # Старые очереди могли сохраниться из неполного ответа модели. Не
+        # показываем служебную ошибку: очищаем их и собираем готовую замену.
+        current = _next_presentable_queue_recipe(cid)
+        if current is not None:
+            await _send_queue_card(bot, cid, meal, current, status=status)
+            return
+        clear_recipe_queue(cid)
+        q = {}
     if q.get("meal") != meal or not q.get("items"):
         if status is None:
             status = await util.StatusManager.start(bot, cid)

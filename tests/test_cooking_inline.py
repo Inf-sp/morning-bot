@@ -76,3 +76,41 @@ def test_recipe_menu_fallback_reuses_shared_inline_status(monkeypatch):
     asyncio.run(cooking.show_next_recipe(object(), "42", status=Status()))
 
     assert calls[0][2].mode == "inline"
+
+
+def test_enter_meal_replaces_stale_unpresentable_queue(monkeypatch):
+    calls = []
+
+    class Status:
+        mode = "inline"
+
+        async def replace(self, *_args, **_kwargs):
+            raise AssertionError("stale queue must not show the generic recipe error")
+
+    stale = {"meal": "dinner", "items": [{"name": "Оборванный рецепт"}]}
+    fallback = {
+        "name": "Быстрый омлет с овощами", "ingredients": "яйца, овощи",
+        "steps": ["Разогрей сковороду", "Обжарь овощи"],
+    }
+    next_items = iter((None, fallback))
+
+    monkeypatch.setattr(cooking, "set_active_meal", lambda *_args: None)
+    monkeypatch.setattr(cooking, "get_recipe_queue", lambda _cid: stale)
+    monkeypatch.setattr(cooking, "_next_presentable_queue_recipe", lambda _cid: next(next_items))
+    monkeypatch.setattr(cooking, "clear_recipe_queue", lambda _cid: calls.append("clear"))
+
+    async def generate(_cid, meal, ingredients=None):
+        calls.append(("generate", meal, ingredients))
+        return [fallback]
+
+    async def send(_bot, _cid, meal, recipe, status=None):
+        calls.append(("send", meal, recipe, status))
+
+    monkeypatch.setattr(cooking, "_generate_and_store_queue", generate)
+    monkeypatch.setattr(cooking, "_send_queue_card", send)
+
+    asyncio.run(cooking.enter_meal(object(), "42", "dinner", status=Status()))
+
+    assert calls[:2] == ["clear", ("generate", "dinner", None)]
+    assert calls[2][:3] == ("send", "dinner", fallback)
+    assert calls[2][3].mode == "inline"
