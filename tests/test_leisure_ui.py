@@ -583,7 +583,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
         "birthday": {"name": "Кнут Гамсун", "birth": "1859-08-04", "detail": "норвежский писатель"},
     }, [{
         "title": "Onyx Storm", "author": "Ребекка Яррос",
-        "vibe": "драконы, политика и тёмный фэнтези-мир",
+        "summary": "Вайолет ищет союзников, пока война всё ближе к её дому.",
     }])
     music = leisure_movies.leisure_ui.music_week_screen("Алкмар", {
         "rebus": {"emoji": "👑 🐝 🎤", "answer": "Beyoncé", "fact": "Факт."},
@@ -608,7 +608,10 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "Литературный ребус: 🧙‍♀️ ⚡ 🚂 → Гарри Поттер" in books.text
     assert "Именинник дня: Кнут Гамсун · 4 августа 1859 — норвежский писатель." in books.text
     assert "Книга под настроение:" not in books.text
-    assert "Главные премьеры:\n• «Onyx Storm» - Ребекка Яррос (Драконы, политика и тёмный фэнтези-мир)" in books.text
+    assert (
+        "Главные премьеры:\n• «Onyx Storm» - Ребекка Яррос\n"
+        "  Вайолет ищет союзников, пока война всё ближе к её дому."
+    ) in books.text
     assert books.text.index("Главные премьеры:") < books.text.index("Именинник дня:") < books.text.index("💡 Интересно:")
     assert any(entity.type == MessageEntity.SPOILER for entity in books.entities)
     assert "🎧 Музыка этой недели · Алкмар" in music.text
@@ -948,11 +951,15 @@ def test_weekly_books_never_show_classics_when_catalogue_has_no_fresh_hits(monke
 
 def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
     message = leisure_books.leisure_ui.weekly_books_screen("Алкмар", {}, [{
-        "title": "Недавний бестселлер", "author": "Автор", "vibe": "триллер",
+        "title": "Недавний бестселлер", "author": "Автор",
+        "summary": "Напряжённый триллер о тайне, которую нельзя оставить в прошлом.",
         "url": "https://books.google.com/books?id=test",
     }])
 
-    assert "Главные премьеры:\n• «Недавний бестселлер» - Автор (Триллер)" in message.text
+    assert (
+        "Главные премьеры:\n• «Недавний бестселлер» - Автор\n"
+        "  Напряжённый триллер о тайне, которую нельзя оставить в прошлом."
+    ) in message.text
     assert "Популярное чтение" not in message.text
     assert any(
         entity.type == MessageEntity.TEXT_LINK
@@ -962,7 +969,7 @@ def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
 
 
 def test_book_showcase_falls_back_to_google_books_search_link():
-    item = leisure_books._books_with_premiere_vibes([{
+    item = leisure_books._books_with_premiere_summaries([{
         "title": "Недавний бестселлер", "author": "Автор",
     }])[0]
 

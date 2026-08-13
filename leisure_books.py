@@ -1,8 +1,10 @@
 """Книжные рекомендации, замены и любимые книги."""
 
 import asyncio
+import html
 import logging
 import random
+import re
 import threading
 import time
 from datetime import date, datetime, timedelta
@@ -38,16 +40,28 @@ _BOOK_GENRES = [
 ]
 _PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("3.5", "3.5"), ("4.0", "4.0"), ("4.5", "4.5")]
-_WEEKLY_SHOWCASE_VERSION = 2
+_WEEKLY_SHOWCASE_VERSION = 3
 
 # Last safe fallback for the weekly showcase. These are recent, widely read
 # releases, deliberately separate from _FALLBACK_BOOKS (the classic personal
 # recommendation catalogue below).
 _WEEKLY_POPULAR_FALLBACKS = [
-    {"title": "Onyx Storm", "author": "Rebecca Yarros", "published_date": "2025-01-21"},
-    {"title": "Great Big Beautiful Life", "author": "Emily Henry", "published_date": "2025-04-22"},
-    {"title": "The Tenant", "author": "Freida McFadden", "published_date": "2025-05-06"},
-    {"title": "Atmosphere", "author": "Taylor Jenkins Reid", "published_date": "2025-06-03"},
+    {
+        "title": "Onyx Storm", "author": "Rebecca Yarros", "published_date": "2025-01-21",
+        "summary": "Вайолет ищет союзников, пока война всё ближе к её дому.",
+    },
+    {
+        "title": "Great Big Beautiful Life", "author": "Emily Henry", "published_date": "2025-04-22",
+        "summary": "Две писательницы соперничают за право рассказать историю затворницы с тёмным прошлым.",
+    },
+    {
+        "title": "The Tenant", "author": "Freida McFadden", "published_date": "2025-05-06",
+        "summary": "Женщина снимает комнату в идеальном доме и замечает, что хозяева скрывают опасную тайну.",
+    },
+    {
+        "title": "Atmosphere", "author": "Taylor Jenkins Reid", "published_date": "2025-06-03",
+        "summary": "Астронавтка пытается совместить мечту о космосе с любовью, которую нельзя назвать вслух.",
+    },
 ]
 
 _BOOK_REBUSES = (
@@ -80,11 +94,11 @@ _BOOK_BIRTHDAY_FALLBACKS = {
         "fact": "«Голод» стал литературным прорывом Гамсуна и одним из первых современных норвежских романов.",
     },
 }
-_PREMIERE_VIBES = {
-    "onyx storm": "драконы, политика и тёмный фэнтези-мир",
-    "great big beautiful life": "роман о тайнах прошлого",
-    "the tenant": "триллер с неожиданным твистом",
-    "atmosphere": "эмоциональная история о космосе и близости",
+_PREMIERE_SUMMARIES = {
+    "onyx storm": "Вайолет ищет союзников, пока война всё ближе к её дому.",
+    "great big beautiful life": "Две писательницы соперничают за право рассказать историю затворницы с тёмным прошлым.",
+    "the tenant": "Женщина снимает комнату в идеальном доме и замечает, что хозяева скрывают опасную тайну.",
+    "atmosphere": "Астронавтка пытается совместить мечту о космосе с любовью, которую нельзя назвать вслух.",
 }
 
 
@@ -325,16 +339,18 @@ def _book_city(cid):
     return str(settings_data.get("city") or config.DEFAULT_CITY.get("name") or "").strip()
 
 
-def _premiere_vibe(item):
+def _premiere_summary(item):
     title = str((item or {}).get("title") or "").casefold().strip()
-    known = _PREMIERE_VIBES.get(title)
+    known = _PREMIERE_SUMMARIES.get(title)
     if known:
         return known
-    description = str((item or {}).get("description") or "").strip()
+    description = html.unescape(str((item or {}).get("description") or ""))
+    description = re.sub(r"<[^>]+>", " ", description)
+    description = re.sub(r"\s+", " ", description).strip()
     if not description:
-        return "новая заметная книга"
-    sentence = description.split(".", 1)[0].strip()
-    return sentence[:110].rstrip(" ,;:") or "новая заметная книга"
+        return ""
+    sentence = re.split(r"(?<=[.!?])\s+", description, maxsplit=1)[0].strip()
+    return sentence[:180].rstrip(" ,;:") or ""
 
 
 def _book_showcase_url(item) -> str:
@@ -359,11 +375,11 @@ def _with_book_url(item):
     return result
 
 
-def _books_with_premiere_vibes(items):
+def _books_with_premiere_summaries(items):
     return [
         {
             **dict(item),
-            "vibe": _premiere_vibe(item),
+            "summary": _premiere_summary(item),
             "url": _book_showcase_url(item),
         }
         for item in (items or [])
@@ -505,6 +521,7 @@ async def get_weekly_new_books():
     items = [dict(item) for _score, item in ranked[:4]]
     if not items:
         items = _fallback_book_showcase(candidates)
+    items = _books_with_premiere_summaries(items)
     _weekly_book_cache_set(items)
     return items
 

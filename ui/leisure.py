@@ -609,7 +609,7 @@ def _book_premiere_items(items) -> list:
 def _write_book_premiere(builder: MessageBuilder, item) -> None:
     title = str(_item_value(item, "title", "") or "").strip()
     author = str(_item_value(item, "author", "") or "").strip()
-    vibe = str(_item_value(item, "vibe", "") or "").strip()
+    summary = str(_item_value(item, "summary", "") or _item_value(item, "vibe", "") or "").strip()
     url = str(_item_value(item, "url", "") or "").strip()
 
     builder.text_line("• ")
@@ -619,9 +619,13 @@ def _write_book_premiere(builder: MessageBuilder, item) -> None:
         builder.text_line(f"«{title}»")
     if author:
         builder.text_line(f" - {author}")
-    if vibe:
-        builder.text_line(f" ({vibe[:1].upper() + vibe[1:]})")
     builder.newline()
+    if summary:
+        summary = clip(summary, limit=180)
+        summary = summary[:1].upper() + summary[1:]
+        if summary and summary[-1] not in ".!?…":
+            summary += "."
+        builder.line(f"  {summary}")
 
 
 def music_week_screen(city, daily_music, concerts):
