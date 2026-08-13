@@ -102,10 +102,13 @@ def test_daily_mood_never_repeats_when_hashes_collide(monkeypatch):
     monkeypatch.setattr("balance.hashlib.sha256", lambda _value: SameDigest())
 
     yesterday = __import__("balance").health_focus("42")["phrase"]
+    yesterday_topic = __import__("balance").health_focus("42")["theme"]
     FixedDateTime.current = datetime(2026, 7, 28)
     today = __import__("balance").health_focus("42")["phrase"]
+    today_topic = __import__("balance").health_focus("42")["theme"]
 
     assert today != yesterday
+    assert today_topic != yesterday_topic
 
 
 def test_quote_fallback_uses_fresh_author_after_favorite_book_was_shown(monkeypatch):

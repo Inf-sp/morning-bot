@@ -258,19 +258,16 @@ def health_menu(focus: dict):
     b.bold("Здоровье на сегодня")
     b.newline()
     b.spacer()
-    b.line("Небольшая опора без диагноза и без перегруза.")
-    b.spacer()
-    b.bold("Фокус дня:")
-    b.text_line(" ")
-    b.line(focus.get("phrase", ""))
-    b.spacer()
-    b.bold("Сегодня:")
+    b.bold("Расписание:")
     b.newline()
-    for step in list(focus.get("steps", ()))[:3]:
-        b.bullet(step)
+    for item in list(focus.get("schedule", ()))[:4]:
+        b.bullet(item)
     b.spacer()
-    b.text_line("💡 ")
-    b.labeled_line("Полезно", focus.get("tip", ""))
+    theme = str(focus.get("theme") or "Забота о себе").strip()
+    b.bold(f"Тема дня · {theme}:")
+    b.newline()
+    for tip in list(focus.get("tips", focus.get("steps", ())))[:3]:
+        b.bullet(tip)
     return b.build_stripped(reply_markup=ikb(_SCREENS["m_balance"][3]))
 
 

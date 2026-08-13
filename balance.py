@@ -66,6 +66,41 @@ _FOCUS_GUIDANCE = {
     ),
 }
 
+_HEALTH_SCHEDULE = (
+    "08:00 · Почисти зубы и выпей стакан воды.",
+    "13:00 · Собери обед: овощи, белок и цельные злаки.",
+    "18:30 · Сделай пять минут лёгкой гимнастики.",
+    "22:30 · Почисти зубы и дай себе время на сон.",
+)
+
+_HEALTH_TOPICS = (
+    ("Уход за кожей", (
+        "Утром нанеси увлажняющий крем и SPF, если выходишь на улицу.",
+        "Умывайся мягким средством без скраба каждый день.",
+        "Вводи только одно новое средство за раз.",
+    )),
+    ("Осанка", (
+        "Поставь верх экрана на уровень глаз.",
+        "Поставь стопы на пол и опирайся спиной на спинку стула.",
+        "Раз в час встань, пройдись и разомни плечи две минуты.",
+    )),
+    ("Питание", (
+        "Добавь овощи или фрукты хотя бы к одному приёму пищи.",
+        "Выбери бобовые: чечевицу, фасоль или нут — как источник белка и клетчатки.",
+        "Сделай гарнир из цельных злаков: овсянки, гречки или цельнозернового хлеба.",
+    )),
+    ("Движение", (
+        "Выбери десять минут ходьбы в удобном темпе.",
+        "Сделай по несколько мягких кругов плечами и тазом.",
+        "После долгого сидения разомни голеностоп и икры.",
+    )),
+    ("Сон", (
+        "За час до сна убери яркий экран или включи тёплый свет.",
+        "Оставь на вечер короткий повторяющийся ритуал: душ, книга или музыка.",
+        "Не переноси на кровать рабочие задачи и ленту новостей.",
+    )),
+)
+
 
 def _focus_index(cid, day):
     digest = hashlib.sha256(str(cid).encode()).digest()
@@ -73,12 +108,26 @@ def _focus_index(cid, day):
     return (start + date.fromisoformat(day).toordinal()) % len(_FOCUS_PHRASES)
 
 
+def _health_topic_index(cid, day):
+    digest = hashlib.sha256(f"health-topic:{cid}".encode()).digest()
+    start = int.from_bytes(digest[:4], "big") % len(_HEALTH_TOPICS)
+    return (start + date.fromisoformat(day).toordinal()) % len(_HEALTH_TOPICS)
+
+
 def health_focus(cid):
     now = datetime.now(TZ)
     day = now.strftime("%Y-%m-%d")
     kind, phrase = _FOCUS_PHRASES[_focus_index(cid, day)]
     steps, tip = _FOCUS_GUIDANCE[kind]
-    return {"phrase": phrase, "steps": steps, "tip": tip}
+    theme, tips = _HEALTH_TOPICS[_health_topic_index(cid, day)]
+    return {
+        "phrase": phrase,
+        "steps": steps,
+        "tip": tip,
+        "schedule": _HEALTH_SCHEDULE,
+        "theme": theme,
+        "tips": tips,
+    }
 
 
 async def send_health_focus(bot, cid):
