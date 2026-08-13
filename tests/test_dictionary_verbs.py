@@ -334,6 +334,22 @@ def test_bare_add_eisen_uses_local_dutch_card_when_ai_is_unavailable(monkeypatch
     assert entry["perfect_form"] == "heeft geëist"
 
 
+def test_common_dutch_noun_is_added_without_ai_when_providers_are_unavailable(monkeypatch):
+    """Обычные слова не должны уходить в уточнение только из-за AI-сбоя."""
+    async def unavailable(*_args, **_kwargs):
+        raise AssertionError("de waarde must use its local card")
+
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", unavailable)
+
+    entry = asyncio.run(dictionary_import._normalize_dict_entry_full("de waarde", "nl"))
+
+    assert entry["term"] == "Waarde"
+    assert entry["article"] == "de"
+    assert entry["translation"] == "Ценность; значение"
+    assert "De waarde → Ценность · значение" in dictionary_import._dict_entry_message(
+        entry, status="added").text
+
+
 def test_successful_analysis_fields_are_saved_in_existing_dictionary_record(monkeypatch):
     stored = []
     monkeypatch.setattr(dictionary_import.store, "get_list", lambda _key, _cid: [])

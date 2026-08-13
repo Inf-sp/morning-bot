@@ -86,6 +86,21 @@ _LOCAL_DUTCH_VERB_CARDS = {
     },
 }
 
+# Базовые существительные, для которых карточка должна появляться даже во время
+# краткого сбоя AI-резервов. Эти данные проверены вручную: локальный fallback
+# никогда не угадывает перевод или род.
+_LOCAL_DUTCH_NOUN_CARDS = {
+    "waarde": {
+        "article": "de",
+        "translation": "ценность; значение",
+        "plural": "waarden",
+        "example_nl": "Deze ring heeft veel waarde.",
+        "example_ru": "Это кольцо имеет большую ценность.",
+        "topic": "общение",
+        "difficulty": "A2",
+    },
+}
+
 
 def _dictionary_nav(cid, lang=None, back=None):
     code = lang if lang in ("nl", "en") else _active_language_code(cid)
@@ -472,6 +487,43 @@ def _local_dutch_verb_entry(raw_user_term, lang_hint):
     }
 
 
+def _local_dutch_noun_entry(raw_user_term, lang_hint):
+    """Карточка для проверенных нидерландских существительных без AI."""
+    if lang_hint != "nl":
+        return None
+    raw_term = _clean_raw_user_term(raw_user_term)
+    term = _normalized_user_term(raw_term, "nl")
+    card = _LOCAL_DUTCH_NOUN_CARDS.get(term.casefold())
+    if not card:
+        return None
+    normalized_term = normalize_term_case(term, "word")
+    return {
+        "lang": "nl",
+        "term": normalized_term,
+        "raw_user_term": raw_term[:120],
+        "normalized_term": normalized_term,
+        "article": card["article"],
+        "translation": normalize_translation_case(card["translation"]),
+        "breakdown": f"существительное · {card['article']}-слово",
+        "examples": [{
+            "text": card["example_nl"],
+            "translation": card["example_ru"],
+        }],
+        "source_text": raw_term[:120],
+        "added_at": datetime.now(config.TZ).isoformat(),
+        "status": "new",
+        "last_shown_at": None,
+        "needs_confirmation": False,
+        "reason": "",
+        "analysis_confidence": 1.0,
+        "analysis_provider": "local_dictionary",
+        **_extract_srs_fields({
+            "pos": "существительное",
+            "plural": card["plural"],
+            "topic": card["topic"],
+            "difficulty": card["difficulty"],
+        }),
+    }
 def _verb_analysis_prompt(word, fixed_preposition=""):
     request = {
         "word": word,
@@ -770,7 +822,10 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
     if (not raw_user_term or _contains_suspicious_analysis_text(raw_user_term)
             or (lang_hint == "nl" and _contains_mixed_script(raw_user_term))):
         return None
-    local_entry = _local_dutch_verb_entry(raw_user_term, lang_hint)
+    local_entry = (
+        _local_dutch_noun_entry(raw_user_term, lang_hint)
+        or _local_dutch_verb_entry(raw_user_term, lang_hint)
+    )
     if local_entry:
         return local_entry
     russian_source = bool(_CYRILLIC_RE.search(raw_user_term))
