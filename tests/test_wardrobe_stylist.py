@@ -41,25 +41,23 @@ def _item(item_id, zone, name):
     }
 
 
-def test_outfit_card_groups_items_by_category_without_weather_intro_or_naden_label():
+def test_outfit_card_shows_three_base_items_without_weather_intro():
     message = render_wardrobe_message({
         "items": [
             {"name": "Белая футболка", "zone": "Верх"},
             {"name": "Широкие брюки", "zone": "Низ"},
             {"name": "Белые кеды", "zone": "Обувь"},
         ],
-        "purchase_recommendation": {
-            "item": "Серые широкие джинсы",
-            "reason": "закроют пробел в шкафу и дадут больше сочетаний с твоими рубашками и футболками",
-        },
+        "style_tip": "Оставь верх навыпуск, чтобы силуэт выглядел расслабленнее",
     })
 
     assert _entities(message, MessageEntity.ITALIC) == []
     assert "Жарко и сухо" not in message.text
-    assert "Надень" not in message.text
-    assert "Верх: Белая футболка" in message.text
-    assert "Низ и обувь: Широкие брюки, Белые кеды" in message.text
-    assert "💡 Полезно: Серые широкие джинсы — закроют пробел" in message.text
+    assert "Надень:" in message.text
+    assert "- Белая футболка" in message.text
+    assert "- Широкие брюки" in message.text
+    assert "- Белые кеды" in message.text
+    assert "💡 Полезно: Оставь верх навыпуск" in message.text
 
 
 def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
@@ -67,9 +65,9 @@ def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
         "items": [{"name": "цепочка со значком сторон света"}, {"name": "футболка Levi's"}],
     })
 
-    assert "Аксессуары: Цепочка со значком сторон света" in message.text
-    assert "Верх: Футболка Levi's" in message.text
-    assert "Надень" not in message.text
+    assert "💡 Полезно: Добавь Цепочка со значком сторон света" in message.text
+    assert "- Футболка Levi's" in message.text
+    assert "Надень:" in message.text
 
 
 def test_outfit_card_shows_selected_accessories_after_main_items():
@@ -82,8 +80,23 @@ def test_outfit_card_shows_selected_accessories_after_main_items():
         ],
     })
 
-    assert "Низ и обувь: Брюки, Кеды" in message.text
-    assert "Аксессуары: Часы" in message.text
+    assert "- Брюки" in message.text
+    assert "- Кеды" in message.text
+    assert "💡 Полезно: Добавь Часы" in message.text
+
+
+def test_outfit_card_adds_outerwear_to_top_line_only_when_selected():
+    message = render_wardrobe_message({
+        "items": [
+            {"name": "Фиолетовая футболка", "zone": "Верх"},
+            {"name": "Лёгкая ветровка", "zone": "Верхняя одежда"},
+            {"name": "Бежевые брюки", "zone": "Низ"},
+            {"name": "Белые кеды", "zone": "Обувь"},
+        ],
+    })
+
+    assert "- Фиолетовая футболка, Лёгкая ветровка" in message.text
+    assert "Верхняя одежда:" not in message.text
 
 
 def test_outfit_header_uses_emoji_of_selected_style():

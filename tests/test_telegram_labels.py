@@ -32,22 +32,18 @@ def test_wardrobe_card_uses_current_outfit_labels():
             {"name": "Белая рубашка", "zone": "Верх"},
             {"name": "Синие брюки", "zone": "Низ"},
         ],
-        "purchase_recommendation": {
-            "item": "Серые широкие джинсы",
-            "reason": "закроют пробел в шкафу",
-        },
+        "style_tip": "Подверни рукава, чтобы образ выглядел легче",
     })
 
     assert _bold_fragments(message) == [
         "🧥 Образ на сегодня · Скандинавский",
-        "Верх:",
-        "Низ и обувь:",
+        "Надень:",
         "Полезно:",
     ]
     assert "🧥 Образ на сегодня · Скандинавский" in message.text
     assert "Гардероб · Образ на сегодня" not in message.text
-    assert "Верх: Белая рубашка\nНиз и обувь: Синие брюки" in message.text
-    assert "💡 Полезно: Серые широкие джинсы — закроют пробел в шкафу." in message.text
+    assert "Надень:\n- Белая рубашка\n- Синие брюки" in message.text
+    assert "💡 Полезно: Подверни рукава, чтобы образ выглядел легче." in message.text
 
 
 def test_day_summary_lifehack_keeps_capital_letter_after_label():

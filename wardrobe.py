@@ -36,7 +36,7 @@ from wardrobe_migration import migrate_item_attrs
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
-COPY_VALIDATOR_VERSION = 10
+COPY_VALIDATOR_VERSION = 11
 PURCHASE_RECOMMENDATION_VERSION = 2
 
 def _kb(rows):
@@ -277,6 +277,8 @@ def _repair_missing_purchase_recommendation(cid, look_data):
     wardrobe = store.load_wardrobe(cid)
     outfit_items = _cached_outfit_items(wardrobe, look_data)
     fallback_tip = build_style_tip(outfit_items, {})
+    if not _clean_text(look_data.get("style_tip")) and fallback_tip:
+        look_data["style_tip"] = fallback_tip
     recommendation = _get_or_create_purchase_recommendation(
         cid,
         wardrobe,
@@ -612,6 +614,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
             {"name": public_item_name(it), "zone": it.get("zone")}
             for it in best_sorted
         ],
+        "style_tip": fallback_tip,
         "purchase_recommendation": purchase_recommendation,
     }
     if kb is None:
@@ -1214,8 +1217,7 @@ async def ingest(bot, cid, text):
 async def handle_callback(bot, cid, q, data, status=None):
     if data == "w_look":
         previous = _get_cached_look(cid) or {}
-        previous_recommendation = (previous.get("look_data") or {}).get("purchase_recommendation") or {}
-        previous_style_tip = previous_recommendation.get("reason") if previous_recommendation.get("kind") == "wear" else None
+        previous_style_tip = (previous.get("look_data") or {}).get("style_tip") or None
         store.clear_wardrobe_daylook(cid)
         owns_status = status is None
         if owns_status:

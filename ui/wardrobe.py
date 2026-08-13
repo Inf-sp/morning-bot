@@ -98,30 +98,31 @@ def empty_wardrobe():
 
 
 def render_wardrobe_message(look_data):
-    """Образ на сегодня: вещи сгруппированы по понятным категориям.
+    """Образ на сегодня: три вещи, которые нужно надеть, и один финальный штрих.
 
     Погодная строка намеренно не показывается.
 
-    look_data: {primary_style, items[{name, zone}], purchase_recommendation}
+    look_data: {primary_style, items[{name, zone}], style_tip}
     """
     look_data = look_data or {}
     b = MessageBuilder()
     primary_style = _clean_text(look_data.get("primary_style"))
     b.section(outfit_header(primary_style))
 
-    grouped_items = _group_outfit_items(look_data.get("items") or [])
-    if grouped_items:
+    slots = _outfit_slots(look_data.get("items") or [])
+    if any(slots.values()):
         b.spacer()
-        for category, items in grouped_items:
-            b.labeled_line(category, ", ".join(items), lowercase=False)
+        b.bold("Надень:")
+        b.newline()
+        top = ", ".join([*slots["Верх"], *slots["Верхняя одежда"]])
+        if top:
+            b.line(f"- {top}")
+        if slots["Низ"]:
+            b.line(f"- {', '.join(slots['Низ'])}")
+        if slots["Обувь"]:
+            b.line(f"- {', '.join(slots['Обувь'])}")
 
-    recommendation = look_data.get("purchase_recommendation") or {}
-    if isinstance(recommendation, dict):
-        item = _clean_text(recommendation.get("item"))
-        reason = _finish_dot(recommendation.get("reason"))
-        tip = f"{item} — {reason}" if item and reason else item or reason
-    else:
-        tip = _clean_text(recommendation)
+    tip = _outfit_tip(slots, look_data.get("style_tip"))
     if tip:
         b.spacer()
         b.text_line("💡 ")
@@ -140,36 +141,28 @@ def _item_display(it):
     return it.get("short_name") or it.get("name")
 
 
-_OUTFIT_CATEGORY_LABELS = {
-    "Верх": "Верх",
-    "Верхняя одежда": "Верхняя одежда",
-    "Низ": "Низ и обувь",
-    "Обувь": "Низ и обувь",
-    "Аксессуары": "Аксессуары",
-    "Другое": "Другое",
-}
-_OUTFIT_CATEGORY_ORDER = (
-    "Верх",
-    "Верхняя одежда",
-    "Низ и обувь",
-    "Аксессуары",
-    "Другое",
-)
+_OUTFIT_SLOTS = ("Верх", "Верхняя одежда", "Низ", "Обувь", "Аксессуары", "Другое")
 
 
-def _group_outfit_items(items):
-    """Готовит короткие строки карточки, не принимая решений о составе образа."""
-    grouped = {category: [] for category in _OUTFIT_CATEGORY_ORDER}
+def _outfit_slots(items):
+    """Раскладывает уже выбранные вещи, не решая, что войдёт в образ."""
+    grouped = {slot: [] for slot in _OUTFIT_SLOTS}
     for item in items:
         name = _upper_first(_clean_text(_item_display(item)))
         if not name:
             continue
         zone = _clean_text(item.get("zone")) if isinstance(item, dict) else ""
-        category = _OUTFIT_CATEGORY_LABELS.get(zone)
-        if not category:
-            category = _OUTFIT_CATEGORY_LABELS.get(zone_of(name), "Другое")
-        grouped[category].append(name)
-    return [(category, grouped[category]) for category in _OUTFIT_CATEGORY_ORDER if grouped[category]]
+        slot = zone if zone in grouped else zone_of(name)
+        grouped[slot if slot in grouped else "Другое"].append(name)
+    return grouped
+
+
+def _outfit_tip(slots, style_tip):
+    accessories = slots.get("Аксессуары") or []
+    if accessories:
+        names = ", ".join(accessories)
+        return f"Добавь {names} — это завершит образ без лишних деталей"
+    return _finish_dot(style_tip)
 
 
 def _pluralize_items(n):
