@@ -369,6 +369,32 @@ def test_purchase_suggestions_show_colors_and_three_real_outfits():
     assert "• Худи + белые кеды." in message.text
 
 
+def test_other_purchase_immediately_recommends_a_wardrobe_gap(monkeypatch):
+    sent = []
+    wardrobe_data = {
+        "zones": {
+            "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},
+            "Низ": {"Брюки": [{"name": "Бежевые брюки", "zone": "Низ"}]},
+            "Обувь": {"Кеды": [{"name": "Белые кеды", "zone": "Обувь"}]},
+        }
+    }
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
+    monkeypatch.setattr(wardrobe, "has_wardrobe_items", lambda _cid: True)
+    monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: None)
+    monkeypatch.setattr(wardrobe._settings, "wardrobe_styles", lambda _cid: [])
+
+    asyncio.run(wardrobe.recommend_missing_purchase(Bot(), "42"))
+
+    assert "💳 Что докупить · Серые широкие джинсы" in sent[0]["text"]
+    assert "закроют пробел в шкафу" in sent[0]["text"]
+    assert _labels(sent[0]["reply_markup"])[0] == ["✨ Подобрать другую вещь"]
+
+
 def test_purchase_suggestions_keep_only_outfits_with_real_wardrobe_items(monkeypatch):
     wardrobe_data = {
         "zones": {
