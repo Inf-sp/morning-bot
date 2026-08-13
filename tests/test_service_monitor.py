@@ -50,12 +50,25 @@ def test_quota_rows_show_remaining_not_usage(monkeypatch):
     )
 
 
-def test_one_remaining_request_uses_singular(monkeypatch):
+def test_one_remaining_request_is_healthy_when_spoonacular_still_accepts_requests(monkeypatch):
     _memory_store(monkeypatch)
     provider_runtime.record_result("spoonacular", True, quota_remaining=1, quota_total=150)
 
     assert service_monitor.format_row("spoonacular") == (
-        "🟡 Spoonacular · Готовка · 1/150 осталось"
+        "🟢 Spoonacular · Готовка · 1/150 осталось"
+    )
+
+
+def test_successful_spoonacular_request_removes_themealdb_fallback(monkeypatch):
+    _memory_store(monkeypatch)
+    provider_runtime.record_result("spoonacular", False, status_code=402, error="quota")
+    provider_runtime.record_result("themealdb", True)
+    assert provider_runtime.activate_fallback("spoonacular", "themealdb")
+
+    provider_runtime.record_result("spoonacular", True, quota_remaining=1, quota_total=49)
+
+    assert service_monitor.format_row("spoonacular") == (
+        "🟢 Spoonacular · Готовка · 1/49 осталось"
     )
 
 

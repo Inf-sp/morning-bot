@@ -152,11 +152,8 @@ def format_row(service: str, state: dict | None = None) -> str:
             return " · ".join([
                 f"{_DOT[status]} {spec.label}", spec.category, _status_detail(service, state),
             ])
-        dot = _DOT[WARNING if remaining <= 200 else OK]
-        return f"{dot} Google Books · Книги · {_number(remaining)}/1 000 осталось"
+        return f"🟢 Google Books · Книги · {_number(remaining)}/1 000 осталось"
     remaining, total = _confirmed_quota(service, state)
-    if status in (OK, UNKNOWN) and total and remaining is not None and remaining <= total * 0.2:
-        status = WARNING
     parts = [f"{_DOT[status]} {spec.label}"]
     category = _DATA_CATEGORIES.get(service, spec.category)
     if category:
@@ -179,8 +176,6 @@ def _format_groq_row(model: str, role: str, state: dict | None = None) -> str:
     usage_service = api_usage.groq_model_service(model)
     remaining, total = _confirmed_quota(usage_service, state)
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
-    if remaining is not None and total and remaining <= total * 0.2:
-        status = WARNING
     detail = _quota_text(remaining, total) if remaining is not None and total is not None else _usage_detail(usage_service)
     return f"{_DOT[status]} Groq · {role} · {_display_model(model)} · {detail}"
 
@@ -203,9 +198,6 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
         )
     if service == "gemini" and quota_remaining is not None and quota_remaining <= 0:
         detail = "лимит исчерпан"
-    remaining, total = quota_remaining, quota_total
-    if remaining is not None and total and remaining <= total * 0.2:
-        status = WARNING
     if status in (DOWN, WARNING) and state.get("error_type") not in ("quota", "rate_limit"):
         detail = str(state.get("last_error") or detail)
     return f"{_DOT[status]} {label} · {role} · {detail}"
