@@ -317,6 +317,23 @@ def test_known_dutch_verb_is_added_without_ai_when_providers_are_unavailable(mon
     assert entry["analysis_provider"] == "local_grammar"
 
 
+def test_bare_add_eisen_uses_local_dutch_card_when_ai_is_unavailable(monkeypatch):
+    """Точный сценарий из чата: Add eisen не должен идти к AI-резервам."""
+    async def unavailable(*_args, **_kwargs):
+        raise AssertionError("eisen must use its local card")
+
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", unavailable)
+
+    payload, lang = dictionary_import._extract_chat_dict_add("Add eisen", "42")
+    assert (payload, lang) == ("eisen", "nl")
+
+    entry = asyncio.run(dictionary_import._normalize_dict_entry_full(payload, lang))
+
+    assert entry["translation"] == "требовать"
+    assert entry["past_singular"] == "eiste"
+    assert entry["perfect_form"] == "heeft geëist"
+
+
 def test_successful_analysis_fields_are_saved_in_existing_dictionary_record(monkeypatch):
     stored = []
     monkeypatch.setattr(dictionary_import.store, "get_list", lambda _key, _cid: [])

@@ -72,6 +72,18 @@ _LOCAL_DUTCH_VERB_CARDS = {
         "topic": "здоровье",
         "difficulty": "A2",
     },
+    "eisen": {
+        "translation": "требовать",
+        "past_singular": "eiste",
+        "past_participle": "geëist",
+        "auxiliary": "hebben",
+        "perfect_form": "heeft geëist",
+        "verb_type": "weak",
+        "example_nl": "Deze baan eist veel tijd.",
+        "example_ru": "Эта работа требует много времени.",
+        "topic": "работа",
+        "difficulty": "B1",
+    },
 }
 
 
@@ -160,7 +172,7 @@ _DUTCH_ARTICLE_RE = re.compile(r"\b(de|het)\s+\w+", re.I)
 _DUTCH_WORD_HINTS = {
     "liever", "vanwege", "bewonderen", "tegoed", "walging", "gevolg",
     "afdeling", "ongeveer", "twijfelen", "twijfelt", "wennen", "omgaan",
-    "kies", "tering",
+    "kies", "tering", "eisen",
 }
 
 
