@@ -53,7 +53,7 @@ _HOME_OPENING_DEDUP_SECONDS = 3
 _HOME_WARM_SCHEDULE = (
     ("myday", "08:00"),
     ("wardrobe", "08:05"),
-    ("cooking", "08:10"),
+    ("cooking", "03:20"),
     ("travel", "08:15"),
     ("cinema", "08:20"),
     ("books", "08:25"),
