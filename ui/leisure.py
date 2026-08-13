@@ -100,14 +100,15 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
                 b.text_line(label)
             genres = _movie_genres_for_line(movie)
             if genres:
-                b.line(f" - {genres[:1].upper() + genres[1:]}")
-            else:
-                b.newline()
+                b.text_line(f" ({genres})")
             overview = clip(str(_item_value(movie, "overview", "") or ""), limit=160)
             if overview:
                 if overview[-1] not in ".!?…":
                     overview += "."
-                b.line(f"  {overview}")
+                b.text_line(" · ")
+                b.line(overview)
+            else:
+                b.newline()
     else:
         b.text_line(" ")
         b.line("Пока не удалось подтвердить актуальные показы.")
@@ -147,6 +148,8 @@ def _movie_now_playing_lines(now_playing) -> list[dict]:
 
 def _movie_genres_for_line(movie) -> str:
     raw_genres = _item_value(movie, "genres")
+    if isinstance(raw_genres, str):
+        raw_genres = re.split(r"\s*[,·/]\s*", raw_genres)
     if not isinstance(raw_genres, list):
         raw_genres = [_item_value(movie, "genre")]
     translations = {
@@ -602,7 +605,7 @@ def weekly_books_screen(city, daily_book, items):
 
 
 def movie_premieres_screen(country, date_range, items):
-    """Список региональных кинопремьер: дата, название и одна строка о фильме."""
+    """Полные карточки региональных кинопремьер без лишней табличной метаинформации."""
     b = MessageBuilder()
     b.text_line("🎟️ ")
     b.bold(f"Премьеры в кино · {country}")
@@ -617,21 +620,30 @@ def movie_premieres_screen(country, date_range, items):
         title = str(_item_value(item, "title", "") or "").strip()
         if not title:
             continue
-        date_label = str(_item_value(item, "date_label", "") or "").strip()
-        genres = str(_item_value(item, "genres", "") or "").strip()
-        b.text_line("• ")
-        if date_label:
-            b.text_line(f"{date_label} · ")
         b.bold(f"«{title}»")
-        if genres:
-            b.text_line(f" · {genres}")
         b.newline()
-        overview = clip(str(_item_value(item, "overview", "") or ""), limit=170)
+        genres = _movie_genres_for_line(item)
+        if genres:
+            b.line(genres.replace(", ", " · "))
+        premiere_date = _movie_premiere_date(item)
+        if premiere_date:
+            b.line(f"Премьера: {premiere_date}")
+        overview = clip(str(_item_value(item, "overview", "") or ""), limit=310)
         if overview:
             if overview[-1] not in ".!?…":
                 overview += "."
-            b.line(f"  {overview}")
+            b.line(overview)
+        b.newline()
     return b.build_stripped()
+
+
+def _movie_premiere_date(item):
+    raw = str(_item_value(item, "date", "") or "").strip()
+    try:
+        value = date.fromisoformat(raw)
+    except ValueError:
+        return str(_item_value(item, "date_label", "") or "").strip()
+    return _format_date_label(value, include_year=True)
 
 
 def book_premieres_screen(month, items):

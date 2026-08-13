@@ -596,8 +596,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "Ребус дня: 🦈 🌊 👨‍🔬 → Челюсти" in movie.text
     assert "Именинник дня: Грета Гервиг · 4 августа 1983 — режиссёр и актриса. «Леди Бёрд» принесла ей две номинации на «Оскар»." in movie.text
     assert "Фильм под настроение:" not in movie.text
-    assert "Что в кино:\n• «Фильм» - Драма, триллер" in movie.text
-    assert "Героиня возвращается домой и находит старую тайну." in movie.text
+    assert "Что в кино:\n• «Фильм» (драма, триллер) · Героиня возвращается домой и находит старую тайну." in movie.text
     movie_link = next(entity for entity in movie.entities if entity.type == MessageEntity.TEXT_LINK)
     assert movie_link.url == "https://www.youtube.com/watch?v=trailer123"
     assert "💡 Интересно: «Челюсти» считают первым современным летним блокбастером." in movie.text
@@ -651,7 +650,7 @@ def test_books_home_opens_daily_literary_screen_not_a_recommendation(monkeypatch
 
 def test_premiere_screens_are_compact_and_keep_book_links():
     movie = leisure_movies.leisure_ui.movie_premieres_screen("Нидерланды", "13–26 августа", [{
-        "title": "Премьера", "date_label": "15 августа", "genres": "Драма",
+        "title": "Премьера", "date": "2026-08-15", "genres": "Драма, комедия",
         "overview": "Семья пытается сохранить дом после большого наводнения",
     }])
     books = leisure_books.leisure_ui.book_premieres_screen("Август 2026", [{
@@ -660,7 +659,7 @@ def test_premiere_screens_are_compact_and_keep_book_links():
     }])
 
     assert "Премьеры в кино · Нидерланды" in movie.text
-    assert "15 августа · «Премьера» · Драма" in movie.text
+    assert "«Премьера»\nдрама · комедия\nПремьера: 15 августа 2026" in movie.text
     assert "Семья пытается сохранить дом после большого наводнения." in movie.text
     assert "Премьеры книг · Август 2026" in books.text
     assert "Героиня ищет сестру в незнакомом городе." in books.text
@@ -814,9 +813,9 @@ def test_movie_home_shows_three_popular_local_premieres_with_trailer_links(monke
 
     asyncio.run(leisure_movies.send_movie_now_playing(Bot(), "42"))
 
-    assert "• «Первый» - Драма" in sent[0]["text"]
-    assert "• «Второй» - Комедия" in sent[0]["text"]
-    assert "• «Третий» - Триллер" in sent[0]["text"]
+    assert "• «Первый» (драма)" in sent[0]["text"]
+    assert "• «Второй» (комедия)" in sent[0]["text"]
+    assert "• «Третий» (триллер)" in sent[0]["text"]
     assert "Четвёртый" not in sent[0]["text"]
     links = [entity.url for entity in sent[0]["entities"] if entity.type == MessageEntity.TEXT_LINK]
     assert links == [
