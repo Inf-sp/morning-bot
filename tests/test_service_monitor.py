@@ -72,6 +72,24 @@ def test_successful_spoonacular_request_removes_themealdb_fallback(monkeypatch):
     )
 
 
+def test_successful_spoonacular_probe_with_remaining_quota_removes_stale_fallback(monkeypatch):
+    """Обычный health-probe должен вернуть готовку к первичному источнику."""
+    _memory_store(monkeypatch)
+    provider_runtime.record_result("spoonacular", False, status_code=402, error="quota")
+    provider_runtime.record_result("themealdb", True)
+    assert provider_runtime.activate_fallback("spoonacular", "themealdb")
+
+    provider_runtime.record_result(
+        "spoonacular", True, quota_remaining=1, quota_total=49,
+        allow_quota_recovery=False, record_history=False,
+    )
+
+    assert provider_runtime.selected_provider("spoonacular") == "spoonacular"
+    assert service_monitor.format_row("spoonacular") == (
+        "🟢 Spoonacular · Готовка · 1/49 осталось"
+    )
+
+
 def test_exhausted_quota_is_yellow(monkeypatch):
     _memory_store(monkeypatch)
     provider_runtime.record_result("gemini", True, quota_remaining=0, quota_total=20)

@@ -491,7 +491,17 @@ def record_result(
         incident_id = str(state.get("incident_id") or "")
         incident_started_at = int(state.get("incident_started_at") or now)
         state["last_check"] = now
-        if ok and not allow_quota_recovery and old_error_type in ("quota", "rate_limit"):
+        # Положительный остаток в ответе провайдера — прямое доказательство,
+        # что прежний исчерпанный лимит снят. Это важно для Spoonacular: его
+        # health-probe иначе обновлял 1/N, но оставлял активным TheMealDB.
+        # Для 429 не восстанавливаемся по одному остатку: дневная квота не
+        # отменяет кратковременный rate limit.
+        quota_recovered = (
+            old_error_type == "quota"
+            and int(remaining or 0) > 0
+        )
+        if (ok and not allow_quota_recovery and old_error_type in ("quota", "rate_limit")
+                and not quota_recovered):
             return data, None
         if remaining is not None and total is not None:
             try:
