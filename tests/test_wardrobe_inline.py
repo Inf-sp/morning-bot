@@ -342,14 +342,13 @@ def test_wardrobe_home_actions_use_one_column():
     assert "📌 Предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
 
 
-def test_purchase_hub_explains_the_flow_and_keeps_check_as_a_second_action():
+def test_purchase_hub_explains_the_flow_without_purchase_check():
     message = wardrobe.wardrobe_ui.shopping_home_screen()
 
     assert "Подберу вещь, которая будет работать с твоим шкафом" in message.text
     assert "худи»" in message.text
     assert _labels(wardrobe._purchase_hub_kb()) == [
         ["✨ Подобрать вещь"],
-        ["🧐 Оценить покупку"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 

@@ -1056,7 +1056,6 @@ async def check_purchase(bot, cid, text):
 def _purchase_hub_kb():
     return _kb([
         [("✨ Подобрать вещь", "w_buy_pick")],
-        [("🧐 Оценить покупку", "w_check")],
         [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")],
     ])
 
@@ -1064,7 +1063,6 @@ def _purchase_hub_kb():
 def _purchase_result_kb():
     return _kb([
         [("✨ Подобрать другую вещь", "w_buy_pick")],
-        [("🧐 Оценить покупку", "w_check")],
         [("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")],
     ])
 
@@ -1299,10 +1297,6 @@ async def handle_callback(bot, cid, q, data, status=None):
         )
         return
     if data == "w_check":
-        store.pending_input[str(cid)] = "wardrobe_check"
-        await bot.send_message(
-            chat_id=cid,
-            text="Опиши вещь, которую уже нашёл: например «зелёная худи, хлопок, свободный крой». Если знаешь цену, материал или состояние — тоже добавь.",
-            reply_markup=_kb([[("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")]]),
-        )
+        # Совместимость со старыми сообщениями: отдельная оценка покупки убрана.
+        await send_purchase_hub(bot, cid)
         return
