@@ -621,6 +621,43 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert any(entity.type == MessageEntity.SPOILER for entity in music.entities)
 
 
+def test_books_home_opens_daily_literary_screen_not_a_recommendation(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def daily():
+        return {"rebus": {"emoji": "🧙 ⚡", "answer": "Гарри Поттер", "fact": "Факт."}}
+
+    async def premieres():
+        return [{"title": "Премьера", "author": "Автор", "vibe": "фэнтези"}]
+
+    monkeypatch.setattr(leisure_books, "_daily_book_content", daily)
+    monkeypatch.setattr(leisure_books, "get_weekly_new_books", premieres)
+    monkeypatch.setattr(leisure_books, "_book_city", lambda _cid: "Алкмар")
+
+    asyncio.run(leisure_books.send_books_home(Bot(), "42"))
+
+    assert "📚 Литературный вайб · Алкмар" in sent[0]["text"]
+    assert "Литературный ребус: 🧙 ⚡ → Гарри Поттер" in sent[0]["text"]
+    assert _labels(sent[0]["reply_markup"])[0] == ["✨ Подобрать книгу"]
+
+
+def test_movie_home_opens_daily_cinema_screen(monkeypatch):
+    calls = []
+
+    async def cinema(bot, cid, *, q=None, status=None):
+        calls.append((bot, cid, q, status))
+
+    monkeypatch.setattr(leisure_movies, "send_movie_now_playing", cinema)
+
+    asyncio.run(leisure_movies.send_movie_home("bot", "42", q="query", status="status"))
+
+    assert calls == [("bot", "42", "query", "status")]
+
+
 def test_daily_category_block_titles_are_bold():
     movie = leisure_movies.leisure_ui.movie_now_playing_screen("Алкмар", [{
         "title": "Фильм", "genres": ["drama"],

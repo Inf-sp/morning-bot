@@ -131,22 +131,30 @@ def test_music_keeps_recommending_when_ai_is_unavailable_and_first_fallback_is_k
     assert "Alvvays" in calls[0][0]
 
 
-def test_music_home_shows_the_prepared_personal_artist(monkeypatch):
+def test_music_home_shows_daily_rebus_and_concerts(monkeypatch):
     sent = []
 
     class Bot:
         async def send_message(self, **kwargs):
             sent.append(kwargs)
 
-    async def send_listen(bot, cid, *, status=None):
-        sent.append((bot, cid, status))
+    async def daily(_cid):
+        return {"rebus": {"emoji": "👑 🐝 🎤", "answer": "Beyoncé", "fact": "Факт."}}
 
-    monkeypatch.setattr(leisure_music, "send_listen", send_listen)
+    async def concerts(_cid):
+        return [{"artist": "Romy", "date": "21 августа", "place": "Алкмар"}]
 
+    monkeypatch.setattr(leisure_music, "_daily_music_content", daily)
+    monkeypatch.setattr(leisure_music, "_weekly_concerts", concerts)
+    monkeypatch.setattr(leisure_music, "_music_city", lambda _cid: "Алкмар")
     asyncio.run(leisure_music.send_music_home(Bot(), "42"))
 
     assert len(sent) == 1
-    assert sent[0][1:] == ("42", None)
+    assert "🎧 Музыка этой недели · Алкмар" in sent[0]["text"]
+    assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in sent[0]["text"]
+    assert [row[0].text for row in sent[0]["reply_markup"].inline_keyboard[:2]] == [
+        "✨ Подобрать новую музыку", "🎭 По жанру",
+    ]
 
 
 def test_music_home_shows_three_nearby_concerts_as_separate_items():

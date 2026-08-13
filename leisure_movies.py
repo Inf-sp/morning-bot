@@ -540,21 +540,8 @@ async def get_local_now_playing(cid, *, limit=20, refresh=False):
 
 
 async def send_movie_home(bot, cid, q=None, status=None):
-    """Открывает уже подготовленную персональную карточку кино."""
-    it, tm = await get_current_movie(cid)
-    if not it:
-        text = "Не удалось подобрать кино. Попробуй ещё раз."
-        if status is not None:
-            await status.replace(text, reply_markup=_movie_home_only_kb())
-        else:
-            await bot.send_message(chat_id=cid, text=text, reply_markup=_movie_home_only_kb())
-        return
-    disp = _display_title(it, tm)
-    movie_engine.mark_shown(cid, disp)
-    store.last_recos[str(cid)] = {"kind": "movie", "items": [disp]}
-    store.last_source[str(cid)] = "Кино"
-    store.last_answer[str(cid)] = f"{disp} - {it.get('hook', '')}"
-    await _send_movie_card(bot, cid, it, 0, tm=tm, status=status)
+    """Открывает ежедневную витрину кино; подбор запускается отдельной кнопкой."""
+    await send_movie_now_playing(bot, cid, q=q, status=status)
 
 
 def _featured_now_playing(items):
@@ -734,9 +721,10 @@ async def send_movie_now_playing(bot, cid, q=None, status=None):
 
 
 async def warm_movie_home_cache(cid):
-    """Готовит карточку кино заранее, не отправляя экран в Telegram."""
-    it, _tm = await get_current_movie(cid)
-    return bool(it)
+    """Готовит данные ежедневной витрины кино без рекомендации и сообщений."""
+    await get_local_now_playing(cid, limit=20)
+    await _daily_cinema_content()
+    return True
 
 
 def _movie_prefs(cid):

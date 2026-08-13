@@ -507,13 +507,29 @@ async def send_music_task(bot, cid, key, *, status=None):
 
 
 async def send_music_home(bot, cid, q=None, status=None):
-    """Открывает дневную карточку артиста, подготовленную до входа в раздел."""
-    await send_listen(bot, cid, status=status)
+    """Открывает ежедневную музыкальную витрину; артиста выбирают отдельной кнопкой."""
+    daily_music, concerts = await asyncio.gather(
+        _daily_music_content(cid),
+        _weekly_concerts(cid),
+    )
+    msg = leisure_ui.music_week_screen(_music_city(cid), daily_music, concerts)
+    kb = music_home_keyboard()
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+        return
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 async def warm_music_home_cache(cid):
-    """Готовит персонального артиста дня, не отмечая его как уже показанного."""
-    return bool(await send_listen(bot, cid, preview=True))
+    """Готовит данные музыкальной витрины без запроса персональной рекомендации."""
+    await asyncio.gather(_daily_music_content(cid), _weekly_concerts(cid))
+    return True
 
 
 async def _weekly_concerts(cid):

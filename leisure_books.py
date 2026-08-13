@@ -203,13 +203,32 @@ def books_home_keyboard():
 
 
 async def send_books_home(bot, cid, q=None, status=None):
-    """Открывает дневную персональную книгу вместо общей витрины."""
-    await send_books_reco(bot, cid, status=status)
+    """Открывает ежедневную литературную витрину; подбор книги остаётся по кнопке."""
+    daily_book, items = await asyncio.gather(
+        _daily_book_content(),
+        get_weekly_new_books(),
+    )
+    msg = leisure_ui.weekly_books_screen(_book_city(cid), daily_book, items)
+    kb = books_home_keyboard()
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb,
+                             disable_web_page_preview=True)
+        return
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb,
+                                      disable_web_page_preview=True)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
+                           disable_web_page_preview=True)
 
 
 async def warm_books_home_cache(cid):
-    """Готовит книгу дня без отправки сообщения пользователю."""
-    return bool(await get_current_book(cid))
+    """Готовит данные литературной витрины без персональной рекомендации."""
+    await asyncio.gather(_daily_book_content(), get_weekly_new_books())
+    return True
 
 
 def _daily_book_rebus(day):
