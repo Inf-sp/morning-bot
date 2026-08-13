@@ -176,6 +176,9 @@ def _format_groq_row(model: str, role: str, state: dict | None = None) -> str:
     usage_service = api_usage.groq_model_service(model)
     remaining, total = _confirmed_quota(usage_service, state)
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
+    if (status in (OK, UNKNOWN) and remaining is not None and total
+            and int(remaining) * 2 < int(total)):
+        status = WARNING
     detail = _quota_text(remaining, total) if remaining is not None and total is not None else _usage_detail(usage_service)
     return f"{_DOT[status]} Groq · {role} · {_display_model(model)} · {detail}"
 

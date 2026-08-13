@@ -142,6 +142,21 @@ def test_local_groq_counter_is_usage_not_provider_quota(monkeypatch):
     )
 
 
+def test_groq_turns_yellow_only_below_half_of_confirmed_quota(monkeypatch):
+    _memory_store(monkeypatch)
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+
+    provider_runtime.record_result("groq", True, quota_remaining=998, quota_total=1000)
+    assert service_monitor.format_row("groq") == (
+        "🟢 Groq · Основной · gpt-oss-20b · 998/1 000 осталось"
+    )
+
+    provider_runtime.record_result("groq", True, quota_remaining=499, quota_total=1000)
+    assert service_monitor.format_row("groq") == (
+        "🟡 Groq · Основной · gpt-oss-20b · 499/1 000 осталось"
+    )
+
+
 def test_gemini_usage_does_not_expose_internal_model_name(monkeypatch):
     _memory_store(monkeypatch)
     monkeypatch.setattr(
