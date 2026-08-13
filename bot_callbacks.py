@@ -467,6 +467,12 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "book_reco":
         await _inline_status(lambda status: leisure_books.send_books_reco(bot, cid, status=status))
         return
+    if data == "book_premieres":
+        await _inline_status(
+            lambda status: leisure_books.send_book_premieres(bot, cid, status=status),
+            preserve_message=True,
+        )
+        return
     if data == "book_genre_menu":
         await _ack(q)
         await leisure_books.send_book_genre_menu(bot, cid, q)
@@ -534,6 +540,12 @@ async def handle(update, context, remove_reply_keyboard):
         await _inline_status(
             lambda status: leisure_movies.send_recos(bot, cid, "movie", status=status),
             preserve_message=True)
+        return
+    if data == "movie_premieres":
+        await _inline_status(
+            lambda status: leisure_movies.send_movie_premieres(bot, cid, status=status),
+            preserve_message=True,
+        )
         return
     if data == "movie_now_playing":
         await _inline_status(

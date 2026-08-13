@@ -317,18 +317,16 @@ async def send_favorite_artists_added_card(bot, cid, artists):
 
 def _listen_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Другой артист", callback_data="a_listen_no")],
-        [InlineKeyboardButton("🎫 Концерты", callback_data="a_artist_concerts")],
+        [InlineKeyboardButton("✨ Другая музыка", callback_data="a_listen_no")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="music_genre_menu")],
-        [InlineKeyboardButton("🎚️ Мои артисты", callback_data="artist_favorites")],
-        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
 def music_home_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать новую музыку", callback_data="music_reco")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="music_genre_menu")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find")],
         [InlineKeyboardButton("🎚️ Мои артисты", callback_data="artist_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -584,7 +582,8 @@ def _music_genre_menu_kb(cid):
     buttons = [InlineKeyboardButton(label, callback_data=f"music_g_{key}")
                for key, label, _prompt_name in _MUSIC_GENRES if key in selected]
     rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 

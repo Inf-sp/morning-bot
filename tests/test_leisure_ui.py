@@ -31,20 +31,19 @@ def _bold_values(message):
 
 def test_category_homes_keep_personal_lists_in_their_own_sections():
     assert _labels(leisure_movies._movie_home_kb()) == [
-        ["✨ Подобрать кино"],
-        ["🎭 По жанру"],
+        ["✨ Подобрать новое кино"],
+        ["🎟️ Премьеры"],
         ["🎚️ Моё кино"],
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_books.books_home_keyboard()) == [
-        ["✨ Подобрать книгу"],
-        ["🎭 По жанру"],
+        ["✨ Подобрать новую книгу"],
+        ["🆕 Премьеры"],
         ["🎚️ Мои книги"],
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_music.music_home_keyboard()) == [
         ["✨ Подобрать новую музыку"],
-        ["🎭 По жанру"],
         ["🎫 Концерты"],
         ["🎚️ Мои артисты"],
         ["#️⃣ Главная"],
@@ -52,12 +51,12 @@ def test_category_homes_keep_personal_lists_in_their_own_sections():
 
 
 def test_recommendation_cards_use_content_specific_next_labels():
-    assert _labels(leisure_movies._movie_kb(0))[0] == ["✨ Подобрать другое кино"]
+    assert _labels(leisure_movies._movie_kb(0))[0] == ["✨ Другое кино"]
     assert _labels(leisure_books._book_kb(0))[0] == ["✨ Другая книга"]
-    assert _labels(leisure_music._listen_kb())[0] == ["✨ Другой артист"]
+    assert _labels(leisure_music._listen_kb())[0] == ["✨ Другая музыка"]
     assert _labels(leisure_books._book_kb(0))[1] == ["🎭 По жанру"]
     assert _labels(leisure_movies._movie_kb(0))[1] == ["🎭 По жанру"]
-    assert _labels(leisure_music._listen_kb())[2] == ["🎭 По жанру"]
+    assert _labels(leisure_music._listen_kb())[1] == ["🎭 По жанру"]
     assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 
@@ -346,7 +345,7 @@ def test_personal_lists_are_available_from_their_category_preferences():
     assert _labels(leisure_music._music_preferences_kb("42"))[0] == ["⬜ 🌿 Инди"]
 
 
-def test_only_the_movie_recommendation_card_offers_a_back_button():
+def test_recommendation_subscreens_return_to_their_category_home():
     music_styles = [key for key, _label, _prompt_name in leisure_music._MUSIC_GENRES]
     original_music_styles = leisure_music._music_styles
     leisure_music._music_styles = lambda _cid: music_styles
@@ -357,7 +356,7 @@ def test_only_the_movie_recommendation_card_offers_a_back_button():
         leisure_music._listen_kb(), leisure_music._music_genre_menu_kb("42"),
     ]
     try:
-        assert all("⬅️ Назад" not in sum(_labels(keyboard), []) for keyboard in keyboards)
+        assert all(_labels(keyboard)[-1] == ["⬅️ Назад", "#️⃣ Главная"] for keyboard in keyboards)
         assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
         assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
         assert _labels(leisure_books._book_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
@@ -430,7 +429,7 @@ def test_music_genre_menu_shows_only_selected_styles(monkeypatch):
     monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie", "rock"])
 
     assert _labels(leisure_music._music_genre_menu_kb("42")) == [
-        ["🌿 Инди", "🎸 Рок"], ["#️⃣ Главная"],
+        ["🌿 Инди", "🎸 Рок"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
@@ -568,6 +567,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     movie = leisure_movies.leisure_ui.movie_now_playing_screen("Алкмар", [{
         "title": "Фильм", "genres": ["drama", "thriller"],
         "trailer_url": "https://www.youtube.com/watch?v=trailer123",
+        "overview": "Героиня возвращается домой и находит старую тайну",
     }], {
         "rebus": {
             "emoji": "🦈 🌊 👨‍🔬", "answer": "Челюсти",
@@ -597,6 +597,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "Именинник дня: Грета Гервиг · 4 августа 1983 — режиссёр и актриса. «Леди Бёрд» принесла ей две номинации на «Оскар»." in movie.text
     assert "Фильм под настроение:" not in movie.text
     assert "Что в кино:\n• «Фильм» - Драма, триллер" in movie.text
+    assert "Героиня возвращается домой и находит старую тайну." in movie.text
     movie_link = next(entity for entity in movie.entities if entity.type == MessageEntity.TEXT_LINK)
     assert movie_link.url == "https://www.youtube.com/watch?v=trailer123"
     assert "💡 Интересно: «Челюсти» считают первым современным летним блокбастером." in movie.text
@@ -645,7 +646,25 @@ def test_books_home_opens_daily_literary_screen_not_a_recommendation(monkeypatch
 
     assert "📚 Литературный вайб · Алкмар" in sent[0]["text"]
     assert "Литературный ребус: 🧙 ⚡ → Гарри Поттер" in sent[0]["text"]
-    assert _labels(sent[0]["reply_markup"])[0] == ["✨ Подобрать книгу"]
+    assert _labels(sent[0]["reply_markup"])[0] == ["✨ Подобрать новую книгу"]
+
+
+def test_premiere_screens_are_compact_and_keep_book_links():
+    movie = leisure_movies.leisure_ui.movie_premieres_screen("Нидерланды", "13–26 августа", [{
+        "title": "Премьера", "date_label": "15 августа", "genres": "Драма",
+        "overview": "Семья пытается сохранить дом после большого наводнения",
+    }])
+    books = leisure_books.leisure_ui.book_premieres_screen("Август 2026", [{
+        "title": "Новая книга", "author": "Автор", "summary": "Героиня ищет сестру в незнакомом городе",
+        "url": "https://books.google.com/books?id=new",
+    }])
+
+    assert "Премьеры в кино · Нидерланды" in movie.text
+    assert "15 августа · «Премьера» · Драма" in movie.text
+    assert "Семья пытается сохранить дом после большого наводнения." in movie.text
+    assert "Премьеры книг · Август 2026" in books.text
+    assert "Героиня ищет сестру в незнакомом городе." in books.text
+    assert any(entity.type == MessageEntity.TEXT_LINK and entity.url.endswith("id=new") for entity in books.entities)
 
 
 def test_movie_home_opens_daily_cinema_screen(monkeypatch):

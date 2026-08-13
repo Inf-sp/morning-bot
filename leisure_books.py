@@ -19,6 +19,7 @@ import recommendation_stoplist
 import settings
 import store
 import tracking
+from util import _MONTHS
 from ui import leisure as leisure_ui
 from leisure_collection import plain_label
 
@@ -41,6 +42,7 @@ _BOOK_GENRES = [
 _PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("3.5", "3.5"), ("4.0", "4.0"), ("4.5", "4.5")]
 _WEEKLY_SHOWCASE_VERSION = 3
+_BOOK_PREMIERES_CACHE_VERSION = 1
 
 # Last safe fallback for the weekly showcase. These are recent, widely read
 # releases, deliberately separate from _FALLBACK_BOOKS (the classic personal
@@ -202,15 +204,15 @@ def _book_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
-        [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
-        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
 def books_home_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать книгу", callback_data="book_reco")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
+        [InlineKeyboardButton("✨ Подобрать новую книгу", callback_data="book_reco")],
+        [InlineKeyboardButton("🆕 Премьеры", callback_data="book_premieres")],
         [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -526,11 +528,108 @@ async def get_weekly_new_books():
     return items
 
 
+def _book_premieres_cache_get(today):
+    data = store._load(config.BOOK_PREMIERES_CACHE_KEY)
+    entry = data if isinstance(data, dict) else {}
+    if entry.get("version") != _BOOK_PREMIERES_CACHE_VERSION:
+        return None
+    if entry.get("month") != today.strftime("%Y-%m"):
+        return None
+    try:
+        expires = date.fromisoformat(str(entry.get("expires") or ""))
+    except ValueError:
+        return None
+    items = entry.get("items")
+    if expires < today or not isinstance(items, list):
+        return None
+    return [dict(item) for item in items if isinstance(item, dict)]
+
+
+def _book_premieres_cache_set(today, items):
+    store._save(config.BOOK_PREMIERES_CACHE_KEY, {
+        "version": _BOOK_PREMIERES_CACHE_VERSION,
+        "month": today.strftime("%Y-%m"),
+        "expires": (today + timedelta(days=13)).isoformat(),
+        "items": [dict(item) for item in items if isinstance(item, dict)],
+    })
+
+
+def _book_premiere_genre(item):
+    categories = [str(value).strip() for value in (item.get("categories") or []) if str(value).strip()]
+    return categories[0].casefold() if categories else ""
+
+
+async def get_book_premieres():
+    """Свежие книги текущего месяца разных жанров, без старых резервных подборок."""
+    today = datetime.now(config.TZ).date()
+    cached = _book_premieres_cache_get(today)
+    if cached is not None:
+        return cached
+    candidates = await asyncio.to_thread(google_books.search_new_releases, 40)
+    fresh, seen = [], set()
+    for item in candidates:
+        if not isinstance(item, dict) or not _released_this_month(item.get("published_date")):
+            continue
+        title = str(item.get("title") or "").strip()
+        if not title or title.casefold() in seen:
+            continue
+        seen.add(title.casefold())
+        fresh.append(_with_book_url({
+            **item,
+            "summary": _premiere_summary(item),
+        }))
+    fresh.sort(key=lambda item: (
+        str(item.get("published_date") or ""),
+        float(item.get("rating") or 0),
+        int(item.get("ratings_count") or 0),
+    ), reverse=True)
+
+    # Сначала по одной книге из разных категорий, затем заполняем список по датам.
+    items, used_genres = [], set()
+    for item in fresh:
+        genre = _book_premiere_genre(item)
+        if genre and genre in used_genres:
+            continue
+        items.append(item)
+        if genre:
+            used_genres.add(genre)
+        if len(items) == 12:
+            break
+    if len(items) < 12:
+        existing = {str(item.get("title") or "").casefold() for item in items}
+        for item in fresh:
+            if str(item.get("title") or "").casefold() in existing:
+                continue
+            items.append(item)
+            if len(items) == 12:
+                break
+    if items:
+        _book_premieres_cache_set(today, items)
+    return items
+
+
+async def send_book_premieres(bot, cid, *, status=None):
+    today = datetime.now(config.TZ).date()
+    month = f"{_MONTHS[today.month - 1].capitalize()} {today.year}"
+    msg = leisure_ui.book_premieres_screen(month, await get_book_premieres())
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb,
+                             disable_web_page_preview=True)
+        return
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
+                           disable_web_page_preview=True)
+
+
 def _book_genre_menu_kb():
     buttons = [InlineKeyboardButton(label, callback_data=f"book_g_{key}")
                for key, label, _subject in _BOOK_GENRES]
     rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 

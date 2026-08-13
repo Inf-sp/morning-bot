@@ -153,7 +153,7 @@ def test_music_home_shows_daily_rebus_and_concerts(monkeypatch):
     assert "🎧 Музыка этой недели · Алкмар" in sent[0]["text"]
     assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in sent[0]["text"]
     assert [row[0].text for row in sent[0]["reply_markup"].inline_keyboard[:2]] == [
-        "✨ Подобрать новую музыку", "🎭 По жанру",
+        "✨ Подобрать новую музыку", "🎫 Концерты",
     ]
 
 

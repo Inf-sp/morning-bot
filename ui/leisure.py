@@ -103,6 +103,11 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
                 b.line(f" - {genres[:1].upper() + genres[1:]}")
             else:
                 b.newline()
+            overview = clip(str(_item_value(movie, "overview", "") or ""), limit=160)
+            if overview:
+                if overview[-1] not in ".!?…":
+                    overview += "."
+                b.line(f"  {overview}")
     else:
         b.text_line(" ")
         b.line("Пока не удалось подтвердить актуальные показы.")
@@ -593,6 +598,56 @@ def weekly_books_screen(city, daily_book, items):
         b.bold("💡 Интересно:")
         b.text_line(" ")
         b.line(fact)
+    return b.build_stripped()
+
+
+def movie_premieres_screen(country, date_range, items):
+    """Список региональных кинопремьер: дата, название и одна строка о фильме."""
+    b = MessageBuilder()
+    b.text_line("🎟️ ")
+    b.bold(f"Премьеры в кино · {country}")
+    b.newline()
+    b.spacer()
+    b.line(f"Новые фильмы 2026 года · {date_range}.")
+    b.spacer()
+    if not items:
+        b.line("Пока не удалось подтвердить ближайшие премьеры для этой страны.")
+        return b.build_stripped()
+    for item in items:
+        title = str(_item_value(item, "title", "") or "").strip()
+        if not title:
+            continue
+        date_label = str(_item_value(item, "date_label", "") or "").strip()
+        genres = str(_item_value(item, "genres", "") or "").strip()
+        b.text_line("• ")
+        if date_label:
+            b.text_line(f"{date_label} · ")
+        b.bold(f"«{title}»")
+        if genres:
+            b.text_line(f" · {genres}")
+        b.newline()
+        overview = clip(str(_item_value(item, "overview", "") or ""), limit=170)
+        if overview:
+            if overview[-1] not in ".!?…":
+                overview += "."
+            b.line(f"  {overview}")
+    return b.build_stripped()
+
+
+def book_premieres_screen(month, items):
+    """Полный список свежих книг месяца с Google Books-ссылками."""
+    b = MessageBuilder()
+    b.text_line("🆕 ")
+    b.bold(f"Премьеры книг · {month}")
+    b.newline()
+    b.spacer()
+    b.line("Свежие книги разных жанров; список обновляется раз в две недели.")
+    b.spacer()
+    if not items:
+        b.line("Пока не удалось подтвердить новые книги этого месяца.")
+        return b.build_stripped()
+    for item in items:
+        _write_book_premiere(b, item)
     return b.build_stripped()
 
 

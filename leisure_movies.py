@@ -5,7 +5,7 @@ import logging
 import re
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote_plus
 
 import requests
@@ -21,6 +21,7 @@ import recommendation_stoplist
 import verify
 import tracking
 import local_cinema
+from util import _MONTHS
 from ui import leisure as leisure_ui
 from leisure_collection import (
     canonical_movie_label,
@@ -32,6 +33,7 @@ from leisure_collection import (
 
 _CINEMA_BIRTHDAY_LOCK = threading.Lock()
 _CINEMA_BIRTHDAY_CACHE_VERSION = 3
+_MOVIE_PREMIERES_CACHE_VERSION = 1
 _CINEMA_REBUSES = (
     {
         "emoji": "🦈 🌊 👨‍🔬",
@@ -115,9 +117,8 @@ def _movie_kb(i, category=None):
     category используется только для контекста подбора.
     """
     rows = [
-        [InlineKeyboardButton("✨ Подобрать другое кино", callback_data=f"movie_no_{i}")],
+        [InlineKeyboardButton("✨ Другое кино", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
-        [InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")],
     ]
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
@@ -139,7 +140,8 @@ def _movie_genre_menu_kb():
                for label, gid in _GENRE_MENU]
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i:i + 2])
-    rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 MIN_TMDB_RATING = 7.0
@@ -384,8 +386,8 @@ async def send_recos(bot, cid, kind, status=None):
 
 def _movie_home_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать кино", callback_data="movie_reco")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
+        [InlineKeyboardButton("✨ Подобрать новое кино", callback_data="movie_reco")],
+        [InlineKeyboardButton("🎟️ Премьеры", callback_data="movie_premieres")],
         [InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -494,6 +496,7 @@ def _regional_now_playing_item(movie):
         "popularity": float(getattr(movie, "popularity", 0) or 0),
         "genre_ids": [],
         "genres": list(getattr(movie, "genres", None) or []),
+        "overview": str(getattr(movie, "overview", "") or "").strip(),
     }
 
 
@@ -725,6 +728,111 @@ async def warm_movie_home_cache(cid):
     await get_local_now_playing(cid, limit=20)
     await _daily_cinema_content()
     return True
+
+
+def _movie_premieres_cache_get(country_code, today):
+    data = store._load(config.MOVIE_PREMIERES_CACHE_KEY) or {}
+    entry = data.get(str(country_code or "").upper()) if isinstance(data, dict) else None
+    if not isinstance(entry, dict) or entry.get("version") != _MOVIE_PREMIERES_CACHE_VERSION:
+        return None
+    try:
+        expires = datetime.fromisoformat(str(entry.get("expires") or "")).date()
+    except ValueError:
+        return None
+    items = entry.get("items")
+    if expires < today or not isinstance(items, list):
+        return None
+    return [dict(item) for item in items if isinstance(item, dict)]
+
+
+def _movie_premieres_cache_set(country_code, expires, items):
+    country_code = str(country_code or "").upper()
+
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        data[country_code] = {
+            "version": _MOVIE_PREMIERES_CACHE_VERSION,
+            "expires": expires.isoformat(),
+            "items": [dict(item) for item in items if isinstance(item, dict)],
+        }
+        return data, None
+
+    store.mutate_kv(config.MOVIE_PREMIERES_CACHE_KEY, mutate)
+
+
+def _movie_premiere_item(movie, today):
+    release = getattr(movie, "release_date", None)
+    if release is None or release.year != today.year:
+        return None
+    title = str(getattr(movie, "title", "") or "").strip()
+    if not title:
+        return None
+    if release == today:
+        date_label = "сегодня"
+    else:
+        date_label = f"{release.day} {_MONTHS[release.month - 1]}"
+    return {
+        "id": getattr(movie, "id", None),
+        "title": title,
+        "date": release.isoformat(),
+        "date_label": date_label,
+        "genres": ", ".join(getattr(movie, "genres", None) or [])[:70],
+        "overview": str(getattr(movie, "overview", "") or "").strip(),
+    }
+
+
+async def get_movie_premieres(cid):
+    """Новые релизы в стране: уже вышедшие и ближайшие две недели, без старых фильмов."""
+    settings_data = store.get_settings(cid)
+    country_code = str(settings_data.get("cc") or "NL").upper()
+    today = datetime.now(config.TZ).date()
+    cached = _movie_premieres_cache_get(country_code, today)
+    if cached is not None:
+        return cached
+    end = today + timedelta(days=13)
+    now_playing, upcoming = await asyncio.gather(
+        asyncio.to_thread(tmdb.get_now_playing, country_code, _movie_service_language(cid), 30),
+        asyncio.to_thread(tmdb.get_upcoming_theatrical_releases, country_code, today, end, _movie_service_language(cid)),
+    )
+    items, seen = [], set()
+    for movie in [*(now_playing or []), *(upcoming or [])]:
+        item = _movie_premiere_item(movie, today)
+        if not item:
+            continue
+        try:
+            release = datetime.fromisoformat(item["date"]).date()
+        except ValueError:
+            continue
+        if release < today - timedelta(days=7) or release > end:
+            continue
+        key = str(item.get("id") or item["title"]).casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(item)
+    items.sort(key=lambda item: item["date"])
+    items = items[:14]
+    if items:
+        _movie_premieres_cache_set(country_code, end, items)
+    return items
+
+
+async def send_movie_premieres(bot, cid, *, status=None):
+    settings_data = store.get_settings(cid)
+    country = _movie_country_label(settings_data.get("country"), settings_data.get("cc"))
+    today = datetime.now(config.TZ).date()
+    end = today + timedelta(days=13)
+    date_range = f"{today.day} {_MONTHS[today.month - 1]} – {end.day} {_MONTHS[end.month - 1]}"
+    items = await get_movie_premieres(cid)
+    msg = leisure_ui.movie_premieres_screen(country, date_range, items)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+        return
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 def _movie_prefs(cid):
