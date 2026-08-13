@@ -164,9 +164,18 @@ def test_music_home_shows_three_nearby_concerts_as_separate_items():
         {"artist": "The National", "date": "14 сентября", "place": "Утрехт"},
     ])
 
-    assert "Концерты рядом:\n• Romy - 21 августа · Алкмар" in message.text
-    assert "• FKA twigs - 3 сентября · Амстердам" in message.text
-    assert "• The National - 14 сентября · Утрехт" in message.text
+    assert "Концерты рядом:\n• Romy · 21 августа · Алкмар" in message.text
+    assert "• FKA twigs · 3 сентября · Амстердам" in message.text
+    assert "• The National · 14 сентября · Утрехт" in message.text
+
+
+def test_music_home_keeps_concert_type_in_compact_preview():
+    message = leisure_music.leisure_ui.music_week_screen("Алкмар", {}, [{
+        "artist": "Romy", "date": "21 августа", "place": "Биддингхёйзен",
+        "context": "Фестиваль · Lowlands",
+    }])
+
+    assert "• Romy (фестиваль · Lowlands) · 21 августа · Биддингхёйзен" in message.text
 
 
 def test_weekly_concert_loader_keeps_three_confirmed_events(monkeypatch):

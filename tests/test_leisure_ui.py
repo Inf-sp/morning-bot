@@ -618,7 +618,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "Вайб дня" not in music.text
     assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in music.text
     assert "Именинник дня: Луи Армстронг · 4 августа 1901 — трубач и певец." in music.text
-    assert "Концерты рядом:\n• Romy - 21 августа · Биддингхёйзен" in music.text
+    assert "Концерты рядом:\n• Romy · 21 августа · Биддингхёйзен" in music.text
     assert music.text.index("Именинник дня:") < music.text.index("💡 Интересно:")
     assert "Новые альбомы" not in music.text
     assert any(entity.type == MessageEntity.SPOILER for entity in music.entities)

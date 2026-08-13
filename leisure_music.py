@@ -564,7 +564,12 @@ async def _weekly_concerts(cid):
                 date_label += f" {year}"
         except (ValueError, IndexError):
             date_label = event_date
-        rows.append({"artist": artist, "date": date_label, "place": city})
+        rows.append({
+            "artist": artist,
+            "date": date_label,
+            "place": city,
+            "context": leisure_concerts._concert_context(event),
+        })
         if len(rows) >= 3:
             break
     return rows

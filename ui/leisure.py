@@ -753,8 +753,13 @@ def music_week_screen(city, daily_music, concerts):
             artist = str(_item_value(event, "artist", "") or "").strip()
             date = str(_item_value(event, "date", "") or "").strip()
             place = str(_item_value(event, "place", "") or "").strip()
+            context = _concert_context_text(_item_value(event, "context", ""))
             details = " · ".join(value for value in (date, place) if value)
-            b.line(f"• {artist}" + (f" - {details}" if details else ""))
+            b.line(
+                f"• {artist}"
+                + (f" ({_lower_initial(context)})" if context else "")
+                + (f" · {details}" if details else "")
+            )
     else:
         b.line(" Пока нет подтверждённых ближайших выступлений.")
 
@@ -796,10 +801,12 @@ def music_activity_screen(task):
 
 
 def _concert_context_text(event) -> str:
-    context = str(event.get("context") or "").strip()
-    if context.startswith("Фестиваль · "):
-        return context.removeprefix("Фестиваль · ") + " · Фестиваль"
-    return context
+    return str(event.get("context") if isinstance(event, dict) else event or "").strip()
+
+
+def _lower_initial(value):
+    value = str(value or "")
+    return value[:1].lower() + value[1:] if value else ""
 
 
 def concerts_list(place_label, events, empty_hint=""):
@@ -818,14 +825,14 @@ def concerts_list(place_label, events, empty_hint=""):
             b.spacer()
             b.bold(ev.get("artist", ""))
             b.newline()
+            context = _concert_context_text(ev)
+            if context:
+                b.line(context)
             date_place = " · ".join(x for x in (ev.get("date"), ev.get("place")) if x)
             if ev.get("flag"):
                 date_place = f"{date_place} {ev['flag']}".strip()
             if date_place:
-                b.line(date_place)
-            context = _concert_context_text(ev)
-            if context:
-                b.line(context)
+                b.line(f"Концерт: {date_place}")
             if ev.get("price"):
                 b.line(ev["price"])
             if ev.get("url"):
