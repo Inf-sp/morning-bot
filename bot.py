@@ -951,7 +951,7 @@ def _build_application():
     )
     jq.run_daily(job_morning_brief, time=_t("08:30"), days=tuple(range(7)), **_job_options("morning_brief_daily"))
     jq.run_daily(job_weather_warn, time=_t("08:45"), days=tuple(range(7)), **_job_options("weather_warn_daily"))
-    jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(4,), **_job_options("concerts_cache_weekly"))
+    jq.run_daily(job_refresh_concerts_cache, time=_t("02:55"), days=(4,), **_job_options("concerts_cache_weekly"))
     jq.run_daily(job_weekend_events, time=_t("10:00"), days=(4,), **_job_options("weekend_events_weekly"))
     jq.run_daily(job_daily_words, time=_t("11:00"), days=tuple(range(7)), **_job_options("daily_words"))
     jq.run_daily(job_checkin_day, time=_t("14:00"), days=tuple(range(7)), **_job_options("checkin_day_daily"))

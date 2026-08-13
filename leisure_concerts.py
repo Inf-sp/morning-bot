@@ -154,8 +154,10 @@ async def _ticketmaster_fetch_throttled(fn, *args):
         return await asyncio.to_thread(fn, *args)
 
 async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3,
-                                    limit=_TICKETMASTER_ARTIST_BATCH_LIMIT):
+                                    limit=_TICKETMASTER_ARTIST_BATCH_LIMIT,
+                                    include_checked=False):
     batches = []
+    checked_artists = []
     for artist in artists[:limit]:
         if _ticketmaster_cooldown_remaining():
             break
@@ -170,6 +172,7 @@ async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3,
         except Exception:
             continue
         batches.append(batch)
+        checked_artists.append(artist)
     found, seen_pairs = {}, set()
     for batch in batches:
         if isinstance(batch, Exception):
@@ -183,7 +186,11 @@ async def _ticketmaster_events_many(artists, cc, start_dt="", end_dt="", size=3,
                 continue
             seen_pairs.add(pair)
             found[e.get("id") or f"{artist}:{date}:{e.get('name', '')}"] = e
-    return sorted(found.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate") or "9999-99-99")
+    events = sorted(
+        found.values(),
+        key=lambda e: e.get("dates", {}).get("start", {}).get("localDate") or "9999-99-99",
+    )
+    return (events, checked_artists) if include_checked else events
 
 
 def _popular_events_cache_key(cc, period_start):
@@ -700,8 +707,8 @@ def _concert_place_name(name, cc=""):
     return str(name or "твоей стране").strip()
 
 _CONCERTS_CACHE_TTL = 31 * 86400
-_CONCERTS_CACHE_VERSION = 4
-_ARTIST_CONCERT_CHECKS_VERSION = 1
+_CONCERTS_CACHE_VERSION = 5
+_ARTIST_CONCERT_CHECKS_VERSION = 2
 _ARTIST_CONCERT_CHECK_INTERVAL = 31 * 86400
 
 
@@ -846,17 +853,27 @@ async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False,
     retained_events = [] if cid is None else _stored_artist_events(cid, artists, cc)
     if not due_artists:
         return filter_concert_events(retained_events, cc)
-    tm_events = await _ticketmaster_events_many(
-        due_artists, cc, start_dt=date_from, end_dt=date_to, size=200,
-        limit=_TICKETMASTER_ARTIST_BATCH_LIMIT,
+    # В лимит Ticketmaster попадают только реально проверяемые артисты. Важно
+    # не записывать остальных как "проверенных": иначе девятый и следующие
+    # навсегда выпадут из месячной очереди, хотя запрос для них не уходил.
+    checked_artists = due_artists[:_TICKETMASTER_ARTIST_BATCH_LIMIT]
+    ticketmaster_result = await _ticketmaster_events_many(
+        checked_artists, cc, start_dt=date_from, end_dt=date_to, size=200,
+        limit=_TICKETMASTER_ARTIST_BATCH_LIMIT, include_checked=True,
     )
+    # Совместимость с небольшими тестовыми/локальными адаптерами: в рабочем
+    # пути функция возвращает и события, и действительно проверенных артистов.
+    if isinstance(ticketmaster_result, tuple):
+        tm_events, checked_artists = ticketmaster_result
+    else:
+        tm_events = ticketmaster_result
     # External search is a bounded last fallback for unresolved artists.
     found_artists = {
         _item_text(event.get("_artist")).casefold()
         for event in tm_events
         if isinstance(event, dict) and _item_text(event.get("_artist"))
     }
-    unresolved = [artist for artist in due_artists
+    unresolved = [artist for artist in checked_artists
                   if _item_text(artist).casefold() not in found_artists]
 
     async def external_for_artist(artist):
@@ -874,7 +891,7 @@ async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False,
         external_events.extend(batch or [])
     fresh_events = filter_concert_events(merge_concert_events(tm_events, external_events), cc)
     if cid is not None:
-        _save_artist_check_results(cid, due_artists, cc, fresh_events)
+        _save_artist_check_results(cid, checked_artists, cc, fresh_events)
     return filter_concert_events(merge_concert_events([*retained_events, *fresh_events], []), cc)
 
 

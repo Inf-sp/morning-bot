@@ -88,3 +88,23 @@ def test_new_artist_is_checked_once_then_reused_until_known_concert(monkeypatch)
     assert [event["id"] for event in first] == ["rom-2099"]
     assert [event["id"] for event in second] == ["rom-2099"]
     assert ticketmaster_calls == [["Romy"]]
+
+
+def test_artists_outside_ticketmaster_batch_remain_due_for_the_next_pass(monkeypatch):
+    _memory_store(monkeypatch)
+    artists = [*[f"Artist {index}" for index in range(8)], "Evanescence"]
+
+    async def ticketmaster(batch, *_args, **_kwargs):
+        assert batch == artists[:8]
+        return []
+
+    async def external(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(leisure_concerts, "_ticketmaster_events_many", ticketmaster)
+    monkeypatch.setattr(leisure_concerts, "get_external_events_for_artist", external)
+    monkeypatch.setattr(leisure_concerts, "filter_concert_events", lambda events, _cc: events)
+
+    asyncio.run(leisure_concerts._fetch_concerts(artists, "NL", "Нидерланды", cid="42"))
+
+    assert leisure_concerts._artist_is_due("42", "Evanescence", "NL")

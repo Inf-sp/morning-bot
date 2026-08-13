@@ -70,3 +70,20 @@ def test_ticketmaster_batch_spaces_artist_requests(monkeypatch):
 
     assert fetched == ["Artist A", "Artist B", "Artist C"]
     assert pauses == [0.5, 0.5]
+
+
+def test_ticketmaster_reports_only_artists_with_successful_response(monkeypatch):
+    async def fetch(_fn, artist, *_args):
+        if artist == "Artist B":
+            raise leisure_concerts.TicketmasterRateLimitError()
+        return []
+
+    monkeypatch.setattr(leisure_concerts, "_ticketmaster_fetch_throttled", fetch)
+    monkeypatch.setattr(leisure_concerts, "_ticketmaster_cooldown_remaining", lambda: 0)
+
+    events, checked = asyncio.run(leisure_concerts._ticketmaster_events_many(
+        ["Artist A", "Artist B", "Artist C"], "NL", include_checked=True,
+    ))
+
+    assert events == []
+    assert checked == ["Artist A"]
