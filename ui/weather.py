@@ -96,6 +96,25 @@ def week_forecast(rng, city, overview, days, advice, country="", country_code=""
     return b.build_stripped()
 
 
+def month_forecast(rng, city, periods, advice, country="", country_code="", days=30):
+    """Короткий обзор 30 дней по неделям, а не тридцать строк в чате."""
+    b = MessageBuilder()
+    place = f"{str(city or '').strip()}{_country_suffix(country, country_code)}".strip(", ")
+    b.bold(f"Ближайшие {int(days)} дней · {rng}" + (f" · {place}" if place else ""))
+    b.newline()
+    b.spacer()
+    b.line("Чем дальше дата, тем прогноз ориентировочнее.")
+    b.spacer()
+    for period in periods:
+        b.line(
+            f"{period['range']} · {period['icon']} "
+            f"{period['tmin']:+.0f}…{period['tmax']:+.0f}° · {period['rain']}"
+        )
+    b.spacer()
+    b.line(f"💡 Полезно: {_finish_sentence(cap_sentence(advice))}")
+    return b.build_stripped()
+
+
 def _finish_sentence(text):
     text = (text or "").strip()
     if text and text[-1] not in ".!?…":

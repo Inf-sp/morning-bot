@@ -15,6 +15,7 @@ from ui import weather as weather_ui
 import weather_provider as _provider
 
 fetch_weather = _provider.fetch_weather
+fetch_month_weather = _provider.fetch_month_weather
 fetch_current_temp = _provider.fetch_current_temp
 fetch_current_conditions = _provider.fetch_current_conditions
 get_weather_usage = _provider.get_weather_usage
@@ -273,6 +274,66 @@ def _week_advice(days):
         return "Возьми лёгкую куртку — утром и вечером будет прохладно"
     if len(outdoor) >= 5:
         return "Можно спокойно планировать прогулки, велосипед и поездки"
+    return "Сверяйся с прогнозом перед выходом: условия в течение недели будут меняться"
+
+
+def _month_periods(records):
+    """Сворачивает дневные данные в четыре коротких недельных отрезка."""
+    periods = []
+    for offset in range(0, min(len(records), 30), 7):
+        chunk = records[offset:offset + 7]
+        prepared = []
+        for record in chunk:
+            try:
+                dt = datetime.fromtimestamp(int(record.get("dt")), TZ)
+            except (TypeError, ValueError):
+                continue
+            temp = record.get("temp") or {}
+            tmin, tmax = temp.get("min"), temp.get("max")
+            if tmin is None or tmax is None:
+                continue
+            weather_id = ((record.get("weather") or [{}])[0] or {}).get("id")
+            code = _owm_weathercode(weather_id)
+            rain = round(float(record.get("pop") or 0) * 100)
+            rain_mm = _owm_precip_mm(record)
+            prepared.append({
+                "date": dt,
+                "tmin": float(tmin),
+                "tmax": float(tmax),
+                "code": code,
+                "rain_real": _rain_real(rain, rain_mm),
+                "wind": float(record.get("wind_speed") or 0),
+            })
+        if not prepared:
+            continue
+        first, last = prepared[0]["date"], prepared[-1]["date"]
+        if first.month == last.month:
+            rng = f"{first.day}–{last.day} {_MONTHS[first.month - 1]}"
+        else:
+            rng = f"{first.day} {_MONTHS[first.month - 1]} – {last.day} {_MONTHS[last.month - 1]}"
+        rain_days = sum(day["rain_real"] for day in prepared)
+        rain_label = "без заметного дождя" if not rain_days else f"дождь {rain_days} дн."
+        representative = max(prepared, key=lambda day: (day["rain_real"], day["wind"], day["tmax"]))
+        periods.append({
+            "range": rng,
+            "icon": _week_icon(representative["code"], representative["tmax"], 100 if representative["rain_real"] else 0,
+                               representative["wind"]),
+            "tmin": min(day["tmin"] for day in prepared),
+            "tmax": max(day["tmax"] for day in prepared),
+            "rain": rain_label,
+        })
+    return periods
+
+
+def _month_advice(periods):
+    if not periods:
+        return "Для важных планов перепроверь погоду за 2–3 дня"
+    hottest = max(period["tmax"] for period in periods)
+    if hottest >= 30:
+        return "Для долгих прогулок в тёплые дни выбирай утро или вечер и следи за обновлениями"
+    if sum("дождь" in period["rain"] for period in periods) >= 2:
+        return "Для поездок и мероприятий на улице перепроверь дождь ближе к дате"
+    return "Для важных планов перепроверь погоду за 2–3 дня: дальние даты ещё уточнятся"
     return f"Самый тёплый день — {hottest['name']}"
 
 
@@ -428,6 +489,35 @@ def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="",
 # ---------- отправка ----------
 async def send_weather(bot, cid, mode="today", status=None):
     s = store.get_settings(cid)
+    if mode == "month":
+        try:
+            month_data = fetch_month_weather(s["lat"], s["lon"])
+        except WeatherDailyLimitExceeded:
+            await bot.send_message(chat_id=cid, text=WEATHER_LIMIT_FALLBACK)
+            return
+        records = month_data.get("days") or []
+        periods = _month_periods(records)
+        if not periods:
+            raise ValueError("weather API returned incomplete monthly forecast")
+        first = datetime.fromtimestamp(int(records[0]["dt"]), TZ)
+        last = datetime.fromtimestamp(int(records[-1]["dt"]), TZ)
+        if first.month == last.month:
+            rng = f"{first.day}–{last.day} {_MONTHS[first.month - 1]}"
+        else:
+            rng = f"{first.day} {_MONTHS[first.month - 1]} – {last.day} {_MONTHS[last.month - 1]}"
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        ])
+        msg = weather_ui.month_forecast(
+            rng, s["city"], periods, _month_advice(periods),
+            country=s.get("country", ""), country_code=s.get("cc", ""), days=len(records),
+        )
+        if status is not None:
+            await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+        else:
+            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+        return
     try:
         data = fetch_weather(s["lat"], s["lon"], 9)
     except WeatherDailyLimitExceeded:

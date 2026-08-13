@@ -17,6 +17,8 @@ TZ = config.TZ
 _WX_CACHE = {}          # (lat2, lon2, days) -> (ts, json)
 _WX_TTL = 3 * 3600      # сек: обновляем прогноз раз в 3 часа вместо 12
 _WX_STALE_TTL = 24 * 3600
+_MONTH_CACHE = {}       # (lat2, lon2, days) -> (ts, {date, days})
+_MONTH_TTL = 24 * 3600  # длинный прогноз открывают редко; не тратим квоту повторно
 _CURRENT_CACHE = {}     # (lat2, lon2) -> (ts, current conditions)
 _CURRENT_TTL = 10 * 60
 
@@ -449,6 +451,65 @@ def fetch_weather(lat, lon, days=2):
             return stale
         raise
 
+
+def fetch_month_weather(lat, lon, days=30):
+    """Дневной прогноз на месяц через три страницы One Call, с суточным кэшем.
+
+    API возвращает не больше десяти дней за раз. Этот путь вызывается только при
+    явном нажатии пользователя, поэтому не участвует в ежедневном прогреве.
+    """
+    days = max(7, min(int(days or 30), 30))
+    key = (round(float(lat), 2), round(float(lon), 2), days)
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    cached = _MONTH_CACHE.get(key)
+    if cached and time.time() - cached[0] <= _MONTH_TTL and cached[1].get("date") == today:
+        _mark_weather_cache_hit()
+        return deepcopy(cached[1])
+
+    cache_key = f"month:{_weather_cache_key(lat, lon, days)}"
+    persisted = _persistent_cache_load(cache_key)
+    if persisted:
+        ts, data = persisted
+        if time.time() - ts <= _MONTH_TTL and data.get("date") == today:
+            _MONTH_CACHE[key] = (ts, deepcopy(data))
+            _mark_weather_cache_hit()
+            return deepcopy(data)
+    if not config.WEATHER_API_KEY:
+        raise Exception("no weather api key")
+
+    records, seen, start = [], set(), None
+    while len(records) < days:
+        params = {"start": start} if start is not None else None
+        payload = _onecall_get("timeline/1day", lat, lon, extra_params=params)
+        page = _first_data_item(payload)
+        if not page:
+            break
+        for record in page:
+            try:
+                stamp = int(record.get("dt"))
+            except (TypeError, ValueError):
+                continue
+            if stamp not in seen:
+                seen.add(stamp)
+                records.append(record)
+            if len(records) >= days:
+                break
+        try:
+            next_start = int(page[-1].get("dt")) + 24 * 60 * 60
+        except (TypeError, ValueError):
+            break
+        if start is not None and next_start <= start:
+            break
+        start = next_start
+
+    if not records:
+        raise Exception("weather API returned no monthly forecast")
+    result = {"date": today, "days": records[:days]}
+    now = time.time()
+    _MONTH_CACHE[key] = (now, deepcopy(result))
+    _persistent_cache_save(cache_key, result)
+    return result
+
 def fetch_current_temp(lat, lon):
     try:
         if not config.WEATHER_API_KEY:
@@ -484,4 +545,3 @@ def fetch_current_conditions(lat, lon):
         return deepcopy(result)
     except Exception:
         return None
-
