@@ -445,6 +445,34 @@ async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
                 logging.exception("home cache warm failed cid=%s section=%s", cid, name)
         logging.info("home cache warm complete cid=%s sections=%s", cid, ",".join(warmed))
 
+
+async def job_warm_movie_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
+    """Ночью обновляет витрины кинопремьер по одной на страну."""
+    seen_countries = set()
+    for cid in access.get_allowed_cids():
+        if tracking.has_active_actions():
+            logging.info("movie premieres warm skipped: user action active")
+            return
+        try:
+            country_code = str(store.get_settings(cid).get("cc") or "NL").upper()
+            if country_code in seen_countries:
+                continue
+            seen_countries.add(country_code)
+            await leisure_movies.warm_movie_premieres_cache(cid)
+        except Exception:
+            logging.exception("job_warm_movie_premieres_cache failed for cid=%s", cid)
+
+
+async def job_warm_book_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
+    """Ночью обновляет единую книжную витрину один раз для всех пользователей."""
+    if not access.get_allowed_cids() or tracking.has_active_actions():
+        return
+    try:
+        await leisure_books.warm_book_premieres_cache()
+    except Exception:
+        logging.exception("job_warm_book_premieres_cache failed")
+
+
 async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "daily_words"):
@@ -910,6 +938,17 @@ def _build_application():
             **_job_options(f"warm_home_{section}_daily"),
         )
     jq.run_daily(job_warm_weather_cache, time=_t("07:55"), days=tuple(range(7)), **_job_options("warm_weather_cache_daily"))
+    # Премьеры не обновляются при открытии экрана: ночной планировщик
+    # проверяет их каждый день в разные часы, а внешний запрос делает лишь
+    # после недельного TTL или при первом заполнении.
+    jq.run_daily(
+        job_warm_movie_premieres_cache, time=_t("02:10"), days=tuple(range(7)),
+        **_job_options("movie_premieres_cache_weekly"),
+    )
+    jq.run_daily(
+        job_warm_book_premieres_cache, time=_t("02:40"), days=tuple(range(7)),
+        **_job_options("book_premieres_cache_weekly"),
+    )
     jq.run_daily(job_morning_brief, time=_t("08:30"), days=tuple(range(7)), **_job_options("morning_brief_daily"))
     jq.run_daily(job_weather_warn, time=_t("08:45"), days=tuple(range(7)), **_job_options("weather_warn_daily"))
     jq.run_daily(job_refresh_concerts_cache, time=_t("09:50"), days=(4,), **_job_options("concerts_cache_weekly"))

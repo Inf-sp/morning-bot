@@ -226,3 +226,30 @@ def test_home_cache_warm_schedule_separates_heavy_sections():
         ("music", "08:30"),
         ("learning", "08:35"),
     )
+
+
+def test_nightly_premieres_warm_once_per_country_and_once_for_books(monkeypatch):
+    movie_calls = []
+    book_calls = []
+
+    monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42", "43", "44"])
+    monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
+    monkeypatch.setattr(
+        bot.store, "get_settings",
+        lambda cid: {"cc": "NL" if cid in {"42", "43"} else "BE"},
+    )
+
+    async def warm_movie(cid):
+        movie_calls.append(cid)
+
+    async def warm_books():
+        book_calls.append(True)
+
+    monkeypatch.setattr(bot.leisure_movies, "warm_movie_premieres_cache", warm_movie)
+    monkeypatch.setattr(bot.leisure_books, "warm_book_premieres_cache", warm_books)
+
+    asyncio.run(bot.job_warm_movie_premieres_cache(object()))
+    asyncio.run(bot.job_warm_book_premieres_cache(object()))
+
+    assert movie_calls == ["42", "44"]
+    assert book_calls == [True]

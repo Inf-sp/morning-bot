@@ -611,7 +611,7 @@ def movie_premieres_screen(country, date_range, items):
     b.line(f"Новые фильмы 2026 года · {date_range}.")
     b.spacer()
     if not items:
-        b.line("Пока не удалось подтвердить ближайшие премьеры для этой страны.")
+        b.line("Витрина появится после ближайшего ночного обновления.")
         return b.build_stripped()
     for item in items:
         title = str(_item_value(item, "title", "") or "").strip()
@@ -641,10 +641,10 @@ def book_premieres_screen(month, items):
     b.bold(f"Премьеры книг · {month}")
     b.newline()
     b.spacer()
-    b.line("Свежие книги разных жанров; список обновляется раз в две недели.")
+    b.line("Свежие книги разных жанров; список обновляется раз в неделю.")
     b.spacer()
     if not items:
-        b.line("Пока не удалось подтвердить новые книги этого месяца.")
+        b.line("Витрина появится после ближайшего ночного обновления.")
         return b.build_stripped()
     for item in items:
         _write_book_premiere(b, item)

@@ -42,7 +42,7 @@ _BOOK_GENRES = [
 _PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("3.5", "3.5"), ("4.0", "4.0"), ("4.5", "4.5")]
 _WEEKLY_SHOWCASE_VERSION = 3
-_BOOK_PREMIERES_CACHE_VERSION = 1
+_BOOK_PREMIERES_CACHE_VERSION = 2
 
 # Last safe fallback for the weekly showcase. These are recent, widely read
 # releases, deliberately separate from _FALLBACK_BOOKS (the classic personal
@@ -244,6 +244,12 @@ async def send_books_home(bot, cid, q=None, status=None):
 async def warm_books_home_cache(cid):
     """Готовит данные литературной витрины без персональной рекомендации."""
     await asyncio.gather(_daily_book_content(), get_weekly_new_books())
+    return True
+
+
+async def warm_book_premieres_cache():
+    """Обновляет общую книжную витрину только из ночного расписания."""
+    await get_book_premieres(refresh=True)
     return True
 
 
@@ -528,7 +534,7 @@ async def get_weekly_new_books():
     return items
 
 
-def _book_premieres_cache_get(today):
+def _book_premieres_cache_get(today, *, allow_stale=False):
     data = store._load(config.BOOK_PREMIERES_CACHE_KEY)
     entry = data if isinstance(data, dict) else {}
     if entry.get("version") != _BOOK_PREMIERES_CACHE_VERSION:
@@ -540,7 +546,7 @@ def _book_premieres_cache_get(today):
     except ValueError:
         return None
     items = entry.get("items")
-    if expires < today or not isinstance(items, list):
+    if (expires < today and not allow_stale) or not isinstance(items, list):
         return None
     return [dict(item) for item in items if isinstance(item, dict)]
 
@@ -549,7 +555,7 @@ def _book_premieres_cache_set(today, items):
     store._save(config.BOOK_PREMIERES_CACHE_KEY, {
         "version": _BOOK_PREMIERES_CACHE_VERSION,
         "month": today.strftime("%Y-%m"),
-        "expires": (today + timedelta(days=13)).isoformat(),
+        "expires": (today + timedelta(days=7)).isoformat(),
         "items": [dict(item) for item in items if isinstance(item, dict)],
     })
 
@@ -559,12 +565,14 @@ def _book_premiere_genre(item):
     return categories[0].casefold() if categories else ""
 
 
-async def get_book_premieres():
-    """Свежие книги текущего месяца разных жанров, без старых резервных подборок."""
+async def get_book_premieres(*, refresh=False):
+    """Свежие книги месяца; днём используется готовый недельный кэш."""
     today = datetime.now(config.TZ).date()
     cached = _book_premieres_cache_get(today)
     if cached is not None:
         return cached
+    if not refresh:
+        return _book_premieres_cache_get(today, allow_stale=True) or []
     candidates = await asyncio.to_thread(google_books.search_new_releases, 40)
     fresh, seen = [], set()
     for item in candidates:

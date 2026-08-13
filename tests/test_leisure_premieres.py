@@ -35,12 +35,13 @@ def test_movie_premieres_keep_only_current_year_and_cache_by_country(monkeypatch
     monkeypatch.setattr(leisure_movies.tmdb, "get_now_playing", get_now_playing)
     monkeypatch.setattr(leisure_movies.tmdb, "get_upcoming_theatrical_releases", get_upcoming)
 
-    first = asyncio.run(leisure_movies.get_movie_premieres("42"))
-    second = asyncio.run(leisure_movies.get_movie_premieres("42"))
+    first = asyncio.run(leisure_movies.get_movie_premieres("42", refresh=True))
+    second = asyncio.run(leisure_movies.get_movie_premieres("42", refresh=True))
 
     assert [item["title"] for item in first] == ["В прокате", "Скоро"]
     assert second == first
     assert calls == ["now", "upcoming"]
+    assert saved["NL"]["expires"] == (today + timedelta(days=7)).isoformat()
 
 
 def test_book_premieres_are_current_month_diverse_and_cached(monkeypatch):
@@ -63,9 +64,50 @@ def test_book_premieres_are_current_month_diverse_and_cached(monkeypatch):
     monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: saved.update(value))
     monkeypatch.setattr(leisure_books.google_books, "search_new_releases", search)
 
-    first = asyncio.run(leisure_books.get_book_premieres())
-    second = asyncio.run(leisure_books.get_book_premieres())
+    first = asyncio.run(leisure_books.get_book_premieres(refresh=True))
+    second = asyncio.run(leisure_books.get_book_premieres(refresh=True))
 
     assert [item["title"] for item in first] == ["Роман", "Биография"]
     assert second == first
     assert calls == ["search"]
+    assert saved["expires"] == (today + timedelta(days=7)).isoformat()
+
+
+def test_movie_premieres_use_stale_cache_without_daytime_tmdb_request(monkeypatch):
+    today = datetime.now(leisure_movies.config.TZ).date()
+    saved = {
+        "NL": {
+            "version": leisure_movies._MOVIE_PREMIERES_CACHE_VERSION,
+            "expires": (today - timedelta(days=1)).isoformat(),
+            "items": [{"title": "Вчерашняя витрина"}],
+        },
+    }
+    monkeypatch.setattr(leisure_movies.store, "get_settings", lambda _cid: {"cc": "NL"})
+    monkeypatch.setattr(leisure_movies.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(
+        leisure_movies.tmdb, "get_now_playing",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("daytime request")),
+    )
+    monkeypatch.setattr(
+        leisure_movies.tmdb, "get_upcoming_theatrical_releases",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("daytime request")),
+    )
+
+    assert asyncio.run(leisure_movies.get_movie_premieres("42")) == [{"title": "Вчерашняя витрина"}]
+
+
+def test_book_premieres_use_stale_cache_without_daytime_google_request(monkeypatch):
+    today = datetime.now(leisure_books.config.TZ).date()
+    saved = {
+        "version": leisure_books._BOOK_PREMIERES_CACHE_VERSION,
+        "month": today.strftime("%Y-%m"),
+        "expires": (today - timedelta(days=1)).isoformat(),
+        "items": [{"title": "Вчерашняя витрина"}],
+    }
+    monkeypatch.setattr(leisure_books.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(
+        leisure_books.google_books, "search_new_releases",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("daytime request")),
+    )
+
+    assert asyncio.run(leisure_books.get_book_premieres()) == [{"title": "Вчерашняя витрина"}]

@@ -33,7 +33,7 @@ from leisure_collection import (
 
 _CINEMA_BIRTHDAY_LOCK = threading.Lock()
 _CINEMA_BIRTHDAY_CACHE_VERSION = 3
-_MOVIE_PREMIERES_CACHE_VERSION = 1
+_MOVIE_PREMIERES_CACHE_VERSION = 2
 _CINEMA_REBUSES = (
     {
         "emoji": "🦈 🌊 👨‍🔬",
@@ -730,7 +730,13 @@ async def warm_movie_home_cache(cid):
     return True
 
 
-def _movie_premieres_cache_get(country_code, today):
+async def warm_movie_premieres_cache(cid):
+    """Обновляет региональную витрину премьер только из ночного расписания."""
+    await get_movie_premieres(cid, refresh=True)
+    return True
+
+
+def _movie_premieres_cache_get(country_code, today, *, allow_stale=False):
     data = store._load(config.MOVIE_PREMIERES_CACHE_KEY) or {}
     entry = data.get(str(country_code or "").upper()) if isinstance(data, dict) else None
     if not isinstance(entry, dict) or entry.get("version") != _MOVIE_PREMIERES_CACHE_VERSION:
@@ -740,7 +746,7 @@ def _movie_premieres_cache_get(country_code, today):
     except ValueError:
         return None
     items = entry.get("items")
-    if expires < today or not isinstance(items, list):
+    if (expires < today and not allow_stale) or not isinstance(items, list):
         return None
     return [dict(item) for item in items if isinstance(item, dict)]
 
@@ -781,14 +787,20 @@ def _movie_premiere_item(movie, today):
     }
 
 
-async def get_movie_premieres(cid):
-    """Новые релизы в стране: уже вышедшие и ближайшие две недели, без старых фильмов."""
+async def get_movie_premieres(cid, *, refresh=False):
+    """Новые релизы в стране; внешние данные обновляет только ночной прогрев.
+
+    Днём экран читает недельный кэш. Если ночное обновление временно не
+    состоялось, остаётся последняя готовая витрина вместо нового запроса к TMDb.
+    """
     settings_data = store.get_settings(cid)
     country_code = str(settings_data.get("cc") or "NL").upper()
     today = datetime.now(config.TZ).date()
     cached = _movie_premieres_cache_get(country_code, today)
     if cached is not None:
         return cached
+    if not refresh:
+        return _movie_premieres_cache_get(country_code, today, allow_stale=True) or []
     end = today + timedelta(days=13)
     now_playing, upcoming = await asyncio.gather(
         asyncio.to_thread(tmdb.get_now_playing, country_code, _movie_service_language(cid), 30),
@@ -813,7 +825,7 @@ async def get_movie_premieres(cid):
     items.sort(key=lambda item: item["date"])
     items = items[:14]
     if items:
-        _movie_premieres_cache_set(country_code, end, items)
+        _movie_premieres_cache_set(country_code, today + timedelta(days=7), items)
     return items
 
 
