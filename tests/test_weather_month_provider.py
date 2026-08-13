@@ -6,7 +6,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import weather_provider
 
 
-def test_month_forecast_loads_three_daily_pages_once_and_uses_cache(monkeypatch):
+def test_month_forecast_reuses_week_page_then_loads_two_more_once(monkeypatch):
     base = 1_780_000_000
     calls = []
 
@@ -26,9 +26,10 @@ def test_month_forecast_loads_three_daily_pages_once_and_uses_cache(monkeypatch)
     monkeypatch.setattr(weather_provider.config, "WEATHER_API_KEY", "test-weather-key")
     weather_provider._MONTH_CACHE.clear()
 
-    first = weather_provider.fetch_month_weather(51.5, 4.2)
-    second = weather_provider.fetch_month_weather(51.5, 4.2)
+    seed = [record(index) for index in range(10)]
+    first = weather_provider.fetch_month_weather(51.5, 4.2, seed_records=seed)
+    second = weather_provider.fetch_month_weather(51.5, 4.2, seed_records=seed)
 
     assert len(first["days"]) == 30
     assert second == first
-    assert len(calls) == 3
+    assert len(calls) == 2

@@ -18,7 +18,7 @@ _WX_CACHE = {}          # (lat2, lon2, days) -> (ts, json)
 _WX_TTL = 3 * 3600      # сек: обновляем прогноз раз в 3 часа вместо 12
 _WX_STALE_TTL = 24 * 3600
 _MONTH_CACHE = {}       # (lat2, lon2, days) -> (ts, {date, days})
-_MONTH_TTL = 24 * 3600  # длинный прогноз открывают редко; не тратим квоту повторно
+_MONTH_TTL = 7 * 24 * 3600  # месячный обзор не обновляем без нужды всю неделю
 _CURRENT_CACHE = {}     # (lat2, lon2) -> (ts, current conditions)
 _CURRENT_TTL = 10 * 60
 
@@ -152,6 +152,9 @@ def _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts=No
         "alert_ids": alert_ids,
         "alerts": alerts or [],
         "provider": "openweathermap",
+        # Сырой дневной timeline нужен только месячному экрану: он позволяет
+        # не скачивать первую страницу повторно после открытия недели.
+        "daily_timeline": deepcopy(daily),
     }
 
 
@@ -452,11 +455,21 @@ def fetch_weather(lat, lon, days=2):
         raise
 
 
-def fetch_month_weather(lat, lon, days=30):
+def get_week_daily_seed(lat, lon):
+    """Возвращает уже скачанную страницу недельного прогноза без сети."""
+    key = (round(float(lat), 2), round(float(lon), 2), 9)
+    cache_key = _weather_cache_key(lat, lon, 9)
+    cached = _weather_cache_get(key, cache_key, max_age=_WX_TTL)
+    if not cached:
+        return []
+    return deepcopy(cached.get("daily_timeline") or [])
+
+
+def fetch_month_weather(lat, lon, days=30, seed_records=None):
     """Дневной прогноз на месяц через три страницы One Call, с суточным кэшем.
 
-    API возвращает не больше десяти дней за раз. Этот путь вызывается только при
-    явном нажатии пользователя, поэтому не участвует в ежедневном прогреве.
+    API возвращает не больше десяти дней за раз. Если пользователь уже открывал
+    неделю, первая страница передаётся через ``seed_records`` без нового запроса.
     """
     days = max(7, min(int(days or 30), 30))
     key = (round(float(lat), 2), round(float(lon), 2), days)
@@ -477,7 +490,21 @@ def fetch_month_weather(lat, lon, days=30):
     if not config.WEATHER_API_KEY:
         raise Exception("no weather api key")
 
-    records, seen, start = [], set(), None
+    records, seen = [], set()
+    for record in seed_records or []:
+        try:
+            stamp = int(record.get("dt"))
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if stamp not in seen:
+            seen.add(stamp)
+            records.append(record)
+        if len(records) >= days:
+            break
+    try:
+        start = int(records[-1].get("dt")) + 24 * 60 * 60 if records else None
+    except (AttributeError, TypeError, ValueError):
+        start = None
     while len(records) < days:
         params = {"start": start} if start is not None else None
         payload = _onecall_get("timeline/1day", lat, lon, extra_params=params)

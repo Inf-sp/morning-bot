@@ -16,6 +16,7 @@ import weather_provider as _provider
 
 fetch_weather = _provider.fetch_weather
 fetch_month_weather = _provider.fetch_month_weather
+get_week_daily_seed = _provider.get_week_daily_seed
 fetch_current_temp = _provider.fetch_current_temp
 fetch_current_conditions = _provider.fetch_current_conditions
 get_weather_usage = _provider.get_weather_usage
@@ -491,7 +492,9 @@ async def send_weather(bot, cid, mode="today", status=None):
     s = store.get_settings(cid)
     if mode == "month":
         try:
-            month_data = fetch_month_weather(s["lat"], s["lon"])
+            month_data = fetch_month_weather(
+                s["lat"], s["lon"], seed_records=get_week_daily_seed(s["lat"], s["lon"]),
+            )
         except WeatherDailyLimitExceeded:
             await bot.send_message(chat_id=cid, text=WEATHER_LIMIT_FALLBACK)
             return
