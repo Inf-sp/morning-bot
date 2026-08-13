@@ -679,6 +679,7 @@ def _write_book_premiere(builder: MessageBuilder, item, *, compact=False) -> Non
     if not title:
         return
     author = str(_item_value(item, "author", "") or "").strip()
+    genres = _book_premiere_genres(item)
     summary = str(_item_value(item, "summary", "") or _item_value(item, "vibe", "") or "").strip()
     url = str(_item_value(item, "url", "") or "").strip()
 
@@ -690,6 +691,8 @@ def _write_book_premiere(builder: MessageBuilder, item, *, compact=False) -> Non
             builder.text_line(f"«{title}»")
         if author:
             builder.text_line(f" ({author})")
+        if genres:
+            builder.text_line(f" · {genres}")
         if summary:
             builder.text_line(" · ")
             builder.line(_book_premiere_summary(summary, limit=160))
@@ -704,12 +707,45 @@ def _write_book_premiere(builder: MessageBuilder, item, *, compact=False) -> Non
     builder.newline()
     if author:
         builder.line(author)
+    if genres:
+        builder.line(genres)
     premiere_date = _book_premiere_date(item)
     if premiere_date:
         builder.line(f"Премьера: {premiere_date}")
     if summary:
         builder.line(_book_premiere_summary(summary, limit=310))
     builder.newline()
+
+
+def _book_premiere_genres(item) -> str:
+    categories = _item_value(item, "categories", [])
+    if isinstance(categories, str):
+        categories = [categories]
+    if not isinstance(categories, list):
+        return ""
+    translations = {
+        "fiction": "Художественная проза",
+        "fantasy": "Фэнтези",
+        "science fiction": "Фантастика",
+        "mystery & detective": "Детектив",
+        "thrillers": "Триллер",
+        "romance": "Романтика",
+        "history": "История",
+        "biography": "Биография",
+        "biography & autobiography": "Биография",
+        "psychology": "Психология",
+        "poetry": "Поэзия",
+        "juvenile fiction": "Детская литература",
+    }
+    labels = []
+    for category in categories:
+        raw = str(category or "").strip()
+        translated = translations.get(raw.casefold())
+        if translated:
+            labels.append(translated)
+        elif any("а" <= char.casefold() <= "я" for char in raw):
+            labels.append(raw[:1].upper() + raw[1:])
+    return " · ".join(dict.fromkeys(labels[:2]))
 
 
 def _book_premiere_summary(summary, *, limit):

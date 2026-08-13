@@ -583,6 +583,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
         "birthday": {"name": "Кнут Гамсун", "birth": "1859-08-04", "detail": "норвежский писатель"},
     }, [{
         "title": "Onyx Storm", "author": "Ребекка Яррос",
+        "categories": ["Fantasy"],
         "summary": "Вайолет ищет союзников, пока война всё ближе к её дому.",
     }])
     music = leisure_movies.leisure_ui.music_week_screen("Алкмар", {
@@ -606,10 +607,11 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "📚 Литературный вайб · Алкмар" in books.text
     assert "Цитата со страницы:" not in books.text
     assert "Литературный ребус: 🧙‍♀️ ⚡ 🚂 → Гарри Поттер" in books.text
+    assert "«Onyx Storm» (Ребекка Яррос) · Фэнтези" in books.text
     assert "Именинник дня: Кнут Гамсун · 4 августа 1859 — норвежский писатель." in books.text
     assert "Книга под настроение:" not in books.text
     assert (
-        "Главные премьеры:\n• «Onyx Storm» (Ребекка Яррос) · "
+        "Главные премьеры:\n• «Onyx Storm» (Ребекка Яррос) · Фэнтези · "
         "Вайолет ищет союзников, пока война всё ближе к её дому."
     ) in books.text
     assert books.text.index("Главные премьеры:") < books.text.index("Именинник дня:") < books.text.index("💡 Интересно:")
@@ -655,14 +657,15 @@ def test_premiere_screens_are_compact_and_keep_book_links():
     }])
     books = leisure_books.leisure_ui.book_premieres_screen("Август 2026", [{
         "title": "Новая книга", "author": "Автор", "summary": "Героиня ищет сестру в незнакомом городе",
-        "published_date": "2026-08-15", "url": "https://books.google.com/books?id=new",
+        "published_date": "2026-08-15", "categories": ["Fiction"],
+        "url": "https://books.google.com/books?id=new",
     }])
 
     assert "Премьеры в кино · Нидерланды" in movie.text
     assert "«Премьера»\nдрама · комедия\nПремьера: 15 августа 2026" in movie.text
     assert "Семья пытается сохранить дом после большого наводнения." in movie.text
     assert "Премьеры книг · Август 2026" in books.text
-    assert "«Новая книга»\nАвтор\nПремьера: 15 августа 2026" in books.text
+    assert "«Новая книга»\nАвтор\nХудожественная проза\nПремьера: 15 августа 2026" in books.text
     assert "Героиня ищет сестру в незнакомом городе." in books.text
     assert any(entity.type == MessageEntity.TEXT_LINK and entity.url.endswith("id=new") for entity in books.entities)
 
