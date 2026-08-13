@@ -201,7 +201,8 @@ def _purchase_candidate(w, weather_ctx, selected_styles=None):
     return None
 
 
-def _get_or_create_purchase_recommendation(cid, w, weather_ctx, fallback_tip="", selected_styles=None):
+def _get_or_create_purchase_recommendation(cid, w, weather_ctx, fallback_tip="", selected_styles=None,
+                                           refresh_wear_tip=False):
     current = store.get_wardrobe_purchase_recommendation(cid)
     if current and current.get("version") != PURCHASE_RECOMMENDATION_VERSION:
         current = {}
@@ -226,6 +227,16 @@ def _get_or_create_purchase_recommendation(cid, w, weather_ctx, fallback_tip="",
         if candidate_priority > current_priority:
             store.set_wardrobe_purchase_recommendation(cid, candidate)
             return candidate
+        if (refresh_wear_tip and current.get("kind") == "wear" and fallback_tip
+                and _clean_text(current.get("reason")) != _clean_text(fallback_tip)):
+            refreshed = {
+                "version": PURCHASE_RECOMMENDATION_VERSION,
+                "kind": "wear",
+                "reason": fallback_tip,
+                "priority": 0,
+            }
+            store.set_wardrobe_purchase_recommendation(cid, refreshed)
+            return refreshed
         return current
     if candidate:
         store.set_wardrobe_purchase_recommendation(cid, candidate)
@@ -579,13 +590,18 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
 
     best_sorted = sorted(best, key=outfit_display_order)
     item_ids = [it.get("id") for it in best_sorted]
-    fallback_tip = build_style_tip(best_sorted, weather_ctx)
+    fallback_tip = build_style_tip(
+        best_sorted,
+        weather_ctx,
+        avoid_tips={previous_style_tip} if previous_style_tip else None,
+    )
     purchase_recommendation = _get_or_create_purchase_recommendation(
         cid,
         w,
         weather_ctx,
         fallback_tip=fallback_tip,
         selected_styles=selected_styles,
+        refresh_wear_tip=bool(previous_item_ids),
     )
     look_data = {
         "primary_style": choose_outfit_style(best_sorted, selected_styles),
@@ -1195,6 +1211,8 @@ async def ingest(bot, cid, text):
 async def handle_callback(bot, cid, q, data, status=None):
     if data == "w_look":
         previous = _get_cached_look(cid) or {}
+        previous_recommendation = (previous.get("look_data") or {}).get("purchase_recommendation") or {}
+        previous_style_tip = previous_recommendation.get("reason") if previous_recommendation.get("kind") == "wear" else None
         store.clear_wardrobe_daylook(cid)
         owns_status = status is None
         if owns_status:
@@ -1209,6 +1227,7 @@ async def handle_callback(bot, cid, q, data, status=None):
             await send_looks(
                 bot, cid, status=status,
                 previous_item_ids=previous.get("item_ids") or [],
+                previous_style_tip=previous_style_tip,
             )
         except Exception as e:
             await verify.safe_error(bot, cid, e, back="m_wardrobe")

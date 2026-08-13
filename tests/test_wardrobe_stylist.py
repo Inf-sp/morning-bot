@@ -524,6 +524,20 @@ def test_generic_style_tip_can_change_for_another_outfit():
     assert "заправь верх спереди" not in second.casefold()
 
 
+def test_generic_style_tip_has_a_broader_safe_rotation():
+    tips = {
+        build_style_tip([
+            {"id": f"top-{index}", "zone": "Верх", "name": "Футболка"},
+            {"id": f"bottom-{index}", "zone": "Низ", "name": "Брюки"},
+            {"id": f"shoe-{index}", "zone": "Обувь", "name": "Кеды"},
+        ])
+        for index in range(12)
+    }
+
+    assert len(tips) >= 5
+    assert all("чтобы" in tip.casefold() for tip in tips)
+
+
 def test_final_accessory_is_allowed_only_when_selected_and_present_in_database():
     watch = {
         "id": "watch-1",
