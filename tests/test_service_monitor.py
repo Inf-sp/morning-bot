@@ -99,6 +99,19 @@ def test_exhausted_quota_is_yellow(monkeypatch):
     )
 
 
+def test_unclassified_openrouter_monitor_result_is_neutral(monkeypatch):
+    """Непонятный probe не является доказательством поломки последнего резерва."""
+    _memory_store(monkeypatch)
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+    provider_runtime.record_result(
+        "openrouter", False, status_code=400, error="HTTP 400", record_history=False,
+    )
+
+    assert service_monitor.format_row("openrouter") == (
+        "⚪ OpenRouter · Последний резерв · 0 сегодня"
+    )
+
+
 def test_only_a_provider_response_can_mark_a_rate_limit(monkeypatch):
     _memory_store(monkeypatch)
 

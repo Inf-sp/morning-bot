@@ -187,6 +187,11 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
     if not _configured(service):
         return f"🔴 {label} · {role} · API-ключ не настроен"
+    # Неопределённый результат фонового probe — не подтверждённая поломка
+    # сервиса. Показываем нейтральное состояние, пока не придёт реальная
+    # ошибка (авторизация, лимит, сеть или 5xx) либо успешная проверка.
+    if state.get("error_type") == "unknown":
+        status = UNKNOWN
     quota_remaining, quota_total = _confirmed_quota(service, state)
     if service == "gemini":
         detail = _usage_detail(service)
@@ -198,7 +203,8 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
         )
     if service == "gemini" and quota_remaining is not None and quota_remaining <= 0:
         detail = "лимит исчерпан"
-    if status in (DOWN, WARNING) and state.get("error_type") not in ("quota", "rate_limit"):
+    if (status in (DOWN, WARNING)
+            and state.get("error_type") not in ("quota", "rate_limit", "unknown")):
         detail = str(state.get("last_error") or detail)
     return f"{_DOT[status]} {label} · {role} · {detail}"
 
