@@ -140,7 +140,8 @@ def _movie_now_playing_lines(now_playing) -> list[dict]:
     entries = []
     for item in now_playing or []:
         title = str(_item_value(item, "title", "") or "").strip()
-        if not title:
+        overview = str(_item_value(item, "overview", "") or "").strip()
+        if not title or not overview:
             continue
         entries.append(item)
     return entries

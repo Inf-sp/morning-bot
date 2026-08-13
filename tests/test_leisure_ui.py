@@ -794,11 +794,16 @@ def test_movie_home_shows_three_popular_local_premieres_with_trailer_links(monke
             {"id": 1, "title": "Первый", "genres": ["drama"], "rating": 7.0,
              "vote_count": 100, "popularity": 90},
             {"id": 2, "title": "Второй", "genres": ["comedy"], "rating": 7.0,
-             "vote_count": 100, "popularity": 80},
+             "vote_count": 100, "popularity": 80,
+             "overview": "Героиня решает начать всё заново"},
             {"id": 3, "title": "Третий", "genres": ["thriller"], "rating": 7.0,
-             "vote_count": 100, "popularity": 70},
+             "vote_count": 100, "popularity": 70, "overview": "   "},
             {"id": 4, "title": "Четвёртый", "genres": ["action"], "rating": 7.0,
-             "vote_count": 100, "popularity": 60},
+             "vote_count": 100, "popularity": 60,
+             "overview": "Команда отправляется спасать город"},
+            {"id": 5, "title": "Пятый", "genres": ["drama"], "rating": 7.0,
+             "vote_count": 100, "popularity": 50,
+             "overview": "Друзья возвращаются в родной город"},
         ]
 
     async def cinema_day():
@@ -814,15 +819,16 @@ def test_movie_home_shows_three_popular_local_premieres_with_trailer_links(monke
 
     asyncio.run(leisure_movies.send_movie_now_playing(Bot(), "42"))
 
-    assert "• «Первый» (драма)" in sent[0]["text"]
     assert "• «Второй» (комедия)" in sent[0]["text"]
-    assert "• «Третий» (триллер)" in sent[0]["text"]
-    assert "Четвёртый" not in sent[0]["text"]
+    assert "• «Четвёртый» (боевик)" in sent[0]["text"]
+    assert "• «Пятый» (драма)" in sent[0]["text"]
+    assert "Первый" not in sent[0]["text"]
+    assert "Третий" not in sent[0]["text"]
     links = [entity.url for entity in sent[0]["entities"] if entity.type == MessageEntity.TEXT_LINK]
     assert links == [
-        "https://www.youtube.com/watch?v=trailer1",
         "https://www.youtube.com/watch?v=trailer2",
-        "https://www.youtube.com/watch?v=trailer3",
+        "https://www.youtube.com/watch?v=trailer4",
+        "https://www.youtube.com/watch?v=trailer5",
     ]
     assert sent[0]["disable_web_page_preview"] is True
 

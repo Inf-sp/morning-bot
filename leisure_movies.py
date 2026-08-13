@@ -547,10 +547,12 @@ async def send_movie_home(bot, cid, q=None, status=None):
     await send_movie_now_playing(bot, cid, q=q, status=status)
 
 
-def _featured_now_playing(items):
+def _featured_now_playing(items, *, require_overview=False):
     """На витрину попадают только достаточно известные картины из проката."""
     featured = []
     for item in items or []:
+        if require_overview and not str(item.get("overview") or "").strip():
+            continue
         try:
             rating = float(item.get("rating") or 0)
             votes = int(item.get("vote_count") or 0)
@@ -697,7 +699,9 @@ async def _daily_cinema_content():
 
 async def send_movie_now_playing(bot, cid, q=None, status=None):
     city = _movie_city(cid)
-    featured = _featured_now_playing(await get_local_now_playing(cid, limit=20))[:3]
+    featured = _featured_now_playing(
+        await get_local_now_playing(cid, limit=20), require_overview=True,
+    )[:3]
     now_playing = await _with_trailer_urls(featured)
     cinema_day = await _daily_cinema_content()
     msg = leisure_ui.movie_now_playing_screen(city, now_playing, cinema_day)
