@@ -363,8 +363,7 @@ def test_add_word_asks_for_meaning_when_all_ai_reserves_fail(monkeypatch):
     asyncio.run(dictionary_import.add_dict_entry_from_chat(Bot(), cid, "tering", "nl"))
 
     assert sent[-1]["text"] == (
-        "Сейчас не удалось проверить «tering». Напиши перевод или короткий контекст — "
-        "например: «ругательство» или «болезнь»."
+        "Сейчас не удалось проверить «tering». Напиши перевод или короткий контекст."
     )
     assert dictionary_import.store.pending_input[cid] == "dictclarify_nl"
     assert dictionary_import.store.dict_pending_add[cid]["term"] == "tering"

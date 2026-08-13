@@ -59,6 +59,21 @@ _DICT_ANALYSIS_ORDER = (
     "cf", "openrouter",
 )
 
+_LOCAL_DUTCH_VERB_CARDS = {
+    "bewegen": {
+        "translation": "двигаться; шевелить",
+        "past_singular": "bewoog",
+        "past_participle": "bewogen",
+        "auxiliary": "hebben",
+        "perfect_form": "heeft bewogen",
+        "verb_type": "strong",
+        "example_nl": "Ik beweeg elke dag.",
+        "example_ru": "Я двигаюсь каждый день.",
+        "topic": "здоровье",
+        "difficulty": "A2",
+    },
+}
+
 
 def _dictionary_nav(cid, lang=None, back=None):
     code = lang if lang in ("nl", "en") else _active_language_code(cid)
@@ -399,6 +414,52 @@ def _extract_srs_fields(d):
     }
 
 
+def _local_dutch_verb_entry(raw_user_term, lang_hint):
+    """Карточка для коротких проверенных глаголов без зависимости от AI."""
+    if lang_hint != "nl":
+        return None
+    term = _normalized_user_term(raw_user_term, "nl").casefold()
+    card = _LOCAL_DUTCH_VERB_CARDS.get(term)
+    if not card:
+        return None
+    example = {
+        "text": card["example_nl"],
+        "translation": card["example_ru"],
+    }
+    return {
+        "lang": "nl",
+        "term": term,
+        "raw_user_term": str(raw_user_term or "")[:120],
+        "normalized_term": term,
+        "article": "",
+        "translation": card["translation"],
+        "breakdown": "глагол",
+        "examples": [example],
+        "source_text": str(raw_user_term or "")[:120],
+        "added_at": datetime.now(config.TZ).isoformat(),
+        "status": "new",
+        "last_shown_at": None,
+        "needs_confirmation": False,
+        "reason": "",
+        "infinitive": term,
+        "past_singular": card["past_singular"],
+        "past_participle": card["past_participle"],
+        "auxiliary": card["auxiliary"],
+        "perfect_form": card["perfect_form"],
+        "verb_type": card["verb_type"],
+        "example_nl": card["example_nl"],
+        "example_ru": card["example_ru"],
+        "analysis_confidence": 1.0,
+        "analysis_provider": "local_grammar",
+        **_extract_srs_fields({
+            "pos": "глагол",
+            "forms": [card["past_singular"], card["perfect_form"]],
+            "topic": card["topic"],
+            "difficulty": card["difficulty"],
+        }),
+    }
+
+
 def _verb_analysis_prompt(word, fixed_preposition=""):
     request = {
         "word": word,
@@ -697,6 +758,9 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
     if (not raw_user_term or _contains_suspicious_analysis_text(raw_user_term)
             or (lang_hint == "nl" and _contains_mixed_script(raw_user_term))):
         return None
+    local_entry = _local_dutch_verb_entry(raw_user_term, lang_hint)
+    if local_entry:
+        return local_entry
     russian_source = bool(_CYRILLIC_RE.search(raw_user_term))
     if russian_source and lang_hint in ("nl", "en"):
         language_line = (
@@ -1237,10 +1301,7 @@ async def _ask_dict_clarification(bot, cid, payload, lang=None, *, unavailable=F
         keyboard = _dict_clarification_kb(cid, code, choices)
     else:
         lead = "Сейчас не удалось проверить" if unavailable else "Не удалось уверенно определить"
-        message = (
-            f"{lead} «{raw_term}». Напиши перевод или короткий контекст — "
-            "например: «ругательство» или «болезнь»."
-        )
+        message = f"{lead} «{raw_term}». Напиши перевод или короткий контекст."
         keyboard = _dictionary_nav(cid, code)
     await bot.send_message(chat_id=cid, text=message, reply_markup=keyboard)
 

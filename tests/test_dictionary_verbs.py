@@ -303,6 +303,20 @@ def test_bevelen_is_normalized_before_verb_enrichment():
     }
 
 
+def test_known_dutch_verb_is_added_without_ai_when_providers_are_unavailable(monkeypatch):
+    async def unavailable(*_args, **_kwargs):
+        raise AssertionError("bewegen must use its local card")
+
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", unavailable)
+
+    entry = asyncio.run(dictionary_import._normalize_dict_entry_full("bewegen", "nl"))
+
+    assert entry["translation"] == "двигаться; шевелить"
+    assert entry["past_singular"] == "bewoog"
+    assert entry["perfect_form"] == "heeft bewogen"
+    assert entry["analysis_provider"] == "local_grammar"
+
+
 def test_successful_analysis_fields_are_saved_in_existing_dictionary_record(monkeypatch):
     stored = []
     monkeypatch.setattr(dictionary_import.store, "get_list", lambda _key, _cid: [])
