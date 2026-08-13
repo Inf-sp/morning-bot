@@ -8,7 +8,7 @@ import wardrobe
 import bot_callbacks
 import travel
 import util
-from ui.wardrobe import purchase_check_card
+from ui.wardrobe import purchase_check_card, purchase_suggestions_card
 
 
 def _labels(markup):
@@ -295,7 +295,7 @@ def test_purchase_check_card_uses_decision_format_and_limits_outfits():
     assert "Закрывает пробел: да." in message.text
     assert "Почему: добавляет недостающий яркий низ" in message.text
     assert "Как носить:" in message.text
-    assert "Третий комплект" not in message.text
+    assert "Третий комплект" in message.text
 
 
 def test_purchase_check_rejects_unexplained_negative_verdict():
@@ -336,10 +336,70 @@ def test_purchase_check_does_not_invent_zero_compatibility():
 def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard())[:3] == [
         ["✨ Подобрать другой образ"],
-        ["🧐 Оценить новую покупку"],
+        ["💳 Что докупить"],
         ["🎚️ Мой шкаф"],
     ]
     assert "📌 Предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
+
+
+def test_purchase_hub_explains_the_flow_and_keeps_check_as_a_second_action():
+    message = wardrobe.wardrobe_ui.shopping_home_screen()
+
+    assert "Подберу вещь, которая будет работать с твоим шкафом" in message.text
+    assert "худи»" in message.text
+    assert _labels(wardrobe._purchase_hub_kb()) == [
+        ["✨ Подобрать вещь"],
+        ["🧐 Оценить покупку"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+
+
+def test_purchase_suggestions_show_colors_and_three_real_outfits():
+    message = purchase_suggestions_card({
+        "item": "худи",
+        "headline": "Лучше выбрать спокойный оттенок.",
+        "colors": [
+            {"color": "тёмно-синий", "reason": "собирает серые и оливковые вещи"},
+        ],
+        "outfits": ["Худи + серые джинсы", "Худи + оливковые брюки", "Худи + белые кеды"],
+    })
+
+    assert "💳 Что докупить · худи" in message.text
+    assert "Лучшие цвета:\n• Тёмно-синий — собирает серые и оливковые вещи." in message.text
+    assert "С чем носить:\n• Худи + серые джинсы." in message.text
+    assert "• Худи + белые кеды." in message.text
+
+
+def test_purchase_suggestions_keep_only_outfits_with_real_wardrobe_items(monkeypatch):
+    wardrobe_data = {
+        "zones": {
+            "Верх": {"Худи": [{"name": "Оливковая худи", "zone": "Верх"}]},
+            "Низ": {"Джинсы": [{"name": "Серые джинсы", "zone": "Низ"}]},
+            "Обувь": {"Кеды": [{"name": "Белые кеды", "zone": "Обувь"}]},
+        }
+    }
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def recommend(*_args, **_kwargs):
+        return {
+            "colors": [{"color": "бордовый", "reason": "даёт акцент"}],
+            "outfits": ["Худи + выдуманные вещи"],
+        }
+
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
+    monkeypatch.setattr(wardrobe.store, "wardrobe_to_text", lambda _w: "Оливковая худи; Серые джинсы; Белые кеды")
+    monkeypatch.setattr(wardrobe._settings, "wardrobe_prefs_context", lambda _cid: "")
+    monkeypatch.setattr(wardrobe.ai, "allm_json", recommend)
+
+    asyncio.run(wardrobe.recommend_purchase(Bot(), "42", "худи"))
+
+    assert "Бордовый — даёт акцент." in sent[0]["text"]
+    assert "выдуманные вещи" not in sent[0]["text"]
+    assert "Оливковая худи + Серые джинсы" in sent[0]["text"]
 
 
 def test_other_outfit_keeps_result_card_instead_of_deleting_it(monkeypatch):

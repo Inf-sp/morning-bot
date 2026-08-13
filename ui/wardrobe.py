@@ -256,7 +256,57 @@ def purchase_check_card(data):
     wear_with = [_finish_dot(x) for x in (data.get("wear_with") or []) if _clean_text(x)]
     if wear_with:
         b.section("Как носить:")
-        b.line("\n".join(f"- {x}" for x in wear_with[:2]))
+        b.line("\n".join(f"- {x}" for x in wear_with[:3]))
+
+    return b.build_stripped()
+
+
+def shopping_home_screen():
+    """Короткое объяснение покупки до запроса — без данных и решений о стиле."""
+    b = MessageBuilder()
+    b.section("💳 Что докупить")
+    b.spacer()
+    b.line("Подберу вещь, которая будет работать с твоим шкафом, а не ждать особого случая.")
+    b.spacer()
+    b.line("Напиши, что ищешь: например «худи», «осенние ботинки» или «рубашка для работы».")
+    b.line("Я учту вещи, цвета и стиль и покажу несколько готовых сочетаний.")
+    b.spacer()
+    b.line("Если вещь уже выбрана, сначала оцени её.")
+    return b.build_stripped()
+
+
+def purchase_suggestions_card(data):
+    """Результат подбора новой вещи: цвет, причина и реальные сочетания."""
+    data = data if isinstance(data, dict) else {}
+    b = MessageBuilder()
+    item = _clean_text(data.get("item")) or "Новая вещь"
+    b.section(f"💳 Что докупить · {item}")
+
+    headline = _finish_dot(data.get("headline"))
+    if headline:
+        b.spacer()
+        b.line(headline)
+
+    colors = [entry for entry in (data.get("colors") or []) if isinstance(entry, dict)]
+    if colors:
+        b.spacer()
+        b.section("Лучшие цвета:")
+        for entry in colors[:3]:
+            color = _upper_first(_clean_text(entry.get("color")))
+            reason = _finish_dot(entry.get("reason"))
+            if color:
+                b.line(f"• {color}" + (f" — {_lower_first(reason)}" if reason else ""))
+
+    avoid = _finish_dot(data.get("avoid"))
+    if avoid:
+        b.spacer()
+        b.labeled_line("Лучше пропустить", avoid)
+
+    outfits = [_finish_dot(value) for value in (data.get("outfits") or []) if _clean_text(value)]
+    if outfits:
+        b.spacer()
+        b.section("С чем носить:")
+        b.line("\n".join(f"• {outfit}" for outfit in outfits[:3]))
 
     return b.build_stripped()
 

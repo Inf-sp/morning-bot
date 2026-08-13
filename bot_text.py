@@ -149,6 +149,8 @@ async def handle(update, context, remove_reply_keyboard):
             await wardrobe.handle_wardrobe_search(bot, cid, text); return
         if kind == "wardrobe_check":
             await wardrobe.check_purchase(bot, cid, text); return
+        if kind == "wardrobe_buy":
+            await wardrobe.recommend_purchase(bot, cid, text); return
         if kind == "onboard_name":
             await onboard.handle_name(bot, cid, text); return
         if kind == "onboard_city":
