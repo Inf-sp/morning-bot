@@ -74,11 +74,27 @@ def test_month_forecast_groups_days_into_compact_weekly_periods():
 
     periods = weather._month_periods(records)
     message = weather_ui.month_forecast(
-        "14–27 августа", "Алкмар", periods, "Проверь дождь ближе к дате", country="NL", days=14,
+        "14–27 авг", "Алкмар", periods, "Проверь дождь ближе к дате", country="NL", days=14,
     )
 
     assert len(periods) == 2
     assert periods[0]["rain"] == "дождь 2 дн."
-    assert "Ближайшие 14 дней · 14–27 августа · Алкмар, NL 🇳🇱" in message.text
-    assert "14–20 августа" in message.text
+    assert "Ближайшие 14 дней · 14–27 авг · Алкмар, NL 🇳🇱" in message.text
+    assert "14–20 авг" in message.text
+    assert "до +23°" in message.text
+    assert "💡 Анализ на месяц:" in message.text
     assert "Чем дальше дата, тем прогноз ориентировочнее." in message.text
+
+
+def test_daytime_temperature_uses_only_hours_from_eight_to_twenty():
+    data = {
+        "hourly": {
+            "time": [
+                "2026-08-14T07:00", "2026-08-14T08:00", "2026-08-14T19:00",
+                "2026-08-14T20:00", "2026-08-14T23:00",
+            ],
+            "temperature_2m": [8, 12, 21, 15, 9],
+        },
+    }
+
+    assert weather._daytime_temperature_range(data, "2026-08-14", 7, 25) == (12, 21)

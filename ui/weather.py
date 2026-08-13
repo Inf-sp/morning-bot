@@ -108,10 +108,10 @@ def month_forecast(rng, city, periods, advice, country="", country_code="", days
     for period in periods:
         b.line(
             f"{period['range']} · {period['icon']} "
-            f"{period['tmin']:+.0f}…{period['tmax']:+.0f}° · {period['rain']}"
+            f"до {period['tmax']:+.0f}° · {period['rain']}"
         )
     b.spacer()
-    b.line(f"💡 Полезно: {_finish_sentence(cap_sentence(advice))}")
+    b.line(f"💡 Анализ на месяц: {_finish_sentence(cap_sentence(advice))}")
     return b.build_stripped()
 
 

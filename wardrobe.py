@@ -557,8 +557,11 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         wdata = await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 2)
         wd = wdata["daily"]
         day_str = (wd.get("time") or [None])[0] or _day_key()
-        tmax = round(wd["temperature_2m_max"][0])
-        tmin = round(wd["temperature_2m_min"][0])
+        daytime_min, daytime_max = weather._daytime_temperature_range(
+            wdata, day_str, wd["temperature_2m_min"][0], wd["temperature_2m_max"][0],
+        )
+        tmax = round(daytime_max)
+        tmin = round(daytime_min)
         wind_ms = round(wd["windspeed_10m_max"][0])
         rain_prob_day = wd["precipitation_probability_max"][0] or 0
         rain_mm_day = (wd.get("precipitation_sum") or [None])[0]

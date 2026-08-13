@@ -908,7 +908,7 @@ def _movie_rebus_of_day(day):
     return leisure_movies.daily_movie_rebus(day)
 
 
-_DAY_CACHE_VERSION = 11
+_DAY_CACHE_VERSION = 12
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
@@ -986,7 +986,9 @@ def _build_day_text(cid, *, refresh_current=False):
         d = data["daily"]
         day_str = d["time"][0]
         code = d["weathercode"][0]
-        tmax = d["temperature_2m_max"][0]
+        _tmin, tmax = weather._daytime_temperature_range(
+            data, day_str, d["temperature_2m_min"][0], d["temperature_2m_max"][0],
+        )
         rain_day = d["precipitation_probability_max"][0] or 0
         rain_mm_day = (d.get("precipitation_sum") or [None])[0] if d.get("precipitation_sum") else None
         wind_ms = d["windspeed_10m_max"][0] or 0

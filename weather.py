@@ -48,7 +48,8 @@ HEAVY_RAIN_MM_HOUR = 2.0
 STRONG_WIND_MS = 8
 # Дневное окно «когда пользователь обычно выходит из дома» (часы)
 DAYTIME_START_H = 8
-DAYTIME_END_H = 22
+DAYTIME_END_H = 20
+_MONTHS_SHORT = ("янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
 DESC = {0: "ясно", 1: "малооблачно", 2: "переменно облачно", 3: "пасмурно", 45: "туман", 48: "туман",
         51: "морось", 53: "морось", 55: "морось", 61: "дождь", 63: "дождь", 65: "сильный дождь",
@@ -152,7 +153,7 @@ def humidity_phrase(data, day_str, tmax, cc):
         return "", ""
     day_hum = [
         v for t, v in zip(hours, hum_vals)
-        if t.startswith(day_str) and 6 <= int(t[11:13]) < 21 and v is not None
+        if t.startswith(day_str) and DAYTIME_START_H <= int(t[11:13]) < DAYTIME_END_H and v is not None
     ]
     if not day_hum:
         return "", ""
@@ -290,8 +291,8 @@ def _month_periods(records):
             except (TypeError, ValueError):
                 continue
             temp = record.get("temp") or {}
-            tmin, tmax = temp.get("min"), temp.get("max")
-            if tmin is None or tmax is None:
+            tmax = temp.get("max")
+            if tmax is None:
                 continue
             weather_id = ((record.get("weather") or [{}])[0] or {}).get("id")
             code = _owm_weathercode(weather_id)
@@ -299,7 +300,6 @@ def _month_periods(records):
             rain_mm = _owm_precip_mm(record)
             prepared.append({
                 "date": dt,
-                "tmin": float(tmin),
                 "tmax": float(tmax),
                 "code": code,
                 "rain_real": _rain_real(rain, rain_mm),
@@ -309,9 +309,9 @@ def _month_periods(records):
             continue
         first, last = prepared[0]["date"], prepared[-1]["date"]
         if first.month == last.month:
-            rng = f"{first.day}–{last.day} {_MONTHS[first.month - 1]}"
+            rng = f"{first.day}–{last.day} {_MONTHS_SHORT[first.month - 1]}"
         else:
-            rng = f"{first.day} {_MONTHS[first.month - 1]} – {last.day} {_MONTHS[last.month - 1]}"
+            rng = f"{first.day} {_MONTHS_SHORT[first.month - 1]} – {last.day} {_MONTHS_SHORT[last.month - 1]}"
         rain_days = sum(day["rain_real"] for day in prepared)
         rain_label = "без заметного дождя" if not rain_days else f"дождь {rain_days} дн."
         representative = max(prepared, key=lambda day: (day["rain_real"], day["wind"], day["tmax"]))
@@ -319,23 +319,36 @@ def _month_periods(records):
             "range": rng,
             "icon": _week_icon(representative["code"], representative["tmax"], 100 if representative["rain_real"] else 0,
                                representative["wind"]),
-            "tmin": min(day["tmin"] for day in prepared),
             "tmax": max(day["tmax"] for day in prepared),
             "rain": rain_label,
+            "rain_days": rain_days,
+            "first": first,
+            "last": last,
         })
     return periods
 
 
 def _month_advice(periods):
+    """Короткий вывод по месяцу, а не общий совет на один случайный день."""
     if not periods:
         return "Для важных планов перепроверь погоду за 2–3 дня"
     hottest = max(period["tmax"] for period in periods)
+    rainy_days = sum(int(period.get("rain_days") or 0) for period in periods)
+    first, last = periods[0].get("first"), periods[-1].get("last")
+    if isinstance(first, datetime) and isinstance(last, datetime):
+        if first.month == last.month:
+            span = f"{_MONTHS_SHORT[first.month - 1]}"
+        else:
+            span = f"{_MONTHS_SHORT[first.month - 1]}–{_MONTHS_SHORT[last.month - 1]}"
+    else:
+        span = "этот период"
     if hottest >= 30:
-        return "Для долгих прогулок в тёплые дни выбирай утро или вечер и следи за обновлениями"
-    if sum("дождь" in period["rain"] for period in periods) >= 2:
-        return "Для поездок и мероприятий на улице перепроверь дождь ближе к дате"
-    return "Для важных планов перепроверь погоду за 2–3 дня: дальние даты ещё уточнятся"
-    return f"Самый тёплый день — {hottest['name']}"
+        return f"{span.capitalize()} будет тёплым: до {hottest:+.0f}°C, активность лучше планировать на утро или вечер"
+    if rainy_days <= 2:
+        return f"{span.capitalize()} обещает быть преимущественно сухим — хорошее окно для прогулок, велосипеда и поездок"
+    if rainy_days >= 10:
+        return f"В {span} много дождливых дней — для поездок и мероприятий на улице оставляй запасной план"
+    return f"Погода в {span} будет переменчивой: важные планы лучше сверять за 2–3 дня"
 
 
 # ---------- периоды по часам ----------
@@ -345,15 +358,14 @@ def _periods(data, day_str, key, threshold):
         vals = data["hourly"][key]
     except Exception:
         return []
-    buckets = {"утром": (6, 12), "днём": (12, 18), "вечером": (18, 24), "ночью": (0, 6)}
+    buckets = {"утром": (DAYTIME_START_H, 12), "днём": (12, 18), "вечером": (18, DAYTIME_END_H)}
     hit = []
     for name, (h1, h2) in buckets.items():
         for t, v in zip(hours, vals):
             if t.startswith(day_str) and h1 <= int(t[11:13]) < h2 and (v or 0) >= threshold:
                 hit.append(name)
                 break
-    # порядок: утром, днём, вечером, ночью
-    return [p for p in ["утром", "днём", "вечером", "ночью"] if p in hit]
+    return [p for p in ["утром", "днём", "вечером"] if p in hit]
 
 
 def _join_periods(periods):
@@ -386,6 +398,26 @@ def _daytime_max(data, day_str, key):
                 and DAYTIME_START_H <= int(t[11:13]) < DAYTIME_END_H
                 and v is not None]
     return max(day_vals) if day_vals else None
+
+
+def _daytime_temperature_range(data, day_str, fallback_min=None, fallback_max=None):
+    """Температуры, которые видит пользователь с 08:00 до 20:00.
+
+    Почасовой горизонт короче недельного, поэтому для дальних дней остаётся
+    дневной прогноз провайдера, но ночной минимум нигде не показывается.
+    """
+    try:
+        hours = data["hourly"]["time"]
+        temperatures = data["hourly"].get("temperature_2m") or []
+    except (KeyError, TypeError):
+        hours = temperatures = []
+    values = [value for stamp, value in zip(hours, temperatures)
+              if stamp.startswith(day_str)
+              and DAYTIME_START_H <= int(stamp[11:13]) < DAYTIME_END_H
+              and value is not None]
+    if values:
+        return min(values), max(values)
+    return fallback_min, fallback_max
 
 
 def daytime_outfit_weather(data, day_str, tmax, wind_ms, rain_prob_day, rain_mm_day, weathercode):
@@ -505,9 +537,9 @@ async def send_weather(bot, cid, mode="today", status=None):
         first = datetime.fromtimestamp(int(records[0]["dt"]), TZ)
         last = datetime.fromtimestamp(int(records[-1]["dt"]), TZ)
         if first.month == last.month:
-            rng = f"{first.day}–{last.day} {_MONTHS[first.month - 1]}"
+            rng = f"{first.day}–{last.day} {_MONTHS_SHORT[first.month - 1]}"
         else:
-            rng = f"{first.day} {_MONTHS[first.month - 1]} – {last.day} {_MONTHS[last.month - 1]}"
+            rng = f"{first.day} {_MONTHS_SHORT[first.month - 1]} – {last.day} {_MONTHS_SHORT[last.month - 1]}"
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -531,7 +563,7 @@ async def send_weather(bot, cid, mode="today", status=None):
 
     if mode == "full":
         dt = now
-        header = f"Полный прогноз на сегодня • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} • {s['city']}"
+        header = f"Полный прогноз на сегодня • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS_SHORT[dt.month-1]} • {s['city']}"
         try:
             hours = data["hourly"]["time"]
             temps = data["hourly"].get("temperature_2m") or []
@@ -542,7 +574,7 @@ async def send_weather(bot, cid, mode="today", status=None):
             temps = probs = precs = winds = []
         day_str = d["time"][0]
         periods = []
-        parts = [("Утром", 6, 12), ("Днём", 12, 18), ("Вечером", 18, 24)]
+        parts = [("Утром", DAYTIME_START_H, 12), ("Днём", 12, 18), ("Вечером", 18, DAYTIME_END_H)]
         for label, h1, h2 in parts:
             t_vals, p_vals, w_vals, mm_vals = [], [], [], []
             for i, ts in enumerate(hours):
@@ -564,7 +596,10 @@ async def send_weather(bot, cid, mode="today", status=None):
                 line += f" • {rain_part}"
             line += f" • {wind_str}"
             periods.append({"label": label, "line": line})
-        joke = _joke_outfit(s["city"], d["temperature_2m_max"][0], d["precipitation_probability_max"][0] or 0,
+        _tmin, daytime_tmax = _daytime_temperature_range(
+            data, day_str, d["temperature_2m_min"][0], d["temperature_2m_max"][0],
+        )
+        joke = _joke_outfit(s["city"], daytime_tmax, d["precipitation_probability_max"][0] or 0,
                             d["windspeed_10m_max"][0] or 0, DESC.get(d["weathercode"][0], ""), "сегодня")
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
         msg = weather_ui.full_forecast(header, periods, joke)
@@ -576,13 +611,20 @@ async def send_weather(bot, cid, mode="today", status=None):
         dt = now + timedelta(days=day)
         title = "сегодня" if mode == "today" else "завтра"
         flag = __import__("util").flag_from_cc(s.get("cc", "")) or ""
-        header = f"Погода на {title} • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} • {s['city']} {flag}"
+        header = f"Погода на {title} • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS_SHORT[dt.month-1]} • {s['city']} {flag}"
         code = d["weathercode"][day]
-        tmax = d["temperature_2m_max"][day]
-        rain = d["precipitation_probability_max"][day] or 0
-        rain_mm = (d.get("precipitation_sum") or [None] * (day + 1))[day] if d.get("precipitation_sum") else None
-        wind_ms = d["windspeed_10m_max"][day] or 0
-        day_str = d["time"][day]
+        _tmin, tmax = _daytime_temperature_range(
+            data, day_str := d["time"][day], d["temperature_2m_min"][day], d["temperature_2m_max"][day],
+        )
+        day_weather = daytime_outfit_weather(
+            data, day_str, tmax, d["windspeed_10m_max"][day] or 0,
+            d["precipitation_probability_max"][day] or 0,
+            (d.get("precipitation_sum") or [None] * (day + 1))[day] if d.get("precipitation_sum") else None,
+            code,
+        )
+        rain = day_weather["rain_prob"]
+        rain_mm = day_weather["rain_mm"]
+        wind_ms = day_weather["wind_ms"] or 0
         icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         main_lines = [_compact_forecast_line(icon, tmax, rain, rain_mm, rain_p, wind_ms)]
@@ -615,14 +657,21 @@ async def send_weather(bot, cid, mode="today", status=None):
         dt = now + timedelta(days=1)
         header = (
             f"Завтра · {_WEEKDAY_SHORT[dt.weekday()]}, "
-            f"{dt.day} {_MONTHS[dt.month-1]} · {s['city']} 📍"
+            f"{dt.day} {_MONTHS_SHORT[dt.month-1]} · {s['city']} 📍"
         )
         code = d["weathercode"][day]
-        tmax = d["temperature_2m_max"][day]
-        rain = d["precipitation_probability_max"][day] or 0
-        rain_mm = (d.get("precipitation_sum") or [None] * (day + 1))[day] if d.get("precipitation_sum") else None
-        wind_ms = d["windspeed_10m_max"][day] or 0
-        day_str = d["time"][day]
+        _tmin, tmax = _daytime_temperature_range(
+            data, day_str := d["time"][day], d["temperature_2m_min"][day], d["temperature_2m_max"][day],
+        )
+        day_weather = daytime_outfit_weather(
+            data, day_str, tmax, d["windspeed_10m_max"][day] or 0,
+            d["precipitation_probability_max"][day] or 0,
+            (d.get("precipitation_sum") or [None] * (day + 1))[day] if d.get("precipitation_sum") else None,
+            code,
+        )
+        rain = day_weather["rain_prob"]
+        rain_mm = day_weather["rain_mm"]
+        wind_ms = day_weather["wind_ms"] or 0
         icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         desc = DESC.get(code, "")
@@ -664,8 +713,9 @@ async def send_weather(bot, cid, mode="today", status=None):
         day_str = d["time"][idx]
         dt_i = datetime.fromisoformat(day_str)
         code = d["weathercode"][idx]
-        tmax = d["temperature_2m_max"][idx]
-        tmin = d["temperature_2m_min"][idx]
+        tmin, tmax = _daytime_temperature_range(
+            data, day_str, d["temperature_2m_min"][idx], d["temperature_2m_max"][idx],
+        )
         if tmax is None or tmin is None:
             continue
         rain = d["precipitation_probability_max"][idx] or 0
@@ -690,9 +740,9 @@ async def send_weather(bot, cid, mode="today", status=None):
         raise ValueError("weather API returned incomplete weekly forecast")
     d1, d2 = day_data[0]["date"], day_data[-1]["date"]
     if d1.month == d2.month:
-        rng = f"{d1.day}–{d2.day} {_MONTHS[d1.month-1]}"
+        rng = f"{d1.day}–{d2.day} {_MONTHS_SHORT[d1.month-1]}"
     else:
-        rng = f"{d1.day} {_MONTHS[d1.month-1]} – {d2.day} {_MONTHS[d2.month-1]}"
+        rng = f"{d1.day} {_MONTHS_SHORT[d1.month-1]} – {d2.day} {_MONTHS_SHORT[d2.month-1]}"
     overview = _week_overview(day_data)
     advice = _week_advice(day_data)
 
