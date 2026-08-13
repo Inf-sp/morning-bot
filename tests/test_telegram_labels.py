@@ -62,16 +62,15 @@ def test_day_summary_header_shows_country_and_flag():
     assert message.text.startswith("Мой день · Вт, 4 августа · Лилль, FR 🇫🇷")
 
 
-def test_day_summary_uses_movie_rebus_and_concert_without_quote():
+def test_day_summary_uses_movie_rebus_without_concert_or_quote():
     message = day_summary(
         "Вт, 4 августа", "Лилль",
         movie_rebus={"emoji": "🦈 🌊 👨‍🔬", "answer": "Челюсти"},
-        concert_line="Tokio Hotel · Амстердам · завтра",
         quote_text="Эта строка больше не должна появляться",
     )
 
     assert "🎬 Ребус дня: 🦈 🌊 👨‍🔬 → Челюсти" in message.text
-    assert "🎫 Афиша: Tokio Hotel · Амстердам · завтра" in message.text
+    assert "🎫 Афиша" not in message.text
     assert "💭" not in message.text
     spoiler = next(entity for entity in message.entities if entity.type == MessageEntity.SPOILER)
     assert message.text.encode("utf-16-le")[spoiler.offset * 2:(spoiler.offset + spoiler.length) * 2].decode("utf-16-le") == "Челюсти"

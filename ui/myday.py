@@ -31,7 +31,6 @@ def day_summary(
     word_lang="nl",
     movie_rebus=None,
     mood="",
-    concert_line="",
     outfit_items=None,
     lifehack="",
     quote_text="",
@@ -79,11 +78,6 @@ def day_summary(
     if mood:
         b.text_line("⚡️ ")
         b.labeled_line("Настрой", finish_dot(mood), lowercase=False)
-        b.spacer()
-
-    if concert_line:
-        b.text_line("🎫 ")
-        b.labeled_line("Афиша", concert_line, lowercase=False)
         b.spacer()
 
     outfit = ", ".join(

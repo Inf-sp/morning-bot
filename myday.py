@@ -908,49 +908,7 @@ def _movie_rebus_of_day(day):
     return leisure_movies.daily_movie_rebus(day)
 
 
-def _concert_date_label(value, today):
-    try:
-        event_day = datetime.fromisoformat(str(value)).date()
-    except (TypeError, ValueError):
-        return ""
-    delta = (event_day - today).days
-    if delta == 0:
-        return "сегодня"
-    if delta == 1:
-        return "завтра"
-    if delta == 7:
-        return "через неделю"
-    if 2 <= delta <= 6:
-        return f"через {delta} дн."
-    label = f"{event_day.day} {_MONTHS[event_day.month - 1]}"
-    return f"{label} {event_day.year}" if event_day.year != today.year else label
-
-
-def _concert_of_day(cid, today):
-    """Ближайшее событие из прогретой афиши; сеть и AI здесь запрещены."""
-    import leisure_concerts
-
-    settings_data = store.get_settings(cid)
-    events = leisure_concerts.cached_concerts(cid, settings_data.get("cc") or "NL")
-    for event in events:
-        start = (event.get("dates") or {}).get("start") or {}
-        date_label = _concert_date_label(start.get("localDate"), today)
-        if not date_label:
-            continue
-        try:
-            if datetime.fromisoformat(str(start.get("localDate"))).date() < today:
-                continue
-        except (TypeError, ValueError):
-            continue
-        artist = " ".join(str(event.get("_artist") or "").split())
-        venue = ((event.get("_embedded") or {}).get("venues") or [{}])[0]
-        city = " ".join(str((venue.get("city") or {}).get("name") or "").split())
-        if artist:
-            return " · ".join(part for part in (artist, city, date_label) if part)
-    return ""
-
-
-_DAY_CACHE_VERSION = 10
+_DAY_CACHE_VERSION = 11
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
@@ -1080,8 +1038,6 @@ def _build_day_text(cid, *, refresh_current=False):
     import wardrobe
     mood = balance.health_focus(cid).get("phrase", "")
     outfit_items = wardrobe.get_cached_outfit_items(cid)
-    concert_line = _concert_of_day(cid, now.date())
-
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     _hack_cat, hack_text = daily_lifehack(
         cid, rain=(rain >= 40 or bool(current_precipitation)),
@@ -1101,7 +1057,6 @@ def _build_day_text(cid, *, refresh_current=False):
         word_lang=word_lang,
         movie_rebus=movie_rebus,
         mood=mood,
-        concert_line=concert_line,
         outfit_items=outfit_items,
         lifehack=hack_text,
     )
