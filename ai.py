@@ -1246,9 +1246,6 @@ MODULE_POLICY = {
     "learning_dictionary": GRAMMAR_ORDER,
     "dictionary_import": GRAMMAR_ORDER,
     "trainer": GRAMMAR_ORDER,
-    "health": GRAMMAR_ORDER,
-    "balance": GRAMMAR_ORDER,
-    "thoughts": GRAMMAR_ORDER,
     # Сложные карточки, рекомендации и свободный диалог используют premium-маршрут.
     "food": FOOD_ORDER,
     "cooking": FOOD_ORDER,

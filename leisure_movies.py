@@ -389,8 +389,7 @@ def _movie_home_kb():
         [InlineKeyboardButton("✨ Подобрать новое кино", callback_data="movie_reco")],
         [InlineKeyboardButton("🎟️ Премьеры", callback_data="movie_premieres")],
         [InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 

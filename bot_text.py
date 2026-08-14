@@ -1,11 +1,9 @@
 """Маршрутизация входящих текстовых сообщений."""
 
 import logging
-import re
 
 import access
 import assistant
-import balance
 import fridge
 import learning_dictionary as dictionary
 import dictionary_import
@@ -25,20 +23,6 @@ import weather
 _log = logging.getLogger(__name__)
 
 
-_THOUGHT_CAPTURE_INTENT_RE = re.compile(
-    r"(?i)(тревож|боюсь|кажется|вдруг|пережива|паник|страшно|не могу успеть|"
-    r"не успею|много тревог|мысль|мысли)"
-)
-
-
-def _should_capture_thought_during_onboarding(text):
-    """Не отдаёт явную тревожную запись в старый шаг города/имени."""
-    return bool(_THOUGHT_CAPTURE_INTENT_RE.search(str(text or "")))
-
-
-def _looks_like_command(text):
-    return str(text or "").strip().startswith("/")
-
 async def handle(update, context, remove_reply_keyboard):
     cid = str(update.effective_chat.id)
     text = secure.clamp(update.message.text)        # лимит длины + чистка невидимых/управляющих
@@ -56,84 +40,45 @@ async def handle(update, context, remove_reply_keyboard):
 
     # Режим добавления одежды (файлом)
     if store.add_wardrobe_mode.get(cid):
-        balance.thoughts.cancel_capture(cid, clear_pending=False)
         await wardrobe.ingest(bot, cid, text)
         return
 
     # Команда добавления лайфхака должна быть раньше словаря: в тексте могут
     # встречаться «de», «het», «слово» и «перевод», но это всё ещё один лайфхак.
     if await assistant.try_add_lifehack_from_chat(bot, cid, text):
-        balance.thoughts.cancel_capture(cid)
         return
     if await assistant.try_edit_lifehack_from_chat(bot, cid, text):
-        balance.thoughts.cancel_capture(cid)
         return
 
-    # Явная команда словаря сильнее открытого режима ожидания любого раздела.
-    # Например, «Добавить *twijfelt*» из экрана «Мысли» должна попасть в словарь,
-    # а не сохраниться как мысль. Сбрасываем только прежний pending: обработчик
-    # словаря может открыть новый шаг уточнения перевода.
+    # Сбрасываем только прежний pending: обработчик словаря может открыть новый
+    # шаг уточнения перевода.
     previous_kind = store.pending_input.get(cid)
     if await dictionary_import.try_add_dict_from_chat(bot, cid, text):
         if store.pending_input.get(cid) == previous_kind:
             store.pending_input.pop(cid, None)
         store.game_state.pop(cid, None)
         store.challenge_state.pop(cid, None)
-        if previous_kind in ("worry", "thought", "thought_reminder"):
-            balance.thoughts.cancel_capture(cid, clear_pending=False)
         return
 
-    # Игра и перевод проверяем ПЕРЕД pending - иначе ответ уходит не туда (в дневник)
+    # Игра и перевод проверяем перед обычным pending-вводом.
     if cid in store.game_state:
         if await learning_game.game_answer(bot, cid, text):
-            balance.thoughts.cancel_capture(cid, clear_pending=False)
             return
 
     pending_kind = store.pending_input.get(cid)
-    thought_waiting = balance.thoughts.capture_waiting(cid)
-
-    # Открытый экран «Мысли» имеет приоритет над забытым шагом онбординга.
-    # Иначе фраза вроде «много тревожности» может попасть в поле города и
-    # оставить у пользователя пустой список мыслей.
-    if (
-        thought_waiting
-        and pending_kind in ("onboard_name", "onboard_city")
-        and _should_capture_thought_during_onboarding(text)
-        and balance.thoughts.claim_capture(cid)
-    ):
-        _log.info("thought: onboarding input overridden by explicit thought intent for cid=%s", cid)
-        await balance.thoughts.capture(bot, cid, text)
-        return
-
-    # Явные текстовые действия сильнее пассивного ожидания ответа на напоминание.
-    # Активный специализированный workflow при этом остаётся первым.
-    if pending_kind is None or pending_kind in balance.thoughts.CAPTURE_PENDING_KINDS:
+    if pending_kind is None:
         if await fridge.try_add_fridge_from_chat(bot, cid, text):
-            balance.thoughts.cancel_capture(cid)
             return
         if await assistant.try_add_love_from_chat(bot, cid, text):
-            balance.thoughts.cancel_capture(cid)
             return
 
     # Pending-ввод
     if cid in store.pending_input:
         kind = store.pending_input.get(cid)
-        if kind in balance.thoughts.CAPTURE_PENDING_KINDS:
-            if not thought_waiting:
-                balance.thoughts.cancel_capture(cid)
-            kind = None
-        else:
-            store.pending_input.pop(cid, None)
-            if thought_waiting:
-                balance.thoughts.cancel_capture(cid, clear_pending=False)
+        store.pending_input.pop(cid, None)
         if kind == trainer_session.PENDING_ANSWER:
             if await trainer.handle_text(bot, cid, text):
                 return
-        if kind in ("role_doctor", "role_state"):
-            await balance.handle_role(bot, cid, kind.split("_")[1], text); return
-        if kind == "role_medicine":
-            import medicine
-            await medicine.answer(bot, cid, text); return
         if kind == "wardrobe_add":
             await wardrobe.add_item(bot, cid, text); return
         if kind == "wardrobe_fill":
@@ -193,14 +138,6 @@ async def handle(update, context, remove_reply_keyboard):
         await onboard.handle_name(bot, cid, text); return
     if ob_step == "city":
         await onboard.handle_city(bot, cid, text); return
-
-    # Персистентное ожидание мыслей идёт после всех специализированных workflow.
-    # Время хранится только как метаданные и не определяет принадлежность текста.
-    if (not _looks_like_command(text)
-            and balance.thoughts.claim_capture(cid)):
-        _log.info("thought: routed via capture state for cid=%s", cid)
-        await balance.thoughts.capture(bot, cid, text)
-        return
 
     # Свободный чат
     await assistant.chat_reply(bot, cid, text)

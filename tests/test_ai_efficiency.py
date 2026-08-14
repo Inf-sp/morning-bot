@@ -76,8 +76,8 @@ def test_structured_cache_key_uses_scenario_not_prompt_text():
 
 def test_utility_routes_do_not_start_with_gemini():
     for module in (
-        "learning", "learning_trainer", "learning_dict_add", "health", "trainer",
-        "medicine", "doctor", "dictionary_import", "wardrobe_utility", "travel_utility",
+        "learning", "learning_trainer", "learning_dict_add", "trainer",
+        "dictionary_import", "wardrobe_utility", "travel_utility",
     ):
         assert "gemini" not in ai._resolve(None, None, module=module)
 

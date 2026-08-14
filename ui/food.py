@@ -19,7 +19,7 @@ MEAL_LABEL = {
 
 DEFAULT_CUISINE_EMOJI = ui_label("recipes", "").strip()
 
-# Русское название кухни по машиночитаемому коду (balance.RECIPE_CUISINE_CODES) —
+# Русское название кухни по машиночитаемому коду (settings.CUISINE_OPTIONS) —
 # модель возвращает код, а не готовую подпись, чтобы не плодить разнобой в языке/падежах.
 CUISINE_RU = {
     "european": "Европейская кухня",

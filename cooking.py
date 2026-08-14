@@ -6,7 +6,7 @@ import store
 _log = logging.getLogger(__name__)
 import util
 import verify
-from ui import balance as balance_ui
+from ui import text as text_ui
 from ui import food as food_ui
 from ui.navigation import back_menu_keyboard
 import menu
@@ -48,13 +48,13 @@ def _food_card(d, label="Рецепт дня"):
     return food_ui.food_card(d, label=label)
 
 def _finish_dot(value):
-    return balance_ui.finish_dot(value)
+    return text_ui.finish_dot(value)
 
 def _recipe_kb(cid=None, recipe=None):
     """Единая клавиатура карточки рецепта для всех 4 категорий (§6.2 спеки).
 
     «Другой рецепт» (as_food) и «Назад» (as_food_back) работают в рамках активной
-    категории (balance.get_active_meal) — см. handle_callback. «Назад» — отдельный
+    категории (recipe_state.get_active_meal) — см. handle_callback. «Назад» — отдельный
     callback, а не общий m_close, чтобы не задевать другие разделы, которые тоже
     используют m_close для закрытия карточки без возврата в конкретное меню."""
     return _kb([

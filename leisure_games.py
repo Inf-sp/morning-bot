@@ -197,10 +197,7 @@ def _game_keyboard(*, no_match=False):
     ]
     if no_match:
         rows.append([InlineKeyboardButton("📝 Платформы", callback_data="set_pref_games")])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append([InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 

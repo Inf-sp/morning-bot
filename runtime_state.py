@@ -2,7 +2,6 @@
 
 challenge_state = {}
 chat_history = {}
-doctor_context = {}
 add_wardrobe_mode = {}
 game_state = {}
 game_config = {}

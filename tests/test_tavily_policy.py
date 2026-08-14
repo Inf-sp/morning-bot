@@ -16,34 +16,18 @@ def test_generic_web_search_never_falls_back_to_tavily(monkeypatch):
     assert research.web_search("music recommendation") == []
 
 
-def test_medicine_policy_allows_tavily_source_search(monkeypatch):
-    monkeypatch.setattr(research, "_tavily_allowed", lambda *_args, **_kwargs: True)
-    calls = []
-
-    def tavily(*_args, **kwargs):
-        calls.append(kwargs.get("scenario"))
-        return [{"title": "Official", "url": "https://fda.gov/x", "content": "source"}]
-
-    monkeypatch.setattr(research, "tavily_search", tavily)
-    assert research.web_search(
-        "medicine label", scenario="medicine_official", allow_tavily=True,
-        search_priority="tavily",
-    )
-    assert calls == ["medicine_official"]
-
-
 def test_only_explicit_research_phrase_enables_chat_web_search():
     assert research.requires_explicit_web_search("Проверь в интернете, что сейчас известно")
     assert not research.requires_explicit_web_search("Посоветуй фильм на вечер")
 
 
-def test_economy_mode_keeps_medicine_but_skips_optional_travel(monkeypatch):
+def test_economy_mode_keeps_explicit_research_but_skips_optional_travel(monkeypatch):
     monkeypatch.setattr(research.api_usage, "tavily_budget", lambda: {"mode": "economy"})
     monkeypatch.setattr(research.provider_runtime, "tavily_monthly_quota_exhausted", lambda: False)
     events = []
     monkeypatch.setattr(research.api_usage, "record_tavily_event", lambda scenario, event, **_kw: events.append((scenario, event)))
 
-    assert research._tavily_allowed("medicine_official")
+    assert research._tavily_allowed("explicit_research")
     assert not research._tavily_allowed("travel_current")
     assert ("travel_current", "skipped_policy") in events
 
@@ -53,7 +37,7 @@ def test_advanced_search_requires_explicit_advanced_scenario(monkeypatch):
     monkeypatch.setattr(research.provider_runtime, "tavily_monthly_quota_exhausted", lambda: False)
     monkeypatch.setattr(research.api_usage, "record_tavily_event", lambda *_args, **_kwargs: None)
 
-    assert not research._tavily_allowed("medicine_official", search_depth="advanced")
+    assert not research._tavily_allowed("explicit_research", search_depth="advanced")
     assert research._tavily_allowed("explicit_research_advanced", search_depth="advanced")
 
 
@@ -73,8 +57,8 @@ def test_tavily_cache_avoids_second_network_request(monkeypatch):
 
     monkeypatch.setattr(research.requests, "post", lambda *_args, **_kwargs: calls.append(True) or Response())
 
-    assert research.tavily_search("official medicine", scenario="medicine_official")
-    assert research.tavily_search("  OFFICIAL   medicine ", scenario="medicine_official")
+    assert research.tavily_search("official sources", scenario="explicit_research")
+    assert research.tavily_search("  OFFICIAL   sources ", scenario="explicit_research")
     assert len(calls) == 1
 
 

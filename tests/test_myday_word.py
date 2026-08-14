@@ -1,6 +1,5 @@
 import asyncio
 import os
-from datetime import datetime
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
@@ -30,6 +29,13 @@ def test_myday_inline_open_builds_a_missing_daily_cache(monkeypatch):
     asyncio.run(myday.send_plany(object(), "42", status=status))
 
     assert status.replaced[0] == "Сводка готова"
+
+
+def test_myday_menu_only_offers_week_weather():
+    keyboard = myday._day_menu_kb().inline_keyboard
+    callbacks = [button.callback_data for row in keyboard for button in row]
+
+    assert callbacks == ["a_w_week", "m_menu"]
 
 
 def test_day_summary_keeps_only_compact_weather_block():
@@ -70,45 +76,20 @@ def test_day_summary_keeps_capitalized_dictionary_translation_after_arrow():
     assert "→ Худой" in message.text
 
 
-def test_yesterdays_day_cache_never_hides_todays_mood(monkeypatch):
-    cid = "myday-new-mood"
+def test_yesterdays_day_cache_never_hides_todays_summary(monkeypatch):
+    cid = "myday-new-summary"
     myday._day_cache.pop(cid, None)
     monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {
         "myday_home_cache": {
             "date": "2026-07-27",
             "version": myday._DAY_CACHE_VERSION,
-            "text": "⚡️ Настрой: Вчерашняя фраза.",
+            "text": "Вчерашняя сводка.",
             "entities": [],
             "ts": 0,
         },
     })
 
     assert myday._load_day_cache(cid, "2026-07-28") is None
-
-
-def test_daily_mood_never_repeats_when_hashes_collide(monkeypatch):
-    class FixedDateTime:
-        current = datetime(2026, 7, 27)
-
-        @classmethod
-        def now(cls, _tz):
-            return cls.current
-
-    class SameDigest:
-        def digest(self):
-            return b"\0" * 32
-
-    monkeypatch.setattr("balance.datetime", FixedDateTime)
-    monkeypatch.setattr("balance.hashlib.sha256", lambda _value: SameDigest())
-
-    yesterday = __import__("balance").health_focus("42")["phrase"]
-    yesterday_topic = __import__("balance").health_focus("42")["theme"]
-    FixedDateTime.current = datetime(2026, 7, 28)
-    today = __import__("balance").health_focus("42")["phrase"]
-    today_topic = __import__("balance").health_focus("42")["theme"]
-
-    assert today != yesterday
-    assert today_topic != yesterday_topic
 
 
 def test_quote_fallback_uses_fresh_author_after_favorite_book_was_shown(monkeypatch):

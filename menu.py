@@ -17,8 +17,8 @@ def main_menu_kb():
 
 
 _MAIN_MENU_CALLBACKS = {
-    "m_myday", "m_wardrobe", "m_food", "m_learn", "m_balance",
-    "m_travel", "m_leisure", "m_settings",
+    "m_myday", "m_wardrobe", "m_food", "m_learn", "m_travel",
+    "m_movie", "m_music", "m_books", "m_games", "m_settings",
 }
 
 
@@ -51,9 +51,6 @@ def menu_screen(key, cid=None):
         import learning
         home = learning.build_learning_home(cid) if cid is not None else {"has_material": False, "lang_code": "nl"}
         msg = menu_ui.learning_menu(home)
-    elif key == "m_balance":
-        import balance
-        msg = menu_ui.health_menu(balance.health_focus(cid))
     else:
         msg = menu_ui.menu_screen(key)
     return msg.text, msg.entities, msg.reply_markup

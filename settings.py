@@ -15,7 +15,6 @@ NOTIF_TYPES = [
     ("morning_brief",   "Мой день"),
     ("weekend_events",  "Ближайшие события"),
     ("daily_words",     "Обучение языку"),
-    ("checkin_day",     "Запись мыслей"),
     ("evening_weather", "Погода на завтра"),
 ]
 
@@ -161,7 +160,6 @@ def _notif_label(kind: str, label: str) -> str:
     times = {
         "morning_brief": "08:30",
         "daily_words": "11:00",
-        "checkin_day": "14:00",
         "evening_weather": "20:30",
     }
     if kind in times:
@@ -452,9 +450,6 @@ async def _send_scheduled_notification(bot, cid, kind):
             await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     elif kind == "daily_words":
         await dictionary_morning.send_daily_practice(_NoKbBot(bot), cid)
-    elif kind == "checkin_day":
-        import thoughts as _thoughts
-        return await _thoughts.send_day_reminder(bot, cid)
     elif kind == "weekend_events":
         import leisure_concerts
         await leisure_concerts.send_weekend_events(_NoKbBot(bot), cid)
@@ -515,7 +510,6 @@ _ADMIN_NOTIFICATION_META = {
     "morning_brief":   ("08:30", "Мой день"),
     "weekend_events":  ("пт 10:00", "Ближайшие события"),
     "daily_words":     ("11:00", "Обучение языку"),
-    "checkin_day":     ("14:00", "Запись мыслей"),
     "evening_weather": ("20:30", "Погода на завтра"),
 }
 
@@ -1015,10 +1009,6 @@ async def handle_callback(bot, cid, data, q=None):
     ):
         # Кнопка ручного обновления базы удалена. Старые сообщения безопасно
         # возвращают к актуальным настройкам и не запускают сетевую обработку.
-        await send_home(bot, cid)
-    elif data in ("set_thought_history_delete", "set_thought_history_delete_yes"):
-        # Старые сообщения могли сохранить удалённую кнопку. Массовое удаление
-        # истории мыслей больше недоступно из интерфейса.
         await send_home(bot, cid)
     elif data == "set_priorities":
         await send_personalization(bot, cid, q)

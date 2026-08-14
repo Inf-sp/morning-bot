@@ -5,7 +5,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import store
 import util
 import verify
-from ui import balance as balance_ui
+from ui import text as text_ui
 
 
 def keyboard(rows):
@@ -16,12 +16,12 @@ def keyboard(rows):
 
 
 def clean_card_text(value):
-    return balance_ui.clean_card_text(value)
+    return text_ui.clean_card_text(value)
 
 
 def build_entity_card(title, summary="", quote="", bullets=None, final="",
                       bullet_label="Рекомендации:", emoji=""):
-    message = balance_ui.entity_card(
+    message = text_ui.entity_card(
         title, summary, quote, bullets, final, bullet_label, emoji=emoji)
     return message.text, message.entities
 

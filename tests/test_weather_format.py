@@ -1,5 +1,4 @@
 import os
-from datetime import datetime, timedelta
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
@@ -56,34 +55,6 @@ def test_week_forecast_marks_extreme_heat_as_a_reason_to_change_plans():
     assert advice.startswith("В четверг до +40°C")
     assert "избегай долгих прогулок и велосипеда днём" in advice
     assert "💡 Полезно: В четверг до +40°C" in message.text
-
-
-def test_month_forecast_groups_days_into_compact_weekly_periods():
-    start = datetime(2026, 8, 14, tzinfo=weather.TZ)
-    records = [
-        {
-            "dt": int((start + timedelta(days=index)).timestamp()),
-            "temp": {"min": 13 + index % 2, "max": 21 + index % 3},
-            "weather": [{"id": 500 if index in (1, 5) else 801}],
-            "pop": 0.7 if index in (1, 5) else 0.1,
-            "rain": 1 if index in (1, 5) else 0,
-            "wind_speed": 4,
-        }
-        for index in range(14)
-    ]
-
-    periods = weather._month_periods(records)
-    message = weather_ui.month_forecast(
-        "14–27 авг", "Алкмар", periods, "Проверь дождь ближе к дате", country="NL", days=14,
-    )
-
-    assert len(periods) == 2
-    assert periods[0]["rain"] == "дождь 2 дн."
-    assert "Ближайшие 14 дней · 14–27 авг · Алкмар, NL 🇳🇱" in message.text
-    assert "14–20 авг" in message.text
-    assert "до +23°" in message.text
-    assert "💡 Анализ на месяц:" in message.text
-    assert "Чем дальше дата, тем прогноз ориентировочнее." in message.text
 
 
 def test_daytime_temperature_uses_only_hours_from_eight_to_twenty():

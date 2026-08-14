@@ -4,7 +4,6 @@ import logging
 import re
 
 import access
-import balance
 import callback_topics
 import cleanup
 import cooking
@@ -52,8 +51,6 @@ def _status_stages(data):
 
     if data.startswith(("as_food", "as_fridge_cook", "m_food", "food_")):
         first = "⏳ Ищу рецепт..."
-    elif data == "as_daycheck":
-        return progress("🧠 Разбираю мысль...", "💭 Ищу опору в записи...", "📝 Готовлю разбор...")
     elif data == "w_look":
         first = "⏳ Ищу образ..."
     elif data.startswith(("movie_", "a_watch")):
@@ -88,7 +85,7 @@ def _status_stages(data):
         first = "🎧 Ищу музыку..."
     elif data in ("a_plany", "m_myday"):
         return progress("☀️ Собираю мой день...", "🌦️ Сверяю планы...", "📝 Готовлю сводку...")
-    elif data in ("a_w_week", "a_w_month"):
+    elif data == "a_w_week":
         return progress("🌦️ Ищу прогноз...", "🗓️ Сверяю дни...", "📝 Готовлю прогноз...")
     elif topic == "wardrobe":
         first = "⏳ Ищу образ..."
@@ -100,8 +97,6 @@ def _status_stages(data):
         first = "✨ Ищу рекомендацию..."
     elif topic == "travel":
         first = "✈️ Ищу поездку..."
-    elif topic == "health":
-        first = "💬 Ищу ответ..."
     else:
         return stages
     return ((0, first), *stages[1:])
@@ -139,15 +134,6 @@ async def handle(update, context, remove_reply_keyboard):
     if not access.is_allowed(cid):
         await bot.send_message(chat_id=cid, text="❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
-    # Любое действие кнопкой означает, что пользователь начал новый сценарий.
-    # Исключение — явная кнопка входа в режим выгрузки мыслей.
-    if data != "thought_capture":
-        balance.thoughts.cancel_capture(cid)
-    pending_kind = store.pending_input.get(cid)
-    if data.startswith("m_") and pending_kind in ("role_doctor", "role_medicine"):
-        store.pending_input.pop(cid, None)
-        if pending_kind == "role_doctor":
-            store.doctor_context.pop(cid, None)
     # Онбординг новых пользователей
     if data.startswith("ob_"):
         await onboard.handle_callback(bot, cid, q, data)
@@ -157,25 +143,16 @@ async def handle(update, context, remove_reply_keyboard):
     if data.startswith("fav_"):
         await personal_collections.handle_collection_callback(bot, cid, q, data)
         return
-    if data.startswith("thought_"):
-        await balance.thoughts.handle_callback(bot, cid, q, data)
-        return
     if data.startswith("tts_word:"):
         # answerCallbackQuery запускается заранее в bot.answer_callback, поэтому
         # кнопка перестаёт крутиться до сетевого запроса Azure.
         await dictionary_tts.send_pronunciation(bot, cid, data.split(":", 1)[1])
         return
-    # Здоровье/готовка vs личные коллекции
+    # Готовка vs личные коллекции
     if data.startswith("ls_"):
         await personal_collections.handle_collection_callback(bot, cid, q, data)
         return
     if data.startswith("as_"):
-        if data == "as_daycheck":
-            await _inline_status(
-                lambda status: balance.handle_callback(bot, cid, q, data, status=status),
-                preserve_message=True,
-            )
-            return
         if data in ("as_food", "as_food_back", "as_fridge_cook"):
             await _inline_status(
                 lambda status: cooking.handle_callback(bot, cid, q, data, status=status),
@@ -183,8 +160,6 @@ async def handle(update, context, remove_reply_keyboard):
             return
         if data.startswith(("as_food", "as_fridge", "as_recipe")):
             await cooking.handle_callback(bot, cid, q, data)
-        elif data.startswith(("as_daycheck", "as_motiv", "as_doctor", "as_medicine")):
-            await balance.handle_callback(bot, cid, q, data)
         else:
             await personal_collections.handle_collection_callback(bot, cid, q, data)
         return
@@ -338,11 +313,6 @@ async def handle(update, context, remove_reply_keyboard):
             elif act == "w_week":
                 await _inline_status(
                     lambda status: weather.send_weather(bot, cid, "week", status=status),
-                    preserve_message=True,
-                )
-            elif act == "w_month":
-                await _inline_status(
-                    lambda status: weather.send_weather(bot, cid, "month", status=status),
                     preserve_message=True,
                 )
             elif act == "setcity":
@@ -613,15 +583,15 @@ async def handle(update, context, remove_reply_keyboard):
             preserve_message=True,
         )
         return
-    # Совместимость со старыми сообщениями дневника тревог.
-    if data == "worry_clearall":
-        await balance.worry_clear_all(bot, cid)
-        return
     # «Продолжить / ещё раз»
     if data == "chat_retry":
         await _inline_status(lambda status: retry_flow.retry_last_response(bot, cid, status=status))
         return
     # «Короче / Глубже» - переписать последний ответ
     if data in ("ans_short", "ans_deep"):
-        await _inline_status(lambda _s: balance.reword(bot, cid, "short" if data == "ans_short" else "deep"))
+        await _inline_status(
+            lambda _s: retry_flow.reword_last_response(
+                bot, cid, "short" if data == "ans_short" else "deep",
+            )
+        )
         return

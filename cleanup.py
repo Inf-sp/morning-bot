@@ -1,6 +1,6 @@
 """Движок коллекций: пагинация + мультивыбор + контекстные действия.
 
-Используется из learning, wardrobe, balance и bot. Пользовательское
+Используется из learning, wardrobe и bot. Пользовательское
 описание раздела — docs/cleanup.md.
 
 "view"-режим (стабильный item_id + revision коллекции, короткий callback_data

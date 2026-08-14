@@ -431,7 +431,7 @@ _PER_USER_KEYS = {
     config.MOVIE_RECO_CACHE_KEY, config.MOVIE_NOW_PLAYING_CACHE_KEY,
     config.SAVED_COUNTRIES_KEY, config.MOVIE_BLACKLIST_KEY, config.BOOK_BLACKLIST_KEY,
     config.MUSIC_DISLIKE_KEY, config.TRAVEL_DISLIKE_KEY,
-    config.THOUGHTS_KEY, config.THOUGHT_REVIEWS_KEY,
+    config.THOUGHTS_KEY,
     config.MOVIE_SEEN_KEY, config.BOOK_SEEN_KEY, config.MUSIC_SEEN_KEY,
     config.RECOMMENDATION_STOPLIST_KEY,
     config.DICT_KEY, config.DIARY_KEY, config.LIFEHACK_KEY,
@@ -439,7 +439,7 @@ _PER_USER_KEYS = {
     config.CONCERTS_CACHE_KEY, config.CONCERT_ARTIST_CHECKS_KEY,
     # Удалённые сценарии: чистим старые физические ключи только при удалении
     # аккаунта, но обычный код их больше не читает и не записывает.
-    "content_records.json", "notes.json", "language_review.json",
+    "content_records.json", "notes.json", "language_review.json", "thought_reviews.json",
     "data_refresh_backups.json", "lagom.json", "motiv_lagom_seen.json",
 }
 # При удалении профиля очищаем и старые физические ключи, иначе ленивый перенос
@@ -467,7 +467,6 @@ def purge_user(cid):
 # Совместимые ссылки: владельцем временных состояний является runtime_state.py.
 challenge_state = runtime_state.challenge_state
 chat_history = runtime_state.chat_history
-doctor_context = runtime_state.doctor_context
 add_wardrobe_mode = runtime_state.add_wardrobe_mode
 game_state = runtime_state.game_state
 game_config = runtime_state.game_config

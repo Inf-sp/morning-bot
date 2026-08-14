@@ -329,8 +329,7 @@ def music_home_keyboard():
         [InlineKeyboardButton("✨ Подобрать новую музыку", callback_data="music_reco")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find")],
         [InlineKeyboardButton("🎚️ Мои артисты", callback_data="artist_favorites")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 

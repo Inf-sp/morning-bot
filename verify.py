@@ -2,7 +2,6 @@
 
 Грейдеры привязаны к типу пользовательской поверхности:
   chat    - свободный диалог: html + не больше 1 эмодзи
-  health  - медразбор: html + обязательный дисклеймер (эмодзи-маркеры разрешены)
   card    - карточки/советы с эмодзи-заголовками: только html
   weather - сводка/лук: html + предупреждение про «зонт без дождя»
 
@@ -14,7 +13,7 @@ import re
 
 _log = logging.getLogger(__name__)
 
-SURFACES = ("chat", "health", "card", "weather")
+SURFACES = ("chat", "card", "weather")
 
 # --- детектор эмодзи: соседние эмодзи-символы (с ZWJ/VS16/тоном кожи) = один кластер ---
 _EMOJI_CHAR = (
@@ -22,11 +21,6 @@ _EMOJI_CHAR = (
     r"\u2190-\u21FF\u2300-\u23FF\u2B00-\u2BFF\ufe0f\u200d\U0001F3FB-\U0001F3FF]"
 )
 _EMOJI_CLUSTER = re.compile(_EMOJI_CHAR + r"+")
-
-_DISCLAIMER = ("ℹ️ Это общая справочная информация, не диагноз и не назначение - "
-               "при тревожных симптомах обратись к врачу.")
-_DISC_MARKERS = ("не диагноз", "не назначение", "справочн", "к врачу", "обратись к специалист")
-
 
 # ================= ЧИСТЫЕ ГРЕЙДЕРЫ (без I/O, тестируемые) =================
 def grade_emoji(text, max_n=1):
@@ -38,14 +32,6 @@ def grade_emoji(text, max_n=1):
     out = _EMOJI_CLUSTER.sub(lambda m: "" if m.start() >= keep_end else m.group(0), text)
     out = re.sub(r"[ \t]{2,}", " ", out).strip()
     return out, [f"emoji>{max_n}: trimmed {len(clusters) - max_n}"]
-
-
-def grade_disclaimer(text):
-    """Медицинский ответ обязан содержать дисклеймер; если нет - дописываем. -> (text, warnings)."""
-    low = (text or "").lower()
-    if any(m in low for m in _DISC_MARKERS):
-        return text, []
-    return (text or "").rstrip() + "\n\n" + _DISCLAIMER, ["health: disclaimer appended"]
 
 
 def grade_umbrella(text, rain_real):
@@ -76,8 +62,6 @@ def _apply_graders(text, surface, rain_real):
     warnings = []
     if surface == "chat":
         text, w = grade_emoji(text, 1); warnings += w
-    elif surface == "health":
-        text, w = grade_disclaimer(text); warnings += w
     elif surface == "weather":
         _, w = grade_umbrella(text, rain_real); warnings += w
     return text, warnings
@@ -332,7 +316,6 @@ def audit_architecture(root=None):
             findings.append("dictionary_repository.py: DictionaryRepository missing")
 
     ownership_rules = {
-        "balance.py": ("def enter_meal(", "def send_fridge(", "import cooking", "from cooking import"),
         "settings.py": ("def send_notes(", "def handle_notes_callback("),
         "personal_collections.py": ("def send_notes(", "def handle_notes_callback("),
         "leisure_movies.py": ("def content_recommend(", "def collect_done(", "def dedupe_lists("),
@@ -480,15 +463,6 @@ def audit_navigation_contracts(root=None):
     for callback in ('"m_close"', '"m_menu"'):
         if callback not in delivery:
             findings.append(f"response keyboard missing {callback}")
-
-    balance_source = source("balance.py")
-    doctor_branch = balance_source.partition('if data == "as_doctor":')[2].partition("return")[0]
-    if "doctor.send_prompt" in doctor_branch:
-        doctor_source = source("doctor.py")
-        if '"role_doctor"' not in doctor_source or "_back_keyboard()" not in doctor_source:
-            findings.append("doctor prompt must set pending input and show navigation")
-    elif '"role_doctor"' not in doctor_branch or "_back_kb()" not in doctor_branch:
-        findings.append("doctor prompt must set pending input and show navigation")
 
     trainer_source = source("trainer.py")
     trainer_router = source("learning_router.py")

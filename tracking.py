@@ -202,14 +202,14 @@ _SECTION_BY_MODULE = {
     "leisure_music": "Музыка", "leisure_concerts": "Концерты",
     "azure_speech": "Озвучка", "dictionary_tts": "Озвучка", "travel": "Поездка",
     "travel_photos": "Поездка",
-    "balance": "Здоровье", "thoughts": "Здоровье", "settings": "Настройки",
+    "settings": "Настройки",
     "menu": "Меню", "bot_callbacks": "Меню", "bot": "Бот",
 }
 
 _SERVICE_NAMES = (
     "azure speech", "language tool", "languagetool", "spoonacular", "themealdb",
     "openweather", "ticketmaster", "google books", "firecrawl",
-    "openrouter", "github models", "cloudflare", "zeroentropy", "gemini",
+    "openrouter", "github models", "cloudflare", "gemini",
     "groq", "tavily", "telegram", "tmdb", "pexels", "unsplash",
 )
 

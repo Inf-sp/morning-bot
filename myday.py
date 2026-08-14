@@ -955,7 +955,6 @@ def _save_day_cache(cid, today, text, entities, ts):
 def _day_menu_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
-        [InlineKeyboardButton("🗓️ Погода на месяц", callback_data="a_w_month")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -1036,9 +1035,7 @@ def _build_day_text(cid, *, refresh_current=False):
     learning_enabled = store.learning_is_enabled(cid)
     word_line, word_lang = _word_of_day(cid) if learning_enabled else ("", "")
     movie_rebus = {} if learning_enabled else _movie_rebus_of_day(now.date())
-    import balance
     import wardrobe
-    mood = balance.health_focus(cid).get("phrase", "")
     outfit_items = wardrobe.get_cached_outfit_items(cid)
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     _hack_cat, hack_text = daily_lifehack(
@@ -1058,7 +1055,6 @@ def _build_day_text(cid, *, refresh_current=False):
         word_line=word_line,
         word_lang=word_lang,
         movie_rebus=movie_rebus,
-        mood=mood,
         outfit_items=outfit_items,
         lifehack=hack_text,
     )

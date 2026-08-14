@@ -528,7 +528,6 @@ def gemini_search_facts_multi(city: str, country: str, cc: str = "",
 
 _TV_CACHE: dict = {}    # query -> (ts, results)
 _TAVILY_SCENARIOS = {
-    "medicine_official": {"ttl": 3 * 86400, "economy": True, "advanced": False},
     "explicit_research": {"ttl": 24 * 3600, "economy": True, "advanced": False},
     "explicit_research_advanced": {"ttl": 24 * 3600, "economy": True, "advanced": True},
     "travel_current": {"ttl": 24 * 3600, "economy": False, "advanced": False},

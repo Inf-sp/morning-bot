@@ -214,8 +214,7 @@ def books_home_keyboard():
         [InlineKeyboardButton("✨ Подобрать новую книгу", callback_data="book_reco")],
         [InlineKeyboardButton("✍🏻 Премьеры", callback_data="book_premieres")],
         [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 

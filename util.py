@@ -64,11 +64,6 @@ class StatusManager:
             (2, "🗺️ Сверяю маршрут..."),
             (6, "📍 Готовлю план..."),
         ),
-        "health": (
-            (0, "💬 Ищу ответ..."),
-            (2, "🧠 Уточняю главное..."),
-            (6, "📝 Готовлю ответ..."),
-        ),
     }
 
     def __init__(self, bot, cid=None, message=None, parse_mode=None, mode="message", stages=None,

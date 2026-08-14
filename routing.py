@@ -27,7 +27,6 @@ _SUBROUTERS = {
     "settings": ("settings.py", "handle_callback"),
     "wardrobe": ("wardrobe.py", "handle_callback"),
     "myday": ("myday.py", "handle_callback"),
-    "balance": ("balance.py", "handle_callback"),
     "cooking": ("cooking.py", "handle_callback"),
     "learning_router": ("learning_router.py", "handle_callback"),
     "personal_collections": ("personal_collections.py", "handle_collection_callback"),
@@ -151,7 +150,7 @@ def _direct_subrouter_call(stmts):
 def _body_calls_subrouter(body, callback_data, subject_name="data"):
     """Определяет, какой под-роутер реально получит `callback_data`, учитывая
     возможный вложенный if/else внутри тела ветки (например `as_*` дальше делится
-    на balance.py и settings.py по более узкому префиксу).
+    на cooking.py и settings.py по более узкому префиксу).
 
     Возвращает имя модуля (например "settings") или None, если тело не делегирует
     ни одному под-роутеру для этого конкретного callback_data."""
@@ -259,7 +258,7 @@ def resolve_callback_handler(callback_data: str):
     """Определяет, какой handler реально обработает данный callback_data.
 
     Возвращает dict {"handled": bool, "module": str|None, "detail": str} —
-    "module" - под-роутер (settings/wardrobe/myday/balance/learning_router/cleanup/onboard),
+    "module" - под-роутер (settings/wardrobe/myday/learning_router/cleanup/onboard),
     None если обработка целиком в bot_callbacks.py, либо None+handled=False, если callback
     не совпал ни с одной веткой ни на одном уровне.
 
@@ -302,7 +301,7 @@ def _resolve_subrouter_target(sub_module, callback_data, _callback_tree):
     if callback_data.startswith(("fav_", "ls_")):
         return _COLLECTIONS_ROUTER
     if callback_data.startswith("as_") and not callback_data.startswith(
-        ("as_food", "as_fridge", "as_recipe", "as_daycheck", "as_motiv", "as_doctor")
+        ("as_food", "as_fridge", "as_recipe")
     ):
         return _COLLECTIONS_ROUTER
     return _SUBROUTERS["settings"]

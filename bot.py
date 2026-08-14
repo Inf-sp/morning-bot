@@ -16,7 +16,6 @@ import store
 import callback_topics
 import access
 import menu
-import balance
 import recipe_generation
 import bot_callbacks
 import bot_text
@@ -61,9 +60,6 @@ _HOME_WARM_SCHEDULE = (
     ("learning", "08:35"),
 )
 
-
-
-_WORRY_PROMPT_WINDOW_S = 1800  # окно, в течение которого свободный текст ещё считается ответом на "Дневную разгрузку"
 
 
 def _claim_home_opening(cid, message_id, data):
@@ -277,9 +273,6 @@ async def message_activity_handler(update, _context):
     cid = getattr(getattr(update, "effective_chat", None), "id", None)
     if cid is not None and access.is_allowed(cid):
         tracking.touch(cid)
-        text = str(getattr(getattr(update, "message", None), "text", "") or "").strip()
-        if text.startswith("/"):
-            balance.thoughts.cancel_capture(str(cid))
 
 
 
@@ -481,15 +474,6 @@ async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
             await settings.send_scheduled_notification(context.bot, cid, "daily_words")
         except Exception:
             logging.exception("job_daily_words failed for cid=%s", cid)
-
-async def job_checkin_day(context: ContextTypes.DEFAULT_TYPE):
-    for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "checkin_day"):
-            continue
-        try:
-            await settings.send_scheduled_notification(context.bot, cid, "checkin_day")
-        except Exception:
-            logging.exception("job_checkin_day failed for cid=%s", cid)
 
 async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
     """Прогревает недельный кэш концертов перед уведомлением «Куда сходить» (10:00 пт),
@@ -954,7 +938,6 @@ def _build_application():
     jq.run_daily(job_refresh_concerts_cache, time=_t("02:55"), days=(4,), **_job_options("concerts_cache_weekly"))
     jq.run_daily(job_weekend_events, time=_t("10:00"), days=(4,), **_job_options("weekend_events_weekly"))
     jq.run_daily(job_daily_words, time=_t("11:00"), days=tuple(range(7)), **_job_options("daily_words"))
-    jq.run_daily(job_checkin_day, time=_t("14:00"), days=tuple(range(7)), **_job_options("checkin_day_daily"))
     jq.run_daily(job_evening_weather, time=_t("20:30"), days=tuple(range(7)), **_job_options("evening_weather_daily"))
     jq.run_daily(job_inactivity_reminders, time=_t("09:00"), days=tuple(range(7)), **_job_options("inactivity_reminders_daily"))
     _log.info("Scheduler configured jobs=%s", len(jq.jobs()))

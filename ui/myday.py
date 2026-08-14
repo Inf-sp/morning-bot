@@ -1,6 +1,6 @@
 from telegram import MessageEntity
 
-from .balance import finish_dot
+from .text import finish_dot
 from .builder import MessageBuilder
 from util import cap_sentence
 
@@ -30,7 +30,6 @@ def day_summary(
     word_line="",
     word_lang="nl",
     movie_rebus=None,
-    mood="",
     outfit_items=None,
     lifehack="",
     quote_text="",
@@ -73,11 +72,6 @@ def day_summary(
         b.text_line(f" {emoji} → ")
         b.add(answer, MessageEntity.SPOILER)
         b.newline()
-        b.spacer()
-
-    if mood:
-        b.text_line("⚡️ ")
-        b.labeled_line("Настрой", finish_dot(mood), lowercase=False)
         b.spacer()
 
     outfit = ", ".join(

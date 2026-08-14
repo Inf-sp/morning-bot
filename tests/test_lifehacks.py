@@ -108,7 +108,6 @@ def test_chat_router_prioritizes_lifehack_command_over_dictionary(monkeypatch):
     monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
     monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", fail_dictionary)
     monkeypatch.setattr(bot_text.assistant, "try_add_lifehack_from_chat", fake_lifehack)
-    monkeypatch.setattr(bot_text.balance.thoughts, "cancel_capture", lambda *_args, **_kwargs: None)
 
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id="lifehack-router"),

@@ -489,7 +489,6 @@ def test_wardrobe_callback_reuses_shared_inline_status(monkeypatch):
     monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
     monkeypatch.setattr(bot_callbacks, "_ack", ack_loading)
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
-    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
 
     class Query:
         data = "w_look"
@@ -527,7 +526,6 @@ def test_book_refresh_uses_preserved_inline_status(monkeypatch):
     monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
     monkeypatch.setattr(bot_callbacks.leisure_books, "book_dislike", book_dislike)
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
-    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
 
     class Query:
         data = "book_no_0"
@@ -565,7 +563,6 @@ def test_week_forecast_uses_preserved_inline_status(monkeypatch):
     monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
     monkeypatch.setattr(bot_callbacks.weather, "send_weather", send_weather)
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
-    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
 
     class Query:
         data = "a_w_week"
@@ -586,7 +583,6 @@ def test_week_forecast_uses_preserved_inline_status(monkeypatch):
 
 def test_main_menu_static_sections_replace_the_welcome(monkeypatch):
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
-    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
 
     class Message:
         chat_id = "42"
@@ -603,7 +599,7 @@ def test_main_menu_static_sections_replace_the_welcome(monkeypatch):
             raise AssertionError("first-level menu must edit the current welcome")
 
     for callback_data, title in (
-        ("m_learn", "Обучение"), ("m_balance", "Здоровье"),
+        ("m_learn", "Обучение"),
         ("m_settings", "Настройки"),
     ):
         message = Message()
@@ -617,7 +613,6 @@ def test_main_menu_static_sections_replace_the_welcome(monkeypatch):
 
 def test_main_menu_personal_sections_replace_welcome_with_prepared_card(monkeypatch):
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
-    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
 
     class Message:
         chat_id = "42"

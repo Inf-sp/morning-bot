@@ -26,7 +26,6 @@ def test_movie_recommendation_keeps_main_screen_while_loading(monkeypatch):
     monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
     monkeypatch.setattr(bot_callbacks.leisure_movies, "send_recos", send_recos)
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
-    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
 
     class Query:
         data = "movie_reco"
@@ -99,45 +98,6 @@ def test_long_inline_actions_have_three_distinct_progress_stages():
         assert len({text for _delay, text in stages}) == 3
 
 
-def test_thought_review_keeps_health_menu_visible_while_loading(monkeypatch):
-    calls = []
-
-    class Status:
-        mode = "inline"
-
-        async def stop(self, delete=True):
-            calls.append(("stop", delete))
-
-    async def start_inline(q, bot=None, cid=None, stages=None, preserve_message=False):
-        calls.append(("start_inline", stages[0][1], preserve_message))
-        return Status()
-
-    async def handle_health_callback(bot, cid, q, data, status=None):
-        calls.append(("health", cid, data, status))
-
-    monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
-    monkeypatch.setattr(bot_callbacks.balance, "handle_callback", handle_health_callback)
-    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
-    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
-
-    class Query:
-        data = "as_daycheck"
-        message = type("Message", (), {"chat_id": "42", "message_id": 7})()
-
-    class Update:
-        callback_query = Query()
-
-    class Context:
-        bot = object()
-
-    asyncio.run(bot_callbacks.handle(Update(), Context(), None))
-
-    assert calls[0] == ("start_inline", "🧠 Разбираю мысль...", True)
-    assert calls[1] == ("health", "42", "as_daycheck", calls[1][3])
-    assert calls[1][3].mode == "inline"
-    assert calls[-1] == ("stop", True)
-
-
 def test_saved_country_card_keeps_travel_list_visible_while_loading(monkeypatch):
     calls = []
 
@@ -157,7 +117,6 @@ def test_saved_country_card_keeps_travel_list_visible_while_loading(monkeypatch)
     monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
     monkeypatch.setattr(bot_callbacks.travel, "handle_country_callback", handle_country_callback)
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
-    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
 
     class Query:
         data = "a_trav_country_NL_0"

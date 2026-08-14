@@ -16,7 +16,6 @@ def test_empty_learning_add_words_button_opens_dictionary_input(monkeypatch):
         calls.append((bot, cid, lang, q))
 
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
-    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
     monkeypatch.setattr(bot_callbacks.learning_router.dictionary, "send_dict_manage", send_dict_manage)
 
     class Query:
@@ -46,7 +45,7 @@ def test_navigation_audit_recognizes_all_travel_saved_country_callbacks():
     assert all(routing.resolve_callback_handler(data)["handled"] for data in callbacks)
 
 
-def test_cooking_learning_health_and_travel_menu_callbacks_are_routable():
+def test_cooking_learning_and_travel_menu_callbacks_are_routable():
     callbacks = {
         "cooking": (
             "m_food", "m_food_next", "as_food", "as_food_back",
@@ -61,11 +60,6 @@ def test_cooking_learning_health_and_travel_menu_callbacks_are_routable():
             "a_dictseed_start_nl", "a_dictlang_nl_from_menu", "a_dictlang_nl", "a_dictlang_active",
             "a_dictedit_nl", "a_dictviewid_0_word", "set_learning", "set_learning_dict",
             "toggle_learning_language", "toggle_learning_language_dict", "set_learning_global", "set_learning_language_nl", "set_learning_language_en_dict", "set_learning_language_none", "set_learning_language_nl_settings", "set_learning_level_easy", "set_learning_level_easy_dict",
-        ),
-        "health": (
-            "m_balance", "as_daycheck", "as_motiv", "as_medicine", "as_doctor", "thought_capture",
-            "thought_review", "thought_review_later", "thought_review_clear",
-            "thought_review_clear_cancel", "thought_review_clear_yes",
         ),
         "travel": (
             "m_travel", "a_trav_go", "a_trav_no", "a_trav_plan", "a_trav_fav",

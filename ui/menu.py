@@ -2,7 +2,7 @@ import re
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
-from .balance import finish_dot
+from .text import finish_dot
 from .builder import MessageBuilder, MessageSpec
 from .constants import CUISINE_EMOJI, LANGUAGE_EMOJI, ui_label
 from .food import CUISINE_RU
@@ -11,7 +11,6 @@ UI_MYDAY = ui_label("myday", "").strip()
 UI_WARDROBE = ui_label("wardrobe", "").strip()
 UI_FOOD = ui_label("food", "").strip()
 UI_LEARNING = ui_label("learning", "").strip()
-UI_HEALTH = ui_label("health", "").strip()
 UI_TRAVEL = ui_label("travel", "").strip()
 UI_SETTINGS = ui_label("settings", "").strip()
 
@@ -50,8 +49,9 @@ def main_menu_rows():
     return [
         [(ui_label("myday", "Мой день"), "m_myday")],
         [(ui_label("wardrobe", "Гардероб"), "m_wardrobe"), (ui_label("food", "Готовка"), "m_food")],
-        [(ui_label("learning", "Обучение"), "m_learn"), (ui_label("health", "Здоровье"), "m_balance")],
-        [(ui_label("travel", "Поездки"), "m_travel"), ("🎲 Развлечения", "m_leisure")],
+        [(ui_label("learning", "Обучение"), "m_learn"), (ui_label("travel", "Поездки"), "m_travel")],
+        [(ui_label("cinema", "Кино"), "m_movie"), (ui_label("music", "Музыка"), "m_music")],
+        [(ui_label("books", "Книги"), "m_books"), ("👾 Игры", "m_games")],
         [(ui_label("settings", "Настройки"), "m_settings")],
     ]
 
@@ -84,16 +84,6 @@ def inactivity_reminder():
 
 
 _SCREENS = {
-    "m_leisure": (
-        "🎲",
-        "Развлечения",
-        "Выбери, что хочется посмотреть, послушать, почитать или во что сыграть.",
-        [
-            [("🎬 Кино", "m_movie"), ("🎧 Музыка", "m_music")],
-            [("📚 Книги", "m_books"), ("👾 Игры", "m_games")],
-            [("#️⃣ Главная", "m_menu")],
-        ],
-    ),
     "m_myday": (
         UI_MYDAY,
         "Мой день",
@@ -120,16 +110,6 @@ _SCREENS = {
         [
             [("✨ Подобрать рецепт", "m_food_gen")],
             [("🎚️ Мой холодильник", "as_fridge_home")],
-            [("#️⃣ Главная", "m_menu")],
-        ],
-    ),
-    "m_balance": (
-        UI_HEALTH,
-        "Здоровье",
-        "",
-        [
-            [(ui_label("doctor", "Спросить врача"), "as_doctor")],
-            [(ui_label("worry_diary", "Разобрать мысли"), "as_daycheck")],
             [("#️⃣ Главная", "m_menu")],
         ],
     ),
@@ -259,25 +239,6 @@ def learning_menu(home: dict):
         [("🎚️ Мой словарь", f"a_dictlang_{code}_from_menu")],
         [("#️⃣ Главная", "m_menu")],
     ]))
-
-
-def health_menu(focus: dict):
-    b = MessageBuilder()
-    b.text_line("🚑 ")
-    b.bold("Здоровье на сегодня")
-    b.newline()
-    b.spacer()
-    b.bold("Расписание:")
-    b.newline()
-    for item in list(focus.get("schedule", ()))[:4]:
-        b.bullet(item)
-    b.spacer()
-    theme = str(focus.get("theme") or "Забота о себе").strip()
-    b.bold(f"Тема дня · {theme}:")
-    b.newline()
-    for tip in list(focus.get("tips", focus.get("steps", ())))[:3]:
-        b.bullet(tip)
-    return b.build_stripped(reply_markup=ikb(_SCREENS["m_balance"][3]))
 
 
 def menu_screen(key):

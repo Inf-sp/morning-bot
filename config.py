@@ -49,7 +49,6 @@ CF_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 CF_MODEL = os.environ.get("CLOUDFLARE_MODEL", "@cf/openai/gpt-oss-20b").strip() or "@cf/openai/gpt-oss-20b"
 CHAT_ID = os.environ.get("CHAT_ID", "")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
-ZEROENTROPY_API_KEY = os.environ.get("ZEROENTROPY_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openrouter/free")
 OPENROUTER_DAILY_LIMIT = _env_int("OPENROUTER_DAILY_LIMIT", 50)
@@ -121,9 +120,6 @@ API_QUOTAS = {
         {"mode": "headers", "unit": "requests", "period": "day", "enabled": False},
         {"mode": "local", "unit": "requests", "period": "day"},
     ],
-    "zeroentropy": [
-        {"mode": "local", "unit": "tokens", "period": "day"},
-    ],
     "pexels": [
         {"mode": "local", "unit": "requests", "period": "day"},
     ],
@@ -170,8 +166,7 @@ MOVIE_SHOWN_KEY = "movie_shown.json"
 BOOK_SEEN_KEY = "book_seen.json"
 MUSIC_SEEN_KEY = "music_seen.json"
 RECOMMENDATION_STOPLIST_KEY = "recommendation_stoplist.json"
-THOUGHTS_KEY = "thoughts.json"
-THOUGHT_REVIEWS_KEY = "thought_reviews.json"
+THOUGHTS_KEY = "thoughts.json"  # удалённый раздел; чтение только для экспорта старых данных
 DICT_KEY = "dict.json"
 TTS_CACHE_KEY = "tts_cache.json"
 PROFILE_KEY = "profile.json"   # память пользователя: фокус, фидбек гардероба, наблюдения
@@ -195,8 +190,6 @@ AI_RESPONSE_CACHE_KEY = "ai_response_cache.json"  # кэш дорогих AI-о�
 WEATHER_CACHE_KEY = "weather_cache.json"  # устойчивый кэш OpenWeather: {cache_key: {"ts": epoch, "data": {...}}}
 TRAVEL_COUNTRY_CARDS_KEY = "travel_country_cards.json"  # глобальные карточки по ISO-коду
 TRAVEL_IDEA_KEY = "travel_idea.json"  # последняя идея маршрута пользователя
-MEDICINE_LABEL_CACHE_KEY = "medicine_label_cache.json"  # DailyMed: names + SPL sections by SET ID
-MEDICINE_AUDIT_LOG_KEY = "medicine_audit_log.json"  # technical source/provider metadata, no question text
 ALLOWED_CIDS_KEY = "allowed_cids.json"    # список разрешённых chat_id (мульти-юзер)
 PENDING_INVITES_KEY = "pending_invites.json"  # одноразовые инвайт-коды {code: ts}
 ERROR_LOG_KEY = "error_log.json"   # rolling-лог ошибок для админ-экрана «Ошибки» {log: [{ts, source, kind, msg}]}

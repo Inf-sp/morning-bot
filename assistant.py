@@ -11,19 +11,12 @@ import verify
 import research
 import rich_delivery
 import myday
+import secure
 from ui import assistant as assistant_ui
 from ui.builder import MessageSpec
 
 
 _log = logging.getLogger(__name__)
-
-_MED_WORDS = ("боль", "болит", "симптом", "врач", "горло", "кашель", "тошнот", "давлен",
-              "сыпь", "простуд", "грипп", "живот", "голова", "мигрень", "насморк")
-_MEDICINE_WORDS = ("лекарств", "таблет", "препарат", "доз", "мг ", " мг", "капл", "сироп",
-                   "мазь", "антибиотик", "парацетамол", "ибупрофен", "риталин", "concerta")
-_BODY_TEMP_HINTS = ("у меня температур", "температура тела", "высокая температура",
-                    "температура 37", "температура 38", "температура 39", "температура 40")
-_WEATHER_HINTS = ("погода", "на улице", "прогноз", "зонт", "ветер", "дождь")
 
 # Короткие реплики-реакции: разбираются правилами, без похода в основной AI-промпт
 # (см. classify_short_reply). Ключи — точное совпадение реплики целиком (после
@@ -147,13 +140,10 @@ _INTENT_MAP = [
     (("что послушать", "послушать", "музыку", "музыка", "плейлист"), "music"),
     (("куда поехать", "путешест", "поездка", "отпуск", "маршрут"), "travel"),
     (("концерт", "мероприят", "событи", "афиша", "выступлен"), "concerts"),
-    (("мотивац", "прокрастин", "лень", "грустн", "грустно",
-      "не могу начать", "застрял", "настроени"), "motivation"),
     (("нидерландск", "голландск", "dutch", "английск", "english", "phrasal", "де/хет", "de/het"), "learn"),
     (("словар", "лексик", "перевод", "какое слово", "слово дня"), "dictionary"),
     (("одеться", "что надеть", "образ дня", "образ на"), "outfit"),
     (("погода", "дождь", "температура", "зонт", "прогноз"), "weather"),
-    (("тревог", "тревож", "беспокоюсь", "стресс", "переживаю", "нервничаю"), "worry"),
 ]
 
 _RECIPE_INGREDIENT_RE = re.compile(
@@ -342,19 +332,7 @@ def _recipe_ingredients_from_chat(text: str):
     return ingredients[:160]
 
 
-def _looks_medical(text: str) -> bool:
-    t = text.lower()
-    if any(kw in t for kw in _MEDICINE_WORDS):
-        return True
-    if any(kw in t for kw in _BODY_TEMP_HINTS):
-        return True
-    if "температур" in t and any(kw in t for kw in _WEATHER_HINTS):
-        return False
-    return any(kw in t for kw in _MED_WORDS)
-
-
 async def _run_intent(bot, cid, action, recipe_ingredients=None):
-    import balance
     import cooking
     import leisure_movies
     import myday
@@ -393,8 +371,6 @@ async def _run_intent(bot, cid, action, recipe_ingredients=None):
         await travel.send_go(no_kb_bot, cid)
     elif action == "concerts":
         await leisure_concerts.find_concerts(no_kb_bot, cid, "home")
-    elif action == "motivation":
-        await balance.send_motiv_push(no_kb_bot, cid)
     elif action == "learn":
         text, entities, kb = __import__("menu").menu_screen("m_learn", cid)
         await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb)
@@ -404,8 +380,6 @@ async def _run_intent(bot, cid, action, recipe_ingredients=None):
         await wardrobe.send_looks(no_kb_bot, cid)
     elif action == "weather":
         await wx.send_weather(no_kb_bot, cid, "today")
-    elif action == "worry":
-        await balance.send_daycheck(no_kb_bot, cid)
 
 
 async def chat_reply(bot, cid, text):
@@ -426,10 +400,10 @@ async def chat_reply(bot, cid, text):
         store.last_surface[str(cid)] = "chat"
         return
 
-    # Явные вопросы о здоровье сразу идут в медицинский сценарий.
-    if _looks_medical(text):
-        import doctor
-        await doctor.answer(bot, cid, text)
+    # Базовая кризисная защита остаётся частью общего ассистента, даже без
+    # отдельного медицинского раздела.
+    if secure.is_dangerous_med(text):
+        await verify.safe_send(bot, cid, secure.CRISIS_MSG)
         return
 
     await bot.send_chat_action(chat_id=cid, action="typing")

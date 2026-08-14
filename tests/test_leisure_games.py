@@ -26,23 +26,13 @@ def _profile_store(monkeypatch):
     return profiles
 
 
-def test_main_menu_opens_entertainment_instead_of_three_separate_categories():
+def test_main_menu_shows_all_four_entertainment_categories():
     labels = _labels(menu.main_menu_kb())
 
-    assert ["✈️ Поездки", "🎲 Развлечения"] in labels
-    flat = [label for row in labels for label in row]
-    assert "🎬 Кино" not in flat
-    assert "🎧 Музыка" not in flat
-    assert "📚 Книги" not in flat
-
-
-def test_entertainment_screen_has_two_category_rows():
-    _text, _entities, markup = menu.menu_screen("m_leisure")
-
-    assert _labels(markup) == [
+    assert labels[-3:] == [
         ["🎬 Кино", "🎧 Музыка"],
         ["📚 Книги", "👾 Игры"],
-        ["#️⃣ Главная"],
+        ["🎚️ Настройки"],
     ]
 
 
@@ -106,7 +96,7 @@ def test_game_home_has_other_game_premieres_and_genres(monkeypatch):
         ["✨ Другая игра"],
         ["🆕 Премьеры игр"],
         ["🎭 По жанру"],
-        ["⬅️ Назад", "#️⃣ Главная"],
+        ["#️⃣ Главная"],
     ]
 
 

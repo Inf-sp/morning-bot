@@ -19,7 +19,6 @@ import onboard
 import settings
 import store
 import wardrobe
-import balance
 from ui import menu as menu_ui
 
 
@@ -60,7 +59,6 @@ def test_learning_entry_shows_empty_state_without_starting_seed(monkeypatch):
             raise AssertionError("empty learning state should replace the current menu")
 
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
-    monkeypatch.setattr(bot_callbacks.balance.thoughts, "cancel_capture", lambda _cid: None)
     monkeypatch.setattr(bot_callbacks.trainer, "cancel", lambda _cid: None)
     monkeypatch.setattr(learning, "build_learning_home", lambda _cid: {
         "has_material": False, "lang_code": "nl",
@@ -231,39 +229,6 @@ def test_empty_fridge_check_reads_the_actual_fridge_store(monkeypatch):
     assert calls == [(menu.config.FRIDGE_KEY, "42")]
 
 
-def test_health_home_opens_without_first_use_data(monkeypatch):
-    monkeypatch.setattr(balance, "health_focus", lambda _cid: {
-        "schedule": [
-            "08:00 · Почисти зубы и выпей стакан воды.",
-            "13:00 · Собери обед: овощи, белок и цельные злаки.",
-            "18:30 · Сделай пять минут лёгкой гимнастики.",
-            "22:30 · Почисти зубы и дай себе время на сон.",
-        ],
-        "theme": "Уход за кожей",
-        "tips": [
-            "Утром нанеси увлажняющий крем и SPF, если выходишь на улицу.",
-            "Умывайся мягким средством без скраба каждый день.",
-            "Вводи только одно новое средство за раз.",
-        ],
-    })
-
-    text, _entities, markup = menu.menu_screen("m_balance", "42")
-
-    assert text.startswith(
-        "🚑 Здоровье на сегодня\n\n"
-        "Расписание:\n"
-        "• 08:00 · Почисти зубы и выпей стакан воды."
-    )
-    assert "Тема дня · Уход за кожей:" in text
-    assert "• Вводи только одно новое средство за раз." in text
-    assert text.count("• ") == 7
-    assert _labels(markup) == [
-        ["👩🏻‍⚕️ Спросить врача"],
-        ["😮‍💨 Разобрать мысли"],
-        ["#️⃣ Главная"],
-    ]
-
-
 def test_onboarding_creates_a_level_only_for_the_selected_language(monkeypatch):
     selected_languages = []
     level_calls = []
@@ -325,7 +290,6 @@ def _prepare_pending_text_router(monkeypatch):
     monkeypatch.setattr(bot_text.assistant, "try_add_lifehack_from_chat", no_async_match)
     monkeypatch.setattr(bot_text.assistant, "try_edit_lifehack_from_chat", no_async_match)
     monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", no_async_match)
-    monkeypatch.setattr(bot_text.balance.thoughts, "capture_waiting", lambda _cid: False)
 
 
 def test_fill_wardrobe_text_input_opens_normal_home(monkeypatch):

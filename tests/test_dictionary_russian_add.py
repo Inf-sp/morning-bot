@@ -67,18 +67,13 @@ def test_dictionary_confirmation_removes_old_keyboard_without_loading_button(mon
         assert events == [("markup", None), marker]
 
 
-def test_dictionary_command_has_priority_over_open_thoughts(monkeypatch):
-    cid = "dictionary-over-thoughts"
+def test_dictionary_command_clears_stale_pending_input(monkeypatch):
+    cid = "dictionary-over-stale-pending"
     routed = []
-    captured_as_thought = []
-    settings_changes = []
 
     async def fake_dict(_bot, routed_cid, text):
         routed.append((routed_cid, text))
         return True
-
-    async def fail_thought(*args, **kwargs):
-        captured_as_thought.append((args, kwargs))
 
     async def remove_keyboard(_bot, _cid):
         return None
@@ -86,12 +81,7 @@ def test_dictionary_command_has_priority_over_open_thoughts(monkeypatch):
     monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
     monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
     monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", fake_dict)
-    monkeypatch.setattr(bot_text.balance.thoughts, "capture", fail_thought)
-    monkeypatch.setattr(
-        bot_text.settings, "set_",
-        lambda routed_cid, key, value: settings_changes.append((routed_cid, key, value)),
-    )
-    bot_text.store.pending_input[cid] = "thought"
+    bot_text.store.pending_input[cid] = "obsolete_step"
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=cid),
         message=SimpleNamespace(text="Добавить *twijfelt*"),
@@ -101,9 +91,7 @@ def test_dictionary_command_has_priority_over_open_thoughts(monkeypatch):
     asyncio.run(bot_text.handle(update, context, remove_keyboard))
 
     assert routed == [(cid, "Добавить *twijfelt*")]
-    assert captured_as_thought == []
     assert cid not in bot_text.store.pending_input
-    assert (cid, "_thoughts_prompt_ts", 0) in settings_changes
 
 
 def test_dictionary_clarification_survives_the_add_command_route(monkeypatch):

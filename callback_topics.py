@@ -15,8 +15,7 @@ STATUS_TOPIC_PREFIXES = (
     ("listen", "leisure"), ("a_watch", "leisure"), ("a_read", "leisure"),
     ("a_listen", "leisure"), ("a_concerts", "leisure"),
     ("m_travel", "travel"), ("a_trav_", "travel"),
-    ("as_daycheck", "health"), ("as_motiv", "health"), ("as_doctor", "health"),
-    ("role_", "health"), ("ans_", "health"), ("chat_retry", "health"),
+    ("ans_", "assistant"), ("chat_retry", "assistant"),
 )
 
 # Только эти главные экраны могут запустить долгую работу и безопасно блокируются
