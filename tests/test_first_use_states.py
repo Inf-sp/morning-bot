@@ -109,7 +109,7 @@ def test_dictionary_contains_only_dictionary_actions(monkeypatch):
     asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl"))
 
     rows = _labels(bot.message["reply_markup"])
-    assert "📌 Предпочтения" not in [label for row in rows for label in row]
+    assert "📝 Предпочтения" not in [label for row in rows for label in row]
     assert rows[-3:] == [
         ["✨ Подобрать слова"],
         ["🆕 Добавить слово"],

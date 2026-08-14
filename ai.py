@@ -1260,6 +1260,7 @@ MODULE_POLICY = {
     "leisure": LEISURE_ORDER,
     "leisure_movies": LEISURE_ORDER,
     "leisure_music": LEISURE_ORDER,
+    "leisure_games": LEISURE_ORDER,
     "leisure_concerts": LEISURE_ORDER,
     "leisure_collection": LEISURE_ORDER,
     "myday": LEISURE_ORDER,

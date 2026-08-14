@@ -33,7 +33,7 @@ from leisure_collection import (
 
 _CINEMA_BIRTHDAY_LOCK = threading.Lock()
 _CINEMA_BIRTHDAY_CACHE_VERSION = 3
-_MOVIE_PREMIERES_CACHE_VERSION = 2
+_MOVIE_PREMIERES_CACHE_VERSION = 3
 _CINEMA_REBUSES = (
     {
         "emoji": "🦈 🌊 👨‍🔬",
@@ -389,7 +389,8 @@ def _movie_home_kb():
         [InlineKeyboardButton("✨ Подобрать новое кино", callback_data="movie_reco")],
         [InlineKeyboardButton("🎟️ Премьеры", callback_data="movie_premieres")],
         [InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")],
-        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
@@ -807,8 +808,11 @@ async def get_movie_premieres(cid, *, refresh=False):
         return _movie_premieres_cache_get(country_code, today, allow_stale=True) or []
     end = today + timedelta(days=13)
     now_playing, upcoming = await asyncio.gather(
-        asyncio.to_thread(tmdb.get_now_playing, country_code, _movie_service_language(cid), 30),
-        asyncio.to_thread(tmdb.get_upcoming_theatrical_releases, country_code, today, end, _movie_service_language(cid)),
+        asyncio.to_thread(tmdb.get_now_playing, country_code, "ru-RU", 30),
+        asyncio.to_thread(
+            tmdb.get_upcoming_theatrical_releases,
+            country_code, today, end, "ru-RU",
+        ),
     )
     items, seen = [], set()
     for movie in [*(now_playing or []), *(upcoming or [])]:

@@ -329,7 +329,8 @@ def music_home_keyboard():
         [InlineKeyboardButton("✨ Подобрать новую музыку", callback_data="music_reco")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find")],
         [InlineKeyboardButton("🎚️ Мои артисты", callback_data="artist_favorites")],
-        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
@@ -663,14 +664,14 @@ async def send_music_preferences(bot, cid, q=None):
 
 def _music_preferences_required_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📌 Предпочтения", callback_data="set_pref_music")],
+        [InlineKeyboardButton("📝 Предпочтения", callback_data="set_pref_music")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
 async def _prompt_for_music_styles(bot, cid, *, status=None):
-    text = "Сначала отметь хотя бы один жанр в 📌 Предпочтения → Музыка."
+    text = "Сначала отметь хотя бы один жанр в 📝 Предпочтения → Музыка."
     kb = _music_preferences_required_kb()
     if status is not None:
         await status.replace(text, reply_markup=kb)

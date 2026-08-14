@@ -172,7 +172,7 @@ async def send_home(bot, cid, q=None):
     rows = [
         [InlineKeyboardButton("📍 Город", callback_data="set_city")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
-        [InlineKeyboardButton("📌 Предпочтения", callback_data="set_preferences")],
+        [InlineKeyboardButton("📝 Предпочтения", callback_data="set_preferences")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
@@ -202,6 +202,7 @@ async def send_preferences(bot, cid, q=None):
         [InlineKeyboardButton("🎧 Музыка", callback_data="set_pref_music")],
         [InlineKeyboardButton("🎬 Кино", callback_data="set_pref_movie")],
         [InlineKeyboardButton("📚 Книги", callback_data="set_pref_books")],
+        [InlineKeyboardButton("👾 Игры", callback_data="set_pref_games")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
@@ -963,6 +964,14 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_pref_books":
         import leisure_books
         await leisure_books.send_book_preferences(bot, cid, q)
+    elif data == "set_pref_games":
+        import leisure_games
+        await leisure_games.send_game_preferences(bot, cid, q)
+    elif data.startswith("set_game_platform_"):
+        import leisure_games
+        await leisure_games.toggle_game_platform(
+            bot, cid, data[len("set_game_platform_"):], q,
+        )
     elif data == "set_lifehacks":
         await send_lifehacks(bot, cid, q)
     elif data.startswith("set_lh_page_"):

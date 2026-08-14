@@ -39,6 +39,86 @@ def _pluralize_titles(n):
     return "фильмов/сериалов"
 
 
+def game_card(data):
+    """Компактная рекомендация игры в том же ритме, что кино и музыка."""
+    data = data or {}
+    b = MessageBuilder()
+    if not data:
+        b.section("👾 Игра не нашлась")
+        b.line("Для выбранных платформ пока нет варианта в этом жанре.")
+        return b.build_stripped()
+    platforms = " · ".join(str(value) for value in data.get("platform_labels") or [])
+    b.text_line("👾 ")
+    b.bold("Игра для тебя" + (f" · {platforms}" if platforms else ""))
+    b.newline()
+    b.spacer()
+    b.bold(str(data.get("name") or "Игра"))
+    genre = str(data.get("genre_label") or "").strip()
+    if genre:
+        b.text_line(f" · {genre}")
+    b.newline()
+    description = str(data.get("description") or "").strip()
+    if description:
+        b.spacer()
+        b.line(description)
+    reasons = [str(value).strip() for value in data.get("reasons") or [] if str(value).strip()]
+    if reasons:
+        b.spacer()
+        b.bold("Почему тебе:")
+        b.newline()
+        for reason in reasons[:2]:
+            b.bullet(reason)
+    start = str(data.get("start") or "").strip()
+    if start:
+        b.spacer()
+        b.labeled_line("С чего начать", start, lowercase=False)
+    return b.build_stripped()
+
+
+def game_genres_screen():
+    b = MessageBuilder()
+    b.section("🎭 Жанр игры")
+    b.line("Выбери настроение — подберу игру для твоих платформ.")
+    return b.build_stripped()
+
+
+def game_preferences(current):
+    b = MessageBuilder()
+    b.section("👾 Игры")
+    b.line("Отметь платформы, которые учитывать в рекомендациях и премьерах.")
+    b.spacer()
+    b.labeled_line("Сейчас", " · ".join(current) if current else "все платформы", lowercase=False)
+    return b.build_stripped()
+
+
+def game_premieres_screen(items):
+    b = MessageBuilder()
+    b.section("🆕 Премьеры игр")
+    if not items:
+        b.line("Пока не удалось подтвердить ближайшие релизы.")
+        return b.build_stripped()
+    for item in items[:8]:
+        b.spacer()
+        title = str(item.get("title") or "").strip()
+        url = str(item.get("url") or "").strip()
+        if url:
+            b.link(title, url)
+        else:
+            b.bold(title)
+        b.newline()
+        meta = " · ".join(
+            str(value).strip()
+            for value in (item.get("date_label"), item.get("platform_label"), item.get("genre"))
+            if str(value or "").strip()
+        )
+        if meta:
+            b.line(meta)
+        summary = str(item.get("summary") or "").strip()
+        if summary:
+            b.line(summary)
+    return b.build_stripped()
+
+
 def movie_home_screen(genre_labels, country_label=None, now_playing=None):
     """Главный экран раздела «Кино»: как искать и что сейчас в прокате. Тот же
     визуальный паттерн, что у Гардероба (home_screen)."""
@@ -76,13 +156,6 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
     b.text_line("🎬 ")
     b.bold(f"Кино на сегодня · {city}")
     b.newline()
-
-    b.spacer()
-    b.bold("Ребус дня:")
-    b.text_line(" ")
-    b.text_line(str(rebus.get("emoji") or "🎬 ❓"))
-    b.text_line(" → ")
-    b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
 
     b.spacer()
     b.bold("Что в кино:")
@@ -128,6 +201,12 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
         b.newline()
 
     fact = str(rebus.get("fact") or cinema_day.get("fact") or "").strip()
+    b.spacer()
+    b.bold("Ребус дня:")
+    b.text_line(" ")
+    b.text_line(str(rebus.get("emoji") or "🎬 ❓"))
+    b.text_line(" → ")
+    b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
     if fact:
         b.spacer()
         b.bold("💡 Интересно:")
@@ -568,13 +647,6 @@ def weekly_books_screen(city, daily_book, items):
     b.bold(f"Литературный вайб · {city}")
     b.newline()
 
-    b.spacer()
-    b.bold("Литературный ребус:")
-    b.text_line(" ")
-    b.text_line(str(rebus.get("emoji") or "📚 ❓"))
-    b.text_line(" → ")
-    b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
-
     premieres = _book_premiere_items(items)
     b.spacer()
     b.bold("Главные премьеры:")
@@ -597,6 +669,12 @@ def weekly_books_screen(city, daily_book, items):
         b.line(f" — {str(birthday.get('detail') or 'писатель').strip()}.")
 
     fact = str(birthday.get("fact") or rebus.get("fact") or daily_book.get("fact") or "").strip()
+    b.spacer()
+    b.bold("Литературный ребус:")
+    b.text_line(" ")
+    b.text_line(str(rebus.get("emoji") or "📚 ❓"))
+    b.text_line(" → ")
+    b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
     if fact:
         b.spacer()
         b.bold("💡 Интересно:")
@@ -606,7 +684,7 @@ def weekly_books_screen(city, daily_book, items):
 
 
 def movie_premieres_screen(country, date_range, items):
-    """Полные карточки региональных кинопремьер без лишней табличной метаинформации."""
+    """Целые компактные карточки премьер в пределах одного сообщения Telegram."""
     b = MessageBuilder()
     b.text_line("🎟️ ")
     b.bold(f"Премьеры в кино · {country}")
@@ -621,21 +699,38 @@ def movie_premieres_screen(country, date_range, items):
         title = str(_item_value(item, "title", "") or "").strip()
         if not title:
             continue
-        b.bold(f"«{title}»")
-        b.newline()
+        card = MessageBuilder()
+        card.bold(f"«{title}»")
+        body = []
         genres = _movie_genres_for_line(item)
         if genres:
-            b.line(genres.replace(", ", " · "))
+            body.append(genres.replace(", ", " · "))
         premiere_date = _movie_premiere_date(item)
         if premiere_date:
-            b.line(f"Премьера: {premiere_date}")
-        overview = clip(str(_item_value(item, "overview", "") or ""), limit=310)
+            body.append(f"Премьера: {premiere_date}")
+        overview = _movie_premiere_summary(_item_value(item, "overview", ""))
         if overview:
             if overview[-1] not in ".!?…":
                 overview += "."
-            b.line(overview)
-        b.newline()
+            body.append(overview)
+        if body:
+            card.add("\n" + "\n".join(body))
+        card = card.build_stripped()
+        # Оставляем запас под разметку и возможные изменения Telegram. Карточку
+        # либо добавляем целиком, либо не добавляем вовсе — текст не разрезается.
+        if u16_len(b.text) + 2 + u16_len(card.text) > 3900:
+            break
+        b.embed(card)
     return b.build_stripped()
+
+
+def _movie_premiere_summary(value):
+    """Первое законченное предложение: короче исходной завязки, но без обрыва."""
+    text = " ".join(str(value or "").split())
+    if not text:
+        return ""
+    sentences = re.split(r"(?<=[.!?…])\s+", text)
+    return sentences[0].strip()
 
 
 def _movie_premiere_date(item):
@@ -775,13 +870,6 @@ def music_week_screen(city, daily_music, concerts):
     b.newline()
 
     b.spacer()
-    b.bold("Музыкальный ребус:")
-    b.text_line(" ")
-    b.text_line(str(rebus.get("emoji") or "🎧 ❓"))
-    b.text_line(" → ")
-    b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
-
-    b.spacer()
     events = [item for item in concerts or [] if _item_value(item, "artist")][:3]
     b.bold("Концерты рядом:")
     if events:
@@ -811,6 +899,12 @@ def music_week_screen(city, daily_music, concerts):
         b.line(f" — {str(legend.get('detail') or 'музыкант').strip()}.")
 
     fact = str(rebus.get("fact") or daily_music.get("fact") or "").strip()
+    b.spacer()
+    b.bold("Музыкальный ребус:")
+    b.text_line(" ")
+    b.text_line(str(rebus.get("emoji") or "🎧 ❓"))
+    b.text_line(" → ")
+    b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
     if fact:
         b.spacer()
         b.bold("💡 Интересно:")

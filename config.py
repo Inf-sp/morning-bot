@@ -156,6 +156,7 @@ LOCAL_CINEMA_CACHE_KEY = "local_cinema_cache.json"  # {cid: {city, ts, movies}} 
 MOVIE_NOW_PLAYING_CACHE_KEY = "movie_now_playing_cache.json"  # {cid: {city, week, items}} — стабильный каталог проката на неделю
 MOVIE_PREMIERES_CACHE_KEY = "movie_premieres_cache.json"  # {country: {expires, items}} — новые региональные релизы на неделю
 BOOK_PREMIERES_CACHE_KEY = "book_premieres_cache.json"  # {month: {expires, items}} — книги текущего месяца на неделю
+GAME_PREMIERES_CACHE_KEY = "game_premieres_cache.json"  # {platform_signature: {expires, items}} — подтверждённые игровые релизы
 CINEMA_DAILY_CACHE_KEY = "cinema_daily_cache.json"  # {YYYY-MM-DD: {birthday}} — один проверенный именинник дня для всех пользователей
 MUSIC_RECO_CACHE_KEY = "music_reco_cache.json"  # {cid: {date, item}} — персональный артист на день
 MUSIC_DAILY_CACHE_KEY = "music_daily_cache.json"  # {YYYY-MM-DD: {legend}} — один проверенный музыкальный именинник дня для всех пользователей

@@ -90,12 +90,13 @@ def test_new_artist_is_checked_once_then_reused_until_known_concert(monkeypatch)
     assert ticketmaster_calls == [["Romy"]]
 
 
-def test_artists_outside_ticketmaster_batch_remain_due_for_the_next_pass(monkeypatch):
+def test_refresh_checks_later_artists_in_a_second_bounded_batch(monkeypatch):
     _memory_store(monkeypatch)
     artists = [*[f"Artist {index}" for index in range(8)], "Evanescence"]
+    batches = []
 
     async def ticketmaster(batch, *_args, **_kwargs):
-        assert batch == artists[:8]
+        batches.append(batch)
         return []
 
     async def external(*_args, **_kwargs):
@@ -107,4 +108,32 @@ def test_artists_outside_ticketmaster_batch_remain_due_for_the_next_pass(monkeyp
 
     asyncio.run(leisure_concerts._fetch_concerts(artists, "NL", "Нидерланды", cid="42"))
 
-    assert leisure_concerts._artist_is_due("42", "Evanescence", "NL")
+    assert batches == [artists[:8], ["Evanescence"]]
+    assert not leisure_concerts._artist_is_due("42", "Evanescence", "NL")
+
+
+def test_single_concert_refresh_does_not_hide_later_favorite_artist(monkeypatch):
+    _memory_store(monkeypatch)
+    artists = [*[f"Artist {index}" for index in range(8)], "Evanescence"]
+
+    async def ticketmaster(batch, *_args, **_kwargs):
+        if "Evanescence" not in batch:
+            return []
+        return [{
+            "id": "evanescence-2026",
+            "_artist": "Evanescence",
+            "dates": {"start": {"localDate": "2026-10-03"}},
+        }]
+
+    async def external(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(leisure_concerts, "_ticketmaster_events_many", ticketmaster)
+    monkeypatch.setattr(leisure_concerts, "get_external_events_for_artist", external)
+    monkeypatch.setattr(leisure_concerts, "filter_concert_events", lambda events, _cc: events)
+
+    events = asyncio.run(leisure_concerts._fetch_concerts(
+        artists, "NL", "Нидерланды", cid="42",
+    ))
+
+    assert any(event.get("_artist") == "Evanescence" for event in events)

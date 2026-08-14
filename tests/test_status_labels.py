@@ -64,6 +64,7 @@ def test_inline_status_starts_with_action_specific_text():
         "m_movie": "🎬 Ищу кино...",
         "m_books": "📚 Ищу книгу...",
         "m_music": "🎧 Ищу музыку...",
+        "m_games": "👾 Ищу игру...",
         "m_myday": "☀️ Собираю мой день...",
     }
 
@@ -79,6 +80,7 @@ def test_long_main_screens_have_a_specific_tracking_topic():
         "m_movie": "leisure",
         "m_books": "leisure",
         "m_music": "leisure",
+        "m_games": "leisure",
         "m_travel": "travel",
     }
 

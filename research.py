@@ -533,6 +533,7 @@ _TAVILY_SCENARIOS = {
     "explicit_research_advanced": {"ttl": 24 * 3600, "economy": True, "advanced": True},
     "travel_current": {"ttl": 24 * 3600, "economy": False, "advanced": False},
     "concert_specific": {"ttl": 12 * 3600, "economy": False, "advanced": False},
+    "game_releases": {"ttl": 7 * 86400, "economy": False, "advanced": False},
 }
 _EXPLICIT_RESEARCH_RE = re.compile(
     r"\b(?:найди\s+(?:актуальн|источник)|что\s+сейчас\s+известно|проверь\s+в\s+интернете|"

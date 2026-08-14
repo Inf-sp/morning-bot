@@ -6,6 +6,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import cooking
+import recipe_generation
 
 
 def test_inline_recipe_result_replaces_search_status(monkeypatch):
@@ -114,3 +115,14 @@ def test_enter_meal_replaces_stale_unpresentable_queue(monkeypatch):
     assert calls[:2] == ["clear", ("generate", "dinner", None)]
     assert calls[2][:3] == ("send", "dinner", fallback)
     assert calls[2][3].mode == "inline"
+
+
+def test_local_fallback_uses_different_egg_recipe_for_each_meal():
+    ingredients = "яйца, помидоры, сыр"
+
+    names = {
+        recipe_generation._fallback_leftovers_recipe(ingredients, meal=meal)["name"]
+        for meal in ("breakfast", "lunch", "dinner")
+    }
+
+    assert len(names) == 3

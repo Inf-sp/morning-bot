@@ -19,7 +19,7 @@ def personalization():
 
 def cuisines(current):
     b = MessageBuilder()
-    b.section("📌 Предпочтения")
+    b.section("📝 Предпочтения")
     b.line("Выбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника с их учётом.")
     b.spacer()
     b.bold("Сейчас:")
@@ -87,7 +87,7 @@ def style_custom_input():
 
 def style_pick():
     b = MessageBuilder()
-    b.section("📌 Предпочтения")
+    b.section("📝 Предпочтения")
     b.line("Выбери из предложенных или опиши своими словами — бот учтёт при подборе образа:")
     return b.build_stripped()
 
@@ -112,13 +112,13 @@ def settings_home(city="", notifications_on=True, learning_language="Не изу
     b.line(f"📍 Город: {city or 'не выбран'}")
     b.line(f"🔔 Уведомления: {'включены' if notifications_on else 'выключены'}")
     b.spacer()
-    b.line("Вкусы и параметры подбора — в «📌 Предпочтения».")
+    b.line("Вкусы и параметры подбора — в «📝 Предпочтения».")
     return b.build_stripped()
 
 
 def preferences_home():
     b = MessageBuilder()
-    b.section("📌 Предпочтения")
+    b.section("📝 Предпочтения")
     b.line("Выбери, что учитывать в рекомендациях.")
     return b.build_stripped()
 

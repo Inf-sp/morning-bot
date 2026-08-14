@@ -144,7 +144,7 @@ def test_callback_ack_runs_in_parallel_with_handler(monkeypatch):
 
 @pytest.mark.parametrize(
     "callback_data",
-    ("m_myday", "m_wardrobe", "m_food", "m_movie", "m_books", "m_music", "m_travel"),
+    ("m_myday", "m_wardrobe", "m_food", "m_movie", "m_books", "m_music", "m_games", "m_travel"),
 )
 def test_duplicate_long_main_screen_taps_start_one_action(monkeypatch, callback_data):
     calls = []

@@ -18,7 +18,7 @@ def main_menu_kb():
 
 _MAIN_MENU_CALLBACKS = {
     "m_myday", "m_wardrobe", "m_food", "m_learn", "m_balance",
-    "m_travel", "m_movie", "m_books", "m_music", "m_settings",
+    "m_travel", "m_leisure", "m_settings",
 }
 
 

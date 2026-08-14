@@ -21,12 +21,12 @@ def test_movie_premieres_keep_only_current_year_and_cache_by_country(monkeypatch
             overview=f"Коротко о фильме {title}",
         )
 
-    def get_now_playing(*_args):
-        calls.append("now")
+    def get_now_playing(_country, language, _limit):
+        calls.append(("now", language))
         return [movie("В прокате", today - timedelta(days=3), 1), movie("Старый", today.replace(year=today.year - 1), 2)]
 
-    def get_upcoming(*_args):
-        calls.append("upcoming")
+    def get_upcoming(_country, _start, _end, language):
+        calls.append(("upcoming", language))
         return [movie("Скоро", today + timedelta(days=7), 3)]
 
     monkeypatch.setattr(leisure_movies.store, "get_settings", lambda _cid: {"cc": "NL", "country": "Нидерланды"})
@@ -40,7 +40,7 @@ def test_movie_premieres_keep_only_current_year_and_cache_by_country(monkeypatch
 
     assert [item["title"] for item in first] == ["В прокате", "Скоро"]
     assert second == first
-    assert calls == ["now", "upcoming"]
+    assert calls == [("now", "ru-RU"), ("upcoming", "ru-RU")]
     assert saved["NL"]["expires"] == (today + timedelta(days=7)).isoformat()
 
 
@@ -111,3 +111,32 @@ def test_book_premieres_use_stale_cache_without_daytime_google_request(monkeypat
     )
 
     assert asyncio.run(leisure_books.get_book_premieres()) == [{"title": "Вчерашняя витрина"}]
+
+
+def test_book_premieres_screen_recovers_when_cache_is_empty(monkeypatch):
+    today = datetime.now(leisure_books.config.TZ).date()
+    saved = {}
+    calls = []
+
+    def search(_limit):
+        calls.append("search")
+        return [{
+            "title": "Новая книга",
+            "author": "Автор",
+            "published_date": today.isoformat(),
+            "categories": ["Fiction"],
+            "description": "Героиня возвращается домой и раскрывает семейную тайну.",
+        }]
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            calls.append((text, kwargs))
+
+    monkeypatch.setattr(leisure_books.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: saved.update(value))
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", search)
+
+    asyncio.run(leisure_books.send_book_premieres(object(), "42", status=Status()))
+
+    assert calls[0] == "search"
+    assert "Новая книга" in calls[1][0]

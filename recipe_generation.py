@@ -757,7 +757,10 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
 
 
 def _home_local_idea(context: dict) -> dict:
-    local = _fallback_leftovers_recipe(", ".join(context.get("available") or [])) or _fallback_recipe()
+    local = _fallback_leftovers_recipe(
+        ", ".join(context.get("available") or []),
+        meal=context.get("meal"),
+    ) or _fallback_recipe()
     if not local:
         return {}
     return _normalize_home_idea({
@@ -1016,7 +1019,7 @@ def _gen_leftovers_recipe(ingredients, cid=None):
     return _source_fallback_card(sources) or _fallback_leftovers_recipe(ingredients) or _fallback_recipe()
 
 
-def _fallback_leftovers_recipe(ingredients):
+def _fallback_leftovers_recipe(ingredients, meal=None):
     """Простой рецепт без AI на случай лимита обоих провайдеров.
 
     Использует только названия из холодильника; вода и сухая антипригарная
@@ -1088,6 +1091,18 @@ def _fallback_leftovers_recipe(ingredients):
 
     if eggs:
         used = eggs[:1] + cookable_vegetables[:2] + cheese[:1]
+        if meal == "lunch":
+            return build("Яичная сковорода с овощами", 15, used, [
+                "Нарежь добавки и прогрей их на сухой антипригарной сковороде 4–5 минут",
+                "Взбей яйца, влей к овощам и перемешивай 2–3 минуты",
+                "Добавь сыр и подержи под крышкой ещё 2 минуты",
+            ], "Перемешивай яйца от краёв к центру: так они останутся мягкими")
+        if meal == "dinner":
+            return build("Фриттата с овощами", 20, used, [
+                "Нарежь добавки и прогрей их на сухой жаропрочной сковороде 4–5 минут",
+                "Взбей яйца, влей к овощам и посыпь сыром",
+                "Запекай при 190 °C 10–12 минут до плотного края и мягкого центра",
+            ], "Дай фриттате постоять 3 минуты после духовки: середина схватится и не пересохнет")
         if cookable_vegetables and cheese:
             title = "Омлет с овощами и сыром"
         elif cookable_vegetables:

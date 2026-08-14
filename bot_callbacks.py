@@ -15,6 +15,7 @@ import learning_settings
 import learning_router
 import leisure_books
 import leisure_concerts
+import leisure_games
 import leisure_movies
 import leisure_music
 import menu
@@ -65,6 +66,8 @@ def _status_stages(data):
         return progress("🎫 Ищу концерт...", "📅 Проверяю афишу...", "📝 Готовлю события...")
     elif data.startswith(("game", "a_game")):
         return progress("🕵️ Ищу загадку...", "📖 Проверяю текст...", "🧩 Собираю загадку...")
+    elif data.startswith(("vg_", "m_games")):
+        return progress("👾 Ищу игру...", "🎮 Сверяю платформы...", "📝 Готовлю карточку...")
     elif data.startswith(("a_dict", "word_")):
         return progress("📖 Ищу слово...", "🔤 Проверяю форму...", "📝 Готовлю карточку...")
     elif data.startswith(("a_train", "a_tr_", "ex_", "again_tr_")):
@@ -246,9 +249,6 @@ async def handle(update, context, remove_reply_keyboard):
     if data in ("m_learn", "m_menu"):
         trainer.cancel(cid)
 
-    if data == "m_leisure":
-        # Старые карточки не ведут в удалённый агрегатор Досуга.
-        data = "m_menu"
     if data == "m_menu":
         text, entities, kb = menu.main_menu_screen(cid)
         # Главное меню открывается отдельным сообщением: полезная карточка
@@ -303,6 +303,12 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "m_music":
         await _inline_status(
             lambda status: leisure_music.send_music_home(bot, cid, status=status),
+            preserve_message=False,
+        )
+        return
+    if data == "m_games":
+        await _inline_status(
+            lambda status: leisure_games.send_games_home(bot, cid, status=status),
             preserve_message=False,
         )
         return
@@ -502,6 +508,32 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "music_genre_menu":
         await _ack(q)
         await leisure_music.send_music_genre_menu(bot, cid, q)
+        return
+    if data == "vg_next":
+        await _inline_status(
+            lambda status: leisure_games.send_games_home(
+                bot, cid, status=status, refresh=True,
+            ),
+            preserve_message=True,
+        )
+        return
+    if data == "vg_premieres":
+        await _inline_status(
+            lambda status: leisure_games.send_game_premieres(bot, cid, status=status),
+            preserve_message=True,
+        )
+        return
+    if data == "vg_genres":
+        await _ack(q)
+        await leisure_games.send_game_genres(bot, cid, q)
+        return
+    if data.startswith("vg_g_"):
+        await _inline_status(
+            lambda status: leisure_games.send_games_home(
+                bot, cid, status=status, refresh=True, genre=data[len("vg_g_"):],
+            ),
+            preserve_message=True,
+        )
         return
     if data.startswith("music_g_"):
         await _inline_status(

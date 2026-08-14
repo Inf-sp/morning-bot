@@ -139,6 +139,7 @@ def test_travel_home_shows_a_daily_tourist_emoji_rebus():
     )
 
     assert "Туристический ребус: 🌋 ♨️ ❄️ → Исландия" in message.text
+    assert message.text.index("Маршрут:") < message.text.index("Туристический ребус:") < message.text.index("💡 Полезно:")
     assert any(entity.type == MessageEntity.SPOILER for entity in message.entities)
 
 
@@ -148,7 +149,7 @@ def test_suitcase_keeps_only_saved_countries(monkeypatch):
     keyboard, _page, _pages = travel._countries_kb("42", 0)
     labels = [[button.text for button in row] for row in keyboard.inline_keyboard]
 
-    assert "📌 Предпочтения" not in [label for row in labels for label in row]
+    assert "📝 Предпочтения" not in [label for row in labels for label in row]
     assert labels[-2] == ["🆕 Добавить страну"]
     assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 

@@ -339,7 +339,7 @@ def test_wardrobe_home_actions_use_one_column():
         ["💳 Что докупить"],
         ["🎚️ Мой шкаф"],
     ]
-    assert "📌 Предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
+    assert "📝 Предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
 
 
 def test_purchase_hub_explains_the_flow_without_purchase_check():
@@ -648,6 +648,7 @@ def test_main_menu_personal_sections_replace_welcome_with_prepared_card(monkeypa
         ("m_movie", bot_callbacks.leisure_movies, "send_movie_home"),
         ("m_books", bot_callbacks.leisure_books, "send_books_home"),
         ("m_music", bot_callbacks.leisure_music, "send_music_home"),
+        ("m_games", bot_callbacks.leisure_games, "send_games_home"),
     )
     for callback_data, module, name in handlers:
         monkeypatch.setattr(module, name, prepared_card)

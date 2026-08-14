@@ -23,14 +23,6 @@ def home_screen(idea, visited_count, rebus=None):
     b.newline()
     b.spacer()
     b.line(idea["intro"])
-    if rebus and rebus.get("emoji") and rebus.get("answer"):
-        b.spacer()
-        b.bold("Туристический ребус:")
-        b.text_line(" ")
-        b.text_line(str(rebus["emoji"]))
-        b.text_line(" → ")
-        b.add(str(rebus["answer"]), MessageEntity.SPOILER)
-        b.newline()
     b.spacer()
     b.bold(f"{idea['from']} → {idea['to']}")
     b.newline()
@@ -42,6 +34,14 @@ def home_screen(idea, visited_count, rebus=None):
     b.spacer()
     b.bold("Прогресс:")
     b.line(f" посещено {visited_count} {plural_countries(visited_count)}")
+    if rebus and rebus.get("emoji") and rebus.get("answer"):
+        b.spacer()
+        b.bold("Туристический ребус:")
+        b.text_line(" ")
+        b.text_line(str(rebus["emoji"]))
+        b.text_line(" → ")
+        b.add(str(rebus["answer"]), MessageEntity.SPOILER)
+        b.newline()
     b.spacer()
     b.line(f"💡 Полезно: {idea['tip']}")
     return b.build_stripped()
@@ -106,4 +106,3 @@ def travel_plan(plan, fallback_country):
     if plan.get("lgbt"):
         b.spacer(); b.labeled_line("🏳️‍🌈 LGBTQ+", plan["lgbt"])
     return b.build_stripped()
-

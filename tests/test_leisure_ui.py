@@ -34,19 +34,19 @@ def test_category_homes_keep_personal_lists_in_their_own_sections():
         ["✨ Подобрать новое кино"],
         ["🎟️ Премьеры"],
         ["🎚️ Моё кино"],
-        ["#️⃣ Главная"],
+        ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert _labels(leisure_books.books_home_keyboard()) == [
         ["✨ Подобрать новую книгу"],
         ["✍🏻 Премьеры"],
         ["🎚️ Мои книги"],
-        ["#️⃣ Главная"],
+        ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert _labels(leisure_music.music_home_keyboard()) == [
         ["✨ Подобрать новую музыку"],
         ["🎫 Концерты"],
         ["🎚️ Мои артисты"],
-        ["#️⃣ Главная"],
+        ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
@@ -88,7 +88,7 @@ def test_global_preferences_has_all_recommendation_sections():
 
     assert _labels(bot.sent[0]["reply_markup"]) == [
         ["🧠 Обучение"], ["🥣 Кухни"], ["🧵 Стиль"], ["🎧 Музыка"],
-        ["🎬 Кино"], ["📚 Книги"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🎬 Кино"], ["📚 Книги"], ["👾 Игры"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
@@ -601,7 +601,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     movie_link = next(entity for entity in movie.entities if entity.type == MessageEntity.TEXT_LINK)
     assert movie_link.url == "https://www.youtube.com/watch?v=trailer123"
     assert "💡 Интересно: «Челюсти» считают первым современным летним блокбастером." in movie.text
-    assert movie.text.index("Что в кино:") < movie.text.index("Именинник дня:") < movie.text.index("💡 Интересно:")
+    assert movie.text.index("Что в кино:") < movie.text.index("Именинник дня:") < movie.text.index("Ребус дня:") < movie.text.index("💡 Интересно:")
     assert movie.rich_message is None
     assert any(entity.type == MessageEntity.SPOILER for entity in movie.entities)
     assert "📚 Литературный вайб · Алкмар" in books.text
@@ -614,14 +614,14 @@ def test_category_week_screens_are_compact_and_show_only_content():
         "Главные премьеры:\n• «Onyx Storm» (Ребекка Яррос) · Фэнтези · "
         "Вайолет ищет союзников, пока война всё ближе к её дому."
     ) in books.text
-    assert books.text.index("Главные премьеры:") < books.text.index("Именинник дня:") < books.text.index("💡 Интересно:")
+    assert books.text.index("Главные премьеры:") < books.text.index("Именинник дня:") < books.text.index("Литературный ребус:") < books.text.index("💡 Интересно:")
     assert any(entity.type == MessageEntity.SPOILER for entity in books.entities)
     assert "🎧 Музыка этой недели · Алкмар" in music.text
     assert "Вайб дня" not in music.text
     assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in music.text
     assert "Именинник дня: Луи Армстронг · 4 августа 1901 — трубач и певец." in music.text
     assert "Концерты рядом:\n• Romy · 21 августа · Биддингхёйзен" in music.text
-    assert music.text.index("Именинник дня:") < music.text.index("💡 Интересно:")
+    assert music.text.index("Именинник дня:") < music.text.index("Музыкальный ребус:") < music.text.index("💡 Интересно:")
     assert "Новые альбомы" not in music.text
     assert any(entity.type == MessageEntity.SPOILER for entity in music.entities)
 
@@ -668,6 +668,25 @@ def test_premiere_screens_are_compact_and_keep_book_links():
     assert "«Новая книга»\nАвтор\nХудожественная проза\nПремьера: 15 августа 2026" in books.text
     assert "Героиня ищет сестру в незнакомом городе." in books.text
     assert any(entity.type == MessageEntity.TEXT_LINK and entity.url.endswith("id=new") for entity in books.entities)
+
+
+def test_movie_premieres_fit_one_message_without_cutting_descriptions():
+    first_sentence = "Героиня возвращается домой и пытается раскрыть семейную тайну."
+    items = [{
+        "title": f"Премьера {index}",
+        "date": "2026-08-15",
+        "genres": "Драма, триллер",
+        "overview": f"{first_sentence} Это второе подробное предложение в карточке.",
+    } for index in range(30)]
+
+    message = leisure_movies.leisure_ui.movie_premieres_screen(
+        "Нидерланды", "13–26 августа", items,
+    )
+
+    assert len(message.text.encode("utf-16-le")) // 2 <= 3900
+    assert first_sentence in message.text
+    assert "Это второе подробное предложение" not in message.text
+    assert not message.text.endswith("…")
 
 
 def test_movie_home_opens_daily_cinema_screen(monkeypatch):

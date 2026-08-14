@@ -51,8 +51,7 @@ def main_menu_rows():
         [(ui_label("myday", "Мой день"), "m_myday")],
         [(ui_label("wardrobe", "Гардероб"), "m_wardrobe"), (ui_label("food", "Готовка"), "m_food")],
         [(ui_label("learning", "Обучение"), "m_learn"), (ui_label("health", "Здоровье"), "m_balance")],
-        [(ui_label("travel", "Поездки"), "m_travel"), (ui_label("music", "Музыка"), "m_music")],
-        [(ui_label("cinema", "Кино"), "m_movie"), (ui_label("books", "Книги"), "m_books")],
+        [(ui_label("travel", "Поездки"), "m_travel"), ("🎲 Развлечения", "m_leisure")],
         [(ui_label("settings", "Настройки"), "m_settings")],
     ]
 
@@ -85,6 +84,16 @@ def inactivity_reminder():
 
 
 _SCREENS = {
+    "m_leisure": (
+        "🎲",
+        "Развлечения",
+        "Выбери, что хочется посмотреть, послушать, почитать или во что сыграть.",
+        [
+            [("🎬 Кино", "m_movie"), ("🎧 Музыка", "m_music")],
+            [("📚 Книги", "m_books"), ("👾 Игры", "m_games")],
+            [("#️⃣ Главная", "m_menu")],
+        ],
+    ),
     "m_myday": (
         UI_MYDAY,
         "Мой день",

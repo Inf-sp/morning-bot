@@ -707,7 +707,7 @@ def _concert_place_name(name, cc=""):
     return str(name or "твоей стране").strip()
 
 _CONCERTS_CACHE_TTL = 31 * 86400
-_CONCERTS_CACHE_VERSION = 5
+_CONCERTS_CACHE_VERSION = 6
 _ARTIST_CONCERT_CHECKS_VERSION = 2
 _ARTIST_CONCERT_CHECK_INTERVAL = 31 * 86400
 
@@ -853,20 +853,27 @@ async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False,
     retained_events = [] if cid is None else _stored_artist_events(cid, artists, cc)
     if not due_artists:
         return filter_concert_events(retained_events, cc)
-    # В лимит Ticketmaster попадают только реально проверяемые артисты. Важно
-    # не записывать остальных как "проверенных": иначе девятый и следующие
-    # навсегда выпадут из месячной очереди, хотя запрос для них не уходил.
-    checked_artists = due_artists[:_TICKETMASTER_ARTIST_BATCH_LIMIT]
-    ticketmaster_result = await _ticketmaster_events_many(
-        checked_artists, cc, start_dt=date_from, end_dt=date_to, size=200,
-        limit=_TICKETMASTER_ARTIST_BATCH_LIMIT, include_checked=True,
-    )
-    # Совместимость с небольшими тестовыми/локальными адаптерами: в рабочем
-    # пути функция возвращает и события, и действительно проверенных артистов.
-    if isinstance(ticketmaster_result, tuple):
-        tm_events, checked_artists = ticketmaster_result
-    else:
-        tm_events = ticketmaster_result
+    # Один внутренний batch остаётся небольшим, но за один пользовательский
+    # refresh проходим всю очередь. Иначе девятый любимый артист не попадал в
+    # текущую афишу и мог ждать следующего недельного запуска.
+    tm_events = []
+    checked_artists = []
+    for start in range(0, len(due_artists), _TICKETMASTER_ARTIST_BATCH_LIMIT):
+        batch_artists = due_artists[start:start + _TICKETMASTER_ARTIST_BATCH_LIMIT]
+        ticketmaster_result = await _ticketmaster_events_many(
+            batch_artists, cc, start_dt=date_from, end_dt=date_to, size=200,
+            limit=_TICKETMASTER_ARTIST_BATCH_LIMIT, include_checked=True,
+        )
+        # Совместимость с небольшими тестовыми/локальными адаптерами: в рабочем
+        # пути функция возвращает и события, и действительно проверенных артистов.
+        if isinstance(ticketmaster_result, tuple):
+            batch_events, actually_checked = ticketmaster_result
+        else:
+            batch_events, actually_checked = ticketmaster_result, batch_artists
+        tm_events.extend(batch_events or [])
+        checked_artists.extend(actually_checked or [])
+        if len(actually_checked or []) < len(batch_artists):
+            break
     # External search is a bounded last fallback for unresolved artists.
     found_artists = {
         _item_text(event.get("_artist")).casefold()

@@ -214,7 +214,8 @@ def books_home_keyboard():
         [InlineKeyboardButton("✨ Подобрать новую книгу", callback_data="book_reco")],
         [InlineKeyboardButton("✍🏻 Премьеры", callback_data="book_premieres")],
         [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
-        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
@@ -619,7 +620,13 @@ async def get_book_premieres(*, refresh=False):
 async def send_book_premieres(bot, cid, *, status=None):
     today = datetime.now(config.TZ).date()
     month = f"{_MONTHS[today.month - 1].capitalize()} {today.year}"
-    msg = leisure_ui.book_premieres_screen(month, await get_book_premieres())
+    items = await get_book_premieres()
+    if not items:
+        # Ночной прогрев мог ещё не выполниться после запуска или смены месяца.
+        # Пользовательский вход восстанавливает только отсутствующий кэш; готовая
+        # витрина по-прежнему открывается без дополнительного запроса.
+        items = await get_book_premieres(refresh=True)
+    msg = leisure_ui.book_premieres_screen(month, items)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

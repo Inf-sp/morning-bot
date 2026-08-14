@@ -10,6 +10,7 @@ STATUS_TOPIC_PREFIXES = (
     ("ex_", "learning"), ("again_tr_", "learning"), ("game", "learning"),
     ("a_game", "learning"), ("gamediff_", "learning"),
     ("m_movie", "leisure"), ("m_books", "leisure"), ("m_music", "leisure"),
+    ("m_games", "leisure"), ("vg_", "leisure"),
     ("movie_", "leisure"), ("book_", "leisure"), ("music_", "leisure"),
     ("listen", "leisure"), ("a_watch", "leisure"), ("a_read", "leisure"),
     ("a_listen", "leisure"), ("a_concerts", "leisure"),
@@ -21,7 +22,7 @@ STATUS_TOPIC_PREFIXES = (
 # Только эти главные экраны могут запустить долгую работу и безопасно блокируются
 # на несколько секунд при повторном нажатии той же inline-кнопки.
 LONG_HOME_CALLBACKS = frozenset({
-    "m_myday", "m_wardrobe", "m_food", "m_movie", "m_books", "m_music", "m_travel",
+    "m_myday", "m_wardrobe", "m_food", "m_movie", "m_books", "m_music", "m_games", "m_travel",
 })
 
 
