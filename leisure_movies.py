@@ -11,8 +11,6 @@ from urllib.parse import quote_plus
 import requests
 
 import config
-
-_log = logging.getLogger(__name__)
 import store
 import settings
 import tmdb
@@ -28,6 +26,13 @@ from leisure_collection import (
     content_recommend,
     movie_title_for_lookup,
     normalize_movie_items,
+)
+from module_binding import bind_functions as _bind_functions
+import movie_discovery as _movie_discovery
+
+_log = logging.getLogger(__name__)
+_DISCOVERY_DEPENDENCIES = (
+    InputMediaPhoto, time, timedelta, quote_plus, requests, local_cinema, _MONTHS,
 )
 
 
@@ -750,6 +755,4 @@ async def movie_love(bot, cid, i, q=None):
             await q.message.edit_reply_markup(reply_markup=_movie_kb(i))
 
 
-from module_binding import bind_functions as _bind_functions
-import movie_discovery as _movie_discovery
 _bind_functions(globals(), _movie_discovery, ["_movie_home_kb","_movie_country_label","_movie_service_language","_movie_city","_local_movie_score","_now_playing_week_key","_now_playing_catalog_get","_now_playing_catalog_set","_regional_now_playing_item","get_local_now_playing","send_movie_home","_featured_now_playing","_youtube_trailer_search_url","_with_trailer_urls","_daily_rebus","daily_movie_rebus","_cinema_birthday_cache_get","_cinema_birthday_cache_set","_cinema_birthday_role","_load_cinema_birthday","_daily_cinema_content","send_movie_now_playing","warm_movie_home_cache","warm_movie_premieres_cache","_movie_premieres_cache_get","_movie_premieres_cache_set","_movie_premiere_item","get_movie_premieres","send_movie_premieres"])

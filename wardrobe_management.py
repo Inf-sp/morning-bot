@@ -1,5 +1,19 @@
 """Closet management and purchase evaluation flows."""
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from wardrobe import (
+        _PURCHASE_FLAGS, _PURCHASE_REJECT_REASONS, _PURCHASE_VERDICTS,
+        _ZONES_DESC, _back_kb, _build_purchase_message,
+        _build_purchase_suggestions_message, _clean_text,
+        _flat_wardrobe_items, _get_cached_look, _kb, _log,
+        _purchase_candidate, _settings, ai, closet_kb, config,
+        delete_label, has_wardrobe_items, normalize_parsed_item,
+        public_item_name, re, secure, send_home, send_item_card,
+        send_wardrobe_zones, store, verify, wardrobe_stats, wardrobe_ui,
+    )
+
 
 def get_wardrobe_gaps(cid):
     return store.get_list(config.WARDROBE_GAPS_KEY, cid)

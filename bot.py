@@ -2,7 +2,6 @@ import asyncio
 import logging
 from datetime import datetime
 
-_log = logging.getLogger(__name__)
 from telegram import ReplyKeyboardRemove
 from telegram.error import Conflict
 from telegram.request import HTTPXRequest
@@ -39,11 +38,12 @@ from process_guard import PollingLease, process_identity
 import onboard
 import tracking
 from telegram_runtime import MenuCleanupBot as _MenuCleanupBot, RetryingHTTPXRequest as _RetryingHTTPXRequest
-import util
 from deploy_report import (
     get_app_version,
     maybe_send_admin_deploy_notification,
 )
+
+_log = logging.getLogger(__name__)
 
 TZ = config.TZ
 CHAT_ID = config.CHAT_ID

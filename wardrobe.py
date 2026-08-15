@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime
+from typing import TYPE_CHECKING
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import re
 import config
@@ -32,8 +33,17 @@ from wardrobe_outfit import (
     save_outfit_feedback,
 )
 from wardrobe_migration import migrate_item_attrs
+from module_binding import bind_functions as _bind_functions
+import wardrobe_management as _wardrobe_management
 
 _log = logging.getLogger(__name__)
+_MANAGEMENT_DEPENDENCIES = (ai, secure, normalize_parsed_item)
+
+if TYPE_CHECKING:
+    from wardrobe_management import (
+        _find_item, add_item, add_wardrobe_gap, get_wardrobe_gaps,
+        recommend_missing_purchase, send_purchase_hub,
+    )
 
 WARDROBE_WIND_LAYER_MS = 6
 COPY_VALIDATOR_VERSION = 11
@@ -839,6 +849,4 @@ async def handle_callback(bot, cid, q, data, status=None):
         return
 
 
-from module_binding import bind_functions as _bind_functions
-import wardrobe_management as _wardrobe_management
 _bind_functions(globals(), _wardrobe_management, ["get_wardrobe_gaps","add_wardrobe_gap","_local_text_item","_parse_items","_show_added_items","add_item","add_item_settings","add_item_photo","_find_item","_replace_item","edit_item_text","edit_add_preview","handle_wardrobe_search","_normalize_purchase_check","check_purchase","_purchase_hub_kb","_purchase_result_kb","send_purchase_hub","_missing_purchase_candidate","recommend_missing_purchase","_local_purchase_suggestions","_normalize_purchase_suggestions","recommend_purchase"])

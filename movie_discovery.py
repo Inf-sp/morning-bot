@@ -1,5 +1,17 @@
 """Cinema home, local listings and premiere discovery."""
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from leisure_movies import (
+        InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto,
+        _BIRTHDAY_FALLBACKS, _CINEMA_BIRTHDAY_CACHE_VERSION,
+        _CINEMA_BIRTHDAY_LOCK, _CINEMA_REBUSES, _MONTHS,
+        _MOVIE_PREMIERES_CACHE_VERSION, _log, _movie_prefs,
+        asyncio, config, datetime, leisure_ui, local_cinema, quote_plus,
+        requests, store, time, timedelta, tmdb,
+    )
+
 
 def _movie_home_kb():
     return InlineKeyboardMarkup([

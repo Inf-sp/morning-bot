@@ -23,12 +23,25 @@ from dictionary_model import (
     normalize_key,
     normalize_term_case,
 )
+from dictionary_management import (
+    confirm_delete_dict_entry,
+    confirm_delete_dict_entry_by_id,
+    confirm_move_dict_entry_by_id,
+    del_dict_entry_by_id,
+    del_dict_entry_by_term,
+    del_word,
+    dict_entry_view_kb as _dict_entry_view_kb,
+    move_dict_entry_by_id,
+)
 from ui import dictionary as dict_ui
 from ui.constants import delete_label
 from ui.navigation import back_menu_keyboard
 
 _HERE = Path(__file__).parent
 _log = logging.getLogger(__name__)
+__all__ = [
+    "confirm_delete_dict_entry", "confirm_delete_dict_entry_by_id", "confirm_move_dict_entry_by_id", "del_dict_entry_by_id", "del_dict_entry_by_term", "del_word", "move_dict_entry_by_id",
+]
 
 
 def _active_language_code(cid):
@@ -647,18 +660,6 @@ async def handle_dict_search(bot, cid, lang, query):
 
 def _entry_by_id(cid, word_id):
     return next((item for item in _ensure_dict(cid) if str(item.get("id") or "") == str(word_id)), None)
-
-
-from dictionary_management import (
-    confirm_delete_dict_entry,
-    confirm_delete_dict_entry_by_id,
-    confirm_move_dict_entry_by_id,
-    del_dict_entry_by_id,
-    del_dict_entry_by_term,
-    del_word,
-    dict_entry_view_kb as _dict_entry_view_kb,
-    move_dict_entry_by_id,
-)
 
 
 _DICT_LIST_PAGE_SIZE = 10

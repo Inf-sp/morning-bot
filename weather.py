@@ -4,16 +4,17 @@ import random
 from datetime import datetime, timedelta
 import requests
 
-_log = logging.getLogger(__name__)
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 import ai
-from util import cap_sentence, _WEEKDAYS, _WEEKDAY_SHORT, _MONTHS
+from util import cap_sentence, _WEEKDAYS, _WEEKDAY_SHORT
 import verify
 from ui import weather as weather_ui
 import weather_provider as _provider
 from weather_weekly import week_advice as _weekly_advice, week_overview as _week_overview
+
+_log = logging.getLogger(__name__)
 
 fetch_weather = _provider.fetch_weather
 fetch_current_temp = _provider.fetch_current_temp
