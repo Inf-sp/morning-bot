@@ -20,8 +20,10 @@ def _profile_store(monkeypatch):
         lambda cid: dict(profiles.get(str(cid), {})),
     )
     monkeypatch.setattr(
-        leisure_games.store, "set_profile",
-        lambda cid, value: profiles.__setitem__(str(cid), dict(value)),
+        leisure_games.store, "mutate_profile",
+        lambda cid, change: profiles.__setitem__(
+            str(cid), dict(change(dict(profiles.get(str(cid), {})))[0]),
+        ),
     )
     return profiles
 

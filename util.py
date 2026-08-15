@@ -554,3 +554,10 @@ def chunk_text_with_entities(text: str, entities, limit: int = 4000):
         chunks.append((chunk_text, chunk_entities))
         start = end
     return chunks
+
+
+def telegram_text_chunks(text: str | None, limit: int = 4000):
+    """Готовит безопасные Telegram-чанки без разрыва HTML-тегов и entities."""
+    rendered = tg_html(text)
+    plain, entities = html_to_entities(rendered)
+    return chunk_text_with_entities(plain, entities, limit)

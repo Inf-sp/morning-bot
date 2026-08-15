@@ -168,8 +168,9 @@ async def _remove_reply_kb_once(bot, cid):
         await bot.delete_message(chat_id=cid, message_id=msg.message_id)
     except Exception:
         return
-    prof[menu.REPLY_KB_REMOVED_FLAG] = True
-    store.set_profile(cid, prof)
+    store.mutate_profile(cid, lambda profile: (
+        {**profile, menu.REPLY_KB_REMOVED_FLAG: True}, None,
+    ))
 
 
 async def start(update, context):

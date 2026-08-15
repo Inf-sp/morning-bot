@@ -777,6 +777,8 @@ async def _enrich_dutch_verb(entry, cid=None, force=False):
 
     if entry.get("analysis_provider") == "local_grammar":
         return entry
+    if entry.get("analysis_provider") == "combined_llm" and not force:
+        return entry
 
     cached = None if force else _cached_verb_entry(cid, original_term)
     if cached:
@@ -963,6 +965,10 @@ INPUT_JSON: {input_payload}
 - pos: часть речи одним словом ("существительное", "глагол", "прилагательное", "фраза" и т.п.).
 - plural: множественное число, если применимо к существительному, иначе пусто.
 - forms: до 3 других форм слова (склонения/спряжения), если это уместно, иначе пустой список.
+- verb: для нидерландского глагола заполни полный проверяемый разбор: инфинитив,
+  1–2 русских перевода, imperfectum в единственном числе, причастие, auxiliary
+  hebben/ zijn, готовый perfectum, тип weak/strong/irregular и тот же короткий пример.
+  Для любой другой записи оставь is_verb=false и остальные поля пустыми.
 - topic: одна короткая тема ("быт", "работа", "путешествия" и т.п.).
 - difficulty: оценка уровня CEFR одной меткой ("A1".."C1") по сложности слова/фразы.
 - construction: если это устойчивая конструкция/идиома — сама конструкция целиком
@@ -992,6 +998,19 @@ INPUT_JSON: {input_payload}
   "construction": "",
   "situation_type": "",
   "alt_translations": [],
+  "verb": {{
+    "is_verb": false,
+    "infinitive": null,
+    "translations": [],
+    "past_singular": null,
+    "past_participle": null,
+    "auxiliary": null,
+    "perfect_form": null,
+    "verb_type": null,
+    "example_nl": null,
+    "example_ru": null,
+    "confidence": 0.0
+  }},
   "needs_confirmation": false,
   "reason": "короткая причина уточнения или пусто"
 }}
@@ -1000,7 +1019,7 @@ INPUT_JSON: {input_payload}
 """
     try:
         d = await ai.allm_json(
-            prompt, 650, order=_DICT_ANALYSIS_ORDER, module="learning_dict_add",
+            prompt, 850, order=_DICT_ANALYSIS_ORDER, module="learning_dict_add",
             fallback_allowed=True, privacy_level="public", budget_seconds=16,
         )
     except Exception as exc:
@@ -1063,6 +1082,37 @@ INPUT_JSON: {input_payload}
         "reason": str(d.get("reason") or "").strip(),
         **_extract_srs_fields(d),
     }
+    if lang == "nl" and str(entry.get("pos") or "").casefold() == "глагол":
+        fixed_structure = learning_data_quality.dutch_verb_with_preposition(entry["term"])
+        analysis_term = fixed_structure[0] if fixed_structure else entry["term"]
+        fixed_preposition = fixed_structure[1] if fixed_structure else ""
+        analysis, _error = _validate_verb_analysis(
+            d.get("verb"),
+            expected_infinitive=analysis_term,
+            fixed_preposition=fixed_preposition,
+        )
+        if analysis:
+            entry.update({
+                "infinitive": analysis["infinitive"],
+                "past_singular": analysis["past_singular"],
+                "past_participle": analysis["past_participle"],
+                "auxiliary": analysis["auxiliary"],
+                "perfect_form": analysis["perfect_form"],
+                "verb_type": analysis["verb_type"],
+                "example_nl": analysis["example_nl"],
+                "example_ru": analysis["example_ru"],
+                "analysis_confidence": analysis["confidence"],
+                "analysis_provider": "combined_llm",
+                "analysis_updated_at": datetime.now(config.TZ).isoformat(),
+                "forms": [value for value in (
+                    analysis["past_singular"], analysis["perfect_form"],
+                ) if value],
+            })
+            if analysis["example_nl"] and analysis["example_ru"]:
+                entry["examples"] = [{
+                    "text": analysis["example_nl"],
+                    "translation": analysis["example_ru"],
+                }]
     if not russian_source and len(term.split()) > 1:
         if entry.get("construction"):
             entry["entry_type"] = "construction"
@@ -1074,7 +1124,8 @@ INPUT_JSON: {input_payload}
             entry["breakdown"] = "фраза"
         entry["article"] = ""
         entry["plural"] = ""
-        entry["forms"] = []
+        if entry.get("analysis_provider") != "combined_llm":
+            entry["forms"] = []
     if lang == "nl":
         if _contains_mixed_script(entry.get("term")):
             return None

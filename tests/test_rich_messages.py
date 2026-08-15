@@ -87,7 +87,7 @@ def test_logs_use_phone_friendly_table():
         ["08:00 · Система · Groq · лимит исчерпан"], 1, "12:30",
     )
     log_table = _table_blocks(logs)[0]
-    assert [cell["text"] for cell in log_table["cells"][0]] == ["Время", "Инцидент"]
+    assert [cell["text"] for cell in log_table["cells"][0]] == ["Дата и время", "Инцидент"]
     assert [cell["text"] for cell in log_table["cells"][1]] == [
         "08:00", "Система · Groq · лимит исчерпан",
     ]

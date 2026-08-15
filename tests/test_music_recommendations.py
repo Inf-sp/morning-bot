@@ -15,13 +15,15 @@ def test_recent_artist_history_is_unique_and_limited(monkeypatch):
     profile = {"music_recent_artists": ["The xx", "Bicep", "the xx"]}
     saved = []
 
-    def set_profile(_cid, value):
+    def mutate_profile(_cid, change):
+        value, result = change(dict(profile))
         profile.clear()
         profile.update(value)
         saved.append(dict(value))
+        return result
 
     monkeypatch.setattr(leisure_music.store, "get_profile", lambda _cid: profile)
-    monkeypatch.setattr(leisure_music.store, "set_profile", set_profile)
+    monkeypatch.setattr(leisure_music.store, "mutate_profile", mutate_profile)
 
     leisure_music._remember_artist("42", "BICEP")
     leisure_music._remember_artist("42", "FKA twigs")
@@ -91,7 +93,10 @@ def test_music_shows_a_local_artist_when_the_ai_chain_is_unavailable(monkeypatch
     monkeypatch.setattr(leisure_music.ai, "allm_json", unavailable)
     monkeypatch.setattr(leisure_music.store, "get_list", lambda *_args: [])
     monkeypatch.setattr(leisure_music.store, "get_profile", lambda _cid: profile)
-    monkeypatch.setattr(leisure_music.store, "set_profile", lambda _cid, value: profile.update(value))
+    monkeypatch.setattr(
+        leisure_music.store, "mutate_profile",
+        lambda _cid, change: profile.update(change(dict(profile))[0]),
+    )
     monkeypatch.setattr(leisure_music.store, "_load", lambda *_args: {})
     monkeypatch.setattr(leisure_music.store, "mutate_kv", lambda _key, change: change({})[1])
     monkeypatch.setattr(leisure_music.recommendation_stoplist, "values", lambda *_args: [])
@@ -118,7 +123,10 @@ def test_music_keeps_recommending_when_ai_is_unavailable_and_first_fallback_is_k
     monkeypatch.setattr(leisure_music.ai, "allm_json", unavailable)
     monkeypatch.setattr(leisure_music.store, "get_list", lambda *_args: [])
     monkeypatch.setattr(leisure_music.store, "get_profile", lambda _cid: profile)
-    monkeypatch.setattr(leisure_music.store, "set_profile", lambda _cid, value: profile.update(value))
+    monkeypatch.setattr(
+        leisure_music.store, "mutate_profile",
+        lambda _cid, change: profile.update(change(dict(profile))[0]),
+    )
     monkeypatch.setattr(leisure_music.store, "_load", lambda *_args: {})
     monkeypatch.setattr(leisure_music.store, "mutate_kv", lambda _key, change: change({})[1])
     monkeypatch.setattr(leisure_music.recommendation_stoplist, "values", lambda *_args: ["Big Thief"])
@@ -281,7 +289,10 @@ def test_music_recommendation_rejects_an_artist_outside_selected_styles(monkeypa
     monkeypatch.setattr(leisure_music.ai, "allm_json", wrong_genre)
     monkeypatch.setattr(leisure_music.store, "get_list", lambda *_args: [])
     monkeypatch.setattr(leisure_music.store, "get_profile", lambda _cid: profile)
-    monkeypatch.setattr(leisure_music.store, "set_profile", lambda _cid, value: profile.update(value))
+    monkeypatch.setattr(
+        leisure_music.store, "mutate_profile",
+        lambda _cid, change: profile.update(change(dict(profile))[0]),
+    )
     monkeypatch.setattr(leisure_music.store, "_load", lambda *_args: {})
     monkeypatch.setattr(leisure_music.store, "mutate_kv", lambda _key, change: change({})[1])
     monkeypatch.setattr(leisure_music.recommendation_stoplist, "values", lambda *_args: [])
@@ -291,6 +302,48 @@ def test_music_recommendation_rejects_an_artist_outside_selected_styles(monkeypa
 
     assert "Big Thief" in calls[0][0]
     assert "FKA twigs" not in calls[0][0]
+
+
+def test_music_selects_from_one_batch_without_retrying_ai(monkeypatch):
+    delivered = []
+    ai_calls = []
+    profile = {}
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            delivered.append(text)
+
+    async def candidates(*_args, **_kwargs):
+        ai_calls.append(True)
+        return {"candidates": [
+            {"artist": "Wrong Genre", "genre": "rnb"},
+            {
+                "artist": "Alvvays", "genre": "indie", "desc": "Мелодичный инди-поп.",
+                "why": ["Гитарная мелодика", "Светлее по настроению"],
+                "tracks": ["Archie, Marry Me - начало"], "fact": "Группа из Канады.",
+            },
+        ]}
+
+    async def no_links(data):
+        return data
+
+    monkeypatch.setattr(leisure_music.ai, "allm_json", candidates)
+    monkeypatch.setattr(leisure_music, "_attach_track_links", no_links)
+    monkeypatch.setattr(leisure_music.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(leisure_music.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(
+        leisure_music.store, "mutate_profile",
+        lambda _cid, change: profile.update(change(dict(profile))[0]),
+    )
+    monkeypatch.setattr(leisure_music.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_music.store, "mutate_kv", lambda _key, change: change({})[1])
+    monkeypatch.setattr(leisure_music.recommendation_stoplist, "values", lambda *_args: [])
+    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie"])
+
+    asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
+
+    assert ai_calls == [True]
+    assert delivered and "Alvvays" in delivered[0]
 
 
 def test_music_task_returns_a_usable_track(monkeypatch):

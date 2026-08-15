@@ -51,9 +51,9 @@ _DAILY_MATERIAL_CACHE = {}  # cid -> {"date": iso, "entry": dict, "lang": code}
 def _save_daily_material(cid, today, lang, entry):
     cached = {"date": today, "lang": lang, "entry": entry}
     _DAILY_MATERIAL_CACHE[str(cid)] = cached
-    profile = store.get_profile(cid)
-    profile["learning_daily_material"] = cached
-    store.set_profile(cid, profile)
+    store.mutate_profile(cid, lambda profile: (
+        {**profile, "learning_daily_material": cached}, None,
+    ))
     return entry
 
 
@@ -178,9 +178,11 @@ def warm_home_cache(cid):
 def reset_daily_material_cache(cid):
     """Сбрасывает материал дня после ручной нормализации словаря."""
     _DAILY_MATERIAL_CACHE.pop(str(cid), None)
-    profile = store.get_profile(cid)
-    if profile.pop("learning_daily_material", None) is not None:
-        store.set_profile(cid, profile)
+    def change(profile):
+        profile.pop("learning_daily_material", None)
+        return profile, None
+
+    store.mutate_profile(cid, change)
 
 
 # ================= ЕДИНЫЙ ТРЕНАЖЁР =================

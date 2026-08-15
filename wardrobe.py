@@ -1003,11 +1003,12 @@ def _normalize_purchase_check(data, wardrobe=None):
 async def check_purchase(bot, cid, text):
     w = store.load_wardrobe(cid)
     prefs = _settings.wardrobe_prefs_context(cid)
-    prefs_ctx = f"{prefs}\n" if prefs else ""
-    prompt = f"""Ты честный стилист-аналитик. Пользователь думает купить: {text}
+    prefs_ctx = f"{secure.wrap_untrusted(prefs, 'предпочтения')}\n" if prefs else ""
+    wardrobe_ctx = secure.wrap_untrusted(store.wardrobe_to_text(w), "гардероб")
+    prompt = f"""Ты честный стилист-аналитик. Пользователь думает купить: {secure.wrap_untrusted(text, 'покупка')}
 {prefs_ctx}
 Гардероб пользователя:
-{store.wardrobe_to_text(w)}
+{wardrobe_ctx}
 Ответь на один вопрос: есть ли смысл добавлять эту вещь в гардероб пользователя?
 
 Правила:
@@ -1199,18 +1200,18 @@ async def recommend_purchase(bot, cid, item):
         )
         return
     prefs = _settings.wardrobe_prefs_context(cid)
-    prompt = f"""Ты персональный стилист. Пользователь хочет купить: {item}.
+    prompt = f"""Ты персональный стилист. Пользователь хочет купить: {secure.wrap_untrusted(item, 'покупка')}.
 Подбери эту вещь к его реальному гардеробу, не советуя абстрактные вещи.
 
 Предпочтения:
-{prefs}
+{secure.wrap_untrusted(prefs, 'предпочтения')}
 
 Гардероб:
-{store.wardrobe_to_text(wardrobe)}
+{secure.wrap_untrusted(store.wardrobe_to_text(wardrobe), 'гардероб')}
 
 Верни JSON без Markdown:
 {{
-  "item":"{item}",
+  "item":"название покупки из входных данных",
   "headline":"один короткий прямой вывод",
   "colors":[
     {{"color":"конкретный цвет или оттенок","reason":"почему сочетается с вещами из шкафа"}}

@@ -10,6 +10,21 @@ import recipe_generation
 import util
 
 
+def test_nightly_cooking_warm_prepares_only_breakfast(monkeypatch):
+    hours = []
+
+    def idea(_cid, now=None, refresh=False):
+        hours.append((now.hour, refresh))
+        return {"name": "Каша"}
+
+    monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", idea)
+
+    result = recipe_generation.warm_cooking_home_ideas("42")
+
+    assert result == {"breakfast": True}
+    assert hours == [(8, False)]
+
+
 def test_other_food_menu_refresh_edits_current_inline_message(monkeypatch):
     calls = []
 

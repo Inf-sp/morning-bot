@@ -485,7 +485,7 @@ def test_dictionary_analysis_uses_distinct_ai_reserves(monkeypatch):
 
     assert entry["term"] == "Tering"
     assert calls == [
-        (650, {
+        (850, {
             "order": dictionary_import._DICT_ANALYSIS_ORDER,
             "module": "learning_dict_add",
             "fallback_allowed": True,

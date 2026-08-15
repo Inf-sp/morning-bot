@@ -48,12 +48,11 @@ async def send_response(bot, cid, text, kb=None, surface="card"):
     store.last_answer[str(cid)] = text
     store.last_source.setdefault(str(cid), "Ассистент")
     store.last_surface[str(cid)] = surface
-    rendered = util.tg_html(text)
-    chunks = [rendered[i:i + 4000] for i in range(0, len(rendered), 4000)]
-    for index, chunk in enumerate(chunks):
+    chunks = util.telegram_text_chunks(text, 4000)
+    for index, (chunk_text, chunk_entities) in enumerate(chunks):
         markup = (kb if kb is not None else answer_keyboard()) if index == len(chunks) - 1 else None
         try:
             await bot.send_message(
-                chat_id=cid, text=chunk, parse_mode="HTML", reply_markup=markup)
+                chat_id=cid, text=chunk_text, entities=chunk_entities, reply_markup=markup)
         except Exception:
-            await bot.send_message(chat_id=cid, text=chunk, reply_markup=markup)
+            await bot.send_message(chat_id=cid, text=chunk_text, reply_markup=markup)

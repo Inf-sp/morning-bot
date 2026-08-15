@@ -25,12 +25,14 @@ def _lvl_kb(code: str) -> InlineKeyboardMarkup:
 
 def _save_step(cid, step: str | None):
     """Персистируем шаг в профиле — выживает при рестарте бота."""
-    prof = store.get_profile(cid)
-    if step:
-        prof["_onboard_step"] = step
-    else:
-        prof.pop("_onboard_step", None)
-    store.set_profile(cid, prof)
+    def change(profile):
+        if step:
+            profile["_onboard_step"] = step
+        else:
+            profile.pop("_onboard_step", None)
+        return profile, None
+
+    store.mutate_profile(cid, change)
 
 
 def get_text_step(cid) -> str | None:
@@ -56,9 +58,7 @@ async def start(bot, cid):
 
 async def handle_name(bot, cid, text: str):
     name = text.strip()[:50]
-    prof = store.get_profile(cid)
-    prof["name"] = name
-    store.set_profile(cid, prof)
+    store.mutate_profile(cid, lambda profile: ({**profile, "name": name}, None))
     _ob.setdefault(str(cid), {})["step"] = "city"
     _save_step(cid, "city")
     store.pending_input[str(cid)] = "onboard_city"
@@ -140,9 +140,9 @@ async def _finish(bot, cid):
     _ob.pop(str(cid), None)
     _save_step(cid, None)
     store.pending_input.pop(str(cid), None)
-    prof = store.get_profile(cid)
-    prof[menu.REPLY_KB_REMOVED_FLAG] = True
-    store.set_profile(cid, prof)
+    store.mutate_profile(cid, lambda profile: (
+        {**profile, menu.REPLY_KB_REMOVED_FLAG: True}, None,
+    ))
     msg = menu.welcome_for(cid)
     await bot.send_message(
         chat_id=cid,

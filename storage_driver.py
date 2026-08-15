@@ -1,4 +1,4 @@
-"""KV-драйвер PostgreSQL с локальным in-memory fallback."""
+"""KV-драйвер PostgreSQL с локальным in-memory backend для разработки."""
 
 import copy
 import json
@@ -15,6 +15,10 @@ _memory_locks = {}
 _connection_lock = threading.RLock()
 _READ_CACHE_TTL = 5
 _read_cache = {}
+
+
+class StorageUnavailableError(RuntimeError):
+    """Настроенное постоянное хранилище временно недоступно."""
 
 
 def _json_safe(value):
@@ -70,10 +74,28 @@ def db():
     except Exception as error:
         _connection = None
         _log.warning(
-            "storage: DB connect failed, using memory: %s",
+            "storage: DB connect failed; persistent backend unavailable: %s",
             error,
         )
         return None
+
+
+def ping():
+    """Проверяет именно активный backend, не маскируя PostgreSQL памятью."""
+    if not config.DATABASE_URL:
+        return True
+    connection = db()
+    if connection is None:
+        raise StorageUnavailableError("PostgreSQL connection unavailable")
+    try:
+        with _connection_lock:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                row = cursor.fetchone()
+        return bool(row and row[0] == 1)
+    except Exception as error:
+        _invalidate_connection()
+        raise StorageUnavailableError("PostgreSQL health check failed") from error
 
 
 def _invalidate_connection():
@@ -96,6 +118,8 @@ def load(key):
     connection = db()
 
     if connection is None:
+        if config.DATABASE_URL:
+            raise StorageUnavailableError("PostgreSQL connection unavailable")
         if key not in _memory:
             for legacy_key in _legacy_keys(key):
                 if legacy_key in _memory:
@@ -141,16 +165,8 @@ def load(key):
 
     except Exception as error:
         _invalidate_connection()
-        _log.warning(
-            "storage: load(%s) DB error, using memory: %s",
-            key,
-            error,
-        )
-
-        return {
-            k: list(v) if isinstance(v, list) else v
-            for k, v in _memory.get(key, {}).items()
-        }
+        _log.warning("storage: load(%s) DB error: %s", key, error)
+        raise StorageUnavailableError(f"PostgreSQL load failed for {key}") from error
 
 
 def save(key, data):
@@ -158,6 +174,8 @@ def save(key, data):
     connection = db()
 
     if connection is None:
+        if config.DATABASE_URL:
+            raise StorageUnavailableError("PostgreSQL connection unavailable")
         _memory[key] = copy.deepcopy(data)
         _cache_set(key, data)
         return
@@ -180,14 +198,8 @@ def save(key, data):
     except Exception as error:
         _invalidate_connection()
 
-        _log.warning(
-            "storage: save(%s) DB error, falling back to memory: %s",
-            key,
-            error,
-        )
-
-        _memory[key] = copy.deepcopy(data)
-        _cache_set(key, data)
+        _log.warning("storage: save(%s) DB error: %s", key, error)
+        raise StorageUnavailableError(f"PostgreSQL save failed for {key}") from error
 
 
 def mutate(key, mutator):
@@ -274,6 +286,8 @@ def delete(key):
     connection = db()
 
     if connection is None:
+        if config.DATABASE_URL:
+            raise StorageUnavailableError("PostgreSQL connection unavailable")
         _memory.pop(key, None)
         _read_cache.pop(key, None)
         return
@@ -290,9 +304,5 @@ def delete(key):
 
     except Exception as error:
         _invalidate_connection()
-
-        _log.warning(
-            "storage: delete(%s) DB error: %s",
-            key,
-            error,
-        )
+        _log.warning("storage: delete(%s) DB error: %s", key, error)
+        raise StorageUnavailableError(f"PostgreSQL delete failed for {key}") from error

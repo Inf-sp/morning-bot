@@ -52,11 +52,32 @@ def get_profile(chat_id):
     return copy.deepcopy(profile)
 
 def set_profile(chat_id, prof):
+    """Атомарно заменяет профиль пользователя внутри общего KV-ключа."""
     key = str(chat_id)
-    d = _load(config.PROFILE_KEY)
-    d[key] = prof
-    _save(config.PROFILE_KEY, d)
-    _profile_cache[key] = (time.monotonic(), copy.deepcopy(prof))
+    profile = copy.deepcopy(dict(prof or {}))
+
+    def change(data):
+        data[key] = profile
+        return data, None
+
+    mutate_kv(config.PROFILE_KEY, change)
+    _profile_cache[key] = (time.monotonic(), copy.deepcopy(profile))
+
+
+def mutate_profile(chat_id, mutator):
+    """Атомарно меняет один профиль, не затирая параллельные поля пользователя."""
+    key = str(chat_id)
+
+    def change(data):
+        current = copy.deepcopy(data.get(key, {}))
+        updated, result = mutator(current if isinstance(current, dict) else {})
+        updated = dict(updated or {})
+        data[key] = updated
+        return data, (copy.deepcopy(updated), result)
+
+    updated, result = mutate_kv(config.PROFILE_KEY, change)
+    _profile_cache[key] = (time.monotonic(), copy.deepcopy(updated))
+    return result
 
 
 def get_persisted_transient_message_id(chat_id):
@@ -96,15 +117,16 @@ def get_wardrobe_daylook(chat_id):
     return get_profile(chat_id).get("wardrobe_daylook", {})
 
 def set_wardrobe_daylook(chat_id, data):
-    prof = get_profile(chat_id)
-    prof["wardrobe_daylook"] = data
-    set_profile(chat_id, prof)
+    mutate_profile(chat_id, lambda prof: (
+        {**prof, "wardrobe_daylook": data}, None,
+    ))
 
 def clear_wardrobe_daylook(chat_id):
-    prof = get_profile(chat_id)
-    if "wardrobe_daylook" in prof:
+    def change(prof):
         prof.pop("wardrobe_daylook", None)
-        set_profile(chat_id, prof)
+        return prof, None
+
+    mutate_profile(chat_id, change)
 
 
 def get_wardrobe_purchase_recommendation(chat_id):
@@ -114,16 +136,18 @@ def get_wardrobe_purchase_recommendation(chat_id):
 
 
 def set_wardrobe_purchase_recommendation(chat_id, data):
-    prof = get_profile(chat_id)
-    prof["wardrobe_purchase_recommendation"] = dict(data or {})
-    set_profile(chat_id, prof)
+    recommendation = dict(data or {})
+    mutate_profile(chat_id, lambda prof: (
+        {**prof, "wardrobe_purchase_recommendation": recommendation}, None,
+    ))
 
 
 def clear_wardrobe_purchase_recommendation(chat_id):
-    prof = get_profile(chat_id)
-    if "wardrobe_purchase_recommendation" in prof:
+    def change(prof):
         prof.pop("wardrobe_purchase_recommendation", None)
-        set_profile(chat_id, prof)
+        return prof, None
+
+    mutate_profile(chat_id, change)
 
 
 def clear_wardrobe_purchase_if_matches(chat_id, items):
@@ -153,13 +177,15 @@ def get_wardrobe_history(chat_id) -> list:
 
 
 def add_wardrobe_history_entry(chat_id, date, weather_tags, item_ids):
-    prof = get_profile(chat_id)
-    hist = prof.get("wardrobe_history", [])
-    if not isinstance(hist, list):
-        hist = []
-    hist.append({"date": date, "weather_tags": list(weather_tags or []), "item_ids": list(item_ids or [])})
-    prof["wardrobe_history"] = hist[-WARDROBE_HISTORY_LIMIT:]
-    set_profile(chat_id, prof)
+    entry = {"date": date, "weather_tags": list(weather_tags or []), "item_ids": list(item_ids or [])}
+
+    def change(prof):
+        hist = prof.get("wardrobe_history", [])
+        hist = list(hist) if isinstance(hist, list) else []
+        prof["wardrobe_history"] = [*hist, entry][-WARDROBE_HISTORY_LIMIT:]
+        return prof, None
+
+    mutate_profile(chat_id, change)
 
 _LEVEL_MIGRATION = {
     "A1": "simple", "A2": "simple",
@@ -221,9 +247,9 @@ def set_learning_language(chat_id, language):
     code = str(language or "").strip().lower()
     if code not in ("nl", "en", "none"):
         return
-    prof = get_profile(chat_id)
-    prof["learning_language"] = code
-    set_profile(chat_id, prof)
+    mutate_profile(chat_id, lambda prof: (
+        {**prof, "learning_language": code}, None,
+    ))
 
 def _empty_wardrobe() -> dict:
     """Новый пустой гардероб. Функция, а не модульная константа — иначе

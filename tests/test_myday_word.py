@@ -119,7 +119,10 @@ def test_quote_uses_a_favorite_artist_when_the_list_is_not_empty(monkeypatch):
     monkeypatch.setattr(myday.store, "get_list", get_list)
     monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {})
     monkeypatch.setattr(myday.store, "set_list", lambda *_args: None)
-    monkeypatch.setattr(myday.store, "set_profile", lambda *_args: saved_profiles.append(_args))
+    monkeypatch.setattr(
+        myday.store, "mutate_profile",
+        lambda cid, change: saved_profiles.append((cid, change({})[0])),
+    )
     monkeypatch.setattr(myday.ai, "llm_json", lambda text, *_args, **_kwargs: (
         prompt.append(text) or {"quote": "Музыка помогает чувствовать связь.", "src": "Romy"}
     ))
@@ -140,7 +143,7 @@ def test_quote_does_not_substitute_another_author_when_favorite_artist_exists(mo
     monkeypatch.setattr(myday.store, "get_list", get_list)
     monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {})
     monkeypatch.setattr(myday.store, "set_list", lambda *_args: None)
-    monkeypatch.setattr(myday.store, "set_profile", lambda *_args: None)
+    monkeypatch.setattr(myday.store, "mutate_profile", lambda _cid, change: change({})[1])
     monkeypatch.setattr(myday.ai, "llm_json", lambda *_args, **_kwargs: {
         "quote": "Музыка помогает чувствовать связь.", "src": "Дэвид Боуи",
     })

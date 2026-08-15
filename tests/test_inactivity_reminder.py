@@ -93,8 +93,8 @@ def test_onboarding_finish_sends_transient_menu(monkeypatch):
     monkeypatch.setattr(onboard.store, "get_profile", lambda _cid: dict(profile))
     monkeypatch.setattr(
         onboard.store,
-        "set_profile",
-        lambda _cid, value: profile.update(value),
+        "mutate_profile",
+        lambda _cid, change: profile.update(change(dict(profile))[0]),
     )
 
     asyncio.run(

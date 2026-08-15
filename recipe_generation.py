@@ -879,31 +879,31 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
         raise ValueError("Неполный рецепт для главного экрана Готовки")
     # За время AI-запроса профиль мог измениться в другом сценарии. Перечитываем его,
     # чтобы запись кэша не затёрла новые предпочтения или другие пользовательские данные.
-    profile = store.get_profile(cid)
-    entries = profile.get("cooking_home_ideas")
-    if not isinstance(entries, dict):
-        entries = {}
-    entries[context["meal"]] = {"signature": context["signature"], "idea": idea}
-    profile["cooking_home_ideas"] = entries
-    # Старое поле оставляем как последний использованный рецепт для совместимости.
-    profile["cooking_home_idea"] = {"signature": context["signature"], "idea": idea}
-    store.set_profile(cid, profile)
+    cache_entry = {"signature": context["signature"], "idea": idea}
+
+    def save_idea(profile):
+        entries = profile.get("cooking_home_ideas")
+        entries = dict(entries) if isinstance(entries, dict) else {}
+        entries[context["meal"]] = cache_entry
+        profile["cooking_home_ideas"] = entries
+        # Старое поле оставляем как последний использованный рецепт для совместимости.
+        profile["cooking_home_idea"] = cache_entry
+        return profile, None
+
+    store.mutate_profile(cid, save_idea)
     return idea
 
 
 def warm_cooking_home_ideas(cid, now=None) -> dict:
-    """Готовит три главных рецепта дня для фонового прогрева в 08:00."""
+    """Готовит ближайший завтрак; остальные приёмы пищи создаются по запросу."""
     base = now or datetime.now(TZ)
-    results = {}
-    for meal, hour in (("breakfast", 8), ("lunch", 13), ("dinner", 19)):
-        meal_now = base.replace(hour=hour, minute=0, second=0, microsecond=0)
-        try:
-            idea = get_cooking_home_idea(cid, now=meal_now, refresh=False)
-            results[meal] = bool(idea)
-        except Exception as error:
-            _log.warning("cooking home warm failed cid=%s meal=%s: %r", cid, meal, error)
-            results[meal] = False
-    return results
+    breakfast = base.replace(hour=8, minute=0, second=0, microsecond=0)
+    try:
+        idea = get_cooking_home_idea(cid, now=breakfast, refresh=False)
+        return {"breakfast": bool(idea)}
+    except Exception as error:
+        _log.warning("cooking home warm failed cid=%s meal=breakfast: %r", cid, error)
+        return {"breakfast": False}
 
 
 def _cuisine_context(cid):
@@ -1205,8 +1205,8 @@ RECIPE_CUISINE_CODES = (
 # одного флага — используем нейтральную эмблему блюда.
 RECIPE_CUISINE_EMOJI_FALLBACK = CUISINE_EMOJI
 
-RECIPE_BATCH_SIZE = 10
-RECIPE_BATCH_MAX_TOKENS = 5000  # ~10 рецептов * (поля + шаги с длительностью) с запасом на JSON-обвязку
+RECIPE_BATCH_SIZE = 4
+RECIPE_BATCH_MAX_TOKENS = 2600
 
 
 def _season_hint() -> str:

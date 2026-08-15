@@ -16,14 +16,16 @@ class SeedStateRepository:
         return state if isinstance(state, dict) else {}
 
     def set(self, state):
-        profile = store.get_profile(self.cid)
-        profile[STATE_PROFILE_KEY] = state
-        store.set_profile(self.cid, profile)
+        store.mutate_profile(self.cid, lambda profile: (
+            {**profile, STATE_PROFILE_KEY: state}, None,
+        ))
 
     def clear(self):
-        profile = store.get_profile(self.cid)
-        profile.pop(STATE_PROFILE_KEY, None)
-        store.set_profile(self.cid, profile)
+        def change(profile):
+            profile.pop(STATE_PROFILE_KEY, None)
+            return profile, None
+
+        store.mutate_profile(self.cid, change)
 
     def seen_keys(self):
         raw = store.get_profile(self.cid).get(SEEN_PROFILE_KEY) or []
@@ -34,7 +36,13 @@ class SeedStateRepository:
         keys = set(keys)
         if not keys:
             return
-        profile = store.get_profile(self.cid)
-        seen = self.seen_keys() | keys
-        profile[SEEN_PROFILE_KEY] = [list(value) for value in sorted(seen)]
-        store.set_profile(self.cid, profile)
+        def change(profile):
+            raw = profile.get(SEEN_PROFILE_KEY) or []
+            seen = {
+                tuple(value) for value in raw
+                if isinstance(value, (list, tuple)) and len(value) == 3
+            }
+            profile[SEEN_PROFILE_KEY] = [list(value) for value in sorted(seen | keys)]
+            return profile, None
+
+        store.mutate_profile(self.cid, change)

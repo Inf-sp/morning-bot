@@ -13,6 +13,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import ai
 import config
 import recommendation_stoplist
+import secure
 import settings
 import store
 import youtube_tracks
@@ -241,12 +242,19 @@ def _remember_artist(cid, artist):
     artist = str(artist or "").strip()
     if not artist:
         return
-    profile = store.get_profile(cid)
-    profile = dict(profile) if isinstance(profile, dict) else {}
-    recent = _recent_artists(cid)
-    recent = [item for item in recent if item.casefold() != artist.casefold()]
-    profile["music_recent_artists"] = [*recent, artist][-_RECENT_ARTISTS_LIMIT:]
-    store.set_profile(cid, profile)
+    def change(profile):
+        values = profile.get("music_recent_artists", [])
+        recent = []
+        for value in values if isinstance(values, list) else []:
+            item = str(value or "").strip()
+            if item and item.casefold() != artist.casefold() and item.casefold() not in {
+                known.casefold() for known in recent
+            }:
+                recent.append(item)
+        profile["music_recent_artists"] = [*recent, artist][-_RECENT_ARTISTS_LIMIT:]
+        return profile, None
+
+    store.mutate_profile(cid, change)
 
 
 def _add_unique(key, cid, value):
@@ -760,56 +768,53 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
     known = (set(a.lower() for a in arts)
              | set(value.lower() for value in blocked) | set(value.lower() for value in recent))
     avoid_all = ", ".join(list(arts) + blocked + recent)[:600]
+    safe_anchors = secure.wrap_untrusted(anchors or "список пуст", "любимые артисты")
+    safe_avoid = secure.wrap_untrusted(avoid_all or "список пуст", "исключённые артисты")
     data = None
-    rejected = []
     allowed_genres = {category["value"]} if category else set(selected_styles)
-    for attempt in range(3):
-        avoid_this_try = avoid_all
-        if rejected:
-            avoid_this_try = f"{avoid_all}, {', '.join(rejected)}"[:600]
-        try:
-            cand = await ai.allm_json(
+    try:
+        generated = await ai.allm_json(
                 "Ты — музыкальный эксперт-минималист. Пиши коротко, емко, без воды и лишних вводных слов "
                 '(никаких "стоит отметить", "однако"). Используй контрастную структуру.\n'
                 "Правила подбора ориентиров:\n"
                 "1. Сравнивай только с релевантными группами из вкуса пользователя.\n"
                 "2. Не смешивай полярные жанры: никакого симфо-метала, чистого клубного хауса "
                 "и других дальних жанров в сравнениях, если их нет во вкусе пользователя.\n\n"
-                f"Любимые исполнители пользователя (его вкус): {anchors}.\n"
+                f"Любимые исполнители пользователя (его вкус): {safe_anchors}.\n"
                 f"{genre_context}\n"
                 f"{style_context}\n"
-                f"НЕ предлагай никого из этого списка (уже в любимых, отклонены или недавно показаны): {avoid_this_try}.\n"
-                "Предложи РОВНО ОДНОГО НОВОГО исполнителя, максимально близкого по вкусу "
+                f"НЕ предлагай никого из этого списка (уже в любимых, отклонены или недавно показаны): {safe_avoid}.\n"
+                "Предложи ТРЁХ РАЗНЫХ новых исполнителей, максимально близких по вкусу "
                 "пользователя. Предпочитай современных активных артистов с выразительной, мелодичной, "
                 "качественно спродюсированной музыкой. Исполнитель должен быть заметным, популярным или "
                 "признанным в своей сцене — не выбирай чрезмерно малоизвестного артиста без сильного совпадения.\n"
                 "Треки указывай ТОЛЬКО реально существующие — без выдуманных названий.\n"
                 "В why дай 2 коротких контрастных пункта: сначала точное сходство, затем отличие/зацепку.\n"
-                f"Попытка генерации: {attempt + 1}. Если сомневаешься, выбирай менее очевидный вариант.\n"
                 "Верни строго такой JSON:\n"
-                '{"artist": "имя исполнителя", '
+                '{"candidates": [{"artist": "имя исполнителя", '
                 f'"genre": "один ключ из {", ".join(sorted(allowed_genres))}", '
                 '"desc": "1-2 строки образно о звучании", '
                 '"why": ["пункт 1 - на кого из его любимых похоже и чем", "пункт 2"], '
                 '"tracks": ["трек 1 - короткая пометка", "трек 2 - короткая пометка", "трек 3 - короткая пометка"], '
-                '"fact": "1 интересный факт об исполнителе"}',
-                1000, tier="leisure", route="gemini", module="leisure")
-        except Exception as e:
-            _log.warning("send_listen: allm_json attempt=%s failed cid=%s: %r", attempt, cid, e, exc_info=True)
-            # Cooldown или таймаут цепочки не исправится мгновенным повтором.
-            # Сразу переходим к локальному резерву, чтобы не показывать ошибку.
-            data = _local_artist_fallback(known, fallback_category)
-            break
+                '"fact": "1 интересный факт об исполнителе"}]}',
+                1500, tier="leisure", route="gemini", module="leisure")
+    except Exception as e:
+        _log.warning("send_listen: allm_json failed cid=%s: %r", cid, e, exc_info=True)
+        generated = {}
+    candidates = generated.get("candidates") if isinstance(generated, dict) else []
+    if not isinstance(candidates, list):
+        candidates = []
+    # Совместимость с валидным одиночным ответом старого кэша/резерва.
+    if not candidates and isinstance(generated, dict) and generated.get("artist"):
+        candidates = [generated]
+    for cand in candidates[:3]:
         cand_artist = str(cand.get("artist") or "").strip() if isinstance(cand, dict) else ""
         cand_genre = str(cand.get("genre") or "").strip().casefold() if isinstance(cand, dict) else ""
-        _log.info("send_listen: attempt=%s cid=%s cand_type=%s cand_artist=%r",
-                  attempt, cid, type(cand).__name__, cand_artist)
+        _log.info("send_listen: candidate cid=%s cand_type=%s cand_artist=%r",
+                  cid, type(cand).__name__, cand_artist)
         if cand_artist and cand_genre in allowed_genres and cand_artist.lower() not in known:
             data = cand
             break
-        if cand_artist:
-            rejected.append(cand_artist)
-        data = None
     if not data or not data.get("artist"):
         data = _local_artist_fallback(known, fallback_category)
     if not data or not data.get("artist"):

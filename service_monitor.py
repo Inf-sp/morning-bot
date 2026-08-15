@@ -13,6 +13,7 @@ import requests
 import api_usage
 import config
 import provider_runtime
+import storage_driver
 import store
 
 ServiceSpec = provider_runtime.ProviderSpec
@@ -271,7 +272,8 @@ def probe(service: str) -> bool:
         return False
     if service == "database":
         try:
-            store._load("__service_monitor_health__")
+            if not storage_driver.ping():
+                raise storage_driver.StorageUnavailableError("PostgreSQL ping returned no row")
         except Exception as exc:
             provider_runtime.record_result(
                 service, False, error=str(exc) or type(exc).__name__,

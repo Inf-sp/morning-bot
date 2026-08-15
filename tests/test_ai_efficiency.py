@@ -252,6 +252,13 @@ def test_second_action_uses_cached_premium_answer_without_gemini(monkeypatch):
     memory = {}
     calls = []
     monkeypatch.setattr(ai.store, "_load", lambda key: memory.get(key, {}))
+
+    def mutate(key, change):
+        updated, result = change(memory.get(key, {}))
+        memory[key] = updated
+        return result
+
+    monkeypatch.setattr(ai.store, "mutate_kv", mutate)
     monkeypatch.setattr(ai.store, "_save", lambda key, value: memory.__setitem__(key, value))
     monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)

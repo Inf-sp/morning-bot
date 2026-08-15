@@ -48,3 +48,12 @@ class ProfileRepository:
             data[self.cid] = profile
             return data, None
         storage_driver.mutate(config.PROFILE_KEY, change)
+
+    def mutate(self, function):
+        def change(data):
+            current = dict(data.get(self.cid, {}))
+            updated, result = function(current)
+            data[self.cid] = dict(updated or {})
+            return data, result
+
+        return storage_driver.mutate(config.PROFILE_KEY, change)

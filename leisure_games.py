@@ -294,10 +294,17 @@ def pick_game(cid, *, genre=None, refresh=False):
     seed = int(hashlib.sha256(f"{cid}|{today}|{genre or ''}".encode()).hexdigest()[:8], 16)
     item = candidates[seed % len(candidates)]
     seen = [value for value in seen if value != item["id"]]
-    profile["game_seen"] = [*seen, item["id"]][-20:]
-    if not genre:
-        profile["game_daily"] = {"date": today, "signature": signature, "item": dict(item)}
-    store.set_profile(cid, profile)
+    daily_entry = {"date": today, "signature": signature, "item": dict(item)}
+
+    def save_selection(current):
+        current_seen = [str(value) for value in current.get("game_seen", []) if str(value)]
+        current_seen = [value for value in current_seen if value != item["id"]]
+        current["game_seen"] = [*current_seen, item["id"]][-20:]
+        if not genre:
+            current["game_daily"] = daily_entry
+        return current, None
+
+    store.mutate_profile(cid, save_selection)
     return _decorate_game(item, cid, genre=genre)
 
 
@@ -442,16 +449,16 @@ async def toggle_game_platform(bot, cid, platform, q=None):
         else:
             selected.append(platform)
         settings.set_(cid, "game_platforms", selected)
-        profile = store.get_profile(cid)
-        profile.pop("game_daily", None)
-        store.set_profile(cid, profile)
+        _reset_game_daily(cid)
     await send_game_preferences(bot, cid, q=q)
 
 
 def _reset_game_daily(cid):
-    profile = store.get_profile(cid)
-    profile.pop("game_daily", None)
-    store.set_profile(cid, profile)
+    def change(profile):
+        profile.pop("game_daily", None)
+        return profile, None
+
+    store.mutate_profile(cid, change)
 
 
 async def toggle_game_recency(bot, cid, value, q=None):

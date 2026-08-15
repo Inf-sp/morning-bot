@@ -124,3 +124,26 @@ def test_unavailable_language_tool_does_not_block_new_entry(monkeypatch):
     assert checked["term"] == "Vervangen"
     assert "pending_language_check" not in checked
     assert "language_check_status" not in checked
+
+
+def test_new_verb_does_not_check_the_same_example_twice(monkeypatch):
+    calls = []
+
+    async def check(text, language, **kwargs):
+        calls.append((text, language))
+        return _ok(text)
+
+    monkeypatch.setattr(learning_data_quality.language_tool, "check_text_retry", check)
+    asyncio.run(learning_data_quality.check_new_entry({
+        "lang": "nl",
+        "term": "wandelen",
+        "translation": "гулять",
+        "examples": [{"text": "Ik wandel elke dag.", "translation": "Я гуляю каждый день."}],
+        "example_nl": "Ik wandel elke dag.",
+        "forms": ["wandelde", "heeft gewandeld"],
+    }))
+
+    assert calls == [
+        ("wandelen", "nl-NL"),
+        ("Ik wandel elke dag.", "nl-NL"),
+    ]

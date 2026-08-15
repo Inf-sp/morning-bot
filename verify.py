@@ -78,18 +78,18 @@ async def safe_send(bot, cid, text, *, surface="card", rain_real=None, reply_mar
     warnings += grade_html(html)
     for w in warnings:
         _log.warning("[verify] %s: %s", surface, w)
-    # Telegram Bot API 2026 supports long bot messages with client-side "Show More".
-    # Keep a safety margin below the documented 32768 chars.
-    chunks = [html[i:i + 32000] for i in range(0, len(html), 32000)] or [html]
+    chunks = util.telegram_text_chunks(text, 4000)
     if reply_markup is None:
         from ui.navigation import back_menu_keyboard
         reply_markup = back_menu_keyboard(back)
-    for i, c in enumerate(chunks):
+    for i, (chunk_text, chunk_entities) in enumerate(chunks):
         markup = reply_markup if i == len(chunks) - 1 else None
         try:
-            await bot.send_message(chat_id=cid, text=c, parse_mode="HTML", reply_markup=markup)
+            await bot.send_message(
+                chat_id=cid, text=chunk_text, entities=chunk_entities, reply_markup=markup,
+            )
         except Exception:
-            await bot.send_message(chat_id=cid, text=c, reply_markup=markup)
+            await bot.send_message(chat_id=cid, text=chunk_text, reply_markup=markup)
 
 
 _SKIP_MODULES = frozenset({"verify", "ai", "bot", "asyncio", "concurrent"})

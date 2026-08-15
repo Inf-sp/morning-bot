@@ -188,9 +188,9 @@ def _game_recent(cid):
 def _set_game_recent(cid, rec):
     rec = [str(x).strip() for x in (rec or []) if str(x).strip()]
     store.game_recent[str(cid)] = rec
-    prof = store.get_profile(cid)
-    prof["game_seen"] = rec
-    store.set_profile(cid, prof)
+    store.mutate_profile(cid, lambda profile: (
+        {**profile, "game_seen": rec}, None,
+    ))
 
 
 def _remember_game_answer(cid, d):

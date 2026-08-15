@@ -863,9 +863,10 @@ def _fetch_quote(cid=None):
         if src not in seen:
             store.set_list(config.QUOTE_AUTHORS_KEY, cid, seen + [src])
     if cid:
-        profile = store.get_profile(cid)
-        profile["myday_quote_cache"] = {"date": today, "data": d}
-        store.set_profile(cid, profile)
+        quote_cache = {"date": today, "data": d}
+        store.mutate_profile(cid, lambda profile: (
+            {**profile, "myday_quote_cache": quote_cache}, None,
+        ))
 
     return d
 
@@ -913,9 +914,11 @@ _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":...
 
 def reset_day_cache(cid):
     _day_cache.pop(str(cid), None)
-    prof = store.get_profile(cid)
-    if prof.pop("myday_home_cache", None) is not None:
-        store.set_profile(cid, prof)
+    def change(profile):
+        profile.pop("myday_home_cache", None)
+        return profile, None
+
+    store.mutate_profile(cid, change)
 
 
 def _load_day_cache(cid, today):
@@ -941,15 +944,16 @@ def _load_day_cache(cid, today):
 def _save_day_cache(cid, today, text, entities, ts):
     cached = {"date": today, "version": _DAY_CACHE_VERSION, "text": text, "entities": entities, "ts": ts}
     _day_cache[str(cid)] = cached
-    prof = store.get_profile(cid)
-    prof["myday_home_cache"] = {
+    saved = {
         "date": today,
         "version": _DAY_CACHE_VERSION,
         "text": text,
         "entities": util.entities_to_json(entities),
         "ts": ts,
     }
-    store.set_profile(cid, prof)
+    store.mutate_profile(cid, lambda profile: (
+        {**profile, "myday_home_cache": saved}, None,
+    ))
     return cached
 
 def _day_menu_kb():

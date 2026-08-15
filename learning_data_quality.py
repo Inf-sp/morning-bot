@@ -289,11 +289,26 @@ def _set_field(entry: dict, path: str, value: str) -> None:
         entry[path] = value
 
 
-async def check_entry(entry: dict, *, semaphore=None) -> tuple[dict, dict]:
+async def check_entry(entry: dict, *, semaphore=None, compact=False) -> tuple[dict, dict]:
     """Безопасно исправляет только однозначные ошибки в изучаемом языке."""
     checked = copy.deepcopy(entry)
     stats = {"checked_fields": 0, "fixed_fields": 0, "available": True}
     targets = _targets(checked)
+    if compact:
+        # При добавлении достаточно проверить сам термин и один пример. Формы
+        # уже валидируются structured-схемой; отдельный HTTP-запрос на каждую
+        # форму заметно расходует квоту LanguageTool без пользы для карточки.
+        compact_targets = [target for target in targets if target["field"] in {
+            "term", "examples.0.text", "example_nl",
+        }]
+        targets = []
+        seen_texts = set()
+        for target in compact_targets:
+            normalized_text = target["text"].strip().casefold()
+            if normalized_text in seen_texts:
+                continue
+            seen_texts.add(normalized_text)
+            targets.append(target)
     reports = await asyncio.gather(*(
         language_tool.check_text_retry(
             target["text"], _language_code(checked), retries=1, semaphore=semaphore,
@@ -332,7 +347,7 @@ async def check_new_entry(entry: dict) -> dict:
     normalized, _ = normalize_entry(entry)
     try:
         checked, _stats = await check_entry(
-            normalized, semaphore=asyncio.Semaphore(_MAX_CONCURRENCY),
+            normalized, semaphore=asyncio.Semaphore(_MAX_CONCURRENCY), compact=True,
         )
         return checked
     except Exception:

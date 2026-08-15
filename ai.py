@@ -434,25 +434,30 @@ def _cache_set(key: str, value):
     if value is None:
         return
     try:
-        data = store._load(config.AI_RESPONSE_CACHE_KEY)
-        items = data.setdefault("items", {})
-        items[key] = {"ts": int(time.time()), "value": value}
-        if len(items) > _AI_CACHE_MAX:
-            oldest = sorted(items.items(), key=lambda kv: int((kv[1] or {}).get("ts") or 0))
-            for k, _v in oldest[:len(items) - _AI_CACHE_MAX]:
-                items.pop(k, None)
-        store._save(config.AI_RESPONSE_CACHE_KEY, data)
+        def change(data):
+            items = data.setdefault("items", {})
+            items[key] = {"ts": int(time.time()), "value": value}
+            if len(items) > _AI_CACHE_MAX:
+                oldest = sorted(
+                    items.items(), key=lambda kv: int((kv[1] or {}).get("ts") or 0)
+                )
+                for old_key, _entry in oldest[:len(items) - _AI_CACHE_MAX]:
+                    items.pop(old_key, None)
+            return data, None
+
+        store.mutate_kv(config.AI_RESPONSE_CACHE_KEY, change)
     except Exception:
         pass
 
 
 def _cache_delete(key: str):
     try:
-        data = store._load(config.AI_RESPONSE_CACHE_KEY)
-        items = data.get("items") or {}
-        if key in items:
+        def change(data):
+            items = data.get("items") or {}
             items.pop(key, None)
-            store._save(config.AI_RESPONSE_CACHE_KEY, data)
+            return data, None
+
+        store.mutate_kv(config.AI_RESPONSE_CACHE_KEY, change)
     except Exception:
         pass
 

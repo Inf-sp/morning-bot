@@ -159,7 +159,7 @@ async def _send_queue_card(bot, cid, meal, d, status=None):
 
 
 async def _generate_and_store_queue(cid, meal, ingredients=None):
-    """Генерирует новую очередь ~10 рецептов для категории meal и сохраняет её (§4.2/§5).
+    """Генерирует компактную очередь рецептов для категории meal и сохраняет её (§4.2/§5).
 
     ТОЛЬКО текстовые поля рецепта, без единого сетевого вызова к Pexels."""
     cuisine_weights = get_cuisine_weights(cid)

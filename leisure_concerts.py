@@ -364,13 +364,17 @@ def _external_events_cache_get(artist: str, cc: str):
 
 
 def _external_events_cache_set(artist: str, cc: str, events: list):
-    data = store._load(config.ARTIST_EXTERNAL_EVENTS_KEY) or {}
-    data[_artist_cache_key(artist, cc)] = {
-        "version": _ARTIST_EXTERNAL_CACHE_VERSION,
-        "ts": int(time.time()),
-        "events": events,
-    }
-    store._save(config.ARTIST_EXTERNAL_EVENTS_KEY, data)
+    cache_key = _artist_cache_key(artist, cc)
+
+    def change(data):
+        data[cache_key] = {
+            "version": _ARTIST_EXTERNAL_CACHE_VERSION,
+            "ts": int(time.time()),
+            "events": events,
+        }
+        return data, None
+
+    store.mutate_kv(config.ARTIST_EXTERNAL_EVENTS_KEY, change)
 
 
 def _classify_external_source(url: str, artist: str) -> str:

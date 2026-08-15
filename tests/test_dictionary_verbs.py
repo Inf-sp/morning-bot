@@ -385,3 +385,53 @@ def test_successful_analysis_fields_are_saved_in_existing_dictionary_record(monk
         "analysis_confidence", "analysis_provider", "analysis_updated_at",
     ):
         assert stored[0][key] == saved[key] == entry[key]
+def test_unknown_dutch_verb_uses_one_combined_ai_response(monkeypatch):
+    calls = []
+
+    async def analyze(*_args, **_kwargs):
+        calls.append("combined")
+        return {
+            "ok": True,
+            "lang": "nl",
+            "term": "wandelen",
+            "article": "",
+            "translation": "гулять",
+            "breakdown": "глагол",
+            "examples": [{"text": "Ik wandel elke dag.", "translation": "Я гуляю каждый день."}],
+            "pos": "глагол",
+            "plural": "",
+            "forms": [],
+            "topic": "быт",
+            "difficulty": "A1",
+            "construction": "",
+            "situation_type": "",
+            "alt_translations": [],
+            "verb": {
+                "is_verb": True,
+                "infinitive": "wandelen",
+                "translations": ["гулять"],
+                "past_singular": "wandelde",
+                "past_participle": "gewandeld",
+                "auxiliary": "hebben",
+                "perfect_form": "heeft gewandeld",
+                "verb_type": "weak",
+                "example_nl": "Ik wandel elke dag.",
+                "example_ru": "Я гуляю каждый день.",
+                "confidence": 0.98,
+            },
+            "needs_confirmation": False,
+            "reason": "",
+        }
+
+    async def should_not_run(*_args, **_kwargs):
+        raise AssertionError("second verb AI request")
+
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", analyze)
+    monkeypatch.setattr(dictionary_import, "_request_verb_analysis", should_not_run)
+
+    entry = asyncio.run(dictionary_import._normalize_dict_entry_full("wandelen", "nl"))
+    enriched = asyncio.run(dictionary_import._enrich_dutch_verb(entry, "42"))
+
+    assert calls == ["combined"]
+    assert enriched["analysis_provider"] == "combined_llm"
+    assert enriched["perfect_form"] == "heeft gewandeld"
