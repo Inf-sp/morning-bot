@@ -136,6 +136,7 @@ def test_game_premieres_use_verified_source_url_and_platforms(monkeypatch):
         }]}
 
     monkeypatch.setattr(leisure_games.ai, "allm_json", llm)
+    monkeypatch.setattr(leisure_games.igdb, "enrich_game_premieres", lambda items: items)
 
     items = asyncio.run(leisure_games.get_game_premieres("42", refresh=True))
 
@@ -149,3 +150,58 @@ def test_game_premieres_use_verified_source_url_and_platforms(monkeypatch):
         "summary": "Герой исследует неизвестную планету.",
         "url": source_url,
     }]
+
+
+def test_game_premiere_title_uses_youtube_trailer():
+    message = leisure_games.leisure_ui.game_premieres_screen([{
+        "title": "Example Game",
+        "date_label": "15 сентября 2026",
+        "platform_label": "💻 ПК",
+        "genre": "приключение",
+        "summary": "Герой исследует неизвестную планету.",
+        "url": "https://example.com/releases",
+        "trailer_url": "https://www.youtube.com/watch?v=official-trailer",
+    }])
+
+    links = [entity.url for entity in message.entities if entity.type == "text_link"]
+
+    assert links == ["https://www.youtube.com/watch?v=official-trailer"]
+
+
+def test_game_premieres_are_sent_as_native_poster_gallery(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_media_group(self, **kwargs):
+            sent.append(("gallery", kwargs))
+
+        async def send_photo(self, **kwargs):
+            sent.append(("photo", kwargs))
+
+        async def send_message(self, **kwargs):
+            sent.append(("message", kwargs))
+
+    items = [{
+        "title": f"Игра {index}",
+        "date_label": "15 сентября 2026",
+        "platform_label": "💻 ПК",
+        "genre": "RPG",
+        "summary": f"Короткое описание {index}.",
+        "url": f"https://example.com/game/{index}",
+        "poster": f"https://images.igdb.com/cover{index}.jpg",
+        "trailer_url": f"https://www.youtube.com/watch?v=trailer{index}",
+    } for index in range(3)]
+
+    monkeypatch.setattr(
+        leisure_games, "get_game_premieres", lambda _cid, **_kwargs: asyncio.sleep(0, result=items),
+    )
+
+    asyncio.run(leisure_games.send_game_premieres(Bot(), "42"))
+
+    assert [kind for kind, _kwargs in sent] == ["gallery"]
+    gallery = sent[0][1]
+    assert len(gallery["media"]) == 3
+    assert gallery["caption"].startswith("🆕 Премьеры игр")
+    assert {
+        entity.url for entity in gallery["caption_entities"] if entity.type == "text_link"
+    } == {item["trailer_url"] for item in items}

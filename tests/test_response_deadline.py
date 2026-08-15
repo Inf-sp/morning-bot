@@ -228,9 +228,10 @@ def test_home_cache_warm_schedule_separates_heavy_sections():
     )
 
 
-def test_nightly_premieres_warm_once_per_country_and_once_for_books(monkeypatch):
+def test_nightly_premieres_warm_movies_books_and_friday_games(monkeypatch):
     movie_calls = []
     book_calls = []
+    game_calls = []
 
     monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42", "43", "44"])
     monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
@@ -245,11 +246,18 @@ def test_nightly_premieres_warm_once_per_country_and_once_for_books(monkeypatch)
     async def warm_books():
         book_calls.append(True)
 
+    async def warm_games(cid):
+        game_calls.append(cid)
+
     monkeypatch.setattr(bot.leisure_movies, "warm_movie_premieres_cache", warm_movie)
     monkeypatch.setattr(bot.leisure_books, "warm_book_premieres_cache", warm_books)
+    monkeypatch.setattr(bot.leisure_games, "warm_game_premieres_cache", warm_games)
+    monkeypatch.setattr(bot.settings, "notif_on", lambda *_args: True)
 
     asyncio.run(bot.job_warm_movie_premieres_cache(object()))
     asyncio.run(bot.job_warm_book_premieres_cache(object()))
+    asyncio.run(bot.job_warm_game_premieres_cache(object()))
 
     assert movie_calls == ["42", "44"]
     assert book_calls == [True]
+    assert game_calls == ["42", "43", "44"]

@@ -199,14 +199,41 @@ def test_weekly_events_add_large_confirmed_music_events(monkeypatch):
     }
 
     monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {"cc": "NL", "country": "Нидерланды"})
-    monkeypatch.setattr(leisure_concerts, "_ensure_artists", lambda _cid: ["Romy"])
     monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda _cid, _cc: [personal])
-    monkeypatch.setattr(leisure_concerts, "get_popular_music_events", lambda *_args: _async([festival]))
-    monkeypatch.setattr(leisure_concerts.config, "TICKETMASTER_API_KEY", "test-key")
+    monkeypatch.setattr(leisure_concerts, "_popular_events_cache_get", lambda *_args: [festival])
+    monkeypatch.setattr(leisure_concerts.leisure_movies, "get_movie_premieres", lambda _cid: _async([]))
+    monkeypatch.setattr(leisure_concerts.leisure_books, "get_book_premieres", lambda: _async([]))
+    monkeypatch.setattr(leisure_concerts.leisure_games, "get_game_premieres", lambda _cid: _async([]))
     msg = asyncio.run(leisure_concerts._build_weekly_events_msg("42"))
 
     assert "Romy" in msg.text
     assert "Lowlands 2026" in msg.text
+
+
+def test_weekly_events_notification_has_category_buttons(monkeypatch):
+    from ui.builder import MessageSpec
+
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(
+        leisure_concerts, "_build_weekly_events_msg",
+        lambda _cid: _async(MessageSpec(text="🎲 Ближайшие события")),
+    )
+
+    asyncio.run(leisure_concerts.send_weekend_events(Bot(), "42"))
+
+    keyboard = sent[0]["reply_markup"].inline_keyboard
+    assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
+        [("🎬 Кино", "movie_premieres"), ("🎫 Концерты", "a_concerts_find")],
+        [("📚 Книги", "book_premieres"), ("👾 Игры", "vg_premieres")],
+        [("#️⃣ Главная", "m_menu")],
+        [("❌ Отключить уведомление", "set_notifpush_weekend_events")],
+    ]
+    assert sent[0]["disable_web_page_preview"] is True
 
 
 async def _async(value):

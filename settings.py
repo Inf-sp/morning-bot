@@ -11,8 +11,9 @@ _log = logging.getLogger(__name__)
 
 
 SETTINGS_KEY = "user_settings.json"
+EVENING_WEATHER_TIME = "20:00"
 NOTIF_TYPES = [
-    ("morning_brief",   "Мой день"),
+    ("weather_warn",     "Погодное предупреждение"),
     ("weekend_events",  "Ближайшие события"),
     ("daily_words",     "Обучение языку"),
     ("evening_weather", "Погода на завтра"),
@@ -101,13 +102,14 @@ _LEGACY_NOTIF_KINDS = {
 }
 
 def notif_on(cid, kind):
-    # Предупреждения о потенциально опасной погоде обязательны: это не
-    # маркетинговая рассылка, поэтому переключателя в настройках нет.
-    if kind == "weather_warn":
-        return True
     value = get(cid, f"notif_{kind}", None)
     if value is not None:
         return bool(value)
+    # До появления переключателя погодные предупреждения приходили всем.
+    # Сохраняем это поведение для старых профилей, пока пользователь сам их
+    # не отключит.
+    if kind == "weather_warn":
+        return True
     for legacy_kind in _LEGACY_NOTIF_KINDS.get(kind, ()):
         legacy_value = get(cid, f"notif_{legacy_kind}", None)
         if legacy_value is not None:
@@ -155,16 +157,26 @@ def _mark_transient_edit(bot, cid, message):
 
 
 def _notif_label(kind: str, label: str) -> str:
+    if kind == "weather_warn":
+        return f"{label} (ежедневно в 08:00, если есть повод)"
     if kind == "weekend_events":
         return f"{label} (по пятницам в 10:00)"
     times = {
-        "morning_brief": "08:30",
         "daily_words": "11:00",
-        "evening_weather": "20:30",
+        "evening_weather": EVENING_WEATHER_TIME,
     }
     if kind in times:
         return f"{label} (ежедневно в {times[kind]})"
     return label
+
+
+def notification_markup(kind: str, rows, *, enabled: bool = True) -> InlineKeyboardMarkup:
+    """Навигация планового сообщения и отдельный переключатель только его типа."""
+    toggle_label = "❌ Отключить уведомление" if enabled else "✅ Включить уведомление"
+    return InlineKeyboardMarkup([
+        *[list(row) for row in rows],
+        [InlineKeyboardButton(toggle_label, callback_data=f"set_notifpush_{kind}")],
+    ])
 
 async def send_home(bot, cid, q=None):
     rows = [
@@ -433,12 +445,7 @@ class _NotificationTrackingBot:
 
 
 async def _send_scheduled_notification(bot, cid, kind):
-    if kind == "morning_brief":
-        import myday as _m
-        # force=False: если пользователь уже открывал «Мой день» сегодня, уведомление
-        # переиспользует готовый дневной кэш вместо повторной сборки (экономит AI/API).
-        await _m.send_plany(_NoKbBot(bot), cid, force=False, show_loading=False)
-    elif kind == "weather_warn":
+    if kind == "weather_warn":
         import asyncio
         import weather as _w
         import weather_warn as _ww
@@ -447,15 +454,32 @@ async def _send_scheduled_notification(bot, cid, kind):
         msg = _ww.build_warning(data, cid)
         # Тихий день без значимых погодных факторов — ничего не отправляем.
         if msg is not None:
-            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+            kb = notification_markup("weather_warn", [[
+                InlineKeyboardButton("☀️ Мой день", callback_data="weather_myday"),
+                InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+            ]])
+            await bot.send_message(
+                chat_id=cid,
+                text=msg.text,
+                entities=msg.entities,
+                reply_markup=kb,
+            )
     elif kind == "daily_words":
-        await dictionary_morning.send_daily_practice(_NoKbBot(bot), cid)
+        kb = notification_markup("daily_words", [[
+            InlineKeyboardButton("🧠 Обучение", callback_data="notify_learning"),
+            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+        ]])
+        await dictionary_morning.send_daily_practice(bot, cid, reply_markup=kb)
     elif kind == "weekend_events":
         import leisure_concerts
-        await leisure_concerts.send_weekend_events(_NoKbBot(bot), cid)
+        await leisure_concerts.send_weekend_events(bot, cid)
     elif kind == "evening_weather":
         import weather as _w
-        await _w.send_weather(_NoKbBot(bot), cid, "tomorrow_plain")
+        kb = notification_markup("evening_weather", [[
+            InlineKeyboardButton("☀️ Мой день", callback_data="weather_myday"),
+            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+        ]])
+        await _w.send_weather(bot, cid, "tomorrow_plain", reply_markup=kb)
 
 
 async def send_scheduled_notification(bot, cid, kind):
@@ -507,16 +531,16 @@ class NotificationOption:
 
 
 _ADMIN_NOTIFICATION_META = {
-    "morning_brief":   ("08:30", "Мой день"),
+    "weather_warn":    ("08:00, если есть повод", "Погодное предупреждение"),
     "weekend_events":  ("пт 10:00", "Ближайшие события"),
     "daily_words":     ("11:00", "Обучение языку"),
-    "evening_weather": ("20:30", "Погода на завтра"),
+    "evening_weather": (EVENING_WEATHER_TIME, "Погода на завтра"),
 }
 
 
 def _time_sort_key(value: str) -> int:
     """Извлекает HH:MM из произвольного места строки (не только 'HH:MM' целиком) —
-    time_label теперь может быть 'пт 10:00' или '08:45, если есть повод'."""
+    time_label теперь может быть 'пт 10:00' или '08:00, если есть повод'."""
     import re
     m = re.search(r"(\d{1,2}):(\d{2})", str(value or ""))
     if not m:
@@ -583,6 +607,31 @@ async def toggle_notif(bot, cid, kind, q=None):
         return
     set_(cid, f"notif_{kind}", not notif_on(cid, kind))
     await send_notif(bot, cid, q)
+
+
+async def toggle_notification_from_message(cid, kind, q):
+    """Меняет один тип рассылки, сохраняя полезное сообщение и его навигацию."""
+    if kind not in dict(NOTIF_TYPES) or q is None:
+        return
+    enabled = not notif_on(cid, kind)
+    set_(cid, f"notif_{kind}", enabled)
+    current = getattr(getattr(q, "message", None), "reply_markup", None)
+    rows = []
+    for row in getattr(current, "inline_keyboard", []) or []:
+        kept = [
+            button for button in row
+            if not str(getattr(button, "callback_data", "") or "").startswith("set_notifpush_")
+        ]
+        if kept:
+            rows.append(kept)
+    markup = notification_markup(kind, rows, enabled=enabled)
+    try:
+        await q.edit_message_reply_markup(reply_markup=markup)
+    except Exception:
+        try:
+            await q.message.edit_reply_markup(reply_markup=markup)
+        except Exception:
+            pass
 
 
 async def notif_off_all(bot, cid, q=None):
@@ -1059,6 +1108,8 @@ async def handle_callback(bot, cid, data, q=None):
         await toggle_cuisine(bot, cid, data[len("set_cuisine_"):], q)
     elif data.startswith("set_notiftgl_"):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
+    elif data.startswith("set_notifpush_"):
+        await toggle_notification_from_message(cid, data[len("set_notifpush_"):], q)
     elif data == "set_notif_off_all":
         await notif_off_all(bot, cid, q)
     elif data == "set_learning_global":

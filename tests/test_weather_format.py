@@ -1,9 +1,14 @@
+import asyncio
 import os
+from types import SimpleNamespace
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import weather
+import weather_warn
+import settings
+import bot
 from ui import weather as weather_ui
 
 
@@ -55,6 +60,143 @@ def test_week_forecast_marks_extreme_heat_as_a_reason_to_change_plans():
     assert advice.startswith("В четверг до +40°C")
     assert "избегай долгих прогулок и велосипеда днём" in advice
     assert "💡 Полезно: В четверг до +40°C" in message.text
+
+
+def test_weather_warning_is_scheduled_for_eight():
+    assert bot._WEATHER_WARNING_TIME == "08:00"
+
+
+def test_morning_myday_notification_is_removed():
+    assert "morning_brief" not in dict(settings.NOTIF_TYPES)
+    assert "morning_brief" not in settings._ADMIN_NOTIFICATION_META
+    assert not hasattr(bot, "job_morning_brief")
+
+
+def test_weather_warning_is_a_notification_option_enabled_by_default(monkeypatch):
+    monkeypatch.setattr(settings, "get", lambda *_args: None)
+
+    option = next(item for item in settings.get_notification_options() if item.key == "weather_warn")
+
+    assert settings.notif_on("42", "weather_warn") is True
+    assert option.button_label == "Погодное предупреждение · 08:00, если есть повод"
+
+
+def test_weather_warning_can_be_disabled(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "get",
+        lambda _cid, key, default=None: False if key == "notif_weather_warn" else default,
+    )
+
+    assert settings.notif_on("42", "weather_warn") is False
+
+
+def test_weather_warning_job_skips_disabled_users(monkeypatch):
+    sent = []
+
+    async def send_notification(*args):
+        sent.append(args)
+
+    monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
+    monkeypatch.setattr(settings, "notif_on", lambda *_args: False)
+    monkeypatch.setattr(settings, "send_scheduled_notification", send_notification)
+
+    asyncio.run(bot.job_weather_warn(SimpleNamespace(bot=object())))
+
+    assert sent == []
+
+
+def test_weather_warning_notification_links_to_myday_and_home(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"lat": 52.6, "lon": 4.7})
+    monkeypatch.setattr(weather, "fetch_weather", lambda *_args: {"daily": {}})
+    monkeypatch.setattr(
+        weather_warn,
+        "build_warning",
+        lambda *_args: weather_ui.weather_warning(
+            ["🌧️ Ожидается сильный дождь."],
+            "08:00–11:00",
+            ["Возьми дождевик."],
+        ),
+    )
+
+    asyncio.run(settings._send_scheduled_notification(Bot(), "42", "weather_warn"))
+
+    keyboard = sent[0]["reply_markup"].inline_keyboard
+    assert [(button.text, button.callback_data) for button in keyboard[0]] == [
+        ("☀️ Мой день", "weather_myday"),
+        ("#️⃣ Главная", "m_menu"),
+    ]
+    assert [(button.text, button.callback_data) for button in keyboard[-1]] == [
+        ("❌ Отключить уведомление", "set_notifpush_weather_warn"),
+    ]
+
+
+def test_evening_weather_is_at_twenty_and_links_to_myday_and_home(monkeypatch):
+    calls = []
+    notification_bot = object()
+
+    async def send_weather(target_bot, cid, mode, status=None, reply_markup=None):
+        calls.append((target_bot, cid, mode, status, reply_markup))
+
+    monkeypatch.setattr(weather, "send_weather", send_weather)
+
+    asyncio.run(settings._send_scheduled_notification(
+        notification_bot, "42", "evening_weather",
+    ))
+
+    option = next(
+        item for item in settings.get_notification_options()
+        if item.key == "evening_weather"
+    )
+    keyboard = calls[0][4].inline_keyboard
+    assert settings.EVENING_WEATHER_TIME == "20:00"
+    assert option.button_label == "Погода на завтра · 20:00"
+    assert calls[0][:4] == (notification_bot, "42", "tomorrow_plain", None)
+    assert [(button.text, button.callback_data) for button in keyboard[0]] == [
+        ("☀️ Мой день", "weather_myday"),
+        ("#️⃣ Главная", "m_menu"),
+    ]
+    assert [(button.text, button.callback_data) for button in keyboard[-1]] == [
+        ("❌ Отключить уведомление", "set_notifpush_evening_weather"),
+    ]
+
+
+def test_notification_can_be_disabled_in_place_and_enabled_again(monkeypatch):
+    saved = []
+    edited = []
+    markup = settings.notification_markup("daily_words", [[
+        settings.InlineKeyboardButton("🧠 Обучение", callback_data="notify_learning"),
+        settings.InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ]])
+
+    class Query:
+        message = SimpleNamespace(reply_markup=markup)
+
+        async def edit_message_reply_markup(self, **kwargs):
+            edited.append(kwargs["reply_markup"])
+
+    monkeypatch.setattr(settings, "notif_on", lambda *_args: True)
+    monkeypatch.setattr(settings, "set_", lambda cid, key, value: saved.append((cid, key, value)))
+
+    asyncio.run(settings.handle_callback(
+        object(), "42", "set_notifpush_daily_words", Query(),
+    ))
+
+    keyboard = edited[0].inline_keyboard
+    assert saved == [("42", "notif_daily_words", False)]
+    assert [(button.text, button.callback_data) for button in keyboard[0]] == [
+        ("🧠 Обучение", "notify_learning"),
+        ("#️⃣ Главная", "m_menu"),
+    ]
+    assert [(button.text, button.callback_data) for button in keyboard[-1]] == [
+        ("✅ Включить уведомление", "set_notifpush_daily_words"),
+    ]
 
 
 def test_daytime_temperature_uses_only_hours_from_eight_to_twenty():

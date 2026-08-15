@@ -444,7 +444,7 @@ def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="",
 
 
 # ---------- отправка ----------
-async def send_weather(bot, cid, mode="today", status=None):
+async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
     s = store.get_settings(cid)
     try:
         data = fetch_weather(s["lat"], s["lon"], 9)
@@ -590,7 +590,12 @@ async def send_weather(bot, cid, mode="today", status=None):
             except Exception:
                 pass
         msg = weather_ui.day_forecast(header, main_lines, alert=alert, fact_title="Метео-итог", fact=fact)
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+        await bot.send_message(
+            chat_id=cid,
+            text=msg.text,
+            entities=msg.entities,
+            reply_markup=reply_markup,
+        )
         return
 
     # week/week_plain: семь фактических дневных строк без группировки и повторов

@@ -2,10 +2,11 @@
 
 # Порядок важен: более конкретные главные экраны перечислены до общих префиксов.
 STATUS_TOPIC_PREFIXES = (
-    ("m_myday", "myday"), ("a_plany", "myday"),
+    ("m_myday", "myday"), ("a_plany", "myday"), ("weather_myday", "myday"),
     ("m_wardrobe", "wardrobe"), ("w_", "wardrobe"),
     ("m_food", "food"), ("as_food", "food"), ("as_fridge", "food"),
     ("as_recipe", "food"), ("a_recipe_", "food"), ("food_", "food"),
+    ("notify_learning", "learning"),
     ("a_dict", "learning"), ("a_train", "learning"), ("a_tr_", "learning"),
     ("ex_", "learning"), ("again_tr_", "learning"), ("game", "learning"),
     ("a_game", "learning"), ("gamediff_", "learning"),

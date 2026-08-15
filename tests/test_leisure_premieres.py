@@ -44,6 +44,39 @@ def test_movie_premieres_keep_only_current_year_and_cache_by_country(monkeypatch
     assert saved["NL"]["expires"] == (today + timedelta(days=7)).isoformat()
 
 
+def test_movie_premieres_keep_seven_most_popular_with_trailers(monkeypatch):
+    saved = {}
+    today = datetime.now(leisure_movies.config.TZ).date()
+
+    def movie(index):
+        return SimpleNamespace(
+            id=index,
+            title=f"Фильм {index}",
+            release_date=today + timedelta(days=index % 5),
+            genres=["Драма"],
+            overview=f"Короткая завязка {index}.",
+            poster_url=f"https://image.tmdb.org/poster{index}.jpg",
+            popularity=float(index),
+            vote_count=index * 10,
+        )
+
+    monkeypatch.setattr(leisure_movies.store, "get_settings", lambda _cid: {"cc": "NL"})
+    monkeypatch.setattr(leisure_movies.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(leisure_movies.store, "mutate_kv", lambda _key, fn: saved.update(fn(saved)[0]))
+    monkeypatch.setattr(leisure_movies.tmdb, "get_now_playing", lambda *_args: [movie(i) for i in range(10)])
+    monkeypatch.setattr(leisure_movies.tmdb, "get_upcoming_theatrical_releases", lambda *_args: [])
+    monkeypatch.setattr(
+        leisure_movies.tmdb,
+        "trailer_url",
+        lambda movie_id, _kind: f"https://www.youtube.com/watch?v=trailer{movie_id}",
+    )
+
+    items = asyncio.run(leisure_movies.get_movie_premieres("42", refresh=True))
+
+    assert [item["title"] for item in items] == [f"Фильм {i}" for i in range(9, 2, -1)]
+    assert all(item["poster"] and item["trailer_url"] for item in items)
+
+
 def test_book_premieres_are_current_month_diverse_and_cached(monkeypatch):
     saved = {}
     calls = []
@@ -94,6 +127,47 @@ def test_movie_premieres_use_stale_cache_without_daytime_tmdb_request(monkeypatc
     )
 
     assert asyncio.run(leisure_movies.get_movie_premieres("42")) == [{"title": "Вчерашняя витрина"}]
+
+
+def test_movie_premieres_rebuild_an_empty_cache_on_first_open(monkeypatch):
+    saved = {}
+    calls = []
+    today = datetime.now(leisure_movies.config.TZ).date()
+    premiere = SimpleNamespace(
+        id=7,
+        title="Новая премьера",
+        release_date=today,
+        genres=["Драма"],
+        overview="Героиня возвращается домой.",
+        poster_url="https://image.tmdb.org/poster7.jpg",
+        popularity=70,
+        vote_count=700,
+    )
+    monkeypatch.setattr(leisure_movies.store, "get_settings", lambda _cid: {"cc": "NL"})
+    monkeypatch.setattr(leisure_movies.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(leisure_movies.store, "mutate_kv", lambda _key, fn: saved.update(fn(saved)[0]))
+    monkeypatch.setattr(
+        leisure_movies.tmdb,
+        "get_now_playing",
+        lambda *_args: calls.append("now") or [premiere],
+    )
+    monkeypatch.setattr(
+        leisure_movies.tmdb,
+        "get_upcoming_theatrical_releases",
+        lambda *_args: calls.append("upcoming") or [],
+    )
+    monkeypatch.setattr(
+        leisure_movies.tmdb,
+        "trailer_url",
+        lambda *_args: "https://www.youtube.com/watch?v=premiere7",
+    )
+
+    first = asyncio.run(leisure_movies.get_movie_premieres("42"))
+    second = asyncio.run(leisure_movies.get_movie_premieres("42"))
+
+    assert [item["title"] for item in first] == ["Новая премьера"]
+    assert second == first
+    assert calls == ["now", "upcoming"]
 
 
 def test_book_premieres_use_stale_cache_without_daytime_google_request(monkeypatch):

@@ -97,25 +97,36 @@ def game_premieres_screen(items):
     if not items:
         b.line("Пока не удалось подтвердить ближайшие релизы.")
         return b.build_stripped()
-    for item in items[:8]:
-        b.spacer()
+    for item in items[:7]:
+        card = MessageBuilder()
         title = str(item.get("title") or "").strip()
-        url = str(item.get("url") or "").strip()
+        if not title:
+            continue
+        url = str(item.get("trailer_url") or item.get("url") or "").strip()
         if url:
-            b.link(title, url)
+            card.link(title, url)
         else:
-            b.bold(title)
-        b.newline()
+            card.bold(title)
+        card.newline()
         meta = " · ".join(
             str(value).strip()
             for value in (item.get("date_label"), item.get("platform_label"), item.get("genre"))
             if str(value or "").strip()
         )
         if meta:
-            b.line(meta)
-        summary = str(item.get("summary") or "").strip()
+            card.line(meta)
+        summary = _movie_premiere_summary(item.get("summary"), limit=90)
         if summary:
-            b.line(summary)
+            if summary[-1] not in ".!?…":
+                summary += "."
+            card.line(summary)
+        card = card.build_stripped()
+        # Подпись нативной Telegram-галереи ограничена 1024 UTF-16 единицами.
+        # Последнюю карточку не обрываем: она либо помещается целиком, либо не
+        # попадает в подпись альбома.
+        if u16_len(b.text) + 2 + u16_len(card.text) > 1024:
+            break
+        b.embed(card)
     return b.build_stripped()
 
 
@@ -684,53 +695,59 @@ def weekly_books_screen(city, daily_book, items):
 
 
 def movie_premieres_screen(country, date_range, items):
-    """Целые компактные карточки премьер в пределах одного сообщения Telegram."""
+    """Общая подпись к Telegram-галерее: до семи премьер."""
     b = MessageBuilder()
     b.text_line("🎟️ ")
     b.bold(f"Премьеры в кино · {country}")
     b.newline()
     b.spacer()
-    b.line(f"Новые фильмы 2026 года · {date_range}.")
-    b.spacer()
+    b.line(f"{date_range} · до 7 самых популярных")
     if not items:
+        b.spacer()
         b.line("Витрина появится после ближайшего ночного обновления.")
         return b.build_stripped()
-    for item in items:
+    for item in list(items or [])[:7]:
         title = str(_item_value(item, "title", "") or "").strip()
         if not title:
             continue
         card = MessageBuilder()
-        card.bold(f"«{title}»")
-        body = []
+        trailer_url = str(_item_value(item, "trailer_url", "") or "").strip()
+        if trailer_url:
+            card.link(f"«{title}»", trailer_url)
+        else:
+            card.bold(f"«{title}»")
+        meta = []
         genres = _movie_genres_for_line(item)
         if genres:
-            body.append(genres.replace(", ", " · "))
+            meta.append(genres.replace(", ", " · "))
         premiere_date = _movie_premiere_date(item)
         if premiere_date:
-            body.append(f"Премьера: {premiere_date}")
-        overview = _movie_premiere_summary(_item_value(item, "overview", ""))
+            meta.append(premiere_date)
+        if meta:
+            card.text_line(f" · {' · '.join(meta)}")
+        card.newline()
+        overview = _movie_premiere_summary(_item_value(item, "overview", ""), limit=90)
         if overview:
             if overview[-1] not in ".!?…":
                 overview += "."
-            body.append(overview)
-        if body:
-            card.add("\n" + "\n".join(body))
+            card.line(overview)
         card = card.build_stripped()
-        # Оставляем запас под разметку и возможные изменения Telegram. Карточку
-        # либо добавляем целиком, либо не добавляем вовсе — текст не разрезается.
-        if u16_len(b.text) + 2 + u16_len(card.text) > 3900:
+        # Подпись альбома ограничена 1024 UTF-16 единицами.
+        # Карточку добавляем целиком, без обрыва последней строки.
+        if u16_len(b.text) + 2 + u16_len(card.text) > 1024:
             break
         b.embed(card)
     return b.build_stripped()
 
 
-def _movie_premiere_summary(value):
+def _movie_premiere_summary(value, limit=None):
     """Первое законченное предложение: короче исходной завязки, но без обрыва."""
     text = " ".join(str(value or "").split())
     if not text:
         return ""
     sentences = re.split(r"(?<=[.!?…])\s+", text)
-    return sentences[0].strip()
+    summary = sentences[0].strip()
+    return clip(summary, limit=limit) if limit else summary
 
 
 def _movie_premiere_date(item):
@@ -1126,36 +1143,91 @@ def _movie_item(b: MessageBuilder, event: dict) -> None:
     b.newline()
 
 
-def weekly_events_card(period_start: date, period_end: date, concerts, movies) -> MessageSpec:
-    concert_groups = _group_concerts(concerts)
-    movie_groups = _group_movies_by_date(movies)
+def _weekly_rating(value, count, scale) -> str:
+    try:
+        rating = float(value or 0)
+        ratings_count = int(count or 0)
+    except (TypeError, ValueError):
+        return ""
+    if rating <= 0 or ratings_count <= 0:
+        return ""
+    return f"⭐ {rating:.1f}/{scale}"
 
+
+def _weekly_item(builder: MessageBuilder, title, url="", meta=()) -> None:
+    title = " ".join(str(title or "").split())
+    if not title:
+        return
+    builder.text_line("• ")
+    if str(url or "").strip():
+        builder.link(title, str(url).strip())
+    else:
+        builder.bold(title)
+    values = [" ".join(str(value).split()) for value in meta if str(value or "").strip()]
+    if values:
+        builder.text_line(f" · {' · '.join(values)}")
+    builder.newline()
+
+
+def weekly_events_card(movies, concerts, books, games) -> MessageSpec:
+    """Одна строка на событие, максимум три пункта в каждой категории."""
     b = MessageBuilder()
-    b.text_line(f"{ui_label('music', '')} ")
-    b.bold(f"Ближайшие события · {_format_event_period(period_start, period_end)}")
-    b.newline()
+    b.title("🎲 Ближайшие события")
 
-    if concert_groups:
-        b.section(f"{ui_label('concerts', 'Концерты')}")
-        for idx, event in enumerate(concert_groups):
-            if idx:
-                b.spacer()
-            _concert_card(b, event)
-
-    if movie_groups:
+    sections_added = 0
+    movie_rows = [item for item in list(movies or []) if _item_value(item, "title", "")][:3]
+    if movie_rows:
         b.section("🎬 Кино")
-        b.newline()
-        for idx, (day, items) in enumerate(movie_groups):
-            if idx:
-                b.newline()
-            b.line(_format_date_label(day, include_year=day.year != date.today().year))
-            for event in items:
-                _movie_item(b, event)
+        sections_added += 1
+        for item in movie_rows:
+            movie_id = _item_value(item, "id", "")
+            url = str(_item_value(item, "trailer_url", "") or "").strip()
+            if not url and movie_id:
+                url = f"https://www.themoviedb.org/movie/{movie_id}"
+            genres = _movie_genres_for_line(item).replace(", ", " · ")
+            rating = _weekly_rating(
+                _item_value(item, "rating", 0), _item_value(item, "vote_count", 0), 10,
+            )
+            _weekly_item(b, f"«{_item_value(item, 'title', '')}»", url, (genres, rating))
 
-    if not concert_groups and not movie_groups:
-        b.spacer()
-        b.line("Пока ничего интересного не нашлось.")
+    concert_rows = [item for item in list(concerts or []) if item.get("title")][:3]
+    if concert_rows:
+        b.section("🎫 Концерты")
+        sections_added += 1
+        for item in concert_rows:
+            day = _parse_event_date(item.get("date"))
+            date_label = _format_date_label(day, include_year=day.year != date.today().year) if day else ""
+            _weekly_item(
+                b, item.get("title"), item.get("url"), (item.get("genre"), date_label),
+            )
 
+    book_rows = [item for item in list(books or []) if _item_value(item, "title", "")][:3]
+    if book_rows:
+        b.section("📚 Книги")
+        sections_added += 1
+        for item in book_rows:
+            rating = _weekly_rating(
+                _item_value(item, "rating", 0), _item_value(item, "ratings_count", 0), 5,
+            )
+            _weekly_item(
+                b,
+                f"«{_item_value(item, 'title', '')}»",
+                _item_value(item, "url", ""),
+                (_book_premiere_genres(item), rating),
+            )
+
+    game_rows = [item for item in list(games or []) if item.get("title")][:3]
+    if game_rows:
+        b.section("👾 Игры")
+        sections_added += 1
+        for item in game_rows:
+            _weekly_item(
+                b, item.get("title"), item.get("trailer_url") or item.get("url"),
+                (item.get("genre"), item.get("date_label"), item.get("platform_label")),
+            )
+
+    if not sections_added:
+        b.line("Пока нет подтверждённых премьер и событий.")
     return b.build_stripped()
 
 

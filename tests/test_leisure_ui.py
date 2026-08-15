@@ -173,6 +173,44 @@ def test_movie_preferences_are_used_without_favourite_films(monkeypatch):
     assert delivered[0][0]["title"] == "Новый сериал"
 
 
+def test_first_movie_recommendation_keeps_poster_with_inline_status():
+    class Bot:
+        def __init__(self):
+            self.photos = []
+            self.messages = []
+
+        async def send_photo(self, **kwargs):
+            self.photos.append(kwargs)
+
+        async def send_message(self, **kwargs):
+            self.messages.append(kwargs)
+
+    class Status:
+        def __init__(self):
+            self.replacements = []
+
+        async def replace(self, text, **kwargs):
+            self.replacements.append((text, kwargs))
+
+    bot = Bot()
+    status = Status()
+    tm = {
+        "name": "Патерсон",
+        "kind": "movie",
+        "poster": "https://image.tmdb.org/paterson.jpg",
+        "rating": 7.4,
+        "vote_count": 500,
+    }
+
+    asyncio.run(leisure_movies._send_movie_card(
+        bot, "42", {"title": "Патерсон"}, 0, tm=tm, status=status,
+    ))
+
+    assert bot.photos[0]["photo"] == tm["poster"]
+    assert status.replacements == []
+    assert bot.messages == []
+
+
 def test_movie_home_falls_back_when_tmdb_is_temporarily_unavailable(monkeypatch):
     monkeypatch.setattr(leisure_movies, "_cached_movie", lambda _cid: None)
     monkeypatch.setattr(leisure_movies.store, "get_list", lambda *_args: [])
@@ -654,6 +692,7 @@ def test_premiere_screens_are_compact_and_keep_book_links():
     movie = leisure_movies.leisure_ui.movie_premieres_screen("Нидерланды", "13–26 августа", [{
         "title": "Премьера", "date": "2026-08-15", "genres": "Драма, комедия",
         "overview": "Семья пытается сохранить дом после большого наводнения",
+        "trailer_url": "https://www.youtube.com/watch?v=premiere",
     }])
     books = leisure_books.leisure_ui.book_premieres_screen("Август 2026", [{
         "title": "Новая книга", "author": "Автор", "summary": "Героиня ищет сестру в незнакомом городе",
@@ -662,12 +701,58 @@ def test_premiere_screens_are_compact_and_keep_book_links():
     }])
 
     assert "Премьеры в кино · Нидерланды" in movie.text
-    assert "«Премьера»\nдрама · комедия\nПремьера: 15 августа 2026" in movie.text
+    assert "«Премьера» · драма · комедия · 15 августа 2026" in movie.text
     assert "Семья пытается сохранить дом после большого наводнения." in movie.text
+    assert any(
+        entity.type == MessageEntity.TEXT_LINK
+        and entity.url == "https://www.youtube.com/watch?v=premiere"
+        for entity in movie.entities
+    )
     assert "Премьеры книг · Август 2026" in books.text
     assert "«Новая книга»\nАвтор\nХудожественная проза\nПремьера: 15 августа 2026" in books.text
     assert "Героиня ищет сестру в незнакомом городе." in books.text
     assert any(entity.type == MessageEntity.TEXT_LINK and entity.url.endswith("id=new") for entity in books.entities)
+
+
+def test_weekly_events_are_one_line_per_item_across_all_categories():
+    items = range(4)
+    message = leisure_movies.leisure_ui.weekly_events_card(
+        [{
+            "id": index, "title": f"Фильм {index}", "genres": "Драма",
+            "rating": 7.5, "vote_count": 20,
+            "trailer_url": f"https://example.com/movie/{index}",
+            "overview": "Описание не должно попасть в рассылку.",
+        } for index in items],
+        [{
+            "title": f"Концерт {index}", "genre": "Рок", "date": "2026-08-21",
+            "url": f"https://example.com/concert/{index}",
+        } for index in items],
+        [{
+            "title": f"Книга {index}", "categories": ["Fantasy"],
+            "rating": 4.4, "ratings_count": 15,
+            "url": f"https://example.com/book/{index}",
+            "summary": "Описание не должно попасть в рассылку.",
+        } for index in items],
+        [{
+            "title": f"Игра {index}", "genre": "RPG", "date_label": "1 сентября 2026",
+            "platform_label": "💻 ПК", "url": f"https://example.com/game/{index}",
+            "trailer_url": f"https://www.youtube.com/watch?v=game{index}",
+            "summary": "Описание не должно попасть в рассылку.",
+        } for index in items],
+    )
+
+    assert message.text.startswith("🎲 Ближайшие события\n\n🎬 Кино")
+    assert message.text.count("• «Фильм") == 3
+    assert message.text.count("• Концерт") == 3
+    assert message.text.count("• «Книга") == 3
+    assert message.text.count("• Игра") == 3
+    assert "«Фильм 0» · драма · ⭐ 7.5/10" in message.text
+    assert "«Книга 0» · Фэнтези · ⭐ 4.4/5" in message.text
+    assert "Описание не должно" not in message.text
+    assert "https://www.youtube.com/watch?v=game0" in {
+        entity.url for entity in message.entities if entity.type == MessageEntity.TEXT_LINK
+    }
+    assert len([entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]) == 12
 
 
 def test_movie_premieres_fit_one_message_without_cutting_descriptions():
@@ -683,10 +768,56 @@ def test_movie_premieres_fit_one_message_without_cutting_descriptions():
         "Нидерланды", "13–26 августа", items,
     )
 
-    assert len(message.text.encode("utf-16-le")) // 2 <= 3900
+    assert len(message.text.encode("utf-16-le")) // 2 <= 1024
+    assert message.text.count("«Премьера ") == 7
     assert first_sentence in message.text
     assert "Это второе подробное предложение" not in message.text
     assert not message.text.endswith("…")
+
+
+def test_movie_premieres_are_sent_as_one_native_poster_gallery(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_media_group(self, **kwargs):
+            sent.append(("gallery", kwargs))
+
+        async def send_photo(self, **kwargs):
+            sent.append(("photo", kwargs))
+
+        async def send_message(self, **kwargs):
+            sent.append(("message", kwargs))
+
+    class Status:
+        async def replace(self, *_args, **_kwargs):
+            raise AssertionError("gallery must not fall back to a text message")
+
+    items = [
+        {
+            "title": f"Фильм {index}",
+            "date": "2026-08-15",
+            "genres": "драма",
+            "overview": f"Короткая завязка {index}.",
+            "poster": f"https://image.tmdb.org/poster{index}.jpg",
+            "trailer_url": f"https://www.youtube.com/watch?v=trailer{index}",
+        }
+        for index in range(3)
+    ]
+    monkeypatch.setattr(leisure_movies.store, "get_settings", lambda _cid: {
+        "country": "Нидерланды", "cc": "NL",
+    })
+    monkeypatch.setattr(leisure_movies, "get_movie_premieres", lambda _cid: asyncio.sleep(0, result=items))
+
+    asyncio.run(leisure_movies.send_movie_premieres(Bot(), "42", status=Status()))
+
+    assert [kind for kind, _kwargs in sent] == ["gallery"]
+    gallery = sent[0][1]
+    assert len(gallery["media"]) == 3
+    assert gallery["caption"].startswith("🎟️ Премьеры в кино · Нидерланды")
+    assert {
+        entity.url for entity in gallery["caption_entities"]
+        if entity.type == MessageEntity.TEXT_LINK
+    } == {item["trailer_url"] for item in items}
 
 
 def test_movie_home_opens_daily_cinema_screen(monkeypatch):

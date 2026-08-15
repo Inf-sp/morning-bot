@@ -11,9 +11,12 @@ from ui.constants import COUNTRY_EMOJI
 import ai
 import api_usage
 import config
+import leisure_books
+import leisure_games
+import leisure_movies
 import provider_runtime
+import settings
 import store
-import tmdb
 import util
 from ui import leisure as leisure_ui
 
@@ -30,8 +33,6 @@ def _item_text(item):
     return str(item or "").strip()
 
 
-def _movie_service_language(_cid=None):
-    return "ru-RU"
 def _ensure_artists(cid):
     """Возвращает список артистов пользователя (без авто-сида). Элемент может быть
     строкой или {"id":..., "value": строка} (после захода в удаление, см.
@@ -1259,101 +1260,77 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
 
 
 async def _build_weekly_events_msg(cid):
-    """Афиша недели: концерты артистов пользователя + кинопремьеры ближайших дней -> MessageSpec."""
+    """Компактная пятничная подборка из готовых премьерных кэшей."""
     from datetime import datetime, timedelta
 
     s = store.get_settings(cid)
     cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
-    cname = _concert_place_name(s.get("country"), cc)
-    now = datetime.now(config.TZ)
-    period_start = now.date()
-    period_end = (now + timedelta(days=7)).date()
+    period_start = datetime.now(config.TZ).date()
+    period_end = period_start + timedelta(days=31)
     today_str = period_start.isoformat()
     date_to_str = period_end.isoformat()
 
-    # --- Концерты любимых артистов + несколько крупных событий недели ---
-    # Читаем недельный кэш (обновлён job'ом refresh_concerts_cache перед этим уведомлением),
-    # чтобы не делать живой запрос к Ticketmaster по всем артистам прямо в момент отправки.
-    concert_items = []
-    if config.TICKETMASTER_API_KEY:
-        artists = _ensure_artists(cid)
-        if artists:
-            cached = _concerts_cache_get(cid, cc)
-            events = cached if cached is not None else await _fetch_concerts(artists, cc, cname, cid=cid)
-            if cached is None:
-                _concerts_cache_set(cid, cc, events)
-            events = [e for e in events
-                      if today_str <= e.get("dates", {}).get("start", {}).get("localDate", "9999") <= date_to_str]
-            for e in events[:5]:
-                artist = e.get("_artist", "")
-                date_str = e.get("dates", {}).get("start", {}).get("localDate", "")
-                ven = (e.get("_embedded", {}).get("venues") or [{}])[0]
-                vn = ven.get("name", "")
-                city = (ven.get("city") or {}).get("name", "")
-                venue_str = ", ".join(x for x in [vn, city] if x)
-                concert_items.append({
-                    "title": artist,
-                    "place": venue_str,
-                    "date": date_str,
-                    "context": _concert_context(e),
-                })
-
-    popular_events = await get_popular_music_events(cc, period_start, period_end)
-    existing = {
-        (str(item.get("title") or "").casefold(), str(item.get("date") or ""),
-         str(item.get("place") or "").casefold())
-        for item in concert_items
-    }
-    for event in popular_events:
+    # Концерты уже прогреты отдельным пятничным заданием. В момент рассылки не
+    # запускаем Ticketmaster заново: объединяем персональный и месячный кэши.
+    personal_events = _concerts_cache_get(cid, cc) or []
+    popular_events = _popular_events_cache_get(cc, period_start) or []
+    concert_items, existing = [], set()
+    for event in [*personal_events, *popular_events]:
         date_str = event.get("dates", {}).get("start", {}).get("localDate", "")
+        if not (today_str <= date_str <= date_to_str):
+            continue
         venue = (event.get("_embedded", {}).get("venues") or [{}])[0]
-        venue_str = ", ".join(value for value in (
-            str(venue.get("name") or "").strip(),
-            str((venue.get("city") or {}).get("name") or "").strip(),
-        ) if value)
-        title = str(event.get("name") or "").strip()
-        key = (title.casefold(), date_str, venue_str.casefold())
+        city = str((venue.get("city") or {}).get("name") or "").strip()
+        title = str(event.get("_artist") or event.get("name") or "").strip()
+        key = (title.casefold(), date_str, city.casefold())
         if not title or key in existing:
             continue
         existing.add(key)
         concert_items.append({
             "title": title,
-            "place": venue_str,
             "date": date_str,
-            "context": _concert_context(event),
+            "genre": _concert_genre(event),
+            "url": str(event.get("url") or "").strip(),
         })
-        if len(concert_items) >= 5:
-            break
+    concert_items.sort(key=lambda item: item.get("date") or "9999-99-99")
 
-    # --- Кинопремьеры ---
-    movie_items = []
-    if config.TMDB_API_KEY:
-        try:
-            movie_items = await asyncio.to_thread(
-                tmdb.get_upcoming_theatrical_releases,
-                cc,
-                period_start,
-                period_end,
-                _movie_service_language(cid),
-            )
-        except Exception:
-            movie_items = []
+    results = await asyncio.gather(
+        leisure_movies.get_movie_premieres(cid),
+        leisure_books.get_book_premieres(),
+        leisure_games.get_game_premieres(cid),
+        return_exceptions=True,
+    )
+    labels = ("movie", "book", "game")
+    loaded = {}
+    for label, result in zip(labels, results):
+        if isinstance(result, Exception):
+            _log.warning("weekly events %s cache failed: %r", label, result)
+            loaded[label] = []
+        else:
+            loaded[label] = list(result or [])
 
-    return leisure_ui.weekly_events_card(period_start, period_end, concert_items, movie_items[:5])
+    return leisure_ui.weekly_events_card(
+        loaded["movie"], concert_items, loaded["book"], loaded["game"],
+    )
 
 
 async def send_weekend_events(bot, cid):
-    """Пятница 10:00 — «Куда сходить»: афиша недели (концерты + кино) и новые концерты
-    любимых артистов одним сообщением."""
-    from ui.builder import MessageBuilder
-    weekly_msg = await _build_weekly_events_msg(cid)
-    new_concerts_msg = await _build_new_concerts_msg(cid)
-    combined = MessageBuilder()
-    combined.embed(weekly_msg)
-    if new_concerts_msg is not None:
-        combined.embed(new_concerts_msg)
-    msg = combined.build_stripped()
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, disable_web_page_preview=True)
+    """Пятница 10:00 — одно сообщение с премьерами и переходами в категории."""
+    msg = await _build_weekly_events_msg(cid)
+    kb = settings.notification_markup("weekend_events", [
+        [InlineKeyboardButton("🎬 Кино", callback_data="movie_premieres"),
+         InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find")],
+        [InlineKeyboardButton("📚 Книги", callback_data="book_premieres"),
+         InlineKeyboardButton("👾 Игры", callback_data="vg_premieres")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    await bot.send_message(
+        chat_id=cid,
+        text=msg.text,
+        entities=msg.entities,
+        reply_markup=kb,
+        disable_web_page_preview=True,
+    )
 
 
 async def concert_pick_country(bot, cid):

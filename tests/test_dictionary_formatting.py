@@ -1,15 +1,18 @@
+import asyncio
 import os
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import config
+import dictionary_morning
 import learning_dictionary
+import settings
 import trainer
 import trainer_engine
 import trainer_exercises
 from dictionary_model import display_term, normalize_entry
-from ui.builder import MessageBuilder
+from ui.builder import MessageBuilder, MessageSpec
 from ui.learning_entry import render_learning_entry
 
 
@@ -192,3 +195,29 @@ def test_normalize_dictionary_merges_same_term_with_different_translations(monke
         "text": "Ik beveel hem te stoppen.",
         "translation": "Я приказываю ему остановиться.",
     }]
+
+
+def test_daily_learning_notification_has_learning_and_home_buttons(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(settings, "study_lang", lambda _cid: "нидерландский")
+    monkeypatch.setattr(
+        dictionary_morning,
+        "_build_morning_word",
+        lambda *_args: (MessageSpec(text="📚 Слова и фразы дня"), []),
+    )
+
+    asyncio.run(settings._send_scheduled_notification(Bot(), "42", "daily_words"))
+
+    keyboard = sent[0]["reply_markup"].inline_keyboard
+    assert [(button.text, button.callback_data) for button in keyboard[0]] == [
+        ("🧠 Обучение", "notify_learning"),
+        ("#️⃣ Главная", "m_menu"),
+    ]
+    assert [(button.text, button.callback_data) for button in keyboard[-1]] == [
+        ("❌ Отключить уведомление", "set_notifpush_daily_words"),
+    ]

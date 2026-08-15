@@ -83,7 +83,7 @@ def _status_stages(data):
         first = "📚 Ищу книгу..."
     elif data == "m_music":
         first = "🎧 Ищу музыку..."
-    elif data in ("a_plany", "m_myday"):
+    elif data in ("a_plany", "m_myday", "weather_myday"):
         return progress("☀️ Собираю мой день...", "🌦️ Сверяю планы...", "📝 Готовлю сводку...")
     elif data == "a_w_week":
         return progress("🌦️ Ищу прогноз...", "🗓️ Сверяю дни...", "📝 Готовлю прогноз...")
@@ -233,6 +233,26 @@ async def handle(update, context, remove_reply_keyboard):
             text=text,
             reply_markup=kb,
             entities=entities,
+            transient=True,
+        )
+        return
+    if data == "weather_myday":
+        # Погодное предупреждение — полезный результат: оставляем его в истории
+        # и открываем «Мой день» отдельным сообщением.
+        await _inline_status(
+            lambda status: myday.send_plany(bot, cid, status=status),
+            preserve_message=True,
+        )
+        return
+    if data == "notify_learning":
+        # Слова дня остаются в истории; учебный экран открывается отдельно.
+        trainer.cancel(cid)
+        text, entities, kb = menu.menu_screen("m_learn", cid)
+        await bot.send_message(
+            chat_id=cid,
+            text=text,
+            entities=entities,
+            reply_markup=kb,
             transient=True,
         )
         return

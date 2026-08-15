@@ -27,6 +27,7 @@ import learning
 import settings
 import leisure_movies
 import leisure_books
+import leisure_games
 import leisure_music
 import leisure_collection
 import leisure_concerts
@@ -49,6 +50,7 @@ CHAT_ID = config.CHAT_ID
 _PROCESS_STARTED_AT = datetime.now(TZ).isoformat()
 _RECENT_HOME_OPENINGS = {}
 _HOME_OPENING_DEDUP_SECONDS = 3
+_WEATHER_WARNING_TIME = "08:00"
 _HOME_WARM_SCHEDULE = (
     ("myday", "08:00"),
     ("wardrobe", "08:05"),
@@ -367,17 +369,10 @@ async def admin_logs_command(update, context):
 
 
 # ---------- Расписание ----------
-async def job_morning_brief(context: ContextTypes.DEFAULT_TYPE):
-    for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "morning_brief"):
-            continue
-        try:
-            await settings.send_scheduled_notification(context.bot, cid, "morning_brief")
-        except Exception:
-            logging.exception("job_morning_brief failed for cid=%s", cid)
-
 async def job_weather_warn(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "weather_warn"):
+            continue
         try:
             await settings.send_scheduled_notification(context.bot, cid, "weather_warn")
         except Exception:
@@ -466,6 +461,20 @@ async def job_warm_book_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
         logging.exception("job_warm_book_premieres_cache failed")
 
 
+async def job_warm_game_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
+    """Перед пятничной рассылкой готовит игровые премьеры под платформы пользователей."""
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "weekend_events"):
+            continue
+        if tracking.has_active_actions():
+            logging.info("game premieres warm skipped: user action active")
+            return
+        try:
+            await leisure_games.warm_game_premieres_cache(cid)
+        except Exception:
+            logging.exception("job_warm_game_premieres_cache failed for cid=%s", cid)
+
+
 async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "daily_words"):
@@ -476,7 +485,7 @@ async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_daily_words failed for cid=%s", cid)
 
 async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
-    """Прогревает недельный кэш концертов перед уведомлением «Куда сходить» (10:00 пт),
+    """Прогревает недельный кэш концертов перед уведомлением «Ближайшие события» (10:00 пт),
     чтобы само уведомление и последующие интерактивные «Концерты» читали кэш, а не ждали Ticketmaster."""
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "weekend_events"):
@@ -487,8 +496,7 @@ async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_refresh_concerts_cache failed for cid=%s", cid)
 
 async def job_weekend_events(context: ContextTypes.DEFAULT_TYPE):
-    """«Куда сходить» — афиша недели (концерты + кино) и новые концерты любимых артистов
-    одним сообщением по пятницам."""
+    """Компактные премьеры кино, концертов, книг и игр по пятницам."""
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "weekend_events"):
             continue
@@ -933,12 +941,25 @@ def _build_application():
         job_warm_book_premieres_cache, time=_t("02:40"), days=tuple(range(7)),
         **_job_options("book_premieres_cache_weekly"),
     )
-    jq.run_daily(job_morning_brief, time=_t("08:30"), days=tuple(range(7)), **_job_options("morning_brief_daily"))
-    jq.run_daily(job_weather_warn, time=_t("08:45"), days=tuple(range(7)), **_job_options("weather_warn_daily"))
+    jq.run_daily(
+        job_warm_game_premieres_cache, time=_t("02:50"), days=(4,),
+        **_job_options("game_premieres_cache_weekly"),
+    )
+    jq.run_daily(
+        job_weather_warn,
+        time=_t(_WEATHER_WARNING_TIME),
+        days=tuple(range(7)),
+        **_job_options("weather_warn_daily"),
+    )
     jq.run_daily(job_refresh_concerts_cache, time=_t("02:55"), days=(4,), **_job_options("concerts_cache_weekly"))
     jq.run_daily(job_weekend_events, time=_t("10:00"), days=(4,), **_job_options("weekend_events_weekly"))
     jq.run_daily(job_daily_words, time=_t("11:00"), days=tuple(range(7)), **_job_options("daily_words"))
-    jq.run_daily(job_evening_weather, time=_t("20:30"), days=tuple(range(7)), **_job_options("evening_weather_daily"))
+    jq.run_daily(
+        job_evening_weather,
+        time=_t(settings.EVENING_WEATHER_TIME),
+        days=tuple(range(7)),
+        **_job_options("evening_weather_daily"),
+    )
     jq.run_daily(job_inactivity_reminders, time=_t("09:00"), days=tuple(range(7)), **_job_options("inactivity_reminders_daily"))
     _log.info("Scheduler configured jobs=%s", len(jq.jobs()))
     return app

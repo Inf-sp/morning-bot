@@ -102,9 +102,14 @@ async def send_morning_word(bot, cid, language=None, with_kb=True):
     )
 
 
-async def send_daily_practice(bot, cid):
+async def send_daily_practice(bot, cid, reply_markup=None):
     """11:00 — только повторение изученного, без блока «Живой язык»."""
     import settings
     language = settings.study_lang(cid)
     word_msg, _del_row = _build_morning_word(cid, language)
-    await bot.send_message(chat_id=cid, text=word_msg.text, entities=word_msg.entities)
+    await bot.send_message(
+        chat_id=cid,
+        text=word_msg.text,
+        entities=word_msg.entities,
+        reply_markup=reply_markup,
+    )

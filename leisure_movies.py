@@ -1,4 +1,4 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from ui.constants import ui_label
 import asyncio
 import logging
@@ -33,7 +33,7 @@ from leisure_collection import (
 
 _CINEMA_BIRTHDAY_LOCK = threading.Lock()
 _CINEMA_BIRTHDAY_CACHE_VERSION = 3
-_MOVIE_PREMIERES_CACHE_VERSION = 3
+_MOVIE_PREMIERES_CACHE_VERSION = 5
 _CINEMA_REBUSES = (
     {
         "emoji": "🦈 🌊 👨‍🔬",
@@ -236,15 +236,15 @@ async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None, stat
             tm = None
     title, msg = _movie_card(it, tm)
     kb = _movie_kb(i, category=category)
-    if status is not None:
-        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
-        return
     if tm and tm.get("poster"):
         try:
             await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=msg.text, caption_entities=msg.entities, reply_markup=kb)
             return
         except Exception:
             pass
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+        return
     try:
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
     except Exception:
@@ -788,6 +788,10 @@ def _movie_premiere_item(movie, today):
         "date_label": date_label,
         "genres": ", ".join(getattr(movie, "genres", None) or [])[:70],
         "overview": str(getattr(movie, "overview", "") or "").strip(),
+        "poster": str(getattr(movie, "poster_url", "") or "").strip(),
+        "rating": float(getattr(movie, "rating", 0) or 0),
+        "popularity": float(getattr(movie, "popularity", 0) or 0),
+        "vote_count": int(getattr(movie, "vote_count", 0) or 0),
     }
 
 
@@ -804,7 +808,12 @@ async def get_movie_premieres(cid, *, refresh=False):
     if cached is not None:
         return cached
     if not refresh:
-        return _movie_premieres_cache_get(country_code, today, allow_stale=True) or []
+        stale = _movie_premieres_cache_get(country_code, today, allow_stale=True)
+        if stale:
+            return stale
+        # Первый вход после смены формата сам собирает витрину;
+        # дальше все открытия снова читают недельный кэш.
+        refresh = True
     end = today + timedelta(days=13)
     now_playing, upcoming = await asyncio.gather(
         asyncio.to_thread(tmdb.get_now_playing, country_code, "ru-RU", 30),
@@ -829,8 +838,18 @@ async def get_movie_premieres(cid, *, refresh=False):
             continue
         seen.add(key)
         items.append(item)
-    items.sort(key=lambda item: item["date"])
-    items = items[:14]
+    items.sort(key=lambda item: (
+        -float(item.get("popularity") or 0),
+        -int(item.get("vote_count") or 0),
+        item["date"],
+    ))
+    items = [item for item in items if item.get("overview")][:7]
+    trailer_urls = await asyncio.gather(*(
+        asyncio.to_thread(tmdb.trailer_url, item.get("id"), "movie")
+        for item in items
+    ))
+    for item, trailer_url in zip(items, trailer_urls):
+        item["trailer_url"] = str(trailer_url or "").strip()
     if items:
         _movie_premieres_cache_set(country_code, today + timedelta(days=7), items)
     return items
@@ -848,6 +867,34 @@ async def send_movie_premieres(bot, cid, *, status=None):
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
+    posters = [
+        InputMediaPhoto(media=str(item.get("poster") or "").strip())
+        for item in items[:7]
+        if str(item.get("poster") or "").strip()
+    ]
+    if len(posters) >= 2:
+        try:
+            await bot.send_media_group(
+                chat_id=cid,
+                media=posters,
+                caption=msg.text,
+                caption_entities=msg.entities,
+            )
+            return
+        except Exception:
+            pass
+    if len(posters) == 1:
+        try:
+            await bot.send_photo(
+                chat_id=cid,
+                photo=posters[0].media,
+                caption=msg.text,
+                caption_entities=msg.entities,
+                reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
         return

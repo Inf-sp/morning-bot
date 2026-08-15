@@ -4,10 +4,11 @@ import asyncio
 import hashlib
 from datetime import date, datetime, timedelta
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 
 import ai
 import config
+import igdb
 import research
 import secure
 import settings
@@ -33,7 +34,7 @@ GAME_GENRES = (
 
 _PLATFORM_LABEL = dict(GAME_PLATFORMS)
 _GENRE_LABEL = dict(GAME_GENRES)
-_GAME_PREMIERES_VERSION = 1
+_GAME_PREMIERES_VERSION = 2
 
 _GAME_CATALOG = (
     {
@@ -409,8 +410,14 @@ async def get_game_premieres(cid, *, refresh=False):
         return []
     items = _normalize_premieres(payload, source_urls, set(_effective_platforms(cid)), today)
     if items:
+        items = await asyncio.to_thread(igdb.enrich_game_premieres, items)
         _premiere_cache_set(signature, today, items)
     return items
+
+
+async def warm_game_premieres_cache(cid):
+    """Обновляет премьерную витрину для платформ пользователя перед рассылкой."""
+    await get_game_premieres(cid, refresh=True)
 
 
 async def send_game_premieres(bot, cid, *, status=None):
@@ -422,4 +429,32 @@ async def send_game_premieres(bot, cid, *, status=None):
         InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ]])
+    posters = [
+        InputMediaPhoto(media=str(item.get("poster") or "").strip())
+        for item in items[:7]
+        if str(item.get("poster") or "").strip()
+    ]
+    if len(posters) >= 2:
+        try:
+            await bot.send_media_group(
+                chat_id=cid,
+                media=posters,
+                caption=msg.text,
+                caption_entities=msg.entities,
+            )
+            return
+        except Exception:
+            pass
+    if len(posters) == 1:
+        try:
+            await bot.send_photo(
+                chat_id=cid,
+                photo=posters[0].media,
+                caption=msg.text,
+                caption_entities=msg.entities,
+                reply_markup=markup,
+            )
+            return
+        except Exception:
+            pass
     await _deliver(bot, cid, msg, markup, status=status)
