@@ -366,6 +366,56 @@ def test_bare_add_eentje_is_saved_and_shows_card_without_ai(monkeypatch):
     assert "Сейчас не удалось проверить" not in sent[-1]["text"]
 
 
+def test_bare_add_overdag_is_saved_and_shows_card_without_ai(monkeypatch):
+    """Точный сценарий из чата: Add overdag не зависит от доступности AI."""
+    sent = []
+    saved = []
+
+    class Status:
+        async def stop(self):
+            return None
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def start(*_args, **_kwargs):
+        return Status()
+
+    async def unavailable(*_args, **_kwargs):
+        raise AssertionError("overdag must use its local card")
+
+    async def unchanged(entry, *_args, **_kwargs):
+        return entry
+
+    def save(_cid, entry):
+        saved.append(entry)
+        return "added", entry
+
+    monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", unavailable)
+    monkeypatch.setattr(dictionary_import, "_enrich_dutch_verb", unchanged)
+    monkeypatch.setattr(dictionary_import.learning_data_quality, "check_new_entry", unchanged)
+    monkeypatch.setattr(dictionary_import, "_save_normalized_dict_entry", save)
+    monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
+
+    async def remove_keyboard(*_args, **_kwargs):
+        return None
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id="42"),
+        message=SimpleNamespace(text="Add overdag"),
+    )
+    context = SimpleNamespace(bot=Bot())
+
+    asyncio.run(bot_text.handle(update, context, remove_keyboard))
+    assert saved[0]["term"] == "Overdag"
+    assert saved[0]["translation"] == "Днём"
+    assert "Overdag → Днём" in sent[-1]["text"]
+    assert "Сейчас не удалось проверить" not in sent[-1]["text"]
+
+
 def test_add_word_asks_for_meaning_when_all_ai_reserves_fail(monkeypatch):
     cid = "dictionary-clarification"
     sent = []

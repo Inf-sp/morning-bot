@@ -114,6 +114,15 @@ _LOCAL_DUTCH_WORD_CARDS = {
         "topic": "быт",
         "difficulty": "A1",
     },
+    "overdag": {
+        "translation": "днём",
+        "breakdown": "наречие времени",
+        "pos": "наречие",
+        "example_nl": "Overdag werk ik thuis.",
+        "example_ru": "Днём я работаю дома.",
+        "topic": "время",
+        "difficulty": "A1",
+    },
 }
 
 
@@ -458,7 +467,7 @@ def _extract_srs_fields(d):
 
 def _local_dutch_verb_entry(raw_user_term, lang_hint):
     """Карточка для коротких проверенных глаголов без зависимости от AI."""
-    if lang_hint != "nl":
+    if lang_hint not in (None, "nl"):
         return None
     term = _normalized_user_term(raw_user_term, "nl").casefold()
     card = _LOCAL_DUTCH_VERB_CARDS.get(term)
@@ -504,7 +513,7 @@ def _local_dutch_verb_entry(raw_user_term, lang_hint):
 
 def _local_dutch_noun_entry(raw_user_term, lang_hint):
     """Карточка для проверенных нидерландских существительных без AI."""
-    if lang_hint != "nl":
+    if lang_hint not in (None, "nl"):
         return None
     raw_term = _clean_raw_user_term(raw_user_term)
     term = _normalized_user_term(raw_term, "nl")
@@ -543,7 +552,7 @@ def _local_dutch_noun_entry(raw_user_term, lang_hint):
 
 def _local_dutch_word_entry(raw_user_term, lang_hint):
     """Карточка проверенного частого слова, которое не является noun/verb."""
-    if lang_hint != "nl":
+    if lang_hint not in (None, "nl"):
         return None
     raw_term = _clean_raw_user_term(raw_user_term)
     term = _normalized_user_term(raw_term, "nl")
