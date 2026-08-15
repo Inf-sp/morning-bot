@@ -2,7 +2,6 @@
 
 import logging
 import re
-from datetime import datetime
 from pathlib import Path
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -646,134 +645,20 @@ async def handle_dict_search(bot, cid, lang, query):
         reply_markup=_dict_search_kb(match, term_key), persistent_inline=True)
 
 
-async def confirm_delete_dict_entry(bot, cid, lang, term_key, q=None):
-    await _show_screen(
-        bot, cid, "Точно удалить это из словаря?", None,
-        InlineKeyboardMarkup([
-            [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelok_{lang}_{term_key}")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-        ]),
-        q=q,
-    )
-
-
 def _entry_by_id(cid, word_id):
     return next((item for item in _ensure_dict(cid) if str(item.get("id") or "") == str(word_id)), None)
 
 
-def _dict_loose_text(lang, word):
-    """Ключ для проверки дубля при переносе записи между словарями."""
-    value = re.sub(r"\s+", " ", str(word or "").strip()).rstrip(".").casefold()
-    if lang == "nl":
-        value = re.sub(r"^(de|het|een)\s+", "", value)
-    elif lang == "en":
-        value = re.sub(r"^(to|the|a|an)\s+", "", value)
-    return value
-
-
-async def confirm_delete_dict_entry_by_id(bot, cid, word_id, q=None):
-    entry = _entry_by_id(cid, word_id)
-    if not entry:
-        await send_dict(bot, cid, q=q)
-        return
-    term = _entry_term(entry)
-    display = display_term(term, entry.get("article") or "")
-    await _show_screen(
-        bot, cid, f"Удалить «{display}» из словаря?", None,
-        InlineKeyboardMarkup([
-            [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelokid_{word_id}")],
-            [InlineKeyboardButton("Отмена", callback_data=f"a_dictlang_{_dict_lang(entry)}")],
-        ]), q=q,
-    )
-
-
-async def confirm_move_dict_entry_by_id(bot, cid, word_id, q=None):
-    entry = _entry_by_id(cid, word_id)
-    if not entry:
-        await send_dict(bot, cid, q=q)
-        return
-    source_lang = _dict_lang(entry)
-    target_lang = "en" if source_lang == "nl" else "nl"
-    term = _entry_term(entry)
-    display = display_term(term, entry.get("article") or "")
-    target_title = "английский" if target_lang == "en" else "нидерландский"
-    await _show_screen(
-        bot, cid, f"Переместить «{display}» в {target_title} словарь?", None,
-        InlineKeyboardMarkup([
-            [InlineKeyboardButton("↔️ Переместить", callback_data=f"a_dictmoveok_{word_id}_{target_lang}")],
-            [InlineKeyboardButton("Отмена", callback_data=f"a_dictlang_{source_lang}")],
-        ]), q=q,
-    )
-
-
-async def move_dict_entry_by_id(bot, cid, word_id, target_lang, q=None):
-    if target_lang not in ("nl", "en"):
-        return
-    words = store.get_list(config.DICT_KEY, cid)
-    entry = next((item for item in words if str(item.get("id") or "") == str(word_id)), None)
-    if not entry:
-        await send_dict(bot, cid, q=q)
-        return
-    source_lang = _dict_lang(entry)
-    if source_lang == target_lang:
-        return
-    loose = _dict_loose_text(target_lang, _entry_term(entry))
-    duplicate = next((item for item in words
-                      if item is not entry and _dict_lang(item) == target_lang
-                      and _dict_loose_text(target_lang, _entry_term(item)) == loose), None)
-    if duplicate:
-        await _show_screen(
-            bot, cid, "Такая запись уже есть в другом словаре.", None,
-            _dict_manage_kb(target_lang), q=q,
-        )
-        return
-    updated = dict(entry)
-    updated["lang"] = target_lang
-    updated["updated_at"] = datetime.now(config.TZ).isoformat()
-    words[words.index(entry)] = updated
-    store.set_list(config.DICT_KEY, cid, words)
-    from dictionary_import import _dict_entry_message, _dict_saved_kb
-    msg = _dict_entry_message(updated, status="updated")
-    await _show_screen(
-        bot, cid, msg.text, msg.entities,
-        _dict_saved_kb(updated, show_dictionary=True), q=q, persistent_inline=True,
-    )
-
-
-async def del_dict_entry_by_id(bot, cid, word_id, page=None, q=None):
-    words = normalize_user_dictionary(cid)
-    removed = next((item for item in words if str(item.get("id") or "") == str(word_id)), None)
-    if removed:
-        store.set_list(config.DICT_KEY, cid, [item for item in words if item is not removed])
-    msg = dict_ui.dict_deleted(removed)
-    lang = _dict_lang(removed) if removed else _active_language_code(cid)
-    if page is not None:
-        await _show_screen(bot, cid, msg.text, msg.entities, back_menu_keyboard(f"a_dictedit_{lang}_{page}"), q=q)
-        return
-    await _show_screen(bot, cid, msg.text, msg.entities, _dict_manage_kb(lang), q=q)
-
-
-async def del_dict_entry_by_term(bot, cid, lang, term_key, page=None, q=None):
-    words = normalize_user_dictionary(cid)
-    removed = None
-    kept = []
-    for item in words:
-        if _dict_lang(item) == lang and _dict_entry_matches_key(item, lang, term_key) and removed is None:
-            removed = item
-            continue
-        kept.append(item)
-    if removed:
-        store.set_list(config.DICT_KEY, cid, kept)
-    msg = dict_ui.dict_deleted(removed)
-    if page is not None:
-        await _show_screen(
-            bot, cid, msg.text, msg.entities,
-            back_menu_keyboard(f"a_dictedit_{lang}_{page}"),
-            q=q,
-        )
-        return
-    await _show_screen(bot, cid, msg.text, msg.entities, _dict_manage_kb(lang), q=q)
+from dictionary_management import (
+    confirm_delete_dict_entry,
+    confirm_delete_dict_entry_by_id,
+    confirm_move_dict_entry_by_id,
+    del_dict_entry_by_id,
+    del_dict_entry_by_term,
+    del_word,
+    dict_entry_view_kb as _dict_entry_view_kb,
+    move_dict_entry_by_id,
+)
 
 
 _DICT_LIST_PAGE_SIZE = 10
@@ -784,17 +669,6 @@ def _dict_lang_entries(cid, lang):
     постраничного списка «Мои слова и фразы»."""
     entries = [w for w in _ensure_dict(cid) if _dict_lang(w) == lang]
     return sorted(entries, key=lambda w: _cap(_entry_term(w)).casefold())
-
-
-def _dict_entry_view_kb(entry, page, term_key):
-    lang = _dict_lang(entry)
-    word_id = str(entry.get("id") or "")
-    delete_row = ([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictviewdelid_{page}_{word_id}")]]
-                  if word_id else [])
-    return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + [
-        [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}_{page}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
 
 
 async def send_dict_entry_view(bot, cid, lang, page, term_key, q=None):
@@ -823,23 +697,3 @@ async def send_dict_entry_view_by_id(bot, cid, page, word_id, q=None):
     await _show_screen(
         bot, cid, msg.text, msg.entities, _dict_entry_view_kb(match, page, ""),
         q=q, persistent_inline=True)
-
-
-async def del_word(bot, cid, i):
-    words = normalize_user_dictionary(cid)
-    removed = ""
-    removed_lang = None
-    if i < len(words):
-        removed_item = words.pop(i)
-        removed = normalize_term_case(
-            _entry_term(removed_item), _kind_of(_entry_term(removed_item)))
-        removed_lang = _dict_lang(removed_item)
-        store.set_list(config.DICT_KEY, cid, words)
-    lang = removed_lang or _active_language_code(cid)
-    msg = dict_ui.dict_deleted(removed or "")
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
-        reply_markup=_dict_manage_kb(lang),
-    )
