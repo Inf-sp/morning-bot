@@ -101,6 +101,21 @@ _LOCAL_DUTCH_NOUN_CARDS = {
     },
 }
 
+# Частые слова других частей речи. Они не должны зависеть от AI: явная команда
+# Add обязана сразу сохранить проверенную карточку, даже если провайдеры временно
+# недоступны.
+_LOCAL_DUTCH_WORD_CARDS = {
+    "eentje": {
+        "translation": "один; одна; одно",
+        "breakdown": "местоименное числительное",
+        "pos": "числительное",
+        "example_nl": "Ik neem er eentje.",
+        "example_ru": "Я возьму один.",
+        "topic": "быт",
+        "difficulty": "A1",
+    },
+}
+
 
 def _dictionary_nav(cid, lang=None, back=None):
     code = lang if lang in ("nl", "en") else _active_language_code(cid)
@@ -187,7 +202,7 @@ _DUTCH_ARTICLE_RE = re.compile(r"\b(de|het)\s+\w+", re.I)
 _DUTCH_WORD_HINTS = {
     "liever", "vanwege", "bewonderen", "tegoed", "walging", "gevolg",
     "afdeling", "ongeveer", "twijfelen", "twijfelt", "wennen", "omgaan",
-    "kies", "tering", "eisen",
+    "kies", "tering", "eisen", "eentje",
 }
 
 
@@ -524,6 +539,46 @@ def _local_dutch_noun_entry(raw_user_term, lang_hint):
             "difficulty": card["difficulty"],
         }),
     }
+
+
+def _local_dutch_word_entry(raw_user_term, lang_hint):
+    """Карточка проверенного частого слова, которое не является noun/verb."""
+    if lang_hint != "nl":
+        return None
+    raw_term = _clean_raw_user_term(raw_user_term)
+    term = _normalized_user_term(raw_term, "nl")
+    card = _LOCAL_DUTCH_WORD_CARDS.get(term.casefold())
+    if not card:
+        return None
+    normalized_term = normalize_term_case(term, "word")
+    return {
+        "lang": "nl",
+        "term": normalized_term,
+        "raw_user_term": raw_term[:120],
+        "normalized_term": normalized_term,
+        "article": "",
+        "translation": normalize_translation_case(card["translation"]),
+        "breakdown": card["breakdown"],
+        "examples": [{
+            "text": card["example_nl"],
+            "translation": card["example_ru"],
+        }],
+        "source_text": raw_term[:120],
+        "added_at": datetime.now(config.TZ).isoformat(),
+        "status": "new",
+        "last_shown_at": None,
+        "needs_confirmation": False,
+        "reason": "",
+        "analysis_confidence": 1.0,
+        "analysis_provider": "local_dictionary",
+        **_extract_srs_fields({
+            "pos": card["pos"],
+            "topic": card["topic"],
+            "difficulty": card["difficulty"],
+        }),
+    }
+
+
 def _verb_analysis_prompt(word, fixed_preposition=""):
     request = {
         "word": word,
@@ -825,6 +880,7 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
     local_entry = (
         _local_dutch_noun_entry(raw_user_term, lang_hint)
         or _local_dutch_verb_entry(raw_user_term, lang_hint)
+        or _local_dutch_word_entry(raw_user_term, lang_hint)
     )
     if local_entry:
         return local_entry

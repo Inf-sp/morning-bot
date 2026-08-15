@@ -15,6 +15,7 @@ import requests
 
 import api_usage
 import config
+import util
 
 
 _TOKEN_URL = "https://id.twitch.tv/oauth2/token"
@@ -23,6 +24,7 @@ _IMAGE_URL = "https://images.igdb.com/igdb/image/upload/t_cover_big/{image_id}.j
 _YOUTUBE_URL = "https://www.youtube.com/watch?v={video_id}"
 _DIGITAL_PLATFORMS = {"pc", "ps5", "other"}
 _TRAILER_WORDS = ("trailer", "teaser", "announcement", "announce", "reveal")
+_LOOKUP_CACHE_TTL = 30 * 86400
 
 _TOKEN_LOCK = threading.Lock()
 _TOKEN = ""
@@ -173,6 +175,17 @@ def enrich_game_premieres(items) -> list[dict]:
     ][:10]
     if not digital_indexes:
         return result
+    unresolved = []
+    for item_index in digital_indexes:
+        cache_key = _normalized_title(result[item_index].get("title"))
+        cached = util.ttl_get("igdb_game", cache_key, _LOOKUP_CACHE_TTL)
+        if cached is None:
+            unresolved.append(item_index)
+            continue
+        result[item_index].update(dict(cached))
+    digital_indexes = unresolved
+    if not digital_indexes:
+        return result
     token = _access_token()
     if not token:
         return result
@@ -185,11 +198,25 @@ def enrich_game_premieres(items) -> list[dict]:
     for query_index, item_index in enumerate(digital_indexes):
         match = _best_match(titles[query_index], grouped.get(f"game_{query_index}"))
         if not match:
+            util.ttl_set("igdb_game", _normalized_title(titles[query_index]), {})
             continue
+        enrichment = {}
         image_id = str((match.get("cover") or {}).get("image_id") or "").strip()
         if image_id:
-            result[item_index]["poster"] = _IMAGE_URL.format(image_id=image_id)
+            enrichment["poster"] = _IMAGE_URL.format(image_id=image_id)
         video_id = _trailer_video_id(match.get("videos"))
         if video_id:
-            result[item_index]["trailer_url"] = _YOUTUBE_URL.format(video_id=video_id)
+            enrichment["trailer_url"] = _YOUTUBE_URL.format(video_id=video_id)
+        result[item_index].update(enrichment)
+        util.ttl_set("igdb_game", _normalized_title(titles[query_index]), enrichment)
     return result
+
+
+def enrich_game_recommendation(item) -> dict:
+    """Add IGDB cover/trailer to one digital recommendation when configured."""
+    if not isinstance(item, dict):
+        return {}
+    prepared = dict(item)
+    prepared.setdefault("title", prepared.get("name"))
+    enriched = enrich_game_premieres([prepared])
+    return enriched[0] if enriched else prepared

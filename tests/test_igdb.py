@@ -7,6 +7,7 @@ import igdb
 
 
 def test_enriches_digital_game_with_cover_and_verified_trailer(monkeypatch):
+    igdb.util._TTL_CACHE.clear()
     monkeypatch.setattr(igdb.config, "IGDB_CLIENT_ID", "client-id")
     monkeypatch.setattr(igdb.config, "IGDB_CLIENT_SECRET", "client-secret")
     monkeypatch.setattr(igdb, "_access_token", lambda: "token")
@@ -35,6 +36,7 @@ def test_enriches_digital_game_with_cover_and_verified_trailer(monkeypatch):
 
 
 def test_does_not_query_igdb_for_board_games(monkeypatch):
+    igdb.util._TTL_CACHE.clear()
     monkeypatch.setattr(igdb.config, "IGDB_CLIENT_ID", "client-id")
     monkeypatch.setattr(igdb.config, "IGDB_CLIENT_SECRET", "client-secret")
     monkeypatch.setattr(
@@ -47,6 +49,7 @@ def test_does_not_query_igdb_for_board_games(monkeypatch):
 
 
 def test_rejects_uncertain_title_match(monkeypatch):
+    igdb.util._TTL_CACHE.clear()
     monkeypatch.setattr(igdb.config, "IGDB_CLIENT_ID", "client-id")
     monkeypatch.setattr(igdb.config, "IGDB_CLIENT_SECRET", "client-secret")
     monkeypatch.setattr(igdb, "_access_token", lambda: "token")

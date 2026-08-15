@@ -861,7 +861,10 @@ async def send_movie_premieres(bot, cid, *, status=None):
     today = datetime.now(config.TZ).date()
     end = today + timedelta(days=13)
     date_range = f"{today.day} {_MONTHS[today.month - 1]} – {end.day} {_MONTHS[end.month - 1]}"
-    items = await get_movie_premieres(cid)
+    items = [
+        item for item in (await get_movie_premieres(cid))
+        if str(item.get("poster") or "").strip()
+    ][:7]
     msg = leisure_ui.movie_premieres_screen(country, date_range, items)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
@@ -869,8 +872,7 @@ async def send_movie_premieres(bot, cid, *, status=None):
     ])
     posters = [
         InputMediaPhoto(media=str(item.get("poster") or "").strip())
-        for item in items[:7]
-        if str(item.get("poster") or "").strip()
+        for item in items
     ]
     if len(posters) >= 2:
         try:
@@ -895,6 +897,8 @@ async def send_movie_premieres(bot, cid, *, status=None):
             return
         except Exception:
             pass
+    if posters:
+        msg = leisure_ui.movie_premieres_screen(country, date_range, [])
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
         return

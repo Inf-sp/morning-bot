@@ -228,10 +228,12 @@ def test_weekly_events_notification_has_category_buttons(monkeypatch):
 
     keyboard = sent[0]["reply_markup"].inline_keyboard
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
-        [("🎬 Кино", "movie_premieres"), ("🎫 Концерты", "a_concerts_find")],
-        [("📚 Книги", "book_premieres"), ("👾 Игры", "vg_premieres")],
+        [("🔕 Отключить уведомления", "set_notifpush_weekend_events")],
+        [("🎬 Кино", "movie_premieres")],
+        [("🎫 Концерты", "a_concerts_find")],
+        [("📚 Книги", "book_premieres")],
+        [("👾 Игры", "vg_premieres")],
         [("#️⃣ Главная", "m_menu")],
-        [("❌ Отключить уведомление", "set_notifpush_weekend_events")],
     ]
     assert sent[0]["disable_web_page_preview"] is True
 

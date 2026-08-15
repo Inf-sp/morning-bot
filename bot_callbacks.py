@@ -499,10 +499,34 @@ async def handle(update, context, remove_reply_keyboard):
         await _ack(q)
         await leisure_music.send_music_genre_menu(bot, cid, q)
         return
+    if data == "vg_reco":
+        await _inline_status(
+            lambda status: leisure_games.send_game_recommendation(
+                bot, cid, status=status,
+            ),
+            preserve_message=True,
+        )
+        return
+    if data == "vg_board":
+        await _inline_status(
+            lambda status: leisure_games.send_game_recommendation(
+                bot, cid, status=status, refresh=True, genre="board",
+            ),
+            preserve_message=True,
+        )
+        return
     if data == "vg_next":
         await _inline_status(
-            lambda status: leisure_games.send_games_home(
+            lambda status: leisure_games.send_game_recommendation(
                 bot, cid, status=status, refresh=True,
+            ),
+            preserve_message=True,
+        )
+        return
+    if data.startswith("vg_next_"):
+        await _inline_status(
+            lambda status: leisure_games.send_game_recommendation(
+                bot, cid, status=status, refresh=True, genre=data[len("vg_next_"):],
             ),
             preserve_message=True,
         )
@@ -519,7 +543,7 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data.startswith("vg_g_"):
         await _inline_status(
-            lambda status: leisure_games.send_games_home(
+            lambda status: leisure_games.send_game_recommendation(
                 bot, cid, status=status, refresh=True, genre=data[len("vg_g_"):],
             ),
             preserve_message=True,

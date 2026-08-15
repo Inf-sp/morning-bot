@@ -197,20 +197,22 @@ def test_book_premieres_screen_recovers_when_cache_is_empty(monkeypatch):
         return [{
             "title": "Новая книга",
             "author": "Автор",
-            "published_date": today.isoformat(),
-            "categories": ["Fiction"],
-            "description": "Героиня возвращается домой и раскрывает семейную тайну.",
-        }]
+                "published_date": today.isoformat(),
+                "categories": ["Fiction"],
+                "description": "Героиня возвращается домой и раскрывает семейную тайну.",
+                "cover_url": "https://images.test/new-book.jpg",
+            }]
 
-    class Status:
-        async def replace(self, text, **kwargs):
-            calls.append((text, kwargs))
+    class Bot:
+        async def send_photo(self, **kwargs):
+            calls.append(("photo", kwargs))
 
     monkeypatch.setattr(leisure_books.store, "_load", lambda _key: saved)
     monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: saved.update(value))
     monkeypatch.setattr(leisure_books.google_books, "search_new_releases", search)
 
-    asyncio.run(leisure_books.send_book_premieres(object(), "42", status=Status()))
+    asyncio.run(leisure_books.send_book_premieres(Bot(), "42"))
 
     assert calls[0] == "search"
-    assert "Новая книга" in calls[1][0]
+    assert calls[1][0] == "photo"
+    assert "Новая книга" in calls[1][1]["caption"]

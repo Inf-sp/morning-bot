@@ -171,11 +171,19 @@ def _notif_label(kind: str, label: str) -> str:
 
 
 def notification_markup(kind: str, rows, *, enabled: bool = True) -> InlineKeyboardMarkup:
-    """Навигация планового сообщения и отдельный переключатель только его типа."""
-    toggle_label = "❌ Отключить уведомление" if enabled else "✅ Включить уведомление"
+    """Единая вертикальная навигация плановых уведомлений."""
+    toggle_label = "🔕 Отключить уведомления" if enabled else "✅ Включить уведомления"
+    actions, home = [], []
+    for row in rows:
+        for button in row:
+            callback = str(getattr(button, "callback_data", "") or "")
+            if callback.startswith("set_notifpush_"):
+                continue
+            (home if callback == "m_menu" else actions).append(button)
     return InlineKeyboardMarkup([
-        *[list(row) for row in rows],
         [InlineKeyboardButton(toggle_label, callback_data=f"set_notifpush_{kind}")],
+        *[[button] for button in actions],
+        *[[button] for button in home],
     ])
 
 async def send_home(bot, cid, q=None):
@@ -1014,6 +1022,16 @@ async def handle_callback(bot, cid, data, q=None):
         import leisure_games
         await leisure_games.toggle_game_platform(
             bot, cid, data[len("set_game_platform_"):], q,
+        )
+    elif data.startswith("set_game_recency_"):
+        import leisure_games
+        await leisure_games.toggle_game_recency(
+            bot, cid, data[len("set_game_recency_"):], q,
+        )
+    elif data.startswith("set_game_rating_"):
+        import leisure_games
+        await leisure_games.toggle_game_rating(
+            bot, cid, data[len("set_game_rating_"):], q,
         )
     elif data == "set_lifehacks":
         await send_lifehacks(bot, cid, q)

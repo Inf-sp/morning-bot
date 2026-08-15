@@ -52,10 +52,28 @@ def game_card(data):
     b.bold("Игра для тебя" + (f" · {platforms}" if platforms else ""))
     b.newline()
     b.spacer()
-    b.bold(str(data.get("name") or "Игра"))
-    genre = str(data.get("genre_label") or "").strip()
-    if genre:
-        b.text_line(f" · {genre}")
+    name = str(data.get("name") or "Игра")
+    trailer_url = str(data.get("trailer_url") or "").strip()
+    if trailer_url:
+        b.link(name, trailer_url)
+    else:
+        b.bold(name)
+    meta = [str(data.get("genre_label") or "").strip()]
+    try:
+        year = int(data.get("year") or 0)
+    except (TypeError, ValueError):
+        year = 0
+    if year:
+        meta.append(str(year))
+    try:
+        rating = float(data.get("rating") or 0)
+    except (TypeError, ValueError):
+        rating = 0
+    if rating:
+        meta.append(f"⭐ {rating:.1f}/10")
+    meta = [value for value in meta if value]
+    if meta:
+        b.text_line(f" · {' · '.join(meta)}")
     b.newline()
     description = str(data.get("description") or "").strip()
     if description:
@@ -75,6 +93,53 @@ def game_card(data):
     return b.build_stripped()
 
 
+def game_home_screen(city, items, daily):
+    daily = daily or {}
+    b = MessageBuilder()
+    b.text_line("🎬 ")
+    b.bold(f"Игры на сегодня · {str(city or 'Алкмар').strip()}")
+    b.newline()
+
+    b.spacer()
+    b.bold("Какие новинки:")
+    b.newline()
+    rows = [item for item in list(items or []) if str(item.get("title") or "").strip()][:3]
+    if rows:
+        for item in rows:
+            b.text_line("• ")
+            title = str(item.get("title") or "").strip()
+            url = str(item.get("trailer_url") or item.get("url") or "").strip()
+            if url:
+                b.link(title, url)
+            else:
+                b.bold(title)
+            meta = " · ".join(
+                str(value).strip()
+                for value in (item.get("genre"), item.get("platform_label"))
+                if str(value or "").strip()
+            )
+            if meta:
+                b.text_line(f" · {meta}")
+            b.newline()
+    else:
+        b.line("Пока не удалось подтвердить ближайшие релизы.")
+
+    b.spacer()
+    b.bold("Ребус дня:")
+    b.newline()
+    b.text_line(str(daily.get("emoji") or "🎮 ❓"))
+    b.text_line(" → ")
+    b.add(str(daily.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
+
+    fact = str(daily.get("fact") or "").strip()
+    if fact:
+        b.spacer()
+        b.bold("💡 Интересно:")
+        b.text_line(" ")
+        b.line(fact)
+    return b.build_stripped()
+
+
 def game_genres_screen():
     b = MessageBuilder()
     b.section("🎭 Жанр игры")
@@ -82,18 +147,22 @@ def game_genres_screen():
     return b.build_stripped()
 
 
-def game_preferences(current):
+def game_preferences(current, recency, rating):
     b = MessageBuilder()
     b.section("👾 Игры")
-    b.line("Отметь платформы, которые учитывать в рекомендациях и премьерах.")
+    b.line("Это приоритеты для рекомендаций и премьер, а не жёсткие ограничения.")
     b.spacer()
-    b.labeled_line("Сейчас", " · ".join(current) if current else "все платформы", lowercase=False)
+    b.labeled_line(
+        "Платформы", " · ".join(current) if current else "все популярные", lowercase=False,
+    )
+    b.labeled_line("Период", recency or "Любые годы", lowercase=False)
+    b.labeled_line("Рейтинг", rating or "любая", lowercase=False)
     return b.build_stripped()
 
 
 def game_premieres_screen(items):
     b = MessageBuilder()
-    b.section("🆕 Премьеры игр")
+    b.section("🎮 Премьеры игр")
     if not items:
         b.line("Пока не удалось подтвердить ближайшие релизы.")
         return b.build_stripped()
@@ -760,7 +829,7 @@ def _movie_premiere_date(item):
 
 
 def book_premieres_screen(month, items):
-    """Полный список свежих книг месяца с Google Books-ссылками."""
+    """Подпись книжной Telegram-галереи: до семи премьер с обложками."""
     b = MessageBuilder()
     b.text_line("🆕 ")
     b.bold(f"Премьеры книг · {month}")
@@ -771,8 +840,13 @@ def book_premieres_screen(month, items):
     if not items:
         b.line("Витрина появится после ближайшего ночного обновления.")
         return b.build_stripped()
-    for item in items:
-        _write_book_premiere(b, item)
+    for item in list(items or [])[:7]:
+        card = MessageBuilder()
+        _write_book_premiere(card, item, summary_limit=90)
+        card = card.build_stripped()
+        if u16_len(b.text) + 2 + u16_len(card.text) > 1024:
+            break
+        b.embed(card)
     return b.build_stripped()
 
 
@@ -786,7 +860,9 @@ def _book_premiere_items(items) -> list:
     return entries
 
 
-def _write_book_premiere(builder: MessageBuilder, item, *, compact=False) -> None:
+def _write_book_premiere(
+    builder: MessageBuilder, item, *, compact=False, summary_limit=310,
+) -> None:
     title = str(_item_value(item, "title", "") or "").strip()
     if not title:
         return
@@ -825,7 +901,7 @@ def _write_book_premiere(builder: MessageBuilder, item, *, compact=False) -> Non
     if premiere_date:
         builder.line(f"Премьера: {premiere_date}")
     if summary:
-        builder.line(_book_premiere_summary(summary, limit=310))
+        builder.line(_book_premiere_summary(summary, limit=summary_limit))
     builder.newline()
 
 

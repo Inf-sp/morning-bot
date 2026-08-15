@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 from urllib.parse import quote_plus
 
 import requests
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 
 import config
 import google_books
@@ -625,11 +625,44 @@ async def send_book_premieres(bot, cid, *, status=None):
         # Пользовательский вход восстанавливает только отсутствующий кэш; готовая
         # витрина по-прежнему открывается без дополнительного запроса.
         items = await get_book_premieres(refresh=True)
+    items = [
+        item for item in items
+        if str(item.get("cover_url") or "").strip()
+    ][:7]
     msg = leisure_ui.book_premieres_screen(month, items)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
+    covers = [
+        InputMediaPhoto(media=str(item.get("cover_url") or "").strip())
+        for item in items
+    ]
+    if len(covers) >= 2:
+        try:
+            await bot.send_media_group(
+                chat_id=cid,
+                media=covers,
+                caption=msg.text,
+                caption_entities=msg.entities,
+            )
+            return
+        except Exception:
+            pass
+    if len(covers) == 1:
+        try:
+            await bot.send_photo(
+                chat_id=cid,
+                photo=covers[0].media,
+                caption=msg.text,
+                caption_entities=msg.entities,
+                reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
+    if covers:
+        msg = leisure_ui.book_premieres_screen(month, [])
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb,
                              disable_web_page_preview=True)

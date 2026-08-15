@@ -325,6 +325,47 @@ def test_add_dutch_phrase_reaches_the_netherlands_dictionary_flow(monkeypatch):
     assert [message["text"] for message in sent] == ["Готово"]
 
 
+def test_bare_add_eentje_is_saved_and_shows_card_without_ai(monkeypatch):
+    """Точный сценарий из чата: Add eentje должен сразу сохранить слово."""
+    sent = []
+    saved = []
+
+    class Status:
+        async def stop(self):
+            return None
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def start(*_args, **_kwargs):
+        return Status()
+
+    async def unavailable(*_args, **_kwargs):
+        raise AssertionError("eentje must use its local card")
+
+    async def unchanged(entry, *_args, **_kwargs):
+        return entry
+
+    def save(_cid, entry):
+        saved.append(entry)
+        return "added", entry
+
+    monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", unavailable)
+    monkeypatch.setattr(dictionary_import, "_enrich_dutch_verb", unchanged)
+    monkeypatch.setattr(dictionary_import.learning_data_quality, "check_new_entry", unchanged)
+    monkeypatch.setattr(dictionary_import, "_save_normalized_dict_entry", save)
+
+    assert asyncio.run(
+        dictionary_import.try_add_dict_from_chat(Bot(), "42", "Add eentje")
+    )
+    assert saved[0]["term"] == "Eentje"
+    assert saved[0]["translation"] == "Один; одна; одно"
+    assert "Eentje → Один · одна · одно" in sent[-1]["text"]
+    assert "Сейчас не удалось проверить" not in sent[-1]["text"]
+
+
 def test_add_word_asks_for_meaning_when_all_ai_reserves_fail(monkeypatch):
     cid = "dictionary-clarification"
     sent = []

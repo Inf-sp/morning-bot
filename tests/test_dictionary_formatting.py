@@ -214,10 +214,8 @@ def test_daily_learning_notification_has_learning_and_home_buttons(monkeypatch):
     asyncio.run(settings._send_scheduled_notification(Bot(), "42", "daily_words"))
 
     keyboard = sent[0]["reply_markup"].inline_keyboard
-    assert [(button.text, button.callback_data) for button in keyboard[0]] == [
-        ("🧠 Обучение", "notify_learning"),
-        ("#️⃣ Главная", "m_menu"),
-    ]
-    assert [(button.text, button.callback_data) for button in keyboard[-1]] == [
-        ("❌ Отключить уведомление", "set_notifpush_daily_words"),
+    assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
+        [("🔕 Отключить уведомления", "set_notifpush_daily_words")],
+        [("🧠 Обучение", "notify_learning")],
+        [("#️⃣ Главная", "m_menu")],
     ]
