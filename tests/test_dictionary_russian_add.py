@@ -416,7 +416,62 @@ def test_bare_add_overdag_is_saved_and_shows_card_without_ai(monkeypatch):
     assert "Сейчас не удалось проверить" not in sent[-1]["text"]
 
 
-def test_add_word_asks_for_meaning_when_all_ai_reserves_fail(monkeypatch):
+def test_add_niet_storen_uses_local_card_without_ai(monkeypatch):
+    """Точный сценарий из чата получает полную локальную карточку."""
+    cid = "dictionary-niet-storen"
+    sent = []
+    saved = []
+
+    class Status:
+        async def stop(self):
+            return None
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def start(*_args, **_kwargs):
+        return Status()
+
+    async def unavailable(*_args, **_kwargs):
+        raise AssertionError("niet storen must use its local card")
+
+    async def unchanged(entry, *_args, **_kwargs):
+        return entry
+
+    async def remove_keyboard(*_args, **_kwargs):
+        return None
+
+    def save(_cid, entry):
+        saved.append(entry)
+        return "added", {**entry, "id": "niet-storen-id"}
+
+    monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", unavailable)
+    monkeypatch.setattr(dictionary_import, "_enrich_dutch_verb", unchanged)
+    monkeypatch.setattr(dictionary_import.learning_data_quality, "check_new_entry", unchanged)
+    monkeypatch.setattr(dictionary_import, "_active_language_code", lambda _cid: "nl")
+    monkeypatch.setattr(dictionary_import, "_save_normalized_dict_entry", save)
+    monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
+    bot_text.store.pending_input.pop(cid, None)
+    bot_text.store.dict_pending_add.pop(cid, None)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=cid),
+        message=SimpleNamespace(text="Add niet storen"),
+    )
+    asyncio.run(bot_text.handle(update, SimpleNamespace(bot=Bot()), remove_keyboard))
+
+    assert saved[0]["lang"] == "nl"
+    assert saved[0]["term"] == "Niet storen"
+    assert saved[0]["translation"] == "Не беспокоить"
+    assert "Niet storen → Не беспокоить" in sent[-1]["text"]
+    assert "Сейчас не удалось проверить" not in sent[-1]["text"]
+    assert cid not in bot_text.store.pending_input
+
+
+def test_add_word_is_saved_for_later_enrichment_when_all_ai_reserves_fail(monkeypatch):
     cid = "dictionary-clarification"
     sent = []
 
@@ -436,16 +491,19 @@ def test_add_word_asks_for_meaning_when_all_ai_reserves_fail(monkeypatch):
 
     monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
     monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", unavailable)
+    dictionary_import.store.set_list(dictionary_import.config.DICT_KEY, cid, [])
     dictionary_import.store.pending_input.pop(cid, None)
     dictionary_import.store.dict_pending_add.pop(cid, None)
 
     asyncio.run(dictionary_import.add_dict_entry_from_chat(Bot(), cid, "tering", "nl"))
 
-    assert sent[-1]["text"] == (
-        "Сейчас не удалось проверить «tering». Напиши перевод или короткий контекст."
-    )
-    assert dictionary_import.store.pending_input[cid] == "dictclarify_nl"
-    assert dictionary_import.store.dict_pending_add[cid]["term"] == "tering"
+    saved = dictionary_import.store.get_list(dictionary_import.config.DICT_KEY, cid)
+    assert saved[-1]["term"] == "Tering"
+    assert saved[-1]["translation"] == ""
+    assert saved[-1]["analysis_pending"] is True
+    assert "Перевод и пример добавлю после проверки" in sent[-1]["text"]
+    assert "Сейчас не удалось проверить" not in sent[-1]["text"]
+    assert cid not in dictionary_import.store.pending_input
 
 
 def test_ambiguous_dictionary_word_offers_translation_choices(monkeypatch):

@@ -123,6 +123,15 @@ _LOCAL_DUTCH_WORD_CARDS = {
         "topic": "время",
         "difficulty": "A1",
     },
+    "niet storen": {
+        "translation": "не беспокоить",
+        "breakdown": "устойчивая фраза",
+        "pos": "фраза",
+        "example_nl": "Niet storen, alstublieft.",
+        "example_ru": "Не беспокоить, пожалуйста.",
+        "topic": "общение",
+        "difficulty": "A1",
+    },
 }
 
 
@@ -409,6 +418,9 @@ def _dict_entry_message(entry, status="added"):
     b.bold(title)
     b.newline()
     render_learning_entry(b, entry)
+    if entry.get("analysis_pending"):
+        b.spacer()
+        b.text_line("Перевод и пример добавлю после проверки.")
     return b.build_stripped()
 
 
@@ -1205,6 +1217,12 @@ def _save_normalized_dict_entry(cid, entry):
             if entry.get("analysis_provider") and "verb_analysis_failed" in duplicate:
                 duplicate.pop("verb_analysis_failed", None)
                 changed = True
+            if (entry.get("analysis_pending") and not duplicate.get("translation")
+                    and not duplicate.get("analysis_pending")):
+                duplicate["analysis_pending"] = True
+                changed = True
+            elif entry.get("translation") and duplicate.pop("analysis_pending", None):
+                changed = True
             if changed:
                 words[idx] = duplicate
                 store.set_list(config.DICT_KEY, cid, words)
@@ -1231,6 +1249,10 @@ def _save_normalized_dict_entry(cid, entry):
             })
             if entry.get("analysis_provider"):
                 updated.pop("verb_analysis_failed", None)
+            if entry.get("analysis_pending") and not updated.get("translation"):
+                updated["analysis_pending"] = True
+            elif entry.get("translation"):
+                updated.pop("analysis_pending", None)
             # SRS-прогресс существующей записи не затирается повторным добавлением —
             # только доопределяем поля, которых у записи ещё нет вовсе.
             for k, v in srs_fields.items():
@@ -1252,6 +1274,7 @@ def _save_normalized_dict_entry(cid, entry):
         "added_at": entry["added_at"],
         "status": entry.get("status") or "new",
         "last_shown_at": entry.get("last_shown_at"),
+        **({"analysis_pending": True} if entry.get("analysis_pending") else {}),
         **srs_fields,
         **verb_fields,
     }
@@ -1336,6 +1359,8 @@ async def _refresh_dict_entry(cid, item):
             })
             if entry.get("forms"):
                 updated["forms"] = entry["forms"]
+            if entry.get("translation"):
+                updated.pop("analysis_pending", None)
             words[idx] = updated
             store.set_list(config.DICT_KEY, cid, words)
             return updated
@@ -1380,6 +1405,39 @@ def _overwrite_dict_entry_fields(cid, lang, term, fields):
     return None
 
 
+def _deferred_dict_entry(payload, lang, source_text=""):
+    """Сохраняет точный термин при временной недоступности анализа.
+
+    Перевод не угадывается и такая запись не попадает в упражнения, пока
+    обычное ленивое обогащение не добавит проверенные данные.
+    """
+    raw_term = _clean_raw_user_term(payload)
+    if (lang not in ("nl", "en") or not raw_term
+            or not _LATIN_FIELD_RE.search(raw_term)
+            or _CYRILLIC_FIELD_RE.search(raw_term)
+            or _contains_suspicious_analysis_text(raw_term)):
+        return None
+    term = _normalized_user_term(raw_term, lang)
+    if not term:
+        return None
+    return {
+        "lang": lang,
+        "term": term[:120],
+        "article": "",
+        "translation": "",
+        "breakdown": "слово" if len(term.split()) == 1 else "фраза",
+        "examples": [],
+        "raw_user_term": raw_term[:120],
+        "normalized_term": term[:120],
+        "source_text": _clean_raw_user_term(source_text or payload)[:120],
+        "added_at": datetime.now(config.TZ).isoformat(),
+        "status": "new",
+        "last_shown_at": None,
+        "analysis_pending": True,
+        **_extract_srs_fields({}),
+    }
+
+
 async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text=""):
     """Сохраняет запись в словарь сразу, без ожидания кнопки "Добавить" - если разбор
     ошибся, запись можно удалить одной кнопкой, а не потерять, забыв подтвердить."""
@@ -1394,9 +1452,13 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
             entry = await learning_data_quality.check_new_entry(entry)
     except DictionaryAnalysisUnavailable:
         unavailable = True
-        entry = None
-    except Exception:
-        entry = None
+        entry = _deferred_dict_entry(payload, check_lang, source_text)
+    except Exception as exc:
+        _log.warning(
+            "operation=dictionary_add_deferred error_type=%s user_id=%s",
+            type(exc).__name__, str(cid),
+        )
+        entry = _deferred_dict_entry(payload, check_lang, source_text)
     await status_message.stop()
     if not entry:
         await _ask_dict_clarification(bot, cid, payload, lang, unavailable=unavailable)

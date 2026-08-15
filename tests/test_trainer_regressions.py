@@ -20,6 +20,7 @@ def test_lazy_dictionary_refresh_preserves_existing_translation():
         "term": "Wat balen",
         "translation": "Вот досада!",
         "examples": [],
+        "analysis_pending": True,
     }]
     wrong_ai_entry = {
         "lang": "nl",
@@ -43,6 +44,7 @@ def test_lazy_dictionary_refresh_preserves_existing_translation():
 
     assert stored[0]["translation"] == "Вот досада!"
     assert stored[0]["term"] == "Wat balen"
+    assert "analysis_pending" not in stored[0]
 
 
 def test_trainer_refreshes_an_entry_with_an_incomplete_saved_example(monkeypatch):
