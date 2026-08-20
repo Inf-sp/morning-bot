@@ -97,7 +97,7 @@ def test_enter_meal_replaces_stale_unpresentable_queue(monkeypatch):
 
     monkeypatch.setattr(cooking, "set_active_meal", lambda *_args: None)
     monkeypatch.setattr(cooking, "get_recipe_queue", lambda _cid: stale)
-    monkeypatch.setattr(cooking, "_next_presentable_queue_recipe", lambda _cid: next(next_items))
+    monkeypatch.setattr(cooking, "_next_presentable_queue_recipe", lambda _cid, *_args, **_kwargs: next(next_items))
     monkeypatch.setattr(cooking, "clear_recipe_queue", lambda _cid: calls.append("clear"))
 
     async def generate(_cid, meal, ingredients=None):
@@ -126,3 +126,72 @@ def test_local_fallback_uses_different_egg_recipe_for_each_meal():
     }
 
     assert len(names) == 3
+
+
+def test_dinner_batch_failure_does_not_fall_back_to_omelet(monkeypatch):
+    monkeypatch.setattr(recipe_generation, "_recipe_sources", lambda *_args, **_kwargs: [])
+
+    def fail_llm(*_args, **_kwargs):
+        raise RuntimeError("provider timeout")
+
+    monkeypatch.setattr(recipe_generation.ai, "llm_json", fail_llm)
+
+    recipes = recipe_generation._gen_recipe_batch(
+        "ужин", meal_guard="Это УЖИН: не предлагай блюда для завтрака."
+    )
+
+    assert recipes
+    assert "омлет" not in recipes[0]["name"].casefold()
+
+
+def test_dinner_rejects_cached_breakfast_recipe_and_generates_new_dinner(monkeypatch):
+    shown = []
+    cached_omelet = {
+        "name": "Быстрый омлет с овощами", "ingredients": "яйца, овощи",
+        "steps": ["Нарежь овощи", "Обжарь овощи", "Добавь яйца"],
+    }
+    dinner = {
+        "name": "Паста с грибами", "ingredients": "паста, грибы",
+        "steps": ["Отвари пасту", "Обжарь грибы", "Соедини всё"],
+    }
+    queue_items = iter((cached_omelet, None, dinner))
+
+    monkeypatch.setattr(cooking, "set_active_meal", lambda *_args: None)
+    monkeypatch.setattr(cooking, "get_recipe_queue", lambda _cid: {
+        "meal": "dinner", "items": [cached_omelet],
+    })
+    monkeypatch.setattr(cooking, "queue_next", lambda _cid: next(queue_items))
+    monkeypatch.setattr(cooking, "clear_recipe_queue", lambda _cid: None)
+
+    async def generate(_cid, meal, ingredients=None):
+        assert meal == "dinner"
+        return [dinner]
+
+    async def send(_bot, _cid, meal, recipe, status=None):
+        shown.append((meal, recipe["name"]))
+
+    monkeypatch.setattr(cooking, "_generate_and_store_queue", generate)
+    monkeypatch.setattr(cooking, "_send_queue_card", send)
+
+    asyncio.run(cooking.enter_meal(object(), "42", "dinner", status=object()))
+
+    assert shown == [("dinner", "Паста с грибами")]
+
+
+def test_next_dinner_skips_recipe_that_was_just_shown(monkeypatch):
+    repeated = {
+        "name": "Паста с грибами", "ingredients": "паста, грибы",
+        "steps": ["Отвари пасту", "Обжарь грибы", "Соедини всё"],
+    }
+    fresh = {
+        "name": "Гречка с грибами", "ingredients": "гречка, грибы",
+        "steps": ["Отвари гречку", "Обжарь грибы", "Соедини всё"],
+    }
+    items = iter((repeated, fresh))
+    monkeypatch.setattr(cooking, "queue_next", lambda _cid: next(items))
+
+    result = cooking._next_presentable_queue_recipe(
+        "42", "dinner", avoid_names=["Паста с грибами"],
+    )
+
+    assert result["name"] == "Гречка с грибами"

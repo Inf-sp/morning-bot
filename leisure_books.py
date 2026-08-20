@@ -452,6 +452,12 @@ def _released_this_month(value: str) -> bool:
     return bool(released and released.year == today.year and released.month == today.month)
 
 
+def _released_recently(value: str, *, days=180) -> bool:
+    released = _release_date(value)
+    today = datetime.now(config.TZ).date()
+    return bool(released and today - timedelta(days=days) <= released <= today)
+
+
 def _weekly_book_score(item):
     try:
         rating = float(item.get("rating") or 0)
@@ -566,26 +572,33 @@ def _book_premiere_genre(item):
 
 
 async def get_book_premieres(*, refresh=False):
-    """Свежие книги месяца; днём используется готовый недельный кэш."""
+    """Свежие книги из Google Books; днём используется готовый недельный кэш."""
     today = datetime.now(config.TZ).date()
     cached = _book_premieres_cache_get(today)
-    if cached is not None:
+    if cached is not None and (cached or not refresh):
         return cached
     if not refresh:
         return _book_premieres_cache_get(today, allow_stale=True) or []
     candidates = await asyncio.to_thread(google_books.search_new_releases, 40)
-    fresh, seen = [], set()
+    month_items, recent_items, seen = [], [], set()
     for item in candidates:
-        if not isinstance(item, dict) or not _released_this_month(item.get("published_date")):
+        if not isinstance(item, dict) or not str(item.get("cover_url") or "").strip():
             continue
         title = str(item.get("title") or "").strip()
         if not title or title.casefold() in seen:
             continue
-        seen.add(title.casefold())
-        fresh.append(_with_book_url({
+        prepared = _with_book_url({
             **item,
             "summary": _premiere_summary(item),
-        }))
+        })
+        if _released_this_month(item.get("published_date")):
+            month_items.append(prepared)
+        elif _released_recently(item.get("published_date")):
+            recent_items.append(prepared)
+        else:
+            continue
+        seen.add(title.casefold())
+    fresh = month_items or recent_items
     fresh.sort(key=lambda item: (
         str(item.get("published_date") or ""),
         float(item.get("rating") or 0),
@@ -629,7 +642,9 @@ async def send_book_premieres(bot, cid, *, status=None):
         item for item in items
         if str(item.get("cover_url") or "").strip()
     ][:7]
-    msg = leisure_ui.book_premieres_screen(month, items)
+    period = month if all(_released_this_month(item.get("published_date")) for item in items) \
+        else "Свежие новинки"
+    msg = leisure_ui.book_premieres_screen(period, items)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

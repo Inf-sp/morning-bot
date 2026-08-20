@@ -18,6 +18,7 @@ _COLLECTIONS = {
     "movies": (config.FAVORITE_MOVIES_KEY, "cinema_favorites"),
     "books": (config.FAVORITE_BOOKS_KEY, "books_favorites"),
     "artists": (config.FAVORITE_ARTISTS_KEY, "music_favorite_artists"),
+    "games": (config.FAVORITE_GAMES_KEY, "games_favorites"),
 }
 
 
@@ -59,6 +60,7 @@ def _export_payload(cid):
             "movies": store.get_list(config.FAVORITE_MOVIES_KEY, cid),
             "books": store.get_list(config.FAVORITE_BOOKS_KEY, cid),
             "artists": store.get_list(config.FAVORITE_ARTISTS_KEY, cid),
+            "games": store.get_list(config.FAVORITE_GAMES_KEY, cid),
         },
         "visited_countries": store.get_list(config.SAVED_COUNTRIES_KEY, cid),
         "thoughts": store.get_list(config.THOUGHTS_KEY, cid),
@@ -97,6 +99,7 @@ async def love_add_start(bot, cid, key, origin="base"):
         "movies": "фильм или сериал",
         "artists": "артиста",
         "books": "книгу",
+        "games": "игру",
     }[key]
     await bot.send_message(chat_id=cid, text=f"Напиши {name} — добавлю в любимые.")
 
@@ -124,15 +127,20 @@ async def love_add_done(bot, cid, key, text, origin="base"):
             )
         except asyncio.TimeoutError:
             items = [plain_label(item) for item in items if plain_label(item)]
+    elif key == "games":
+        import leisure_games
+
+        items = [leisure_games.normalize_favorite_game(item) for item in items]
+        items = [item for item in items if item]
     else:
         items = [plain_label(item) for item in items if plain_label(item)]
     existing = {
-        (movie_title_for_lookup(item) if key == "movies" else item).casefold()
+        (movie_title_for_lookup(item) if key == "movies" else _item_text(item)).casefold()
         for item in _love_items(cid, key)
     }
     added = []
     for item in items:
-        dedupe_key = (movie_title_for_lookup(item) if key == "movies" else item).casefold()
+        dedupe_key = (movie_title_for_lookup(item) if key == "movies" else _item_text(item)).casefold()
         if dedupe_key not in existing:
             store.add_to_list(store_key, cid, item)
             existing.add(dedupe_key)
@@ -148,9 +156,15 @@ async def love_add_done(bot, cid, key, text, origin="base"):
 
         await leisure_movies.send_favorite_movies_added_card(bot, cid, added)
         return
+    if key == "games" and added:
+        import leisure_games
+
+        leisure_games._reset_game_daily(cid)
+        await leisure_games.send_favorite_games_added_card(bot, cid, added)
+        return
     import cleanup
 
-    back = {"movies": "m_movie", "books": "m_books", "artists": "m_music"}[key]
+    back = {"movies": "m_movie", "books": "m_books", "artists": "m_music", "games": "m_games"}[key]
     await cleanup.open_collection(bot, cid, collection_id, back=back)
 
 

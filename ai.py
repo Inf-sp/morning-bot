@@ -25,14 +25,15 @@ _ACTIVE_DEADLINE = contextvars.ContextVar("ai_deadline", default=None)
 STANDARD_BUDGET_SECONDS = 10.0
 COMPLEX_BUDGET_SECONDS = 15.0
 OPENROUTER_FALLBACK_RESERVE_SECONDS = 2.5
-FREE_CHAT_BUDGET_SECONDS = 10.0
-FREE_CHAT_ROUTE_VERSION = "free-chat-standard-v4"
+FREE_CHAT_BUDGET_SECONDS = 7.0
+FREE_CHAT_MAX_TOKENS = 350
+FREE_CHAT_ROUTE_VERSION = "free-chat-concise-v5"
 FREE_CHAT_SCENARIO = "assistant/free_chat"
 FREE_CHAT_TIER = "smart"
 _FREE_CHAT_PROVIDER_TIMEOUTS = {
-    "groq_standard": 3.0,
-    "cf": 3.0,
-    "openrouter": 4.0,
+    "groq_standard": 2.5,
+    "cf": 2.0,
+    "openrouter": 2.5,
 }
 _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS = 1.0
 _COMPLEX_MODULE_PREFIXES = (
@@ -1675,13 +1676,19 @@ def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=No
         ),
     )
 
-CHAT_SYSTEM = """Ты помощник. Отвечай как обычный собеседник в чате, а не как документ.
+CHAT_SYSTEM = """Ты личный помощник в чате. Отвечай коротко, по делу и простым человеческим языком.
 
-ДЛИНА: подбирай длину ответа под вопрос. На простую реплику отвечай естественно и
-по делу; объяснение, совет или разбор раскрывай полно, если это помогает. Не обрывай
-ответ из-за условного числа строк.
-Списки, заголовки и структура ("Что важно:", "Что сделать:") — только если вопрос
-реально сложный и многосоставный; для обычного разговора не нужны.
+ДЛИНА: обычно 2–4 коротких предложения, до 6 коротких строк. Дай сначала
+прямой ответ, затем только действительно нужную деталь. Пиши подробнее лишь когда
+пользователь явно просит подробный разбор. Не повторяй вопрос, вывод и одни и те же
+советы разными словами.
+Списки и заголовки используй только для сложного вопроса, когда без них ответ хуже.
+
+РЕГИОН: в бытовых советах, ценах, сервисах, правилах и культурном контексте
+ориентируйся прежде всего на Европу и США (Америку), а не на Россию и СНГ. Если
+ответ заметно зависит от страны или штата, коротко скажи об этом и уточни место
+только когда без него нельзя дать полезный ответ.
+
 ФОРМАТ: без HTML, markdown и эмодзи. Пиши по-русски, если не просят другой язык.
 Если используешь подпись с двоеточием (например «Как носить:»), ставь её в начале
 строки; текст после двоеточия обычно начинай со строчной буквы.
@@ -1714,7 +1721,9 @@ def _chat(provider, history, system, timeout_cap=None):
         contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in history]
         r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{_provider_model_name(provider)}:generateContent?key={config.GEMINI_API_KEY}",
             {}, {"system_instruction": {"parts": [{"text": system}]}, "contents": contents,
-                 "generationConfig": {"maxOutputTokens": 700, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}}}, 40, provider, timeout_cap=bounded_cap(6))
+                 "generationConfig": {"maxOutputTokens": FREE_CHAT_MAX_TOKENS, "temperature": 0.8,
+                                      "thinkingConfig": {"thinkingBudget": 0}}},
+            40, provider, timeout_cap=bounded_cap(6))
         return r.json()["candidates"][0]["content"]["parts"][0]["text"]
     if _monitor_name(provider) == "groq":
         if not config.GROQ_API_KEY:
@@ -1722,7 +1731,7 @@ def _chat(provider, history, system, timeout_cap=None):
         r = _post("https://api.groq.com/openai/v1/chat/completions",
             {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"},
             {"model": _provider_model_name(provider), "messages": [{"role": "system", "content": system}] + history,
-             "max_tokens": 700, "temperature": 0.8}, 40, provider, timeout_cap=bounded_cap(5),
+             "max_tokens": FREE_CHAT_MAX_TOKENS, "temperature": 0.8}, 40, provider, timeout_cap=bounded_cap(5),
              usage_service=api_usage.groq_model_service(_provider_model_name(provider)))
         return r.json()["choices"][0]["message"]["content"]
     if provider == "openrouter":
@@ -1733,7 +1742,7 @@ def _chat(provider, history, system, timeout_cap=None):
             {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}", "Content-Type": "application/json"},
             {"model": config.OPENROUTER_MODEL,
              "messages": [{"role": "system", "content": system}] + history,
-             "max_tokens": 700, "temperature": 0.8},
+             "max_tokens": FREE_CHAT_MAX_TOKENS, "temperature": 0.8},
             40,
             "openrouter",
             timeout_cap=bounded_cap(4),
@@ -1744,7 +1753,8 @@ def _chat(provider, history, system, timeout_cap=None):
             raise Exception("no cf")
         r = _post(f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/run/{config.CF_MODEL}",
             {"Authorization": f"Bearer {config.CF_API_TOKEN}", "Content-Type": "application/json"},
-            {"messages": [{"role": "system", "content": system}] + history, "max_tokens": 700}, 40, "cf", timeout_cap=bounded_cap(4))
+            {"messages": [{"role": "system", "content": system}] + history,
+             "max_tokens": FREE_CHAT_MAX_TOKENS}, 40, "cf", timeout_cap=bounded_cap(4))
         output = _as_text(r.json().get("result", {}).get("response"))
         api_usage.record_request(
             "cloudflare",
@@ -1771,7 +1781,7 @@ def _chat_stream(provider, history, system, emit, timeout_cap=None):
     messages = [{"role": "system", "content": system}] + history
     payload = {
         "messages": messages,
-        "max_tokens": 700,
+        "max_tokens": FREE_CHAT_MAX_TOKENS,
         "temperature": 0.8,
         "stream": True,
     }

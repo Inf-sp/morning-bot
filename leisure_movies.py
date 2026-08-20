@@ -3,6 +3,7 @@ from ui.constants import ui_label
 import asyncio
 import logging
 import re
+import secrets
 import threading
 import time
 from datetime import datetime, timedelta
@@ -39,6 +40,9 @@ _DISCOVERY_DEPENDENCIES = (
 _CINEMA_BIRTHDAY_LOCK = threading.Lock()
 _CINEMA_BIRTHDAY_CACHE_VERSION = 3
 _MOVIE_PREMIERES_CACHE_VERSION = 5
+_FAVORITE_MOVIE_PAGE_SIZE = 8
+_FAVORITE_MOVIE_VIEW_TTL = 24 * 3600
+_favorite_movie_views = {}
 _CINEMA_REBUSES = (
     {
         "emoji": "🦈 🌊 👨‍🔬",
@@ -114,6 +118,186 @@ async def send_favorite_movies_added_card(bot, cid, titles):
         msg = leisure_ui.favorite_movies_added_card(titles)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=_favorite_movie_added_kb())
+
+
+def _favorite_movie_value(record):
+    return str(record.get("value") or record.get("name") or record.get("title") or "").strip()
+
+
+async def _favorite_movie_records(cid):
+    records = store.ensure_list_ids(config.FAVORITE_MOVIES_KEY, cid)
+    semaphore = asyncio.Semaphore(6)
+
+    async def enrich(record):
+        value = _favorite_movie_value(record)
+        title = movie_title_for_lookup(value)
+        metadata = None
+        if config.TMDB_API_KEY and title:
+            async with semaphore:
+                try:
+                    metadata = await asyncio.wait_for(
+                        asyncio.to_thread(tmdb.lookup_title, title), timeout=5.0,
+                    )
+                except Exception:
+                    metadata = None
+        metadata = dict(metadata or {})
+        display_title = str(metadata.get("name") or title or value).strip()
+        raw_genres = [part.strip() for part in str(metadata.get("genres") or "").split(",") if part.strip()]
+        genre = (raw_genres[0] if raw_genres else "Без жанра").capitalize()
+        return {
+            "id": str(record.get("id") or ""),
+            "value": value,
+            "title": display_title,
+            "genre": genre,
+            "tm": metadata,
+        }
+
+    return list(await asyncio.gather(*(enrich(record) for record in records)))
+
+
+def _new_favorite_movie_view(cid, records):
+    now = time.time()
+    for token, view in list(_favorite_movie_views.items()):
+        if now - view.get("created_at", 0) > _FAVORITE_MOVIE_VIEW_TTL:
+            _favorite_movie_views.pop(token, None)
+    token = secrets.token_hex(3)
+    genres = {}
+    for record in records:
+        genres.setdefault(record["genre"], []).append(record)
+    for items in genres.values():
+        items.sort(key=lambda item: item["title"].casefold())
+    ordered_genres = sorted(genres, key=lambda value: (value == "Без жанра", value.casefold()))
+    view = {
+        "cid": str(cid),
+        "created_at": now,
+        "genres": [(genre, genres[genre]) for genre in ordered_genres],
+    }
+    _favorite_movie_views[token] = view
+    return token, view
+
+
+def _favorite_movie_view(cid, token):
+    view = _favorite_movie_views.get(token)
+    if not view or view.get("cid") != str(cid):
+        return None
+    if time.time() - view.get("created_at", 0) > _FAVORITE_MOVIE_VIEW_TTL:
+        _favorite_movie_views.pop(token, None)
+        return None
+    return view
+
+
+async def send_favorite_movies(bot, cid, q=None):
+    records = await _favorite_movie_records(cid)
+    token, view = _new_favorite_movie_view(cid, records)
+    summaries = [
+        {"genre": genre, "titles": [item["title"] for item in items]}
+        for genre, items in view["genres"]
+    ]
+    msg = leisure_ui.favorite_movies_home(len(records), summaries)
+    rows = [
+        [InlineKeyboardButton(f"{genre} · {len(items)}", callback_data=f"mfg:{token}:{index}:0")]
+        for index, (genre, items) in enumerate(view["genres"])
+    ]
+    rows.append([InlineKeyboardButton("🆕 Добавить фильм", callback_data="as_loveadd_movies")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def send_favorite_movie_genre(bot, cid, token, genre_index, page=0, q=None):
+    view = _favorite_movie_view(cid, token)
+    if view is None or not 0 <= genre_index < len(view["genres"]):
+        await send_favorite_movies(bot, cid, q=q)
+        return
+    genre, items = view["genres"][genre_index]
+    pages = max(1, (len(items) + _FAVORITE_MOVIE_PAGE_SIZE - 1) // _FAVORITE_MOVIE_PAGE_SIZE)
+    page = max(0, min(page, pages - 1))
+    chunk = items[page * _FAVORITE_MOVIE_PAGE_SIZE:(page + 1) * _FAVORITE_MOVIE_PAGE_SIZE]
+    msg = leisure_ui.favorite_movie_genre(genre, len(items))
+    rows = [[InlineKeyboardButton(item["title"][:48], callback_data=f"mfi:{token}:{item['id'][:8]}:{genre_index}:{page}")]
+            for item in chunk]
+    if pages > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"mfg:{token}:{genre_index}:{(page - 1) % pages}"),
+            InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"mfg:{token}:{genre_index}:{(page + 1) % pages}"),
+        ])
+    rows.append([InlineKeyboardButton("🆕 Добавить фильм", callback_data="as_loveadd_movies")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="movie_favorites"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+def _favorite_movie_from_view(cid, token, short_id):
+    view = _favorite_movie_view(cid, token)
+    if view is None:
+        return None
+    return next((item for _genre, items in view["genres"] for item in items
+                 if item["id"].startswith(short_id)), None)
+
+
+async def send_favorite_movie_card(bot, cid, token, short_id, genre_index, page):
+    item = _favorite_movie_from_view(cid, token, short_id)
+    if item is None:
+        await send_favorite_movies(bot, cid)
+        return
+    _title, msg = _movie_card({"title": item["title"]}, item["tm"])
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Удалить", callback_data=f"mfd:{token}:{short_id}:{genre_index}:{page}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"mfg:{token}:{genre_index}:{page}"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    poster = item["tm"].get("poster")
+    if poster:
+        try:
+            await bot.send_photo(chat_id=cid, photo=poster, caption=msg.text,
+                                 caption_entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def send_favorite_movie_delete_confirmation(bot, cid, token, short_id, genre_index, page, q=None):
+    item = _favorite_movie_from_view(cid, token, short_id)
+    if item is None:
+        await send_favorite_movies(bot, cid, q=q)
+        return
+    text = f"Удалить «{item['title']}»?"
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Удалить", callback_data=f"mfdok:{token}:{short_id}")],
+        [InlineKeyboardButton("Отмена", callback_data=f"mfg:{token}:{genre_index}:{page}"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    if q is not None:
+        try:
+            await q.message.edit_text(text, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+
+
+async def delete_favorite_movie(bot, cid, token, short_id, q=None):
+    item = _favorite_movie_from_view(cid, token, short_id)
+    if item is not None:
+        store.remove_from_list_by_ids(config.FAVORITE_MOVIES_KEY, cid, [item["id"]])
+    _favorite_movie_views.pop(token, None)
+    await send_favorite_movies(bot, cid, q=q)
 
 
 def _movie_kb(i, category=None):

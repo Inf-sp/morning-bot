@@ -139,6 +139,7 @@ def test_game_home_matches_movie_style_and_keeps_board_games_separate(monkeypatc
         ["✨ Подобрать новую игру"],
         ["🎮 Премьеры игр"],
         ["🎲 Настолки"],
+        ["🎚️ Мой набор"],
         ["#️⃣ Главная"],
     ]
 
@@ -187,7 +188,48 @@ def test_game_recommendation_keeps_genres_inside_card(monkeypatch):
     assert _labels(status.call[1]["reply_markup"]) == [
         ["✨ Другая игра"],
         ["🎭 По жанру"],
+        ["🎚️ Мой набор"],
         ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+
+
+def test_favorite_games_influence_recommendation_and_are_not_repeated(monkeypatch):
+    _profile_store(monkeypatch)
+    monkeypatch.setattr(leisure_games.settings, "get", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        leisure_games.store, "get_list",
+        lambda key, _cid: [leisure_games.normalize_favorite_game("Hades")]
+        if key == leisure_games.config.FAVORITE_GAMES_KEY else [],
+    )
+
+    item = leisure_games.pick_game("42", refresh=True)
+
+    assert item["name"] == "It Takes Two"
+    assert "action" in item["genres"]
+
+
+def test_game_set_groups_games_like_my_cinema(monkeypatch):
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    monkeypatch.setattr(leisure_games.store, "ensure_list_ids", lambda *_args: [
+        {**leisure_games.normalize_favorite_game("Hades"), "id": "hades"},
+        {**leisure_games.normalize_favorite_game("Baldur’s Gate 3"), "id": "bg3"},
+    ])
+
+    bot = Bot()
+    asyncio.run(leisure_games.send_game_set(bot, "42"))
+
+    assert bot.message["text"] == (
+        "🎚️ Мой набор · 2 игры\n\n"
+        "RPG:\nBaldur’s Gate 3\n\n"
+        "Экшен:\nHades"
+    )
+    assert _labels(bot.message["reply_markup"])[-2:] == [
+        ["🆕 Добавить игру"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
@@ -270,6 +312,48 @@ def test_game_premieres_use_verified_source_url_and_platforms(monkeypatch):
         "summary": "Герой исследует неизвестную планету.",
         "url": source_url,
     }]
+
+
+def test_game_premieres_fall_back_to_igdb_when_web_search_is_empty(monkeypatch):
+    today = datetime.now(leisure_games.config.TZ).date()
+    release = today + timedelta(days=21)
+    memory = {}
+    expected = {
+        "title": "Catalog Game",
+        "date": release.isoformat(),
+        "date_label": leisure_games._premiere_date_label(release.isoformat()),
+        "platforms": ["pc"],
+        "platform_label": "💻 ПК",
+        "genre": "приключение",
+        "summary": "Герой исследует новый мир.",
+        "url": "https://www.igdb.com/games/catalog-game",
+        "poster": "https://images.igdb.com/catalog-game.jpg",
+    }
+
+    monkeypatch.setattr(
+        leisure_games.settings, "get",
+        lambda _cid, key, default=None: ["pc"] if key == "game_platforms" else default,
+    )
+    monkeypatch.setattr(leisure_games.store, "_load", lambda _key: memory)
+    monkeypatch.setattr(leisure_games.research, "web_search", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        leisure_games.igdb,
+        "get_upcoming_games",
+        lambda platforms, **_kwargs: [expected] if platforms == {"pc"} else [],
+        raising=False,
+    )
+
+    def mutate(_key, callback):
+        data, result = callback(memory)
+        memory.clear()
+        memory.update(data)
+        return result
+
+    monkeypatch.setattr(leisure_games.store, "mutate_kv", mutate)
+
+    items = asyncio.run(leisure_games.get_game_premieres("42", refresh=True))
+
+    assert items == [expected]
 
 
 def test_game_premiere_title_uses_youtube_trailer():

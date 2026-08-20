@@ -47,3 +47,18 @@ def test_ingredient_recipe_intent_uses_standard_cooking_card(monkeypatch):
     asyncio.run(assistant._run_intent(bot, "42", "meal_recipe", "мидий"))
 
     assert calls == [(bot, "42", "блюдо из мидий")]
+
+
+def test_language_question_with_nedostatki_does_not_route_to_fridge_recipe():
+    text = (
+        "Как легко запомнить различие между преимущества и недостатки "
+        "в нидерландском языке nadeel voordeel"
+    )
+
+    assert assistant._recipe_ingredients_from_chat(text) is None
+    assert assistant._detect_intent(text) is None
+
+
+def test_real_leftovers_and_explicit_recipe_requests_still_route_directly():
+    assert assistant._detect_intent("Что сделать с остатками курицы?") == "fridge"
+    assert assistant._recipe_ingredients_from_chat("Что приготовить из мидий?") == "мидий"

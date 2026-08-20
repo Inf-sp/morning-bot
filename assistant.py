@@ -133,7 +133,7 @@ _INTENT_MAP = [
     (("завтрак", "обед", "ужин", "поесть", "приготовить", "рецепт",
       "покушать", "голоден", "голодна", "что поесть", "что покушать",
       "что приготовить", "чего поесть"), "meal_picker"),
-    (("холодильник", "из холодильника", "что есть дома", "что есть в холодильнике", "остатки"),
+    (("холодильник", "из холодильника", "что есть дома", "что есть в холодильнике", "остатк"),
      "fridge"),
     (("что посмотреть", "фильм", "сериал", "кино"), "movie"),
     (("что почитать", "почитать", "книгу", "книжку"), "book"),
@@ -315,8 +315,15 @@ async def try_edit_lifehack_from_chat(bot, cid, text):
 
 def _detect_intent(text: str):
     t = text.lower()
+    informational_markers = (
+        "как запомнить", "как различать", "в чём разница", "в чем разница",
+        "чем отличается", "чем отличаются", "различие между", "разница между",
+        "что значит", "что означает", "объясни", "объясните",
+    )
+    if any(marker in t for marker in informational_markers):
+        return None
     for keywords, action in _INTENT_MAP:
-        if any(kw in t for kw in keywords):
+        if any(re.search(rf"(?<!\w){re.escape(kw)}", t) for kw in keywords):
             return action
     return None
 

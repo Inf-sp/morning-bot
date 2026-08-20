@@ -80,10 +80,10 @@ def test_free_chat_gives_openrouter_its_reserved_remaining_budget(monkeypatch):
     def provider(provider, _history, _system, timeout_cap=None):
         calls.append((provider, timeout_cap))
         if provider == "groq_standard":
-            clock["now"] = 3.0
+            clock["now"] = 2.5
             raise ai.LLMProviderError(provider, "groq timeout", temporary=True)
         if provider == "cf":
-            clock["now"] = 6.0
+            clock["now"] = 4.5
             raise ai.LLMProviderError(provider, "cloudflare timeout", temporary=True)
         return "Ответ OpenRouter"
 
@@ -93,9 +93,9 @@ def test_free_chat_gives_openrouter_its_reserved_remaining_budget(monkeypatch):
 
     assert result == "Ответ OpenRouter"
     assert calls == [
-        ("groq_standard", 3.0),
-        ("cf", 3.0),
-        ("openrouter", 4.0),
+        ("groq_standard", 2.5),
+        ("cf", 2.0),
+        ("openrouter", 2.5),
     ]
 
 
@@ -125,12 +125,19 @@ def test_free_chat_route_uses_the_standard_chain():
     assert ai.FREE_CHAT_TIER == "smart"
 
 
-def test_free_chat_prompt_has_no_fixed_short_answer_cap():
+def test_free_chat_prompt_requires_short_human_answers_for_europe_and_america():
     system = ai._chat_system()
 
-    assert "подбирай длину ответа под вопрос" in system.casefold()
-    assert "ответ в 1 предложение" not in system
-    assert "до 8 строк" not in system
+    assert "коротко" in system.casefold()
+    assert "простым человеческим языком" in system.casefold()
+    assert "европ" in system.casefold()
+    assert "сша" in system.casefold()
+    assert "до 6 коротких строк" in system.casefold()
+
+
+def test_free_chat_has_a_small_response_and_time_budget():
+    assert ai.FREE_CHAT_MAX_TOKENS <= 350
+    assert ai.FREE_CHAT_BUDGET_SECONDS <= 7
 
 
 def test_free_chat_route_log_identifies_deployment_and_serving_provider(monkeypatch):
@@ -217,7 +224,7 @@ def test_home_cache_warm_yields_to_active_user_action(monkeypatch):
 
 def test_home_cache_warm_schedule_separates_heavy_sections():
     assert bot._HOME_WARM_SCHEDULE == (
-        ("myday", "08:00"),
+        ("myday", "07:00"),
         ("wardrobe", "08:05"),
         ("cooking", "03:20"),
         ("travel", "08:15"),
@@ -228,7 +235,7 @@ def test_home_cache_warm_schedule_separates_heavy_sections():
     )
 
 
-def test_nightly_premieres_warm_movies_books_and_friday_games(monkeypatch):
+def test_nightly_premieres_warm_movies_books_and_games(monkeypatch):
     movie_calls = []
     book_calls = []
     game_calls = []
@@ -261,3 +268,20 @@ def test_nightly_premieres_warm_movies_books_and_friday_games(monkeypatch):
     assert movie_calls == ["42", "44"]
     assert book_calls == [True]
     assert game_calls == ["42", "43", "44"]
+
+
+def test_nightly_game_premieres_warm_without_weekend_notification(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
+    monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
+    monkeypatch.setattr(bot.settings, "notif_on", lambda *_args: False)
+
+    async def warm(cid):
+        calls.append(cid)
+
+    monkeypatch.setattr(bot.leisure_games, "warm_game_premieres_cache", warm)
+
+    asyncio.run(bot.job_warm_game_premieres_cache(object()))
+
+    assert calls == ["42"]

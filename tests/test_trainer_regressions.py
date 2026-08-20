@@ -14,6 +14,21 @@ import trainer_grading
 import trainer_session
 
 
+def test_build_sentence_is_not_selected_for_training():
+    entry = {
+        "term": "Ik ga naar huis",
+        "translation": "Я иду домой",
+        "srs_level": 5,
+    }
+
+    assert trainer_engine.EXERCISE_BUILD_SENTENCE not in trainer_engine.ALL_EXERCISES
+    selected = {
+        trainer_engine.select_exercise_type(entry)
+        for _ in range(100)
+    }
+    assert trainer_engine.EXERCISE_BUILD_SENTENCE not in selected
+
+
 def test_lazy_dictionary_refresh_preserves_existing_translation():
     stored = [{
         "lang": "nl",

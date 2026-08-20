@@ -2,6 +2,8 @@
 
 import asyncio
 import hashlib
+import secrets
+import time
 from datetime import date, datetime, timedelta
 from urllib.parse import quote_plus
 
@@ -38,6 +40,9 @@ _PLATFORM_LABEL = dict(GAME_PLATFORMS)
 _PLATFORM_LABEL["other"] = "🕹️ Прочее"
 _GENRE_LABEL = dict(GAME_GENRES)
 _GAME_PREMIERES_VERSION = 3
+_GAME_SET_PAGE_SIZE = 8
+_GAME_SET_VIEW_TTL = 24 * 3600
+_game_set_views = {}
 
 _GAME_RECENCY_OPTIONS = (
     ("🆕 Новинки", "new"),
@@ -226,8 +231,38 @@ def _platform_signature(cid):
     return hashlib.sha256("|".join(sorted(_effective_platforms(cid))).encode()).hexdigest()[:16]
 
 
+def _favorite_game_name(item):
+    if isinstance(item, dict):
+        return str(item.get("name") or item.get("value") or "").strip()
+    return str(item or "").strip()
+
+
+def normalize_favorite_game(value):
+    """Сохраняет известную игру с локальными метаданными, неизвестную — без выдумок."""
+    name = " ".join(_favorite_game_name(value).split()).strip(" ,;.-")
+    if not name:
+        return None
+    match = next((item for item in _GAME_CATALOG if item["name"].casefold() == name.casefold()), None)
+    if match:
+        return dict(match)
+    return {"name": name, "genres": [], "platforms": []}
+
+
+def _favorite_games(cid):
+    return store.get_list(config.FAVORITE_GAMES_KEY, cid)
+
+
+def _favorite_game_signature(cid):
+    names = sorted(_favorite_game_name(item).casefold() for item in _favorite_games(cid)
+                   if _favorite_game_name(item))
+    return hashlib.sha256("|".join(names).encode()).hexdigest()[:16]
+
+
 def _game_signature(cid):
-    payload = f"{_platform_signature(cid)}|{_game_recency(cid)}|{_game_min_rating(cid) or ''}"
+    payload = (
+        f"{_platform_signature(cid)}|{_game_recency(cid)}|{_game_min_rating(cid) or ''}"
+        f"|{_favorite_game_signature(cid)}"
+    )
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
@@ -288,6 +323,20 @@ def pick_game(cid, *, genre=None, refresh=False):
     pool = _eligible_games(cid, genre=genre)
     if not pool:
         return {}
+    favorites = _favorite_games(cid)
+    favorite_names = {_favorite_game_name(item).casefold() for item in favorites if _favorite_game_name(item)}
+    favorite_genres = {
+        str(value) for item in favorites if isinstance(item, dict)
+        for value in (item.get("genres") or []) if str(value)
+    }
+    not_favorite = [item for item in pool if item["name"].casefold() not in favorite_names]
+    if not_favorite:
+        pool = not_favorite
+    if favorite_genres:
+        best_overlap = max(len(favorite_genres.intersection(item.get("genres") or [])) for item in pool)
+        if best_overlap:
+            pool = [item for item in pool
+                    if len(favorite_genres.intersection(item.get("genres") or [])) == best_overlap]
     seen = [str(value) for value in profile.get("game_seen", []) if str(value)]
     fresh = [item for item in pool if item["id"] not in seen]
     candidates = fresh or pool
@@ -313,6 +362,7 @@ def _game_home_keyboard():
         [InlineKeyboardButton("✨ Подобрать новую игру", callback_data="vg_reco")],
         [InlineKeyboardButton("🎮 Премьеры игр", callback_data="vg_premieres")],
         [InlineKeyboardButton("🎲 Настолки", callback_data="vg_board")],
+        [InlineKeyboardButton("🎚️ Мой набор", callback_data="vg_set")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -322,6 +372,7 @@ def _game_keyboard(*, no_match=False, genre=None):
     rows = [
         [InlineKeyboardButton("✨ Другая игра", callback_data=next_callback)],
         [InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")],
+        [InlineKeyboardButton("🎚️ Мой набор", callback_data="vg_set")],
     ]
     if no_match:
         rows.append([InlineKeyboardButton("📝 Платформы", callback_data="set_pref_games")])
@@ -330,6 +381,170 @@ def _game_keyboard(*, no_match=False, genre=None):
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     return InlineKeyboardMarkup(rows)
+
+
+def _game_genre_title(value):
+    label = _GENRE_LABEL.get(str(value), str(value or ""))
+    return label.split(" ", 1)[-1] if " " in label else (label or "Без жанра")
+
+
+def _game_set_records(cid):
+    records = []
+    for raw in store.ensure_list_ids(config.FAVORITE_GAMES_KEY, cid):
+        item = dict(raw)
+        value = item.get("value")
+        if value and not item.get("name"):
+            item = {**(normalize_favorite_game(value) or {}), "id": item.get("id")}
+        name = _favorite_game_name(item)
+        genres = [str(value) for value in item.get("genres") or [] if str(value)]
+        genre = _game_genre_title(genres[0]) if genres else "Без жанра"
+        item.update({"name": name, "genre": genre, "genre_label": genre})
+        records.append(item)
+    return records
+
+
+def _new_game_set_view(cid):
+    now = time.time()
+    for token, view in list(_game_set_views.items()):
+        if now - view.get("created_at", 0) > _GAME_SET_VIEW_TTL:
+            _game_set_views.pop(token, None)
+    genres = {}
+    for item in _game_set_records(cid):
+        genres.setdefault(item["genre"], []).append(item)
+    for items in genres.values():
+        items.sort(key=lambda item: item["name"].casefold())
+    ordered = sorted(genres, key=lambda value: (value == "Без жанра", value.casefold()))
+    token = secrets.token_hex(3)
+    view = {"cid": str(cid), "created_at": now,
+            "genres": [(genre, genres[genre]) for genre in ordered]}
+    _game_set_views[token] = view
+    return token, view
+
+
+def _game_set_view(cid, token):
+    view = _game_set_views.get(token)
+    if not view or view.get("cid") != str(cid) or time.time() - view.get("created_at", 0) > _GAME_SET_VIEW_TTL:
+        _game_set_views.pop(token, None)
+        return None
+    return view
+
+
+async def send_game_set(bot, cid, q=None):
+    token, view = _new_game_set_view(cid)
+    total = sum(len(items) for _genre, items in view["genres"])
+    msg = leisure_ui.game_set_home(total, [
+        {"genre": genre, "names": [item["name"] for item in items]}
+        for genre, items in view["genres"]
+    ])
+    rows = [[InlineKeyboardButton(f"{genre} · {len(items)}", callback_data=f"vg_setg:{token}:{index}:0")]
+            for index, (genre, items) in enumerate(view["genres"])]
+    rows.append([InlineKeyboardButton("🆕 Добавить игру", callback_data="as_loveadd_games")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    await _deliver(bot, cid, msg, InlineKeyboardMarkup(rows), q=q)
+
+
+async def send_game_set_genre(bot, cid, token, genre_index, page=0, q=None):
+    view = _game_set_view(cid, token)
+    if view is None or not 0 <= genre_index < len(view["genres"]):
+        await send_game_set(bot, cid, q=q)
+        return
+    genre, items = view["genres"][genre_index]
+    pages = max(1, (len(items) + _GAME_SET_PAGE_SIZE - 1) // _GAME_SET_PAGE_SIZE)
+    page = max(0, min(page, pages - 1))
+    chunk = items[page * _GAME_SET_PAGE_SIZE:(page + 1) * _GAME_SET_PAGE_SIZE]
+    rows = [[InlineKeyboardButton(item["name"][:48], callback_data=f"vg_seti:{token}:{item['id'][:8]}:{genre_index}:{page}")]
+            for item in chunk]
+    if pages > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"vg_setg:{token}:{genre_index}:{(page - 1) % pages}"),
+            InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"vg_setg:{token}:{genre_index}:{(page + 1) % pages}"),
+        ])
+    rows.append([InlineKeyboardButton("🆕 Добавить игру", callback_data="as_loveadd_games")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="vg_set"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    await _deliver(bot, cid, leisure_ui.game_set_genre(genre, len(items)), InlineKeyboardMarkup(rows), q=q)
+
+
+def _game_set_item(cid, token, short_id):
+    view = _game_set_view(cid, token)
+    if view is None:
+        return None
+    return next((item for _genre, items in view["genres"] for item in items
+                 if str(item.get("id") or "").startswith(short_id)), None)
+
+
+async def send_game_set_card(bot, cid, token, short_id, genre_index, page):
+    item = _game_set_item(cid, token, short_id)
+    if item is None:
+        await send_game_set(bot, cid)
+        return
+    card = _decorate_game(item, cid) if item.get("platforms") else dict(item)
+    card = await asyncio.to_thread(igdb.enrich_game_recommendation, card)
+    msg = leisure_ui.game_set_card(card)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Удалить", callback_data=f"vg_setd:{token}:{short_id}:{genre_index}:{page}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"vg_setg:{token}:{genre_index}:{page}"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    if card.get("poster"):
+        try:
+            await bot.send_photo(chat_id=cid, photo=card["poster"], caption=msg.text,
+                                 caption_entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def confirm_game_set_delete(bot, cid, token, short_id, genre_index, page, q=None):
+    item = _game_set_item(cid, token, short_id)
+    if item is None:
+        await send_game_set(bot, cid, q=q)
+        return
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Удалить", callback_data=f"vg_setdok:{token}:{short_id}")],
+        [InlineKeyboardButton("Отмена", callback_data=f"vg_setg:{token}:{genre_index}:{page}"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    await _deliver(bot, cid, leisure_ui.game_delete_confirmation(item["name"]), kb, q=q)
+
+
+async def delete_game_set_item(bot, cid, token, short_id, q=None):
+    item = _game_set_item(cid, token, short_id)
+    if item:
+        store.remove_from_list_by_ids(config.FAVORITE_GAMES_KEY, cid, [item["id"]])
+        _reset_game_daily(cid)
+    _game_set_views.pop(token, None)
+    await send_game_set(bot, cid, q=q)
+
+
+async def send_favorite_games_added_card(bot, cid, items):
+    items = [dict(item) for item in items or [] if isinstance(item, dict)]
+    if len(items) != 1:
+        await send_game_set(bot, cid)
+        return
+    item = items[0]
+    genres = [str(value) for value in item.get("genres") or [] if str(value)]
+    item["genre_label"] = _game_genre_title(genres[0]) if genres else "Без жанра"
+    if item.get("platforms"):
+        item = _decorate_game(item, cid)
+    item = await asyncio.to_thread(igdb.enrich_game_recommendation, item)
+    msg = leisure_ui.favorite_game_added_card(item)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎚️ Мой набор", callback_data="vg_set")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    if item.get("poster"):
+        try:
+            await bot.send_photo(chat_id=cid, photo=item["poster"], caption=msg.text,
+                                 caption_entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 def _genre_keyboard():
@@ -592,7 +807,14 @@ async def get_game_premieres(cid, *, refresh=False):
     )
     sources = [item for item in sources if item.get("url") and (item.get("content") or item.get("title"))]
     if not sources:
-        return []
+        items = await asyncio.to_thread(
+            igdb.get_upcoming_games, set(_effective_platforms(cid)), today=today, days=180,
+        )
+        for item in items:
+            item["date_label"] = _premiere_date_label(item.get("date"))
+        if items:
+            _premiere_cache_set(signature, today, items)
+        return items
     source_urls = {str(item["url"]).strip() for item in sources}
     source_text = "\n---\n".join(
         f"URL: {item['url']}\n{item.get('title', '')}\n{str(item.get('content') or '')[:700]}"
@@ -619,8 +841,14 @@ async def get_game_premieres(cid, *, refresh=False):
             },
         )
     except Exception:
-        return []
+        payload = {}
     items = _normalize_premieres(payload, source_urls, set(_effective_platforms(cid)), today)
+    if not items:
+        items = await asyncio.to_thread(
+            igdb.get_upcoming_games, set(_effective_platforms(cid)), today=today, days=180,
+        )
+        for item in items:
+            item["date_label"] = _premiere_date_label(item.get("date"))
     if items:
         items = await asyncio.to_thread(igdb.enrich_game_premieres, items)
         _premiere_cache_set(signature, today, items)

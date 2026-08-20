@@ -212,7 +212,6 @@ async def _render_next(bot, cid):
         data = await _build_exercise(cid, item)
         if data is None:
             for fallback in (
-                EXERCISE_BUILD_SENTENCE,
                 EXERCISE_FILL_GAP, EXERCISE_RECALL, EXERCISE_CHOOSE_TRANSLATION,
             ):
                 if fallback in (item["exercise_type"], state.get("last_exercise_type")):

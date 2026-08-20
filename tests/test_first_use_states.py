@@ -38,7 +38,7 @@ def test_learning_empty_state_has_one_clear_next_step():
     )
     assert _labels(message.reply_markup) == [
         ["🆕 Добавить слова"],
-        ["✨ Подобрать слова"],
+        ["✨ Подобрать новые слова"],
     ]
 
 
@@ -72,7 +72,7 @@ def test_learning_entry_shows_empty_state_without_starting_seed(monkeypatch):
 
     assert Query.message.updated["text"].startswith("🧠 Обучение\n\nДобавляй сюда слова")
     assert _labels(Query.message.updated["reply_markup"]) == [
-        ["🆕 Добавить слова"], ["✨ Подобрать слова"],
+        ["🆕 Добавить слова"], ["✨ Подобрать новые слова"],
     ]
 
 
@@ -81,6 +81,10 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         "has_material": True, "lang_code": "nl", "kind": "word",
         "term": "morgen", "translation": "завтра", "progress": {},
         "focus": "вспомнить перевод до открытия спойлера.",
+        "live_language": {
+            "text": "Laat maar", "translation": "Ладно, забудь",
+            "meaning": "Когда решаешь не продолжать тему.",
+        },
     })
 
     assert _labels(message.reply_markup) == [
@@ -92,6 +96,17 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     assert "• В изучении 0 слов и фраз" in message.text
     assert "• Повторить сегодня — 0" in message.text
     assert "• Без подсказок — 0%" in message.text
+    assert "Фраза дня" not in message.text
+    assert "Слово дня" not in message.text
+    assert "Живой язык: Laat maar → Ладно, забудь." in message.text
+    assert "Когда говорят?" not in message.text
+    assert "Когда решаешь не продолжать тему." not in message.text
+    spoiler_texts = [
+        message.text.encode("utf-16-le")[entity.offset * 2:(entity.offset + entity.length) * 2].decode("utf-16-le")
+        for entity in message.entities
+        if entity.type == "spoiler"
+    ]
+    assert spoiler_texts == ["Ладно, забудь."]
 
 
 def test_dictionary_contains_only_dictionary_actions(monkeypatch):
@@ -109,7 +124,7 @@ def test_dictionary_contains_only_dictionary_actions(monkeypatch):
     rows = _labels(bot.message["reply_markup"])
     assert "📝 Предпочтения" not in [label for row in rows for label in row]
     assert rows[-3:] == [
-        ["✨ Подобрать слова"],
+        ["✨ Подобрать новые слова"],
         ["🆕 Добавить слово"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
@@ -183,7 +198,7 @@ def test_seed_intro_uses_the_same_learning_empty_state_copy(monkeypatch):
 
     assert sent[0]["text"].startswith("🧠 Обучение\n\nДобавляй сюда слова и фразы")
     assert _labels(sent[0]["reply_markup"]) == [
-        ["🆕 Добавить слова"], ["✨ Подобрать слова"],
+        ["🆕 Добавить слова"], ["✨ Подобрать новые слова"],
     ]
 
 

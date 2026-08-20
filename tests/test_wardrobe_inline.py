@@ -696,7 +696,103 @@ def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
     asyncio.run(wardrobe.send_wardrobe_zones(bot, "closet-test"))
 
     labels = _labels(bot.message["reply_markup"])
+    assert bot.message["text"] == "🎚️ Мой шкаф · 1 вещь\n\nВерх:\nФутболка"
+    assert "Выбери категорию" not in bot.message["text"]
     assert labels[-2] == ["🆕 Добавить вещь"]
     assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert all(len(row) == 1 for row in labels[:-1])
     assert all("✏️ Изменить" not in row for row in labels)
+
+
+def test_closet_hides_other_category_but_keeps_legacy_items_accessible(monkeypatch):
+    class Bot:
+        messages = []
+
+        async def send_message(self, **kwargs):
+            self.messages.append(kwargs)
+
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {
+        "zones": {"Другое": {"Другое": [{"id": "legacy-1", "name": "Старинная брошь"}]}},
+    })
+
+    bot = Bot()
+    asyncio.run(wardrobe.send_wardrobe_zones(bot, "closet-test"))
+    home_labels = _labels(bot.messages[-1]["reply_markup"])
+
+    assert all("Другое" not in row for row in home_labels)
+    assert "Аксессуары:\nСтаринная брошь" in bot.messages[-1]["text"]
+
+    asyncio.run(wardrobe.send_category(bot, "closet-test", "acc"))
+    category_labels = _labels(bot.messages[-1]["reply_markup"])
+    assert category_labels[0] == ["Старинная брошь"]
+
+
+def test_closet_screen_lists_nonempty_categories_with_spacing(monkeypatch):
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {
+        "zones": {
+            "Верх": {"Футболки": [
+                {"id": "top-1", "name": "Белая футболка"},
+                {"id": "top-2", "name": "Синяя рубашка"},
+            ]},
+            "Низ": {"Брюки": [{"id": "bottom-1", "name": "Чёрные брюки"}]},
+        },
+    })
+
+    bot = Bot()
+    asyncio.run(wardrobe.send_wardrobe_zones(bot, "closet-test"))
+
+    assert bot.message["text"] == (
+        "🎚️ Мой шкаф · 3 вещи\n\n"
+        "Верх:\nБелая футболка, Синяя рубашка\n\n"
+        "Низ:\nЧёрные брюки"
+    )
+
+
+def test_closet_category_has_add_item_button_above_navigation(monkeypatch):
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {
+        "zones": {"Верх": {"Футболки": [{"id": "top-1", "name": "Футболка"}]}},
+    })
+
+    bot = Bot()
+    asyncio.run(wardrobe.send_category(bot, "closet-test", "top"))
+
+    labels = _labels(bot.message["reply_markup"])
+    assert labels[-2] == ["🆕 Добавить вещь"]
+    assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+
+
+def test_closet_category_uses_movie_style_pagination(monkeypatch):
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    items = [
+        {"id": f"top-{index}", "name": f"Вещь {index}"}
+        for index in range(1, 11)
+    ]
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {
+        "zones": {"Верх": {"Футболки": items}},
+    })
+
+    bot = Bot()
+    asyncio.run(wardrobe.send_category(bot, "closet-test", "top", page=1))
+
+    labels = _labels(bot.message["reply_markup"])
+    assert labels[:2] == [["Вещь 9"], ["Вещь 10"]]
+    assert labels[-3] == ["◀️", "2/2", "▶️"]
+    assert labels[-2] == ["🆕 Добавить вещь"]
+    assert bot.message["text"].startswith("👕 Верх · 10 вещей")

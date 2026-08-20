@@ -535,7 +535,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
             InlineKeyboardButton("◀️", callback_data=f"a_dictlang_{lang}_{previous_page}"),
             InlineKeyboardButton("▶️", callback_data=f"a_dictlang_{lang}_{next_page}"),
         ])
-    rows.append([InlineKeyboardButton("✨ Подобрать слова", callback_data=f"a_dictseed_start_{lang}")])
+    rows.append([InlineKeyboardButton("✨ Подобрать новые слова", callback_data=f"a_dictseed_start_{lang}")])
     rows.append([InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     if entries:

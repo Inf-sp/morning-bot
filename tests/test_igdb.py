@@ -1,9 +1,50 @@
 import os
+from datetime import date, datetime, timedelta, timezone
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import igdb
+
+
+def test_upcoming_games_returns_dated_catalog_releases(monkeypatch):
+    today = date(2026, 8, 20)
+    release = today + timedelta(days=20)
+
+    class Response:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return [{
+                "name": "Catalog Game",
+                "slug": "catalog-game",
+                "first_release_date": int(datetime.combine(
+                    release, datetime.min.time(), tzinfo=timezone.utc,
+                ).timestamp()),
+                "cover": {"image_id": "cover123"},
+                "platforms": [{"id": 6}],
+                "genres": [{"name": "Adventure"}],
+                "videos": [{"name": "Official Trailer", "video_id": "trailer123"}],
+            }]
+
+    monkeypatch.setattr(igdb, "_access_token", lambda: "token")
+    monkeypatch.setattr(igdb.requests, "post", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr(igdb, "_record", lambda *_args, **_kwargs: None)
+
+    result = igdb.get_upcoming_games({"pc"}, today=today)
+
+    assert result == [{
+        "title": "Catalog Game",
+        "date": release.isoformat(),
+        "platforms": ["pc"],
+        "platform_label": "💻 ПК",
+        "genre": "приключение",
+        "summary": "",
+        "url": "https://www.igdb.com/games/catalog-game",
+        "poster": "https://images.igdb.com/igdb/image/upload/t_cover_big/cover123.jpg",
+        "trailer_url": "https://www.youtube.com/watch?v=trailer123",
+    }]
 
 
 def test_enriches_digital_game_with_cover_and_verified_trailer(monkeypatch):

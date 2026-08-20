@@ -65,7 +65,7 @@ def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
         "items": [{"name": "цепочка со значком сторон света"}, {"name": "футболка Levi's"}],
     })
 
-    assert "💡 Полезно: Добавь Цепочка со значком сторон света" in message.text
+    assert "Дополнительно:\n- Цепочка со значком сторон света" in message.text
     assert "- Футболка Levi's" in message.text
     assert "Надень:" in message.text
 
@@ -76,16 +76,16 @@ def test_outfit_card_shows_selected_accessories_after_main_items():
             {"name": "Футболка", "zone": "Верх"},
             {"name": "Брюки", "zone": "Низ"},
             {"name": "Кеды", "zone": "Обувь"},
-            {"name": "Часы", "zone": "Аксессуары"},
+            {"name": "Синие носки", "zone": "Аксессуары"},
         ],
     })
 
     assert "- Брюки" in message.text
     assert "- Кеды" in message.text
-    assert "💡 Полезно: Добавь Часы" in message.text
+    assert "Дополнительно:\n- Синие носки" in message.text
 
 
-def test_outfit_card_adds_outerwear_to_top_line_only_when_selected():
+def test_outfit_card_shows_outerwear_as_an_extra_only_when_selected():
     message = render_wardrobe_message({
         "items": [
             {"name": "Фиолетовая футболка", "zone": "Верх"},
@@ -95,7 +95,8 @@ def test_outfit_card_adds_outerwear_to_top_line_only_when_selected():
         ],
     })
 
-    assert "- Фиолетовая футболка, Лёгкая ветровка" in message.text
+    assert "Надень:\n- Фиолетовая футболка" in message.text
+    assert "Дополнительно:\n- Лёгкая ветровка" in message.text
     assert "Верхняя одежда:" not in message.text
 
 

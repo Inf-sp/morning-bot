@@ -84,8 +84,8 @@ def test_book_premieres_are_current_month_diverse_and_cached(monkeypatch):
     current_month = today.strftime("%Y-%m")
     old_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
     candidates = [
-        {"title": "Роман", "author": "Автор", "published_date": f"{current_month}-10", "categories": ["Fiction"], "description": "История о возвращении домой."},
-        {"title": "Биография", "author": "Автор", "published_date": f"{current_month}-09", "categories": ["Biography"], "description": "История о смелом выборе."},
+        {"title": "Роман", "author": "Автор", "published_date": f"{current_month}-10", "categories": ["Fiction"], "description": "История о возвращении домой.", "cover_url": "https://images.test/novel.jpg"},
+        {"title": "Биография", "author": "Автор", "published_date": f"{current_month}-09", "categories": ["Biography"], "description": "История о смелом выборе.", "cover_url": "https://images.test/biography.jpg"},
         {"title": "Старая", "author": "Автор", "published_date": f"{old_month}-10", "categories": ["History"]},
     ]
 
@@ -216,3 +216,59 @@ def test_book_premieres_screen_recovers_when_cache_is_empty(monkeypatch):
     assert calls[0] == "search"
     assert calls[1][0] == "photo"
     assert "Новая книга" in calls[1][1]["caption"]
+
+
+def test_book_premieres_fall_back_to_recent_google_books_results(monkeypatch):
+    today = datetime.now(leisure_books.config.TZ).date()
+    recent = today - timedelta(days=35)
+    saved = {}
+    google_result = {
+        "title": "Недавняя новинка",
+        "author": "Автор",
+        "published_date": recent.isoformat(),
+        "categories": ["Fiction"],
+        "description": "Героиня начинает новую жизнь в незнакомом городе.",
+        "cover_url": "https://images.test/recent-book.jpg",
+        "info_link": "https://books.google.com/books?id=recent",
+    }
+
+    monkeypatch.setattr(leisure_books.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: saved.update(value))
+    monkeypatch.setattr(
+        leisure_books.google_books,
+        "search_new_releases",
+        lambda _limit: [google_result],
+    )
+
+    items = asyncio.run(leisure_books.get_book_premieres(refresh=True))
+
+    assert [item["title"] for item in items] == ["Недавняя новинка"]
+
+
+def test_book_premieres_refresh_bypasses_empty_cache(monkeypatch):
+    today = datetime.now(leisure_books.config.TZ).date()
+    saved = {
+        "version": leisure_books._BOOK_PREMIERES_CACHE_VERSION,
+        "month": today.strftime("%Y-%m"),
+        "expires": (today + timedelta(days=2)).isoformat(),
+        "items": [],
+    }
+    calls = []
+    google_result = {
+        "title": "Новая книга",
+        "published_date": today.isoformat(),
+        "cover_url": "https://images.test/new-book.jpg",
+    }
+
+    monkeypatch.setattr(leisure_books.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: saved.update(value))
+    monkeypatch.setattr(
+        leisure_books.google_books,
+        "search_new_releases",
+        lambda _limit: calls.append("search") or [google_result],
+    )
+
+    items = asyncio.run(leisure_books.get_book_premieres(refresh=True))
+
+    assert calls == ["search"]
+    assert [item["title"] for item in items] == ["Новая книга"]

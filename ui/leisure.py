@@ -39,6 +39,102 @@ def _pluralize_titles(n):
     return "фильмов/сериалов"
 
 
+def favorite_movies_home(total, genres):
+    b = MessageBuilder()
+    b.title(f"🎚️ Моё кино · {total} {_pluralize_titles(total)}")
+    for group in genres or []:
+        titles = [str(title or "").strip() for title in group.get("titles") or [] if str(title or "").strip()]
+        if not titles:
+            continue
+        b.bold(f"{str(group.get('genre') or 'Без жанра').strip()}:")
+        b.newline()
+        b.line(", ".join(titles))
+        b.spacer()
+    if not total:
+        b.line("Добавь любимые фильмы и сериалы — подбор станет точнее.")
+    return b.build_stripped()
+
+
+def favorite_movie_genre(genre, total):
+    b = MessageBuilder()
+    b.section(f"🎬 {str(genre or 'Без жанра').strip()} · {total} {_pluralize_titles(total)}")
+    return b.build_stripped()
+
+
+def game_set_home(total, genres):
+    b = MessageBuilder()
+    b.title(f"🎚️ Мой набор · {total} {_pluralize_games(total)}")
+    for group in genres or []:
+        names = [str(name or "").strip() for name in group.get("names") or [] if str(name or "").strip()]
+        if not names:
+            continue
+        b.bold(f"{str(group.get('genre') or 'Без жанра').strip()}:")
+        b.newline()
+        b.line(", ".join(names))
+        b.spacer()
+    if not total:
+        b.line("Добавь любимые игры — следующие рекомендации станут точнее.")
+    return b.build_stripped()
+
+
+def _pluralize_games(n):
+    n = abs(int(n))
+    if n % 10 == 1 and n % 100 != 11:
+        return "игра"
+    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+        return "игры"
+    return "игр"
+
+
+def game_set_genre(genre, total):
+    b = MessageBuilder()
+    b.section(f"👾 {str(genre or 'Без жанра').strip()} · {total} {_pluralize_games(total)}")
+    return b.build_stripped()
+
+
+def game_set_card(data):
+    data = data or {}
+    b = MessageBuilder()
+    b.text_line("👾 ")
+    b.bold(str(data.get("name") or "Игра"))
+    b.newline()
+    meta = [str(data.get("genre_label") or "").strip()]
+    if data.get("year"):
+        meta.append(str(data["year"]))
+    platforms = " · ".join(str(value) for value in data.get("platform_labels") or [])
+    if platforms:
+        meta.append(platforms)
+    meta = [value for value in meta if value]
+    if meta:
+        b.spacer()
+        b.line(" · ".join(meta))
+    if data.get("description"):
+        b.spacer()
+        b.line(str(data["description"]).strip())
+    return b.build_stripped()
+
+
+def game_delete_confirmation(name):
+    b = MessageBuilder()
+    b.line(f"Удалить «{str(name or 'Игра').strip()}»?")
+    return b.build_stripped()
+
+
+def favorite_game_added_card(data):
+    b = MessageBuilder()
+    b.line("✅ Добавлена в «🎚️ Мой набор»")
+    b.spacer()
+    b.bold(str((data or {}).get("name") or "Игра"))
+    b.newline()
+    meta = [str((data or {}).get("genre_label") or "").strip()]
+    if (data or {}).get("year"):
+        meta.append(str(data["year"]))
+    meta = [value for value in meta if value]
+    if meta:
+        b.line(" · ".join(meta))
+    return b.build_stripped()
+
+
 def game_card(data):
     """Компактная рекомендация игры в том же ритме, что кино и музыка."""
     data = data or {}
@@ -764,13 +860,13 @@ def weekly_books_screen(city, daily_book, items):
 
 
 def movie_premieres_screen(country, date_range, items):
-    """Общая подпись к Telegram-галерее: до семи премьер."""
+    """Общая подпись к Telegram-галерее премьер."""
     b = MessageBuilder()
     b.text_line("🎟️ ")
     b.bold(f"Премьеры в кино · {country}")
     b.newline()
     b.spacer()
-    b.line(f"{date_range} · до 7 самых популярных")
+    b.line(date_range)
     if not items:
         b.spacer()
         b.line("Витрина появится после ближайшего ночного обновления.")

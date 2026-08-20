@@ -37,6 +37,7 @@ from recipe_generation import (
     _gen_recipe,
     _gen_recipe_batch,
     _normalize_queue_recipe,
+    _recipe_matches_meal,
     _queue_recipe_presentable,
     _season_hint,
 )
@@ -181,14 +182,17 @@ async def _generate_and_store_queue(cid, meal, ingredients=None):
     return items
 
 
-def _next_presentable_queue_recipe(cid):
+def _next_presentable_queue_recipe(cid, meal=None, avoid_names=None):
     """Пропускает повреждённые карточки, уже сохранённые в старой очереди."""
+    avoided = {str(name or "").casefold() for name in (avoid_names or [])}
     while True:
         item = queue_next(cid)
         if item is None:
             return None
         item = _normalize_queue_recipe(item)
-        if _queue_recipe_presentable(item):
+        if (_queue_recipe_presentable(item)
+                and _recipe_matches_meal(item, meal)
+                and str(item.get("name") or "").casefold() not in avoided):
             return item
 
 
@@ -200,7 +204,10 @@ async def enter_meal(bot, cid, meal, ingredients=None, status=None):
     if q.get("meal") == meal and q.get("items"):
         # Старые очереди могли сохраниться из неполного ответа модели. Не
         # показываем служебную ошибку: очищаем их и собираем готовую замену.
-        current = _next_presentable_queue_recipe(cid)
+        previous = store.last_recipe.get(str(cid)) or {}
+        current = _next_presentable_queue_recipe(
+            cid, meal, avoid_names=[previous.get("name")],
+        )
         if current is not None:
             await _send_queue_card(bot, cid, meal, current, status=status)
             return
@@ -219,7 +226,8 @@ async def enter_meal(bot, cid, meal, ingredients=None, status=None):
                 "Не получилось придумать рецепты, попробуй ещё раз.",
                 reply_markup=back_menu_keyboard("m_food"))
             return
-    d = _next_presentable_queue_recipe(cid)
+    previous = store.last_recipe.get(str(cid)) or {}
+    d = _next_presentable_queue_recipe(cid, meal, avoid_names=[previous.get("name")])
     if d is None:
         if status is not None:
             await status.replace(
@@ -262,7 +270,7 @@ async def show_next_recipe(bot, cid, status=None):
     prev_cuisine = prev.get("cuisine")
     if prev_cuisine:
         bump_cuisine_weight(cid, prev_cuisine, -1)
-    d = _next_presentable_queue_recipe(cid)
+    d = _next_presentable_queue_recipe(cid, meal, avoid_names=[prev.get("name")])
     if d is None:
         if status is None:
             status = await util.StatusManager.start(bot, cid)
@@ -276,7 +284,7 @@ async def show_next_recipe(bot, cid, status=None):
                 "Не получилось придумать рецепты, попробуй ещё раз.",
                 reply_markup=back_menu_keyboard("m_food"))
             return
-        d = _next_presentable_queue_recipe(cid)
+        d = _next_presentable_queue_recipe(cid, meal, avoid_names=[prev.get("name")])
         if d is None:
             await status.replace(
                 "Не получилось придумать рецепты, попробуй ещё раз.",

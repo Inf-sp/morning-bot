@@ -345,6 +345,101 @@ def test_movie_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
     assert all("✏️ Изменить" not in row for row in rows)
 
 
+def test_favorite_movies_home_groups_russian_titles_by_genre():
+    message = leisure_movies.leisure_ui.favorite_movies_home(3, [
+        {"genre": "Драма", "titles": ["Патерсон", "Развод Надера и Симин"]},
+        {"genre": "Комедия", "titles": ["Амели"]},
+    ])
+
+    assert message.text == (
+        "🎚️ Моё кино · 3 фильма/сериала\n\n"
+        "Драма:\nПатерсон, Развод Надера и Симин\n\n"
+        "Комедия:\nАмели"
+    )
+
+
+def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
+    class Bot:
+        messages = []
+        photos = []
+
+        async def send_message(self, **kwargs):
+            self.messages.append(kwargs)
+
+        async def send_photo(self, **kwargs):
+            self.photos.append(kwargs)
+
+    records = [
+        {"id": "a123456789", "value": "Paterson (фильм, 2016)"},
+        {"id": "b123456789", "value": "Amélie (фильм, 2001)"},
+    ]
+    metadata = {
+        "Paterson": {"name": "Патерсон", "year": "2016", "kind": "movie", "genres": "драма, комедия",
+                      "overview": "Водитель автобуса пишет стихи.", "poster": "https://img/paterson.jpg"},
+        "Amélie": {"name": "Амели", "year": "2001", "kind": "movie", "genres": "комедия, мелодрама",
+                   "overview": "Девушка меняет жизни соседей.", "poster": "https://img/amelie.jpg"},
+    }
+    monkeypatch.setattr(leisure_movies.config, "TMDB_API_KEY", "test-key")
+    monkeypatch.setattr(leisure_movies.store, "ensure_list_ids", lambda *_args: records)
+    monkeypatch.setattr(leisure_movies.tmdb, "lookup_title", lambda title: metadata[title])
+
+    bot = Bot()
+    asyncio.run(leisure_movies.send_favorite_movies(bot, "42"))
+
+    labels = _labels(bot.messages[0]["reply_markup"])
+    assert bot.messages[0]["text"] == (
+        "🎚️ Моё кино · 2 фильма/сериала\n\n"
+        "Драма:\nПатерсон\n\n"
+        "Комедия:\nАмели"
+    )
+    assert labels[-2:] == [["🆕 Добавить фильм"], ["⬅️ Назад", "#️⃣ Главная"]]
+    genre_callback = bot.messages[0]["reply_markup"].inline_keyboard[0][0].callback_data
+    _op, token, genre_index, page = genre_callback.split(":")
+
+    asyncio.run(leisure_movies.send_favorite_movie_genre(
+        bot, "42", token, int(genre_index), int(page),
+    ))
+    item_callback = bot.messages[-1]["reply_markup"].inline_keyboard[0][0].callback_data
+    _op, token, short_id, genre_index, page = item_callback.split(":")
+    asyncio.run(leisure_movies.send_favorite_movie_card(
+        bot, "42", token, short_id, int(genre_index), int(page),
+    ))
+
+    assert bot.photos[-1]["photo"] == "https://img/paterson.jpg"
+    assert "Патерсон (2016)" in bot.photos[-1]["caption"]
+    assert "Фильм · драма, комедия" in bot.photos[-1]["caption"]
+    assert "Водитель автобуса пишет стихи." in bot.photos[-1]["caption"]
+    assert _labels(bot.photos[-1]["reply_markup"])[0] == ["❌ Удалить"]
+
+
+def test_favorite_movie_delete_removes_only_selected_record(monkeypatch):
+    token = "delete"
+    leisure_movies._favorite_movie_views[token] = {
+        "cid": "42",
+        "created_at": leisure_movies.time.time(),
+        "genres": [("Драма", [{
+            "id": "movie-id-1", "value": "Патерсон", "title": "Патерсон",
+            "genre": "Драма", "tm": {},
+        }])],
+    }
+    removed = []
+    reopened = []
+    monkeypatch.setattr(
+        leisure_movies.store, "remove_from_list_by_ids",
+        lambda key, cid, ids: removed.append((key, cid, ids)) or 1,
+    )
+
+    async def reopen(_bot, cid, q=None):
+        reopened.append((cid, q))
+
+    monkeypatch.setattr(leisure_movies, "send_favorite_movies", reopen)
+
+    asyncio.run(leisure_movies.delete_favorite_movie(object(), "42", token, "movie-id"))
+
+    assert removed == [(config.FAVORITE_MOVIES_KEY, "42", ["movie-id-1"])]
+    assert reopened == [("42", None)]
+
+
 def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
     view_id = "books-layout"
     cleanup._views[view_id] = {
@@ -701,6 +796,7 @@ def test_premiere_screens_are_compact_and_keep_book_links():
     }])
 
     assert "Премьеры в кино · Нидерланды" in movie.text
+    assert "до 7 самых популярных" not in movie.text
     assert "«Премьера» · драма · комедия · 15 августа 2026" in movie.text
     assert "Семья пытается сохранить дом после большого наводнения." in movie.text
     assert any(
@@ -810,7 +906,7 @@ def test_movie_premieres_are_sent_as_one_native_poster_gallery(monkeypatch):
 
     asyncio.run(leisure_movies.send_movie_premieres(Bot(), "42", status=Status()))
 
-    assert [kind for kind, _kwargs in sent] == ["gallery"]
+    assert [kind for kind, _kwargs in sent] == ["gallery", "message"]
     gallery = sent[0][1]
     assert len(gallery["media"]) == 3
     assert gallery["caption"].startswith("🎟️ Премьеры в кино · Нидерланды")
@@ -818,6 +914,8 @@ def test_movie_premieres_are_sent_as_one_native_poster_gallery(monkeypatch):
         entity.url for entity in gallery["caption_entities"]
         if entity.type == MessageEntity.TEXT_LINK
     } == {item["trailer_url"] for item in items}
+    navigation = sent[1][1]["reply_markup"]
+    assert _labels(navigation) == [["⬅️ Назад", "#️⃣ Главная"]]
 
 
 def test_movie_home_opens_daily_cinema_screen(monkeypatch):

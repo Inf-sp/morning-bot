@@ -507,6 +507,27 @@ async def handle(update, context, remove_reply_keyboard):
             preserve_message=True,
         )
         return
+    if data == "vg_set":
+        await leisure_games.send_game_set(bot, cid, q=q)
+        return
+    if data.startswith("vg_setg:"):
+        _op, token, genre_index, page = data.split(":", 3)
+        await leisure_games.send_game_set_genre(bot, cid, token, int(genre_index), int(page), q=q)
+        return
+    if data.startswith("vg_seti:"):
+        _op, token, short_id, genre_index, page = data.split(":", 4)
+        await leisure_games.send_game_set_card(bot, cid, token, short_id, int(genre_index), int(page))
+        return
+    if data.startswith("vg_setd:"):
+        _op, token, short_id, genre_index, page = data.split(":", 4)
+        await leisure_games.confirm_game_set_delete(
+            bot, cid, token, short_id, int(genre_index), int(page), q=q,
+        )
+        return
+    if data.startswith("vg_setdok:"):
+        _op, token, short_id = data.split(":", 2)
+        await leisure_games.delete_game_set_item(bot, cid, token, short_id, q=q)
+        return
     if data == "vg_board":
         await _inline_status(
             lambda status: leisure_games.send_game_recommendation(
@@ -556,7 +577,29 @@ async def handle(update, context, remove_reply_keyboard):
         )
         return
     if data == "movie_favorites":
-        await cleanup.open_collection(bot, cid, "cinema_favorites", back="m_movie")
+        await leisure_movies.send_favorite_movies(bot, cid, q=q)
+        return
+    if data.startswith("mfg:"):
+        _op, token, genre_index, page = data.split(":", 3)
+        await leisure_movies.send_favorite_movie_genre(
+            bot, cid, token, int(genre_index), int(page), q=q,
+        )
+        return
+    if data.startswith("mfi:"):
+        _op, token, short_id, genre_index, page = data.split(":", 4)
+        await leisure_movies.send_favorite_movie_card(
+            bot, cid, token, short_id, int(genre_index), int(page),
+        )
+        return
+    if data.startswith("mfd:"):
+        _op, token, short_id, genre_index, page = data.split(":", 4)
+        await leisure_movies.send_favorite_movie_delete_confirmation(
+            bot, cid, token, short_id, int(genre_index), int(page), q=q,
+        )
+        return
+    if data.startswith("mfdok:"):
+        _op, token, short_id = data.split(":", 2)
+        await leisure_movies.delete_favorite_movie(bot, cid, token, short_id, q=q)
         return
     if data == "book_favorites":
         await cleanup.open_collection(bot, cid, "books_favorites", back="m_books")

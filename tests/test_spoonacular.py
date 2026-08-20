@@ -233,8 +233,9 @@ def test_batch_returns_plain_template_when_sources_and_llms_are_down(monkeypatch
 
     result = recipe_generation._gen_recipe_batch("ужин", cid="42")
 
-    assert len(result) == 1
-    assert result[0]["name"] == "Быстрый омлет с овощами"
+    assert len(result) == 4
+    assert len({item["name"] for item in result}) == 4
+    assert all("омлет" not in item["name"].casefold() for item in result)
     assert result[0]["steps"]
 
 
@@ -247,6 +248,7 @@ def test_incomplete_recipe_batch_response_uses_presentable_local_recipe(monkeypa
 
     result = recipe_generation._gen_recipe_batch("ужин", cid="42")
 
-    assert len(result) == 1
-    assert result[0]["name"] == "Быстрый омлет с овощами"
+    assert len(result) == 4
+    assert len({item["name"] for item in result}) == 4
+    assert all("омлет" not in item["name"].casefold() for item in result)
     assert recipe_generation._queue_recipe_presentable(result[0])

@@ -98,7 +98,7 @@ def empty_wardrobe():
 
 
 def render_wardrobe_message(look_data):
-    """Образ на сегодня: три вещи, которые нужно надеть, и один финальный штрих.
+    """Образ на сегодня: три базовые вещи и выбранные дополнения.
 
     Погодная строка намеренно не показывается.
 
@@ -114,13 +114,24 @@ def render_wardrobe_message(look_data):
         b.spacer()
         b.bold("Надень:")
         b.newline()
-        top = ", ".join([*slots["Верх"], *slots["Верхняя одежда"]])
-        if top:
-            b.line(f"- {top}")
+        if slots["Верх"]:
+            b.line(f"- {', '.join(slots['Верх'])}")
         if slots["Низ"]:
             b.line(f"- {', '.join(slots['Низ'])}")
         if slots["Обувь"]:
             b.line(f"- {', '.join(slots['Обувь'])}")
+
+        extras = [
+            *slots["Верхняя одежда"],
+            *slots["Аксессуары"],
+            *slots["Другое"],
+        ]
+        if extras:
+            b.spacer()
+            b.bold("Дополнительно:")
+            b.newline()
+            for item in extras:
+                b.line(f"- {item}")
 
     tip = _outfit_tip(slots, look_data.get("style_tip"))
     if tip:
@@ -158,10 +169,6 @@ def _outfit_slots(items):
 
 
 def _outfit_tip(slots, style_tip):
-    accessories = slots.get("Аксессуары") or []
-    if accessories:
-        names = ", ".join(accessories)
-        return f"Добавь {names} — это завершит образ без лишних деталей"
     return _finish_dot(style_tip)
 
 
@@ -318,10 +325,21 @@ def zone_picker_screen():
     return b.build_stripped()
 
 
-def wardrobe_home_screen(total):
+def wardrobe_home_screen(total, categories=None):
     b = MessageBuilder()
-    b.section(f"🎚️ Мой шкаф · {total} {_pluralize_items(total)}")
-    b.line("Выбери категорию:")
+    b.title(f"🎚️ Мой шкаф · {total} {_pluralize_items(total)}")
+    for category in categories or []:
+        names = [
+            _clean_text(_item_display(item))
+            for item in (category.get("items") or [])
+            if _clean_text(_item_display(item))
+        ]
+        if not names:
+            continue
+        b.bold(f"{_clean_text(category.get('zone'))}:")
+        b.newline()
+        b.line(", ".join(names))
+        b.spacer()
     return b.build_stripped()
 
 
@@ -332,9 +350,10 @@ def subcat_picker_screen(zone):
     return b.build_stripped()
 
 
-def category_screen(zone, items):
+def category_screen(zone, items, total=None):
     b = MessageBuilder()
-    b.section(f"👕 {_clean_text(zone)} · {len(items)} {_pluralize_items(len(items))}")
+    count = len(items) if total is None else total
+    b.section(f"👕 {_clean_text(zone)} · {count} {_pluralize_items(count)}")
     if items:
         b.spacer()
         for index, item in enumerate(items, 1):

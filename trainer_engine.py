@@ -19,8 +19,7 @@ EXERCISE_CHOOSE_REACTION = "choose_reaction"
 
 ALL_EXERCISES = (
     EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL,
-    EXERCISE_BUILD_SENTENCE, EXERCISE_FIND_ERROR,
-    EXERCISE_FILL_GAP,
+    EXERCISE_FIND_ERROR, EXERCISE_FILL_GAP,
     EXERCISE_CHOOSE_REACTION,
 )
 
@@ -57,8 +56,6 @@ def select_exercise_type(entry, avoid="", rng=random):
             candidates.append(EXERCISE_FILL_GAP)
     elif level <= 3:
         candidates = [EXERCISE_RECALL, EXERCISE_FILL_GAP]
-        if kind == "phrase" and len(_entry_term(entry).split()) >= 3:
-            candidates.append(EXERCISE_BUILD_SENTENCE)
         if entry.get("situation_type"):
             candidates.append(EXERCISE_CHOOSE_REACTION)
         if kind == "rule":
@@ -67,8 +64,6 @@ def select_exercise_type(entry, avoid="", rng=random):
         candidates = [EXERCISE_RECALL]
         if entry.get("situation_type"):
             candidates.append(EXERCISE_CHOOSE_REACTION)
-        if kind == "phrase" and len(_entry_term(entry).split()) >= 3:
-            candidates.append(EXERCISE_BUILD_SENTENCE)
         candidates.append(EXERCISE_FIND_ERROR)
         if rng.random() < 0.15:
             candidates.append(rng.choice((EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL)))

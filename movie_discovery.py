@@ -511,9 +511,17 @@ async def send_movie_premieres(bot, cid, *, status=None):
                 caption=msg.text,
                 caption_entities=msg.entities,
             )
-            return
         except Exception:
             pass
+        else:
+            # Telegram не поддерживает inline-кнопки у альбомов, поэтому
+            # навигация приходит отдельной компактной строкой сразу под ними.
+            await bot.send_message(
+                chat_id=cid,
+                text="🎟️ Премьеры",
+                reply_markup=kb,
+            )
+            return
     if len(posters) == 1:
         try:
             await bot.send_photo(

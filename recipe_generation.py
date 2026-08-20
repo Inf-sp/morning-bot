@@ -1330,6 +1330,44 @@ def _queue_recipe_presentable(item) -> bool:
     )
 
 
+_BREAKFAST_NAME_MARKERS = (
+    "омлет", "каша", "тост", "сырник", "йогурт", "блин", "гранол", "творог",
+)
+
+
+def _recipe_matches_meal(item, meal) -> bool:
+    """Не пропускает очевидный завтрак в очередь обеда или ужина."""
+    name = str((item or {}).get("name") or "").casefold()
+    if meal in {"lunch", "dinner"}:
+        return not any(marker in name for marker in _BREAKFAST_NAME_MARKERS)
+    return True
+
+
+def _meal_fallback_batch(constraint, n, recent_history=None):
+    """Быстрый локальный запас без омлета для обеда и ужина."""
+    normalized = str(constraint or "").casefold()
+    meal = "dinner" if "ужин" in normalized else ("lunch" if "обед" in normalized else "breakfast")
+    if meal == "breakfast":
+        return [_fallback_recipe()]
+    ingredient_sets = (
+        "паста, грибы, помидоры",
+        "рис, брокколи, морковь",
+        "гречка, грибы, лук",
+        "нут, кабачок, помидоры",
+    )
+    avoided = {str(name or "").casefold() for name in recent_history or []}
+    candidates = []
+    for ingredients in ingredient_sets:
+        recipe = _fallback_leftovers_recipe(ingredients, meal=meal)
+        recipe = _normalize_queue_recipe(recipe)
+        name = str(recipe.get("name") or "").casefold()
+        if (name and _queue_recipe_presentable(recipe) and _recipe_matches_meal(recipe, meal)):
+            candidates.append(recipe)
+    fresh = [recipe for recipe in candidates
+             if str(recipe.get("name") or "").casefold() not in avoided]
+    return (fresh or candidates)[:n]
+
+
 def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history=None,
                        season_hint=None, n=RECIPE_BATCH_SIZE, meal_guard="",
                        source_ingredients=""):
@@ -1379,12 +1417,15 @@ def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history
                 "profile_version": 1,
                 "schema_version": 1,
             },
+            budget_seconds=7,
         )
     except Exception as error:
         _log.warning("recipe batch LLM chain unavailable, using safe fallback: %s", type(error).__name__)
         source_cards = [_normalize_queue_recipe(_source_recipe_card(source)) for source in sources[:n]]
-        source_cards = [card for card in source_cards if _queue_recipe_presentable(card)]
-        return source_cards or [_fallback_recipe()]
+        meal = "dinner" if "ужин" in str(constraint).casefold() else ("lunch" if "обед" in str(constraint).casefold() else "breakfast")
+        source_cards = [card for card in source_cards
+                        if _queue_recipe_presentable(card) and _recipe_matches_meal(card, meal)]
+        return source_cards or _meal_fallback_batch(constraint, n, recent_history)
     items = result.get("recipes") if isinstance(result, dict) else None
     if not isinstance(items, list):
         # модель могла вернуть один рецепт плоским объектом вместо {"recipes":[...]}"
@@ -1397,10 +1438,12 @@ def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history
     items = presentable
     if not items and sources:
         source_cards = [_normalize_queue_recipe(_source_recipe_card(source)) for source in sources[:n]]
-        source_cards = [card for card in source_cards if _queue_recipe_presentable(card)]
-        return source_cards or [_fallback_recipe()]
+        meal = "dinner" if "ужин" in str(constraint).casefold() else ("lunch" if "обед" in str(constraint).casefold() else "breakfast")
+        source_cards = [card for card in source_cards
+                        if _queue_recipe_presentable(card) and _recipe_matches_meal(card, meal)]
+        return source_cards or _meal_fallback_batch(constraint, n, recent_history)
     if not items:
-        return [_fallback_recipe()]
+        return _meal_fallback_batch(constraint, n, recent_history)
     return items
 
 

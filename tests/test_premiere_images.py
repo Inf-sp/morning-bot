@@ -48,7 +48,7 @@ def test_movie_premiere_without_poster_is_not_shown(monkeypatch):
 
     asyncio.run(leisure_movies.send_movie_premieres(bot, "42"))
 
-    assert [kind for kind, _kwargs in bot.sent] == ["gallery"]
+    assert [kind for kind, _kwargs in bot.sent] == ["gallery", "message"]
     assert "Без постера" not in bot.sent[0][1]["caption"]
     assert len(bot.sent[0][1]["media"]) == 2
 

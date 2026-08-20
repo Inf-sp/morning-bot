@@ -188,38 +188,19 @@ def learning_menu(home: dict):
         b.line("Я буду использовать их в практике и повторении.")
         return b.build_stripped(reply_markup=ikb([
             [("🆕 Добавить слова", f"a_dictadd_smart_{code}")],
-            [("✨ Подобрать слова", f"a_dictseed_start_{code}")],
+            [("✨ Подобрать новые слова", f"a_dictseed_start_{code}")],
         ]))
 
     b.bold(f"{flag} Изучаем сегодня · {title}")
-    b.newline()
-    b.spacer()
-    kind = home.get("kind") or "phrase"
-    material_label = {
-        "word": "Слово дня",
-        "phrase": "Фраза дня",
-        "construction": "Конструкция дня",
-        "rule": "Правило дня",
-    }.get(kind, "Фраза дня")
-    if kind == "construction":
-        b.text_line(home["term"])
-    else:
-        b.label(material_label, home["term"], lowercase=False)
-    if kind != "rule" and home.get("translation"):
-        b.text_line(" → ")
-        b.add(finish_dot(home["translation"]), MessageEntity.SPOILER)
     b.newline()
 
     phrase = home.get("live_language") or {}
     if phrase.get("text") and phrase.get("translation"):
         b.spacer()
         b.bold("Живой язык:")
-        b.text_line(f" {phrase['text']} → {phrase['translation']}")
+        b.text_line(f" {phrase['text']} → ")
+        b.add(finish_dot(phrase["translation"]), MessageEntity.SPOILER)
         b.newline()
-        if phrase.get("meaning"):
-            b.bold("Когда говорят?")
-            b.text_line(f" {phrase['meaning']}")
-            b.newline()
 
     progress = home.get("progress") or {}
     b.spacer()

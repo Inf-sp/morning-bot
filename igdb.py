@@ -7,6 +7,7 @@ match. Board games are intentionally left untouched.
 
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta, timezone
 import re
 import threading
 import time
@@ -20,11 +21,30 @@ import util
 
 _TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 _MULTIQUERY_URL = "https://api.igdb.com/v4/multiquery"
+_GAMES_URL = "https://api.igdb.com/v4/games"
 _IMAGE_URL = "https://images.igdb.com/igdb/image/upload/t_cover_big/{image_id}.jpg"
 _YOUTUBE_URL = "https://www.youtube.com/watch?v={video_id}"
 _DIGITAL_PLATFORMS = {"pc", "ps5", "other"}
 _TRAILER_WORDS = ("trailer", "teaser", "announcement", "announce", "reveal")
 _LOOKUP_CACHE_TTL = 30 * 86400
+
+_PLATFORM_IDS = {
+    "pc": {6},
+    "ps5": {167},
+    "xbox": {169},
+    "switch": {130, 508},
+    "mobile": {34, 39},
+}
+_PLATFORM_LABELS = {
+    "pc": "💻 ПК", "ps5": "🎮 PS5", "xbox": "🟩 Xbox",
+    "switch": "🔴 Switch", "mobile": "📱 Мобильные",
+}
+_GENRES_RU = {
+    "adventure": "приключение", "role-playing (rpg)": "RPG",
+    "shooter": "шутер", "strategy": "стратегия", "racing": "гонки",
+    "sport": "спорт", "simulator": "симулятор", "puzzle": "головоломка",
+    "fighting": "файтинг", "platform": "платформер", "indie": "инди",
+}
 
 _TOKEN_LOCK = threading.Lock()
 _TOKEN = ""
@@ -161,6 +181,85 @@ def _trailer_video_id(videos) -> str:
         if video_id and any(word in name for word in _TRAILER_WORDS):
             return video_id
     return ""
+
+
+def get_upcoming_games(platforms, *, today=None, days=180) -> list[dict]:
+    """Return dated upcoming releases directly from the verified IGDB catalogue."""
+    selected = {str(value).strip().casefold() for value in (platforms or [])}
+    platform_ids = sorted({ident for key in selected for ident in _PLATFORM_IDS.get(key, set())})
+    token = _access_token()
+    if not token or not platform_ids:
+        return []
+    today = today or date.today()
+    start = int(datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc).timestamp())
+    end = int(datetime.combine(today + timedelta(days=days), datetime.max.time(), tzinfo=timezone.utc).timestamp())
+    query = (
+        "fields name,slug,first_release_date,cover.image_id,platforms.id,"
+        "genres.name,summary,videos.name,videos.video_id; "
+        f"where first_release_date >= {start} & first_release_date <= {end} "
+        f"& platforms = ({','.join(str(value) for value in platform_ids)}) "
+        "& cover != null & version_parent = null; sort first_release_date asc; limit 50;"
+    )
+    try:
+        response = requests.post(
+            _GAMES_URL,
+            headers={
+                "Client-ID": config.IGDB_CLIENT_ID,
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/json",
+            },
+            data=query.encode("utf-8"),
+            timeout=_request_timeout(),
+        )
+        _record(response)
+        if not 200 <= response.status_code < 300:
+            return []
+        payload = response.json()
+    except Exception as exc:
+        _record(error=type(exc).__name__)
+        return []
+    result, seen = [], set()
+    for game in payload if isinstance(payload, list) else []:
+        title = " ".join(str(game.get("name") or "").split())
+        slug = str(game.get("slug") or "").strip()
+        timestamp = game.get("first_release_date")
+        if not title or not slug or title.casefold() in seen:
+            continue
+        try:
+            release = datetime.fromtimestamp(int(timestamp), tz=timezone.utc).date()
+        except (TypeError, ValueError, OSError):
+            continue
+        keys = [
+            key for key in _PLATFORM_IDS
+            if key in selected and any(
+                int(item.get("id") or 0) in _PLATFORM_IDS[key]
+                for item in (game.get("platforms") or []) if isinstance(item, dict)
+            )
+        ]
+        if not keys:
+            continue
+        image_id = str((game.get("cover") or {}).get("image_id") or "").strip()
+        if not image_id:
+            continue
+        genres = [str(item.get("name") or "").strip() for item in (game.get("genres") or []) if isinstance(item, dict)]
+        genre = next((_GENRES_RU.get(value.casefold(), value) for value in genres if value), "")
+        trailer_id = _trailer_video_id(game.get("videos"))
+        item = {
+            "title": title,
+            "date": release.isoformat(),
+            "platforms": keys,
+            "platform_label": " · ".join(_PLATFORM_LABELS[key] for key in keys),
+            "genre": genre,
+            "summary": "",
+            "url": f"https://www.igdb.com/games/{slug}",
+        }
+        if image_id:
+            item["poster"] = _IMAGE_URL.format(image_id=image_id)
+        if trailer_id:
+            item["trailer_url"] = _YOUTUBE_URL.format(video_id=trailer_id)
+        result.append(item)
+        seen.add(title.casefold())
+    return result[:8]
 
 
 def enrich_game_premieres(items) -> list[dict]:

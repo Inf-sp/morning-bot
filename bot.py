@@ -52,7 +52,7 @@ _RECENT_HOME_OPENINGS = {}
 _HOME_OPENING_DEDUP_SECONDS = 3
 _WEATHER_WARNING_TIME = "08:00"
 _HOME_WARM_SCHEDULE = (
-    ("myday", "08:00"),
+    ("myday", "07:00"),
     ("wardrobe", "08:05"),
     ("cooking", "03:20"),
     ("travel", "08:15"),
@@ -393,10 +393,8 @@ async def job_warm_book_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def job_warm_game_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
-    """Перед пятничной рассылкой готовит игровые премьеры под платформы пользователей."""
+    """Ночью готовит игровые премьеры под платформы каждого пользователя."""
     for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "weekend_events"):
-            continue
         if tracking.has_active_actions():
             logging.info("game premieres warm skipped: user action active")
             return
@@ -684,8 +682,8 @@ def _build_application():
         **_job_options("book_premieres_cache_weekly"),
     )
     jq.run_daily(
-        job_warm_game_premieres_cache, time=_t("02:50"), days=(4,),
-        **_job_options("game_premieres_cache_weekly"),
+        job_warm_game_premieres_cache, time=_t("02:50"), days=tuple(range(7)),
+        **_job_options("game_premieres_cache_daily"),
     )
     jq.run_daily(
         job_weather_warn,

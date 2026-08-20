@@ -149,6 +149,7 @@ FAVORITE_MOVIES_KEY = "favorite_movies.json"
 SAVED_COUNTRIES_KEY = "saved_countries.json"
 LEGACY_COUNTRIES_KEY = "mycountries.json"
 FAVORITE_BOOKS_KEY = "favorite_books.json"
+FAVORITE_GAMES_KEY = "favorite_games.json"
 BOOK_RECO_CACHE_KEY = "book_reco_cache.json"  # {cid: {date, item}} — текущая карточка книги на день
 MOVIE_RECO_CACHE_KEY = "movie_reco_cache.json"  # {cid: {date, signature, item, tm}} — персональная карточка кино на день
 BOOK_WEEKLY_CACHE_KEY = "book_weekly_cache.json"  # {week, date, items} — заметные новинки книг недели

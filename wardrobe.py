@@ -48,6 +48,8 @@ if TYPE_CHECKING:
 WARDROBE_WIND_LAYER_MS = 6
 COPY_VALIDATOR_VERSION = 11
 PURCHASE_RECOMMENDATION_VERSION = 2
+WARDROBE_CATEGORY_PAGE_SIZE = 8
+CLOSET_ZONE_ORDER = ("Верх", "Низ", "Верхняя одежда", "Обувь", "Аксессуары")
 
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
@@ -657,15 +659,27 @@ async def send_wardrobe_zones(bot, cid, q=None):
     _cancel_wardrobe_input(cid)
     w = store.load_wardrobe(cid)
     total, counts = wardrobe_stats(w)
+    flat_items = _flat_wardrobe_items(w)
+    category_summaries = [
+        {
+            "zone": public_zone_name(zone),
+            "items": [
+                item for item_zone, _subcat, item in flat_items
+                if item_zone == zone or (zone == "Аксессуары" and item_zone == "Другое")
+            ],
+        }
+        for zone in CLOSET_ZONE_ORDER
+        if counts.get(zone) or (zone == "Аксессуары" and counts.get("Другое"))
+    ]
     rows = []
-    for zone in ZONE_ORDER:
+    for zone in CLOSET_ZONE_ORDER:
         rows.append([InlineKeyboardButton(
             public_zone_name(zone),
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
         )])
     rows.append([InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
-    msg = wardrobe_ui.wardrobe_home_screen(total)
+    msg = wardrobe_ui.wardrobe_home_screen(total, category_summaries)
     kb = InlineKeyboardMarkup(rows)
     # Экран шкафа служебный. Отправляем его отдельно, чтобы карточка образа,
     # из которой пользователь пришёл, осталась в истории как полезный результат.
@@ -673,16 +687,29 @@ async def send_wardrobe_zones(bot, cid, q=None):
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb, transient=True)
 
 
-async def send_category(bot, cid, zone_slug, q=None):
+async def send_category(bot, cid, zone_slug, page=0, q=None):
     zone = ZONE_BY_SLUG.get(zone_slug)
     if not zone:
         await send_wardrobe_zones(bot, cid, q=q)
         return
     items = [item for item_zone, _subcat, item in _flat_wardrobe_items(store.load_wardrobe(cid))
-             if item_zone == zone]
-    msg = wardrobe_ui.category_screen(public_zone_name(zone), items)
+             if item_zone == zone or (zone == "Аксессуары" and item_zone == "Другое")]
+    total = len(items)
+    pages = max(1, (total + WARDROBE_CATEGORY_PAGE_SIZE - 1) // WARDROBE_CATEGORY_PAGE_SIZE)
+    page = max(0, min(int(page), pages - 1))
+    chunk = items[
+        page * WARDROBE_CATEGORY_PAGE_SIZE:(page + 1) * WARDROBE_CATEGORY_PAGE_SIZE
+    ]
+    msg = wardrobe_ui.category_screen(public_zone_name(zone), chunk, total=total)
     rows = [[InlineKeyboardButton(str(item.get("name") or "Вещь")[:48], callback_data=f"w_item_{item.get('id')}")]
-            for item in items]
+            for item in chunk]
+    if pages > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"w_cat_{zone_slug}_{(page - 1) % pages}"),
+            InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"w_cat_{zone_slug}_{(page + 1) % pages}"),
+        ])
+    rows.append([InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -811,7 +838,13 @@ async def handle_callback(bot, cid, q, data, status=None):
         item_id = data[len("w_searchdel_"):]
         await send_delete_confirmation(bot, cid, item_id, q=q); return
     if data.startswith("w_cat_"):
-        await send_category(bot, cid, data[len("w_cat_"):], q=q); return
+        category_data = data[len("w_cat_"):]
+        zone_slug, separator, page_value = category_data.rpartition("_")
+        if separator and zone_slug in ZONE_BY_SLUG and page_value.isdigit():
+            await send_category(bot, cid, zone_slug, int(page_value), q=q)
+        else:
+            await send_category(bot, cid, category_data, q=q)
+        return
     if data.startswith("w_item_"):
         await send_item_card(bot, cid, data[len("w_item_"):], q=q); return
     if data.startswith("w_edit_"):
