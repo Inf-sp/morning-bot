@@ -30,18 +30,18 @@ GAME_PLATFORMS = (
     ("board", "🎲 Настолки"),
 )
 GAME_GENRES = (
-    ("rpg", "🧙 RPG"),
-    ("action", "⚔️ Экшен"),
-    ("strategy", "🧠 Стратегии"),
-    ("adventure", "🗺️ Приключения"),
-    ("cozy", "🌿 Уютные"),
-    ("horror", "👻 Хоррор"),
+    ("rpg", "RPG"),
+    ("action", "Экшен"),
+    ("strategy", "Стратегии"),
+    ("adventure", "Приключения"),
+    ("cozy", "Уютные"),
+    ("horror", "Хоррор"),
 )
 
 _PLATFORM_LABEL = dict(GAME_PLATFORMS)
 _PLATFORM_LABEL["other"] = "🕹️ Прочее"
 _GENRE_LABEL = dict(GAME_GENRES)
-_GENRE_LABEL["board"] = "🎲 Настолки"
+_GENRE_LABEL["board"] = "Настолки"
 _GAME_PREMIERES_VERSION = 3
 _GAME_SET_PAGE_SIZE = 8
 _GAME_SET_VIEW_TTL = 24 * 3600
@@ -474,21 +474,53 @@ async def send_game_set_genre(bot, cid, token, genre_index, page=0, q=None):
         await send_game_set(bot, cid, q=q)
         return
     genre, items = view["genres"][genre_index]
-    pages = max(1, (len(items) + _GAME_SET_PAGE_SIZE - 1) // _GAME_SET_PAGE_SIZE)
-    page = max(0, min(page, pages - 1))
-    chunk = items[page * _GAME_SET_PAGE_SIZE:(page + 1) * _GAME_SET_PAGE_SIZE]
-    rows = [[InlineKeyboardButton(item["name"][:48], callback_data=f"vg_seti:{token}:{item['id'][:8]}:{genre_index}:{page}")]
-            for item in chunk]
-    if pages > 1:
+    page = max(0, min(int(page), len(items) - 1))
+    item = items[page]
+    card = _decorate_game(item, cid) if item.get("platforms") else dict(item)
+    card = await asyncio.to_thread(enrich_favorite_game, card)
+    card["platform_labels"] = [
+        _PLATFORM_LABEL[key] for key in card.get("platforms") or [] if key in _PLATFORM_LABEL
+    ]
+    item.update(card)
+    msg = leisure_ui.game_set_card(card)
+    rows = []
+    if len(items) > 1:
         rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"vg_setg:{token}:{genre_index}:{(page - 1) % pages}"),
-            InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
-            InlineKeyboardButton("▶️", callback_data=f"vg_setg:{token}:{genre_index}:{(page + 1) % pages}"),
+            InlineKeyboardButton("◀️", callback_data=f"vg_setg:{token}:{genre_index}:{(page - 1) % len(items)}"),
+            InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"vg_setg:{token}:{genre_index}:{(page + 1) % len(items)}"),
         ])
+    rows.append([InlineKeyboardButton(
+        "❌ Удалить", callback_data=f"vg_setd:{token}:{item['id'][:8]}:{genre_index}:{page}",
+    )])
     rows.append([InlineKeyboardButton("🆕 Добавить игру", callback_data="as_loveadd_games")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="vg_set"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
-    await _deliver(bot, cid, leisure_ui.game_set_genre(genre, len(items)), InlineKeyboardMarkup(rows), q=q)
+    kb = InlineKeyboardMarkup(rows)
+    poster = str(card.get("poster") or "").strip()
+    if q is not None and poster:
+        try:
+            await q.edit_message_media(
+                media=InputMediaPhoto(
+                    media=poster, caption=msg.text, caption_entities=msg.entities,
+                ),
+                reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
+    if poster:
+        try:
+            await bot.send_photo(
+                chat_id=cid, photo=poster, caption=msg.text,
+                caption_entities=msg.entities, reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
+    )
 
 
 def _game_set_item(cid, token, short_id):
@@ -584,7 +616,7 @@ async def send_favorite_games_added_card(bot, cid, items):
 
 def _genre_keyboard():
     buttons = [InlineKeyboardButton(label, callback_data=f"vg_g_{key}") for key, label in GAME_GENRES]
-    rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
+    rows = [[button] for button in buttons]
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),

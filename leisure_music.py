@@ -29,12 +29,12 @@ def _music_home_only_kb():
     return InlineKeyboardMarkup([[InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
 
 _MUSIC_GENRES = [
-    ("indie", "🌿 Инди", "инди-поп или инди-рок"),
-    ("pop", "✨ Поп", "современный поп"),
-    ("electronic", "⚡ Электроника", "электронная музыка"),
-    ("rnb", "🪩 R&B", "R&B или соул"),
-    ("rock", "🎸 Рок", "рок"),
-    ("hiphop", "🎤 Хип-хоп", "хип-хоп"),
+    ("indie", "Инди", "инди-поп или инди-рок"),
+    ("pop", "Поп", "современный поп"),
+    ("electronic", "Электроника", "электронная музыка"),
+    ("rnb", "R&B", "R&B или соул"),
+    ("rock", "Рок", "рок"),
+    ("hiphop", "Хип-хоп", "хип-хоп"),
 ]
 _MUSIC_STYLE_KEY = "music_styles"
 _RECENT_ARTISTS_LIMIT = 40
@@ -598,7 +598,7 @@ def _music_genre_menu_kb(cid):
     selected = set(_music_styles(cid))
     buttons = [InlineKeyboardButton(label, callback_data=f"music_g_{key}")
                for key, label, _prompt_name in _MUSIC_GENRES if key in selected]
-    rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
+    rows = [[button] for button in buttons]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)

@@ -116,6 +116,22 @@ def test_recall_uses_local_distractors_with_the_same_part_of_speech():
     assert set(data["wrong"]).issubset({"huis", "boek", "vriend", "trein"})
 
 
+def test_money_investment_recall_uses_plausible_financial_distractors():
+    data = trainer_exercises.build_exercise(
+        {
+            "term": "Geld beleggen",
+            "translation": "Инвестировать деньги",
+            "lang": "nl",
+            "pos": "verb",
+        },
+        [],
+        trainer_engine.EXERCISE_RECALL,
+    )
+
+    assert data["correct"] == "Geld beleggen"
+    assert data["wrong"] == ["Geld uitgeven", "Geld sparen"]
+
+
 def test_short_verb_translation_does_not_get_sentence_distractors():
     data = trainer_exercises.build_exercise(
         {

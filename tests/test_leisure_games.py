@@ -272,6 +272,35 @@ def test_game_set_groups_games_like_my_cinema(monkeypatch):
     ]
 
 
+def test_game_set_genre_switches_posters_in_the_same_card(monkeypatch):
+    token = "game-carousel"
+    leisure_games._game_set_views[token] = {
+        "cid": "42", "created_at": leisure_games.time.time(),
+        "genres": [("Экшен", [{
+            **leisure_games.normalize_favorite_game("Hades"), "id": "hades-one",
+            "poster": "one.jpg",
+        }, {
+            **leisure_games.normalize_favorite_game("Hades"), "id": "hades-two",
+            "name": "Hades II", "poster": "two.jpg",
+        }])],
+    }
+    monkeypatch.setattr(leisure_games, "enrich_favorite_game", lambda item: dict(item))
+    edited = []
+
+    class Query:
+        async def edit_message_media(self, **kwargs):
+            edited.append(kwargs)
+
+    asyncio.run(leisure_games.send_game_set_genre(
+        object(), "42", token, 0, 1, q=Query(),
+    ))
+
+    assert edited[0]["media"].media == "two.jpg"
+    assert "Hades II" in edited[0]["media"].caption
+    assert _labels(edited[0]["reply_markup"])[0] == ["◀️", "2/2", "▶️"]
+    assert _labels(edited[0]["reply_markup"])[1] == ["❌ Удалить"]
+
+
 def test_game_recommendation_with_poster_is_sent_as_photo(monkeypatch):
     sent = []
 

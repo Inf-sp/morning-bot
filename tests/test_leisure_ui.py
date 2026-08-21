@@ -11,6 +11,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import cleanup
 import config
 import leisure_books
+import leisure_games
 import leisure_movies
 import leisure_music
 import movie_engine
@@ -523,14 +524,39 @@ def test_favorite_books_are_grouped_by_genre_and_open_cover_card(monkeypatch):
     asyncio.run(leisure_books.send_favorite_book_genre(
         bot, "42", token, int(genre_index), int(page),
     ))
-    item_callback = bot.messages[-1]["reply_markup"].inline_keyboard[0][0].callback_data
-    _op, token, short_id, genre_index, page = item_callback.split(":")
-    asyncio.run(leisure_books.send_favorite_book_card(
-        bot, "42", token, short_id, int(genre_index), int(page),
-    ))
 
     assert bot.photos[-1]["photo"] == "https://images.test/dune.jpg"
     assert _labels(bot.photos[-1]["reply_markup"])[0] == ["❌ Удалить"]
+
+
+def test_favorite_book_genre_switches_covers_in_the_same_card():
+    token = "book-carousel"
+    leisure_books._favorite_book_views[token] = {
+        "cid": "42", "created_at": leisure_books.time.time(),
+        "genres": [("Фантастика", [{
+            "id": "book-one", "title": "Первая", "book": {
+                "title": "Первая", "cover_url": "one.jpg",
+            },
+        }, {
+            "id": "book-two", "title": "Вторая", "book": {
+                "title": "Вторая", "cover_url": "two.jpg",
+            },
+        }])],
+    }
+    edited = []
+
+    class Query:
+        async def edit_message_media(self, **kwargs):
+            edited.append(kwargs)
+
+    asyncio.run(leisure_books.send_favorite_book_genre(
+        object(), "42", token, 0, 1, q=Query(),
+    ))
+
+    assert edited[0]["media"].media == "two.jpg"
+    assert "Вторая" in edited[0]["media"].caption
+    assert _labels(edited[0]["reply_markup"])[0] == ["◀️", "2/2", "▶️"]
+    assert _labels(edited[0]["reply_markup"])[1] == ["❌ Удалить"]
 
 
 def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
@@ -568,7 +594,7 @@ def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
 
 
 def test_personal_lists_are_available_from_their_category_preferences():
-    assert _labels(leisure_music._music_preferences_kb("42"))[0] == ["⬜ 🌿 Инди"]
+    assert _labels(leisure_music._music_preferences_kb("42"))[0] == ["⬜ Инди"]
 
 
 def test_recommendation_subscreens_return_to_their_category_home():
@@ -636,18 +662,25 @@ def test_book_recommendation_skips_favorite_and_prefers_reader_rating(monkeypatc
     assert result["title"] == "Книга читателей"
 
 
-def test_book_and_music_genre_menus_have_two_columns(monkeypatch):
+def test_book_and_music_genre_menus_have_one_column_without_emoji(monkeypatch):
     monkeypatch.setattr(
         leisure_music, "_music_styles",
         lambda _cid: [key for key, _label, _prompt_name in leisure_music._MUSIC_GENRES],
     )
     assert _labels(leisure_books._book_genre_menu_kb())[:-1] == [
-        ["🧙 Фэнтези", "🚀 Фантастика"], ["🔍 Детектив", "😱 Триллер"],
-        ["💕 Романтика", "🏛 История"], ["👤 Биографии", "🧠 Психология"],
+        ["Фэнтези"], ["Фантастика"], ["Детектив"], ["Триллер"],
+        ["Романтика"], ["История"], ["Биографии"], ["Психология"],
     ]
     assert _labels(leisure_music._music_genre_menu_kb("42"))[:-1] == [
-        ["🌿 Инди", "✨ Поп"], ["⚡ Электроника", "🪩 R&B"],
-        ["🎸 Рок", "🎤 Хип-хоп"],
+        ["Инди"], ["Поп"], ["Электроника"], ["R&B"], ["Рок"], ["Хип-хоп"],
+    ]
+    assert _labels(leisure_movies._movie_genre_menu_kb())[:-1] == [
+        ["Комедия"], ["Ужасы"], ["Фантастика"],
+        ["Триллер"], ["Романтика"], ["Драма"],
+    ]
+    assert _labels(leisure_games._genre_keyboard())[:-1] == [
+        ["RPG"], ["Экшен"], ["Стратегии"],
+        ["Приключения"], ["Уютные"], ["Хоррор"],
     ]
 
 
@@ -655,7 +688,7 @@ def test_music_genre_menu_shows_only_selected_styles(monkeypatch):
     monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie", "rock"])
 
     assert _labels(leisure_music._music_genre_menu_kb("42")) == [
-        ["🌿 Инди", "🎸 Рок"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["Инди"], ["Рок"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
@@ -730,7 +763,7 @@ def test_music_genre_selection_stays_in_the_selected_genre(monkeypatch):
     asyncio.run(leisure_music.send_music_by_genre(object(), "42", "indie", status="status"))
 
     assert calls == [("42", {"category": {
-        "kind": "genre", "value": "indie", "label": "🌿 Инди",
+        "kind": "genre", "value": "indie", "label": "Инди",
         "prompt_name": "инди-поп или инди-рок",
     }, "force": True, "status": "status"})]
 

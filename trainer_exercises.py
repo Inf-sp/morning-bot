@@ -117,6 +117,16 @@ _LOCAL_WORD_DISTRACTORS = {
     },
 }
 
+# Для частых смысловых конструкций варианты должны быть не случайными словами,
+# а соседними понятиями, между которыми ученик действительно учится различать.
+_SEMANTIC_DISTRACTORS = {
+    ("nl", "geld beleggen"): (
+        "Geld uitgeven",
+        "Geld sparen",
+        "Geld lenen",
+    ),
+}
+
 
 def _entry_pos(entry):
     raw = " ".join(str(entry.get("pos") or "").casefold().split())
@@ -195,6 +205,9 @@ def _local_distractors(entry, correct, language, rng):
     """Полные учебные варианты той же формы, не связанные с базой пользователя."""
     language = str(language or "nl").casefold()
     language = language if language in _LOCAL_WORD_DISTRACTORS else "nl"
+    semantic = _SEMANTIC_DISTRACTORS.get((language, " ".join(str(correct).casefold().split())))
+    if semantic:
+        return clean_options(correct, semantic)
     if _is_sentence_like(correct):
         pool = list(_LOCAL_PHRASE_DISTRACTORS[language])
     else:

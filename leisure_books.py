@@ -32,14 +32,14 @@ _BOOK_BIRTHDAY_CACHE_VERSION = 2
 
 
 _BOOK_GENRES = [
-    ("fantasy", "🧙 Фэнтези", "Fantasy"),
-    ("scifi", "🚀 Фантастика", "Science fiction"),
-    ("detective", "🔍 Детектив", "Mystery & Detective"),
-    ("thriller", "😱 Триллер", "Thrillers"),
-    ("romance", "💕 Романтика", "Romance"),
-    ("history", "🏛 История", "History"),
-    ("biography", "👤 Биографии", "Biography & Autobiography"),
-    ("psychology", "🧠 Психология", "Psychology"),
+    ("fantasy", "Фэнтези", "Fantasy"),
+    ("scifi", "Фантастика", "Science fiction"),
+    ("detective", "Детектив", "Mystery & Detective"),
+    ("thriller", "Триллер", "Thrillers"),
+    ("romance", "Романтика", "Romance"),
+    ("history", "История", "History"),
+    ("biography", "Биографии", "Biography & Autobiography"),
+    ("psychology", "Психология", "Psychology"),
 ]
 _PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("3.5", "3.5"), ("4.0", "4.0"), ("4.5", "4.5")]
@@ -335,24 +335,48 @@ async def send_favorite_book_genre(bot, cid, token, genre_index, page=0, q=None)
         await send_favorite_books(bot, cid, q=q)
         return
     genre, items = view["genres"][genre_index]
-    pages = max(1, (len(items) + _FAVORITE_BOOK_PAGE_SIZE - 1) // _FAVORITE_BOOK_PAGE_SIZE)
-    page = max(0, min(page, pages - 1))
-    chunk = items[page * _FAVORITE_BOOK_PAGE_SIZE:(page + 1) * _FAVORITE_BOOK_PAGE_SIZE]
-    rows = [[InlineKeyboardButton(
-        item["title"][:48], callback_data=f"bfi:{token}:{item['id'][:8]}:{genre_index}:{page}",
-    )] for item in chunk]
-    if pages > 1:
+    page = max(0, min(int(page), len(items) - 1))
+    item = items[page]
+    book = item["book"]
+    msg = _book_text(book)
+    rows = []
+    if len(items) > 1:
         rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"bfg:{token}:{genre_index}:{(page - 1) % pages}"),
-            InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
-            InlineKeyboardButton("▶️", callback_data=f"bfg:{token}:{genre_index}:{(page + 1) % pages}"),
+            InlineKeyboardButton("◀️", callback_data=f"bfg:{token}:{genre_index}:{(page - 1) % len(items)}"),
+            InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"bfg:{token}:{genre_index}:{(page + 1) % len(items)}"),
         ])
+    rows.append([InlineKeyboardButton(
+        "❌ Удалить", callback_data=f"bfd:{token}:{item['id'][:8]}:{genre_index}:{page}",
+    )])
     rows.append([InlineKeyboardButton("🆕 Добавить книгу", callback_data="as_loveadd_books")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="book_favorites"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
-    await _deliver_book_view(
-        bot, cid, leisure_ui.favorite_book_genre(genre, len(items)),
-        InlineKeyboardMarkup(rows), q=q,
+    kb = InlineKeyboardMarkup(rows)
+    cover = str(book.get("cover_url") or "").strip()
+    if q is not None and cover:
+        try:
+            await q.edit_message_media(
+                media=InputMediaPhoto(
+                    media=cover, caption=msg.text, caption_entities=msg.entities,
+                ),
+                reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
+    if cover:
+        try:
+            await bot.send_photo(
+                chat_id=cid, photo=cover, caption=msg.text,
+                caption_entities=msg.entities, reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities,
+        reply_markup=kb, disable_web_page_preview=True,
     )
 
 
@@ -846,7 +870,7 @@ async def send_book_premieres(bot, cid, *, status=None):
 def _book_genre_menu_kb():
     buttons = [InlineKeyboardButton(label, callback_data=f"book_g_{key}")
                for key, label, _subject in _BOOK_GENRES]
-    rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
+    rows = [[button] for button in buttons]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)

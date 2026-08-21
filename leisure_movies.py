@@ -376,17 +376,17 @@ def _movie_kb(i, category=None):
 
 # Шесть популярных жанров для быстрого меню «По жанру».
 _GENRE_MENU = [
-    ("😂 Комедия", 35), ("👻 Ужасы", 27),
-    ("🚀 Фантастика", 878), ("🔪 Триллер", 53),
-    ("💕 Романтика", 10749), ("🎭 Драма", 18),
+    ("Комедия", 35), ("Ужасы", 27),
+    ("Фантастика", 878), ("Триллер", 53),
+    ("Романтика", 10749), ("Драма", 18),
 ]
 
 def _movie_genre_menu_kb():
     rows = []
     buttons = [InlineKeyboardButton(label, callback_data=f"movie_g_{gid}")
                for label, gid in _GENRE_MENU]
-    for i in range(0, len(buttons), 2):
-        rows.append(buttons[i:i + 2])
+    for button in buttons:
+        rows.append([button])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
