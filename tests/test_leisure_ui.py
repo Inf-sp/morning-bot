@@ -513,8 +513,8 @@ def test_favorite_books_are_grouped_by_genre_and_open_cover_card(monkeypatch):
 
     assert bot.messages[0]["text"] == (
         "🎚️ Мои книги · 2 книги\n\n"
-        "Романтика:\nГордость и предубеждение\n\n"
-        "Фантастика:\nДюна"
+        "Фантастика:\nДюна\n\n"
+        "Романтика:\nГордость и предубеждение"
     )
     genre_callback = next(
         row[0].callback_data for row in bot.messages[0]["reply_markup"].inline_keyboard
@@ -527,6 +527,20 @@ def test_favorite_books_are_grouped_by_genre_and_open_cover_card(monkeypatch):
 
     assert bot.photos[-1]["photo"] == "https://images.test/dune.jpg"
     assert _labels(bot.photos[-1]["reply_markup"])[0] == ["❌ Удалить"]
+
+
+def test_favorite_book_with_multiple_categories_uses_primary_genre_once():
+    assert leisure_books._favorite_book_genre({
+        "categories": ["Fantasy", "Romance"],
+    }) == "Фэнтези"
+    token, view = leisure_books._new_favorite_book_view("42", [{
+        "id": "book-1", "title": "Книга", "genre": "Фэнтези", "book": {},
+    }])
+
+    assert token
+    assert [(genre, [item["title"] for item in items]) for genre, items in view["genres"]] == [
+        ("Фэнтези", ["Книга"]),
+    ]
 
 
 def test_favorite_book_genre_switches_covers_in_the_same_card():
@@ -660,6 +674,24 @@ def test_book_recommendation_skips_favorite_and_prefers_reader_rating(monkeypatc
         {"title": "Книга с меньшей оценкой", "rating": 4.1, "ratings_count": 900},
     ], "42")
     assert result["title"] == "Книга читателей"
+
+
+def test_favorite_artists_are_grouped_by_genre_without_no_genre_category(monkeypatch):
+    monkeypatch.setattr(leisure_music, "_cached_artist", lambda _cid: {})
+    items = [
+        ("unknown", "Unknown Artist"),
+        ("indie", "Big Thief"),
+        ("pop", "Caroline Polachek"),
+    ]
+
+    grouped = leisure_music.group_favorite_artist_items("42", items)
+
+    assert [leisure_music.favorite_artist_genre("42", label) for _id, label in grouped] == [
+        "Инди", "Поп", "Другие артисты",
+    ]
+    assert "Без жанра" not in {
+        leisure_music.favorite_artist_genre("42", label) for _id, label in grouped
+    }
 
 
 def test_book_and_music_genre_menus_have_one_column_without_emoji(monkeypatch):

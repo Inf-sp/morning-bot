@@ -392,7 +392,7 @@ def _game_home_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать новую игру", callback_data="vg_reco")],
         [InlineKeyboardButton("🎲 Настолки", callback_data="vg_board")],
-        [InlineKeyboardButton("🎚️ Мой набор", callback_data="vg_set")],
+        [InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -402,7 +402,7 @@ def _game_keyboard(*, no_match=False, genre=None):
     rows = [[InlineKeyboardButton("✨ Другая игра", callback_data=next_callback)]]
     if genre != "board":
         rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
-    rows.append([InlineKeyboardButton("🎚️ Мой набор", callback_data="vg_set")])
+    rows.append([InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")])
     if no_match:
         rows.append([InlineKeyboardButton("📝 Платформы", callback_data="set_pref_games")])
     rows.append([
@@ -446,7 +446,15 @@ def _new_game_set_view(cid):
         genres.setdefault(item["genre"], []).append(item)
     for items in genres.values():
         items.sort(key=lambda item: item["name"].casefold())
-    ordered = sorted(genres, key=lambda value: (value == "Без жанра", value.casefold()))
+    genre_order = {
+        _game_genre_title(key): index for index, (key, _label) in enumerate(GAME_GENRES)
+    }
+    genre_order["Настолки"] = len(genre_order)
+    genre_order["Без жанра"] = len(genre_order) + 1
+    ordered = sorted(
+        genres,
+        key=lambda value: (genre_order.get(value, len(genre_order)), value.casefold()),
+    )
     token = secrets.token_hex(3)
     view = {"cid": str(cid), "created_at": now,
             "genres": [(genre, genres[genre]) for genre in ordered]}
@@ -609,7 +617,7 @@ async def send_favorite_games_added_card(bot, cid, items):
     )
     msg = leisure_ui.favorite_game_added_card(item)
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎚️ Мой набор", callback_data="vg_set")],
+        [InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

@@ -288,7 +288,17 @@ def _new_favorite_book_view(cid, records):
         genres.setdefault(record["genre"], []).append(record)
     for items in genres.values():
         items.sort(key=lambda item: item["title"].casefold())
-    ordered = sorted(genres, key=lambda value: (value == "Без жанра", value.casefold()))
+    genre_order = {label: index for index, (_key, label, _subject) in enumerate(_BOOK_GENRES)}
+    genre_order.update({
+        "Художественная проза": len(genre_order),
+        "Поэзия": len(genre_order) + 1,
+        "Детская литература": len(genre_order) + 2,
+        "Без жанра": len(genre_order) + 3,
+    })
+    ordered = sorted(
+        genres,
+        key=lambda value: (genre_order.get(value, len(genre_order)), value.casefold()),
+    )
     token = secrets.token_hex(3)
     view = {"cid": str(cid), "created_at": now,
             "genres": [(genre, genres[genre]) for genre in ordered]}

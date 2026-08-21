@@ -110,7 +110,7 @@ def favorite_book_delete_confirmation(title):
 
 def game_set_home(total, genres):
     b = MessageBuilder()
-    b.title(f"🎚️ Мой набор · {total} {_pluralize_games(total)}")
+    b.title(f"🎚️ Мой набор игр · {total} {_pluralize_games(total)}")
     for group in genres or []:
         names = [str(name or "").strip() for name in group.get("names") or [] if str(name or "").strip()]
         if not names:
@@ -169,7 +169,7 @@ def game_delete_confirmation(name):
 
 def favorite_game_added_card(data):
     b = MessageBuilder()
-    b.line("✅ Добавлена в «🎚️ Мой набор»")
+    b.line("✅ Добавлена в «🎚️ Мой набор игр»")
     b.spacer()
     b.bold(str((data or {}).get("name") or "Игра"))
     b.newline()

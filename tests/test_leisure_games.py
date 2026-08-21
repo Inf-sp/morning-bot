@@ -138,7 +138,7 @@ def test_game_home_matches_movie_style_and_keeps_board_games_separate(monkeypatc
     assert _labels(status.call[1]["reply_markup"]) == [
         ["✨ Подобрать новую игру"],
         ["🎲 Настолки"],
-        ["🎚️ Мой набор"],
+        ["🎚️ Мой набор игр"],
         ["#️⃣ Главная"],
     ]
 
@@ -269,7 +269,7 @@ def test_game_recommendation_keeps_genres_inside_card(monkeypatch):
     assert _labels(status.call[1]["reply_markup"]) == [
         ["✨ Другая игра"],
         ["🎭 По жанру"],
-        ["🎚️ Мой набор"],
+        ["🎚️ Мой набор игр"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
@@ -295,7 +295,7 @@ def test_board_recommendation_stays_in_board_games_without_genre_button(monkeypa
     assert "🎲 Настолки" in status.call[0]
     assert _labels(status.call[1]["reply_markup"]) == [
         ["✨ Другая игра"],
-        ["🎚️ Мой набор"],
+        ["🎚️ Мой набор игр"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert status.call[1]["reply_markup"].inline_keyboard[0][0].callback_data == "vg_next_board"
@@ -342,12 +342,32 @@ def test_game_set_groups_games_like_my_cinema(monkeypatch):
     asyncio.run(leisure_games.send_game_set(bot, "42"))
 
     assert bot.message["text"] == (
-        "🎚️ Мой набор · 2 игры\n\n"
+        "🎚️ Мой набор игр · 2 игры\n\n"
         "RPG:\nBaldur’s Gate 3\n\n"
         "Экшен:\nHades"
     )
     assert _labels(bot.message["reply_markup"])[-2:] == [
         ["🆕 Добавить игру"], ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+
+
+def test_game_set_uses_one_primary_genre_and_keeps_board_games_separate(monkeypatch):
+    monkeypatch.setattr(leisure_games.store, "ensure_list_ids", lambda *_args: [
+        {
+            "id": "multi", "name": "Multi Genre", "genres": ["adventure", "action"],
+            "platforms": ["pc"],
+        },
+        {
+            "id": "board", "name": "Board Strategy", "genres": ["strategy", "cozy"],
+            "platforms": ["board"],
+        },
+    ])
+
+    _token, view = leisure_games._new_game_set_view("42")
+
+    assert [(genre, [item["name"] for item in items]) for genre, items in view["genres"]] == [
+        ("Приключения", ["Multi Genre"]),
+        ("Настолки", ["Board Strategy"]),
     ]
 
 

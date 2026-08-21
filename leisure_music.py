@@ -39,6 +39,33 @@ _MUSIC_GENRES = [
 _MUSIC_STYLE_KEY = "music_styles"
 _RECENT_ARTISTS_LIMIT = 40
 
+
+def favorite_artist_genre(cid, artist):
+    """Возвращает подтверждённый локальный жанр без выдуманного «Без жанра»."""
+    normalized = str(artist or "").strip().casefold()
+    cached = _cached_artist(cid)
+    if normalized and str((cached or {}).get("artist") or "").strip().casefold() == normalized:
+        key = str((cached or {}).get("genre") or "").strip().casefold()
+        label = next((label for genre, label, _prompt in _MUSIC_GENRES if genre == key), "")
+        if label:
+            return label
+    for key, candidates in _LOCAL_ARTIST_FALLBACKS.items():
+        if any(str(item.get("artist") or "").strip().casefold() == normalized for item in candidates):
+            return next((label for genre, label, _prompt in _MUSIC_GENRES if genre == key), "Другие артисты")
+    return "Другие артисты"
+
+
+def group_favorite_artist_items(cid, items):
+    order = {label: index for index, (_key, label, _prompt) in enumerate(_MUSIC_GENRES)}
+    order["Другие артисты"] = len(order)
+    return sorted(
+        list(items or []),
+        key=lambda item: (
+            order.get(favorite_artist_genre(cid, item[1]), len(order)),
+            str(item[1] or "").casefold(),
+        ),
+    )
+
 _MUSIC_REBUSES = (
     {
         "emoji": "👑 🐝 🎤",

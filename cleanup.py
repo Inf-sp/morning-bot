@@ -697,7 +697,11 @@ async def _render_view(bot, cid, view_id, q=None):
         return
     ctx = view["ctx"]
     title, items, _back = _view_items(ctx, cid)
-    items = _sort_items(items)
+    if ctx == "music_favorite_artists":
+        import leisure_music
+        items = leisure_music.group_favorite_artist_items(cid, items)
+    else:
+        items = _sort_items(items)
     all_ids = {i for i, _ in items}
     view["selected_ids"] &= all_ids
     sel = view["selected_ids"]
@@ -712,7 +716,9 @@ async def _render_view(bot, cid, view_id, q=None):
     else:
         count_line = f"Всего: {total}"
     lines = [f"<b>{esc(title)}</b>", "", count_line]
-    if ctx in {"cinema_favorites", "music_favorite_artists"} and total > 1:
+    if ctx == "music_favorite_artists" and total:
+        lines.append("По жанрам")
+    elif ctx == "cinema_favorites" and total > 1:
         lines.append("По алфавиту")
     if total:
         lines.append("")
@@ -727,7 +733,14 @@ async def _render_view(bot, cid, view_id, q=None):
     if add_button and not add_button_at_bottom:
         label, callback_data = add_button
         rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
+    previous_group = None
     for full_id, lbl in chunk:
+        if ctx == "music_favorite_artists":
+            import leisure_music
+            group = leisure_music.favorite_artist_genre(cid, lbl)
+            if group != previous_group:
+                rows.append([InlineKeyboardButton(group, callback_data="noop")])
+                previous_group = group
         mark = (("✅" if full_id in sel else "□") + " ") if view.get("editing") else ""
         rows.append([InlineKeyboardButton(f"{mark} {lbl[:36]}", callback_data=f"clt:{view_id}:{short_of[full_id]}")])
     if pages > 1:
