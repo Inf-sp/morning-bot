@@ -278,13 +278,13 @@ async def send_home(bot, cid, q=None):
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🛠 Система", callback_data="adm_api_ai")],
-        [InlineKeyboardButton("⚠️ Ошибки", callback_data="adm_logs")],
         [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.home(
         status_dot=dot, status_text=status_text,
         updated_at=_updated_at(latest_check or time.time()), stale=stale,
+        error_rows=_active_error_rows(limit=5),
     )
     await _show(bot, cid, msg, kb, q)
 
@@ -634,6 +634,33 @@ async def clear_logs(bot, cid, q=None):
     await send_logs(bot, cid, q)
 
 
+def _active_error_rows(*, limit=40, include_hidden=True):
+    cutoff = time.time() - DAY
+    errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
+    monitor_errors = [
+        entry for entry in provider_runtime.history(limit=200)
+        if (
+            entry.get("ts", 0) >= cutoff
+            and entry.get("event_type") == "error"
+            and not entry.get("recovered_at")
+            and not entry.get("fallback_target")
+        )
+    ]
+    combined = [
+        (int(entry.get("ts") or 0), _compact_log_row(entry) + _repeat_suffix(count))
+        for entry, count in _collapse_app_errors(errors)
+    ] + [
+        (int(entry.get("ts") or 0), _monitor_error_row(entry) + _repeat_suffix(count))
+        for entry, count in _collapse_monitor_errors(monitor_errors)
+    ]
+    combined.sort(key=lambda item: item[0], reverse=True)
+    rows = [row for _ts, row in combined[:limit]]
+    hidden_count = max(0, len(combined) - len(rows))
+    if hidden_count and include_hidden:
+        rows.append(f"… ещё {hidden_count} ошибок скрыто")
+    return rows
+
+
 async def send_logs(bot, cid, q=None):
     cutoff = time.time() - DAY
     errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
@@ -649,34 +676,25 @@ async def send_logs(bot, cid, q=None):
             and not entry.get("fallback_target")
         )
     ]
-    combined = [
-        (int(entry.get("ts") or 0), _compact_log_row(entry) + _repeat_suffix(count))
-        for entry, count in _collapse_app_errors(errors)
-    ] + [
-        (
-            int(entry.get("ts") or 0),
-            _monitor_error_row(entry) + _repeat_suffix(count),
-        )
-        for entry, count in _collapse_monitor_errors(monitor_errors)
-    ]
-    combined.sort(key=lambda item: item[0], reverse=True)
-    rows = []
+    combined_count = len(_collapse_app_errors(errors)) + len(_collapse_monitor_errors(monitor_errors))
+    rows = _active_error_rows(limit=40, include_hidden=False)
     text_size = 0
-    for _ts, row in combined[:40]:
+    visible_rows = []
+    for row in rows:
         next_size = text_size + len(row) + 1
-        if rows and next_size > 3500:
+        if visible_rows and next_size > 3500:
             break
-        rows.append(row)
+        visible_rows.append(row)
         text_size = next_size
-    hidden_count = max(0, len(combined) - len(rows))
+    hidden_count = max(0, combined_count - len(visible_rows))
     if hidden_count:
-        rows.append(f"… ещё {hidden_count} ошибок скрыто")
+        visible_rows.append(f"… ещё {hidden_count} ошибок скрыто")
     buttons = []
-    if combined:
+    if combined_count:
         buttons.append([InlineKeyboardButton(delete_label("Очистить ошибки"), callback_data="adm_logs_clear")])
     buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(buttons)
     now = int(time.time())
-    msg = ui.logs(rows, len(rows), _updated_at(now), now)
+    msg = ui.logs(visible_rows, len(visible_rows), _updated_at(now), now)
     await _show(bot, cid, msg, kb, q)
     _mark_logs_viewed(cid, errors)

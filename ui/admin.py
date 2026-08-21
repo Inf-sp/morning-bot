@@ -61,7 +61,8 @@ def deploy_report(version, title, release_notes):
 
 def home(status_dot=None, status_text=None, updated_at=None, stale=False,
          *, system_dot=None, system_text=None, system_line=None,
-         notif_line=None, users_line=None, data_line=None, logs_line=None):
+         notif_line=None, users_line=None, data_line=None, logs_line=None,
+         error_rows=None):
     """Render the admin home screen.
 
     The compact metric form is used by the current screen.  The older
@@ -93,6 +94,11 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
         b.line(f"{status_dot} Состояние неизвестно · данные от {updated_at}")
     else:
         b.line(f"{status_dot} {status_text} · обновлено в {updated_at}")
+    rows = [str(row or "").strip() for row in error_rows or [] if str(row or "").strip()]
+    if rows:
+        b.spacer()
+        for row in rows:
+            b.line(row)
     return b.build_stripped()
 
 

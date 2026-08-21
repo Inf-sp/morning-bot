@@ -85,7 +85,7 @@ class _Bot:
         self.sent.append(kwargs)
 
 
-def test_system_screen_links_to_logs_and_navigation(monkeypatch):
+def test_system_screen_keeps_only_navigation(monkeypatch):
     monkeypatch.setattr(admin.service_monitor, "rows", lambda: ["⚪ Gemini · Везде · лимит неизвестен"])
     monkeypatch.setattr(admin.service_monitor, "last_check_time", lambda: "21:44")
     bot = _Bot()
@@ -93,8 +93,8 @@ def test_system_screen_links_to_logs_and_navigation(monkeypatch):
     asyncio.run(admin.send_api_ai(bot, "42"))
 
     markup = bot.sent[0]["reply_markup"].inline_keyboard
-    assert [button.text for button in markup[0]] == ["⚠️ Ошибки"]
     assert [button.text for button in markup[-1]] == ["⬅️ Назад", "#️⃣ Главная"]
+    assert all(button.text != "⚠️ Ошибки" for row in markup for button in row)
     assert "Ответы · 95%" not in bot.sent[0]["text"]
     assert "Автоматический резерв" not in bot.sent[0]["text"]
     assert "Последняя ошибка" not in bot.sent[0]["text"]
@@ -323,6 +323,19 @@ def test_admin_home_ui_uses_compact_exact_lines_without_ok():
         "Обновлено в 10:23"
     )
     assert "OK" not in message.text
+
+
+def test_admin_home_ui_shows_current_errors_under_status():
+    message = admin_ui.home(
+        status_dot="🔴", status_text="Требуется внимание",
+        updated_at="15:15", error_rows=["21 августа, 15:14 · Обучение · не открылось задание"],
+    )
+
+    assert message.text == (
+        "🛠️ Админ\n\n"
+        "🔴 Требуется внимание · обновлено в 15:15\n\n"
+        "21 августа, 15:14 · Обучение · не открылось задание"
+    )
 
 
 def test_system_summary_counts_user_impact_and_not_replaced_api():
