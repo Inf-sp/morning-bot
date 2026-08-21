@@ -79,7 +79,14 @@ def test_concerts_card_keeps_classic_text_and_link():
 
     assert "21 августа 2099 · Biddinghuizen 🇳🇱" in message.text
     assert "Концерт: 21 августа 2099 · Biddinghuizen 🇳🇱" in message.text
-    assert any(entity.type == "text_link" for entity in message.entities)
+    assert "Подробнее" not in message.text
+    link = next(entity for entity in message.entities if entity.type == "text_link")
+    encoded = message.text.encode("utf-16-le")
+    linked_text = encoded[
+        link.offset * 2:(link.offset + link.length) * 2
+    ].decode("utf-16-le")
+    assert linked_text == "Romy"
+    assert link.url == "https://example.com/romy"
     assert message.rich_message is None
 
 

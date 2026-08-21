@@ -30,6 +30,16 @@ def clip(text, limit=450):
     return (cut[:sp] if sp > 0 else cut).rstrip(" ,.;:—-") + "…"
 
 
+def _safe_rebus_fact(rebus, *candidates):
+    """Не показывает факт, если он напрямую раскрывает скрытый ответ ребуса."""
+    answer = " ".join(str((rebus or {}).get("answer") or "").casefold().split()).strip("«»\"'")
+    for value in candidates:
+        fact = " ".join(str(value or "").split()).strip()
+        if fact and (not answer or answer not in fact.casefold()):
+            return fact
+    return ""
+
+
 def _pluralize_titles(n):
     n = abs(int(n))
     if n % 10 == 1 and n % 100 != 11:
@@ -269,7 +279,7 @@ def game_home_screen(city, items, daily):
     b.text_line(" → ")
     b.add(str(daily.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
 
-    fact = str(daily.get("fact") or "").strip()
+    fact = _safe_rebus_fact(daily, daily.get("fact"))
     if fact:
         b.spacer()
         b.bold("💡 Интересно:")
@@ -411,7 +421,7 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
             b.text_line(f" {birthday_fact}")
         b.newline()
 
-    fact = str(rebus.get("fact") or cinema_day.get("fact") or "").strip()
+    fact = _safe_rebus_fact(rebus, rebus.get("fact"), cinema_day.get("fact"))
     b.spacer()
     b.bold("Ребус дня:")
     b.text_line(" ")
@@ -882,7 +892,9 @@ def weekly_books_screen(city, daily_book, items):
             b.text_line(f" · {birth_date}")
         b.line(f" — {str(birthday.get('detail') or 'писатель').strip()}.")
 
-    fact = str(birthday.get("fact") or rebus.get("fact") or daily_book.get("fact") or "").strip()
+    fact = _safe_rebus_fact(
+        rebus, birthday.get("fact"), rebus.get("fact"), daily_book.get("fact"),
+    )
     b.spacer()
     b.bold("Литературный ребус:")
     b.text_line(" ")
@@ -1172,7 +1184,7 @@ def music_week_screen(city, daily_music, concerts):
             b.text_line(f" · {birth_date}")
         b.line(f" — {str(legend.get('detail') or 'музыкант').strip()}.")
 
-    fact = str(rebus.get("fact") or daily_music.get("fact") or "").strip()
+    fact = _safe_rebus_fact(rebus, rebus.get("fact"), daily_music.get("fact"))
     b.spacer()
     b.bold("Музыкальный ребус:")
     b.text_line(" ")
@@ -1216,7 +1228,7 @@ def _lower_initial(value):
 
 def concerts_list(place_label, events, empty_hint=""):
     """Список концертов твоих артистов -> MessageBuilder. Каждое событие - мини-блок:
-    имя артиста, место, цена от, дата, скрытая ссылка "Подробнее…"."""
+    кликабельное имя артиста, место, цена от и дата."""
     events = list(events or [])
     b = MessageBuilder()
     b.text_line(f"{ui_label('concerts', '')} ")
@@ -1228,7 +1240,12 @@ def concerts_list(place_label, events, empty_hint=""):
     else:
         for ev in events:
             b.spacer()
-            b.bold(ev.get("artist", ""))
+            artist = str(ev.get("artist") or "").strip()
+            url = str(ev.get("url") or "").strip()
+            if url:
+                b.link(artist, url)
+            else:
+                b.bold(artist)
             b.newline()
             context = _concert_context_text(ev)
             if context:
@@ -1240,9 +1257,6 @@ def concerts_list(place_label, events, empty_hint=""):
                 b.line(f"Концерт: {date_place}")
             if ev.get("price"):
                 b.line(ev["price"])
-            if ev.get("url"):
-                b.link("Подробнее…", ev["url"])
-                b.newline()
     return b.build_stripped()
 
 

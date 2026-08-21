@@ -877,7 +877,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     }], {
         "rebus": {
             "emoji": "🦈 🌊 👨‍🔬", "answer": "Челюсти",
-            "fact": "«Челюсти» считают первым современным летним блокбастером.",
+            "fact": "Стивен Спилберг использовал механическую акулу на съёмках.",
         },
         "birthday": {
             "name": "Грета Гервиг", "birth": "+1983-08-04T00:00:00Z", "role": "режиссёр и актриса",
@@ -908,7 +908,8 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "Героиня возвращается домой" not in movie.text
     movie_link = next(entity for entity in movie.entities if entity.type == MessageEntity.TEXT_LINK)
     assert movie_link.url == "https://www.youtube.com/watch?v=trailer123"
-    assert "💡 Интересно: «Челюсти» считают первым современным летним блокбастером." in movie.text
+    assert "💡 Интересно: «Челюсти»" not in movie.text
+    assert "💡 Интересно: Стивен Спилберг" in movie.text
     assert movie.text.index("Что в кино:") < movie.text.index("Именинник дня:") < movie.text.index("Ребус дня:") < movie.text.index("💡 Интересно:")
     assert movie.rich_message is None
     assert any(entity.type == MessageEntity.SPOILER for entity in movie.entities)
@@ -937,6 +938,17 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert music.text.index("Именинник дня:") < music.text.index("Музыкальный ребус:") < music.text.index("💡 Интересно:")
     assert "Новые альбомы" not in music.text
     assert any(entity.type == MessageEntity.SPOILER for entity in music.entities)
+
+
+def test_rebus_fact_never_repeats_the_hidden_answer():
+    assert leisure_movies.leisure_ui._safe_rebus_fact(
+        {"answer": "Челюсти"},
+        "«Челюсти» считают первым летним блокбастером.",
+        "Стивен Спилберг использовал механическую акулу.",
+    ) == "Стивен Спилберг использовал механическую акулу."
+    assert leisure_movies.leisure_ui._safe_rebus_fact(
+        {"answer": "Hades"}, "В Hades поражение продолжает историю.",
+    ) == ""
 
 
 def test_books_home_opens_daily_literary_screen_not_a_recommendation(monkeypatch):
