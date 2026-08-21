@@ -726,6 +726,56 @@ _BOOK_QUOTES = {
     ),
 }
 
+# Только мотивирующие цитаты для финального блока «Моего дня». Отдельный пул
+# не даёт случайно выбрать мрачную или ироничную строку из общей книжной базы.
+_MOTIVATING_BOOK_QUOTE_KEYS = (
+    "маленький принц",
+    "убить пересмешника",
+    "капитанская дочка",
+    "над пропастью во ржи",
+    "великий гэтсби",
+    "старик и море",
+    "451 градус по фаренгейту",
+    "о дивный новый мир",
+    "джейн эйр",
+    "граф монте-кристо",
+    "три мушкетёра",
+    "отверженные",
+    "властелин колец",
+    "гарри поттер",
+    "алиса в стране чудес",
+    "приключения тома сойера",
+    "думай медленно решай быстро",
+    "атомные привычки",
+    "как заводить друзей и оказывать влияние на людей",
+)
+
+
+def _motivating_book_quote(cid, shown_ids=None):
+    """Неповторяющаяся мотивирующая цитата; любимые книги имеют приоритет."""
+    pool = {
+        key: _BOOK_QUOTES[key]
+        for key in _MOTIVATING_BOOK_QUOTE_KEYS
+        if key in _BOOK_QUOTES
+    }
+    shown = {str(value) for value in (shown_ids or []) if str(value) in pool}
+    if len(shown) >= len(pool):
+        shown.clear()
+    favorite_keys = [
+        _item_text(book).casefold()
+        for book in store.get_list(config.FAVORITE_BOOKS_KEY, cid)
+        if _item_text(book).casefold() in pool and _item_text(book).casefold() not in shown
+    ]
+    available = favorite_keys or [key for key in pool if key not in shown]
+    quote_id = random.choice(available)
+    quote, author = pool[quote_id]
+    return {
+        "id": quote_id,
+        "quote": quote,
+        "src": author,
+        "book": quote_id,
+    }, list(shown)
+
 
 def _book_quote_fallback(cid=None):
     """Берёт цитату из любимой книги пользователя; если нет совпадений —
@@ -909,7 +959,7 @@ def _movie_rebus_of_day(day):
     return leisure_movies.daily_movie_rebus(day)
 
 
-_DAY_CACHE_VERSION = 12
+_DAY_CACHE_VERSION = 14
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
@@ -939,6 +989,35 @@ def _load_day_cache(cid, today):
     }
     _day_cache[str(cid)] = cached
     return cached
+
+
+def _daily_literary_quote(cid):
+    """Одна проверенная книжная цитата в день без отдельного AI-запроса."""
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    profile = store.get_profile(cid)
+    cached = profile.get("myday_quote_cache") or {}
+    if (
+        cached.get("date") == today
+        and cached.get("kind") == "book"
+        and cached.get("version") == 2
+        and isinstance(cached.get("data"), dict)
+    ):
+        return cached["data"]
+    quote, history = _motivating_book_quote(
+        cid, profile.get("myday_quote_history") or [],
+    )
+    history.append(quote["id"])
+    store.mutate_profile(cid, lambda profile: (
+        {
+            **profile,
+            "myday_quote_history": history,
+            "myday_quote_cache": {
+                "date": today, "kind": "book", "version": 2, "data": quote,
+            },
+        },
+        None,
+    ))
+    return quote
 
 
 def _save_day_cache(cid, today, text, entities, ts):
@@ -1045,6 +1124,7 @@ def _build_day_text(cid, *, refresh_current=False):
     _hack_cat, hack_text = daily_lifehack(
         cid, rain=(rain >= 40 or bool(current_precipitation)),
         hot=(tmax is not None and tmax >= 24), is_weekend=is_weekend)
+    quote = _daily_literary_quote(cid)
     msg = myday_ui.day_summary(
         header,
         s.get("city", ""),
@@ -1061,6 +1141,8 @@ def _build_day_text(cid, *, refresh_current=False):
         movie_rebus=movie_rebus,
         outfit_items=outfit_items,
         lifehack=hack_text,
+        quote_text=_clip_quote(quote.get("quote", "")),
+        quote_author=quote.get("src", ""),
     )
     text = msg.text
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя

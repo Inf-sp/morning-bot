@@ -17,6 +17,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 import config
 import google_books
 import recommendation_stoplist
+import inclusive_recommendations
 import settings
 import store
 import tracking
@@ -1052,6 +1053,49 @@ def _fallback_book(cid, extra_skip=()):
     return random.choice(pool)
 
 
+_INCLUSIVE_BOOKS = (
+    {"title": "Песнь Ахилла", "title_en": "The Song of Achilles", "year": "2011",
+     "author": "Мадлен Миллер", "lgbt": True,
+     "desc": "Мифологический роман о любви Ахилла и Патрокла накануне Троянской войны.",
+     "plot": "Патрокл взрослеет рядом с Ахиллом, пока война не заставляет их выбирать между славой и близостью."},
+    {"title": "Комната Джованни", "title_en": "Giovanni's Room", "year": "1956",
+     "author": "Джеймс Болдуин", "lgbt": True,
+     "desc": "Психологический роман о любви, страхе и принятии себя в Париже.",
+     "plot": "Американец Дэвид пытается отрицать чувства к Джованни и сталкивается с ценой этого выбора."},
+    {"title": "Кэрол", "title_en": "The Price of Salt", "year": "1952",
+     "author": "Патриция Хайсмит", "lgbt": True,
+     "desc": "Роман о двух женщинах, которые решаются на отношения вопреки давлению общества.",
+     "plot": "Встреча Терез и Кэрол превращается в путешествие, где обеим приходится защищать право на собственную жизнь."},
+    {"title": "Прошлой ночью в Телеграфном клубе", "title_en": "Last Night at the Telegraph Club",
+     "year": "2021", "author": "Малинда Ло", "lgbt": True,
+     "desc": "Исторический роман о первой любви в китайском квартале Сан-Франциско 1950-х.",
+     "plot": "Лили открывает для себя квир-сообщество города в эпоху политической подозрительности."},
+)
+
+
+async def _inclusive_book_pick(cid, extra_skip=()):
+    used = _book_used(cid) | {str(value).casefold() for value in extra_skip}
+    for source in _INCLUSIVE_BOOKS:
+        if source["title"].casefold() in used:
+            continue
+        item = dict(source)
+        try:
+            item = await asyncio.to_thread(google_books.enrich_book, item)
+        except Exception:
+            pass
+        item["lgbt"] = True
+        return item
+    return None
+
+
+def _record_book_recommendation(cid, item):
+    inclusive = bool(item.get("lgbt")) or inclusive_recommendations.is_inclusive(
+        "book", item.get("title"), item.get("title_en"),
+    )
+    item["lgbt"] = inclusive
+    inclusive_recommendations.record(cid, "book", inclusive)
+
+
 def _genre_fallback_book(cid, genre_key, extra_skip=()):
     """Локальный резерв сохраняет смысл выбранного жанра при пустом каталоге."""
     used = _book_used(cid) | {str(x).strip().lower() for x in extra_skip}
@@ -1142,7 +1186,11 @@ async def get_current_book(cid):
 
 
 async def send_books_reco(bot, cid, status=None):
-    it = await get_current_book(cid)
+    it = (
+        await _inclusive_book_pick(cid)
+        if inclusive_recommendations.is_due(cid, "book") else None
+    ) or await get_current_book(cid)
+    _record_book_recommendation(cid, it)
     store.last_recos[str(cid)] = {"kind": "book", "items": [it.get("title", "")]}
     store.last_source[str(cid)] = "Книги"
     store.last_answer[str(cid)] = it.get("title", "")
@@ -1168,6 +1216,7 @@ async def send_book_by_genre(bot, cid, genre_key):
             reply_markup=_book_genre_menu_kb(),
         )
         return
+    _record_book_recommendation(cid, it)
     rec = {"kind": "book", "items": [it.get("title", "")], "category": category}
     store.last_recos[str(cid)] = rec
     store.last_source[str(cid)] = "Книги"
@@ -1194,6 +1243,9 @@ async def book_dislike(bot, cid, i):
             reply_markup=_book_genre_menu_kb(),
         )
         return
+    if not category and inclusive_recommendations.is_due(cid, "book"):
+        it = await _inclusive_book_pick(cid, rec.get("items", [])) or it
+    _record_book_recommendation(cid, it)
     rec["items"].append(it.get("title", ""))
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1
@@ -1215,6 +1267,9 @@ async def _advance_book(bot, cid):
             reply_markup=_book_genre_menu_kb(),
         )
         return
+    if not category and inclusive_recommendations.is_due(cid, "book"):
+        it = await _inclusive_book_pick(cid, rec.get("items", [])) or it
+    _record_book_recommendation(cid, it)
     rec["items"].append(it.get("title", ""))
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1

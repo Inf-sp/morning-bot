@@ -89,4 +89,13 @@ def day_summary(
         b.labeled_line("🦉Лайфхак", cap_sentence(finish_dot(lifehack)), lowercase=False)
         b.spacer()
 
+    quote_text = str(quote_text or "").strip().strip("«»\"")
+    quote_author = str(quote_author or "").strip()
+    if quote_text:
+        b.text_line("💭 ")
+        b.add(f"«{quote_text}»", MessageEntity.ITALIC)
+        if quote_author:
+            b.text_line(f" — {quote_author}")
+        b.newline()
+
     return b.build_stripped()

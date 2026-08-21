@@ -17,6 +17,7 @@ import settings
 import tmdb
 import movie_engine
 import recommendation_stoplist
+import inclusive_recommendations
 import verify
 import tracking
 import local_cinema
@@ -44,6 +45,30 @@ _MOVIE_PREMIERES_CACHE_VERSION = 5
 _FAVORITE_MOVIE_PAGE_SIZE = 8
 _FAVORITE_MOVIE_VIEW_TTL = 24 * 3600
 _favorite_movie_views = {}
+_FAVORITE_MOVIE_GENRES = (
+    "Комедия", "Ужасы", "Фантастика", "Триллер", "Романтика", "Драма",
+)
+
+
+def _favorite_movie_genre(metadata):
+    genres = [
+        part.strip().casefold()
+        for part in str((metadata or {}).get("genres") or "").split(",")
+        if part.strip()
+    ]
+    aliases = {
+        "комедия": "Комедия", "comedy": "Комедия",
+        "ужасы": "Ужасы", "horror": "Ужасы",
+        "фантастика": "Фантастика", "фэнтези": "Фантастика",
+        "science fiction": "Фантастика", "fantasy": "Фантастика", "анимация": "Фантастика",
+        "триллер": "Триллер", "детектив": "Триллер", "криминал": "Триллер",
+        "боевик": "Триллер", "thriller": "Триллер", "mystery": "Триллер",
+        "crime": "Триллер", "action": "Триллер",
+        "романтика": "Романтика", "мелодрама": "Романтика", "romance": "Романтика",
+        "драма": "Драма", "история": "Драма", "документальный": "Драма",
+        "drama": "Драма", "history": "Драма", "documentary": "Драма",
+    }
+    return next((aliases[genre] for genre in genres if genre in aliases), "Драма")
 _CINEMA_REBUSES = (
     {
         "emoji": "🦈 🌊 👨‍🔬",
@@ -143,8 +168,7 @@ async def _favorite_movie_records(cid):
                     metadata = None
         metadata = dict(metadata or {})
         display_title = str(metadata.get("name") or title or value).strip()
-        raw_genres = [part.strip() for part in str(metadata.get("genres") or "").split(",") if part.strip()]
-        genre = (raw_genres[0] if raw_genres else "Без жанра").capitalize()
+        genre = _favorite_movie_genre(metadata)
         return {
             "id": str(record.get("id") or ""),
             "value": value,
@@ -167,7 +191,7 @@ def _new_favorite_movie_view(cid, records):
         genres.setdefault(record["genre"], []).append(record)
     for items in genres.values():
         items.sort(key=lambda item: item["title"].casefold())
-    ordered_genres = sorted(genres, key=lambda value: (value == "Без жанра", value.casefold()))
+    ordered_genres = [genre for genre in _FAVORITE_MOVIE_GENRES if genre in genres]
     view = {
         "cid": str(cid),
         "created_at": now,
@@ -218,29 +242,47 @@ async def send_favorite_movie_genre(bot, cid, token, genre_index, page=0, q=None
         await send_favorite_movies(bot, cid, q=q)
         return
     genre, items = view["genres"][genre_index]
-    pages = max(1, (len(items) + _FAVORITE_MOVIE_PAGE_SIZE - 1) // _FAVORITE_MOVIE_PAGE_SIZE)
-    page = max(0, min(page, pages - 1))
-    chunk = items[page * _FAVORITE_MOVIE_PAGE_SIZE:(page + 1) * _FAVORITE_MOVIE_PAGE_SIZE]
-    msg = leisure_ui.favorite_movie_genre(genre, len(items))
-    rows = [[InlineKeyboardButton(item["title"][:48], callback_data=f"mfi:{token}:{item['id'][:8]}:{genre_index}:{page}")]
-            for item in chunk]
-    if pages > 1:
+    page = max(0, min(int(page), len(items) - 1))
+    item = items[page]
+    _title, msg = _movie_card({"title": item["title"]}, item["tm"])
+    rows = []
+    if len(items) > 1:
         rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"mfg:{token}:{genre_index}:{(page - 1) % pages}"),
-            InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
-            InlineKeyboardButton("▶️", callback_data=f"mfg:{token}:{genre_index}:{(page + 1) % pages}"),
+            InlineKeyboardButton("◀️", callback_data=f"mfg:{token}:{genre_index}:{(page - 1) % len(items)}"),
+            InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"mfg:{token}:{genre_index}:{(page + 1) % len(items)}"),
         ])
+    rows.append([InlineKeyboardButton(
+        "❌ Удалить", callback_data=f"mfd:{token}:{item['id'][:8]}:{genre_index}:{page}",
+    )])
     rows.append([InlineKeyboardButton("🆕 Добавить фильм", callback_data="as_loveadd_movies")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="movie_favorites"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
-    if q is not None:
+    poster = str(item["tm"].get("poster") or "").strip()
+    if q is not None and poster:
         try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            await q.edit_message_media(
+                media=InputMediaPhoto(
+                    media=poster, caption=msg.text, caption_entities=msg.entities,
+                ),
+                reply_markup=kb,
+            )
             return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    if poster:
+        try:
+            await bot.send_photo(
+                chat_id=cid, photo=poster, caption=msg.text,
+                caption_entities=msg.entities, reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
+    )
 
 
 def _favorite_movie_from_view(cid, token, short_id):
@@ -280,23 +322,38 @@ async def send_favorite_movie_delete_confirmation(bot, cid, token, short_id, gen
         return
     text = f"Удалить «{item['title']}»?"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Удалить", callback_data=f"mfdok:{token}:{short_id}")],
+        [InlineKeyboardButton(
+            "❌ Удалить",
+            callback_data=f"mfdok:{token}:{short_id}:{genre_index}:{page}",
+        )],
         [InlineKeyboardButton("Отмена", callback_data=f"mfg:{token}:{genre_index}:{page}"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     if q is not None:
         try:
-            await q.message.edit_text(text, reply_markup=kb)
+            if getattr(q.message, "photo", None):
+                await q.message.edit_caption(caption=text, reply_markup=kb)
+            else:
+                await q.message.edit_text(text, reply_markup=kb)
             return
         except Exception:
             pass
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
-async def delete_favorite_movie(bot, cid, token, short_id, q=None):
+async def delete_favorite_movie(bot, cid, token, short_id, genre_index=None, page=0, q=None):
     item = _favorite_movie_from_view(cid, token, short_id)
     if item is not None:
         store.remove_from_list_by_ids(config.FAVORITE_MOVIES_KEY, cid, [item["id"]])
+    view = _favorite_movie_view(cid, token)
+    if view is not None and genre_index is not None and 0 <= genre_index < len(view["genres"]):
+        _genre, items = view["genres"][genre_index]
+        items[:] = [value for value in items if not value["id"].startswith(short_id)]
+        if items:
+            await send_favorite_movie_genre(
+                bot, cid, token, genre_index, min(int(page), len(items) - 1), q=q,
+            )
+            return
     _favorite_movie_views.pop(token, None)
     await send_favorite_movies(bot, cid, q=q)
 
@@ -530,12 +587,18 @@ async def send_recos(bot, cid, kind, status=None):
         import leisure_books
         await leisure_books.send_books_reco(bot, cid, status=status)
         return
+    prefs = _movie_prefs(cid)
+    inclusive_pick = (
+        await _inclusive_movie_pick(cid, prefs)
+        if inclusive_recommendations.is_due(cid, "movie") else None
+    )
     # Даже без любимых открытие раздела должно дать современную качественную
     # рекомендацию; вкус начнёт уточняться после первых отметок в любимом.
     # Явный запрос всегда получает новый вариант, а не утреннюю карточку из кэша.
     seen = store.get_list(config.FAVORITE_MOVIES_KEY, cid)
-    if not seen:
-        prefs = _movie_prefs(cid)
+    if inclusive_pick:
+        it, tm = inclusive_pick
+    elif not seen:
         requested_kind = prefs.get("type_pref") or "movie"
         excluded = movie_engine._excluded_norms(cid)
         requested_kinds = [requested_kind]
@@ -571,6 +634,12 @@ async def send_recos(bot, cid, kind, status=None):
     store.last_source[str(cid)] = "Кино"
     store.last_answer[str(cid)] = f"{disp} - {it.get('hook','')}"
     _cache_movie(cid, it, tm)
+    inclusive = inclusive_recommendations.is_inclusive(
+        "movie", it.get("title"), (tm or {}).get("name"), (tm or {}).get("name_en"),
+    )
+    if tm is not None and inclusive:
+        tm = {**tm, "lgbt": True}
+    inclusive_recommendations.record(cid, "movie", inclusive)
     await _send_movie_card(bot, cid, it, 0, tm=tm, status=status)
 
 
@@ -583,6 +652,38 @@ def _movie_prefs(cid):
         "recency": settings.get(cid, "movie_recency", "") or None,
         "min_rating": _as_float(settings.get(cid, "movie_min_rating", None)),
     }
+
+
+_INCLUSIVE_MOVIE_TITLES = (
+    "Moonlight", "Portrait of a Lady on Fire", "Nimona",
+    "Heartstopper", "It's a Sin", "Pose",
+)
+
+
+async def _inclusive_movie_pick(cid, prefs):
+    """Проверенный ЛГБТ-проект, подходящий типу и минимальному рейтингу."""
+    excluded = movie_engine._excluded_norms(cid)
+    type_pref = prefs.get("type_pref")
+    min_rating = float(prefs.get("min_rating") or 0)
+    for title in _INCLUSIVE_MOVIE_TITLES:
+        try:
+            tm = await asyncio.to_thread(tmdb.lookup_title, title)
+        except Exception:
+            continue
+        if not tm or movie_engine._norm(tm.get("name")) in excluded:
+            continue
+        if type_pref and tm.get("kind") != type_pref:
+            continue
+        if float(tm.get("rating") or 0) < min_rating:
+            continue
+        tm = {**tm, "lgbt": True}
+        it = {
+            "title": tm.get("name") or title,
+            "title_en": tm.get("name_en") or title,
+            "hook": "ЛГБТ-история с сильными отзывами и близким тебе настроением.",
+        }
+        return it, tm
+    return None
 
 
 def _as_float(v):

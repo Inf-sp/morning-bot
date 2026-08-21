@@ -598,8 +598,13 @@ async def handle(update, context, remove_reply_keyboard):
         )
         return
     if data.startswith("mfdok:"):
-        _op, token, short_id = data.split(":", 2)
-        await leisure_movies.delete_favorite_movie(bot, cid, token, short_id, q=q)
+        parts = data.split(":")
+        _op, token, short_id = parts[:3]
+        genre_index = int(parts[3]) if len(parts) > 3 else None
+        page = int(parts[4]) if len(parts) > 4 else 0
+        await leisure_movies.delete_favorite_movie(
+            bot, cid, token, short_id, genre_index, page, q=q,
+        )
         return
     if data == "book_favorites":
         await leisure_books.send_favorite_books(bot, cid, q=q)

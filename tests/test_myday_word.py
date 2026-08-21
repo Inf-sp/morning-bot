@@ -107,6 +107,47 @@ def test_quote_fallback_uses_fresh_author_after_favorite_book_was_shown(monkeypa
     assert quote["src"] != "Антуан де Сент-Экзюпери"
 
 
+def test_daily_literary_quote_is_cached_as_a_book_quote(monkeypatch):
+    saved = []
+    monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {})
+    monkeypatch.setattr(myday.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(
+        myday.store, "mutate_profile",
+        lambda _cid, change: saved.append(change({})[0]),
+    )
+    monkeypatch.setattr(myday, "_motivating_book_quote", lambda *_args: ({
+        "id": "старик и море",
+        "quote": "Человека можно уничтожить, но нельзя победить.",
+        "src": "Эрнест Хемингуэй",
+    }, []))
+
+    quote = myday._daily_literary_quote("42")
+
+    assert quote["quote"] == "Человека можно уничтожить, но нельзя победить."
+    assert saved[0]["myday_quote_cache"]["kind"] == "book"
+    assert saved[0]["myday_quote_history"] == ["старик и море"]
+
+
+def test_motivating_quotes_do_not_repeat_before_pool_is_exhausted(monkeypatch):
+    monkeypatch.setattr(myday.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(myday.random, "choice", lambda values: values[0])
+    first, history = myday._motivating_book_quote("42", [])
+    second, _history = myday._motivating_book_quote("42", [first["id"]])
+
+    assert first["id"] != second["id"]
+    assert first["id"] not in history
+
+
+def test_unseen_quote_from_favorite_book_has_priority(monkeypatch):
+    monkeypatch.setattr(
+        myday.store, "get_list",
+        lambda key, _cid: ["Атомные привычки"] if key == config.FAVORITE_BOOKS_KEY else [],
+    )
+    quote, _history = myday._motivating_book_quote("42", [])
+
+    assert quote["id"] == "атомные привычки"
+
+
 def test_quote_uses_a_favorite_artist_when_the_list_is_not_empty(monkeypatch):
     saved_profiles = []
     prompt = []

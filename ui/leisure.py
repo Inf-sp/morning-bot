@@ -211,6 +211,8 @@ def game_card(data):
     if meta:
         b.text_line(f" · {' · '.join(meta)}")
     b.newline()
+    if data.get("lgbt"):
+        b.line("🏳️‍🌈 ЛГБТ")
     description = str(data.get("description") or "").strip()
     if description:
         b.spacer()
@@ -535,6 +537,8 @@ def movie_card(item, tm):
         meta_parts.append(f"⭐ {tm['rating']:.1f}")
     if type_label:
         meta_parts.append(type_label)
+    if tm and tm.get("lgbt"):
+        meta_parts.append("🏳️‍🌈 ЛГБТ")
     if tm and tm.get("genres"):
         meta_parts.append(tm["genres"])
     if meta_parts:
@@ -677,6 +681,8 @@ def book_text(item):
         meta_offset = head_and_gap_offset + u16_len(head) + 1
         b._entities.append(MessageEntity(MessageEntity.ITALIC, meta_offset, u16_len(meta_text)))
     b.newline()
+    if item.get("lgbt"):
+        b.line("🏳️‍🌈 ЛГБТ")
     try:
         rating = float(item.get("rating"))
         ratings_count = int(item.get("ratings_count") or 0)
@@ -895,7 +901,7 @@ def movie_premieres_screen(country, date_range, items):
     """Подпись карточки премьеры кино."""
     b = MessageBuilder()
     b.text_line("🎟️ ")
-    b.bold(f"Премьеры в кино · {country}")
+    b.bold(f"Премьеры фильмов · {country}")
     b.newline()
     b.spacer()
     b.line(date_range)

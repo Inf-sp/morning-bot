@@ -32,7 +32,7 @@ def _bold_values(message):
 def test_category_homes_keep_personal_lists_in_their_own_sections():
     assert _labels(leisure_movies._movie_home_kb()) == [
         ["✨ Подобрать новое кино"],
-        ["🎟️ Премьеры"],
+        ["🎟️ Премьеры фильмов"],
         ["📺 Премьеры сериалов"],
         ["🎚️ Моё кино"],
         ["#️⃣ Главная"],
@@ -390,20 +390,19 @@ def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
     labels = _labels(bot.messages[0]["reply_markup"])
     assert bot.messages[0]["text"] == (
         "🎚️ Моё кино · 2 фильма/сериала\n\n"
-        "Драма:\nПатерсон\n\n"
-        "Комедия:\nАмели"
+        "Комедия:\nАмели\n\n"
+        "Драма:\nПатерсон"
     )
     assert labels[-2:] == [["🆕 Добавить фильм"], ["⬅️ Назад", "#️⃣ Главная"]]
-    genre_callback = bot.messages[0]["reply_markup"].inline_keyboard[0][0].callback_data
+    genre_callback = next(
+        row[0].callback_data
+        for row in bot.messages[0]["reply_markup"].inline_keyboard
+        if row[0].text.startswith("Драма")
+    )
     _op, token, genre_index, page = genre_callback.split(":")
 
     asyncio.run(leisure_movies.send_favorite_movie_genre(
         bot, "42", token, int(genre_index), int(page),
-    ))
-    item_callback = bot.messages[-1]["reply_markup"].inline_keyboard[0][0].callback_data
-    _op, token, short_id, genre_index, page = item_callback.split(":")
-    asyncio.run(leisure_movies.send_favorite_movie_card(
-        bot, "42", token, short_id, int(genre_index), int(page),
     ))
 
     assert bot.photos[-1]["photo"] == "https://img/paterson.jpg"
@@ -411,6 +410,45 @@ def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
     assert "Фильм · драма, комедия" in bot.photos[-1]["caption"]
     assert "Водитель автобуса пишет стихи." in bot.photos[-1]["caption"]
     assert _labels(bot.photos[-1]["reply_markup"])[0] == ["❌ Удалить"]
+
+
+def test_favorite_movie_genre_switches_posters_in_the_same_card():
+    token = "carousel"
+    leisure_movies._favorite_movie_views[token] = {
+        "cid": "42",
+        "created_at": leisure_movies.time.time(),
+        "genres": [("Драма", [{
+            "id": "first-id", "title": "Первый", "tm": {
+                "name": "Первый", "kind": "movie", "poster": "first.jpg",
+            },
+        }, {
+            "id": "second-id", "title": "Второй", "tm": {
+                "name": "Второй", "kind": "movie", "poster": "second.jpg",
+            },
+        }])],
+    }
+    edited = []
+
+    class Query:
+        async def edit_message_media(self, **kwargs):
+            edited.append(kwargs)
+
+    asyncio.run(leisure_movies.send_favorite_movie_genre(
+        object(), "42", token, 0, 1, q=Query(),
+    ))
+
+    assert edited[0]["media"].media == "second.jpg"
+    assert "Второй" in edited[0]["media"].caption
+    assert _labels(edited[0]["reply_markup"])[0] == ["◀️", "2/2", "▶️"]
+    assert _labels(edited[0]["reply_markup"])[1] == ["❌ Удалить"]
+
+
+def test_favorite_movies_use_only_six_main_genres():
+    assert leisure_movies._FAVORITE_MOVIE_GENRES == (
+        "Комедия", "Ужасы", "Фантастика", "Триллер", "Романтика", "Драма",
+    )
+    assert leisure_movies._favorite_movie_genre({"genres": "анимация, семейный"}) == "Фантастика"
+    assert leisure_movies._favorite_movie_genre({"genres": "криминал, боевик"}) == "Триллер"
 
 
 def test_favorite_movie_delete_removes_only_selected_record(monkeypatch):
@@ -904,7 +942,7 @@ def test_premiere_screens_are_compact_and_keep_book_links():
         "url": "https://books.google.com/books?id=new",
     }])
 
-    assert "Премьеры в кино · Нидерланды" in movie.text
+    assert "Премьеры фильмов · Нидерланды" in movie.text
     assert "до 7 самых популярных" not in movie.text
     assert "«Премьера» · драма · комедия · 15 августа 2026" in movie.text
     assert "Семья пытается сохранить дом после большого наводнения." in movie.text
@@ -1015,7 +1053,7 @@ def test_movie_premieres_are_sent_as_one_poster_carousel(monkeypatch):
     assert [kind for kind, _kwargs in sent] == ["photo"]
     card = sent[0][1]
     assert card["photo"] == items[0]["poster"]
-    assert card["caption"].startswith("🎟️ Премьеры в кино · Нидерланды")
+    assert card["caption"].startswith("🎟️ Премьеры фильмов · Нидерланды")
     assert "Фильм 0" in card["caption"]
     assert "Фильм 1" not in card["caption"]
     assert {

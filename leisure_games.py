@@ -12,6 +12,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 
 import ai
 import config
+import inclusive_recommendations
 import igdb
 import research
 import secure
@@ -648,9 +649,22 @@ async def send_games_home(bot, cid, *, q=None, status=None):
 async def send_game_recommendation(
     bot, cid, *, q=None, status=None, refresh=False, genre=None,
 ):
-    item = pick_game(cid, genre=genre, refresh=refresh)
+    item = None
+    if inclusive_recommendations.is_due(cid, "game"):
+        candidate = next((
+            value for value in _eligible_games(cid, genre=genre)
+            if inclusive_recommendations.is_inclusive("game", value.get("name"))
+        ), None)
+        if candidate:
+            item = _decorate_game({**candidate, "lgbt": True}, cid, genre=genre)
+    item = item or pick_game(cid, genre=genre, refresh=refresh)
     if item:
         item = await asyncio.to_thread(igdb.enrich_game_recommendation, item)
+        inclusive = bool(item.get("lgbt")) or inclusive_recommendations.is_inclusive(
+            "game", item.get("name"),
+        )
+        item["lgbt"] = inclusive
+        inclusive_recommendations.record(cid, "game", inclusive)
     msg = leisure_ui.game_card(item)
     markup = _game_keyboard(no_match=not item, genre=genre)
     poster = str(item.get("poster") or "").strip() if item else ""
