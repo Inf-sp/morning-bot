@@ -191,6 +191,7 @@ async def send_home(bot, cid, q=None):
         [InlineKeyboardButton("📍 Город", callback_data="set_city")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton("📝 Предпочтения", callback_data="set_preferences")],
+        [InlineKeyboardButton("🔄 Обновить", callback_data="set_refresh_data")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
@@ -1069,8 +1070,28 @@ async def handle_callback(bot, cid, data, q=None):
         await menu.send_food_menu(bot, cid)
     elif data == "set_notif":
         await send_notif(bot, cid, q)
+    elif data == "set_refresh_data":
+        import cache_refresh
+        started = cache_refresh.start(bot, cid)
+        text = (
+            "🔄 Обновляю данные постепенно, чтобы не перегружать сервисы.\n\n"
+            "Все кэши обновятся в течение 5 минут."
+            if started else
+            "🔄 Обновление уже идёт. Данные будут готовы в течение 5 минут."
+        )
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ Назад", callback_data="set_home")],
+            [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        ])
+        if q is not None:
+            try:
+                await q.message.edit_text(text, reply_markup=markup)
+                return
+            except Exception:
+                pass
+        await bot.send_message(chat_id=cid, text=text, reply_markup=markup, transient=True)
     elif data in (
-        "set_refresh_data", "set_refresh_review", "set_refresh_review_apply",
+        "set_refresh_review", "set_refresh_review_apply",
         "set_refresh_review_delete", "set_refresh_review_skip",
     ):
         # Кнопка ручного обновления базы удалена. Старые сообщения безопасно

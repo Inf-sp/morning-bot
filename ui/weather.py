@@ -50,16 +50,26 @@ def weather_warning(events, when="", advice=None):
     return b.build_stripped()
 
 
-def full_forecast(header, periods, joke=""):
+def full_forecast(header, current, periods, sun_line="", advice=""):
     b = MessageBuilder()
     b.section(header)
     b.newline()
+    if current:
+        b.section(current.get("title") or "Сейчас")
+        for line in current.get("lines") or []:
+            b.bullet(line)
     for period in periods:
-        b.section(f"{period['label']}:")
-        b.line(period["line"])
-        b.newline()
-    if joke:
-        b.line(joke)
+        b.spacer()
+        b.section(period.get("title") or period.get("label") or "Прогноз")
+        for line in period.get("lines") or []:
+            b.bullet(line)
+    if sun_line:
+        b.spacer()
+        b.line(sun_line)
+    if advice:
+        b.spacer()
+        b.bold("💡 Полезно:")
+        b.text_line(f" {advice}")
     return b.build_stripped()
 
 

@@ -3,7 +3,7 @@ import asyncio
 import logging
 import re
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -94,6 +94,12 @@ def _daily_travel_rebus(day=None):
     return dict(_TRAVEL_REBUSES[(day.timetuple().tm_yday - 1) % len(_TRAVEL_REBUSES)])
 
 
+def _travel_week_start(day=None):
+    """Понедельник текущей локальной недели — стабильный ключ кэша поездки."""
+    day = day or datetime.now(config.TZ).date()
+    return (day - timedelta(days=day.weekday())).isoformat()
+
+
 def _editorial_line(value, *, allow_empty=True):
     text = _card_text(value)
     if any(marker in text.casefold() for marker in _CARD_CLICHES):
@@ -170,24 +176,24 @@ def _idea_lock(cid):
         return _IDEA_LOCKS.setdefault(key, threading.Lock())
 
 
-def _home_idea(cid):
-    """Одна идея на локальные сутки; страна профиля задаёт допустимый радиус."""
+def _home_idea(cid, *, refresh=False):
+    """Одна идея на локальную неделю; страна профиля задаёт допустимый радиус."""
     key = str(cid)
-    today = datetime.now(config.TZ).date().isoformat()
+    week = _travel_week_start()
     profile = store.get_settings(cid)
     city = profile.get("city") or "Алкмар"
     home_cc = str(profile.get("cc") or "NL").upper()
     with _idea_lock(cid):
         state = store._load(config.TRAVEL_IDEA_KEY) or {}
         cached = state.get(key) or {}
-        if (cached.get("version") == 2 and cached.get("date") == today and cached.get("city") == city
+        if (not refresh and cached.get("version") == 3 and cached.get("week") == week and cached.get("city") == city
                 and cached.get("cc") == home_cc
                 and cached.get("idea")):
             return cached["idea"]
         idea = _generate_home_idea(cid)
 
         def change(data):
-            data[key] = {"version": 2, "date": today, "city": city, "cc": home_cc, "idea": idea}
+            data[key] = {"version": 3, "week": week, "city": city, "cc": home_cc, "idea": idea}
             return data, None
 
         store.mutate_kv(config.TRAVEL_IDEA_KEY, change)
@@ -217,9 +223,9 @@ async def send_home(bot, cid, q=None, status=None):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_home_kb())
 
 
-async def warm_home_cache(cid):
-    """Создаёт дневную идею заранее, если актуального кэша ещё нет."""
-    await asyncio.to_thread(_home_idea, cid)
+async def warm_home_cache(cid, *, refresh=False):
+    """Создаёт недельную идею заранее, если актуального кэша ещё нет."""
+    await asyncio.to_thread(_home_idea, cid, refresh=refresh)
     return True
 
 

@@ -400,15 +400,18 @@ async def handle(update, context, remove_reply_keyboard):
                 )
             elif act in ("food_breakfast", "recipe_breakfast"):
                 await _inline_status(
-                    lambda status: cooking.enter_meal(bot, cid, "breakfast", status=status),
+                    lambda status: menu.send_food_menu(
+                        bot, cid, status=status, refresh=True, meal="breakfast"),
                     preserve_message=True)
             elif act in ("food_lunch", "recipe_lunch"):
                 await _inline_status(
-                    lambda status: cooking.enter_meal(bot, cid, "lunch", status=status),
+                    lambda status: menu.send_food_menu(
+                        bot, cid, status=status, refresh=True, meal="lunch"),
                     preserve_message=True)
             elif act in ("food_dinner", "recipe_dinner"):
                 await _inline_status(
-                    lambda status: cooking.enter_meal(bot, cid, "dinner", status=status),
+                    lambda status: menu.send_food_menu(
+                        bot, cid, status=status, refresh=True, meal="dinner"),
                     preserve_message=True)
         except Exception as e:
             await verify.safe_error(bot, cid, e)

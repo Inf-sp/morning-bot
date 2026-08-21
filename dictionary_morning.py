@@ -1,5 +1,6 @@
 """Ежедневная словарная практика и выбор материала дня."""
 
+import hashlib
 from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -44,48 +45,73 @@ def _entries_review_sorted(pool):
     return sorted(pool, key=_key)
 
 
+def build_daily_practice(cid, language, *, mark_shown=False):
+    """Три стабильные записи дня из личного словаря с примерами и подсказкой."""
+    lang_code = _code(language)
+    words = _ensure_dict(cid)
+    pool = [
+        word for word in words
+        if _dict_lang(word) == lang_code and _entry_term(word) and _entry_translation(word)
+    ]
+    if not pool:
+        return {"flag": _flag(language), "entries": []}
+
+    ordered = _entries_review_sorted(pool)
+    # Записи с готовыми примерами полезнее для карточки дня. Внутри группы
+    # недельная/SRS-очередь остаётся стабильной.
+    ordered.sort(key=lambda word: 0 if word.get("examples") else 1)
+    today = datetime.now(config.TZ).date().isoformat()
+    base = int(hashlib.sha256(f"{cid}|{lang_code}".encode()).hexdigest()[:8], 16)
+    offset = (base + datetime.now(config.TZ).date().toordinal()) % len(ordered)
+    rotated = ordered[offset:] + ordered[:offset]
+    chosen = rotated[:3]
+    now_iso = datetime.now(config.TZ).isoformat()
+    entries = []
+    for word in chosen:
+        term = capitalize_initial(
+            normalize_term_case(_entry_term(word), dictionary._kind_of(_entry_term(word)))
+        )
+        translation = _entry_translation(word)
+        override = CANONICAL_ENTRY_OVERRIDES.get(normalize_key(_entry_term(word)))
+        if override:
+            term, translation = override
+        examples = word.get("examples") or []
+        example = examples[0] if examples and isinstance(examples[0], dict) else {}
+        entries.append({
+            "term": term,
+            "translation": translation,
+            "example": str(example.get("text") or "").strip(),
+            "example_translation": str(example.get("translation") or "").strip(),
+            "breakdown": str(word.get("breakdown") or "").strip(),
+        })
+        if mark_shown:
+            try:
+                words[words.index(word)]["last_shown_at"] = now_iso
+            except ValueError:
+                pass
+    if mark_shown:
+        store.set_list(config.DICT_KEY, cid, words)
+
+    first = entries[0]
+    tip = (
+        f"Свяжи «{first['term']}» с одной знакомой ситуацией и повтори пример вслух два раза."
+    )
+    generic = {"слово", "фраза", "выражение"}
+    rule = next((
+        entry["breakdown"] for entry in entries
+        if entry.get("breakdown", "").casefold() not in generic
+    ), "")
+    return {"flag": _flag(language), "entries": entries, "tip": tip, "rule": rule}
+
+
 def _build_morning_word(cid, language):
     """Собирает карточку повторения без нового учебного материала."""
-    lang_code = _code(language)
-    flag = _flag(language)
-    words = _ensure_dict(cid)
-    pool = [w for w in words if _dict_lang(w) == lang_code and _entry_term(w) and _entry_translation(w)]
-    review_pool = [w for w in pool if w.get("srs_history") or w.get("status") == "known"]
-    if not review_pool:
-        msg = learning_ui.morning_words(flag, empty_hint=True)
-        return msg, []
-    chosen = _entries_review_sorted(review_pool)[:3]
-    if not chosen:
-        msg = learning_ui.morning_words(flag, empty_hint=True)
-        return msg, []
-
-    now_iso = datetime.now(config.TZ).isoformat()
-    del_row = []
-    lines = []
-    for w in chosen:
-        # Фразы сохраняют внутренний регистр, но в рассылке всегда начинаются
-        # с заглавной буквы — так же, как на экране словаря.
-        term = capitalize_initial(
-            normalize_term_case(_entry_term(w), dictionary._kind_of(_entry_term(w)))
-        )
-        ru = _entry_translation(w)
-        override = CANONICAL_ENTRY_OVERRIDES.get(normalize_key(_entry_term(w)))
-        if override:
-            term, ru = override
-        lines.append((term, ru))
-        try:
-            idx = words.index(w)
-            words[idx]["last_shown_at"] = now_iso
-            del_row.append(InlineKeyboardButton(delete_label(term[:20]), callback_data=f"worddel_{idx}"))
-        except ValueError:
-            pass
-    try:
-        store.set_list(config.DICT_KEY, cid, words)
-    except Exception:
-        pass
-
-    msg = learning_ui.morning_words(flag, words=lines)
-    return msg, del_row
+    practice = build_daily_practice(cid, language, mark_shown=True)
+    msg = learning_ui.morning_words(
+        practice["flag"], entries=practice["entries"], tip=practice.get("tip"),
+        rule=practice.get("rule"), empty_hint=not practice["entries"],
+    )
+    return msg, []
 
 
 async def send_morning_word(bot, cid, language=None, with_kb=True):

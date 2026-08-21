@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import config
 import store
 from ui import menu as menu_ui
@@ -61,7 +63,10 @@ def has_available_fridge(cid) -> bool:
     return bool(_fridge_available(store.get_list(config.FRIDGE_KEY, str(cid))))
 
 
-async def send_food_menu(bot, cid, status=None, refresh=False, q=None):
+_FOOD_MEAL_HOURS = {"breakfast": 8, "lunch": 13, "dinner": 18}
+
+
+async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None):
     import asyncio
     import recipe_generation
     import util
@@ -84,10 +89,21 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None):
             )
         return
 
+    current_now = datetime.now(config.TZ)
+    recipe_now = current_now
+    if meal in _FOOD_MEAL_HOURS:
+        recipe_now = current_now.replace(
+            hour=_FOOD_MEAL_HOURS[meal], minute=0, second=0, microsecond=0,
+        )
+    selected_meal = meal or recipe_generation._home_meal_for_hour(current_now.hour)
+    late_dinner = selected_meal == "dinner" and (
+        current_now.hour >= 21 or current_now.hour < 6
+    )
+
     if not refresh:
-        cached = recipe_generation.get_cached_cooking_home_idea(cid)
+        cached = recipe_generation.get_cached_cooking_home_idea(cid, now=recipe_now)
         if cached is not None:
-            msg = menu_ui.food_menu(cached)
+            msg = menu_ui.food_menu(cached, late_dinner=late_dinner)
             if status is not None:
                 await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
             elif q is not None:
@@ -116,8 +132,8 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None):
                 bot, cid, stages=util.StatusManager.TOPIC_STAGES["food"])
     try:
         idea = await asyncio.to_thread(
-            recipe_generation.get_cooking_home_idea, cid, None, refresh)
-        msg = menu_ui.food_menu(idea)
+            recipe_generation.get_cooking_home_idea, cid, recipe_now, refresh)
+        msg = menu_ui.food_menu(idea, late_dinner=late_dinner)
         await status.replace(
             msg.text,
             entities=msg.entities,

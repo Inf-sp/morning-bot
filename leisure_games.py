@@ -344,10 +344,12 @@ def _decorate_game(item, cid, *, genre=None):
 def pick_game(cid, *, genre=None, refresh=False):
     """Локальный подбор без AI: платформы + жанр + защита от недавних повторов."""
     profile = store.get_profile(cid)
-    today = datetime.now(config.TZ).date().isoformat()
+    today = datetime.now(config.TZ).date()
+    year, week, _weekday = today.isocalendar()
+    week_key = f"{year}-W{week:02d}"
     signature = _game_signature(cid)
     cached = profile.get("game_daily") or {}
-    if (not refresh and not genre and cached.get("date") == today
+    if (not refresh and not genre and cached.get("week") == week_key
             and cached.get("signature") == signature and isinstance(cached.get("item"), dict)):
         return _decorate_game(cached["item"], cid, genre=genre)
 
@@ -371,10 +373,10 @@ def pick_game(cid, *, genre=None, refresh=False):
     seen = [str(value) for value in profile.get("game_seen", []) if str(value)]
     fresh = [item for item in pool if item["id"] not in seen]
     candidates = fresh or pool
-    seed = int(hashlib.sha256(f"{cid}|{today}|{genre or ''}".encode()).hexdigest()[:8], 16)
+    seed = int(hashlib.sha256(f"{cid}|{week_key}|{genre or ''}".encode()).hexdigest()[:8], 16)
     item = candidates[seed % len(candidates)]
     seen = [value for value in seen if value != item["id"]]
-    daily_entry = {"date": today, "signature": signature, "item": dict(item)}
+    daily_entry = {"week": week_key, "signature": signature, "item": dict(item)}
 
     def save_selection(current):
         current_seen = [str(value) for value in current.get("game_seen", []) if str(value)]
@@ -662,10 +664,11 @@ async def send_games_home(bot, cid, *, q=None, status=None):
     if not items:
         items = await get_game_premieres(cid, refresh=True, seasonal=True)
     today = datetime.now(config.TZ).date()
+    week_anchor = today - timedelta(days=today.weekday())
     _season_start, _season_end, season = _game_season(today)
-    daily = dict(_GAME_DAILY_CONTENT[(today.toordinal() - 1) % len(_GAME_DAILY_CONTENT)])
+    daily = dict(_GAME_DAILY_CONTENT[(week_anchor.toordinal() - 1) % len(_GAME_DAILY_CONTENT)])
     home_items = []
-    items = _rotated_season_items(items, today)
+    items = _rotated_season_items(items, week_anchor)
     for source in items[:3]:
         item = dict(source)
         item["trailer_url"] = str(item.get("trailer_url") or "").strip() or (

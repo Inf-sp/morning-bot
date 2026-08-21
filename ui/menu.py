@@ -194,6 +194,36 @@ def learning_menu(home: dict):
     b.bold(f"{flag} Изучаем сегодня · {title}")
     b.newline()
 
+    practice = home.get("daily_practice") or {}
+    entries = list(practice.get("entries") or [])[:3]
+    if entries:
+        b.spacer()
+        b.bold("Слова и фразы дня:")
+        b.newline()
+        for index, entry in enumerate(entries, 1):
+            b.bold(f"{index}. {entry.get('term', '')}")
+            b.text_line(f" → {entry.get('translation', '')}")
+            b.newline()
+            example = str(entry.get("example") or "").strip()
+            example_translation = str(entry.get("example_translation") or "").strip()
+            if example:
+                b.text_line("Пример: ")
+                b.italic(example)
+                if example_translation:
+                    b.text_line(f" → {example_translation}")
+                b.newline()
+        rule = str(practice.get("rule") or "").strip()
+        if rule:
+            b.spacer()
+            b.labeled_line("Правило", rule, lowercase=False)
+        tip = str(practice.get("tip") or "").strip()
+        if tip:
+            b.spacer()
+            b.labeled_line("Как запомнить", tip, lowercase=False)
+        b.spacer()
+        b.text_line("🎯 ")
+        b.label("Задание", "составь одно предложение с любым словом или фразой.")
+
     phrase = home.get("live_language") or {}
     if phrase.get("text") and phrase.get("translation"):
         b.spacer()
@@ -252,7 +282,7 @@ def _cooking_sentence(value) -> str:
     return value
 
 
-def food_menu(idea=None):
+def food_menu(idea=None, *, late_dinner=False):
     """Главный экран Готовки: один полный рецепт из холодильника."""
     idea = idea or {}
     b = MessageBuilder()
@@ -266,6 +296,10 @@ def food_menu(idea=None):
         b.spacer()
         b.bold(name)
         b.newline()
+
+    if late_dinner:
+        b.spacer()
+        b.line("🌙 Поздний ужин — завтрак уже начинает ревновать.")
 
     ingredients = [_cooking_text(item) for item in (idea.get("ingredients") or [])]
     ingredients = [item for item in ingredients if item]

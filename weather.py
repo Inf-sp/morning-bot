@@ -8,7 +8,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 import ai
-from util import cap_sentence, _WEEKDAYS, _WEEKDAY_SHORT
+from util import cap_sentence, _MONTHS, _WEEKDAYS, _WEEKDAY_SHORT
 import verify
 from ui import weather as weather_ui
 import weather_provider as _provider
@@ -376,6 +376,31 @@ def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="",
     return ""
 
 
+def _wind_direction(value):
+    try:
+        degrees = float(value) % 360
+    except (TypeError, ValueError):
+        return ""
+    labels = ("северный", "северо-восточный", "восточный", "юго-восточный",
+              "южный", "юго-западный", "западный", "северо-западный")
+    return labels[int((degrees + 22.5) // 45) % 8]
+
+
+def _speed_range(values):
+    rounded = [int(round(float(value or 0))) for value in values]
+    if not rounded:
+        return "0"
+    low, high = min(rounded), max(rounded)
+    return str(high) if low == high else f"{low}–{high}"
+
+
+def _clock(value):
+    try:
+        return datetime.fromisoformat(str(value)).astimezone(TZ).strftime("%H:%M")
+    except (TypeError, ValueError):
+        return ""
+
+
 # ---------- отправка ----------
 async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
     s = store.get_settings(cid)
@@ -389,46 +414,96 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
 
     if mode == "full":
         dt = now
-        header = f"Полный прогноз на сегодня • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS_SHORT[dt.month-1]} • {s['city']}"
+        cc = str(s.get("cc") or "").upper()
+        flag = __import__("util").flag_from_cc(cc) or ""
+        place = f"{s['city']}{f', {cc}' if cc else ''}{f' {flag}' if flag else ''}"
+        header = f"Полный прогноз • {_WEEKDAY_SHORT[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} · {place}"
+        hourly = data.get("hourly") or {}
         try:
-            hours = data["hourly"]["time"]
-            temps = data["hourly"].get("temperature_2m") or []
-            probs = data["hourly"]["precipitation_probability"]
-            precs = data["hourly"].get("precipitation") or []
-            winds = data["hourly"]["windspeed_10m"]
+            hours = hourly["time"]
+            temps = hourly.get("temperature_2m") or []
+            probs = hourly.get("precipitation_probability") or []
+            precs = hourly.get("precipitation") or []
+            winds = hourly.get("windspeed_10m") or []
+            gusts = hourly.get("windgusts_10m") or []
+            clouds = hourly.get("cloudcover") or []
         except Exception:
-            temps = probs = precs = winds = []
+            hours = temps = probs = precs = winds = gusts = clouds = []
         day_str = d["time"][0]
+        current_data = data.get("current") or {}
+        current_prob = next((
+            probs[index] for index, stamp in enumerate(hours)
+            if stamp.startswith(dt.strftime("%Y-%m-%dT%H")) and index < len(probs)
+        ), d["precipitation_probability_max"][0] or 0)
+        current_temp = current_data.get("temperature_2m")
+        current_wind = current_data.get("windspeed_10m") or 0
+        current_gust = current_data.get("windgusts_10m") or current_wind
+        current_code = current_data.get("weathercode", d["weathercode"][0])
+        current_icon = weather_icon(current_code, current_temp or 0, current_prob, current_wind)
+        current_lines = [
+            f"Ветер {current_wind:.0f} м/с"
+            + (f" · {_wind_direction(current_data.get('winddirection_10m'))}" if _wind_direction(current_data.get("winddirection_10m")) else "")
+            + (f" · порывы до {current_gust:.0f} м/с" if current_gust else ""),
+            f"Дождь {float(current_prob or 0):.0f}%",
+        ]
+        visibility = current_data.get("visibility")
+        if visibility is not None:
+            current_lines.append(f"Видимость {float(visibility) / 1000:.0f} км")
+        uv = current_data.get("uv_index")
+        if uv is not None:
+            current_lines.append(f"UV {float(uv):g}")
+        current = {
+            "title": f"{current_icon} Сейчас до {float(current_temp or 0):+.0f}°C",
+            "lines": current_lines,
+        }
         periods = []
-        parts = [("Утром", DAYTIME_START_H, 12), ("Днём", 12, 18), ("Вечером", 18, DAYTIME_END_H)]
+        parts = [("Днём", 12, 18), ("Вечером", 18, 23)]
         for label, h1, h2 in parts:
-            t_vals, p_vals, w_vals, mm_vals = [], [], [], []
+            t_vals, p_vals, w_vals, g_vals, mm_vals, cloud_vals = [], [], [], [], [], []
             for i, ts in enumerate(hours):
                 if ts.startswith(day_str) and h1 <= int(ts[11:13]) < h2:
                     if i < len(temps): t_vals.append(temps[i] or 0)
                     if i < len(probs): p_vals.append(probs[i] or 0)
                     if i < len(winds): w_vals.append(winds[i] or 0)
+                    if i < len(gusts): g_vals.append(gusts[i] or 0)
                     if i < len(precs): mm_vals.append(precs[i] or 0)
+                    if i < len(clouds) and clouds[i] is not None: cloud_vals.append(clouds[i])
             if not t_vals:
                 continue
             tmx = max(t_vals); rn = max(p_vals) if p_vals else 0; wd = max(w_vals) if w_vals else 0
-            mm = max(mm_vals) if mm_vals else None
+            mm = sum(float(value or 0) for value in mm_vals)
             icon = weather_icon(d["weathercode"][0], tmx, rn, wd, mm)
-            wemoji, wword = wind_scale(wd)
-            wind_str = f"{wemoji} {wword} {wd:.0f} м/с" if wd >= 8 else f"💨 Ветер {wd:.0f} м/с"
-            rain_part = rain_text(rn, mm)
-            line = f"{icon} До {tmx:+.0f}°C"
-            if rain_part:
-                line += f" • {rain_part}"
-            line += f" • {wind_str}"
-            periods.append({"label": label, "line": line})
+            lines = [
+                f"Ветер {_speed_range(w_vals)} м/с"
+                + (f" · порывы до {max(g_vals):.0f} м/с" if g_vals else ""),
+                f"Вероятность дождя {rn:.0f}%",
+                f"Осадки до {mm:.1f} мм",
+            ]
+            if cloud_vals:
+                lines.append(f"Облачность {max(cloud_vals):.0f}%")
+            periods.append({
+                "title": f"{icon} {label} · {h1:02d}:00–{h2:02d}:00 до {tmx:+.0f}°C",
+                "lines": lines,
+            })
         _tmin, daytime_tmax = _daytime_temperature_range(
             data, day_str, d["temperature_2m_min"][0], d["temperature_2m_max"][0],
         )
-        joke = _joke_outfit(s["city"], daytime_tmax, d["precipitation_probability_max"][0] or 0,
-                            d["windspeed_10m_max"][0] or 0, DESC.get(d["weathercode"][0], ""), "сегодня")
+        sunrise = _clock((d.get("sunrise") or [""])[0])
+        sunset = _clock((d.get("sunset") or [""])[0])
+        sun_line = "Солнце" + (f" · Восход {sunrise}" if sunrise else "") + (f" · Закат {sunset}" if sunset else "")
+        today_probs = [
+            float(probs[index] or 0) for index, stamp in enumerate(hours)
+            if stamp.startswith(day_str) and index < len(probs)
+        ]
+        rain_max = max([float(current_prob or 0), *today_probs])
+        if rain_max >= RAIN_PROB_MIN:
+            advice = f"{s['city']} сегодня мокрый. Лучше взять дождевик и зонт, особенно если собираешься выходить днём."
+        elif float(d["windspeed_10m_max"][0] or 0) >= 8:
+            advice = f"В {s['city']} сегодня ветрено. Для велосипеда и долгой прогулки лучше выбрать защищённый маршрут."
+        else:
+            advice = f"В {s['city']} сегодня без сильных погодных помех — можно планировать дела на улице."
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
-        msg = weather_ui.full_forecast(header, periods, joke)
+        msg = weather_ui.full_forecast(header, current, periods, sun_line, advice)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
 

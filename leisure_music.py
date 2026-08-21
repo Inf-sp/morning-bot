@@ -4,7 +4,7 @@ import asyncio
 import logging
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote_plus
 
 import requests
@@ -506,10 +506,11 @@ def _music_city(cid):
 
 
 async def _daily_music_content(cid):
-    now = datetime.now(config.TZ)
+    today = datetime.now(config.TZ).date()
+    week_anchor = today - timedelta(days=today.weekday())
     return {
-        "rebus": _daily_music_rebus(now.date()),
-        "legend": await asyncio.to_thread(_load_music_legend, now.date()),
+        "rebus": _daily_music_rebus(week_anchor),
+        "legend": await asyncio.to_thread(_load_music_legend, week_anchor),
     }
 
 

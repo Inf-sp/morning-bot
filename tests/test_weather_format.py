@@ -29,6 +29,24 @@ def test_tomorrow_forecast_marks_wind_above_ten_as_strong():
     assert line == "🌧️ Погода: до +20°C · Сильный ветер до 11 м/с"
 
 
+def test_full_forecast_uses_current_periods_sun_and_practical_advice():
+    message = weather_ui.full_forecast(
+        "Полный прогноз • Пт, 21 августа · Alkmaar, NL 🇳🇱",
+        {"title": "🌧️ Сейчас до +18°C", "lines": ["Ветер 6 м/с · западный", "Дождь 70%"]},
+        [{"title": "☀️ Днём · 12:00–18:00 до +20°C", "lines": ["Осадки до 2.4 мм"]}],
+        "Солнце · Восход 06:25 · Закат 21:02",
+        "Alkmaar сегодня мокрый. Лучше взять дождевик и зонт.",
+    )
+
+    assert message.text.startswith(
+        "Полный прогноз • Пт, 21 августа · Alkmaar, NL 🇳🇱\n\n"
+        "🌧️ Сейчас до +18°C"
+    )
+    assert "• Ветер 6 м/с · западный" in message.text
+    assert "☀️ Днём · 12:00–18:00 до +20°C" in message.text
+    assert "💡 Полезно: Alkmaar сегодня мокрый." in message.text
+
+
 def test_city_change_confirmation_includes_country_flag():
     message = weather_ui.city_changed("Лилль", "FR", "fr")
 

@@ -41,6 +41,7 @@ def test_movie_premieres_keep_only_current_year_and_cache_by_country(monkeypatch
     assert [item["title"] for item in first] == ["В прокате", "Скоро"]
     assert second == first
     assert calls == [("now", "ru-RU"), ("upcoming", "ru-RU")]
+    assert saved["NL"]["week"] == leisure_movies._now_playing_week_key()
     assert saved["NL"]["expires"] == (today + timedelta(days=7)).isoformat()
 
 

@@ -358,9 +358,9 @@ _HOME_FORMAL_IMPERATIVE_RE = re.compile(r"\b[а-яё]+(?:йте|ите)\b", re.I
 
 def _home_meal_for_hour(hour: int) -> str:
     """Тип блюда для главного экрана по локальному времени пользователя/бота."""
-    if 6 <= hour < 12:
+    if 6 <= hour < 11:
         return "breakfast"
-    if 12 <= hour < 18:
+    if 11 <= hour < 16:
         return "lunch"
     return "dinner"
 
@@ -672,7 +672,7 @@ def _home_idea_context(cid, now=None) -> dict:
     cuisine_codes = cooking_settings.cuisines(cid)
     signature_data = {
         "date": now.date().isoformat(),
-        "home_copy_version": 9,
+        "home_copy_version": 10,
         "meal": meal,
         "available": available,
         "unavailable": unavailable,
@@ -895,15 +895,18 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
 
 
 def warm_cooking_home_ideas(cid, now=None) -> dict:
-    """Готовит ближайший завтрак; остальные приёмы пищи создаются по запросу."""
+    """Готовит дневной кэш завтрака, обеда и ужина без сообщений пользователю."""
     base = now or datetime.now(TZ)
-    breakfast = base.replace(hour=8, minute=0, second=0, microsecond=0)
-    try:
-        idea = get_cooking_home_idea(cid, now=breakfast, refresh=False)
-        return {"breakfast": bool(idea)}
-    except Exception as error:
-        _log.warning("cooking home warm failed cid=%s meal=breakfast: %r", cid, error)
-        return {"breakfast": False}
+    result = {}
+    for meal, hour in (("breakfast", 8), ("lunch", 13), ("dinner", 18)):
+        meal_time = base.replace(hour=hour, minute=0, second=0, microsecond=0)
+        try:
+            idea = get_cooking_home_idea(cid, now=meal_time, refresh=False)
+            result[meal] = bool(idea)
+        except Exception as error:
+            _log.warning("cooking home warm failed cid=%s meal=%s: %r", cid, meal, error)
+            result[meal] = False
+    return result
 
 
 def _cuisine_context(cid):

@@ -662,28 +662,22 @@ def _build_application():
         **_job_options("monitoring_repeating"),
     )
     for section, time_label in _HOME_WARM_SCHEDULE:
+        weekly_home_sections = {"travel", "cinema", "books", "music"}
+        warm_days = (0,) if section in weekly_home_sections else tuple(range(7))
+        cadence = "weekly" if section in weekly_home_sections else "daily"
         jq.run_daily(
             job_warm_home_pages,
             time=_t(time_label),
-            days=tuple(range(7)),
+            days=warm_days,
             data=section,
-            **_job_options(f"warm_home_{section}_daily"),
+            **_job_options(f"warm_home_{section}_{cadence}"),
         )
     jq.run_daily(job_warm_weather_cache, time=_t("07:55"), days=tuple(range(7)), **_job_options("warm_weather_cache_daily"))
-    # Премьеры не обновляются при открытии экрана: ночной планировщик
-    # проверяет их каждый день в разные часы, а внешний запрос делает лишь
-    # после недельного TTL или при первом заполнении.
+    # Премьеры фильмов обновляются по недельному ключу в понедельник. Остальные
+    # витрины сами проверяют свой TTL и не делают лишний внешний запрос.
     jq.run_daily(
-        job_warm_movie_premieres_cache, time=_t("02:10"), days=tuple(range(7)),
+        job_warm_movie_premieres_cache, time=_t("02:10"), days=(0,),
         **_job_options("movie_premieres_cache_weekly"),
-    )
-    jq.run_daily(
-        job_warm_book_premieres_cache, time=_t("02:40"), days=tuple(range(7)),
-        **_job_options("book_premieres_cache_weekly"),
-    )
-    jq.run_daily(
-        job_warm_game_premieres_cache, time=_t("02:50"), days=tuple(range(7)),
-        **_job_options("game_premieres_cache_daily"),
     )
     jq.run_daily(
         job_weather_warn,
@@ -691,7 +685,6 @@ def _build_application():
         days=tuple(range(7)),
         **_job_options("weather_warn_daily"),
     )
-    jq.run_daily(job_refresh_concerts_cache, time=_t("02:55"), days=(4,), **_job_options("concerts_cache_weekly"))
     jq.run_daily(job_weekend_events, time=_t("10:00"), days=(4,), **_job_options("weekend_events_weekly"))
     jq.run_daily(job_daily_words, time=_t("11:00"), days=tuple(range(7)), **_job_options("daily_words"))
     jq.run_daily(

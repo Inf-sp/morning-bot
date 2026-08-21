@@ -949,25 +949,25 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "Цитата со страницы:" not in books.text
     assert "Литературный ребус: 🧙‍♀️ ⚡ 🚂 → Гарри Поттер" in books.text
     assert "«Onyx Storm» (Фэнтези) · Ребекка Яррос" in books.text
-    assert "Именинник дня: Кнут Гамсун · 4 августа 1859 — норвежский писатель." in books.text
+    assert "Автор недели: Кнут Гамсун · 4 августа 1859 — норвежский писатель." in books.text
     assert "Книга под настроение:" not in books.text
     assert (
-        "Главные премьеры:\n• «Onyx Storm» (Фэнтези) · Ребекка Яррос · "
+        "Новинки сезона:\n• «Onyx Storm» (Фэнтези) · Ребекка Яррос · "
         "Вайолет ищет союзников, пока война всё ближе к её дому."
     ) in books.text
-    assert books.text.index("Главные премьеры:") < books.text.index("Именинник дня:") < books.text.index("Литературный ребус:") < books.text.index("💡 Интересно:")
+    assert books.text.index("Новинки сезона:") < books.text.index("Автор недели:") < books.text.index("Литературный ребус:") < books.text.index("💡 Интересно:")
     assert any(entity.type == MessageEntity.SPOILER for entity in books.entities)
     assert "🎧 Музыка этой недели · Алкмар" in music.text
     assert "Вайб дня" not in music.text
     assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in music.text
-    assert "Именинник дня: Луи Армстронг · 4 августа 1901 — трубач и певец." in music.text
+    assert "Артист недели: Луи Армстронг · 4 августа 1901 — трубач и певец." in music.text
     assert "Концерты рядом:\n• Romy · 21 августа · Биддингхёйзен" in music.text
     assert any(
         entity.type == MessageEntity.TEXT_LINK
         and entity.url == "https://tickets.example/romy"
         for entity in music.entities
     )
-    assert music.text.index("Именинник дня:") < music.text.index("Музыкальный ребус:") < music.text.index("💡 Интересно:")
+    assert music.text.index("Артист недели:") < music.text.index("Музыкальный ребус:") < music.text.index("💡 Интересно:")
     assert "Новые альбомы" not in music.text
     assert any(entity.type == MessageEntity.SPOILER for entity in music.entities)
 
@@ -1229,9 +1229,9 @@ def test_daily_category_block_titles_are_bold():
 
     assert {"Ребус дня:", "Именинник дня:",
             "Что в кино:", "💡 Интересно:"}.issubset(_bold_values(movie))
-    assert {"Литературный ребус:", "Именинник дня:",
-            "Главные премьеры:", "💡 Интересно:"}.issubset(_bold_values(books))
-    assert {"Музыкальный ребус:", "Именинник дня:",
+    assert {"Литературный ребус:", "Автор недели:",
+            "Новинки сезона:", "💡 Интересно:"}.issubset(_bold_values(books))
+    assert {"Музыкальный ребус:", "Артист недели:",
             "Концерты рядом:", "💡 Интересно:"}.issubset(_bold_values(music))
     assert "Вайб дня:" not in _bold_values(music)
 
@@ -1429,7 +1429,7 @@ def test_weekly_books_keep_only_current_popular_releases(monkeypatch):
     assert stored["items"] == items
 
 
-def test_literary_vibe_uses_only_books_from_current_month(monkeypatch):
+def test_literary_vibe_uses_only_books_from_current_season(monkeypatch):
     today = datetime.now(config.TZ).date()
     stored = {}
 
@@ -1458,7 +1458,7 @@ def test_literary_vibe_puts_genre_in_parentheses():
     assert "• «Свежая книга» (Художественная проза) · Автор · История" in message.text
 
 
-def test_weekly_books_fall_back_to_this_month_when_week_has_no_hits(monkeypatch):
+def test_weekly_books_fall_back_to_current_season_when_popularity_is_low(monkeypatch):
     today = datetime.now(config.TZ).date()
     stored = {}
 
@@ -1472,7 +1472,7 @@ def test_weekly_books_fall_back_to_this_month_when_week_has_no_hits(monkeypatch)
     items = asyncio.run(leisure_books.get_weekly_new_books())
 
     assert [item["title"] for item in items] == ["Премьера месяца"]
-    assert items[0]["_showcase"] == "month"
+    assert items[0]["_showcase"] == "season"
     assert stored["items"] == items
 
 
@@ -1498,19 +1498,16 @@ def test_weekly_books_rebuilds_an_empty_daily_cache(monkeypatch):
     assert stored["items"] == items
 
 
-def test_weekly_books_do_not_fall_back_outside_current_month(monkeypatch):
+def test_weekly_books_do_not_fall_back_outside_current_season(monkeypatch):
     today = datetime.now(config.TZ).date()
     stored = {}
 
     monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
     monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: stored.update(value))
     monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
-        {"title": "Популярная премьера", "published_date": str(today.replace(day=1)),
-         "rating": 4.6, "ratings_count": 240},
         {"title": "Неудачная", "published_date": "2020-01-01",
          "rating": 4.9, "ratings_count": 5000},
     ])
-    monkeypatch.setattr(leisure_books, "_released_this_month", lambda _value: False)
 
     items = asyncio.run(leisure_books.get_weekly_new_books())
 
@@ -1540,7 +1537,7 @@ def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
     }])
 
     assert (
-        "Главные премьеры:\n• «Недавний бестселлер» · Автор · "
+        "Новинки сезона:\n• «Недавний бестселлер» · Автор · "
         "Напряжённый триллер о тайне, которую нельзя оставить в прошлом."
     ) in message.text
     assert "Популярное чтение" not in message.text

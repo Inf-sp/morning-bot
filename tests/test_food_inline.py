@@ -10,7 +10,17 @@ import recipe_generation
 import util
 
 
-def test_nightly_cooking_warm_prepares_only_breakfast(monkeypatch):
+def test_home_meal_time_windows():
+    assert recipe_generation._home_meal_for_hour(5) == "dinner"
+    assert recipe_generation._home_meal_for_hour(6) == "breakfast"
+    assert recipe_generation._home_meal_for_hour(10) == "breakfast"
+    assert recipe_generation._home_meal_for_hour(11) == "lunch"
+    assert recipe_generation._home_meal_for_hour(15) == "lunch"
+    assert recipe_generation._home_meal_for_hour(16) == "dinner"
+    assert recipe_generation._home_meal_for_hour(21) == "dinner"
+
+
+def test_nightly_cooking_warm_prepares_all_meals(monkeypatch):
     hours = []
 
     def idea(_cid, now=None, refresh=False):
@@ -21,8 +31,8 @@ def test_nightly_cooking_warm_prepares_only_breakfast(monkeypatch):
 
     result = recipe_generation.warm_cooking_home_ideas("42")
 
-    assert result == {"breakfast": True}
-    assert hours == [(8, False)]
+    assert result == {"breakfast": True, "lunch": True, "dinner": True}
+    assert hours == [(8, False), (13, False), (18, False)]
 
 
 def test_other_food_menu_refresh_edits_current_inline_message(monkeypatch):
@@ -48,7 +58,7 @@ def test_other_food_menu_refresh_edits_current_inline_message(monkeypatch):
     monkeypatch.setattr(util.StatusManager, "start_inline", start_inline)
     monkeypatch.setattr(menu, "has_available_fridge", lambda _cid: True)
     monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", lambda *_args: {"name": "Паста"})
-    monkeypatch.setattr(menu.menu_ui, "food_menu", lambda _idea: SimpleNamespace(
+    monkeypatch.setattr(menu.menu_ui, "food_menu", lambda _idea, **_kwargs: SimpleNamespace(
         text="Обновлённый рецепт", entities=[], reply_markup="food-kb"))
 
     class Query:

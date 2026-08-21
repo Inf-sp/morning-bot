@@ -97,9 +97,11 @@ def _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts=No
         "precipitation": [],
         "windspeed_10m": [],
         "windgusts_10m": [],
+        "winddirection_10m": [],
         "temperature_2m": [],
         "relativehumidity_2m": [],
         "uv_index": [],
+        "cloudcover": [],
     }
     for h in hourly:
         hourly_out["time"].append(_owm_iso(h.get("dt", 0)))
@@ -107,9 +109,11 @@ def _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts=No
         hourly_out["precipitation"].append(round(_owm_precip_mm(h), 2))
         hourly_out["windspeed_10m"].append(h.get("wind_speed") or 0)
         hourly_out["windgusts_10m"].append(h.get("wind_gust") or h.get("wind_speed") or 0)
+        hourly_out["winddirection_10m"].append(h.get("wind_deg"))
         hourly_out["temperature_2m"].append(h.get("temp"))
         hourly_out["relativehumidity_2m"].append(h.get("humidity"))
         hourly_out["uv_index"].append(h.get("uvi"))
+        hourly_out["cloudcover"].append(h.get("clouds"))
 
     daily_out = {
         "time": [],
@@ -122,6 +126,8 @@ def _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts=No
         "windgusts_10m_max": [],
         "winddirection_10m_dominant": [],
         "uv_index_max": [],
+        "sunrise": [],
+        "sunset": [],
     }
     for d in daily:
         temp = d.get("temp") or {}
@@ -136,6 +142,8 @@ def _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts=No
         daily_out["windgusts_10m_max"].append(d.get("wind_gust") or d.get("wind_speed") or 0)
         daily_out["winddirection_10m_dominant"].append(d.get("wind_deg"))
         daily_out["uv_index_max"].append(d.get("uvi"))
+        daily_out["sunrise"].append(_owm_iso(d.get("sunrise", 0)))
+        daily_out["sunset"].append(_owm_iso(d.get("sunset", 0)))
 
     current_weather_id = ((current.get("weather") or [{}])[0] or {}).get("id")
     alert_ids = [a.get("id") for a in (current.get("alerts") or []) if isinstance(a, dict) and a.get("id")]
@@ -144,6 +152,12 @@ def _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts=No
             "temperature_2m": current.get("temp"),
             "apparent_temperature": current.get("feels_like"),
             "weathercode": _owm_weathercode(current_weather_id),
+            "windspeed_10m": current.get("wind_speed"),
+            "windgusts_10m": current.get("wind_gust") or current.get("wind_speed"),
+            "winddirection_10m": current.get("wind_deg"),
+            "visibility": current.get("visibility"),
+            "uv_index": current.get("uvi"),
+            "cloudcover": current.get("clouds"),
         },
         "hourly": hourly_out,
         "daily": daily_out,
@@ -244,6 +258,21 @@ def _persistent_cache_save(cache_key, data):
     cache = clean
     cache[cache_key] = {"ts": now, "data": deepcopy(data)}
     store._save(config.WEATHER_CACHE_KEY, cache)
+
+
+def invalidate_weather_cache(lat, lon, days=2):
+    """Удаляет один погодный кэш перед явным ручным обновлением."""
+    days = max(int(days), 2)
+    mem_key = (round(float(lat), 2), round(float(lon), 2), days)
+    cache_key = _weather_cache_key(lat, lon, days)
+    _WX_CACHE.pop(mem_key, None)
+
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        data.pop(cache_key, None)
+        return data, None
+
+    store.mutate_kv(config.WEATHER_CACHE_KEY, mutate)
 
 
 def _weather_cache_get(mem_key, cache_key, *, max_age):

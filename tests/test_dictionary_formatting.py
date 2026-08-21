@@ -12,6 +12,7 @@ import trainer
 import trainer_engine
 import trainer_exercises
 from dictionary_model import display_term, normalize_entry
+from ui import learning as learning_ui
 from ui.builder import MessageBuilder, MessageSpec
 from ui.learning_entry import render_learning_entry
 
@@ -235,3 +236,18 @@ def test_daily_learning_notification_has_learning_and_home_buttons(monkeypatch):
         [("🧠 Обучение", "notify_learning")],
         [("#️⃣ Главная", "m_menu")],
     ]
+
+
+def test_morning_words_show_examples_rule_tip_and_task():
+    msg = learning_ui.morning_words("🇳🇱", entries=[{
+        "term": "Inmiddels",
+        "translation": "Уже · тем временем",
+        "example": "Inmiddels woon ik hier al twee jaar.",
+        "example_translation": "Я уже два года здесь живу.",
+    }], rule="наречие", tip="Свяжи слово со знакомой ситуацией.")
+
+    assert "1. Inmiddels → Уже · тем временем" in msg.text
+    assert "Пример: Inmiddels woon ik hier al twee jaar. → Я уже два года здесь живу." in msg.text
+    assert "Правило: наречие" in msg.text
+    assert "Как запомнить: Свяжи слово со знакомой ситуацией." in msg.text
+    assert "🎯 Задание: составь одно предложение" in msg.text

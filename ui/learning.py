@@ -283,7 +283,7 @@ def translate_result(flag, lang, ru, answer, result):
     return msg
 
 
-def morning_words(flag, words=None, empty_hint=False):
+def morning_words(flag, words=None, empty_hint=False, *, entries=None, tip="", rule=""):
     """Ежедневная карточка повторения ранее изученных слов и фраз."""
     b = MessageBuilder()
     b.section(f"📚{flag} Слова и фразы дня")
@@ -296,22 +296,34 @@ def morning_words(flag, words=None, empty_hint=False):
         msg.text = msg.text.rstrip("\n")
         return msg
     b.line("Сегодня повторяем слова и фразы из прошлых занятий. Сначала вспомни перевод сам, потом проверь себя.")
-    entries = list(words or [])
-    if entries:
+    prepared = list(entries or [])
+    if not prepared and words:
+        prepared = [{"term": word, "translation": ru} for word, ru in words]
+    if prepared:
         b.spacer()
-        b.bold("Повтори:")
-        b.newline()
-        for word, ru in entries:
-            b.text_line("• ")
-            b.text_line(f"{word} → ")
-            b.add(ru, MessageEntity.SPOILER)
+        for index, entry in enumerate(prepared[:3], 1):
+            b.bold(f"{index}. {entry.get('term', '')}")
+            b.text_line(f" → {entry.get('translation', '')}")
             b.newline()
+            example = str(entry.get("example") or "").strip()
+            example_translation = str(entry.get("example_translation") or "").strip()
+            if example:
+                b.text_line("Пример: ")
+                b.italic(example)
+                if example_translation:
+                    b.text_line(f" → {example_translation}")
+                b.newline()
+            if index < min(3, len(prepared)):
+                b.spacer()
+        if rule:
+            b.spacer()
+            b.labeled_line("Правило", rule, lowercase=False)
+        if tip:
+            b.spacer()
+            b.labeled_line("Как запомнить", tip, lowercase=False)
         b.spacer()
         b.text_line("🎯 ")
-        b.label(
-            "Мини-задача",
-            "используй сегодня одно слово или одну фразу в сообщении, разговоре или мысленно составь с ними предложение.",
-        )
+        b.label("Задание", "составь одно предложение с любым словом или фразой.")
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg

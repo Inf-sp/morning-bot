@@ -173,7 +173,7 @@ async def get_local_now_playing(cid, *, limit=20, refresh=False):
 
 
 async def send_movie_home(bot, cid, q=None, status=None):
-    """Открывает ежедневную витрину кино; подбор запускается отдельной кнопкой."""
+    """Открывает витрину с недельным прокатом; подбор запускается отдельной кнопкой."""
     await send_movie_now_playing(bot, cid, q=q, status=status)
 
 
@@ -358,14 +358,14 @@ async def send_movie_now_playing(bot, cid, q=None, status=None):
 
 
 async def warm_movie_home_cache(cid):
-    """Готовит данные ежедневной витрины кино без рекомендации и сообщений."""
+    """Готовит недельный прокат и дневные рубрики без сообщений пользователю."""
     await get_local_now_playing(cid, limit=20)
     await _daily_cinema_content()
     return True
 
 
 async def warm_movie_premieres_cache(cid):
-    """Обновляет региональную витрину премьер только из ночного расписания."""
+    """Обновляет недельную витрину премьер из расписания по понедельникам."""
     await get_movie_premieres(cid, refresh=True)
     return True
 
@@ -374,6 +374,8 @@ def _movie_premieres_cache_get(country_code, today, *, allow_stale=False):
     data = store._load(config.MOVIE_PREMIERES_CACHE_KEY) or {}
     entry = data.get(str(country_code or "").upper()) if isinstance(data, dict) else None
     if not isinstance(entry, dict) or entry.get("version") != _MOVIE_PREMIERES_CACHE_VERSION:
+        return None
+    if not allow_stale and entry.get("week") != _now_playing_week_key():
         return None
     try:
         expires = datetime.fromisoformat(str(entry.get("expires") or "")).date()
@@ -392,6 +394,7 @@ def _movie_premieres_cache_set(country_code, expires, items):
         data = data if isinstance(data, dict) else {}
         data[country_code] = {
             "version": _MOVIE_PREMIERES_CACHE_VERSION,
+            "week": _now_playing_week_key(),
             "expires": expires.isoformat(),
             "items": [dict(item) for item in items if isinstance(item, dict)],
         }

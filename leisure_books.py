@@ -43,7 +43,7 @@ _BOOK_GENRES = [
 ]
 _PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("3.5", "3.5"), ("4.0", "4.0"), ("4.5", "4.5")]
-_WEEKLY_SHOWCASE_VERSION = 4
+_WEEKLY_SHOWCASE_VERSION = 5
 _BOOK_PREMIERES_CACHE_VERSION = 2
 _FAVORITE_BOOK_PAGE_SIZE = 8
 _FAVORITE_BOOK_VIEW_TTL = 24 * 3600
@@ -216,7 +216,8 @@ async def send_books_home(bot, cid, q=None, status=None):
         _daily_book_content(),
         get_weekly_new_books(),
     )
-    msg = leisure_ui.weekly_books_screen(_book_city(cid), daily_book, items)
+    _start, _end, season = _book_season()
+    msg = leisure_ui.weekly_books_screen(_book_city(cid), daily_book, items, season=season)
     kb = books_home_keyboard()
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb,
@@ -233,9 +234,9 @@ async def send_books_home(bot, cid, q=None, status=None):
                            disable_web_page_preview=True)
 
 
-async def warm_books_home_cache(cid):
+async def warm_books_home_cache(cid, *, refresh=False):
     """Готовит данные литературной витрины без персональной рекомендации."""
-    await asyncio.gather(_daily_book_content(), get_weekly_new_books())
+    await asyncio.gather(_daily_book_content(), get_weekly_new_books(refresh=refresh))
     return True
 
 
@@ -604,10 +605,11 @@ def _books_with_premiere_summaries(items):
 
 
 async def _daily_book_content():
-    now = datetime.now(config.TZ)
+    today = datetime.now(config.TZ).date()
+    week_anchor = today - timedelta(days=today.weekday())
     return {
-        "rebus": _daily_book_rebus(now.date()),
-        "birthday": await asyncio.to_thread(_load_book_birthday, now.date()),
+        "rebus": _daily_book_rebus(week_anchor),
+        "birthday": await asyncio.to_thread(_load_book_birthday, week_anchor),
     }
 
 def _book_week_key() -> str:
@@ -616,10 +618,24 @@ def _book_week_key() -> str:
     return f"{year}-W{week:02d}"
 
 
+def _book_season(today=None):
+    today = today or datetime.now(config.TZ).date()
+    if today.month in (12, 1, 2):
+        start_year = today.year if today.month == 12 else today.year - 1
+        winter_end = date(start_year + 1, 3, 1) - timedelta(days=1)
+        return date(start_year, 12, 1), winter_end, "зимы"
+    if today.month in (3, 4, 5):
+        return date(today.year, 3, 1), date(today.year, 5, 31), "весны"
+    if today.month in (6, 7, 8):
+        return date(today.year, 6, 1), date(today.year, 8, 31), "лета"
+    return date(today.year, 9, 1), date(today.year, 11, 30), "осени"
+
+
 def _weekly_book_cache_get():
     entry = store._load(config.BOOK_WEEKLY_CACHE_KEY)
+    season_start, _season_end, _season = _book_season()
     if (not isinstance(entry, dict) or entry.get("week") != _book_week_key()
-            or entry.get("date") != datetime.now(config.TZ).date().isoformat()
+            or entry.get("season") != season_start.isoformat()
             or entry.get("version") != _WEEKLY_SHOWCASE_VERSION):
         return None
     items = entry.get("items")
@@ -629,10 +645,11 @@ def _weekly_book_cache_get():
 
 
 def _weekly_book_cache_set(items):
+    season_start, _season_end, _season = _book_season()
     store._save(config.BOOK_WEEKLY_CACHE_KEY, {
         "version": _WEEKLY_SHOWCASE_VERSION,
         "week": _book_week_key(),
-        "date": datetime.now(config.TZ).date().isoformat(),
+        "season": season_start.isoformat(),
         "items": [dict(item) for item in (items or []) if isinstance(item, dict)],
     })
 
@@ -696,34 +713,37 @@ def _showcase_items(rows, showcase):
 
 
 def _fallback_book_showcase(candidates):
-    monthly = []
+    seasonal = []
+    season_start, season_end, _season = _book_season()
     for item in candidates:
         if not isinstance(item, dict) or not str(item.get("title") or "").strip():
             continue
-        if not _released_this_month(item.get("published_date")):
+        released = _release_date(item.get("published_date"))
+        if not released or not season_start <= released <= season_end:
             continue
         score = _monthly_book_score(item) or 0
-        monthly.append((score, item))
-    monthly.sort(key=lambda row: (
+        seasonal.append((score, item))
+    seasonal.sort(key=lambda row: (
         row[0], str(row[1].get("published_date") or ""),
     ), reverse=True)
-    return _showcase_items(monthly, "month")
+    return _showcase_items(seasonal, "season")[:3]
 
 
-async def get_weekly_new_books():
-    cached = _weekly_book_cache_get()
+async def get_weekly_new_books(*, refresh=False):
+    cached = None if refresh else _weekly_book_cache_get()
     if cached is not None:
         return cached
     candidates = await asyncio.to_thread(google_books.search_new_releases, 20)
     ranked = []
+    season_start, season_end, _season = _book_season()
     for item in candidates:
         score = _weekly_book_score(item)
-        if (score is None or not _released_this_week(item.get("published_date"))
-                or not _released_this_month(item.get("published_date"))):
+        released = _release_date(item.get("published_date"))
+        if score is None or not released or not season_start <= released <= season_end:
             continue
         ranked.append((score, item))
     ranked.sort(key=lambda row: row[0], reverse=True)
-    items = [dict(item) for _score, item in ranked[:4]]
+    items = [dict(item) for _score, item in ranked[:3]]
     if not items:
         items = _fallback_book_showcase(candidates)
     items = _books_with_premiere_summaries(items)

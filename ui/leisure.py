@@ -274,7 +274,7 @@ def game_home_screen(city, items, daily, *, year=None, season="лета"):
         b.line("Пока не удалось подтвердить ближайшие релизы.")
 
     b.spacer()
-    b.bold("Ребус дня:")
+    b.bold("Ребус недели:")
     b.newline()
     b.text_line(str(daily.get("emoji") or "🎮 ❓"))
     b.text_line(" → ")
@@ -861,8 +861,8 @@ def favorite_movies_added_card(titles):
     return b.build_stripped()
 
 
-def weekly_books_screen(city, daily_book, items):
-    """Ежедневная литературная витрина без рейтингов и служебных подписей."""
+def weekly_books_screen(city, daily_book, items, *, season=""):
+    """Недельная литературная витрина без рейтингов и служебных подписей."""
     city = str(city or "твоего города").strip()
     daily_book = daily_book or {}
     rebus = daily_book.get("rebus") or {}
@@ -874,7 +874,7 @@ def weekly_books_screen(city, daily_book, items):
 
     premieres = _book_premiere_items(items)
     b.spacer()
-    b.bold("Главные премьеры:")
+    b.bold(f"Новинки {str(season or 'сезона').strip()}:")
     if premieres:
         b.newline()
         for premiere in premieres:
@@ -885,7 +885,7 @@ def weekly_books_screen(city, daily_book, items):
 
     if birthday.get("name"):
         b.spacer()
-        b.bold("Именинник дня:")
+        b.bold("Автор недели:")
         b.text_line(" ")
         b.bold(str(birthday["name"]))
         birth_date = _birthday_date_label(birthday.get("birth"))
@@ -1140,7 +1140,7 @@ def _book_premiere_date(item):
 
 
 def music_week_screen(city, daily_music, concerts):
-    """Короткая ежедневная витрина Музыки без чартов и таблиц."""
+    """Короткая недельная витрина Музыки без чартов и таблиц."""
     city = str(city or "твоего города").strip()
     daily_music = daily_music or {}
     rebus = daily_music.get("rebus") or {}
@@ -1177,7 +1177,7 @@ def music_week_screen(city, daily_music, concerts):
 
     if legend.get("name"):
         b.spacer()
-        b.bold("Именинник дня:")
+        b.bold("Артист недели:")
         b.text_line(" ")
         b.bold(str(legend["name"]))
         birth_date = _birthday_date_label(legend.get("birth"))
