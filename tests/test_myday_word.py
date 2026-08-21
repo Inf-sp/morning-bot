@@ -31,11 +31,11 @@ def test_myday_inline_open_builds_a_missing_daily_cache(monkeypatch):
     assert status.replaced[0] == "Сводка готова"
 
 
-def test_myday_menu_only_offers_week_weather():
+def test_myday_menu_offers_detailed_day_and_week_weather():
     keyboard = myday._day_menu_kb().inline_keyboard
     callbacks = [button.callback_data for row in keyboard for button in row]
 
-    assert callbacks == ["a_w_week", "m_menu"]
+    assert callbacks == ["a_w_full", "a_w_week", "m_menu"]
 
 
 def test_day_summary_keeps_only_compact_weather_block():

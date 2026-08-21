@@ -85,7 +85,7 @@ def _status_stages(data):
         first = "🎧 Ищу музыку..."
     elif data in ("a_plany", "m_myday", "weather_myday"):
         return progress("☀️ Собираю мой день...", "🌦️ Сверяю планы...", "📝 Готовлю сводку...")
-    elif data == "a_w_week":
+    elif data in ("a_w_full", "a_w_week"):
         return progress("🌦️ Ищу прогноз...", "🗓️ Сверяю дни...", "📝 Готовлю прогноз...")
     elif topic == "wardrobe":
         first = "⏳ Ищу образ..."
@@ -333,6 +333,11 @@ async def handle(update, context, remove_reply_keyboard):
             elif act == "w_week":
                 await _inline_status(
                     lambda status: weather.send_weather(bot, cid, "week", status=status),
+                    preserve_message=True,
+                )
+            elif act == "w_full":
+                await _inline_status(
+                    lambda status: weather.send_weather(bot, cid, "full", status=status),
                     preserve_message=True,
                 )
             elif act == "setcity":
