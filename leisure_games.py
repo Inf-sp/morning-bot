@@ -63,37 +63,37 @@ _GAME_DAILY_CONTENT = (
     {
         "emoji": "🧙 🚪 3️⃣",
         "answer": "Baldur’s Gate 3",
-        "fact": "Разработчики записали множество отдельных сцен для неудачных проверок навыков.",
+        "fact": "Разработчики записали множество отдельных сцен для неудачных проверок навыков. Провал броска нередко открывает сцену, которую нельзя увидеть при успехе.",
     },
     {
         "emoji": "🔥 🏛️ ⚔️",
         "answer": "Hades",
-        "fact": "После каждого поражения появляются новые диалоги, поэтому неудача продолжает историю.",
+        "fact": "После каждого поражения появляются новые диалоги, поэтому неудача продолжает историю. Персонажи запоминают прошлые попытки и комментируют их.",
     },
     {
         "emoji": "💃 💿 🕵️",
         "answer": "Disco Elysium",
-        "fact": "Внутренние качества героя здесь спорят друг с другом как отдельные персонажи.",
+        "fact": "Внутренние качества героя здесь спорят друг с другом как отдельные персонажи. Даже неудачный ответ может открыть новую ветку расследования.",
     },
     {
         "emoji": "2️⃣ 🤝 🧩",
         "answer": "It Takes Two",
-        "fact": "У каждого из двух игроков своя роль, и большинство головоломок требует сотрудничества.",
+        "fact": "У каждого из двух игроков своя роль, и большинство головомок требует сотрудничества. Второму игроку достаточно бесплатного Friend’s Pass.",
     },
     {
         "emoji": "⭐ 💧 🏞️",
         "answer": "Stardew Valley",
-        "fact": "Большинство занятий на ферме можно проходить в своём темпе без обязательного расписания.",
+        "fact": "Большинство занятий на ферме можно проходить в своём темпе без обязательного расписания. Первую версию почти четыре года создавал один человек.",
     },
     {
         "emoji": "🪽 📏 🌍",
         "answer": "Wingspan",
-        "fact": "Карты птиц основаны на реальных видах и содержат короткие сведения о них.",
+        "fact": "Карты птиц основаны на реальных видах и содержат короткие сведения о них. Их свойства связаны с тем, где они живут, чем питаются и как гнездятся.",
     },
     {
         "emoji": "🔵 🧱 👑",
         "answer": "Азул",
-        "fact": "Оформление игры вдохновлено португальской традицией декоративной плитки азулежу.",
+        "fact": "Оформление игры вдохновлено португальской традицией декоративной керамической плитки. Узор на личном планшете собирается из плиток, которые все игроки берут из общих фабрик.",
     },
 )
 
@@ -289,9 +289,20 @@ def _game_signature(cid):
 def _youtube_trailer_search_url(title):
     query = " ".join(str(title or "").split())
     return (
-        f"https://www.youtube.com/results?search_query={quote_plus(f'{query} official trailer')}"
+        f"https://www.youtube.com/results?search_query={quote_plus(f'{query} game official trailer')}"
         if query else ""
     )
+
+
+def _ensure_game_trailer_url(item):
+    prepared = dict(item or {})
+    if "board" in (prepared.get("platforms") or []) and not str(
+        prepared.get("trailer_url") or ""
+    ).strip():
+        prepared["trailer_url"] = _youtube_trailer_search_url(
+            prepared.get("name") or prepared.get("title")
+        )
+    return prepared
 
 
 def _eligible_games(cid, genre=None):
@@ -388,11 +399,10 @@ def _game_home_keyboard():
 
 def _game_keyboard(*, no_match=False, genre=None):
     next_callback = f"vg_next_{genre}" if genre else "vg_next"
-    rows = [
-        [InlineKeyboardButton("✨ Другая игра", callback_data=next_callback)],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")],
-        [InlineKeyboardButton("🎚️ Мой набор", callback_data="vg_set")],
-    ]
+    rows = [[InlineKeyboardButton("✨ Другая игра", callback_data=next_callback)]]
+    if genre != "board":
+        rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
+    rows.append([InlineKeyboardButton("🎚️ Мой набор", callback_data="vg_set")])
     if no_match:
         rows.append([InlineKeyboardButton("📝 Платформы", callback_data="set_pref_games")])
     rows.append([
@@ -692,6 +702,7 @@ async def send_game_recommendation(
     item = item or pick_game(cid, genre=genre, refresh=refresh)
     if item:
         item = await asyncio.to_thread(igdb.enrich_game_recommendation, item)
+        item = _ensure_game_trailer_url(item)
         inclusive = bool(item.get("lgbt")) or inclusive_recommendations.is_inclusive(
             "game", item.get("name"),
         )

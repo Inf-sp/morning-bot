@@ -168,6 +168,36 @@ def test_game_home_shows_three_linked_releases_with_genres_and_platforms():
     assert any(entity.type == "spoiler" for entity in message.entities)
 
 
+def test_game_home_youtube_fallback_searches_for_official_game_trailer():
+    assert leisure_games._youtube_trailer_search_url("Example Game") == (
+        "https://www.youtube.com/results?search_query="
+        "Example+Game+game+official+trailer"
+    )
+
+
+def test_board_game_name_links_to_youtube_trailer_search():
+    item = leisure_games._ensure_game_trailer_url({
+        "name": "Каскадия",
+        "platforms": ["board"],
+        "platform_labels": ["🎲 Настолки"],
+        "genre_label": "Настолки",
+    })
+    message = leisure_games.leisure_ui.game_card(item)
+
+    links = [entity.url for entity in message.entities if entity.type == "text_link"]
+    assert links == [
+        "https://www.youtube.com/results?search_query="
+        "%D0%9A%D0%B0%D1%81%D0%BA%D0%B0%D0%B4%D0%B8%D1%8F+game+official+trailer"
+    ]
+
+
+def test_daily_game_rebus_has_two_facts_without_revealing_answer():
+    for rebus in leisure_games._GAME_DAILY_CONTENT:
+        fact = rebus["fact"]
+        assert fact.count(".") == 2
+        assert rebus["answer"].casefold() not in fact.casefold()
+
+
 def test_game_season_uses_three_calendar_months_and_handles_leap_winter():
     assert leisure_games._game_season(date(2026, 8, 21)) == (
         date(2026, 6, 1), date(2026, 8, 31), "лета",
@@ -242,6 +272,33 @@ def test_game_recommendation_keeps_genres_inside_card(monkeypatch):
         ["🎚️ Мой набор"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
+
+
+def test_board_recommendation_stays_in_board_games_without_genre_button(monkeypatch):
+    _profile_store(monkeypatch)
+    monkeypatch.setattr(leisure_games.settings, "get", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        leisure_games.igdb, "enrich_game_recommendation", lambda item: item,
+    )
+
+    class Status:
+        call = None
+
+        async def replace(self, text, **kwargs):
+            self.call = (text, kwargs)
+
+    status = Status()
+    asyncio.run(leisure_games.send_game_recommendation(
+        object(), "42", status=status, refresh=True, genre="board",
+    ))
+
+    assert "🎲 Настолки" in status.call[0]
+    assert _labels(status.call[1]["reply_markup"]) == [
+        ["✨ Другая игра"],
+        ["🎚️ Мой набор"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+    assert status.call[1]["reply_markup"].inline_keyboard[0][0].callback_data == "vg_next_board"
 
 
 def test_favorite_games_influence_recommendation_and_are_not_repeated(monkeypatch):
