@@ -241,15 +241,16 @@ def game_card(data):
     return b.build_stripped()
 
 
-def game_home_screen(city, items, daily):
+def game_home_screen(city, items, daily, *, year=None, season="лета"):
     daily = daily or {}
+    year = int(year or datetime.now().year)
     b = MessageBuilder()
-    b.text_line("🎬 ")
-    b.bold(f"Игры на сегодня · {str(city or 'Алкмар').strip()}")
+    b.text_line("👾 ")
+    b.bold(f"Игры на сегодня · Новинки {year}")
     b.newline()
 
     b.spacer()
-    b.bold("Какие новинки:")
+    b.bold(f"Новинки {str(season or 'лета').strip()}:")
     b.newline()
     rows = [item for item in list(items or []) if str(item.get("title") or "").strip()][:3]
     if rows:

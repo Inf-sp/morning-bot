@@ -238,12 +238,12 @@ def get_upcoming_games(platforms, *, today=None, days=180) -> list[dict]:
             continue
         keys = [
             key for key in _PLATFORM_IDS
-            if key in selected and any(
+            if any(
                 int(item.get("id") or 0) in _PLATFORM_IDS[key]
                 for item in (game.get("platforms") or []) if isinstance(item, dict)
             )
         ]
-        if not keys:
+        if not set(keys).intersection(selected):
             continue
         image_id = str((game.get("cover") or {}).get("image_id") or "").strip()
         if not image_id:
@@ -290,6 +290,11 @@ def enrich_game_premieres(items) -> list[dict]:
             unresolved.append(item_index)
             continue
         result[item_index].update(dict(cached))
+        cached_platforms = result[item_index].get("platforms") or []
+        if cached_platforms:
+            result[item_index]["platform_label"] = " · ".join(
+                _PLATFORM_LABELS[key] for key in cached_platforms if key in _PLATFORM_LABELS
+            )
     digital_indexes = unresolved
     if not digital_indexes:
         return result
@@ -325,6 +330,9 @@ def enrich_game_premieres(items) -> list[dict]:
         ]
         if platforms:
             enrichment["platforms"] = platforms
+            enrichment["platform_label"] = " · ".join(
+                _PLATFORM_LABELS[key] for key in platforms if key in _PLATFORM_LABELS
+            )
         genres = [
             _GENRE_KEYS.get(str(value.get("name") or "").strip().casefold())
             for value in (match.get("genres") or []) if isinstance(value, dict)

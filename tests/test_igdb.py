@@ -23,7 +23,7 @@ def test_upcoming_games_returns_dated_catalog_releases(monkeypatch):
                     release, datetime.min.time(), tzinfo=timezone.utc,
                 ).timestamp()),
                 "cover": {"image_id": "cover123"},
-                "platforms": [{"id": 6}],
+                "platforms": [{"id": 6}, {"id": 167}],
                 "genres": [{"name": "Adventure"}],
                 "videos": [{"name": "Official Trailer", "video_id": "trailer123"}],
             }]
@@ -37,8 +37,8 @@ def test_upcoming_games_returns_dated_catalog_releases(monkeypatch):
     assert result == [{
         "title": "Catalog Game",
         "date": release.isoformat(),
-        "platforms": ["pc"],
-        "platform_label": "💻 ПК",
+        "platforms": ["pc", "ps5"],
+        "platform_label": "💻 ПК · 🎮 PS5",
         "genre": "приключение",
         "summary": "",
         "url": "https://www.igdb.com/games/catalog-game",
@@ -78,6 +78,7 @@ def test_enriches_digital_game_with_cover_and_verified_trailer(monkeypatch):
     )
     assert result[0]["trailer_url"] == "https://www.youtube.com/watch?v=trailer-id"
     assert result[0]["platforms"] == ["ps5"]
+    assert result[0]["platform_label"] == "🎮 PS5"
     assert result[0]["genres"] == ["adventure"]
     assert result[0]["year"] == 2024
 

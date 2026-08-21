@@ -1,6 +1,6 @@
 import asyncio
 import os
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
@@ -131,13 +131,12 @@ def test_game_home_matches_movie_style_and_keeps_board_games_separate(monkeypatc
     status = Status()
     asyncio.run(leisure_games.send_games_home(object(), "42", status=status))
 
-    assert "🎬 Игры на сегодня · Alkmaar" in status.call[0]
-    assert "Какие новинки:" in status.call[0]
+    assert "👾 Игры на сегодня · Новинки 2026" in status.call[0]
+    assert "Новинки лета:" in status.call[0]
     assert "Ребус дня:" in status.call[0]
     assert "💡 Интересно:" in status.call[0]
     assert _labels(status.call[1]["reply_markup"]) == [
         ["✨ Подобрать новую игру"],
-        ["🎮 Премьеры игр"],
         ["🎲 Настолки"],
         ["🎚️ Мой набор"],
         ["#️⃣ Главная"],
@@ -157,8 +156,9 @@ def test_game_home_shows_three_linked_releases_with_genres_and_platforms():
         "emoji": "🧙 🚪 3️⃣",
         "answer": "Baldur’s Gate 3",
         "fact": "Игровой факт.",
-    })
+    }, year=2026)
 
+    assert message.text.startswith("👾 Игры на сегодня · Новинки 2026\n\nНовинки лета:")
     assert message.text.count("• Игра ") == 3
     assert "• Игра 0 · RPG · 💻 ПК · 🎮 PS5" in message.text
     assert "Игра 3" not in message.text
@@ -166,6 +166,28 @@ def test_game_home_shows_three_linked_releases_with_genres_and_platforms():
         entity.url for entity in message.entities if entity.type == "text_link"
     } == {f"https://www.youtube.com/watch?v=game{index}" for index in range(3)}
     assert any(entity.type == "spoiler" for entity in message.entities)
+
+
+def test_game_season_uses_three_calendar_months_and_handles_leap_winter():
+    assert leisure_games._game_season(date(2026, 8, 21)) == (
+        date(2026, 6, 1), date(2026, 8, 31), "лета",
+    )
+    assert leisure_games._game_season(date(2026, 9, 1)) == (
+        date(2026, 9, 1), date(2026, 11, 30), "осени",
+    )
+    assert leisure_games._game_season(date(2028, 2, 1)) == (
+        date(2027, 12, 1), date(2028, 2, 29), "зимы",
+    )
+
+
+def test_season_games_rotate_when_more_than_three_are_available():
+    items = [{"title": str(index)} for index in range(5)]
+
+    first = leisure_games._rotated_season_items(items, date(2026, 8, 21))
+    second = leisure_games._rotated_season_items(items, date(2026, 8, 22))
+
+    assert len(first) == len(second) == 3
+    assert first != second
 
 
 def test_game_home_attaches_nearest_release_poster(monkeypatch):

@@ -277,8 +277,9 @@ async def send_home(bot, cid, q=None):
         dot, status_text = ui.OK, "Всё работает"
 
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🛠 Система", callback_data="adm_api_ai"),
-         InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
+        [InlineKeyboardButton("🛠 Система", callback_data="adm_api_ai")],
+        [InlineKeyboardButton("⚠️ Ошибки", callback_data="adm_logs")],
+        [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.home(
@@ -474,7 +475,6 @@ async def send_api_ai(bot, cid, q=None):
     rows = service_monitor.rows()
 
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⚠️ Ошибки", callback_data="adm_logs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     latest_check = max(
@@ -674,7 +674,7 @@ async def send_logs(bot, cid, q=None):
     buttons = []
     if combined:
         buttons.append([InlineKeyboardButton(delete_label("Очистить ошибки"), callback_data="adm_logs_clear")])
-    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_system"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(buttons)
     now = int(time.time())
     msg = ui.logs(rows, len(rows), _updated_at(now), now)

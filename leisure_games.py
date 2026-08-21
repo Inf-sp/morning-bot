@@ -380,7 +380,6 @@ def pick_game(cid, *, genre=None, refresh=False):
 def _game_home_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать новую игру", callback_data="vg_reco")],
-        [InlineKeyboardButton("🎮 Премьеры игр", callback_data="vg_premieres")],
         [InlineKeyboardButton("🎲 Настолки", callback_data="vg_board")],
         [InlineKeyboardButton("🎚️ Мой набор", callback_data="vg_set")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -641,22 +640,23 @@ async def _deliver(bot, cid, msg, markup, *, q=None, status=None):
 
 
 async def send_games_home(bot, cid, *, q=None, status=None):
-    items = await get_game_premieres(cid)
+    items = await get_game_premieres(cid, seasonal=True)
     if not items:
-        items = await get_game_premieres(cid, refresh=True)
-    city = str(
-        store.get_settings(cid).get("city") or config.DEFAULT_CITY.get("city") or "Алкмар"
-    ).strip()
+        items = await get_game_premieres(cid, refresh=True, seasonal=True)
     today = datetime.now(config.TZ).date()
+    _season_start, _season_end, season = _game_season(today)
     daily = dict(_GAME_DAILY_CONTENT[(today.toordinal() - 1) % len(_GAME_DAILY_CONTENT)])
     home_items = []
+    items = _rotated_season_items(items, today)
     for source in items[:3]:
         item = dict(source)
         item["trailer_url"] = str(item.get("trailer_url") or "").strip() or (
             _youtube_trailer_search_url(item.get("title"))
         )
         home_items.append(item)
-    msg = leisure_ui.game_home_screen(city, home_items, daily)
+    msg = leisure_ui.game_home_screen(
+        None, home_items, daily, year=today.year, season=season,
+    )
     markup = _game_home_keyboard()
     poster = next(
         (str(item.get("poster") or "").strip() for item in home_items
@@ -832,7 +832,7 @@ def _premiere_date_label(value):
     return f"{parsed.day} {months[parsed.month - 1]} {parsed.year}"
 
 
-def _normalize_premieres(payload, source_urls, selected_platforms, today):
+def _normalize_premieres(payload, source_urls, selected_platforms, start_date, end_date=None):
     raw_items = payload.get("items") if isinstance(payload, dict) else []
     if not isinstance(raw_items, list):
         return []
@@ -845,7 +845,7 @@ def _normalize_premieres(payload, source_urls, selected_platforms, today):
         "board": "board", "board game": "board", "настолки": "board",
     }
     result, seen = [], set()
-    latest = today + timedelta(days=180)
+    latest = end_date or (start_date + timedelta(days=180))
     for item in raw_items:
         if not isinstance(item, dict):
             continue
@@ -861,7 +861,7 @@ def _normalize_premieres(payload, source_urls, selected_platforms, today):
             if normalized and normalized not in platforms:
                 platforms.append(normalized)
         if (not title or title.casefold() in seen or url not in source_urls
-                or not (today <= release <= latest)
+                or not (start_date <= release <= latest)
                 or not set(platforms).intersection(selected_platforms)):
             continue
         seen.add(title.casefold())
@@ -882,9 +882,32 @@ def _normalize_premieres(payload, source_urls, selected_platforms, today):
     return result[:8]
 
 
-async def get_game_premieres(cid, *, refresh=False):
+def _game_season(today):
+    if today.month in (12, 1, 2):
+        start_year = today.year if today.month == 12 else today.year - 1
+        return date(start_year, 12, 1), date(start_year + 1, 3, 1) - timedelta(days=1), "зимы"
+    if today.month in (3, 4, 5):
+        return date(today.year, 3, 1), date(today.year, 5, 31), "весны"
+    if today.month in (6, 7, 8):
+        return date(today.year, 6, 1), date(today.year, 8, 31), "лета"
+    return date(today.year, 9, 1), date(today.year, 11, 30), "осени"
+
+
+def _rotated_season_items(items, today):
+    rows = list(items or [])
+    if len(rows) <= 3:
+        return rows
+    offset = today.toordinal() % len(rows)
+    return [rows[(offset + index) % len(rows)] for index in range(3)]
+
+
+async def get_game_premieres(cid, *, refresh=False, seasonal=False):
     today = datetime.now(config.TZ).date()
-    signature = _platform_signature(cid)
+    if seasonal:
+        start_date, end_date, season = _game_season(today)
+    else:
+        start_date, end_date, season = today, today + timedelta(days=180), ""
+    signature = f"{_platform_signature(cid)}:{start_date.isoformat()}:{end_date.isoformat()}"
     cached = _premiere_cache_get(signature, today)
     if cached is not None:
         return cached
@@ -898,7 +921,10 @@ async def get_game_premieres(cid, *, refresh=False):
     }
     platform_labels = [label for key, label in GAME_PLATFORMS if key in _effective_platforms(cid)]
     search_platforms = " ".join(search_labels[key] for key in _effective_platforms(cid))
-    query = f"upcoming game release dates {search_platforms} {today.year}"
+    query = (
+        f"most popular notable game releases {season} {start_date.year} {search_platforms}"
+        if seasonal else f"upcoming game release dates {search_platforms} {today.year}"
+    )
     sources = await asyncio.to_thread(
         research.web_search, query, 8,
         scenario="game_releases", allow_tavily=True, search_priority="tavily",
@@ -906,7 +932,8 @@ async def get_game_premieres(cid, *, refresh=False):
     sources = [item for item in sources if item.get("url") and (item.get("content") or item.get("title"))]
     if not sources:
         items = await asyncio.to_thread(
-            igdb.get_upcoming_games, set(_effective_platforms(cid)), today=today, days=180,
+            igdb.get_upcoming_games, set(_effective_platforms(cid)), today=start_date,
+            days=(end_date - start_date).days,
         )
         for item in items:
             item["date_label"] = _premiere_date_label(item.get("date"))
@@ -919,7 +946,9 @@ async def get_game_premieres(cid, *, refresh=False):
         for item in sources
     )[:7000]
     prompt = (
-        f"Сегодня {today.isoformat()}. Извлеки ближайшие подтверждённые премьеры игр на 180 дней "
+        f"Сегодня {today.isoformat()}. Извлеки подтверждённые релизы игр "
+        f"с {start_date.isoformat()} по {end_date.isoformat()}. "
+        + ("Верни до 8 самых популярных и заметных. " if seasonal else "") +
         f"для платформ: {', '.join(platform_labels)}. Используй только факты и URL из материалов. "
         "Не придумывай дату, платформу или ссылку. Название оставь официальным, genre и summary пиши по-русски; "
         "summary — одно короткое предложение без рекламы.\n"
@@ -933,17 +962,21 @@ async def get_game_premieres(cid, *, refresh=False):
             prompt, 1400, tier="cheap", module="leisure_games",
             fallback_allowed=True, privacy_level="public",
             cache_context={
-                "scenario": "game_premieres", "date": today.isoformat(),
+                "scenario": "game_season" if seasonal else "game_premieres",
+                "start": start_date.isoformat(), "end": end_date.isoformat(),
                 "platforms": sorted(_effective_platforms(cid)), "sources": sorted(source_urls),
                 "schema_version": 1,
             },
         )
     except Exception:
         payload = {}
-    items = _normalize_premieres(payload, source_urls, set(_effective_platforms(cid)), today)
+    items = _normalize_premieres(
+        payload, source_urls, set(_effective_platforms(cid)), start_date, end_date,
+    )
     if not items:
         items = await asyncio.to_thread(
-            igdb.get_upcoming_games, set(_effective_platforms(cid)), today=today, days=180,
+            igdb.get_upcoming_games, set(_effective_platforms(cid)), today=start_date,
+            days=(end_date - start_date).days,
         )
         for item in items:
             item["date_label"] = _premiere_date_label(item.get("date"))
