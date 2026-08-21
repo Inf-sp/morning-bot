@@ -271,7 +271,7 @@ def enrich_book(item: dict) -> dict:
         return result
     for field in (
         "google_books_id", "cover_url", "preview_link", "info_link", "isbn",
-        "rating", "ratings_count",
+        "rating", "ratings_count", "categories", "description",
     ):
         if volume.get(field):
             result[field] = volume[field]

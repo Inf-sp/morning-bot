@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import re
 import secrets
 import time
 from datetime import date, datetime, timedelta
@@ -39,6 +40,7 @@ GAME_GENRES = (
 _PLATFORM_LABEL = dict(GAME_PLATFORMS)
 _PLATFORM_LABEL["other"] = "🕹️ Прочее"
 _GENRE_LABEL = dict(GAME_GENRES)
+_GENRE_LABEL["board"] = "🎲 Настолки"
 _GAME_PREMIERES_VERSION = 3
 _GAME_SET_PAGE_SIZE = 8
 _GAME_SET_VIEW_TTL = 24 * 3600
@@ -242,10 +244,27 @@ def normalize_favorite_game(value):
     name = " ".join(_favorite_game_name(value).split()).strip(" ,;.-")
     if not name:
         return None
+    is_board = bool(re.search(r"\b(настолка|настольная игра)\b", name, flags=re.IGNORECASE))
+    if is_board:
+        name = re.sub(
+            r"\b(настолка|настольная игра)\b", "", name, flags=re.IGNORECASE,
+        ).strip(" ,;.-")
     match = next((item for item in _GAME_CATALOG if item["name"].casefold() == name.casefold()), None)
     if match:
         return dict(match)
-    return {"name": name, "genres": [], "platforms": []}
+    return {
+        "name": name,
+        "genres": ["board"] if is_board else [],
+        "platforms": ["board"] if is_board else [],
+    }
+
+
+def enrich_favorite_game(item):
+    """Дополняет неизвестную цифровую игру проверенными метаданными IGDB."""
+    prepared = dict(item or {})
+    if prepared.get("platforms") == ["board"]:
+        return prepared
+    return igdb.enrich_game_recommendation(prepared)
 
 
 def _favorite_games(cid):
@@ -397,7 +416,11 @@ def _game_set_records(cid):
             item = {**(normalize_favorite_game(value) or {}), "id": item.get("id")}
         name = _favorite_game_name(item)
         genres = [str(value) for value in item.get("genres") or [] if str(value)]
-        genre = _game_genre_title(genres[0]) if genres else "Без жанра"
+        actual_genres = [value for value in genres if value != "board"]
+        if "board" in (item.get("platforms") or []):
+            genre = "Настолки"
+        else:
+            genre = _game_genre_title(actual_genres[0]) if actual_genres else "Без жанра"
         item.update({"name": name, "genre": genre, "genre_label": genre})
         records.append(item)
     return records
@@ -481,7 +504,10 @@ async def send_game_set_card(bot, cid, token, short_id, genre_index, page):
         await send_game_set(bot, cid)
         return
     card = _decorate_game(item, cid) if item.get("platforms") else dict(item)
-    card = await asyncio.to_thread(igdb.enrich_game_recommendation, card)
+    card = await asyncio.to_thread(enrich_favorite_game, card)
+    card["platform_labels"] = [
+        _PLATFORM_LABEL[key] for key in card.get("platforms") or [] if key in _PLATFORM_LABEL
+    ]
     msg = leisure_ui.game_set_card(card)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить", callback_data=f"vg_setd:{token}:{short_id}:{genre_index}:{page}")],
@@ -530,7 +556,15 @@ async def send_favorite_games_added_card(bot, cid, items):
     item["genre_label"] = _game_genre_title(genres[0]) if genres else "Без жанра"
     if item.get("platforms"):
         item = _decorate_game(item, cid)
-    item = await asyncio.to_thread(igdb.enrich_game_recommendation, item)
+    item = await asyncio.to_thread(enrich_favorite_game, item)
+    item["platform_labels"] = [
+        _PLATFORM_LABEL[key] for key in item.get("platforms") or [] if key in _PLATFORM_LABEL
+    ]
+    genres = [value for value in item.get("genres") or [] if value != "board"]
+    item["genre_label"] = (
+        _game_genre_title(genres[0]) if genres else
+        ("Настолки" if "board" in (item.get("platforms") or []) else "Без жанра")
+    )
     msg = leisure_ui.favorite_game_added_card(item)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎚️ Мой набор", callback_data="vg_set")],
@@ -590,7 +624,25 @@ async def send_games_home(bot, cid, *, q=None, status=None):
         )
         home_items.append(item)
     msg = leisure_ui.game_home_screen(city, home_items, daily)
-    await _deliver(bot, cid, msg, _game_home_keyboard(), q=q, status=status)
+    markup = _game_home_keyboard()
+    poster = next(
+        (str(item.get("poster") or "").strip() for item in home_items
+         if str(item.get("poster") or "").strip()),
+        "",
+    )
+    if poster:
+        try:
+            await bot.send_photo(
+                chat_id=cid,
+                photo=poster,
+                caption=msg.text,
+                caption_entities=msg.entities,
+                reply_markup=markup,
+            )
+            return
+        except Exception:
+            pass
+    await _deliver(bot, cid, msg, markup, q=q, status=status)
 
 
 async def send_game_recommendation(

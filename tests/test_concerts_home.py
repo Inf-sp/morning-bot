@@ -96,7 +96,7 @@ def test_concerts_show_the_full_year_without_confirmation_and_with_full_country_
             }]},
             "url": "https://example.com/romy",
         }
-        for date in ("2026-08-20", "2027-02-12", "2027-07-18")
+        for date in ("2026-08-22", "2027-02-12", "2027-07-18")
     ]
 
     class Bot:
@@ -120,6 +120,40 @@ def test_concerts_show_the_full_year_without_confirmation_and_with_full_country_
     assert message["reply_markup"].inline_keyboard[0][0].text == "🇳🇱 Нидерланды"
     assert message["text"].count("Romy") == 3
     assert "Подтверждён" not in message["text"]
+
+
+def test_concerts_from_cache_are_shown_nearest_first(monkeypatch):
+    dates = ("2026-11-20", "2026-08-25", "2026-09-10")
+    events = [{
+        "id": f"romy-{event_date}",
+        "_artist": "Romy",
+        "dates": {"start": {"localDate": event_date}},
+        "_embedded": {"venues": [{
+            "city": {"name": "Amsterdam"},
+            "country": {"countryCode": "NL"},
+        }]},
+        "url": f"https://example.com/{event_date}",
+    } for event_date in dates]
+
+    class Bot:
+        sent = []
+
+        async def send_message(self, **kwargs):
+            self.sent.append(kwargs)
+
+    monkeypatch.setattr(leisure_concerts, "_ensure_artists", lambda _cid: ["Romy"])
+    monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {
+        "cc": "NL", "country": "Нидерланды",
+    })
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_args: events)
+    monkeypatch.setattr(leisure_concerts.config, "TICKETMASTER_API_KEY", "test-key")
+
+    bot = Bot()
+    asyncio.run(leisure_concerts.find_concerts(bot, "42"))
+
+    text = bot.sent[0]["text"]
+    assert text.index("25 августа 2026") < text.index("10 сентября 2026")
+    assert text.index("10 сентября 2026") < text.index("20 ноября 2026")
 
 
 def test_concerts_keep_the_full_classic_list_instead_of_rich_blocks():

@@ -128,10 +128,15 @@ async def love_add_done(bot, cid, key, text, origin="base"):
         except asyncio.TimeoutError:
             items = [plain_label(item) for item in items if plain_label(item)]
     elif key == "games":
+        import asyncio
         import leisure_games
 
         items = [leisure_games.normalize_favorite_game(item) for item in items]
         items = [item for item in items if item]
+        items = await asyncio.gather(*(
+            asyncio.to_thread(leisure_games.enrich_favorite_game, item)
+            for item in items
+        ))
     else:
         items = [plain_label(item) for item in items if plain_label(item)]
     existing = {

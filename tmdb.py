@@ -407,6 +407,59 @@ def discover(kind, genre_ids=None, min_rating=None, year_gte=None, region=None,
     return items
 
 
+def upcoming_tv_releases(start, end, page=1):
+    """Новые сериалы с первой датой выхода в заданном интервале."""
+    if not config.TMDB_API_KEY:
+        return []
+    start_value = start.isoformat() if hasattr(start, "isoformat") else str(start)
+    end_value = end.isoformat() if hasattr(end, "isoformat") else str(end)
+    params = {
+        "first_air_date.gte": start_value,
+        "first_air_date.lte": end_value,
+        "sort_by": "popularity.desc",
+        "vote_average.gte": 7.0,
+        "vote_count.gte": 20,
+        "page": page,
+    }
+    ck = "upcoming_tv|" + "|".join(f"{key}={value}" for key, value in sorted(params.items()))
+    cached = util.ttl_get("tmdb_upcoming_tv", ck, 21600)
+    if cached is not None:
+        return cached
+    data = _get("/discover/tv", params) or {}
+    items = _clean(data.get("results", []), "tv")
+    util.ttl_set("tmdb_upcoming_tv", ck, items)
+    return items
+
+
+def upcoming_tv_seasons(tmdb_id, start, end):
+    """Будущие сезоны конкретного сериала по официальным датам TMDb."""
+    if not config.TMDB_API_KEY or not tmdb_id:
+        return []
+    start_value = start.isoformat() if hasattr(start, "isoformat") else str(start)
+    end_value = end.isoformat() if hasattr(end, "isoformat") else str(end)
+    ck = f"{tmdb_id}|{start_value}|{end_value}"
+    cached = util.ttl_get("tmdb_upcoming_tv_seasons", ck, 21600)
+    if cached is not None:
+        return cached
+    data = _get(f"/tv/{tmdb_id}", {}) or {}
+    base = normalize(data, "tv") if data else {}
+    items = []
+    for season in data.get("seasons") or []:
+        air_date = str(season.get("air_date") or "")
+        season_number = int(season.get("season_number") or 0)
+        if not air_date or season_number < 1 or not (start_value <= air_date <= end_value):
+            continue
+        item = dict(base)
+        item.update({
+            "release_date": air_date,
+            "season_number": season_number,
+            "poster": _poster(season.get("poster_path")) or base.get("poster"),
+        })
+        items.append(item)
+    util.ttl_set("tmdb_upcoming_tv_seasons", ck, items)
+    return items
+
+
 def _regional_movie_page(endpoint, country_code, language, page, *, success_ttl, empty_ttl, error_ttl):
     cc = (country_code or "").upper()
     lang = language or _LANG

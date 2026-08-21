@@ -591,7 +591,8 @@ def _event_country_cc(event: dict) -> str:
 def filter_concert_events(events: list, cc: str) -> list:
     """Оставляет только события с подтверждённой страной площадки."""
     target = str(cc or "").upper()
-    return [event for event in events if _event_country_cc(event) == target]
+    filtered = [event for event in events if _event_country_cc(event) == target]
+    return sorted(filtered, key=lambda event: _event_date(event) or "9999-99-99")
 
 
 def merge_concert_events(tm_events: list, external_events: list) -> list:
@@ -1056,7 +1057,7 @@ async def _build_new_concerts_msg(cid):
             return ds
 
     rows_data = []
-    for e in new_events:
+    for e in sorted(new_events, key=lambda event: _event_date(event) or "9999-99-99"):
         date = e.get("dates", {}).get("start", {}).get("localDate", "")
         city = ((e.get("_embedded", {}).get("venues") or [{}])[0].get("city") or {}).get("name", "")
         rows_data.append({
@@ -1216,7 +1217,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
     today_str = datetime.now(config.TZ).date().isoformat()
     seen_artist_events = set()
     rows_data = []
-    for e in events:
+    for e in sorted(events, key=lambda event: _event_date(event) or "9999-99-99"):
         artist = e.get("_artist", "")
         date = e.get("dates", {}).get("start", {}).get("localDate", "")
         if date and date < today_str:

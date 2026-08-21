@@ -57,6 +57,9 @@ def test_enriches_digital_game_with_cover_and_verified_trailer(monkeypatch):
         "result": [{
             "name": "Example Game",
             "cover": {"image_id": "co123"},
+            "platforms": [{"id": 167}],
+            "genres": [{"name": "Adventure"}],
+            "first_release_date": 1704067200,
             "videos": [
                 {"name": "Gameplay", "video_id": "gameplay-id"},
                 {"name": "Official Trailer", "video_id": "trailer-id"},
@@ -74,6 +77,9 @@ def test_enriches_digital_game_with_cover_and_verified_trailer(monkeypatch):
         "https://images.igdb.com/igdb/image/upload/t_cover_big/co123.jpg"
     )
     assert result[0]["trailer_url"] == "https://www.youtube.com/watch?v=trailer-id"
+    assert result[0]["platforms"] == ["ps5"]
+    assert result[0]["genres"] == ["adventure"]
+    assert result[0]["year"] == 2024
 
 
 def test_does_not_query_igdb_for_board_games(monkeypatch):

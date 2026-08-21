@@ -168,6 +168,35 @@ def test_game_home_shows_three_linked_releases_with_genres_and_platforms():
     assert any(entity.type == "spoiler" for entity in message.entities)
 
 
+def test_game_home_attaches_nearest_release_poster(monkeypatch):
+    sent = []
+    items = [{
+        "title": "Новая игра",
+        "genre": "приключение",
+        "platform_label": "💻 ПК",
+        "url": "https://example.com/game",
+        "poster": "https://images.igdb.com/new-game.jpg",
+    }]
+
+    class Bot:
+        async def send_photo(self, **kwargs):
+            sent.append(("photo", kwargs))
+
+        async def send_message(self, **kwargs):
+            sent.append(("message", kwargs))
+
+    monkeypatch.setattr(
+        leisure_games, "get_game_premieres",
+        lambda _cid, **_kwargs: asyncio.sleep(0, result=items),
+    )
+    monkeypatch.setattr(leisure_games.store, "get_settings", lambda _cid: {"city": "Алкмар"})
+
+    asyncio.run(leisure_games.send_games_home(Bot(), "42"))
+
+    assert [kind for kind, _kwargs in sent] == ["photo"]
+    assert sent[0][1]["photo"] == "https://images.igdb.com/new-game.jpg"
+
+
 def test_game_recommendation_keeps_genres_inside_card(monkeypatch):
     _profile_store(monkeypatch)
     monkeypatch.setattr(leisure_games.settings, "get", lambda *_args, **_kwargs: [])
@@ -206,6 +235,16 @@ def test_favorite_games_influence_recommendation_and_are_not_repeated(monkeypatc
 
     assert item["name"] == "It Takes Two"
     assert "action" in item["genres"]
+
+
+def test_manual_board_game_label_is_detected_without_ai():
+    item = leisure_games.normalize_favorite_game("настольная игра Каркассон")
+
+    assert item == {
+        "name": "Каркассон",
+        "genres": ["board"],
+        "platforms": ["board"],
+    }
 
 
 def test_game_set_groups_games_like_my_cinema(monkeypatch):

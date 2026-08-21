@@ -602,7 +602,29 @@ async def handle(update, context, remove_reply_keyboard):
         await leisure_movies.delete_favorite_movie(bot, cid, token, short_id, q=q)
         return
     if data == "book_favorites":
-        await cleanup.open_collection(bot, cid, "books_favorites", back="m_books")
+        await leisure_books.send_favorite_books(bot, cid, q=q)
+        return
+    if data.startswith("bfg:"):
+        _op, token, genre_index, page = data.split(":", 3)
+        await leisure_books.send_favorite_book_genre(
+            bot, cid, token, int(genre_index), int(page), q=q,
+        )
+        return
+    if data.startswith("bfi:"):
+        _op, token, short_id, genre_index, page = data.split(":", 4)
+        await leisure_books.send_favorite_book_card(
+            bot, cid, token, short_id, int(genre_index), int(page),
+        )
+        return
+    if data.startswith("bfd:"):
+        _op, token, short_id, genre_index, page = data.split(":", 4)
+        await leisure_books.send_favorite_book_delete_confirmation(
+            bot, cid, token, short_id, int(genre_index), int(page), q=q,
+        )
+        return
+    if data.startswith("bfdok:"):
+        _op, token, short_id = data.split(":", 2)
+        await leisure_books.delete_favorite_book(bot, cid, token, short_id, q=q)
         return
     if data == "book_prefs":
         await leisure_books.send_book_preferences(bot, cid, q)
@@ -634,6 +656,24 @@ async def handle(update, context, remove_reply_keyboard):
         await _inline_status(
             lambda status: leisure_movies.send_movie_premieres(bot, cid, status=status),
             preserve_message=True,
+        )
+        return
+    if data.startswith("movie_premiere_page:"):
+        await _ack(q)
+        await leisure_movies.show_movie_premiere_page(
+            cid, q, int(data.rsplit(":", 1)[1]),
+        )
+        return
+    if data == "series_premieres":
+        await _inline_status(
+            lambda status: leisure_movies.send_series_premieres(bot, cid, status=status),
+            preserve_message=True,
+        )
+        return
+    if data.startswith("series_premiere_page:"):
+        await _ack(q)
+        await leisure_movies.show_series_premiere_page(
+            cid, q, int(data.rsplit(":", 1)[1]),
         )
         return
     if data == "movie_now_playing":

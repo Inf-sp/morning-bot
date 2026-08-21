@@ -44,7 +44,7 @@ def test_movie_premieres_keep_only_current_year_and_cache_by_country(monkeypatch
     assert saved["NL"]["expires"] == (today + timedelta(days=7)).isoformat()
 
 
-def test_movie_premieres_keep_seven_most_popular_with_trailers(monkeypatch):
+def test_movie_premieres_keep_five_most_popular_with_trailers(monkeypatch):
     saved = {}
     today = datetime.now(leisure_movies.config.TZ).date()
 
@@ -73,8 +73,36 @@ def test_movie_premieres_keep_seven_most_popular_with_trailers(monkeypatch):
 
     items = asyncio.run(leisure_movies.get_movie_premieres("42", refresh=True))
 
-    assert [item["title"] for item in items] == [f"Фильм {i}" for i in range(9, 2, -1)]
+    assert [item["title"] for item in items] == [f"Фильм {i}" for i in range(9, 4, -1)]
     assert all(item["poster"] and item["trailer_url"] for item in items)
+
+
+def test_series_premieres_prioritize_favorite_seasons_and_require_rating_above_seven(monkeypatch):
+    today = datetime.now(leisure_movies.config.TZ).date()
+    monkeypatch.setattr(
+        leisure_movies.store, "get_list",
+        lambda _key, _cid: ["Разделение (сериал, 2022)"],
+    )
+    monkeypatch.setattr(leisure_movies.tmdb, "search_id", lambda *_args: {
+        "id": 10, "kind": "tv", "rating": 8.7,
+    })
+    monkeypatch.setattr(leisure_movies.tmdb, "upcoming_tv_seasons", lambda *_args: [{
+        "id": 10, "name": "Разделение", "season_number": 3,
+        "release_date": (today + timedelta(days=20)).isoformat(),
+        "rating": 8.7, "poster": "favorite.jpg", "overview": "Новый сезон.",
+    }])
+    monkeypatch.setattr(leisure_movies.tmdb, "upcoming_tv_releases", lambda *_args: [{
+        "id": 20, "name": "Новый хит", "release_date": (today + timedelta(days=5)).isoformat(),
+        "rating": 7.8, "poster": "new.jpg", "overview": "Новая история.",
+    }, {
+        "id": 21, "name": "Ровно семь", "release_date": (today + timedelta(days=2)).isoformat(),
+        "rating": 7.0, "poster": "seven.jpg", "overview": "Не проходит фильтр.",
+    }])
+
+    items = asyncio.run(leisure_movies.get_series_premieres("42"))
+
+    assert [item["name"] for item in items] == ["Разделение", "Новый хит"]
+    assert items[0]["favorite"] is True
 
 
 def test_book_premieres_are_current_month_diverse_and_cached(monkeypatch):

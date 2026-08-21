@@ -61,6 +61,43 @@ def favorite_movie_genre(genre, total):
     return b.build_stripped()
 
 
+def favorite_books_home(total, genres):
+    b = MessageBuilder()
+    b.title(f"🎚️ Мои книги · {total} {_pluralize_books(total)}")
+    for group in genres or []:
+        titles = [str(title or "").strip() for title in group.get("titles") or [] if str(title or "").strip()]
+        if not titles:
+            continue
+        b.bold(f"{str(group.get('genre') or 'Без жанра').strip()}:")
+        b.newline()
+        b.line(", ".join(titles))
+        b.spacer()
+    if not total:
+        b.line("Добавь любимые книги — следующие рекомендации станут точнее.")
+    return b.build_stripped()
+
+
+def _pluralize_books(n):
+    n = abs(int(n))
+    if n % 10 == 1 and n % 100 != 11:
+        return "книга"
+    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+        return "книги"
+    return "книг"
+
+
+def favorite_book_genre(genre, total):
+    b = MessageBuilder()
+    b.section(f"📚 {str(genre or 'Без жанра').strip()} · {total} {_pluralize_books(total)}")
+    return b.build_stripped()
+
+
+def favorite_book_delete_confirmation(title):
+    b = MessageBuilder()
+    b.line(f"Удалить «{str(title or 'Книга').strip()}»?")
+    return b.build_stripped()
+
+
 def game_set_home(total, genres):
     b = MessageBuilder()
     b.title(f"🎚️ Мой набор · {total} {_pluralize_games(total)}")
@@ -127,6 +164,9 @@ def favorite_game_added_card(data):
     b.bold(str((data or {}).get("name") or "Игра"))
     b.newline()
     meta = [str((data or {}).get("genre_label") or "").strip()]
+    platforms = " · ".join(str(value) for value in (data or {}).get("platform_labels") or [])
+    if platforms:
+        meta.append(platforms)
     if (data or {}).get("year"):
         meta.append(str(data["year"]))
     meta = [value for value in meta if value]
@@ -350,14 +390,7 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
             genres = _movie_genres_for_line(movie)
             if genres:
                 b.text_line(f" ({genres})")
-            overview = clip(str(_item_value(movie, "overview", "") or ""), limit=160)
-            if overview:
-                if overview[-1] not in ".!?…":
-                    overview += "."
-                b.text_line(" · ")
-                b.line(overview)
-            else:
-                b.newline()
+            b.newline()
     else:
         b.text_line(" ")
         b.line("Пока не удалось подтвердить актуальные показы.")
@@ -395,8 +428,7 @@ def _movie_now_playing_lines(now_playing) -> list[dict]:
     entries = []
     for item in now_playing or []:
         title = str(_item_value(item, "title", "") or "").strip()
-        overview = str(_item_value(item, "overview", "") or "").strip()
-        if not title or not overview:
+        if not title:
             continue
         entries.append(item)
     return entries
@@ -860,7 +892,7 @@ def weekly_books_screen(city, daily_book, items):
 
 
 def movie_premieres_screen(country, date_range, items):
-    """Общая подпись к Telegram-галерее премьер."""
+    """Подпись карточки премьеры кино."""
     b = MessageBuilder()
     b.text_line("🎟️ ")
     b.bold(f"Премьеры в кино · {country}")
@@ -871,7 +903,7 @@ def movie_premieres_screen(country, date_range, items):
         b.spacer()
         b.line("Витрина появится после ближайшего ночного обновления.")
         return b.build_stripped()
-    for item in list(items or [])[:7]:
+    for item in list(items or [])[:5]:
         title = str(_item_value(item, "title", "") or "").strip()
         if not title:
             continue
@@ -916,12 +948,53 @@ def _movie_premiere_summary(value, limit=None):
 
 
 def _movie_premiere_date(item):
-    raw = str(_item_value(item, "date", "") or "").strip()
+    raw = str(
+        _item_value(item, "date", "")
+        or _item_value(item, "release_date", "")
+        or ""
+    ).strip()
     try:
         value = date.fromisoformat(raw)
     except ValueError:
         return str(_item_value(item, "date_label", "") or "").strip()
     return _format_date_label(value, include_year=True)
+
+
+def series_premiere_screen(item):
+    b = MessageBuilder()
+    b.title("📺 Премьеры сериалов")
+    if not item:
+        b.line("Пока нет премьер с рейтингом выше 7.")
+        return b.build_stripped()
+    title = str(_item_value(item, "name", "") or "Сериал").strip()
+    url = str(_item_value(item, "url", "") or "").strip()
+    if url:
+        b.link(title, url)
+    else:
+        b.bold(title)
+    b.newline()
+    meta = []
+    season = int(_item_value(item, "season_number", 0) or 0)
+    if season:
+        meta.append(f"{season} сезон")
+    else:
+        meta.append("Новый сериал")
+    if _item_value(item, "favorite", False):
+        meta.append("из Моего кино")
+    release_date = _movie_premiere_date(item)
+    if release_date:
+        meta.append(release_date)
+    rating = float(_item_value(item, "rating", 0) or 0)
+    meta.append(f"⭐ {rating:.1f}/10")
+    genres = _movie_genres_for_line(item)
+    if genres:
+        meta.append(genres.replace(", ", " · "))
+    b.line(" · ".join(meta))
+    overview = _movie_premiere_summary(_item_value(item, "overview", ""), limit=180)
+    if overview:
+        b.spacer()
+        b.line(overview if overview[-1] in ".!?…" else overview + ".")
+    return b.build_stripped()
 
 
 def book_premieres_screen(month, items):
@@ -973,10 +1046,10 @@ def _write_book_premiere(
             builder.link(f"«{title}»", url)
         else:
             builder.text_line(f"«{title}»")
-        if author:
-            builder.text_line(f" ({author})")
         if genres:
-            builder.text_line(f" · {genres}")
+            builder.text_line(f" ({genres})")
+        if author:
+            builder.text_line(f" · {author}")
         if summary:
             builder.text_line(" · ")
             builder.line(_book_premiere_summary(summary, limit=160))
@@ -1068,12 +1141,18 @@ def music_week_screen(city, daily_music, concerts):
             date = str(_item_value(event, "date", "") or "").strip()
             place = str(_item_value(event, "place", "") or "").strip()
             context = _concert_context_text(_item_value(event, "context", ""))
+            url = str(_item_value(event, "url", "") or "").strip()
             details = " · ".join(value for value in (date, place) if value)
-            b.line(
-                f"• {artist}"
-                + (f" ({_lower_initial(context)})" if context else "")
-                + (f" · {details}" if details else "")
-            )
+            b.text_line("• ")
+            if url:
+                b.link(artist, url)
+            else:
+                b.text_line(artist)
+            if context:
+                b.text_line(f" ({_lower_initial(context)})")
+            if details:
+                b.text_line(f" · {details}")
+            b.newline()
     else:
         b.line(" Пока нет подтверждённых ближайших выступлений.")
 

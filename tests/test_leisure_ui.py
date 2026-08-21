@@ -33,6 +33,7 @@ def test_category_homes_keep_personal_lists_in_their_own_sections():
     assert _labels(leisure_movies._movie_home_kb()) == [
         ["✨ Подобрать новое кино"],
         ["🎟️ Премьеры"],
+        ["📺 Премьеры сериалов"],
         ["🎚️ Моё кино"],
         ["#️⃣ Главная"],
     ]
@@ -440,6 +441,60 @@ def test_favorite_movie_delete_removes_only_selected_record(monkeypatch):
     assert reopened == [("42", None)]
 
 
+def test_favorite_books_are_grouped_by_genre_and_open_cover_card(monkeypatch):
+    class Bot:
+        def __init__(self):
+            self.messages = []
+            self.photos = []
+
+        async def send_message(self, **kwargs):
+            self.messages.append(kwargs)
+
+        async def send_photo(self, **kwargs):
+            self.photos.append(kwargs)
+
+    records = [
+        {"id": "book-a123", "value": "Дюна"},
+        {"id": "book-b123", "value": "Гордость и предубеждение"},
+    ]
+    metadata = {
+        "Дюна": {"title": "Дюна", "categories": ["Science Fiction"],
+                 "cover_url": "https://images.test/dune.jpg", "description": "История Арракиса."},
+        "Гордость и предубеждение": {"title": "Гордость и предубеждение",
+                                     "categories": ["Romance"]},
+    }
+    monkeypatch.setattr(leisure_books.store, "ensure_list_ids", lambda *_args: records)
+    monkeypatch.setattr(
+        leisure_books.google_books, "enrich_book",
+        lambda item: metadata[item["title"]],
+    )
+
+    bot = Bot()
+    asyncio.run(leisure_books.send_favorite_books(bot, "42"))
+
+    assert bot.messages[0]["text"] == (
+        "🎚️ Мои книги · 2 книги\n\n"
+        "Романтика:\nГордость и предубеждение\n\n"
+        "Фантастика:\nДюна"
+    )
+    genre_callback = next(
+        row[0].callback_data for row in bot.messages[0]["reply_markup"].inline_keyboard
+        if row[0].text.startswith("Фантастика")
+    )
+    _op, token, genre_index, page = genre_callback.split(":")
+    asyncio.run(leisure_books.send_favorite_book_genre(
+        bot, "42", token, int(genre_index), int(page),
+    ))
+    item_callback = bot.messages[-1]["reply_markup"].inline_keyboard[0][0].callback_data
+    _op, token, short_id, genre_index, page = item_callback.split(":")
+    asyncio.run(leisure_books.send_favorite_book_card(
+        bot, "42", token, short_id, int(genre_index), int(page),
+    ))
+
+    assert bot.photos[-1]["photo"] == "https://images.test/dune.jpg"
+    assert _labels(bot.photos[-1]["reply_markup"])[0] == ["❌ Удалить"]
+
+
 def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
     view_id = "books-layout"
     cleanup._views[view_id] = {
@@ -696,6 +751,53 @@ def test_book_card_title_links_to_google_books():
     )
 
 
+def test_book_card_from_inline_status_is_sent_with_cover(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_photo(self, **kwargs):
+            sent.append(("photo", kwargs))
+
+        async def send_message(self, **kwargs):
+            sent.append(("message", kwargs))
+
+    class Status:
+        async def replace(self, *_args, **_kwargs):
+            raise AssertionError("card with cover must be sent as a photo")
+
+    item = {
+        "title": "Новая книга",
+        "url": "https://books.google.com/books?id=new",
+        "cover_url": "https://images.test/new-book.jpg",
+    }
+
+    asyncio.run(leisure_books._send_book_card(
+        Bot(), "42", item, 0, enrich=False, status=Status(),
+    ))
+
+    assert [kind for kind, _kwargs in sent] == ["photo"]
+    assert sent[0][1]["photo"] == "https://images.test/new-book.jpg"
+
+
+def test_book_card_text_fallback_disables_link_preview(monkeypatch):
+    replaced = {}
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            replaced.update({"text": text, **kwargs})
+
+    monkeypatch.setattr(leisure_books, "_book_cover", lambda *_args: None)
+
+    asyncio.run(leisure_books._send_book_card(
+        object(), "42", {
+            "title": "Книга без обложки",
+            "url": "https://books.google.com/books?id=no-cover",
+        }, 0, enrich=False, status=Status(),
+    ))
+
+    assert replaced["disable_web_page_preview"] is True
+
+
 def test_category_week_screens_are_compact_and_show_only_content():
     movie = leisure_movies.leisure_ui.movie_now_playing_screen("Алкмар", [{
         "title": "Фильм", "genres": ["drama", "thriller"],
@@ -723,14 +825,16 @@ def test_category_week_screens_are_compact_and_show_only_content():
         "rebus": {"emoji": "👑 🐝 🎤", "answer": "Beyoncé", "fact": "Факт."},
         "legend": {"name": "Луи Армстронг", "birth": "1901-08-04", "detail": "трубач и певец"},
     },
-        [{"artist": "Romy", "date": "21 августа", "place": "Биддингхёйзен"}],
+        [{"artist": "Romy", "date": "21 августа", "place": "Биддингхёйзен",
+          "url": "https://tickets.example/romy"}],
     )
 
     assert "🎬 Кино на сегодня · Алкмар" in movie.text
     assert "Ребус дня: 🦈 🌊 👨‍🔬 → Челюсти" in movie.text
     assert "Именинник дня: Грета Гервиг · 4 августа 1983 — режиссёр и актриса. «Леди Бёрд» принесла ей две номинации на «Оскар»." in movie.text
     assert "Фильм под настроение:" not in movie.text
-    assert "Что в кино:\n• «Фильм» (драма, триллер) · Героиня возвращается домой и находит старую тайну." in movie.text
+    assert "Что в кино:\n• «Фильм» (драма, триллер)" in movie.text
+    assert "Героиня возвращается домой" not in movie.text
     movie_link = next(entity for entity in movie.entities if entity.type == MessageEntity.TEXT_LINK)
     assert movie_link.url == "https://www.youtube.com/watch?v=trailer123"
     assert "💡 Интересно: «Челюсти» считают первым современным летним блокбастером." in movie.text
@@ -740,11 +844,11 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "📚 Литературный вайб · Алкмар" in books.text
     assert "Цитата со страницы:" not in books.text
     assert "Литературный ребус: 🧙‍♀️ ⚡ 🚂 → Гарри Поттер" in books.text
-    assert "«Onyx Storm» (Ребекка Яррос) · Фэнтези" in books.text
+    assert "«Onyx Storm» (Фэнтези) · Ребекка Яррос" in books.text
     assert "Именинник дня: Кнут Гамсун · 4 августа 1859 — норвежский писатель." in books.text
     assert "Книга под настроение:" not in books.text
     assert (
-        "Главные премьеры:\n• «Onyx Storm» (Ребекка Яррос) · Фэнтези · "
+        "Главные премьеры:\n• «Onyx Storm» (Фэнтези) · Ребекка Яррос · "
         "Вайолет ищет союзников, пока война всё ближе к её дому."
     ) in books.text
     assert books.text.index("Главные премьеры:") < books.text.index("Именинник дня:") < books.text.index("Литературный ребус:") < books.text.index("💡 Интересно:")
@@ -754,6 +858,11 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in music.text
     assert "Именинник дня: Луи Армстронг · 4 августа 1901 — трубач и певец." in music.text
     assert "Концерты рядом:\n• Romy · 21 августа · Биддингхёйзен" in music.text
+    assert any(
+        entity.type == MessageEntity.TEXT_LINK
+        and entity.url == "https://tickets.example/romy"
+        for entity in music.entities
+    )
     assert music.text.index("Именинник дня:") < music.text.index("Музыкальный ребус:") < music.text.index("💡 Интересно:")
     assert "Новые альбомы" not in music.text
     assert any(entity.type == MessageEntity.SPOILER for entity in music.entities)
@@ -865,19 +974,16 @@ def test_movie_premieres_fit_one_message_without_cutting_descriptions():
     )
 
     assert len(message.text.encode("utf-16-le")) // 2 <= 1024
-    assert message.text.count("«Премьера ") == 7
+    assert message.text.count("«Премьера ") == 5
     assert first_sentence in message.text
     assert "Это второе подробное предложение" not in message.text
     assert not message.text.endswith("…")
 
 
-def test_movie_premieres_are_sent_as_one_native_poster_gallery(monkeypatch):
+def test_movie_premieres_are_sent_as_one_poster_carousel(monkeypatch):
     sent = []
 
     class Bot:
-        async def send_media_group(self, **kwargs):
-            sent.append(("gallery", kwargs))
-
         async def send_photo(self, **kwargs):
             sent.append(("photo", kwargs))
 
@@ -886,7 +992,7 @@ def test_movie_premieres_are_sent_as_one_native_poster_gallery(monkeypatch):
 
     class Status:
         async def replace(self, *_args, **_kwargs):
-            raise AssertionError("gallery must not fall back to a text message")
+            raise AssertionError("carousel must not fall back to a text message")
 
     items = [
         {
@@ -906,16 +1012,75 @@ def test_movie_premieres_are_sent_as_one_native_poster_gallery(monkeypatch):
 
     asyncio.run(leisure_movies.send_movie_premieres(Bot(), "42", status=Status()))
 
-    assert [kind for kind, _kwargs in sent] == ["gallery", "message"]
-    gallery = sent[0][1]
-    assert len(gallery["media"]) == 3
-    assert gallery["caption"].startswith("🎟️ Премьеры в кино · Нидерланды")
+    assert [kind for kind, _kwargs in sent] == ["photo"]
+    card = sent[0][1]
+    assert card["photo"] == items[0]["poster"]
+    assert card["caption"].startswith("🎟️ Премьеры в кино · Нидерланды")
+    assert "Фильм 0" in card["caption"]
+    assert "Фильм 1" not in card["caption"]
     assert {
-        entity.url for entity in gallery["caption_entities"]
+        entity.url for entity in card["caption_entities"]
         if entity.type == MessageEntity.TEXT_LINK
-    } == {item["trailer_url"] for item in items}
-    navigation = sent[1][1]["reply_markup"]
-    assert _labels(navigation) == [["⬅️ Назад", "#️⃣ Главная"]]
+    } == {items[0]["trailer_url"]}
+    assert _labels(card["reply_markup"]) == [
+        ["◀️", "1/3", "▶️"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+
+
+def test_movie_premiere_carousel_edits_the_same_message(monkeypatch):
+    items = [{
+        "title": f"Фильм {index}",
+        "date": "2026-08-15",
+        "genres": "драма",
+        "overview": f"Короткая завязка {index}.",
+        "poster": f"https://image.tmdb.org/poster{index}.jpg",
+    } for index in range(3)]
+    edited = []
+
+    class Query:
+        async def edit_message_media(self, **kwargs):
+            edited.append(kwargs)
+
+    monkeypatch.setattr(leisure_movies.store, "get_settings", lambda _cid: {
+        "country": "Нидерланды", "cc": "NL",
+    })
+    monkeypatch.setattr(
+        leisure_movies, "get_movie_premieres",
+        lambda _cid: asyncio.sleep(0, result=items),
+    )
+
+    asyncio.run(leisure_movies.show_movie_premiere_page("42", Query(), 1))
+
+    assert len(edited) == 1
+    assert edited[0]["media"].media == items[1]["poster"]
+    assert "Фильм 1" in edited[0]["media"].caption
+    assert _labels(edited[0]["reply_markup"]) == [
+        ["◀️", "2/3", "▶️"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+
+
+def test_series_premiere_card_marks_favorite_season_and_rating():
+    message = leisure_movies.leisure_ui.series_premiere_screen({
+        "name": "Разделение",
+        "season_number": 3,
+        "favorite": True,
+        "release_date": "2026-09-12",
+        "rating": 8.4,
+        "genres": "драма, фантастика",
+        "overview": "Сотрудники снова пытаются раскрыть тайну компании.",
+        "url": "https://www.themoviedb.org/tv/95396",
+    })
+
+    assert "📺 Премьеры сериалов" in message.text
+    assert "3 сезон · из Моего кино · 12 сентября 2026 · ⭐ 8.4/10" in message.text
+    assert "драма · фантастика" in message.text
+    assert any(
+        entity.type == MessageEntity.TEXT_LINK
+        and entity.url == "https://www.themoviedb.org/tv/95396"
+        for entity in message.entities
+    )
 
 
 def test_movie_home_opens_daily_cinema_screen(monkeypatch):
@@ -1149,6 +1314,35 @@ def test_weekly_books_keep_only_current_popular_releases(monkeypatch):
     assert stored["items"] == items
 
 
+def test_literary_vibe_uses_only_books_from_current_month(monkeypatch):
+    today = datetime.now(config.TZ).date()
+    stored = {}
+
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: stored.update(value))
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
+        {"title": "Свежая книга", "published_date": today.isoformat(),
+         "categories": ["Fiction"]},
+        {"title": "Старая книга", "published_date": "2025-06-10",
+         "rating": 4.9, "ratings_count": 5000},
+    ])
+
+    items = asyncio.run(leisure_books.get_weekly_new_books())
+
+    assert [item["title"] for item in items] == ["Свежая книга"]
+
+
+def test_literary_vibe_puts_genre_in_parentheses():
+    message = leisure_books.leisure_ui.weekly_books_screen("Алкмар", {}, [{
+        "title": "Свежая книга",
+        "author": "Автор",
+        "categories": ["Fiction"],
+        "summary": "История о возвращении домой.",
+    }])
+
+    assert "• «Свежая книга» (Художественная проза) · Автор · История" in message.text
+
+
 def test_weekly_books_fall_back_to_this_month_when_week_has_no_hits(monkeypatch):
     today = datetime.now(config.TZ).date()
     stored = {}
@@ -1189,7 +1383,7 @@ def test_weekly_books_rebuilds_an_empty_daily_cache(monkeypatch):
     assert stored["items"] == items
 
 
-def test_weekly_books_fall_back_to_recent_popular_releases(monkeypatch):
+def test_weekly_books_do_not_fall_back_outside_current_month(monkeypatch):
     today = datetime.now(config.TZ).date()
     stored = {}
 
@@ -1205,8 +1399,7 @@ def test_weekly_books_fall_back_to_recent_popular_releases(monkeypatch):
 
     items = asyncio.run(leisure_books.get_weekly_new_books())
 
-    assert [item["title"] for item in items] == ["Популярная премьера"]
-    assert items[0]["_showcase"] == "popular"
+    assert items == []
 
 
 def test_weekly_books_never_show_classics_when_catalogue_has_no_fresh_hits(monkeypatch):
@@ -1221,8 +1414,7 @@ def test_weekly_books_never_show_classics_when_catalogue_has_no_fresh_hits(monke
 
     items = asyncio.run(leisure_books.get_weekly_new_books())
 
-    assert items[0]["_showcase"] == "popular"
-    assert "Мастер и Маргарита" not in [item["title"] for item in items]
+    assert items == []
 
 
 def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
@@ -1233,7 +1425,7 @@ def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
     }])
 
     assert (
-        "Главные премьеры:\n• «Недавний бестселлер» (Автор) · "
+        "Главные премьеры:\n• «Недавний бестселлер» · Автор · "
         "Напряжённый триллер о тайне, которую нельзя оставить в прошлом."
     ) in message.text
     assert "Популярное чтение" not in message.text

@@ -9,7 +9,7 @@ if TYPE_CHECKING:
         _CINEMA_BIRTHDAY_LOCK, _CINEMA_REBUSES, _MONTHS,
         _MOVIE_PREMIERES_CACHE_VERSION, _log, _movie_prefs,
         asyncio, config, datetime, leisure_ui, local_cinema, quote_plus,
-        requests, store, time, timedelta, tmdb,
+        movie_title_for_lookup, requests, store, time, timedelta, tmdb,
     )
 
 
@@ -17,6 +17,7 @@ def _movie_home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать новое кино", callback_data="movie_reco")],
         [InlineKeyboardButton("🎟️ Премьеры", callback_data="movie_premieres")],
+        [InlineKeyboardButton("📺 Премьеры сериалов", callback_data="series_premieres")],
         [InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -472,7 +473,7 @@ async def get_movie_premieres(cid, *, refresh=False):
         -int(item.get("vote_count") or 0),
         item["date"],
     ))
-    items = [item for item in items if item.get("overview")][:7]
+    items = [item for item in items if item.get("overview")][:5]
     trailer_urls = await asyncio.gather(*(
         asyncio.to_thread(tmdb.trailer_url, item.get("id"), "movie")
         for item in items
@@ -484,49 +485,45 @@ async def get_movie_premieres(cid, *, refresh=False):
     return items
 
 
-async def send_movie_premieres(bot, cid, *, status=None):
+def _movie_premieres_view(cid, items, page=0):
     settings_data = store.get_settings(cid)
     country = _movie_country_label(settings_data.get("country"), settings_data.get("cc"))
     today = datetime.now(config.TZ).date()
     end = today + timedelta(days=13)
     date_range = f"{today.day} {_MONTHS[today.month - 1]} – {end.day} {_MONTHS[end.month - 1]}"
-    items = [
+    page = max(0, min(int(page), len(items) - 1)) if items else 0
+    msg = leisure_ui.movie_premieres_screen(
+        country, date_range, [items[page]] if items else [],
+    )
+    rows = []
+    if len(items) > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"movie_premiere_page:{(page - 1) % len(items)}"),
+            InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"movie_premiere_page:{(page + 1) % len(items)}"),
+        ])
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ])
+    return msg, InlineKeyboardMarkup(rows), page
+
+
+async def _movie_premieres_with_posters(cid):
+    return [
         item for item in (await get_movie_premieres(cid))
         if str(item.get("poster") or "").strip()
-    ][:7]
-    msg = leisure_ui.movie_premieres_screen(country, date_range, items)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
-    posters = [
-        InputMediaPhoto(media=str(item.get("poster") or "").strip())
-        for item in items
-    ]
-    if len(posters) >= 2:
-        try:
-            await bot.send_media_group(
-                chat_id=cid,
-                media=posters,
-                caption=msg.text,
-                caption_entities=msg.entities,
-            )
-        except Exception:
-            pass
-        else:
-            # Telegram не поддерживает inline-кнопки у альбомов, поэтому
-            # навигация приходит отдельной компактной строкой сразу под ними.
-            await bot.send_message(
-                chat_id=cid,
-                text="🎟️ Премьеры",
-                reply_markup=kb,
-            )
-            return
-    if len(posters) == 1:
+    ][:5]
+
+
+async def send_movie_premieres(bot, cid, *, status=None):
+    items = await _movie_premieres_with_posters(cid)
+    msg, kb, page = _movie_premieres_view(cid, items)
+    if items:
         try:
             await bot.send_photo(
                 chat_id=cid,
-                photo=posters[0].media,
+                photo=str(items[page].get("poster") or "").strip(),
                 caption=msg.text,
                 caption_entities=msg.entities,
                 reply_markup=kb,
@@ -534,9 +531,121 @@ async def send_movie_premieres(bot, cid, *, status=None):
             return
         except Exception:
             pass
-    if posters:
-        msg = leisure_ui.movie_premieres_screen(country, date_range, [])
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
         return
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def show_movie_premiere_page(cid, q, page):
+    items = await _movie_premieres_with_posters(cid)
+    if not items:
+        return
+    msg, kb, page = _movie_premieres_view(cid, items, page)
+    await q.edit_message_media(
+        media=InputMediaPhoto(
+            media=str(items[page].get("poster") or "").strip(),
+            caption=msg.text,
+            caption_entities=msg.entities,
+        ),
+        reply_markup=kb,
+    )
+
+
+async def get_series_premieres(cid):
+    """Новые сериалы и новые сезоны избранного с рейтингом выше 7."""
+    today = datetime.now(config.TZ).date()
+    new_series_start = today - timedelta(days=30)
+    end = today + timedelta(days=60)
+    favorites = store.get_list(config.FAVORITE_MOVIES_KEY, cid)
+
+    async def favorite_seasons(value):
+        if "(фильм" in str(value or "").casefold():
+            return []
+        title = movie_title_for_lookup(value)
+        found = await asyncio.to_thread(tmdb.search_id, title)
+        if not found or found.get("kind") != "tv" or float(found.get("rating") or 0) <= 7:
+            return []
+        seasons = await asyncio.to_thread(
+            tmdb.upcoming_tv_seasons, found.get("id"), today, end,
+        )
+        seasons = [dict(item) for item in seasons]
+        for item in seasons:
+            item["favorite"] = True
+        return seasons
+
+    favorite_groups, new_series = await asyncio.gather(
+        asyncio.gather(*(favorite_seasons(value) for value in favorites)),
+        asyncio.to_thread(tmdb.upcoming_tv_releases, new_series_start, end),
+    )
+    candidates = [item for group in favorite_groups for item in group]
+    candidates.extend(new_series or [])
+    result, seen = [], set()
+    favorite_ids = {
+        str(item.get("id")) for item in candidates
+        if item.get("favorite") and item.get("id")
+    }
+    for item in candidates:
+        rating = float(item.get("rating") or 0)
+        key = (str(item.get("id") or item.get("name") or ""), int(item.get("season_number") or 0))
+        if not item.get("favorite") and str(item.get("id")) in favorite_ids:
+            continue
+        if rating <= 7 or not item.get("poster") or not item.get("overview") or key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    result.sort(key=lambda item: (
+        not bool(item.get("favorite")),
+        str(item.get("release_date") or ""),
+        -float(item.get("rating") or 0),
+    ))
+    return result[:5]
+
+
+def _series_premieres_view(items, page=0):
+    page = max(0, min(int(page), len(items) - 1)) if items else 0
+    msg = leisure_ui.series_premiere_screen(items[page] if items else None)
+    rows = []
+    if len(items) > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"series_premiere_page:{(page - 1) % len(items)}"),
+            InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"series_premiere_page:{(page + 1) % len(items)}"),
+        ])
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ])
+    return msg, InlineKeyboardMarkup(rows), page
+
+
+async def send_series_premieres(bot, cid, *, status=None):
+    items = await get_series_premieres(cid)
+    msg, kb, page = _series_premieres_view(items)
+    if items:
+        try:
+            await bot.send_photo(
+                chat_id=cid, photo=items[page]["poster"], caption=msg.text,
+                caption_entities=msg.entities, reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+        return
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def show_series_premiere_page(cid, q, page):
+    items = await get_series_premieres(cid)
+    if not items:
+        return
+    msg, kb, page = _series_premieres_view(items, page)
+    await q.edit_message_media(
+        media=InputMediaPhoto(
+            media=items[page]["poster"], caption=msg.text,
+            caption_entities=msg.entities,
+        ),
+        reply_markup=kb,
+    )

@@ -463,7 +463,6 @@ async def _send_scheduled_notification(bot, cid, kind):
         # Тихий день без значимых погодных факторов — ничего не отправляем.
         if msg is not None:
             kb = notification_markup("weather_warn", [[
-                InlineKeyboardButton("☀️ Мой день", callback_data="weather_myday"),
                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
             ]])
             await bot.send_message(

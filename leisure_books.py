@@ -5,6 +5,7 @@ import html
 import logging
 import random
 import re
+import secrets
 import threading
 import time
 from datetime import date, datetime, timedelta
@@ -41,30 +42,20 @@ _BOOK_GENRES = [
 ]
 _PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("3.5", "3.5"), ("4.0", "4.0"), ("4.5", "4.5")]
-_WEEKLY_SHOWCASE_VERSION = 3
+_WEEKLY_SHOWCASE_VERSION = 4
 _BOOK_PREMIERES_CACHE_VERSION = 2
+_FAVORITE_BOOK_PAGE_SIZE = 8
+_FAVORITE_BOOK_VIEW_TTL = 24 * 3600
+_favorite_book_views = {}
 
-# Last safe fallback for the weekly showcase. These are recent, widely read
-# releases, deliberately separate from _FALLBACK_BOOKS (the classic personal
-# recommendation catalogue below).
-_WEEKLY_POPULAR_FALLBACKS = [
-    {
-        "title": "Onyx Storm", "author": "Rebecca Yarros", "published_date": "2025-01-21",
-        "summary": "Вайолет ищет союзников, пока война всё ближе к её дому.",
-    },
-    {
-        "title": "Great Big Beautiful Life", "author": "Emily Henry", "published_date": "2025-04-22",
-        "summary": "Две писательницы соперничают за право рассказать историю затворницы с тёмным прошлым.",
-    },
-    {
-        "title": "The Tenant", "author": "Freida McFadden", "published_date": "2025-05-06",
-        "summary": "Женщина снимает комнату в идеальном доме и замечает, что хозяева скрывают опасную тайну.",
-    },
-    {
-        "title": "Atmosphere", "author": "Taylor Jenkins Reid", "published_date": "2025-06-03",
-        "summary": "Астронавтка пытается совместить мечту о космосе с любовью, которую нельзя назвать вслух.",
-    },
-]
+_BOOK_CATEGORY_RU = {
+    "fiction": "Художественная проза", "fantasy": "Фэнтези",
+    "science fiction": "Фантастика", "mystery & detective": "Детектив",
+    "thrillers": "Триллер", "romance": "Романтика", "history": "История",
+    "biography": "Биография", "biography & autobiography": "Биография",
+    "psychology": "Психология", "poetry": "Поэзия",
+    "juvenile fiction": "Детская литература",
+}
 
 _BOOK_REBUSES = (
     {
@@ -245,6 +236,188 @@ async def warm_books_home_cache(cid):
     """Готовит данные литературной витрины без персональной рекомендации."""
     await asyncio.gather(_daily_book_content(), get_weekly_new_books())
     return True
+
+
+def _favorite_book_value(record):
+    return str(record.get("value") or record.get("title") or record.get("name") or "").strip()
+
+
+def _favorite_book_genre(item):
+    categories = item.get("categories") or []
+    if isinstance(categories, str):
+        categories = [categories]
+    first = next((str(value).strip() for value in categories if str(value).strip()), "")
+    return _BOOK_CATEGORY_RU.get(first.casefold(), first or "Без жанра")
+
+
+async def _favorite_book_records(cid):
+    records = store.ensure_list_ids(config.FAVORITE_BOOKS_KEY, cid)
+    semaphore = asyncio.Semaphore(6)
+
+    async def enrich(record):
+        value = _favorite_book_value(record)
+        metadata = {"title": value}
+        if value:
+            async with semaphore:
+                try:
+                    metadata = await asyncio.wait_for(
+                        asyncio.to_thread(google_books.enrich_book, metadata), timeout=5.0,
+                    )
+                except Exception:
+                    pass
+        metadata = _with_book_url(dict(metadata or {}))
+        return {
+            "id": str(record.get("id") or ""),
+            "value": value,
+            "title": str(metadata.get("title") or value).strip(),
+            "genre": _favorite_book_genre(metadata),
+            "book": metadata,
+        }
+
+    return list(await asyncio.gather(*(enrich(record) for record in records)))
+
+
+def _new_favorite_book_view(cid, records):
+    now = time.time()
+    for token, view in list(_favorite_book_views.items()):
+        if now - view.get("created_at", 0) > _FAVORITE_BOOK_VIEW_TTL:
+            _favorite_book_views.pop(token, None)
+    genres = {}
+    for record in records:
+        genres.setdefault(record["genre"], []).append(record)
+    for items in genres.values():
+        items.sort(key=lambda item: item["title"].casefold())
+    ordered = sorted(genres, key=lambda value: (value == "Без жанра", value.casefold()))
+    token = secrets.token_hex(3)
+    view = {"cid": str(cid), "created_at": now,
+            "genres": [(genre, genres[genre]) for genre in ordered]}
+    _favorite_book_views[token] = view
+    return token, view
+
+
+def _favorite_book_view(cid, token):
+    view = _favorite_book_views.get(token)
+    if not view or view.get("cid") != str(cid):
+        return None
+    if time.time() - view.get("created_at", 0) > _FAVORITE_BOOK_VIEW_TTL:
+        _favorite_book_views.pop(token, None)
+        return None
+    return view
+
+
+async def send_favorite_books(bot, cid, q=None):
+    records = await _favorite_book_records(cid)
+    token, view = _new_favorite_book_view(cid, records)
+    msg = leisure_ui.favorite_books_home(len(records), [
+        {"genre": genre, "titles": [item["title"] for item in items]}
+        for genre, items in view["genres"]
+    ])
+    rows = [[InlineKeyboardButton(
+        f"{genre} · {len(items)}", callback_data=f"bfg:{token}:{index}:0",
+    )] for index, (genre, items) in enumerate(view["genres"])]
+    rows.append([InlineKeyboardButton("🆕 Добавить книгу", callback_data="as_loveadd_books")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    kb = InlineKeyboardMarkup(rows)
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def send_favorite_book_genre(bot, cid, token, genre_index, page=0, q=None):
+    view = _favorite_book_view(cid, token)
+    if view is None or not 0 <= genre_index < len(view["genres"]):
+        await send_favorite_books(bot, cid, q=q)
+        return
+    genre, items = view["genres"][genre_index]
+    pages = max(1, (len(items) + _FAVORITE_BOOK_PAGE_SIZE - 1) // _FAVORITE_BOOK_PAGE_SIZE)
+    page = max(0, min(page, pages - 1))
+    chunk = items[page * _FAVORITE_BOOK_PAGE_SIZE:(page + 1) * _FAVORITE_BOOK_PAGE_SIZE]
+    rows = [[InlineKeyboardButton(
+        item["title"][:48], callback_data=f"bfi:{token}:{item['id'][:8]}:{genre_index}:{page}",
+    )] for item in chunk]
+    if pages > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"bfg:{token}:{genre_index}:{(page - 1) % pages}"),
+            InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"bfg:{token}:{genre_index}:{(page + 1) % pages}"),
+        ])
+    rows.append([InlineKeyboardButton("🆕 Добавить книгу", callback_data="as_loveadd_books")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="book_favorites"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    await _deliver_book_view(
+        bot, cid, leisure_ui.favorite_book_genre(genre, len(items)),
+        InlineKeyboardMarkup(rows), q=q,
+    )
+
+
+async def _deliver_book_view(bot, cid, msg, markup, q=None):
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=markup)
+
+
+def _favorite_book_from_view(cid, token, short_id):
+    view = _favorite_book_view(cid, token)
+    if view is None:
+        return None
+    return next((item for _genre, items in view["genres"] for item in items
+                 if item["id"].startswith(short_id)), None)
+
+
+async def send_favorite_book_card(bot, cid, token, short_id, genre_index, page):
+    item = _favorite_book_from_view(cid, token, short_id)
+    if item is None:
+        await send_favorite_books(bot, cid)
+        return
+    book = item["book"]
+    msg = _book_text(book)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Удалить", callback_data=f"bfd:{token}:{short_id}:{genre_index}:{page}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"bfg:{token}:{genre_index}:{page}"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    cover = str(book.get("cover_url") or "").strip()
+    if cover:
+        try:
+            await bot.send_photo(chat_id=cid, photo=cover, caption=msg.text,
+                                 caption_entities=msg.entities, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=kb, disable_web_page_preview=True)
+
+
+async def send_favorite_book_delete_confirmation(bot, cid, token, short_id, genre_index, page, q=None):
+    item = _favorite_book_from_view(cid, token, short_id)
+    if item is None:
+        await send_favorite_books(bot, cid, q=q)
+        return
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Удалить", callback_data=f"bfdok:{token}:{short_id}")],
+        [InlineKeyboardButton("Отмена", callback_data=f"bfg:{token}:{genre_index}:{page}"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    await _deliver_book_view(
+        bot, cid, leisure_ui.favorite_book_delete_confirmation(item["title"]), kb, q=q,
+    )
+
+
+async def delete_favorite_book(bot, cid, token, short_id, q=None):
+    item = _favorite_book_from_view(cid, token, short_id)
+    if item is not None:
+        store.remove_from_list_by_ids(config.FAVORITE_BOOKS_KEY, cid, [item["id"]])
+    _favorite_book_views.pop(token, None)
+    await send_favorite_books(bot, cid, q=q)
 
 
 async def warm_book_premieres_cache():
@@ -483,41 +656,23 @@ def _monthly_book_score(item):
     return rating * 100 + min(ratings_count, 5000) ** 0.5
 
 
-def _recent_popular_book_score(item):
-    released = _release_date(item.get("published_date"))
-    if not released or released < datetime.now(config.TZ).date() - timedelta(days=180):
-        return None
-    try:
-        rating = float(item.get("rating") or 0)
-        ratings_count = int(item.get("ratings_count") or 0)
-    except (TypeError, ValueError):
-        return None
-    if rating < 4.0 or ratings_count < 25:
-        return None
-    return rating * 100 + min(ratings_count, 5000) ** 0.5
-
-
 def _showcase_items(rows, showcase):
     return [{**dict(item), "_showcase": showcase} for _score, item in rows[:4]]
 
 
 def _fallback_book_showcase(candidates):
     monthly = []
-    popular = []
     for item in candidates:
-        month_score = _monthly_book_score(item)
-        if month_score is not None and _released_this_month(item.get("published_date")):
-            monthly.append((month_score, item))
-        popular_score = _recent_popular_book_score(item)
-        if popular_score is not None:
-            popular.append((popular_score, item))
-    if monthly:
-        monthly.sort(key=lambda row: row[0], reverse=True)
-        return _showcase_items(monthly, "month")
-    if popular:
-        popular.sort(key=lambda row: row[0], reverse=True)
-        return _showcase_items(popular, "popular")
-    return [{**dict(item), "_showcase": "popular"} for item in _WEEKLY_POPULAR_FALLBACKS]
+        if not isinstance(item, dict) or not str(item.get("title") or "").strip():
+            continue
+        if not _released_this_month(item.get("published_date")):
+            continue
+        score = _monthly_book_score(item) or 0
+        monthly.append((score, item))
+    monthly.sort(key=lambda row: (
+        row[0], str(row[1].get("published_date") or ""),
+    ), reverse=True)
+    return _showcase_items(monthly, "month")
 
 
 async def get_weekly_new_books():
@@ -528,7 +683,8 @@ async def get_weekly_new_books():
     ranked = []
     for item in candidates:
         score = _weekly_book_score(item)
-        if score is None or not _released_this_week(item.get("published_date")):
+        if (score is None or not _released_this_week(item.get("published_date"))
+                or not _released_this_month(item.get("published_date"))):
             continue
         ranked.append((score, item))
     ranked.sort(key=lambda row: row[0], reverse=True)
@@ -763,9 +919,6 @@ async def _send_book_card(bot, cid, it, i, *, enrich=True, status=None):
     it = _with_book_url(it)
     msg = _book_text(it)
     kb = _book_kb(i)
-    if status is not None:
-        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
-        return it
     cover = it.get("cover_url")
     if not cover:
         try:
@@ -781,12 +934,27 @@ async def _send_book_card(bot, cid, it, i, *, enrich=True, status=None):
         except Exception:
             cover = None
     if cover:
+        it["cover_url"] = cover
         try:
             await bot.send_photo(chat_id=cid, photo=cover, caption=msg.text, caption_entities=msg.entities, reply_markup=kb)
             return it
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    if status is not None:
+        await status.replace(
+            msg.text,
+            entities=msg.entities,
+            reply_markup=kb,
+            disable_web_page_preview=True,
+        )
+        return it
+    await bot.send_message(
+        chat_id=cid,
+        text=msg.text,
+        entities=msg.entities,
+        reply_markup=kb,
+        disable_web_page_preview=True,
+    )
     return it
 
 _FALLBACK_BOOKS = [

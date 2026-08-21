@@ -556,7 +556,10 @@ async def _weekly_concerts(cid):
 
     today = datetime.now(config.TZ).date().isoformat()
     rows, seen = [], set()
-    for event in events:
+    for event in sorted(
+        events,
+        key=lambda item: leisure_concerts._event_date(item) or "9999-99-99",
+    ):
         artist = str(event.get("_artist") or "").strip()
         event_date = str(((event.get("dates") or {}).get("start") or {}).get("localDate") or "")
         venue = (((event.get("_embedded") or {}).get("venues") or [{}])[0])
@@ -577,6 +580,7 @@ async def _weekly_concerts(cid):
             "date": date_label,
             "place": city,
             "context": leisure_concerts._concert_context(event),
+            "url": str(event.get("url") or "").strip(),
         })
         if len(rows) >= 3:
             break

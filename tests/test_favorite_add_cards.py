@@ -6,6 +6,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import leisure_movies
 import leisure_music
+import leisure_games
 import leisure_collection
 import personal_collections
 import config
@@ -76,6 +77,38 @@ def test_manual_collection_add_routes_to_artist_card(monkeypatch):
 
     assert added == ["The National"]
     assert cards == [["The National"]]
+
+
+def test_manual_game_add_saves_detected_genre_and_platform(monkeypatch):
+    added = []
+    monkeypatch.setattr(personal_collections, "_love_items", lambda _cid, _key: [])
+    monkeypatch.setattr(
+        personal_collections.store, "add_to_list",
+        lambda _key, _cid, value: added.append(value),
+    )
+    monkeypatch.setattr(
+        leisure_games.igdb,
+        "enrich_game_recommendation",
+        lambda item: {
+            **item,
+            "genres": ["adventure"],
+            "platforms": ["ps5"],
+            "year": 2025,
+        },
+    )
+    monkeypatch.setattr(leisure_games, "_reset_game_daily", lambda _cid: None)
+
+    async def send_card(_bot, _cid, _items):
+        return None
+
+    monkeypatch.setattr(leisure_games, "send_favorite_games_added_card", send_card)
+
+    asyncio.run(personal_collections.love_add_done(
+        _Bot(), "42", "games", "Unknown Adventure",
+    ))
+
+    assert added[0]["genres"] == ["adventure"]
+    assert added[0]["platforms"] == ["ps5"]
 
 
 def test_collection_migration_uses_a_plain_russian_movie_label(monkeypatch):

@@ -24,7 +24,7 @@ _MULTIQUERY_URL = "https://api.igdb.com/v4/multiquery"
 _GAMES_URL = "https://api.igdb.com/v4/games"
 _IMAGE_URL = "https://images.igdb.com/igdb/image/upload/t_cover_big/{image_id}.jpg"
 _YOUTUBE_URL = "https://www.youtube.com/watch?v={video_id}"
-_DIGITAL_PLATFORMS = {"pc", "ps5", "other"}
+_DIGITAL_PLATFORMS = {"pc", "ps5", "xbox", "switch", "mobile", "other"}
 _TRAILER_WORDS = ("trailer", "teaser", "announcement", "announce", "reveal")
 _LOOKUP_CACHE_TTL = 30 * 86400
 
@@ -44,6 +44,12 @@ _GENRES_RU = {
     "shooter": "шутер", "strategy": "стратегия", "racing": "гонки",
     "sport": "спорт", "simulator": "симулятор", "puzzle": "головоломка",
     "fighting": "файтинг", "platform": "платформер", "indie": "инди",
+}
+_GENRE_KEYS = {
+    "adventure": "adventure", "role-playing (rpg)": "rpg",
+    "shooter": "action", "fighting": "action", "hack and slash/beat 'em up": "action",
+    "strategy": "strategy", "real time strategy (rts)": "strategy",
+    "turn-based strategy (tbs)": "strategy",
 }
 
 _TOKEN_LOCK = threading.Lock()
@@ -130,7 +136,8 @@ def _multiquery(titles: list[str], token: str) -> list[dict]:
         queries.append(
             f'query games "game_{index}" {{ '
             f'search "{_escape_query(title)}"; '
-            "fields name,cover.image_id,videos.name,videos.video_id; limit 5; };"
+            "fields name,cover.image_id,videos.name,videos.video_id,"
+            "platforms.id,genres.name,first_release_date; limit 5; };"
         )
     if not queries:
         return []
@@ -269,14 +276,15 @@ def enrich_game_premieres(items) -> list[dict]:
         return result
     digital_indexes = [
         index for index, item in enumerate(result)
-        if set(item.get("platforms") or []).intersection(_DIGITAL_PLATFORMS)
+        if (not item.get("platforms")
+            or set(item.get("platforms") or []).intersection(_DIGITAL_PLATFORMS))
         and str(item.get("title") or "").strip()
     ][:10]
     if not digital_indexes:
         return result
     unresolved = []
     for item_index in digital_indexes:
-        cache_key = _normalized_title(result[item_index].get("title"))
+        cache_key = f"v2:{_normalized_title(result[item_index].get('title'))}"
         cached = util.ttl_get("igdb_game", cache_key, _LOOKUP_CACHE_TTL)
         if cached is None:
             unresolved.append(item_index)
@@ -296,8 +304,9 @@ def enrich_game_premieres(items) -> list[dict]:
     }
     for query_index, item_index in enumerate(digital_indexes):
         match = _best_match(titles[query_index], grouped.get(f"game_{query_index}"))
+        cache_key = f"v2:{_normalized_title(titles[query_index])}"
         if not match:
-            util.ttl_set("igdb_game", _normalized_title(titles[query_index]), {})
+            util.ttl_set("igdb_game", cache_key, {})
             continue
         enrichment = {}
         image_id = str((match.get("cover") or {}).get("image_id") or "").strip()
@@ -306,8 +315,31 @@ def enrich_game_premieres(items) -> list[dict]:
         video_id = _trailer_video_id(match.get("videos"))
         if video_id:
             enrichment["trailer_url"] = _YOUTUBE_URL.format(video_id=video_id)
+        platform_ids = {
+            int(value.get("id") or 0)
+            for value in (match.get("platforms") or []) if isinstance(value, dict)
+        }
+        platforms = [
+            key for key, identifiers in _PLATFORM_IDS.items()
+            if platform_ids.intersection(identifiers)
+        ]
+        if platforms:
+            enrichment["platforms"] = platforms
+        genres = [
+            _GENRE_KEYS.get(str(value.get("name") or "").strip().casefold())
+            for value in (match.get("genres") or []) if isinstance(value, dict)
+        ]
+        genres = list(dict.fromkeys(value for value in genres if value))
+        if genres:
+            enrichment["genres"] = genres
+        try:
+            enrichment["year"] = datetime.fromtimestamp(
+                int(match.get("first_release_date")), tz=timezone.utc,
+            ).year
+        except (TypeError, ValueError, OSError):
+            pass
         result[item_index].update(enrichment)
-        util.ttl_set("igdb_game", _normalized_title(titles[query_index]), enrichment)
+        util.ttl_set("igdb_game", cache_key, enrichment)
     return result
 
 

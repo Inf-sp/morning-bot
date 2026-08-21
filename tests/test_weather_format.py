@@ -106,7 +106,7 @@ def test_weather_warning_job_skips_disabled_users(monkeypatch):
     assert sent == []
 
 
-def test_weather_warning_notification_links_to_myday_and_home(monkeypatch):
+def test_weather_warning_notification_links_only_to_home(monkeypatch):
     sent = []
 
     class Bot:
@@ -130,7 +130,6 @@ def test_weather_warning_notification_links_to_myday_and_home(monkeypatch):
     keyboard = sent[0]["reply_markup"].inline_keyboard
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
         [("🔕 Отключить уведомления", "set_notifpush_weather_warn")],
-        [("☀️ Мой день", "weather_myday")],
         [("#️⃣ Главная", "m_menu")],
     ]
 
