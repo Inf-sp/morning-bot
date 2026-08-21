@@ -6,6 +6,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import weather
+import weather_provider
 import weather_warn
 import settings
 import bot
@@ -45,6 +46,18 @@ def test_full_forecast_uses_current_periods_sun_and_practical_advice():
     assert "• Ветер 6 м/с · западный" in message.text
     assert "☀️ Днём · 12:00–18:00 до +20°C" in message.text
     assert "💡 Полезно: Alkmaar сегодня мокрый." in message.text
+
+
+def test_weather_adapter_keeps_sunset_from_current_conditions():
+    payload = weather_provider._adapt_openweather(
+        {"data": [{"dt": 1787284800, "sunrise": 1787276700, "sunset": 1787338920}]},
+        {"data": []},
+        {"data": [{"dt": 1787284800, "temp": {}, "weather": []}]},
+    )
+
+    assert payload["daily"]["sunrise"][0]
+    assert payload["daily"]["sunset"][0]
+    assert payload["daily"]["sunset"][0].endswith("21:02")
 
 
 def test_city_change_confirmation_includes_country_flag():

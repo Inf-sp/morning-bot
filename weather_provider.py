@@ -59,6 +59,20 @@ def _owm_iso(ts):
     return datetime.fromtimestamp(int(ts), TZ).strftime("%Y-%m-%dT%H:%M")
 
 
+def _weather_time_iso(value):
+    """Нормализует время солнца из epoch или ISO-строки разных ответов API."""
+    if value in (None, "", 0, "0"):
+        return ""
+    try:
+        return _owm_iso(value)
+    except (TypeError, ValueError, OverflowError):
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            return parsed.astimezone(TZ).strftime("%Y-%m-%dT%H:%M")
+        except (TypeError, ValueError):
+            return ""
+
+
 def _owm_precip_mm(item):
     rain = item.get("rain")
     snow = item.get("snow")
@@ -129,7 +143,7 @@ def _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts=No
         "sunrise": [],
         "sunset": [],
     }
-    for d in daily:
+    for index, d in enumerate(daily):
         temp = d.get("temp") or {}
         weather_id = ((d.get("weather") or [{}])[0] or {}).get("id")
         daily_out["time"].append(datetime.fromtimestamp(int(d.get("dt", 0)), TZ).strftime("%Y-%m-%d"))
@@ -142,8 +156,13 @@ def _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts=No
         daily_out["windgusts_10m_max"].append(d.get("wind_gust") or d.get("wind_speed") or 0)
         daily_out["winddirection_10m_dominant"].append(d.get("wind_deg"))
         daily_out["uv_index_max"].append(d.get("uvi"))
-        daily_out["sunrise"].append(_owm_iso(d.get("sunrise", 0)))
-        daily_out["sunset"].append(_owm_iso(d.get("sunset", 0)))
+        sunrise = d.get("sunrise") or d.get("sunriseTime")
+        sunset = d.get("sunset") or d.get("sunsetTime")
+        if index == 0:
+            sunrise = sunrise or current.get("sunrise") or current.get("sunriseTime")
+            sunset = sunset or current.get("sunset") or current.get("sunsetTime")
+        daily_out["sunrise"].append(_weather_time_iso(sunrise))
+        daily_out["sunset"].append(_weather_time_iso(sunset))
 
     current_weather_id = ((current.get("weather") or [{}])[0] or {}).get("id")
     alert_ids = [a.get("id") for a in (current.get("alerts") or []) if isinstance(a, dict) and a.get("id")]
