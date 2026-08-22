@@ -538,6 +538,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
         next_page = page + 1 if page < total_pages - 1 else 0
         rows.append([
             InlineKeyboardButton("◀️", callback_data=f"a_dictlang_{lang}_{previous_page}"),
+            InlineKeyboardButton(f"{page + 1} / {total_pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"a_dictlang_{lang}_{next_page}"),
         ])
     rows.append([InlineKeyboardButton("✨ Подобрать новые слова", callback_data=f"a_dictseed_start_{lang}")])

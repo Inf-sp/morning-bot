@@ -268,13 +268,13 @@ async def send_home(bot, cid, q=None):
         logs["count"], stale,
     ))
     if stale:
-        dot, status_text = ui.UNKNOWN, "Состояние неизвестно"
+        dot, status_text = ui.UNKNOWN, "Состояние API неизвестно"
     elif critical:
-        dot, status_text = ui.BAD, "Требуется внимание"
+        dot, status_text = ui.BAD, "API требуют внимания"
     elif limited:
-        dot, status_text = ui.WARN, "Работает с ограничениями"
+        dot, status_text = ui.WARN, "API работают с ограничениями"
     else:
-        dot, status_text = ui.OK, "Всё работает"
+        dot, status_text = ui.OK, "API работают"
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🛠 Система", callback_data="adm_api_ai")],

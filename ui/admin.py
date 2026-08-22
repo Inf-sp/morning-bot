@@ -91,12 +91,15 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
         b.line(f"Обновлено в {updated_at}")
         return b.build_stripped()
     if stale:
-        b.line(f"{status_dot} Состояние неизвестно · данные от {updated_at}")
+        stale_text = status_text or "Состояние API неизвестно"
+        b.line(f"{status_dot} {stale_text} · данные от {updated_at}")
     else:
         b.line(f"{status_dot} {status_text} · обновлено в {updated_at}")
     rows = [str(row or "").strip() for row in error_rows or [] if str(row or "").strip()]
     if rows:
         b.spacer()
+        b.bold("Ошибки:")
+        b.newline()
         for row in rows:
             b.line(row)
     return b.build_stripped()

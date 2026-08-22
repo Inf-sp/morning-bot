@@ -164,6 +164,25 @@ def test_dictionary_groups_entries_by_part_of_speech(monkeypatch):
     assert category_rows == list(learning_dictionary._DICT_CATEGORY_ORDER)
 
 
+def test_dictionary_pagination_shows_current_page(monkeypatch):
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    entries = [
+        {"id": str(index), "term": f"Word {index}", "pos": "noun"}
+        for index in range(21)
+    ]
+    monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: entries)
+    bot = Bot()
+
+    asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl", page=1))
+
+    assert ["◀️", "2 / 3", "▶️"] in _labels(bot.message["reply_markup"])
+
+
 def test_learning_preferences_return_to_active_dictionary():
     keyboard = learning_settings.learning_settings_kb("нидерландский", "simple", back="a_dictlang_active")
 

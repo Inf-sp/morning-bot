@@ -327,14 +327,20 @@ def test_admin_home_ui_uses_compact_exact_lines_without_ok():
 
 def test_admin_home_ui_shows_current_errors_under_status():
     message = admin_ui.home(
-        status_dot="🔴", status_text="Требуется внимание",
+        status_dot="🔴", status_text="API требуют внимания",
         updated_at="15:15", error_rows=["21 августа, 15:14 · Обучение · не открылось задание"],
     )
 
     assert message.text == (
         "🛠️ Админ\n\n"
-        "🔴 Требуется внимание · обновлено в 15:15\n\n"
+        "🔴 API требуют внимания · обновлено в 15:15\n\n"
+        "Ошибки:\n"
         "21 августа, 15:14 · Обучение · не открылось задание"
+    )
+    assert any(
+        entity.type == "bold"
+        and entity.length == len("Ошибки:")
+        for entity in message.entities
     )
 
 
