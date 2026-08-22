@@ -82,6 +82,12 @@ def test_fridge_home_has_available_counts_and_delete_before_navigation(monkeypat
 
     message = bot.messages[-1]
     assert message["text"].startswith("🎚️ Мой холодильник · 2 продукта в наличии")
+    assert "Мясо и рыба: мясо, птица, колбасы, рыба и морепродукты" in message["text"]
+    assert "Овощи и фрукты: овощи, фрукты, ягоды, зелень и грибы" in message["text"]
+    assert "Молочное и напитки: молочные продукты, яйца и напитки" in message["text"]
+    assert "Бакалея: крупы, макароны, хлеб, консервы, снеки и сладости" in message["text"]
+    assert "Специи и соусы: приправы, соусы, намазки, мёд и варенье" in message["text"]
+    assert "Заморозка: замороженные продукты и готовые полуфабрикаты" in message["text"]
     assert _labels(message["reply_markup"]) == [
         ["Мясо и рыба · 1"],
         ["Овощи и фрукты · 1"],

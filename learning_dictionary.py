@@ -518,16 +518,21 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     chunk = entries[start:start + _DICT_LIST_PAGE_SIZE]
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     rows = []
-    word_buttons = []
-    for item in chunk:
-        word_id = str(item.get("id") or "")
-        if not word_id:
+    for category in _DICT_CATEGORY_ORDER:
+        category_items = [item for item in chunk if _dictionary_category(item) == category]
+        if not category_items:
             continue
-        word_buttons.append(InlineKeyboardButton(
-            display_term(_entry_term(item), item.get("article") or "")[:24],
-            callback_data=f"a_dictviewid_{page}_{word_id}",
-        ))
-    rows.extend(word_buttons[i:i + 2] for i in range(0, len(word_buttons), 2))
+        rows.append([InlineKeyboardButton(category, callback_data="noop")])
+        word_buttons = []
+        for item in category_items:
+            word_id = str(item.get("id") or "")
+            if not word_id:
+                continue
+            word_buttons.append(InlineKeyboardButton(
+                display_term(_entry_term(item), item.get("article") or "")[:24],
+                callback_data=f"a_dictviewid_{page}_{word_id}",
+            ))
+        rows.extend(word_buttons[i:i + 2] for i in range(0, len(word_buttons), 2))
     if total_pages > 1:
         previous_page = page - 1 if page > 0 else total_pages - 1
         next_page = page + 1 if page < total_pages - 1 else 0
@@ -663,13 +668,41 @@ def _entry_by_id(cid, word_id):
 
 
 _DICT_LIST_PAGE_SIZE = 10
+_DICT_CATEGORY_ORDER = (
+    "Прилагательные", "Глаголы", "Существительные", "Местоимения",
+    "Наречия", "Предлоги", "Предложения",
+)
+
+
+def _dictionary_category(entry):
+    """Локально раскладывает записи по семи пользовательским категориям."""
+    pos = str((entry or {}).get("pos") or "").strip().casefold()
+    aliases = {
+        "adjective": "Прилагательные", "adj": "Прилагательные",
+        "прилагательное": "Прилагательные", "bijvoeglijk naamwoord": "Прилагательные",
+        "verb": "Глаголы", "глагол": "Глаголы", "werkwoord": "Глаголы",
+        "noun": "Существительные", "существительное": "Существительные",
+        "zelfstandig naamwoord": "Существительные",
+        "pronoun": "Местоимения", "местоимение": "Местоимения", "voornaamwoord": "Местоимения",
+        "adverb": "Наречия", "наречие": "Наречия", "bijwoord": "Наречия",
+        "preposition": "Предлоги", "предлог": "Предлоги", "voorzetsel": "Предлоги",
+        "sentence": "Предложения", "предложение": "Предложения",
+        "phrase": "Предложения", "фраза": "Предложения", "expression": "Предложения",
+        "выражение": "Предложения", "construction": "Предложения", "конструкция": "Предложения",
+    }
+    if pos in aliases:
+        return aliases[pos]
+    term = re.sub(r"^(de|het|een|the|a|an)\s+", "", _entry_term(entry).strip(), flags=re.I)
+    return "Предложения" if len(term.split()) > 1 else "Существительные"
 
 
 def _dict_lang_entries(cid, lang):
-    """Слова языка, отсортированные по алфавиту — стабильный порядок для
-    постраничного списка «Мои слова и фразы»."""
+    """Записи языка, отсортированные по категории и алфавиту."""
     entries = [w for w in _ensure_dict(cid) if _dict_lang(w) == lang]
-    return sorted(entries, key=lambda w: _cap(_entry_term(w)).casefold())
+    category_index = {label: index for index, label in enumerate(_DICT_CATEGORY_ORDER)}
+    return sorted(entries, key=lambda w: (
+        category_index[_dictionary_category(w)], _cap(_entry_term(w)).casefold(),
+    ))
 
 
 async def send_dict_entry_view(bot, cid, lang, page, term_key, q=None):

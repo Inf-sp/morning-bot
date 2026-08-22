@@ -219,7 +219,19 @@ def fridge_home(available):
     b.bold("🎚️ " + title)
     b.text_line(f" · {available} {_products_label(available)} в наличии")
     b.spacer()
-    b.line("Выбери категорию:")
+    categories = (
+        ("Мясо и рыба", "мясо, птица, колбасы, рыба и морепродукты"),
+        ("Овощи и фрукты", "овощи, фрукты, ягоды, зелень и грибы"),
+        ("Молочное и напитки", "молочные продукты, яйца и напитки"),
+        ("Бакалея", "крупы, макароны, хлеб, консервы, снеки и сладости"),
+        ("Специи и соусы", "приправы, соусы, намазки, мёд и варенье"),
+        ("Заморозка", "замороженные продукты и готовые полуфабрикаты"),
+    )
+    for index, (category, description) in enumerate(categories):
+        b.bold(f"{category}:")
+        b.text_line(f" {description}")
+        if index < len(categories) - 1:
+            b.newline()
     return b.build_stripped()
 
 

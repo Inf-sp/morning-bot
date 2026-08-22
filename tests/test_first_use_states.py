@@ -138,6 +138,32 @@ def test_dictionary_contains_only_dictionary_actions(monkeypatch):
     ]
 
 
+def test_dictionary_groups_entries_by_part_of_speech(monkeypatch):
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    entries = [
+        {"id": "1", "term": "Mooi", "pos": "adjective"},
+        {"id": "2", "term": "Lopen", "pos": "verb"},
+        {"id": "3", "term": "Huis", "pos": "noun"},
+        {"id": "4", "term": "Ik", "pos": "pronoun"},
+        {"id": "5", "term": "Snel", "pos": "adverb"},
+        {"id": "6", "term": "Met", "pos": "preposition"},
+        {"id": "7", "term": "Hoe gaat het?", "pos": "sentence"},
+    ]
+    monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: entries)
+    bot = Bot()
+
+    asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl"))
+
+    rows = _labels(bot.message["reply_markup"])
+    category_rows = [row[0] for row in rows if row and row[0] in learning_dictionary._DICT_CATEGORY_ORDER]
+    assert category_rows == list(learning_dictionary._DICT_CATEGORY_ORDER)
+
+
 def test_learning_preferences_return_to_active_dictionary():
     keyboard = learning_settings.learning_settings_kb("нидерландский", "simple", back="a_dictlang_active")
 
