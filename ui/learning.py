@@ -303,7 +303,8 @@ def morning_words(flag, words=None, empty_hint=False, *, entries=None, tip="", r
         b.spacer()
         for index, entry in enumerate(prepared[:3], 1):
             b.bold(f"{index}. {entry.get('term', '')}")
-            b.text_line(f" → {entry.get('translation', '')}")
+            b.text_line(" → ")
+            b.add(str(entry.get("translation") or ""), MessageEntity.SPOILER)
             b.newline()
             example = str(entry.get("example") or "").strip()
             example_translation = str(entry.get("example_translation") or "").strip()

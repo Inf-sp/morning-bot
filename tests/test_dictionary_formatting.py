@@ -251,3 +251,5 @@ def test_morning_words_show_examples_rule_tip_and_task():
     assert "Правило: наречие" in msg.text
     assert "Как запомнить: Свяжи слово со знакомой ситуацией." in msg.text
     assert "🎯 Задание: составь одно предложение" in msg.text
+    spoilers = [entity for entity in msg.entities if entity.type == "spoiler"]
+    assert spoilers

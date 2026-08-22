@@ -2,7 +2,6 @@ import random
 from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
-import dictionary_morning
 import live_language
 import srs
 import store
@@ -139,7 +138,6 @@ def build_learning_home(cid):
     lang_code = _active_language_code(cid)
     progress = build_progress_screen(cid)
     phrase = live_language.daily_phrase(lang_code)
-    practice = dictionary_morning.build_daily_practice(cid, lang_code)
     if not entry:
         return {
             "has_material": False,
@@ -168,7 +166,6 @@ def build_learning_home(cid):
         "focus": _daily_focus_text(entry, kind),
         "live_language": phrase,
         "progress": progress,
-        "daily_practice": practice,
     }
 
 

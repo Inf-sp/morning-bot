@@ -404,7 +404,7 @@ def _game_keyboard(*, no_match=False, genre=None):
     rows = [[InlineKeyboardButton("✨ Другая игра", callback_data=next_callback)]]
     if genre != "board":
         rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
-    rows.append([InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")])
+        rows.append([InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")])
     if no_match:
         rows.append([InlineKeyboardButton("📝 Платформы", callback_data="set_pref_games")])
     rows.append([

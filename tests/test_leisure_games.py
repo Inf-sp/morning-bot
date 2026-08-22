@@ -295,7 +295,6 @@ def test_board_recommendation_stays_in_board_games_without_genre_button(monkeypa
     assert "🎲 Настолки" in status.call[0]
     assert _labels(status.call[1]["reply_markup"]) == [
         ["✨ Другая игра"],
-        ["🎚️ Мой набор игр"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert status.call[1]["reply_markup"].inline_keyboard[0][0].callback_data == "vg_next_board"

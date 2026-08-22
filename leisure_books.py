@@ -631,12 +631,13 @@ def _book_season(today=None):
     return date(today.year, 9, 1), date(today.year, 11, 30), "осени"
 
 
-def _weekly_book_cache_get():
+def _weekly_book_cache_get(*, allow_stale=False):
     entry = store._load(config.BOOK_WEEKLY_CACHE_KEY)
     season_start, _season_end, _season = _book_season()
-    if (not isinstance(entry, dict) or entry.get("week") != _book_week_key()
-            or entry.get("season") != season_start.isoformat()
+    if (not isinstance(entry, dict) or entry.get("season") != season_start.isoformat()
             or entry.get("version") != _WEEKLY_SHOWCASE_VERSION):
+        return None
+    if not allow_stale and entry.get("week") != _book_week_key():
         return None
     items = entry.get("items")
     # Пустая витрина не должна блокировать новый поиск на весь день: после
@@ -665,8 +666,11 @@ def _released_this_week(value: str) -> bool:
 
 
 def _release_date(value: str) -> date | None:
+    raw = str(value or "").strip()[:10]
+    if re.fullmatch(r"\d{4}-\d{2}", raw):
+        raw += "-01"
     try:
-        return date.fromisoformat(str(value or "")[:10])
+        return date.fromisoformat(raw)
     except ValueError:
         return None
 
@@ -733,7 +737,8 @@ async def get_weekly_new_books(*, refresh=False):
     cached = None if refresh else _weekly_book_cache_get()
     if cached is not None:
         return cached
-    candidates = await asyncio.to_thread(google_books.search_new_releases, 20)
+    stale = _weekly_book_cache_get(allow_stale=True)
+    candidates = await asyncio.to_thread(google_books.search_new_releases, 40)
     ranked = []
     season_start, season_end, _season = _book_season()
     for item in candidates:
@@ -746,6 +751,8 @@ async def get_weekly_new_books(*, refresh=False):
     items = [dict(item) for _score, item in ranked[:3]]
     if not items:
         items = _fallback_book_showcase(candidates)
+    if not items and stale:
+        return stale
     items = _books_with_premiere_summaries(items)
     _weekly_book_cache_set(items)
     return items

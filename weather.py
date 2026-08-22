@@ -430,34 +430,12 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         except Exception:
             hours = temps = probs = precs = winds = gusts = clouds = []
         day_str = d["time"][0]
-        current_data = data.get("current") or {}
         current_prob = next((
             probs[index] for index, stamp in enumerate(hours)
             if stamp.startswith(dt.strftime("%Y-%m-%dT%H")) and index < len(probs)
         ), d["precipitation_probability_max"][0] or 0)
-        current_temp = current_data.get("temperature_2m")
-        current_wind = current_data.get("windspeed_10m") or 0
-        current_gust = current_data.get("windgusts_10m") or current_wind
-        current_code = current_data.get("weathercode", d["weathercode"][0])
-        current_icon = weather_icon(current_code, current_temp or 0, current_prob, current_wind)
-        current_lines = [
-            f"Ветер {current_wind:.0f} м/с"
-            + (f" · {_wind_direction(current_data.get('winddirection_10m'))}" if _wind_direction(current_data.get("winddirection_10m")) else "")
-            + (f" · порывы до {current_gust:.0f} м/с" if current_gust else ""),
-            f"Дождь {float(current_prob or 0):.0f}%",
-        ]
-        visibility = current_data.get("visibility")
-        if visibility is not None:
-            current_lines.append(f"Видимость {float(visibility) / 1000:.0f} км")
-        uv = current_data.get("uv_index")
-        if uv is not None:
-            current_lines.append(f"UV {float(uv):g}")
-        current = {
-            "title": f"{current_icon} Сейчас до {float(current_temp or 0):+.0f}°C",
-            "lines": current_lines,
-        }
         periods = []
-        parts = [("Днём", 12, 18), ("Вечером", 18, 23)]
+        parts = [("Утро", 8, 12), ("Днём", 12, 18), ("Вечером", 18, 23)]
         for label, h1, h2 in parts:
             t_vals, p_vals, w_vals, g_vals, mm_vals, cloud_vals = [], [], [], [], [], []
             for i, ts in enumerate(hours):
@@ -490,7 +468,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         )
         sunrise = _clock((d.get("sunrise") or [""])[0])
         sunset = _clock((d.get("sunset") or [""])[0])
-        sun_line = "Солнце" + (f" · Восход {sunrise}" if sunrise else "") + (f" · Закат {sunset}" if sunset else "")
+        sun_line = "☀️ Солнце" + (f" · Восход {sunrise}" if sunrise else "") + (f" · Закат {sunset}" if sunset else "")
         today_probs = [
             float(probs[index] or 0) for index, stamp in enumerate(hours)
             if stamp.startswith(day_str) and index < len(probs)
@@ -502,8 +480,12 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             advice = f"В {s['city']} сегодня ветрено. Для велосипеда и долгой прогулки лучше выбрать защищённый маршрут."
         else:
             advice = f"В {s['city']} сегодня без сильных погодных помех — можно планировать дела на улице."
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
-        msg = weather_ui.full_forecast(header, current, periods, sun_line, advice)
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🌦️ Погода на неделю", callback_data="a_w_week")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"),
+             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        ])
+        msg = weather_ui.full_forecast(header, None, periods, sun_line, advice)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
 

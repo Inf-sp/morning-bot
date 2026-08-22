@@ -1447,6 +1447,21 @@ def test_literary_vibe_uses_only_books_from_current_season(monkeypatch):
     assert [item["title"] for item in items] == ["Свежая книга"]
 
 
+def test_literary_vibe_accepts_google_books_month_precision(monkeypatch):
+    today = datetime.now(config.TZ).date()
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_books.store, "_save", lambda *_args: None)
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [{
+        "title": "Сезонная новинка",
+        "published_date": f"{today.year}-{today.month:02d}",
+        "categories": ["Fiction"],
+    }])
+
+    items = asyncio.run(leisure_books.get_weekly_new_books())
+
+    assert [item["title"] for item in items] == ["Сезонная новинка"]
+
+
 def test_literary_vibe_puts_genre_in_parentheses():
     message = leisure_books.leisure_ui.weekly_books_screen("Алкмар", {}, [{
         "title": "Свежая книга",

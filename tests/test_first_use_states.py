@@ -85,8 +85,16 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
             "text": "Laat maar", "translation": "Ладно, забудь",
             "meaning": "Когда решаешь не продолжать тему.",
         },
+        "daily_practice": {
+            "entries": [{"term": "Inmiddels", "translation": "Уже"}],
+            "tip": "Не должно появиться на главном экране.",
+        },
     })
 
+    assert "Живой язык: Laat maar" in message.text
+    assert "Inmiddels" not in message.text
+    assert "Как запомнить" not in message.text
+    assert "🎯 Задание" not in message.text
     assert _labels(message.reply_markup) == [
         ["🎯 Практика изучения языка"],
         ["🕵️ Угадай персонажа"],

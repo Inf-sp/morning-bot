@@ -95,15 +95,10 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
         recipe_now = current_now.replace(
             hour=_FOOD_MEAL_HOURS[meal], minute=0, second=0, microsecond=0,
         )
-    selected_meal = meal or recipe_generation._home_meal_for_hour(current_now.hour)
-    late_dinner = selected_meal == "dinner" and (
-        current_now.hour >= 21 or current_now.hour < 6
-    )
-
     if not refresh:
         cached = recipe_generation.get_cached_cooking_home_idea(cid, now=recipe_now)
         if cached is not None:
-            msg = menu_ui.food_menu(cached, late_dinner=late_dinner)
+            msg = menu_ui.food_menu(cached)
             if status is not None:
                 await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
             elif q is not None:
@@ -133,7 +128,7 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
     try:
         idea = await asyncio.to_thread(
             recipe_generation.get_cooking_home_idea, cid, recipe_now, refresh)
-        msg = menu_ui.food_menu(idea, late_dinner=late_dinner)
+        msg = menu_ui.food_menu(idea)
         await status.replace(
             msg.text,
             entities=msg.entities,

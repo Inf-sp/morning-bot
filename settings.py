@@ -191,8 +191,8 @@ async def send_home(bot, cid, q=None):
         [InlineKeyboardButton("📍 Город", callback_data="set_city")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton("📝 Предпочтения", callback_data="set_preferences")],
-        [InlineKeyboardButton("🔄 Обновить", callback_data="set_refresh_data")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
+        [InlineKeyboardButton("🔄 Обновить", callback_data="set_refresh_data")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     city = store.get_settings(cid).get("city") or ""
