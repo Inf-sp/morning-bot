@@ -159,8 +159,11 @@ def test_game_home_shows_three_linked_releases_with_genres_and_platforms():
     }, year=2026)
 
     assert message.text.startswith("👾 Игры на сегодня · Новинки 2026\n\nНовинки лета:")
+    assert "Игра 0 (RPG) · ПК, PS5" in message.text
+    assert "💻" not in message.text
+    assert "🎮" not in message.text
     assert message.text.count("• Игра ") == 3
-    assert "• Игра 0 · RPG · 💻 ПК · 🎮 PS5" in message.text
+    assert "• Игра 0 (RPG) · ПК, PS5" in message.text
     assert "Игра 3" not in message.text
     assert {
         entity.url for entity in message.entities if entity.type == "text_link"

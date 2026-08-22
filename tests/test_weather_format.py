@@ -36,7 +36,7 @@ def test_full_forecast_uses_morning_periods_sun_and_practical_advice():
         None,
         [
             {"title": "☀️ Утро · 08:00–12:00 до +18°C", "lines": ["Ветер 4 м/с"]},
-            {"title": "☀️ Днём · 12:00–18:00 до +20°C", "lines": ["Осадки до 2.4 мм"]},
+            {"title": "☀️ Днём · 12:00–18:00 до +20°C", "lines": ["Вероятность дождя 70%"]},
         ],
         "☀️ Солнце · Восход 06:25 · Закат 21:02",
         "Alkmaar сегодня мокрый. Лучше взять дождевик и зонт.",
@@ -49,6 +49,7 @@ def test_full_forecast_uses_morning_periods_sun_and_practical_advice():
     assert "Сейчас" not in message.text
     assert "• Ветер 4 м/с" in message.text
     assert "☀️ Днём · 12:00–18:00 до +20°C" in message.text
+    assert "Осадки до" not in message.text
     assert "☀️ Солнце · Восход 06:25 · Закат 21:02" in message.text
     assert "💡 Полезно: Alkmaar сегодня мокрый." in message.text
 

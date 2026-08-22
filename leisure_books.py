@@ -2,6 +2,7 @@
 
 import asyncio
 import html
+import json
 import logging
 import random
 import re
@@ -14,9 +15,12 @@ from urllib.parse import quote_plus
 import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 
+import ai
 import config
 import google_books
 import recommendation_stoplist
+import research
+import secure
 import inclusive_recommendations
 import settings
 import store
@@ -43,7 +47,7 @@ _BOOK_GENRES = [
 ]
 _PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("3.5", "3.5"), ("4.0", "4.0"), ("4.5", "4.5")]
-_WEEKLY_SHOWCASE_VERSION = 5
+_WEEKLY_SHOWCASE_VERSION = 6
 _BOOK_PREMIERES_CACHE_VERSION = 2
 _FAVORITE_BOOK_PAGE_SIZE = 8
 _FAVORITE_BOOK_VIEW_TTL = 24 * 3600
@@ -687,17 +691,57 @@ def _released_recently(value: str, *, days=180) -> bool:
     return bool(released and today - timedelta(days=days) <= released <= today)
 
 
-def _weekly_book_score(item):
+_REEDITION_MARKERS = (
+    "new edition", "revised edition", "anniversary edition", "reissue",
+    "movie tie-in", "paperback edition", "ebook edition", "новое издание",
+    "переиздание", "юбилейное издание", "мягкая обложка",
+)
+
+
+def _normalized_isbn(value):
+    return re.sub(r"[^0-9X]", "", str(value or "").upper())
+
+
+def _normal_book_cover(value):
+    url = str(value or "").strip()
+    lowered = url.casefold()
+    return url.startswith(("https://", "http://")) and not any(
+        marker in lowered for marker in ("placeholder", "no-cover", "nocover")
+    )
+
+
+def _is_reedition(item):
+    text = " ".join(str(item.get(field) or "") for field in (
+        "title", "subtitle", "description",
+    )).casefold()
+    return any(marker in text for marker in _REEDITION_MARKERS)
+
+
+def _weekly_book_score(item, *, today=None):
+    """Оценивает только проверяемые новинки последних 90 дней."""
+    today = today or datetime.now(config.TZ).date()
+    released = _release_date(item.get("published_date"))
+    author = str(item.get("author") or "").strip()
+    isbn = _normalized_isbn(item.get("isbn"))
+    if (not released or not today - timedelta(days=90) <= released <= today
+            or not author or not isbn or not _normal_book_cover(item.get("cover_url"))
+            or _is_reedition(item)):
+        return None
     try:
         rating = float(item.get("rating") or 0)
         ratings_count = int(item.get("ratings_count") or 0)
     except (TypeError, ValueError):
-        return None
-    # Релиз может быть новым, но его пока никто не знает. В витрине нужны
-    # только книги с уже заметным читательским откликом.
-    if rating < 3.8 or ratings_count < 10:
-        return None
-    return rating * 100 + min(ratings_count, 5000) ** 0.5
+        rating, ratings_count = 0, 0
+    score = 30 + 10  # новинка и нормальная обложка
+    if ratings_count >= 500:
+        score += 15  # автор уже заметен по читательскому следу книги
+    if rating >= 4.0:
+        score += 15
+    if ratings_count >= 100:
+        score += 10
+    if item.get("publisher_date_confirmed"):
+        score += 20
+    return score
 
 
 def _monthly_book_score(item):
@@ -739,23 +783,100 @@ async def get_weekly_new_books(*, refresh=False):
         return cached
     stale = _weekly_book_cache_get(allow_stale=True)
     candidates = await asyncio.to_thread(google_books.search_new_releases, 40)
-    ranked = []
-    season_start, season_end, _season = _book_season()
+    prepared = []
     for item in candidates:
-        score = _weekly_book_score(item)
-        released = _release_date(item.get("published_date"))
-        if score is None or not released or not season_start <= released <= season_end:
-            continue
-        ranked.append((score, item))
-    ranked.sort(key=lambda row: row[0], reverse=True)
-    items = [dict(item) for _score, item in ranked[:3]]
-    if not items:
-        items = _fallback_book_showcase(candidates)
+        if isinstance(item, dict):
+            prepared.append({
+                **item,
+                "publisher_date_confirmed": bool(
+                    item.get("publisher") and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(item.get("published_date") or ""))
+                ),
+            })
+    if len(_rank_weekly_books(prepared)) < 3:
+        prepared.extend(await _publisher_book_candidates())
+    items = _rank_weekly_books(prepared)[:3]
     if not items and stale:
         return stale
     items = _books_with_premiere_summaries(items)
-    _weekly_book_cache_set(items)
+    if items:
+        _weekly_book_cache_set(items)
     return items
+
+
+def _rank_weekly_books(candidates):
+    by_isbn = {}
+    for item in candidates or []:
+        if not isinstance(item, dict):
+            continue
+        isbn = _normalized_isbn(item.get("isbn"))
+        score = _weekly_book_score(item)
+        if score is None:
+            continue
+        row = (score, _release_date(item.get("published_date")), dict(item))
+        if isbn not in by_isbn or row[:2] > by_isbn[isbn][:2]:
+            by_isbn[isbn] = row
+    ranked = list(by_isbn.values())
+    ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    return [item for _score, _released, item in ranked]
+
+
+async def _publisher_book_candidates():
+    """Добирает издательские анонсы через Tavily и сверяет издания в Google Books."""
+    today = datetime.now(config.TZ).date()
+    start = today - timedelta(days=90)
+    domains = (
+        "penguinrandomhouse.com", "harpercollins.com", "simonandschuster.com",
+        "macmillan.com", "hachettebookgroup.com",
+    )
+    query = (
+        f"new books published {start.isoformat()} to {today.isoformat()} "
+        "official publisher release date author ISBN"
+    )
+    results = await asyncio.to_thread(
+        research.tavily_search, query, 10, domains, scenario="book_releases",
+    )
+    if not results:
+        return []
+    source = json.dumps(results, ensure_ascii=False)[:12000]
+    prompt = (
+        "Извлеки из материалов официальных издательств книги, впервые опубликованные "
+        f"с {start.isoformat()} по {today.isoformat()}. Не включай переиздания, paperback/ebook "
+        "старых книг и не додумывай данные. Верни JSON: "
+        '{"books":[{"title":"","author":"","published_date":"YYYY-MM-DD",'
+        '"publisher":"","isbn":"","source_url":""}]}.\n'
+        + secure.wrap_untrusted(source, "результаты поиска по сайтам издательств")
+    )
+    try:
+        payload = await asyncio.to_thread(
+            ai.llm_json, prompt, 1200, tier="leisure", module="leisure_books",
+        )
+    except Exception:
+        return []
+    verified = []
+    for extracted in (payload or {}).get("books") or []:
+        if not isinstance(extracted, dict):
+            continue
+        title = str(extracted.get("title") or "").strip()
+        author = str(extracted.get("author") or "").strip()
+        if not title or not author:
+            continue
+        try:
+            volume = await asyncio.to_thread(google_books.find_volume, title, author=author)
+        except Exception:
+            continue
+        if not volume:
+            continue
+        item = {
+            **volume,
+            "title": str(volume.get("title") or title).strip(),
+            "author": str(volume.get("author") or author).strip(),
+            "published_date": str(extracted.get("published_date") or volume.get("published_date") or ""),
+            "publisher": str(extracted.get("publisher") or volume.get("publisher") or ""),
+            "publisher_date_confirmed": True,
+            "publisher_source_url": str(extracted.get("source_url") or ""),
+        }
+        verified.append(item)
+    return verified
 
 
 def _book_premieres_cache_get(today, *, allow_stale=False):

@@ -68,6 +68,7 @@ def _volume(item: dict) -> dict:
         "subtitle": str(info.get("subtitle") or "").strip(),
         "authors": authors,
         "author": ", ".join(authors),
+        "publisher": str(info.get("publisher") or "").strip(),
         "published_date": str(info.get("publishedDate") or "").strip(),
         "year": _year(info.get("publishedDate")),
         "description": str(info.get("description") or "").strip(),

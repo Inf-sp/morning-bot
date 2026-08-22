@@ -262,13 +262,12 @@ def game_home_screen(city, items, daily, *, year=None, season="лета"):
                 b.link(title, url)
             else:
                 b.bold(title)
-            meta = " · ".join(
-                str(value).strip()
-                for value in (item.get("genre"), item.get("platform_label"))
-                if str(value or "").strip()
-            )
-            if meta:
-                b.text_line(f" · {meta}")
+            genre = str(item.get("genre") or "").strip()
+            platforms = _plain_game_platforms(item.get("platform_label"))
+            if genre:
+                b.text_line(f" ({genre})")
+            if platforms:
+                b.text_line(f" · {platforms}")
             b.newline()
     else:
         b.line("Пока не удалось подтвердить ближайшие релизы.")
@@ -287,6 +286,15 @@ def game_home_screen(city, items, daily, *, year=None, season="лета"):
         b.text_line(" ")
         b.line(fact)
     return b.build_stripped()
+
+
+def _plain_game_platforms(value):
+    labels = []
+    for raw in re.split(r"\s*[·,]\s*", str(value or "")):
+        label = re.sub(r"^[^0-9A-Za-zА-Яа-яЁё]+", "", raw).strip()
+        if label and label not in labels:
+            labels.append(label)
+    return ", ".join(labels)
 
 
 def game_genres_screen():
@@ -874,7 +882,7 @@ def weekly_books_screen(city, daily_book, items, *, season=""):
 
     premieres = _book_premiere_items(items)
     b.spacer()
-    b.bold(f"Новинки {str(season or 'сезона').strip()}:")
+    b.bold(f"Новинки {str(season or 'сезона').strip()}")
     if premieres:
         b.newline()
         for premiere in premieres:
@@ -1060,20 +1068,13 @@ def _write_book_premiere(
     url = str(_item_value(item, "url", "") or "").strip()
 
     if compact:
-        builder.text_line("• ")
         if url:
-            builder.link(f"«{title}»", url)
+            builder.link(title, url)
         else:
-            builder.text_line(f"«{title}»")
-        if genres:
-            builder.text_line(f" ({genres})")
+            builder.text_line(title)
         if author:
-            builder.text_line(f" · {author}")
-        if summary:
-            builder.text_line(" · ")
-            builder.line(_book_premiere_summary(summary, limit=160))
-        else:
-            builder.newline()
+            builder.text_line(f" — {author}")
+        builder.newline()
         return
 
     if url:

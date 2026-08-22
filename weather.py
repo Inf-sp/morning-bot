@@ -455,7 +455,6 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
                 f"Ветер {_speed_range(w_vals)} м/с"
                 + (f" · порывы до {max(g_vals):.0f} м/с" if g_vals else ""),
                 f"Вероятность дождя {rn:.0f}%",
-                f"Осадки до {mm:.1f} мм",
             ]
             if cloud_vals:
                 lines.append(f"Облачность {max(cloud_vals):.0f}%")

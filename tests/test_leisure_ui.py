@@ -948,14 +948,10 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "📚 Литературный вайб · Алкмар" in books.text
     assert "Цитата со страницы:" not in books.text
     assert "Литературный ребус: 🧙‍♀️ ⚡ 🚂 → Гарри Поттер" in books.text
-    assert "«Onyx Storm» (Фэнтези) · Ребекка Яррос" in books.text
+    assert "Onyx Storm — Ребекка Яррос" in books.text
     assert "Автор недели: Кнут Гамсун · 4 августа 1859 — норвежский писатель." in books.text
     assert "Книга под настроение:" not in books.text
-    assert (
-        "Новинки сезона:\n• «Onyx Storm» (Фэнтези) · Ребекка Яррос · "
-        "Вайолет ищет союзников, пока война всё ближе к её дому."
-    ) in books.text
-    assert books.text.index("Новинки сезона:") < books.text.index("Автор недели:") < books.text.index("Литературный ребус:") < books.text.index("💡 Интересно:")
+    assert books.text.index("Новинки сезона") < books.text.index("Автор недели:") < books.text.index("Литературный ребус:") < books.text.index("💡 Интересно:")
     assert any(entity.type == MessageEntity.SPOILER for entity in books.entities)
     assert "🎧 Музыка этой недели · Алкмар" in music.text
     assert "Вайб дня" not in music.text
@@ -1230,7 +1226,7 @@ def test_daily_category_block_titles_are_bold():
     assert {"Ребус дня:", "Именинник дня:",
             "Что в кино:", "💡 Интересно:"}.issubset(_bold_values(movie))
     assert {"Литературный ребус:", "Автор недели:",
-            "Новинки сезона:", "💡 Интересно:"}.issubset(_bold_values(books))
+            "Новинки сезона", "💡 Интересно:"}.issubset(_bold_values(books))
     assert {"Музыкальный ребус:", "Артист недели:",
             "Концерты рядом:", "💡 Интересно:"}.issubset(_bold_values(music))
     assert "Вайб дня:" not in _bold_values(music)
@@ -1418,7 +1414,9 @@ def test_weekly_books_keep_only_current_popular_releases(monkeypatch):
     monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
     monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: stored.update(value))
     monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
-        {"title": "Заметная", "published_date": today, "rating": 4.5, "ratings_count": 140},
+        {"title": "Заметная", "author": "Автор", "isbn": "9780000000001",
+         "cover_url": "https://covers.test/1.jpg", "published_date": today,
+         "rating": 4.5, "ratings_count": 140},
         {"title": "Без отзывов", "published_date": today, "rating": 4.8, "ratings_count": 2},
         {"title": "Старая", "published_date": "2025-01-01", "rating": 4.9, "ratings_count": 900},
     ])
@@ -1436,7 +1434,8 @@ def test_literary_vibe_uses_only_books_from_current_season(monkeypatch):
     monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
     monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: stored.update(value))
     monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
-        {"title": "Свежая книга", "published_date": today.isoformat(),
+        {"title": "Свежая книга", "author": "Автор", "isbn": "9780000000004",
+         "cover_url": "https://covers.test/4.jpg", "published_date": today.isoformat(),
          "categories": ["Fiction"]},
         {"title": "Старая книга", "published_date": "2025-06-10",
          "rating": 4.9, "ratings_count": 5000},
@@ -1453,6 +1452,8 @@ def test_literary_vibe_accepts_google_books_month_precision(monkeypatch):
     monkeypatch.setattr(leisure_books.store, "_save", lambda *_args: None)
     monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [{
         "title": "Сезонная новинка",
+        "author": "Автор", "isbn": "9780000000005",
+        "cover_url": "https://covers.test/5.jpg",
         "published_date": f"{today.year}-{today.month:02d}",
         "categories": ["Fiction"],
     }])
@@ -1462,7 +1463,36 @@ def test_literary_vibe_accepts_google_books_month_precision(monkeypatch):
     assert [item["title"] for item in items] == ["Сезонная новинка"]
 
 
-def test_literary_vibe_puts_genre_in_parentheses():
+def test_literary_vibe_recovers_three_verified_books_through_publishers(monkeypatch):
+    today = datetime.now(config.TZ).date()
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_books.store, "_save", lambda *_args: None)
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [])
+    monkeypatch.setattr(leisure_books.research, "tavily_search", lambda *_args, **_kwargs: [
+        {"title": "Publisher summer books", "url": "https://publisher.test/new", "content": "Three new novels."},
+    ])
+    monkeypatch.setattr(leisure_books.ai, "llm_json", lambda *_args, **_kwargs: {
+        "books": [
+            {"title": f"Book {index}", "author": f"Author {index}",
+             "published_date": (today - timedelta(days=index * 10)).isoformat(),
+             "publisher": "Publisher", "source_url": "https://publisher.test/new"}
+            for index in range(1, 4)
+        ],
+    })
+    monkeypatch.setattr(leisure_books.google_books, "find_volume", lambda title, **_kwargs: {
+        "title": title, "author": title.replace("Book", "Author"),
+        "published_date": (today - timedelta(days=10)).isoformat(),
+        "isbn": f"97800000000{title[-1]}", "cover_url": f"https://covers.test/{title[-1]}.jpg",
+        "rating": 4.4, "ratings_count": 200, "info_link": "https://books.google.test/book",
+    })
+
+    items = asyncio.run(leisure_books.get_weekly_new_books())
+
+    assert len(items) == 3
+    assert all(item["author"] and item["isbn"] and item["cover_url"] for item in items)
+
+
+def test_literary_vibe_shows_short_title_and_author_line():
     message = leisure_books.leisure_ui.weekly_books_screen("Алкмар", {}, [{
         "title": "Свежая книга",
         "author": "Автор",
@@ -1470,7 +1500,8 @@ def test_literary_vibe_puts_genre_in_parentheses():
         "summary": "История о возвращении домой.",
     }])
 
-    assert "• «Свежая книга» (Художественная проза) · Автор · История" in message.text
+    assert "Новинки сезона\nСвежая книга — Автор" in message.text
+    assert "Художественная проза" not in message.text
 
 
 def test_weekly_books_fall_back_to_current_season_when_popularity_is_low(monkeypatch):
@@ -1481,13 +1512,13 @@ def test_weekly_books_fall_back_to_current_season_when_popularity_is_low(monkeyp
     monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: stored.update(value))
     monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
         {"title": "Премьера месяца", "published_date": f"{today.year}-{today.month:02d}-01",
-         "rating": 4.2, "ratings_count": 2},
+         "author": "Автор", "isbn": "9780000000002",
+         "cover_url": "https://covers.test/2.jpg", "rating": 4.2, "ratings_count": 2},
     ])
 
     items = asyncio.run(leisure_books.get_weekly_new_books())
 
     assert [item["title"] for item in items] == ["Премьера месяца"]
-    assert items[0]["_showcase"] == "season"
     assert stored["items"] == items
 
 
@@ -1504,7 +1535,8 @@ def test_weekly_books_rebuilds_an_empty_daily_cache(monkeypatch):
     monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: stored.update(value))
     monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
         {"title": "Новая витрина", "published_date": today.isoformat(),
-         "rating": 4.4, "ratings_count": 120},
+         "author": "Автор", "isbn": "9780000000003",
+         "cover_url": "https://covers.test/3.jpg", "rating": 4.4, "ratings_count": 120},
     ])
 
     items = asyncio.run(leisure_books.get_weekly_new_books())
@@ -1551,10 +1583,7 @@ def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
         "url": "https://books.google.com/books?id=test",
     }])
 
-    assert (
-        "Новинки сезона:\n• «Недавний бестселлер» · Автор · "
-        "Напряжённый триллер о тайне, которую нельзя оставить в прошлом."
-    ) in message.text
+    assert "Новинки сезона\nНедавний бестселлер — Автор" in message.text
     assert "Популярное чтение" not in message.text
     assert any(
         entity.type == MessageEntity.TEXT_LINK
