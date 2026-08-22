@@ -510,37 +510,15 @@ async def send_dict(bot, cid, back="m_learn", q=None):
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
 
 async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
-    """Главный экран языкового словаря: добавление и сразу список слов."""
+    """Главный экран языкового словаря: семь категорий вместо плоской сетки."""
     entries = _dict_lang_entries(cid, lang)
-    total_pages = max(1, (len(entries) + _DICT_LIST_PAGE_SIZE - 1) // _DICT_LIST_PAGE_SIZE)
-    page = max(0, min(page, total_pages - 1))
-    start = page * _DICT_LIST_PAGE_SIZE
-    chunk = entries[start:start + _DICT_LIST_PAGE_SIZE]
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     rows = []
-    for category in _DICT_CATEGORY_ORDER:
-        category_items = [item for item in chunk if _dictionary_category(item) == category]
-        if not category_items:
-            continue
-        rows.append([InlineKeyboardButton(category, callback_data="noop")])
-        word_buttons = []
-        for item in category_items:
-            word_id = str(item.get("id") or "")
-            if not word_id:
-                continue
-            word_buttons.append(InlineKeyboardButton(
-                display_term(_entry_term(item), item.get("article") or "")[:24],
-                callback_data=f"a_dictviewid_{page}_{word_id}",
-            ))
-        rows.extend(word_buttons[i:i + 2] for i in range(0, len(word_buttons), 2))
-    if total_pages > 1:
-        previous_page = page - 1 if page > 0 else total_pages - 1
-        next_page = page + 1 if page < total_pages - 1 else 0
-        rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"a_dictlang_{lang}_{previous_page}"),
-            InlineKeyboardButton(f"{page + 1} / {total_pages}", callback_data="noop"),
-            InlineKeyboardButton("▶️", callback_data=f"a_dictlang_{lang}_{next_page}"),
-        ])
+    for index, category in enumerate(_DICT_CATEGORY_ORDER):
+        count = sum(1 for item in entries if _dictionary_category(item) == category)
+        rows.append([InlineKeyboardButton(
+            f"{category} · {count}", callback_data=f"a_dictcat_{lang}_{index}_0",
+        )])
     rows.append([InlineKeyboardButton("✨ Подобрать новые слова", callback_data=f"a_dictseed_start_{lang}")])
     rows.append([InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
@@ -548,6 +526,45 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
         text = f"{flag} Мой словарь · {len(entries)} слов и фраз"
     else:
         text = f"{flag} Мой словарь\n\nПока здесь нет слов."
+    await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
+
+
+async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
+    if not 0 <= category_index < len(_DICT_CATEGORY_ORDER):
+        await send_dict_lang(bot, cid, lang, q=q)
+        return
+    category = _DICT_CATEGORY_ORDER[category_index]
+    entries = [
+        item for item in _dict_lang_entries(cid, lang)
+        if _dictionary_category(item) == category
+    ]
+    total_pages = max(1, (len(entries) + _DICT_LIST_PAGE_SIZE - 1) // _DICT_LIST_PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * _DICT_LIST_PAGE_SIZE
+    chunk = entries[start:start + _DICT_LIST_PAGE_SIZE]
+    rows = []
+    word_buttons = [
+        InlineKeyboardButton(
+            display_term(_entry_term(item), item.get("article") or "")[:24],
+            callback_data=f"a_dictviewid_{page}_{item.get('id')}",
+        )
+        for item in chunk if item.get("id")
+    ]
+    rows.extend(word_buttons[index:index + 2] for index in range(0, len(word_buttons), 2))
+    if total_pages > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"a_dictcat_{lang}_{category_index}_{(page - 1) % total_pages}"),
+            InlineKeyboardButton(f"{page + 1} / {total_pages}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"a_dictcat_{lang}_{category_index}_{(page + 1) % total_pages}"),
+        ])
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ])
+    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+    text = f"{flag} {category} · {len(entries)}"
+    if not entries:
+        text += "\n\nПока здесь нет записей."
     await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
 
 

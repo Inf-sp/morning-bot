@@ -126,6 +126,12 @@ async def handle_action(bot, cid, q, act, run_with_status):
         await dictionary.send_dict_lang(bot, cid, act.split("_")[1])
     elif act == "dictlang_active":
         await dictionary.send_dict_lang(bot, cid, dictionary._active_language_code(cid), q=q)
+    elif act.startswith("dictcat_"):
+        parts = act.split("_")
+        if len(parts) == 4 and parts[1] in ("nl", "en") and parts[2].isdigit() and parts[3].isdigit():
+            await dictionary.send_dict_category(
+                bot, cid, parts[1], int(parts[2]), page=int(parts[3]), q=q,
+            )
     elif act in ("dictlang_nl", "dictlang_en"):
         await dictionary.send_dict_lang(bot, cid, act.rsplit("_", 1)[-1], q=q)
     elif ((act.startswith("dictlang_nl_") and act.rsplit("_", 1)[-1].isdigit())

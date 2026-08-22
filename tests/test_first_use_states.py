@@ -138,7 +138,7 @@ def test_dictionary_contains_only_dictionary_actions(monkeypatch):
     ]
 
 
-def test_dictionary_groups_entries_by_part_of_speech(monkeypatch):
+def test_dictionary_home_opens_categories_instead_of_old_word_grid(monkeypatch):
     class Bot:
         message = None
 
@@ -160,8 +160,8 @@ def test_dictionary_groups_entries_by_part_of_speech(monkeypatch):
     asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl"))
 
     rows = _labels(bot.message["reply_markup"])
-    category_rows = [row[0] for row in rows if row and row[0] in learning_dictionary._DICT_CATEGORY_ORDER]
-    assert category_rows == list(learning_dictionary._DICT_CATEGORY_ORDER)
+    assert rows[:7] == [[f"{category} · 1"] for category in learning_dictionary._DICT_CATEGORY_ORDER]
+    assert not any("Mooi" in label or "Lopen" in label for row in rows for label in row)
 
 
 def test_dictionary_pagination_shows_current_page(monkeypatch):
@@ -178,7 +178,7 @@ def test_dictionary_pagination_shows_current_page(monkeypatch):
     monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: entries)
     bot = Bot()
 
-    asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl", page=1))
+    asyncio.run(learning_dictionary.send_dict_category(bot, "42", "nl", 2, page=1))
 
     assert ["◀️", "2 / 3", "▶️"] in _labels(bot.message["reply_markup"])
 
